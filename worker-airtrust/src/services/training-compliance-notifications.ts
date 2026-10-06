@@ -29,6 +29,9 @@ export type ComplianceNotificationPolicy = {
   manager_message_template: string;
 };
 
+const LEGACY_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE =
+  'GERÊNCIA DE TREINAMENTO | COSTA DO SOL\n\nOlá, {{funcionario}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\nTreinamento: {{treinamento}}\nVencimento: {{data_vencimento}}\nStatus: {{status}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação e é acompanhado pela Gerência de Treinamento, inclusive para fins de auditoria.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.{{link_bloco}}\n\nMensagem automática da Gerência de Treinamento da Costa do Sol.';
+
 export const DEFAULT_COMPLIANCE_NOTIFICATION_POLICY: ComplianceNotificationPolicy = {
   enabled: false,
   email: true,
@@ -79,12 +82,20 @@ export function normalizeNotificationMessageTemplate(
   value: unknown,
   fallback: string,
   maxLength = 5000,
+  legacyDefaults: string[] = [],
 ): string {
   const candidate = String(value || '').trim().slice(0, maxLength);
   if (!candidate) return fallback;
 
   const compact = (text: string) => text.replace(/\s+/g, ' ').trim();
-  return compact(candidate) === compact(fallback) ? fallback : candidate;
+  const normalizedCandidate = compact(candidate);
+  if (
+    normalizedCandidate === compact(fallback) ||
+    legacyDefaults.some((legacy) => normalizedCandidate === compact(legacy))
+  ) {
+    return fallback;
+  }
+  return candidate;
 }
 
 function normalizePolicy(value: unknown): ComplianceNotificationPolicy {
@@ -124,6 +135,8 @@ function normalizePolicy(value: unknown): ComplianceNotificationPolicy {
     email_message_template: normalizeNotificationMessageTemplate(
       input.email_message_template,
       DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template,
+      5000,
+      [LEGACY_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE],
     ),
     manager_subject_template:
       String(input.manager_subject_template || '')
