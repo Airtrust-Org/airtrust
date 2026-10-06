@@ -11,6 +11,11 @@ on:
         description: 'Type AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY'
         required: true
         type: string
+      course_ids:
+        description: 'Optional comma-separated active course IDs for focused diagnostics'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -78,6 +83,7 @@ jobs:
       PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
       PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
       CERT_BROWSER: ${{ matrix.browser }}
+      CERT_COURSE_IDS: ${{ inputs.course_ids }}
       CERT_REPORT_PATH: qa-state/lms-active-certification-${{ matrix.browser }}.json
       CERT_COURSE_TIMEOUT_MS: '25000'
       CERT_MAX_STEPS: '240'
