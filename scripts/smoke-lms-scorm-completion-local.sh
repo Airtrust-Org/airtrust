@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# source_reference: Canonical local LMS smoke for SCORM completion persistence.
+# operational_decision: Exercise only the disposable local D1/Worker; never target remote D1/R2.
+# dry_run_required: YES — CI/local disposable state only.
+# rollback_plan_required: YES — scripts/setup-local-lms-smoke-db.sh --reset recreates the fixture.
+
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
