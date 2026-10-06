@@ -90,6 +90,27 @@ describe('whatsapp-templates', () => {
     expect(variables['5']).toBe('https://airtrust.online/lms/player/999');
   });
 
+  it('usa template neutro para lembrete de matrícula LMS sem transformar matrícula em obrigação', () => {
+    const template = getAlertWhatsAppTemplateDefinition('ead_enrollment_reminder');
+    expect(template).toBeDefined();
+    const variables = buildTrainingTemplateVariables({
+      funcionarioNome: 'Viviane',
+      qualificacaoNome: 'Integração Corporativa',
+      dataVencimento: '15/10/2026',
+      statusVencimento: 'Treinamento em andamento',
+      trainingUrl: 'https://airtrust.online/lms/player/321',
+    });
+    const message = renderTemplateBody(template!.bodyText, variables);
+
+    expect(message).toContain('treinamento matriculado no AirTrust');
+    expect(message).toContain('*Treinamento:* Integração Corporativa');
+    expect(message).toContain('*Prazo:* 15/10/2026');
+    expect(message).toContain('*Status:* Treinamento em andamento');
+    expect(message).toContain('https://airtrust.online/lms/player/321');
+    expect(message).not.toContain('treinamento obrigatório');
+    expect(message).not.toContain('auditoria');
+  });
+
   it('mantem compatibilidade com template EAD antigo enquanto a nova versao nao foi sincronizada', () => {
     const oldBody =
       '*GERÊNCIA DE TREINAMENTO | COSTA DO SOL*\n\nOlá, {{1}}!\n\n*Treinamento:* {{2}}\n*Vencimento:* {{3}}\n*Status:* {{4}}';
