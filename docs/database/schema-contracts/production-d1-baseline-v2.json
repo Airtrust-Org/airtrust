@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-07",
-    "last_reconciled_against": "0536 FDM three audiences classified after 0535 INTEGRA repair; prior governed states preserved",
-    "schema_v2_digest": "b00e8f37ad22d6c9dd1e5afa4194887e254df0bd69a9262f6304ecb2d536cba9",
+    "last_reconciled_against": "0537 source-backed training catalog metadata classified after FDM audiences 0536; prior governed states preserved",
+    "schema_v2_digest": "cf46ed830381a70a2634d51f638ac1245fdbac8999c84c3cf6ad484f675ab595",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1370,6 +1370,18 @@
       "reviewed_manifest": "training-compliance-fdm-three-audiences-0536.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-fdm-three-audiences-0536.md",
       "note": "0536 adds the three reviewed FDM audiences after the 0535 INTEGRA repair. It reuses FDM_COMITE and GATEKEEPER as distinct nominal designations, preserves FDM-MECANICO identity/history, creates pilot and Committee/Gatekeeper qualification models without inventing modality/hours/validity or LMS content, and never auto-assigns committee membership."
+    },
+    {
+      "change_file": "0537_training_catalog_source_backed_metadata.sql",
+      "change_id": "training-catalog-source-backed-metadata-0537",
+      "sha256": "6f46b02a0c3a210c3e5c8236eb1f5d465ecff9a28ef12d4042796a22bb846c6d",
+      "targets": [],
+      "domain": "training catalog / source-backed maintenance, FDM and LGPD metadata",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-catalog-source-backed-metadata-0537.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-catalog-source-backed-metadata-0537.md",
+      "note": "0537 corrects controlled-source metadata without schema DDL: PTM Rev.06 and Doutrinação 8h/4h/36m, standalone MGM/MOM/MCQ without fabricated hours, FDM Rev.09 audience hours, and internally evidenced 2h LGPD. Tenant 6 only; no enrollments, histories, certificates or employee assignments."
     }
   ]
 }
