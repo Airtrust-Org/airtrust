@@ -12,6 +12,18 @@ assert_positive(){ local label="$1" sql="$2" count; count="$(query_count "$sql")
 assert_count migration-ledger-0534 1 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0534_training_compliance_final_matrix.sql';"
 assert_count nr05-ead 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='NR-05' AND categoria='EAD' AND validade IS NULL AND ativo=1 AND deleted_at IS NULL;"
 assert_count codigo-etica 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='COD_ETICA' AND categoria='EAD' AND validade=12 AND carga_horaria=3 AND ativo=1 AND deleted_at IS NULL;"
+# Reviewed, non-sensitive read-only counts after staging 0534 was applied.
+# This also executes on the validation-only ledger=1 path; it never writes D1.
+# Never emit row contents, names, course/person identities, or raw SQL responses.
+echo "DIAG_0534_INTEGRA_ACTIVE_CANONICAL=$(query_count "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(TRIM(codigo))='INTEGRA' AND ativo=1 AND deleted_at IS NULL;")"
+echo "DIAG_0534_INTEGRA_ANY_STATE=$(query_count "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(TRIM(codigo))='INTEGRA';")"
+echo "DIAG_0534_INTEGRA_ACTIVE_EXACT=$(query_count "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='INTEGRA' AND ativo=1 AND deleted_at IS NULL;")"
+echo "DIAG_0534_INTEGRA_CATEGORY_EAD=$(query_count "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(TRIM(codigo))='INTEGRA' AND categoria='EAD' AND ativo=1 AND deleted_at IS NULL;")"
+echo "DIAG_0534_INTEGRA_VALIDITY_24=$(query_count "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(TRIM(codigo))='INTEGRA' AND validade=24 AND ativo=1 AND deleted_at IS NULL;")"
+echo "DIAG_0534_INTEGRA_HOURS_2=$(query_count "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(TRIM(codigo))='INTEGRA' AND carga_horaria=2 AND ativo=1 AND deleted_at IS NULL;")"
+echo "DIAG_0534_INTEGRA_NAME_CANDIDATES=$(query_count "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(TRIM(nome)) LIKE '%INTEGRA%' AND ativo=1 AND deleted_at IS NULL;")"
+echo "DIAG_0534_INTEGRA_ACTIVE_COURSES=$(query_count "SELECT COUNT(*) count FROM lms_cursos c JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id WHERE c.empresa_id=6 AND UPPER(TRIM(qt.codigo))='INTEGRA' AND c.ativo=1 AND c.deleted_at IS NULL;")"
+
 assert_count integra 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='INTEGRA' AND categoria='EAD' AND validade=24 AND carga_horaria=2 AND ativo=1 AND deleted_at IS NULL;"
 assert_count nr12 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='NR-12' AND categoria='Treinamento' AND validade=24 AND carga_horaria=2 AND ativo=1 AND deleted_at IS NULL;"
 assert_count nr20 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='NR-20' AND categoria='EAD' AND validade=24 AND carga_horaria=2 AND carga_horaria_inicial=2 AND carga_horaria_recorrente=2 AND ativo=1 AND deleted_at IS NULL;"
