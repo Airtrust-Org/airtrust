@@ -594,11 +594,54 @@ if [[ "$migration_basename" == "0534_training_compliance_final_matrix.sql" ]]; t
     echo "ERROR: 0534 bounded combined SQL is empty or exceeds query transport." >&2
     exit 1
   }
+  # Keep query output off CI logs (may contain data), but preserve sanitized
+  # error diagnostics; the previous release dropped the --json response and
+  # masked the reason for a nonzero exit.
+  d1_query_output="$(mktemp -t airtrust-0534-query-output.XXXXXXXX)"
+  d1_query_error="$(mktemp -t airtrust-0534-query-error.XXXXXXXX)"
+  trap 'rm -f "$preflight_output" "$recovery_output" "$ledger_output" "$combined_sql" "$d1_query_output" "$d1_query_error"' EXIT
   apply_status=0
   (
     cd worker-airtrust
-    npx wrangler d1 execute "$db_name" --env staging --remote --command="$sql_payload" --json >/dev/null
+    npx wrangler d1 execute "$db_name" --env staging --remote --command="$sql_payload" --json \
+      >"$d1_query_output" 2>"$d1_query_error"
   ) || apply_status=$?
+  node - "$d1_query_output" "$d1_query_error" "$apply_status" <<'NODE'
+const fs = require('node:fs');
+const [stdoutFile, stderrFile, exitCode] = process.argv.slice(2);
+const stdout = fs.readFileSync(stdoutFile, 'utf8');
+const stderr = fs.readFileSync(stderrFile, 'utf8');
+const text = stdout + '\n' + stderr;
+let json;
+try { json = JSON.parse(stdout); } catch { json = null; }
+const entries = Array.isArray(json) ? json : json ? [json] : [];
+const flattened = entries.flatMap((item) =>
+  Array.isArray(item?.results) ? [item] : [item]
+);
+const failures = flattened.filter((v) => v?.success === false);
+const hasExplicitSuccess = flattened.length > 0 && flattened.every((v) => v?.success === true);
+const classes = [
+  ['SQLITE_INCOMPLETE_INPUT', /incomplete input/i],
+  ['SQLITE_CONSTRAINT', /constraint failed|SQLITE_CONSTRAINT/i],
+  ['D1_RESET_DO', /D1_RESET_DO/i],
+  ['SQLITE_MISSING_OBJECT', /no such (?:table|column|function)/i],
+  ['SQLITE_SYNTAX', /syntax error/i],
+  ['SQLITE_LOCK', /database is locked|SQLITE_BUSY/i],
+  ['D1_QUERY_LIMIT', /too many|exceeds? (?:size|limit)|query.*large|SQLITE_TOOBIG/i],
+  ['D1_REQUEST_ERROR', /D1_ERROR|SQLITE_ERROR/i],
+  ['JSON_PARSE_ERROR', /unexpected token|invalid JSON/i],
+];
+const category = classes.find(([, re]) => re.test(text))?.[0] || 'UNCLASSIFIED';
+const ok = exitCode === '0' && failures.length === 0 && hasExplicitSuccess;
+console.log('REVIEWED_D1_QUERY_TRANSPORT=' + (ok ? 'PASS' : 'FAIL'));
+console.log('REVIEWED_D1_QUERY_ERROR_CLASS=' + (ok ? 'NONE' : category));
+console.log('REVIEWED_D1_QUERY_JSON_VALID=' + (json !== null));
+console.log('REVIEWED_D1_QUERY_RESULT_COUNT=' + entries.length);
+console.log('REVIEWED_D1_QUERY_STDERR_PRESENT=' + (stderr.trim().length > 0));
+if (!ok) process.exit(1);
+NODE
+  diagnostic_status=$?
+  if [[ "$diagnostic_status" -ne 0 ]]; then apply_status=1; fi
 else
   apply_status=0
   (
