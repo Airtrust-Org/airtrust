@@ -96,10 +96,11 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /required-interaction/);
   assert.match(source, /document\.body\.querySelectorAll\('\*'\)/);
   assert.match(source, /cardShapeHint/);
+  assert.match(source, /structuredCardHint/);
   assert.match(source, /structuralGroups/);
   assert.match(source, /structuralCards/);
   assert.match(source, /children\.length !== requiredTotal/);
-  assert.match(source, /manifest\.requiredInteractions \|\| 0\) \* 35_000/);
+  assert.match(source, /manifest\.requiredInteractions \|\| 0\) \* 50_000/);
   assert.match(source, /intera\[cç\]\[aã\]o\\s\+obrigat/);
   assert.match(source, /resetAssessmentRetryState/);
   assert.match(source, /adaptive-exhausted/);

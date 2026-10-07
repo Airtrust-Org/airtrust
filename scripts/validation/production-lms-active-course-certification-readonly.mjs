@@ -568,19 +568,29 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
             el.tabIndex >= 0 ||
             el.hasAttribute('onclick') ||
             /(barrier|decision|interactive|interact|required|toggle|step|action|choice|clickable)/i.test(`${className} ${dataKeys}`);
+          const cardGeometryHint =
+            rect.width >= 100 &&
+            rect.height >= 60 &&
+            rect.width <= window.innerWidth * 0.65 &&
+            rect.height <= window.innerHeight * 0.7;
           const cardShapeHint =
+            cardGeometryHint &&
             (
               parseFloat(style.borderTopWidth || '0') > 0 ||
               style.boxShadow !== 'none' ||
               parseFloat(style.borderRadius || '0') >= 8
             ) &&
-            Boolean(el.querySelector('h1,h2,h3,h4,h5,h6,li')) &&
-            rect.width >= 100 &&
-            rect.height >= 60 &&
-            rect.width <= window.innerWidth * 0.65 &&
-            rect.height <= window.innerHeight * 0.7;
+            Boolean(el.querySelector('h1,h2,h3,h4,h5,h6,li'));
+          // Some mandatory barrier cards are visually structured but do not expose
+          // cursor/role/class semantics. Under the explicit N/M mandatory-interaction
+          // gate only, a compact block containing list content is a safe learner-card
+          // candidate; broad page containers are excluded by the geometry bound.
+          const structuredCardHint =
+            cardGeometryHint &&
+            Boolean(el.querySelector('li')) &&
+            Array.from(el.querySelectorAll('li')).length >= 2;
           const text = clean(el.textContent);
-          return (interactiveHint || cardShapeHint) && text.length > 0 && text.length <= 800;
+          return (interactiveHint || cardShapeHint || structuredCardHint) && text.length > 0 && text.length <= 800;
         });
         // Keep the outermost pointer-like element so inherited cursor styles on
         // headings/list items do not produce multiple clicks inside one card.
@@ -771,10 +781,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       const isChoiceButton = (item) =>
         /(^|\s)(choice|option|answer)(\s|$)/i.test(item.className);
 
-      // The quiz templates reveal the correct option to the learner after an
-      // answer by visibly marking a disabled option as ".correct". That feedback
-      // is learner-visible evidence, not a hidden answer key. Remember it so a
-      // retry can replay known-correct answers without brute-forcing the module.
+      // Quiz templates reveal the correct option to the learner after an answer
+      // by visibly marking a disabled option as ".correct". This is learner-visible
+      // feedback, not a hidden answer key. Remember it for the next retry.
       if (questionNumber) {
         const feedbackChoices = Array.from(
           document.querySelectorAll('button.option,button.choice,button.answer'),
@@ -1505,7 +1514,7 @@ async function certifyScormCourse(browser, token, listed) {
         420_000,
         Math.max(
           180_000,
-          slideCount * 4_000 + Number(manifest.requiredInteractions || 0) * 35_000,
+          slideCount * 4_000 + Number(manifest.requiredInteractions || 0) * 50_000,
         ),
       )
     : 0;
