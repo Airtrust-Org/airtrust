@@ -4,15 +4,43 @@ import {
   DEFAULT_COMPLIANCE_NOTIFICATION_POLICY,
   normalizeNotificationMessageTemplate,
   renderComplianceEmailHtml,
+  complianceTemplateVariables,
 } from '../../services/training-compliance-notifications';
 
 describe('training compliance notification formatting', () => {
+
+  it.each([
+    ['NAO_REALIZADO', null, 'Situação: Pendente de realização', 'pendente'],
+    ['VENCENDO', '2026-10-15', 'Situação: Sua qualificação vencerá em 15/10/2026', 'próxima do vencimento'],
+    ['VENCIDO', '2026-10-01', 'Situação: Sua qualificação está vencida desde 01/10/2026', 'vencida'],
+  ] as const)('renders status-specific employee copy for %s', (status, date, label, subject) => {
+    const variables = complianceTemplateVariables({
+      empresa_id: 1, funcionario_id: 2, funcionario_nome: 'Pessoa Teste', funcionario_cpf: null,
+      email: null, telefone: null, setor_id: null, setor_nome: null, qualificacao_tipo_id: 3,
+      qualificacao_nome: 'CFIT', status_compliance: status, data_validade: date, dias_para_vencer: null,
+    }, 'https://airtrust.online/lms/player/842');
+    expect(variables.situacao_bloco).toBe(label);
+    expect(variables.assunto_situacao).toBe(subject);
+    expect(variables.link_bloco).toContain('https://airtrust.online/lms/player/842');
+    expect(variables.orientacao).toContain('Solicitamos');
+  });
+
+  it('formats new course and situation fields with a direct link', () => {
+    const html = renderComplianceEmailHtml(
+      'GERÊNCIA DE TREINAMENTO | COSTA DO SOL\n\nCurso: CFIT\nSituação: Pendente de realização\n\nAcesse o curso diretamente pelo AirTrust:\nhttps://airtrust.online/lms/player/842',
+    );
+    expect(html).toContain('<strong>Curso:</strong> CFIT');
+    expect(html).toContain('<strong>Situação:</strong> Pendente de realização');
+    expect(html).toContain('<strong>Acesse o curso diretamente pelo AirTrust:</strong>');
+    expect(html).toContain('<a href="https://airtrust.online/lms/player/842"');
+  });
+
   it('keeps the default employee email structurally separated', () => {
     expect(DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template).toContain(
-      'requer sua atenção:\n\nTreinamento:',
+      'Curso: {{treinamento}}\n{{situacao_bloco}}',
     );
     expect(DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template).toContain(
-      'Esta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.',
+      'Esta é uma comunicação automática. Não é necessário responder a este e-mail.',
     );
   });
 
