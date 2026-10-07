@@ -1287,6 +1287,135 @@ async function captureVisibleControls(frame) {
   }).catch(() => null);
 }
 
+
+async function captureRequiredInteractionDom(frame) {
+  return frame.evaluate(() => {
+    const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+    const requiredPattern = /intera[cç][aã]o\s+obrigat[oó]ria\s*\((\d+)\s*\/\s*(\d+)\)/i;
+    const visible = (el) => {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        rect.bottom > 0 &&
+        rect.right > 0 &&
+        rect.top < window.innerHeight &&
+        rect.left < window.innerWidth &&
+        style.visibility !== 'hidden' &&
+        style.display !== 'none' &&
+        style.opacity !== '0' &&
+        el.getAttribute('aria-hidden') !== 'true'
+      );
+    };
+    const rectOf = (el) => {
+      const rect = el.getBoundingClientRect();
+      return {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+      };
+    };
+    const describe = (el, includeChildren = false) => {
+      if (!el) return null;
+      const style = getComputedStyle(el);
+      const text = clean(el.textContent).slice(0, 240);
+      const out = {
+        tag: el.tagName.toLowerCase(),
+        id: String(el.id || '').slice(0, 120) || null,
+        class_name: String(el.className || '').slice(0, 220) || null,
+        role: el.getAttribute('role'),
+        data_keys: Object.keys(el.dataset || {}).sort().slice(0, 20),
+        onclick: el.hasAttribute('onclick'),
+        tabindex: el.getAttribute('tabindex'),
+        text_preview: text || null,
+        child_count: el.children.length,
+        li_count: el.querySelectorAll('li').length,
+        rect: rectOf(el),
+        style: {
+          cursor: style.cursor,
+          display: style.display,
+          position: style.position,
+          border_top_width: style.borderTopWidth,
+          border_radius: style.borderRadius,
+          box_shadow: style.boxShadow === 'none' ? 'none' : 'present',
+          background_image: style.backgroundImage === 'none' ? 'none' : 'present',
+        },
+      };
+      if (includeChildren) {
+        out.children = Array.from(el.children).slice(0, 20).map((child) => ({
+          tag: child.tagName.toLowerCase(),
+          id: String(child.id || '').slice(0, 120) || null,
+          class_name: String(child.className || '').slice(0, 220) || null,
+          role: child.getAttribute('role'),
+          text_preview: clean(child.textContent).slice(0, 180) || null,
+          child_count: child.children.length,
+          li_count: child.querySelectorAll('li').length,
+          rect: rectOf(child),
+        }));
+      }
+      return out;
+    };
+
+    const all = Array.from(document.body.querySelectorAll('*'));
+    const badgeCandidates = all
+      .filter((el) => visible(el))
+      .map((el) => ({ el, text: clean(el.textContent), rect: el.getBoundingClientRect() }))
+      .filter((item) => item.text.length > 0 && item.text.length <= 300 && requiredPattern.test(item.text))
+      .sort((a, b) => (a.rect.width * a.rect.height) - (b.rect.width * b.rect.height));
+    const badge = badgeCandidates[0]?.el || null;
+    if (!badge) return null;
+    const match = clean(badge.textContent).match(requiredPattern);
+    const requiredTotal = match ? Number(match[2]) : null;
+
+    const ancestorChain = [];
+    let cursor = badge;
+    for (let depth = 0; cursor && cursor !== document.body && depth < 7; depth += 1) {
+      ancestorChain.push(describe(cursor, true));
+      cursor = cursor.parentElement;
+    }
+    if (cursor === document.body) ancestorChain.push(describe(document.body, true));
+
+    const badgeRect = badge.getBoundingClientRect();
+    const nearby = all
+      .filter((el) => visible(el))
+      .filter((el) => {
+        if (el === badge || el.contains(badge)) return false;
+        const rect = el.getBoundingClientRect();
+        const text = clean(el.textContent);
+        return (
+          text.length > 0 &&
+          text.length <= 900 &&
+          rect.width >= 60 &&
+          rect.height >= 30 &&
+          rect.top >= badgeRect.bottom - 24 &&
+          rect.top <= Math.min(window.innerHeight, badgeRect.bottom + 520)
+        );
+      })
+      .map((el) => describe(el, false))
+      .sort((a, b) => {
+        const dy = a.rect.top - b.rect.top;
+        if (Math.abs(dy) > 4) return dy;
+        const aa = a.rect.width * a.rect.height;
+        const ba = b.rect.width * b.rect.height;
+        return aa - ba;
+      })
+      .slice(0, 80);
+
+    return {
+      required_total: requiredTotal,
+      badge: describe(badge, false),
+      ancestor_chain: ancestorChain,
+      nearby_elements: nearby,
+    };
+  }).catch(() => null);
+}
+
 async function captureDriverState(frame) {
   return frame.evaluate(() => {
     const st = window.__AIRTRUST_CERT_DRIVER;
@@ -1397,6 +1526,13 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   const driverState = await captureDriverState(frame);
   let diagnosticScreenshot = null;
   const focusedDiagnostics = COURSE_IDS.size > 0 && COURSE_IDS.size <= 6;
+  const requiredInteractionDom = (
+    focusedDiagnostics &&
+    phase === 'resume-complete' &&
+    !terminalState(preUnloadTrace?.values || {})
+  )
+    ? await captureRequiredInteractionDom(frame)
+    : null;
   if (
     focusedDiagnostics &&
     phase === 'resume-complete' &&
@@ -1444,6 +1580,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     stalled_slide: stalledSlide,
     visible_controls: visibleControls,
     driver_state: driverState,
+    required_interaction_dom: requiredInteractionDom,
     diagnostic_screenshot: diagnosticScreenshot,
     asset_failures: assetFailures.slice(0, 20),
     page_errors: pageErrors.slice(0, 10),
