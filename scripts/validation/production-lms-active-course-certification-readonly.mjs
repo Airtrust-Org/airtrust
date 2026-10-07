@@ -342,6 +342,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         assessmentBackfillByLocation: {},
         adaptiveByLocation: {},
         answerAcceptedByLocation: {},
+        reviewVisitedByLocation: {},
       };
       const st = w.__AIRTRUST_CERT_DRIVER;
       st.clickedByLocation ??= {};
@@ -351,6 +352,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       st.assessmentBackfillByLocation ??= {};
       st.adaptiveByLocation ??= {};
       st.answerAcceptedByLocation ??= {};
+      st.reviewVisitedByLocation ??= {};
       const locationBase = String(location || 'unknown');
       // cmi.core.lesson_location tracks the slide, not the question inside it.
       // Use the learner-visible ordinal to avoid treating each new quiz question
@@ -552,23 +554,29 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           pendingProbe: null,
           probeQuestion: 0,
           retries: 0,
+          questionTotal: 0,
         };
         return st.adaptiveByLocation[locationBase];
       };
       const resultText = clean(document.body?.innerText || '');
       const resultScoreMatch = resultText.match(/acertou\s+(\d+)\s+de\s+(\d+)\s+quest/i);
+      const labelledPercentMatch = resultText.match(
+        /\b(?:nota|resultado(?:\s+do\s+cap[ií]tulo)?)\s*:?[\s-]*(\d{1,3})\s*%/i,
+      );
       const firstPercentMatch = resultText.match(/\b(\d{1,3})\s*%/);
       const resultMetric = resultScoreMatch
         ? (Number(resultScoreMatch[1]) / Math.max(1, Number(resultScoreMatch[2]))) * 100
-        : firstPercentMatch
-          ? Number(firstPercentMatch[1])
-          : null;
+        : labelledPercentMatch
+          ? Number(labelledPercentMatch[1])
+          : firstPercentMatch
+            ? Number(firstPercentMatch[1])
+            : null;
       const resultQuestionTotal = resultScoreMatch ? Number(resultScoreMatch[2]) : null;
 
       const prepareAdaptiveProbe = () => {
         if (!Number.isFinite(resultMetric)) return null;
         const adaptive = getAdaptiveState();
-        const total = Math.max(1, Number(resultQuestionTotal || questionTotal || 0));
+        const total = Math.max(1, Number(resultQuestionTotal || adaptive.questionTotal || questionTotal || 0));
         if (!adaptive.initialized) {
           adaptive.initialized = true;
           adaptive.bestMetric = Number(resultMetric);
@@ -649,6 +657,61 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           }
         }
       };
+      // The AW139-style assessment exposes learner-visible review feedback after
+      // a failed attempt. Learn only from that visible feedback, visit each wrong
+      // question once, then follow the package's own "Revisar capítulo" flow.
+      const reviewAnswerButtons = Array.from(document.querySelectorAll('button.answer'));
+      const reviewCorrectIndex = reviewAnswerButtons.findIndex((el) =>
+        /(^|\s)review-correct(\s|$)/i.test(String(el.className || ''))
+      );
+      const reviewMode = reviewCorrectIndex >= 0 || reviewAnswerButtons.some((el) =>
+        /(^|\s)review-(?:correct|incorrect)(\s|$)/i.test(String(el.className || ''))
+      );
+      if (reviewMode && questionNumber && questionTotal) {
+        const adaptive = getAdaptiveState();
+        adaptive.questionTotal = Math.max(Number(adaptive.questionTotal || 0), Number(questionTotal || 0));
+        if (!adaptive.initialized) {
+          adaptive.initialized = true;
+          if (Number.isFinite(resultMetric)) adaptive.bestMetric = Number(resultMetric);
+          for (let q = 0; q < adaptive.questionTotal; q += 1) {
+            if (!Number.isInteger(adaptive.bestAnswers[q])) {
+              adaptive.bestAnswers[q] = Number.isInteger(adaptive.currentAnswers[q])
+                ? adaptive.currentAnswers[q]
+                : 0;
+            }
+          }
+        }
+        const reviewQIndex = questionNumber - 1;
+        if (reviewCorrectIndex >= 0) adaptive.bestAnswers[reviewQIndex] = reviewCorrectIndex;
+
+        const visited = new Set(
+          Array.isArray(st.reviewVisitedByLocation[locationBase])
+            ? st.reviewVisitedByLocation[locationBase]
+            : [],
+        );
+        visited.add(reviewQIndex);
+        st.reviewVisitedByLocation[locationBase] = Array.from(visited);
+        const nextWrongReview = Array.from(document.querySelectorAll('button.review-q.bad'))
+          .filter(visible)
+          .find((el) => {
+            const match = clean(el.textContent).match(/\d+/);
+            const q = match ? Number(match[0]) - 1 : -1;
+            return q >= 0 && !visited.has(q);
+          });
+        if (nextWrongReview) {
+          nextWrongReview.click();
+          logAction('assessment-review-wrong');
+          return { type: 'assessment-review-wrong', text: clean(nextWrongReview.textContent).slice(0, 80) };
+        }
+
+        const reviewChapter = items.find((item) => /revisar\s+(?:o\s+)?cap[ií]tulo/i.test(item.key));
+        if (reviewChapter) {
+          st.reviewVisitedByLocation[locationBase] = [];
+          resetAssessmentRetryState();
+          return requestTrustedClick(reviewChapter, 'assessment-review-chapter');
+        }
+      }
+
       const moduleRetry = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
       if (moduleRetry) {
         if (!allowAdaptiveRetry) return { type: 'retry-deferred' };
@@ -689,6 +752,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         );
         const adaptive = getAdaptiveState();
         const qIndex = questionNumber ? questionNumber - 1 : cursor;
+        if (questionTotal) {
+          adaptive.questionTotal = Math.max(Number(adaptive.questionTotal || 0), Number(questionTotal));
+        }
         adaptive.optionCounts[qIndex] = assessmentChoices.length;
         if (selected) adaptive.currentAnswers[qIndex] = Math.max(0, assessmentChoices.indexOf(selected));
 
@@ -1320,7 +1386,7 @@ async function certifyScormCourse(browser, token, listed) {
   );
   const completionBudgetMs = Math.max(
     COURSE_TIMEOUT_MS,
-    COURSE_IDS.size > 0 ? 90_000 : 0,
+    COURSE_IDS.size > 0 ? 240_000 : 0,
     Math.min(180_000, slideCount * 320),
   );
   const complete = suspendAlreadyCompleted
