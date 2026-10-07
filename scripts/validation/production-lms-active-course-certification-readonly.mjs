@@ -222,7 +222,7 @@ function extractAnswerPlan(model) {
     }
     const obj = value;
     let options = null;
-    for (const key of ['options', 'alternatives', 'choices', 'answers']) {
+    for (const key of ['options', 'alternatives', 'choices', 'answers', 'alternativas', 'opcoes', 'respostas']) {
       if (Array.isArray(obj[key]) && obj[key].length) {
         options = obj[key];
         break;
@@ -233,7 +233,7 @@ function extractAnswerPlan(model) {
       for (const key of ['correctIndex', 'answerIndex', 'correctOptionIndex', 'correctAnswerIndex']) {
         if (Number.isInteger(obj[key])) indices = [Number(obj[key])];
       }
-      for (const key of ['correctAnswer', 'answer', 'correctOption', 'correct']) {
+      for (const key of ['correctAnswer', 'answer', 'correctOption', 'correct', 'correctLetter', 'rightAnswer', 'respostaCorreta', 'gabarito']) {
         const raw = obj[key];
         if (typeof raw === 'number' && Number.isInteger(raw)) indices = [raw];
         if (Array.isArray(raw) && raw.every((item) => Number.isInteger(item))) indices = raw.map(Number);
@@ -243,6 +243,10 @@ function extractAnswerPlan(model) {
             String(option?.value ?? option?.text ?? option?.label ?? option).trim() === normalized
           );
           if (idx >= 0) indices = [idx];
+          else if (/^[A-Z]$/i.test(normalized)) {
+            const letter = normalized.toUpperCase().charCodeAt(0) - 65;
+            if (letter >= 0 && letter < options.length) indices = [letter];
+          }
         }
       }
       const marked = options
@@ -420,8 +424,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           good.test(text) ||
           forwardId.test(id) ||
           /^(start|finish|submit|iniciar|come[cç]ar|finalizar|concluir)$/i.test(id);
+        if (/^(menubtn|refbtn|refsbtn|closemenubtn|resetbtn)$/i.test(id) || backwardId.test(id)) return true;
         if (semanticAction) return false;
-        if (/^(menubtn|refbtn|closemenubtn|resetbtn)$/.test(id) || backwardId.test(id)) return true;
         if (/(^|\s)(icon-btn|menu-btn|close-menu|drawer-close|skip-link)(\s|$)/i.test(className)) return true;
         if (bad.test(text)) return true;
         return Boolean(el.closest(
@@ -474,97 +478,131 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         return { type, text: (item.text || item.id || String(item.index)).slice(0, 80) };
       };
 
-      // Assessments with button answers need an answer before qNext/quizNext.
+      const isChoiceButton = (item) =>
+        /(^|\s)(choice|option|answer)(\s|$)/i.test(item.className);
       const assessmentChoices = items.filter((item) =>
-        /(^|\s)answer(\s|$)/i.test(item.className) &&
+        /(^|\s)(answer|option)(\s|$)/i.test(item.className) &&
         !forwardId.test(item.id) &&
         !backwardId.test(item.id)
       );
-      const assessmentForward = items.find((item) => assessmentForwardId.test(item.id));
-      if (assessmentChoices.length && assessmentForward) {
+      // A disabled qNext must not make the driver treat quiz choices as navigation.
+      const assessmentMode =
+        Boolean(document.querySelector('#qNext,#quizNext')) && assessmentChoices.length > 0;
+      if (assessmentMode) {
+        const cursor = Number(st.assessmentCursorByLocation[locationKey] || 0);
+        const quizKey = `${locationKey}:assessment:${cursor}`;
+        st.quizChoicesTried ??= {};
+        const tried = new Set(st.quizChoicesTried[quizKey] || []);
         const selected = assessmentChoices.find((item) =>
-          /(^|\s)selected(\s|$)/i.test(item.className) ||
+          /(^|\s)(selected|active)(\s|$)/i.test(item.className) ||
           item.ariaPressed === 'true' ||
           item.ariaChecked === 'true'
         );
-        const cursor = Number(st.assessmentCursorByLocation[locationKey] || 0);
-        if (!selected) {
-          const planned = plansHere[cursor]?.indices || [];
-          const target = planned.length
-            ? Math.max(0, Math.min(Number(planned[0]), assessmentChoices.length - 1))
-            : Math.min(cursor % assessmentChoices.length, assessmentChoices.length - 1);
-          return markAndClick(assessmentChoices[target], 'assessment-answer');
+        const nextQuestion = items.find((item) => assessmentForwardId.test(item.id));
+        if (selected && nextQuestion) {
+          st.assessmentCursorByLocation[locationKey] = cursor + 1;
+          logAction('assessment-next', nextQuestion);
+          nextQuestion.el.click();
+          return { type: 'assessment-next', text: nextQuestion.id };
         }
-        st.assessmentCursorByLocation[locationKey] = cursor + 1;
-        logAction('assessment-next', assessmentForward);
-        assessmentForward.el.click();
-        return { type: 'assessment-next', text: assessmentForward.id };
+        const planned = plansHere[cursor]?.indices || [];
+        const candidateOrder = [
+          ...planned.map((index) => assessmentChoices[Math.max(0, Math.min(Number(index), assessmentChoices.length - 1))]),
+          ...assessmentChoices,
+        ].filter(Boolean);
+        const candidate = candidateOrder.find((item) => !tried.has(item.signature));
+        if (candidate) {
+          tried.add(candidate.signature);
+          st.quizChoicesTried[quizKey] = Array.from(tried);
+          return markAndClick(candidate, 'assessment-answer');
+        }
+        // Do not fake progress when no valid answer/next control exists.
+        return { type: 'none' };
       }
 
       // Multi-select practices/checklists must be satisfied before submit/navigation.
       const toggle = items.find((item) => item.multiToggle && !alreadyClicked(item));
       if (toggle) return markAndClick(toggle, 'content-toggle');
 
-      const submit = items.find((item) => /confirmar|responder|enviar|verificar|corrigir|submit/i.test(item.key));
-      const genericChoices = items.filter((item) =>
+      const exactNext = items.find((item) => forwardId.test(item.id));
+      if (exactNext) return markAndClick(exactNext, 'next');
+
+      // A satisfied required decision enables the forward control. Advance
+      // before considering other answers, but never treat an answer card that
+      // happens to contain "próximo" as navigation.
+      const enabledTextNext = items.find((item) =>
+        !/(^|\s)(choice|option|answer)(\s|$)/i.test(item.className) &&
+        /(^|\s)(next|pr[oó]xim[oa]|avan[cç]ar|continuar|prosseguir)(\s|$)/i.test(item.key)
+      );
+      if (enabledTextNext) return markAndClick(enabledTextNext, 'next');
+
+      // A choice may contain words like "verificar"/"próximo" in its lesson text.
+      // Classification must use the button role/class before its text.
+      const contentChoices = items.filter((item) =>
+        isChoiceButton(item) &&
+        !forwardId.test(item.id) &&
+        !backwardId.test(item.id)
+      );
+      const submit = items.find((item) =>
+        !isChoiceButton(item) &&
+        /confirmar|responder|enviar|verificar|corrigir|submit/i.test(item.key)
+      );
+      const untriedChoices = contentChoices.filter((item) => !alreadyClicked(item));
+      if (untriedChoices.length) {
+        const planCursor = Number(st.planCursorByLocation[locationKey] || 0);
+        const planned = plansHere[planCursor]?.indices || [];
+        const suggested = planned.length
+          ? contentChoices[Math.max(0, Math.min(Number(planned[0]), contentChoices.length - 1))]
+          : null;
+        const target = suggested && !alreadyClicked(suggested)
+          ? suggested
+          : untriedChoices[0];
+        return markAndClick(target, 'content-choice');
+      }
+
+      if (submit && !alreadyClicked(submit)) return markAndClick(submit, 'submit-after-choice');
+
+      const textNext = items.find((item) =>
+        !isChoiceButton(item) &&
+        /(^|\s)(next|pr[oó]xim[oa]|avan[cç]ar|continuar|prosseguir)(\s|$)/i.test(item.key)
+      );
+      if (textNext) return markAndClick(textNext, 'next');
+
+      const fallbackChoices = items.filter((item) =>
         item.el.tagName.toLowerCase() !== 'a' &&
+        !isChoiceButton(item) &&
         !item.multiToggle &&
         !good.test(item.key) &&
         !retry.test(item.key) &&
         !forwardId.test(item.id) &&
         !backwardId.test(item.id) &&
-        !/^resetbtn$/i.test(item.id) &&
-        !/(^|\s)(finish|finalizar|concluir|resultado|start|iniciar|come[cç]ar)(\s|$)/i.test(item.key)
+        !/(reset|menu|ref|zoom|skip|close|nav)/i.test(item.id + ' ' + item.className)
       );
-      const priorChoice = genericChoices.some(alreadyClicked);
-      const submitAlreadyTried = Boolean(submit && alreadyClicked(submit));
+      const fallback = fallbackChoices.find((item) => !alreadyClicked(item));
+      if (fallback) return markAndClick(fallback, 'content-choice-generic');
 
-      // Prefer the model's correct option for button-based practices/reviews.
-      if (!priorChoice && genericChoices.length) {
-        const planCursor = Number(st.planCursorByLocation[locationKey] || 0);
-        const planned = plansHere[planCursor]?.indices || [];
-        if (planned.length) {
-          const target = Math.max(0, Math.min(Number(planned[0]), genericChoices.length - 1));
-          return markAndClick(genericChoices[target], 'content-choice-planned');
+      // Legacy quizzes sometimes require an explicit restart after feedback locks
+      // all options. At most one reset per location is attempted in read-only preview.
+      const visibleDisabledChoices = Array.from(document.querySelectorAll('button.option,button.choice,button.answer'))
+        .some((el) => el.disabled);
+      st.resetTriedByLocation ??= {};
+      if (visibleDisabledChoices && !st.resetTriedByLocation[locationKey]) {
+        const reset = document.getElementById('resetBtn');
+        if (reset && visible(reset)) {
+          st.resetTriedByLocation[locationKey] = true;
+          reset.click();
+          logAction('bounded-retry');
+          return { type: 'bounded-retry' };
         }
       }
 
-      // For single-choice decision cards: choose one option, then confirm.
-      if (submit && priorChoice && !submitAlreadyTried) {
-        return markAndClick(submit, 'submit-after-choice');
-      }
-
-      // If submit did not unlock navigation, try the next not-yet-tested answer.
-      if (submit && priorChoice && submitAlreadyTried) {
-        const retryChoice = genericChoices.find((item) => !alreadyClicked(item));
-        if (retryChoice) {
-          clicked.delete(submit.signature);
-          persistClicked();
-          return markAndClick(retryChoice, 'content-choice-retry');
-        }
-      }
-
-      const choice = genericChoices.find((item) => !alreadyClicked(item));
-      if (choice) return markAndClick(choice, 'content-choice');
-
-      if (submit) return markAndClick(submit, 'submit');
-
-      // Exact navigation IDs take precedence over answer text that happens to
-      // contain words such as "próximo".
-      const exactNext = items.find((item) => forwardId.test(item.id));
-      if (exactNext) return markAndClick(exactNext, 'next');
-
-      const textNext = items.find((item) =>
-        /(^|\s)(next|pr[oó]xim[oa]|avan[cç]ar|continuar|prosseguir)(\s|$)/i.test(item.key)
-      );
-      if (textNext) return markAndClick(textNext, 'next');
-
-      const preferred = items.find((item) => good.test(item.key));
+      const preferred = items.find((item) => !isChoiceButton(item) && !alreadyClicked(item) && good.test(item.key));
       if (preferred) return markAndClick(preferred, 'preferred');
 
       const safe = items.find((item) =>
-        forwardId.test(item.id) ||
-        /next|continue|start|finish|submit/i.test(item.key)
+        !isChoiceButton(item) &&
+        !alreadyClicked(item) &&
+        (forwardId.test(item.id) || /next|continue|start|finish|submit/i.test(item.key))
       );
       if (safe) return markAndClick(safe, 'safe');
 
@@ -764,12 +802,26 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
         schema: typeof model.schema === 'string' ? model.schema : null,
         slide_count: Array.isArray(model.slides) ? model.slides.length : null,
         answer_plan_count: answerPlan.length,
+        assessment_question_shape: (() => {
+          const slide = Array.isArray(model.slides)
+            ? model.slides.find((item) => item?.kind === 'assessment' && Array.isArray(item.assessmentQuestions) && item.assessmentQuestions.length)
+            : null;
+          const question = slide?.assessmentQuestions?.[0];
+          return question && typeof question === 'object'
+            ? { keys: Object.keys(question).sort().slice(0, 25), question_count: slide.assessmentQuestions.length }
+            : null;
+        })(),
       }
     : { schema: null, slide_count: null, answer_plan_count: 0 };
 
   let steps = 0;
   if (phase !== 'reopen-completed') {
-    steps = await driveFrame(page, frame, answerPlan, maxDriveMs);
+    const stepLimit = Math.max(
+      MAX_STEPS,
+      Math.max(Number(modelMeta.slide_count || 0), Number(manifest.requiredSlides || 0)) * 5,
+      Number(manifest.requiredInteractions || 0) * 8,
+    );
+    steps = await driveFrame(page, frame, answerPlan, maxDriveMs, stepLimit);
   } else {
     await page.waitForTimeout(1200);
   }
@@ -868,9 +920,14 @@ async function certifyScormCourse(browser, token, listed) {
     else suspendValues['cmi.core.entry'] = 'resume';
   }
 
+  const slideCount = Math.max(
+    Number(manifest.requiredSlides || 0),
+    Number(suspend.model?.slide_count || 0),
+  );
+  const completionBudgetMs = Math.max(COURSE_TIMEOUT_MS, Math.min(180_000, slideCount * 320));
   const complete = suspendAlreadyCompleted
     ? suspend
-    : await runPhase({ browser, token, course: { id }, manifest, phase: 'resume-complete', initialValues: suspendValues, maxDriveMs: COURSE_TIMEOUT_MS });
+    : await runPhase({ browser, token, course: { id }, manifest, phase: 'resume-complete', initialValues: suspendValues, maxDriveMs: completionBudgetMs });
 
   const finalValues = complete.values;
   if (String(detail?.scorm_versao || '1.2') === '2004') finalValues['cmi.entry'] = 'resume';
