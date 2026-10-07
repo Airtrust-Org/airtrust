@@ -28,6 +28,33 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /summarizeStalledSlide/);
   assert.match(source, /captureVisibleControls/);
   assert.match(source, /visible_controls/);
+  assert.match(source, /isProductChrome/);
+  assert.match(source, /content-toggle/);
+  assert.match(source, /content-choice/);
+  assert.match(source, /content-choice-retry/);
+  assert.match(source, /submitAlreadyTried/);
+  assert.match(source, /semanticAction/);
+  assert.match(source, /slideIndex/);
+  assert.match(source, /assessmentCursorByLocation/);
+  assert.match(source, /assessment-answer/);
+  assert.match(source, /assessment-next/);
+  assert.match(source, /content-choice-planned/);
+  assert.match(source, /content_buttons/);
+  assert.match(source, /rect\.bottom > 0/);
+  assert.match(source, /action\?\.type === 'none'/);
+  assert.match(source, /PPTX_QUALIFYING_COMPLETION_EVIDENCE_REQUIRED/);
+  assert.match(source, /generates_qualification/);
+  assert.match(source, /forwardId/);
+  assert.match(source, /qnext/);
+  assert.match(source, /quiznext/);
+  assert.match(source, /close-menu/);
+  assert.match(source, /resetbtn/);
+  assert.match(source, /aria_pressed/);
+  assert.match(source, /clickedByLocation/);
+  assert.match(source, /captureDriverState/);
+  assert.match(source, /driver_state/);
+  assert.match(source, /location: currentLocation/);
+  assert.match(source, /submit-after-choice/);
   assert.match(source, /interactionsValid/);
   assert.doesNotMatch(source, /interactions\.length\s*>\s*0/);
   assert.match(source, /calls_after_finish/);
@@ -40,9 +67,17 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.doesNotMatch(source, /wrangler\s+(?:deploy|d1|r2)/i);
 });
 
-test('production certification workflow is manual, SHA-pinned, secret-scoped and evidence-preserving', () => {
+test('production certification workflow is governed, online-triggerable, SHA-pinned, secret-scoped and evidence-preserving', () => {
   const workflow = read(WORKFLOW);
+  const resolver = read('scripts/validation/resolve-production-lms-active-certification-request.mjs');
+  assert.match(workflow, /issue_comment:/);
   assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /resolve-production-lms-active-certification-request\.mjs/);
+  assert.match(workflow, /collaborators\/\$\{actor\}\/permission/);
+  assert.match(workflow, /ACTOR_PERMISSION_INSUFFICIENT/);
+  assert.match(workflow, /PR_BASE_NOT_MAIN/);
+  assert.match(workflow, /PR_FROM_FORK_REJECTED/);
+  assert.match(workflow, /needs\.guard\.outputs\.course_ids/);
   assert.match(workflow, /course_ids:/);
   assert.match(workflow, /CERT_COURSE_IDS/);
   assert.doesNotMatch(workflow, /\bpush:/);
@@ -59,6 +94,13 @@ test('production certification workflow is manual, SHA-pinned, secret-scoped and
   assert.match(workflow, /if:\s*always\(\)/);
   assert.match(workflow, /actions\/upload-artifact@v7/);
   assert.match(workflow, /Enforce zero certification failures/);
+
+  assert.match(resolver, /COMMENT_ACTOR_MISMATCH/);
+  assert.match(resolver, /COMMENT_COMMAND_MUST_BE_SINGLE_LINE/);
+  assert.match(resolver, /COMMENT_COMMAND_INVALID/);
+  assert.match(resolver, /COURSE_IDS_INVALID/);
+  assert.match(resolver, /OUTPUT_NEWLINE_FORBIDDEN/);
+  assert.match(resolver, /AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY/);
 
   assert.doesNotMatch(workflow, /CLOUDFLARE_(?:WORKER|PAGES|D1|API)_/);
   assert.doesNotMatch(workflow, /wrangler\s+(?:deploy|d1|r2)/i);

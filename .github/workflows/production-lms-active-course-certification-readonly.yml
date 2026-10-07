@@ -1,6 +1,8 @@
 name: Production LMS Active Course Certification Readonly
 
 on:
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
       expected_production_sha:
@@ -35,10 +37,15 @@ env:
 jobs:
   guard:
     name: Guard production LMS active certification
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, 'AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY '))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
-      expected_sha: ${{ steps.guard.outputs.expected_sha }}
+      expected_sha: ${{ steps.request.outputs.expected_sha }}
+      course_ids: ${{ steps.request.outputs.course_ids }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,15 +53,31 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Require pinned production SHA and canonical gates
-        id: guard
+      - name: Resolve governed read-only request
+        id: request
         shell: bash
         env:
-          CONFIRMATION: ${{ inputs.confirmation }}
-          EXPECTED_SHA: ${{ inputs.expected_production_sha }}
-          RELEASE_SHA: ${{ inputs.expected_production_sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ACTOR: ${{ github.event.comment.user.login }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+          INPUT_EXPECTED_SHA: ${{ inputs.expected_production_sha }}
+          INPUT_COURSE_IDS: ${{ inputs.course_ids }}
+        run: node scripts/validation/resolve-production-lms-active-certification-request.mjs >> "$GITHUB_OUTPUT"
+
+      - name: Require pinned production SHA, actor permission and canonical gates
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ steps.request.outputs.pr_number }}
+          CONFIRMATION: ${{ steps.request.outputs.confirmation }}
+          EXPECTED_SHA: ${{ steps.request.outputs.expected_sha }}
+          RELEASE_SHA: ${{ steps.request.outputs.expected_sha }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_ONLY >&2; exit 1; }
@@ -63,10 +86,42 @@ jobs:
           [[ "$expected" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
           git cat-file -e "$expected^{commit}"
           git merge-base --is-ancestor "$expected" HEAD
+
+          if [[ "$EVENT_NAME" == 'issue_comment' ]]; then
+            [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo COMMENT_PR_NUMBER_INVALID >&2; exit 1; }
+            export PR_NUMBER GITHUB_REPOSITORY GITHUB_ACTOR
+            node <<'NODE'
+          (async () => {
+            const repo = process.env.GITHUB_REPOSITORY;
+            const prNumber = process.env.PR_NUMBER;
+            const actor = process.env.GITHUB_ACTOR;
+            const headers = {
+              authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+              accept: 'application/vnd.github+json',
+              'x-github-api-version': '2022-11-28',
+            };
+            async function get(path) {
+              const response = await fetch(`https://api.github.com${path}`, { headers });
+              if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`);
+              return response.json();
+            }
+            const pr = await get(`/repos/${repo}/pulls/${prNumber}`);
+            if (pr.base?.ref !== 'main') throw new Error('PR_BASE_NOT_MAIN');
+            if (pr.head?.repo?.full_name !== repo || pr.head?.repo?.fork) throw new Error('PR_FROM_FORK_REJECTED');
+            const permission = await get(`/repos/${repo}/collaborators/${actor}/permission`);
+            if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) {
+              throw new Error('ACTOR_PERMISSION_INSUFFICIENT');
+            }
+          })().catch((error) => {
+            console.error(`LMS certification guard failed: ${error.message}`);
+            process.exit(1);
+          });
+          NODE
+          fi
+
           EXPECTED_SHA="$expected" RELEASE_SHA="$expected" node scripts/ci/verify-release-gates.mjs
           live="$(curl -fsS https://api.airtrust.online/api/version | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);const b=j.data&&typeof j.data==='object'?j.data:j;process.stdout.write(String(b.sourceSha||b.source_sha||'').toLowerCase())})")"
           [[ "$live" == "$expected" ]] || { echo "PRODUCTION_SHA_MISMATCH:$live" >&2; exit 1; }
-          echo "expected_sha=$expected" >> "$GITHUB_OUTPUT"
 
   certify:
     name: Certify active courses (${{ matrix.browser }})
@@ -83,7 +138,7 @@ jobs:
       PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
       PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
       CERT_BROWSER: ${{ matrix.browser }}
-      CERT_COURSE_IDS: ${{ inputs.course_ids }}
+      CERT_COURSE_IDS: ${{ needs.guard.outputs.course_ids }}
       CERT_REPORT_PATH: qa-state/lms-active-certification-${{ matrix.browser }}.json
       CERT_COURSE_TIMEOUT_MS: '25000'
       CERT_MAX_STEPS: '240'

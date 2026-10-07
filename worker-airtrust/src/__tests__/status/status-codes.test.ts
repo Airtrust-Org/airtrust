@@ -5,6 +5,7 @@ import {
   isActiveOrCompletedSessionStatus,
   isCancelledStatus,
   isCompletedStatus,
+  isCertificateEligibleQualificationStatus,
   isPlannedQualificationStatus,
   SCHEDULED_SESSION_STATUS_VALUES,
   sqlStatusEqualsAny,
@@ -21,6 +22,26 @@ describe('status codes compatibility', () => {
     expect(isCompletedStatus('CONCLUIDA')).toBe(true);
     expect(isCompletedStatus('CONCLUIDO')).toBe(true);
     expect(normalizeCompletedStatusForNewWrites('CONCLUIDO')).toBe(SESSION_STATUS.CONCLUIDA);
+  });
+
+  it('accepts realized qualification lifecycle statuses for certificate emission', () => {
+    for (const status of [
+      'CONCLUIDA',
+      'CONCLUIDO',
+      'VALIDA',
+      'VÁLIDA',
+      'VENCIDA',
+      'RENOVADA',
+      'PROXIMA_VENCIMENTO',
+      'VENCENDO',
+      'VENCENDO_30',
+    ]) {
+      expect(isCertificateEligibleQualificationStatus(status)).toBe(true);
+    }
+
+    for (const status of ['PLANEJADA', 'PLANEJADO', 'CANCELADA', 'CANCELADO', '', null, 'INDEFINIDA']) {
+      expect(isCertificateEligibleQualificationStatus(status)).toBe(false);
+    }
   });
 
   it('accepts canonical and legacy cancelled statuses', () => {
