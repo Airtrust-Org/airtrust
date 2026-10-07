@@ -541,6 +541,61 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         };
       };
 
+      // Some course templates use clickable cards instead of semantic buttons for
+      // explicitly required interactions (for example "Interação obrigatória 0/4").
+      // Only in that declared state, identify pointer-like learner-content elements
+      // outside product chrome and click each distinct card at most once.
+      const requiredInteractionMatch = clean(document.body?.innerText || '').match(
+        /intera[cç][aã]o\s+obrigat[oó]ria\s*\((\d+)\s*\/\s*(\d+)\)/i,
+      );
+      if (
+        requiredInteractionMatch &&
+        Number(requiredInteractionMatch[1]) < Number(requiredInteractionMatch[2])
+      ) {
+        const scope = Array.from(document.querySelectorAll(
+          'main *,article *,section *,[class*="content" i] *,[class*="slide" i] *',
+        ));
+        const unique = [...new Set(scope)];
+        const rawCandidates = unique.filter((el) => {
+          if (!visible(el)) return false;
+          if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
+          if (el.closest(
+            'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+          )) return false;
+          const style = getComputedStyle(el);
+          const dataKeys = Object.keys(el.dataset || {}).join(' ');
+          const className = clean(el.className);
+          const interactiveHint =
+            style.cursor === 'pointer' ||
+            el.tabIndex >= 0 ||
+            el.hasAttribute('onclick') ||
+            /(barrier|decision|interactive|interact|required|toggle|step|action|choice|clickable)/i.test(`${className} ${dataKeys}`);
+          const text = clean(el.textContent);
+          return interactiveHint && text.length > 0 && text.length <= 800;
+        });
+        // Keep the outermost pointer-like element so inherited cursor styles on
+        // headings/list items do not produce multiple clicks inside one card.
+        const candidates = rawCandidates.filter((el) =>
+          !rawCandidates.some((other) => other !== el && other.contains(el))
+        );
+        const all = Array.from(document.querySelectorAll('*'));
+        const candidateItems = candidates.map((el) => {
+          const index = Math.max(0, all.indexOf(el));
+          const id = clean(el.id);
+          const role = clean(el.getAttribute('role'));
+          return {
+            el,
+            index,
+            id,
+            role,
+            text: clean(el.textContent),
+            signature: ['required', index, id, el.tagName.toLowerCase()].join(':'),
+          };
+        });
+        const requiredCandidate = candidateItems.find((item) => !alreadyClicked(item));
+        if (requiredCandidate) return requestTrustedClick(requiredCandidate, 'required-interaction');
+      }
+
       const getAdaptiveState = () => {
         st.adaptiveByLocation[locationBase] ??= {
           initialized: false,
@@ -1195,7 +1250,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   if (phase !== 'reopen-completed') {
     const stepLimit = Math.max(
       MAX_STEPS,
-      COURSE_IDS.size > 0 ? 900 : 0,
+      COURSE_IDS.size > 0 ? 3_600 : 0,
       Math.max(Number(modelMeta.slide_count || 0), Number(manifest.requiredSlides || 0)) * 5,
       Number(manifest.requiredInteractions || 0) * 8,
     );
@@ -1334,9 +1389,12 @@ async function certifyScormCourse(browser, token, listed) {
     Number(manifest.requiredSlides || 0),
     Number(suspend.model?.slide_count || 0),
   );
+  const focusedCompletionBudgetMs = COURSE_IDS.size > 0
+    ? Math.min(420_000, Math.max(180_000, slideCount * 4_000))
+    : 0;
   const completionBudgetMs = Math.max(
     COURSE_TIMEOUT_MS,
-    COURSE_IDS.size > 0 ? 90_000 : 0,
+    focusedCompletionBudgetMs,
     Math.min(180_000, slideCount * 320),
   );
   const complete = suspendAlreadyCompleted
