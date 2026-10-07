@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-manager-designation-nr05-0538",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0538_training_compliance_manager_designation_nr05.sql",
+  "fileHash": "3cf1d2e1d616d1cd558c5dfca3271cf1342ae7e862550004e29da7761f25bc65",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-manager-designation-nr05-0538.md",
+  "planHash": "8053f1d0961a1af055900940bc95d712ac91a6b3e0cbb1c2a7a24b287325cb3d"
+}
