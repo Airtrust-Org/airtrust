@@ -6,8 +6,16 @@ ALLOWED_DB_NAME="airtrust-db-staging-baseline-20260701"; target="$ALLOWED_DB_NAM
 for arg in "$@"; do case "$arg" in --target=*) target="${arg#*=}" ;; *) echo "ERROR: unknown argument: $arg" >&2; exit 1 ;; esac; done
 [[ "$target" == "$ALLOWED_DB_NAME" ]] || { echo "ERROR: staging 0534 postconditions refused target: $target" >&2; exit 1; }
 query_count(){ local sql="$1"; (cd worker-airtrust && npx wrangler d1 execute "$target" --env staging --remote --json --command "$sql") | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const p=JSON.parse(d);const r=p[0]?.results?.[0]||{};console.log(Number(r.count??r.total??Object.values(r)[0]??0))})"; }
-assert_count(){ local label="$1" expected="$2" sql="$3" count; count="$(query_count "$sql")"; [[ "$count" == "$expected" ]] || { echo "ERROR: $label expected=$expected found=$count" >&2; exit 1; }; echo "POSTCONDITION_OK=$label"; }
-assert_positive(){ local label="$1" sql="$2" count; count="$(query_count "$sql")"; (( count > 0 )) || { echo "ERROR: $label expected=>0 found=$count" >&2; exit 1; }; echo "POSTCONDITION_OK=$label"; }
+postcondition_failures=0
+assert_count(){ local label="$1" expected="$2" sql="$3" count; count="$(query_count "$sql")"; if [[ "$count" != "$expected" ]]; then
+    echo "POSTCONDITION_FAIL=$label expected=$expected found=$count" >&2
+    if [[ "$label" == "migration-ledger-0534" ]]; then exit 1; fi
+    postcondition_failures=$((postcondition_failures+1))
+  else echo "POSTCONDITION_OK=$label"; fi; }
+assert_positive(){ local label="$1" sql="$2" count; count="$(query_count "$sql")"; if (( count <= 0 )); then
+    echo "POSTCONDITION_FAIL=$label expected_positive found=$count" >&2
+    postcondition_failures=$((postcondition_failures+1))
+  else echo "POSTCONDITION_OK=$label"; fi; }
 
 assert_count migration-ledger-0534 1 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0534_training_compliance_final_matrix.sql';"
 assert_count nr05-ead 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='NR-05' AND categoria='EAD' AND validade IS NULL AND ativo=1 AND deleted_at IS NULL;"
@@ -66,4 +74,8 @@ if (( nr20_courses > 0 )); then
   assert_count nr20-course-autoqual 0 "SELECT COUNT(*) count FROM lms_cursos c JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id WHERE c.empresa_id=6 AND qt.codigo='NR-20' AND c.ativo=1 AND c.deleted_at IS NULL AND c.gerar_qualificacao_ao_concluir<>1;"
 fi
 assert_count nr35-course-autoqual 0 "SELECT COUNT(*) count FROM lms_cursos c JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id WHERE c.empresa_id=6 AND qt.codigo='NR-35' AND c.ativo=1 AND c.deleted_at IS NULL AND c.gerar_qualificacao_ao_concluir<>0;"
+if (( postcondition_failures > 0 )); then
+  echo "TRAINING_COMPLIANCE_FINAL_MATRIX_0534_STAGING_POSTCONDITION_FAILURE_COUNT=$postcondition_failures" >&2
+  exit 1
+fi
 echo TRAINING_COMPLIANCE_FINAL_MATRIX_0534_STAGING_POSTCONDITIONS=PASS
