@@ -7,6 +7,7 @@ for arg in "$@"; do case "$arg" in --target=*) target="${arg#*=}" ;; *) echo "ER
 [[ "$target" == "$ALLOWED_DB_NAME" ]] || { echo "ERROR: staging 0535 preflight refused target" >&2; exit 1; }
 query_count(){ local sql="$1"; (cd worker-airtrust && npx wrangler d1 execute "$target" --env staging --remote --json --command "$sql") | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const p=JSON.parse(d);const r=p[0]?.results?.[0]||{};console.log(Number(r.count??r.total??Object.values(r)[0]??0))})"; }
 assert_count(){ local label="$1" expected="$2" sql="$3" count; count="$(query_count "$sql")"; [[ "$count" == "$expected" ]] || { echo "ERROR: $label expected=$expected found=$count" >&2; exit 1; }; echo "PREFLIGHT_OK=$label"; }
+bash scripts/staging/validate-0534-postconditions.sh --target="$target"
 assert_count dependency-0534-ledger 1 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0534_training_compliance_final_matrix.sql';"
 assert_count unapplied-0535 0 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0535_training_compliance_fdm_three_audiences.sql';"
 assert_count canonical-operational-training-category 1 "SELECT COUNT(*) count FROM qualificacoes_categorias WHERE empresa_id=6 AND UPPER(TRIM(codigo))='TREINAMENTO_OPERACIONAL' AND ativo=1 AND deleted_at IS NULL;"
