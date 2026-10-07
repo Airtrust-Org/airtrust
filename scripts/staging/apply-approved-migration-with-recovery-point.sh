@@ -622,6 +622,12 @@ const failures = flattened.filter((v) => v?.success === false);
 const hasExplicitSuccess = flattened.length > 0 && flattened.every((v) => v?.success === true);
 const classes = [
   ['SQLITE_INCOMPLETE_INPUT', /incomplete input/i],
+  ['SQLITE_CONSTRAINT_UNIQUE', /UNIQUE constraint failed|SQLITE_CONSTRAINT_UNIQUE/i],
+  ['SQLITE_CONSTRAINT_NOTNULL', /NOT NULL constraint failed|SQLITE_CONSTRAINT_NOTNULL/i],
+  ['SQLITE_CONSTRAINT_CHECK', /CHECK constraint failed|SQLITE_CONSTRAINT_CHECK/i],
+  ['SQLITE_CONSTRAINT_FOREIGNKEY', /FOREIGN KEY constraint failed|SQLITE_CONSTRAINT_FOREIGNKEY/i],
+  ['SQLITE_CONSTRAINT_PRIMARYKEY', /PRIMARY KEY constraint failed|SQLITE_CONSTRAINT_PRIMARYKEY/i],
+  ['SQLITE_CONSTRAINT_TRIGGER', /SQLITE_CONSTRAINT_TRIGGER/i],
   ['SQLITE_CONSTRAINT', /constraint failed|SQLITE_CONSTRAINT/i],
   ['D1_RESET_DO', /D1_RESET_DO/i],
   ['SQLITE_MISSING_OBJECT', /no such (?:table|column|function)/i],
@@ -632,9 +638,22 @@ const classes = [
   ['JSON_PARSE_ERROR', /unexpected token|invalid JSON/i],
 ];
 const category = classes.find(([, re]) => re.test(text))?.[0] || 'UNCLASSIFIED';
+// Only publish schema identifiers from a fixed table allowlist, never raw
+// sqlite error text, literals, SQL, tenant data or query results.
+const constraintTables = new Set([
+  'qualificacoes_tipos', 'treinamento_requisitos', 'lms_cursos',
+  'qualificacoes_areas', 'compliance_condicoes', 'funcoes',
+  'd1_migrations', 'airtrust_schema_changes_v2',
+]);
+const constraintMatch = text.match(
+  /(?:UNIQUE|NOT NULL|CHECK|PRIMARY KEY) constraint failed:\s*([A-Za-z_][A-Za-z0-9_]*)/i,
+);
+const candidateTarget = (constraintMatch?.[1] || '').toLowerCase();
+const constraintTarget = constraintTables.has(candidateTarget) ? candidateTarget : 'UNCLASSIFIED';
 const ok = exitCode === '0' && failures.length === 0 && hasExplicitSuccess;
 console.log('REVIEWED_D1_QUERY_TRANSPORT=' + (ok ? 'PASS' : 'FAIL'));
 console.log('REVIEWED_D1_QUERY_ERROR_CLASS=' + (ok ? 'NONE' : category));
+console.log('REVIEWED_D1_QUERY_CONSTRAINT_TARGET=' + (ok ? 'NONE' : constraintTarget));
 console.log('REVIEWED_D1_QUERY_JSON_VALID=' + (json !== null));
 console.log('REVIEWED_D1_QUERY_RESULT_COUNT=' + entries.length);
 console.log('REVIEWED_D1_QUERY_STDERR_PRESENT=' + (stderr.trim().length > 0));

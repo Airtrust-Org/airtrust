@@ -77,6 +77,11 @@ describe('training compliance final matrix 0534', () => {
     expect(runner).toContain('REVIEWED_D1_QUERY_TRANSPORT=');
     expect(runner).toContain('REVIEWED_D1_QUERY_ERROR_CLASS=');
     expect(runner).toContain('SQLITE_INCOMPLETE_INPUT');
+    expect(runner).toContain('SQLITE_CONSTRAINT_UNIQUE');
+    expect(runner).toContain('SQLITE_CONSTRAINT_NOTNULL');
+    expect(runner).toContain('SQLITE_CONSTRAINT_CHECK');
+    expect(runner).toContain('SQLITE_CONSTRAINT_FOREIGNKEY');
+    expect(runner).toContain('REVIEWED_D1_QUERY_CONSTRAINT_TARGET=');
     expect(runner).toContain('SQLITE_CONSTRAINT');
     expect(runner).not.toContain('--json >/dev/null');
   });
