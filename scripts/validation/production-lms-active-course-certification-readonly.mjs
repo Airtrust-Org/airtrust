@@ -383,7 +383,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       };
 
       const closeMenu = Array.from(document.querySelectorAll('#closeMenuBtn,[data-action="close-menu"],.close-menu,.drawer-close')).find(visible);
-      if (closeMenu) {
+      st.menuCloseByLocation ??= {};
+      if (closeMenu && !st.menuCloseByLocation[locationKey]) {
+        st.menuCloseByLocation[locationKey] = true;
         closeMenu.click();
         logAction('close-menu');
         return { type: 'close-menu', text: 'close-menu' };
@@ -660,6 +662,16 @@ function summarizeStalledSlide(model, lessonLocation) {
     : Array.isArray(slide.alternatives)
       ? slide.alternatives
       : [];
+  const rawQuestions = slide.questions ?? slide.assessmentQuestions ?? null;
+  const questionCollection = Array.isArray(rawQuestions)
+    ? rawQuestions
+    : rawQuestions && typeof rawQuestions === 'object'
+      ? Object.values(rawQuestions).filter((item) => item && typeof item === 'object')
+      : [];
+  const firstQuestion = questionCollection.find((item) => item && typeof item === 'object');
+  const questionOptions = firstQuestion && typeof firstQuestion === 'object'
+    ? ['options', 'alternatives', 'choices', 'answers', 'alternativas'].filter((key) => Array.isArray(firstQuestion[key]))
+    : [];
   return {
     location: location || null,
     resolved: true,
@@ -669,6 +681,14 @@ function summarizeStalledSlide(model, lessonLocation) {
     required_decision: slide.requiredDecision === true,
     option_count: options.length,
     keys: Object.keys(slide).sort().slice(0, 40),
+    question_collection_type: Array.isArray(rawQuestions) ? 'array' : rawQuestions === null ? 'none' : typeof rawQuestions,
+    question_collection_keys: rawQuestions && !Array.isArray(rawQuestions) && typeof rawQuestions === 'object'
+      ? Object.keys(rawQuestions).sort().slice(0, 30)
+      : [],
+    question_count: questionCollection.length,
+    question_shape: firstQuestion
+      ? { keys: Object.keys(firstQuestion).sort().slice(0, 40), option_array_keys: questionOptions }
+      : null,
   };
 }
 
@@ -710,6 +730,9 @@ async function captureVisibleControls(frame) {
           id: id || null,
           role: el.getAttribute('role'),
           class_name: String(el.className || '').slice(0, 160) || null,
+          parent_class_name: String(el.parentElement?.className || '').slice(0, 100) || null,
+          expanded: el.getAttribute('aria-expanded'),
+          data_keys: Object.keys(el.dataset || {}).sort().slice(0, 12),
           aria_pressed: el.getAttribute('aria-pressed'),
           aria_checked: el.getAttribute('aria-checked'),
           category: classify(text, id),
@@ -833,6 +856,27 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   const visibleControls = await captureVisibleControls(frame);
   const stalledSlide = summarizeStalledSlide(model, preUnloadLocation);
   const driverState = await captureDriverState(frame);
+  let diagnosticScreenshot = null;
+  const focusedDiagnostics = COURSE_IDS.size > 0 && COURSE_IDS.size <= 6;
+  if (
+    focusedDiagnostics &&
+    phase === 'resume-complete' &&
+    !terminalState(preUnloadTrace?.values || {})
+  ) {
+    const outputFile = path.join(
+      path.dirname(REPORT_PATH),
+      'lms-active-certification-diagnostics',
+      BROWSER_NAME,
+      `course-${course.id}-stalled.png`,
+    );
+    fs.mkdirSync(path.dirname(outputFile), { recursive: true });
+    const captured = await frame.locator('body').screenshot({
+      path: outputFile,
+      timeout: 5_000,
+      animations: 'disabled',
+    }).then(() => true).catch(() => false);
+    if (captured) diagnosticScreenshot = outputFile;
+  }
 
   await unloadFrame(frame);
   await page.waitForTimeout(120);
@@ -860,6 +904,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     stalled_slide: stalledSlide,
     visible_controls: visibleControls,
     driver_state: driverState,
+    diagnostic_screenshot: diagnosticScreenshot,
     asset_failures: assetFailures.slice(0, 20),
     page_errors: pageErrors.slice(0, 10),
     console_errors: consoleErrors.slice(0, 10),
