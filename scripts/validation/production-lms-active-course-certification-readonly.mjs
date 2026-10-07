@@ -479,9 +479,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       };
 
       const isChoiceButton = (item) =>
-        /(^|\\s)(choice|option|answer)(\\s|$)/i.test(item.className);
+        /(^|\s)(choice|option|answer)(\s|$)/i.test(item.className);
       const assessmentChoices = items.filter((item) =>
-        /(^|\\s)(answer|option)(\\s|$)/i.test(item.className) &&
+        /(^|\s)(answer|option)(\s|$)/i.test(item.className) &&
         !forwardId.test(item.id) &&
         !backwardId.test(item.id)
       );
@@ -494,7 +494,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         st.quizChoicesTried ??= {};
         const tried = new Set(st.quizChoicesTried[quizKey] || []);
         const selected = assessmentChoices.find((item) =>
-          /(^|\\s)(selected|active)(\\s|$)/i.test(item.className) ||
+          /(^|\s)(selected|active)(\s|$)/i.test(item.className) ||
           item.ariaPressed === 'true' ||
           item.ariaChecked === 'true'
         );
@@ -555,7 +555,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
       const textNext = items.find((item) =>
         !isChoiceButton(item) &&
-        /(^|\\s)(next|pr[oó]xim[oa]|avan[cç]ar|continuar|prosseguir)(\\s|$)/i.test(item.key)
+        /(^|\s)(next|pr[oó]xim[oa]|avan[cç]ar|continuar|prosseguir)(\s|$)/i.test(item.key)
       );
       if (textNext) return markAndClick(textNext, 'next');
 
