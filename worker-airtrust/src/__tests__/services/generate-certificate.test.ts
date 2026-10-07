@@ -386,6 +386,30 @@ describe('generateCertificateForHistorico', () => {
     expect(bucket.delete).not.toHaveBeenCalled();
   });
 
+  it.each(['INDETERMINADA', 'ATENCAO'])(
+    'gera PDF com vínculo em documentos e pasta_virtual para status legado %s com conclusão comprovada',
+    async (status) => {
+      const { db, documentos, pastaVirtual, historico } = makeFakeD1({
+        qualificacao: makeQualificacaoRow({
+          status,
+          data_conclusao: '2026-01-23',
+          data_vencimento: null,
+          qualificacao_validade: 12,
+        }),
+      });
+      const bucket = makeBucket();
+      const env = makeEnv(db, bucket);
+
+      const result = await generateCertificateForHistorico(env, HISTORICO_ID, EMPRESA_ID, {});
+
+      expect(result.documentoId).toBeGreaterThan(0);
+      expect(documentos).toHaveLength(1);
+      expect(pastaVirtual).toHaveLength(1);
+      expect(historico.certificado_arquivo_id).toBe(result.documentoId);
+      expect(bucket.put).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('categoria canônica presente (join qualificacoes_tipos.categoria_id -> qualificacoes_categorias.nome) -> único campo "Categoria" mostra a canônica, nunca o texto legado', async () => {
     const { db } = makeFakeD1({
       qualificacao: makeQualificacaoRow({ categoria_qualificacao_canonica: 'EAD' }),

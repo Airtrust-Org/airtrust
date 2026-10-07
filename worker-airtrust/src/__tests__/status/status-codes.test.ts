@@ -35,6 +35,8 @@ describe('status codes compatibility', () => {
       'PROXIMA_VENCIMENTO',
       'VENCENDO',
       'VENCENDO_30',
+      'ATENCAO',
+      'INDETERMINADA',
     ]) {
       expect(isCertificateEligibleQualificationStatus(status)).toBe(true);
     }
