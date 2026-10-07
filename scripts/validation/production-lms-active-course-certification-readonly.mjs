@@ -527,6 +527,15 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       const exactNext = items.find((item) => forwardId.test(item.id));
       if (exactNext) return markAndClick(exactNext, 'next');
 
+      // A satisfied required decision enables the forward control. Advance
+      // before considering other answers, but never treat an answer card that
+      // happens to contain "próximo" as navigation.
+      const enabledTextNext = items.find((item) =>
+        !/(^|\s)(choice|option|answer)(\s|$)/i.test(item.className) &&
+        /(^|\s)(next|pr[oó]xim[oa]|avan[cç]ar|continuar|prosseguir)(\s|$)/i.test(item.key)
+      );
+      if (enabledTextNext) return markAndClick(enabledTextNext, 'next');
+
       // A choice may contain words like "verificar"/"próximo" in its lesson text.
       // Classification must use the button role/class before its text.
       const contentChoices = items.filter((item) =>
