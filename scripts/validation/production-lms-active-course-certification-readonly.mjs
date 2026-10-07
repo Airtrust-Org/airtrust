@@ -457,6 +457,12 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           good.test(text) ||
           forwardId.test(id) ||
           /^(start|finish|submit|iniciar|come[cç]ar|finalizar|concluir)$/i.test(id);
+        const certifiableChoice = el.matches(
+          'button.choice,button.answer,button.option,[data-quiz-choice],[data-module-quiz]',
+        );
+        // Learner answers remain course controls even when their visible text contains
+        // words such as "anterior" or they live under a menu-named layout wrapper.
+        if (certifiableChoice) return false;
         if (/^(menubtn|refbtn|refsbtn|closemenubtn|resetbtn)$/i.test(id) || backwardId.test(id)) return true;
         if (semanticAction) return false;
         if (/(^|\s)(icon-btn|menu-btn|close-menu|drawer-close|skip-link)(\s|$)/i.test(className)) return true;
@@ -527,21 +533,19 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         const quizKey = `${locationKey}:assessment:${cursor}`;
         st.quizChoicesTried ??= {};
         const tried = new Set(st.quizChoicesTried[quizKey] || []);
-        const selected = assessmentChoices.find((item) =>
-          /(^|\s)(selected|active)(\s|$)/i.test(item.className) ||
-          item.ariaPressed === 'true' ||
-          item.ariaChecked === 'true'
-        );
         const nextQuestion = items.find((item) => assessmentForwardId.test(item.id));
         const assessmentFinish = items.find((item) =>
           !isChoiceButton(item) &&
           /concluir\s+(?:a\s+)?avalia[cç][aã]o|finalizar\s+(?:a\s+)?avalia[cç][aã]o|encerrar\s+avalia[cç][aã]o|enviar\s+respostas|concluir\s+quiz/i.test(item.key)
         );
-        if (selected && nextQuestion) {
+        // items only contains enabled controls. If the package enabled next/finish,
+        // it has already accepted the learner answer even when it does not expose
+        // selected/aria state in a way the harness can recognize after resume.
+        if (nextQuestion) {
           st.assessmentCursorByLocation[locationKey] = cursor + 1;
           return markAndClick(nextQuestion, 'assessment-next');
         }
-        if (selected && assessmentFinish && !nextQuestion) {
+        if (assessmentFinish) {
           return markAndClick(assessmentFinish, 'assessment-finish');
         }
         const planned = plannedQuestion?.indices || plansHere[cursor]?.indices || [];
