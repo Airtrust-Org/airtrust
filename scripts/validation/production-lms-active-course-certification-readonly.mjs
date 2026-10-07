@@ -330,7 +330,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       state?.values?.['cmi.core.lesson_location'] ??
       state?.values?.['cmi.location'] ??
       '';
-    const action = await frame.evaluate(({ plan, location }) => {
+    const action = await frame.evaluate(({ plan, location, allowAdaptiveRetry }) => {
       const w = window;
       w.__AIRTRUST_CERT_DRIVER ??= {
         questionOrder: [],
@@ -341,6 +341,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         planCursorByLocation: {},
         assessmentBackfillByLocation: {},
         adaptiveByLocation: {},
+        answeredBeforeByLocation: {},
+        selectionRecoveryByLocation: {},
       };
       const st = w.__AIRTRUST_CERT_DRIVER;
       st.clickedByLocation ??= {};
@@ -349,6 +351,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       st.planCursorByLocation ??= {};
       st.assessmentBackfillByLocation ??= {};
       st.adaptiveByLocation ??= {};
+      st.answeredBeforeByLocation ??= {};
+      st.selectionRecoveryByLocation ??= {};
       const locationBase = String(location || 'unknown');
       // cmi.core.lesson_location tracks the slide, not the question inside it.
       // Use the learner-visible ordinal to avoid treating each new quiz question
@@ -629,6 +633,16 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
             delete st.quizChoicesTried[key];
           }
         }
+        for (const key of Object.keys(st.answeredBeforeByLocation || {})) {
+          if (key === locationBase || key.startsWith(locationBase + ':question-')) {
+            delete st.answeredBeforeByLocation[key];
+          }
+        }
+        for (const key of Object.keys(st.selectionRecoveryByLocation || {})) {
+          if (key === locationBase || key.startsWith(locationBase + ':question-')) {
+            delete st.selectionRecoveryByLocation[key];
+          }
+        }
       };
       const moduleRetry = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
       if (moduleRetry) {
@@ -699,13 +713,24 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           st.assessmentBackfillByLocation[locationBase] = false;
         }
 
-        // Some packages allow learners to navigate without answering. A real
-        // selected state is required before qNext/finish is allowed to advance.
-        if (selected && nextQuestion) {
+        // Some packages do not expose a stable selected/aria state. In that case,
+        // the learner-visible "Respondidas N/M" counter is authoritative evidence
+        // that the click on this question was accepted.
+        const answeredBefore = Number(st.answeredBeforeByLocation[locationKey]);
+        const answeredCountAdvanced =
+          Number.isFinite(answeredBefore) &&
+          answeredCount != null &&
+          answeredCount > answeredBefore;
+        const answerAccepted = Boolean(selected) || answeredCountAdvanced;
+        if (answerAccepted && nextQuestion) {
           st.assessmentCursorByLocation[locationKey] = cursor + 1;
+          delete st.answeredBeforeByLocation[locationKey];
+          delete st.selectionRecoveryByLocation[locationKey];
           return markAndClick(nextQuestion, 'assessment-next');
         }
-        if (selected && assessmentFinish && !nextQuestion) {
+        if (answerAccepted && assessmentFinish && !nextQuestion) {
+          delete st.answeredBeforeByLocation[locationKey];
+          delete st.selectionRecoveryByLocation[locationKey];
           return markAndClick(assessmentFinish, 'assessment-finish');
         }
 
@@ -728,10 +753,27 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (candidate) {
           tried.add(candidate.signature);
           st.quizChoicesTried[quizKey] = Array.from(tried);
+          st.answeredBeforeByLocation[locationKey] = answeredCount ?? -1;
           adaptive.currentAnswers[qIndex] = Math.max(0, assessmentChoices.indexOf(candidate));
           return markAndClick(candidate, 'assessment-answer');
         }
-        if (assessmentFinish && !nextQuestion && candidateOrder.every((item) => tried.has(item.signature))) {
+        // A resumed/restarted assessment can reuse the same question location while
+        // the in-page driver still remembers options tried in the prior attempt.
+        // Clear that local bookkeeping once; the visible answered counter must then
+        // prove that the retried click was accepted before navigation can continue.
+        if (
+          !answerAccepted &&
+          candidateOrder.length > 0 &&
+          !st.selectionRecoveryByLocation[locationKey]
+        ) {
+          st.selectionRecoveryByLocation[locationKey] = true;
+          st.quizChoicesTried[quizKey] = [];
+          st.answeredBeforeByLocation[locationKey] = answeredCount ?? -1;
+          const retryCandidate = candidateOrder[0];
+          adaptive.currentAnswers[qIndex] = Math.max(0, assessmentChoices.indexOf(retryCandidate));
+          return markAndClick(retryCandidate, 'assessment-answer-retry');
+        }
+        if (assessmentFinish && !nextQuestion && answerAccepted) {
           return markAndClick(assessmentFinish, 'assessment-finish');
         }
         return { type: 'none' };
