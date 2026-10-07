@@ -116,4 +116,24 @@ describe('training compliance final matrix 0534', () => {
     expect(productionWorkflow).toContain('validate-0534-production-preflight.sh');
     expect(productionWorkflow).toContain('validate-0534-production-postconditions.sh');
   });
+  it('prints only bounded read-only diagnostics if the INTEGRA postcondition diverges', () => {
+    const script = read('scripts/staging/validate-0534-postconditions.sh');
+    for (const key of [
+      'DIAG_0534_INTEGRA_ACTIVE_CANONICAL',
+      'DIAG_0534_INTEGRA_ANY_STATE',
+      'DIAG_0534_INTEGRA_ACTIVE_EXACT',
+      'DIAG_0534_INTEGRA_CATEGORY_EAD',
+      'DIAG_0534_INTEGRA_VALIDITY_24',
+      'DIAG_0534_INTEGRA_HOURS_2',
+      'DIAG_0534_INTEGRA_NAME_CANDIDATES',
+      'DIAG_0534_INTEGRA_ACTIVE_COURSES',
+    ]) expect(script).toContain(key);
+    expect(script).toContain('postcondition_failures=$((postcondition_failures+1))');
+    expect(script).toContain('migration-ledger-0534');
+    expect(script).toContain('TRAINING_COMPLIANCE_FINAL_MATRIX_0534_STAGING_POSTCONDITION_FAILURE_COUNT=');
+    expect(script).not.toContain('SELECT *');
+    expect(script).not.toContain('DELETE FROM');
+    expect(script).not.toContain('UPDATE qualificacoes_tipos');
+  });
+
 });
