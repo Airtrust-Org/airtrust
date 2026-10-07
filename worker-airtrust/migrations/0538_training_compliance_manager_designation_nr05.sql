@@ -28,11 +28,11 @@ UPDATE compliance_condicoes
        updated_at=datetime('now')
  WHERE empresa_id=6 AND codigo='GESTOR' AND ativo=1 AND deleted_at IS NULL;
 
--- Supersede the former job-title inference for manager-only requirements.
+-- Supersede every prior applicability rule for manager-only requirements.
+-- From this point onward the explicit GESTOR designation is the only audience authority.
 UPDATE treinamento_requisitos
    SET ativo=0,deleted_at=datetime('now'),updated_at=datetime('now')
  WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL
-   AND escopo='FUNCAO' AND condicao_id IS NULL
    AND qualificacao_tipo_id IN (
      SELECT id FROM qualificacoes_tipos
       WHERE empresa_id=6 AND codigo IN ('PPSP_SUP','BOWTIEXP')
