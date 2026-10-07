@@ -49,14 +49,20 @@ def normalize(value: object) -> str:
     return re.sub(r"\s+", " ", text.strip()).upper()
 
 
-def excel_date(value: object) -> str:
+def excel_date(value: object) -> str | None:
     raw = str(value or "").strip()
+    if not raw or normalize(raw) in {"N/C", "NC", "N.A.", "NA", "NAO CONSTA"}:
+        return None
     if re.fullmatch(r"\d+(?:\.0+)?", raw):
         return (datetime(1899, 12, 30) + timedelta(days=int(float(raw)))).date().isoformat()
-    match = re.match(r"^(\d{4}-\d{2}-\d{2})", raw)
-    if not match:
-        raise ValueError("invalid completion date")
-    return match.group(1)
+    iso = re.match(r"^(\d{4}-\d{2}-\d{2})", raw)
+    if iso:
+        return iso.group(1)
+    br = re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", raw)
+    if br:
+        day, month, year = map(int, br.groups())
+        return date(year, month, day).isoformat()
+    return None
 
 
 def col_index(ref: str) -> int:
@@ -116,6 +122,8 @@ def read_control_workbook(path: Path) -> list[dict[str, str]]:
                 if not employee_name or normalize(employee_name) == "NOME DO FUNCIONARIO" or not raw_date:
                     continue
                 completion = excel_date(raw_date)
+                if not completion:
+                    continue
                 key = (normalize(employee_name), code, completion)
                 if key in seen:
                     continue
