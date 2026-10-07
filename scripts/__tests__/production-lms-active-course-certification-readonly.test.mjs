@@ -28,6 +28,12 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /summarizeStalledSlide/);
   assert.match(source, /captureVisibleControls/);
   assert.match(source, /visible_controls/);
+  assert.match(source, /completionBudgetMs/);
+  assert.match(source, /stepLimit/);
+  assert.match(source, /isChoiceButton/);
+  assert.match(source, /quizChoicesTried/);
+  assert.match(source, /bounded-retry/);
+  assert.match(source, /assessment_question_shape/);
   assert.match(source, /isProductChrome/);
   assert.match(source, /content-toggle/);
   assert.match(source, /content-choice/);
