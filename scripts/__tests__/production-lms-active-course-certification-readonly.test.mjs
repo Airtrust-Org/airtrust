@@ -49,6 +49,8 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.doesNotMatch(source, /interactions\.length\s*>\s*0/);
   assert.match(source, /calls_after_finish/);
   assert.match(source, /completion_reached/);
+  assert.match(source, /PPTX_QUALIFYING_COMPLETION_EVIDENCE_REQUIRED/);
+  assert.match(source, /generates_qualification/);
   assert.match(source, /chromium/);
   assert.match(source, /webkit/);
 
