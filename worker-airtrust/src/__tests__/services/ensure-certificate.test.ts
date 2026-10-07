@@ -146,6 +146,40 @@ describe('ensureCertificateForQualification', () => {
     expect(generateCertificateForHistoricoMock).not.toHaveBeenCalled();
   });
 
+  it('permite histórico legado com status NULL e realização/vencimento comprovados', async () => {
+    const db = createDb({
+      id: 1,
+      certificado_arquivo_id: null,
+      status: null,
+      data_conclusao: '2026-01-23',
+      data_vencimento: '2027-01-23',
+      empresa_id: 10,
+    });
+    generateCertificateForHistoricoMock.mockResolvedValueOnce({ documentoId: 999 });
+    const result = await ensureCertificateForQualification(
+      { ...mockEnv, DB: db } as unknown as Env, 1, 10,
+    );
+    expect(result.state).toBe('CREATED');
+    expect(result.documentoId).toBe(999);
+    expect(generateCertificateForHistoricoMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('não permite geração automática de histórico NULL sem data de vencimento', async () => {
+    const db = createDb({
+      id: 1,
+      certificado_arquivo_id: null,
+      status: null,
+      data_conclusao: '2026-01-23',
+      data_vencimento: null,
+      empresa_id: 10,
+    });
+    const result = await ensureCertificateForQualification(
+      { ...mockEnv, DB: db } as unknown as Env, 1, 10,
+    );
+    expect(result.state).toBe('SKIPPED');
+    expect(generateCertificateForHistoricoMock).not.toHaveBeenCalled();
+  });
+
   it('bloqueia certificado para estado não concluído (PLANEJADA)', async () => {
     const db = createDb({
       id: 1,

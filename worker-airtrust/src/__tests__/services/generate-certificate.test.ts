@@ -410,6 +410,44 @@ describe('generateCertificateForHistorico', () => {
     },
   );
 
+  it('gera PDF e persiste vínculos para histórico legado com status NULL e realização/vencimento comprovados', async () => {
+    const { db, documentos, pastaVirtual, historico } = makeFakeD1({
+      qualificacao: makeQualificacaoRow({
+        status: null,
+        data_conclusao: '2026-01-23',
+        data_vencimento: '2027-01-23',
+      }),
+    });
+    const bucket = makeBucket();
+    const result = await generateCertificateForHistorico(makeEnv(db, bucket), HISTORICO_ID, EMPRESA_ID, {});
+    expect(result.documentoId).toBeGreaterThan(0);
+    expect(documentos).toHaveLength(1);
+    expect(pastaVirtual).toHaveLength(1);
+    expect(historico.certificado_arquivo_id).toBe(result.documentoId);
+    expect(bucket.put).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { completion: '2026-01-23', expiry: null },
+    { completion: null, expiry: '2027-01-23' },
+    { completion: '2099-01-23', expiry: '2100-01-23' },
+  ])('mantém fail-closed para status NULL sem evidência suficiente (%s)', async ({ completion, expiry }) => {
+    const { db, documentos, pastaVirtual } = makeFakeD1({
+      qualificacao: makeQualificacaoRow({
+        status: null,
+        data_conclusao: completion,
+        data_vencimento: expiry,
+      }),
+    });
+    const bucket = makeBucket();
+    await expect(
+      generateCertificateForHistorico(makeEnv(db, bucket), HISTORICO_ID, EMPRESA_ID, {}),
+    ).rejects.toMatchObject({ code: 'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE' });
+    expect(documentos).toHaveLength(0);
+    expect(pastaVirtual).toHaveLength(0);
+    expect(bucket.put).not.toHaveBeenCalled();
+  });
+
   it('categoria canônica presente (join qualificacoes_tipos.categoria_id -> qualificacoes_categorias.nome) -> único campo "Categoria" mostra a canônica, nunca o texto legado', async () => {
     const { db } = makeFakeD1({
       qualificacao: makeQualificacaoRow({ categoria_qualificacao_canonica: 'EAD' }),

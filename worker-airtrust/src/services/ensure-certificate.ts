@@ -15,7 +15,7 @@ import {
   CertificateGenerationError,
   generateCertificateForHistorico,
 } from './generate-certificate';
-import { isCertificateEligibleQualificationStatus } from '../lib/status/status-codes';
+import { isCertificateEligibleQualificationRecord } from '../lib/status/status-codes';
 
 // ── Tipos públicos ─────────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ export async function ensureCertificateForQualification(
     // 2. Buscar historico para checar existência de certificado e data_conclusao
     const historico = await db
       .prepare(
-        `SELECT qh.id, qh.certificado_arquivo_id, qh.data_conclusao, qh.status, f.empresa_id
+        `SELECT qh.id, qh.certificado_arquivo_id, qh.data_conclusao, qh.status, qh.data_vencimento, f.empresa_id
            FROM qualificacoes_historico qh
            INNER JOIN funcionarios f
              ON f.id = qh.funcionario_id
@@ -75,6 +75,7 @@ export async function ensureCertificateForQualification(
         certificado_arquivo_id: number | null;
         data_conclusao: string | null;
         status: string | null;
+        data_vencimento: string | null;
         empresa_id: number;
       }>();
 
@@ -85,7 +86,11 @@ export async function ensureCertificateForQualification(
       };
     }
 
-    if (!isCertificateEligibleQualificationStatus(historico.status)) {
+    if (!isCertificateEligibleQualificationRecord({
+      status: historico.status,
+      dataConclusao: historico.data_conclusao,
+      dataVencimento: historico.data_vencimento,
+    })) {
       return {
         state: 'SKIPPED',
         reason: `Qualificação ${historicoId} não possui um status elegível para certificado (status atual: ${historico.status}).`,
