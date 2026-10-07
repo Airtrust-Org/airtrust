@@ -308,7 +308,7 @@ async function getTrace(page) {
   return page.evaluate(() => window.__AIRTRUST_COMPLETION_CERT?.getState?.() || null);
 }
 
-async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS) {
+async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS, allowAdaptiveRetry = true) {
   const started = Date.now();
   let steps = 0;
   let idle = 0;
@@ -339,12 +339,16 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         actionLog: [],
         assessmentCursorByLocation: {},
         planCursorByLocation: {},
+        assessmentBackfillByLocation: {},
+        adaptiveByLocation: {},
       };
       const st = w.__AIRTRUST_CERT_DRIVER;
       st.clickedByLocation ??= {};
       st.actionLog ??= [];
       st.assessmentCursorByLocation ??= {};
       st.planCursorByLocation ??= {};
+      st.assessmentBackfillByLocation ??= {};
+      st.adaptiveByLocation ??= {};
       const locationBase = String(location || 'unknown');
       // cmi.core.lesson_location tracks the slide, not the question inside it.
       // Use the learner-visible ordinal to avoid treating each new quiz question
@@ -354,6 +358,10 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       );
       const questionNumber = questionMatch ? Number(questionMatch[1]) : null;
       const questionTotal = questionMatch ? Number(questionMatch[2]) : null;
+      const answeredMatch = String(document.body?.innerText || '').match(
+        /\brespondidas?\s*(\d+)\s*\/\s*(\d+)/i,
+      );
+      const answeredCount = answeredMatch ? Number(answeredMatch[1]) : null;
       const locationKey = locationBase + (
         questionNumber && questionTotal
           ? ':question-' + questionNumber + '-of-' + questionTotal
@@ -385,7 +393,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           // into view, without exposing hidden menus or disabled elements.
           (
             (r.bottom > 0 && r.right > 0 && r.top < window.innerHeight && r.left < window.innerWidth) ||
-            el.matches('button.choice,button.answer,button.option,[data-quiz-choice],[data-module-quiz],#qNext,#quizNext')
+            el.matches('button.choice,button.answer,button.option,[data-quiz-choice],[data-module-quiz],#qNext,#quizNext,#qPrev,#quizPrev')
           ) &&
           s.visibility !== 'hidden' &&
           s.display !== 'none' &&
@@ -519,8 +527,121 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         return { type, text: (item.text || item.id || String(item.index)).slice(0, 80) };
       };
 
+      const getAdaptiveState = () => {
+        st.adaptiveByLocation[locationBase] ??= {
+          initialized: false,
+          bestMetric: null,
+          bestAnswers: {},
+          currentAnswers: {},
+          optionCounts: {},
+          testedOptions: {},
+          pendingProbe: null,
+          probeQuestion: 0,
+          retries: 0,
+        };
+        return st.adaptiveByLocation[locationBase];
+      };
+      const resultText = clean(document.body?.innerText || '');
+      const resultScoreMatch = resultText.match(/acertou\s+(\d+)\s+de\s+(\d+)\s+quest/i);
+      const firstPercentMatch = resultText.match(/\b(\d{1,3})\s*%/);
+      const resultMetric = resultScoreMatch
+        ? (Number(resultScoreMatch[1]) / Math.max(1, Number(resultScoreMatch[2]))) * 100
+        : firstPercentMatch
+          ? Number(firstPercentMatch[1])
+          : null;
+      const resultQuestionTotal = resultScoreMatch ? Number(resultScoreMatch[2]) : null;
+
+      const prepareAdaptiveProbe = () => {
+        if (!Number.isFinite(resultMetric)) return null;
+        const adaptive = getAdaptiveState();
+        const total = Math.max(1, Number(resultQuestionTotal || questionTotal || 0));
+        if (!adaptive.initialized) {
+          adaptive.initialized = true;
+          adaptive.bestMetric = Number(resultMetric);
+          for (let q = 0; q < total; q += 1) {
+            if (!Number.isInteger(adaptive.bestAnswers[q])) {
+              adaptive.bestAnswers[q] = Number.isInteger(adaptive.currentAnswers[q])
+                ? adaptive.currentAnswers[q]
+                : 0;
+            }
+          }
+          adaptive.probeQuestion = 0;
+        } else if (adaptive.pendingProbe) {
+          const probe = adaptive.pendingProbe;
+          adaptive.testedOptions[probe.question] ??= [];
+          if (!adaptive.testedOptions[probe.question].includes(probe.option)) {
+            adaptive.testedOptions[probe.question].push(probe.option);
+          }
+          if (Number(resultMetric) > Number(adaptive.bestMetric) + 0.01) {
+            adaptive.bestMetric = Number(resultMetric);
+            adaptive.bestAnswers[probe.question] = probe.option;
+            adaptive.probeQuestion = probe.question + 1;
+          } else if (Number(resultMetric) < Number(adaptive.bestMetric) - 0.01) {
+            // Exactly one answer changed. A lower score proves the previous
+            // learner answer should remain the best candidate for this question.
+            adaptive.probeQuestion = probe.question + 1;
+          } else {
+            adaptive.probeQuestion = probe.question;
+          }
+          adaptive.pendingProbe = null;
+        }
+
+        for (let q = Math.max(0, Number(adaptive.probeQuestion || 0)); q < total; q += 1) {
+          const count = Math.max(2, Number(adaptive.optionCounts[q] || 4));
+          const best = Number.isInteger(adaptive.bestAnswers[q]) ? adaptive.bestAnswers[q] : 0;
+          const tested = new Set(adaptive.testedOptions[q] || []);
+          const candidate = Array.from({ length: count }, (_, index) => index)
+            .find((index) => index !== best && !tested.has(index));
+          if (candidate !== undefined) {
+            adaptive.probeQuestion = q;
+            adaptive.pendingProbe = { question: q, option: candidate };
+            adaptive.currentAnswers = {};
+            adaptive.retries += 1;
+            return adaptive.pendingProbe;
+          }
+          adaptive.probeQuestion = q + 1;
+        }
+        return null;
+      };
+
       const isChoiceButton = (item) =>
         /(^|\s)(choice|option|answer)(\s|$)/i.test(item.className);
+
+      // Result screens may keep stale quiz controls mounted. Retry must win
+      // before assessment-mode detection, otherwise hidden/stale controls can
+      // trap the driver even though the learner-visible action is "Refazer".
+      const resetAssessmentRetryState = () => {
+        for (const key of Object.keys(st.assessmentCursorByLocation || {})) {
+          if (key === locationBase || key.startsWith(locationBase + ':question-')) {
+            delete st.assessmentCursorByLocation[key];
+          }
+        }
+        for (const key of Object.keys(st.clickedByLocation || {})) {
+          if (key === locationBase || key.startsWith(locationBase + ':question-')) {
+            delete st.clickedByLocation[key];
+          }
+        }
+        for (const key of Object.keys(st.quizChoicesTried || {})) {
+          if (
+            key.startsWith(locationBase + ':question-') ||
+            key.startsWith(locationBase + ':assessment:')
+          ) {
+            delete st.quizChoicesTried[key];
+          }
+        }
+      };
+      const moduleRetry = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
+      if (moduleRetry) {
+        if (!allowAdaptiveRetry) return { type: 'retry-deferred' };
+        const probe = prepareAdaptiveProbe();
+        if (!probe) return { type: 'adaptive-exhausted' };
+        // Adaptive scoring assumes exactly one learner answer changes per retry.
+        // Reset per-attempt UI bookkeeping so all non-probed questions can reuse
+        // the current best answer instead of being forced onto an untried option.
+        resetAssessmentRetryState();
+        return markAndClick(moduleRetry, 'adaptive-retry');
+      }
+
       const assessmentChoices = items.filter((item) =>
         /(^|\s)(answer|option)(\s|$)/i.test(item.className) &&
         !forwardId.test(item.id) &&
@@ -535,17 +656,51 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         st.quizChoicesTried ??= {};
         const tried = new Set(st.quizChoicesTried[quizKey] || []);
         const selected = assessmentChoices.find((item) =>
-          /(^|\s)(selected|active)(\s|$)/i.test(item.className) ||
+          /(^|\s)(selected|active|checked)(\s|$)/i.test(item.className) ||
           item.ariaPressed === 'true' ||
-          item.ariaChecked === 'true'
+          item.ariaChecked === 'true' ||
+          item.el.getAttribute('data-selected') === 'true' ||
+          item.el.getAttribute('data-checked') === 'true'
         );
         const nextQuestion = items.find((item) => assessmentForwardId.test(item.id));
         const assessmentFinish = items.find((item) =>
           !isChoiceButton(item) &&
           /concluir\s+(?:a\s+)?avalia[cç][aã]o|finalizar\s+(?:a\s+)?avalia[cç][aã]o|encerrar\s+avalia[cç][aã]o|enviar\s+respostas|concluir\s+quiz/i.test(item.key)
         );
-        // Some packages allow learners to navigate to the next question without
-        // answering. Never interpret an enabled qNext as proof of a response.
+        const adaptive = getAdaptiveState();
+        const qIndex = questionNumber ? questionNumber - 1 : cursor;
+        adaptive.optionCounts[qIndex] = assessmentChoices.length;
+        if (selected) adaptive.currentAnswers[qIndex] = Math.max(0, assessmentChoices.indexOf(selected));
+
+        // Resume can reopen at Q10 while the package itself reports only 1/10
+        // answered. That counter is stronger evidence than lesson_location:
+        // walk backwards inside the assessment only, then refill forward.
+        if (
+          questionNumber &&
+          answeredCount != null &&
+          questionNumber - answeredCount > 1
+        ) {
+          st.assessmentBackfillByLocation[locationBase] = true;
+        }
+        const assessmentPrev = Array.from(document.querySelectorAll('#qPrev,#quizPrev'))
+          .find((el) => visible(el) && !el.disabled);
+        if (
+          st.assessmentBackfillByLocation[locationBase] &&
+          questionNumber &&
+          questionNumber > 1 &&
+          assessmentPrev
+        ) {
+          assessmentPrev.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+          assessmentPrev.click();
+          logAction('assessment-prev-backfill');
+          return { type: 'assessment-prev-backfill', text: assessmentPrev.id || 'previous' };
+        }
+        if (st.assessmentBackfillByLocation[locationBase] && questionNumber === 1) {
+          st.assessmentBackfillByLocation[locationBase] = false;
+        }
+
+        // Some packages allow learners to navigate without answering. A real
+        // selected state is required before qNext/finish is allowed to advance.
         if (selected && nextQuestion) {
           st.assessmentCursorByLocation[locationKey] = cursor + 1;
           return markAndClick(nextQuestion, 'assessment-next');
@@ -553,8 +708,19 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (selected && assessmentFinish && !nextQuestion) {
           return markAndClick(assessmentFinish, 'assessment-finish');
         }
+
+        const adaptiveWanted = adaptive.initialized
+          ? (
+              adaptive.pendingProbe?.question === qIndex
+                ? adaptive.pendingProbe.option
+                : adaptive.bestAnswers[qIndex]
+            )
+          : null;
         const planned = plannedQuestion?.indices || plansHere[cursor]?.indices || [];
         const candidateOrder = [
+          Number.isInteger(adaptiveWanted)
+            ? assessmentChoices[Math.max(0, Math.min(Number(adaptiveWanted), assessmentChoices.length - 1))]
+            : null,
           ...planned.map((index) => assessmentChoices[Math.max(0, Math.min(Number(index), assessmentChoices.length - 1))]),
           ...assessmentChoices,
         ].filter(Boolean);
@@ -562,12 +728,12 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (candidate) {
           tried.add(candidate.signature);
           st.quizChoicesTried[quizKey] = Array.from(tried);
+          adaptive.currentAnswers[qIndex] = Math.max(0, assessmentChoices.indexOf(candidate));
           return markAndClick(candidate, 'assessment-answer');
         }
         if (assessmentFinish && !nextQuestion && candidateOrder.every((item) => tried.has(item.signature))) {
           return markAndClick(assessmentFinish, 'assessment-finish');
         }
-        // Do not fake progress when no valid answer/next control exists.
         return { type: 'none' };
       }
 
@@ -694,11 +860,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       );
       if (safe) return markAndClick(safe, 'safe');
 
-      const retryAction = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
-      if (retryAction) return markAndClick(retryAction, 'retry');
-
       return { type: 'none' };
-    }, { plan: answerPlan, location: currentLocation }).catch((error) => ({
+    }, { plan: answerPlan, location: currentLocation, allowAdaptiveRetry }).catch((error) => ({
       type: 'frame-error',
       message: safe(error?.message || String(error)),
     }));
@@ -713,6 +876,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
     diagnostics.last_location = String(currentLocation || '').slice(0, 100);
     diagnostics.last_action = action?.type || null;
+    if (action?.type === 'retry-deferred' || action?.type === 'adaptive-exhausted') break;
     if (action?.type === 'frame-error') {
       diagnostics.frame_error_count += 1;
       const signature = diagnostics.last_location + ':' + String(action.message || '');
@@ -957,10 +1121,18 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   if (phase !== 'reopen-completed') {
     const stepLimit = Math.max(
       MAX_STEPS,
+      COURSE_IDS.size > 0 ? 900 : 0,
       Math.max(Number(modelMeta.slide_count || 0), Number(manifest.requiredSlides || 0)) * 5,
       Number(manifest.requiredInteractions || 0) * 8,
     );
-    const drive = await driveFrame(page, frame, answerPlan, maxDriveMs, stepLimit);
+    const drive = await driveFrame(
+      page,
+      frame,
+      answerPlan,
+      maxDriveMs,
+      stepLimit,
+      phase !== 'suspend',
+    );
     steps = drive.steps;
     driveDiagnostics = drive.diagnostics;
   } else {
@@ -1088,7 +1260,11 @@ async function certifyScormCourse(browser, token, listed) {
     Number(manifest.requiredSlides || 0),
     Number(suspend.model?.slide_count || 0),
   );
-  const completionBudgetMs = Math.max(COURSE_TIMEOUT_MS, Math.min(180_000, slideCount * 320));
+  const completionBudgetMs = Math.max(
+    COURSE_TIMEOUT_MS,
+    COURSE_IDS.size > 0 ? 90_000 : 0,
+    Math.min(180_000, slideCount * 320),
+  );
   const complete = suspendAlreadyCompleted
     ? suspend
     : await runPhase({ browser, token, course: { id }, manifest, phase: 'resume-complete', initialValues: suspendValues, maxDriveMs: completionBudgetMs });
