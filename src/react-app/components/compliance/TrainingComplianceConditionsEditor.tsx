@@ -103,7 +103,17 @@ export function TrainingComplianceConditionsEditor() {
   const assign = useMutation({
     mutationFn: async () => {
       if (!employeeId || !conditionId) throw new Error('Selecione funcionário e condição.');
-      return readJson<{ id: number }>(
+      return readJson<{
+        id: number;
+        auto_enrollment: {
+          created: number;
+          reactivated: number;
+          preserved: number;
+          skipped_valid_evidence: number;
+          unavailable_course: number;
+        } | null;
+        auto_enrollment_warning: string | null;
+      }>(
         await fetchWithAuth('/api/compliance-treinamentos/condicoes/atribuicoes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -119,8 +129,22 @@ export function TrainingComplianceConditionsEditor() {
         }),
       );
     },
-    onSuccess: async () => {
-      showToast.success('Condição atribuída ao funcionário.');
+    onSuccess: async (result) => {
+      const enrolled =
+        Number(result.auto_enrollment?.created || 0) +
+        Number(result.auto_enrollment?.reactivated || 0);
+      if (enrolled > 0) {
+        showToast.success(
+          `Designação atribuída. ${enrolled} treinamento(s) disponibilizado(s) automaticamente.`,
+        );
+      } else {
+        showToast.success('Designação atribuída ao funcionário.');
+      }
+      if (result.auto_enrollment_warning) {
+        showToast.warning(
+          'A designação foi salva, mas a matrícula automática será reconciliada separadamente.',
+        );
+      }
       setReason('');
       await invalidate();
     },
