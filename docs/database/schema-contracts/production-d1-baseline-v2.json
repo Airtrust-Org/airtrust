@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-07",
-    "last_reconciled_against": "0539 Maintenance Indoctrination identity bootstrap prepared after staging absence blocked 0537",
-    "schema_v2_digest": "0097bc0524d81c2fea165990bff65bfe9d0715514f006ba570f7d77537cc0b90",
+    "last_reconciled_against": "0540 Maintenance manual identity bootstrap prepared after staging prerequisite drift blocked 0539",
+    "schema_v2_digest": "76b564178f7adc036f725945052aa482be00f0da48b0dd160ffcd60c55e9c86e",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1384,18 +1384,6 @@
       "note": "0538 follows source-backed 0537: Gestor training applicability moves from title inference to explicit GESTOR designation with runtime auto-enrollment, and NR-05 becomes EAD / 24 months / 2 hours / company-wide by Training Management decision."
     },
     {
-      "change_file": "ead-category-reconciliation-executor-0453.sql",
-      "change_id": null,
-      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
-      "targets": [
-        "ead_category_reconciliation_runs"
-      ],
-      "domain": "EAD category reconciliation executor ledger",
-      "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REPO_EXPECTED",
-      "reviewed_manifest": null
-    },
-    {
       "change_file": "0539_training_doutrinacao_bootstrap.sql",
       "change_id": "training-doutrinacao-bootstrap-0539",
       "sha256": "e10c80ea539a8f2313af4abc84cda8fd18eae640bb6e71efc34b64e970e93236",
@@ -1406,6 +1394,30 @@
       "reviewed_manifest": "training-doutrinacao-bootstrap-0539.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-doutrinacao-bootstrap-0539.md",
       "note": "0539 repairs an environment-specific missing/inactive MNT_INTEGRACAO_DOUTRINACAO identity discovered before 0537 apply; it preserves an existing ID when possible or bootstraps from the Maintenance taxonomy, then normalizes PTM Rev.06 8h/4h/36m without employee, enrollment, history or certificate writes."
+    },
+    {
+      "change_file": "0540_training_maintenance_manuals_bootstrap.sql",
+      "change_id": "training-maintenance-manuals-bootstrap-0540",
+      "sha256": "c26a03a1be5659b65530531185f5d7173c24ae824cfced0849d98fc39ffff265",
+      "targets": [],
+      "domain": "training catalog / Maintenance manual identity bootstrap",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-maintenance-manuals-bootstrap-0540.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-maintenance-manuals-bootstrap-0540.md",
+      "note": "0540 repairs the staging prerequisite layer discovered after two fail-closed attempts: it restores the canonical Maintenance Doutrinação category and MNT_MGM/MNT_MOM/MNT_MCQ identities without standalone hours or employee/LMS/history writes, before 0539 -> 0537 -> 0538."
+    },
+    {
+      "change_file": "ead-category-reconciliation-executor-0453.sql",
+      "change_id": null,
+      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
+      "targets": [
+        "ead_category_reconciliation_runs"
+      ],
+      "domain": "EAD category reconciliation executor ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
     }
   ]
 }
