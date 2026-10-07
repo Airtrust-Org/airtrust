@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  employeeSearchTerm,
   filterEmployeeCandidates,
   normalizeText,
   selectCourse,
@@ -21,9 +22,13 @@ test('selectCourse prefers exact normalized title', () => {
   assert.equal(course.id, 11);
 });
 
-test('filterEmployeeCandidates requires all query tokens', () => {
+test('employeeSearchTerm broadens multi-token lookup to first token', () => {
+  assert.equal(employeeSearchTerm('  Wilson Nery  '), 'Wilson');
+});
+
+test('filterEmployeeCandidates matches non-contiguous name tokens', () => {
   const rows = [
-    { id: 1, nome: 'Wilson Nery da Silva' },
+    { id: 1, nome: 'Wilson José Nery da Silva' },
     { id: 2, nome: 'Wilson da Silva' },
     { id: 3, nome: 'Nery Souza' },
   ];
