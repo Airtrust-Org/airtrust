@@ -1,0 +1,100 @@
+name: Production Targeted LMS Rematriculation
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA reviewed for this targeted operation
+        required: true
+        type: string
+      targets_json:
+        description: JSON array with exact employee search labels
+        required: true
+        type: string
+      course_query:
+        description: Course title/search text
+        required: true
+        type: string
+      send_email:
+        description: Send enrollment invitation email
+        required: true
+        type: boolean
+        default: false
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_TARGETED_LMS_REMATRICULATION
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-targeted-lms-rematriculation
+  cancel-in-progress: false
+
+env:
+  PROD_API_BASE_URL: https://api.airtrust.online
+  EXPECTED_TENANT_ID: '6'
+
+jobs:
+  rematriculate:
+    name: Governed production targeted LMS rematriculation
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    env:
+      E2E_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+      AIRTRUST_TARGET_EMPLOYEE_QUERIES: ${{ inputs.targets_json }}
+      AIRTRUST_COURSE_QUERY: ${{ inputs.course_query }}
+      AIRTRUST_SEND_EMAIL: ${{ inputs.send_email }}
+      AIRTRUST_PRODUCTION_REMATRICULATION_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_REF_REQUIRED >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo EXPECTED_SHA_MISMATCH >&2; exit 1; }
+          [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_TARGETED_LMS_REMATRICULATION ]] || { echo CONFIRMATION_REQUIRED >&2; exit 1; }
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - run: npm --prefix worker-airtrust ci
+
+      - name: Validate targeted operator
+        run: |
+          set -euo pipefail
+          node --check scripts/production/lms-targeted-rematriculation.mjs
+          node --test scripts/__tests__/production-lms-targeted-rematriculation.test.mjs
+
+      - name: Verify official release gates on exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Require production admin credentials
+        run: |
+          set -euo pipefail
+          [[ -n "$E2E_EMAIL" && -n "$E2E_PASSWORD" ]] || { echo PRODUCTION_ADMIN_CREDENTIALS_MISSING >&2; exit 1; }
+          [[ "$E2E_EMAIL" != *'staging.airtrust.invalid'* ]] || { echo STAGING_QA_IDENTITY_REJECTED >&2; exit 1; }
+
+      - name: Execute exact rematriculation through audited API
+        run: node scripts/production/lms-targeted-rematriculation.mjs
