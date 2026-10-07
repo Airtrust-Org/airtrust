@@ -85,7 +85,8 @@ describe('training compliance final matrix 0534', () => {
     const runner = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
     const workflow = read('.github/workflows/apply-schema-change-v2.yml');
     expect(runner).toContain('[[ "$migration_basename" == "0534_training_compliance_final_matrix.sql" ]]');
-    expect(runner).toContain('fd8a8ac34f7dffe353c6fe2b68c0551abcc35c2611c0f25b319eabeb929d00e7');
+    const manifest = JSON.parse(read(manifestPath)) as { fileHash: string };
+    expect(runner).toContain(manifest.fileHash);
     expect(runner).toContain('--env staging --remote --command="$sql_payload" --json');
     expect(runner).toContain('ledger_count="$(read_ledger_count)"');
     expect(runner).toContain('validate_postconditions');
