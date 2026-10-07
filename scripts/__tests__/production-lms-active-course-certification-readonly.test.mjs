@@ -90,6 +90,9 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /resetAssessmentRetryState/);
   assert.match(source, /adaptive-exhausted/);
   assert.match(source, /resultScoreMatch/);
+  assert.match(source, /labeledPercentMatch/);
+  assert.match(source, /observedQuestionTotal/);
+  assert.match(source, /revisar\\s\+/);
   assert.match(source, /COURSE_IDS\.size > 0 \? 900 : 0/);
   assert.match(source, /COURSE_IDS\.size > 0 \? 90_000 : 0/);
   assert.match(source, /content_buttons/);

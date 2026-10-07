@@ -407,7 +407,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
       const bad = /voltar|anterior|menu|sum[aá]rio|fechar|sair|cancelar/i;
       const good = /confirmar|responder|enviar|verificar|corrigir|continuar|pr[oó]xim[oa]|avan[cç]ar|iniciar|come[cç]ar|prosseguir|finalizar|concluir|resultado/i;
-      const retry = /tentar novamente|refazer|retry/i;
+      const retry = /tentar novamente|refazer|retry|revisar\s+(?:(?:este|o|a)\s+)?(?:cap[ií]tulo|m[oó]dulo)/i;
       const forwardId = /^(?:next|nextbtn|btnnext|qnext|quiznext|continue|continuebtn|submitnext)$/i;
       const assessmentForwardId = /^(?:qnext|quiznext)$/i;
       const backwardId = /^(?:prev|prevbtn|previous|back|qprev|quizprev)$/i;
@@ -557,18 +557,34 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       };
       const resultText = clean(document.body?.innerText || '');
       const resultScoreMatch = resultText.match(/acertou\s+(\d+)\s+de\s+(\d+)\s+quest/i);
+      const labeledPercentMatch = resultText.match(
+        /\b(?:nota|resultado(?:\s+(?:do|da)\s+(?:cap[ií]tulo|m[oó]dulo|quiz|avalia[cç][aã]o))?)\s*:?[ \t]*(\d{1,3})\s*%/i,
+      );
       const firstPercentMatch = resultText.match(/\b(\d{1,3})\s*%/);
       const resultMetric = resultScoreMatch
         ? (Number(resultScoreMatch[1]) / Math.max(1, Number(resultScoreMatch[2]))) * 100
-        : firstPercentMatch
-          ? Number(firstPercentMatch[1])
-          : null;
+        : labeledPercentMatch
+          ? Number(labeledPercentMatch[1])
+          : firstPercentMatch
+            ? Number(firstPercentMatch[1])
+            : null;
       const resultQuestionTotal = resultScoreMatch ? Number(resultScoreMatch[2]) : null;
 
       const prepareAdaptiveProbe = () => {
         if (!Number.isFinite(resultMetric)) return null;
         const adaptive = getAdaptiveState();
-        const total = Math.max(1, Number(resultQuestionTotal || questionTotal || 0));
+        const observedQuestionTotal = Math.max(
+          0,
+          ...Object.keys(adaptive.optionCounts || {}).map((key) => Number(key) + 1).filter(Number.isFinite),
+          ...Object.keys(adaptive.currentAnswers || {}).map((key) => Number(key) + 1).filter(Number.isFinite),
+          ...Object.keys(adaptive.bestAnswers || {}).map((key) => Number(key) + 1).filter(Number.isFinite),
+        );
+        const total = Math.max(
+          1,
+          Number(resultQuestionTotal || 0),
+          Number(questionTotal || 0),
+          observedQuestionTotal,
+        );
         if (!adaptive.initialized) {
           adaptive.initialized = true;
           adaptive.bestMetric = Number(resultMetric);
