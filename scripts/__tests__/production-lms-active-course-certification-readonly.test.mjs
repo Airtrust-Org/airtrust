@@ -73,6 +73,9 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /moduleRetry/);
   assert.match(source, /retry-deferred/);
   assert.match(source, /assessmentBackfillByLocation/);
+  assert.match(source, /shouldStartAssessmentBackfill/);
+  assert.match(source, /frame\.evaluate\(\(\{ plan, location, allowAdaptiveRetry \}\)/);
+  assert.equal((source.match(/resetAssessmentRetryState\(\)/g) || []).length, 2);
   assert.match(source, /answeredMatch/);
   assert.match(source, /assessment-prev-backfill/);
   assert.match(source, /adaptiveByLocation/);
