@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-07",
-    "last_reconciled_against": "0538 explicit Gestor designation + approved NR-05 company-wide policy prepared; live apply pending",
-    "schema_v2_digest": "9ee1b46e85f9feb924058205b55391dae260a0fe6b5b519f5101c51fca439125",
+    "last_reconciled_against": "0539 Maintenance Indoctrination identity bootstrap prepared after staging absence blocked 0537",
+    "schema_v2_digest": "0097bc0524d81c2fea165990bff65bfe9d0715514f006ba570f7d77537cc0b90",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1394,6 +1394,18 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
       "reviewed_manifest": null
+    },
+    {
+      "change_file": "0539_training_doutrinacao_bootstrap.sql",
+      "change_id": "training-doutrinacao-bootstrap-0539",
+      "sha256": "e10c80ea539a8f2313af4abc84cda8fd18eae640bb6e71efc34b64e970e93236",
+      "targets": [],
+      "domain": "training catalog / Maintenance Indoctrination identity bootstrap",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-doutrinacao-bootstrap-0539.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-doutrinacao-bootstrap-0539.md",
+      "note": "0539 repairs an environment-specific missing/inactive MNT_INTEGRACAO_DOUTRINACAO identity discovered before 0537 apply; it preserves an existing ID when possible or bootstraps from the Maintenance taxonomy, then normalizes PTM Rev.06 8h/4h/36m without employee, enrollment, history or certificate writes."
     }
   ]
 }
