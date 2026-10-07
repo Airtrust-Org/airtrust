@@ -103,7 +103,7 @@ export function TrainingComplianceConditionsEditor() {
   const assign = useMutation({
     mutationFn: async () => {
       if (!employeeId || !conditionId) throw new Error('Selecione funcionário e condição.');
-      return readJson<{ id: number }>(
+      return readJson<{ id:number; auto_enrollment:{created:number;reactivated:number;preserved:number;skipped_valid_evidence:number;unavailable_course:number}|null; auto_enrollment_warning:string|null }>(
         await fetchWithAuth('/api/compliance-treinamentos/condicoes/atribuicoes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -119,10 +119,12 @@ export function TrainingComplianceConditionsEditor() {
         }),
       );
     },
-    onSuccess: async () => {
-      showToast.success('Condição atribuída ao funcionário.');
-      setReason('');
-      await invalidate();
+    onSuccess: async (result) => {
+      const enrolled=Number(result.auto_enrollment?.created||0)+Number(result.auto_enrollment?.reactivated||0);
+      showToast.success(enrolled>0?`Designação atribuída. ${enrolled} treinamento(s) disponibilizado(s) automaticamente.`:'Designação atribuída ao funcionário.');
+      if(Number(result.auto_enrollment?.unavailable_course||0)>0) showToast.warning('Designação salva, mas existe treinamento sem um único curso EAD publicado e vinculado.');
+      else if(result.auto_enrollment_warning) showToast.warning('Designação salva, mas a matrícula automática precisará ser reconciliada.');
+      setReason(''); await invalidate();
     },
     onError: (error) =>
       showToast.error(error instanceof Error ? error.message : 'Erro ao atribuir condição'),
