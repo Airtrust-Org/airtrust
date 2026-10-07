@@ -229,7 +229,7 @@ describe('generateCertificateForHistorico — qualification status eligibility (
     }
   });
 
-  it.each(['VALIDA', 'VÁLIDA', 'PROXIMA_VENCIMENTO', 'VENCENDO', 'VENCENDO_30'])(
+  it.each(['VALIDA', 'VÁLIDA', 'PROXIMA_VENCIMENTO', 'VENCENDO', 'VENCENDO_30', 'ATENCAO', 'INDETERMINADA'])(
     '%s: eligible for certificate because the qualification realization happened',
     async (status) => {
       const db = new SqliteD1Database();
@@ -245,6 +245,32 @@ describe('generateCertificateForHistorico — qualification status eligibility (
         await expect(
           generateCertificateForHistorico(makeEnv(db), historicoId, 1),
         ).rejects.not.toMatchObject({ code: 'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE' });
+      } finally {
+        db.close();
+      }
+    },
+  );
+
+  it.each([null, '2099-01-23', '2026-02-31'])(
+    'legacy INDETERMINADA without a valid past completion date (%s) is blocked',
+    async (completionDate) => {
+      const db = new SqliteD1Database();
+      patchSchema(db);
+      try {
+        const id = insertHistory(db.database, {
+          funcionarioId: 1000,
+          qualificationId: 100,
+          empresaId: 1,
+          status: 'INDETERMINADA',
+        });
+        db.database.prepare('UPDATE qualificacoes_historico SET data_conclusao = ? WHERE id = ?')
+          .run(completionDate, id);
+
+        await expect(
+          generateCertificateForHistorico(makeEnv(db), id, 1),
+        ).rejects.toMatchObject({
+          code: 'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE',
+        });
       } finally {
         db.close();
       }

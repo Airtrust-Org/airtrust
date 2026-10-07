@@ -115,6 +115,11 @@ export const CERTIFICATE_ELIGIBLE_QUALIFICATION_STATUS_VALUES = [
   'PROXIMA_VENCIMENTO',
   'VENCENDO',
   'VENCENDO_30',
+  // Older persisted operational states that describe an already-realized
+  // qualification (expiry warning or expiry not classified). Certificate
+  // issuance also requires a real, non-future completion date.
+  'ATENCAO',
+  'INDETERMINADA',
 ] as const;
 
 const completedStatusSet = new Set<string>(COMPLETED_STATUS_VALUES);

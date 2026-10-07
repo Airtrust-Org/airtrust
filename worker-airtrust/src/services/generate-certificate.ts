@@ -280,13 +280,37 @@ export async function generateCertificateForHistorico(
     .trim()
     .toUpperCase();
   if (!isCertificateEligibleQualificationStatus(qualificacaoStatus)) {
+    // The history listing displays a date-derived operational status, while
+    // this service validates the stored one. Expose only a bounded status code
+    // (never employee identifiers) so legacy mismatches can be diagnosed.
+    const recordedStatus = /^[A-Z0-9_ÁÉÍÓÚÇ -]{1,32}$/.test(qualificacaoStatus)
+      ? qualificacaoStatus
+      : 'DESCONHECIDO';
     throw new CertificateGenerationError(
       'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE',
       qualificacaoStatus === 'PLANEJADA' || qualificacaoStatus === 'PLANEJADO'
         ? 'Qualificação ainda não realizada (PLANEJADA); não é possível emitir certificado.'
         : qualificacaoStatus === 'CANCELADA' || qualificacaoStatus === 'CANCELADO'
           ? 'Qualificação cancelada; não é possível emitir certificado.'
-          : 'Status da qualificação não permite emissão de certificado.',
+          : `Status registrado da qualificação (${recordedStatus || 'VAZIO'}) não permite emissão de certificado.`,
+    );
+  }
+
+  // Expiry status alone does not prove a course/qualification happened. In
+  // particular, legacy INDETERMINADA may have no expiry: require a recorded
+  // completion date, not a generated PDF dated "today" via fallback.
+  const dataRealizacao = String(qualificacao.data_conclusao || '').trim().slice(0, 10);
+  const isIsoDate = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(dataRealizacao);
+  const parsedRealizacao = isIsoDate ? new Date(`${dataRealizacao}T00:00:00Z`) : null;
+  if (
+    !parsedRealizacao ||
+    Number.isNaN(parsedRealizacao.getTime()) ||
+    parsedRealizacao.toISOString().slice(0, 10) !== dataRealizacao ||
+    dataRealizacao > new Date().toISOString().slice(0, 10)
+  ) {
+    throw new CertificateGenerationError(
+      'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE',
+      'Qualificação sem data de realização válida e comprovada; não é possível emitir certificado.',
     );
   }
 

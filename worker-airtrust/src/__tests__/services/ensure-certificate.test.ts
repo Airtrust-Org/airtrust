@@ -101,7 +101,7 @@ describe('ensureCertificateForQualification', () => {
     expect(result.documentoId).toBe(999);
   });
 
-  it.each(['VALIDA', 'VÁLIDA', 'VENCIDA', 'RENOVADA', 'PROXIMA_VENCIMENTO', 'VENCENDO', 'VENCENDO_30'])(
+  it.each(['VALIDA', 'VÁLIDA', 'VENCIDA', 'RENOVADA', 'PROXIMA_VENCIMENTO', 'VENCENDO', 'VENCENDO_30', 'ATENCAO', 'INDETERMINADA'])(
     'permite certificado para qualificação realizada em estado operacional %s',
     async (status) => {
       const db = createDb({
@@ -125,6 +125,26 @@ describe('ensureCertificateForQualification', () => {
       expect(generateCertificateForHistoricoMock).toHaveBeenCalledTimes(1);
     },
   );
+
+  it('does not auto-generate for legacy undetermined status without completion evidence', async () => {
+    const db = createDb({
+      id: 1,
+      certificado_arquivo_id: null,
+      data_conclusao: null,
+      status: 'INDETERMINADA',
+      empresa_id: 10,
+    });
+
+    const result = await ensureCertificateForQualification(
+      { ...mockEnv, DB: db } as unknown as Env,
+      1,
+      10,
+    );
+
+    expect(result.state).toBe('SKIPPED');
+    expect(result.reason).toContain('sem data_conclusao');
+    expect(generateCertificateForHistoricoMock).not.toHaveBeenCalled();
+  });
 
   it('bloqueia certificado para estado não concluído (PLANEJADA)', async () => {
     const db = createDb({
