@@ -221,23 +221,48 @@ function extractAnswerPlan(model) {
       return;
     }
     const obj = value;
-    const options = Array.isArray(obj.options) ? obj.options : Array.isArray(obj.alternatives) ? obj.alternatives : null;
+    let options = null;
+    for (const key of ['options', 'alternatives', 'choices', 'answers']) {
+      if (Array.isArray(obj[key]) && obj[key].length) {
+        options = obj[key];
+        break;
+      }
+    }
     if (options?.length) {
       let indices = [];
-      for (const key of ['correctIndex', 'answerIndex', 'correctOptionIndex']) {
+      for (const key of ['correctIndex', 'answerIndex', 'correctOptionIndex', 'correctAnswerIndex']) {
         if (Number.isInteger(obj[key])) indices = [Number(obj[key])];
       }
-      for (const key of ['correctAnswer', 'answer', 'correctOption']) {
+      for (const key of ['correctAnswer', 'answer', 'correctOption', 'correct']) {
         const raw = obj[key];
         if (typeof raw === 'number' && Number.isInteger(raw)) indices = [raw];
+        if (Array.isArray(raw) && raw.every((item) => Number.isInteger(item))) indices = raw.map(Number);
         if (typeof raw === 'string') {
-          const idx = options.findIndex((option) => String(option?.value ?? option?.text ?? option?.label ?? option) === raw);
+          const normalized = raw.trim();
+          const idx = options.findIndex((option) =>
+            String(option?.value ?? option?.text ?? option?.label ?? option).trim() === normalized
+          );
           if (idx >= 0) indices = [idx];
         }
       }
-      const marked = options.map((option, i) => (option && typeof option === 'object' && (option.correct === true || option.isCorrect === true) ? i : -1)).filter((i) => i >= 0);
+      const marked = options
+        .map((option, i) => (
+          option && typeof option === 'object' &&
+          (option.correct === true || option.isCorrect === true || option.correctAnswer === true)
+            ? i
+            : -1
+        ))
+        .filter((i) => i >= 0);
       if (marked.length) indices = marked;
-      if (indices.length) answers.push({ path, indices: [...new Set(indices)].filter((i) => i >= 0 && i < options.length) });
+      const unique = [...new Set(indices)].filter((i) => i >= 0 && i < options.length);
+      if (unique.length) {
+        const slideMatch = path.match(/(?:^|\.)slides\[(\d+)\]/);
+        answers.push({
+          path,
+          slideIndex: slideMatch ? Number(slideMatch[1]) + 1 : null,
+          indices: unique,
+        });
+      }
     }
     for (const [key, child] of Object.entries(obj)) visit(child, path ? `${path}.${key}` : key);
   }
@@ -296,14 +321,22 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       w.__AIRTRUST_CERT_DRIVER ??= {
         questionOrder: [],
         attempts: {},
-        planCursor: 0,
         clickedByLocation: {},
         actionLog: [],
+        assessmentCursorByLocation: {},
+        planCursorByLocation: {},
       };
       const st = w.__AIRTRUST_CERT_DRIVER;
       st.clickedByLocation ??= {};
       st.actionLog ??= [];
+      st.assessmentCursorByLocation ??= {};
+      st.planCursorByLocation ??= {};
       const locationKey = String(location || 'unknown');
+      const slideMatch = locationKey.match(/^(\d+)/);
+      const slideIndex = slideMatch ? Number(slideMatch[1]) : null;
+      const plansHere = Array.isArray(plan)
+        ? plan.filter((item) => item?.slideIndex === slideIndex)
+        : [];
       const clicked = new Set(
         Array.isArray(st.clickedByLocation[locationKey])
           ? st.clickedByLocation[locationKey]
@@ -312,18 +345,43 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       const visible = (el) => {
         const r = el.getBoundingClientRect();
         const s = getComputedStyle(el);
-        return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' && !el.disabled;
+        return (
+          r.width > 0 &&
+          r.height > 0 &&
+          r.bottom > 0 &&
+          r.right > 0 &&
+          r.top < window.innerHeight &&
+          r.left < window.innerWidth &&
+          s.visibility !== 'hidden' &&
+          s.display !== 'none' &&
+          s.opacity !== '0' &&
+          el.getAttribute('aria-hidden') !== 'true' &&
+          !el.disabled
+        );
       };
       const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
       const bad = /voltar|anterior|menu|sum[aá]rio|fechar|sair|cancelar/i;
       const good = /confirmar|responder|enviar|verificar|corrigir|continuar|pr[oó]xim[oa]|avan[cç]ar|iniciar|come[cç]ar|prosseguir|finalizar|concluir|resultado/i;
       const retry = /tentar novamente|refazer|retry/i;
       const forwardId = /^(?:next|nextbtn|btnnext|qnext|quiznext|continue|continuebtn|submitnext)$/i;
+      const assessmentForwardId = /^(?:qnext|quiznext)$/i;
       const backwardId = /^(?:prev|prevbtn|previous|back|qprev|quizprev)$/i;
 
-      const closeMenu = Array.from(document.querySelectorAll('#closeMenuBtn,[data-action="close-menu"]')).find(visible);
+      const logAction = (type, item = null) => {
+        st.actionLog.push({
+          location: locationKey,
+          type,
+          index: item?.index ?? null,
+          id: item?.id || null,
+          role: item?.role || null,
+        });
+        if (st.actionLog.length > 120) st.actionLog.splice(0, st.actionLog.length - 120);
+      };
+
+      const closeMenu = Array.from(document.querySelectorAll('#closeMenuBtn,[data-action="close-menu"],.close-menu,.drawer-close')).find(visible);
       if (closeMenu) {
         closeMenu.click();
+        logAction('close-menu');
         return { type: 'close-menu', text: 'close-menu' };
       }
 
@@ -334,15 +392,20 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         groups.get(key).push(input);
       }
       if (groups.size) {
+        let groupPosition = 0;
         for (const [key, inputs] of groups) {
           if (!st.questionOrder.includes(key)) st.questionOrder.push(key);
           const qIndex = st.questionOrder.indexOf(key);
-          const planned = Array.isArray(plan?.[qIndex]?.indices) ? plan[qIndex].indices : [];
+          const planned =
+            (Array.isArray(plansHere?.[groupPosition]?.indices) && plansHere[groupPosition].indices) ||
+            (Array.isArray(plan?.[qIndex]?.indices) && plan[qIndex].indices) ||
+            [];
           const attempts = Number(st.attempts[key] || 0);
           const target = planned.length ? planned[Math.min(attempts, planned.length - 1)] : attempts % inputs.length;
           const input = inputs[Math.max(0, Math.min(target, inputs.length - 1))];
           if (input && !input.checked) input.click();
           st.attempts[key] = attempts + 1;
+          groupPosition += 1;
         }
       }
 
@@ -352,15 +415,17 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
       const isProductChrome = (el, text) => {
         const id = String(el.id || '').toLowerCase();
+        const className = clean(el.className).toLowerCase();
         const semanticAction =
           good.test(text) ||
           forwardId.test(id) ||
           /^(start|finish|submit|iniciar|come[cç]ar|finalizar|concluir)$/i.test(id);
         if (semanticAction) return false;
         if (/^(menubtn|refbtn|closemenubtn|resetbtn)$/.test(id) || backwardId.test(id)) return true;
+        if (/(^|\s)(icon-btn|menu-btn|close-menu|drawer-close|skip-link)(\s|$)/i.test(className)) return true;
         if (bad.test(text)) return true;
         return Boolean(el.closest(
-          'nav,aside,[role=navigation],[class*="sidebar" i],[class*="drawer" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+          'aside,[class*="sidebar" i],[class*="drawer" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
         ));
       };
       const items = Array.from(document.querySelectorAll('button,[role=button],input[type=button],input[type=submit],a'))
@@ -369,13 +434,13 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           const text = clean(el.innerText || el.value || el.getAttribute('aria-label') || el.title);
           const id = clean(el.id);
           const key = clean(`${id} ${text}`);
+          const className = clean(el.className);
           const multiToggle = Boolean(
             el.matches('[aria-pressed],[aria-checked],[role=checkbox]') ||
-            el.closest('[class*="checklist" i],[id*="checklist" i]'),
+            el.closest('[class*="checklist" i],[id*="checklist" i]')
           );
           const role = clean(el.getAttribute('role'));
           const name = clean(el.getAttribute('name'));
-          const className = clean(el.className);
           const ariaPressed = clean(el.getAttribute('aria-pressed'));
           const ariaChecked = clean(el.getAttribute('aria-checked'));
           const signature = [index, id, role, name, el.tagName.toLowerCase()].join(':');
@@ -404,29 +469,41 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       const markAndClick = (item, type) => {
         clicked.add(item.signature);
         persistClicked();
-        st.actionLog.push({
-          location: locationKey,
-          type,
-          index: item.index,
-          id: item.id || null,
-          role: item.role || null,
-        });
-        if (st.actionLog.length > 120) st.actionLog.splice(0, st.actionLog.length - 120);
+        logAction(type, item);
         item.el.click();
         return { type, text: (item.text || item.id || String(item.index)).slice(0, 80) };
       };
 
+      // Assessments with button answers need an answer before qNext/quizNext.
+      const assessmentChoices = items.filter((item) =>
+        /(^|\s)answer(\s|$)/i.test(item.className) &&
+        !forwardId.test(item.id) &&
+        !backwardId.test(item.id)
+      );
+      const assessmentForward = items.find((item) => assessmentForwardId.test(item.id));
+      if (assessmentChoices.length && assessmentForward) {
+        const selected = assessmentChoices.find((item) =>
+          /(^|\s)selected(\s|$)/i.test(item.className) ||
+          item.ariaPressed === 'true' ||
+          item.ariaChecked === 'true'
+        );
+        const cursor = Number(st.assessmentCursorByLocation[locationKey] || 0);
+        if (!selected) {
+          const planned = plansHere[cursor]?.indices || [];
+          const target = planned.length
+            ? Math.max(0, Math.min(Number(planned[0]), assessmentChoices.length - 1))
+            : Math.min(cursor % assessmentChoices.length, assessmentChoices.length - 1);
+          return markAndClick(assessmentChoices[target], 'assessment-answer');
+        }
+        st.assessmentCursorByLocation[locationKey] = cursor + 1;
+        logAction('assessment-next', assessmentForward);
+        assessmentForward.el.click();
+        return { type: 'assessment-next', text: assessmentForward.id };
+      }
+
       // Multi-select practices/checklists must be satisfied before submit/navigation.
       const toggle = items.find((item) => item.multiToggle && !alreadyClicked(item));
       if (toggle) return markAndClick(toggle, 'content-toggle');
-
-      // Once a decision enabled "next", advance immediately instead of cycling
-      // through the remaining single-choice alternatives.
-      const next = items.find((item) =>
-        forwardId.test(item.id) ||
-        /(^|\s)(next|pr[oó]xim[oa]|avan[cç]ar|continuar|prosseguir)(\s|$)/i.test(item.key)
-      );
-      if (next) return markAndClick(next, 'next');
 
       const submit = items.find((item) => /confirmar|responder|enviar|verificar|corrigir|submit/i.test(item.key));
       const genericChoices = items.filter((item) =>
@@ -441,6 +518,16 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       );
       const priorChoice = genericChoices.some(alreadyClicked);
       const submitAlreadyTried = Boolean(submit && alreadyClicked(submit));
+
+      // Prefer the model's correct option for button-based practices/reviews.
+      if (!priorChoice && genericChoices.length) {
+        const planCursor = Number(st.planCursorByLocation[locationKey] || 0);
+        const planned = plansHere[planCursor]?.indices || [];
+        if (planned.length) {
+          const target = Math.max(0, Math.min(Number(planned[0]), genericChoices.length - 1));
+          return markAndClick(genericChoices[target], 'content-choice-planned');
+        }
+      }
 
       // For single-choice decision cards: choose one option, then confirm.
       if (submit && priorChoice && !submitAlreadyTried) {
@@ -462,6 +549,16 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
       if (submit) return markAndClick(submit, 'submit');
 
+      // Exact navigation IDs take precedence over answer text that happens to
+      // contain words such as "próximo".
+      const exactNext = items.find((item) => forwardId.test(item.id));
+      if (exactNext) return markAndClick(exactNext, 'next');
+
+      const textNext = items.find((item) =>
+        /(^|\s)(next|pr[oó]xim[oa]|avan[cç]ar|continuar|prosseguir)(\s|$)/i.test(item.key)
+      );
+      if (textNext) return markAndClick(textNext, 'next');
+
       const preferred = items.find((item) => good.test(item.key));
       if (preferred) return markAndClick(preferred, 'preferred');
 
@@ -477,10 +574,13 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       return { type: 'none' };
     }, { plan: answerPlan, location: currentLocation }).catch(() => ({ type: 'frame-error' }));
 
-    await page.evaluate(() => {
-      const f = document.getElementById('scorm-frame');
-      if (f?.contentWindow) f.contentWindow.postMessage({ type: 'lms:navigate', direction: 'next' }, window.location.origin);
-    }).catch(() => undefined);
+    // Fallback only when the package exposes no usable visible control.
+    if (action?.type === 'none') {
+      await page.evaluate(() => {
+        const f = document.getElementById('scorm-frame');
+        if (f?.contentWindow) f.contentWindow.postMessage({ type: 'lms:navigate', direction: 'next' }, window.location.origin);
+      }).catch(() => undefined);
+    }
 
     if (action?.type === 'none') idle += 1;
     else idle = 0;
@@ -539,10 +639,22 @@ async function captureVisibleControls(frame) {
     const visible = (el) => {
       const rect = el.getBoundingClientRect();
       const style = getComputedStyle(el);
-      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        rect.bottom > 0 &&
+        rect.right > 0 &&
+        rect.top < window.innerHeight &&
+        rect.left < window.innerWidth &&
+        style.visibility !== 'hidden' &&
+        style.display !== 'none' &&
+        style.opacity !== '0' &&
+        el.getAttribute('aria-hidden') !== 'true'
+      );
     };
     const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const classify = (text) => {
+    const classify = (text, id) => {
+      if (/^(qnext|quiznext|next|nextbtn|btnnext|continue|continuebtn)$/i.test(id)) return 'next';
       if (/pr[oó]ximo|avan[cç]ar|continuar|prosseguir|next/.test(text)) return 'next';
       if (/confirmar|responder|enviar|verificar|submit/.test(text)) return 'submit';
       if (/finalizar|concluir|finish|resultado/.test(text)) return 'finish';
@@ -554,21 +666,27 @@ async function captureVisibleControls(frame) {
       .filter(visible)
       .map((el) => {
         const text = clean(el.innerText || el.value || el.getAttribute('aria-label') || el.title);
+        const id = String(el.id || '');
         return {
           tag: el.tagName.toLowerCase(),
-          id: el.id || null,
+          id: id || null,
           role: el.getAttribute('role'),
           class_name: String(el.className || '').slice(0, 160) || null,
           aria_pressed: el.getAttribute('aria-pressed'),
           aria_checked: el.getAttribute('aria-checked'),
-          category: classify(text),
+          category: classify(text, id),
           disabled: Boolean(el.disabled) || el.getAttribute('aria-disabled') === 'true',
         };
       });
+    const contentButtons = buttons.filter((item) =>
+      !/(menu|drawer|sidebar|toc|skip-link|icon-btn)/i.test(String(item.class_name || '')) &&
+      !/^(menuBtn|refBtn|closeMenuBtn)$/i.test(String(item.id || ''))
+    );
     return {
       button_count: buttons.length,
       enabled_button_count: buttons.filter((item) => !item.disabled).length,
       buttons: buttons.slice(0, 20),
+      content_buttons: contentButtons.slice(-30),
       radio_count: Array.from(document.querySelectorAll('input[type=radio]')).filter(visible).length,
       checkbox_count: Array.from(document.querySelectorAll('input[type=checkbox]')).filter(visible).length,
       role_radio_count: Array.from(document.querySelectorAll('[role=radio]')).filter(visible).length,
@@ -794,16 +912,30 @@ async function certifyPptxCourse(browser, token, listed) {
   const response = await context.request.get(`${API}/api/lms/pptx/asset/${id}`, { headers: { Authorization: `Bearer ${token}` } });
   const bytes = response.ok() ? await response.body() : Buffer.alloc(0);
   await context.close();
-  const pass = response.status() === 200 && bytes.byteLength > 100;
+  const assetPass = response.status() === 200 && bytes.byteLength > 100;
+  const generatesQualification =
+    Number(detail?.gerar_qualificacao_ao_concluir ?? listed?.gerar_qualificacao_ao_concluir ?? 0) === 1 ||
+    detail?.gerar_qualificacao_ao_concluir === true ||
+    listed?.gerar_qualificacao_ao_concluir === true;
+  const completionCertifiable = !generatesQualification;
+  const pass = assetPass && completionCertifiable;
+  const reason = !assetPass
+    ? `PPTX_ASSET_HTTP_${response.status()}`
+    : generatesQualification
+      ? 'PPTX_QUALIFYING_COMPLETION_EVIDENCE_REQUIRED'
+      : null;
   return {
     course_id: id,
     titulo: String(listed.titulo || detail.titulo || ''),
     tipo_conteudo: 'pptx',
     status: pass ? 'PASS' : 'FAIL',
-    reason: pass ? null : `PPTX_ASSET_HTTP_${response.status()}`,
+    reason,
     asset_bytes: bytes.byteLength,
+    generates_qualification: generatesQualification,
     version_tag: detail?.version_tag ? String(detail.version_tag) : null,
-    note: 'Exact PPTX asset load is certified here; completion persistence is covered by canonical LMS local smoke/backend tests.',
+    note: generatesQualification
+      ? 'Asset load passed, but the current backend intentionally blocks qualifying PPTX completion until server-validated evidence exists.'
+      : 'Exact PPTX asset load certified; this course does not mint a qualification.',
   };
 }
 
