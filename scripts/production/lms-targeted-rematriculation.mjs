@@ -40,6 +40,10 @@ export function selectCourse(rows, query) {
   throw new Error(`COURSE_RESOLUTION_AMBIGUOUS:count=${candidates.length}`);
 }
 
+export function employeeSearchTerm(query) {
+  return String(query || '').trim().split(/\s+/).filter(Boolean)[0] || '';
+}
+
 export function filterEmployeeCandidates(rows, query) {
   const tokens = normalizeText(query).split(' ').filter(Boolean);
   return (Array.isArray(rows) ? rows : []).filter((row) => {
@@ -77,7 +81,7 @@ async function apiJson(baseUrl, token, path, options = {}) {
 }
 
 async function resolveEmployee(baseUrl, token, query, course) {
-  const search = encodeURIComponent(query);
+  const search = encodeURIComponent(employeeSearchTerm(query));
   const payload = await apiJson(
     baseUrl,
     token,
