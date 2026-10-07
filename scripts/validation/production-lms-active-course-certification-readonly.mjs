@@ -312,6 +312,16 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
   const started = Date.now();
   let steps = 0;
   let idle = 0;
+  let sameErrorCount = 0;
+  let lastErrorSignature = '';
+  const diagnostics = {
+    frame_error_count: 0,
+    no_control_count: 0,
+    last_location: null,
+    last_action: null,
+    error_examples: [],
+    halted_due_to_repeated_error: false,
+  };
   while (Date.now() - started < untilMs && steps < maxSteps) {
     const state = await getTrace(page).catch(() => null);
     if (state?.values && terminalState(state.values)) break;
@@ -679,7 +689,10 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       if (retryAction) return markAndClick(retryAction, 'retry');
 
       return { type: 'none' };
-    }, { plan: answerPlan, location: currentLocation }).catch(() => ({ type: 'frame-error' }));
+    }, { plan: answerPlan, location: currentLocation }).catch((error) => ({
+      type: 'frame-error',
+      message: safe(error?.message || String(error)),
+    }));
 
     // Fallback only when the package exposes no usable visible control.
     if (action?.type === 'none') {
@@ -689,12 +702,38 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       }).catch(() => undefined);
     }
 
-    if (action?.type === 'none') idle += 1;
-    else idle = 0;
+    diagnostics.last_location = String(currentLocation || '').slice(0, 100);
+    diagnostics.last_action = action?.type || null;
+    if (action?.type === 'frame-error') {
+      diagnostics.frame_error_count += 1;
+      const signature = diagnostics.last_location + ':' + String(action.message || '');
+      sameErrorCount = signature === lastErrorSignature ? sameErrorCount + 1 : 1;
+      lastErrorSignature = signature;
+      if (diagnostics.error_examples.length < 3 &&
+          !diagnostics.error_examples.some((item) => item.message === action.message)) {
+        diagnostics.error_examples.push({
+          location: diagnostics.last_location,
+          message: String(action.message || '').slice(0, 250),
+        });
+      }
+      if (sameErrorCount >= 8) {
+        diagnostics.halted_due_to_repeated_error = true;
+        break;
+      }
+    } else {
+      sameErrorCount = 0;
+      lastErrorSignature = '';
+    }
+    if (action?.type === 'none') {
+      idle += 1;
+      diagnostics.no_control_count += 1;
+    } else {
+      idle = 0;
+    }
     steps += 1;
     await page.waitForTimeout(idle > 5 ? 180 : 90);
   }
-  return steps;
+  return { steps, diagnostics };
 }
 
 async function unloadFrame(frame) {
@@ -905,13 +944,16 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     : { schema: null, slide_count: null, answer_plan_count: 0 };
 
   let steps = 0;
+  let driveDiagnostics = null;
   if (phase !== 'reopen-completed') {
     const stepLimit = Math.max(
       MAX_STEPS,
       Math.max(Number(modelMeta.slide_count || 0), Number(manifest.requiredSlides || 0)) * 5,
       Number(manifest.requiredInteractions || 0) * 8,
     );
-    steps = await driveFrame(page, frame, answerPlan, maxDriveMs, stepLimit);
+    const drive = await driveFrame(page, frame, answerPlan, maxDriveMs, stepLimit);
+    steps = drive.steps;
+    driveDiagnostics = drive.diagnostics;
   } else {
     await page.waitForTimeout(1200);
   }
@@ -967,6 +1009,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     })(),
     last_error: trace.lastError,
     steps,
+    drive_diagnostics: driveDiagnostics,
     model: modelMeta,
     stalled_slide: stalledSlide,
     visible_controls: visibleControls,
