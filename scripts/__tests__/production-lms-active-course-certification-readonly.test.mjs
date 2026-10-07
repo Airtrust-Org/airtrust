@@ -78,6 +78,7 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /adaptiveByLocation/);
   assert.match(source, /prepareAdaptiveProbe/);
   assert.match(source, /adaptive-retry/);
+  assert.match(source, /resetAssessmentRetryState/);
   assert.match(source, /adaptive-exhausted/);
   assert.match(source, /resultScoreMatch/);
   assert.match(source, /COURSE_IDS\.size > 0 \? 900 : 0/);
