@@ -30,3 +30,12 @@ test('filterEmployeeCandidates requires all query tokens', () => {
   const result = filterEmployeeCandidates(rows, 'Wilson Nery');
   assert.deepEqual(result.map((row) => row.id), [1]);
 });
+
+test('filterEmployeeCandidates can match name plus nome de guerra', () => {
+  const rows = [
+    { id: 4, nome: 'Wilson Antonio da Silva', guerra: 'Nery' },
+    { id: 5, nome: 'Wilson Antonio da Silva', guerra: 'Silva' },
+  ];
+  const result = filterEmployeeCandidates(rows, 'Wilson Nery');
+  assert.deepEqual(result.map((row) => row.id), [4]);
+});

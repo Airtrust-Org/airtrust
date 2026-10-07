@@ -44,8 +44,10 @@ export function filterEmployeeCandidates(rows, query) {
   const tokens = normalizeText(query).split(' ').filter(Boolean);
   return (Array.isArray(rows) ? rows : []).filter((row) => {
     const id = asPositiveInt(row?.id);
-    const name = normalizeText(row?.nome);
-    return id && tokens.every((token) => name.includes(token));
+    const haystack = normalizeText(
+      [row?.nome, row?.guerra, row?.email, row?.matricula].filter(Boolean).join(' '),
+    );
+    return id && tokens.every((token) => haystack.includes(token));
   });
 }
 
@@ -77,13 +79,27 @@ async function apiJson(baseUrl, token, path, options = {}) {
 }
 
 async function resolveEmployee(baseUrl, token, query, course) {
-  const search = encodeURIComponent(query);
-  const payload = await apiJson(
-    baseUrl,
-    token,
-    `/api/funcionarios?search=${search}&limit=100&status=ativos`,
+  const tokens = normalizeText(query).split(' ').filter(Boolean);
+  const searchTerms = [query, ...tokens].filter(
+    (value, index, values) =>
+      normalizeText(value).length >= 2 &&
+      values.findIndex((candidate) => normalizeText(candidate) === normalizeText(value)) === index,
   );
-  let candidates = filterEmployeeCandidates(payload?.data, query);
+  const rowsById = new Map();
+
+  for (const searchTerm of searchTerms) {
+    const payload = await apiJson(
+      baseUrl,
+      token,
+      `/api/funcionarios?search=${encodeURIComponent(searchTerm)}&limit=100&status=ativos`,
+    );
+    for (const row of Array.isArray(payload?.data) ? payload.data : []) {
+      const id = asPositiveInt(row?.id);
+      if (id) rowsById.set(id, row);
+    }
+  }
+
+  let candidates = filterEmployeeCandidates([...rowsById.values()], query);
   if (candidates.length === 1) return candidates[0];
 
   if (candidates.length > 1) {
