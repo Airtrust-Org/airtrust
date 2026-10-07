@@ -353,9 +353,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-06",
-    "last_reconciled_against": "0534 final canonical Training Compliance matrix classified; 0533 and prior governed states preserved",
-    "schema_v2_digest": "abc5fc3af106da437c03e72fb6287af1f5ac3d2e835992f5bac750b056cce05c",
+    "last_reconciled_at": "2026-10-07",
+    "last_reconciled_against": "0535 FDM three audiences classified as pending, after canonical 0534; prior governed states preserved",
+    "schema_v2_digest": "5cd849f2b7484cb3fd24ba5f22d136106099ad826bc98e27bc39986d069bef3a",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1225,6 +1225,18 @@
       "reviewed_manifest": "training-compliance-final-matrix-0534.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-final-matrix-0534.md",
       "note": "0534 is the tenant-6 forward alignment to the final Training Management matrix dated 2026-10-06, with NR-05 explicitly corrected to EAD. It supersedes prior conflicting applicability/metadata decisions, preserves historical qualification evidence, consolidates Regras de Ouro on the evidence-bearing model, retires only the active FDM-EAD Compliance obligation, adds FDM-MECANICO and BOWTIEXP qualification requirements, and requires governed staging/recovery/ledger validation before any production apply."
+    },
+    {
+      "change_file": "0535_training_compliance_fdm_three_audiences.sql",
+      "change_id": "training-compliance-fdm-three-audiences-0535",
+      "sha256": "df0d1c9864cd78d90797cc18ebd14096656e309460759316939ab2b47725d185",
+      "targets": [],
+      "domain": "training compliance / FDM three distinct audience rules and formal nominations",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-fdm-three-audiences-0535.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-fdm-three-audiences-0535.md",
+      "note": "0535 extends the reviewed 0534 final matrix after target-environment 0534 postconditions. Two generic training qualification models are created for pilots and formally nominated Committee/Gatekeeper roles, FDM-MECANICO keeps its approved EAD metadata but receives its MNT display name; no inferred modality, hours, expiration, SCORM, LMS, employee membership, enrollment or evidence writes. Actual staging/production apply requires governed recovery/ledger and current exact-SHA authorization."
     }
   ]
 }
