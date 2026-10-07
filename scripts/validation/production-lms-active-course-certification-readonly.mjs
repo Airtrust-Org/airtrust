@@ -695,12 +695,19 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         // Resume can reopen at Q10 while the package itself reports only 1/10
         // answered. That counter is stronger evidence than lesson_location:
         // walk backwards inside the assessment only, then refill forward.
-        if (
+        const shouldStartAssessmentBackfill = Boolean(
           questionNumber &&
           answeredCount != null &&
-          questionNumber - answeredCount > 1
-        ) {
+          questionNumber - answeredCount > 1 &&
+          !st.assessmentBackfillByLocation[locationBase]
+        );
+        if (shouldStartAssessmentBackfill) {
           st.assessmentBackfillByLocation[locationBase] = true;
+          // The resume gap can be discovered only after the driver already tried
+          // controls on the resumed question. Clear that stale per-question UI
+          // bookkeeping once before walking backwards, otherwise the final
+          // question can return with every option incorrectly marked as tried.
+          resetAssessmentRetryState();
         }
         const assessmentPrev = Array.from(document.querySelectorAll('#qPrev,#quizPrev'))
           .find((el) => visible(el) && !el.disabled);
