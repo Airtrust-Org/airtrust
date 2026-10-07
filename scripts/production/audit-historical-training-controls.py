@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKER = ROOT / "worker-airtrust"
 MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 RID_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-TODAY = date(2026, 10, 7)
+TODAY = date.today()
 
 SHEET_TO_CODE = {
     "GESTAO DE MUDANCA": "MUDA",
@@ -83,12 +83,16 @@ def read_control_workbook(path: Path) -> list[dict[str, str]]:
 
         records: list[dict[str, str]] = []
         seen: set[tuple[str, str, str]] = set()
+        found_sheets: set[str] = set()
         for sheet in workbook.find(f"{{{MAIN_NS}}}sheets"):
             sheet_name = str(sheet.attrib["name"]).strip()
             normalized_sheet = normalize(sheet_name)
             code = SHEET_TO_CODE.get(normalized_sheet)
             if not code:
                 continue
+            if normalized_sheet in found_sheets:
+                raise ValueError("duplicate controlled training sheet")
+            found_sheets.add(normalized_sheet)
             target = rels[sheet.attrib[f"{{{RID_NS}}}id"]]
             if not target.startswith("xl/"):
                 target = "xl/" + target
@@ -117,6 +121,10 @@ def read_control_workbook(path: Path) -> list[dict[str, str]]:
                     continue
                 seen.add(key)
                 records.append({"employee_name": key[0], "code": code, "date": completion})
+        if found_sheets != set(SHEET_TO_CODE):
+            raise ValueError("missing controlled training sheet(s)")
+        if not records:
+            raise ValueError("controlled workbook has no completion evidence")
         return records
 
 
@@ -177,8 +185,13 @@ def candidate_hash(rows: list[dict]) -> str:
     return hashlib.sha256(material.encode()).hexdigest()
 
 
-def audit(source: Path) -> dict:
+def audit(source: Path, reference: Path) -> dict:
     records = read_control_workbook(source)
+    comparison = read_control_workbook(reference)
+    if sorted((r["employee_name"], r["code"], r["date"]) for r in records) != sorted(
+        (r["employee_name"], r["code"], r["date"]) for r in comparison
+    ):
+        raise ValueError("controlled workbook copies disagree: reconciliation refused")
     employees = wrangler_select(
         f"SELECT id,nome,status,ativo,deleted_at FROM funcionarios WHERE empresa_id={EMPRESA_ID}"
     )
@@ -188,7 +201,7 @@ def audit(source: Path) -> dict:
     )
     histories = wrangler_select(
         "SELECT qh.id,qh.funcionario_id,qh.qualificacao_id,"
-        "COALESCE(qt.codigo,qh.qualificacao_codigo) codigo,qh.data_conclusao,qh.status "
+        "qh.qualificacao_codigo original_code,qt.codigo type_code,qh.data_conclusao,qh.status "
         "FROM qualificacoes_historico qh "
         "LEFT JOIN qualificacoes_tipos qt ON qt.id=qh.qualificacao_id AND qt.empresa_id=qh.empresa_id "
         f"WHERE qh.empresa_id={EMPRESA_ID} AND qh.deleted_at IS NULL"
@@ -230,8 +243,13 @@ def audit(source: Path) -> dict:
 
         relevant = [
             row for row in histories_by_employee.get(int(employee["id"]), [])
-            if normalize(row.get("codigo")) == normalize(code)
-            and normalize(row.get("status")) not in {"PLANEJADA", "PLANEJADO", "CANCELADA", "CANCELADO"}
+            if code in {normalize(row.get("original_code")), normalize(row.get("type_code"))}
+            and row.get("data_conclusao")
+            and normalize(row.get("status")) not in {
+                "PLANEJADA", "PLANEJADO", "CANCELADA", "CANCELADO",
+                "PENDENTE", "EM_ANDAMENTO", "REPROVADA", "REPROVADO",
+                "NAO_REALIZADA", "NAO_REALIZADO", "INVALIDA", "INVALIDO",
+            }
         ]
         exact = [
             row for row in relevant
@@ -259,6 +277,8 @@ def audit(source: Path) -> dict:
         "mode": "read-only",
         "empresa_id": EMPRESA_ID,
         "source_sha256": source_hash,
+        "reference_sha256": hashlib.sha256(reference.read_bytes()).hexdigest(),
+        "source_copies_agree": True,
         "source_rows": len(records),
         "source_people": len({row["employee_name"] for row in records}),
         "stats": dict(stats),
@@ -275,12 +295,14 @@ def audit(source: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--reference", type=Path, required=True)
     args = parser.parse_args()
-    if not args.source.is_file():
-        raise RuntimeError("source workbook not found")
-    if ROOT in args.source.resolve().parents:
-        raise RuntimeError("source workbook must stay outside the git repository")
-    print(json.dumps(audit(args.source), ensure_ascii=False, indent=2))
+    for workbook in (args.source, args.reference):
+        if not workbook.is_file():
+            raise RuntimeError("controlled workbook not found")
+        if ROOT in workbook.resolve().parents:
+            raise RuntimeError("source workbook must stay outside the git repository")
+    print(json.dumps(audit(args.source, args.reference), ensure_ascii=False, indent=2))
     return 0
 
 
