@@ -1,7 +1,7 @@
 {
   "changeId": "training-maintenance-manuals-bootstrap-0540",
   "baselineId": "production-d1-baseline-v2-20260714",
-  "filePath": "worker-airtrust/schema-v2/changes/0540_training_maintenance_manuals_bootstrap.sql",
+  "filePath": "worker-airtrust/schema-v2/changes/0540_training_maintenance_catalog_identities_bootstrap.sql",
   "fileHash": "c26a03a1be5659b65530531185f5d7173c24ae824cfced0849d98fc39ffff265",
   "planPath": "worker-airtrust/schema-v2/plans/training-maintenance-manuals-bootstrap-0540.md",
   "planHash": "a2903595d0cb90508c8ea6f51197fd44b04563db9211e2f34045fe7d8ef325fc"
