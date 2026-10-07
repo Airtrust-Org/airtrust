@@ -6,6 +6,7 @@ import {
   isCancelledStatus,
   isCompletedStatus,
   isCertificateEligibleQualificationStatus,
+  isCertificateEligibleQualificationRecord,
   isPlannedQualificationStatus,
   SCHEDULED_SESSION_STATUS_VALUES,
   sqlStatusEqualsAny,
@@ -43,6 +44,31 @@ describe('status codes compatibility', () => {
 
     for (const status of ['PLANEJADA', 'PLANEJADO', 'CANCELADA', 'CANCELADO', '', null, 'INDEFINIDA']) {
       expect(isCertificateEligibleQualificationStatus(status)).toBe(false);
+    }
+  });
+
+  it('permits a real legacy NULL/blank status only when completion and expiry prove realization', () => {
+    const completed = '2020-01-23';
+    const expires = '2021-01-23';
+    for (const status of [null, '', '  ']) {
+      expect(isCertificateEligibleQualificationRecord({
+        status, dataConclusao: completed, dataVencimento: expires,
+      })).toBe(true);
+      for (const dataVencimento of [null, '', '2020-01-22', '2020-02-31']) {
+        expect(isCertificateEligibleQualificationRecord({
+          status, dataConclusao: completed, dataVencimento,
+        })).toBe(false);
+      }
+      for (const dataConclusao of [null, '', '2020-02-31', '2099-01-23']) {
+        expect(isCertificateEligibleQualificationRecord({
+          status, dataConclusao, dataVencimento: expires,
+        })).toBe(false);
+      }
+    }
+    for (const status of ['PLANEJADA', 'CANCELADA', 'NAO_REALIZADA', 'DESCONHECIDO_123']) {
+      expect(isCertificateEligibleQualificationRecord({
+        status, dataConclusao: completed, dataVencimento: expires,
+      })).toBe(false);
     }
   });
 

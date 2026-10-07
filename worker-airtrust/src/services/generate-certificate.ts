@@ -28,7 +28,7 @@ import {
   resolveFuncionarioInstrutorNaEmpresa,
 } from '../routes/qualificacoes-certificados-helpers';
 import { generateCertificateValidationHash } from '../utils/certificate-validation-hash';
-import { isCertificateEligibleQualificationStatus } from '../lib/status/status-codes';
+import { isCertificateEligibleQualificationRecord } from '../lib/status/status-codes';
 
 // ── Erros tipados ──────────────────────────────────────────────────────────────
 
@@ -279,11 +279,17 @@ export async function generateCertificateForHistorico(
   const qualificacaoStatus = String(qualificacao.status || '')
     .trim()
     .toUpperCase();
-  if (!isCertificateEligibleQualificationStatus(qualificacaoStatus)) {
+  if (!isCertificateEligibleQualificationRecord({
+    status: qualificacao.status,
+    dataConclusao: qualificacao.data_conclusao,
+    dataVencimento: qualificacao.data_vencimento,
+  })) {
     // The history listing displays a date-derived operational status, while
     // this service validates the stored one. Expose only a bounded status code
     // (never employee identifiers) so legacy mismatches can be diagnosed.
-    const recordedStatus = /^[A-Z0-9_ÁÉÍÓÚÇ -]{1,32}$/.test(qualificacaoStatus)
+    const recordedStatus = !qualificacaoStatus
+      ? 'SEM_STATUS'
+      : /^[A-Z0-9_ÁÉÍÓÚÇ -]{1,32}$/.test(qualificacaoStatus)
       ? qualificacaoStatus
       : 'DESCONHECIDO';
     throw new CertificateGenerationError(

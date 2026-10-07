@@ -229,6 +229,44 @@ describe('generateCertificateForHistorico — qualification status eligibility (
     }
   });
 
+  it('NULL persisted status with recorded valid completion and expiry passes status guard (real SQL)', async () => {
+    const db = new SqliteD1Database();
+    patchSchema(db);
+    try {
+      const historicoId = insertHistory(db.database, {
+        funcionarioId: 1000,
+        qualificationId: 100,
+        empresaId: 1,
+        status: 'CONCLUIDA',
+      });
+      db.database.prepare(
+        'UPDATE qualificacoes_historico SET status = NULL, data_conclusao = ?, data_vencimento = ? WHERE id = ?',
+      ).run('2026-01-23', '2027-01-23', historicoId);
+
+      await expect(generateCertificateForHistorico(makeEnv(db), historicoId, 1))
+        .rejects.not.toMatchObject({ code: 'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE' });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('NULL persisted status without expiry remains ineligible in real SQL', async () => {
+    const db = new SqliteD1Database();
+    patchSchema(db);
+    try {
+      const historicoId = insertHistory(db.database, {
+        funcionarioId: 1000, qualificationId: 100, empresaId: 1, status: 'CONCLUIDA',
+      });
+      db.database.prepare(
+        'UPDATE qualificacoes_historico SET status = NULL, data_conclusao = ?, data_vencimento = NULL WHERE id = ?',
+      ).run('2026-01-23', historicoId);
+      await expect(generateCertificateForHistorico(makeEnv(db), historicoId, 1))
+        .rejects.toMatchObject({ code: 'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE' });
+    } finally {
+      db.close();
+    }
+  });
+
   it.each(['VALIDA', 'VÁLIDA', 'PROXIMA_VENCIMENTO', 'VENCENDO', 'VENCENDO_30', 'ATENCAO', 'INDETERMINADA'])(
     '%s: eligible for certificate because the qualification realization happened',
     async (status) => {
