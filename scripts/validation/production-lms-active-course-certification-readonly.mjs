@@ -794,16 +794,34 @@ async function certifyPptxCourse(browser, token, listed) {
   const response = await context.request.get(`${API}/api/lms/pptx/asset/${id}`, { headers: { Authorization: `Bearer ${token}` } });
   const bytes = response.ok() ? await response.body() : Buffer.alloc(0);
   await context.close();
-  const pass = response.status() === 200 && bytes.byteLength > 100;
+  const assetPass = response.status() === 200 && bytes.byteLength > 100;
+  const generatesQualification =
+    Number(detail?.gerar_qualificacao_ao_concluir ?? listed?.gerar_qualificacao_ao_concluir ?? 0) === 1 ||
+    detail?.gerar_qualificacao_ao_concluir === true ||
+    listed?.gerar_qualificacao_ao_concluir === true;
+  // Current backend contract deliberately rejects qualifying PDF/PPTX/video
+  // finalization with CONTENT_EVIDENCE_REQUIRED until immutable server-side
+  // consumption evidence exists. Loading the bytes must never be reported as
+  // a completion certification.
+  const completionCertifiable = !generatesQualification;
+  const pass = assetPass && completionCertifiable;
+  const reason = !assetPass
+    ? `PPTX_ASSET_HTTP_${response.status()}`
+    : generatesQualification
+      ? 'PPTX_QUALIFYING_COMPLETION_EVIDENCE_REQUIRED'
+      : null;
   return {
     course_id: id,
     titulo: String(listed.titulo || detail.titulo || ''),
     tipo_conteudo: 'pptx',
     status: pass ? 'PASS' : 'FAIL',
-    reason: pass ? null : `PPTX_ASSET_HTTP_${response.status()}`,
+    reason,
     asset_bytes: bytes.byteLength,
+    generates_qualification: generatesQualification,
     version_tag: detail?.version_tag ? String(detail.version_tag) : null,
-    note: 'Exact PPTX asset load is certified here; completion persistence is covered by canonical LMS local smoke/backend tests.',
+    note: generatesQualification
+      ? 'Asset load passed, but the current backend intentionally blocks qualifying PPTX completion until server-validated evidence exists.'
+      : 'Exact PPTX asset load certified; this course does not mint a qualification.',
   };
 }
 
