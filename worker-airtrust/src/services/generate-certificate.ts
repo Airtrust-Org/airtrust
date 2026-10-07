@@ -300,7 +300,7 @@ export async function generateCertificateForHistorico(
   // particular, legacy INDETERMINADA may have no expiry: require a recorded
   // completion date, not a generated PDF dated "today" via fallback.
   const dataRealizacao = String(qualificacao.data_conclusao || '').trim().slice(0, 10);
-  const isIsoDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(dataRealizacao);
+  const isIsoDate = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(dataRealizacao);
   const parsedRealizacao = isIsoDate ? new Date(`${dataRealizacao}T00:00:00Z`) : null;
   if (
     !parsedRealizacao ||
