@@ -454,7 +454,7 @@ async function loadQualificationEvidence(
           ${deletedExpr}
           AND NOT (${sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES)})
           AND NOT (${sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES)})
-        ORDER BY qh.funcionario_id, qh.${tipoCol},
+        ORDER BY qh.funcionario_id, ${resolvedTipoSelect},
                  datetime(COALESCE(qh.${dataCol}, ${updatedExpr}, ${vencSelect})) DESC, qh.id DESC`,
     )
     .bind(empresaId)
