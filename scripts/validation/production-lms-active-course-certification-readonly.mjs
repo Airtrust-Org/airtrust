@@ -1304,6 +1304,30 @@ async function captureRequiredInteractionStructure(frame) {
     const excluded = (el) => Boolean(el.closest(
       'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
     ));
+    const describe = (el) => {
+      if (!el) return null;
+      const r=el.getBoundingClientRect(), st=getComputedStyle(el), parent=el.parentElement;
+      return {
+        tag: el.tagName?.toLowerCase?.() || null,
+        id: String(el.id || '').slice(0,80) || null,
+        class_name: String(el.className || '').slice(0,180) || null,
+        role: el.getAttribute?.('role') || null,
+        parent_tag: parent?.tagName?.toLowerCase() || null,
+        parent_class_name: String(parent?.className || '').slice(0,180) || null,
+        parent_child_count: parent?.children?.length ?? null,
+        direct_child_count: el.children?.length ?? 0,
+        li_count: el.querySelectorAll?.('li')?.length ?? 0,
+        heading_count: el.querySelectorAll?.('h1,h2,h3,h4,h5,h6')?.length ?? 0,
+        cursor: st.cursor || null,
+        pointer_events: st.pointerEvents || null,
+        position: st.position || null,
+        border_radius: st.borderRadius || null,
+        border_top_width: st.borderTopWidth || null,
+        box_shadow: st.boxShadow || null,
+        rect: {top:Math.round(r.top),left:Math.round(r.left),width:Math.round(r.width),height:Math.round(r.height)},
+        text_sample: clean(el.textContent).slice(0,220),
+      };
+    };
     const badges = Array.from(document.body.querySelectorAll('*')).filter((el) => {
       const text = clean(el.textContent);
       return visible(el) && text.length <= 260 &&
@@ -1314,41 +1338,45 @@ async function captureRequiredInteractionStructure(frame) {
       return ar.width*ar.height - br.width*br.height;
     })[0] || null;
     const bottom = badge?.getBoundingClientRect().bottom || 0;
-    const rows = Array.from(document.body.querySelectorAll('div,section,article,ul,li'))
+    const rows = Array.from(document.body.querySelectorAll('*'))
       .filter((el) => {
-        if (!visible(el) || excluded(el)) return false;
+        if (!visible(el) || excluded(el) || el === badge || el.contains(badge)) return false;
         const r=el.getBoundingClientRect(), text=clean(el.textContent);
-        return r.top >= bottom-12 && r.width >= 80 && r.height >= 30 &&
-          r.width <= innerWidth*0.9 && r.height <= innerHeight*0.8 &&
-          text.length >= 6 && text.length <= 1200;
+        return r.top >= bottom-16 && r.width >= 40 && r.height >= 18 &&
+          r.width <= innerWidth*0.95 && r.height <= innerHeight*0.9 &&
+          text.length >= 2 && text.length <= 1400;
       })
-      .map((el) => {
-        const r=el.getBoundingClientRect(), st=getComputedStyle(el), parent=el.parentElement;
-        return {
-          tag: el.tagName.toLowerCase(),
-          id: String(el.id || '').slice(0,80) || null,
-          class_name: String(el.className || '').slice(0,180) || null,
-          parent_tag: parent?.tagName?.toLowerCase() || null,
-          parent_class_name: String(parent?.className || '').slice(0,180) || null,
-          parent_child_count: parent?.children?.length ?? null,
-          direct_child_count: el.children?.length ?? 0,
-          li_count: el.querySelectorAll('li').length,
-          heading_count: el.querySelectorAll('h1,h2,h3,h4,h5,h6').length,
-          cursor: st.cursor || null,
-          border_radius: st.borderRadius || null,
-          border_top_width: st.borderTopWidth || null,
-          box_shadow: st.boxShadow || null,
-          rect: {top:Math.round(r.top),left:Math.round(r.left),width:Math.round(r.width),height:Math.round(r.height)},
-          text_sample: clean(el.textContent).slice(0,220),
-        };
+      .map(describe)
+      .sort((a,b) => {
+        const dy = a.rect.top - b.rect.top;
+        if (Math.abs(dy) > 4) return dy;
+        return (a.rect.width*a.rect.height) - (b.rect.width*b.rect.height);
       })
-      .sort((a,b) => a.rect.width*a.rect.height - b.rect.width*b.rect.height)
-      .slice(0,80);
+      .slice(0,120);
+
+    const hitTests = [];
+    const yValues = [bottom + 45, bottom + 95, bottom + 155, bottom + 215]
+      .filter((y) => y > 0 && y < innerHeight - 10);
+    const xValues = [0.08,0.22,0.36,0.50,0.64,0.78,0.92]
+      .map((f) => Math.round(innerWidth * f))
+      .filter((x) => x > 10 && x < innerWidth - 10);
+    for (const y of yValues) {
+      for (const x of xValues) {
+        const stack = document.elementsFromPoint(x, y)
+          .filter((el) => el && !excluded(el))
+          .slice(0, 8)
+          .map(describe);
+        if (stack.length) hitTests.push({ x, y: Math.round(y), stack });
+      }
+    }
+
     const br=badge?.getBoundingClientRect();
     return {
       current:Number(match[1]), total:Number(match[2]),
+      viewport:{width:innerWidth,height:innerHeight},
       badge: br ? {tag:badge.tagName.toLowerCase(),class_name:String(badge.className||'').slice(0,180),top:Math.round(br.top),bottom:Math.round(br.bottom),left:Math.round(br.left),width:Math.round(br.width),height:Math.round(br.height)} : null,
       candidates: rows,
+      hit_tests: hitTests.slice(0,40),
     };
   }).catch(() => null);
 }

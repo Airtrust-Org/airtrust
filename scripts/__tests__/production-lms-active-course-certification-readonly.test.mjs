@@ -127,6 +127,9 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /required_interaction_structure/);
   assert.match(source, /parent_child_count/);
   assert.match(source, /text_sample/);
+  assert.match(source, /elementsFromPoint/);
+  assert.match(source, /hit_tests/);
+  assert.match(source, /pointer_events/);
   assert.match(source, /captureDriverState/);
   assert.match(source, /driver_state/);
   assert.match(source, /location: currentLocation/);
