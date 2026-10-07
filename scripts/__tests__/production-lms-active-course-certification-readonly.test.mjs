@@ -56,8 +56,8 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /certifiableChoice/);
   assert.match(source, /button\.choice,button\.answer,button\.option/);
   assert.match(source, /const selected = assessmentChoices\.find/);
-  assert.match(source, /if \(selected && nextQuestion\)/);
-  assert.match(source, /if \(selected && assessmentFinish && !nextQuestion\)/);
+  assert.match(source, /if \(\(selected \|\| driverAccepted\) && nextQuestion\)/);
+  assert.match(source, /if \(\(selected \|\| driverAccepted\) && assessmentFinish && !nextQuestion\)/);
   assert.match(source, /slideIndex/);
   assert.match(source, /assessmentCursorByLocation/);
   assert.match(source, /assessment-answer/);
@@ -78,6 +78,12 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /adaptiveByLocation/);
   assert.match(source, /prepareAdaptiveProbe/);
   assert.match(source, /adaptive-retry/);
+  assert.match(source, /frame\.evaluate\(\(\{ plan, location, allowAdaptiveRetry \}\)/);
+  assert.match(source, /requestTrustedClick/);
+  assert.match(source, /trusted_click_token/);
+  assert.match(source, /answerAcceptedByLocation/);
+  assert.match(source, /driverAccepted/);
+  assert.match(source, /data-airtrust-cert-click/);
   assert.match(source, /resetAssessmentRetryState/);
   assert.match(source, /adaptive-exhausted/);
   assert.match(source, /resultScoreMatch/);

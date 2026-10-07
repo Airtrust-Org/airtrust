@@ -330,7 +330,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       state?.values?.['cmi.core.lesson_location'] ??
       state?.values?.['cmi.location'] ??
       '';
-    const action = await frame.evaluate(({ plan, location }) => {
+    let action = await frame.evaluate(({ plan, location, allowAdaptiveRetry }) => {
       const w = window;
       w.__AIRTRUST_CERT_DRIVER ??= {
         questionOrder: [],
@@ -341,6 +341,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         planCursorByLocation: {},
         assessmentBackfillByLocation: {},
         adaptiveByLocation: {},
+        answerAcceptedByLocation: {},
       };
       const st = w.__AIRTRUST_CERT_DRIVER;
       st.clickedByLocation ??= {};
@@ -349,6 +350,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       st.planCursorByLocation ??= {};
       st.assessmentBackfillByLocation ??= {};
       st.adaptiveByLocation ??= {};
+      st.answerAcceptedByLocation ??= {};
       const locationBase = String(location || 'unknown');
       // cmi.core.lesson_location tracks the slide, not the question inside it.
       // Use the learner-visible ordinal to avoid treating each new quiz question
@@ -526,6 +528,18 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         item.el.click();
         return { type, text: (item.text || item.id || String(item.index)).slice(0, 80) };
       };
+      const requestTrustedClick = (item, type) => {
+        const token = `airtrust-cert-${Date.now()}-${item.index}`;
+        item.el.setAttribute('data-airtrust-cert-click', token);
+        logAction(type, item);
+        return {
+          type,
+          text: (item.text || item.id || String(item.index)).slice(0, 80),
+          trusted_click_token: token,
+          location_key: locationKey,
+          signature: item.signature,
+        };
+      };
 
       const getAdaptiveState = () => {
         st.adaptiveByLocation[locationBase] ??= {
@@ -629,6 +643,11 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
             delete st.quizChoicesTried[key];
           }
         }
+        for (const key of Object.keys(st.answerAcceptedByLocation || {})) {
+          if (key === locationBase || key.startsWith(locationBase + ':question-')) {
+            delete st.answerAcceptedByLocation[key];
+          }
+        }
       };
       const moduleRetry = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
       if (moduleRetry) {
@@ -639,7 +658,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         // Reset per-attempt UI bookkeeping so all non-probed questions can reuse
         // the current best answer instead of being forced onto an untried option.
         resetAssessmentRetryState();
-        return markAndClick(moduleRetry, 'adaptive-retry');
+        return requestTrustedClick(moduleRetry, 'adaptive-retry');
       }
 
       const assessmentChoices = items.filter((item) =>
@@ -662,6 +681,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           item.el.getAttribute('data-selected') === 'true' ||
           item.el.getAttribute('data-checked') === 'true'
         );
+        const driverAccepted = Boolean(st.answerAcceptedByLocation[locationKey]);
         const nextQuestion = items.find((item) => assessmentForwardId.test(item.id));
         const assessmentFinish = items.find((item) =>
           !isChoiceButton(item) &&
@@ -701,11 +721,11 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
         // Some packages allow learners to navigate without answering. A real
         // selected state is required before qNext/finish is allowed to advance.
-        if (selected && nextQuestion) {
+        if ((selected || driverAccepted) && nextQuestion) {
           st.assessmentCursorByLocation[locationKey] = cursor + 1;
           return markAndClick(nextQuestion, 'assessment-next');
         }
-        if (selected && assessmentFinish && !nextQuestion) {
+        if ((selected || driverAccepted) && assessmentFinish && !nextQuestion) {
           return markAndClick(assessmentFinish, 'assessment-finish');
         }
 
@@ -729,7 +749,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           tried.add(candidate.signature);
           st.quizChoicesTried[quizKey] = Array.from(tried);
           adaptive.currentAnswers[qIndex] = Math.max(0, assessmentChoices.indexOf(candidate));
-          return markAndClick(candidate, 'assessment-answer');
+          return requestTrustedClick(candidate, 'assessment-answer');
         }
         if (assessmentFinish && !nextQuestion && candidateOrder.every((item) => tried.has(item.signature))) {
           return markAndClick(assessmentFinish, 'assessment-finish');
@@ -865,6 +885,37 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       type: 'frame-error',
       message: safe(error?.message || String(error)),
     }));
+
+    if (action?.trusted_click_token) {
+      try {
+        const token = String(action.trusted_click_token);
+        await frame.locator(`[data-airtrust-cert-click="${token}"]`).click({ timeout: 2_500 });
+        await frame.evaluate(({ token: clickToken, locationKey, signature, type }) => {
+          document.querySelector(`[data-airtrust-cert-click="${clickToken}"]`)
+            ?.removeAttribute('data-airtrust-cert-click');
+          const st = window.__AIRTRUST_CERT_DRIVER;
+          if (!st || typeof st !== 'object') return;
+          st.clickedByLocation ??= {};
+          const clicked = new Set(Array.isArray(st.clickedByLocation[locationKey]) ? st.clickedByLocation[locationKey] : []);
+          clicked.add(signature);
+          st.clickedByLocation[locationKey] = Array.from(clicked).slice(-120);
+          if (type === 'assessment-answer') {
+            st.answerAcceptedByLocation ??= {};
+            st.answerAcceptedByLocation[locationKey] = signature;
+          }
+        }, {
+          token,
+          locationKey: String(action.location_key || ''),
+          signature: String(action.signature || ''),
+          type: String(action.type || ''),
+        }).catch(() => undefined);
+      } catch (error) {
+        action = {
+          type: 'frame-error',
+          message: safe(error?.message || String(error)),
+        };
+      }
+    }
 
     // Fallback only when the package exposes no usable visible control.
     if (action?.type === 'none') {
