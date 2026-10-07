@@ -196,7 +196,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: production-lms-active-certification-${{ matrix.browser }}-${{ needs.guard.outputs.expected_sha }}
-          path: ${{ env.CERT_REPORT_PATH }}
+          path: |
+            ${{ env.CERT_REPORT_PATH }}
+            qa-state/lms-active-certification-diagnostics/${{ matrix.browser }}/**/*.png
           if-no-files-found: error
           retention-days: 30
       - name: Enforce zero certification failures
