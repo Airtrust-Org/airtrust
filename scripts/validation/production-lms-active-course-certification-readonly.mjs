@@ -552,6 +552,51 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         requiredInteractionMatch &&
         Number(requiredInteractionMatch[1]) < Number(requiredInteractionMatch[2])
       ) {
+        // Prefer the package's explicit interaction contract before visual
+        // heuristics. AirTrust-authored courses mark mandatory learner targets
+        // with data-touch / .touchable; these may sit inside a scrolled content
+        // surface and therefore be outside the current viewport at discovery time.
+        const all = Array.from(document.querySelectorAll('*'));
+        const explicitRequiredItems = Array.from(
+          document.querySelectorAll('[data-touch],.touchable'),
+        )
+          .filter((el) => {
+            if (el.closest(
+              'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+            )) return false;
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            const text = clean(el.textContent);
+            return (
+              rect.width > 0 &&
+              rect.height > 0 &&
+              style.visibility !== 'hidden' &&
+              style.display !== 'none' &&
+              style.opacity !== '0' &&
+              el.getAttribute('aria-hidden') !== 'true' &&
+              text.length > 0 &&
+              text.length <= 800
+            );
+          })
+          .map((el) => {
+            const index = Math.max(0, all.indexOf(el));
+            const id = clean(el.id);
+            const role = clean(el.getAttribute('role'));
+            const touch = clean(el.getAttribute('data-touch'));
+            return {
+              el,
+              index,
+              id,
+              role,
+              text: clean(el.textContent),
+              signature: ['required-explicit', touch, index, id, el.tagName.toLowerCase()].join(':'),
+            };
+          });
+        const explicitRequiredCandidate = explicitRequiredItems.find((item) => !alreadyClicked(item));
+        if (explicitRequiredCandidate) {
+          return requestTrustedClick(explicitRequiredCandidate, 'required-interaction-explicit');
+        }
+
         const scope = Array.from(document.body.querySelectorAll('*'));
         const rawCandidates = scope.filter((el) => {
           if (!visible(el)) return false;
@@ -651,7 +696,6 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
             if (!candidates.includes(el)) candidates.push(el);
           }
         }
-        const all = Array.from(document.querySelectorAll('*'));
         const candidateItems = candidates.map((el) => {
           const index = Math.max(0, all.indexOf(el));
           const id = clean(el.id);
