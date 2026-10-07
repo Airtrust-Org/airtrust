@@ -355,7 +355,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-06",
     "last_reconciled_against": "0534 final canonical Training Compliance matrix classified; 0533 and prior governed states preserved",
-    "schema_v2_digest": "20e70ebba99f6fa5ccbaef23c02ba5cc1863c529ade58e04c104cb772ba65433",
+    "schema_v2_digest": "abc5fc3af106da437c03e72fb6287af1f5ac3d2e835992f5bac750b056cce05c",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1217,7 +1217,7 @@
     {
       "change_file": "0534_training_compliance_final_matrix.sql",
       "change_id": "training-compliance-final-matrix-0534",
-      "sha256": "fd8a8ac34f7dffe353c6fe2b68c0551abcc35c2611c0f25b319eabeb929d00e7",
+      "sha256": "31366ebd2e3ba20dda8040ab1a5f34a0c67ae0bae116028dfec7d81df67c33f0",
       "targets": [],
       "domain": "training compliance / final canonical QSMS and operational-safety matrix",
       "coverage": "OUT_OF_CONTRACT_SCOPE",

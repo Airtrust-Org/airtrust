@@ -49,8 +49,8 @@ describe('training compliance final matrix 0534', () => {
 
   it('adds the final FDM mechanic and BOWTIEXP models and retires FDM-EAD compliance only', () => {
     const sql = read(changePath);
-    expect(sql).toContain("'FDM-MECANICO','FDM - Mecânico','EAD',NULL,1,1,1");
-    expect(sql).toContain("'BOWTIEXP','BOWTIEXP','EAD',24,4,4,4");
+    expect(sql).toContain("'FDM-MECANICO','FDM - Mecânico','EAD',(SELECT id FROM qualificacoes_categorias WHERE empresa_id=6 AND UPPER(TRIM(codigo))='EAD' AND ativo=1 AND deleted_at IS NULL LIMIT 1),NULL,1,1,1");
+    expect(sql).toContain("'BOWTIEXP','BOWTIEXP','EAD',(SELECT id FROM qualificacoes_categorias WHERE empresa_id=6 AND UPPER(TRIM(codigo))='EAD' AND ativo=1 AND deleted_at IS NULL LIMIT 1),24,4,4,4");
     expect(sql).toContain("UPPER(TRIM(codigo))='FDM-EAD'");
     expect(sql).not.toContain("UPDATE lms_cursos SET ativo=0");
   });
@@ -85,13 +85,23 @@ describe('training compliance final matrix 0534', () => {
     const runner = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
     const workflow = read('.github/workflows/apply-schema-change-v2.yml');
     expect(runner).toContain('[[ "$migration_basename" == "0534_training_compliance_final_matrix.sql" ]]');
-    expect(runner).toContain('fd8a8ac34f7dffe353c6fe2b68c0551abcc35c2611c0f25b319eabeb929d00e7');
+    const manifest = JSON.parse(read(manifestPath)) as { fileHash: string };
+    expect(runner).toContain(manifest.fileHash);
     expect(runner).toContain('--env staging --remote --command="$sql_payload" --json');
     expect(runner).toContain('ledger_count="$(read_ledger_count)"');
     expect(runner).toContain('validate_postconditions');
     expect(workflow).toContain('"$CHANGE_ID" == "training-compliance-final-matrix-0534"');
     expect(workflow).toContain('--env production --remote --command="$sql_payload" --json');
     expect(workflow).toContain('Verify ledger postcondition');
+  });
+
+  it('binds both new EAD qualifications to the canonical tenant-6 category', () => {
+    const sql = read(changePath);
+    const lookup = "(SELECT id FROM qualificacoes_categorias WHERE empresa_id=6 AND UPPER(TRIM(codigo))='EAD' AND ativo=1 AND deleted_at IS NULL LIMIT 1)";
+    expect(sql.split('(empresa_id,codigo,nome,categoria,categoria_id,validade,carga_horaria,carga_horaria_inicial,carga_horaria_recorrente,area_id,ativo,is_check,observacoes,created_at,updated_at)').length - 1).toBe(2);
+    expect(sql.split(lookup).length - 1).toBe(2);
+    expect(read('scripts/staging/validate-0534-preflight.sh')).toContain('ead-category-canonical');
+    expect(read('scripts/schema-v2/validate-0534-production-preflight.sh')).toContain('ead-category-canonical');
   });
 
   it('routes 0534 through governed staging and production validators', () => {

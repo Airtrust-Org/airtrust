@@ -76,15 +76,15 @@ UPDATE qualificacoes_tipos
 
 -- New canonical qualifications introduced by the final matrix.
 INSERT INTO qualificacoes_tipos
-  (empresa_id,codigo,nome,categoria,validade,carga_horaria,carga_horaria_inicial,carga_horaria_recorrente,area_id,ativo,is_check,observacoes,created_at,updated_at)
-SELECT 6,'FDM-MECANICO','FDM - Mecânico','EAD',NULL,1,1,1,
+  (empresa_id,codigo,nome,categoria,categoria_id,validade,carga_horaria,carga_horaria_inicial,carga_horaria_recorrente,area_id,ativo,is_check,observacoes,created_at,updated_at)
+SELECT 6,'FDM-MECANICO','FDM - Mecânico','EAD',(SELECT id FROM qualificacoes_categorias WHERE empresa_id=6 AND UPPER(TRIM(codigo))='EAD' AND ativo=1 AND deleted_at IS NULL LIMIT 1),NULL,1,1,1,
        (SELECT id FROM qualificacoes_areas WHERE empresa_id=6 AND codigo='SEGURANCA_OPERACIONAL' AND ativo=1 AND deleted_at IS NULL LIMIT 1),
        1,0,'Validade vitalícia conforme matriz final de 06/10/2026.',datetime('now'),datetime('now')
  WHERE NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(TRIM(codigo))='FDM-MECANICO' AND ativo=1 AND deleted_at IS NULL);
 
 INSERT INTO qualificacoes_tipos
-  (empresa_id,codigo,nome,categoria,validade,carga_horaria,carga_horaria_inicial,carga_horaria_recorrente,area_id,ativo,is_check,observacoes,created_at,updated_at)
-SELECT 6,'BOWTIEXP','BOWTIEXP','EAD',24,4,4,4,
+  (empresa_id,codigo,nome,categoria,categoria_id,validade,carga_horaria,carga_horaria_inicial,carga_horaria_recorrente,area_id,ativo,is_check,observacoes,created_at,updated_at)
+SELECT 6,'BOWTIEXP','BOWTIEXP','EAD',(SELECT id FROM qualificacoes_categorias WHERE empresa_id=6 AND UPPER(TRIM(codigo))='EAD' AND ativo=1 AND deleted_at IS NULL LIMIT 1),24,4,4,4,
        (SELECT id FROM qualificacoes_areas WHERE empresa_id=6 AND codigo='SEGURANCA_OPERACIONAL' AND ativo=1 AND deleted_at IS NULL LIMIT 1),
        1,0,'Aplicável a Gestores conforme matriz final de 06/10/2026.',datetime('now'),datetime('now')
  WHERE NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(TRIM(codigo))='BOWTIEXP' AND ativo=1 AND deleted_at IS NULL);

@@ -585,7 +585,7 @@ echo "RECOVERY_POINT_CAPTURED=true"
 # Follow the existing governed Schema V2 query-transport precedent; preserve
 # the exact versioned SQL, the same combined migration+ledger, and postconditions.
 if [[ "$migration_basename" == "0534_training_compliance_final_matrix.sql" ]]; then
-  [[ "$sql_sha256" == "fd8a8ac34f7dffe353c6fe2b68c0551abcc35c2611c0f25b319eabeb929d00e7" ]] || {
+  [[ "$sql_sha256" == "31366ebd2e3ba20dda8040ab1a5f34a0c67ae0bae116028dfec7d81df67c33f0" ]] || {
     echo "ERROR: reviewed 0534 SQL hash mismatch." >&2
     exit 1
   }
