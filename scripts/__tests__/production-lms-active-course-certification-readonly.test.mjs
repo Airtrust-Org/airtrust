@@ -34,6 +34,16 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /content-choice-retry/);
   assert.match(source, /submitAlreadyTried/);
   assert.match(source, /semanticAction/);
+  assert.match(source, /slideIndex/);
+  assert.match(source, /assessmentCursorByLocation/);
+  assert.match(source, /assessment-answer/);
+  assert.match(source, /assessment-next/);
+  assert.match(source, /content-choice-planned/);
+  assert.match(source, /content_buttons/);
+  assert.match(source, /rect\.bottom > 0/);
+  assert.match(source, /action\?\.type === 'none'/);
+  assert.match(source, /PPTX_QUALIFYING_COMPLETION_EVIDENCE_REQUIRED/);
+  assert.match(source, /generates_qualification/);
   assert.match(source, /forwardId/);
   assert.match(source, /qnext/);
   assert.match(source, /quiznext/);
