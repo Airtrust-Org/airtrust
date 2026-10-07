@@ -47,3 +47,19 @@ test('audit identifies only active, past-or-current missing evidence as import c
   assert.match(script, /employee_inactive/);
   assert.match(script, /employee_unresolved/);
 });
+
+test('audit rejects incomplete or disagreeing source copies before querying production', () => {
+  assert.match(script, /parser\.add_argument\("--reference", type=Path, required=True\)/);
+  assert.match(script, /controlled workbook copies disagree: reconciliation refused/);
+  assert.match(script, /missing controlled training sheet\(s\)/);
+  assert.match(script, /"source_copies_agree": True/);
+  assert.match(script, /TODAY = date\.today\(\)/);
+});
+
+test('historical evidence requires a completion date and accepts exact canonical code', () => {
+  assert.match(script, /row\.get\("data_conclusao"\)/);
+  assert.match(script, /original_code/);
+  assert.match(script, /type_code/);
+  assert.match(script, /"REPROVADA"/);
+  assert.match(script, /"EM_ANDAMENTO"/);
+});
