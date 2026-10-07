@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-07",
-    "last_reconciled_against": "0535 INTEGRA bootstrap classified after applied 0534 staging diagnosis; prior governed states preserved",
-    "schema_v2_digest": "2a2a335d1c052f2bd1bee0fb4268266d70012295b298fe4be823e5c1e1af606b",
+    "last_reconciled_against": "0536 FDM three audiences classified after 0535 INTEGRA repair; prior governed states preserved",
+    "schema_v2_digest": "b00e8f37ad22d6c9dd1e5afa4194887e254df0bd69a9262f6304ecb2d536cba9",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1358,6 +1358,18 @@
       "reviewed_manifest": "training-compliance-integra-bootstrap-0535.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-integra-bootstrap-0535.md",
       "note": "0535 is the minimal tenant-6 forward repair for the sole failing 0534 staging postcondition: INTEGRA was entirely absent. It preserves existing identity/evidence when present, otherwise creates the canonical EAD 24-month/2-hour model and missing company-wide rule. No LMS course, enrollment, qualification history, employee or other-tenant write is introduced."
+    },
+    {
+      "change_file": "0536_training_compliance_fdm_three_audiences.sql",
+      "change_id": "training-compliance-fdm-three-audiences-0536",
+      "sha256": "27b33d0d16c0a0a227efe119ee0782bd2e72696bb65f6683bdfb2c06ccb20d00",
+      "targets": [],
+      "domain": "training compliance / FDM three audience rules and formal nominations",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-fdm-three-audiences-0536.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-fdm-three-audiences-0536.md",
+      "note": "0536 adds the three reviewed FDM audiences after the 0535 INTEGRA repair. It reuses FDM_COMITE and GATEKEEPER as distinct nominal designations, preserves FDM-MECANICO identity/history, creates pilot and Committee/Gatekeeper qualification models without inventing modality/hours/validity or LMS content, and never auto-assigns committee membership."
     }
   ]
 }
