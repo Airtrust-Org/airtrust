@@ -412,15 +412,36 @@ async function loadQualificationEvidence(
   const modalitySelect = cols.has('formato_codigo')
     ? `UPPER(TRIM(COALESCE(qh.formato_codigo,'')))`
     : "''";
+  const hasQualificationCode = cols.has('qualificacao_codigo');
+  const currentTypeJoin = `
+         LEFT JOIN qualificacoes_tipos qt_history_id
+           ON qt_history_id.id = qh.${tipoCol}
+          AND qt_history_id.empresa_id = f.empresa_id
+          AND qt_history_id.deleted_at IS NULL
+          AND COALESCE(qt_history_id.ativo, 1) = 1`;
+  const codeTypeJoin = hasQualificationCode
+    ? `
+         LEFT JOIN qualificacoes_tipos qt_history_code
+           ON qt_history_code.empresa_id = f.empresa_id
+          AND qt_history_code.deleted_at IS NULL
+          AND COALESCE(qt_history_code.ativo, 1) = 1
+          AND UPPER(TRIM(COALESCE(qt_history_code.codigo,''))) =
+              UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))`
+    : '';
+  const resolvedTipoSelect = hasQualificationCode
+    ? `COALESCE(qt_history_id.id, qt_history_code.id, qh.${tipoCol})`
+    : `COALESCE(qt_history_id.id, qh.${tipoCol})`;
   const profileSql = await buildQualificationEvidenceProfileSql(db, cols);
 
   const { results } = await db
     .prepare(
-      `SELECT qh.id, qh.funcionario_id, qh.${tipoCol} AS tipo_id,
+      `SELECT qh.id, qh.funcionario_id, ${resolvedTipoSelect} AS tipo_id,
               qh.${dataCol} AS data_realizacao, ${vencSelect} AS data_vencimento,
               ${modalitySelect} AS modalidade, ${profileSql.select} AS perfil_competencia
          FROM qualificacoes_historico qh
          JOIN funcionarios f ON f.id = qh.funcionario_id
+         ${currentTypeJoin}
+         ${codeTypeJoin}
          ${profileSql.joins}
         WHERE ${empresaExpr}
           ${deletedExpr}
