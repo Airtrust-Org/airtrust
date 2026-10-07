@@ -23,7 +23,7 @@ permissions:
   contents: read
   checks: read
   statuses: read
-  pull-requests: read
+  pull-requests: write
 
 concurrency:
   group: production-lms-active-course-certification-readonly
@@ -191,6 +191,32 @@ jobs:
             console.log(`- ${item.status} — #${item.course_id} ${item.titulo}${item.reason ? ` — ${item.reason}` : ''}`);
           }
           NODE
+      - name: Publish certification result to trigger PR
+        if: always() && github.event_name == 'issue_comment'
+        uses: actions/github-script@v8
+        env:
+          CERT_REPORT_PATH: ${{ env.CERT_REPORT_PATH }}
+          CERT_BROWSER: ${{ matrix.browser }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const reportPath = process.env.CERT_REPORT_PATH;
+            if (!reportPath || !fs.existsSync(reportPath)) return;
+            const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+            const lines = [
+              `AIRTRUST_LMS_CERTIFICATION_RESULT run_id=${context.runId} browser=${process.env.CERT_BROWSER} production_sha=${report.production_sha} pass=${report.pass_count} fail=${report.fail_count}`,
+              ...report.results.map((item) =>
+                `- ${item.status} #${item.course_id}${item.reason ? ` — ${item.reason}` : ''}`
+              ),
+            ];
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(process.env.PR_NUMBER),
+              body: lines.join('\n'),
+            });
+
       - name: Upload sanitized certification evidence
         if: always()
         uses: actions/upload-artifact@v7
