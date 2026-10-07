@@ -610,13 +610,35 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       // Result screens may keep stale quiz controls mounted. Retry must win
       // before assessment-mode detection, otherwise hidden/stale controls can
       // trap the driver even though the learner-visible action is "Refazer".
+      const resetAssessmentRetryState = () => {
+        for (const key of Object.keys(st.assessmentCursorByLocation || {})) {
+          if (key === locationBase || key.startsWith(locationBase + ':question-')) {
+            delete st.assessmentCursorByLocation[key];
+          }
+        }
+        for (const key of Object.keys(st.clickedByLocation || {})) {
+          if (key === locationBase || key.startsWith(locationBase + ':question-')) {
+            delete st.clickedByLocation[key];
+          }
+        }
+        for (const key of Object.keys(st.quizChoicesTried || {})) {
+          if (
+            key.startsWith(locationBase + ':question-') ||
+            key.startsWith(locationBase + ':assessment:')
+          ) {
+            delete st.quizChoicesTried[key];
+          }
+        }
+      };
       const moduleRetry = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
       if (moduleRetry) {
         if (!allowAdaptiveRetry) return { type: 'retry-deferred' };
         const probe = prepareAdaptiveProbe();
         if (!probe) return { type: 'adaptive-exhausted' };
-        delete st.assessmentCursorByLocation[locationKey];
-        delete st.clickedByLocation[locationKey];
+        // Adaptive scoring assumes exactly one learner answer changes per retry.
+        // Reset per-attempt UI bookkeeping so all non-probed questions can reuse
+        // the current best answer instead of being forced onto an untried option.
+        resetAssessmentRetryState();
         return markAndClick(moduleRetry, 'adaptive-retry');
       }
 
