@@ -29,6 +29,7 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /captureVisibleControls/);
   assert.match(source, /visible_controls/);
   assert.match(source, /completionBudgetMs/);
+  assert.match(source, /enabledTextNext/);
   assert.match(source, /stepLimit/);
   assert.match(source, /isChoiceButton/);
   assert.match(source, /quizChoicesTried/);
