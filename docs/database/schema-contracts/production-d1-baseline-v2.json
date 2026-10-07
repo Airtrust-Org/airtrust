@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-07",
     "last_reconciled_against": "0540 Maintenance manual identity bootstrap prepared after staging prerequisite drift blocked 0539",
-    "schema_v2_digest": "fb8dbca3633723f89f9144df6984165456556c243cdb2a837c81fdd39ee2938a",
+    "schema_v2_digest": "9b4e2eef1960fd09f1cee03e024df4078283f0eed8577ab357f51343aeb585fa",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1396,7 +1396,7 @@
       "note": "0539 repairs an environment-specific missing/inactive MNT_INTEGRACAO_DOUTRINACAO identity discovered before 0537 apply; it preserves an existing ID when possible or bootstraps from the Maintenance taxonomy, then normalizes PTM Rev.06 8h/4h/36m without employee, enrollment, history or certificate writes."
     },
     {
-      "change_file": "0540_training_maintenance_manuals_bootstrap.sql",
+      "change_file": "0540_training_maintenance_catalog_identities_bootstrap.sql",
       "change_id": "training-maintenance-manuals-bootstrap-0540",
       "sha256": "c26a03a1be5659b65530531185f5d7173c24ae824cfced0849d98fc39ffff265",
       "targets": [],
