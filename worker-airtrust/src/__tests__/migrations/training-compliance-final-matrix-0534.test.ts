@@ -72,6 +72,15 @@ describe('training compliance final matrix 0534', () => {
     expect(sql).toContain("AND escopo<>'FUNCIONARIO'");
   });
 
+  it('fails closed and exposes only classified D1 query transport failures', () => {
+    const runner = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
+    expect(runner).toContain('REVIEWED_D1_QUERY_TRANSPORT=');
+    expect(runner).toContain('REVIEWED_D1_QUERY_ERROR_CLASS=');
+    expect(runner).toContain('SQLITE_INCOMPLETE_INPUT');
+    expect(runner).toContain('SQLITE_CONSTRAINT');
+    expect(runner).not.toContain('--json >/dev/null');
+  });
+
   it('uses reviewed bounded query transport for 0534 after repeated D1_RESET_DO', () => {
     const runner = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
     const workflow = read('.github/workflows/apply-schema-change-v2.yml');
