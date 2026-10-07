@@ -51,10 +51,13 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /visibleDisabledChoices/);
   assert.match(source, /resetTriedByLocation/);
   assert.match(source, /semanticAction/);
+  assert.match(source, /retry\.test\(text\)/);
+  assert.match(source, /refazer/);
   assert.match(source, /certifiableChoice/);
   assert.match(source, /button\.choice,button\.answer,button\.option/);
-  assert.match(source, /if \(nextQuestion\)/);
-  assert.match(source, /if \(assessmentFinish\)/);
+  assert.match(source, /const selected = assessmentChoices\.find/);
+  assert.match(source, /if \(selected && nextQuestion\)/);
+  assert.match(source, /if \(selected && assessmentFinish && !nextQuestion\)/);
   assert.match(source, /slideIndex/);
   assert.match(source, /assessmentCursorByLocation/);
   assert.match(source, /assessment-answer/);
