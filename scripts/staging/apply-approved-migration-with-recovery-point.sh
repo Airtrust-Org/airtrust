@@ -580,11 +580,32 @@ NODE
 echo "RECOVERY_TIMESTAMP_UTC=$recovery_timestamp"
 echo "RECOVERY_POINT_CAPTURED=true"
 
-apply_status=0
-(
-  cd worker-airtrust
-  npx wrangler d1 execute "$db_name" --remote --file="$combined_sql"
-) || apply_status=$?
+# 0534 is a bounded, reviewed data change. Cloudflare D1's bulk-import path
+# produced D1_RESET_DO twice after successful preflight and recovery capture.
+# Follow the existing governed Schema V2 query-transport precedent; preserve
+# the exact versioned SQL, the same combined migration+ledger, and postconditions.
+if [[ "$migration_basename" == "0534_training_compliance_final_matrix.sql" ]]; then
+  [[ "$sql_sha256" == "fd8a8ac34f7dffe353c6fe2b68c0551abcc35c2611c0f25b319eabeb929d00e7" ]] || {
+    echo "ERROR: reviewed 0534 SQL hash mismatch." >&2
+    exit 1
+  }
+  sql_payload="$(cat "$combined_sql")"
+  [[ -n "$sql_payload" && ${#sql_payload} -le 100000 ]] || {
+    echo "ERROR: 0534 bounded combined SQL is empty or exceeds query transport." >&2
+    exit 1
+  }
+  apply_status=0
+  (
+    cd worker-airtrust
+    npx wrangler d1 execute "$db_name" --env staging --remote --command="$sql_payload" --json >/dev/null
+  ) || apply_status=$?
+else
+  apply_status=0
+  (
+    cd worker-airtrust
+    npx wrangler d1 execute "$db_name" --remote --file="$combined_sql"
+  ) || apply_status=$?
+fi
 if [[ $apply_status -ne 0 ]]; then
   echo "MIGRATION_FAILED=$migration_basename" >&2
   exit "$apply_status"

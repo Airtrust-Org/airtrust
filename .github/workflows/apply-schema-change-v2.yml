@@ -571,14 +571,14 @@ jobs:
         run: |
           set -euo pipefail
           test -f "$COMBINED_SQL"
-          if [[ "$CHANGE_ID" == "frms-parametric-v2-0498" || "$CHANGE_ID" == "frms-v2-historical-backfill-0499" ]]; then
-            # Remote D1 --file uses the bulk-import/reset path, which returned
-            # D1_RESET_DO for this bounded, non-trigger-heavy bundle in staging.
-            # Submit the exact reviewed bundle through D1's query API instead.
+          if [[ "$CHANGE_ID" == "frms-parametric-v2-0498" || "$CHANGE_ID" == "frms-v2-historical-backfill-0499" || "$CHANGE_ID" == "training-compliance-final-matrix-0534" ]]; then
+            # The bounded, reviewed 0534 and FRMS bundles use D1's query API
+            # after the bulk-import/reset path produced D1_RESET_DO in staging.
+            # Keep Schema V2 immutable manifest, ledger and recovery guards.
             sql_payload="$(cat "$COMBINED_SQL")"
-            [[ -n "$sql_payload" ]] || { echo 'FRMS bounded combined SQL is empty.' >&2; exit 1; }
-            [[ ${#sql_payload} -le 100000 ]] || { echo 'FRMS bounded combined SQL exceeds --command transport.' >&2; exit 1; }
-            apply_output="$RUNNER_TEMP/schema-v2-frms-bounded-apply.json"
+            [[ -n "$sql_payload" ]] || { echo 'Reviewed bounded combined SQL is empty.' >&2; exit 1; }
+            [[ ${#sql_payload} -le 100000 ]] || { echo 'Reviewed bounded combined SQL exceeds --command transport.' >&2; exit 1; }
+            apply_output="$RUNNER_TEMP/schema-v2-reviewed-bounded-apply.json"
             npx wrangler d1 execute airtrust-db --env production --remote --command="$sql_payload" --json > "$apply_output"
             test -s "$apply_output"
             rm -f "$apply_output"
