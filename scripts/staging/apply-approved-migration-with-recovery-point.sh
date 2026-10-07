@@ -64,6 +64,7 @@ APPROVED_MIGRATIONS=(
   "0531_training_compliance_nr20_modality_repair.sql"
   "0532_training_compliance_fdm_designation_only.sql"
   "0533_training_catalog_metadata_references.sql"
+  "0534_training_compliance_final_matrix.sql"
 )
 
 apply=false
@@ -290,6 +291,9 @@ validate_postconditions() {
     0533_training_catalog_metadata_references.sql)
       bash scripts/staging/validate-0533-postconditions.sh --target="$db_name"
       ;;
+    0534_training_compliance_final_matrix.sql)
+      bash scripts/staging/validate-0534-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -435,6 +439,11 @@ fi
 if [[ "$migration_basename" == "0533_training_catalog_metadata_references.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0533-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0533_OK=true"
+fi
+
+if [[ "$migration_basename" == "0534_training_compliance_final_matrix.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0534-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0534_OK=true"
 fi
 
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then

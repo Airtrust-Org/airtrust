@@ -353,9 +353,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-05",
-    "last_reconciled_against": "0533 training catalog references/metadata + stricter 24-month Maintenance recurrence classified; 0532 and prior governed states preserved",
-    "schema_v2_digest": "16beb8f734c087d08550776702a5cd9d5d82c1ca48469629ad869b8d88fc4240",
+    "last_reconciled_at": "2026-10-06",
+    "last_reconciled_against": "0534 final canonical Training Compliance matrix classified; 0533 and prior governed states preserved",
+    "schema_v2_digest": "20e70ebba99f6fa5ccbaef23c02ba5cc1863c529ade58e04c104cb772ba65433",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1213,6 +1213,18 @@
       "reviewed_manifest": "training-catalog-metadata-references-0533.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-catalog-metadata-references-0533.md",
       "note": "0533 adds explicit training references metadata to qualification/LMS tables and performs tenant-6 reviewed catalog corrections. It also applies the Training Manager decision to reduce active Maintenance models reviewed at 36 months to a stricter 24-month AirTrust cycle with coherent history snapshots, corrects PT6C/Doutrination loads, makes NR-35 presencial and NR-20 hybrid for compliance, disables EAD-only auto-qualification for those two regulated courses, and moves LGPD to QSMS taxonomy. Production apply requires staging validation, D1 recovery point, ledger verification and exact-SHA authorization."
+    },
+    {
+      "change_file": "0534_training_compliance_final_matrix.sql",
+      "change_id": "training-compliance-final-matrix-0534",
+      "sha256": "fd8a8ac34f7dffe353c6fe2b68c0551abcc35c2611c0f25b319eabeb929d00e7",
+      "targets": [],
+      "domain": "training compliance / final canonical QSMS and operational-safety matrix",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-final-matrix-0534.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-final-matrix-0534.md",
+      "note": "0534 is the tenant-6 forward alignment to the final Training Management matrix dated 2026-10-06, with NR-05 explicitly corrected to EAD. It supersedes prior conflicting applicability/metadata decisions, preserves historical qualification evidence, consolidates Regras de Ouro on the evidence-bearing model, retires only the active FDM-EAD Compliance obligation, adds FDM-MECANICO and BOWTIEXP qualification requirements, and requires governed staging/recovery/ledger validation before any production apply."
     }
   ]
 }

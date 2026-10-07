@@ -1,3 +1,5 @@
+> **SUPERSEDIDA EM 06/10/2026.** A matriz canônica vigente é `docs/AIRTRUST_TRAINING_COMPLIANCE_V5_20261006.md`. Esta V4 permanece somente como registro histórico das decisões anteriores.
+
 # AirTrust — Training Compliance V4
 
 **Data:** 2026-10-03  
