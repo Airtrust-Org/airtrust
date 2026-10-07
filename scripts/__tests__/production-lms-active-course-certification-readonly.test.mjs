@@ -51,6 +51,12 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /assessmentCursorByLocation/);
   assert.match(source, /assessment-answer/);
   assert.match(source, /assessment-next/);
+  assert.match(source, /questionMatch/);
+  assert.match(source, /plannedQuestion/);
+  assert.match(source, /inlineQuizChoices/);
+  assert.match(source, /inline-quiz-next/);
+  assert.match(source, /assessment-finish/);
+  assert.match(source, /scrollIntoView/);
   assert.match(source, /candidateOrder/);
   assert.match(source, /assessmentMode/);
   assert.match(source, /content_buttons/);
