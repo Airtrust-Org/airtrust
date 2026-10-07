@@ -413,18 +413,25 @@ async function loadQualificationEvidence(
     ? `UPPER(TRIM(COALESCE(qh.formato_codigo,'')))`
     : "''";
   const hasQualificationCode = cols.has('qualificacao_codigo');
+  const qualificationTypeCols = await columnSet(db, 'qualificacoes_tipos');
+  const currentTypeActiveExpr = qualificationTypeCols.has('ativo')
+    ? 'AND COALESCE(qt_history_id.ativo, 1) = 1'
+    : '';
+  const codeTypeActiveExpr = qualificationTypeCols.has('ativo')
+    ? 'AND COALESCE(qt_history_code.ativo, 1) = 1'
+    : '';
   const currentTypeJoin = `
          LEFT JOIN qualificacoes_tipos qt_history_id
            ON qt_history_id.id = qh.${tipoCol}
           AND qt_history_id.empresa_id = f.empresa_id
           AND qt_history_id.deleted_at IS NULL
-          AND COALESCE(qt_history_id.ativo, 1) = 1`;
+          ${currentTypeActiveExpr}`;
   const codeTypeJoin = hasQualificationCode
     ? `
          LEFT JOIN qualificacoes_tipos qt_history_code
            ON qt_history_code.empresa_id = f.empresa_id
           AND qt_history_code.deleted_at IS NULL
-          AND COALESCE(qt_history_code.ativo, 1) = 1
+          ${codeTypeActiveExpr}
           AND UPPER(TRIM(COALESCE(qt_history_code.codigo,''))) =
               UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))`
     : '';
