@@ -411,6 +411,37 @@ describe('training compliance engine', () => {
     });
   });
 
+  it('ordena evidências reconciliadas pela identidade canônica antes de escolher a mais recente', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+
+      INSERT INTO qualificacoes_tipos
+        (id, empresa_id, codigo, nome, categoria, categoria_id, validade,
+         carga_horaria, carga_horaria_inicial, carga_horaria_recorrente, deleted_at)
+      VALUES (190, 1, 'MNT-12-LEGACY', 'MNT legado', 'MANUTENCAO', 1, 12, 8, 8, 4,
+              '2026-01-01 00:00:00');
+
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at) VALUES
+        (1000, 100, 'MNT-12', 'MANUTENCAO', '2025-08-01', '2026-08-01',
+         'RENOVADA', 1, 1, '2025-08-01', '2025-08-01'),
+        (1000, 190, 'MNT-12', 'MANUTENCAO', '2026-08-01', '2027-08-01',
+         'CONCLUIDA', 0, 1, '2026-08-01', '2026-08-01');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1000');
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.data.requisitos[0]).toMatchObject({
+      status_compliance: 'CONFORME',
+      ultima_data: '2026-08-01',
+    });
+  });
+
   it('usa a realização mais recente da qualificação, não o vencimento mais distante', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
