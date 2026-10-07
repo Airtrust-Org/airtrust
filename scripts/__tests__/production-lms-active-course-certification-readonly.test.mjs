@@ -79,6 +79,11 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /answeredMatch/);
   assert.match(source, /assessment-prev-backfill/);
   assert.match(source, /adaptiveByLocation/);
+  assert.match(source, /confirmedAnswers/);
+  assert.match(source, /confirmedRetryDone/);
+  assert.match(source, /feedbackChoices/);
+  assert.match(source, /correctFeedbackIndex/);
+  assert.match(source, /data-correct/);
   assert.match(source, /prepareAdaptiveProbe/);
   assert.match(source, /adaptive-retry/);
   assert.match(source, /frame\.evaluate\(\(\{ plan, location, allowAdaptiveRetry \}\)/);
@@ -92,6 +97,9 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /document\.body\.querySelectorAll\('\*'\)/);
   assert.match(source, /cardShapeHint/);
   assert.match(source, /structuredCardHint/);
+  assert.match(source, /structuralGroups/);
+  assert.match(source, /structuralCards/);
+  assert.match(source, /children\.length !== requiredTotal/);
   assert.match(source, /manifest\.requiredInteractions \|\| 0\) \* 50_000/);
   assert.match(source, /intera\[cç\]\[aã\]o\\s\+obrigat/);
   assert.match(source, /resetAssessmentRetryState/);
