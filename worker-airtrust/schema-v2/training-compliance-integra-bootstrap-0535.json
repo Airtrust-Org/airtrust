@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-integra-bootstrap-0535",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0535_training_compliance_integra_bootstrap.sql",
+  "fileHash": "b15d685133cf31b59d28bb945f62a0918311f13868e3103b12f4a7057b7c28e9",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-integra-bootstrap-0535.md",
+  "planHash": "5894ec831973518a95ebd6621c6401c1b0854d1f951e76f0a85d314ab4e84d81"
+}
