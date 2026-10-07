@@ -65,7 +65,7 @@ describe('apply-schema-change-v2.yml — controlled single-file apply', () => {
     expect(workflow).toContain("inputs.change_id == 'frms-parametric-v2-0498'");
     expect(workflow).toContain('validate-0498-production-preflight.sh');
     expect(workflow).toContain('validate-0498-production-postconditions.sh');
-    expect(workflow).toContain('if [[ "$CHANGE_ID" == "frms-parametric-v2-0498" || "$CHANGE_ID" == "frms-v2-historical-backfill-0499" ]]');
+    expect(workflow).toContain('if [[ "$CHANGE_ID" == "frms-parametric-v2-0498" || "$CHANGE_ID" == "frms-v2-historical-backfill-0499" || "$CHANGE_ID" == "training-compliance-final-matrix-0534" ]]');
     expect(workflow).toContain('--command="$sql_payload" --json');
   });
 
