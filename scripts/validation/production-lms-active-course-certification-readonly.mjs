@@ -587,6 +587,60 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         const candidates = rawCandidates.filter((el) =>
           !rawCandidates.some((other) => other !== el && other.contains(el))
         );
+        const requiredTotal = Number(requiredInteractionMatch[2]);
+        if (candidates.length < requiredTotal) {
+          // Some packages intentionally render required cards as plain divs with
+          // no pointer cursor or semantic class. When the learner-visible badge
+          // explicitly declares N required interactions, fall back to a structural
+          // group of exactly N visible sibling cards below that badge.
+          const badge = Array.from(document.body.querySelectorAll('*'))
+            .filter((el) => {
+              const text = clean(el.textContent);
+              return text.length > 0 &&
+                text.length <= 240 &&
+                /intera[cç][aã]o\s+obrigat[oó]ria\s*\(\d+\s*\/\s*\d+\)/i.test(text);
+            })
+            .sort((a, b) => {
+              const ar = a.getBoundingClientRect();
+              const br = b.getBoundingClientRect();
+              return (ar.width * ar.height) - (br.width * br.height);
+            })[0] || null;
+          const badgeBottom = badge ? badge.getBoundingClientRect().bottom : 0;
+          const structuralGroups = Array.from(document.body.querySelectorAll('*'))
+            .map((parent) => {
+              if (parent.closest(
+                'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+              )) return null;
+              const children = Array.from(parent.children).filter((el) => {
+                if (!visible(el)) return false;
+                if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
+                const text = clean(el.textContent);
+                const rect = el.getBoundingClientRect();
+                return (
+                  text.length >= 12 &&
+                  text.length <= 800 &&
+                  rect.top >= badgeBottom - 8 &&
+                  rect.width >= 100 &&
+                  rect.height >= 60 &&
+                  rect.width <= window.innerWidth * 0.55 &&
+                  rect.height <= window.innerHeight * 0.75
+                );
+              });
+              if (children.length !== requiredTotal) return null;
+              const tops = children.map((el) => el.getBoundingClientRect().top);
+              const heights = children.map((el) => el.getBoundingClientRect().height);
+              const maxHeight = Math.max(...heights, 1);
+              if (Math.max(...tops) - Math.min(...tops) > Math.max(90, maxHeight * 0.6)) return null;
+              const pr = parent.getBoundingClientRect();
+              return { children, area: pr.width * pr.height };
+            })
+            .filter(Boolean)
+            .sort((a, b) => a.area - b.area);
+          const structuralCards = structuralGroups[0]?.children || [];
+          for (const el of structuralCards) {
+            if (!candidates.includes(el)) candidates.push(el);
+          }
+        }
         const all = Array.from(document.querySelectorAll('*'));
         const candidateItems = candidates.map((el) => {
           const index = Math.max(0, all.indexOf(el));
@@ -613,6 +667,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           currentAnswers: {},
           optionCounts: {},
           testedOptions: {},
+          confirmedAnswers: {},
+          confirmedRetryDone: false,
           pendingProbe: null,
           probeQuestion: 0,
           retries: 0,
@@ -680,7 +736,21 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           adaptive.pendingProbe = null;
         }
 
+        const confirmedCount = Object.keys(adaptive.confirmedAnswers || {})
+          .filter((key) => Number.isInteger(adaptive.confirmedAnswers[key]))
+          .length;
+        if (confirmedCount >= total && !adaptive.confirmedRetryDone) {
+          adaptive.confirmedRetryDone = true;
+          adaptive.currentAnswers = {};
+          return { confirmed: true };
+        }
+
         for (let q = Math.max(0, Number(adaptive.probeQuestion || 0)); q < total; q += 1) {
+          if (Number.isInteger(adaptive.confirmedAnswers?.[q])) {
+            adaptive.bestAnswers[q] = adaptive.confirmedAnswers[q];
+            adaptive.probeQuestion = q + 1;
+            continue;
+          }
           const count = Math.max(2, Number(adaptive.optionCounts[q] || 4));
           const best = Number.isInteger(adaptive.bestAnswers[q]) ? adaptive.bestAnswers[q] : 0;
           const tested = new Set(adaptive.testedOptions[q] || []);
@@ -700,6 +770,38 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
       const isChoiceButton = (item) =>
         /(^|\s)(choice|option|answer)(\s|$)/i.test(item.className);
+
+      // The quiz templates reveal the correct option to the learner after an
+      // answer by visibly marking a disabled option as ".correct". That feedback
+      // is learner-visible evidence, not a hidden answer key. Remember it so a
+      // retry can replay known-correct answers without brute-forcing the module.
+      if (questionNumber) {
+        const feedbackChoices = Array.from(
+          document.querySelectorAll('button.option,button.choice,button.answer'),
+        );
+        const feedbackVisible = feedbackChoices.length > 0 &&
+          feedbackChoices.some((el) => el.disabled) &&
+          feedbackChoices.every((el) => {
+            const rect = el.getBoundingClientRect();
+            const style = getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 &&
+              style.visibility !== 'hidden' &&
+              style.display !== 'none';
+          });
+        const correctFeedbackIndex = feedbackVisible
+          ? feedbackChoices.findIndex((el) =>
+              /(^|\s)(correct|is-correct|right|success)(\s|$)/i.test(clean(el.className)) ||
+              el.getAttribute('data-correct') === 'true'
+            )
+          : -1;
+        if (correctFeedbackIndex >= 0) {
+          const adaptive = getAdaptiveState();
+          const qIndex = questionNumber - 1;
+          adaptive.optionCounts[qIndex] = feedbackChoices.length;
+          adaptive.bestAnswers[qIndex] = correctFeedbackIndex;
+          adaptive.confirmedAnswers[qIndex] = correctFeedbackIndex;
+        }
+      }
 
       // Result screens may keep stale quiz controls mounted. Retry must win
       // before assessment-mode detection, otherwise hidden/stale controls can
