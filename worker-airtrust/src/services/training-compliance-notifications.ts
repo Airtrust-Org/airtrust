@@ -381,7 +381,7 @@ export function renderComplianceEmailHtml(message: string): string {
 
       const access = line.match(/^(Acesse diretamente o treinamento|Acesse o curso diretamente pelo AirTrust):\s*(.*)$/);
       if (access) {
-        const url = access[1].trim();
+        const url = access[2].trim();
         return url
           ? `<div style="margin:4px 0"><strong>${escapeHtml(access[1])}:</strong><br>${linkify(url)}</div>`
           : `<div style="margin:4px 0"><strong>${escapeHtml(access[1])}:</strong></div>`;
