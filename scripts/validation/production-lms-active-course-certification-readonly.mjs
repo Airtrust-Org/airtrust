@@ -330,7 +330,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       state?.values?.['cmi.core.lesson_location'] ??
       state?.values?.['cmi.location'] ??
       '';
-    const action = await frame.evaluate(({ plan, location }) => {
+    let action = await frame.evaluate(({ plan, location, allowAdaptiveRetry }) => {
       const w = window;
       w.__AIRTRUST_CERT_DRIVER ??= {
         questionOrder: [],
@@ -341,6 +341,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         planCursorByLocation: {},
         assessmentBackfillByLocation: {},
         adaptiveByLocation: {},
+        answerAcceptedByLocation: {},
       };
       const st = w.__AIRTRUST_CERT_DRIVER;
       st.clickedByLocation ??= {};
@@ -349,6 +350,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       st.planCursorByLocation ??= {};
       st.assessmentBackfillByLocation ??= {};
       st.adaptiveByLocation ??= {};
+      st.answerAcceptedByLocation ??= {};
       const locationBase = String(location || 'unknown');
       // cmi.core.lesson_location tracks the slide, not the question inside it.
       // Use the learner-visible ordinal to avoid treating each new quiz question
@@ -405,7 +407,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
       const bad = /voltar|anterior|menu|sum[aá]rio|fechar|sair|cancelar/i;
       const good = /confirmar|responder|enviar|verificar|corrigir|continuar|pr[oó]xim[oa]|avan[cç]ar|iniciar|come[cç]ar|prosseguir|finalizar|concluir|resultado/i;
-      const retry = /tentar novamente|refazer|retry/i;
+      const retry = /tentar novamente|refazer|retry|revisar\s+(?:(?:este|o|a)\s+)?(?:cap[ií]tulo|m[oó]dulo)/i;
       const forwardId = /^(?:next|nextbtn|btnnext|qnext|quiznext|continue|continuebtn|submitnext)$/i;
       const assessmentForwardId = /^(?:qnext|quiznext)$/i;
       const backwardId = /^(?:prev|prevbtn|previous|back|qprev|quizprev)$/i;
@@ -526,6 +528,146 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         item.el.click();
         return { type, text: (item.text || item.id || String(item.index)).slice(0, 80) };
       };
+      const requestTrustedClick = (item, type) => {
+        const token = `airtrust-cert-${Date.now()}-${item.index}`;
+        item.el.setAttribute('data-airtrust-cert-click', token);
+        logAction(type, item);
+        return {
+          type,
+          text: (item.text || item.id || String(item.index)).slice(0, 80),
+          trusted_click_token: token,
+          location_key: locationKey,
+          signature: item.signature,
+        };
+      };
+
+      // Some course templates use clickable cards instead of semantic buttons for
+      // explicitly required interactions (for example "Interação obrigatória 0/4").
+      // Only in that declared state, identify pointer-like learner-content elements
+      // outside product chrome and click each distinct card at most once.
+      const requiredInteractionMatch = clean(document.body?.innerText || '').match(
+        /intera[cç][aã]o\s+obrigat[oó]ria\s*\((\d+)\s*\/\s*(\d+)\)/i,
+      );
+      if (
+        requiredInteractionMatch &&
+        Number(requiredInteractionMatch[1]) < Number(requiredInteractionMatch[2])
+      ) {
+        const scope = Array.from(document.body.querySelectorAll('*'));
+        const rawCandidates = scope.filter((el) => {
+          if (!visible(el)) return false;
+          if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
+          if (el.closest(
+            'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+          )) return false;
+          const style = getComputedStyle(el);
+          const dataKeys = Object.keys(el.dataset || {}).join(' ');
+          const className = clean(el.className);
+          const rect = el.getBoundingClientRect();
+          const interactiveHint =
+            style.cursor === 'pointer' ||
+            el.tabIndex >= 0 ||
+            el.hasAttribute('onclick') ||
+            /(barrier|decision|interactive|interact|required|toggle|step|action|choice|clickable)/i.test(`${className} ${dataKeys}`);
+          const cardGeometryHint =
+            rect.width >= 100 &&
+            rect.height >= 60 &&
+            rect.width <= window.innerWidth * 0.65 &&
+            rect.height <= window.innerHeight * 0.7;
+          const cardShapeHint =
+            cardGeometryHint &&
+            (
+              parseFloat(style.borderTopWidth || '0') > 0 ||
+              style.boxShadow !== 'none' ||
+              parseFloat(style.borderRadius || '0') >= 8
+            ) &&
+            Boolean(el.querySelector('h1,h2,h3,h4,h5,h6,li'));
+          // Some mandatory barrier cards are visually structured but do not expose
+          // cursor/role/class semantics. Under the explicit N/M mandatory-interaction
+          // gate only, a compact block containing list content is a safe learner-card
+          // candidate; broad page containers are excluded by the geometry bound.
+          const structuredCardHint =
+            cardGeometryHint &&
+            Boolean(el.querySelector('li')) &&
+            Array.from(el.querySelectorAll('li')).length >= 2;
+          const text = clean(el.textContent);
+          return (interactiveHint || cardShapeHint || structuredCardHint) && text.length > 0 && text.length <= 800;
+        });
+        // Keep the outermost pointer-like element so inherited cursor styles on
+        // headings/list items do not produce multiple clicks inside one card.
+        const candidates = rawCandidates.filter((el) =>
+          !rawCandidates.some((other) => other !== el && other.contains(el))
+        );
+        const requiredTotal = Number(requiredInteractionMatch[2]);
+        if (candidates.length < requiredTotal) {
+          // Some packages intentionally render required cards as plain divs with
+          // no pointer cursor or semantic class. When the learner-visible badge
+          // explicitly declares N required interactions, fall back to a structural
+          // group of exactly N visible sibling cards below that badge.
+          const badge = Array.from(document.body.querySelectorAll('*'))
+            .filter((el) => {
+              const text = clean(el.textContent);
+              return text.length > 0 &&
+                text.length <= 240 &&
+                /intera[cç][aã]o\s+obrigat[oó]ria\s*\(\d+\s*\/\s*\d+\)/i.test(text);
+            })
+            .sort((a, b) => {
+              const ar = a.getBoundingClientRect();
+              const br = b.getBoundingClientRect();
+              return (ar.width * ar.height) - (br.width * br.height);
+            })[0] || null;
+          const badgeBottom = badge ? badge.getBoundingClientRect().bottom : 0;
+          const structuralGroups = Array.from(document.body.querySelectorAll('*'))
+            .map((parent) => {
+              if (parent.closest(
+                'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+              )) return null;
+              const children = Array.from(parent.children).filter((el) => {
+                if (!visible(el)) return false;
+                if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
+                const text = clean(el.textContent);
+                const rect = el.getBoundingClientRect();
+                return (
+                  text.length >= 12 &&
+                  text.length <= 800 &&
+                  rect.top >= badgeBottom - 8 &&
+                  rect.width >= 100 &&
+                  rect.height >= 60 &&
+                  rect.width <= window.innerWidth * 0.55 &&
+                  rect.height <= window.innerHeight * 0.75
+                );
+              });
+              if (children.length !== requiredTotal) return null;
+              const tops = children.map((el) => el.getBoundingClientRect().top);
+              const heights = children.map((el) => el.getBoundingClientRect().height);
+              const maxHeight = Math.max(...heights, 1);
+              if (Math.max(...tops) - Math.min(...tops) > Math.max(90, maxHeight * 0.6)) return null;
+              const pr = parent.getBoundingClientRect();
+              return { children, area: pr.width * pr.height };
+            })
+            .filter(Boolean)
+            .sort((a, b) => a.area - b.area);
+          const structuralCards = structuralGroups[0]?.children || [];
+          for (const el of structuralCards) {
+            if (!candidates.includes(el)) candidates.push(el);
+          }
+        }
+        const all = Array.from(document.querySelectorAll('*'));
+        const candidateItems = candidates.map((el) => {
+          const index = Math.max(0, all.indexOf(el));
+          const id = clean(el.id);
+          const role = clean(el.getAttribute('role'));
+          return {
+            el,
+            index,
+            id,
+            role,
+            text: clean(el.textContent),
+            signature: ['required', index, id, el.tagName.toLowerCase()].join(':'),
+          };
+        });
+        const requiredCandidate = candidateItems.find((item) => !alreadyClicked(item));
+        if (requiredCandidate) return requestTrustedClick(requiredCandidate, 'required-interaction');
+      }
 
       const getAdaptiveState = () => {
         st.adaptiveByLocation[locationBase] ??= {
@@ -535,6 +677,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           currentAnswers: {},
           optionCounts: {},
           testedOptions: {},
+          confirmedAnswers: {},
+          confirmedRetryDone: false,
           pendingProbe: null,
           probeQuestion: 0,
           retries: 0,
@@ -543,18 +687,34 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       };
       const resultText = clean(document.body?.innerText || '');
       const resultScoreMatch = resultText.match(/acertou\s+(\d+)\s+de\s+(\d+)\s+quest/i);
+      const labeledPercentMatch = resultText.match(
+        /\b(?:nota|resultado(?:\s+(?:do|da)\s+(?:cap[ií]tulo|m[oó]dulo|quiz|avalia[cç][aã]o))?)\s*:?[ \t]*(\d{1,3})\s*%/i,
+      );
       const firstPercentMatch = resultText.match(/\b(\d{1,3})\s*%/);
       const resultMetric = resultScoreMatch
         ? (Number(resultScoreMatch[1]) / Math.max(1, Number(resultScoreMatch[2]))) * 100
-        : firstPercentMatch
-          ? Number(firstPercentMatch[1])
-          : null;
+        : labeledPercentMatch
+          ? Number(labeledPercentMatch[1])
+          : firstPercentMatch
+            ? Number(firstPercentMatch[1])
+            : null;
       const resultQuestionTotal = resultScoreMatch ? Number(resultScoreMatch[2]) : null;
 
       const prepareAdaptiveProbe = () => {
         if (!Number.isFinite(resultMetric)) return null;
         const adaptive = getAdaptiveState();
-        const total = Math.max(1, Number(resultQuestionTotal || questionTotal || 0));
+        const observedQuestionTotal = Math.max(
+          0,
+          ...Object.keys(adaptive.optionCounts || {}).map((key) => Number(key) + 1).filter(Number.isFinite),
+          ...Object.keys(adaptive.currentAnswers || {}).map((key) => Number(key) + 1).filter(Number.isFinite),
+          ...Object.keys(adaptive.bestAnswers || {}).map((key) => Number(key) + 1).filter(Number.isFinite),
+        );
+        const total = Math.max(
+          1,
+          Number(resultQuestionTotal || 0),
+          Number(questionTotal || 0),
+          observedQuestionTotal,
+        );
         if (!adaptive.initialized) {
           adaptive.initialized = true;
           adaptive.bestMetric = Number(resultMetric);
@@ -586,7 +746,21 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           adaptive.pendingProbe = null;
         }
 
+        const confirmedCount = Object.keys(adaptive.confirmedAnswers || {})
+          .filter((key) => Number.isInteger(adaptive.confirmedAnswers[key]))
+          .length;
+        if (confirmedCount >= total && !adaptive.confirmedRetryDone) {
+          adaptive.confirmedRetryDone = true;
+          adaptive.currentAnswers = {};
+          return { confirmed: true };
+        }
+
         for (let q = Math.max(0, Number(adaptive.probeQuestion || 0)); q < total; q += 1) {
+          if (Number.isInteger(adaptive.confirmedAnswers?.[q])) {
+            adaptive.bestAnswers[q] = adaptive.confirmedAnswers[q];
+            adaptive.probeQuestion = q + 1;
+            continue;
+          }
           const count = Math.max(2, Number(adaptive.optionCounts[q] || 4));
           const best = Number.isInteger(adaptive.bestAnswers[q]) ? adaptive.bestAnswers[q] : 0;
           const tested = new Set(adaptive.testedOptions[q] || []);
@@ -606,6 +780,37 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
       const isChoiceButton = (item) =>
         /(^|\s)(choice|option|answer)(\s|$)/i.test(item.className);
+
+      // Quiz templates reveal the correct option to the learner after an answer
+      // by visibly marking a disabled option as ".correct". This is learner-visible
+      // feedback, not a hidden answer key. Remember it for the next retry.
+      if (questionNumber) {
+        const feedbackChoices = Array.from(
+          document.querySelectorAll('button.option,button.choice,button.answer'),
+        );
+        const feedbackVisible = feedbackChoices.length > 0 &&
+          feedbackChoices.some((el) => el.disabled) &&
+          feedbackChoices.every((el) => {
+            const rect = el.getBoundingClientRect();
+            const style = getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 &&
+              style.visibility !== 'hidden' &&
+              style.display !== 'none';
+          });
+        const correctFeedbackIndex = feedbackVisible
+          ? feedbackChoices.findIndex((el) =>
+              /(^|\s)(correct|is-correct|right|success)(\s|$)/i.test(clean(el.className)) ||
+              el.getAttribute('data-correct') === 'true'
+            )
+          : -1;
+        if (correctFeedbackIndex >= 0) {
+          const adaptive = getAdaptiveState();
+          const qIndex = questionNumber - 1;
+          adaptive.optionCounts[qIndex] = feedbackChoices.length;
+          adaptive.bestAnswers[qIndex] = correctFeedbackIndex;
+          adaptive.confirmedAnswers[qIndex] = correctFeedbackIndex;
+        }
+      }
 
       // Result screens may keep stale quiz controls mounted. Retry must win
       // before assessment-mode detection, otherwise hidden/stale controls can
@@ -629,6 +834,11 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
             delete st.quizChoicesTried[key];
           }
         }
+        for (const key of Object.keys(st.answerAcceptedByLocation || {})) {
+          if (key === locationBase || key.startsWith(locationBase + ':question-')) {
+            delete st.answerAcceptedByLocation[key];
+          }
+        }
       };
       const moduleRetry = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
       if (moduleRetry) {
@@ -639,7 +849,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         // Reset per-attempt UI bookkeeping so all non-probed questions can reuse
         // the current best answer instead of being forced onto an untried option.
         resetAssessmentRetryState();
-        return markAndClick(moduleRetry, 'adaptive-retry');
+        return requestTrustedClick(moduleRetry, 'adaptive-retry');
       }
 
       const assessmentChoices = items.filter((item) =>
@@ -662,6 +872,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           item.el.getAttribute('data-selected') === 'true' ||
           item.el.getAttribute('data-checked') === 'true'
         );
+        const driverAccepted = Boolean(st.answerAcceptedByLocation[locationKey]);
         const nextQuestion = items.find((item) => assessmentForwardId.test(item.id));
         const assessmentFinish = items.find((item) =>
           !isChoiceButton(item) &&
@@ -675,12 +886,19 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         // Resume can reopen at Q10 while the package itself reports only 1/10
         // answered. That counter is stronger evidence than lesson_location:
         // walk backwards inside the assessment only, then refill forward.
-        if (
+        const shouldStartAssessmentBackfill = Boolean(
           questionNumber &&
           answeredCount != null &&
-          questionNumber - answeredCount > 1
-        ) {
+          questionNumber - answeredCount > 1 &&
+          !st.assessmentBackfillByLocation[locationBase]
+        );
+        if (shouldStartAssessmentBackfill) {
           st.assessmentBackfillByLocation[locationBase] = true;
+          // The resume gap can be discovered only after the driver already tried
+          // controls on the resumed question. Clear that stale per-question UI
+          // bookkeeping once before walking backwards, otherwise the final
+          // question can return with every option incorrectly marked as tried.
+          resetAssessmentRetryState();
         }
         const assessmentPrev = Array.from(document.querySelectorAll('#qPrev,#quizPrev'))
           .find((el) => visible(el) && !el.disabled);
@@ -701,11 +919,11 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
         // Some packages allow learners to navigate without answering. A real
         // selected state is required before qNext/finish is allowed to advance.
-        if (selected && nextQuestion) {
+        if ((selected || driverAccepted) && nextQuestion) {
           st.assessmentCursorByLocation[locationKey] = cursor + 1;
           return markAndClick(nextQuestion, 'assessment-next');
         }
-        if (selected && assessmentFinish && !nextQuestion) {
+        if ((selected || driverAccepted) && assessmentFinish && !nextQuestion) {
           return markAndClick(assessmentFinish, 'assessment-finish');
         }
 
@@ -729,7 +947,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           tried.add(candidate.signature);
           st.quizChoicesTried[quizKey] = Array.from(tried);
           adaptive.currentAnswers[qIndex] = Math.max(0, assessmentChoices.indexOf(candidate));
-          return markAndClick(candidate, 'assessment-answer');
+          return requestTrustedClick(candidate, 'assessment-answer');
         }
         if (assessmentFinish && !nextQuestion && candidateOrder.every((item) => tried.has(item.signature))) {
           return markAndClick(assessmentFinish, 'assessment-finish');
@@ -865,6 +1083,37 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       type: 'frame-error',
       message: safe(error?.message || String(error)),
     }));
+
+    if (action?.trusted_click_token) {
+      try {
+        const token = String(action.trusted_click_token);
+        await frame.locator(`[data-airtrust-cert-click="${token}"]`).click({ timeout: 2_500 });
+        await frame.evaluate(({ token: clickToken, locationKey, signature, type }) => {
+          document.querySelector(`[data-airtrust-cert-click="${clickToken}"]`)
+            ?.removeAttribute('data-airtrust-cert-click');
+          const st = window.__AIRTRUST_CERT_DRIVER;
+          if (!st || typeof st !== 'object') return;
+          st.clickedByLocation ??= {};
+          const clicked = new Set(Array.isArray(st.clickedByLocation[locationKey]) ? st.clickedByLocation[locationKey] : []);
+          clicked.add(signature);
+          st.clickedByLocation[locationKey] = Array.from(clicked).slice(-120);
+          if (type === 'assessment-answer') {
+            st.answerAcceptedByLocation ??= {};
+            st.answerAcceptedByLocation[locationKey] = signature;
+          }
+        }, {
+          token,
+          locationKey: String(action.location_key || ''),
+          signature: String(action.signature || ''),
+          type: String(action.type || ''),
+        }).catch(() => undefined);
+      } catch (error) {
+        action = {
+          type: 'frame-error',
+          message: safe(error?.message || String(error)),
+        };
+      }
+    }
 
     // Fallback only when the package exposes no usable visible control.
     if (action?.type === 'none') {
@@ -1121,7 +1370,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   if (phase !== 'reopen-completed') {
     const stepLimit = Math.max(
       MAX_STEPS,
-      COURSE_IDS.size > 0 ? 900 : 0,
+      COURSE_IDS.size > 0 ? 3_600 : 0,
       Math.max(Number(modelMeta.slide_count || 0), Number(manifest.requiredSlides || 0)) * 5,
       Number(manifest.requiredInteractions || 0) * 8,
     );
@@ -1260,9 +1509,18 @@ async function certifyScormCourse(browser, token, listed) {
     Number(manifest.requiredSlides || 0),
     Number(suspend.model?.slide_count || 0),
   );
+  const focusedCompletionBudgetMs = COURSE_IDS.size > 0
+    ? Math.min(
+        420_000,
+        Math.max(
+          180_000,
+          slideCount * 4_000 + Number(manifest.requiredInteractions || 0) * 50_000,
+        ),
+      )
+    : 0;
   const completionBudgetMs = Math.max(
     COURSE_TIMEOUT_MS,
-    COURSE_IDS.size > 0 ? 90_000 : 0,
+    focusedCompletionBudgetMs,
     Math.min(180_000, slideCount * 320),
   );
   const complete = suspendAlreadyCompleted
