@@ -335,12 +335,31 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       st.actionLog ??= [];
       st.assessmentCursorByLocation ??= {};
       st.planCursorByLocation ??= {};
-      const locationKey = String(location || 'unknown');
-      const slideMatch = locationKey.match(/^(\d+)/);
+      const locationBase = String(location || 'unknown');
+      // cmi.core.lesson_location tracks the slide, not the question inside it.
+      // Use the learner-visible ordinal to avoid treating each new quiz question
+      // as a previously-clicked answer on the same slide.
+      const questionMatch = String(document.body?.innerText || '').match(
+        /\b(?:quest[ãa]o|pergunta)\s*(\d+)\s*(?:\/|de)\s*(\d+)/i,
+      );
+      const questionNumber = questionMatch ? Number(questionMatch[1]) : null;
+      const questionTotal = questionMatch ? Number(questionMatch[2]) : null;
+      const locationKey = locationBase + (
+        questionNumber && questionTotal
+          ? ':question-' + questionNumber + '-of-' + questionTotal
+          : ''
+      );
+      const slideMatch = locationBase.match(/^(\d+)/);
       const slideIndex = slideMatch ? Number(slideMatch[1]) : null;
       const plansHere = Array.isArray(plan)
         ? plan.filter((item) => item?.slideIndex === slideIndex)
         : [];
+      const plannedQuestion = questionNumber
+        ? plansHere.find((item) =>
+            String(item?.path || '').includes('.questions[' + (questionNumber - 1) + ']') ||
+            String(item?.path || '').includes('.assessmentQuestions[' + (questionNumber - 1) + ']'),
+          ) || plansHere[questionNumber - 1]
+        : null;
       const clicked = new Set(
         Array.isArray(st.clickedByLocation[locationKey])
           ? st.clickedByLocation[locationKey]
@@ -352,10 +371,12 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         return (
           r.width > 0 &&
           r.height > 0 &&
-          r.bottom > 0 &&
-          r.right > 0 &&
-          r.top < window.innerHeight &&
-          r.left < window.innerWidth &&
+          // Quiz controls can be below the iframe viewport and must be scrolled
+          // into view, without exposing hidden menus or disabled elements.
+          (
+            (r.bottom > 0 && r.right > 0 && r.top < window.innerHeight && r.left < window.innerWidth) ||
+            el.matches('button.choice,button.answer,button.option,[data-quiz-choice],[data-module-quiz],#qNext,#quizNext')
+          ) &&
           s.visibility !== 'hidden' &&
           s.display !== 'none' &&
           s.opacity !== '0' &&
@@ -476,6 +497,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         clicked.add(item.signature);
         persistClicked();
         logAction(type, item);
+        item.el.scrollIntoView?.({ block: 'center', inline: 'nearest' });
         item.el.click();
         return { type, text: (item.text || item.id || String(item.index)).slice(0, 80) };
       };
@@ -501,13 +523,18 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           item.ariaChecked === 'true'
         );
         const nextQuestion = items.find((item) => assessmentForwardId.test(item.id));
+        const assessmentFinish = items.find((item) =>
+          !isChoiceButton(item) &&
+          /concluir\s+(?:a\s+)?avalia[cç][aã]o|finalizar\s+(?:a\s+)?avalia[cç][aã]o|encerrar\s+avalia[cç][aã]o|enviar\s+respostas|concluir\s+quiz/i.test(item.key)
+        );
         if (selected && nextQuestion) {
           st.assessmentCursorByLocation[locationKey] = cursor + 1;
-          logAction('assessment-next', nextQuestion);
-          nextQuestion.el.click();
-          return { type: 'assessment-next', text: nextQuestion.id };
+          return markAndClick(nextQuestion, 'assessment-next');
         }
-        const planned = plansHere[cursor]?.indices || [];
+        if (selected && assessmentFinish && !nextQuestion) {
+          return markAndClick(assessmentFinish, 'assessment-finish');
+        }
+        const planned = plannedQuestion?.indices || plansHere[cursor]?.indices || [];
         const candidateOrder = [
           ...planned.map((index) => assessmentChoices[Math.max(0, Math.min(Number(index), assessmentChoices.length - 1))]),
           ...assessmentChoices,
@@ -518,11 +545,45 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           st.quizChoicesTried[quizKey] = Array.from(tried);
           return markAndClick(candidate, 'assessment-answer');
         }
+        if (assessmentFinish && !nextQuestion && candidateOrder.every((item) => tried.has(item.signature))) {
+          return markAndClick(assessmentFinish, 'assessment-finish');
+        }
         // Do not fake progress when no valid answer/next control exists.
         return { type: 'none' };
       }
 
+      // Quizzes in the newer M8 player expose data-quiz-choice and data-next,
+      // while the LMS location remains fixed for all 10 questions on a slide.
+      // The question-specific locationKey above resets attempts per question.
+      const inlineQuizChoices = items.filter((item) => item.el.matches('[data-quiz-choice]'));
+      if (inlineQuizChoices.length) {
+        const inlineNext = items.find((item) => item.el.matches('[data-next]'));
+        if (inlineNext) return markAndClick(inlineNext, 'inline-quiz-next');
+        const chosen = new Set(st.inlineChoicesTried?.[locationKey] || []);
+        const wanted = (plannedQuestion?.indices || [])[0];
+        const candidates = [
+          Number.isInteger(wanted) ? inlineQuizChoices[wanted] : null,
+          ...inlineQuizChoices,
+        ].filter(Boolean);
+        const option = candidates.find((item) => !chosen.has(item.signature));
+        if (option) {
+          st.inlineChoicesTried ??= {};
+          chosen.add(option.signature);
+          st.inlineChoicesTried[locationKey] = Array.from(chosen);
+          return markAndClick(option, 'inline-quiz-choice');
+        }
+        return { type: 'none' };
+      }
+
       // Multi-select practices/checklists must be satisfied before submit/navigation.
+      const finalizeAssessment = items.find((item) =>
+        !isChoiceButton(item) &&
+        /concluir\s+(?:a\s+)?avalia[cç][aã]o|finalizar\s+(?:a\s+)?avalia[cç][aã]o/i.test(item.key)
+      );
+      if (finalizeAssessment && !alreadyClicked(finalizeAssessment)) {
+        return markAndClick(finalizeAssessment, 'assessment-finish');
+      }
+
       const toggle = items.find((item) => item.multiToggle && !alreadyClicked(item));
       if (toggle) return markAndClick(toggle, 'content-toggle');
 
@@ -592,6 +653,12 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         const reset = document.getElementById('resetBtn');
         if (reset && visible(reset)) {
           st.resetTriedByLocation[locationKey] = true;
+          delete st.clickedByLocation[locationKey];
+          if (st.quizChoicesTried) {
+            for (const key of Object.keys(st.quizChoicesTried)) {
+              if (key.startsWith(locationKey + ':assessment:')) delete st.quizChoicesTried[key];
+            }
+          }
           reset.click();
           logAction('bounded-retry');
           return { type: 'bounded-retry' };
