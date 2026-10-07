@@ -1217,7 +1217,7 @@
     {
       "change_file": "0534_training_compliance_final_matrix.sql",
       "change_id": "training-compliance-final-matrix-0534",
-      "sha256": "fd8a8ac34f7dffe353c6fe2b68c0551abcc35c2611c0f25b319eabeb929d00e7",
+      "sha256": "31366ebd2e3ba20dda8040ab1a5f34a0c67ae0bae116028dfec7d81df67c33f0",
       "targets": [],
       "domain": "training compliance / final canonical QSMS and operational-safety matrix",
       "coverage": "OUT_OF_CONTRACT_SCOPE",

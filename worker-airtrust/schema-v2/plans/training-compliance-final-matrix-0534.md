@@ -59,3 +59,7 @@ Forward-only. If the final matrix is revised again, create a new compensating Sc
 - one canonical active Regras de Ouro model exists with 24 months / 2 h and its historical evidence remains.
 - no active Compliance requirement remains for FDM-EAD.
 - NR-35 remains PRESENCIAL, 24 months / 8 h, and LMS completion alone does not auto-grant the qualification.
+
+## Pré-aplicação: vínculo obrigatório à categoria canônica EAD
+
+A tentativa de staging da 0534 retornou `SQLITE_CONSTRAINT` após preflight e ponto de recuperação. Na revisão, foi identificado que os dois novos modelos FDM-MECANICO e BOWTIEXP eram inseridos sem `categoria_id`, embora o contrato governado 0457 exija um ID ativo da categoria do mesmo tenant em todo novo modelo. Os dois INSERTs agora referenciam exclusivamente a categoria EAD ativa da empresa 6. Os preflights verificam a unicidade da categoria EAD. A alteração é restrita aos dois vínculos no SQL 0534 ainda não aplicado, com novo hash no manifest, ledger e contrato de mudança. Não há edição de qualificações históricas, certificados, designações ou matrículas.

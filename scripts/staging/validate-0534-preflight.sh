@@ -9,6 +9,7 @@ query_count(){ local sql="$1"; (cd worker-airtrust && npx wrangler d1 execute "$
 assert_count(){ local label="$1" expected="$2" sql="$3" count; count="$(query_count "$sql")"; [[ "$count" == "$expected" ]] || { echo "ERROR: $label expected=$expected found=$count" >&2; exit 1; }; echo "PREFLIGHT_OK=$label"; }
 assert_count migration-ledger-0533 1 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0533_training_catalog_metadata_references.sql';"
 assert_count migration-ledger-0534-absent 0 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0534_training_compliance_final_matrix.sql';"
+assert_count ead-category-canonical 1 "SELECT COUNT(*) count FROM qualificacoes_categorias WHERE empresa_id=6 AND UPPER(TRIM(codigo))='EAD' AND UPPER(TRIM(nome))='EAD' AND ativo=1 AND deleted_at IS NULL;"
 assert_count nr20-model 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(TRIM(codigo))='NR-20' AND ativo=1 AND deleted_at IS NULL;"
 assert_count d2-model 1 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(TRIM(codigo))='D2' AND ativo=1 AND deleted_at IS NULL;"
 assert_count petro-ouro-evidence-model 0 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND UPPER(TRIM(codigo))='PETRO-OURO' AND ativo=1 AND deleted_at IS NULL;"
