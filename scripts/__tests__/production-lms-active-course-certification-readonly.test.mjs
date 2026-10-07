@@ -125,6 +125,9 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /clickedByLocation/);
   assert.match(source, /captureRequiredInteractionStructure/);
   assert.match(source, /required_interaction_structure/);
+  assert.match(source, /document\.querySelectorAll\('\[data-touch\],\.touchable'\)/);
+  assert.match(source, /required-interaction-explicit/);
+  assert.match(source, /required-explicit/);
   assert.match(source, /parent_child_count/);
   assert.match(source, /text_sample/);
   assert.match(source, /elementsFromPoint/);
