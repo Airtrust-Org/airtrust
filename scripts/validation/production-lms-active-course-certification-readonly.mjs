@@ -1287,6 +1287,72 @@ async function captureVisibleControls(frame) {
   }).catch(() => null);
 }
 
+async function captureRequiredInteractionStructure(frame) {
+  return frame.evaluate(() => {
+    const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+    const match = clean(document.body?.innerText || '').match(
+      /intera[cç][aã]o\s+obrigat[oó]ria\s*\((\d+)\s*\/\s*(\d+)\)/i,
+    );
+    if (!match || Number(match[1]) >= Number(match[2])) return null;
+    const visible = (el) => {
+      const r = el.getBoundingClientRect();
+      const st = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 &&
+        r.top < innerHeight && r.left < innerWidth && st.visibility !== 'hidden' &&
+        st.display !== 'none' && st.opacity !== '0' && el.getAttribute('aria-hidden') !== 'true';
+    };
+    const excluded = (el) => Boolean(el.closest(
+      'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+    ));
+    const badges = Array.from(document.body.querySelectorAll('*')).filter((el) => {
+      const text = clean(el.textContent);
+      return visible(el) && text.length <= 260 &&
+        /intera[cç][aã]o\s+obrigat[oó]ria\s*\(\d+\s*\/\s*\d+\)/i.test(text);
+    });
+    const badge = badges.sort((a, b) => {
+      const ar=a.getBoundingClientRect(), br=b.getBoundingClientRect();
+      return ar.width*ar.height - br.width*br.height;
+    })[0] || null;
+    const bottom = badge?.getBoundingClientRect().bottom || 0;
+    const rows = Array.from(document.body.querySelectorAll('div,section,article,ul,li'))
+      .filter((el) => {
+        if (!visible(el) || excluded(el)) return false;
+        const r=el.getBoundingClientRect(), text=clean(el.textContent);
+        return r.top >= bottom-12 && r.width >= 80 && r.height >= 30 &&
+          r.width <= innerWidth*0.9 && r.height <= innerHeight*0.8 &&
+          text.length >= 6 && text.length <= 1200;
+      })
+      .map((el) => {
+        const r=el.getBoundingClientRect(), st=getComputedStyle(el), parent=el.parentElement;
+        return {
+          tag: el.tagName.toLowerCase(),
+          id: String(el.id || '').slice(0,80) || null,
+          class_name: String(el.className || '').slice(0,180) || null,
+          parent_tag: parent?.tagName?.toLowerCase() || null,
+          parent_class_name: String(parent?.className || '').slice(0,180) || null,
+          parent_child_count: parent?.children?.length ?? null,
+          direct_child_count: el.children?.length ?? 0,
+          li_count: el.querySelectorAll('li').length,
+          heading_count: el.querySelectorAll('h1,h2,h3,h4,h5,h6').length,
+          cursor: st.cursor || null,
+          border_radius: st.borderRadius || null,
+          border_top_width: st.borderTopWidth || null,
+          box_shadow: st.boxShadow || null,
+          rect: {top:Math.round(r.top),left:Math.round(r.left),width:Math.round(r.width),height:Math.round(r.height)},
+          text_sample: clean(el.textContent).slice(0,220),
+        };
+      })
+      .sort((a,b) => a.rect.width*a.rect.height - b.rect.width*b.rect.height)
+      .slice(0,80);
+    const br=badge?.getBoundingClientRect();
+    return {
+      current:Number(match[1]), total:Number(match[2]),
+      badge: br ? {tag:badge.tagName.toLowerCase(),class_name:String(badge.className||'').slice(0,180),top:Math.round(br.top),bottom:Math.round(br.bottom),left:Math.round(br.left),width:Math.round(br.width),height:Math.round(br.height)} : null,
+      candidates: rows,
+    };
+  }).catch(() => null);
+}
+
 async function captureDriverState(frame) {
   return frame.evaluate(() => {
     const st = window.__AIRTRUST_CERT_DRIVER;
@@ -1394,6 +1460,9 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     null;
   const visibleControls = await captureVisibleControls(frame);
   const stalledSlide = summarizeStalledSlide(model, preUnloadLocation);
+  const requiredInteractionStructure = !terminalState(preUnloadTrace?.values || {})
+    ? await captureRequiredInteractionStructure(frame)
+    : null;
   const driverState = await captureDriverState(frame);
   let diagnosticScreenshot = null;
   const focusedDiagnostics = COURSE_IDS.size > 0 && COURSE_IDS.size <= 6;
@@ -1443,6 +1512,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     model: modelMeta,
     stalled_slide: stalledSlide,
     visible_controls: visibleControls,
+    required_interaction_structure: requiredInteractionStructure,
     driver_state: driverState,
     diagnostic_screenshot: diagnosticScreenshot,
     asset_failures: assetFailures.slice(0, 20),
