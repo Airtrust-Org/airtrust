@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-fdm-three-audiences-0536",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0536_training_compliance_fdm_three_audiences.sql",
+  "fileHash": "27b33d0d16c0a0a227efe119ee0782bd2e72696bb65f6683bdfb2c06ccb20d00",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-fdm-three-audiences-0536.md",
+  "planHash": "320dd4ed5f9be8406d001d523bc653d0e36727a0e35bcf698ad1cde12089c6a8"
+}
