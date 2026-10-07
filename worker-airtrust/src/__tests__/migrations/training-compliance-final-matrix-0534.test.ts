@@ -72,6 +72,19 @@ describe('training compliance final matrix 0534', () => {
     expect(sql).toContain("AND escopo<>'FUNCIONARIO'");
   });
 
+  it('uses reviewed bounded query transport for 0534 after repeated D1_RESET_DO', () => {
+    const runner = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
+    const workflow = read('.github/workflows/apply-schema-change-v2.yml');
+    expect(runner).toContain('[[ "$migration_basename" == "0534_training_compliance_final_matrix.sql" ]]');
+    expect(runner).toContain('fd8a8ac34f7dffe353c6fe2b68c0551abcc35c2611c0f25b319eabeb929d00e7');
+    expect(runner).toContain('--env staging --remote --command="$sql_payload" --json');
+    expect(runner).toContain('ledger_count="$(read_ledger_count)"');
+    expect(runner).toContain('validate_postconditions');
+    expect(workflow).toContain('"$CHANGE_ID" == "training-compliance-final-matrix-0534"');
+    expect(workflow).toContain('--env production --remote --command="$sql_payload" --json');
+    expect(workflow).toContain('Verify ledger postcondition');
+  });
+
   it('routes 0534 through governed staging and production validators', () => {
     const stagingWorkflow = read('.github/workflows/staging-d1-schema-change.yml');
     const runner = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
