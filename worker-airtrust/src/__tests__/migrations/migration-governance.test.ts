@@ -129,8 +129,8 @@ describe('migration governance', () => {
     // 0528 separates sector Compliance alert responsibility from operational sector access.
     // 0530 adds the governed placeholder qualification models for planned EAD packages.
     // 0531 repairs the reviewed tenant-6 NR-20 HIBRIDO requirement modality after 0526.
-    // 0533 adds governed training catalog references/metadata; 0534 aligns the final canonical Training Compliance matrix.
-    const expectedLatest = 534;
+    // 0533 adds governed metadata; 0534 aligns the final matrix; 0535 repairs the missing INTEGRA prerequisite discovered in staging.
+    const expectedLatest = 535;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
