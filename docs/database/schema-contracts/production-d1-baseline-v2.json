@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-07",
     "last_reconciled_against": "0538 explicit Gestor designation + approved NR-05 company-wide policy prepared; live apply pending",
-    "schema_v2_digest": "8c267c0ec617513b1b4688e0c63ba8dfa2395c52114a23451f8a119117643907",
+    "schema_v2_digest": "b26e7bc12c42340541b5345c5de88904916320d10aa8215030d33d630f84ac8c",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1374,7 +1374,7 @@
     {
       "change_file": "0538_training_compliance_manager_designation_nr05.sql",
       "change_id": "training-compliance-manager-designation-nr05-0538",
-      "sha256": "3cf1d2e1d616d1cd558c5dfca3271cf1342ae7e862550004e29da7761f25bc65",
+      "sha256": "6ee4d80214914d9d68d595853fae1b61e38fdc0dd5c6d9a2cb5c8b33b3cda4ab",
       "targets": [],
       "domain": "training compliance / explicit Gestor designation and approved NR-05 company-wide rule",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
