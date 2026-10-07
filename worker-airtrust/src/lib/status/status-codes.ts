@@ -168,6 +168,38 @@ export function isActiveOrCompletedSessionStatus(status: StatusLike): boolean {
   return activeOrCompletedSessionStatusSet.has(normalizeStatus(status));
 }
 
+/**
+ * A persisted NULL/blank status is a known legacy qualification-history shape.
+ * It is not a completed status by itself. Only accept the legacy case when
+ * the record contains two valid, chronological dates evidencing completion
+ * and the corresponding qualification expiry.
+ *
+ * Explicit planned/cancelled/unknown statuses still fail closed regardless
+ * of their dates. No status is updated or inferred in the database.
+ */
+export function isCertificateEligibleQualificationRecord(record: {
+  status: StatusLike;
+  dataConclusao: string | null | undefined;
+  dataVencimento: string | null | undefined;
+}): boolean {
+  if (isCertificateEligibleQualificationStatus(record.status)) return true;
+  if (normalizeStatus(record.status) !== '') return false;
+
+  const completion = String(record.dataConclusao || '').trim().slice(0, 10);
+  const expiry = String(record.dataVencimento || '').trim().slice(0, 10);
+  const isValidCalendarDate = (value: string): boolean => {
+    if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+  return (
+    isValidCalendarDate(completion) &&
+    isValidCalendarDate(expiry) &&
+    completion <= new Date().toISOString().slice(0, 10) &&
+    expiry >= completion
+  );
+}
+
 export function isPlannedQualificationStatus(status: StatusLike): boolean {
   return plannedQualificationStatusSet.has(normalizeStatus(status));
 }
