@@ -28,6 +28,11 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /summarizeStalledSlide/);
   assert.match(source, /captureVisibleControls/);
   assert.match(source, /visible_controls/);
+  assert.match(source, /question_collection_type/);
+  assert.match(source, /question_shape/);
+  assert.match(source, /focusedDiagnostics/);
+  assert.match(source, /diagnostic_screenshot/);
+  assert.match(source, /menuCloseByLocation/);
   assert.match(source, /completionBudgetMs/);
   assert.match(source, /enabledTextNext/);
   assert.match(source, /stepLimit/);
@@ -102,6 +107,7 @@ test('production certification workflow is governed, online-triggerable, SHA-pin
   assert.match(workflow, /production-lms-active-course-certification-readonly\.mjs/);
   assert.match(workflow, /if:\s*always\(\)/);
   assert.match(workflow, /actions\/upload-artifact@v7/);
+  assert.match(workflow, /lms-active-certification-diagnostics/);
   assert.match(workflow, /Enforce zero certification failures/);
 
   assert.match(resolver, /COMMENT_ACTOR_MISMATCH/);
