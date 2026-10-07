@@ -552,11 +552,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         requiredInteractionMatch &&
         Number(requiredInteractionMatch[1]) < Number(requiredInteractionMatch[2])
       ) {
-        const scope = Array.from(document.querySelectorAll(
-          'main *,article *,section *,[class*="content" i] *,[class*="slide" i] *',
-        ));
-        const unique = [...new Set(scope)];
-        const rawCandidates = unique.filter((el) => {
+        const scope = Array.from(document.body.querySelectorAll('*'));
+        const rawCandidates = scope.filter((el) => {
           if (!visible(el)) return false;
           if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
           if (el.closest(
@@ -565,13 +562,25 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           const style = getComputedStyle(el);
           const dataKeys = Object.keys(el.dataset || {}).join(' ');
           const className = clean(el.className);
+          const rect = el.getBoundingClientRect();
           const interactiveHint =
             style.cursor === 'pointer' ||
             el.tabIndex >= 0 ||
             el.hasAttribute('onclick') ||
             /(barrier|decision|interactive|interact|required|toggle|step|action|choice|clickable)/i.test(`${className} ${dataKeys}`);
+          const cardShapeHint =
+            (
+              parseFloat(style.borderTopWidth || '0') > 0 ||
+              style.boxShadow !== 'none' ||
+              parseFloat(style.borderRadius || '0') >= 8
+            ) &&
+            Boolean(el.querySelector('h1,h2,h3,h4,h5,h6,li')) &&
+            rect.width >= 100 &&
+            rect.height >= 60 &&
+            rect.width <= window.innerWidth * 0.65 &&
+            rect.height <= window.innerHeight * 0.7;
           const text = clean(el.textContent);
-          return interactiveHint && text.length > 0 && text.length <= 800;
+          return (interactiveHint || cardShapeHint) && text.length > 0 && text.length <= 800;
         });
         // Keep the outermost pointer-like element so inherited cursor styles on
         // headings/list items do not produce multiple clicks inside one card.
@@ -1390,7 +1399,13 @@ async function certifyScormCourse(browser, token, listed) {
     Number(suspend.model?.slide_count || 0),
   );
   const focusedCompletionBudgetMs = COURSE_IDS.size > 0
-    ? Math.min(420_000, Math.max(180_000, slideCount * 4_000))
+    ? Math.min(
+        420_000,
+        Math.max(
+          180_000,
+          slideCount * 4_000 + Number(manifest.requiredInteractions || 0) * 35_000,
+        ),
+      )
     : 0;
   const completionBudgetMs = Math.max(
     COURSE_TIMEOUT_MS,
