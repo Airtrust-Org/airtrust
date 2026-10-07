@@ -69,6 +69,7 @@ APPROVED_MIGRATIONS=(
   "0536_training_compliance_fdm_three_audiences.sql"
   "0537_training_catalog_source_backed_metadata.sql"
   "0538_training_compliance_manager_designation_nr05.sql"
+  "0539_training_doutrinacao_bootstrap.sql"
 )
 
 apply=false
@@ -310,6 +311,9 @@ validate_postconditions() {
     0538_training_compliance_manager_designation_nr05.sql)
       bash scripts/staging/validate-0538-postconditions.sh --target="$db_name"
       ;;
+    0539_training_doutrinacao_bootstrap.sql)
+      bash scripts/staging/validate-0539-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -480,6 +484,11 @@ fi
 if [[ "$migration_basename" == "0538_training_compliance_manager_designation_nr05.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0538-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0538_OK=true"
+fi
+
+if [[ "$migration_basename" == "0539_training_doutrinacao_bootstrap.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0539-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0539_OK=true"
 fi
 
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then
