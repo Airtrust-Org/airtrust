@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-07",
-    "last_reconciled_against": "0535 INTEGRA bootstrap classified after applied 0534 staging diagnosis; prior governed states preserved",
-    "schema_v2_digest": "2a2a335d1c052f2bd1bee0fb4268266d70012295b298fe4be823e5c1e1af606b",
+    "last_reconciled_against": "0537 explicit Gestor designation + NR-05 company-wide policy prepared; live apply remains pending",
+    "schema_v2_digest": "a39d86ec4bf41d219174b2948a0360c8a34c9b63ace3dd3ea084f39c2ee172ec",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -440,18 +440,6 @@
       "reviewed_manifest": null
     },
     {
-      "change_file": "0454_qualificacoes_tipos_dominio_override.sql",
-      "change_id": null,
-      "sha256": "6aef100bbff18241eae3c067b5c9aadc647a17145fcd136f300cb57244b2b2f6",
-      "targets": [
-        "qualificacoes_tipos"
-      ],
-      "domain": "qualificacoes_tipos operational-domain override (base statement)",
-      "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REPO_EXPECTED",
-      "reviewed_manifest": null
-    },
-    {
       "change_file": "0454_qualificacoes_tipos_dominio_override_reconcile_existing.sql",
       "change_id": "qualificacoes-tipos-dominio-override-0454",
       "sha256": "ca185d203fc0cc11b26be9fb829057c618c6d5f471adadfdba3c67f9526521a3",
@@ -462,6 +450,18 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "qualificacoes-tipos-dominio-override-0454.json"
+    },
+    {
+      "change_file": "0454_qualificacoes_tipos_dominio_override.sql",
+      "change_id": null,
+      "sha256": "6aef100bbff18241eae3c067b5c9aadc647a17145fcd136f300cb57244b2b2f6",
+      "targets": [
+        "qualificacoes_tipos"
+      ],
+      "domain": "qualificacoes_tipos operational-domain override (base statement)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
     },
     {
       "change_file": "0456_lms_h5p_course_binding.sql",
@@ -1136,18 +1136,6 @@
       "note": "0517 is reviewed and prepared only. The seed catalog is expressed as independent INSERT statements to stay within the D1 compound-SELECT ceiling; semantics remain unchanged. It adds tenant-scoped condition assignments and requirement applicability/evidence metadata, without deriving obligations from qualification history or creating LMS enrollments. Remote apply requires the governed Schema V2 workflow, staging validation, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
-      "change_file": "ead-category-reconciliation-executor-0453.sql",
-      "change_id": null,
-      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
-      "targets": [
-        "ead_category_reconciliation_runs"
-      ],
-      "domain": "EAD category reconciliation executor ledger",
-      "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REPO_EXPECTED",
-      "reviewed_manifest": null
-    },
-    {
       "change_file": "0518_crm_qualification_consolidation.sql",
       "change_id": "crm-qualification-consolidation-0518",
       "sha256": "68e2d5a7901471e01215b459fea421696fd4e2783bf7177aa28a2dbf95220ea9",
@@ -1358,6 +1346,30 @@
       "reviewed_manifest": "training-compliance-integra-bootstrap-0535.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-integra-bootstrap-0535.md",
       "note": "0535 is the minimal tenant-6 forward repair for the sole failing 0534 staging postcondition: INTEGRA was entirely absent. It preserves existing identity/evidence when present, otherwise creates the canonical EAD 24-month/2-hour model and missing company-wide rule. No LMS course, enrollment, qualification history, employee or other-tenant write is introduced."
+    },
+    {
+      "change_file": "0537_training_compliance_manager_designation_nr05.sql",
+      "change_id": "training-compliance-manager-designation-nr05-0537",
+      "sha256": "d8f8f32e0741542e40223cfaef9f02cc248df4ffe23787dfb8accad21fdc480a",
+      "targets": [],
+      "domain": "training compliance / explicit Gestor designation and NR-05 Petrobras company-wide rule",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-manager-designation-nr05-0537.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-manager-designation-nr05-0537.md",
+      "note": "0537 is a tenant-6 data-only policy change: manager-only PPSP_SUP/BOWTIEXP applicability moves from job-title inference to an explicit GESTOR designation with runtime auto-enrollment enabled, while NR-05 becomes EAD / 24 months / 2 hours / company-wide under the Petrobras requirement adopted by the company. The schema change designates no employee and writes no LMS enrollment or completion evidence."
+    },
+    {
+      "change_file": "ead-category-reconciliation-executor-0453.sql",
+      "change_id": null,
+      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
+      "targets": [
+        "ead_category_reconciliation_runs"
+      ],
+      "domain": "EAD category reconciliation executor ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
     }
   ]
 }
