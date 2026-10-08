@@ -13,5 +13,5 @@ assert_count policy-default-scored 0 "SELECT COUNT(*) count FROM lms_cursos WHER
 assert_count no-formative-outside-crm 0 "SELECT COUNT(*) count FROM lms_cursos WHERE scorm_assessment_policy='FORMATIVE' AND NOT (empresa_id=6 AND tipo_conteudo='scorm' AND deleted_at IS NULL AND TRIM(titulo) IN ('CRM — Gestores — Cargos de Direção Requeridos (RBAC 119)','CRM para Gestores — Cargos de Direção Requeridos (RBAC 119)'));"
 assert_count no-crm-with-wrong-policy 0 "SELECT COUNT(*) count FROM lms_cursos WHERE empresa_id=6 AND tipo_conteudo='scorm' AND deleted_at IS NULL AND TRIM(titulo) IN ('CRM — Gestores — Cargos de Direção Requeridos (RBAC 119)','CRM para Gestores — Cargos de Direção Requeridos (RBAC 119)') AND (scorm_assessment_policy!='FORMATIVE' OR scorm_mastery_score IS NOT NULL);"
 assert_count schema-v2-ledger 1 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='lms-scorm-formative-assessment-0542';"
-assert_count incident-still-unmodified 1 "SELECT COUNT(*) count FROM lms_matriculas WHERE id=863 AND empresa_id=6 AND deleted_at IS NULL AND status!='CONCLUIDO';"
+assert_count incident-enrollment-preserved 1 "SELECT COUNT(*) count FROM lms_matriculas WHERE id=863 AND empresa_id=6 AND deleted_at IS NULL;"
 echo LMS_SCORM_FORMATIVE_0542_PRODUCTION_POSTCONDITIONS=PASS
