@@ -273,11 +273,22 @@ export default function LmsPlayer() {
   // Legacy formative packages do not always provide granular diagnostics.
   // Only a real terminal package event / server guard can confirm them; do not
   // unlock a browser-side completion solely from a final slide counter.
+  // Older published packages may have no granular contract. For those, the
+  // final position plus the SCORM assessment policy / persisted score is the
+  // conservative fallback; the server will validate final status and score.
+  // A reported quiz failure never enables completion.
+  const legacyFinalSlide = parsedCurrentLocation != null &&
+    parsedCurrentLocation.total > 0 &&
+    parsedCurrentLocation.current >= parsedCurrentLocation.total;
+  const legacyAssessmentEvidence = curso?.scorm_assessment_policy === 'FORMATIVE' ||
+    (curso?.scorm_assessment_policy === 'SCORED' &&
+      (matricula?.score_final != null || completionDiagnostic?.score_pct != null));
   const canRequestScormCompletion =
     isScormContent && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
-    diagnosticSlidesDone && diagnosticAssessmentDone &&
-    (curso?.scorm_assessment_policy !== 'SCORED' ||
-      granularDiagnostic?.assessment.completed === true);
+    (granularDiagnostic
+      ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
+        granularDiagnostic.assessment.passed !== false)
+      : Boolean(legacyFinalSlide && legacyAssessmentEvidence));
   const canRequestCompletion = canFinalize || Boolean(canRequestScormCompletion);
 
   useEffect(() => {
@@ -1113,17 +1124,17 @@ export default function LmsPlayer() {
               </div>
             </section>
 
-            {canRequestCompletion ? (
+            {!effectiveReviewMode && !isCompletedState ? (
               <button
                 onClick={() => setCompletionDialogOpen(true)}
-                disabled={isFinalizing}
+                disabled={!canRequestCompletion || isFinalizing}
                 className="mt-auto w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isFinalizing
                   ? 'Confirmando...'
                   : matricula?.gerar_qualificacao_ao_concluir === 1
-                    ? 'Confirmar conclusao e gerar qualificacao'
-                    : 'Confirmar conclusao'}
+                    ? 'Concluir curso'
+                    : 'Concluir curso'}
               </button>
             ) : null}
 
@@ -1179,8 +1190,8 @@ export default function LmsPlayer() {
                 {isFinalizing
                   ? 'Confirmando...'
                   : matricula?.gerar_qualificacao_ao_concluir === 1
-                    ? 'Confirmar conclusao e gerar qualificacao'
-                    : 'Confirmar conclusao'}
+                    ? 'Concluir curso'
+                    : 'Concluir curso'}
               </button>
             ) : null}
           </div>
