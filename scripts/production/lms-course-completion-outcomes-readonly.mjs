@@ -61,7 +61,7 @@ export function sanitizeCourse(row, aggregate) {
   };
 }
 async function readOnlyGet(token, route) {
-  requireValue(route.startsWith('/api/lms/') || route === '/api/auth/empresas' || route === '/api/empresas/minha', 'READONLY_PATH_REJECTED');
+  requireValue(route.startsWith('/api/lms/') || route === '/api/auth/empresas' || route === '/api/auth/me' || route === '/api/empresas/minha', 'READONLY_PATH_REJECTED');
   return fetchJson(API + route, { headers: { Authorization: 'Bearer ' + token } });
 }
 async function pinnedProduction() {
@@ -96,6 +96,12 @@ async function scopedToken() {
   }
   const mine = await readOnlyGet(token, '/api/empresas/minha');
   requireValue(mine.status === 200 && Number(mine.json?.data?.id) === COMPANY_ID, 'TARGET_COMPANY_CONTEXT_MISMATCH');
+  // Manager-level identities can only see assigned sectors. A tenant-wide
+  // course audit must fail closed rather than silently undercount employees.
+  const me = await readOnlyGet(token, '/api/auth/me');
+  requireValue(me.status === 200, 'AUTH_ME_HTTP_' + me.status);
+  const role = String(me.json?.data?.role || '').trim().toLowerCase();
+  requireValue(['admin', 'administrador'].includes(role), 'FULL_TENANT_ADMIN_SCOPE_REQUIRED');
   return token;
 }
 async function listActivePublished(token) {
