@@ -1123,6 +1123,7 @@ export function useScormState(matriculaId: number) {
 
 export interface PostXapiStatementDTO {
   matricula_id: number;
+  completion_intent?: 'USER_CONFIRMED';
   actor: Record<string, unknown>;
   verb: { id: string; display?: Record<string, string> };
   object: { id: string; objectType?: string; definition?: Record<string, unknown> };
