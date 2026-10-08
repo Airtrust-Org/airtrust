@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  assertLegacyGatekeeperCompletions,
   filterEmployeeCandidates,
   normalizeText,
   selectCourse,
@@ -38,4 +39,16 @@ test('filterEmployeeCandidates can match name plus nome de guerra', () => {
   ];
   const result = filterEmployeeCandidates(rows, 'Wilson Nery');
   assert.deepEqual(result.map((row) => row.id), [4]);
+});
+
+test('Gatekeeper legacy 14 requires two distinct canonically completed enrollments', () => {
+  const history = [
+    { funcionario_id: 401, status: 'CONCLUIDO' },
+    { funcionario_id: 402, status: 'CONCLUIDO' },
+    { funcionario_id: 403, status: 'CANCELADO' },
+  ];
+  assert.equal(assertLegacyGatekeeperCompletions(history, [401, 402]), true);
+  assert.throws(() => assertLegacyGatekeeperCompletions(history, [401, 403]));
+  assert.throws(() => assertLegacyGatekeeperCompletions(history, [401]));
+  assert.throws(() => assertLegacyGatekeeperCompletions([history[0], history[0], history[1]], [401, 402]));
 });
