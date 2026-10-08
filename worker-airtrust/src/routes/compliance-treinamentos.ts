@@ -626,8 +626,7 @@ function computeRequirement(
   const evidenceReviewReason =
     status_compliance !== 'NAO_REALIZADO' ? null :
     modalityMismatch && candidateEvidence?.data_realizacao ? 'MODALIDADE' :
-    profileMismatch && allHistory.some((item) =>
-      trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, today)) ? 'PERFIL' : null;
+    profileMismatch && allHistory.some((item) => trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, today)) ? 'PERFIL' : null;
 
   const status_legacy =
     status_compliance === 'VENCIDO'
