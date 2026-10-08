@@ -401,7 +401,7 @@ async function loadQualificationEvidence(
   const vencSelect = vencCol ? `qh.${vencCol}` : 'NULL';
   const qualificationTypeCols = await columnSet(db, 'qualificacoes_tipos');
   const modalitySelect = trainingComplianceHistoricalModalitySql(
-    cols.has('formato_codigo'), qualificationTypeCols.has('tipo'), cols.has('qualificacao_codigo'),
+    cols.has('formato_codigo'), qualificationTypeCols.has('tipo'), cols.has('qualificacao_codigo'), qualificationTypeCols.has('categoria'),
   );
   const { joins: typeIdentityJoins, resolvedTypeSql: resolvedTipoSelect } = trainingComplianceHistoryIdentitySql(
     tipoCol, cols.has('qualificacao_codigo'), qualificationTypeCols.has('ativo'),
