@@ -3,8 +3,13 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/routes/compliance-treinamentos.ts'), 'utf8');
-const body = source.slice(source.indexOf('async function reconcileEnrollmentAfterComplianceSave('),
-  source.indexOf('export type TrainingComplianceSnapshot'));
+const enrollmentService = readFileSync(
+  resolve(process.cwd(), 'src/services/training-compliance-rule-enrollment.ts'), 'utf8',
+);
+const body = enrollmentService.slice(
+  enrollmentService.indexOf('async function performComplianceRuleEnrollment'),
+  enrollmentService.indexOf('export async function reconcileTrainingComplianceRuleEnrollment'),
+);
 const post = source.slice(source.indexOf("app.post('/regras',"),
   source.indexOf("app.put('/regras/:id',"));
 const put = source.slice(source.indexOf("app.put('/regras/:id',"),
@@ -12,12 +17,12 @@ const put = source.slice(source.indexOf("app.put('/regras/:id',"),
 
 describe('Compliance requirement save enrollment synchronization', () => {
   it('reconciles immediately on both create and edit after saving the requirement', () => {
-    expect(post).toContain('reconcileEnrollmentAfterComplianceSave(');
-    expect(put).toContain('reconcileEnrollmentAfterComplianceSave(');
+    expect(post).toContain('reconcileTrainingComplianceRuleEnrollment(');
+    expect(put).toContain('reconcileTrainingComplianceRuleEnrollment(');
     expect(post.indexOf('insertTrainingComplianceRequirement('))
-      .toBeLessThan(post.indexOf('reconcileEnrollmentAfterComplianceSave('));
+      .toBeLessThan(post.indexOf('reconcileTrainingComplianceRuleEnrollment('));
     expect(put.indexOf('updateTrainingComplianceRequirement('))
-      .toBeLessThan(put.indexOf('reconcileEnrollmentAfterComplianceSave('));
+      .toBeLessThan(put.indexOf('reconcileTrainingComplianceRuleEnrollment('));
   });
 
   it('requires a single published linked course and respects the effective rule', () => {
@@ -45,9 +50,9 @@ describe('Compliance requirement save enrollment synchronization', () => {
   });
 
   it('reports deferred synchronization rather than claiming complete success', () => {
-    expect(post).toContain('AUTO_ENROLLMENT_DEFERRED');
-    expect(put).toContain('AUTO_ENROLLMENT_DEFERRED');
-    expect(post).toContain('LMS_COURSE_MAPPING_UNAVAILABLE');
-    expect(put).toContain('LMS_COURSE_MAPPING_UNAVAILABLE');
+    expect(enrollmentService).toContain('AUTO_ENROLLMENT_DEFERRED');
+    expect(enrollmentService).toContain('LMS_COURSE_MAPPING_UNAVAILABLE');
+    expect(post).toContain('...enrollment');
+    expect(put).toContain('data: enrollment');
   });
 });
