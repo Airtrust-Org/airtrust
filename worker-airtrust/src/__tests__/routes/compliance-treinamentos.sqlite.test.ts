@@ -212,6 +212,50 @@ describe('training compliance engine', () => {
     expect(summary.data.nao_realizados).toBe(3);
   });
 
+  it('exige AVSEC específico do tripulante no lugar do corporativo e não transforma histórico sem perfil', async () => {
+    sqlite.database.exec(`
+      INSERT INTO qualificacoes_tipos
+        (id,empresa_id,codigo,nome,categoria,validade)
+      VALUES (220,1,'D1','AVSEC','Teórico',24),
+             (221,1,'AVSEC_CONSC','AVSEC Corporativo','Teórico',NULL);
+      INSERT INTO treinamento_requisitos
+        (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem)
+      VALUES (1,221,'EMPRESA','OBRIGATORIA','EMPRESA');
+      INSERT INTO treinamento_requisitos
+        (empresa_id,qualificacao_tipo_id,escopo,funcao_id,perfil_competencia,obrigatoriedade,origem)
+      VALUES (1,220,'FUNCAO',2,'AVSEC_TRIPULANTE','OBRIGATORIA','EMPRESA');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id,qualificacao_id,qualificacao_codigo,categoria,data_conclusao,data_vencimento,status,empresa_id,perfil_competencia)
+      VALUES (1002,220,'D1','Teórico','2026-06-01','2028-06-01','CONCLUIDA',1,'AVSEC_TRIPULANTE');
+    `);
+    const app = createApp(sqlite.asD1());
+    const [pilotResponse, maintenanceResponse] = await Promise.all([
+      app.request('/funcionarios/1002'), app.request('/funcionarios/1000'),
+    ]);
+    const pilot = (await pilotResponse.json() as any).data;
+    const maintenance = (await maintenanceResponse.json() as any).data;
+    expect(pilotResponse.status).toBe(200);
+    expect(pilot.requisitos.map((r: any) => r.qualificacao_tipo_codigo)).toEqual(['D1']);
+    expect(pilot.requisitos[0]).toMatchObject({
+      perfil_competencia: 'AVSEC_TRIPULANTE', status_compliance: 'CONFORME',
+    });
+    expect(maintenance.requisitos.map((r: any) => r.qualificacao_tipo_codigo))
+      .toEqual(['AVSEC_CONSC']);
+    expect(maintenance.requisitos[0].status_compliance).toBe('NAO_REALIZADO');
+    const summary = (await (await app.request('/resumo')).json() as any).data;
+    expect(summary.requisitos_obrigatorios).toBe(3);
+
+    // Certificado sem perfil NÃO pode ser presumido tripulante nem corporativo.
+    sqlite.database.exec(`
+      UPDATE qualificacoes_historico SET perfil_competencia=NULL
+      WHERE empresa_id=1 AND funcionario_id=1002 AND qualificacao_id=220;
+    `);
+    const unprofiled = (await (await app.request('/funcionarios/1002')).json() as any).data;
+    expect(unprofiled.requisitos).toHaveLength(1);
+    expect(unprofiled.requisitos[0].status_compliance).toBe('NAO_REALIZADO');
+    expect(unprofiled.requisitos[0].evidencia_pendente_motivo).toBe('PERFIL');
+  });
+
   it('filtra todas as visões operacionais por nome do funcionário, ignorando acentos', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
