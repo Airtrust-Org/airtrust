@@ -1,3 +1,7 @@
+// source_reference: GitHub issue #1279, tenant-6 read-only FDM13 inventory and PR #1276 proof.
+ // operational_decision: 2026-10-08 Training Management, FDM13 to 71/72 by function, >=99% administrative equivalence only.
+ // dry_run_required: successful SHA-pinned read-only workflow run and matching candidate SHA-256 before apply.
+ // rollback_plan_required: approved D1 Time Travel recovery point; any restore requires separate governance and isolation of concurrent writes.
 #!/usr/bin/env node
 /**
  * Tenant-6 FDM13 historic administrative transfer (NOT a SCORM completion).
