@@ -769,13 +769,17 @@ async function reconcileEnrollmentAfterComplianceSave(
   // Never fulfill presencial/hybrid/practical regulatory requirements with an LMS launch.
   if (rule.modalidade_requerida && rule.modalidade_requerida !== 'EAD') return summary;
 
-  const pending = snapshot.people.filter((person) =>
-    person.requisitos.some(
-      (req) => req.regra_id === ruleId &&
-        req.obrigatoriedade === 'OBRIGATORIA' &&
-        trainingComplianceNeedsImmediateEnrollmentOnRuleSave(req.status_compliance),
-    ),
+  const applicable = snapshot.people.flatMap((person) =>
+    person.requisitos
+      .filter((req) => req.regra_id === ruleId && req.obrigatoriedade === 'OBRIGATORIA')
+      .map((req) => ({ person, status: req.status_compliance })),
   );
+  summary.skipped_valid_evidence = applicable.filter(
+    ({ status }) => status === 'CONFORME' || status === 'VENCENDO',
+  ).length;
+  const pending = applicable
+    .filter(({ status }) => trainingComplianceNeedsImmediateEnrollmentOnRuleSave(status))
+    .map(({ person }) => person);
   if (!pending.length) return summary;
 
   const courses = await db.prepare(
