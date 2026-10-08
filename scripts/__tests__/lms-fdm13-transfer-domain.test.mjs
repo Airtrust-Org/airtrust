@@ -47,6 +47,7 @@ test('source must match reviewed tenant, cohort, status, activity and uniqueness
  assert.throws(()=>buildTransferPlan([{...f[0],empresa_id:5},...f.slice(1)],[],{softDeletedSourceCount:5}),/SOURCE_SCOPE_INVALID/);
  assert.throws(()=>buildTransferPlan([{...f[0],status:'CONCLUIDO'},...f.slice(1)],[],{softDeletedSourceCount:5}),/SOURCE_NOT_ACTIVE_CANCELLED/);
  assert.throws(()=>buildTransferPlan([{...f[0],employee_active:0},...f.slice(1)],[],{softDeletedSourceCount:5}),/SOURCE_EMPLOYEE_NOT_ACTIVE/);
+ assert.throws(()=>buildTransferPlan([{...f[0],explicit_scorm_failure:1},...f.slice(1)],[],{softDeletedSourceCount:5}),/LEGACY_EXPLICIT_FAILURE_REQUIRES_REVIEW/);
  assert.throws(()=>buildTransferPlan([{...f[0],funcionario_id:f[1].funcionario_id},...f.slice(1)],[],{softDeletedSourceCount:5}),/SOURCE_DUPLICATE_EMPLOYEE/);
 });
 test('existing destination enrollment must prove exact provenance and expected status; committee stays untouched',()=>{
