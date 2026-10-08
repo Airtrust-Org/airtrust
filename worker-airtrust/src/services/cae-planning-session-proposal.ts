@@ -128,7 +128,7 @@ export function canManuallyShareSimulatorTrainingSessions(
 function partnerScore(
   primary: SimulatorTrainingSessionNeed,
   partner: SimulatorTrainingSessionNeed,
-): [number, number, number, number, number, number] {
+): number[] {
   const sameTraining = primary.qualification_type_id === partner.qualification_type_id;
   const sameRequirement =
     requirementQualificationTypeId(primary) === requirementQualificationTypeId(partner);
@@ -136,12 +136,17 @@ function partnerScore(
   const complementaryRole =
     (roleKind(primary.employee_role) === 'PIC' && roleKind(partner.employee_role) === 'SIC') ||
     (roleKind(primary.employee_role) === 'SIC' && roleKind(partner.employee_role) === 'PIC');
+  const distance = daysDistance(primary.expiry_date, partner.expiry_date);
   return [
+    // Prefer proximity over a perfect curricular match many weeks ahead.
+    // This is a preference, not a new regulatory validity window.
+    distance > 60 ? 1 : 0,
     sameTraining ? 0 : 1,
     sameRequirement ? 0 : 1,
     sameModel ? 0 : 1,
+    distance,
+    // Two commanders or two copilots are allowed; role is only a tie-breaker.
     complementaryRole ? 0 : 1,
-    daysDistance(primary.expiry_date, partner.expiry_date),
     partner.employee_id,
   ];
 }
@@ -207,20 +212,42 @@ export function pairSimulatorTrainingSessions(
       a.need_id.localeCompare(b.need_id),
   );
   const blocks: SimulatorTrainingSessionBlock[] = [];
+  const pairAllowed = (left: SimulatorTrainingSessionNeed, right: SimulatorTrainingSessionNeed) => {
+    const [earlier, later] = [left, right].sort(
+      (a, b) => a.expiry_date.localeCompare(b.expiry_date) || a.need_id.localeCompare(b.need_id),
+    );
+    return (
+      (allowCrossTraining || earlier.qualification_type_id === later.qualification_type_id) &&
+      canShareSimulatorTrainingSessions(earlier, later) &&
+      daysDistance(earlier.expiry_date, later.expiry_date) <= Math.max(0, maxAnticipationDays) &&
+      (!pairEligibility || pairEligibility(earlier, later))
+    );
+  };
+  const createPairBlock = (
+    left: SimulatorTrainingSessionNeed,
+    right: SimulatorTrainingSessionNeed,
+  ): SimulatorTrainingSessionBlock => {
+    const sessions = [left, right].sort(
+      (a, b) => a.expiry_date.localeCompare(b.expiry_date) || a.need_id.localeCompare(b.need_id),
+    );
+    return {
+      block_id: sessions.map((session) => session.need_id).sort().join('+'),
+      equipment: sessions[0].equipment,
+      duration_minutes: sessions[0].duration_minutes,
+      target_date: sessions[0].expiry_date,
+      pairing: sessions[0].qualification_type_id === sessions[1].qualification_type_id
+        ? 'MESMO_TREINAMENTO'
+        : 'TREINAMENTOS_COMPATIVEIS',
+      sessions,
+    };
+  };
 
   while (remaining.length > 0) {
     const primary = remaining.shift() as SimulatorTrainingSessionNeed;
     const candidates = remaining
       .map((partner, index) => ({ partner, index }))
       .filter(({ partner }) => {
-        const crossTraining = primary.qualification_type_id !== partner.qualification_type_id;
-        return (
-          (!crossTraining || allowCrossTraining) &&
-          canShareSimulatorTrainingSessions(primary, partner) &&
-          daysDistance(primary.expiry_date, partner.expiry_date) <=
-            Math.max(0, maxAnticipationDays) &&
-          (!pairEligibility || pairEligibility(primary, partner))
-        );
+        return pairAllowed(primary, partner);
       })
       .sort((a, b) =>
         compareTuple(partnerScore(primary, a.partner), partnerScore(primary, b.partner)),
@@ -252,7 +279,45 @@ export function pairSimulatorTrainingSessions(
     });
   }
 
-  return blocks;
+  // A greedy first pass can strand two pilots even though an existing pair
+  // can be reorganized into two compatible pairs. Repair only when it reduces
+  // the number of unmatched sessions; never change the required curricula.
+  let repaired = true;
+  while (repaired) {
+    repaired = false;
+    const singles = blocks.filter((block) => block.pairing === 'SEM_DUPLA');
+    const paired = blocks.filter((block) => block.pairing !== 'SEM_DUPLA');
+    repair: for (const current of paired) {
+      for (let i = 0; i < singles.length; i += 1) {
+        for (let j = i + 1; j < singles.length; j += 1) {
+          const a = current.sessions[0];
+          const b = current.sessions[1];
+          const x = singles[i].sessions[0];
+          const y = singles[j].sessions[0];
+          const options: Array<[[SimulatorTrainingSessionNeed, SimulatorTrainingSessionNeed], [SimulatorTrainingSessionNeed, SimulatorTrainingSessionNeed]]> = [
+            [[a, x], [b, y]],
+            [[a, y], [b, x]],
+          ];
+          const replacement = options.find(([[p, q], [r, t]]) =>
+            pairAllowed(p, q) && pairAllowed(r, t),
+          );
+          if (!replacement) continue;
+          const surviving = blocks.filter(
+            (block) => block !== current && block !== singles[i] && block !== singles[j],
+          );
+          blocks.splice(0, blocks.length, ...surviving,
+            createPairBlock(...replacement[0]),
+            createPairBlock(...replacement[1]));
+          repaired = true;
+          break repair;
+        }
+      }
+    }
+  }
+
+  return blocks.sort(
+    (a, b) => a.target_date.localeCompare(b.target_date) || a.block_id.localeCompare(b.block_id),
+  );
 }
 
 function blocksShareCrew(
