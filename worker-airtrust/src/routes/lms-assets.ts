@@ -1706,10 +1706,20 @@ ${buildScormLocationHelpersScript()}
 
   function updateMaxVisitedFromLocation(location) {
     var parsed = parseLocationPair(location);
-    if (!parsed) return;
-    if (parsed.current > maxVisitedSlide) {
-      maxVisitedSlide = parsed.current;
-    }
+    if (!parsed || parsed.total <= 0 || parsed.total > 1000 ||
+        parsed.current < 1 || parsed.current > parsed.total) return;
+    if (parsed.current > maxVisitedSlide) maxVisitedSlide = parsed.current;
+    // Store exact visited positions, not just the maximum index. A direct jump
+    // to 45/45 cannot constitute proof that 1..44 were actually visited.
+    var previous = Array.isArray(cmi['airtrust.viewed_slides'])
+      ? cmi['airtrust.viewed_slides'] : [];
+    var seen = previous.filter(function(n) {
+      return Number.isInteger(n) && n >= 1 && n <= parsed.total;
+    });
+    if (seen.indexOf(parsed.current) < 0) seen.push(parsed.current);
+    seen.sort(function(a, b) { return a - b; });
+    cmi['airtrust.viewed_slides'] = seen;
+    cmi['airtrust.total_slides'] = parsed.total;
   }
 
   function emitProgress(payload) {
@@ -1718,6 +1728,8 @@ ${buildScormLocationHelpersScript()}
       type: 'lms:progress',
       matriculaId: MATRICULA_ID,
       location: getScormLocation(),
+      viewed_slide_count: Array.isArray(cmi['airtrust.viewed_slides']) ? cmi['airtrust.viewed_slides'].length : 0,
+      viewed_slide_total: Number(cmi['airtrust.total_slides']) || null,
     }, payload || {}));
   }
 
