@@ -7,6 +7,7 @@ import {
   type LmsCompletionDecision,
   type LmsCompletionSource,
 } from '../services/lms-completion-evidence';
+import { isTrustedScorm12Finish } from '../services/lms-progress-guardrails';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
 
@@ -262,7 +263,14 @@ function hasTerminalFormativeScormStatus(row: EnrollmentEvidenceRow, incoming: J
   // completion_candidate, slide count and generic PATCH progress do not count.
   return [incoming.lesson_status, incoming.completion_status,
     row.lesson_status, row.completion_status]
-    .some((value) => ['complete', 'completed'].includes(normalizeStatus(value)));
+    .some((value) => ['complete', 'completed'].includes(normalizeStatus(value))) ||
+    isTrustedScorm12Finish({
+      lesson_status: incoming.lesson_status as string | null,
+      commit_event: incoming.commit_event as string | null,
+      completion_candidate: incoming.completion_candidate === true,
+      completion_observed_at: incoming.completion_observed_at as string | null,
+      cmi_json: incoming.cmi_json as string | null,
+    });
 }
 
 function formativeTerminalMissing(): LmsCompletionDecision {
