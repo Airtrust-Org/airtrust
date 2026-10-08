@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
 import {
   resolveTrainingComplianceRules,
   trainingComplianceEffectiveRequirementPredicateSql,
@@ -136,6 +137,52 @@ describe('training compliance rule engine', () => {
     expect(resolveTrainingComplianceRules([corporate, tripulante, individualCorporate], employee))
       .toEqual([individualCorporate, tripulante]);
     expect(resolveTrainingComplianceRules([corporate], employee)).toEqual([corporate]);
+  });
+
+  it('usa a mesma substituição AVSEC nas consultas SQL de alertas e renovação', () => {
+    const db = new DatabaseSync(':memory:');
+    try {
+      db.exec(`
+        CREATE TABLE funcionarios (id INTEGER, empresa_id INTEGER, setor_id INTEGER, funcao_id INTEGER, aeronave TEXT);
+        CREATE TABLE qualificacoes_tipos (id INTEGER, empresa_id INTEGER, codigo TEXT, categoria TEXT, deleted_at TEXT);
+        CREATE TABLE treinamento_requisitos (
+          id INTEGER, empresa_id INTEGER, qualificacao_tipo_id INTEGER, escopo TEXT,
+          setor_id INTEGER, funcao_id INTEGER, funcionario_id INTEGER,
+          condicao_id INTEGER, aeronave_modelo TEXT, perfil_competencia TEXT,
+          obrigatoriedade TEXT, ativo INTEGER, deleted_at TEXT, vigencia_inicio TEXT,
+          vigencia_fim TEXT, auto_matricular_ead INTEGER
+        );
+        CREATE TABLE funcionarios_compliance_condicoes (
+          empresa_id INTEGER, funcionario_id INTEGER, condicao_id INTEGER, ativo INTEGER,
+          deleted_at TEXT, data_inicio TEXT, data_fim TEXT
+        );
+        CREATE TABLE funcionarios_aeronaves (
+          empresa_id INTEGER, funcionario_id INTEGER, aeronave_id INTEGER, ativo INTEGER,
+          deleted_at TEXT, data_inicio TEXT, data_fim TEXT
+        );
+        CREATE TABLE aeronaves (id INTEGER, empresa_id INTEGER, modelo TEXT, deleted_at TEXT);
+        INSERT INTO funcionarios VALUES (10,1,3,7,''),(11,1,3,8,'');
+        INSERT INTO qualificacoes_tipos (id,empresa_id,codigo,categoria)
+        VALUES (22,1,'D1','Teórico'),(194,1,'AVSEC_CONSC','Teórico');
+        INSERT INTO treinamento_requisitos
+          (id,empresa_id,qualificacao_tipo_id,escopo,funcao_id,perfil_competencia,obrigatoriedade,ativo)
+        VALUES (1,1,194,'EMPRESA',NULL,NULL,'OBRIGATORIA',1),
+               (2,1,22,'FUNCAO',7,'AVSEC_TRIPULANTE','OBRIGATORIA',1);
+      `);
+      const predicate = trainingComplianceEffectiveRequirementPredicateSql();
+      const select = db.prepare(`SELECT f.id,qt.codigo,${predicate} eligible
+        FROM funcionarios f CROSS JOIN qualificacoes_tipos qt
+        WHERE f.empresa_id=qt.empresa_id ORDER BY f.id,qt.id`);
+      expect(select.all().map((row) => [row.id, row.codigo, row.eligible]))
+        .toEqual([[10, 'D1', 1], [10, 'AVSEC_CONSC', 0], [11, 'D1', 0], [11, 'AVSEC_CONSC', 1]]);
+      db.exec(`INSERT INTO treinamento_requisitos
+        (id,empresa_id,qualificacao_tipo_id,escopo,funcionario_id,obrigatoriedade,ativo)
+        VALUES (3,1,22,'FUNCIONARIO',10,'NAO_APLICA',1);`);
+      expect(select.all().map((row) => [row.id, row.codigo, row.eligible]))
+        .toEqual([[10, 'D1', 0], [10, 'AVSEC_CONSC', 1], [11, 'D1', 0], [11, 'AVSEC_CONSC', 1]]);
+    } finally {
+      db.close();
+    }
   });
 
   it('generates the same condition-aware predicate for renewal and expiry notification paths', () => {
