@@ -85,20 +85,20 @@ test('canceled legacy cohort yields disjoint pilot/MNT/excluded buckets and neve
   audience:'tripulacao',source_canceled_rows:11,unique_staff:11,
   active_staff_rows:11,inactive_staff_rows:0,duplicate_source_rows:0,
   already_active_at_target:0,any_target_history:0,linked_target_rows:0,
-  legacy_raw100:9,legacy_below100:2,raw100_explicit_end:7,
-  raw100_no_explicit_end:2,raw100_explicit_failure:0,
-  raw100_no_scorm:0,raw100_no_commit:0,
-  raw100_explicit_mastery_met:6,raw100_explicit_mastery_unproven:1,
-  raw100_explicit_no_mastery_requirement:0,
+  legacy_raw99:9,legacy_below99:2,raw99_explicit_end:7,
+  raw99_no_explicit_end:2,raw99_explicit_failure:0,
+  raw99_no_scorm:0,raw99_no_commit:0,
+  raw99_explicit_mastery_met:6,raw99_explicit_mastery_unproven:1,
+  raw99_explicit_no_mastery_requirement:0,
  };
  const excluded={...row,audience:'excluded',source_canceled_rows:6,unique_staff:6,
-  active_staff_rows:6,legacy_raw100:0,legacy_below100:6,
-  raw100_explicit_end:0,raw100_no_explicit_end:0,
-  raw100_explicit_mastery_met:0,raw100_explicit_mastery_unproven:0};
+  active_staff_rows:6,legacy_raw99:0,legacy_below99:6,
+  raw99_explicit_end:0,raw99_no_explicit_end:0,
+  raw99_explicit_mastery_met:0,raw99_explicit_mastery_unproven:0};
  assert.equal(validateReenrollment([row,excluded]).length,2);
- assert.throws(()=>validateReenrollment([{...row,legacy_below100:3}]),/FDM_REENROLLMENT_PROGRESS_PARTITION/);
- assert.throws(()=>validateReenrollment([{...row,raw100_explicit_end:8}]),/FDM_REENROLLMENT_COMPLETION_PARTITION/);
- assert.throws(()=>validateReenrollment([{...row,raw100_explicit_mastery_met:7}]),/FDM_REENROLLMENT_MASTERY_PARTITION/);
+ assert.throws(()=>validateReenrollment([{...row,legacy_below99:3}]),/FDM_REENROLLMENT_PROGRESS_PARTITION/);
+ assert.throws(()=>validateReenrollment([{...row,raw99_explicit_end:8}]),/FDM_REENROLLMENT_COMPLETION_PARTITION/);
+ assert.throws(()=>validateReenrollment([{...row,raw99_explicit_mastery_met:7}]),/FDM_REENROLLMENT_MASTERY_PARTITION/);
  assert.match(FDM_REENROLLMENT_SQL,/m\.curso_id=13 AND m\.deleted_at IS NULL/);
  assert.match(FDM_REENROLLMENT_SQL,/CANCELADO/);
  assert.match(FDM_REENROLLMENT_SQL,/COUNT\(DISTINCT funcionario_id\)/);
@@ -106,6 +106,8 @@ test('canceled legacy cohort yields disjoint pilot/MNT/excluded buckets and neve
  assert.match(FDM_REENROLLMENT_SQL,/FDM-TRIPULACAO/);
  assert.match(FDM_REENROLLMENT_SQL,/FDM-MECANICO/);
  assert.match(FDM_REENROLLMENT_SQL,/legacy_mastery/);
+ assert.match(FDM_REENROLLMENT_SQL,/progresso_pct,0\)>=99/);
+ assert.match(FDM_REENROLLMENT_SQL,/progresso_pct,0\)<99/);
  assert.doesNotMatch(FDM_REENROLLMENT_SQL,/\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH)\s/i);
  assert.doesNotMatch(FDM_REENROLLMENT_SQL,/SELECT\s+(?:m\.\*|f\.nome|f\.id|m\.id|ps\.cmi_json)/i);
  const code=readFileSync(new URL('../production/lms-scorm99-proof-readonly.mjs',import.meta.url),'utf8');
