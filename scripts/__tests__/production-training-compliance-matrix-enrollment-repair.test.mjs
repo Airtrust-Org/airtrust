@@ -36,6 +36,11 @@ test('repair uses canonical compliance evidence and a 60-day renewal window befo
   assert.match(script, /CANONICAL_FUTURE_EVIDENCE_REQUIRES_WORKER_FIX/);
 });
 
+test('completed historical evidence requiring validation is never automatically rematriculated', () => {
+  assert.match(script, /requirement\?\.evidencia_pendente_validacao === true/);
+  assert.match(script, /if \(!needsEnrollment\)/);
+});
+
 test('completed LMS with incompatible required modality is manual review, not duplicate enrollment', () => {
   assert.match(script, /requirementNeedsManualModalityCompletion/);
   assert.match(script, /evidencia_modalidade_incompativel === true/);
