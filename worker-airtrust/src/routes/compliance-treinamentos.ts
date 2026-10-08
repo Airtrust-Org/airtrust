@@ -1230,9 +1230,7 @@ app.post('/regras', requireRole('admin', 'manager'), async (c) => {
     dados_novos: { empresa_id: empresaId, ...data },
     ...extrairUsuarioAuditoria(c),
   });
-  const enrollment = await reconcileTrainingComplianceRuleEnrollment(
-    db, empresaId, id, access, extrairUsuarioAuditoria(c), buildSnapshot,
-  );
+  const enrollment = await reconcileTrainingComplianceRuleEnrollment(db, empresaId, id, access, extrairUsuarioAuditoria(c), buildSnapshot);
   return c.json({ success: true, data: { id, ...enrollment } }, 201);
 });
 
