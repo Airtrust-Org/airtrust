@@ -173,6 +173,13 @@ export function TrainingComplianceIntelligence({
     queryKey: ['training-compliance', 'intelligence-pendings', setorId, funcaoId, search],
     enabled: mode === 'pendencias' || mode === 'relatorios',
     queryFn: async () => readJson<TrainingCompliancePendingRow[]>(await fetchWithAuth(pendingUrl)),
+    // Current qualification evidence and LMS completions are read on every API request.
+    // Prevent an admin from viewing stale pending rows after another user completes a course.
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: 'always',
+    refetchInterval: 120_000,
   });
 
   const communications = useQuery({
