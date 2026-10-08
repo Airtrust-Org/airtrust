@@ -81,6 +81,12 @@ jobs:
           for(const row of j.fdm13){
             console.log('FDM13 '+row.audience+': total='+row.enrolled+', 99%='+row.incomplete_99+', concluded='+row.concluded);
           }
+          console.log('FDM historical enrollments (including canceled and soft-deleted):');
+          for(const row of j.fdm_legacy_and_destination_history){
+            console.log('Course '+row.curso_id+' / '+row.audience+': history='+row.history_rows+', not-cancelled='+row.non_cancelled+
+              ', cancelled-or-soft-deleted='+row.cancelled_or_soft_deleted+', 99%-any='+row.raw_99_any+
+              ', explicit-SCORM-at-99='+row.raw_99_with_explicit_scorm_end);
+          }
           console.log('Production writes: '+j.writes);
           NODE
       - uses: actions/upload-artifact@v7

@@ -68,6 +68,68 @@ SELECT curso_id,audience,COUNT(*) enrolled,
  SUM(CASE WHEN matricula_status!='CONCLUIDO' AND raw_pct>=99 AND employee_active=0 THEN 1 ELSE 0 END) inactive_employee_99
 FROM flagged GROUP BY curso_id,audience ORDER BY curso_id,audience`;
 
+
+// Independent historical FDM cohort audit: includes soft-deleted/cancelled
+// enrollments from the legacy course and all three destinations. No IDs or PII.
+export const FDM_HISTORY_SQL=String.raw`
+WITH h AS (
+ SELECT m.curso_id,
+  CASE WHEN m.curso_id!=13 THEN 'destination'
+   WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(fn.nome),''),NULLIF(TRIM(f.funcao),''),NULLIF(TRIM(f.cargo),''),''))) IN ('COMANDANTE','COPILOTO') THEN 'tripulacao'
+   WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(fn.nome),''),NULLIF(TRIM(f.funcao),''),NULLIF(TRIM(f.cargo),''),''))) IN
+    ('MECANICO','MECÂNICO','MECâNICO','AUXILIAR DE MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENçãO','AUX MANUTENCAO','AUX MANUTENÇÃO','AUX MANUTENçãO')
+    THEN 'manutencao'
+   ELSE 'excluded_or_unknown' END audience,
+  CASE WHEN m.deleted_at IS NOT NULL THEN 1 ELSE 0 END soft_deleted,
+  UPPER(TRIM(COALESCE(m.status,''))) status,
+  COALESCE(m.progresso_pct,0) pct,
+  CASE WHEN f.id IS NULL OR f.deleted_at IS NOT NULL OR COALESCE(f.ativo,1)<>1
+   OR UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))!='ATIVO'
+   THEN 1 ELSE 0 END employee_inactive_or_missing,
+  LOWER(TRIM(COALESCE(ps.lesson_status,''))) lesson_status,
+  LOWER(TRIM(COALESCE(ps.completion_status,''))) completion_status,
+  LOWER(TRIM(COALESCE(ps.success_status,''))) success_status
+ FROM lms_matriculas m
+ LEFT JOIN funcionarios f ON f.empresa_id=m.empresa_id AND f.id=m.funcionario_id
+ LEFT JOIN funcoes fn ON fn.id=f.funcao_id AND fn.empresa_id=m.empresa_id
+ LEFT JOIN lms_progresso_scorm ps ON ps.matricula_id=m.id AND ps.empresa_id=m.empresa_id
+ WHERE m.empresa_id=6 AND m.curso_id IN (13,71,72,73)
+)
+SELECT curso_id,audience,COUNT(*) history_rows,
+ SUM(CASE WHEN soft_deleted=0 AND status!='CANCELADO' THEN 1 ELSE 0 END) non_cancelled,
+ SUM(CASE WHEN soft_deleted=1 OR status='CANCELADO' THEN 1 ELSE 0 END) cancelled_or_soft_deleted,
+ SUM(soft_deleted) soft_deleted,
+ SUM(CASE WHEN status='CANCELADO' THEN 1 ELSE 0 END) cancelled_status,
+ SUM(CASE WHEN status='CONCLUIDO' THEN 1 ELSE 0 END) concluded_status_any,
+ SUM(CASE WHEN pct>=99 THEN 1 ELSE 0 END) raw_99_any,
+ SUM(CASE WHEN pct>=100 THEN 1 ELSE 0 END) raw_100_any,
+ SUM(CASE WHEN pct>=99 AND (lesson_status IN ('passed','completed')
+    OR (completion_status='completed' AND success_status IN ('','passed','unknown')))
+    THEN 1 ELSE 0 END) raw_99_with_explicit_scorm_end,
+ SUM(employee_inactive_or_missing) inactive_or_missing_employee
+FROM h GROUP BY curso_id,audience ORDER BY curso_id,audience`;
+
+export function validateHistory(rows) {
+ fail(Array.isArray(rows)&&rows.length<=16,'FDM_HISTORY_GROUPS_INVALID');
+ const seen=new Set();
+ const keys=['history_rows','non_cancelled','cancelled_or_soft_deleted','soft_deleted',
+ 'cancelled_status','concluded_status_any','raw_99_any','raw_100_any',
+ 'raw_99_with_explicit_scorm_end','inactive_or_missing_employee'];
+ for(const r of rows) {
+  fail([13,71,72,73].includes(r.curso_id),'FDM_HISTORY_COURSE_INVALID');
+  fail(r.curso_id===13
+   ? ['tripulacao','manutencao','excluded_or_unknown'].includes(r.audience)
+   : r.audience==='destination','FDM_HISTORY_AUDIENCE_INVALID');
+  const key=r.curso_id+':'+r.audience;
+  fail(!seen.has(key),'FDM_HISTORY_GROUP_DUPLICATE');seen.add(key);
+  for(const field of keys)fail(Number.isInteger(r[field])&&r[field]>=0&&r[field]<=r.history_rows,'FDM_HISTORY_COUNT_INVALID_'+field);
+  fail(r.non_cancelled+r.cancelled_or_soft_deleted===r.history_rows,'FDM_HISTORY_PARTITION_INVALID');
+  fail(r.raw_100_any<=r.raw_99_any,'FDM_HISTORY_PROGRESS_INVALID');
+  fail(r.raw_99_with_explicit_scorm_end<=r.raw_99_any,'FDM_HISTORY_SCORM_INVALID');
+ }
+ return rows;
+}
+
 export function validate(rows){
  fail(Array.isArray(rows)&&rows.length<=300,'PROOF_ROWS_INVALID');
  const keys=['enrolled','employee_active_enrollments','concluded','incomplete_99','incomplete_raw100',
@@ -93,16 +155,17 @@ export function summarize(rows){
  for(const row of rows)for(const key of Object.keys(totals))totals[key]+=row[key];
  return {totals,fdm13:rows.filter(r=>r.curso_id===13)};
 }
-function readD1(){
- fail(/^\s*WITH\s/i.test(PROOF_SQL),'QUERY_MUST_BE_SELECT');
- fail(!/\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH|PRAGMA|REPLACE|VACUUM)\s/i.test(PROOF_SQL),'QUERY_MUTATION_FORBIDDEN');
- fail(!PROOF_SQL.includes(';'),'MULTI_STATEMENT_FORBIDDEN');
- const r=spawnSync('npx',['wrangler','d1','execute',TARGET_DB,'--env','production','--remote','--json','--command',PROOF_SQL],
+function executeStaticSelect(sql, label){
+ fail(/^\s*WITH\s/i.test(sql),'QUERY_MUST_BE_SELECT_'+label);
+ fail(!/\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH|PRAGMA|REPLACE|VACUUM)\s/i.test(sql),'QUERY_MUTATION_FORBIDDEN_'+label);
+ fail(!sql.includes(';'),'MULTI_STATEMENT_FORBIDDEN_'+label);
+ const r=spawnSync('npx',['wrangler','d1','execute',TARGET_DB,'--env','production','--remote','--json','--command',sql],
  {cwd:new URL('../../worker-airtrust/',import.meta.url),encoding:'utf8',maxBuffer:8*1024*1024,env:process.env});
- fail(r.status===0,'D1_PROOF_READ_FAILED');
+ fail(r.status===0,'D1_SELECT_FAILED_'+label);
  const json=JSON.parse(r.stdout||'[]');
  const result=Array.isArray(json)?json[0]:json;
- return validate(result?.results);
+ fail(Array.isArray(result?.results),'D1_RESULTS_INVALID_'+label);
+ return result.results;
 }
 async function main(){
  fail(process.env.CONFIRMATION===CONFIRM,'CONFIRMATION_REQUIRED');
@@ -110,10 +173,11 @@ async function main(){
  fail(/^[0-9a-f]{40}$/.test(sha),'MAIN_SHA_INVALID');
  fail(process.env.GITHUB_SHA?.toLowerCase()===sha,'EXACT_SHA_REQUIRED');
  fail(process.env.TARGET_COMPANY_ID==='6','TENANT_REJECTED');
- const rows=readD1();
- const data={schema_version:1,tenant:COMPANY,source_sha:sha,mode:'read-only',writes:0,contains_personal_data:false,
+ const rows=validate(executeStaticSelect(PROOF_SQL,'SCORM99'));
+ const history=validateHistory(executeStaticSelect(FDM_HISTORY_SQL,'FDM_HISTORY'));
+ const data={schema_version:2,tenant:COMPANY,source_sha:sha,mode:'read-only',writes:0,contains_personal_data:false,
  population:'All non-cancelled FDM13 enrollments including inactive employees; other courses raw progress >=99',
- ...summarize(rows),by_course_and_audience:rows};
+ ...summarize(rows),by_course_and_audience:rows,fdm_legacy_and_destination_history:history};
  process.stdout.write(JSON.stringify(data,null,2)+'\n');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)
