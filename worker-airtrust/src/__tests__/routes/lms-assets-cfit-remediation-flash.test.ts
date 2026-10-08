@@ -10,13 +10,13 @@ function wrapperScript(html: string): string {
   return [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]).join('\n;\n');
 }
 
-function startWithState(state: Record<string, string>) {
+function startWithState(state: Record<string, string>, enrollmentId = 842) {
   const w = g.window;
   delete w.API;
   g.document.body.innerHTML = '<div id="status-bar"><span id="status-dot"></span><span id="status-text"></span></div><div id="completion-overlay"></div><iframe id="scorm-frame"></iframe>';
   const frame = g.document.getElementById('scorm-frame');
   const html = buildLaunchPage({
-    matriculaId: 842,
+    matriculaId: enrollmentId,
     titulo: 'CFIT em Helicópteros',
     launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/41/pkg/index.html',
     commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
@@ -65,7 +65,7 @@ describe('CFIT remediation — wrapper resume + autosave visual stability', () =
     const { frame } = startWithState({
       'cmi.core.lesson_location': '5/41',
       'cmi.core.lesson_status': 'incomplete',
-    });
+    }, 999);
     frame.contentWindow!.document.body.innerHTML = '<div id="counter">1/41</div>';
     frame.dispatchEvent(new g.Event('load'));
     await new Promise((resolve) => setTimeout(resolve, 275));
