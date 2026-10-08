@@ -76,3 +76,10 @@ test('historical evidence requires a completion date and accepts exact canonical
   assert.match(script, /"REPROVADA"/);
   assert.match(script, /"EM_ANDAMENTO"/);
 });
+  
+test('audit reports undated source rows without treating them as completions', () => {
+  assert.match(script, /source_named_rows/);
+  assert.match(script, /source_rows_without_completion/);
+  assert.match(script, /source_unverified_date_rows/);
+  assert.match(script, /controlled workbook completion counts disagree/);
+});
