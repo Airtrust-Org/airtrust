@@ -13,7 +13,7 @@ assert_count dependency-0536-ledger 1 "SELECT COUNT(*) count FROM d1_migrations 
 assert_count unapplied-0537 0 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0537_training_catalog_source_backed_metadata.sql';"
 assert_count unapplied-0538 0 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0538_training_compliance_manager_designation_nr05.sql';"
 assert_count unapplied-0539 0 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0539_training_doutrinacao_bootstrap.sql';"
-assert_count unapplied-0540 0 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0540_training_maintenance_manuals_bootstrap.sql';"
+assert_count unapplied-0540 0 "SELECT COUNT(*) count FROM d1_migrations WHERE name='0540_training_maintenance_catalog_identities_bootstrap.sql';"
 assert_count maintenance-area 1 "SELECT COUNT(*) count FROM qualificacoes_areas WHERE empresa_id=6 AND codigo='MANUTENCAO' AND ativo=1 AND deleted_at IS NULL;"
 assert_at_most_one doutrinacao-category "SELECT COUNT(*) count FROM qualificacoes_categorias WHERE empresa_id=6 AND (UPPER(TRIM(codigo))='TREINAMENTO-DE-DOUTRINACAO' OR UPPER(TRIM(nome))='TREINAMENTO DE DOUTRINAÇÃO');"
 for code in MNT_MGM MNT_MOM MNT_MCQ; do
