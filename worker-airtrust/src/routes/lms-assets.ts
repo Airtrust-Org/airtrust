@@ -1735,20 +1735,15 @@ ${buildScormLocationHelpersScript()}
 
 ${buildScormProgressParsersScript()}
 
-  // A course with a serialized native cursor controls its own resume.
-  // The LMS location can be a high-water mark (41/41) during remediation.
-  function isNativeCourseResumeOwner(frameWindow, doc) {
-    if (!doc || !doc.getElementById('slide') || !doc.getElementById('counter')) return false;
-    if (!frameWindow.Scorm || typeof frameWindow.Scorm.get !== 'function') return false;
-    var raw = cmi['cmi.suspend_data'];
-    if (typeof raw !== 'string' || !raw.trim()) return false;
+  // Native cursor wins over the LMS location high-water mark.
+  function isNativeCourseResumeOwner(w, doc) {
+    if (!doc?.getElementById('slide') || !doc.getElementById('counter') ||
+        typeof w.Scorm?.get !== 'function') return false;
     try {
-      var state = JSON.parse(raw);
-      return Number.isInteger(state.s) && state.s >= 0 &&
+      var state = JSON.parse(cmi['cmi.suspend_data'] || 'null');
+      return state && Number.isInteger(state.s) && state.s >= 0 &&
         Array.isArray(state.d) && state.mq && typeof state.mq === 'object';
-    } catch (_error) {
-      return false;
-    }
+    } catch (_error) { return false; }
   }
 
   function navigateFrameToSlide(frameWindow, target) {
@@ -1766,7 +1761,6 @@ ${buildScormProgressParsersScript()}
 
       if (frameWindow.location) {
         var targetHash = '#slide/' + String(target);
-        // Reassigning the same hash cannot advance the legacy slide router.
         if (frameWindow.location.hash === targetHash) return false;
         frameWindow.location.hash = targetHash;
         return true;
@@ -1798,11 +1792,7 @@ ${buildScormProgressParsersScript()}
 
       var frameWindow = frame.contentWindow;
       var doc = frameWindow.document;
-      if (isNativeCourseResumeOwner(frameWindow, doc)) {
-        autosaveReady = true;
-        diag(' NATIVE_RESUME_OWNER native-suspend-data-cursor');
-        return;
-      }
+      if (isNativeCourseResumeOwner(frameWindow, doc)) { autosaveReady = true; return; }
       var parsed = parseProgressFromDocument(doc);
       var observedLocation = parsed ? String(parsed.current) + '/' + String(parsed.total) : null;
       var effectiveTarget = resolveScormResumeTargetSlide(savedLocation, observedLocation);
@@ -1911,8 +1901,6 @@ ${buildScormProgressParsersScript()}
       if (!probeDecision.persist) {
         diag(' PROBE_LOCATION_KEPT reason=' + probeDecision.reason + ' loc=' + (existingLocation || 'null'));
         if (existingParsed) {
-          // Do not refetch the parent view every three seconds when the
-          // authoritative position has not changed.
           var canonicalProbeKey = String(existingLocation) + '|' + String(parsed.total);
           if (canonicalProbeKey === lastCanonicalProbeLocation) return;
           lastCanonicalProbeLocation = canonicalProbeKey;
@@ -2044,14 +2032,9 @@ ${buildScormProgressParsersScript()}
     }).then(function(response) {
       if (response && response.ok) {
         diag(' COMMIT_FETCH_STATUS=' + String(response.status) + ' OK');
-        // The transient success banner flashed over the course after routine
-        // commits. Keep failures and terminal-completion messages visible.
-        if (isFinalCommitEvent(eventType)) {
-          setStatus('Progresso salvo', true);
-        } else {
-          var statusBar = document.getElementById('status-bar');
-          if (statusBar) statusBar.classList.remove('visible', 'error');
-        }
+        // Routine saves are silent; errors and final results stay visible.
+        if (isFinalCommitEvent(eventType)) setStatus('Progresso salvo', true);
+        else document.getElementById('status-bar')?.classList.remove('visible', 'error');
         if (payloadFingerprint) lastCommittedFingerprint = payloadFingerprint;
         response.clone().json().then(function(json) {
           if (!json || !json.success || !json.data) return;
