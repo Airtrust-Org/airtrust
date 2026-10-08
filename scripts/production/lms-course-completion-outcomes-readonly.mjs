@@ -147,6 +147,47 @@ async function aggregateCourse(token, course) {
   }
   throw new Error('ENROLLMENT_PAGE_LIMIT');
 }
+
+/**
+ * This existing LMS endpoint reports only server-flagged SCORM inconsistencies.
+ * Its response contains learner metadata which must NEVER be retained, emitted,
+ * logged or uploaded. Aggregate the diagnostic code immediately in memory.
+ */
+export function tallyScormDiagnostics(totals, rows) {
+  for (const row of rows) {
+    if (Number(row?.progresso_pct || 0) < 99 || String(row?.status || '').toUpperCase() === 'CONCLUIDO') continue;
+    const id = Number(row?.curso_id || 0);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    const code = String(row?.diagnostic_code || 'UNCLASSIFIED').trim().toUpperCase();
+    requireValue(/^[A-Z0-9_.-]{1,80}$/.test(code), 'SCORM_DIAGNOSTIC_CODE_INVALID');
+    const bucket = totals[id] ||= { flagged_at_99: 0, codes: {} };
+    bucket.flagged_at_99 += 1;
+    bucket.codes[code] = (bucket.codes[code] || 0) + 1;
+  }
+  return totals;
+}
+async function fetchScormDiagnostics(token) {
+  const totals = Object.create(null);
+  let cursor = '';
+  const seenCursors = new Set();
+  for (let page = 1; page <= 100; page += 1) {
+    const route = '/api/lms/relatorios/conclusoes-inconsistentes?limit=200' +
+      (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+    const response = await readOnlyGet(token, route);
+    requireValue(response.status === 200, 'SCORM_DIAGNOSTICS_HTTP_' + response.status);
+    requireValue(response.json?.success === true && Array.isArray(response.json?.data), 'SCORM_DIAGNOSTICS_PAYLOAD_INVALID');
+    // Never serialize or log this array: the production API exposes PII to the
+    // authorized admin, while the audit output is strictly aggregate-only.
+    tallyScormDiagnostics(totals, response.json.data);
+    const next = String(response.headers?.['x-next-cursor'] || '');
+    if (!next) return totals;
+    requireValue(!seenCursors.has(next), 'SCORM_DIAGNOSTICS_CURSOR_LOOP');
+    seenCursors.add(next);
+    cursor = next;
+  }
+  throw new Error('SCORM_DIAGNOSTICS_PAGE_LIMIT');
+}
+
 export async function run() {
   await pinnedProduction();
   let token = await scopedToken();
@@ -161,9 +202,24 @@ export async function run() {
     }
     result.push(await aggregateCourse(token, course));
   }
+  // A fresh admin-scoped snapshot of known inconsistent SCORM completions.
+  // Absence from the diagnostic endpoint does not mean a 99% record is healthy.
+  if (Date.now() - issued >= 12 * 60_000) {
+    await pinnedProduction();
+    token = await scopedToken();
+    issued = Date.now();
+  }
+  const diagnosticByCourse = await fetchScormDiagnostics(token);
+  for (const course of result) {
+    const d = diagnosticByCourse[course.curso_id] || { flagged_at_99: 0, codes: {} };
+    requireValue(d.flagged_at_99 <= course.pendentes_99_ou_mais, 'SCORM_DIAGNOSTIC_COUNT_EXCEEDS_INCOMPLETE');
+    course.scorm_inconsistencies_at_99 = d.flagged_at_99;
+    course.scorm_diagnostic_codes = d.codes;
+    course.other_incomplete_99 = course.pendentes_99_ou_mais - d.flagged_at_99;
+  }
   result.sort((a, b) => a.curso_id - b.curso_id);
   const report = {
-    schema_version: 1,
+    schema_version: 2,
     generated_at: new Date().toISOString(),
     production_sha: PINNED_SHA,
     empresa_id: COMPANY_ID,
@@ -171,6 +227,8 @@ export async function run() {
     total_matriculas: result.reduce((n, row) => n + row.matriculas, 0),
     total_concluidas: result.reduce((n, row) => n + row.concluidas, 0),
     total_pendentes_99: result.reduce((n, row) => n + row.pendentes_99_ou_mais, 0),
+    diagnostic_scope: 'Only SCORM inconsistencies flagged by the backend; not a complete explanation of every unfinished enrollment',
+    total_scorm_inconsistencies_at_99: result.reduce((n, row) => n + row.scorm_inconsistencies_at_99, 0),
     no_personal_data: true,
     writes: 'none (GET-only for LMS; authentication/company-selection POSTs only)',
     courses: result,
