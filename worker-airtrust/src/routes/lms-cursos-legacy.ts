@@ -1864,6 +1864,12 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
   if (d.scorm_assessment_policy === 'FORMATIVE' && !hasRole(c, 'admin')) {
     throw new ApiError('Somente administrador pode configurar um SCORM como formativo.', 403);
   }
+  if (d.scorm_assessment_policy === 'FORMATIVE' && d.tipo_conteudo !== 'scorm') {
+    throw new ApiError('Modo formativo sem nota aplica-se somente a pacotes SCORM.', 400);
+  }
+  if (d.scorm_assessment_policy === 'SCORED' && d.scorm_mastery_score <= 0) {
+    throw new ApiError('Defina nota mínima positiva para curso avaliado.', 400);
+  }
   const isEadCourse = await isEadCourseRequest(db, empresaId, {
     qualificacaoTipoId: d.qualificacao_tipo_id ?? null,
     formatoId: d.formato_id ?? null,
@@ -2074,7 +2080,7 @@ app.put(
 
     const existing = await db
       .prepare(
-        'SELECT id, titulo, categoria, tipo_conteudo, publicado, ativo, qualificacao_tipo_id, gerar_qualificacao_ao_concluir, scorm_assessment_policy FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        'SELECT id, titulo, categoria, tipo_conteudo, publicado, ativo, qualificacao_tipo_id, gerar_qualificacao_ao_concluir, scorm_assessment_policy, scorm_mastery_score FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
       )
       .bind(cursoId, empresaId)
       .first<{
@@ -2087,6 +2093,7 @@ app.put(
         qualificacao_tipo_id: number | null;
         gerar_qualificacao_ao_concluir: number;
         scorm_assessment_policy: 'SCORED' | 'FORMATIVE';
+        scorm_mastery_score: number | null;
       }>();
     if (!existing) throw new ApiError('Curso não encontrado', 404);
 
@@ -2110,6 +2117,16 @@ app.put(
         d.scorm_assessment_policy !== existing.scorm_assessment_policy &&
         !hasRole(c, 'admin')) {
       throw new ApiError('Somente administrador pode alterar a política avaliativa SCORM.', 403);
+    }
+    const nextAssessmentPolicy = d.scorm_assessment_policy ?? existing.scorm_assessment_policy;
+    const nextContentType = d.tipo_conteudo ?? existing.tipo_conteudo;
+    const nextMasteryScore = d.scorm_mastery_score ?? existing.scorm_mastery_score;
+    if (nextAssessmentPolicy === 'FORMATIVE' && nextContentType !== 'scorm') {
+      throw new ApiError('Modo formativo sem nota aplica-se somente a pacotes SCORM.', 400);
+    }
+    if (d.scorm_assessment_policy === 'SCORED' &&
+        (nextMasteryScore === null || nextMasteryScore <= 0)) {
+      throw new ApiError('Ao ativar avaliação eliminatória, informe nota mínima positiva.', 400);
     }
     if (!(await isValidQualificationAreaId(db, empresaId, d.qualificacao_area_id)))
       throw new ApiError('Área da qualificação inválida ou inativa para esta empresa', 400);
