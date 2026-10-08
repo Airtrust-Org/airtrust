@@ -126,6 +126,7 @@ function parseSlideLocation(
 export default function LmsPlayer() {
   const { matriculaId } = useParams<{ matriculaId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { token, user, empresaAtualId } = useAuth();
   const [searchParams] = useSearchParams();
 
@@ -605,6 +606,7 @@ export default function LmsPlayer() {
         event.data.matriculaId === id
       ) {
         setCompleted(true);
+        void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
         if (event.data.qualificacao_gerada) setQualificacaoGerada(true);
         showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
           qualificationGenerated: Boolean(event.data.qualificacao_gerada),
@@ -672,6 +674,7 @@ export default function LmsPlayer() {
         }
         if (event.data.novo_status === 'CONCLUIDO' && !effectiveReviewMode) {
           setCompleted(true);
+        void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
           showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
         }
         void refetchMatricula();
@@ -693,7 +696,7 @@ export default function LmsPlayer() {
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, launchOrigin, refetchMatricula, persistGranularDiagnostic]);
+  }, [effectiveReviewMode, id, launchOrigin, refetchMatricula, persistGranularDiagnostic, queryClient]);
 
   async function handleFullscreen() {
     const el = iframeRef.current;
@@ -843,6 +846,7 @@ export default function LmsPlayer() {
       }
 
       setCompleted(true);
+      void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
       setLiveProgress(100);
       setQualificacaoGerada(Boolean(json.data?.qualificacao_gerada));
       void refetchMatricula();

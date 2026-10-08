@@ -504,6 +504,7 @@ function invalidateMatriculaCollections(
     }
   }
 
+  qc.invalidateQueries({ queryKey: ['training-compliance'] });
   qc.invalidateQueries({ queryKey: lmsKeys.minhasMatriculas() });
   qc.invalidateQueries({ queryKey: lmsKeys.minhasEAD() });
   invalidateCursoCollections(qc);
