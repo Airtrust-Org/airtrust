@@ -55,11 +55,14 @@ function snapshot(){
  check(ledger.length===2,'SCHEMA_V2_DEPENDENCIES_NOT_APPLIED');
  const source=rows(`SELECT m.id,m.empresa_id,m.curso_id,m.funcionario_id,m.status,m.deleted_at,
   m.progresso_pct,COALESCE(NULLIF(TRIM(fn.nome),''),NULLIF(TRIM(f.funcao),''),NULLIF(TRIM(f.cargo),''),'') funcao_nome,
+  CASE WHEN LOWER(TRIM(COALESCE(ps.lesson_status,'')))='failed'
+    OR LOWER(TRIM(COALESCE(ps.success_status,'')))='failed' THEN 1 ELSE 0 END explicit_scorm_failure,
   CASE WHEN f.id IS NOT NULL AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
    AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO' THEN 1 ELSE 0 END employee_active
  FROM lms_matriculas m
  LEFT JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
  LEFT JOIN funcoes fn ON fn.id=f.funcao_id AND fn.empresa_id=m.empresa_id
+ LEFT JOIN lms_progresso_scorm ps ON ps.matricula_id=m.id AND ps.empresa_id=m.empresa_id
  WHERE m.empresa_id=6 AND m.curso_id=13 AND m.deleted_at IS NULL AND UPPER(TRIM(COALESCE(m.status,'')))='CANCELADO'
  ORDER BY m.id`,'source');
  const soft=rows('SELECT COUNT(*) n FROM lms_matriculas WHERE empresa_id=6 AND curso_id=13 AND deleted_at IS NOT NULL','soft_deleted')[0];
