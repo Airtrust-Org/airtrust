@@ -44,7 +44,7 @@ import {
   type TrainingComplianceScope,
 } from '../services/training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from '../services/training-compliance-evidence-profile';
-import { TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS, trainingComplianceEvidenceIsRealizedBy, trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
+import { TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS, trainingComplianceEvidenceIsRealizedBy, trainingComplianceNeedsImmediateEnrollmentOnRuleSave, trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 
@@ -773,7 +773,7 @@ async function reconcileEnrollmentAfterComplianceSave(
     person.requisitos.some(
       (req) => req.regra_id === ruleId &&
         req.obrigatoriedade === 'OBRIGATORIA' &&
-        (req.status_compliance === 'NAO_REALIZADO' || req.status_compliance === 'VENCIDO'),
+        trainingComplianceNeedsImmediateEnrollmentOnRuleSave(req.status_compliance),
     ),
   );
   if (!pending.length) return summary;
@@ -1353,7 +1353,7 @@ app.post('/regras', requireRole('admin', 'manager'), async (c) => {
     );
     if (autoEnrollment.unavailable_course) autoEnrollmentWarning = 'LMS_COURSE_MAPPING_UNAVAILABLE';
   } catch (error) {
-    console.error('[TRAINING_COMPLIANCE] Falha na sincronização após criar requisito:', error);
+    console.error('[TRAINING_COMPLIANCE] Falha na sincronização após criar requisito');
     autoEnrollmentWarning = 'AUTO_ENROLLMENT_DEFERRED';
   }
   return c.json({
@@ -1404,7 +1404,7 @@ app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
     );
     if (autoEnrollment.unavailable_course) autoEnrollmentWarning = 'LMS_COURSE_MAPPING_UNAVAILABLE';
   } catch (error) {
-    console.error('[TRAINING_COMPLIANCE] Falha na sincronização após atualizar requisito:', error);
+    console.error('[TRAINING_COMPLIANCE] Falha na sincronização após atualizar requisito');
     autoEnrollmentWarning = 'AUTO_ENROLLMENT_DEFERRED';
   }
   return c.json({
