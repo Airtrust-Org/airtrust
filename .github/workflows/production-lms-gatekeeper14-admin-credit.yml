@@ -1,0 +1,153 @@
+name: Production Gatekeeper14 to FDM73 Administrative Credit
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact reviewed SHA on main
+        required: true
+        type: string
+      mode:
+        description: Read-only dry-run or separately authorized apply
+        required: true
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      confirmation:
+        description: Exact mode-specific authorization marker
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Successful SHA-pinned read-only run required for apply
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-gatekeeper14-fdm73-admin-credit
+  cancel-in-progress: false
+
+jobs:
+  credit:
+    name: Reviewed tenant-6 Gatekeeper historical credit
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TARGET_COMPANY_ID: '6'
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_sha }}
+      GATEKEEPER_CREDIT_MODE: ${{ inputs.mode }}
+      GATEKEEPER_CREDIT_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Validate immutable dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_REQUIRED >&2; exit 1; }
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo SHA_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_MAIN_SHA" == "$GITHUB_SHA" ]] || { echo SHA_MISMATCH >&2; exit 1; }
+          if [[ "$GATEKEEPER_CREDIT_MODE" == dry-run ]]; then
+            [[ "$GATEKEEPER_CREDIT_CONFIRMATION" == AIRTRUST_GATEKEEPER14_FDM73_ADMIN_CREDIT_DRY_RUN ]] || exit 1
+          elif [[ "$GATEKEEPER_CREDIT_MODE" == apply ]]; then
+            [[ "$GATEKEEPER_CREDIT_CONFIRMATION" == AIRTRUST_GATEKEEPER14_FDM73_ADMIN_CREDIT_APPLY ]] || exit 1
+          else
+            echo MODE_INVALID >&2; exit 1
+          fi
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - name: Verify all eight canonical release gates for SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - run: npm --prefix worker-airtrust ci
+      - name: Run local policy and fail-closed tests
+        run: |
+          set -euo pipefail
+          node --check scripts/production/lms-gatekeeper14-admin-credit-governed.mjs
+          node --test scripts/__tests__/lms-gatekeeper14-admin-credit.test.mjs
+      - name: Verify reviewed dry-run evidence
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]] || { echo DRY_RUN_REQUIRED >&2; exit 1; }
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
+          [[ "$(jq -r .name <<<"$run_json")" == 'Production Gatekeeper14 to FDM73 Administrative Credit' ]] || exit 1
+          [[ "$(jq -r .conclusion <<<"$run_json")" == success ]] || exit 1
+          [[ "$(jq -r .head_sha <<<"$run_json")" == "$GITHUB_SHA" ]] || exit 1
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "gatekeeper14-credit-dry-run-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
+          evidence="$RUNNER_TEMP/reviewed/result.json"
+          jq -e --arg sha "$GITHUB_SHA" '
+            .mode=="dry-run" and .source_sha==$sha and
+            .candidates==2 and .legacy_completed==2 and
+            .destination_unstarted==2 and .writes==0 and
+            .scorm_written==false and .emails_sent==false and
+            .certificates_issued==false and .contains_personal_data==false
+          ' "$evidence" >/dev/null
+          hash="$(jq -r .candidate_hash "$evidence")"
+          [[ "$hash" =~ ^[a-f0-9]{64}$ ]] || exit 1
+          echo "GATEKEEPER_CREDIT_EXPECTED_HASH=$hash" >> "$GITHUB_ENV"
+          echo "Reviewed dry-run: $REVIEWED_RUN" >> "$GITHUB_STEP_SUMMARY"
+      - name: Capture production D1 Time Travel recovery point
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        working-directory: worker-airtrust
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || exit 1
+          recovery_time="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$recovery_time" > "$RUNNER_TEMP/d1-recovery.txt"
+          test -s "$RUNNER_TEMP/d1-recovery.txt"
+          echo "D1_RECOVERY_UTC=$recovery_time" >> "$GITHUB_STEP_SUMMARY"
+          echo "GATEKEEPER_CREDIT_RECOVERY_READY=yes" >> "$GITHUB_ENV"
+          rm -f "$RUNNER_TEMP/d1-recovery.txt"
+      - name: Run governed read-only proof or exact approved credit
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/production/lms-gatekeeper14-admin-credit-governed.mjs > "$RUNNER_TEMP/result.json"
+          test -s "$RUNNER_TEMP/result.json"
+          jq -e --arg mode "$GATEKEEPER_CREDIT_MODE" '
+            .mode==$mode and .tenant==6 and
+            .source_course==14 and .destination_course==73 and
+            .candidates==2 and .contains_personal_data==false and
+            (.mode=="dry-run" or (.mutation_executed==true and .postconditions_verified==true))
+          ' "$RUNNER_TEMP/result.json" >/dev/null
+      - name: Record sanitized evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -s "$RUNNER_TEMP/result.json" ]] || exit 0
+          jq '{source_sha,mode,tenant,source_course,destination_course,candidates,
+            candidate_hash,legacy_completed,destination_unstarted,writes,
+            mutation_executed,postconditions_verified,credited,scorm_written,
+            emails_sent,certificates_issued,new_scorm_claimed_completed,
+            administrative_equivalence_only,contains_personal_data}' \
+            "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload sanitized aggregate report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gatekeeper14-credit-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          retention-days: 30
+          if-no-files-found: warn
