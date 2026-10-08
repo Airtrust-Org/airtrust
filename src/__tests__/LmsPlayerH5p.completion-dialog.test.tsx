@@ -77,5 +77,6 @@ describe('H5P explicit completion dialog', () => {
     expect(await screen.findByRole('dialog', { name: 'Concluir curso' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar conclusão' }));
     await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ completion_intent: 'USER_CONFIRMED' }));
   });
 });
