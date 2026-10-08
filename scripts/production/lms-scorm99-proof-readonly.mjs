@@ -182,7 +182,7 @@ SELECT audience,
  SUM(destination_historical) any_target_history,
  SUM(valid_model_link) linked_target_rows,
  SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 THEN 1 ELSE 0 END) legacy_raw99,
- SUM(CASE WHEN COALESCE(progresso_pct,0)<99 THEN 1 ELSE 0 END) legacy_below100,
+ SUM(CASE WHEN COALESCE(progresso_pct,0)<99 THEN 1 ELSE 0 END) legacy_below99,
  SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 AND explicit_end=1 THEN 1 ELSE 0 END) raw99_explicit_end,
  SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 AND explicit_end=0 THEN 1 ELSE 0 END) raw99_no_explicit_end,
  SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 AND explicit_failure=1 THEN 1 ELSE 0 END) raw99_explicit_failure,
@@ -196,7 +196,7 @@ FROM joined GROUP BY audience ORDER BY audience`;
 export function validateReenrollment(rows){
  fail(Array.isArray(rows)&&rows.length<=3,'FDM_REENROLLMENT_GROUPS_INVALID');
  const keys=['source_canceled_rows','unique_staff','active_staff_rows','inactive_staff_rows','duplicate_source_rows',
- 'already_active_at_target','any_target_history','linked_target_rows','legacy_raw99','legacy_below100',
+ 'already_active_at_target','any_target_history','linked_target_rows','legacy_raw99','legacy_below99',
  'raw99_explicit_end','raw99_no_explicit_end','raw99_explicit_failure','raw99_no_scorm',
  'raw99_no_commit','raw99_explicit_mastery_met','raw99_explicit_mastery_unproven',
  'raw99_explicit_no_mastery_requirement'];
@@ -206,7 +206,7 @@ export function validateReenrollment(rows){
   fail(!seen.has(row.audience),'FDM_REENROLLMENT_DUPLICATE_GROUP');seen.add(row.audience);
   for(const k of keys)fail(Number.isInteger(row[k])&&row[k]>=0&&row[k]<=row.source_canceled_rows,'FDM_REENROLLMENT_COUNT_INVALID_'+k);
   fail(row.active_staff_rows+row.inactive_staff_rows===row.source_canceled_rows,'FDM_REENROLLMENT_STAFF_PARTITION');
-  fail(row.legacy_raw99+row.legacy_below100===row.source_canceled_rows,'FDM_REENROLLMENT_PROGRESS_PARTITION');
+  fail(row.legacy_raw99+row.legacy_below99===row.source_canceled_rows,'FDM_REENROLLMENT_PROGRESS_PARTITION');
   fail(row.raw99_explicit_end+row.raw99_no_explicit_end===row.legacy_raw99,'FDM_REENROLLMENT_COMPLETION_PARTITION');
   fail(row.raw99_explicit_mastery_met+row.raw99_explicit_mastery_unproven+
    row.raw99_explicit_no_mastery_requirement===row.raw99_explicit_end,'FDM_REENROLLMENT_MASTERY_PARTITION');
