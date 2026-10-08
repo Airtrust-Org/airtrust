@@ -1735,6 +1735,22 @@ ${buildScormLocationHelpersScript()}
 
 ${buildScormProgressParsersScript()}
 
+  // A course with a serialized native cursor controls its own resume.
+  // The LMS location can be a high-water mark (41/41) during remediation.
+  function isNativeCourseResumeOwner(frameWindow, doc) {
+    if (!doc || !doc.getElementById('slide') || !doc.getElementById('counter')) return false;
+    if (!frameWindow.Scorm || typeof frameWindow.Scorm.get !== 'function') return false;
+    var raw = cmi['cmi.suspend_data'];
+    if (typeof raw !== 'string' || !raw.trim()) return false;
+    try {
+      var state = JSON.parse(raw);
+      return Number.isInteger(state.s) && state.s >= 0 &&
+        Array.isArray(state.d) && state.mq && typeof state.mq === 'object';
+    } catch (_error) {
+      return false;
+    }
+  }
+
   function navigateFrameToSlide(frameWindow, target) {
     try {
       if (!Number.isFinite(target) || target < 1) return false;
@@ -1750,11 +1766,9 @@ ${buildScormProgressParsersScript()}
 
       if (frameWindow.location) {
         var targetHash = '#slide/' + String(target);
-        if (frameWindow.location.hash !== targetHash) {
-          frameWindow.location.hash = targetHash;
-        } else if (typeof frameWindow.location.assign === 'function') {
-          frameWindow.location.assign(targetHash);
-        }
+        // Reassigning the same hash cannot advance the legacy slide router.
+        if (frameWindow.location.hash === targetHash) return false;
+        frameWindow.location.hash = targetHash;
         return true;
       }
     } catch (_error) {
@@ -1784,6 +1798,11 @@ ${buildScormProgressParsersScript()}
 
       var frameWindow = frame.contentWindow;
       var doc = frameWindow.document;
+      if (isNativeCourseResumeOwner(frameWindow, doc)) {
+        autosaveReady = true;
+        diag(' NATIVE_RESUME_OWNER native-suspend-data-cursor');
+        return;
+      }
       var parsed = parseProgressFromDocument(doc);
       var observedLocation = parsed ? String(parsed.current) + '/' + String(parsed.total) : null;
       var effectiveTarget = resolveScormResumeTargetSlide(savedLocation, observedLocation);
@@ -1857,6 +1876,7 @@ ${buildScormProgressParsersScript()}
     }
   }
 
+  var lastCanonicalProbeLocation = null;
   function probeFrameProgress() {
     try {
       var frame = document.getElementById('scorm-frame');
@@ -1891,6 +1911,11 @@ ${buildScormProgressParsersScript()}
       if (!probeDecision.persist) {
         diag(' PROBE_LOCATION_KEPT reason=' + probeDecision.reason + ' loc=' + (existingLocation || 'null'));
         if (existingParsed) {
+          // Do not refetch the parent view every three seconds when the
+          // authoritative position has not changed.
+          var canonicalProbeKey = String(existingLocation) + '|' + String(parsed.total);
+          if (canonicalProbeKey === lastCanonicalProbeLocation) return;
+          lastCanonicalProbeLocation = canonicalProbeKey;
           var keptTotal = existingParsed.total != null ? existingParsed.total : parsed.total;
           emitProgress({
             progresso_pct: keptTotal
@@ -2019,7 +2044,14 @@ ${buildScormProgressParsersScript()}
     }).then(function(response) {
       if (response && response.ok) {
         diag(' COMMIT_FETCH_STATUS=' + String(response.status) + ' OK');
-        setStatus('Progresso salvo', true);
+        // The transient success banner flashed over the course after routine
+        // commits. Keep failures and terminal-completion messages visible.
+        if (isFinalCommitEvent(eventType)) {
+          setStatus('Progresso salvo', true);
+        } else {
+          var statusBar = document.getElementById('status-bar');
+          if (statusBar) statusBar.classList.remove('visible', 'error');
+        }
         if (payloadFingerprint) lastCommittedFingerprint = payloadFingerprint;
         response.clone().json().then(function(json) {
           if (!json || !json.success || !json.data) return;
