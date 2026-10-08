@@ -55,7 +55,8 @@ assert c.execute("SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id
     expect(sql).toContain("UPPER(TRIM(codigo))='TREINAMENTO_OPERACIONAL'");
     expect(sql).toContain("UPPER(TRIM(nome))='TREINAMENTOS OPERACIONAIS'");
     expect(sql).toContain('NOT EXISTS');
-    expect(sql).not.toContain('lms_integrada');
+    // Ignore explanatory SQL comments; the production table does not expose this column.
+    expect(sql.replace(/^--.*$/gm, '')).not.toContain('lms_integrada');
     expect(read('scripts/schema-v2/validate-0541-production-postconditions.sh')).not.toContain('lms_integrada');
     for (const unsafe of ['INSERT INTO lms_', 'UPDATE funcionarios', 'qualificacoes_historico SET', 'DELETE FROM', 'UPDATE treinamento_requisitos']) {
       expect(sql).not.toContain(unsafe);
