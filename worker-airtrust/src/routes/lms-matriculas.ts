@@ -1447,13 +1447,10 @@ app.post('/scorm/commit', async (c) => {
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
-  // A terminal SCORM signal is recorded, but only a user-confirmed request
-  // with complete runtime and assessment evidence may issue qualification.
   const sucesso = canFinalizeScormEnrollment({
     commit: d, wasCompleted: matriculaWasConcluido, cmiJson: mergedCmiJson,
     location: mergedLocation, policy: matricula.scorm_assessment_policy,
-    masteryScore: matricula.scorm_mastery_score, scorePct: effectiveScorePct,
-  });
+    masteryScore: matricula.scorm_mastery_score, scorePct: effectiveScorePct });
   const falha = !matriculaWasConcluido && isScormFailed(d);
 
   let progressoPct = progressoAnterior;
