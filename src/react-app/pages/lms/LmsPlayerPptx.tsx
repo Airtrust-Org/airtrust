@@ -376,7 +376,7 @@ export default function LmsPlayerPptx() {
                   )}
                   Concluir curso
                 </button>
-              ) : null}
+              )}
             </div>
           </div>
         </div>
