@@ -36,7 +36,7 @@ export function classifyFdmAudience(funcao, designations=[]) {
   return {group:groups.length===1?groups[0]:null,
     reason:groups.length===0?'UNMAPPED_ROLE':groups.length>1?'MULTIPLE_ELIGIBLE_AUDIENCES':null};
 }
-export function summarizeFdmAssignment(enrollments, employees, assignmentMap, courses) {
+export function summarizeFdmAssignment(enrollments, employees, assignmentMap, courses, existingDestEnrollments = {}) {
   const counts={source_total:enrollments.length,groups:{tripulacao:0,manutencao:0,comite_gatekeeper:0},
     needs_review:{UNMAPPED_ROLE:0,MULTIPLE_ELIGIBLE_AUDIENCES:0,EMPLOYEE_NOT_IN_ACTIVE_CATALOG:0},
     unfinished_99_or_more:0,source_completed:0,source_not_completed:0,
@@ -58,7 +58,10 @@ export function summarizeFdmAssignment(enrollments, employees, assignmentMap, co
     if(!employee){counts.needs_review.EMPLOYEE_NOT_IN_ACTIVE_CATALOG++;continue;}
     const decision=classifyFdmAudience(employee.funcao_nome,assignmentMap.get(id)||[]);
     if(decision.reason)counts.needs_review[decision.reason]++;
-    else counts.groups[decision.group]++;
+    else {
+      counts.groups[decision.group]++;
+      if (existingDestEnrollments[decision.group]?.has(id)) counts.already_target_enrolled++;
+    }
   }
   failUnless(counts.source_completed+counts.source_not_completed===counts.source_total,'SOURCE_COUNTS_MISMATCH');
   failUnless(Object.values(counts.groups).reduce((a,b)=>a+b,0)+Object.values(counts.needs_review).reduce((a,b)=>a+b,0)===counts.source_total,'AUDIENCE_ASSIGNMENT_INCOMPLETE');
@@ -117,6 +120,18 @@ async function listCourses(token){
   }
   throw new Error('COURSE_PAGINATION_LIMIT');
 }
+async function listQualifications(token){
+  const rows=[];
+  for(let page=1;page<=30;page++){
+    const r=await safeGet(token,'/api/qualificacoes/tipos?page='+page+'&limit=200');
+    failUnless(Array.isArray(r?.data),'QUALIFICATION_LIST_INVALID');
+    rows.push(...r.data);
+    const total=Number(r?.pagination?.total??r?.meta?.total??rows.length);
+    if(rows.length>=total){failUnless(rows.length===total,'QUALIFICATION_LIST_CHANGED');return rows;}
+    failUnless(r.data.length>0,'QUALIFICATION_PAGE_EMPTY');
+  }
+  throw new Error('QUALIFICATION_PAGE_LIMIT');
+}
 async function getEnrollments(token,courseId){
   const rows=[];
   for(let page=1;page<=100;page++){
@@ -133,11 +148,12 @@ async function getEnrollments(token,courseId){
 async function run(){
   await assertSha();
   const token=await tokenForTenant();
-  const [catalog,source,conditions,assignees]=await Promise.all([
+  const [catalog,source,conditions,assignees,qualifications]=await Promise.all([
     listCourses(token),
     getEnrollments(token,SOURCE_COURSE),
     safeGet(token,'/api/compliance-treinamentos/condicoes/catalogos'),
     safeGet(token,'/api/compliance-treinamentos/condicoes/atribuicoes'),
+    listQualifications(token),
   ]);
   failUnless(Array.isArray(conditions?.data?.funcionarios)&&Array.isArray(conditions?.data?.condicoes),'DESIGNATION_CATALOG_MISSING');
   failUnless(Array.isArray(assignees?.data),'DESIGNATION_ASSIGNMENTS_MISSING');
@@ -152,6 +168,7 @@ async function run(){
     designations.set(id,prev);
   }
   const targetState={};
+  const destinationEnrollments={};
   for(const [audience,code] of Object.entries(TARGETS)){
     const matches=[];
     for(const c of catalog){
@@ -168,13 +185,19 @@ async function run(){
         qualification_link_matches:actualCode===code,format:String(c.tipo_conteudo||'').toLowerCase(),
         has_scorm_launch:Boolean(String(d.scorm_launch_file||'').trim())});
     }
-    targetState[audience]={qualification_code:code,candidate_count:matches.length,
-      ready:matches.length===1&&matches[0].active&&matches[0].published&&matches[0].qualification_link_matches&&
+    const matchingQualifications=qualifications.filter(q=>norm(q.codigo)===code && Number(q.ativo)===1 && !q.deleted_at);
+    targetState[audience]={qualification_code:code,qualification_models_active:matchingQualifications.length,
+      candidate_count:matches.length,
+      ready:matchingQualifications.length===1&&matches.length===1&&matches[0].active&&matches[0].published&&matches[0].qualification_link_matches&&
         matches[0].format==='scorm'&&matches[0].has_scorm_launch,
       candidates:matches};
+    if (matches.length===1) {
+      const destRows=await getEnrollments(token,matches[0].course_id);
+      destinationEnrollments[audience]=new Set(destRows.map(r=>Number(r.funcionario_id)));
+    }
   }
-  const result=summarizeFdmAssignment(source,employees,designations,targetState);
-  const output={schema_version:1,empresa_id:COMPANY,production_sha:SHA,source_course_id:SOURCE_COURSE,
+  const result=summarizeFdmAssignment(source,employees,designations,targetState,destinationEnrollments);
+  const output={schema_version:2,empresa_id:COMPANY,production_sha:SHA,source_course_id:SOURCE_COURSE,
     observed_at:new Date().toISOString(),scope:'active employee records visible through existing management API',
     warning:'No staff identities, enrollments, roles-per-person, or real progress records are exported.',
     blocker: Object.values(targetState).every(t=>t.ready)?null:'DESTINATION_LMS_COURSES_NOT_READY',
