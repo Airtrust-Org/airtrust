@@ -151,7 +151,7 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('LMSFinish no slide final envia candidato de conclusão confiável uma única vez', async () => {
+  it('LMSFinish apenas persiste evidência; sem clique do aluno não envia candidato', async () => {
     const fetchMock = mockOkFetch();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -183,14 +183,51 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     expect(body).toMatchObject({
       matricula_id: 346,
       commit_event: 'SCORM_FINISH',
-      completion_candidate: true,
+      completion_candidate: null,
       lesson_status: 'incomplete',
       score_raw: 96,
     });
-    expect(body.completion_observed_at).toEqual(expect.any(String));
+    expect(body.completion_observed_at).toBeNull();
   });
 
-  it('repete o mesmo Finish após falha HTTP transitória sem perder o candidato final', async () => {
+  it('o clique confirmar dispara SCORM_USER_FINALIZE com evidência de todas as telas', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const html = buildLaunchPage({
+      matriculaId: 346,
+      titulo: 'Curso formativo',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/119/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: '',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_status': 'incomplete',
+        'cmi.core.lesson_location': '3/3',
+        'airtrust.total_slides': 3,
+        'airtrust.viewed_slides': [1, 2, 3],
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSInitialize();
+    g.window.dispatchEvent(new g.MessageEvent('message', {
+      origin: '',
+      source: g.window.parent,
+      data: { type: 'lms:request-completion', matriculaId: 346 },
+    }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
+    expect(body).toMatchObject({
+      commit_event: 'SCORM_USER_FINALIZE',
+      completion_candidate: true,
+      lesson_status: 'incomplete',
+    });
+    expect(body.cmi_json).toContain('airtrust.viewed_slides');
+  });
+
+  it('repete o mesmo Finish apos falha temporaria, sem criar conclusao automatica', async () => {
     vi.useFakeTimers();
     const fetchMock = vi
       .fn()
@@ -236,7 +273,7 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     const [, retryRequest] = fetchMock.mock.calls[1] as [string, { body: string }];
     expect(JSON.parse(retryRequest.body)).toMatchObject({
       commit_event: 'SCORM_FINISH',
-      completion_candidate: true,
+      completion_candidate: null,
       lesson_status: 'incomplete',
     });
   });
