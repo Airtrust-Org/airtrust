@@ -44,6 +44,11 @@ function execute(sql,label,mutating=false){
 }
 function rows(sql,label){return execute(sql,label)}
 function snapshot(){
+ const ledger=rows(`SELECT change_id FROM airtrust_schema_changes_v2
+  WHERE baseline_id='production-d1-baseline-v2-20260714'
+    AND change_id IN ('training-compliance-fdm-three-audiences-0536',
+      'training-operational-category-bootstrap-0541')`,'schema_ledger');
+ check(ledger.length===2,'SCHEMA_V2_DEPENDENCIES_NOT_APPLIED');
  const source=rows(`SELECT m.id,m.empresa_id,m.curso_id,m.funcionario_id,m.status,m.deleted_at,
   m.progresso_pct,COALESCE(NULLIF(TRIM(fn.nome),''),NULLIF(TRIM(f.funcao),''),NULLIF(TRIM(f.cargo),''),'') funcao_nome,
   CASE WHEN f.id IS NOT NULL AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
