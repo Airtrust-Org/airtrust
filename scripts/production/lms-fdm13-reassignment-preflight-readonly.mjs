@@ -158,14 +158,18 @@ async function getEnrollments(token,courseId){
 async function run(){
   await assertSha();
   const token=await tokenForTenant();
-  const [catalog,source,conditions,qualifications]=await Promise.all([
+  const [catalog,source,sourceCourse,conditions,qualifications]=await Promise.all([
     listCourses(token),
     getEnrollments(token,SOURCE_COURSE),
+    // The normal catalog deliberately lists only active, published courses.
+    // FDM #13 is legacy evidence, so verify its tenant-scoped detail by ID
+    // rather than treating an inactive historical source as missing.
+    safeGet(token,'/api/lms/cursos/'+SOURCE_COURSE),
     safeGet(token,'/api/compliance-treinamentos/condicoes/catalogos'),
     listQualifications(token),
   ]);
   failUnless(Array.isArray(conditions?.data?.funcionarios)&&Array.isArray(conditions?.data?.condicoes),'DESIGNATION_CATALOG_MISSING');
-  failUnless(catalog.some(x=>Number(x.id)===SOURCE_COURSE),'SOURCE_COURSE_MISSING');
+  failUnless(Number(sourceCourse?.data?.id)===SOURCE_COURSE,'SOURCE_COURSE_MISSING');
   const employees=new Map(conditions.data.funcionarios.map(e=>[Number(e.id),e]));
   const targetState={};
   const destinationEnrollments={};
