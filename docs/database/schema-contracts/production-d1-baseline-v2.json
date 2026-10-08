@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-07",
-    "last_reconciled_against": "0541 production-column-compatible category bootstrap; reviewed SQL hash and Schema V2 manifest reconciled",
-    "schema_v2_digest": "18fdc5022dbd09e6f8ac5d5a45e504769fb36d7680b1e1587940979e506b56af",
+    "last_reconciled_at": "2026-10-08",
+    "last_reconciled_against": "0542 LMS formative policy reviewed change and Schema V2 manifest (remote apply pending; no deployment evidence claimed)",
+    "schema_v2_digest": "c374971c5f1f77c2fc37d82af21f173163c690b584d2c09cc5557cbf9e1c859e",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1430,6 +1430,20 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
       "reviewed_manifest": null
+    },
+    {
+      "change_file": "0542_lms_scorm_formative_assessment_policy.sql",
+      "change_id": "lms-scorm-formative-assessment-0542",
+      "sha256": "85fe3b4766ef1010c29d3cc314cbc9bd8345d467ea0cb811473f403d51cd36cb",
+      "targets": [
+        "lms_cursos"
+      ],
+      "domain": "LMS / explicit formative versus scored SCORM assessment policy, tenant-6 CRM RBAC119 remediation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-scorm-formative-assessment-0542.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-formative-assessment-0542.md",
+      "note": "0542 adds fail-closed SCORED policy; narrowly updates a single tenant-6 CRM RBAC119 course to FORMATIVE only after a governed preflight confirms exactly one correct target and approved no-mastery intent. Ledger/manifest are preparation, not proof of a remote apply."
     }
   ]
 }
