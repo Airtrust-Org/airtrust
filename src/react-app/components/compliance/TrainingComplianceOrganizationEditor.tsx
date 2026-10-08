@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Building2 } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
+import { notifyComplianceSaveWithEnrollment } from './complianceEnrollmentFeedback';
 import {
   nextComplianceTableSort,
   sortComplianceRows,
@@ -160,8 +161,8 @@ export function TrainingComplianceOrganizationEditor() {
         }),
       );
     },
-    onSuccess: async () => {
-      showToast.success('Matriz atualizada.');
+    onSuccess: async (result) => {
+      notifyComplianceSaveWithEnrollment(result, 'Matriz atualizada.');
       await invalidate();
     },
     onError: (error) =>
