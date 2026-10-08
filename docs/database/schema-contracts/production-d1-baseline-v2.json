@@ -1410,14 +1410,14 @@
     {
       "change_file": "0541_training_operational_category_bootstrap.sql",
       "change_id": "training-operational-category-bootstrap-0541",
-      "sha256": "8aee0c5b690b53cb0b3b24e69abc9a090a5274bf17a4da49ddcda467c4963211",
+      "sha256": "ed4f2d53c188b4b41df3cfaa10b7f88c2d389f6f6fed97eb63e84652f903e452",
       "targets": [],
       "domain": "training compliance / tenant-6 operational training category prerequisite for 0536",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "training-operational-category-bootstrap-0541.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-operational-category-bootstrap-0541.md",
-      "note": "0541 is a reviewed, tenant-6 only forward prerequisite for FDM three audiences 0536, needed because production read-only showed no TREINAMENTO_OPERACIONAL category. It creates the canonical category only if absent, without employee/LMS/history writes. File/manifest is not evidence of application; apply through governed Schema V2 after exact release authorization."
+      "note": "0541 is a reviewed, tenant-6 only forward prerequisite for FDM three audiences 0536, needed because production read-only showed no TREINAMENTO_OPERACIONAL category. It creates the canonical category only if absent, without employee/LMS/history writes. File/manifest is not evidence of application; apply through governed Schema V2 after exact release authorization. Production PRAGMA confirms lms_integrada is absent, so reviewed SQL and production postconditions avoid this staging-only field."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
