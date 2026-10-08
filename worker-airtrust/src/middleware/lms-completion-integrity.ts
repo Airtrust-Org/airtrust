@@ -263,7 +263,7 @@ function hasTerminalFormativeScormStatus(row: EnrollmentEvidenceRow, incoming: J
   // completion_candidate, slide count and generic PATCH progress do not count.
   return [incoming.lesson_status, incoming.completion_status,
     row.lesson_status, row.completion_status]
-    .some((value) => ['complete', 'completed'].includes(normalizeStatus(value))) ||
+    .some((value) => ['complete', 'completed', 'passed'].includes(normalizeStatus(value))) ||
     isTrustedScorm12Finish({
       lesson_status: incoming.lesson_status as string | null,
       commit_event: incoming.commit_event as string | null,
