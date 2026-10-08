@@ -175,6 +175,7 @@ function isCompletedEnrollmentStatus(status) {
 }
 
 function requirementNeedsEnrollment(requirement) {
+  if (requirement?.evidencia_pendente_validacao === true) return false;
   const realizedOn = String(requirement?.ultima_data || '').slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
   if (realizedOn && realizedOn > today) fail('CANONICAL_FUTURE_EVIDENCE_REQUIRES_WORKER_FIX');
