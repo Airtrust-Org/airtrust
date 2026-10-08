@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModalitySql } from '../services/training-compliance-history-identity';
 import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from '../services/lms-matricula-cycle';
-import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
@@ -43,7 +42,7 @@ import {
   trainingComplianceEligibleCategorySql,
   type TrainingComplianceScope,
 } from '../services/training-compliance-rule-engine';
-import { buildQualificationEvidenceProfileSql } from '../services/training-compliance-evidence-profile';
+import { buildQualificationEvidenceProfileSql, stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS, trainingComplianceEvidenceIsRealizedBy, trainingComplianceNeedsImmediateEnrollmentOnRuleSave, trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -1356,7 +1355,7 @@ app.post('/regras', requireRole('admin', 'manager'), async (c) => {
       db, empresaId, id, access, extrairUsuarioAuditoria(c),
     );
     if (autoEnrollment.unavailable_course) autoEnrollmentWarning = 'LMS_COURSE_MAPPING_UNAVAILABLE';
-  } catch (error) {
+  } catch {
     console.error('[TRAINING_COMPLIANCE] Falha na sincronização após criar requisito');
     autoEnrollmentWarning = 'AUTO_ENROLLMENT_DEFERRED';
   }
@@ -1407,7 +1406,7 @@ app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
       db, empresaId, id, access, extrairUsuarioAuditoria(c),
     );
     if (autoEnrollment.unavailable_course) autoEnrollmentWarning = 'LMS_COURSE_MAPPING_UNAVAILABLE';
-  } catch (error) {
+  } catch {
     console.error('[TRAINING_COMPLIANCE] Falha na sincronização após atualizar requisito');
     autoEnrollmentWarning = 'AUTO_ENROLLMENT_DEFERRED';
   }
