@@ -46,6 +46,13 @@ test('audit preserves source outside git and never creates employees', () => {
   assert.doesNotMatch(script, /DELETE FROM funcionarios/i);
 });
 
+test('audit quantifies evidence that needs canonical-code fallback without exposing people', () => {
+  assert.match(script, /history_exact_requires_code_fallback/);
+  assert.match(script, /active_history_exact_requires_code_fallback/);
+  assert.match(script, /exact_via_current_fk/);
+  assert.match(script, /exact_via_canonical_code/);
+});
+
 test('audit identifies only active, past-or-current missing evidence as import candidates', () => {
   assert.match(script, /if active and date\.fromisoformat\(record\["date"\]\) <= TODAY/);
   assert.match(script, /missing_active_candidate_count/);
