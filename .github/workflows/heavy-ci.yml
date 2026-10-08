@@ -81,6 +81,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends sqlite3
       - run: cd worker-airtrust && npx vitest run --shard=1/2
+      - name: Verify governed qualification renewal repair with SQLite
+        run: python3 scripts/__tests__/qualification-renewal-chain-repair.test.py
 
   worker-tests-2:
     name: worker-tests-2
