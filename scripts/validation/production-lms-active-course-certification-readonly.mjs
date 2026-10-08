@@ -1738,7 +1738,8 @@ async function certifyPptxCourse(browser, token, listed) {
 
 async function main() {
   await assertPinnedProduction();
-  const token = await productionToken();
+  let token = await productionToken();
+  let tokenIssuedAt = Date.now();
   const listed = await listCourses(token);
   invariant(
     COURSE_IDS.size === 0 || listed.length === COURSE_IDS.size,
@@ -1750,6 +1751,14 @@ async function main() {
   const results = [];
   try {
     for (const course of listed) {
+      // Read-only certification can exceed a single access token's lifetime.
+      // Renew strictly via the existing scoped login/company-selection path,
+      // retaining the exact deployed SHA pin and tenant assertion on refresh.
+      if (Date.now() - tokenIssuedAt >= 15 * 60_000) {
+        await assertPinnedProduction();
+        token = await productionToken();
+        tokenIssuedAt = Date.now();
+      }
       const type = String(course?.tipo_conteudo || '').toLowerCase();
       try {
         if (type === 'scorm') results.push(await certifyScormCourse(browser, token, course));
