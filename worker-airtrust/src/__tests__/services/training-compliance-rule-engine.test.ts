@@ -112,6 +112,32 @@ describe('training compliance rule engine', () => {
     ]);
   });
 
+  it('substitui AVSEC Corporativo somente quando o AVSEC específico é requisito efetivo', () => {
+    const corporate = {
+      ...base, id: 12, qualificacao_tipo_id: 194,
+      qualificacao_tipo_codigo: 'AVSEC_CONSC', escopo: 'EMPRESA' as const,
+      obrigatoriedade: 'OBRIGATORIA', perfil_competencia: null,
+    };
+    const tripulante = {
+      ...base, id: 13, qualificacao_tipo_id: 22,
+      qualificacao_tipo_codigo: 'D1', escopo: 'FUNCAO' as const, funcao_id: 7,
+      perfil_competencia: 'AVSEC_TRIPULANTE', obrigatoriedade: 'OBRIGATORIA',
+    };
+    const irrelevant = { ...tripulante, id: 14, funcao_id: 9 };
+    const individualCorporate = {
+      ...corporate, id: 15, escopo: 'FUNCIONARIO' as const, funcionario_id: 10,
+    };
+    expect(resolveTrainingComplianceRules([corporate, tripulante], employee)).toEqual([tripulante]);
+    expect(resolveTrainingComplianceRules([corporate, irrelevant], employee)).toEqual([corporate]);
+    expect(resolveTrainingComplianceRules([corporate, { ...tripulante, perfil_competencia: null }], employee))
+      .toEqual([corporate, { ...tripulante, perfil_competencia: null }]);
+    expect(resolveTrainingComplianceRules([corporate, { ...tripulante, obrigatoriedade: 'NAO_APLICA' }], employee))
+      .toEqual([corporate, { ...tripulante, obrigatoriedade: 'NAO_APLICA' }]);
+    expect(resolveTrainingComplianceRules([corporate, tripulante, individualCorporate], employee))
+      .toEqual([individualCorporate, tripulante]);
+    expect(resolveTrainingComplianceRules([corporate], employee)).toEqual([corporate]);
+  });
+
   it('generates the same condition-aware predicate for renewal and expiry notification paths', () => {
     const sql = trainingComplianceEffectiveRequirementPredicateSql({ requireAutoEnrollment: true });
     expect(sql).toContain('funcionarios_compliance_condicoes');
