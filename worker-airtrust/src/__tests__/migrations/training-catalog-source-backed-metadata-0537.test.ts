@@ -72,6 +72,8 @@ describe('training catalog source-backed metadata 0537', () => {
     expect(adapter).toContain("src.codigo='LGPD_SEG_INFO'");
     expect(adapter).toContain("SELECT 6,'LGPD'");
     expect(post).toContain(`referencias LIKE '%${source}%'`);
+    const production = read('scripts/schema-v2/validate-0537-production-postconditions.sh');
+    expect(production).toContain(`referencias LIKE '%${source}%'`);
     expect(read(changePath)).toContain(source);
   });
 
