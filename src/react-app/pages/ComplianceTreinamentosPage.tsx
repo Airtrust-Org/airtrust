@@ -390,13 +390,25 @@ export default function ComplianceTreinamentosPage() {
       readJson<Catalogs>(await fetchWithAuth('/api/compliance-treinamentos/catalogos')),
   });
   const filter = buildFilter(setorId, funcaoId, searchQuery);
+  // Every visible compliance view must re-read authoritative history after any
+  // LMS or qualification completion, including updates from another device.
+  const liveComplianceRefresh = {
+    staleTime: 0,
+    refetchOnMount: 'always' as const,
+    refetchOnWindowFocus: 'always' as const,
+    refetchOnReconnect: 'always' as const,
+    refetchInterval: 120_000,
+  };
+
   const summary = useQuery({
+    ...liveComplianceRefresh,
     queryKey: ['training-compliance', 'summary', setorId, funcaoId, searchQuery],
     enabled: schemaReady,
     queryFn: async () =>
       readJson<Summary>(await fetchWithAuth(`/api/compliance-treinamentos/resumo${filter}`)),
   });
   const people = useQuery({
+    ...liveComplianceRefresh,
     queryKey: ['training-compliance', 'people', setorId, funcaoId, searchQuery, drilldown],
     enabled: schemaReady && tab === 'pessoas',
     queryFn: async () => {
@@ -413,6 +425,7 @@ export default function ComplianceTreinamentosPage() {
     },
   });
   const trainings = useQuery({
+    ...liveComplianceRefresh,
     queryKey: ['training-compliance', 'trainings', setorId, funcaoId, searchQuery],
     enabled: schemaReady && tab === 'treinamentos',
     queryFn: async () =>
@@ -421,6 +434,7 @@ export default function ComplianceTreinamentosPage() {
       ),
   });
   const sectors = useQuery({
+    ...liveComplianceRefresh,
     queryKey: ['training-compliance', 'sectors', setorId, searchQuery],
     enabled: schemaReady && tab === 'setores',
     queryFn: async () =>

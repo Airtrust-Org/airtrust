@@ -38,6 +38,17 @@ describe('training compliance intelligent report', () => {
     expect(complianceStatusLabel({ ...baseRow, status_compliance: 'VENCENDO', dias_para_vencer: 7 })).toBe('Vence em 7 dia(s)');
   });
 
+  it('does not falsely say never completed when historical evidence needs validation', () => {
+    expect(complianceStatusLabel({
+      ...baseRow, status_compliance: 'NAO_REALIZADO',
+      evidencia_pendente_validacao: true, evidencia_pendente_motivo: 'MODALIDADE',
+    })).toBe('Modalidade a validar');
+    expect(complianceStatusLabel({
+      ...baseRow, status_compliance: 'NAO_REALIZADO',
+      evidencia_pendente_validacao: true, evidencia_pendente_motivo: 'PERFIL',
+    })).toBe('Competência a validar');
+  });
+
   it('builds deterministic management narrative from real aggregate counts', () => {
     const narrative = buildComplianceNarrative(
       {
