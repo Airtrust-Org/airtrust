@@ -623,6 +623,16 @@ function computeRequirement(
     status_compliance = 'EM_ANDAMENTO';
   }
 
+  // Histórico comprovado de mesma identidade, mas sem modalidade/perfil validado,
+  // não pode ser apresentado como "nunca realizou" nem liberar cobrança automática.
+  const evidenceReviewReason =
+    status_compliance === 'NAO_REALIZADO' && modalityMismatch && candidateEvidence?.data_realizacao
+      ? 'MODALIDADE'
+      : status_compliance === 'NAO_REALIZADO' && profileMismatch &&
+          allHistory.some((item) => trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, today))
+        ? 'PERFIL'
+        : null;
+
   const status_legacy =
     status_compliance === 'VENCIDO'
       ? 'VENCIDO'
@@ -667,6 +677,8 @@ function computeRequirement(
     evidencia_perfil_incompativel: profileMismatch,
     evidencia_modalidade: evidence?.modalidade ?? candidateEvidence?.modalidade ?? null,
     evidencia_modalidade_incompativel: modalityMismatch,
+    evidencia_pendente_validacao: evidenceReviewReason !== null,
+    evidencia_pendente_motivo: evidenceReviewReason,
     evidencia_id: evidence?.origem_id ?? null,
     curso_ead_titulo: currentLms?.origem_titulo ?? evidence?.origem_titulo ?? null,
     lms_status:
