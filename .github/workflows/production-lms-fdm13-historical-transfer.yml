@@ -127,6 +127,19 @@ jobs:
           set -euo pipefail
           node scripts/production/lms-fdm13-transfer-governed.mjs > "$RUNNER_TEMP/result.json"
           test -s "$RUNNER_TEMP/result.json"
+      - name: Post-check authenticated LMS API and course counters
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          PROD_API_BASE_URL: https://api.airtrust.online
+          PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          FDM13_APPLY_REPORT: ${{ runner.temp }}/result.json
+        run: |
+          set -euo pipefail
+          [[ -n "$PROD_SMOKE_EMAIL" && -n "$PROD_SMOKE_PASSWORD" ]] || { echo PRODUCTION_CREDENTIALS_MISSING >&2; exit 1; }
+          node scripts/production/lms-fdm13-postcheck-api.mjs > "$RUNNER_TEMP/api-postcheck.json"
+          jq -e '.api_postconditions_verified == true and .contains_personal_data == false' "$RUNNER_TEMP/api-postcheck.json" >/dev/null
+          jq '{mode,source_sha,tenant,course_71,course_72,api_postconditions_verified,contains_personal_data}' "$RUNNER_TEMP/api-postcheck.json" >> "$GITHUB_STEP_SUMMARY"
       - name: Publish sanitized aggregate report
         if: always()
         run: |
@@ -137,6 +150,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: fdm13-transfer-${{ inputs.mode }}-${{ github.sha }}
-          path: ${{ runner.temp }}/result.json
+          path: |
+            ${{ runner.temp }}/result.json
+            ${{ runner.temp }}/api-postcheck.json
           retention-days: 30
           if-no-files-found: error
