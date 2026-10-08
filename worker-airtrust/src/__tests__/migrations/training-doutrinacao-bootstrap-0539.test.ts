@@ -34,9 +34,9 @@ describe('training Doutrinação bootstrap 0539', () => {
     const postcondition = read('scripts/staging/validate-0539-postconditions.sh');
     const source = 'PRG-MNT-002 — Programa de Treinamento de Manutenção Rev.06';
     expect(sql).toContain(source);
-    expect(postcondition).toContain(`referencias LIKE '%${source}%'`);
+    expect(postcondition).toContain("instr(referencias,'PRG-MNT-002')>0 AND instr(referencias,'Programa de Treinamento de Manutenção Rev.06')>0");
     const production = read('scripts/schema-v2/validate-0539-production-postconditions.sh');
-    expect(production).toContain(`referencias LIKE '%${source}%'`);
+    expect(production).toContain("instr(referencias,'PRG-MNT-002')>0 AND instr(referencias,'Programa de Treinamento de Manutenção Rev.06')>0");
   });
 
   it('keeps the repair ordered before 0537 and 0538', () => {
