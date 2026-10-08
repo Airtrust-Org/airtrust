@@ -1449,9 +1449,7 @@
       "change_file": "0543_fdm_target_qualification_links.sql",
       "change_id": "fdm-target-qualification-links-0543",
       "sha256": "371ecaa3e5e0f69fee1f534ccf093ccc1aa3dcc6fbacb16adb55b6cb9a68d0d1",
-      "targets": [
-        "lms_cursos"
-      ],
+      "targets": [],
       "domain": "LMS FDM / narrowly bind tenant-6 course 71 to Tripulação and course 72 to Manutenção qualification models",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
