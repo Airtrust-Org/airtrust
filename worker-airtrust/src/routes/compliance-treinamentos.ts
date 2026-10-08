@@ -276,7 +276,6 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
     : tipoCols.has('validade_meses')
       ? 'qt.validade_meses'
       : 'NULL';
-
   if (!hasV2) {
     if (!(await tableExists(db, 'matriz_treinamento_funcao'))) return [];
     const { results } = await db
@@ -871,12 +870,9 @@ async function validateRuleReferences(
 ) {
   const qualificacaoTipoId = asPositiveInt(payload.qualificacao_tipo_id);
   if (!qualificacaoTipoId) throw new ApiError('qualificacao_tipo_id é obrigatório', 400);
-  const tipo = await db
-    .prepare(
-      `SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND ${trainingComplianceEligibleCategorySql('categoria')}`,
-    )
-    .bind(qualificacaoTipoId, empresaId)
-    .first<{ id: number }>();
+  const tipo = await db.prepare(
+    `SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND ${trainingComplianceEligibleCategorySql('categoria')}`,
+  ).bind(qualificacaoTipoId, empresaId).first<{ id: number }>();
   if (!tipo) throw new ApiError('Tipo de qualificação inválido ou categoria excluída do Compliance', 400);
 
   const escopo = normalizeEnum(payload.escopo, SCOPES, 'FUNCAO');
