@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { aggregateEnrollments, addAggregates, sanitizeCourse } from '../production/lms-course-completion-outcomes-readonly.mjs';
+import { aggregateEnrollments, addAggregates, sanitizeCourse, tallyScormDiagnostics } from '../production/lms-course-completion-outcomes-readonly.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
 const script = readFileSync(new URL('scripts/production/lms-course-completion-outcomes-readonly.mjs', ROOT), 'utf8');
@@ -63,4 +63,30 @@ test('production outcome audit has strict SHA, tenant, read-only scope, no learn
   assert.doesNotMatch(workflow, /\bpush:/);
   assert.doesNotMatch(workflow, /\bpull_request:/);
   assert.doesNotMatch(workflow, /wrangler\s+(?:deploy|d1|r2)/i);
+});
+
+
+test('SCORM diagnostics collapse sensitive rows to code totals at raw 99%, without PII', () => {
+  const rows = [
+    { curso_id: 13, funcionario_id: 4, funcionario_nome: 'Private Person', matricula_id: 8, status: 'EM_ANDAMENTO', progresso_pct: 99, diagnostic_code: 'SCORM_FINAL_COMMIT_MISSING' },
+    { curso_id: 13, funcionario_id: 7, funcionario_nome: 'Private Person 2', matricula_id: 9, status: 'EM_ANDAMENTO', progresso_pct: 100, diagnostic_code: 'SCORM_FINAL_COMMIT_MISSING' },
+    { curso_id: 8, status: 'EM_ANDAMENTO', progresso_pct: 99, diagnostic_code: 'SCORM_STATUS_INCONSISTENT', email: 'private@example.org' },
+    { curso_id: 8, status: 'CONCLUIDO', progresso_pct: 100, diagnostic_code: 'SCORM_STATUS_INCONSISTENT' },
+    { curso_id: 15, status: 'EM_ANDAMENTO', progresso_pct: 86, diagnostic_code: 'SCORM_STATUS_INCONSISTENT' },
+  ];
+  const counted = tallyScormDiagnostics(Object.create(null), rows);
+  assert.equal(counted[13].flagged_at_99, 2);
+  assert.deepEqual(counted[13].codes, { SCORM_FINAL_COMMIT_MISSING: 2 });
+  assert.deepEqual(counted[8].codes, { SCORM_STATUS_INCONSISTENT: 1 });
+  assert.equal(counted[15], undefined);
+  assert.doesNotMatch(JSON.stringify(counted), /Private|private@example|funcionario|matricula_id/);
+});
+
+test('SCORM 99% diagnostics endpoint is cursor-paginated and never outputs enrollment details', () => {
+  assert.match(script, /\/api\/lms\/relatorios\/conclusoes-inconsistentes\?limit=200/);
+  assert.match(script, /response\.headers\?\.\['x-next-cursor'\]/);
+  assert.match(script, /SCORM_DIAGNOSTICS_CURSOR_LOOP/);
+  assert.match(script, /SCORM_DIAGNOSTIC_COUNT_EXCEEDS_INCOMPLETE/);
+  assert.match(script, /diagnostic_scope:/);
+  assert.doesNotMatch(script, /JSON\.stringify\(response\.json\.data\)/);
 });
