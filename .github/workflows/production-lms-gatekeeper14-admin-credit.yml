@@ -131,6 +131,18 @@ jobs:
             .candidates==2 and .contains_personal_data==false and
             (.mode=="dry-run" or (.mutation_executed==true and .postconditions_verified==true))
           ' "$RUNNER_TEMP/result.json" >/dev/null
+      - name: Authenticated production LMS API post-validation
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          PROD_API_BASE_URL: https://api.airtrust.online
+          PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          GATEKEEPER_APPLY_REPORT: ${{ runner.temp }}/result.json
+        run: |
+          set -euo pipefail
+          node scripts/production/lms-gatekeeper14-credit-postcheck-api.mjs > "$RUNNER_TEMP/api-postcheck.json"
+          jq -e '.api_postconditions_verified==true and .contains_personal_data==false
+             and .course_14_preserved_concluded==2 and .course_73_administrative_completed==2' "$RUNNER_TEMP/api-postcheck.json" >/dev/null
       - name: Record sanitized evidence
         if: always()
         shell: bash
@@ -143,11 +155,18 @@ jobs:
             emails_sent,certificates_issued,new_scorm_claimed_completed,
             administrative_equivalence_only,contains_personal_data}' \
             "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+          if [[ -s "$RUNNER_TEMP/api-postcheck.json" ]]; then
+            jq '{source_sha,empresa_id,course_14_preserved_concluded,
+              course_73_administrative_completed,api_postconditions_verified,
+              contains_personal_data}' "$RUNNER_TEMP/api-postcheck.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Upload sanitized aggregate report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: gatekeeper14-credit-${{ inputs.mode }}-${{ github.sha }}
-          path: ${{ runner.temp }}/result.json
+          path: |
+            ${{ runner.temp }}/result.json
+            ${{ runner.temp }}/api-postcheck.json
           retention-days: 30
           if-no-files-found: warn
