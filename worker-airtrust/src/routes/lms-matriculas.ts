@@ -25,7 +25,6 @@ import {
   buildMatriculaCompletionDiagnostic,
   buildScormCompletionDiagnostic,
   extractScormLocationFromCmiJson,
-  hasCompleteScormSlideCoverage,
   mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
@@ -61,12 +60,12 @@ import {
   type ProgressRecoveryStateSnapshot,
 } from '../services/lms-progress-recovery-domain';
 import {
+  canFinalizeScormEnrollment,
   clampPct,
   extractProgressPctFromCmiJson,
   formatScormLocationTelemetry,
   isMatriculaUniqueConstraintError,
   isScormFailed,
-  isScormSuccess,
   parsePositiveInt,
   requiresServerValidatedNonScormEvidence,
   resolveScormScorePct,
@@ -1448,25 +1447,13 @@ app.post('/scorm/commit', async (c) => {
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
-  // Only an explicit user confirmation in the LMS player can finalize a SCORM
-  // enrollment. Normal LMSCommit/LMSFinish records evidence but is never the
-  // user's final decision. Fail closed if the full course location or assessed
-  // score is absent (a quiz score from an intermediate chapter is insufficient).
-  const isExplicitUserFinalize = d.commit_event === 'SCORM_USER_FINALIZE';
-  const reachedFinalSlide = mergedLocation?.total != null &&
-    mergedLocation.total > 0 && mergedLocation.current >= mergedLocation.total;
-  const viewedEverySlide = hasCompleteScormSlideCoverage(mergedCmiJson);
-  const isFormativeCourse = matricula.scorm_assessment_policy === 'FORMATIVE';
-  const masteryRequired = matricula.scorm_mastery_score;
-  const assessmentSatisfied = isFormativeCourse ||
-    (typeof masteryRequired === 'number' && masteryRequired > 0 &&
-      effectiveScorePct !== null && effectiveScorePct >= masteryRequired);
-  // "Rever" replay: never recalculate a previously recorded completion.
-  const sucesso =
-    !matriculaWasConcluido && isExplicitUserFinalize && reachedFinalSlide && viewedEverySlide &&
-    assessmentSatisfied &&
-    isScormSuccess(d, { masteryScore: isFormativeCourse ? null : masteryRequired,
-      effectiveScorePct });
+  // A terminal SCORM signal is recorded, but only a user-confirmed request
+  // with complete runtime and assessment evidence may issue qualification.
+  const sucesso = canFinalizeScormEnrollment({
+    commit: d, wasCompleted: matriculaWasConcluido, cmiJson: mergedCmiJson,
+    location: mergedLocation, policy: matricula.scorm_assessment_policy,
+    masteryScore: matricula.scorm_mastery_score, scorePct: effectiveScorePct,
+  });
   const falha = !matriculaWasConcluido && isScormFailed(d);
 
   let progressoPct = progressoAnterior;
