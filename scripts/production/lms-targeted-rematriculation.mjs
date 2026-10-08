@@ -73,7 +73,7 @@ async function apiJson(baseUrl, token, path, options = {}) {
   const payload = response.json;
   if (response.status < 200 || response.status >= 300 || payload?.success === false) {
     const code = String(payload?.code || payload?.error || 'API_ERROR').slice(0, 120);
-    throw new Error(`${path}:HTTP_${response.status}:${code}`);
+    throw new Error(`${path.split('?')[0]}:HTTP_${response.status}:${code}`);
   }
   return payload;
 }
@@ -119,7 +119,7 @@ async function resolveEmployee(baseUrl, token, query, course) {
   }
 
   if (candidates.length !== 1) {
-    throw new Error(`EMPLOYEE_RESOLUTION_AMBIGUOUS:query=${normalizeText(query)}:count=${candidates.length}`);
+    throw new Error(`EMPLOYEE_RESOLUTION_AMBIGUOUS:count=${candidates.length}`);
   }
   return candidates[0];
 }
