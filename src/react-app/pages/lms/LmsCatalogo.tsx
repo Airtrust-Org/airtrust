@@ -293,6 +293,7 @@ function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
     qualificacao_area_id: null,
     gerar_qualificacao_ao_concluir: initial?.gerar_qualificacao_ao_concluir ?? 0,
     scorm_mastery_score: initial?.scorm_mastery_score ?? 70,
+    scorm_assessment_policy: initial?.scorm_assessment_policy ?? 'SCORED',
     scorm_versao: initial?.scorm_versao ?? '1.2',
     tipo_conteudo: initial?.tipo_conteudo ?? 'scorm',
     publicado: initial?.publicado ?? 0,
@@ -306,7 +307,7 @@ function validateForm(form: CreateCursoDTO) {
     e.qualificacao_tipo_id = 'Selecione o tipo de qualificação.';
   if (form.gerar_qualificacao_ao_concluir === 1 && !form.qualificacao_area_id)
     e.qualificacao_area_id = 'Selecione a Área da Qualificação.';
-  if ((form.scorm_mastery_score ?? 70) < 0 || (form.scorm_mastery_score ?? 70) > 100)
+  if (form.scorm_assessment_policy !== 'FORMATIVE' && ((form.scorm_mastery_score ?? 70) < 0 || (form.scorm_mastery_score ?? 70) > 100))
     e.scorm_mastery_score = 'Nota mínima entre 0 e 100.';
   return e;
 }
@@ -913,7 +914,21 @@ function CourseDrawer({
                         />
                       </div>
                       <div className="space-y-2">
-                        <FieldLabel label="Versão / nota mínima" />
+                        <FieldLabel label="Versão / critério de conclusão" />
+                        <select
+                          aria-label="Critério de conclusão SCORM"
+                          value={form.scorm_assessment_policy ?? 'SCORED'}
+                          onChange={(e) =>
+                            setForm((c) => ({
+                              ...c,
+                              scorm_assessment_policy: e.target.value as 'SCORED' | 'FORMATIVE',
+                            }))
+                          }
+                          className={fieldCls}
+                        >
+                          <option value="SCORED">Avaliação com nota mínima obrigatória</option>
+                          <option value="FORMATIVE">Participação integral — avaliação formativa, sem nota eliminatória</option>
+                        </select>
                         <div className="grid grid-cols-2 gap-3">
                           <select
                             value={form.scorm_versao ?? '1.2'}
@@ -934,6 +949,8 @@ function CourseDrawer({
                             min={0}
                             max={100}
                             value={form.scorm_mastery_score ?? 70}
+                            disabled={form.scorm_assessment_policy === 'FORMATIVE'}
+                            aria-label="Nota mínima SCORM"
                             onChange={(e) =>
                               setForm((c) => ({
                                 ...c,
@@ -944,6 +961,11 @@ function CourseDrawer({
                           />
                         </div>
                         <FieldError message={errors.scorm_mastery_score} />
+                        <p className="text-xs text-slate-600">
+                          {form.scorm_assessment_policy === 'FORMATIVE'
+                            ? 'A conclusão depende da evidência SCORM persistida e da sessão válida, sem exigir nota. Não confundir com aprovação em prova.'
+                            : 'A conclusão exige uma nota SCORM real igual ou superior à mínima configurada.'}
+                        </p>
                       </div>
                     </div>
                     {availableAreas.length > 0 && (
