@@ -43,6 +43,8 @@ test('production outcome audit has strict SHA, tenant, read-only scope, no learn
   assert.match(script, /pinnedProduction/);
   assert.match(script, /PINNED_SHA/);
   assert.match(script, /COMPANY_ID === 6/);
+  assert.match(script, /FULL_TENANT_ADMIN_SCOPE_REQUIRED/);
+  assert.match(script, /\/api\/auth\/me/);
   assert.match(script, /\/api\/lms\/matriculas\/curso\//);
   assert.match(script, /COURSE_ENROLLMENTS_HTTP_/);
   assert.match(script, /ENROLLMENT_TOTAL_CHANGED_RETRY_REQUIRED/);
