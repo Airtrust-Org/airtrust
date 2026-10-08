@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-07",
-    "last_reconciled_against": "0540 Maintenance manual identity bootstrap prepared after staging prerequisite drift blocked 0539",
-    "schema_v2_digest": "9b4e2eef1960fd09f1cee03e024df4078283f0eed8577ab357f51343aeb585fa",
+    "last_reconciled_against": "0541 operational training category production preflight prerequisite added as reviewed, remotely pending Schema V2 change",
+    "schema_v2_digest": "883994970845343718913e0fb1976574427d80acf446911147f8db77cb7ddbc6",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1406,6 +1406,20 @@
       "reviewed_manifest": "training-maintenance-manuals-bootstrap-0540.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-maintenance-manuals-bootstrap-0540.md",
       "note": "0540 repairs the staging prerequisite layer discovered after two fail-closed attempts: it restores the canonical Maintenance Doutrinação category and MNT_MGM/MNT_MOM/MNT_MCQ identities without standalone hours or employee/LMS/history writes, before 0539 -> 0537 -> 0538."
+    },
+    {
+      "change_file": "0541_training_operational_category_bootstrap.sql",
+      "change_id": "training-operational-category-bootstrap-0541",
+      "sha256": "8aee0c5b690b53cb0b3b24e69abc9a090a5274bf17a4da49ddcda467c4963211",
+      "targets": [
+        "qualificacoes_categorias"
+      ],
+      "domain": "training compliance / tenant-6 operational training category prerequisite for 0536",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-operational-category-bootstrap-0541.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-operational-category-bootstrap-0541.md",
+      "note": "0541 is a reviewed, tenant-6 only forward prerequisite for FDM three audiences 0536, needed because production read-only showed no TREINAMENTO_OPERACIONAL category. It creates the canonical category only if absent, without employee/LMS/history writes. File/manifest is not evidence of application; apply through governed Schema V2 after exact release authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
