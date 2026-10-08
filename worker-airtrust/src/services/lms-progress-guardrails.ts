@@ -180,7 +180,7 @@ export function isTrustedScorm12Finish(data: {
   const location = extractScormLocationFromCmiJson(data.cmi_json);
   return (
     normalizeScormToken(data.lesson_status) === 'incomplete' &&
-    normalizeCommitEvent(data.commit_event) === 'SCORM_FINISH' &&
+    ['SCORM_FINISH', 'SCORM_USER_FINALIZE'].includes(normalizeCommitEvent(data.commit_event) || '') &&
     data.completion_candidate === true &&
     Number.isFinite(Date.parse(String(data.completion_observed_at ?? ''))) &&
     location?.total != null &&
