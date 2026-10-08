@@ -75,7 +75,7 @@ print('AVSEC_0544_SQLITE_PASS')
     expect(pre).toContain('no-related-profile');
     expect(post).toContain('exact-corporate-reclassification');
     expect(post).toContain('ledger-0544');
-    expect((sql.match(/UPDATE qualificacoes_historico\\nSET /g) || []).length).toBe(1);
+    expect((sql.match(/UPDATE qualificacoes_historico\s+SET /g) || []).length).toBe(1);
     expect(sql).not.toMatch(/(?:INSERT INTO|DELETE FROM|DROP TABLE|UPDATE funcionarios|UPDATE lms_matriculas)/);
     expect(sql).toContain('WHERE id=5276 AND empresa_id=6 AND funcionario_id=111');
   });
