@@ -239,9 +239,9 @@ export default function LmsPlayerH5p() {
               timestamp: stmt.timestamp ?? new Date().toISOString(),
             };
 
-            const terminalVerb = /\\/(passed|completed)$/i.test(stmt.verb.id);
+            const terminalVerb = /\/(passed|completed)$/i.test(stmt.verb.id);
             const explicitFailure = stmt.result?.success === false ||
-              /\\/failed$/i.test(stmt.verb.id);
+              /\/failed$/i.test(stmt.verb.id);
             if (terminalVerb && !explicitFailure) {
               // H5P does not have a standardized internal "Concluir curso"
               // button. Keep its terminal statement pending until the student
