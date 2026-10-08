@@ -42,15 +42,18 @@ export function trainingComplianceHistoricalModalitySql(
   hasHistoricalFormat: boolean,
   hasModelType: boolean,
   hasHistoricalCode: boolean,
+  hasModelCategory: boolean,
 ): string {
   const legacy = hasHistoricalFormat ? "UPPER(TRIM(COALESCE(qh.formato_codigo,'')))" : "''";
-  if (!hasModelType) return legacy;
-  const model = hasHistoricalCode
-    ? "UPPER(TRIM(COALESCE(NULLIF(TRIM(qt_history_id.tipo),''),qt_history_code.tipo,'')))"
-    : "UPPER(TRIM(COALESCE(qt_history_id.tipo,'')))";
-  return `CASE WHEN ${legacy} NOT IN ('','NAO_CLASSIFICADO')
-    THEN ${legacy}
-    WHEN ${model} IN ('PRATICO','PRÁTICO','PRESENCIAL','EAD','HIBRIDO','DOCUMENTAL','OUTRA')
-    THEN ${model}
+  if (!hasModelType && !hasModelCategory) return legacy;
+  const canonicalValue = (field: string) => hasHistoricalCode
+    ? `UPPER(TRIM(COALESCE(NULLIF(TRIM(qt_history_id.${field}),''),qt_history_code.${field},'')))`
+    : `UPPER(TRIM(COALESCE(qt_history_id.${field},'')))`;
+  const model = hasModelType ? canonicalValue('tipo') : "''";
+  const category = hasModelCategory ? canonicalValue('categoria') : "''";
+  const recognized = "('PRATICO','PRÁTICO','PRESENCIAL','EAD','HIBRIDO','DOCUMENTAL','OUTRA')";
+  return `CASE WHEN ${legacy} NOT IN ('','NAO_CLASSIFICADO') THEN ${legacy}
+    WHEN ${model} IN ${recognized} THEN ${model}
+    WHEN ${category} IN ${recognized} THEN ${category}
     ELSE ${legacy} END`;
 }
