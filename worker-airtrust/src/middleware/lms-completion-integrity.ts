@@ -257,6 +257,24 @@ function contentEvidenceValidated(row: EnrollmentEvidenceRow, source: LmsComplet
   return false;
 }
 
+function hasTerminalFormativeScormStatus(row: EnrollmentEvidenceRow, incoming: JsonRecord): boolean {
+  // Formative completion requires a real SCORM terminal signal. Client-side
+  // completion_candidate, slide count and generic PATCH progress do not count.
+  return [incoming.lesson_status, incoming.completion_status,
+    row.lesson_status, row.completion_status]
+    .some((value) => ['complete', 'completed'].includes(normalizeStatus(value)));
+}
+
+function formativeTerminalMissing(): LmsCompletionDecision {
+  return {
+    accepted: false,
+    code: 'COMPLETION_EVIDENCE_INSUFFICIENT',
+    scorePct: null,
+    masteryScore: null,
+    failurePrecedence: false,
+  };
+}
+
 function packageBound(row: EnrollmentEvidenceRow): boolean {
   const type = String(row.tipo_conteudo ?? 'scorm')
     .trim()
@@ -377,6 +395,10 @@ async function guardScormCommit(
   const ownershipError = await enforceOwnership(c, row);
   if (ownershipError) return ownershipError;
   const assetSessionValid = await hasValidAssetSession(c, row);
+  if (row.scorm_assessment_policy === 'FORMATIVE' &&
+      !failureSignal && !hasTerminalFormativeScormStatus(row, incoming)) {
+    return decisionRejection(c, matriculaId, formativeTerminalMissing());
+  }
   const decision = buildDecision(row, 'scorm', incoming, assetSessionValid, {
     explicitCompletion:
       ['completed', 'complete'].includes(completion) || incoming.completion_candidate === true,
@@ -444,6 +466,10 @@ async function guardManualFinalize(
   if (ownershipError) return ownershipError;
   if (String(row.status).toUpperCase() === 'CONCLUIDO') return null;
   const assetSessionValid = await hasValidAssetSession(c, row);
+  if (row.scorm_assessment_policy === 'FORMATIVE' &&
+      row.tipo_conteudo === 'scorm' && !hasTerminalFormativeScormStatus(row, {})) {
+    return decisionRejection(c, matriculaId, formativeTerminalMissing());
+  }
   const storedCompletion =
     ['completed', 'complete'].includes(normalizeStatus(row.completion_status)) ||
     Number(row.progresso_pct ?? 0) >= 100;
