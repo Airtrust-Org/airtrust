@@ -61,6 +61,22 @@ describe('training catalog source-backed metadata 0537', () => {
     expect(sql).not.toContain('INSERT INTO funcionarios_compliance_condicoes');
   });
 
+  it('keeps staging LGPD bootstrap guarded and 0537 PTM source checks aligned', () => {
+    const preflight = read('scripts/staging/validate-0537-preflight.sh');
+    const adapter = read('scripts/staging/staging-migration-adapters.mjs');
+    const post = read('scripts/staging/validate-0537-postconditions.sh');
+    const source = 'PRG-MNT-002 — Programa de Treinamento de Manutenção Rev.06';
+    expect(preflight).toContain('lgpd-staging-template');
+    expect(preflight).toContain('lgpd-staging-bootstrap-required');
+    expect(adapter).toContain("migrationName === '0537_training_catalog_source_backed_metadata.sql'");
+    expect(adapter).toContain("src.codigo='LGPD_SEG_INFO'");
+    expect(adapter).toContain("SELECT 6,'LGPD'");
+    expect(post).toContain("instr(referencias,'PRG-MNT-002')>0 AND instr(referencias,'Programa de Treinamento de Manutenção Rev.06')>0");
+    const production = read('scripts/schema-v2/validate-0537-production-postconditions.sh');
+    expect(production).toContain("instr(referencias,'PRG-MNT-002')>0 AND instr(referencias,'Programa de Treinamento de Manutenção Rev.06')>0");
+    expect(read(changePath)).toContain(source);
+  });
+
   it('wires governed staging and production validation', () => {
     const runner = read('scripts/staging/apply-approved-migration-with-recovery-point.sh');
     const staging = read('.github/workflows/staging-d1-schema-change.yml');
