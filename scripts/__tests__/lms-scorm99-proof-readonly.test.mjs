@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PROOF_SQL, validate, summarize } from '../production/lms-scorm99-proof-readonly.mjs';
+import { PROOF_SQL, FDM_HISTORY_SQL, validate, validateHistory, summarize } from '../production/lms-scorm99-proof-readonly.mjs';
 
 const example={
  curso_id:13,audience:'tripulacao',enrolled:4,employee_active_enrollments:3,concluded:1,
@@ -50,4 +50,31 @@ test('workflow only runs by governed dispatch with canonical gates and no produc
  assert.doesNotMatch(y,/\bpush:/);
  assert.doesNotMatch(y,/\bpull_request:/);
  assert.doesNotMatch(y,/\bwrangler\s+(?:deploy|d1\s+execute.+(?:INSERT|UPDATE|DELETE))\b/i);
+});
+
+
+test('FDM legacy history preserves cancelled/soft-deleted records and checks destination counts',()=>{
+ const row={
+  curso_id:13,audience:'tripulacao',history_rows:11,non_cancelled:0,
+  cancelled_or_soft_deleted:11,soft_deleted:11,cancelled_status:11,
+  concluded_status_any:0,raw_99_any:8,raw_100_any:8,
+  raw_99_with_explicit_scorm_end:3,inactive_or_missing_employee:0,
+ };
+ const dest={...row,curso_id:71,audience:'destination',
+   history_rows:0,non_cancelled:0,cancelled_or_soft_deleted:0,
+   soft_deleted:0,cancelled_status:0,raw_99_any:0,raw_100_any:0,
+   raw_99_with_explicit_scorm_end:0};
+ assert.equal(validateHistory([row,dest]).length,2);
+ assert.throws(()=>validateHistory([{...row,non_cancelled:1}]),/FDM_HISTORY_PARTITION_INVALID/);
+ assert.throws(()=>validateHistory([{...row,raw_100_any:9}]),/FDM_HISTORY_PROGRESS_INVALID/);
+ assert.match(FDM_HISTORY_SQL,/m\.curso_id IN \(13,71,72,73\)/);
+ assert.match(FDM_HISTORY_SQL,/SUM\(soft_deleted\) soft_deleted/);
+ assert.match(FDM_HISTORY_SQL,/cancelled_or_soft_deleted/);
+ assert.match(FDM_HISTORY_SQL,/raw_99_with_explicit_scorm_end/);
+ assert.match(FDM_HISTORY_SQL,/f\.funcao/);
+ assert.match(FDM_HISTORY_SQL,/f\.cargo/);
+ assert.match(FDM_HISTORY_SQL,/MECâNICO/);
+ assert.match(FDM_HISTORY_SQL,/AUXILIAR DE MANUTENçãO/);
+ assert.doesNotMatch(FDM_HISTORY_SQL,/\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\s/i);
+ assert.doesNotMatch(FDM_HISTORY_SQL,/SELECT\s+(?:m\.\*|f\.nome|f\.id|m\.id|ps\.cmi_json)/i);
 });
