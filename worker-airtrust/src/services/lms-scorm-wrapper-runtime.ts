@@ -284,7 +284,12 @@ export function buildScormSessionCloseRuntimeScript(): string {
     try { probeFrameProgress(); } catch (_ignored) { /* do not infer completion */ }
     var location = parseScormLocationPair(getScormLocation());
     var status = String(cmi['cmi.core.lesson_status'] || cmi['cmi.success_status'] || '').toLowerCase();
-    if (!location || location.current < location.total || status === 'failed') {
+    var visited = Array.isArray(cmi['airtrust.viewed_slides']) ? cmi['airtrust.viewed_slides'] : [];
+    var fullyVisited = location && location.total <= 1000 &&
+      Number(cmi['airtrust.total_slides']) === location.total &&
+      visited.length === location.total &&
+      visited.every(function(n, index) { return n === index + 1; });
+    if (!fullyVisited || status === 'failed') {
       postToParent({ type: 'lms:completion-error', matriculaId: MATRICULA_ID,
         code: 'SCORM_REQUIREMENTS_PENDING',
         message: 'Ainda faltam requisitos do conteúdo ou da avaliação.' });
