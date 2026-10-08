@@ -49,6 +49,11 @@ test('FDM preflight is production-SHA-pinned, scoped and has no D1/R2/LMS write 
   const s=readFileSync(new URL('../production/lms-fdm13-reassignment-preflight-readonly.mjs',import.meta.url),'utf8');
   const w=readFileSync(new URL('../../.github/workflows/production-lms-fdm13-reassignment-preflight-readonly.yml',import.meta.url),'utf8');
   assert.match(s,/SOURCE_COURSE = 13/);
+  // The legacy source can be inactive/unpublished and is therefore absent
+  // from the regular catalog. It must still be checked by its scoped detail
+  // endpoint before its historical enrollments are considered.
+  assert.match(s,/safeGet\(token,'\/api\/lms\/cursos\/'\+SOURCE_COURSE\)/);
+  assert.match(s,/Number\(sourceCourse\?\.data\?\.id\)===SOURCE_COURSE/);
   assert.match(s,/ADMIN_FULL_TENANT_REQUIRED/);
   assert.match(s,/PRODUCTION_SHA_MISMATCH/);
   assert.match(s,/TENANT_CONTEXT_MISMATCH/);
