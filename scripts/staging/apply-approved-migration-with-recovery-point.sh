@@ -72,6 +72,7 @@ APPROVED_MIGRATIONS=(
   "0539_training_doutrinacao_bootstrap.sql"
   "0540_training_maintenance_catalog_identities_bootstrap.sql"
   "0541_training_operational_category_bootstrap.sql"
+  "0542_lms_scorm_formative_assessment_policy.sql"
 )
 
 apply=false
@@ -322,6 +323,9 @@ validate_postconditions() {
     0541_training_operational_category_bootstrap.sql)
       bash scripts/staging/validate-0541-postconditions.sh --target="$db_name"
       ;;
+    0542_lms_scorm_formative_assessment_policy.sql)
+      bash scripts/staging/validate-0542-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -507,6 +511,11 @@ fi
 if [[ "$migration_basename" == "0541_training_operational_category_bootstrap.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0541-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0541_OK=true"
+fi
+
+if [[ "$migration_basename" == "0542_lms_scorm_formative_assessment_policy.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0542-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0542_OK=true"
 fi
 
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then
