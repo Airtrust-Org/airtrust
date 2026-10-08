@@ -24,6 +24,7 @@ type EnrollmentEvidenceRow = {
   ativo: number;
   publicado: number;
   scorm_mastery_score: number | null;
+  scorm_assessment_policy: 'SCORED' | 'FORMATIVE';
   scorm_package_r2_prefix: string | null;
   scorm_launch_file: string | null;
   gerar_qualificacao_ao_concluir: number;
@@ -124,7 +125,7 @@ async function readEnrollmentEvidence(
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct,
               m.qualificacao_historico_id,
               c.id AS curso_id, c.tipo_conteudo, c.ativo, c.publicado,
-              c.scorm_mastery_score, c.scorm_package_r2_prefix, c.scorm_launch_file,
+              c.scorm_mastery_score, c.scorm_assessment_policy, c.scorm_package_r2_prefix, c.scorm_launch_file,
               c.gerar_qualificacao_ao_concluir,
               p.lesson_status, p.completion_status, p.success_status,
               p.score_raw, p.score_min, p.score_max, p.score_scaled,
@@ -289,11 +290,12 @@ function buildDecision(
     hasIncomingRuntimeEvidence(incoming) ||
     Number(row.xapi_count ?? 0) > 0 ||
     progressPct > 0;
-  // Preserve the existing qualification policy: interactive content that
-  // generates an operational qualification must still satisfy the assessment
-  // gate. The new non-SCORM evidence gate must not weaken SCORM/H5P rules.
-  const requiresAssessment =
-    interactive && (row.gerar_qualificacao_ao_concluir === 1 || row.scorm_mastery_score !== null);
+  // An explicit, server-owned course policy distinguishes formative participation
+  // from graded assessment. Only FORMATIVE can omit a score; missing/unknown
+  // policy stays SCORED (fail-closed, including legacy rows and test fixtures).
+  const isFormative = row.scorm_assessment_policy === 'FORMATIVE' && row.tipo_conteudo === 'scorm';
+  const requiresAssessment = interactive && !isFormative &&
+    (row.gerar_qualificacao_ao_concluir === 1 || row.scorm_mastery_score !== null);
 
   return evaluateLmsCompletionEvidence({
     source,
@@ -312,7 +314,7 @@ function buildDecision(
     scoreMin: incoming.score_min ?? row.score_min,
     scoreMax: incoming.score_max ?? row.score_max,
     scoreScaled: incoming.score_scaled ?? row.score_scaled,
-    masteryScore: row.scorm_mastery_score,
+    masteryScore: isFormative ? null : row.scorm_mastery_score,
     requiresAssessment,
     generatesQualification: row.gerar_qualificacao_ao_concluir === 1,
     informativeCourse: !interactive && row.gerar_qualificacao_ao_concluir !== 1,
