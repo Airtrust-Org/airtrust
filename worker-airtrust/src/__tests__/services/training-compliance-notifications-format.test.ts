@@ -5,6 +5,7 @@ import {
   normalizeNotificationMessageTemplate,
   renderComplianceEmailHtml,
   complianceTemplateVariables,
+  getComplianceNotificationPolicy,
 } from '../../services/training-compliance-notifications';
 
 describe('training compliance notification formatting', () => {
@@ -32,13 +33,13 @@ describe('training compliance notification formatting', () => {
     expect(template).not.toContain('GERÊNCIA DE TREINAMENTO | COSTA DO SOL');
     expect(template).not.toContain('Agradecemos sua colaboração');
     expect(template).not.toContain('mensagem automática');
-    expect(template).toContain('Gerência de Treinamento\\nCosta do Sol');
+    expect(template).toContain('Gerência de Treinamento\nCosta do Sol');
     expect(DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_subject_template).toBe(
       'Treinamento obrigatório {{assunto_situacao}} — {{treinamento}}',
     );
   });
 
-  it('retains custom tenant copy and the previous long default as a normalizable legacy template', () => {
+  it('upgrades the previous stored default without overwriting custom tenant copy', async () => {
     const custom = 'Olá, {{funcionario}}! Mensagem específica da empresa.';
     expect(normalizeNotificationMessageTemplate(custom, DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template))
       .toBe(custom);
@@ -51,10 +52,32 @@ describe('training compliance notification formatting', () => {
       'Agradecemos sua colaboração e seu compromisso com a segurança operacional.', '',
       'Gerência de Treinamento', 'Costa do Sol', '',
       'Esta é uma comunicação automática. Não é necessário responder a este e-mail.',
-    ].join('\\n');
-    // These are the legacy defaults resolved by policy normalization.
-    expect(formerLongDefault).toContain('GERÊNCIA DE TREINAMENTO | COSTA DO SOL');
-    expect(DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template).not.toBe(formerLongDefault);
+    ].join('\n');
+    const fromStoredPolicy = async (emailMessageTemplate: string) => {
+      const db = {
+        prepare: () => ({
+          bind: () => ({
+            first: async () => ({
+              cores_tema: JSON.stringify({
+                system_settings: {
+                  trainingComplianceNotifications: {
+                    email_message_template: emailMessageTemplate,
+                    email_subject_template:
+                      'Ação necessária | Capacitação obrigatória {{assunto_situacao}} – {{treinamento}}',
+                  },
+                },
+              }),
+            }),
+          }),
+        }),
+      } as unknown as Parameters<typeof getComplianceNotificationPolicy>[0];
+      return getComplianceNotificationPolicy(db, 1);
+    };
+    const upgraded = await fromStoredPolicy(formerLongDefault);
+    expect(upgraded.email_message_template).toBe(DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template);
+    expect(upgraded.email_subject_template).toBe(DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_subject_template);
+    const preserved = await fromStoredPolicy(custom);
+    expect(preserved.email_message_template).toBe(custom);
   });
 
   it('keeps recipient name and course values dynamic and highlights the required action', () => {
@@ -69,7 +92,7 @@ describe('training compliance notification formatting', () => {
     expect(variables.introducao).toBe('Você tem um treinamento obrigatório pendente:');
     expect(variables.orientacao).toBe('Pedimos que realize o treinamento o quanto antes para manter suas qualificações em dia.');
     const html = renderComplianceEmailHtml(
-      'Olá, Pessoa Exemplo!\\n\\nCurso: CFIT\\nSituação: Pendente de realização\\n\\nImportante: Treinamento obrigatório.',
+      'Olá, Pessoa Exemplo!\n\nCurso: CFIT\nSituação: Pendente de realização\n\nImportante: Treinamento obrigatório.',
     );
     expect(html).toContain('<strong>Importante:</strong> Treinamento obrigatório.');
   });
