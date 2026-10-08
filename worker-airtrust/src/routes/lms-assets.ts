@@ -2190,10 +2190,10 @@ ${buildScormProgressParsersScript()}
       cs === 'completed' ||
       (ss === 'passed' && cs !== 'incomplete')
     ) {
-      notifyCompletionPending('saving', 'status-signaled-completion');
+      // Save terminal package status; the student's confirmation triggers issuance.
       emitTelemetry('SCORM_COMPLETION_CANDIDATE', {
-        decision: 'pending-server-confirmation',
-        reason: 'status-signaled-completion',
+        decision: 'awaiting-user-confirmation',
+        reason: 'terminal-package-status-saved',
       });
       commit(buildPayload(), 0, 'SCORM_COMPLETION_CANDIDATE');
     }
@@ -2416,7 +2416,7 @@ ${buildScormSessionCloseRuntimeScript()}
       return 'true';
     },
     LMSFinish: function() {
-      probeFrameProgress(); var finalLocation = parseLocationMarker(getScormLocation()); if (finalLocation && finalLocation.total != null && finalLocation.current >= finalLocation.total) notifyCompletionPending('saving', 'finish-at-final-location'); diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
+      probeFrameProgress(); diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
       commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
