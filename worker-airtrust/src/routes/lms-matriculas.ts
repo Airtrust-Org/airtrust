@@ -1452,7 +1452,6 @@ app.post('/scorm/commit', async (c) => {
     location: mergedLocation, policy: matricula.scorm_assessment_policy,
     masteryScore: matricula.scorm_mastery_score, scorePct: effectiveScorePct });
   const falha = !matriculaWasConcluido && isScormFailed(d);
-
   let progressoPct = progressoAnterior;
   if (sucesso) {
     progressoPct = 100;
