@@ -26,6 +26,8 @@ test('require aggregate-only static production query and explicit inactive cover
  assert.match(PROOF_SQL,/LEFT JOIN funcionarios f/);
  assert.match(PROOF_SQL,/LEFT JOIN lms_progresso_scorm ps/);
  assert.match(PROOF_SQL,/MECâNICO/);
+ assert.match(PROOF_SQL,/NULLIF\(TRIM\(f\.funcao\)/);
+ assert.match(PROOF_SQL,/NULLIF\(TRIM\(f\.cargo\)/);
  assert.match(PROOF_SQL,/explicit_but_pending/);
  assert.match(PROOF_SQL,/mastery_unproven/);
  assert.doesNotMatch(PROOF_SQL,/\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH)\s/i);
