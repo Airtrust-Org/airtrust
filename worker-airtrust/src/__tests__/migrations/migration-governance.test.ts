@@ -135,7 +135,9 @@ describe('migration governance', () => {
     // 0542 makes formative-vs-scored SCORM policy explicit; defaults remain SCORED.
     expect(files).toContain('0541_training_operational_category_bootstrap.sql');
     expect(files).toContain('0542_lms_scorm_formative_assessment_policy.sql');
-    const expectedLatest = 542;
+    // 0543 narrowly corrects tenant-6 FDM course qualification bindings via Schema V2.
+    expect(files).toContain('0543_fdm_target_qualification_links.sql');
+    const expectedLatest = 543;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
