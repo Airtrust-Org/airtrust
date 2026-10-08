@@ -75,7 +75,7 @@ def col_index(ref: str) -> int:
     return out - 1
 
 
-def read_control_workbook(path: Path) -> list[dict[str, str]]:
+def read_control_workbook(path: Path, diagnostics: Counter | None = None) -> list[dict[str, str]]:
     with ZipFile(path) as archive:
         shared: list[str] = []
         if "xl/sharedStrings.xml" in archive.namelist():
@@ -119,10 +119,18 @@ def read_control_workbook(path: Path) -> list[dict[str, str]]:
 
                 employee_name = str(values.get(0, "")).strip()
                 raw_date = str(values.get(2, "")).strip()
-                if not employee_name or normalize(employee_name) == "NOME DO FUNCIONARIO" or not raw_date:
+                if not employee_name or normalize(employee_name) == "NOME DO FUNCIONARIO":
+                    continue
+                if diagnostics is not None:
+                    diagnostics["source_named_rows"] += 1
+                if not raw_date:
+                    if diagnostics is not None:
+                        diagnostics["source_undated_rows"] += 1
                     continue
                 completion = excel_date(raw_date)
                 if not completion:
+                    if diagnostics is not None:
+                        diagnostics["source_unverified_date_rows"] += 1
                     continue
                 key = (normalize(employee_name), code, completion)
                 if key in seen:
@@ -194,8 +202,12 @@ def candidate_hash(rows: list[dict]) -> str:
 
 
 def audit(source: Path, reference: Path) -> dict:
-    records = read_control_workbook(source)
-    comparison = read_control_workbook(reference)
+    source_diagnostics = Counter()
+    reference_diagnostics = Counter()
+    records = read_control_workbook(source, source_diagnostics)
+    comparison = read_control_workbook(reference, reference_diagnostics)
+    if source_diagnostics != reference_diagnostics:
+        raise ValueError("controlled workbook completion counts disagree: reconciliation refused")
     if sorted((r["employee_name"], r["code"], r["date"]) for r in records) != sorted(
         (r["employee_name"], r["code"], r["date"]) for r in comparison
     ):
@@ -299,6 +311,9 @@ def audit(source: Path, reference: Path) -> dict:
         "reference_sha256": hashlib.sha256(reference.read_bytes()).hexdigest(),
         "source_copies_agree": True,
         "source_rows": len(records),
+        "source_named_rows": source_diagnostics["source_named_rows"],
+        "source_rows_without_completion": source_diagnostics["source_undated_rows"] + source_diagnostics["source_unverified_date_rows"],
+        "source_unverified_date_rows": source_diagnostics["source_unverified_date_rows"],
         "source_people": len({row["employee_name"] for row in records}),
         "stats": dict(stats),
         "by_code": {code: dict(counts) for code, counts in sorted(by_code.items())},
