@@ -592,6 +592,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0542-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight FDM course 71/72 qualification bindings 0543
+        if: ${{ inputs.change_id == 'fdm-target-qualification-links-0543' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0543-production-preflight.sh --target=airtrust-db
+
       - name: Backup governance ledger
         shell: bash
         working-directory: worker-airtrust
@@ -667,6 +675,14 @@ jobs:
             "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='${CHANGE_ID}' AND baseline_id='${BASELINE_ID}' AND file_hash='${FILE_HASH}' AND plan_hash='${PLAN_HASH}' AND github_sha='${EVENT_SHA}';")"
           total="$(printf '%s' "$rows" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d)[0].results[0].total));")"
           [[ "$total" == '1' ]] || { echo 'Schema changed without the exact reviewed ledger row.' >&2; exit 1; }
+
+      - name: Post-validate FDM course 71/72 qualification bindings 0543
+        if: ${{ inputs.change_id == 'fdm-target-qualification-links-0543' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0543-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate schema contract
         shell: bash
