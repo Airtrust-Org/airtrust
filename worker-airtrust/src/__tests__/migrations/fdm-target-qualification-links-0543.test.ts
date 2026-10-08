@@ -48,7 +48,8 @@ print('FDM_0543_SQLITE_PASS')
   expect((sql.match(/UPDATE lms_cursos/g)||[]).length).toBe(2);
   expect(sql).not.toMatch(/(?:INSERT INTO|DELETE FROM|UPDATE lms_matriculas|UPDATE qualificacoes_historico)/);
   expect(pre).toContain('destination-enrollments-absent 0');
-  expect(pre).toContain('unique-qualification-targets 2');
+  expect(pre).toContain('unique-qualification-tripulacao 1');
+  expect(pre).toContain('unique-qualification-manutencao 1');
   expect(pre).toContain('applied-0536-and-0541 2');
   expect(post).toContain('exact-matched-bindings 2');
   expect(post).toContain('no-destination-enrollments-created 0');
