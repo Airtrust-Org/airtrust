@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Link2, UserPlus } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
+import { notifyComplianceSaveWithEnrollment } from './complianceEnrollmentFeedback';
 import {
   nextComplianceTableSort,
   sortComplianceRows,
@@ -223,8 +224,8 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
         }),
       );
     },
-    onSuccess: async () => {
-      showToast.success('Reconciliação aplicada.');
+    onSuccess: async (result) => {
+      notifyComplianceSaveWithEnrollment(result, 'Reconciliação aplicada.');
       await invalidate();
     },
     onError: (error) =>
