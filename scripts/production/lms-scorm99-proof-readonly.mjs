@@ -181,35 +181,35 @@ SELECT audience,
  SUM(destination_active) already_active_at_target,
  SUM(destination_historical) any_target_history,
  SUM(valid_model_link) linked_target_rows,
- SUM(CASE WHEN COALESCE(progresso_pct,0)>=100 THEN 1 ELSE 0 END) legacy_raw100,
- SUM(CASE WHEN COALESCE(progresso_pct,0)<100 THEN 1 ELSE 0 END) legacy_below100,
- SUM(CASE WHEN COALESCE(progresso_pct,0)>=100 AND explicit_end=1 THEN 1 ELSE 0 END) raw100_explicit_end,
- SUM(CASE WHEN COALESCE(progresso_pct,0)>=100 AND explicit_end=0 THEN 1 ELSE 0 END) raw100_no_explicit_end,
- SUM(CASE WHEN COALESCE(progresso_pct,0)>=100 AND explicit_failure=1 THEN 1 ELSE 0 END) raw100_explicit_failure,
- SUM(CASE WHEN COALESCE(progresso_pct,0)>=100 AND has_scorm=0 THEN 1 ELSE 0 END) raw100_no_scorm,
- SUM(CASE WHEN COALESCE(progresso_pct,0)>=100 AND committed=0 THEN 1 ELSE 0 END) raw100_no_commit,
- SUM(CASE WHEN COALESCE(progresso_pct,0)>=100 AND explicit_end=1 AND legacy_mastery IS NOT NULL AND score_pct>=legacy_mastery THEN 1 ELSE 0 END) raw100_explicit_mastery_met,
- SUM(CASE WHEN COALESCE(progresso_pct,0)>=100 AND explicit_end=1 AND legacy_mastery IS NOT NULL AND (score_pct IS NULL OR score_pct<legacy_mastery) THEN 1 ELSE 0 END) raw100_explicit_mastery_unproven,
- SUM(CASE WHEN COALESCE(progresso_pct,0)>=100 AND explicit_end=1 AND legacy_mastery IS NULL THEN 1 ELSE 0 END) raw100_explicit_no_mastery_requirement
+ SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 THEN 1 ELSE 0 END) legacy_raw99,
+ SUM(CASE WHEN COALESCE(progresso_pct,0)<99 THEN 1 ELSE 0 END) legacy_below100,
+ SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 AND explicit_end=1 THEN 1 ELSE 0 END) raw99_explicit_end,
+ SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 AND explicit_end=0 THEN 1 ELSE 0 END) raw99_no_explicit_end,
+ SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 AND explicit_failure=1 THEN 1 ELSE 0 END) raw99_explicit_failure,
+ SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 AND has_scorm=0 THEN 1 ELSE 0 END) raw99_no_scorm,
+ SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 AND committed=0 THEN 1 ELSE 0 END) raw99_no_commit,
+ SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 AND explicit_end=1 AND legacy_mastery IS NOT NULL AND score_pct>=legacy_mastery THEN 1 ELSE 0 END) raw99_explicit_mastery_met,
+ SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 AND explicit_end=1 AND legacy_mastery IS NOT NULL AND (score_pct IS NULL OR score_pct<legacy_mastery) THEN 1 ELSE 0 END) raw99_explicit_mastery_unproven,
+ SUM(CASE WHEN COALESCE(progresso_pct,0)>=99 AND explicit_end=1 AND legacy_mastery IS NULL THEN 1 ELSE 0 END) raw99_explicit_no_mastery_requirement
 FROM joined GROUP BY audience ORDER BY audience`;
 
 export function validateReenrollment(rows){
  fail(Array.isArray(rows)&&rows.length<=3,'FDM_REENROLLMENT_GROUPS_INVALID');
  const keys=['source_canceled_rows','unique_staff','active_staff_rows','inactive_staff_rows','duplicate_source_rows',
- 'already_active_at_target','any_target_history','linked_target_rows','legacy_raw100','legacy_below100',
- 'raw100_explicit_end','raw100_no_explicit_end','raw100_explicit_failure','raw100_no_scorm',
- 'raw100_no_commit','raw100_explicit_mastery_met','raw100_explicit_mastery_unproven',
- 'raw100_explicit_no_mastery_requirement'];
+ 'already_active_at_target','any_target_history','linked_target_rows','legacy_raw99','legacy_below100',
+ 'raw99_explicit_end','raw99_no_explicit_end','raw99_explicit_failure','raw99_no_scorm',
+ 'raw99_no_commit','raw99_explicit_mastery_met','raw99_explicit_mastery_unproven',
+ 'raw99_explicit_no_mastery_requirement'];
  const seen=new Set();
  for(const row of rows){
   fail(['tripulacao','manutencao','excluded'].includes(row.audience),'FDM_REENROLLMENT_GROUP_INVALID');
   fail(!seen.has(row.audience),'FDM_REENROLLMENT_DUPLICATE_GROUP');seen.add(row.audience);
   for(const k of keys)fail(Number.isInteger(row[k])&&row[k]>=0&&row[k]<=row.source_canceled_rows,'FDM_REENROLLMENT_COUNT_INVALID_'+k);
   fail(row.active_staff_rows+row.inactive_staff_rows===row.source_canceled_rows,'FDM_REENROLLMENT_STAFF_PARTITION');
-  fail(row.legacy_raw100+row.legacy_below100===row.source_canceled_rows,'FDM_REENROLLMENT_PROGRESS_PARTITION');
-  fail(row.raw100_explicit_end+row.raw100_no_explicit_end===row.legacy_raw100,'FDM_REENROLLMENT_COMPLETION_PARTITION');
-  fail(row.raw100_explicit_mastery_met+row.raw100_explicit_mastery_unproven+
-   row.raw100_explicit_no_mastery_requirement===row.raw100_explicit_end,'FDM_REENROLLMENT_MASTERY_PARTITION');
+  fail(row.legacy_raw99+row.legacy_below100===row.source_canceled_rows,'FDM_REENROLLMENT_PROGRESS_PARTITION');
+  fail(row.raw99_explicit_end+row.raw99_no_explicit_end===row.legacy_raw99,'FDM_REENROLLMENT_COMPLETION_PARTITION');
+  fail(row.raw99_explicit_mastery_met+row.raw99_explicit_mastery_unproven+
+   row.raw99_explicit_no_mastery_requirement===row.raw99_explicit_end,'FDM_REENROLLMENT_MASTERY_PARTITION');
  }
  return rows;
 }
