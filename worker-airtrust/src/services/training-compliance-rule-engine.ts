@@ -26,7 +26,24 @@ export type TrainingComplianceRuleShape = {
   aeronave_modelo: string | null;
   condicao_id: number | null;
   perfil_competencia?: string | null;
+  qualificacao_tipo_codigo?: string | null;
+  obrigatoriedade?: string | null;
 };
+
+function isSpecializedAvsecRequirement(rule: TrainingComplianceRuleShape): boolean {
+  return String(rule.qualificacao_tipo_codigo || '').toUpperCase() === 'D1' &&
+    String(rule.perfil_competencia || '').trim().toUpperCase().startsWith('AVSEC_') &&
+    String(rule.obrigatoriedade || '').toUpperCase() === 'OBRIGATORIA';
+}
+
+function excludeSupersededCorporateAvsec<T extends TrainingComplianceRuleShape>(rules: T[]): T[] {
+  if (!rules.some(isSpecializedAvsecRequirement)) return rules;
+  return rules.filter((rule) => !(
+    String(rule.qualificacao_tipo_codigo || '').toUpperCase() === 'AVSEC_CONSC' &&
+    rule.escopo === 'EMPRESA' && !rule.condicao_id && !rule.aeronave_modelo &&
+    String(rule.obrigatoriedade || '').toUpperCase() === 'OBRIGATORIA'
+  ));
+}
 
 export function trainingComplianceRulePriority(rule: TrainingComplianceRuleShape): number {
   const scope =
@@ -118,7 +135,7 @@ export function resolveTrainingComplianceRules<T extends TrainingComplianceRuleS
     if (profileWinners.length > 0) resolved.push(...profileWinners);
     else if (generic) resolved.push(generic);
   }
-  return resolved;
+  return excludeSupersededCorporateAvsec(resolved);
 }
 
 export function withTrainingComplianceRuleImpact<T extends TrainingComplianceRuleShape>(
