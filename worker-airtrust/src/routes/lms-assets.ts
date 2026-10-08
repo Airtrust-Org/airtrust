@@ -1940,6 +1940,7 @@ ${buildScormProgressParsersScript()}
   function isFinalCommitEvent(eventType) {
     return [
       'SCORM_FINISH',
+      'SCORM_USER_FINALIZE',
       'SCORM_COMPLETION_CANDIDATE',
       'SCORM_BEFORE_UNLOAD_COMMIT',
       'SCORM_VISIBILITY_COMMIT',
@@ -2361,6 +2362,11 @@ ${buildScormSessionCloseRuntimeScript()}
     // so they must be matched by source identity before the parent-origin gate.
     if (relayPackageDiagnostics(event)) return;
     if (PARENT_ORIGIN !== '*' && event.origin !== PARENT_ORIGIN) return;
+    if (event.data.type === 'lms:request-completion') {
+      if (event.source !== window.parent || event.data.matriculaId !== MATRICULA_ID) return;
+      performExplicitCompletionRequest();
+      return;
+    }
     if (event.data.type === 'lms:session-close') {
       performGovernedSessionClose(typeof event.data.reason === 'string' ? event.data.reason : null);
       return;
