@@ -26,7 +26,24 @@ export type TrainingComplianceRuleShape = {
   aeronave_modelo: string | null;
   condicao_id: number | null;
   perfil_competencia?: string | null;
+  qualificacao_tipo_codigo?: string | null;
+  obrigatoriedade?: string | null;
 };
+
+function isSpecializedAvsecRequirement(rule: TrainingComplianceRuleShape): boolean {
+  return String(rule.qualificacao_tipo_codigo || '').toUpperCase() === 'D1' &&
+    String(rule.perfil_competencia || '').trim().toUpperCase().startsWith('AVSEC_') &&
+    String(rule.obrigatoriedade || '').toUpperCase() === 'OBRIGATORIA';
+}
+
+function excludeSupersededCorporateAvsec<T extends TrainingComplianceRuleShape>(rules: T[]): T[] {
+  if (!rules.some(isSpecializedAvsecRequirement)) return rules;
+  return rules.filter((rule) => !(
+    String(rule.qualificacao_tipo_codigo || '').toUpperCase() === 'AVSEC_CONSC' &&
+    rule.escopo === 'EMPRESA' && !rule.condicao_id && !rule.aeronave_modelo &&
+    String(rule.obrigatoriedade || '').toUpperCase() === 'OBRIGATORIA'
+  ));
+}
 
 export function trainingComplianceRulePriority(rule: TrainingComplianceRuleShape): number {
   const scope =
@@ -118,7 +135,7 @@ export function resolveTrainingComplianceRules<T extends TrainingComplianceRuleS
     if (profileWinners.length > 0) resolved.push(...profileWinners);
     else if (generic) resolved.push(generic);
   }
-  return resolved;
+  return excludeSupersededCorporateAvsec(resolved);
 }
 
 export function withTrainingComplianceRuleImpact<T extends TrainingComplianceRuleShape>(
@@ -239,11 +256,48 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
   const auto = options?.requireAutoEnrollment
     ? ` AND COALESCE(${tr}.auto_matricular_ead, 0) = 1`
     : '';
+  // Manter a régua de notificações coerente com resolveTrainingComplianceRules.
+  // Evidência antiga não é convertida entre D1 e AVSEC_CONSC.
+  const special = 'tr_avsec_special';
+  const other = 'tr_avsec_override';
+  const specialPriority = trainingComplianceRulePrioritySql(special);
+  const otherPriority = trainingComplianceRulePrioritySql(other);
+  const corporateNotSuperseded = `NOT (
+    UPPER(TRIM(COALESCE(qt.codigo,'')))='AVSEC_CONSC'
+    AND ${tr}.escopo='EMPRESA' AND ${tr}.condicao_id IS NULL
+    AND NULLIF(TRIM(${tr}.aeronave_modelo),'') IS NULL
+    AND EXISTS (
+      SELECT 1 FROM treinamento_requisitos ${special}
+      JOIN qualificacoes_tipos qt_avsec ON qt_avsec.id=${special}.qualificacao_tipo_id
+        AND qt_avsec.empresa_id=${special}.empresa_id AND qt_avsec.deleted_at IS NULL
+      WHERE ${special}.empresa_id=${empresa} AND UPPER(TRIM(qt_avsec.codigo))='D1'
+        AND ${special}.ativo=1 AND ${special}.deleted_at IS NULL
+        AND ${special}.obrigatoriedade='OBRIGATORIA'
+        AND SUBSTR(UPPER(TRIM(COALESCE(${special}.perfil_competencia,''))),1,6)='AVSEC_'
+        AND (${special}.vigencia_inicio IS NULL OR date(${special}.vigencia_inicio)<=date('now'))
+        AND (${special}.vigencia_fim IS NULL OR date(${special}.vigencia_fim)>=date('now'))
+        AND ${trainingComplianceRuleApplicabilitySql(special, f)}
+        AND NOT EXISTS (
+          SELECT 1 FROM treinamento_requisitos ${other}
+          WHERE ${other}.empresa_id=${special}.empresa_id
+            AND ${other}.qualificacao_tipo_id=${special}.qualificacao_tipo_id
+            AND ${other}.ativo=1 AND ${other}.deleted_at IS NULL
+            AND (${other}.vigencia_inicio IS NULL OR date(${other}.vigencia_inicio)<=date('now'))
+            AND (${other}.vigencia_fim IS NULL OR date(${other}.vigencia_fim)>=date('now'))
+            AND (${other}.perfil_competencia IS NULL
+                 OR UPPER(TRIM(${other}.perfil_competencia))=UPPER(TRIM(${special}.perfil_competencia)))
+            AND ${trainingComplianceRuleApplicabilitySql(other, f)}
+            AND (${otherPriority}>${specialPriority} OR
+                (${otherPriority}=${specialPriority} AND ${other}.id>${special}.id))
+        )
+    )
+  )`;
   return `COALESCE((SELECT CASE WHEN ${tr}.obrigatoriedade='OBRIGATORIA'${auto} THEN 1 ELSE 0 END
     FROM treinamento_requisitos ${tr}
    WHERE ${tr}.empresa_id=${empresa} AND ${tr}.qualificacao_tipo_id=${qualification}
      AND ${tr}.ativo=1 AND ${tr}.deleted_at IS NULL
       AND ${trainingComplianceEligibleCategorySql('qt.categoria')}
+     AND ${corporateNotSuperseded}
      AND (${tr}.vigencia_inicio IS NULL OR date(${tr}.vigencia_inicio)<=date('now'))
      AND (${tr}.vigencia_fim IS NULL OR date(${tr}.vigencia_fim)>=date('now'))
      AND ${trainingComplianceRuleApplicabilitySql(tr, f)}
