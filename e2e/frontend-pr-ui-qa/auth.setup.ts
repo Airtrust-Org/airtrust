@@ -27,10 +27,28 @@ setup('real staging login', async ({ page }) => {
     .slice(0, 7);
 
   const loginRequests: string[] = [];
-  page.on('request', (request) => {
-    if (request.method() === 'POST' && /\/api\/auth\//.test(request.url())) {
-      loginRequests.push(new URL(request.url()).pathname);
+  const authResponses: string[] = [];
+  const authNetworkFailures: string[] = [];
+  const authPath = (url: string) => {
+    try {
+      const path = new URL(url).pathname;
+      return /^\/api\/auth\/(login|empresas|me)$/.test(path) ? path : null;
+    } catch {
+      return null;
     }
+  };
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && authPath(request.url())) {
+      loginRequests.push('/api/auth/*');
+    }
+  });
+  page.on('response', (response) => {
+    const path = authPath(response.url());
+    if (path) authResponses.push(`${path}:${response.status()}`);
+  });
+  page.on('requestfailed', (request) => {
+    const path = authPath(request.url());
+    if (path) authNetworkFailures.push(`${path}:network-failed`);
   });
 
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
@@ -50,17 +68,26 @@ setup('real staging login', async ({ page }) => {
   const empresasResponsePromise = page.waitForResponse(
     (response) => {
       if (response.request().method() !== 'GET') return false;
-      try {
-        return new URL(response.url()).pathname === '/api/auth/empresas';
-      } catch {
-        return false;
-      }
+      return authPath(response.url()) === '/api/auth/empresas';
     },
     { timeout: 45_000 },
-  );
+  ).catch(() => null);
 
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 45_000 });
+  try {
+    await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
+      timeout: 45_000, waitUntil: 'domcontentloaded',
+    });
+  } catch {
+    // Paths/status codes only. Never log credentials, tokens, responses or PII.
+    const stillOnLogin = new URL(page.url()).pathname.startsWith('/login');
+    throw new Error(
+      `STAGING_LOGIN_NAVIGATION_FAILED:still_on_login=${stillOnLogin};` +
+      `post_seen=${loginRequests.length > 0};` +
+      `auth_responses=${authResponses.join(',') || 'none'};` +
+      `network_failures=${authNetworkFailures.join(',') || 'none'}`,
+    );
+  }
   await expect(page).not.toHaveURL(/\/login/);
 
   // The session must have come from a real POST to the staging auth API.
@@ -83,6 +110,9 @@ setup('real staging login', async ({ page }) => {
   // Never mock auth/API and never manipulate local/session storage directly.
   if (profile === 'admin') {
     const empresasResponse = await empresasResponsePromise;
+    if (!empresasResponse) {
+      throw new Error('QA_EMPRESAS_RESPONSE_MISSING_AFTER_LOGIN');
+    }
     if (!empresasResponse.ok()) {
       throw new Error(`QA_EMPRESAS_RESPONSE_FAILED:${empresasResponse.status()}`);
     }
