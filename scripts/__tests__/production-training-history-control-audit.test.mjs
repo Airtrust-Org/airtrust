@@ -17,7 +17,8 @@ test('historical training control audit is read-only and emits no PII', () => {
 test('audit treats only real completion dates as historical evidence', () => {
   assert.match(script, /"N\/C", "NC", "N\.A\.", "NA", "NAO CONSTA"/);
   assert.match(script, /re\.fullmatch\(r"\(\\d\{1,2\}\)\/\(\\d\{1,2\}\)\/\(\\d\{4\}\)"/);
-  assert.match(script, /if not completion:\n\s+continue/);
+  assert.match(script, /if not completion:/);
+  assert.match(script, /source_unverified_date_rows/);
 });
 
 test('audit covers the eleven controlled spreadsheet tabs with explicit canonical codes', () => {
