@@ -316,8 +316,8 @@ export function useLmsCourseThumbnailUrl(
 export function LmsModuleTabs({ canManage }: { canManage: boolean }) {
   const location = useLocation();
   const items = [
-    { label: 'Visão Geral', to: '/lms/dashboard', visible: true },
-    { label: 'Catálogo', to: '/lms/cursos', visible: true },
+    { label: canManage ? 'Visão geral' : 'Meus treinamentos', to: '/lms', visible: true },
+    { label: canManage ? 'Catálogo' : 'Cursos em lista', to: '/lms/cursos', visible: true },
     { label: 'Legado EdApp', to: '/lms/legado-edapp', visible: canManage },
     { label: 'Configurações', to: '/lms/admin/cursos', visible: canManage },
     { label: 'Relatórios', to: '/lms/relatorios', visible: canManage },
@@ -328,7 +328,7 @@ export function LmsModuleTabs({ canManage }: { canManage: boolean }) {
       <div className="flex overflow-x-auto" role="tablist">
         {items.map((item) => {
           const active =
-            location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+            location.pathname === item.to || (item.to !== '/lms' && location.pathname.startsWith(`${item.to}/`));
 
           return (
             <Link
