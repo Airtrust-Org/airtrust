@@ -60,6 +60,7 @@ const LMS_CURSOS_SELECT_COLUMNS = `
   scorm_package_r2_prefix,
   scorm_launch_file,
   scorm_mastery_score,
+  scorm_assessment_policy,
   qualificacao_tipo_id,
   gerar_qualificacao_ao_concluir,
   ativo,
