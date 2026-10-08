@@ -7,7 +7,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 import { unzipSync, strFromU8 } from 'fflate';
 import { auth } from '../middleware/auth';
-import { requirePermission } from '../middleware/rbac';
+import { hasRole, requirePermission } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { resolveScormLaunchFileHref, resolveScormVersion } from '../lib/lms/scorm-manifest-parser';
 import {
@@ -768,6 +768,7 @@ async function parseCursoCreateRequest(c: Context) {
       tipo_conteudo: String(formData.get('tipo_conteudo') ?? 'scorm').trim() || 'scorm',
       scorm_versao: parseOptionalScormVersion(formText(formData.get('scorm_versao'))),
       scorm_mastery_score: parseOptionalInt(formText(formData.get('scorm_mastery_score'))),
+      scorm_assessment_policy: formText(formData.get('scorm_assessment_policy')) ?? 'SCORED',
       qualificacao_tipo_id: parseOptionalInt(formText(formData.get('qualificacao_tipo_id'))),
       gerar_qualificacao_ao_concluir: parseOptionalBinary(
         formText(formData.get('gerar_qualificacao_ao_concluir')),
@@ -1860,6 +1861,9 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
   const courseSetorSchema = await getCourseSetorSchema(db);
 
   const { data: d, uploadFile } = await parseCursoCreateRequest(c);
+  if (d.scorm_assessment_policy === 'FORMATIVE' && !hasRole(c, 'admin')) {
+    throw new ApiError('Somente administrador pode configurar um SCORM como formativo.', 403);
+  }
   const isEadCourse = await isEadCourseRequest(db, empresaId, {
     qualificacaoTipoId: d.qualificacao_tipo_id ?? null,
     formatoId: d.formato_id ?? null,
@@ -2070,7 +2074,7 @@ app.put(
 
     const existing = await db
       .prepare(
-        'SELECT id, titulo, categoria, tipo_conteudo, publicado, ativo, qualificacao_tipo_id, gerar_qualificacao_ao_concluir FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        'SELECT id, titulo, categoria, tipo_conteudo, publicado, ativo, qualificacao_tipo_id, gerar_qualificacao_ao_concluir, scorm_assessment_policy FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
       )
       .bind(cursoId, empresaId)
       .first<{
@@ -2082,6 +2086,7 @@ app.put(
         ativo: number;
         qualificacao_tipo_id: number | null;
         gerar_qualificacao_ao_concluir: number;
+        scorm_assessment_policy: 'SCORED' | 'FORMATIVE';
       }>();
     if (!existing) throw new ApiError('Curso não encontrado', 404);
 
@@ -2101,6 +2106,11 @@ app.put(
       throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
 
     const d = parsed.data;
+    if (d.scorm_assessment_policy !== undefined &&
+        d.scorm_assessment_policy !== existing.scorm_assessment_policy &&
+        !hasRole(c, 'admin')) {
+      throw new ApiError('Somente administrador pode alterar a política avaliativa SCORM.', 403);
+    }
     if (!(await isValidQualificationAreaId(db, empresaId, d.qualificacao_area_id)))
       throw new ApiError('Área da qualificação inválida ou inativa para esta empresa', 400);
     const nextGerarQualificacao =
