@@ -29,6 +29,14 @@ describe('training Doutrinação bootstrap 0539', () => {
     expect(sql).not.toContain('qualificacoes_historico');
   });
 
+  it('validates the exact reviewed 0539 source reference on staging', () => {
+    const sql = read('worker-airtrust/migrations/0539_training_doutrinacao_bootstrap.sql');
+    const postcondition = read('scripts/staging/validate-0539-postconditions.sh');
+    const source = 'PRG-MNT-002 — Programa de Treinamento de Manutenção Rev.06';
+    expect(sql).toContain(source);
+    expect(postcondition).toContain(`referencias LIKE '%${source}%'`);
+  });
+
   it('keeps the repair ordered before 0537 and 0538', () => {
     for (const p of [
       'scripts/staging/validate-0539-preflight.sh',
