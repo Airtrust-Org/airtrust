@@ -71,9 +71,9 @@ describe('training catalog source-backed metadata 0537', () => {
     expect(adapter).toContain("migrationName === '0537_training_catalog_source_backed_metadata.sql'");
     expect(adapter).toContain("src.codigo='LGPD_SEG_INFO'");
     expect(adapter).toContain("SELECT 6,'LGPD'");
-    expect(post).toContain(`referencias LIKE '%${source}%'`);
+    expect(post).toContain("instr(referencias,'PRG-MNT-002')>0 AND instr(referencias,'Programa de Treinamento de Manutenção Rev.06')>0");
     const production = read('scripts/schema-v2/validate-0537-production-postconditions.sh');
-    expect(production).toContain(`referencias LIKE '%${source}%'`);
+    expect(production).toContain("instr(referencias,'PRG-MNT-002')>0 AND instr(referencias,'Programa de Treinamento de Manutenção Rev.06')>0");
     expect(read(changePath)).toContain(source);
   });
 
