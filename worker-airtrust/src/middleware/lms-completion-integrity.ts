@@ -440,6 +440,10 @@ async function guardXapiStatement(
   const completionSignal = verb.endsWith('/passed') || verb.endsWith('/completed');
   const failureSignal = verb.endsWith('/failed') || result.success === false;
   if (!completionSignal) return null;
+  if (incoming.completion_intent !== 'USER_CONFIRMED') {
+    return errorResponse(c, 409, 'USER_COMPLETION_REQUIRED',
+      'A conclusão exige confirmação explícita pelo botão Concluir curso.');
+  }
 
   const row = await readEnrollmentEvidence(c.env.DB, empresaId, matriculaId);
   if (!row) return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
