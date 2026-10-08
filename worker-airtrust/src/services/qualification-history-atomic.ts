@@ -1271,7 +1271,7 @@ export async function reconcileQualificationLineageAtomic(
 
   const rows = await db
     .prepare(
-      `SELECT id, status, renovacao_de
+      `SELECT id, status, renovada, renovacao_de
          FROM qualificacoes_historico
         WHERE empresa_id = ?
           AND funcionario_id = ?
@@ -1282,7 +1282,7 @@ export async function reconcileQualificationLineageAtomic(
         ORDER BY date(COALESCE(data_conclusao, '1900-01-01')) ASC, id ASC`,
     )
     .bind(input.empresaId, input.funcionarioId, qualificationCode)
-    .all<{ id: number; status: string; renovacao_de: number | null }>();
+    .all<{ id: number; status: string; renovada: number | null; renovacao_de: number | null }>();
 
   const ordered = rows.results ?? [];
   const chain: ReconcileQualificationLineageResult['chain'] = [];
@@ -1302,6 +1302,7 @@ export async function reconcileQualificationLineageAtomic(
     const currentStatus = normalizeCode(row.status);
     const needsUpdate =
       currentRenovacaoDe !== desiredRenovacaoDe ||
+      Number(row.renovada ?? 0) !== desiredRenovada ||
       (isCurrent ? currentStatus === 'RENOVADA' : currentStatus !== 'RENOVADA');
 
     if (needsUpdate) {
