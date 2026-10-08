@@ -124,8 +124,7 @@ setup('real staging login', async ({ page }) => {
     const serverResponded = authResponses.some((entry) =>
       entry.startsWith('/api/auth/login:'));
     if (transportFailure && !serverResponded && guard.violations.length === 0) {
-      // eslint-disable-next-line no-console
-      console.log('[frontend-pr-ui-qa] bounded retry after real staging login transport failure');
+            console.log('[frontend-pr-ui-qa] bounded retry after real staging login transport failure');
       await page.goto('/login', { waitUntil: 'domcontentloaded' });
       if (releaseShortSha) {
         await assertLiveFrontendShaFromPage(page, releaseShortSha, 'login-retry');
@@ -279,20 +278,17 @@ setup('real staging login', async ({ page }) => {
         await assertLiveFrontendShaFromPage(page, releaseShortSha, 'qa-tenant-selected');
       }
 
-      // eslint-disable-next-line no-console
-      console.log('[frontend-pr-ui-qa] canonical QA tenant selected through the real UI');
+            console.log('[frontend-pr-ui-qa] canonical QA tenant selected through the real UI');
     } else {
       // Single-company sessions legitimately have no selector. The real auth
       // response is sufficient proof that the session is already tenant-pinned.
-      // eslint-disable-next-line no-console
-      console.log('[frontend-pr-ui-qa] canonical QA tenant already current');
+            console.log('[frontend-pr-ui-qa] canonical QA tenant already current');
     }
 
     guard.assertClean();
   }
 
-  // eslint-disable-next-line no-console
-  console.log(`[frontend-pr-ui-qa] authenticated with the ${profile} credential pair`);
+    console.log(`[frontend-pr-ui-qa] authenticated with the ${profile} credential pair`);
 
   await page.context().storageState({ path: AUTH_FILE });
 });
