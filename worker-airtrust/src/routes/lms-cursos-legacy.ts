@@ -1864,6 +1864,9 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
   if (d.scorm_assessment_policy === 'FORMATIVE' && !hasRole(c, 'admin')) {
     throw new ApiError('Somente administrador pode configurar um SCORM como formativo.', 403);
   }
+  if (d.scorm_assessment_policy === 'SCORED' && d.scorm_mastery_score <= 0) {
+    throw new ApiError('Cursos avaliativos exigem nota mínima SCORM maior que zero.', 400);
+  }
   if (d.scorm_assessment_policy === 'FORMATIVE' && d.tipo_conteudo !== 'scorm') {
     throw new ApiError('Modo formativo sem nota aplica-se somente a pacotes SCORM.', 400);
   }
@@ -2117,6 +2120,18 @@ app.put(
         d.scorm_assessment_policy !== existing.scorm_assessment_policy &&
         !hasRole(c, 'admin')) {
       throw new ApiError('Somente administrador pode alterar a política avaliativa SCORM.', 403);
+    }
+    // Reverting FORMATIVE to SCORED must never leave NULL mastery and create
+    // another permanently unfinishable course. The caller must choose a real threshold.
+    if (d.scorm_assessment_policy === 'SCORED' &&
+        existing.scorm_assessment_policy === 'FORMATIVE' &&
+        (d.scorm_mastery_score === undefined || d.scorm_mastery_score <= 0)) {
+      throw new ApiError('Ao mudar para avaliação com nota, informe nota mínima SCORM maior que zero.', 400);
+    }
+    if (existing.scorm_assessment_policy === 'SCORED' &&
+        d.scorm_assessment_policy !== 'FORMATIVE' &&
+        d.scorm_mastery_score !== undefined && d.scorm_mastery_score <= 0) {
+      throw new ApiError('Cursos avaliativos exigem nota mínima SCORM maior que zero.', 400);
     }
     const nextAssessmentPolicy = d.scorm_assessment_policy ?? existing.scorm_assessment_policy;
     const nextContentType = d.tipo_conteudo ?? existing.tipo_conteudo;
