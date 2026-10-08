@@ -110,6 +110,10 @@ type Proposal = {
   config: PlanningConfig;
   summary: {
     trainings: number;
+    qualification_candidates?: number;
+    filtered_by_equipment?: number;
+    completed_curricula?: number;
+    blocked_curricula?: number;
     session_requirements: number;
     paired_blocks: number;
     unmatched_blocks: number;
@@ -420,7 +424,11 @@ export default function PlanejamentoSimuladoresV3() {
       });
       setConfirmedTimes({});
       setResources(null);
-      showToast.success(`Proposta criada com ${data.summary.session_requirements} sessão(ões).`);
+      if (data.summary.trainings === 0) {
+        showToast.warning('Nenhuma turma gerada. Consulte o diagnóstico do período na tela.');
+      } else {
+        showToast.success(`Proposta criada com ${data.summary.session_requirements} sessão(ões).`);
+      }
       return data;
     } catch (error) {
       showToast.error(frontendErrorMessage(error));
@@ -1344,7 +1352,27 @@ export default function PlanejamentoSimuladoresV3() {
         </section>
       )}
 
-      {proposal && (
+      {proposal && proposal.summary.trainings === 0 && (
+        <section role="status" className="rounded-xl border border-amber-200 bg-amber-50/60 p-5 text-sm text-slate-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-slate-200">
+          <h3 className="text-base font-semibold">Nenhuma turma encontrada no período informado</h3>
+          <p className="mt-2">
+            {proposal.summary.qualification_candidates === 0
+              ? 'Não há vencimentos de qualificações de simulador registrados nesse intervalo para os funcionários acessíveis. Verifique os vencimentos no Histórico de Qualificações e as obrigações de treinamento pendentes.'
+              : proposal.exceptions.length > 0
+                ? `Foram identificadas ${proposal.exceptions.length} necessidade(s) com impedimento de currículo ou configuração. Consulte “Itens bloqueados na proposta” abaixo.`
+                : (proposal.summary.filtered_by_equipment || 0) > 0
+                  ? 'As necessidades encontradas não correspondem à aeronave selecionada. Experimente “Todas as aeronaves” ou revise os modelos cadastrados.'
+                  : (proposal.summary.completed_curricula || 0) > 0
+                    ? 'Os currículos identificados já têm todas as sessões concluídas no ciclo considerado.'
+                    : 'Foram encontradas qualificações, mas nenhuma sessão elegível. Confira os currículos, modelos de sessão e registros de conclusão.'}
+          </p>
+          <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+            A consulta considera todo o intervalo de vencimentos selecionado. A antecedência operacional de planejamento não restringe a consulta anual.
+          </p>
+        </section>
+      )}
+
+      {proposal && proposal.summary.trainings > 0 && (
         <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
           <h3 className="text-base font-semibold text-slate-900 dark:text-white">
             2. Disponibilidade CAE e datas sugeridas
