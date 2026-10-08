@@ -1,3 +1,7 @@
+// source_reference: audit-historical-training-controls.py; 2026 controlled training workbooks
+// operational_decision: assertions are negative guards; this test never issues database writes
+// dry_run_required: true; audit execution is SELECT-only
+// rollback_plan_required: none; this test performs no database mutations
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
