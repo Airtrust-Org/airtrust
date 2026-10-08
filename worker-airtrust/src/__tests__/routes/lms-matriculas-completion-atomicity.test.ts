@@ -121,6 +121,7 @@ const MATRICULA_EM_ANDAMENTO_BASE = {
   tentativas: 1,
   qualificacao_historico_id: null,
   scorm_mastery_score: 70,
+  scorm_assessment_policy: 'SCORED',
   gerar_qualificacao_ao_concluir: 1,
   qualificacao_tipo_id: 55,
   curso_titulo: 'Curso com qualificação obrigatória',
@@ -134,7 +135,15 @@ function makeCommit(body: Record<string, unknown>) {
   return new Request('http://localhost/scorm/commit', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      commit_event: 'SCORM_USER_FINALIZE',
+      cmi_json: JSON.stringify({
+        'cmi.core.lesson_location': '3/3',
+        'airtrust.total_slides': 3,
+        'airtrust.viewed_slides': [1, 2, 3],
+      }),
+      ...body,
+    }),
   });
 }
 

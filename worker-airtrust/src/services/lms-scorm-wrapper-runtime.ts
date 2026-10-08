@@ -271,6 +271,34 @@ export function buildScormSessionCloseRuntimeScript(): string {
     }
   }
 
+  // Explicit completion is a user action, not an inferred progress threshold.
+  // A single, authenticated wrapper-owned final commit is sent only after the
+  // player has displayed its confirmation dialog. Never synthesize a score or
+  // a SCORM passed/completed status: backend retains the evidence decision.
+  function performExplicitCompletionRequest() {
+    if (PREVIEW_MODE || REVIEW_MODE || completed || sessionCloseHandled || !apiInitialized) {
+      postToParent({ type: 'lms:completion-error', matriculaId: MATRICULA_ID,
+        code: 'SCORM_SESSION_NOT_READY', message: 'Reabra o curso para finalizar a sessão.' });
+      return;
+    }
+    try { probeFrameProgress(); } catch (_ignored) { /* do not infer completion */ }
+    var location = parseScormLocationPair(getScormLocation());
+    var status = String(cmi['cmi.core.lesson_status'] || cmi['cmi.success_status'] || '').toLowerCase();
+    var visited = Array.isArray(cmi['airtrust.viewed_slides']) ? cmi['airtrust.viewed_slides'] : [];
+    var fullyVisited = location && location.total <= 1000 &&
+      Number(cmi['airtrust.total_slides']) === location.total &&
+      visited.length === location.total &&
+      visited.every(function(n, index) { return n === index + 1; });
+    if (!fullyVisited || status === 'failed') {
+      postToParent({ type: 'lms:completion-error', matriculaId: MATRICULA_ID,
+        code: 'SCORM_REQUIREMENTS_PENDING',
+        message: 'Ainda faltam requisitos do conteúdo ou da avaliação.' });
+      return;
+    }
+    notifyCompletionPending('saving', 'user-confirmed-finish');
+    void commit(buildPayload(), 0, 'SCORM_USER_FINALIZE');
+  }
+
   // Relay the inner SCORM package's raw completion diagnostics
   // (AIRTRUST_COMPLETION_DIAGNOSTICS_V1) up to React as lms:completion-diagnostics.
   // Trust ONLY the exact scorm-frame window as the source; ignore any IDs the

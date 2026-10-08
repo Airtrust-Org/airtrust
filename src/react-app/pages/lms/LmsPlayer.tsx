@@ -77,6 +77,23 @@ function readLocationFromCmiJson(cmiJson: string | null | undefined): string | n
   }
 }
 
+/** Runtime proof of each visited slide, scoped to this SCORM enrollment. */
+export function readScormSlideCoverage(cmiJson: string | null | undefined): {
+  count: number; total: number;
+} | null {
+  if (!cmiJson) return null;
+  try {
+    const state = JSON.parse(cmiJson) as Record<string, unknown>;
+    const slides = state['airtrust.viewed_slides'];
+    const total = state['airtrust.total_slides'];
+    if (!Array.isArray(slides) || typeof total !== 'number' || total < 1 || total > 1000 ||
+      slides.some((value, index) => value !== index + 1)) return null;
+    return { count: slides.length, total };
+  } catch {
+    return null;
+  }
+}
+
 export function resolveLmsDisplayProgress(params: {
   completed: boolean;
   matriculaStatus: string | null | undefined;
@@ -137,7 +154,10 @@ export default function LmsPlayer() {
   const [liveProgress, setLiveProgress] = useState<number | null>(null);
   const [liveLocation, setLiveLocation] = useState<string | null>(null);
   const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
+  const [liveSlideCoverage, setLiveSlideCoverage] = useState<{ count: number; total: number } | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  const completionDialogShownRef = useRef(false);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
   const [assetSessionReady, setAssetSessionReady] = useState(false);
   const [completionState, setCompletionState] = useState<
@@ -225,6 +245,12 @@ export default function LmsPlayer() {
   const persistedLocation = readLocationFromCmiJson(
     (matricula?.scorm_progresso as { cmi_json?: string | null } | null | undefined)?.cmi_json,
   );
+  const persistedSlideCoverage = readScormSlideCoverage(
+    (matricula?.scorm_progresso as { cmi_json?: string | null } | null | undefined)?.cmi_json,
+  );
+  const currentSlideCoverage = liveSlideCoverage ?? persistedSlideCoverage;
+  const allSlidesVisited = currentSlideCoverage != null &&
+    currentSlideCoverage.count === currentSlideCoverage.total;
   const currentLocation = liveLocation ?? persistedLocation;
   const parsedCurrentLocation = parseSlideLocation(currentLocation);
   const currentSlideIndex = parsedCurrentLocation?.current ?? null;
@@ -255,6 +281,49 @@ export default function LmsPlayer() {
     !isScormContent &&
     completionDiagnostic?.can_finalize === true &&
     !isFinalizing;
+  // Prefer a package-authored granular checklist. Position alone (45/45) is
+  // not proof that earlier slides or every questionnaire were completed.
+  const diagnosticSlidesDone = granularDiagnostic?.slides.totalRequired != null &&
+    granularDiagnostic.slides.totalRequired > 0 &&
+    granularDiagnostic.slides.completedRequired === granularDiagnostic.slides.totalRequired &&
+    granularDiagnostic.slides.missing.length === 0;
+  const diagnosticAssessmentDone = granularDiagnostic != null &&
+    (!granularDiagnostic.assessment.required ||
+      (granularDiagnostic.assessment.completed &&
+        granularDiagnostic.assessment.unanswered.length === 0 &&
+        granularDiagnostic.assessment.incomplete.length === 0)) &&
+    granularDiagnostic.moduleResults.every((module) =>
+      !module.assessment.required || module.assessment.completed);
+  // Legacy formative packages do not always provide granular diagnostics.
+  // Only a real terminal package event / server guard can confirm them; do not
+  // unlock a browser-side completion solely from a final slide counter.
+  // Older published packages may have no granular contract. For those, the
+  // final position plus the SCORM assessment policy / persisted score is the
+  // conservative fallback; the server will validate final status and score.
+  // A reported quiz failure never enables completion.
+  const legacyFinalSlide = parsedCurrentLocation != null &&
+    parsedCurrentLocation.total > 0 &&
+    parsedCurrentLocation.current >= parsedCurrentLocation.total;
+  const legacyAssessmentEvidence = curso?.scorm_assessment_policy === 'FORMATIVE' ||
+    (curso?.scorm_assessment_policy === 'SCORED' &&
+      (matricula?.score_final != null || completionDiagnostic?.score_pct != null));
+  const canRequestScormCompletion =
+    isScormContent && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
+    allSlidesVisited &&
+    (granularDiagnostic
+      ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
+        granularDiagnostic.assessment.passed !== false)
+      : Boolean(legacyFinalSlide && legacyAssessmentEvidence));
+  const canRequestCompletion = canFinalize || Boolean(canRequestScormCompletion);
+
+  useEffect(() => {
+    if (canRequestScormCompletion && !completionDialogShownRef.current &&
+        completionState !== 'saving') {
+      completionDialogShownRef.current = true;
+      setCompletionDialogOpen(true);
+    }
+  }, [canRequestScormCompletion, completionState]);
+
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
   const canGoNextViewedOnly =
@@ -606,6 +675,8 @@ export default function LmsPlayer() {
         event.data.matriculaId === id
       ) {
         setCompleted(true);
+        setCompletionDialogOpen(false);
+        setIsFinalizing(false);
         void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
         if (event.data.qualificacao_gerada) setQualificacaoGerada(true);
         showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
@@ -646,8 +717,13 @@ export default function LmsPlayer() {
           typeof event.data.message === 'string' && event.data.message.trim()
             ? event.data.message.trim()
             : 'Conclusão recebida, mas ainda não confirmada pelo servidor.';
-        const displayMessage = code ? `${baseMessage} (código: ${code})` : baseMessage;
-        setCompletionErrorInfo({ code, reason, message: baseMessage });
+        const actionableMessage =
+          code === 'SCORE_MISSING' || code === 'MASTERY_SCORE_MISSING'
+            ? 'O conteúdo terminou, mas o curso está configurado para exigir uma nota que o pacote não forneceu. A Gerência de Treinamento precisa corrigir a configuração; a pendência não é uma questão não respondida.'
+            : baseMessage;
+        const displayMessage = code ? `${actionableMessage} (código: ${code})` : actionableMessage;
+        setIsFinalizing(false);
+        setCompletionErrorInfo({ code, reason, message: actionableMessage });
         showCompletionToast('error', displayMessage);
         void refetchMatricula();
         return;
@@ -659,6 +735,13 @@ export default function LmsPlayer() {
         event.data.type === 'lms:progress' &&
         event.data.matriculaId === id
       ) {
+        if (typeof event.data.viewed_slide_count === 'number' &&
+            typeof event.data.viewed_slide_total === 'number' &&
+            event.data.viewed_slide_count >= 0 && event.data.viewed_slide_total > 0) {
+          setLiveSlideCoverage({
+            count: event.data.viewed_slide_count, total: event.data.viewed_slide_total,
+          });
+        }
         if (typeof event.data.progresso_pct === 'number') {
           setLiveProgress(event.data.progresso_pct);
         }
@@ -822,6 +905,25 @@ export default function LmsPlayer() {
     window.addEventListener('message', onAck);
     const timer = window.setTimeout(finish, 4500);
     frameWindow.postMessage({ type: 'lms:session-close', reason: 'user-exit' }, launchOrigin);
+  }
+
+  function requestExplicitCompletion() {
+    if (!canRequestCompletion || !matricula) return;
+    setCompletionDialogOpen(false);
+    if (isScormContent) {
+      const frameWindow = iframeRef.current?.contentWindow;
+      if (!frameWindow) {
+        toast.error('Conteúdo indisponível. Reabra o curso antes de concluir.');
+        return;
+      }
+      setIsFinalizing(true);
+      showCompletionToast('saving', 'Verificando e registrando a conclusão...');
+      frameWindow.postMessage({ type: 'lms:request-completion', matriculaId: id }, launchOrigin);
+      // The wrapper/backend are the only authorities for status and qualification.
+      // Errors and confirmations reset this loading state through postMessage.
+      return;
+    }
+    void handleFinalizeAndGenerateQualification();
   }
 
   async function handleFinalizeAndGenerateQualification() {
@@ -1054,17 +1156,17 @@ export default function LmsPlayer() {
               </div>
             </section>
 
-            {canFinalize ? (
+            {!effectiveReviewMode && !isCompletedState ? (
               <button
-                onClick={handleFinalizeAndGenerateQualification}
-                disabled={isFinalizing}
+                onClick={() => setCompletionDialogOpen(true)}
+                disabled={!canRequestCompletion || isFinalizing}
                 className="mt-auto w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isFinalizing
                   ? 'Confirmando...'
                   : matricula?.gerar_qualificacao_ao_concluir === 1
-                    ? 'Confirmar conclusao e gerar qualificacao'
-                    : 'Confirmar conclusao'}
+                    ? 'Concluir curso'
+                    : 'Concluir curso'}
               </button>
             ) : null}
 
@@ -1078,7 +1180,7 @@ export default function LmsPlayer() {
           </aside>
         </div>
       </main>
-      {(canFinalize ||
+      {(canRequestCompletion ||
         completionState === 'saving' ||
         completionState === 'pending' ||
         completionState === 'error' ||
@@ -1111,7 +1213,7 @@ export default function LmsPlayer() {
                   Voltar ao catálogo
                 </button>
               </div>
-            ) : canFinalize ? (
+            ) : canRequestCompletion ? (
               <button
                 onClick={handleFinalizeAndGenerateQualification}
                 disabled={isFinalizing}
@@ -1120,11 +1222,33 @@ export default function LmsPlayer() {
                 {isFinalizing
                   ? 'Confirmando...'
                   : matricula?.gerar_qualificacao_ao_concluir === 1
-                    ? 'Confirmar conclusao e gerar qualificacao'
-                    : 'Confirmar conclusao'}
+                    ? 'Concluir curso'
+                    : 'Concluir curso'}
               </button>
             ) : null}
           </div>
+        </div>
+      )}
+
+      {completionDialogOpen && !isCompletedState && !effectiveReviewMode && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4">
+          <section role="dialog" aria-modal="true" aria-labelledby="lms-finish-heading"
+            className="w-full max-w-md rounded-2xl border border-slate-600 bg-slate-900 p-6 text-white shadow-2xl">
+            <h2 id="lms-finish-heading" className="text-xl font-semibold">Concluir curso</h2>
+            <p className="mt-3 text-sm text-slate-200">
+              Confirme a conclusão do treinamento. O sistema verificará o registro das telas
+              obrigatórias e, quando houver avaliação, de todos os questionários.
+              A conclusão e eventual qualificação só serão exibidas após confirmação do servidor.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setCompletionDialogOpen(false)}
+                className="rounded-lg bg-white/10 px-4 py-2 text-sm">Voltar ao curso</button>
+              <button onClick={requestExplicitCompletion} disabled={!canRequestCompletion || isFinalizing}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold disabled:opacity-50">
+                {isFinalizing ? 'Validando...' : 'Confirmar conclusão'}
+              </button>
+            </div>
+          </section>
         </div>
       )}
 

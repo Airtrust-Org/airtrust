@@ -9,6 +9,7 @@ import { safeLmsResponseErrorText } from '@/react-app/lib/lms-safe-error-respons
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
 export type ScormVersao = '1.2' | '2004' | null;
+export type ScormAssessmentPolicy = 'SCORED' | 'FORMATIVE';
 export type TipoConteudo = 'scorm' | 'h5p' | 'video' | 'pdf' | 'pptx';
 export type MatriculaStatus =
   'NAO_INICIADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'REPROVADO' | 'CANCELADO';
@@ -29,7 +30,8 @@ export interface LmsCurso {
   scorm_versao: ScormVersao;
   scorm_package_r2_prefix: string | null;
   scorm_launch_file: string | null;
-  scorm_mastery_score: number;
+  scorm_mastery_score: number | null;
+  scorm_assessment_policy?: ScormAssessmentPolicy;
   conteudo_arquivo_nome?: string | null;
   qualificacao_tipo_id: number | null;
   qualificacao_tipo_nome?: string | null;
@@ -195,6 +197,7 @@ export interface CreateCursoDTO {
   qualificacao_area_id?: number | null;
   gerar_qualificacao_ao_concluir?: 0 | 1;
   scorm_mastery_score?: number;
+  scorm_assessment_policy?: ScormAssessmentPolicy;
   scorm_versao?: ScormVersao;
   tipo_conteudo?: TipoConteudo;
   publicado?: 0 | 1;
@@ -1120,6 +1123,7 @@ export function useScormState(matriculaId: number) {
 
 export interface PostXapiStatementDTO {
   matricula_id: number;
+  completion_intent?: 'USER_CONFIRMED';
   actor: Record<string, unknown>;
   verb: { id: string; display?: Record<string, string> };
   object: { id: string; objectType?: string; definition?: Record<string, unknown> };
