@@ -35,6 +35,8 @@ test('FDM preflight aggregates assignment without inventing completed SCORM reco
   assert.equal(summary.source_completed,1);
   assert.equal(summary.source_raw_100_without_completion,1);
   assert.equal(summary.unfinished_99_or_more,2);
+  assert.equal(summary.eligible_unfinished_99_or_more,1);
+  assert.equal(summary.excluded_unfinished_99_or_more,1);
   assert.equal(summary.conditions.production_write_executed,false);
   assert.equal(summary.conditions.out_of_scope_legacy_enrollments_are_soft_cancel_candidates_only,true);
   const destinations={tripulacao:new Set([7]),manutencao:new Set([9])};
