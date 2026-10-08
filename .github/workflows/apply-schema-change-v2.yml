@@ -600,6 +600,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0543-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight AVSEC corporate historical reclassification 0544
+        if: ${{ inputs.change_id == 'avsec-corporativo-historico-0544' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0544-production-preflight.sh --target=airtrust-db
+
       - name: Backup governance ledger
         shell: bash
         working-directory: worker-airtrust
@@ -683,6 +691,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0543-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate AVSEC corporate historical reclassification 0544
+        if: ${{ inputs.change_id == 'avsec-corporativo-historico-0544' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0544-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate schema contract
         shell: bash
