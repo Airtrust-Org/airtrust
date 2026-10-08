@@ -121,16 +121,13 @@ async function listCourses(token){
   throw new Error('COURSE_PAGINATION_LIMIT');
 }
 async function listQualifications(token){
-  const rows=[];
-  for(let page=1;page<=30;page++){
-    const r=await safeGet(token,'/api/qualificacoes/tipos?page='+page+'&limit=200');
-    failUnless(Array.isArray(r?.data),'QUALIFICATION_LIST_INVALID');
-    rows.push(...r.data);
-    const total=Number(r?.pagination?.total??r?.meta?.total??rows.length);
-    if(rows.length>=total){failUnless(rows.length===total,'QUALIFICATION_LIST_CHANGED');return rows;}
-    failUnless(r.data.length>0,'QUALIFICATION_PAGE_EMPTY');
-  }
-  throw new Error('QUALIFICATION_PAGE_LIMIT');
+  // The live qualification-types API is filtered, limit-capped, and does not
+  // implement page/offset; query the FDM family specifically and fail closed
+  // on a saturated 500-row response instead of inventing pagination.
+  const r=await safeGet(token,'/api/qualificacoes/tipos?search=FDM&limit=500');
+  failUnless(Array.isArray(r?.data),'QUALIFICATION_LIST_INVALID');
+  failUnless(r.data.length<500,'QUALIFICATION_LIST_POSSIBLY_TRUNCATED');
+  return r.data;
 }
 async function getEnrollments(token,courseId){
   const rows=[];
