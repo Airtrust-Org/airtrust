@@ -487,6 +487,7 @@ export function buildScormCompletionDiagnostic(params: {
   const commitEvent = params.commitEvent ?? params.commit?.commit_event;
   const finalCommitObserved = [
     'SCORM_FINISH',
+    'SCORM_USER_FINALIZE',
     'SCORM_COMPLETION_CANDIDATE',
     'SCORM_BEFORE_UNLOAD_COMMIT',
     'SCORM_VISIBILITY_COMMIT',
