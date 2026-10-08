@@ -1,3 +1,7 @@
+// source_reference: issue #1279 and production-lms-fdm13-historical-transfer.yml.
+ // operational_decision: assertions verify only reviewed tenant-6 FDM historical transfer.
+ // dry_run_required: tests cover workflow dry-run predecessor and reviewed candidate checks.
+ // rollback_plan_required: assert Time Travel recovery gate; never perform recovery in tests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
