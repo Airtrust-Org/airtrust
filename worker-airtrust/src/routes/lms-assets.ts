@@ -1964,6 +1964,9 @@ ${buildScormProgressParsersScript()}
   }
 
   function queueLatestCommit(data, eventType) {
+    // A regular autosave/close must never replace the student's queued final request.
+    if (queuedCommit && queuedCommit.eventType === 'SCORM_USER_FINALIZE' &&
+        eventType !== 'SCORM_USER_FINALIZE') return;
     if (!queuedCommit || isFinalCommitEvent(eventType) || !isFinalCommitEvent(queuedCommit.eventType)) {
       queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
     }
@@ -2001,8 +2004,8 @@ ${buildScormProgressParsersScript()}
     var requestBody = Object.assign({
       matricula_id: MATRICULA_ID,
       commit_event: eventType || 'SCORM_COMMIT',
-      completion_candidate: completionPending ? true : null,
-      completion_observed_at: completionObservedAt,
+      completion_candidate: eventType === 'SCORM_USER_FINALIZE' ? true : null,
+      completion_observed_at: eventType === 'SCORM_USER_FINALIZE' ? completionObservedAt : null,
     }, data);
     // The wrapper never receives an access bearer. The browser sends only the
     // short-lived, HttpOnly, enrollment-scoped LMS capability cookie.
@@ -2038,13 +2041,13 @@ ${buildScormProgressParsersScript()}
           if (json.data.completion_diagnostic && json.data.completion_diagnostic.status === 'candidate') {
             // High progress/final location alone is not a completion event. Keep
             // the runtime quiet unless this session actually observed one.
-            if (completionPending) {
+            if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
               notifyCompletionPending('pending', json.data.completion_diagnostic.code || null);
             }
             return;
           }
 
-          if (completionPending) {
+          if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
             notifyCompletionError(
               json.data.completion_diagnostic && json.data.completion_diagnostic.code,
               'server-did-not-confirm-completion',
@@ -2083,7 +2086,7 @@ ${buildScormProgressParsersScript()}
           message: err.message,
           attempt: currentAttempt,
         });
-        if (completionPending) {
+        if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
           notifyCompletionError(err.code, err.reason, err.message);
         }
       };
@@ -2120,7 +2123,7 @@ ${buildScormProgressParsersScript()}
         reason: 'network-error',
         attempt: currentAttempt,
       });
-      if (completionPending) {
+      if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
         notifyCompletionError('SCORM_FINAL_COMMIT_MISSING', 'network-error');
       }
       return null;
