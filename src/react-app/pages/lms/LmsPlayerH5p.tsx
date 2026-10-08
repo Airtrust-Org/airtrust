@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import { useMatriculaDetalhe, usePostXapiStatement } from '@/react-app/hooks/useLms';
-import type { PostXapiStatementResult } from '@/react-app/hooks/useLms';
+import type { PostXapiStatementDTO } from '@/react-app/hooks/useLms';
 import {
   API_BASE_URL,
   AUTH_TOKEN_CHANGED_EVENT,
@@ -34,7 +34,7 @@ interface H5PStatement {
   actor?: Record<string, unknown>;
   verb?: { id?: string; display?: Record<string, string> };
   object?: { id?: string; objectType?: string };
-  result?: PostXapiStatementResult | Record<string, unknown>;
+  result?: PostXapiStatementDTO['result'] | Record<string, unknown>;
   context?: Record<string, unknown>;
   timestamp?: string;
 }
@@ -235,13 +235,13 @@ export default function LmsPlayerH5p() {
                 id: stmt.object?.id ?? `h5p:${h5pId}`,
                 objectType: stmt.object?.objectType ?? 'Activity',
               },
-              result: stmt.result as PostXapiStatementResult | undefined,
+              result: stmt.result as PostXapiStatementDTO['result'],
               context: stmt.context,
               timestamp: stmt.timestamp ?? new Date().toISOString(),
             };
 
             const terminalVerb = /\/(passed|completed)$/i.test(stmt.verb.id);
-            const explicitFailure = stmt.result?.success === false ||
+            const explicitFailure = (stmt.result as { success?: boolean } | undefined)?.success === false ||
               /\/failed$/i.test(stmt.verb.id);
             if (terminalVerb && !explicitFailure) {
               // H5P does not have a standardized internal "Concluir curso"
@@ -274,7 +274,7 @@ export default function LmsPlayerH5p() {
         // H5P.externalDispatcher is available after instance init
         const checkDispatcher = () => {
           if (win.H5P?.externalDispatcher) {
-            win.H5P.externalDispatcher.on('xAPI', onXapiEvent);
+            win.H5P.externalDispatcher.on?.('xAPI', onXapiEvent);
           } else {
             dispatcherPollTimer = window.setTimeout(checkDispatcher, 300);
           }
