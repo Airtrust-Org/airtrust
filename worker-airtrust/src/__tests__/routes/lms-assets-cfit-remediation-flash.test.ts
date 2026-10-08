@@ -7,7 +7,7 @@ function wrapperScript(html: string): string {
 }
 
 function startWithState(state: Record<string, string>) {
-  const w = window as Window & { API?: Record<string, (...args: any[]) => any> };
+  const w = window as Window & { API?: Record<string, (...args: unknown[]) => unknown> };
   delete w.API;
   document.body.innerHTML = '<div id="status-bar"><span id="status-dot"></span><span id="status-text"></span></div><div id="completion-overlay"></div><iframe id="scorm-frame"></iframe>';
   const frame = document.getElementById('scorm-frame') as HTMLIFrameElement;
@@ -41,7 +41,7 @@ describe('CFIT remediation — wrapper resume + autosave visual stability', () =
     });
     frame.contentWindow!.document.body.innerHTML =
       '<div id="slide"></div><div id="counter">18/41</div>';
-    (frame.contentWindow as any).Scorm = { get: () => suspendData };
+    (frame.contentWindow as Window & { Scorm?: { get: () => string } }).Scorm = { get: () => suspendData };
     frame.dispatchEvent(new Event('load'));
     await new Promise((resolve) => setTimeout(resolve, 350));
     expect(frame.contentWindow!.location.hash).toBe('');
