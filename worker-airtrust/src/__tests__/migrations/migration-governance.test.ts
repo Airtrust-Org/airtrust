@@ -132,8 +132,10 @@ describe('migration governance', () => {
     // 0533 adds governed metadata; 0534 aligns the final matrix; 0535 repairs INTEGRA; 0536 adds reviewed FDM audiences; 0537 reconciles source-backed metadata; 0538 adds Gestor/NR-05 policy; 0539 repairs Doutrinação; 0540 restores missing Maintenance manual identities.
     // 0541 adds the governed tenant-6 operational training category prerequisite for FDM 0536.
     // Its canonical migration and Schema V2 reviewed manifest are pinned by the 0541 tests.
+    // 0542 makes formative-vs-scored SCORM policy explicit; defaults remain SCORED.
     expect(files).toContain('0541_training_operational_category_bootstrap.sql');
-    const expectedLatest = 541;
+    expect(files).toContain('0542_lms_scorm_formative_assessment_policy.sql');
+    const expectedLatest = 542;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
