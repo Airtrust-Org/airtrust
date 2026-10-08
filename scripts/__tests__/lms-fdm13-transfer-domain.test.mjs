@@ -52,12 +52,14 @@ test('source must match reviewed tenant, cohort, status, activity and uniqueness
 test('existing destination enrollment must prove exact provenance and expected status; committee stays untouched',()=>{
  const f=fixture(),m=f[0];
  const t={empresa_id:6,curso_id:71,funcionario_id:m.funcionario_id,status:'CONCLUIDO',
-  deleted_at:null,observacoes:'FDM13_ADMIN_TRANSFER_SOURCE_'+m.id};
+  deleted_at:null,has_current_cycle:1,has_administrative_qualification:1,observacoes:'FDM13_ADMIN_TRANSFER_SOURCE_'+m.id};
  let plan=buildTransferPlan(f,[t,{empresa_id:6,curso_id:73,funcionario_id:9999,
    status:'NAO_INICIADO',deleted_at:null}],{softDeletedSourceCount:5});
  assert.equal(plan.summary.already_transferred,1);
  assert.equal(plan.rows.length,20);
  assert.throws(()=>buildTransferPlan(f,[{...t,observacoes:''}],{softDeletedSourceCount:5}),/TARGET_HISTORY_REQUIRES_REVIEW/);
  assert.throws(()=>buildTransferPlan(f,[{...t,status:'CANCELADO'}],{softDeletedSourceCount:5}),/TARGET_TRANSFER_STATUS_DRIFT/);
+ assert.throws(()=>buildTransferPlan(f,[{...t,has_current_cycle:0}],{softDeletedSourceCount:5}),/TARGET_CYCLE_MISSING/);
+ assert.throws(()=>buildTransferPlan(f,[{...t,has_administrative_qualification:0}],{softDeletedSourceCount:5}),/TARGET_ADMIN_QUALIFICATION_MISSING/);
  assert.throws(()=>buildTransferPlan(f,[t,t],{softDeletedSourceCount:5}),/TARGET_DUPLICATE/);
 });
