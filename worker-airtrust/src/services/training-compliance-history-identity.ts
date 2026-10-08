@@ -30,3 +30,27 @@ export function trainingComplianceHistoryIdentitySql(
     : `COALESCE(qt_history_id.id, qh.${historicalTypeColumn})`;
   return { joins: currentTypeJoin + canonicalCodeJoin, resolvedTypeSql };
 }
+
+
+/**
+ * Unclassified historical format inherits a recognized modality from the
+ * authoritative qualification model. An explicitly classified historical
+ * format is never overwritten, even if it conflicts with the current model.
+ * Requires only the already tenant-scoped model joins above; no DB writes.
+ */
+export function trainingComplianceHistoricalModalitySql(
+  hasHistoricalFormat: boolean,
+  hasModelType: boolean,
+  hasHistoricalCode: boolean,
+): string {
+  const legacy = hasHistoricalFormat ? "UPPER(TRIM(COALESCE(qh.formato_codigo,'')))" : "''";
+  if (!hasModelType) return legacy;
+  const model = hasHistoricalCode
+    ? "UPPER(TRIM(COALESCE(NULLIF(TRIM(qt_history_id.tipo),''),qt_history_code.tipo,'')))"
+    : "UPPER(TRIM(COALESCE(qt_history_id.tipo,'')))";
+  return `CASE WHEN ${legacy} NOT IN ('','NAO_CLASSIFICADO')
+    THEN ${legacy}
+    WHEN ${model} IN ('PRATICO','PRÁTICO','PRESENCIAL','EAD','HIBRIDO','DOCUMENTAL','OUTRA')
+    THEN ${model}
+    ELSE ${legacy} END`;
+}
