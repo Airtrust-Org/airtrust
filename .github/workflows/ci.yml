@@ -97,6 +97,8 @@ jobs:
         run: node --test scripts/__tests__/production-lms-catalog-readonly-inventory.test.mjs
       - name: validate sanitized LMS completion outcomes contract
         run: node --test scripts/__tests__/lms-course-completion-outcomes-readonly.test.mjs
+      - name: verify FDM13 transfer dry-run contract
+        run: node --test scripts/__tests__/lms-fdm13-reassignment-preflight-readonly.test.mjs
       - name: validate LMS active-course production certification read-only contract
         run: node --test scripts/__tests__/production-lms-active-course-certification-readonly.test.mjs
       - name: validate 0438 legacy staging workflow guards
