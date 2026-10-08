@@ -83,6 +83,14 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
     expect(response.status).toBe(200);
   });
 
+  it('accepts SCORM 1.2 passed status without a numeric score for an explicitly formative course', async () => {
+    const response = await commit(baseRow, {
+      lesson_status: 'passed',
+      cmi_json: '{"cmi.core.lesson_location":"45/45"}',
+    });
+    expect(response.status).toBe(200);
+  });
+
   it('accepts the existing trusted SCORM 1.2 Finish proof with 45/45 when terminal status remains incomplete', async () => {
     const response = await commit(baseRow, {
       lesson_status: 'incomplete',
