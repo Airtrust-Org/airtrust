@@ -1,0 +1,8 @@
+{
+  "changeId": "training-operational-category-bootstrap-0541",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0541_training_operational_category_bootstrap.sql",
+  "fileHash": "8aee0c5b690b53cb0b3b24e69abc9a090a5274bf17a4da49ddcda467c4963211",
+  "planPath": "worker-airtrust/schema-v2/plans/training-operational-category-bootstrap-0541.md",
+  "planHash": "41d30e847f820d13fc2886878518b9a96b90562c6c8d15519587afe4171d9652"
+}
