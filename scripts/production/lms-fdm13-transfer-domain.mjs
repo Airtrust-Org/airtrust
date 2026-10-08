@@ -40,6 +40,7 @@ export function buildTransferPlan(sourceRows,targetRows,opts={}) {
   const pct=Number(s.progresso_pct??0);
   assert(Number.isFinite(pct)&&pct>=0&&pct<=100,'PROGRESS_INVALID');
   const credit=pct>=99;
+  if(credit) assert(Number(s.explicit_scorm_failure??0)===0,'LEGACY_EXPLICIT_FAILURE_REQUIRES_REVIEW');
   const existing=targets.get(Number(s.funcionario_id)+':'+dest);
   if(existing){
    assert(existing.deleted_at==null&&String(existing.observacoes??'').includes('FDM13_ADMIN_TRANSFER_SOURCE_'+Number(s.id)),
