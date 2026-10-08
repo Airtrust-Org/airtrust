@@ -21,7 +21,7 @@ const baseRow = {
   ativo: 1,
   publicado: 1,
   scorm_assessment_policy: 'FORMATIVE',
-  scorm_mastery_score: null,
+  scorm_mastery_score: null as number | null,
   scorm_package_r2_prefix: 'lms/scorm/6/119/package/',
   scorm_launch_file: 'index.html',
   gerar_qualificacao_ao_concluir: 1,
