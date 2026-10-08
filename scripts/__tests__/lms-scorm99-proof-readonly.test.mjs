@@ -73,6 +73,8 @@ test('FDM legacy history preserves cancelled/soft-deleted records and checks des
  assert.match(FDM_HISTORY_SQL,/raw_99_with_explicit_scorm_end/);
  assert.match(FDM_HISTORY_SQL,/f\.funcao/);
  assert.match(FDM_HISTORY_SQL,/f\.cargo/);
+ assert.match(FDM_HISTORY_SQL,/MECâNICO/);
+ assert.match(FDM_HISTORY_SQL,/AUXILIAR DE MANUTENçãO/);
  assert.doesNotMatch(FDM_HISTORY_SQL,/\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\s/i);
  assert.doesNotMatch(FDM_HISTORY_SQL,/SELECT\s+(?:m\.\*|f\.nome|f\.id|m\.id|ps\.cmi_json)/i);
 });
