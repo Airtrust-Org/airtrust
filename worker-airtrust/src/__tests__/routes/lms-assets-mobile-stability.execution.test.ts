@@ -460,6 +460,9 @@ describe('Wrapper SCORM real (execução em jsdom) — tratamento de erros non-2
       isScorm2004: false,
       initialCmiJson: JSON.stringify({
         'cmi.core.lesson_location': '108/108',
+        'cmi.core.lesson_status': 'incomplete',
+        'airtrust.total_slides': 108,
+        'airtrust.viewed_slides': Array.from({length:108},(_,i)=>i+1),
         'cmi.core.score.raw': '100',
       }),
       hasResumeState: false,
@@ -469,7 +472,11 @@ describe('Wrapper SCORM real (execução em jsdom) — tratamento de erros non-2
     g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
 
     const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
-    api.LMSFinish();
+    api.LMSInitialize();
+    g.window.dispatchEvent(new g.MessageEvent('message', {
+      origin: '', source: g.window.parent,
+      data: {type:'lms:request-completion',matriculaId:390},
+    }));
 
     await new Promise((r) => setTimeout(r, 100));
 
