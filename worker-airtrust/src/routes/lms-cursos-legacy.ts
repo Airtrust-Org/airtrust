@@ -1861,6 +1861,9 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
   const courseSetorSchema = await getCourseSetorSchema(db);
 
   const { data: d, uploadFile } = await parseCursoCreateRequest(c);
+  if (d.scorm_assessment_policy === 'FORMATIVE' && d.tipo_conteudo !== 'scorm') {
+    throw new ApiError('A política formativa sem nota está disponível apenas para conteúdo SCORM.', 400);
+  }
   if (d.scorm_assessment_policy === 'FORMATIVE' && !hasRole(c, 'admin')) {
     throw new ApiError('Somente administrador pode configurar um SCORM como formativo.', 403);
   }
@@ -2116,6 +2119,10 @@ app.put(
       throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
 
     const d = parsed.data;
+    if ((d.scorm_assessment_policy ?? existing.scorm_assessment_policy) === 'FORMATIVE' &&
+        (d.tipo_conteudo ?? existing.tipo_conteudo) !== 'scorm') {
+      throw new ApiError('A política formativa sem nota está disponível apenas para conteúdo SCORM.', 400);
+    }
     if (d.scorm_assessment_policy !== undefined &&
         d.scorm_assessment_policy !== existing.scorm_assessment_policy &&
         !hasRole(c, 'admin')) {
