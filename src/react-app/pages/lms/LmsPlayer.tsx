@@ -77,6 +77,23 @@ function readLocationFromCmiJson(cmiJson: string | null | undefined): string | n
   }
 }
 
+/** Runtime proof of each visited slide, scoped to this SCORM enrollment. */
+export function readScormSlideCoverage(cmiJson: string | null | undefined): {
+  count: number; total: number;
+} | null {
+  if (!cmiJson) return null;
+  try {
+    const state = JSON.parse(cmiJson) as Record<string, unknown>;
+    const slides = state['airtrust.viewed_slides'];
+    const total = state['airtrust.total_slides'];
+    if (!Array.isArray(slides) || typeof total !== 'number' || total < 1 || total > 1000 ||
+      slides.some((value, index) => value !== index + 1)) return null;
+    return { count: slides.length, total };
+  } catch {
+    return null;
+  }
+}
+
 export function resolveLmsDisplayProgress(params: {
   completed: boolean;
   matriculaStatus: string | null | undefined;
@@ -137,6 +154,7 @@ export default function LmsPlayer() {
   const [liveProgress, setLiveProgress] = useState<number | null>(null);
   const [liveLocation, setLiveLocation] = useState<string | null>(null);
   const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
+  const [liveSlideCoverage, setLiveSlideCoverage] = useState<{ count: number; total: number } | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
   const completionDialogShownRef = useRef(false);
@@ -227,6 +245,12 @@ export default function LmsPlayer() {
   const persistedLocation = readLocationFromCmiJson(
     (matricula?.scorm_progresso as { cmi_json?: string | null } | null | undefined)?.cmi_json,
   );
+  const persistedSlideCoverage = readScormSlideCoverage(
+    (matricula?.scorm_progresso as { cmi_json?: string | null } | null | undefined)?.cmi_json,
+  );
+  const currentSlideCoverage = liveSlideCoverage ?? persistedSlideCoverage;
+  const allSlidesVisited = currentSlideCoverage != null &&
+    currentSlideCoverage.count === currentSlideCoverage.total;
   const currentLocation = liveLocation ?? persistedLocation;
   const parsedCurrentLocation = parseSlideLocation(currentLocation);
   const currentSlideIndex = parsedCurrentLocation?.current ?? null;
@@ -285,6 +309,7 @@ export default function LmsPlayer() {
       (matricula?.score_final != null || completionDiagnostic?.score_pct != null));
   const canRequestScormCompletion =
     isScormContent && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
+    allSlidesVisited &&
     (granularDiagnostic
       ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
         granularDiagnostic.assessment.passed !== false)
@@ -710,6 +735,13 @@ export default function LmsPlayer() {
         event.data.type === 'lms:progress' &&
         event.data.matriculaId === id
       ) {
+        if (typeof event.data.viewed_slide_count === 'number' &&
+            typeof event.data.viewed_slide_total === 'number' &&
+            event.data.viewed_slide_count >= 0 && event.data.viewed_slide_total > 0) {
+          setLiveSlideCoverage({
+            count: event.data.viewed_slide_count, total: event.data.viewed_slide_total,
+          });
+        }
         if (typeof event.data.progresso_pct === 'number') {
           setLiveProgress(event.data.progresso_pct);
         }
