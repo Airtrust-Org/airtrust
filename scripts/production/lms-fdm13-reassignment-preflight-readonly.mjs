@@ -18,28 +18,31 @@ const SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '').toLowerCase().trim
 const TARGETS = Object.freeze({
   tripulacao: 'FDM-TRIPULACAO',
   manutencao: 'FDM-MECANICO',
-  comite_gatekeeper: 'FDM-COMITE-GATEKEEPER',
 });
 const norm = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toUpperCase();
 function failUnless(check,code){if(!check)throw new Error(code);}
-export function classifyFdmAudience(funcao, designations=[]) {
-  const role=norm(funcao);
-  const designated = new Set(designations.map(norm));
-  const groups=[];
-  if (['COMANDANTE','COPILOTO'].includes(role)) groups.push('tripulacao');
-  if (['MECANICO','AUXILIAR DE MANUTENCAO','AUX MANUTENCAO'].includes(role)) groups.push('manutencao');
-  if ([
-    'GERENTE DE SEGURANCA OPERACIONAL','GERENTE DE MANUTENCAO','GERENTE DE OPERACOES',
-    'ANALISTA DE FDM','ANALISTA FDM','COORDENADOR DE FDM','COORDENADOR FDM',
-    'COORDENADOR DE ENGENHARIA',
-  ].includes(role) || designated.has('GATEKEEPER') || designated.has('FDM_COMITE')) groups.push('comite_gatekeeper');
-  return {group:groups.length===1?groups[0]:null,
-    reason:groups.length===0?'UNMAPPED_ROLE':groups.length>1?'MULTIPLE_ELIGIBLE_AUDIENCES':null};
+// Explicit Training Manager decision: transfer legacy FDM #13 only to
+// Tripulação and Manutenção. All other roles, including formally designated
+// Comitê/Gatekeeper members, are OUT OF SCOPE for this historical transfer.
+// This does NOT remove their independent new FDM committee training obligations.
+export function classifyFdmAudience(funcao) {
+  const role = norm(funcao);
+  if (['COMANDANTE', 'COPILOTO'].includes(role)) {
+    return { group: 'tripulacao', reason: null };
+  }
+  if (['MECANICO', 'AUXILIAR DE MANUTENCAO', 'AUX MANUTENCAO'].includes(role)) {
+    return { group: 'manutencao', reason: null };
+  }
+  return { group: null, reason: 'OUT_OF_SCOPE_BY_USER_DECISION' };
 }
-export function summarizeFdmAssignment(enrollments, employees, assignmentMap, courses) {
-  const counts={source_total:enrollments.length,groups:{tripulacao:0,manutencao:0,comite_gatekeeper:0},
-    needs_review:{UNMAPPED_ROLE:0,MULTIPLE_ELIGIBLE_AUDIENCES:0,EMPLOYEE_NOT_IN_ACTIVE_CATALOG:0},
-    unfinished_99_or_more:0,source_completed:0,source_not_completed:0,
+export function summarizeFdmAssignment(enrollments, employees, courses, existingDestEnrollments = {}) {
+  const counts={source_total:enrollments.length,groups:{tripulacao:0,manutencao:0},
+    excluded_from_migration:0,
+    needs_review:{EMPLOYEE_NOT_IN_ACTIVE_CATALOG:0},
+    unfinished_99_or_more:0,
+    eligible_unfinished_99_or_more:0,
+    excluded_unfinished_99_or_more:0,
+    source_completed:0,source_not_completed:0,
     source_raw_100_without_completion:0,already_target_enrolled:0};
   const seen=new Set();
   for (const row of enrollments) {
@@ -56,18 +59,31 @@ export function summarizeFdmAssignment(enrollments, employees, assignmentMap, co
     }
     const employee=employees.get(id);
     if(!employee){counts.needs_review.EMPLOYEE_NOT_IN_ACTIVE_CATALOG++;continue;}
-    const decision=classifyFdmAudience(employee.funcao_nome,assignmentMap.get(id)||[]);
-    if(decision.reason)counts.needs_review[decision.reason]++;
-    else counts.groups[decision.group]++;
+    const decision=classifyFdmAudience(employee.funcao_nome);
+    if(decision.reason === 'OUT_OF_SCOPE_BY_USER_DECISION') {
+      counts.excluded_from_migration++;
+      if(status!=='CONCLUIDO' && raw>=99) counts.excluded_unfinished_99_or_more++;
+    } else if(decision.reason) throw new Error('UNKNOWN_FDM_ASSIGNMENT_REASON');
+    else {
+      counts.groups[decision.group]++;
+      if(status!=='CONCLUIDO' && raw>=99) counts.eligible_unfinished_99_or_more++;
+      if (existingDestEnrollments[decision.group]?.has(id)) counts.already_target_enrolled++;
+    }
   }
   failUnless(counts.source_completed+counts.source_not_completed===counts.source_total,'SOURCE_COUNTS_MISMATCH');
-  failUnless(Object.values(counts.groups).reduce((a,b)=>a+b,0)+Object.values(counts.needs_review).reduce((a,b)=>a+b,0)===counts.source_total,'AUDIENCE_ASSIGNMENT_INCOMPLETE');
+  failUnless(counts.eligible_unfinished_99_or_more+counts.excluded_unfinished_99_or_more <=
+    counts.unfinished_99_or_more,'CREDIT_ELIGIBILITY_OVERFLOW');
+  failUnless(Object.values(counts.groups).reduce((a,b)=>a+b,0)+counts.excluded_from_migration+
+    Object.values(counts.needs_review).reduce((a,b)=>a+b,0)===counts.source_total,'AUDIENCE_ASSIGNMENT_INCOMPLETE');
   return { ...counts,targets:courses,conditions:{
     no_inferred_completion:true,
     preserve_source_histories:true,
     source_course_will_remain_until_governed_apply_and_verified_zero_active:true,
     requires_exact_destination_scorm_and_qualification_links:true,
-    unclassified_or_multi_audience_require_review:true,
+    out_of_scope_legacy_enrollments_are_soft_cancel_candidates_only:true,
+    historical_evidence_must_remain_preserved:true,
+    at_99_is_not_sufficient_proof_of_mastery_or_equivalent_completion:true,
+    administrative_equivalence_requires_reviewed_evidence_and_auditable_approval:true,
     production_write_executed:false,
   }};
 }
@@ -117,6 +133,15 @@ async function listCourses(token){
   }
   throw new Error('COURSE_PAGINATION_LIMIT');
 }
+async function listQualifications(token){
+  // The live qualification-types API is filtered, limit-capped, and does not
+  // implement page/offset; query the FDM family specifically and fail closed
+  // on a saturated 500-row response instead of inventing pagination.
+  const r=await safeGet(token,'/api/qualificacoes/tipos?search=FDM&limit=500');
+  failUnless(Array.isArray(r?.data),'QUALIFICATION_LIST_INVALID');
+  failUnless(r.data.length<500,'QUALIFICATION_LIST_POSSIBLY_TRUNCATED');
+  return r.data;
+}
 async function getEnrollments(token,courseId){
   const rows=[];
   for(let page=1;page<=100;page++){
@@ -133,25 +158,17 @@ async function getEnrollments(token,courseId){
 async function run(){
   await assertSha();
   const token=await tokenForTenant();
-  const [catalog,source,conditions,assignees]=await Promise.all([
+  const [catalog,source,conditions,qualifications]=await Promise.all([
     listCourses(token),
     getEnrollments(token,SOURCE_COURSE),
     safeGet(token,'/api/compliance-treinamentos/condicoes/catalogos'),
-    safeGet(token,'/api/compliance-treinamentos/condicoes/atribuicoes'),
+    listQualifications(token),
   ]);
   failUnless(Array.isArray(conditions?.data?.funcionarios)&&Array.isArray(conditions?.data?.condicoes),'DESIGNATION_CATALOG_MISSING');
-  failUnless(Array.isArray(assignees?.data),'DESIGNATION_ASSIGNMENTS_MISSING');
   failUnless(catalog.some(x=>Number(x.id)===SOURCE_COURSE),'SOURCE_COURSE_MISSING');
   const employees=new Map(conditions.data.funcionarios.map(e=>[Number(e.id),e]));
-  const designations=new Map();
-  for(const a of assignees.data){
-    if(!['FDM_COMITE','GATEKEEPER'].includes(norm(a.condicao_codigo)))continue;
-    const id=Number(a.funcionario_id);
-    const prev=designations.get(id)||[];
-    prev.push(String(a.condicao_codigo));
-    designations.set(id,prev);
-  }
   const targetState={};
+  const destinationEnrollments={};
   for(const [audience,code] of Object.entries(TARGETS)){
     const matches=[];
     for(const c of catalog){
@@ -168,16 +185,22 @@ async function run(){
         qualification_link_matches:actualCode===code,format:String(c.tipo_conteudo||'').toLowerCase(),
         has_scorm_launch:Boolean(String(d.scorm_launch_file||'').trim())});
     }
-    targetState[audience]={qualification_code:code,candidate_count:matches.length,
-      ready:matches.length===1&&matches[0].active&&matches[0].published&&matches[0].qualification_link_matches&&
+    const matchingQualifications=qualifications.filter(q=>norm(q.codigo)===code && Number(q.ativo)===1 && !q.deleted_at);
+    targetState[audience]={qualification_code:code,qualification_models_active:matchingQualifications.length,
+      candidate_count:matches.length,
+      ready:matchingQualifications.length===1&&matches.length===1&&matches[0].active&&matches[0].published&&matches[0].qualification_link_matches&&
         matches[0].format==='scorm'&&matches[0].has_scorm_launch,
       candidates:matches};
+    if (matches.length===1) {
+      const destRows=await getEnrollments(token,matches[0].course_id);
+      destinationEnrollments[audience]=new Set(destRows.map(r=>Number(r.funcionario_id)));
+    }
   }
-  const result=summarizeFdmAssignment(source,employees,designations,targetState);
-  const output={schema_version:1,empresa_id:COMPANY,production_sha:SHA,source_course_id:SOURCE_COURSE,
-    observed_at:new Date().toISOString(),scope:'active employee records visible through existing management API',
+  const result=summarizeFdmAssignment(source,employees,targetState,destinationEnrollments);
+  const output={schema_version:2,empresa_id:COMPANY,production_sha:SHA,source_course_id:SOURCE_COURSE,
+    observed_at:new Date().toISOString(),scope:'Legacy FDM13 only: transfer pilot/maintenance, exclude other roles by explicit user decision',
     warning:'No staff identities, enrollments, roles-per-person, or real progress records are exported.',
-    blocker: Object.values(targetState).every(t=>t.ready)?null:'DESTINATION_LMS_COURSES_NOT_READY',
+    blocker: targetState.tripulacao?.ready && targetState.manutencao?.ready ? null : 'TRANSFER_DESTINATIONS_NOT_READY',
     ...result};
   process.stdout.write(JSON.stringify(output,null,2)+'\n');
 }

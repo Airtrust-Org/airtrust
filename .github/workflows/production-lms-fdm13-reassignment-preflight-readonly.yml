@@ -190,6 +190,10 @@ jobs:
           console.log('Deployed SHA: ' + r.production_sha);
           console.log('Source course: 13, active visible enrollments: ' + r.source_total);
           console.log('Completed: ' + r.source_completed + ', unfinished at raw >=99%: ' + r.unfinished_99_or_more);
+          console.log('Eligible pilot/MNT pending at raw >=99%: ' + r.eligible_unfinished_99_or_more);
+          console.log('Excluded from transfer by Training Manager decision: ' + r.excluded_from_migration);
+          console.log('Excluded pending at raw >=99%: ' + r.excluded_unfinished_99_or_more);
+          console.log('Active employee records unavailable for classification: ' + r.needs_review.EMPLOYEE_NOT_IN_ACTIVE_CATALOG);
           for (const [group, count] of Object.entries(r.groups)) console.log(group + ': ' + count);
           for (const [reason, count] of Object.entries(r.needs_review)) console.log('Requires review (' + reason + '): ' + count);
           for (const [target, state] of Object.entries(r.targets)) console.log('Destination (' + target + '): ready=' + state.ready + ', candidate_count=' + state.candidate_count);
