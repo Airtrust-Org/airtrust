@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { trainingComplianceHistoryIdentitySql } from '../services/training-compliance-history-identity';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
@@ -381,24 +382,13 @@ async function loadQualificationEvidence(
   const map = new Map<string, Evidence[]>();
   if (!(await tableExists(db, 'qualificacoes_historico'))) return map;
   const cols = await columnSet(db, 'qualificacoes_historico');
-  const tipoCol = cols.has('tipo_qualificacao_id')
-    ? 'tipo_qualificacao_id'
-    : cols.has('qualificacao_id')
-      ? 'qualificacao_id'
-      : cols.has('tipo_id')
-        ? 'tipo_id'
-        : null;
+  const tipoCol = ['tipo_qualificacao_id', 'qualificacao_id', 'tipo_id'].find((name) =>
+    cols.has(name)) ?? null;
   if (!tipoCol) return map;
-  const dataCol = cols.has('data_realizacao')
-    ? 'data_realizacao'
-    : cols.has('data_conclusao')
-      ? 'data_conclusao'
-      : null;
-  const vencCol = cols.has('data_vencimento')
-    ? 'data_vencimento'
-    : cols.has('data_validade')
-      ? 'data_validade'
-      : null;
+  const dataCol = ['data_realizacao', 'data_conclusao'].find((name) =>
+    cols.has(name)) ?? null;
+  const vencCol = ['data_vencimento', 'data_validade'].find((name) =>
+    cols.has(name)) ?? null;
   if (!dataCol) return map;
   const statusExpr = cols.has('status') ? "UPPER(COALESCE(qh.status, ''))" : "''";
   const empresaExpr = cols.has('empresa_id') ? 'qh.empresa_id = ?' : 'f.empresa_id = ?';
@@ -412,32 +402,10 @@ async function loadQualificationEvidence(
   const modalitySelect = cols.has('formato_codigo')
     ? `UPPER(TRIM(COALESCE(qh.formato_codigo,'')))`
     : "''";
-  const hasQualificationCode = cols.has('qualificacao_codigo');
   const qualificationTypeCols = await columnSet(db, 'qualificacoes_tipos');
-  const currentTypeActiveExpr = qualificationTypeCols.has('ativo')
-    ? 'AND COALESCE(qt_history_id.ativo, 1) = 1'
-    : '';
-  const codeTypeActiveExpr = qualificationTypeCols.has('ativo')
-    ? 'AND COALESCE(qt_history_code.ativo, 1) = 1'
-    : '';
-  const currentTypeJoin = `
-         LEFT JOIN qualificacoes_tipos qt_history_id
-           ON qt_history_id.id = qh.${tipoCol}
-          AND qt_history_id.empresa_id = f.empresa_id
-          AND qt_history_id.deleted_at IS NULL
-          ${currentTypeActiveExpr}`;
-  const codeTypeJoin = hasQualificationCode
-    ? `
-         LEFT JOIN qualificacoes_tipos qt_history_code
-           ON qt_history_code.empresa_id = f.empresa_id
-          AND qt_history_code.deleted_at IS NULL
-          ${codeTypeActiveExpr}
-          AND UPPER(TRIM(COALESCE(qt_history_code.codigo,''))) =
-              UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))`
-    : '';
-  const resolvedTipoSelect = hasQualificationCode
-    ? `COALESCE(qt_history_id.id, qt_history_code.id, qh.${tipoCol})`
-    : `COALESCE(qt_history_id.id, qh.${tipoCol})`;
+  const { joins: typeIdentityJoins, resolvedTypeSql: resolvedTipoSelect } = trainingComplianceHistoryIdentitySql(
+    tipoCol, cols.has('qualificacao_codigo'), qualificationTypeCols.has('ativo'),
+  );
   const profileSql = await buildQualificationEvidenceProfileSql(db, cols);
 
   const { results } = await db
@@ -447,8 +415,7 @@ async function loadQualificationEvidence(
               ${modalitySelect} AS modalidade, ${profileSql.select} AS perfil_competencia
          FROM qualificacoes_historico qh
          JOIN funcionarios f ON f.id = qh.funcionario_id
-         ${currentTypeJoin}
-         ${codeTypeJoin}
+         ${typeIdentityJoins}
          ${profileSql.joins}
         WHERE ${empresaExpr}
           ${deletedExpr}
