@@ -32,14 +32,14 @@ import sqlite3,sys
 path=sys.argv[1]
 sql=open(path,encoding='utf-8').read()
 c=sqlite3.connect(':memory:')
-c.executescript('CREATE TABLE qualificacoes_categorias (id INTEGER PRIMARY KEY AUTOINCREMENT,empresa_id INTEGER,nome TEXT,codigo TEXT,cor TEXT,descricao TEXT,ativo INTEGER,dominio_codigo TEXT,lms_integrada INTEGER,created_at TEXT,updated_at TEXT);')
-c.execute("INSERT INTO qualificacoes_categorias (empresa_id,nome,codigo,cor,ativo,lms_integrada) VALUES (7,'Other Tenant','OTHER','#000000',1,0)")
+c.executescript('CREATE TABLE qualificacoes_categorias (id INTEGER PRIMARY KEY AUTOINCREMENT,empresa_id INTEGER,nome TEXT,codigo TEXT,cor TEXT,descricao TEXT,ativo INTEGER,dominio_codigo TEXT,created_at TEXT,updated_at TEXT);')
+c.execute("INSERT INTO qualificacoes_categorias (empresa_id,nome,codigo,cor,ativo) VALUES (7,'Other Tenant','OTHER','#000000',1)")
 c.executescript(sql)
 c.executescript(sql)
-assert c.execute("SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id=6 AND codigo='TREINAMENTO_OPERACIONAL' AND nome='Treinamentos Operacionais' AND ativo=1 AND lms_integrada=0").fetchone()[0]==1
+assert c.execute("SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id=6 AND codigo='TREINAMENTO_OPERACIONAL' AND nome='Treinamentos Operacionais' AND ativo=1 AND dominio_codigo IS NULL").fetchone()[0]==1
 assert c.execute("SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id=7").fetchone()[0]==1
 c.execute("DELETE FROM qualificacoes_categorias WHERE empresa_id=6")
-c.execute("INSERT INTO qualificacoes_categorias (empresa_id,nome,codigo,cor,ativo,lms_integrada) VALUES (6,'Treinamentos Operacionais','TREINAMENTO_OPERACIONAL','#6B7280',1,0)")
+c.execute("INSERT INTO qualificacoes_categorias (empresa_id,nome,codigo,cor,ativo) VALUES (6,'Treinamentos Operacionais','TREINAMENTO_OPERACIONAL','#6B7280',1)")
 c.executescript(sql)
 assert c.execute("SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id=6").fetchone()[0]==1
 `;
@@ -55,6 +55,8 @@ assert c.execute("SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id
     expect(sql).toContain("UPPER(TRIM(codigo))='TREINAMENTO_OPERACIONAL'");
     expect(sql).toContain("UPPER(TRIM(nome))='TREINAMENTOS OPERACIONAIS'");
     expect(sql).toContain('NOT EXISTS');
+    expect(sql).not.toContain('lms_integrada');
+    expect(read('scripts/schema-v2/validate-0541-production-postconditions.sh')).not.toContain('lms_integrada');
     for (const unsafe of ['INSERT INTO lms_', 'UPDATE funcionarios', 'qualificacoes_historico SET', 'DELETE FROM', 'UPDATE treinamento_requisitos']) {
       expect(sql).not.toContain(unsafe);
     }
