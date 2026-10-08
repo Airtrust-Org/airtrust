@@ -83,6 +83,31 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
     expect(response.status).toBe(200);
   });
 
+  it('accepts the existing trusted SCORM 1.2 Finish proof with 45/45 when terminal status remains incomplete', async () => {
+    const response = await commit(baseRow, {
+      lesson_status: 'incomplete',
+      commit_event: 'SCORM_FINISH',
+      completion_candidate: true,
+      completion_observed_at: '2026-10-08T15:00:00.000Z',
+      cmi_json: '{"cmi.core.lesson_location":"45/45"}',
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it('rejects a spoofed candidate lacking a trusted SCORM Finish', async () => {
+    const response = await commit(baseRow, {
+      lesson_status: 'incomplete',
+      commit_event: 'SCORM_BEFORE_UNLOAD_COMMIT',
+      completion_candidate: true,
+      completion_observed_at: '2026-10-08T15:00:00.000Z',
+      cmi_json: '{"cmi.core.lesson_location":"45/45"}',
+    });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'COMPLETION_EVIDENCE_INSUFFICIENT',
+    });
+  });
+
   it('keeps a graded qualifying course fail-closed without a score', async () => {
     const response = await commit({
       ...baseRow, scorm_assessment_policy: 'SCORED', scorm_mastery_score: 70,
