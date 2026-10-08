@@ -856,6 +856,9 @@ function CourseDrawer({
                             setForm((c) => ({
                               ...c,
                               tipo_conteudo: e.target.value as TipoConteudo,
+                              scorm_assessment_policy: e.target.value === 'scorm'
+                                ? (c.scorm_assessment_policy ?? 'SCORED')
+                                : 'SCORED',
                               scorm_versao:
                                 e.target.value === 'video' ? null : (c.scorm_versao ?? '1.2'),
                             }))
@@ -917,6 +920,7 @@ function CourseDrawer({
                         <FieldLabel label="Versão / critério de conclusão" />
                         <select
                           aria-label="Critério de conclusão SCORM"
+                          disabled={form.tipo_conteudo !== 'scorm'}
                           value={form.scorm_assessment_policy ?? 'SCORED'}
                           onChange={(e) =>
                             setForm((c) => ({
