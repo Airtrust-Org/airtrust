@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { trainingComplianceHistoryIdentitySql } from '../services/training-compliance-history-identity';
+import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModalitySql } from '../services/training-compliance-history-identity';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
@@ -399,10 +399,10 @@ async function loadQualificationEvidence(
       ? 'qh.created_at'
       : `qh.${dataCol}`;
   const vencSelect = vencCol ? `qh.${vencCol}` : 'NULL';
-  const modalitySelect = cols.has('formato_codigo')
-    ? `UPPER(TRIM(COALESCE(qh.formato_codigo,'')))`
-    : "''";
   const qualificationTypeCols = await columnSet(db, 'qualificacoes_tipos');
+  const modalitySelect = trainingComplianceHistoricalModalitySql(
+    cols.has('formato_codigo'), qualificationTypeCols.has('tipo'), cols.has('qualificacao_codigo'),
+  );
   const { joins: typeIdentityJoins, resolvedTypeSql: resolvedTipoSelect } = trainingComplianceHistoryIdentitySql(
     tipoCol, cols.has('qualificacao_codigo'), qualificationTypeCols.has('ativo'),
   );
