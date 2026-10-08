@@ -1182,6 +1182,31 @@ describe('training compliance engine', () => {
     });
   });
 
+  it('classifica CA-EBS concluído com formato legado indefinido como evidência a validar, sem inventar prática', async () => {
+    sqlite.database.exec(`
+      ALTER TABLE treinamento_requisitos ADD COLUMN modalidade_requerida TEXT;
+      ALTER TABLE qualificacoes_historico ADD COLUMN formato_codigo TEXT;
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem, modalidade_requerida)
+      VALUES (1, 100, 'FUNCAO', 1, 'OBRIGATORIA', 'PTO', 'PRATICO');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at, formato_codigo)
+      VALUES (1000, 100, 'MNT-12', 'Prático', '2026-02-26', '2030-02-26',
+              'CONCLUIDA', 0, 1, '2026-02-26', '2026-02-26', 'NAO_CLASSIFICADO');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1000');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    expect(body.data.requisitos[0]).toMatchObject({
+      status_compliance: 'NAO_REALIZADO',
+      evidencia_modalidade: 'NAO_CLASSIFICADO',
+      evidencia_modalidade_incompativel: true,
+      evidencia_pendente_validacao: true,
+      evidencia_pendente_motivo: 'MODALIDADE',
+    });
+  });
+
   it('exige correspondência exata do perfil de competência para AVSEC/DGR', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
