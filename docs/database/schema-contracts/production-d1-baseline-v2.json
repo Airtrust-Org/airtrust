@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-07",
-    "last_reconciled_against": "0541 operational training category production preflight prerequisite added as reviewed, remotely pending Schema V2 change",
-    "schema_v2_digest": "883994970845343718913e0fb1976574427d80acf446911147f8db77cb7ddbc6",
+    "last_reconciled_against": "0541 production-column-compatible category bootstrap; reviewed SQL hash and Schema V2 manifest reconciled",
+    "schema_v2_digest": "18fdc5022dbd09e6f8ac5d5a45e504769fb36d7680b1e1587940979e506b56af",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
