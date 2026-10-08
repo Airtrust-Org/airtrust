@@ -29,6 +29,25 @@ describe('training Doutrinação bootstrap 0539', () => {
     expect(sql).not.toContain('qualificacoes_historico');
   });
 
+  it('checks the exact canonical source reference used by migration 0539', () => {
+    const migration = read('worker-airtrust/schema-v2/changes/0539_training_doutrinacao_bootstrap.sql');
+    const sourceReference = 'PRG-MNT-002 — Programa de Treinamento de Manutenção Rev.06';
+    expect(migration).toContain(sourceReference);
+    for (const file of [
+      'scripts/staging/validate-0539-postconditions.sh',
+      'scripts/schema-v2/validate-0539-production-postconditions.sh',
+    ]) {
+      const validator = read(file);
+      expect(validator).toContain(
+        "referencias LIKE '%PRG-MNT-002%Programa de Treinamento de Manutenção Rev.06%'",
+      );
+      expect(validator).not.toContain("referencias LIKE '%PTM Rev.06%'");
+      expect(validator).toContain('carga_horaria_inicial=8');
+      expect(validator).toContain('carga_horaria_recorrente=4');
+      expect(validator).toContain('validade=36');
+    }
+  });
+
   it('keeps the repair ordered before 0537 and 0538', () => {
     for (const p of [
       'scripts/staging/validate-0539-preflight.sh',
