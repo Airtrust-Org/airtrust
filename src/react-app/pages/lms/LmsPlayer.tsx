@@ -646,8 +646,12 @@ export default function LmsPlayer() {
           typeof event.data.message === 'string' && event.data.message.trim()
             ? event.data.message.trim()
             : 'Conclusão recebida, mas ainda não confirmada pelo servidor.';
-        const displayMessage = code ? `${baseMessage} (código: ${code})` : baseMessage;
-        setCompletionErrorInfo({ code, reason, message: baseMessage });
+        const actionableMessage =
+          code === 'SCORE_MISSING' || code === 'MASTERY_SCORE_MISSING'
+            ? 'O conteúdo terminou, mas o curso está configurado para exigir uma nota que o pacote não forneceu. A Gerência de Treinamento precisa corrigir a configuração; a pendência não é uma questão não respondida.'
+            : baseMessage;
+        const displayMessage = code ? `${actionableMessage} (código: ${code})` : actionableMessage;
+        setCompletionErrorInfo({ code, reason, message: actionableMessage });
         showCompletionToast('error', displayMessage);
         void refetchMatricula();
         return;
