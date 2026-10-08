@@ -7,7 +7,7 @@ import {
   type LmsCompletionDecision,
   type LmsCompletionSource,
 } from '../services/lms-completion-evidence';
-import { isTrustedScorm12Finish } from '../services/lms-progress-guardrails';
+import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish } from '../services/lms-progress-guardrails';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
 
@@ -403,6 +403,15 @@ async function guardScormCommit(
   const ownershipError = await enforceOwnership(c, row);
   if (ownershipError) return ownershipError;
   const assetSessionValid = await hasValidAssetSession(c, row);
+  if (incoming.commit_event === 'SCORM_USER_FINALIZE' &&
+      !hasCompleteScormSlideCoverage(
+        typeof incoming.cmi_json === 'string' ? incoming.cmi_json : null
+      )) {
+    return decisionRejection(c, matriculaId, {
+      accepted: false, code: 'PROGRESS_EVIDENCE_MISSING',
+      scorePct: null, masteryScore: null, failurePrecedence: false,
+    });
+  }
   if (row.scorm_assessment_policy === 'FORMATIVE' &&
       !failureSignal && !hasTerminalFormativeScormStatus(row, incoming)) {
     return decisionRejection(c, matriculaId, formativeTerminalMissing());
