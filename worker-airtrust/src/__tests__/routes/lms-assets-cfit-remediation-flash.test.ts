@@ -43,7 +43,7 @@ describe('CFIT remediation — wrapper resume + autosave visual stability', () =
       'cmi.core.lesson_status': 'incomplete',
       'cmi.suspend_data': suspendData,
     });
-    frame.contentWindow!.g.document.body.innerHTML =
+    frame.contentWindow!.document.body.innerHTML =
       '<div id="slide"></div><div id="counter">18/41</div>';
     frame.contentWindow.Scorm = { get: () => suspendData };
     frame.dispatchEvent(new g.Event('load'));
@@ -66,7 +66,7 @@ describe('CFIT remediation — wrapper resume + autosave visual stability', () =
       'cmi.core.lesson_location': '5/41',
       'cmi.core.lesson_status': 'incomplete',
     });
-    frame.contentWindow!.g.document.body.innerHTML = '<div id="counter">1/41</div>';
+    frame.contentWindow!.document.body.innerHTML = '<div id="counter">1/41</div>';
     frame.dispatchEvent(new g.Event('load'));
     await new Promise((resolve) => setTimeout(resolve, 275));
     expect(frame.contentWindow!.location.hash).toBe('#slide/5');
