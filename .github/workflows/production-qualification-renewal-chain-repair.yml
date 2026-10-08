@@ -1,0 +1,165 @@
+name: Production Qualification Renewal Chain Repair
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA
+        required: true
+        type: string
+      mode:
+        description: Read-only dry-run or exact reviewed apply
+        required: true
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      confirmation:
+        description: Exact confirmation required by mode
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Successful same-SHA dry-run run ID, mandatory for apply
+        required: false
+        type: string
+      expected_plan_hash:
+        description: Reviewed SHA-256 digest, mandatory for apply
+        required: false
+        type: string
+      expected_change_count:
+        description: Reviewed exact count, mandatory for apply
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-qualification-renewal-chain-d1
+  cancel-in-progress: false
+
+jobs:
+  d1_repair:
+    name: Governed D1 Qualification Renewal Repair (tenant 6)
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Validate dispatch and exact candidate identification
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          PLAN_HASH: ${{ inputs.expected_plan_hash }}
+          PLAN_COUNT: ${{ inputs.expected_change_count }}
+          REVIEW_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_REF_REQUIRED; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo INVALID_SHA; exit 1; }
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]] || { echo RELEASE_SHA_CHANGED; exit 1; }
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_QUALIFICATION_RENEWAL_DRYRUN ]] || { echo DRYRUN_CONFIRMATION_REQUIRED; exit 1; }
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_APPLY_QUALIFICATION_RENEWAL_LINEAGE_REVIEWED ]] || { echo APPLY_CONFIRMATION_REQUIRED; exit 1; }
+            [[ "$PLAN_HASH" =~ ^[0-9a-f]{64}$ ]] || { echo REVIEWED_HASH_REQUIRED; exit 1; }
+            [[ "$PLAN_COUNT" =~ ^[1-9][0-9]*$ ]] || { echo REVIEWED_COUNT_REQUIRED; exit 1; }
+            [[ "$REVIEW_RUN" =~ ^[1-9][0-9]*$ ]] || { echo REVIEWED_DRYRUN_REQUIRED; exit 1; }
+          else
+            echo INVALID_MODE; exit 1
+          fi
+
+      - name: Checkout exact main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify eight release gates on exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Assert production-scoped credential
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo D1_PRODUCTION_CREDENTIAL_REQUIRED; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo EXACT_MAIN_CHECKOUT_REQUIRED; exit 1; }
+
+      - name: Verify exact earlier successful read-only evidence
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+          PLAN_HASH: ${{ inputs.expected_plan_hash }}
+          PLAN_COUNT: ${{ inputs.expected_change_count }}
+        run: |
+          set -euo pipefail
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEW_RUN")"
+          [[ "$(jq -r .name <<<"$run")" == 'Production Qualification Renewal Chain Repair' ]] || { echo WRONG_DRYRUN_WORKFLOW; exit 1; }
+          [[ "$(jq -r .conclusion <<<"$run")" == success ]] || { echo DRYRUN_NOT_GREEN; exit 1; }
+          [[ "$(jq -r .head_sha <<<"$run")" == "$GITHUB_SHA" ]] || { echo DRYRUN_SHA_CHANGED; exit 1; }
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEW_RUN" --repo "$GITHUB_REPOSITORY" --name "qualification-renewal-chain-dry-run-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
+          file="$RUNNER_TEMP/reviewed/result.json"
+          test -s "$file"
+          [[ "$(jq -r .mode "$file")" == dry-run ]] || { echo BAD_REVIEWED_MODE; exit 1; }
+          [[ "$(jq -r .mutation_executed "$file")" == false ]] || { echo REVIEW_NOT_READONLY; exit 1; }
+          [[ "$(jq -r .source_sha "$file")" == "$GITHUB_SHA" ]] || { echo REVIEWED_SHA_MISMATCH; exit 1; }
+          [[ "$(jq -r .plan_hash "$file")" == "$PLAN_HASH" ]] || { echo REVIEWED_PLAN_MISMATCH; exit 1; }
+          [[ "$(jq -r .eligible_change_count "$file")" == "$PLAN_COUNT" ]] || { echo REVIEWED_COUNT_MISMATCH; exit 1; }
+
+      - name: Run reviewed read-only preview or guarded audited repair
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          PLAN_HASH: ${{ inputs.expected_plan_hash }}
+          PLAN_COUNT: ${{ inputs.expected_change_count }}
+        run: |
+          set -euo pipefail
+          args=("$MODE")
+          if [[ "$MODE" == apply ]]; then
+            args+=(--expected-sha "$EXPECTED_SHA" --expected-plan-hash "$PLAN_HASH" --expected-change-count "$PLAN_COUNT" --confirmation "$CONFIRMATION")
+          fi
+          python3 scripts/production/qualification-renewal-chain-repair.py "${args[@]}" > "$RUNNER_TEMP/result.json"
+          test -s "$RUNNER_TEMP/result.json"
+
+      - name: Record sanitized evidence
+        if: ${{ success() }}
+        run: |
+          jq '{mode,source_sha,empresa_id,as_of,source_rows,eligible_group_count,eligible_change_count,active_employee_groups,plan_hash,blocked_reasons,excluded_rows,mutation_executed,changed_histories,audit_rows,postconditions_verified,recovery_timestamp_utc,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized evidence
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: qualification-renewal-chain-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Postcheck Worker production health
+        if: ${{ inputs.mode == 'apply' && success() }}
+        run: |
+          curl --fail --silent --show-error https://api.airtrust.online/api/health >/dev/null
+          curl --fail --silent --show-error https://api.airtrust.online/api/version >/dev/null
