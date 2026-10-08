@@ -244,6 +244,12 @@ describe('training compliance engine', () => {
     expect(maintenance.requisitos[0].status_compliance).toBe('NAO_REALIZADO');
     const summary = (await (await app.request('/resumo')).json() as any).data;
     expect(summary.requisitos_obrigatorios).toBe(3);
+    const matrixPilot = (await (await app.request('/matriz-organizacao?setor_id=11')).json() as any).data;
+    expect(matrixPilot.find((row: any) => row.qualificacao_tipo_codigo === 'AVSEC_CONSC').impacto.com_requisito)
+      .toBe(0);
+    const matrixMaintenance = (await (await app.request('/matriz-organizacao?setor_id=10')).json() as any).data;
+    expect(matrixMaintenance.find((row: any) => row.qualificacao_tipo_codigo === 'AVSEC_CONSC').impacto.com_requisito)
+      .toBe(2);
 
     // Certificado sem perfil NÃO pode ser presumido tripulante nem corporativo.
     sqlite.database.exec(`
