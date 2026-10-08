@@ -271,9 +271,6 @@ async function loadAircraftModelsCatalog(db: D1Database, empresaId: number) {
 async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
   const hasV2 = await tableExists(db, 'treinamento_requisitos');
   const tipoCols = await columnSet(db, 'qualificacoes_tipos');
-  const eligibleCategoryExpr = tipoCols.has('categoria')
-    ? trainingComplianceEligibleCategorySql('qt.categoria')
-    : '1=1';
   const validadeExpr = tipoCols.has('validade')
     ? 'qt.validade'
     : tipoCols.has('validade_meses')
@@ -305,7 +302,7 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
            LEFT JOIN funcoes fn
              ON fn.id = m.funcao_id AND fn.empresa_id = m.empresa_id AND fn.deleted_at IS NULL
           WHERE m.empresa_id = ? AND m.ativo = 1 AND m.deleted_at IS NULL
-            AND ${eligibleCategoryExpr}
+            AND ${trainingComplianceEligibleCategorySql('qt.categoria')}
           ORDER BY qt.nome ASC, m.id ASC`,
       )
       .bind(empresaId)
@@ -366,7 +363,7 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
         WHERE tr.empresa_id = ?
           AND tr.ativo = 1
           AND tr.deleted_at IS NULL
-          AND ${eligibleCategoryExpr}
+          AND ${trainingComplianceEligibleCategorySql('qt.categoria')}
           AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio) <= date('now'))
           AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim) >= date('now'))
         ORDER BY qt.nome ASC, tr.id ASC`,
@@ -779,10 +776,6 @@ async function loadLmsEnrollments(db: D1Database, empresaId: number): Promise<Lm
     ? "AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'"
     : '';
   const deletedFuncionario = funcionarioCols.has('deleted_at') ? 'AND f.deleted_at IS NULL' : '';
-  const qualificationCols = await columnSet(db, 'qualificacoes_tipos');
-  const eligibleEnrollmentCategory = qualificationCols.has('categoria')
-    ? `(qt.id IS NULL OR ${trainingComplianceEligibleCategorySql('qt.categoria')})`
-    : '1=1';
   const { results } = await db
     .prepare(
       `SELECT m.id, m.funcionario_id, m.curso_id, c.titulo AS curso_titulo,
@@ -797,7 +790,7 @@ async function loadLmsEnrollments(db: D1Database, empresaId: number): Promise<Lm
          LEFT JOIN funcoes fn ON fn.id=f.funcao_id AND fn.empresa_id=f.empresa_id AND fn.deleted_at IS NULL
         WHERE m.empresa_id=? AND m.deleted_at IS NULL
           AND UPPER(COALESCE(m.status,'')) <> 'CANCELADO'
-          AND ${eligibleEnrollmentCategory}
+          AND (qt.id IS NULL OR ${trainingComplianceEligibleCategorySql('qt.categoria')})
           ${deletedFuncionario} ${activeExpr} ${statusExpr}
         ORDER BY c.titulo, f.nome, m.id`,
     )
@@ -878,13 +871,9 @@ async function validateRuleReferences(
 ) {
   const qualificacaoTipoId = asPositiveInt(payload.qualificacao_tipo_id);
   if (!qualificacaoTipoId) throw new ApiError('qualificacao_tipo_id é obrigatório', 400);
-  const tipoCols = await columnSet(db, 'qualificacoes_tipos');
-  const eligibleType = tipoCols.has('categoria')
-    ? trainingComplianceEligibleCategorySql('categoria')
-    : '1=1';
   const tipo = await db
     .prepare(
-      `SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND ${eligibleType}`,
+      `SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND ${trainingComplianceEligibleCategorySql('categoria')}`,
     )
     .bind(qualificacaoTipoId, empresaId)
     .first<{ id: number }>();
@@ -1542,16 +1531,13 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
   }
   const tipoCols = await columnSet(db, 'qualificacoes_tipos');
   const tipoAtivoExpr = tipoCols.has('ativo') ? 'AND COALESCE(ativo,1)=1' : '';
-  const tipoCategoriaExpr = tipoCols.has('categoria')
-    ? `AND ${trainingComplianceEligibleCategorySql('categoria')}`
-    : '';
   const tipoDeletedExpr = tipoCols.has('deleted_at') ? 'AND deleted_at IS NULL' : '';
   const [rules, tiposResult, allEmployees, historyMap, lmsMap] = await Promise.all([
     loadRules(db, empresaId),
     db
       .prepare(
         `SELECT id,codigo,nome FROM qualificacoes_tipos
-          WHERE empresa_id=? ${tipoDeletedExpr} ${tipoAtivoExpr} ${tipoCategoriaExpr}
+          WHERE empresa_id=? ${tipoDeletedExpr} ${tipoAtivoExpr} AND ${trainingComplianceEligibleCategorySql('categoria')}
           ORDER BY nome`,
       )
       .bind(empresaId)
