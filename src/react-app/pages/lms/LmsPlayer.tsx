@@ -138,6 +138,8 @@ export default function LmsPlayer() {
   const [liveLocation, setLiveLocation] = useState<string | null>(null);
   const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  const completionDialogShownRef = useRef(false);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
   const [assetSessionReady, setAssetSessionReady] = useState(false);
   const [completionState, setCompletionState] = useState<
@@ -255,6 +257,37 @@ export default function LmsPlayer() {
     !isScormContent &&
     completionDiagnostic?.can_finalize === true &&
     !isFinalizing;
+  // Prefer a package-authored granular checklist. Position alone (45/45) is
+  // not proof that earlier slides or every questionnaire were completed.
+  const diagnosticSlidesDone = granularDiagnostic?.slides.totalRequired != null &&
+    granularDiagnostic.slides.totalRequired > 0 &&
+    granularDiagnostic.slides.completedRequired === granularDiagnostic.slides.totalRequired &&
+    granularDiagnostic.slides.missing.length === 0;
+  const diagnosticAssessmentDone = granularDiagnostic != null &&
+    (!granularDiagnostic.assessment.required ||
+      (granularDiagnostic.assessment.completed &&
+        granularDiagnostic.assessment.unanswered.length === 0 &&
+        granularDiagnostic.assessment.incomplete.length === 0)) &&
+    granularDiagnostic.moduleResults.every((module) =>
+      !module.assessment.required || module.assessment.completed);
+  // Legacy formative packages do not always provide granular diagnostics.
+  // Only a real terminal package event / server guard can confirm them; do not
+  // unlock a browser-side completion solely from a final slide counter.
+  const canRequestScormCompletion =
+    isScormContent && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
+    diagnosticSlidesDone && diagnosticAssessmentDone &&
+    (curso?.scorm_assessment_policy !== 'SCORED' ||
+      granularDiagnostic?.assessment.completed === true);
+  const canRequestCompletion = canFinalize || Boolean(canRequestScormCompletion);
+
+  useEffect(() => {
+    if (canRequestScormCompletion && !completionDialogShownRef.current &&
+        completionState !== 'saving') {
+      completionDialogShownRef.current = true;
+      setCompletionDialogOpen(true);
+    }
+  }, [canRequestScormCompletion, completionState]);
+
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
   const canGoNextViewedOnly =
@@ -606,6 +639,8 @@ export default function LmsPlayer() {
         event.data.matriculaId === id
       ) {
         setCompleted(true);
+        setCompletionDialogOpen(false);
+        setIsFinalizing(false);
         void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
         if (event.data.qualificacao_gerada) setQualificacaoGerada(true);
         showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
@@ -651,6 +686,7 @@ export default function LmsPlayer() {
             ? 'O conteúdo terminou, mas o curso está configurado para exigir uma nota que o pacote não forneceu. A Gerência de Treinamento precisa corrigir a configuração; a pendência não é uma questão não respondida.'
             : baseMessage;
         const displayMessage = code ? `${actionableMessage} (código: ${code})` : actionableMessage;
+        setIsFinalizing(false);
         setCompletionErrorInfo({ code, reason, message: actionableMessage });
         showCompletionToast('error', displayMessage);
         void refetchMatricula();
@@ -826,6 +862,25 @@ export default function LmsPlayer() {
     window.addEventListener('message', onAck);
     const timer = window.setTimeout(finish, 4500);
     frameWindow.postMessage({ type: 'lms:session-close', reason: 'user-exit' }, launchOrigin);
+  }
+
+  function requestExplicitCompletion() {
+    if (!canRequestCompletion || !matricula) return;
+    setCompletionDialogOpen(false);
+    if (isScormContent) {
+      const frameWindow = iframeRef.current?.contentWindow;
+      if (!frameWindow) {
+        toast.error('Conteúdo indisponível. Reabra o curso antes de concluir.');
+        return;
+      }
+      setIsFinalizing(true);
+      showCompletionToast('saving', 'Verificando e registrando a conclusão...');
+      frameWindow.postMessage({ type: 'lms:request-completion', matriculaId: id }, launchOrigin);
+      // The wrapper/backend are the only authorities for status and qualification.
+      // Errors and confirmations reset this loading state through postMessage.
+      return;
+    }
+    void handleFinalizeAndGenerateQualification();
   }
 
   async function handleFinalizeAndGenerateQualification() {
@@ -1058,9 +1113,9 @@ export default function LmsPlayer() {
               </div>
             </section>
 
-            {canFinalize ? (
+            {canRequestCompletion ? (
               <button
-                onClick={handleFinalizeAndGenerateQualification}
+                onClick={() => setCompletionDialogOpen(true)}
                 disabled={isFinalizing}
                 className="mt-auto w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -1082,7 +1137,7 @@ export default function LmsPlayer() {
           </aside>
         </div>
       </main>
-      {(canFinalize ||
+      {(canRequestCompletion ||
         completionState === 'saving' ||
         completionState === 'pending' ||
         completionState === 'error' ||
@@ -1115,7 +1170,7 @@ export default function LmsPlayer() {
                   Voltar ao catálogo
                 </button>
               </div>
-            ) : canFinalize ? (
+            ) : canRequestCompletion ? (
               <button
                 onClick={handleFinalizeAndGenerateQualification}
                 disabled={isFinalizing}
@@ -1129,6 +1184,28 @@ export default function LmsPlayer() {
               </button>
             ) : null}
           </div>
+        </div>
+      )}
+
+      {completionDialogOpen && !isCompletedState && !effectiveReviewMode && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4">
+          <section role="dialog" aria-modal="true" aria-labelledby="lms-finish-heading"
+            className="w-full max-w-md rounded-2xl border border-slate-600 bg-slate-900 p-6 text-white shadow-2xl">
+            <h2 id="lms-finish-heading" className="text-xl font-semibold">Concluir curso</h2>
+            <p className="mt-3 text-sm text-slate-200">
+              Confirme a conclusão do treinamento. O sistema verificará o registro das telas
+              obrigatórias e, quando houver avaliação, de todos os questionários.
+              A conclusão e eventual qualificação só serão exibidas após confirmação do servidor.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setCompletionDialogOpen(false)}
+                className="rounded-lg bg-white/10 px-4 py-2 text-sm">Voltar ao curso</button>
+              <button onClick={requestExplicitCompletion} disabled={!canRequestCompletion || isFinalizing}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold disabled:opacity-50">
+                {isFinalizing ? 'Validando...' : 'Confirmar conclusão'}
+              </button>
+            </div>
+          </section>
         </div>
       )}
 
