@@ -1575,14 +1575,9 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
           rule.aeronave_modelo === aeronaveModelo,
       ) || null;
     const preview = selectedEmployees.map((employee) => {
-      const employeeEffective = rules
-        .filter(
-          (rule) => rule.qualificacao_tipo_id === Number(tipo.id) && ruleApplies(rule, employee),
-        )
-        .sort(
-          (a, b) =>
-            trainingComplianceRulePriority(b) - trainingComplianceRulePriority(a) || b.id - a.id,
-        )[0];
+      const employeeEffective = resolvedRules(rules, employee).find(
+        (rule) => rule.qualificacao_tipo_id === Number(tipo.id),
+      );
       const requirement =
         employeeEffective && employeeEffective.obrigatoriedade !== 'NAO_APLICA'
           ? computeRequirement(
