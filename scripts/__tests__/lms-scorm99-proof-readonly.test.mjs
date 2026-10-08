@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PROOF_SQL, FDM_HISTORY_SQL, validate, validateHistory, summarize } from '../production/lms-scorm99-proof-readonly.mjs';
+import { PROOF_SQL, FDM_HISTORY_SQL, FDM_REENROLLMENT_SQL, validate, validateHistory, validateReenrollment, summarize } from '../production/lms-scorm99-proof-readonly.mjs';
 
 const example={
  curso_id:13,audience:'tripulacao',enrolled:4,employee_active_enrollments:3,concluded:1,
@@ -77,4 +77,38 @@ test('FDM legacy history preserves cancelled/soft-deleted records and checks des
  assert.match(FDM_HISTORY_SQL,/AUXILIAR DE MANUTENçãO/);
  assert.doesNotMatch(FDM_HISTORY_SQL,/\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\s/i);
  assert.doesNotMatch(FDM_HISTORY_SQL,/SELECT\s+(?:m\.\*|f\.nome|f\.id|m\.id|ps\.cmi_json)/i);
+});
+
+
+test('canceled legacy cohort yields disjoint pilot/MNT/excluded buckets and never credits automatically',()=>{
+ const row={
+  audience:'tripulacao',source_canceled_rows:11,unique_staff:11,
+  active_staff_rows:11,inactive_staff_rows:0,duplicate_source_rows:0,
+  already_active_at_target:0,any_target_history:0,linked_target_rows:0,
+  legacy_raw100:9,legacy_below100:2,raw100_explicit_end:7,
+  raw100_no_explicit_end:2,raw100_explicit_failure:0,
+  raw100_no_scorm:0,raw100_no_commit:0,
+  raw100_explicit_mastery_met:6,raw100_explicit_mastery_unproven:1,
+  raw100_explicit_no_mastery_requirement:0,
+ };
+ const excluded={...row,audience:'excluded',source_canceled_rows:6,unique_staff:6,
+  active_staff_rows:6,legacy_raw100:0,legacy_below100:6,
+  raw100_explicit_end:0,raw100_no_explicit_end:0,
+  raw100_explicit_mastery_met:0,raw100_explicit_mastery_unproven:0};
+ assert.equal(validateReenrollment([row,excluded]).length,2);
+ assert.throws(()=>validateReenrollment([{...row,legacy_below100:3}]),/FDM_REENROLLMENT_PROGRESS_PARTITION/);
+ assert.throws(()=>validateReenrollment([{...row,raw100_explicit_end:8}]),/FDM_REENROLLMENT_COMPLETION_PARTITION/);
+ assert.throws(()=>validateReenrollment([{...row,raw100_explicit_mastery_met:7}]),/FDM_REENROLLMENT_MASTERY_PARTITION/);
+ assert.match(FDM_REENROLLMENT_SQL,/m\.curso_id=13 AND m\.deleted_at IS NULL/);
+ assert.match(FDM_REENROLLMENT_SQL,/CANCELADO/);
+ assert.match(FDM_REENROLLMENT_SQL,/COUNT\(DISTINCT funcionario_id\)/);
+ assert.match(FDM_REENROLLMENT_SQL,/already_active_at_target/);
+ assert.match(FDM_REENROLLMENT_SQL,/FDM-TRIPULACAO/);
+ assert.match(FDM_REENROLLMENT_SQL,/FDM-MECANICO/);
+ assert.match(FDM_REENROLLMENT_SQL,/legacy_mastery/);
+ assert.doesNotMatch(FDM_REENROLLMENT_SQL,/\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH)\s/i);
+ assert.doesNotMatch(FDM_REENROLLMENT_SQL,/SELECT\s+(?:m\.\*|f\.nome|f\.id|m\.id|ps\.cmi_json)/i);
+ const code=readFileSync(new URL('../production/lms-scorm99-proof-readonly.mjs',import.meta.url),'utf8');
+ assert.match(code,/reenrollment_writes:0/);
+ assert.match(code,/administrative_completions_issued:0/);
 });
