@@ -1,3 +1,7 @@
+// source_reference: 2026-10-08 verified Gatekeeper legacy LMS enrollments 23/24 and PR #1297 target 73.
+// operational_decision: Training Management requests an explicit two-person administrative credit; not a new SCORM completion.
+// dry_run_required: SHA-pinned successful production read-only run and matching candidate hash before any D1 write.
+// rollback_plan_required: governed D1 Time Travel recovery point, isolate concurrent writes; otherwise reviewed forward-only compensation.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
