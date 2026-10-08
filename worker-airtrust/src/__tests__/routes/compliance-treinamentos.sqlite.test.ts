@@ -1258,6 +1258,89 @@ describe('training compliance engine', () => {
     });
   });
 
+  it('aceita CA-EBS vigente usando a modalidade PRÁTICO do modelo canônico quando o histórico é não classificado', async () => {
+    sqlite.database.exec(`
+      ALTER TABLE qualificacoes_tipos ADD COLUMN tipo TEXT;
+      UPDATE qualificacoes_tipos SET tipo='PRÁTICO' WHERE empresa_id=1 AND id=100;
+      ALTER TABLE treinamento_requisitos ADD COLUMN modalidade_requerida TEXT;
+      ALTER TABLE qualificacoes_historico ADD COLUMN formato_codigo TEXT;
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem, modalidade_requerida)
+      VALUES (1, 100, 'FUNCAO', 1, 'OBRIGATORIA', 'PTO', 'PRATICO');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at, formato_codigo)
+      VALUES (1000, 100, 'MNT-12', 'Prático', '2026-02-26', '2030-02-26',
+              'CONCLUIDA', 0, 1, '2026-02-26', '2026-02-26', 'NAO_CLASSIFICADO');
+    `);
+    const app = createApp(sqlite.asD1());
+    const response = await app.request('/funcionarios/1000');
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.data.requisitos[0]).toMatchObject({
+      status_compliance: 'CONFORME',
+      evidencia_modalidade: 'PRÁTICO',
+      evidencia_pendente_validacao: false,
+      ultima_data: '2026-02-26',
+      data_validade: '2030-02-26',
+    });
+    const pending = await app.request('/pendencias?status=NAO_REALIZADO');
+    expect(pending.status).toBe(200);
+    const pendingBody = (await pending.json()) as any;
+    expect(pendingBody.data.some((row: any) => row.funcionario_id === 1000 && row.qualificacao_tipo_id === 100)).toBe(false);
+  });
+
+  it('herda categoria EAD do modelo quando tipo do modelo está vazio', async () => {
+    sqlite.database.exec(`
+      ALTER TABLE qualificacoes_tipos ADD COLUMN tipo TEXT;
+      UPDATE qualificacoes_tipos SET tipo=NULL, categoria='EAD' WHERE empresa_id=1 AND id=100;
+      ALTER TABLE treinamento_requisitos ADD COLUMN modalidade_requerida TEXT;
+      ALTER TABLE qualificacoes_historico ADD COLUMN formato_codigo TEXT;
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem, modalidade_requerida)
+      VALUES (1, 100, 'FUNCAO', 1, 'OBRIGATORIA', 'EMPRESA', 'EAD');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at, formato_codigo)
+      VALUES (1000, 100, 'MNT-12', 'EAD', '2026-02-26', '2030-02-26',
+              'CONCLUIDA', 0, 1, '2026-02-26', '2026-02-26', 'NAO_CLASSIFICADO');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1000');
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.data.requisitos[0]).toMatchObject({
+      status_compliance: 'CONFORME',
+      evidencia_modalidade: 'EAD',
+      evidencia_pendente_validacao: false,
+    });
+  });
+
+  it('não converte histórico explicitamente EAD em PRÁTICO mesmo que o modelo seja prático', async () => {
+    sqlite.database.exec(`
+      ALTER TABLE qualificacoes_tipos ADD COLUMN tipo TEXT;
+      UPDATE qualificacoes_tipos SET tipo='PRÁTICO' WHERE empresa_id=1 AND id=100;
+      ALTER TABLE treinamento_requisitos ADD COLUMN modalidade_requerida TEXT;
+      ALTER TABLE qualificacoes_historico ADD COLUMN formato_codigo TEXT;
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem, modalidade_requerida)
+      VALUES (1, 100, 'FUNCAO', 1, 'OBRIGATORIA', 'PTO', 'PRATICO');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria, data_conclusao,
+         data_vencimento, status, renovada, empresa_id, created_at, updated_at, formato_codigo)
+      VALUES (1000, 100, 'MNT-12', 'Prático', '2026-02-26', '2030-02-26',
+              'CONCLUIDA', 0, 1, '2026-02-26', '2026-02-26', 'EAD');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/funcionarios/1000');
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.data.requisitos[0]).toMatchObject({
+      status_compliance: 'NAO_REALIZADO',
+      evidencia_modalidade: 'EAD',
+      evidencia_pendente_validacao: true,
+      evidencia_pendente_motivo: 'MODALIDADE',
+    });
+  });
+
   it('exige correspondência exata do perfil de competência para AVSEC/DGR', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
