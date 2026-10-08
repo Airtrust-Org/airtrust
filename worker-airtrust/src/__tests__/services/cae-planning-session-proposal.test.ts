@@ -304,6 +304,53 @@ describe('session-level simulator proposal', () => {
     expect(classes.map((item) => item.blocks.length)).toEqual([1, 1]);
   });
 
+  it('permits two copilots to share an identical simulator session', () => {
+    const a = need('a', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-03-20', 'Copiloto');
+    const b = need('b', 20, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-03-20', 'Copiloto');
+    const [block] = pairSimulatorTrainingSessions([a, b], 90);
+    expect(block.pairing).toBe('MESMO_TREINAMENTO');
+    expect(block.sessions).toHaveLength(2);
+  });
+
+  it('prefers a nearby same-role pilot over a far-ahead complementary role', () => {
+    const a = need('a', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-01-10', 'Comandante');
+    const distant = need('b', 20, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-03-20', 'Copiloto');
+    const nearby = need('c', 30, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-01-20', 'Comandante');
+    const blocks = pairSimulatorTrainingSessions([a, distant, nearby], 90);
+    const pair = blocks.find((block) => block.pairing !== 'SEM_DUPLA');
+    expect(pair?.sessions.map((session) => session.employee_id).sort()).toEqual([10, 30]);
+  });
+
+  it('uses nearby compatible semestral instead of anticipating a periodic by more than 60 days', () => {
+    const annual = need('a', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-01-10', 'Comandante');
+    const distantAnnual = need('b', 20, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-03-20', 'Copiloto');
+    const nearbySemestral = need('c', 30, 2, 'AW139 — Currículo de Voo - Semestral (FFS)', 1, '2027-01-20', 'Copiloto');
+    const blocks = pairSimulatorTrainingSessions([annual, distantAnnual, nearbySemestral], 90);
+    const pair = blocks.find((block) => block.pairing !== 'SEM_DUPLA');
+    expect(pair?.pairing).toBe('TREINAMENTOS_COMPATIVEIS');
+    expect(pair?.sessions.map((session) => session.employee_id).sort()).toEqual([10, 30]);
+    expect(annual.qualification_type_id).toBe(1);
+    expect(nearbySemestral.qualification_type_id).toBe(2);
+  });
+
+  it('repairs a stranded pair into two valid pairs without crossing eligibility restrictions', () => {
+    const needs = [10, 20, 30, 40].map((employeeId, index) =>
+      need(String.fromCharCode(97 + index), employeeId, 1, 'AW139 — Currículo de Voo - Anual (FFS)',
+        1, '2027-03-20', 'Comandante'),
+    );
+    const compatible = new Set(['10:20', '10:30', '20:40']);
+    const blocks = pairSimulatorTrainingSessions(needs, 45, true, (left, right) =>
+      compatible.has([left.employee_id, right.employee_id].sort((a, b) => a - b).join(':')),
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks.every((block) => block.sessions.length === 2)).toBe(true);
+    expect(blocks.flatMap((block) => block.sessions.map((item) => item.need_id)).sort())
+      .toEqual(['a', 'b', 'c', 'd']);
+    expect(blocks.map((block) =>
+      block.sessions.map((item) => item.employee_id).sort((a, b) => a - b).join(':'),
+    ).sort()).toEqual(['10:30', '20:40']);
+  });
+
   it('keeps a cohort connected when the partner changes between sessions', () => {
     const s1 = pairSimulatorTrainingSessions(
       [
