@@ -52,3 +52,20 @@ test('GitHub Actions guards production D1 write via reviewed dry-run and recover
  assert.doesNotMatch(yml,/\bpush:/);
  assert.doesNotMatch(yml,/\bpull_request:/);
 });
+
+test('production UI API postcheck verifies both course counts and 99% credited totals without PII',()=>{
+ const api=readFileSync(new URL('../production/lms-fdm13-postcheck-api.mjs',import.meta.url),'utf8');
+ for(const evidence of [
+  'TRIPULACAO_UI_COUNT_INCORRECT',
+  'MANUTENCAO_UI_COUNT_INCORRECT',
+  'COMPLETION_UI_COUNT_INCORRECT',
+  'POST_TRANSFER_NOT_COMPLETE',
+  'TENANT_MISMATCH',
+  "contains_personal_data:false"
+ ]) assert.ok(api.includes(evidence),evidence);
+ assert.match(api,/const id of \[71,72\]/);
+ assert.match(yml,/Post-check authenticated LMS API/);
+ assert.match(yml,/secrets\.PROD_SMOKE_EMAIL/);
+ assert.match(yml,/api-postcheck\.json/);
+ assert.doesNotMatch(api,/console\.log\(.*funcionario|JSON\.stringify\(response\.data\)/);
+});
