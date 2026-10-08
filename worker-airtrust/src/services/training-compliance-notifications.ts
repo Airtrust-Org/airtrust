@@ -34,17 +34,8 @@ const LEGACY_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE =
 
 const PREVIOUS_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE = 'GERÊNCIA DE TREINAMENTO | COSTA DO SOL\n\nOlá, {{funcionario}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\n\nTreinamento: {{treinamento}}\nVencimento: {{data_vencimento}}\nStatus: {{status}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação e é acompanhado pela Gerência de Treinamento, inclusive para fins de auditoria.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.{{link_bloco}}\n\nEsta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.';
 const PREVIOUS_COMPLIANCE_EMPLOYEE_EMAIL_SUBJECT = 'Treinamento obrigatório: {{treinamento}} — {{status}}';
-
-export const DEFAULT_COMPLIANCE_NOTIFICATION_POLICY: ComplianceNotificationPolicy = {
-  enabled: false,
-  email: true,
-  whatsapp: true,
-  due_day_thresholds: [30, 15, 7, 0, -7, -15, -30],
-  never_done_every_days: 7,
-  notify_manager_on_overdue: true,
-  manager_overdue_thresholds: [0, -7, -15, -30],
-  email_subject_template: 'Ação necessária | Capacitação obrigatória {{assunto_situacao}} – {{treinamento}}',
-  email_message_template: [
+const PREVIOUS_LONG_COMPLIANCE_EMPLOYEE_EMAIL_SUBJECT = 'Ação necessária | Capacitação obrigatória {{assunto_situacao}} – {{treinamento}}';
+const PREVIOUS_LONG_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE = [
     'GERÊNCIA DE TREINAMENTO | COSTA DO SOL',
     '',
     'Olá, {{funcionario}}!',
@@ -66,6 +57,33 @@ export const DEFAULT_COMPLIANCE_NOTIFICATION_POLICY: ComplianceNotificationPolic
     'Costa do Sol',
     '',
     'Esta é uma comunicação automática. Não é necessário responder a este e-mail.',
+  ].join('\n');
+
+export const DEFAULT_COMPLIANCE_NOTIFICATION_POLICY: ComplianceNotificationPolicy = {
+  enabled: false,
+  email: true,
+  whatsapp: true,
+  due_day_thresholds: [30, 15, 7, 0, -7, -15, -30],
+  never_done_every_days: 7,
+  notify_manager_on_overdue: true,
+  manager_overdue_thresholds: [0, -7, -15, -30],
+  email_subject_template: 'Treinamento obrigatório {{assunto_situacao}} — {{treinamento}}',
+  email_message_template: [
+    'Olá, {{funcionario}}!',
+    '',
+    '{{introducao}}',
+    '',
+    'Curso: {{treinamento}}',
+    '{{situacao_bloco}}',
+    '',
+    '{{link_bloco}}',
+    '',
+    '{{orientacao}}',
+    '',
+    'Importante: Este treinamento é obrigatório para sua função e seu cumprimento é verificado em auditorias.',
+    '',
+    'Gerência de Treinamento',
+    'Costa do Sol',
   ].join('\n'),
   manager_subject_template: 'Pendência de treinamento — {{funcionario}} — {{treinamento}}',
   manager_message_template:
@@ -156,13 +174,13 @@ function normalizePolicy(value: unknown): ComplianceNotificationPolicy {
       input.email_subject_template,
       DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_subject_template,
       300,
-      [PREVIOUS_COMPLIANCE_EMPLOYEE_EMAIL_SUBJECT],
+      [PREVIOUS_COMPLIANCE_EMPLOYEE_EMAIL_SUBJECT, PREVIOUS_LONG_COMPLIANCE_EMPLOYEE_EMAIL_SUBJECT],
     ),
     email_message_template: normalizeNotificationMessageTemplate(
       input.email_message_template,
       DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template,
       5000,
-      [LEGACY_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE, PREVIOUS_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE],
+      [LEGACY_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE, PREVIOUS_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE, PREVIOUS_LONG_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE],
     ),
     manager_subject_template:
       String(input.manager_subject_template || '')
@@ -298,18 +316,24 @@ export function complianceTemplateVariables(
   const situacao = neverDone
     ? 'Pendente de realização'
     : overdue
-      ? dueDate ? 'Sua qualificação está vencida desde ' + dueDate : 'Sua qualificação está vencida'
+      ? dueDate ? 'Vencido desde ' + dueDate : 'Vencido'
       : expiring
-        ? dueDate ? 'Sua qualificação vencerá em ' + dueDate : 'Sua qualificação está próxima do vencimento'
-        : status === 'EM_ANDAMENTO' ? 'Capacitação em andamento' : statusText(target);
-  const introducao = expiring
-    ? 'Identificamos uma capacitação obrigatória próxima do vencimento em seu histórico de qualificações:'
-    : 'Identificamos uma pendência de capacitação obrigatória em seu histórico de qualificações:';
+        ? dueDate ? 'Vence em ' + dueDate : 'Próximo do vencimento'
+        : status === 'EM_ANDAMENTO' ? 'Em andamento' : statusText(target);
+  const introducao = neverDone
+    ? 'Você tem um treinamento obrigatório pendente:'
+    : overdue
+      ? 'Você tem um treinamento obrigatório vencido:'
+      : expiring
+        ? 'Seu treinamento obrigatório está próximo do vencimento:'
+        : 'Você tem um treinamento obrigatório que precisa de atenção:';
   const orientacao = neverDone
-    ? 'Solicitamos que você realize o curso o quanto antes, a fim de regularizar sua situação e manter suas qualificações em conformidade com os requisitos aplicáveis à sua função.'
+    ? 'Pedimos que realize o treinamento o quanto antes para manter suas qualificações em dia.'
     : expiring
-      ? 'Solicitamos que você providencie a renovação antes do vencimento, para manter suas qualificações em conformidade com os requisitos aplicáveis à sua função.'
-      : 'Solicitamos que você providencie a renovação desta capacitação o quanto antes, a fim de regularizar sua situação e manter suas qualificações em conformidade com os requisitos aplicáveis à sua função.';
+      ? 'Renove o treinamento até a data de vencimento para manter suas qualificações em dia.'
+      : overdue
+        ? 'Seu treinamento está vencido. Regularize o quanto antes.'
+        : 'Conclua o treinamento para manter suas qualificações em dia.';
 
   return {
     funcionario: target.funcionario_nome,
@@ -319,7 +343,7 @@ export function complianceTemplateVariables(
     setor: target.setor_nome || 'Não informado',
     introducao,
     situacao_bloco: 'Situação: ' + situacao,
-    assunto_situacao: neverDone ? 'pendente' : overdue ? 'vencida' : expiring ? 'próxima do vencimento' : 'em análise',
+    assunto_situacao: neverDone ? 'pendente' : overdue ? 'vencido' : expiring ? 'a vencer' : 'em andamento',
     orientacao,
     link: trainingUrl || '',
     link_bloco: trainingUrl ? 'Acesse o curso diretamente pelo AirTrust:\n' + trainingUrl : '',
@@ -370,11 +394,11 @@ export function renderComplianceEmailHtml(message: string): string {
         return '<div style="height:12px;line-height:12px">&nbsp;</div>';
       }
 
-      if (index === 0) {
+      if (index === 0 && /^GERÊNCIA DE TREINAMENTO/.test(trimmed)) {
         return `<div style="font-size:18px;font-weight:700;color:#0f172a;margin:0 0 4px">${linkify(line)}</div>`;
       }
 
-      const field = line.match(/^(Curso|Situação|Treinamento|Vencimento|Status):\s*(.*)$/);
+      const field = line.match(/^(Curso|Situação|Importante|Treinamento|Vencimento|Status):\s*(.*)$/);
       if (field) {
         return `<div style="margin:3px 0"><strong>${escapeHtml(field[1])}:</strong> ${linkify(field[2])}</div>`;
       }
