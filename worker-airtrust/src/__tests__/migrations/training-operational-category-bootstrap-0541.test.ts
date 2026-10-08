@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -23,6 +24,27 @@ describe('Schema V2 0541 operational training category prerequisite', () => {
     expect(manifest.fileHash).toBe(hash(sql));
     expect(manifest.planPath).toBe(planPath);
     expect(manifest.planHash).toBe(hash(plan));
+  });
+
+  it('creates one tenant-6 category, is idempotent and leaves other tenants untouched', () => {
+    const python = `
+import sqlite3,sys
+path=sys.argv[1]
+sql=open(path,encoding='utf-8').read()
+c=sqlite3.connect(':memory:')
+c.executescript('CREATE TABLE qualificacoes_categorias (id INTEGER PRIMARY KEY AUTOINCREMENT,empresa_id INTEGER,nome TEXT,codigo TEXT,cor TEXT,descricao TEXT,ativo INTEGER,dominio_codigo TEXT,lms_integrada INTEGER,created_at TEXT,updated_at TEXT);')
+c.execute("INSERT INTO qualificacoes_categorias (empresa_id,nome,codigo,cor,ativo,lms_integrada) VALUES (7,'Other Tenant','OTHER','#000000',1,0)")
+c.executescript(sql)
+c.executescript(sql)
+assert c.execute("SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id=6 AND codigo='TREINAMENTO_OPERACIONAL' AND nome='Treinamentos Operacionais' AND ativo=1 AND lms_integrada=0").fetchone()[0]==1
+assert c.execute("SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id=7").fetchone()[0]==1
+c.execute("DELETE FROM qualificacoes_categorias WHERE empresa_id=6")
+c.execute("INSERT INTO qualificacoes_categorias (empresa_id,nome,codigo,cor,ativo,lms_integrada) VALUES (6,'Treinamentos Operacionais','TREINAMENTO_OPERACIONAL','#6B7280',1,0)")
+c.executescript(sql)
+assert c.execute("SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id=6").fetchone()[0]==1
+`;
+    const result = spawnSync('python3', ['-c', python, join(ROOT, sqlPath)], { encoding: 'utf8' });
+    expect(result.status, result.stderr).toBe(0);
   });
 
   it('creates only the missing same-tenant reference identity, without employee writes', () => {
