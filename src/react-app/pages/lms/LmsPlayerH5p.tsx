@@ -249,7 +249,7 @@ export default function LmsPlayerH5p() {
               // confirms in the AirTrust dialog. Intermediate xAPI statements
               // continue to be saved without granting completion.
               pendingTerminalStatementRef.current = async () => {
-                const res = await postStatement.mutateAsync(dto);
+                const res = await postStatement.mutateAsync({ ...dto, completion_intent: 'USER_CONFIRMED' });
                 if (res.novo_status !== 'CONCLUIDO') {
                   throw new Error('O servidor ainda não confirmou a conclusão.');
                 }
