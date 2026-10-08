@@ -1411,9 +1411,7 @@
       "change_file": "0541_training_operational_category_bootstrap.sql",
       "change_id": "training-operational-category-bootstrap-0541",
       "sha256": "8aee0c5b690b53cb0b3b24e69abc9a090a5274bf17a4da49ddcda467c4963211",
-      "targets": [
-        "qualificacoes_categorias"
-      ],
+      "targets": [],
       "domain": "training compliance / tenant-6 operational training category prerequisite for 0536",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
