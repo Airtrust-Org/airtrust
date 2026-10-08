@@ -175,6 +175,43 @@ describe('training compliance engine', () => {
     patchComplianceSchema(sqlite);
   });
 
+  it('exclui Check, Exame e Licença de todas as pendências, regras e indicadores, preservando os demais treinamentos', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    const app = createApp(sqlite.asD1());
+
+    for (const category of ['Check', 'Exame', 'Licença', 'LICENÇA']) {
+      sqlite.database.prepare('UPDATE qualificacoes_tipos SET categoria=? WHERE id=100 AND empresa_id=1').run(category);
+
+      const person = (await (await app.request('/funcionarios/1000')).json()) as any;
+      expect(person.data.total_obrigatorios, category).toBe(0);
+      expect(person.data.requisitos, category).toEqual([]);
+
+      const rules = (await (await app.request('/regras')).json()) as any;
+      expect(rules.data, category).toEqual([]);
+      const trainings = (await (await app.request('/treinamentos')).json()) as any;
+      expect(trainings.data, category).toEqual([]);
+      const summary = (await (await app.request('/resumo')).json()) as any;
+      expect(summary.data.requisitos_obrigatorios, category).toBe(0);
+      expect(summary.data.nao_realizados, category).toBe(0);
+      const matrix = (await (await app.request('/matriz-organizacao?setor_id=10')).json()) as any;
+      expect(matrix.data.some((item: any) => item.qualificacao_tipo_id === 100), category).toBe(false);
+      const create = await app.request('/regras', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qualificacao_tipo_id: 100, escopo: 'EMPRESA' }),
+      });
+      expect(create.status, category).toBe(400);
+    }
+
+    sqlite.database.exec("UPDATE qualificacoes_tipos SET categoria='EAD' WHERE id=100 AND empresa_id=1");
+    const summary = (await (await app.request('/resumo')).json()) as any;
+    expect(summary.data.requisitos_obrigatorios).toBe(3);
+    expect(summary.data.nao_realizados).toBe(3);
+  });
+
   it('filtra todas as visões operacionais por nome do funcionário, ignorando acentos', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos

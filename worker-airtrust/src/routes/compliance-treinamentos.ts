@@ -38,6 +38,7 @@ import {
   hydrateTrainingComplianceConditions,
   trainingComplianceEvidenceMeetsRequiredModality,
   normalizeTrainingComplianceRequiredModality,
+  trainingComplianceEligibleCategorySql,
   type TrainingComplianceScope,
 } from '../services/training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from '../services/training-compliance-evidence-profile';
@@ -275,7 +276,6 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
     : tipoCols.has('validade_meses')
       ? 'qt.validade_meses'
       : 'NULL';
-
   if (!hasV2) {
     if (!(await tableExists(db, 'matriz_treinamento_funcao'))) return [];
     const { results } = await db
@@ -301,6 +301,7 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
            LEFT JOIN funcoes fn
              ON fn.id = m.funcao_id AND fn.empresa_id = m.empresa_id AND fn.deleted_at IS NULL
           WHERE m.empresa_id = ? AND m.ativo = 1 AND m.deleted_at IS NULL
+            AND ${trainingComplianceEligibleCategorySql('qt.categoria')}
           ORDER BY qt.nome ASC, m.id ASC`,
       )
       .bind(empresaId)
@@ -361,6 +362,7 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
         WHERE tr.empresa_id = ?
           AND tr.ativo = 1
           AND tr.deleted_at IS NULL
+          AND ${trainingComplianceEligibleCategorySql('qt.categoria')}
           AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio) <= date('now'))
           AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim) >= date('now'))
         ORDER BY qt.nome ASC, tr.id ASC`,
@@ -787,6 +789,7 @@ async function loadLmsEnrollments(db: D1Database, empresaId: number): Promise<Lm
          LEFT JOIN funcoes fn ON fn.id=f.funcao_id AND fn.empresa_id=f.empresa_id AND fn.deleted_at IS NULL
         WHERE m.empresa_id=? AND m.deleted_at IS NULL
           AND UPPER(COALESCE(m.status,'')) <> 'CANCELADO'
+          AND (qt.id IS NULL OR ${trainingComplianceEligibleCategorySql('qt.categoria')})
           ${deletedFuncionario} ${activeExpr} ${statusExpr}
         ORDER BY c.titulo, f.nome, m.id`,
     )
@@ -867,13 +870,10 @@ async function validateRuleReferences(
 ) {
   const qualificacaoTipoId = asPositiveInt(payload.qualificacao_tipo_id);
   if (!qualificacaoTipoId) throw new ApiError('qualificacao_tipo_id é obrigatório', 400);
-  const tipo = await db
-    .prepare(
-      'SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-    )
-    .bind(qualificacaoTipoId, empresaId)
-    .first<{ id: number }>();
-  if (!tipo) throw new ApiError('Tipo de qualificação inválido para a empresa atual', 400);
+  const tipo = await db.prepare(
+    `SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND ${trainingComplianceEligibleCategorySql('categoria')}`,
+  ).bind(qualificacaoTipoId, empresaId).first<{ id: number }>();
+  if (!tipo) throw new ApiError('Tipo de qualificação inválido ou categoria excluída do Compliance', 400);
 
   const escopo = normalizeEnum(payload.escopo, SCOPES, 'FUNCAO');
   const setorId = asPositiveInt(payload.setor_id);
@@ -1533,7 +1533,7 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
     db
       .prepare(
         `SELECT id,codigo,nome FROM qualificacoes_tipos
-          WHERE empresa_id=? ${tipoDeletedExpr} ${tipoAtivoExpr}
+          WHERE empresa_id=? ${tipoDeletedExpr} ${tipoAtivoExpr} AND ${trainingComplianceEligibleCategorySql('categoria')}
           ORDER BY nome`,
       )
       .bind(empresaId)

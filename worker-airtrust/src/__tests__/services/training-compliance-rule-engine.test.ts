@@ -119,5 +119,6 @@ describe('training compliance rule engine', () => {
     expect(sql).toContain("tr.obrigatoriedade='OBRIGATORIA'");
     expect(sql).toContain('tr.auto_matricular_ead');
     expect(sql).toContain('tr.condicao_id');
+    expect(sql).toContain("NOT IN ('CHECK', 'EXAME', 'LICENCA')");
   });
 });
