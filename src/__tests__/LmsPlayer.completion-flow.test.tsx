@@ -1,7 +1,7 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import LmsPlayer from '@/react-app/pages/lms/LmsPlayer';
@@ -54,6 +54,7 @@ vi.mock('@/react-app/hooks/useLms', () => ({
   }),
   useLmsCurso: () => ({
     data: {
+      scorm_assessment_policy: 'FORMATIVE',
       descricao: 'Curso AW139',
       conteudo_programatico: 'Modulo 1',
       carga_horaria_minutos: 90,
@@ -121,6 +122,7 @@ async function dispatchPlayerMessage(data: Record<string, unknown>) {
 
 describe('LmsPlayer completion flow', () => {
   beforeEach(() => {
+    matriculaMock.scorm_progresso.cmi_json = JSON.stringify({ 'cmi.location': '22/30' });
     refetchMatriculaMock.mockReset();
     refetchMatriculaMock.mockResolvedValue(undefined);
     toastLoadingMock.mockReset();
@@ -128,6 +130,37 @@ describe('LmsPlayer completion flow', () => {
     toastErrorMock.mockReset();
     toastDismissMock.mockReset();
     vi.restoreAllMocks();
+  });
+
+  it('keeps Concluir curso disabled while slides are missing, even at the final marker', async () => {
+    matriculaMock.scorm_progresso.cmi_json = JSON.stringify({
+      'cmi.location': '30/30',
+      'airtrust.total_slides': 30,
+      'airtrust.viewed_slides': [30],
+    });
+    renderPlayer();
+    expect(screen.getByRole('button', { name: 'Concluir curso' })).toBeDisabled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('opens fallback completion dialog only after every slide and confirms through the SCORM wrapper', async () => {
+    matriculaMock.scorm_progresso.cmi_json = JSON.stringify({
+      'cmi.location': '30/30',
+      'airtrust.total_slides': 30,
+      'airtrust.viewed_slides': Array.from({ length: 30 }, (_, i) => i + 1),
+    });
+    renderPlayer();
+    const dialog = await screen.findByRole('dialog', { name: 'Concluir curso' });
+    expect(dialog).toBeInTheDocument();
+    const frame = await frameWindow();
+    expect(frame).toBeDefined();
+    const postMessage = vi.spyOn(frame!, 'postMessage').mockImplementation(() => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar conclusão' }));
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'lms:request-completion', matriculaId: 42 },
+      'http://localhost:8787',
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('usa toast de saving sem recorrer a window.alert', async () => {
