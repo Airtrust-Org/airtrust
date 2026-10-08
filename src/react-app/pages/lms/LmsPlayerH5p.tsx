@@ -101,6 +101,7 @@ export default function LmsPlayerH5p() {
   const [completionReady, setCompletionReady] = useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
   const [completionSubmitting, setCompletionSubmitting] = useState(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
   const pendingTerminalStatementRef = useRef<null | (() => Promise<void>)>(null);
   const [completionInfo, setCompletionInfo] = useState<CompletionInfo | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -259,6 +260,7 @@ export default function LmsPlayerH5p() {
                     ?.qualificacao_id as number | undefined,
                 });
               };
+              setCompletionError(null);
               setCompletionReady(true);
               setCompletionDialogOpen(true);
               return;
@@ -326,8 +328,8 @@ export default function LmsPlayerH5p() {
       setCompletionDialogOpen(false);
       pendingTerminalStatementRef.current = null;
     } catch {
-      setLoadError('Não foi possível validar a conclusão. Verifique as atividades e tente novamente.');
-      setCompletionDialogOpen(false);
+      setCompletionError('Não foi possível validar a conclusão. Verifique as atividades e tente novamente.');
+      setCompletionDialogOpen(true);
     } finally {
       setCompletionSubmitting(false);
     }
@@ -397,7 +399,7 @@ export default function LmsPlayerH5p() {
         </div>
       </div>
 
-      {!completed && (
+      {!completed && matricula.status !== 'CONCLUIDO' && (
         <div className="border-b border-white/10 bg-slate-900 px-4 py-2 text-right">
           <button type="button" disabled={!completionReady || completionSubmitting}
             onClick={() => setCompletionDialogOpen(true)}
@@ -407,7 +409,7 @@ export default function LmsPlayerH5p() {
         </div>
       )}
 
-      {completionDialogOpen && !completed && (
+      {completionDialogOpen && !completed && matricula.status !== 'CONCLUIDO' && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4">
           <section role="dialog" aria-modal="true" aria-labelledby="h5p-finish-heading"
             className="w-full max-w-md rounded-2xl bg-slate-900 p-6 text-white shadow-2xl">
@@ -416,6 +418,9 @@ export default function LmsPlayerH5p() {
               O conteúdo enviou a evidência de finalização. Confirme para validar
               todas as atividades e registrar a conclusão no AirTrust.
             </p>
+            {completionError && (
+              <p role="alert" className="mt-3 text-sm text-amber-300">{completionError}</p>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <button onClick={() => setCompletionDialogOpen(false)}
                 className="rounded-lg bg-white/10 px-4 py-2 text-sm">Voltar ao curso</button>
