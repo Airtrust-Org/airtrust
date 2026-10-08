@@ -2,15 +2,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildLaunchPage } from '../../routes/lms-assets';
 
+// The Worker intentionally excludes the DOM lib. jsdom is available only at test runtime.
+type AnyGlobal = typeof globalThis & Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+const g = globalThis as AnyGlobal;
+
 function wrapperScript(html: string): string {
   return [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]).join('\n;\n');
 }
 
 function startWithState(state: Record<string, string>) {
-  const w = window as Window & { API?: Record<string, (...args: unknown[]) => unknown> };
+  const w = g.window;
   delete w.API;
-  document.body.innerHTML = '<div id="status-bar"><span id="status-dot"></span><span id="status-text"></span></div><div id="completion-overlay"></div><iframe id="scorm-frame"></iframe>';
-  const frame = document.getElementById('scorm-frame') as HTMLIFrameElement;
+  g.document.body.innerHTML = '<div id="status-bar"><span id="status-dot"></span><span id="status-text"></span></div><div id="completion-overlay"></div><iframe id="scorm-frame"></iframe>';
+  const frame = g.document.getElementById('scorm-frame');
   const html = buildLaunchPage({
     matriculaId: 842,
     titulo: 'CFIT em Helicópteros',
@@ -39,10 +43,10 @@ describe('CFIT remediation — wrapper resume + autosave visual stability', () =
       'cmi.core.lesson_status': 'incomplete',
       'cmi.suspend_data': suspendData,
     });
-    frame.contentWindow!.document.body.innerHTML =
+    frame.contentWindow!.g.document.body.innerHTML =
       '<div id="slide"></div><div id="counter">18/41</div>';
-    (frame.contentWindow as Window & { Scorm?: { get: () => string } }).Scorm = { get: () => suspendData };
-    frame.dispatchEvent(new Event('load'));
+    frame.contentWindow.Scorm = { get: () => suspendData };
+    frame.dispatchEvent(new g.Event('load'));
     await new Promise((resolve) => setTimeout(resolve, 350));
     expect(frame.contentWindow!.location.hash).toBe('');
     expect(api.LMSGetValue('cmi.core.lesson_location')).toBe('41/41');
@@ -50,7 +54,7 @@ describe('CFIT remediation — wrapper resume + autosave visual stability', () =
       s: 18, d: ['s01', 's02', 's18'], sc: [], mq: { chapter2: { passed: false } },
     }));
     await new Promise((resolve) => setTimeout(resolve, 875));
-    expect(document.getElementById('status-bar')?.classList.contains('visible')).toBe(false);
+    expect(g.document.getElementById('status-bar')?.classList.contains('visible')).toBe(false);
   });
 
   it('continues legacy hash-based resume when there is no native package cursor', async () => {
@@ -62,8 +66,8 @@ describe('CFIT remediation — wrapper resume + autosave visual stability', () =
       'cmi.core.lesson_location': '5/41',
       'cmi.core.lesson_status': 'incomplete',
     });
-    frame.contentWindow!.document.body.innerHTML = '<div id="counter">1/41</div>';
-    frame.dispatchEvent(new Event('load'));
+    frame.contentWindow!.g.document.body.innerHTML = '<div id="counter">1/41</div>';
+    frame.dispatchEvent(new g.Event('load'));
     await new Promise((resolve) => setTimeout(resolve, 275));
     expect(frame.contentWindow!.location.hash).toBe('#slide/5');
   });
