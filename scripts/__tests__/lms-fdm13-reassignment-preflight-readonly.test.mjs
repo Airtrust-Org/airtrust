@@ -38,6 +38,9 @@ test('FDM preflight aggregates assignment without inventing completed SCORM reco
   assert.equal(summary.source_raw_100_without_completion,1);
   assert.equal(summary.unfinished_99_or_more,2);
   assert.equal(summary.conditions.production_write_executed,false);
+  const destinations={tripulacao:new Set([7]),manutencao:new Set([9])};
+  const withDest=summarizeFdmAssignment(rows,employees,assignments,{tripulacao:{ready:false}},destinations);
+  assert.equal(withDest.already_target_enrolled,2);
   assert.doesNotMatch(JSON.stringify(summary), /private|funcionario_id/);
 });
 
@@ -52,6 +55,9 @@ test('FDM preflight is production-SHA-pinned, scoped and has no D1/R2/LMS write 
   assert.match(s,/GATEKEEPER/);
   assert.match(s,/DESIGNATION_ASSIGNMENTS_MISSING/);
   assert.match(s,/DESTINATION_LMS_COURSES_NOT_READY/);
+  assert.match(s,/\/api\/qualificacoes\/tipos\?search=FDM&limit=500/);
+  assert.match(s,/QUALIFICATION_LIST_POSSIBLY_TRUNCATED/);
+  assert.match(s,/qualification_models_active/);
   assert.doesNotMatch(s,/method:\s*['"](?:PUT|PATCH|DELETE)['"]/);
   assert.doesNotMatch(s,/\/api\/lms\/matriculas\/scorm\/commit/);
   assert.match(w,/AIRTRUST_PRODUCTION_LMS_FDM13_REASSIGNMENT_PREFLIGHT_READONLY/);
