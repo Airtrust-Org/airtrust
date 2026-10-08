@@ -62,7 +62,7 @@ async function openCourseEditor(page: Page, course: QaCourse) {
   }
 
   const search = page.getByRole('searchbox', {
-    name: /Buscar cursos por título, categoria ou descrição/i,
+    name: /Buscar cursos/i,
   });
   await expect(search).toBeVisible();
   await search.fill(course.title);
