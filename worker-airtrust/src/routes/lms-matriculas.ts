@@ -25,6 +25,7 @@ import {
   buildMatriculaCompletionDiagnostic,
   buildScormCompletionDiagnostic,
   extractScormLocationFromCmiJson,
+  hasCompleteScormSlideCoverage,
   mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
@@ -1454,6 +1455,7 @@ app.post('/scorm/commit', async (c) => {
   const isExplicitUserFinalize = d.commit_event === 'SCORM_USER_FINALIZE';
   const reachedFinalSlide = mergedLocation?.total != null &&
     mergedLocation.total > 0 && mergedLocation.current >= mergedLocation.total;
+  const viewedEverySlide = hasCompleteScormSlideCoverage(mergedCmiJson);
   const isFormativeCourse = matricula.scorm_assessment_policy === 'FORMATIVE';
   const masteryRequired = matricula.scorm_mastery_score;
   const assessmentSatisfied = isFormativeCourse ||
@@ -1461,7 +1463,7 @@ app.post('/scorm/commit', async (c) => {
       effectiveScorePct !== null && effectiveScorePct >= masteryRequired);
   // "Rever" replay: never recalculate a previously recorded completion.
   const sucesso =
-    !matriculaWasConcluido && isExplicitUserFinalize && reachedFinalSlide &&
+    !matriculaWasConcluido && isExplicitUserFinalize && reachedFinalSlide && viewedEverySlide &&
     assessmentSatisfied &&
     isScormSuccess(d, { masteryScore: isFormativeCourse ? null : masteryRequired,
       effectiveScorePct });
