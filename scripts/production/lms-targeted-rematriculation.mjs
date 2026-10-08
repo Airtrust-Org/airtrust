@@ -124,6 +124,20 @@ async function resolveEmployee(baseUrl, token, query, course) {
   return candidates[0];
 }
 
+export function assertLegacyGatekeeperCompletions(sourceRows, employeeIds) {
+  assert(Array.isArray(sourceRows), 'GATEKEEPER_LEGACY_HISTORY_INVALID');
+  assert(Array.isArray(employeeIds) && employeeIds.length === 2,
+    'GATEKEEPER_EXACTLY_TWO_REQUIRED');
+  for (const employeeId of employeeIds) {
+    const complete = sourceRows.filter((row) =>
+      asPositiveInt(row?.funcionario_id) === employeeId &&
+      normalizeText(row?.status) === 'CONCLUIDO',
+    );
+    assert(complete.length === 1, 'GATEKEEPER_LEGACY_COMPLETION_NOT_UNIQUE');
+  }
+  return true;
+}
+
 async function listActiveCourseEnrollments(baseUrl, token, courseId) {
   const payload = await apiJson(
     baseUrl,
@@ -140,6 +154,7 @@ export async function executeTargetedRematriculation({
   targetQueries,
   courseQuery,
   sendEmail = false,
+  gatekeeperLegacyTransfer = false,
 } = {}) {
   assert(email && password, 'PRODUCTION_ADMIN_CREDENTIALS_MISSING');
   assert(Array.isArray(targetQueries) && targetQueries.length > 0, 'TARGETS_REQUIRED');
@@ -165,6 +180,14 @@ export async function executeTargetedRematriculation({
   const course = selectCourse(coursePayload?.data, courseQuery);
   const courseId = asPositiveInt(course?.id);
   assert(courseId, 'COURSE_ID_INVALID');
+  if (gatekeeperLegacyTransfer) {
+    assert(courseId === 73, 'GATEKEEPER_TARGET_MUST_BE_COURSE_73');
+    const courseTitle = normalizeText(course?.titulo);
+    assert(courseTitle.includes('FDM') && courseTitle.includes('COMITE') &&
+      courseTitle.includes('GATEKEEPER'), 'GATEKEEPER_TARGET_TITLE_INVALID');
+    assert(targetQueries.length === 2, 'GATEKEEPER_EXACTLY_TWO_REQUIRED');
+    assert(sendEmail === false, 'GATEKEEPER_EMAIL_NOT_AUTHORIZED');
+  }
 
   const employees = [];
   for (const query of targetQueries) {
@@ -176,6 +199,11 @@ export async function executeTargetedRematriculation({
     'TARGET_RESOLUTION_NOT_ONE_TO_ONE',
   );
 
+  if (gatekeeperLegacyTransfer) {
+    const legacy = await listActiveCourseEnrollments(baseUrl, token, 14);
+    assertLegacyGatekeeperCompletions(legacy, employeeIds);
+  }
+
   const beforeActive = await listActiveCourseEnrollments(baseUrl, token, courseId);
   const beforeActiveIds = new Set(beforeActive.map((row) => asPositiveInt(row?.funcionario_id)).filter(Boolean));
   const alreadyActive = employeeIds.filter((id) => beforeActiveIds.has(id)).length;
@@ -186,7 +214,9 @@ export async function executeTargetedRematriculation({
       funcionario_ids: employeeIds,
       curso_id: courseId,
       observacoes:
-        'Rematrícula pontual solicitada pela Gerência de Treinamento: matrícula anterior cancelada.',
+        gatekeeperLegacyTransfer
+          ? 'Matrícula no FDM Comitê e Gatekeeper por decisão da Gerência de Treinamento. Curso Gatekeeper legado (14) concluído e preservado; novo treinamento ainda não realizado.'
+          : 'Rematrícula pontual solicitada pela Gerência de Treinamento: matrícula anterior cancelada.',
       enviar_convite_email: Boolean(sendEmail),
     }),
   });
@@ -213,6 +243,11 @@ export async function executeTargetedRematriculation({
     );
   }
 
+  if (gatekeeperLegacyTransfer) {
+    const legacyAfter = await listActiveCourseEnrollments(baseUrl, token, 14);
+    assertLegacyGatekeeperCompletions(legacyAfter, employeeIds);
+  }
+
   const summary = {
     tenant_id: tenantId,
     course_id: courseId,
@@ -223,6 +258,7 @@ export async function executeTargetedRematriculation({
     ignored_existing_active: ignored,
     post_active_count: employeeIds.length,
     email_sent: Boolean(sendEmail),
+    gatekeeper_legacy_14_preserved: Boolean(gatekeeperLegacyTransfer),
   };
   console.log(`TARGETED_LMS_REMATRICULATION=PASS ${JSON.stringify(summary)}`);
   return summary;
@@ -242,6 +278,7 @@ async function main() {
     targetQueries,
     courseQuery: process.env.AIRTRUST_COURSE_QUERY || '',
     sendEmail,
+    gatekeeperLegacyTransfer: String(process.env.AIRTRUST_GATEKEEPER_LEGACY_TRANSFER || 'false').toLowerCase() === 'true',
   });
 }
 
