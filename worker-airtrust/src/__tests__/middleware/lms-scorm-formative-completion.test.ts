@@ -102,6 +102,37 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
     expect(response.status).toBe(200);
   });
 
+  it('accepts a user-confirmed final commit only with complete slide coverage', async () => {
+    const response = await commit(baseRow, {
+      lesson_status: 'incomplete',
+      commit_event: 'SCORM_USER_FINALIZE',
+      completion_candidate: true,
+      completion_observed_at: '2026-10-08T15:00:00.000Z',
+      cmi_json: JSON.stringify({
+        'cmi.core.lesson_location': '3/3',
+        'airtrust.total_slides': 3,
+        'airtrust.viewed_slides': [1, 2, 3],
+      }),
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it('rejects user-confirmed final commit after a direct jump to final slide', async () => {
+    const response = await commit(baseRow, {
+      lesson_status: 'incomplete',
+      commit_event: 'SCORM_USER_FINALIZE',
+      completion_candidate: true,
+      completion_observed_at: '2026-10-08T15:00:00.000Z',
+      cmi_json: JSON.stringify({
+        'cmi.core.lesson_location': '3/3',
+        'airtrust.total_slides': 3,
+        'airtrust.viewed_slides': [3],
+      }),
+    });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: 'PROGRESS_EVIDENCE_MISSING' });
+  });
+
   it('rejects a spoofed candidate lacking a trusted SCORM Finish', async () => {
     const response = await commit(baseRow, {
       lesson_status: 'incomplete',
