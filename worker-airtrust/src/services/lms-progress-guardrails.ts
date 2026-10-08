@@ -169,6 +169,29 @@ export function extractScormLocationFromCmiJson(cmiJson: Nullable<string>) {
   }
 }
 
+/**
+ * Server-side confirmation that the wrapper observed every distinct slide.
+ * A max-position marker alone is not sufficient (1 -> 45 would otherwise pass).
+ * This record is scoped to the enrollment's persisted SCORM runtime state.
+ */
+export function hasCompleteScormSlideCoverage(cmiJson: string | null | undefined): boolean {
+  if (!cmiJson) return false;
+  try {
+    const state = JSON.parse(cmiJson) as Record<string, unknown>;
+    if (!state || typeof state !== 'object' || Array.isArray(state)) return false;
+    const marker = parseScormLocationPair(
+      state['cmi.location'] ?? state['cmi.core.lesson_location'],
+    );
+    if (!marker || marker.total > 1000 || marker.current < marker.total) return false;
+    const visited = state['airtrust.viewed_slides'];
+    return Number(state['airtrust.total_slides']) === marker.total &&
+      Array.isArray(visited) && visited.length === marker.total &&
+      visited.every((number, index) => number === index + 1);
+  } catch {
+    return false;
+  }
+}
+
 /** Aceita o fallback SCORM 1.2 apenas com as evidências finais emitidas pelo wrapper. */
 export function isTrustedScorm12Finish(data: {
   lesson_status?: Nullable<string>;
