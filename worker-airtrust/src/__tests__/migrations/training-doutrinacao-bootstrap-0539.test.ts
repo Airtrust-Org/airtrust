@@ -39,7 +39,7 @@ describe('training Doutrinação bootstrap 0539', () => {
     ]) {
       const validator = read(file);
       expect(validator).toContain(
-        "referencias LIKE '%PRG-MNT-002%Programa de Treinamento de Manutenção Rev.06%'",
+        "instr(referencias,'PRG-MNT-002')>0 AND instr(referencias,'Programa de Treinamento de Manutenção Rev.06')>0",
       );
       expect(validator).not.toContain("referencias LIKE '%PTM Rev.06%'");
       expect(validator).toContain('carga_horaria_inicial=8');
