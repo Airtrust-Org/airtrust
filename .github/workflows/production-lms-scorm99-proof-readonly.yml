@@ -94,11 +94,11 @@ jobs:
              ',target-active='+row.already_active_at_target+
              ',target-history='+row.any_target_history+
              ',target-qualified='+row.linked_target_rows+
-             ',raw100='+row.legacy_raw100+
-             ',explicit100='+row.raw100_explicit_end+
-             ',mastery-proven='+row.raw100_explicit_mastery_met+
-             ',mastery-unproven='+row.raw100_explicit_mastery_unproven+
-             ',no-mastery-required='+row.raw100_explicit_no_mastery_requirement);
+             ',raw99='+row.legacy_raw99+
+             ',explicit100='+row.raw99_explicit_end+
+             ',mastery-proven='+row.raw99_explicit_mastery_met+
+             ',mastery-unproven='+row.raw99_explicit_mastery_unproven+
+             ',no-mastery-required='+row.raw99_explicit_no_mastery_requirement);
           }
           console.log('Reenrollments/administrative completions performed: 0/0');
           console.log('Production writes: '+j.writes);
