@@ -187,6 +187,7 @@ if(MODE==='apply'){
  check(after.summary.already_transferred===21&&after.summary.candidates===0,'POST_TRANSFER_COUNT_INVALID');
  check(after.summary.source_canceled===27&&after.summary.out_of_scope===6,'SOURCE_EVIDENCE_CHANGED');
  output.mutation_executed=true;
+ output.write_count=null; // Multiple D1 statements; exact affected-row count is not available here.
  output.created_enrollments=21;
  output.post_transferred=after.summary.already_transferred;
  output.post_pending=after.summary.candidates;
