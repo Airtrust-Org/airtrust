@@ -45,6 +45,8 @@ export function buildTransferPlan(sourceRows,targetRows,opts={}) {
    assert(existing.deleted_at==null&&String(existing.observacoes??'').includes('FDM13_ADMIN_TRANSFER_SOURCE_'+Number(s.id)),
     'TARGET_HISTORY_REQUIRES_REVIEW');
    assert(normalize(existing.status)===(credit?'CONCLUIDO':'NAO_INICIADO'),'TARGET_TRANSFER_STATUS_DRIFT');
+   assert(Number(existing.has_current_cycle)===1,'TARGET_CYCLE_MISSING');
+   if(credit)assert(Number(existing.has_administrative_qualification)===1,'TARGET_ADMIN_QUALIFICATION_MISSING');
    totals.already_transferred++;continue;
   }
   if(credit)totals.credited_at_99++;else totals.needs_fresh_training++;
