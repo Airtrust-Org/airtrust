@@ -111,7 +111,7 @@ export function resolveLmsCatalogRoleView(params: {
     title: canManage
       ? 'Catálogo LMS'
       : restrictToEnrolledCourses
-        ? 'Meus treinamentos'
+        ? 'Cursos matriculados'
         : 'Catálogo de treinamentos',
   };
 }
