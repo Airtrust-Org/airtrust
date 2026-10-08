@@ -39,7 +39,10 @@ export function summarizeFdmAssignment(enrollments, employees, courses, existing
   const counts={source_total:enrollments.length,groups:{tripulacao:0,manutencao:0},
     excluded_from_migration:0,
     needs_review:{EMPLOYEE_NOT_IN_ACTIVE_CATALOG:0},
-    unfinished_99_or_more:0,source_completed:0,source_not_completed:0,
+    unfinished_99_or_more:0,
+    eligible_unfinished_99_or_more:0,
+    excluded_unfinished_99_or_more:0,
+    source_completed:0,source_not_completed:0,
     source_raw_100_without_completion:0,already_target_enrolled:0};
   const seen=new Set();
   for (const row of enrollments) {
@@ -57,14 +60,19 @@ export function summarizeFdmAssignment(enrollments, employees, courses, existing
     const employee=employees.get(id);
     if(!employee){counts.needs_review.EMPLOYEE_NOT_IN_ACTIVE_CATALOG++;continue;}
     const decision=classifyFdmAudience(employee.funcao_nome);
-    if(decision.reason === 'OUT_OF_SCOPE_BY_USER_DECISION') counts.excluded_from_migration++;
-    else if(decision.reason) throw new Error('UNKNOWN_FDM_ASSIGNMENT_REASON');
+    if(decision.reason === 'OUT_OF_SCOPE_BY_USER_DECISION') {
+      counts.excluded_from_migration++;
+      if(status!=='CONCLUIDO' && raw>=99) counts.excluded_unfinished_99_or_more++;
+    } else if(decision.reason) throw new Error('UNKNOWN_FDM_ASSIGNMENT_REASON');
     else {
       counts.groups[decision.group]++;
+      if(status!=='CONCLUIDO' && raw>=99) counts.eligible_unfinished_99_or_more++;
       if (existingDestEnrollments[decision.group]?.has(id)) counts.already_target_enrolled++;
     }
   }
   failUnless(counts.source_completed+counts.source_not_completed===counts.source_total,'SOURCE_COUNTS_MISMATCH');
+  failUnless(counts.eligible_unfinished_99_or_more+counts.excluded_unfinished_99_or_more <=
+    counts.unfinished_99_or_more,'CREDIT_ELIGIBILITY_OVERFLOW');
   failUnless(Object.values(counts.groups).reduce((a,b)=>a+b,0)+counts.excluded_from_migration+
     Object.values(counts.needs_review).reduce((a,b)=>a+b,0)===counts.source_total,'AUDIENCE_ASSIGNMENT_INCOMPLETE');
   return { ...counts,targets:courses,conditions:{
@@ -74,6 +82,8 @@ export function summarizeFdmAssignment(enrollments, employees, courses, existing
     requires_exact_destination_scorm_and_qualification_links:true,
     out_of_scope_legacy_enrollments_are_soft_cancel_candidates_only:true,
     historical_evidence_must_remain_preserved:true,
+    at_99_is_not_sufficient_proof_of_mastery_or_equivalent_completion:true,
+    administrative_equivalence_requires_reviewed_evidence_and_auditable_approval:true,
     production_write_executed:false,
   }};
 }
