@@ -15,8 +15,8 @@ export const PROOF_SQL=String.raw`
 WITH base AS (
  SELECT m.curso_id,
  CASE WHEN m.curso_id<>13 THEN 'other_course'
-      WHEN UPPER(TRIM(COALESCE(fn.nome,''))) IN ('COMANDANTE','COPILOTO') THEN 'tripulacao'
-      WHEN UPPER(TRIM(COALESCE(fn.nome,''))) IN ('MECANICO','MECÂNICO','MECâNICO',
+      WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(fn.nome),''),NULLIF(TRIM(f.funcao),''),NULLIF(TRIM(f.cargo),''),''))) IN ('COMANDANTE','COPILOTO') THEN 'tripulacao'
+      WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(fn.nome),''),NULLIF(TRIM(f.funcao),''),NULLIF(TRIM(f.cargo),''),''))) IN ('MECANICO','MECÂNICO','MECâNICO',
         'AUXILIAR DE MANUTENCAO','AUXILIAR DE MANUTENÇÃO','AUXILIAR DE MANUTENçãO',
         'AUX MANUTENCAO','AUX MANUTENÇÃO') THEN 'manutencao'
       ELSE 'excluded_or_unknown' END audience,
