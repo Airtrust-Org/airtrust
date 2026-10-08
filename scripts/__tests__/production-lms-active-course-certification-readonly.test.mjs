@@ -13,6 +13,12 @@ test('production active-course certifier is preview/read-only and exact-package 
   const source = read(SCRIPT);
   assert.match(source, /assertAllowedProductionBaseUrl/);
   assert.match(source, /EXPECTED_PRODUCTION_SHA/);
+  // An all-courses run lasts longer than the short-lived production access token.
+  // No course should be reported HTTP 401 solely because the certifier expired.
+  assert.match(source, /let token = await productionToken\(\)/);
+  assert.match(source, /Date\.now\(\) - tokenIssuedAt >= 15 \* 60_000/);
+  assert.match(source, /await assertPinnedProduction\(\);\s*token = await productionToken\(\);\s*tokenIssuedAt = Date\.now\(\);/);
+
   assert.match(source, /\/api\/lms\/cursos\/\$\{id\}\/scorm-package-versions/);
   assert.match(source, /status\s*\|\|\s*''\)\.toUpperCase\(\)\s*===\s*'ACTIVE'/);
   assert.match(source, /packageSha256/);
