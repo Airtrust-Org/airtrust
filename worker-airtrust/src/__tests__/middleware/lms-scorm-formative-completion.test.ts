@@ -55,6 +55,7 @@ function makeApp(row = baseRow) {
     await next();
   });
   app.post('/api/lms/matriculas/scorm/commit', (c) => c.json({ success: true }));
+  app.post('/api/lms/xapi/statements', (c) => c.json({ success: true }));
   app.post('/api/lms/matriculas/:id/finalizar', (c) => c.json({ success: true }));
   return { app, db };
 }
@@ -198,6 +199,22 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
     );
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({ code: 'ENROLLMENT_INACTIVE' });
+  });
+
+  it('requires a user-confirmed completion intent for an H5P terminal xAPI statement', async () => {
+    const { app, db } = makeApp({ ...baseRow, tipo_conteudo: 'h5p' });
+    const request = new Request('http://localhost/api/lms/xapi/statements', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        matricula_id: 863,
+        verb: { id: 'http://adlnet.gov/expapi/verbs/completed' },
+        object: { id: 'h5p:course' },
+        result: { completion: true, success: true },
+      }),
+    });
+    const response = await app.fetch(request, { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: 'USER_COMPLETION_REQUIRED' });
   });
 
   it('rejects manual finalization based on 100% progress without terminal SCORM evidence', async () => {
