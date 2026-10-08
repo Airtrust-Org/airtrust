@@ -318,6 +318,10 @@ ensure_sqlite_column "lms_cursos" "dominio_codigo" "TEXT"
 # aligned without replaying the tenant-scoped production data correction.
 ensure_sqlite_column "qualificacoes_tipos" "referencias" "TEXT"
 ensure_sqlite_column "lms_cursos" "referencias" "TEXT"
+# CI-only mirror of governed Schema V2 0542. Disposable local D1 only;
+# remote schema remains exclusively managed by the Schema V2 workflow.
+ensure_sqlite_column "lms_cursos" "scorm_assessment_policy" "TEXT NOT NULL DEFAULT 'SCORED' CHECK(scorm_assessment_policy IN ('SCORED', 'FORMATIVE'))"
+require_sqlite_column "lms_cursos" "scorm_assessment_policy"
 require_sqlite_column "lms_cursos" "conteudo_arquivo_nome"
 require_sqlite_column "lms_cursos" "h5p_conteudo_id"
 require_sqlite_column "lms_matriculas" "ultimo_slide"

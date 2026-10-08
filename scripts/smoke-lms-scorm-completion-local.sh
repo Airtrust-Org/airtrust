@@ -127,7 +127,7 @@ trap cleanup EXIT
 curl -fsS -c "$COOKIE_JAR" -X POST "$API_BASE/lms/assets/session"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "{\"matricula_id\":$MATRICULA_ID}" >/dev/null
 
 echo "[smoke:lms:scorm] Committing terminal passed/completed state"
-FINAL_CMI='{"cmi.core.lesson_location":"3/3","cmi.core.lesson_status":"passed","cmi.core.score.raw":"90","cmi.core.score.max":"100"}'
+FINAL_CMI='{"cmi.core.lesson_location":"3/3","cmi.core.lesson_status":"passed","cmi.core.score.raw":"90","cmi.core.score.max":"100","airtrust.total_slides":3,"airtrust.viewed_slides":[1,2,3]}'
 HTTP_CODE="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR"   -X POST "$API_BASE/lms/matriculas/scorm/commit"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "$(node -e '
     const id=Number(process.argv[1]);
     const cmi=process.argv[2];
@@ -144,8 +144,9 @@ HTTP_CODE="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR"   -X PO
       total_time:"00:03:00",
       suspend_data:JSON.stringify({schema:"airtrust-scorm12-state",slideAtual:3,totalSlides:3,progresso:100}),
       cmi_json:cmi,
-      commit_event:"smoke-terminal",
-      completion_candidate:true
+      commit_event:"SCORM_USER_FINALIZE",
+      completion_candidate:true,
+      completion_observed_at:new Date().toISOString()
     }));
   ' "$MATRICULA_ID" "$FINAL_CMI")")"
 

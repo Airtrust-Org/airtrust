@@ -7,6 +7,7 @@ import {
   type LmsCompletionDecision,
   type LmsCompletionSource,
 } from '../services/lms-completion-evidence';
+import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish } from '../services/lms-progress-guardrails';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
 
@@ -24,6 +25,7 @@ type EnrollmentEvidenceRow = {
   ativo: number;
   publicado: number;
   scorm_mastery_score: number | null;
+  scorm_assessment_policy: 'SCORED' | 'FORMATIVE';
   scorm_package_r2_prefix: string | null;
   scorm_launch_file: string | null;
   gerar_qualificacao_ao_concluir: number;
@@ -124,7 +126,7 @@ async function readEnrollmentEvidence(
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct,
               m.qualificacao_historico_id,
               c.id AS curso_id, c.tipo_conteudo, c.ativo, c.publicado,
-              c.scorm_mastery_score, c.scorm_package_r2_prefix, c.scorm_launch_file,
+              c.scorm_mastery_score, c.scorm_assessment_policy, c.scorm_package_r2_prefix, c.scorm_launch_file,
               c.gerar_qualificacao_ao_concluir,
               p.lesson_status, p.completion_status, p.success_status,
               p.score_raw, p.score_min, p.score_max, p.score_scaled,
@@ -256,6 +258,31 @@ function contentEvidenceValidated(row: EnrollmentEvidenceRow, source: LmsComplet
   return false;
 }
 
+function hasTerminalFormativeScormStatus(row: EnrollmentEvidenceRow, incoming: JsonRecord): boolean {
+  // Formative completion requires a real SCORM terminal signal. Client-side
+  // completion_candidate, slide count and generic PATCH progress do not count.
+  return [incoming.lesson_status, incoming.completion_status,
+    row.lesson_status, row.completion_status]
+    .some((value) => ['complete', 'completed', 'passed'].includes(normalizeStatus(value))) ||
+    isTrustedScorm12Finish({
+      lesson_status: incoming.lesson_status as string | null,
+      commit_event: incoming.commit_event as string | null,
+      completion_candidate: incoming.completion_candidate === true,
+      completion_observed_at: incoming.completion_observed_at as string | null,
+      cmi_json: incoming.cmi_json as string | null,
+    });
+}
+
+function formativeTerminalMissing(): LmsCompletionDecision {
+  return {
+    accepted: false,
+    code: 'COMPLETION_EVIDENCE_INSUFFICIENT',
+    scorePct: null,
+    masteryScore: null,
+    failurePrecedence: false,
+  };
+}
+
 function packageBound(row: EnrollmentEvidenceRow): boolean {
   const type = String(row.tipo_conteudo ?? 'scorm')
     .trim()
@@ -289,11 +316,12 @@ function buildDecision(
     hasIncomingRuntimeEvidence(incoming) ||
     Number(row.xapi_count ?? 0) > 0 ||
     progressPct > 0;
-  // Preserve the existing qualification policy: interactive content that
-  // generates an operational qualification must still satisfy the assessment
-  // gate. The new non-SCORM evidence gate must not weaken SCORM/H5P rules.
-  const requiresAssessment =
-    interactive && (row.gerar_qualificacao_ao_concluir === 1 || row.scorm_mastery_score !== null);
+  // An explicit, server-owned course policy distinguishes formative participation
+  // from graded assessment. Only FORMATIVE can omit a score; missing/unknown
+  // policy stays SCORED (fail-closed, including legacy rows and test fixtures).
+  const isFormative = row.scorm_assessment_policy === 'FORMATIVE' && row.tipo_conteudo === 'scorm';
+  const requiresAssessment = interactive && !isFormative &&
+    (row.gerar_qualificacao_ao_concluir === 1 || row.scorm_mastery_score !== null);
 
   return evaluateLmsCompletionEvidence({
     source,
@@ -312,7 +340,7 @@ function buildDecision(
     scoreMin: incoming.score_min ?? row.score_min,
     scoreMax: incoming.score_max ?? row.score_max,
     scoreScaled: incoming.score_scaled ?? row.score_scaled,
-    masteryScore: row.scorm_mastery_score,
+    masteryScore: isFormative ? null : row.scorm_mastery_score,
     requiresAssessment,
     generatesQualification: row.gerar_qualificacao_ao_concluir === 1,
     informativeCourse: !interactive && row.gerar_qualificacao_ao_concluir !== 1,
@@ -375,6 +403,19 @@ async function guardScormCommit(
   const ownershipError = await enforceOwnership(c, row);
   if (ownershipError) return ownershipError;
   const assetSessionValid = await hasValidAssetSession(c, row);
+  if (incoming.commit_event === 'SCORM_USER_FINALIZE' &&
+      !hasCompleteScormSlideCoverage(
+        typeof incoming.cmi_json === 'string' ? incoming.cmi_json : null
+      )) {
+    return decisionRejection(c, matriculaId, {
+      accepted: false, code: 'PROGRESS_EVIDENCE_MISSING',
+      scorePct: null, masteryScore: null, failurePrecedence: false,
+    });
+  }
+  if (row.scorm_assessment_policy === 'FORMATIVE' &&
+      !failureSignal && !hasTerminalFormativeScormStatus(row, incoming)) {
+    return decisionRejection(c, matriculaId, formativeTerminalMissing());
+  }
   const decision = buildDecision(row, 'scorm', incoming, assetSessionValid, {
     explicitCompletion:
       ['completed', 'complete'].includes(completion) || incoming.completion_candidate === true,
@@ -399,6 +440,10 @@ async function guardXapiStatement(
   const completionSignal = verb.endsWith('/passed') || verb.endsWith('/completed');
   const failureSignal = verb.endsWith('/failed') || result.success === false;
   if (!completionSignal) return null;
+  if (incoming.completion_intent !== 'USER_CONFIRMED') {
+    return errorResponse(c, 409, 'USER_COMPLETION_REQUIRED',
+      'A conclusão exige confirmação explícita pelo botão Concluir curso.');
+  }
 
   const row = await readEnrollmentEvidence(c.env.DB, empresaId, matriculaId);
   if (!row) return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
@@ -442,6 +487,10 @@ async function guardManualFinalize(
   if (ownershipError) return ownershipError;
   if (String(row.status).toUpperCase() === 'CONCLUIDO') return null;
   const assetSessionValid = await hasValidAssetSession(c, row);
+  if (row.scorm_assessment_policy === 'FORMATIVE' &&
+      row.tipo_conteudo === 'scorm' && !hasTerminalFormativeScormStatus(row, {})) {
+    return decisionRejection(c, matriculaId, formativeTerminalMissing());
+  }
   const storedCompletion =
     ['completed', 'complete'].includes(normalizeStatus(row.completion_status)) ||
     Number(row.progresso_pct ?? 0) >= 100;

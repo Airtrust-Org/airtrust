@@ -1706,10 +1706,20 @@ ${buildScormLocationHelpersScript()}
 
   function updateMaxVisitedFromLocation(location) {
     var parsed = parseLocationPair(location);
-    if (!parsed) return;
-    if (parsed.current > maxVisitedSlide) {
-      maxVisitedSlide = parsed.current;
-    }
+    if (!parsed || parsed.total <= 0 || parsed.total > 1000 ||
+        parsed.current < 1 || parsed.current > parsed.total) return;
+    if (parsed.current > maxVisitedSlide) maxVisitedSlide = parsed.current;
+    // Store exact visited positions, not just the maximum index. A direct jump
+    // to 45/45 cannot constitute proof that 1..44 were actually visited.
+    var previous = Array.isArray(cmi['airtrust.viewed_slides'])
+      ? cmi['airtrust.viewed_slides'] : [];
+    var seen = previous.filter(function(n) {
+      return Number.isInteger(n) && n >= 1 && n <= parsed.total;
+    });
+    if (seen.indexOf(parsed.current) < 0) seen.push(parsed.current);
+    seen.sort(function(a, b) { return a - b; });
+    cmi['airtrust.viewed_slides'] = seen;
+    cmi['airtrust.total_slides'] = parsed.total;
   }
 
   function emitProgress(payload) {
@@ -1718,6 +1728,8 @@ ${buildScormLocationHelpersScript()}
       type: 'lms:progress',
       matriculaId: MATRICULA_ID,
       location: getScormLocation(),
+      viewed_slide_count: Array.isArray(cmi['airtrust.viewed_slides']) ? cmi['airtrust.viewed_slides'].length : 0,
+      viewed_slide_total: Number(cmi['airtrust.total_slides']) || null,
     }, payload || {}));
   }
 
@@ -1940,6 +1952,7 @@ ${buildScormProgressParsersScript()}
   function isFinalCommitEvent(eventType) {
     return [
       'SCORM_FINISH',
+      'SCORM_USER_FINALIZE',
       'SCORM_COMPLETION_CANDIDATE',
       'SCORM_BEFORE_UNLOAD_COMMIT',
       'SCORM_VISIBILITY_COMMIT',
@@ -1951,6 +1964,9 @@ ${buildScormProgressParsersScript()}
   }
 
   function queueLatestCommit(data, eventType) {
+    // A regular autosave/close must never replace the student's queued final request.
+    if (queuedCommit && queuedCommit.eventType === 'SCORM_USER_FINALIZE' &&
+        eventType !== 'SCORM_USER_FINALIZE') return;
     if (!queuedCommit || isFinalCommitEvent(eventType) || !isFinalCommitEvent(queuedCommit.eventType)) {
       queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
     }
@@ -1988,8 +2004,8 @@ ${buildScormProgressParsersScript()}
     var requestBody = Object.assign({
       matricula_id: MATRICULA_ID,
       commit_event: eventType || 'SCORM_COMMIT',
-      completion_candidate: completionPending ? true : null,
-      completion_observed_at: completionObservedAt,
+      completion_candidate: eventType === 'SCORM_USER_FINALIZE' ? true : null,
+      completion_observed_at: eventType === 'SCORM_USER_FINALIZE' ? completionObservedAt : null,
     }, data);
     // The wrapper never receives an access bearer. The browser sends only the
     // short-lived, HttpOnly, enrollment-scoped LMS capability cookie.
@@ -2025,13 +2041,13 @@ ${buildScormProgressParsersScript()}
           if (json.data.completion_diagnostic && json.data.completion_diagnostic.status === 'candidate') {
             // High progress/final location alone is not a completion event. Keep
             // the runtime quiet unless this session actually observed one.
-            if (completionPending) {
+            if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
               notifyCompletionPending('pending', json.data.completion_diagnostic.code || null);
             }
             return;
           }
 
-          if (completionPending) {
+          if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
             notifyCompletionError(
               json.data.completion_diagnostic && json.data.completion_diagnostic.code,
               'server-did-not-confirm-completion',
@@ -2070,7 +2086,7 @@ ${buildScormProgressParsersScript()}
           message: err.message,
           attempt: currentAttempt,
         });
-        if (completionPending) {
+        if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
           notifyCompletionError(err.code, err.reason, err.message);
         }
       };
@@ -2107,7 +2123,7 @@ ${buildScormProgressParsersScript()}
         reason: 'network-error',
         attempt: currentAttempt,
       });
-      if (completionPending) {
+      if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
         notifyCompletionError('SCORM_FINAL_COMMIT_MISSING', 'network-error');
       }
       return null;
@@ -2177,10 +2193,10 @@ ${buildScormProgressParsersScript()}
       cs === 'completed' ||
       (ss === 'passed' && cs !== 'incomplete')
     ) {
-      notifyCompletionPending('saving', 'status-signaled-completion');
+      // Save terminal package status; the student's confirmation triggers issuance.
       emitTelemetry('SCORM_COMPLETION_CANDIDATE', {
-        decision: 'pending-server-confirmation',
-        reason: 'status-signaled-completion',
+        decision: 'awaiting-user-confirmation',
+        reason: 'terminal-package-status-saved',
       });
       commit(buildPayload(), 0, 'SCORM_COMPLETION_CANDIDATE');
     }
@@ -2361,6 +2377,11 @@ ${buildScormSessionCloseRuntimeScript()}
     // so they must be matched by source identity before the parent-origin gate.
     if (relayPackageDiagnostics(event)) return;
     if (PARENT_ORIGIN !== '*' && event.origin !== PARENT_ORIGIN) return;
+    if (event.data.type === 'lms:request-completion') {
+      if (event.source !== window.parent || event.data.matriculaId !== MATRICULA_ID) return;
+      performExplicitCompletionRequest();
+      return;
+    }
     if (event.data.type === 'lms:session-close') {
       performGovernedSessionClose(typeof event.data.reason === 'string' ? event.data.reason : null);
       return;
@@ -2398,7 +2419,7 @@ ${buildScormSessionCloseRuntimeScript()}
       return 'true';
     },
     LMSFinish: function() {
-      probeFrameProgress(); var finalLocation = parseLocationMarker(getScormLocation()); if (finalLocation && finalLocation.total != null && finalLocation.current >= finalLocation.total) notifyCompletionPending('saving', 'finish-at-final-location'); diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
+      probeFrameProgress(); diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
       commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
