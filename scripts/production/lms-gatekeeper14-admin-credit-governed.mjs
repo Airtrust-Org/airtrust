@@ -1,8 +1,8 @@
+#!/usr/bin/env node
 // source_reference: 2026-10-08 verified Gatekeeper legacy LMS enrollments 23/24 and PR #1297 target 73.
 // operational_decision: Training Management requests an explicit two-person administrative credit; not a new SCORM completion.
 // dry_run_required: SHA-pinned successful production read-only run and matching candidate hash before any D1 write.
 // rollback_plan_required: governed D1 Time Travel recovery point, isolate concurrent writes; otherwise reviewed forward-only compensation.
-#!/usr/bin/env node
 // Historical Gatekeeper #14 -> FDM Committee/Gatekeeper #73: administrative credit only.
 // Mandatory approved dry-run/hash, eight release gates, Time Travel recovery and scoped D1 audit.
 // Never fabricates SCORM CMI, exam results, course-package completion, certificates or email.
