@@ -266,6 +266,17 @@ def audit(source: Path, reference: Path) -> dict:
         if exact:
             stats["history_exact"] += 1
             by_code[code]["history_exact"] += 1
+            exact_via_current_fk = any(normalize(row.get("type_code")) == normalize(code) for row in exact)
+            exact_via_canonical_code = any(normalize(row.get("original_code")) == normalize(code) for row in exact)
+            if exact_via_current_fk:
+                stats["history_exact_via_current_fk"] += 1
+                by_code[code]["history_exact_via_current_fk"] += 1
+            elif exact_via_canonical_code:
+                stats["history_exact_requires_code_fallback"] += 1
+                by_code[code]["history_exact_requires_code_fallback"] += 1
+                if active:
+                    stats["active_history_exact_requires_code_fallback"] += 1
+                    by_code[code]["active_history_exact_requires_code_fallback"] += 1
         elif relevant:
             stats["history_other_date"] += 1
             by_code[code]["history_other_date"] += 1
