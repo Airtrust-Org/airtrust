@@ -1092,6 +1092,57 @@ describe('training compliance engine', () => {
     expect(body.meta).toMatchObject({ total: 3, funcionarios: 3, nunca_realizados: 3 });
   });
 
+  it('recalcula automaticamente todos os funcionarios: conclusoes de historico/LMS saem da pendencia, vencimento continua', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    const app = createApp(sqlite.asD1());
+    const pending = async () => {
+      const response = await app.request('/pendencias?status=NAO_REALIZADO,VENCIDO');
+      expect(response.status).toBe(200);
+      return (await response.json() as any).data as Array<{
+        funcionario_id: number; status_compliance: string;
+      }>;
+    };
+    expect((await pending()).map((row) => row.funcionario_id).sort()).toEqual([1000, 1001, 1002]);
+
+    // Conclusao por registro de qualificacao: imediatamente reconhecida sem nova matricula.
+    sqlite.database.exec(`
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
+         data_conclusao, data_vencimento, status, renovada, empresa_id, created_at, updated_at)
+      VALUES (1000, 100, 'MNT-12', 'OPERACOES',
+              '2026-08-01', '2030-08-01', 'CONCLUIDA', 0, 1, '2026-08-01', '2026-08-01');
+    `);
+    expect((await pending()).map((row) => row.funcionario_id).sort()).toEqual([1001, 1002]);
+
+    // O mesmo calculo aceita conclusao LMS imediatamente, sem recomecar nem rematricular.
+    sqlite.database.exec(`
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
+      VALUES (505, 1, 'Curso obrigatorio', 100);
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, data_conclusao, created_at, updated_at)
+      VALUES (705, 1, 505, 1001, 'CONCLUIDO', '2026-08-02', '2026-08-01', '2026-08-02');
+    `);
+    expect((await pending()).map((row) => row.funcionario_id)).toEqual([1002]);
+
+    // Evidencia realmente vencida e pendente, mas nunca classificada "nunca realizou".
+    sqlite.database.exec(`
+      INSERT INTO qualificacoes_historico
+        (funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
+         data_conclusao, data_vencimento, status, renovada, empresa_id, created_at, updated_at)
+      VALUES (1002, 100, 'MNT-12', 'OPERACOES',
+              '2024-08-01', '2025-08-01', 'CONCLUIDA', 0, 1, '2024-08-01', '2024-08-01');
+    `);
+    expect(await pending()).toMatchObject([{ funcionario_id: 1002, status_compliance: 'VENCIDO' }]);
+    for (const funcionarioId of [1000, 1001]) {
+      const response = await app.request(`/funcionarios/${funcionarioId}`);
+      expect((await response.json() as any).data.requisitos[0].status_compliance).toBe('CONFORME');
+    }
+  });
+
   it('agrega histórico de cobrança sem depender de LIMIT alto', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
