@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { reconcileTrainingComplianceRuleEnrollment } from '../services/training-compliance-rule-enrollment';
 import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModalitySql } from '../services/training-compliance-history-identity';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
@@ -1230,7 +1231,8 @@ app.post('/regras', requireRole('admin', 'manager'), async (c) => {
     dados_novos: { empresa_id: empresaId, ...data },
     ...extrairUsuarioAuditoria(c),
   });
-  return c.json({ success: true, data: { id } }, 201);
+  const enrollment = await reconcileTrainingComplianceRuleEnrollment(db, empresaId, id, access, extrairUsuarioAuditoria(c), buildSnapshot);
+  return c.json({ success: true, data: { id, ...enrollment } }, 201);
 });
 
 app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
@@ -1268,7 +1270,10 @@ app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
     dados_novos: { empresa_id: empresaId, ...data },
     ...extrairUsuarioAuditoria(c),
   });
-  return c.json({ success: true });
+  const enrollment = await reconcileTrainingComplianceRuleEnrollment(
+    db, empresaId, id, access, extrairUsuarioAuditoria(c), buildSnapshot,
+  );
+  return c.json({ success: true, data: enrollment });
 });
 
 app.delete('/regras/:id', requireRole('admin', 'manager'), async (c) => {
