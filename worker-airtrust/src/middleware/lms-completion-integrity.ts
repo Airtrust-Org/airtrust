@@ -408,7 +408,7 @@ async function guardScormCommit(
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
     activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
     cmiJson: row.cmi_json,
-    suspendData: row.suspend_data,
+    suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
   });
   if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
     'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
@@ -501,7 +501,7 @@ async function guardManualFinalize(
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
     activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
     cmiJson: row.cmi_json,
-    suspendData: row.suspend_data,
+    suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
   });
   if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
     'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
@@ -575,7 +575,7 @@ async function guardAdministrativeStatus(
       bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
       activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
       cmiJson: row.cmi_json,
-    suspendData: row.suspend_data,
+    suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
     });
     if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
       'A conclusão administrativa não pode usar evidências de outra edição.',
