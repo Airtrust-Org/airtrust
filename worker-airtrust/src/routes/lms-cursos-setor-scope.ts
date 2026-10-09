@@ -5,6 +5,38 @@ import {
 } from '../services/employee-sector-access';
 import { getSchemaColumns } from '../utils/db-schema';
 
+/**
+ * A própria matrícula autoriza o aluno a ler os metadados do curso no player,
+ * mesmo quando o curso não está classificado no setor atual do funcionário.
+ * Não altera filtros administrativos nem permite acesso a terceiros.
+ */
+export async function hasOwnLmsCourseEnrollment(
+  db: D1Database,
+  empresaId: number,
+  cursoId: number,
+  funcionarioId: number,
+): Promise<boolean> {
+  if (![empresaId, cursoId, funcionarioId].every((value) => Number.isSafeInteger(value) && value > 0)) {
+    return false;
+  }
+  const row = await db.prepare(
+    `SELECT 1 AS ok
+       FROM lms_matriculas m
+       JOIN funcionarios f ON f.id = m.funcionario_id
+         AND f.empresa_id = m.empresa_id
+         AND f.deleted_at IS NULL
+         AND COALESCE(f.ativo, 1) = 1
+         AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+      WHERE m.empresa_id = ?
+        AND m.curso_id = ?
+        AND m.funcionario_id = ?
+        AND m.deleted_at IS NULL
+        AND UPPER(COALESCE(m.status, '')) <> 'CANCELADO'
+      LIMIT 1`,
+  ).bind(empresaId, cursoId, funcionarioId).first<{ ok: number }>();
+  return Number(row?.ok) === 1;
+}
+
 export function buildCourseSetorScope(
   access: EmployeeSectorAccess,
   courseAlias = 'c',
