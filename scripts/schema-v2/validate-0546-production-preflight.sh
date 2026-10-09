@@ -10,7 +10,7 @@ assert_count(){ local name="$1" expected="$2" sql="$3" n; n="$(query_count "$sql
 assert_count baseline 1 "SELECT COUNT(*) count FROM airtrust_schema_baselines_v2 WHERE baseline_id='production-d1-baseline-v2-20260714' AND status='ACTIVE'"
 assert_count prior-0534-0538 2 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id IN ('training-compliance-final-matrix-0534','training-compliance-manager-designation-nr05-0538')"
 assert_count legacy-0545-unapplied 0 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='training-compliance-canonical-pdf-alignment-0545'"
-assert_count unapplied 0 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='training-compliance-canonical-pdf-alignment-0546'"
+assert_count unapplied 0 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='training-compliance-canonical-category-repair-0546'"
 assert_count models 28 "SELECT COUNT(*) count FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo IN ('AUD_COMP','BRIGADA_INCENDIO','COD_ETICA','INTRO_SGQ','COL_SEL','MUDA','INTEGRA','NR-05','NR06','NR-11','NR-12','NR-20','NR-26','NR-35','PRIMEIROS_SOCORROS','REGRAS_OURO_PETROBRAS','CRM_CORP','CRM_DIR_RBAC119','JUST_CULTURE','FOD','LOSA','PPSP_SUP','PPSP','PRE','D2','STOP_WORK','FDM-MECANICO','BOWTIEXP') AND ativo=1 AND deleted_at IS NULL"
 assert_count generic-category-absent 0 "SELECT COUNT(*) count FROM qualificacoes_categorias WHERE empresa_id=6 AND ativo=1 AND deleted_at IS NULL AND (codigo='TREINAMENTO_GERAL' OR nome='Treinamento')"
 assert_count cipa-condition 1 "SELECT COUNT(*) count FROM compliance_condicoes WHERE empresa_id=6 AND codigo='MEMBRO_CIPA' AND ativo=1 AND deleted_at IS NULL"
