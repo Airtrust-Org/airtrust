@@ -326,3 +326,35 @@ export function buildScormSessionCloseRuntimeScript(): string {
     return true;
   }`;
 }
+
+/** Native M8/legacy package cursor ownership; injected at the same wrapper scope. */
+export function buildScormNativeResumeOwnershipScript(): string {
+  return `
+  function isNativeCourseResumeOwner(w, doc) {
+    try {
+      var state = JSON.parse(cmi['cmi.suspend_data'] || 'null');
+      if (!state || typeof state !== 'object' || Array.isArray(state)) return false;
+
+      // Versioned M8/Factory courses own their position through suspend_data.a.
+      // Never force a generic hash jump from an obsolete LMS high-water mark
+      // when the SAME package has already restored its own cursor.
+      var authored = w.COURSE_DATA;
+      if (authored && typeof authored.packageVersion === 'string' &&
+          state.p === authored.packageVersion && Array.isArray(authored.slides) &&
+          authored.slides.length > 0 && Number.isInteger(state.a) &&
+          state.a >= 0 && state.a < authored.slides.length &&
+          Array.isArray(state.d) &&
+          state.d.every(function(n) {
+            return Number.isInteger(n) && n >= 0 && n < authored.slides.length;
+          })) return true;
+
+      // Older package engine owns its own SCORM cursor in suspend_data.s.
+      if (!doc?.getElementById('slide') || !doc.getElementById('counter') ||
+          typeof w.Scorm?.get !== 'function') return false;
+      return Number.isInteger(state.s) && state.s >= 0 &&
+        Array.isArray(state.d) && state.mq && typeof state.mq === 'object';
+    } catch (_error) { return false; }
+  }
+
+`;
+}
