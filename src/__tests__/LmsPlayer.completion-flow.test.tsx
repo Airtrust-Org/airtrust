@@ -224,6 +224,7 @@ describe('LmsPlayer completion flow', () => {
 
   it('confirma a conclusão com toast de sucesso do AirTrust', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    refetchMatriculaMock.mockResolvedValue({ data: { ...matriculaMock, status: 'CONCLUIDO' } });
 
     renderPlayer();
     await dispatchPlayerMessage({
@@ -234,7 +235,7 @@ describe('LmsPlayer completion flow', () => {
 
     await waitFor(() => {
       expect(toastSuccessMock).toHaveBeenCalledWith(
-        'Curso concluído e registrado com sucesso. A qualificacao foi gerada automaticamente.',
+        'Curso concluído e registrado com sucesso.',
         {
           id: 'lms-scorm-completion-42',
         },
