@@ -2978,13 +2978,11 @@ app.patch('/:id/progresso', async (c) => {
 
   if (!existing) throw new ApiError('Matrícula não encontrada', 404);
 
-  // Não-admins: validar que é o próprio aluno
+  // Mesmo vínculo utilizado no detalhe e no commit SCORM; o legado
+  // funcionarios.usuario_id não é necessariamente preenchido.
   if (!isAdmin) {
-    const funcionarioRow = await db
-      .prepare(`SELECT id FROM funcionarios WHERE usuario_id = ? AND empresa_id = ? LIMIT 1`)
-      .bind(userId, empresaId)
-      .first<{ id: number }>();
-    if (!funcionarioRow || funcionarioRow.id !== existing.funcionario_id) {
+    const callerFuncionarioId = await resolveCallerFuncionarioId(c, db);
+    if (!callerFuncionarioId || callerFuncionarioId !== existing.funcionario_id) {
       throw new ApiError('Sem permissão para atualizar esta matrícula', 403);
     }
   }
