@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSimulatorTrainingClasses,
+  attachSimulatorSupportCrew,
   canManuallyShareSimulatorTrainingSessions,
   canShareSimulatorTrainingSessions,
   pairSimulatorTrainingSessions,
@@ -372,4 +373,48 @@ describe('session-level simulator proposal', () => {
     expect(classes[0].class_name).toBe('AW139-2027.06');
     expect(classes[0].blocks).toHaveLength(2);
   });
+  it('rotates three pilots across successive compatible curricular sessions without inventing needs', () => {
+    const people = [10, 20, 30];
+    const needs = [1, 2, 3, 4].flatMap((order) => people.map((employeeId) =>
+      need(`${employeeId}-${order}`, employeeId, 1, 'AW139 — Periódico Anual', order, '2027-03-20', 'Copiloto'),
+    ));
+    const blocks = pairSimulatorTrainingSessions(needs, 60);
+    expect(blocks.flatMap((b) => b.sessions.map((n) => n.need_id)).sort())
+      .toEqual(needs.map((n) => n.need_id).sort());
+    const pairKeys = new Set(blocks.filter((b) => b.sessions.length === 2)
+      .map((b) => b.sessions.map((n) => n.employee_id).sort().join('-')));
+    expect(pairKeys.size).toBeGreaterThan(1);
+    const classes = buildSimulatorTrainingClasses(blocks);
+    expect(classes.some((trainingClass) =>
+      new Set(trainingClass.blocks.flatMap((b) => b.sessions.map((n) => n.employee_id))).size >= 3,
+    )).toBe(true);
+  });
+
+  it('marks an operational support member without crediting a new training need', () => {
+    const solo = need('solo', 10, 1, 'AW139 — Periódico', 1, '2027-03-20', 'Copiloto');
+    const peer = need('peer', 20, 1, 'AW139 — Periódico', 2, '2027-03-20', 'Copiloto');
+    const blocks = pairSimulatorTrainingSessions([solo], 60);
+    const [updated] = attachSimulatorSupportCrew({
+      blocks,
+      needs: [solo, peer],
+      assignments: [{ anchor_need_id: solo.need_id, support_employee_id: 20 }],
+    });
+    expect(updated.pairing).toBe('APOIO_SEM_RENOVACAO');
+    expect(updated.sessions.map((n) => n.employee_id)).toEqual([10]);
+    expect(updated.support).toEqual({
+      employee_id: 20, employee_name: 'Piloto 20', employee_role: 'Copiloto',
+    });
+    // Support connects an operational 3+ cohort without becoming a second training need.
+    const peerBlock = pairSimulatorTrainingSessions([peer], 60)[0];
+    const cohorts = buildSimulatorTrainingClasses([updated, peerBlock]);
+    expect(cohorts).toHaveLength(1);
+    expect(cohorts[0].blocks).toHaveLength(2);
+
+    expect(() => attachSimulatorSupportCrew({
+      blocks,
+      needs: [solo, peer],
+      assignments: [{ anchor_need_id: solo.need_id, support_employee_id: 10 }],
+    })).toThrow(/apoio/i);
+  });
+
 });

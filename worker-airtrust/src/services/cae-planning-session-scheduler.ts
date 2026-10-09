@@ -115,7 +115,7 @@ export async function scheduleSimulatorTrainingBlocks(params: {
 
   const scheduled: ScheduledSessionBlock[] = [];
   for (const block of orderedBlocks) {
-    if (block.sessions.length < 2) {
+    if (block.sessions.length < 2 && !block.support) {
       scheduled.push({
         ...block,
         schedule_status: 'UNMATCHED_CREW',
@@ -153,7 +153,7 @@ export async function scheduleSimulatorTrainingBlocks(params: {
 
       let rosterAllowed = true;
       const rosterRows: ScheduledSessionBlock['roster'] = [];
-      for (const session of block.sessions) {
+      for (const session of [...block.sessions, ...(block.support ? [block.support] : [])]) {
         const existing = assignmentsByEmployee.get(session.employee_id) || [];
         if (overlaps(candidate.startMs, endMs, existing)) {
           rosterAllowed = false;
@@ -218,7 +218,7 @@ export async function scheduleSimulatorTrainingBlocks(params: {
     const start = isoDateTime(chosen.startMs);
     const end = isoDateTime(chosen.endMs);
     const sourceRef = workingSlot.slot.source_ref;
-    for (const session of block.sessions) {
+    for (const session of [...block.sessions, ...(block.support ? [block.support] : [])]) {
       const ranges = assignmentsByEmployee.get(session.employee_id) || [];
       ranges.push({ startMs: chosen.startMs, endMs: chosen.endMs });
       assignmentsByEmployee.set(session.employee_id, ranges);
