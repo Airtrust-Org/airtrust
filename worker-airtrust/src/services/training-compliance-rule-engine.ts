@@ -235,11 +235,11 @@ export async function hydrateTrainingComplianceConditions<
   return employees;
 }
 
-// Categorias documentais/avaliativas permanecem no Histórico de Qualificações,
+// Categorias documentais/avaliativas e de voo permanecem no Histórico de Qualificações,
 // mas não criam pendência, cobrança ou renovação de Training Compliance.
 // SQLite UPPER não converte cedilha: normalizamos explicitamente ambas as grafias.
 export function trainingComplianceEligibleCategorySql(categoryExpr: string): string {
-  return `UPPER(REPLACE(REPLACE(TRIM(COALESCE(${categoryExpr}, '')), 'ç', 'C'), 'Ç', 'C')) NOT IN ('CHECK', 'EXAME', 'LICENCA')`;
+  return `UPPER(REPLACE(REPLACE(TRIM(COALESCE(${categoryExpr}, '')), 'ç', 'C'), 'Ç', 'C')) NOT IN ('CHECK', 'EXAME', 'LICENCA', 'VOO', 'TREINAMENTO DE VOO')`;
 }
 
 export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
