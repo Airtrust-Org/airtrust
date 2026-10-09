@@ -1,6 +1,7 @@
 import puppeteer, { type Browser, type BrowserWorker, type HTTPRequest } from '@cloudflare/puppeteer';
 
 import type { ScormRuntimeConformance } from './lms-scorm-quality-gate';
+import { buildScormFunctionalDriverScript } from './lms-scorm-functional-driver';
 
 const RUNNER_VERSION = 'AIRTRUST_SCORM_BROWSER_RUN_V1';
 const TIMEOUT_MS = 30_000;
@@ -87,6 +88,11 @@ export async function runScormBrowserConformance(params: {
       return request.respond({ status: 200, body: asset, headers: { 'Content-Type': path.endsWith('.js') ? 'application/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.html') ? 'text/html' : 'application/octet-stream' } });
     });
     await page.setContent(`<base href="${CANDIDATE_ORIGIN}">${injectBeforePackageScripts(new TextDecoder().decode(launch))}`, { waitUntil: 'networkidle0', timeout: TIMEOUT_MS });
+    // Drive authored M8 interactions by actually clicking course controls,
+    // never by calling SCORMSetValue or forcing internal course state.
+    const functional = await page.evaluate(buildScormFunctionalDriverScript()) as {
+      supported: boolean; completed: boolean; steps: number; reason: string | null;
+    };
     // Phase A (implicit): the page load above already lets the package run
     // its normal startup — LMSInitialize/GetValue/SetValue/Commit. LMSFinish
     // is deliberately not required yet; SCORM 1.2 packages commonly gate it
@@ -106,7 +112,27 @@ export async function runScormBrowserConformance(params: {
         "window.dispatchEvent(new Event('unload'));",
     );
     const observed = await page.evaluate('window.__AIRTRUST_SCORM_TRACE()') as ObservedTrace;
-    return analyzeTrace(params.candidateSha256, startedAt, observed.trace, observed.values, observed.initialized, observed.finished, observed.lastError);
+    const runtime = analyzeTrace(params.candidateSha256, startedAt, observed.trace, observed.values, observed.initialized, observed.finished, observed.lastError);
+    const contractBytes = assets.get('airtrust-completion-manifest.json');
+    let masteryScore: number | null = null;
+    if (contractBytes) {
+      try {
+        const contract = JSON.parse(new TextDecoder().decode(contractBytes)) as {
+          assessment?: { masteryScore?: unknown };
+        };
+        const declared = contract?.assessment?.masteryScore;
+        if (typeof declared === 'number' && Number.isFinite(declared) &&
+            declared >= 0 && declared <= 100) masteryScore = declared;
+      } catch {
+        // The static quality gate rejects malformed authoring contracts.
+      }
+    }
+    return {
+      ...runtime,
+      masteryScore: masteryScore === null ? runtime.masteryScore : String(masteryScore),
+      functionalCompletionVerified: functional.supported && functional.completed && functional.steps > 0,
+      functionalCompletionReason: functional.reason,
+    };
   } catch (error) {
     const timedOut = error instanceof Error && /timeout/i.test(error.message);
     return { status: timedOut ? 'TIMEOUT' : 'ERROR', candidateSha256: params.candidateSha256, startedAt, finishedAt: new Date().toISOString(), initializeObserved: false, commitObserved: false, finishObserved: false, completionReached: false, lessonStatus: null, scoreRaw: null, masteryScore: null, lessonLocation: null, trace: [], errors: [error instanceof Error ? error.message : 'Browser Run falhou'], runnerVersion: RUNNER_VERSION };

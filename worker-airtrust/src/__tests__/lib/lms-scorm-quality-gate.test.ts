@@ -37,7 +37,18 @@ describe('SCORM package quality gate', () => {
   it('only publishes matching SHA with static and runtime PASS', () => {
     const staticResult = validateScormPackageQuality(pkg(validManifest));
     const runtime = { status: 'PASS' as const, candidateSha256: 'sha-a', startedAt: '', finishedAt: '', initializeObserved: true, commitObserved: true, finishObserved: true, completionReached: false, lessonStatus: 'incomplete', scoreRaw: null, masteryScore: null, lessonLocation: null, trace: [], errors: [], runnerVersion: 'v1' };
-    expect(applyRuntimeConformance(staticResult, runtime, 'sha-a').publishable).toBe(true);
+    // SCORM Initialize/Commit/Finish with incomplete coursework is a
+    // protocol PASS, never permission to publish a certifying ZIP.
+    expect(applyRuntimeConformance(staticResult, runtime, 'sha-a').publishable).toBe(false);
+    expect(applyRuntimeConformance(staticResult, runtime, 'sha-a').conformance.status).toBe('FAIL');
     expect(applyRuntimeConformance(staticResult, runtime, 'sha-b').publishable).toBe(false);
+    const passed = {
+      ...runtime, lessonStatus: 'passed', completionReached: true,
+      functionalCompletionVerified: true, functionalCompletionReason: null,
+      scoreRaw: '85', masteryScore: '70',
+    };
+    expect(applyRuntimeConformance(staticResult, passed, 'sha-a').publishable).toBe(true);
+    expect(applyRuntimeConformance(staticResult, { ...passed, scoreRaw: '69' }, 'sha-a').publishable).toBe(false);
+    expect(applyRuntimeConformance(staticResult, { ...passed, functionalCompletionVerified: false }, 'sha-a').publishable).toBe(false);
   });
 });

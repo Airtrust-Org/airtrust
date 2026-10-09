@@ -40,6 +40,8 @@ export type ScormRuntimeConformance = {
   trace: Array<{ method: string; key?: string; value?: string }>;
   errors: string[];
   runnerVersion: string;
+  functionalCompletionVerified?: boolean;
+  functionalCompletionReason?: string | null;
 };
 
 function pass(): GateSection {
@@ -363,14 +365,42 @@ export function applyRuntimeConformance(
   expectedSha256: string,
 ): ScormQualityGateResult {
   const shaMatches = runtime.candidateSha256 === expectedSha256;
+  const actualScore = Number(runtime.scoreRaw);
+  const hasMastery = typeof runtime.masteryScore === 'string' && runtime.masteryScore.trim() !== '';
+  const mastery = hasMastery ? Number(runtime.masteryScore) : null;
+  const scoreProven = !hasMastery ||
+    (Number.isFinite(mastery) && mastery !== null && mastery >= 0 && mastery <= 100 &&
+      runtime.scoreRaw !== null && runtime.scoreRaw !== '' &&
+      Number.isFinite(actualScore) && actualScore >= mastery);
+  const functionalProven = runtime.functionalCompletionVerified === true &&
+    runtime.completionReached === true &&
+    ['passed', 'completed'].includes(String(runtime.lessonStatus ?? '').toLowerCase()) &&
+    scoreProven;
+  const verdict = !shaMatches ? 'ERROR' as const :
+    runtime.status === 'PASS' && !functionalProven ? 'FAIL' as const : runtime.status;
   const conformance = {
-    status: shaMatches ? runtime.status : 'ERROR' as const,
-    tests: runtime.trace.map((item) => ({ name: item.method, status: shaMatches ? runtime.status : 'ERROR' as GateStatus, detail: item.key ? `${item.key}${item.value === undefined ? '' : `=${item.value}`}` : '' })),
+    status: verdict,
+    tests: runtime.trace.map((item) => ({
+      name: item.method,
+      status: shaMatches ? runtime.status : 'ERROR' as GateStatus,
+      detail: item.key ? `${item.key}${item.value === undefined ? '' : `=${item.value}`}` : '',
+    })),
   };
-  if (!shaMatches) conformance.tests.push({ name: 'CANDIDATE_SHA256', status: 'ERROR', detail: 'Resultado pertence a SHA diferente' });
+  conformance.tests.push({
+    name: 'FUNCTIONAL_COMPLETION_EVIDENCE',
+    status: shaMatches ? (functionalProven ? 'PASS' : 'FAIL') : 'ERROR' as GateStatus,
+    detail: functionalProven ? 'Interações e avaliação concluídas no navegador isolado' :
+      (runtime.functionalCompletionReason ?? 'Conclusão pedagógica não demonstrada'),
+  });
+  if (!shaMatches) conformance.tests.push({
+    name: 'CANDIDATE_SHA256', status: 'ERROR',
+    detail: 'Resultado pertence a SHA diferente',
+  });
   return {
     ...staticResult,
     conformance,
-    publishable: shaMatches && staticResult.structural.status === 'PASS' && staticResult.completionManifest.status === 'PASS' && staticResult.diagnostics.status === 'PASS' && runtime.status === 'PASS',
+    publishable: shaMatches && staticResult.structural.status === 'PASS' &&
+      staticResult.completionManifest.status === 'PASS' &&
+      staticResult.diagnostics.status === 'PASS' && verdict === 'PASS',
   };
 }
