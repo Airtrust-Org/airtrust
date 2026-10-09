@@ -72,6 +72,7 @@ import {
   summarizeScormTextPayload,
 } from '../services/lms-matricula-runtime-domain';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
+import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -722,6 +723,17 @@ app.get('/:id', async (c) => {
         })
       : null;
 
+  // Read-only, server-verified edition evidence. An old 41/41 runtime may
+  // belong to a published 37-slide package; it must not unlock completion.
+  const editionMismatch = tipoConteudo === 'scorm' && matricula.status !== 'CONCLUIDO'
+    ? await detectLmsEditionMismatch({
+        bucket: c.env.BUCKET,
+        contentType: tipoConteudo,
+        activePrefix: matricula.scorm_package_r2_prefix,
+        cmiJson: progressoScorm?.cmi_json,
+      })
+    : null;
+
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: matricula.status as string | null,
     progressoBruto: matricula.progresso_pct as number | null,
@@ -738,6 +750,7 @@ app.get('/:id', async (c) => {
       scorm_progresso: progressoScorm,
       xapi_summary: xapiSummary,
       completion_diagnostic: completionDiagnostic,
+      edition_mismatch: editionMismatch,
     },
   });
 });
