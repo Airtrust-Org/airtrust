@@ -231,7 +231,9 @@ jobs:
             rm -f worker-airtrust/.dev.vars
           }
           trap cleanup EXIT
-          npm run dev:worker:local > /tmp/worker.log 2>&1 &
+          # Wrangler defaults to localhost, which can resolve to IPv6-only
+          # inside the pinned Playwright container. E2E targets IPv4 127.0.0.1.
+          npm run dev:worker:local -- --ip 127.0.0.1 > /tmp/worker.log 2>&1 &
           WORKER_PID=$!
           # A TCP-connected but unresponsive local Worker once stalled a
           # bare curl for >40m. Treat health as a bounded preflight, preserve
