@@ -9,7 +9,7 @@ export type LmsEditionMismatch = {
   required: true;
   previous_total: number;
   active_total: number;
-  reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED';
+  reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' | 'PACKAGE_SHA_CHANGED';
   previous_version?: string;
   active_version?: string;
 };
@@ -22,6 +22,8 @@ export async function detectLmsEditionMismatch(params: {
   cursoId: number;
   cmiJson: unknown;
   suspendData?: unknown;
+  db?: D1Database;
+  enrollmentStartedAt?: unknown;
 }): Promise<LmsEditionMismatch | null> {
   if (String(params.contentType ?? '').toLowerCase() !== 'scorm') return null;
   if (!params.bucket || typeof params.activePrefix !== 'string') return null;
@@ -109,6 +111,43 @@ export async function detectLmsEditionMismatch(params: {
         previous_version: priorPackageVersion,
         active_version: activeVersion,
       };
+    }
+    // Legacy SCORM may omit package identity. A replacement of equal slide
+    // count is proven only when the enrolled learner began BEFORE activation
+    // and the previous candidate has a different immutable SHA.
+    if (params.db && typeof params.enrollmentStartedAt === 'string') {
+      try {
+        const lineage = await params.db.prepare(
+          `SELECT active.package_sha256 AS active_sha,
+                  previous.package_sha256 AS previous_sha,
+                  active.activated_at AS activated_at
+             FROM lms_scorm_package_versions active
+             JOIN lms_scorm_package_versions previous
+               ON previous.id = active.previous_active_package_id
+              AND previous.empresa_id = active.empresa_id
+              AND previous.curso_id = active.curso_id
+            WHERE active.empresa_id = ? AND active.curso_id = ?
+              AND active.status = 'ACTIVE' AND active.r2_prefix = ?
+            LIMIT 1`,
+        ).bind(params.empresaId, params.cursoId, prefix).first<{
+          active_sha: string; previous_sha: string; activated_at: string | null;
+        }>();
+        const toTime = (value: string | null) => Date.parse(
+          value ? (value.includes('T') ? value : value.replace(' ', 'T') + 'Z') : '',
+        );
+        const start = toTime(params.enrollmentStartedAt);
+        const activation = toTime(lineage?.activated_at ?? null);
+        if (lineage && /^[0-9a-f]{64}$/i.test(lineage.active_sha) &&
+            /^[0-9a-f]{64}$/i.test(lineage.previous_sha) &&
+            lineage.active_sha !== lineage.previous_sha &&
+            Number.isFinite(start) && Number.isFinite(activation) &&
+            start < activation) {
+          return { required: true, previous_total: priorTotal, active_total: activeTotal,
+            reason: 'PACKAGE_SHA_CHANGED' };
+        }
+      } catch {
+        // Missing provenance cannot authorize a reset.
+      }
     }
     return null;
   } catch {
