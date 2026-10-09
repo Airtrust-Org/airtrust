@@ -1,0 +1,72 @@
+name: Production Coordination Profile Activation
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA
+        required: true
+        type: string
+      expected_live_worker_sha:
+        description: Exact deployed Worker source SHA
+        required: true
+        type: string
+      operation:
+        description: inspect (read only) or apply (one scoped profile update)
+        required: true
+        type: choice
+        options:
+          - inspect
+          - apply
+        default: inspect
+      confirmation:
+        description: Type AIRTRUST_COORDENACAO_VOO
+        required: true
+        type: string
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-coordination-profile-activation
+  cancel-in-progress: false
+jobs:
+  profile:
+    name: Tenant-scoped coordination role
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      PROD_API_BASE_URL: https://api.airtrust.online
+      OPERATION_MODE: ${{ inputs.operation }}
+      EXPECTED_WORKER_SHA: ${{ inputs.expected_live_worker_sha }}
+    steps:
+      - name: Validate dispatch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo MAIN_REQUIRED; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ && "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo SOURCE_SHA_MISMATCH; exit 1; }
+          [[ "$EXPECTED_WORKER_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo LIVE_SHA_INVALID; exit 1; }
+          [[ "$CONFIRMATION" == "AIRTRUST_COORDENACAO_VOO" ]] || { echo CONFIRMATION_REQUIRED; exit 1; }
+          [[ "$OPERATION_MODE" == "inspect" || "$OPERATION_MODE" == "apply" ]] || { echo MODE_INVALID; exit 1; }
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Test tenant/role guards
+        run: node --test scripts/__tests__/production-coordination-profile-activation.test.mjs
+      - name: Verify all eight release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Execute through authenticated production admin API
+        env:
+          QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL }}
+          PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+        run: node scripts/ops/production-coordination-profile-activation.mjs
