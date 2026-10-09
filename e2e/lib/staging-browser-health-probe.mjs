@@ -37,14 +37,14 @@ export async function probeRealStagingHealth(page, { guard, releaseShortSha, ass
   };
 
   try {
-    let status = await probe();
+    // The first SPA render can reload the login document several times.\n    // A settled browser network state avoids probing a document being replaced.\n    await page.waitForLoadState('networkidle', { timeout: 15_000 });\n    let status = await probe();
     if (status !== -1 || !healthAborted || guard.violations.length !== 0 ||
       new URL(page.url()).origin !== FRONTEND_ORIGIN) {
       return status;
     }
 
     // This is a bounded retry of the same GET, not an auth or release bypass.
-    await page.waitForLoadState('load');
+    await page.waitForLoadState('networkidle', { timeout: 15_000 });
     if (releaseShortSha) {
       await assertFrontendSha(page, releaseShortSha, 'login-preflight-retry');
     }
