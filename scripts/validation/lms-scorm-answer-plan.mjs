@@ -1,4 +1,5 @@
-// Read-only SCORM browser certification: extract authored correct responses only from package metadata.\nexport function extractAnswerPlan(model) {
+// Read-only SCORM browser certification: extract authored correct responses only from package metadata.
+export function extractAnswerPlan(model) {
   const answers = [];
   const seen = new Set();
   function visit(value, path = '') {
