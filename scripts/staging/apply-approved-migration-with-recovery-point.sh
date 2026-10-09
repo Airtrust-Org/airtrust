@@ -66,6 +66,13 @@ APPROVED_MIGRATIONS=(
   "0533_training_catalog_metadata_references.sql"
   "0534_training_compliance_final_matrix.sql"
   "0535_training_compliance_integra_bootstrap.sql"
+  "0536_training_compliance_fdm_three_audiences.sql"
+  "0537_training_catalog_source_backed_metadata.sql"
+  "0538_training_compliance_manager_designation_nr05.sql"
+  "0539_training_doutrinacao_bootstrap.sql"
+  "0540_training_maintenance_catalog_identities_bootstrap.sql"
+  "0541_training_operational_category_bootstrap.sql"
+  "0542_lms_scorm_formative_assessment_policy.sql"
 )
 
 apply=false
@@ -298,6 +305,27 @@ validate_postconditions() {
     0535_training_compliance_integra_bootstrap.sql)
       bash scripts/staging/validate-0535-postconditions.sh --target="$db_name"
       ;;
+    0536_training_compliance_fdm_three_audiences.sql)
+      bash scripts/staging/validate-0536-postconditions.sh --target="$db_name"
+      ;;
+    0537_training_catalog_source_backed_metadata.sql)
+      bash scripts/staging/validate-0537-postconditions.sh --target="$db_name"
+      ;;
+    0538_training_compliance_manager_designation_nr05.sql)
+      bash scripts/staging/validate-0538-postconditions.sh --target="$db_name"
+      ;;
+    0539_training_doutrinacao_bootstrap.sql)
+      bash scripts/staging/validate-0539-postconditions.sh --target="$db_name"
+      ;;
+    0540_training_maintenance_catalog_identities_bootstrap.sql)
+      bash scripts/staging/validate-0540-postconditions.sh --target="$db_name"
+      ;;
+    0541_training_operational_category_bootstrap.sql)
+      bash scripts/staging/validate-0541-postconditions.sh --target="$db_name"
+      ;;
+    0542_lms_scorm_formative_assessment_policy.sql)
+      bash scripts/staging/validate-0542-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -453,6 +481,41 @@ fi
 if [[ "$migration_basename" == "0535_training_compliance_integra_bootstrap.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0535-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0535_OK=true"
+fi
+
+if [[ "$migration_basename" == "0536_training_compliance_fdm_three_audiences.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0536-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0536_OK=true"
+fi
+
+if [[ "$migration_basename" == "0537_training_catalog_source_backed_metadata.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0537-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0537_OK=true"
+fi
+
+if [[ "$migration_basename" == "0538_training_compliance_manager_designation_nr05.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0538-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0538_OK=true"
+fi
+
+if [[ "$migration_basename" == "0539_training_doutrinacao_bootstrap.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0539-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0539_OK=true"
+fi
+
+if [[ "$migration_basename" == "0540_training_maintenance_catalog_identities_bootstrap.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0540-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0540_OK=true"
+fi
+
+if [[ "$migration_basename" == "0541_training_operational_category_bootstrap.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0541-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0541_OK=true"
+fi
+
+if [[ "$migration_basename" == "0542_lms_scorm_formative_assessment_policy.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0542-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0542_OK=true"
 fi
 
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then

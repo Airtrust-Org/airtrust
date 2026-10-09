@@ -7,7 +7,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 import { unzipSync, strFromU8 } from 'fflate';
 import { auth } from '../middleware/auth';
-import { requirePermission } from '../middleware/rbac';
+import { hasRole, requirePermission } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { resolveScormLaunchFileHref, resolveScormVersion } from '../lib/lms/scorm-manifest-parser';
 import {
@@ -60,6 +60,7 @@ const LMS_CURSOS_SELECT_COLUMNS = `
   scorm_package_r2_prefix,
   scorm_launch_file,
   scorm_mastery_score,
+  scorm_assessment_policy,
   qualificacao_tipo_id,
   gerar_qualificacao_ao_concluir,
   ativo,
@@ -508,6 +509,7 @@ const CursoCreateSchema = z.object({
   ),
   scorm_versao: optionalNullableScormVersion,
   scorm_mastery_score: intWithDefault(70, 0, 100),
+  scorm_assessment_policy: z.enum(['SCORED', 'FORMATIVE']).default('SCORED'),
   qualificacao_tipo_id: optionalNullablePositiveInt,
   qualificacao_area_id: optionalNullablePositiveInt,
   gerar_qualificacao_ao_concluir: binaryFlagWithDefault(0),
@@ -537,6 +539,7 @@ const CursoUpdateSchema = z.object({
     (value) => (value === null || value === '' ? 70 : value),
     z.number().int().min(0).max(100).optional(),
   ),
+  scorm_assessment_policy: z.enum(['SCORED', 'FORMATIVE']).optional(),
   qualificacao_tipo_id: optionalNullablePositiveInt,
   qualificacao_area_id: optionalNullablePositiveInt,
   gerar_qualificacao_ao_concluir: optionalBinaryFlag,
@@ -765,6 +768,7 @@ async function parseCursoCreateRequest(c: Context) {
       tipo_conteudo: String(formData.get('tipo_conteudo') ?? 'scorm').trim() || 'scorm',
       scorm_versao: parseOptionalScormVersion(formText(formData.get('scorm_versao'))),
       scorm_mastery_score: parseOptionalInt(formText(formData.get('scorm_mastery_score'))),
+      scorm_assessment_policy: formText(formData.get('scorm_assessment_policy')) ?? 'SCORED',
       qualificacao_tipo_id: parseOptionalInt(formText(formData.get('qualificacao_tipo_id'))),
       gerar_qualificacao_ao_concluir: parseOptionalBinary(
         formText(formData.get('gerar_qualificacao_ao_concluir')),
@@ -1857,6 +1861,21 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
   const courseSetorSchema = await getCourseSetorSchema(db);
 
   const { data: d, uploadFile } = await parseCursoCreateRequest(c);
+  if (d.scorm_assessment_policy === 'FORMATIVE' && d.tipo_conteudo !== 'scorm') {
+    throw new ApiError('A política formativa sem nota está disponível apenas para conteúdo SCORM.', 400);
+  }
+  if (d.scorm_assessment_policy === 'FORMATIVE' && !hasRole(c, 'admin')) {
+    throw new ApiError('Somente administrador pode configurar um SCORM como formativo.', 403);
+  }
+  if (d.scorm_assessment_policy === 'SCORED' && d.scorm_mastery_score <= 0) {
+    throw new ApiError('Cursos avaliativos exigem nota mínima SCORM maior que zero.', 400);
+  }
+  if (d.scorm_assessment_policy === 'FORMATIVE' && d.tipo_conteudo !== 'scorm') {
+    throw new ApiError('Modo formativo sem nota aplica-se somente a pacotes SCORM.', 400);
+  }
+  if (d.scorm_assessment_policy === 'SCORED' && d.scorm_mastery_score <= 0) {
+    throw new ApiError('Defina nota mínima positiva para curso avaliado.', 400);
+  }
   const isEadCourse = await isEadCourseRequest(db, empresaId, {
     qualificacaoTipoId: d.qualificacao_tipo_id ?? null,
     formatoId: d.formato_id ?? null,
@@ -1913,6 +1932,7 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
     'tipo_conteudo',
     'scorm_versao',
     'scorm_mastery_score',
+    'scorm_assessment_policy',
     'qualificacao_tipo_id',
     'gerar_qualificacao_ao_concluir',
     'publicado',
@@ -1931,7 +1951,8 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
     d.carga_horaria_recorrente_horas ?? null,
     d.tipo_conteudo,
     d.scorm_versao ?? null,
-    d.scorm_mastery_score,
+    d.scorm_assessment_policy === 'FORMATIVE' ? null : d.scorm_mastery_score,
+    d.scorm_assessment_policy,
     resolvedQualificacaoTipoId,
     d.gerar_qualificacao_ao_concluir,
     d.publicado,
@@ -2065,7 +2086,7 @@ app.put(
 
     const existing = await db
       .prepare(
-        'SELECT id, titulo, categoria, tipo_conteudo, publicado, ativo, qualificacao_tipo_id, gerar_qualificacao_ao_concluir FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        'SELECT id, titulo, categoria, tipo_conteudo, publicado, ativo, qualificacao_tipo_id, gerar_qualificacao_ao_concluir, scorm_assessment_policy, scorm_mastery_score FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
       )
       .bind(cursoId, empresaId)
       .first<{
@@ -2077,6 +2098,8 @@ app.put(
         ativo: number;
         qualificacao_tipo_id: number | null;
         gerar_qualificacao_ao_concluir: number;
+        scorm_assessment_policy: 'SCORED' | 'FORMATIVE';
+        scorm_mastery_score: number | null;
       }>();
     if (!existing) throw new ApiError('Curso não encontrado', 404);
 
@@ -2096,6 +2119,37 @@ app.put(
       throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
 
     const d = parsed.data;
+    if ((d.scorm_assessment_policy ?? existing.scorm_assessment_policy) === 'FORMATIVE' &&
+        (d.tipo_conteudo ?? existing.tipo_conteudo) !== 'scorm') {
+      throw new ApiError('A política formativa sem nota está disponível apenas para conteúdo SCORM.', 400);
+    }
+    if (d.scorm_assessment_policy !== undefined &&
+        d.scorm_assessment_policy !== existing.scorm_assessment_policy &&
+        !hasRole(c, 'admin')) {
+      throw new ApiError('Somente administrador pode alterar a política avaliativa SCORM.', 403);
+    }
+    // Reverting FORMATIVE to SCORED must never leave NULL mastery and create
+    // another permanently unfinishable course. The caller must choose a real threshold.
+    if (d.scorm_assessment_policy === 'SCORED' &&
+        existing.scorm_assessment_policy === 'FORMATIVE' &&
+        (d.scorm_mastery_score === undefined || d.scorm_mastery_score <= 0)) {
+      throw new ApiError('Ao mudar para avaliação com nota, informe nota mínima SCORM maior que zero.', 400);
+    }
+    if (existing.scorm_assessment_policy === 'SCORED' &&
+        d.scorm_assessment_policy !== 'FORMATIVE' &&
+        d.scorm_mastery_score !== undefined && d.scorm_mastery_score <= 0) {
+      throw new ApiError('Cursos avaliativos exigem nota mínima SCORM maior que zero.', 400);
+    }
+    const nextAssessmentPolicy = d.scorm_assessment_policy ?? existing.scorm_assessment_policy;
+    const nextContentType = d.tipo_conteudo ?? existing.tipo_conteudo;
+    const nextMasteryScore = d.scorm_mastery_score ?? existing.scorm_mastery_score;
+    if (nextAssessmentPolicy === 'FORMATIVE' && nextContentType !== 'scorm') {
+      throw new ApiError('Modo formativo sem nota aplica-se somente a pacotes SCORM.', 400);
+    }
+    if (d.scorm_assessment_policy === 'SCORED' &&
+        (nextMasteryScore === null || nextMasteryScore <= 0)) {
+      throw new ApiError('Ao ativar avaliação eliminatória, informe nota mínima positiva.', 400);
+    }
     if (!(await isValidQualificationAreaId(db, empresaId, d.qualificacao_area_id)))
       throw new ApiError('Área da qualificação inválida ou inativa para esta empresa', 400);
     const nextGerarQualificacao =
@@ -2149,6 +2203,7 @@ app.put(
 
     const map: Record<string, unknown> = {
       ...d,
+      ...(d.scorm_assessment_policy === 'FORMATIVE' ? { scorm_mastery_score: null } : {}),
       qualificacao_tipo_id: resolvedQualificacaoTipoId,
       gerar_qualificacao_ao_concluir: nextResolvedGerarQualificacao,
     };
@@ -2166,6 +2221,7 @@ app.put(
       'tipo_conteudo',
       'scorm_versao',
       'scorm_mastery_score',
+      'scorm_assessment_policy',
       'qualificacao_tipo_id',
       'gerar_qualificacao_ao_concluir',
       'publicado',

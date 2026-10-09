@@ -32,6 +32,7 @@ import {
 } from '@/react-app/components/compliance/TrainingComplianceIntelligence';
 import { TrainingComplianceNoticeAction } from '@/react-app/components/compliance/TrainingComplianceNoticeAction';
 import { TrainingComplianceBulkNoticeComposer } from '@/react-app/components/compliance/TrainingComplianceBulkNoticeComposer';
+import { TrainingCompliancePicker } from '@/react-app/components/compliance/TrainingCompliancePicker';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { useQualificacaoTipos } from '@/react-app/hooks/useQualificacoesExt';
 
@@ -390,13 +391,25 @@ export default function ComplianceTreinamentosPage() {
       readJson<Catalogs>(await fetchWithAuth('/api/compliance-treinamentos/catalogos')),
   });
   const filter = buildFilter(setorId, funcaoId, searchQuery);
+  // Every visible compliance view must re-read authoritative history after any
+  // LMS or qualification completion, including updates from another device.
+  const liveComplianceRefresh = {
+    staleTime: 0,
+    refetchOnMount: 'always' as const,
+    refetchOnWindowFocus: 'always' as const,
+    refetchOnReconnect: 'always' as const,
+    refetchInterval: 120_000,
+  };
+
   const summary = useQuery({
+    ...liveComplianceRefresh,
     queryKey: ['training-compliance', 'summary', setorId, funcaoId, searchQuery],
     enabled: schemaReady,
     queryFn: async () =>
       readJson<Summary>(await fetchWithAuth(`/api/compliance-treinamentos/resumo${filter}`)),
   });
   const people = useQuery({
+    ...liveComplianceRefresh,
     queryKey: ['training-compliance', 'people', setorId, funcaoId, searchQuery, drilldown],
     enabled: schemaReady && tab === 'pessoas',
     queryFn: async () => {
@@ -413,6 +426,7 @@ export default function ComplianceTreinamentosPage() {
     },
   });
   const trainings = useQuery({
+    ...liveComplianceRefresh,
     queryKey: ['training-compliance', 'trainings', setorId, funcaoId, searchQuery],
     enabled: schemaReady && tab === 'treinamentos',
     queryFn: async () =>
@@ -421,6 +435,7 @@ export default function ComplianceTreinamentosPage() {
       ),
   });
   const sectors = useQuery({
+    ...liveComplianceRefresh,
     queryKey: ['training-compliance', 'sectors', setorId, searchQuery],
     enabled: schemaReady && tab === 'setores',
     queryFn: async () =>
@@ -1599,26 +1614,11 @@ export default function ComplianceTreinamentosPage() {
                   ) : (
                     <>
                       <div className="max-w-xl">
-                        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Treinamento / modelo de qualificação
-                        </label>
-                        <select
-                          value={selectedTipoId ?? ''}
-                          onChange={(event) =>
-                            setSelectedTipoId(
-                              event.target.value ? Number(event.target.value) : null,
-                            )
-                          }
-                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                        >
-                          <option value="">Selecione um treinamento</option>
-                          {tipos.map((tipo) => (
-                            <option key={String(tipo.id)} value={String(tipo.id)}>
-                              {tipo.nome}
-                              {tipo.codigo ? ` (${tipo.codigo})` : ''}
-                            </option>
-                          ))}
-                        </select>
+                        <TrainingCompliancePicker
+                          tipos={tipos}
+                          value={selectedTipoId}
+                          onChange={setSelectedTipoId}
+                        />
                       </div>
                       {selectedTipoId ? (
                         <TrainingComplianceApplicabilityEditor

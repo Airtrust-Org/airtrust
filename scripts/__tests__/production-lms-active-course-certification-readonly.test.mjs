@@ -13,6 +13,12 @@ test('production active-course certifier is preview/read-only and exact-package 
   const source = read(SCRIPT);
   assert.match(source, /assertAllowedProductionBaseUrl/);
   assert.match(source, /EXPECTED_PRODUCTION_SHA/);
+  // An all-courses run lasts longer than the short-lived production access token.
+  // No course should be reported HTTP 401 solely because the certifier expired.
+  assert.match(source, /let token = await productionToken\(\)/);
+  assert.match(source, /Date\.now\(\) - tokenIssuedAt >= 15 \* 60_000/);
+  assert.match(source, /await assertPinnedProduction\(\);\s*token = await productionToken\(\);\s*tokenIssuedAt = Date\.now\(\);/);
+
   assert.match(source, /\/api\/lms\/cursos\/\$\{id\}\/scorm-package-versions/);
   assert.match(source, /status\s*\|\|\s*''\)\.toUpperCase\(\)\s*===\s*'ACTIVE'/);
   assert.match(source, /packageSha256/);
@@ -79,6 +85,11 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /answeredMatch/);
   assert.match(source, /assessment-prev-backfill/);
   assert.match(source, /adaptiveByLocation/);
+  assert.match(source, /confirmedAnswers/);
+  assert.match(source, /confirmedRetryDone/);
+  assert.match(source, /feedbackChoices/);
+  assert.match(source, /correctFeedbackIndex/);
+  assert.match(source, /data-correct/);
   assert.match(source, /prepareAdaptiveProbe/);
   assert.match(source, /adaptive-retry/);
   assert.match(source, /frame\.evaluate\(\(\{ plan, location, allowAdaptiveRetry \}\)/);
@@ -87,18 +98,32 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /answerAcceptedByLocation/);
   assert.match(source, /questionTotal: 0/);
   assert.match(source, /adaptive\.questionTotal/);
-  assert.match(source, /labelledPercentMatch/);
   assert.match(source, /reviewVisitedByLocation/);
   assert.match(source, /reviewCorrectIndex/);
   assert.match(source, /assessment-review-wrong/);
   assert.match(source, /assessment-review-chapter/);
   assert.match(source, /driverAccepted/);
   assert.match(source, /data-airtrust-cert-click/);
+  assert.match(source, /requiredInteractionMatch/);
+  assert.match(source, /required-interaction/);
+  assert.match(source, /document\.body\.querySelectorAll\('\*'\)/);
+  assert.match(source, /cardShapeHint/);
+  assert.match(source, /structuredCardHint/);
+  assert.match(source, /structuralGroups/);
+  assert.match(source, /structuralCards/);
+  assert.match(source, /children\.length !== requiredTotal/);
+  assert.match(source, /manifest\.requiredInteractions \|\| 0\) \* 50_000/);
+  assert.match(source, /intera\[cç\]\[aã\]o\\s\+obrigat/);
   assert.match(source, /resetAssessmentRetryState/);
   assert.match(source, /adaptive-exhausted/);
   assert.match(source, /resultScoreMatch/);
-  assert.match(source, /COURSE_IDS\.size > 0 \? 900 : 0/);
-  assert.match(source, /COURSE_IDS\.size > 0 \? 240_000 : 0/);
+  assert.match(source, /labeledPercentMatch/);
+  assert.match(source, /observedQuestionTotal/);
+  assert.match(source, /adaptive\.questionTotal \|\| 0/);
+  assert.match(source, /revisar\\s\+/);
+  assert.match(source, /COURSE_IDS\.size > 0 \? 3_600 : 0/);
+  assert.match(source, /focusedCompletionBudgetMs/);
+  assert.match(source, /slideCount \* 4_000/);
   assert.match(source, /content_buttons/);
   assert.match(source, /rect\.bottom > 0/);
   assert.match(source, /action\?\.type === 'none'/);
@@ -111,6 +136,16 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /resetbtn/);
   assert.match(source, /aria_pressed/);
   assert.match(source, /clickedByLocation/);
+  assert.match(source, /captureRequiredInteractionStructure/);
+  assert.match(source, /required_interaction_structure/);
+  assert.match(source, /document\.querySelectorAll\('\[data-touch\],\.touchable'\)/);
+  assert.match(source, /required-interaction-explicit/);
+  assert.match(source, /required-explicit/);
+  assert.match(source, /parent_child_count/);
+  assert.match(source, /text_sample/);
+  assert.match(source, /elementsFromPoint/);
+  assert.match(source, /hit_tests/);
+  assert.match(source, /pointer_events/);
   assert.match(source, /captureDriverState/);
   assert.match(source, /driver_state/);
   assert.match(source, /location: currentLocation/);

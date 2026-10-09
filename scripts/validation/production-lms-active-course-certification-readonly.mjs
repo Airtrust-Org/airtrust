@@ -409,7 +409,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
       const bad = /voltar|anterior|menu|sum[aá]rio|fechar|sair|cancelar/i;
       const good = /confirmar|responder|enviar|verificar|corrigir|continuar|pr[oó]xim[oa]|avan[cç]ar|iniciar|come[cç]ar|prosseguir|finalizar|concluir|resultado/i;
-      const retry = /tentar novamente|refazer|retry/i;
+      const retry = /tentar novamente|refazer|retry|revisar\s+(?:(?:este|o|a)\s+)?(?:cap[ií]tulo|m[oó]dulo)/i;
       const forwardId = /^(?:next|nextbtn|btnnext|qnext|quiznext|continue|continuebtn|submitnext)$/i;
       const assessmentForwardId = /^(?:qnext|quiznext)$/i;
       const backwardId = /^(?:prev|prevbtn|previous|back|qprev|quizprev)$/i;
@@ -543,6 +543,178 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         };
       };
 
+      // Some course templates use clickable cards instead of semantic buttons for
+      // explicitly required interactions (for example "Interação obrigatória 0/4").
+      // Only in that declared state, identify pointer-like learner-content elements
+      // outside product chrome and click each distinct card at most once.
+      const requiredInteractionMatch = clean(document.body?.innerText || '').match(
+        /intera[cç][aã]o\s+obrigat[oó]ria\s*\((\d+)\s*\/\s*(\d+)\)/i,
+      );
+      if (
+        requiredInteractionMatch &&
+        Number(requiredInteractionMatch[1]) < Number(requiredInteractionMatch[2])
+      ) {
+        // Prefer the package's explicit interaction contract before visual
+        // heuristics. AirTrust-authored courses mark mandatory learner targets
+        // with data-touch / .touchable; these may sit inside a scrolled content
+        // surface and therefore be outside the current viewport at discovery time.
+        const all = Array.from(document.querySelectorAll('*'));
+        const explicitRequiredItems = Array.from(
+          document.querySelectorAll('[data-touch],.touchable'),
+        )
+          .filter((el) => {
+            if (el.closest(
+              'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+            )) return false;
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            const text = clean(el.textContent);
+            return (
+              rect.width > 0 &&
+              rect.height > 0 &&
+              style.visibility !== 'hidden' &&
+              style.display !== 'none' &&
+              style.opacity !== '0' &&
+              el.getAttribute('aria-hidden') !== 'true' &&
+              text.length > 0 &&
+              text.length <= 800
+            );
+          })
+          .map((el) => {
+            const index = Math.max(0, all.indexOf(el));
+            const id = clean(el.id);
+            const role = clean(el.getAttribute('role'));
+            const touch = clean(el.getAttribute('data-touch'));
+            return {
+              el,
+              index,
+              id,
+              role,
+              text: clean(el.textContent),
+              signature: ['required-explicit', touch, index, id, el.tagName.toLowerCase()].join(':'),
+            };
+          });
+        const explicitRequiredCandidate = explicitRequiredItems.find((item) => !alreadyClicked(item));
+        if (explicitRequiredCandidate) {
+          return requestTrustedClick(explicitRequiredCandidate, 'required-interaction-explicit');
+        }
+
+        const scope = Array.from(document.body.querySelectorAll('*'));
+        const rawCandidates = scope.filter((el) => {
+          if (!visible(el)) return false;
+          if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
+          if (el.closest(
+            'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+          )) return false;
+          const style = getComputedStyle(el);
+          const dataKeys = Object.keys(el.dataset || {}).join(' ');
+          const className = clean(el.className);
+          const rect = el.getBoundingClientRect();
+          const interactiveHint =
+            style.cursor === 'pointer' ||
+            el.tabIndex >= 0 ||
+            el.hasAttribute('onclick') ||
+            /(barrier|decision|interactive|interact|required|toggle|step|action|choice|clickable)/i.test(`${className} ${dataKeys}`);
+          const cardGeometryHint =
+            rect.width >= 100 &&
+            rect.height >= 60 &&
+            rect.width <= window.innerWidth * 0.65 &&
+            rect.height <= window.innerHeight * 0.7;
+          const cardShapeHint =
+            cardGeometryHint &&
+            (
+              parseFloat(style.borderTopWidth || '0') > 0 ||
+              style.boxShadow !== 'none' ||
+              parseFloat(style.borderRadius || '0') >= 8
+            ) &&
+            Boolean(el.querySelector('h1,h2,h3,h4,h5,h6,li'));
+          // Some mandatory barrier cards are visually structured but do not expose
+          // cursor/role/class semantics. Under the explicit N/M mandatory-interaction
+          // gate only, a compact block containing list content is a safe learner-card
+          // candidate; broad page containers are excluded by the geometry bound.
+          const structuredCardHint =
+            cardGeometryHint &&
+            Boolean(el.querySelector('li')) &&
+            Array.from(el.querySelectorAll('li')).length >= 2;
+          const text = clean(el.textContent);
+          return (interactiveHint || cardShapeHint || structuredCardHint) && text.length > 0 && text.length <= 800;
+        });
+        // Keep the outermost pointer-like element so inherited cursor styles on
+        // headings/list items do not produce multiple clicks inside one card.
+        const candidates = rawCandidates.filter((el) =>
+          !rawCandidates.some((other) => other !== el && other.contains(el))
+        );
+        const requiredTotal = Number(requiredInteractionMatch[2]);
+        if (candidates.length < requiredTotal) {
+          // Some packages intentionally render required cards as plain divs with
+          // no pointer cursor or semantic class. When the learner-visible badge
+          // explicitly declares N required interactions, fall back to a structural
+          // group of exactly N visible sibling cards below that badge.
+          const badge = Array.from(document.body.querySelectorAll('*'))
+            .filter((el) => {
+              const text = clean(el.textContent);
+              return text.length > 0 &&
+                text.length <= 240 &&
+                /intera[cç][aã]o\s+obrigat[oó]ria\s*\(\d+\s*\/\s*\d+\)/i.test(text);
+            })
+            .sort((a, b) => {
+              const ar = a.getBoundingClientRect();
+              const br = b.getBoundingClientRect();
+              return (ar.width * ar.height) - (br.width * br.height);
+            })[0] || null;
+          const badgeBottom = badge ? badge.getBoundingClientRect().bottom : 0;
+          const structuralGroups = Array.from(document.body.querySelectorAll('*'))
+            .map((parent) => {
+              if (parent.closest(
+                'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+              )) return null;
+              const children = Array.from(parent.children).filter((el) => {
+                if (!visible(el)) return false;
+                if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
+                const text = clean(el.textContent);
+                const rect = el.getBoundingClientRect();
+                return (
+                  text.length >= 12 &&
+                  text.length <= 800 &&
+                  rect.top >= badgeBottom - 8 &&
+                  rect.width >= 100 &&
+                  rect.height >= 60 &&
+                  rect.width <= window.innerWidth * 0.55 &&
+                  rect.height <= window.innerHeight * 0.75
+                );
+              });
+              if (children.length !== requiredTotal) return null;
+              const tops = children.map((el) => el.getBoundingClientRect().top);
+              const heights = children.map((el) => el.getBoundingClientRect().height);
+              const maxHeight = Math.max(...heights, 1);
+              if (Math.max(...tops) - Math.min(...tops) > Math.max(90, maxHeight * 0.6)) return null;
+              const pr = parent.getBoundingClientRect();
+              return { children, area: pr.width * pr.height };
+            })
+            .filter(Boolean)
+            .sort((a, b) => a.area - b.area);
+          const structuralCards = structuralGroups[0]?.children || [];
+          for (const el of structuralCards) {
+            if (!candidates.includes(el)) candidates.push(el);
+          }
+        }
+        const candidateItems = candidates.map((el) => {
+          const index = Math.max(0, all.indexOf(el));
+          const id = clean(el.id);
+          const role = clean(el.getAttribute('role'));
+          return {
+            el,
+            index,
+            id,
+            role,
+            text: clean(el.textContent),
+            signature: ['required', index, id, el.tagName.toLowerCase()].join(':'),
+          };
+        });
+        const requiredCandidate = candidateItems.find((item) => !alreadyClicked(item));
+        if (requiredCandidate) return requestTrustedClick(requiredCandidate, 'required-interaction');
+      }
+
       const getAdaptiveState = () => {
         st.adaptiveByLocation[locationBase] ??= {
           initialized: false,
@@ -551,6 +723,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           currentAnswers: {},
           optionCounts: {},
           testedOptions: {},
+          confirmedAnswers: {},
+          confirmedRetryDone: false,
           pendingProbe: null,
           probeQuestion: 0,
           retries: 0,
@@ -560,14 +734,14 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       };
       const resultText = clean(document.body?.innerText || '');
       const resultScoreMatch = resultText.match(/acertou\s+(\d+)\s+de\s+(\d+)\s+quest/i);
-      const labelledPercentMatch = resultText.match(
-        /\b(?:nota|resultado(?:\s+do\s+cap[ií]tulo)?)\s*:?[\s-]*(\d{1,3})\s*%/i,
+      const labeledPercentMatch = resultText.match(
+        /\b(?:nota|resultado(?:\s+(?:do|da)\s+(?:cap[ií]tulo|m[oó]dulo|quiz|avalia[cç][aã]o))?)\s*:?[ \t]*(\d{1,3})\s*%/i,
       );
       const firstPercentMatch = resultText.match(/\b(\d{1,3})\s*%/);
       const resultMetric = resultScoreMatch
         ? (Number(resultScoreMatch[1]) / Math.max(1, Number(resultScoreMatch[2]))) * 100
-        : labelledPercentMatch
-          ? Number(labelledPercentMatch[1])
+        : labeledPercentMatch
+          ? Number(labeledPercentMatch[1])
           : firstPercentMatch
             ? Number(firstPercentMatch[1])
             : null;
@@ -576,7 +750,19 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       const prepareAdaptiveProbe = () => {
         if (!Number.isFinite(resultMetric)) return null;
         const adaptive = getAdaptiveState();
-        const total = Math.max(1, Number(resultQuestionTotal || adaptive.questionTotal || questionTotal || 0));
+        const observedQuestionTotal = Math.max(
+          0,
+          ...Object.keys(adaptive.optionCounts || {}).map((key) => Number(key) + 1).filter(Number.isFinite),
+          ...Object.keys(adaptive.currentAnswers || {}).map((key) => Number(key) + 1).filter(Number.isFinite),
+          ...Object.keys(adaptive.bestAnswers || {}).map((key) => Number(key) + 1).filter(Number.isFinite),
+        );
+        const total = Math.max(
+          1,
+          Number(resultQuestionTotal || 0),
+          Number(questionTotal || 0),
+          Number(adaptive.questionTotal || 0),
+          observedQuestionTotal,
+        );
         if (!adaptive.initialized) {
           adaptive.initialized = true;
           adaptive.bestMetric = Number(resultMetric);
@@ -608,7 +794,21 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           adaptive.pendingProbe = null;
         }
 
+        const confirmedCount = Object.keys(adaptive.confirmedAnswers || {})
+          .filter((key) => Number.isInteger(adaptive.confirmedAnswers[key]))
+          .length;
+        if (confirmedCount >= total && !adaptive.confirmedRetryDone) {
+          adaptive.confirmedRetryDone = true;
+          adaptive.currentAnswers = {};
+          return { confirmed: true };
+        }
+
         for (let q = Math.max(0, Number(adaptive.probeQuestion || 0)); q < total; q += 1) {
+          if (Number.isInteger(adaptive.confirmedAnswers?.[q])) {
+            adaptive.bestAnswers[q] = adaptive.confirmedAnswers[q];
+            adaptive.probeQuestion = q + 1;
+            continue;
+          }
           const count = Math.max(2, Number(adaptive.optionCounts[q] || 4));
           const best = Number.isInteger(adaptive.bestAnswers[q]) ? adaptive.bestAnswers[q] : 0;
           const tested = new Set(adaptive.testedOptions[q] || []);
@@ -628,6 +828,37 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
       const isChoiceButton = (item) =>
         /(^|\s)(choice|option|answer)(\s|$)/i.test(item.className);
+
+      // Quiz templates reveal the correct option to the learner after an answer
+      // by visibly marking a disabled option as ".correct". This is learner-visible
+      // feedback, not a hidden answer key. Remember it for the next retry.
+      if (questionNumber) {
+        const feedbackChoices = Array.from(
+          document.querySelectorAll('button.option,button.choice,button.answer'),
+        );
+        const feedbackVisible = feedbackChoices.length > 0 &&
+          feedbackChoices.some((el) => el.disabled) &&
+          feedbackChoices.every((el) => {
+            const rect = el.getBoundingClientRect();
+            const style = getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 &&
+              style.visibility !== 'hidden' &&
+              style.display !== 'none';
+          });
+        const correctFeedbackIndex = feedbackVisible
+          ? feedbackChoices.findIndex((el) =>
+              /(^|\s)(correct|is-correct|right|success)(\s|$)/i.test(clean(el.className)) ||
+              el.getAttribute('data-correct') === 'true'
+            )
+          : -1;
+        if (correctFeedbackIndex >= 0) {
+          const adaptive = getAdaptiveState();
+          const qIndex = questionNumber - 1;
+          adaptive.optionCounts[qIndex] = feedbackChoices.length;
+          adaptive.bestAnswers[qIndex] = correctFeedbackIndex;
+          adaptive.confirmedAnswers[qIndex] = correctFeedbackIndex;
+        }
+      }
 
       // Result screens may keep stale quiz controls mounted. Retry must win
       // before assessment-mode detection, otherwise hidden/stale controls can
@@ -1162,6 +1393,100 @@ async function captureVisibleControls(frame) {
   }).catch(() => null);
 }
 
+async function captureRequiredInteractionStructure(frame) {
+  return frame.evaluate(() => {
+    const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+    const match = clean(document.body?.innerText || '').match(
+      /intera[cç][aã]o\s+obrigat[oó]ria\s*\((\d+)\s*\/\s*(\d+)\)/i,
+    );
+    if (!match || Number(match[1]) >= Number(match[2])) return null;
+    const visible = (el) => {
+      const r = el.getBoundingClientRect();
+      const st = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 &&
+        r.top < innerHeight && r.left < innerWidth && st.visibility !== 'hidden' &&
+        st.display !== 'none' && st.opacity !== '0' && el.getAttribute('aria-hidden') !== 'true';
+    };
+    const excluded = (el) => Boolean(el.closest(
+      'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+    ));
+    const describe = (el) => {
+      if (!el) return null;
+      const r=el.getBoundingClientRect(), st=getComputedStyle(el), parent=el.parentElement;
+      return {
+        tag: el.tagName?.toLowerCase?.() || null,
+        id: String(el.id || '').slice(0,80) || null,
+        class_name: String(el.className || '').slice(0,180) || null,
+        role: el.getAttribute?.('role') || null,
+        parent_tag: parent?.tagName?.toLowerCase() || null,
+        parent_class_name: String(parent?.className || '').slice(0,180) || null,
+        parent_child_count: parent?.children?.length ?? null,
+        direct_child_count: el.children?.length ?? 0,
+        li_count: el.querySelectorAll?.('li')?.length ?? 0,
+        heading_count: el.querySelectorAll?.('h1,h2,h3,h4,h5,h6')?.length ?? 0,
+        cursor: st.cursor || null,
+        pointer_events: st.pointerEvents || null,
+        position: st.position || null,
+        border_radius: st.borderRadius || null,
+        border_top_width: st.borderTopWidth || null,
+        box_shadow: st.boxShadow || null,
+        rect: {top:Math.round(r.top),left:Math.round(r.left),width:Math.round(r.width),height:Math.round(r.height)},
+        text_sample: clean(el.textContent).slice(0,220),
+      };
+    };
+    const badges = Array.from(document.body.querySelectorAll('*')).filter((el) => {
+      const text = clean(el.textContent);
+      return visible(el) && text.length <= 260 &&
+        /intera[cç][aã]o\s+obrigat[oó]ria\s*\(\d+\s*\/\s*\d+\)/i.test(text);
+    });
+    const badge = badges.sort((a, b) => {
+      const ar=a.getBoundingClientRect(), br=b.getBoundingClientRect();
+      return ar.width*ar.height - br.width*br.height;
+    })[0] || null;
+    const bottom = badge?.getBoundingClientRect().bottom || 0;
+    const rows = Array.from(document.body.querySelectorAll('*'))
+      .filter((el) => {
+        if (!visible(el) || excluded(el) || el === badge || el.contains(badge)) return false;
+        const r=el.getBoundingClientRect(), text=clean(el.textContent);
+        return r.top >= bottom-16 && r.width >= 40 && r.height >= 18 &&
+          r.width <= innerWidth*0.95 && r.height <= innerHeight*0.9 &&
+          text.length >= 2 && text.length <= 1400;
+      })
+      .map(describe)
+      .sort((a,b) => {
+        const dy = a.rect.top - b.rect.top;
+        if (Math.abs(dy) > 4) return dy;
+        return (a.rect.width*a.rect.height) - (b.rect.width*b.rect.height);
+      })
+      .slice(0,120);
+
+    const hitTests = [];
+    const yValues = [bottom + 45, bottom + 95, bottom + 155, bottom + 215]
+      .filter((y) => y > 0 && y < innerHeight - 10);
+    const xValues = [0.08,0.22,0.36,0.50,0.64,0.78,0.92]
+      .map((f) => Math.round(innerWidth * f))
+      .filter((x) => x > 10 && x < innerWidth - 10);
+    for (const y of yValues) {
+      for (const x of xValues) {
+        const stack = document.elementsFromPoint(x, y)
+          .filter((el) => el && !excluded(el))
+          .slice(0, 8)
+          .map(describe);
+        if (stack.length) hitTests.push({ x, y: Math.round(y), stack });
+      }
+    }
+
+    const br=badge?.getBoundingClientRect();
+    return {
+      current:Number(match[1]), total:Number(match[2]),
+      viewport:{width:innerWidth,height:innerHeight},
+      badge: br ? {tag:badge.tagName.toLowerCase(),class_name:String(badge.className||'').slice(0,180),top:Math.round(br.top),bottom:Math.round(br.bottom),left:Math.round(br.left),width:Math.round(br.width),height:Math.round(br.height)} : null,
+      candidates: rows,
+      hit_tests: hitTests.slice(0,40),
+    };
+  }).catch(() => null);
+}
+
 async function captureDriverState(frame) {
   return frame.evaluate(() => {
     const st = window.__AIRTRUST_CERT_DRIVER;
@@ -1245,7 +1570,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   if (phase !== 'reopen-completed') {
     const stepLimit = Math.max(
       MAX_STEPS,
-      COURSE_IDS.size > 0 ? 900 : 0,
+      COURSE_IDS.size > 0 ? 3_600 : 0,
       Math.max(Number(modelMeta.slide_count || 0), Number(manifest.requiredSlides || 0)) * 5,
       Number(manifest.requiredInteractions || 0) * 8,
     );
@@ -1269,6 +1594,9 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     null;
   const visibleControls = await captureVisibleControls(frame);
   const stalledSlide = summarizeStalledSlide(model, preUnloadLocation);
+  const requiredInteractionStructure = !terminalState(preUnloadTrace?.values || {})
+    ? await captureRequiredInteractionStructure(frame)
+    : null;
   const driverState = await captureDriverState(frame);
   let diagnosticScreenshot = null;
   const focusedDiagnostics = COURSE_IDS.size > 0 && COURSE_IDS.size <= 6;
@@ -1318,6 +1646,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     model: modelMeta,
     stalled_slide: stalledSlide,
     visible_controls: visibleControls,
+    required_interaction_structure: requiredInteractionStructure,
     driver_state: driverState,
     diagnostic_screenshot: diagnosticScreenshot,
     asset_failures: assetFailures.slice(0, 20),
@@ -1384,9 +1713,18 @@ async function certifyScormCourse(browser, token, listed) {
     Number(manifest.requiredSlides || 0),
     Number(suspend.model?.slide_count || 0),
   );
+  const focusedCompletionBudgetMs = COURSE_IDS.size > 0
+    ? Math.min(
+        420_000,
+        Math.max(
+          180_000,
+          slideCount * 4_000 + Number(manifest.requiredInteractions || 0) * 50_000,
+        ),
+      )
+    : 0;
   const completionBudgetMs = Math.max(
     COURSE_TIMEOUT_MS,
-    COURSE_IDS.size > 0 ? 240_000 : 0,
+    focusedCompletionBudgetMs,
     Math.min(180_000, slideCount * 320),
   );
   const complete = suspendAlreadyCompleted
@@ -1462,7 +1800,8 @@ async function certifyPptxCourse(browser, token, listed) {
 
 async function main() {
   await assertPinnedProduction();
-  const token = await productionToken();
+  let token = await productionToken();
+  let tokenIssuedAt = Date.now();
   const listed = await listCourses(token);
   invariant(
     COURSE_IDS.size === 0 || listed.length === COURSE_IDS.size,
@@ -1474,6 +1813,14 @@ async function main() {
   const results = [];
   try {
     for (const course of listed) {
+      // Read-only certification can exceed a single access token's lifetime.
+      // Renew strictly via the existing scoped login/company-selection path,
+      // retaining the exact deployed SHA pin and tenant assertion on refresh.
+      if (Date.now() - tokenIssuedAt >= 15 * 60_000) {
+        await assertPinnedProduction();
+        token = await productionToken();
+        tokenIssuedAt = Date.now();
+      }
       const type = String(course?.tipo_conteudo || '').toLowerCase();
       try {
         if (type === 'scorm') results.push(await certifyScormCourse(browser, token, course));

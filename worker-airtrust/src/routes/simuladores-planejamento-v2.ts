@@ -8,7 +8,6 @@ import {
   getEmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import {
-  isInsidePlanningHorizon,
   resolveSimulatorPlanningConfig,
   type SimulatorPlanningConfigRow,
 } from '../services/cae-planning-policy';
@@ -631,11 +630,14 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
   const sessionNeeds: SimulatorTrainingSessionNeed[] = [];
   const trainings: Array<Record<string, unknown>> = [];
   const exceptions: Array<Record<string, unknown>> = [];
+  let filteredByEquipment = 0;
+  let completedCurricula = 0;
 
   for (const qualification of planningQualifications) {
     const expiry = String(qualification.data_vencimento).slice(0, 10);
-    if (!isInsidePlanningHorizon({ reference_date: referencia, expiry_date: expiry, config }))
-      continue;
+    // The requested expiry interval is authoritative for a long-range proposal.
+    // planning_horizon_days still limits operational pairing near each expiry,
+    // but must not hide later months of an explicitly requested annual plan.
     const qualificationTypeId = Number(qualification.qualificacao_tipo_id);
     let configuredModels = modelsByQualification.get(qualificationTypeId) || [];
     let curriculumCycle: number | null = null;
@@ -699,7 +701,10 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
     }
 
     const selected = chooseModelsForQualification(qualification, configuredModels, equipmentFilter);
-    if (selected.filteredOut) continue;
+    if (selected.filteredOut) {
+      filteredByEquipment += 1;
+      continue;
+    }
     if (selected.ambiguous || selected.models.length === 0) {
       exceptions.push({
         type: 'CURRICULO_AMBIGUO',
@@ -725,7 +730,10 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
     });
     const remainingIds = new Set(remaining.models.map((model) => Number(model.id)));
     const remainingRows = selected.models.filter((model) => remainingIds.has(Number(model.id)));
-    if (remainingRows.length === 0) continue;
+    if (remainingRows.length === 0) {
+      completedCurricula += 1;
+      continue;
+    }
 
     const ordered = [...remainingRows].sort(
       (a, b) =>
@@ -892,6 +900,10 @@ app.post('/proposta', requireRole('admin', 'manager'), async (c) => {
         warnings: config.warnings,
       },
       summary: {
+        qualification_candidates: planningQualifications.length,
+        filtered_by_equipment: filteredByEquipment,
+        completed_curricula: completedCurricula,
+        blocked_curricula: exceptions.length,
         trainings: trainings.length,
         session_requirements: sessionNeeds.length,
         paired_blocks: blocks.length - unmatched,

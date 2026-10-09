@@ -60,12 +60,12 @@ import {
   type ProgressRecoveryStateSnapshot,
 } from '../services/lms-progress-recovery-domain';
 import {
+  canFinalizeScormEnrollment,
   clampPct,
   extractProgressPctFromCmiJson,
   formatScormLocationTelemetry,
   isMatriculaUniqueConstraintError,
   isScormFailed,
-  isScormSuccess,
   parsePositiveInt,
   requiresServerValidatedNonScormEvidence,
   resolveScormScorePct,
@@ -1324,7 +1324,7 @@ app.post('/scorm/commit', async (c) => {
       `
       SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.tentativas,
         m.qualificacao_historico_id,
-        c.id AS curso_id, c.scorm_mastery_score, c.gerar_qualificacao_ao_concluir,
+        c.id AS curso_id, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
         c.qualificacao_tipo_id, c.titulo AS curso_titulo,
         qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
         qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1345,7 +1345,8 @@ app.post('/scorm/commit', async (c) => {
       tentativas: number;
       qualificacao_historico_id: number | null;
       curso_id: number;
-      scorm_mastery_score: number;
+      scorm_mastery_score: number | null;
+      scorm_assessment_policy: 'FORMATIVE' | 'SCORED' | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       curso_titulo: string;
@@ -1446,12 +1447,11 @@ app.post('/scorm/commit', async (c) => {
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
-  // "Rever" replay: nunca recomputar sucesso/falha (preserva data_conclusao/tentativas).
-  const sucesso =
-    !matriculaWasConcluido &&
-    isScormSuccess(d, { masteryScore: matricula.scorm_mastery_score, effectiveScorePct });
+  const sucesso = canFinalizeScormEnrollment({
+    commit: d, wasCompleted: matriculaWasConcluido, cmiJson: mergedCmiJson,
+    location: mergedLocation, policy: matricula.scorm_assessment_policy,
+    masteryScore: matricula.scorm_mastery_score, scorePct: effectiveScorePct });
   const falha = !matriculaWasConcluido && isScormFailed(d);
-
   let progressoPct = progressoAnterior;
   if (sucesso) {
     progressoPct = 100;

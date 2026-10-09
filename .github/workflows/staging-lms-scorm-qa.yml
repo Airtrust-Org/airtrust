@@ -12,8 +12,10 @@ on:
         required: true
         type: string
 
+# Serialize staging D1 migrations, Worker/Pages deploys and browser SCORM QA.
+# Mixed runtime SHA would invalidate the QA and can expose partially deployed state.
 concurrency:
-  group: staging-lms-scorm-qa
+  group: airtrust-staging-mutations-and-scorm-qa
   cancel-in-progress: false
 
 permissions:
