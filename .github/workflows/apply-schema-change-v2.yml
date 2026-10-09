@@ -609,7 +609,7 @@ jobs:
         run: bash scripts/schema-v2/validate-0545-production-preflight.sh --target=airtrust-db
 
       - name: Preflight Training Compliance canonical category-safe PDF 0546
-        if: ${{ inputs.change_id == 'training-compliance-canonical-pdf-alignment-0546' }}
+        if: ${{ inputs.change_id == 'training-compliance-canonical-category-repair-0546' }}
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
@@ -718,7 +718,7 @@ jobs:
         run: bash scripts/schema-v2/validate-0545-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate Training Compliance canonical category-safe PDF 0546
-        if: ${{ inputs.change_id == 'training-compliance-canonical-pdf-alignment-0546' }}
+        if: ${{ inputs.change_id == 'training-compliance-canonical-category-repair-0546' }}
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
