@@ -175,7 +175,7 @@ describe('training compliance engine', () => {
     patchComplianceSchema(sqlite);
   });
 
-  it('exclui Check, Exame e Licença de todas as pendências, regras e indicadores, preservando os demais treinamentos', async () => {
+  it('exclui Check, Exame, Licença e Voo das pendências, regras e indicadores, preservando EAD', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
         (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
@@ -183,12 +183,15 @@ describe('training compliance engine', () => {
     `);
     const app = createApp(sqlite.asD1());
 
-    for (const category of ['Check', 'Exame', 'Licença', 'LICENÇA']) {
+    for (const category of ['Check', 'Exame', 'Licença', 'LICENÇA', 'Voo', 'VOO', 'Treinamento de Voo', 'TREINAMENTO DE VOO']) {
       sqlite.database.prepare('UPDATE qualificacoes_tipos SET categoria=? WHERE id=100 AND empresa_id=1').run(category);
 
       const person = (await (await app.request('/funcionarios/1000')).json()) as any;
       expect(person.data.total_obrigatorios, category).toBe(0);
       expect(person.data.requisitos, category).toEqual([]);
+
+      const pendings = (await (await app.request('/pendencias')).json()) as any;
+      expect(pendings.data, category).toEqual([]);
 
       const rules = (await (await app.request('/regras')).json()) as any;
       expect(rules.data, category).toEqual([]);
