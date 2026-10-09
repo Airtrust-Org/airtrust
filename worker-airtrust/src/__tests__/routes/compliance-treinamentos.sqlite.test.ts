@@ -262,6 +262,37 @@ describe('training compliance engine', () => {
     expect(unprofiled.requisitos[0].evidencia_pendente_motivo).toBe('PERFIL');
   });
 
+  it('mantém AVSEC Corporativo histórico vencido com MODELO sem validade fixa', async () => {
+    sqlite.database.exec(`
+      ALTER TABLE treinamento_requisitos ADD COLUMN validade_fonte TEXT DEFAULT 'MODELO';
+      INSERT INTO qualificacoes_tipos
+        (id,empresa_id,codigo,nome,categoria,validade)
+      VALUES (221,1,'AVSEC_CONSC','AVSEC Corporativo','Teórico',NULL);
+      INSERT INTO treinamento_requisitos
+        (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem,validade_fonte)
+      VALUES (1,221,'EMPRESA','OBRIGATORIA','EMPRESA','MODELO');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id,qualificacao_id,qualificacao_codigo,categoria,
+         data_conclusao,data_vencimento,status,empresa_id)
+      VALUES (1000,221,'AVSEC_CONSC','Teórico','2024-02-19','2026-02-19','CONCLUIDA',1);
+    `);
+    const app = createApp(sqlite.asD1());
+    const expired = (await (await app.request('/funcionarios/1000')).json() as any).data;
+    expect(expired.requisitos).toHaveLength(1);
+    expect(expired.requisitos[0]).toMatchObject({
+      qualificacao_tipo_codigo: 'AVSEC_CONSC',
+      status_compliance: 'VENCIDO',
+      data_validade: '2026-02-19',
+      evidencia_origem: 'QUALIFICACAO',
+    });
+    sqlite.database.exec(`
+      UPDATE qualificacoes_historico SET data_vencimento='2028-02-19'
+      WHERE empresa_id=1 AND funcionario_id=1000 AND qualificacao_id=221;
+    `);
+    const valid = (await (await app.request('/funcionarios/1000')).json() as any).data;
+    expect(valid.requisitos[0].status_compliance).toBe('CONFORME');
+  });
+
   it('filtra todas as visões operacionais por nome do funcionário, ignorando acentos', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
