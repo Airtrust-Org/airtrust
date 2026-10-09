@@ -90,12 +90,13 @@ export function buildFlightRelatedStatements(
     sicFuncaoBordoId?: number | null;
     paxPlanejado?: number | null;
     pesoPlanejado?: number | null;
+    pesoCarga?: number | null;
     unidadePesoPlanejado?: string | null;
     combustivelSolicitado?: number | null;
     unidadeCombustivelSolicitado?: string | null;
   },
 ): D1PreparedStatement[] {
-  const { empresaId, vooId, userId, routePoints, picFuncionarioId, sicFuncionarioId, picFuncaoBordoId = null, sicFuncaoBordoId = null, paxPlanejado = null, pesoPlanejado = null, unidadePesoPlanejado = 'KG', combustivelSolicitado = null, unidadeCombustivelSolicitado = 'KG' } = input;
+  const { empresaId, vooId, userId, routePoints, picFuncionarioId, sicFuncionarioId, picFuncaoBordoId = null, sicFuncaoBordoId = null, paxPlanejado = null, pesoPlanejado = null, pesoCarga = null, unidadePesoPlanejado = 'KG', combustivelSolicitado = null, unidadeCombustivelSolicitado = 'KG' } = input;
   const statements: D1PreparedStatement[] = [];
   if (picFuncionarioId && sicFuncionarioId) {
     statements.push(
@@ -125,7 +126,8 @@ export function buildFlightRelatedStatements(
         routePointCode(routePoints[index]),
         routePointCode(routePoints[index + 1]),
         index === 0 ? paxPlanejado : null,
-        index === 0 ? pesoPlanejado : null,
+        // Payload is cargo mass in canonical KG, never the aircraft's total planned weight.
+        index === 0 && pesoCarga != null ? Number((unidadePesoPlanejado === 'LB' ? pesoCarga / 2.2046226218 : pesoCarga).toFixed(3)) : null,
         userId,
         userId,
       ),

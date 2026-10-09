@@ -5,6 +5,7 @@ export type FlightPlanningInput = {
   pesoPlanejado: number | null;
   pesoPassageiros: number | null;
   pesoBagagem: number | null;
+  pesoCarga: number | null;
   unidadePesoPlanejado: string;
   combustivelSolicitado: number | null;
   unidadeCombustivelSolicitado: string;
@@ -87,6 +88,7 @@ export function parseFlightPlanningInput(payload: Record<string, unknown>): Flig
     pesoPlanejado: parseOptionalNonNegativeNumber(payload.peso_planejado, 'peso_planejado'),
     pesoPassageiros: parseOptionalNonNegativeNumber(payload.peso_passageiros, 'peso_passageiros'),
     pesoBagagem: parseOptionalNonNegativeNumber(payload.peso_bagagem, 'peso_bagagem'),
+    pesoCarga: parseOptionalNonNegativeNumber(payload.peso_carga, 'peso_carga'),
     unidadePesoPlanejado: normalizeOperationalUnit(
       payload.unidade_peso_planejado,
       'unidade_peso_planejado',
@@ -152,6 +154,7 @@ export async function updateFlightStagePlanningIfSupported(
     planning.pesoPlanejado == null &&
     planning.pesoPassageiros == null &&
     planning.pesoBagagem == null &&
+    planning.pesoCarga == null &&
     aircraftWeightInPlanningUnit == null
   ) return;
 
@@ -160,6 +163,7 @@ export async function updateFlightStagePlanningIfSupported(
       `UPDATE cv_voo_etapas
           SET peso_passageiros = CASE WHEN numero_etapa = 1 THEN ? ELSE peso_passageiros END,
               peso_bagagem = CASE WHEN numero_etapa = 1 THEN ? ELSE peso_bagagem END,
+              payload = CASE WHEN numero_etapa = 1 THEN ? ELSE payload END,
               peso_vazio = ?,
               unidade_peso = ?,
               updated_at = datetime('now')
@@ -167,6 +171,7 @@ export async function updateFlightStagePlanningIfSupported(
     ).bind(
       planning.pesoPassageiros,
       planning.pesoBagagem,
+      planning.pesoCarga == null ? null : convertWeight(planning.pesoCarga, planningUnit, 'KG'),
       aircraftWeightInPlanningUnit,
       planningUnit,
       empresaId,

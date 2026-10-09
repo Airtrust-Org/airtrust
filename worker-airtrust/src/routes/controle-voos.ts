@@ -117,6 +117,7 @@ const allowedCreateFields = new Set([
   'peso_planejado',
   'peso_passageiros',
   'peso_bagagem',
+  'peso_carga',
   'unidade_peso_planejado',
   'combustivel_solicitado',
   'unidade_combustivel_solicitado',
