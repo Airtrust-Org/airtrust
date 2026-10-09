@@ -233,24 +233,37 @@ jobs:
           trap cleanup EXIT
           npm run dev:worker:local > /tmp/worker.log 2>&1 &
           WORKER_PID=$!
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then
+          # A TCP-connected but unresponsive local Worker once stalled a
+          # bare curl for >40m. Treat health as a bounded preflight, preserve
+          # the Worker diagnostic log, and never skip the real E2E assertions.
+          worker_ready=0
+          for i in $(seq 1 30); do
+            if curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
+              http://127.0.0.1:8787/api/health >/dev/null 2>/tmp/airtrust-e2e-health-curl.log; then
+              worker_ready=1
               break
             fi
-            if [[ "$i" -eq 60 ]]; then
-              cat /tmp/worker.log
+            if ! kill -0 "$WORKER_PID" 2>/dev/null; then
+              echo "PUBLIC_E2E_WORKER_EXITED_EARLY" >&2
+              tail -n 150 /tmp/worker.log >&2
               exit 1
             fi
-            sleep 1
+            sleep 2
           done
+          if [[ "$worker_ready" != 1 ]]; then
+            echo "PUBLIC_E2E_LOCAL_API_NOT_READY" >&2
+            tail -n 150 /tmp/worker.log >&2
+            cat /tmp/airtrust-e2e-health-curl.log >&2 || true
+            exit 1
+          fi
           CI=true VITE_API_URL=http://127.0.0.1:8787 \
-            npx playwright test \
+            timeout --signal=TERM 15m npx playwright test \
               --config=playwright.ci.config.ts \
               --project=chromium \
               e2e/ci/login-public-smoke.spec.ts \
               e2e/ci/pilot-offline-persistence.spec.ts
           CI=true VITE_API_URL=http://127.0.0.1:8787 \
-            npx playwright test \
+            timeout --signal=TERM 15m npx playwright test \
               --config=playwright.ci.config.ts \
               --project=webkit-ipad \
               e2e/ci/pilot-offline-persistence.spec.ts
