@@ -102,6 +102,12 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /reviewCorrectIndex/);
   assert.match(source, /assessment-review-wrong/);
   assert.match(source, /assessment-review-chapter/);
+  assert.match(source, /assessment-last-question-next/);
+  assert.match(source, /allQuestionDotsAnswered/);
+  assert.match(source, /allQuestionsAnswered/);
+  assert.match(source, /answeredCount === questionTotal/);
+  assert.match(source, /questionNumber === questionTotal/);
+  assert.match(source, /requestTrustedClick\(bottomNext/);
   assert.match(source, /driverAccepted/);
   assert.match(source, /data-airtrust-cert-click/);
   assert.match(source, /requiredInteractionMatch/);

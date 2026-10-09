@@ -1033,6 +1033,25 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           return markAndClick(assessmentFinish, 'assessment-finish');
         }
 
+        // On some M8 quizzes qNext is disabled on question N/N, but the
+        // learner's bottom navigation button is enabled once every question
+        // is answered. Use only visible evidence of full quiz coverage, never
+        // a slide index alone, to leave the assessment normally.
+        const questionDots = Array.from(document.querySelectorAll('.question-map .qdot'));
+        const allQuestionDotsAnswered = questionDots.length === questionTotal &&
+          questionDots.every((el) => el.classList.contains('answered'));
+        const allQuestionsAnswered = answeredCount === questionTotal || allQuestionDotsAnswered;
+        const bottomNext = items.find((item) =>
+          /^(?:next|nextbtn)$/i.test(item.id) && !isChoiceButton(item)
+        );
+        if (
+          !nextQuestion && !assessmentFinish && selected && bottomNext &&
+          questionNumber && questionTotal && questionNumber === questionTotal &&
+          allQuestionsAnswered
+        ) {
+          return requestTrustedClick(bottomNext, 'assessment-last-question-next');
+        }
+
         const adaptiveWanted = adaptive.initialized
           ? (
               adaptive.pendingProbe?.question === qIndex
