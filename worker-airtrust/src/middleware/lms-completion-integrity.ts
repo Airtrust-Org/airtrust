@@ -567,6 +567,16 @@ async function guardAdministrativeStatus(
     );
   }
   if (requestedStatus !== 'CONCLUIDO') return null;
+  if (String(row.status).toUpperCase() !== 'CONCLUIDO') {
+    const edition = await detectLmsEditionMismatch({
+      bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
+      activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
+      cmiJson: row.cmi_json,
+    });
+    if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
+      'A conclusão administrativa não pode usar evidências de outra edição.',
+      { matricula_id: matriculaId, edition_mismatch: edition });
+  }
 
   const administrativeAuthorized =
     hasRole(c, 'admin') || (hasRole(c, 'manager') && row.gerar_qualificacao_ao_concluir !== 1);
