@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildEnrollmentPlan, chunkIds } from '../production/training-compliance-enroll-no-email.mjs';
+import { buildEnrollmentPlan, chunkIds, executeSilentEnrollment } from '../production/training-compliance-enroll-no-email.mjs';
 
 test('buildEnrollmentPlan creates only single-course actionable groups', () => {
   const result = buildEnrollmentPlan({
@@ -103,4 +103,68 @@ test('FDM scope filters unchanged completed and renewal-approaching evidence', (
   }] }, { scope: 'FDM_MNT_72' });
   assert.equal(result.plan.length, 0);
   assert.throws(() => buildEnrollmentPlan({}, { scope: 'UNSCOPED' }), /ENROLLMENT_SCOPE_INVALID/);
+});
+
+test('scoped executor writes only FDM72, never sends email, and validates tenant six', async () => {
+  const calls = [];
+  let reconcileReads = 0;
+  const validJson = (data) => ({ ok: true, status: 200, json: async () => ({ success: true, data }) });
+  const fetchImpl = async (url, init = {}) => {
+    const pathname = new URL(url).pathname;
+    calls.push({ pathname, init });
+    if (pathname === '/api/auth/login')
+      return validJson({ accessToken: 'scoped-test-token-0123456789' });
+    if (pathname === '/api/auth/empresas')
+      return validJson({ empresaAtualId: 6, empresas: [{ id: 6 }, { id: 7 }] });
+    if (pathname === '/api/empresas/minha')
+      return validJson({ id: 6 });
+    if (pathname === '/api/compliance-treinamentos/reconciliacao') {
+      reconcileReads += 1;
+      return validJson({ gaps_matricula: [
+        { qualificacao_tipo_codigo: 'FDM-MECANICO',
+          funcionarios: reconcileReads === 1
+            ? [{ id: 5, status_compliance: 'NAO_REALIZADO' }, { id: 6, status_compliance: 'VENCIDO' }]
+            : [{ id: 7, status_compliance: 'VENCENDO' }],
+          cursos_ead: [{ id: 72 }] },
+        { qualificacao_tipo_codigo: 'FDM-TRIPULACAO',
+          funcionarios: [{ id: 9, status_compliance: 'NAO_REALIZADO' }],
+          cursos_ead: [{ id: 71 }] },
+      ] });
+    }
+    if (pathname === '/api/lms/matriculas/lote') {
+      const body = JSON.parse(init.body);
+      assert.deepEqual(body.funcionario_ids, [5, 6]);
+      assert.equal(body.curso_id, 72);
+      assert.equal(body.enviar_convite_email, false);
+      return validJson({ criadas: 2, ignoradas: 0, erros: 0 });
+    }
+    throw new Error('UNEXPECTED_API_ROUTE:' + pathname);
+  };
+  const result = await executeSilentEnrollment({
+    fetchImpl, apiBaseUrl: 'https://api.airtrust.online',
+    email: 'test@example.invalid', password: 'synthetic-not-real', scope: 'FDM_MNT_72',
+  });
+  assert.equal(result.created, 2);
+  assert.equal(result.scope, 'FDM_MNT_72');
+  assert.equal(result.groups_planned, 1);
+  assert.equal(calls.filter((entry) => entry.pathname === '/api/lms/matriculas/lote').length, 1);
+  assert.equal(calls.some((entry) => /email|convites/.test(entry.pathname)), false);
+  assert.equal(reconcileReads, 2);
+});
+
+test('scoped executor refuses to mutate if tenant six is inaccessible', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    const path = new URL(url).pathname;
+    calls.push(path);
+    if (path === '/api/auth/login') return { ok: true, status: 200, json: async () =>
+      ({ success: true, data: { accessToken: 'scoped-test-token-0123456789' } }) };
+    if (path === '/api/auth/empresas') return { ok: true, status: 200, json: async () =>
+      ({ success: true, data: { empresaAtualId: 7, empresas: [{ id: 7 }] } }) };
+    throw new Error('UNEXPECTED_ROUTE');
+  };
+  await assert.rejects(() => executeSilentEnrollment({
+    fetchImpl, email: 'test@example.invalid', password: 'synthetic', scope: 'FDM_MNT_72',
+  }), /FDM72_TENANT_NOT_AUTHORIZED/);
+  assert.deepEqual(calls, ['/api/auth/login', '/api/auth/empresas']);
 });
