@@ -28,7 +28,8 @@ describe('controle de voos — planejamento de peso', () => {
   it('propaga o peso básico exato da aeronave e mantém passageiros/bagagem na primeira etapa', async () => {
     const run = vi.fn().mockResolvedValue({ meta: { changes: 2 } });
     const first = vi.fn().mockResolvedValue({ peso_vazio: 4200, unidade_peso: 'KG' });
-    const bind = vi.fn((...args: unknown[]) => ({ run, first }));
+    const all = vi.fn().mockResolvedValue({ results: [] });
+    const bind = vi.fn((...args: unknown[]) => ({ run, first, all }));
     const prepare = vi.fn((_sql: string) => ({ bind }));
     const db = { prepare } as unknown as D1Database;
 
@@ -43,14 +44,15 @@ describe('controle de voos — planejamento de peso', () => {
       unidadeCombustivelSolicitado: 'LB',
     });
 
-    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(prepare).toHaveBeenCalledTimes(3);
     expect(String(prepare.mock.calls[0][0])).toContain('FROM aeronaves');
     expect(String(prepare.mock.calls[1][0])).toContain('peso_passageiros = CASE WHEN numero_etapa = 1');
     expect(String(prepare.mock.calls[1][0])).toContain('peso_vazio = ?');
     expect(String(prepare.mock.calls[1][0])).toContain('empresa_id = ?');
     expect(String(prepare.mock.calls[1][0])).not.toContain('numero_etapa = 1 AND');
     expect(bind).toHaveBeenNthCalledWith(1, 99, 6);
-    expect(bind).toHaveBeenNthCalledWith(2, 900, 180, null, 9259.415, 'LB', 6, 42);
+    expect(bind).toHaveBeenNthCalledWith(2, 5, 900, 180, null, 9259.415, 'LB', 6, 42);
+    expect(bind).toHaveBeenNthCalledWith(3, 6, 42);
     expect(run).toHaveBeenCalledOnce();
   });
 
