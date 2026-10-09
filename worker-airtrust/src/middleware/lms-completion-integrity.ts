@@ -20,6 +20,7 @@ type EnrollmentEvidenceRow = {
   funcionario_id: number;
   status: string;
   progresso_pct: number | null;
+  data_inicio: string | null;
   qualificacao_historico_id: number | null;
   curso_id: number;
   tipo_conteudo: string | null;
