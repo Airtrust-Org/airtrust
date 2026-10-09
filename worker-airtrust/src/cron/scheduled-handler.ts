@@ -12,7 +12,7 @@ import { createStructuredConsole } from '../utils/logger';
 import { processarEventosParaModulo } from '../shared/handlers';
 import { CANCELLED_STATUS_VALUES, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
-import { ensureMatriculaCycle } from '../services/lms-matricula-cycle';
+import { ensureEadRenewalMatriculaForRow } from './resilient/ead-renewal';
 import {
   getSigvoosConfig,
   syncSigvoosForFrms,
@@ -28,11 +28,6 @@ import {
 import { isControleVoosShadowModeEnabledForEmpresa } from '../lib/frms/controle-voos-shadow-flag';
 import { cleanupExpiredRefreshTokens } from '../services/auth-refresh-token';
 import { getModuleAlertSettings, renderAlertTemplate } from '../services/module-alert-settings';
-
-function isMatriculaUniqueConstraintError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error ?? '');
-  return message.includes('UNIQUE constraint failed') && message.includes('lms_matriculas');
-}
 
 export const LMS_RENOVACAO_EAD_JANELA_DIAS = 30;
 
@@ -232,24 +227,6 @@ async function runFrmsIntegrityAudit(db: D1Database): Promise<{
   };
 }
 
-async function findLatestMatriculaForFuncionario(
-  db: D1Database,
-  params: { cursoId: number; funcionarioId: number; empresaId: number },
-) {
-  return db
-    .prepare(
-      `SELECT id, status, deleted_at
-         FROM lms_matriculas
-        WHERE curso_id = ?
-          AND funcionario_id = ?
-          AND empresa_id = ?
-        ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END, id DESC
-        LIMIT 1`,
-    )
-    .bind(params.cursoId, params.funcionarioId, params.empresaId)
-    .first<{ id: number; status: string; deleted_at: string | null }>();
-}
-
 export async function runScheduledJobs(
   event: ScheduledEvent,
   env: Env,
@@ -288,57 +265,12 @@ export async function runScheduledJobs(
       let matriculasCriadas = 0;
       for (const row of qualExpirando.results || []) {
         try {
-          const existente = await findLatestMatriculaForFuncionario(env.DB, {
-            cursoId: row.curso_id,
-            funcionarioId: row.funcionario_id,
-            empresaId: row.empresa_id,
-          });
+          // Reutiliza o fluxo canônico: matrícula ativa é preservada e
+          // matrícula terminal é reaberta em novo ciclo, com histórico intacto.
+          // O handler legado roda quando o schema resiliente não está disponível.
+          const result = await ensureEadRenewalMatriculaForRow(env.DB, row);
+          if (result.created) matriculasCriadas++;
 
-          if (existente) {
-            continue;
-          }
-
-          const dataExpiracao = new Date();
-          dataExpiracao.setDate(dataExpiracao.getDate() + LMS_RENOVACAO_EAD_JANELA_DIAS);
-          const dataExpiracaoStr = dataExpiracao.toISOString().slice(0, 10);
-
-          let matriculaId = 0;
-
-          try {
-            const insertResult = await env.DB.prepare(
-              `INSERT INTO lms_matriculas (empresa_id, curso_id, funcionario_id, data_expiracao, observacoes)
-               VALUES (?, ?, ?, ?, 'Matrícula automática: renovação de qualificação EAD vencendo')`,
-            )
-              .bind(row.empresa_id, row.curso_id, row.funcionario_id, dataExpiracaoStr)
-              .run();
-
-            matriculaId = Number(insertResult.meta.last_row_id);
-            await ensureMatriculaCycle(env.DB, {
-              matriculaId,
-              origin: 'AUTO_RENOVACAO',
-            });
-          } catch (error) {
-            if (!isMatriculaUniqueConstraintError(error)) {
-              throw error;
-            }
-
-            const concorrente = await findLatestMatriculaForFuncionario(env.DB, {
-              cursoId: row.curso_id,
-              funcionarioId: row.funcionario_id,
-              empresaId: row.empresa_id,
-            });
-
-            if (concorrente) {
-              continue;
-            }
-
-            throw error;
-          }
-
-          // A matrícula automática não comunica o funcionário.
-          // Toda comunicação de vencimento é responsabilidade da régua canônica diária.
-
-          matriculasCriadas++;
         } catch (err) {
           console.error('[CRON] ❌ Erro ao criar matrícula automática de renovação:', err);
         }
