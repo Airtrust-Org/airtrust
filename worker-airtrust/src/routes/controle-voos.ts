@@ -117,12 +117,11 @@ const allowedCreateFields = new Set([
   'peso_planejado',
   'peso_passageiros',
   'peso_bagagem',
-  'peso_carga',
   'unidade_peso_planejado',
   'combustivel_solicitado',
   'unidade_combustivel_solicitado',
 ]);
-const allowedFieldsWithVersion = new Set([...allowedFields, 'versao'].filter((field) => field !== 'status'));
+const allowedFieldsWithVersion = new Set([...allowedFields, 'versao', 'rota_ids', 'pax_planejado', 'peso_passageiros', 'peso_bagagem', 'peso_carga', 'unidade_peso_planejado'].filter((field) => field !== 'status'));
 
 const blockedFields = new Set([
   'id',
@@ -700,7 +699,7 @@ async function assertCatalogsForInput(
 function assertCancellationReason(input: Pick<FlightInput, 'status' | 'cancelado_motivo_id'>) {
   if (input.status === 'cancelado' && !input.cancelado_motivo_id) {
     throw new ApiError(
-      'Motivo operacional obrigatorio para cancelamento',
+      'Informe motivo de cancelamento (pelo menos 10 caracteres) quando não houver motivo catalogado',
       400,
       'CONTROLE_VOOS_CANCEL_REASON_REQUIRED',
     );
@@ -1275,6 +1274,49 @@ controleVoos.post('/voos/:id/whatsapp', auth(), requireControleVoosWrite(), send
 controleVoos.post('/voos/:id/email', auth(), requireControleVoosWrite(), sendFlightEmailHandler);
 controleVoos.get('/voos/:id/whatsapp-share', auth(), requireControleVoosWrite(), getFlightWhatsAppShareHandler);
 
+// Confirmation of preflight planning is separate from operational flight release and RDV approval.
+controleVoos.post('/voos/:id/confirmar-planejamento', auth(), requireControleVoosWrite(), requireControleVoosCoordination(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const userId = getActorId(c);
+  const id = c.req.param('id');
+  const payload = await parseJsonPayload(c);
+  assertPayloadFields(payload, new Set(['versao']));
+  const voo = await getFlightOrThrow(c.env.DB, id, empresaId);
+  assertFlightVersion(voo, requireExpectedFlightVersion(payload));
+  if (voo.status !== 'planejado') {
+    throw new ApiError('Confirmação disponível somente para voos em planejamento', 409, 'CONTROLE_VOOS_PLANNING_WRONG_STATUS');
+  }
+  const stages = await c.env.DB.prepare(
+    'SELECT origem_icao, destino_icao, peso_passageiros, peso_bagagem, payload FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id'
+  ).bind(empresaId, voo.id).all<{ origem_icao: string | null; destino_icao: string | null; peso_passageiros: number | null; peso_bagagem: number | null; payload: number | null }>();
+  const first = stages.results?.[0];
+  if (!first || (stages.results || []).some(stage => !stage.origem_icao || !stage.destino_icao)) {
+    throw new ApiError('Confira a rota antes de confirmar o planejamento', 409, 'CONTROLE_VOOS_PLANNING_ROUTE_INCOMPLETE');
+  }
+  // Zero is a valid explicitly confirmed mass; null indicates data not yet supplied.
+  if (first.peso_passageiros == null || first.peso_bagagem == null || first.payload == null) {
+    throw new ApiError('Informe os pesos de passageiros, bagagem e carga (use zero se não houver)', 409, 'CONTROLE_VOOS_PLANNING_WEIGHTS_INCOMPLETE');
+  }
+  const crew = await c.env.DB.prepare(
+    "SELECT funcao FROM cv_voo_tripulantes WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL"
+  ).bind(empresaId, voo.id).all<{ funcao: string }>();
+  if (!crew.results?.some(row => row.funcao === 'PIC') || !crew.results?.some(row => row.funcao === 'SIC')) {
+    throw new ApiError('Informe comandante e copiloto antes de confirmar o planejamento', 409, 'CONTROLE_VOOS_PLANNING_CREW_INCOMPLETE');
+  }
+  const [updated] = await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE cv_voos SET versao = versao + 1, updated_by = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND versao = ? AND deleted_at IS NULL")
+      .bind(userId, id, empresaId, voo.versao),
+    c.env.DB.prepare(`INSERT INTO cv_voo_eventos
+      (empresa_id, voo_id, tipo_evento, status_anterior, status_novo, descricao, metadata_json, usuario_id, created_by, updated_by, created_at, updated_at)
+      SELECT ?, ?, 'sistema', ?, ?, 'Planejamento confirmado pela Coordenação', ?, ?, ?, ?, datetime('now'), datetime('now')
+      WHERE (SELECT changes()) > 0`)
+      .bind(empresaId, voo.id, voo.status, voo.status, JSON.stringify({ action: 'confirm_planning', confirmed_flight_version: voo.versao + 1 }), userId, userId, userId),
+  ]);
+  assertFlightCasApplied(updated);
+  const confirmed = await getFlightOrThrow(c.env.DB, id, empresaId);
+  return c.json({ success: true, data: (await enrichFlightsWithPresentation(c.env.DB, empresaId, [confirmed]))[0] });
+});
+
 controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const userId = getActorId(c);
@@ -1288,7 +1330,24 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
     throw new ApiError('Nenhum campo para atualizar', 400, 'CONTROLE_VOOS_EMPTY_PATCH');
   }
 
-  const input = normalizeFlightInput(payload, false);
+  const routeIds = normalizeFlightRouteIds(payload.rota_ids);
+  const hasPlanning = ['pax_planejado', 'peso_passageiros', 'peso_bagagem', 'peso_carga', 'unidade_peso_planejado'].some(field => Object.prototype.hasOwnProperty.call(payload, field));
+  if ((routeIds || hasPlanning) && existing.status !== 'planejado') {
+    throw new ApiError('Alterações de rota e pesos prévios exigem voo em planejamento', 409, 'CONTROLE_VOOS_PLANNING_NOT_EDITABLE');
+  }
+  const routePoints = routeIds ? await resolveFlightRoutePoints(c.env.DB, empresaId, routeIds) : null;
+  if (routeIds) {
+    const times = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM cv_voo_etapas
+      WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+        AND (horario_motor_ligado IS NOT NULL OR horario_decolagem IS NOT NULL OR horario_pouso IS NOT NULL OR horario_motor_desligado IS NOT NULL)`)
+      .bind(empresaId, existing.id).first<{total: number}>();
+    const activeRdv = await getActiveRdvByFlight(c.env.DB, existing.id, empresaId);
+    if (Number(times?.total || 0) > 0 || (activeRdv && !['rascunho', 'devolvido'].includes(activeRdv.workflow_status))) {
+      throw new ApiError('Rota já possui registros de execução ou RDV encaminhado; utilize o fluxo de revisão', 409, 'CONTROLE_VOOS_PLANNING_ROUTE_LOCKED');
+    }
+  }
+  const normalized = routeIds ? { ...payload, origem_id: routeIds[0], destino_id: routeIds[routeIds.length - 1] } : payload;
+  const input = normalizeFlightInput(normalized, false);
   const merged = buildMergedFlight(existing, input);
   assertFlightTimes(merged);
   assertCancellationReason(merged);
@@ -1348,9 +1407,9 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
       'Voo atualizado',
       merged.cancelado_motivo_id || null,
       JSON.stringify({
-        fields: Object.keys(payload)
-          .filter((field) => field !== 'versao')
-          .sort(),
+        action: 'update_planning',
+        fields: Object.keys(payload).filter(field => field !== 'versao').sort(),
+        ...(routeIds ? { route_point_ids: routeIds } : {}),
       }),
       userId,
       userId,
@@ -1359,6 +1418,49 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
   ]);
 
   assertFlightCasApplied(updateResult);
+
+  if (routePoints) {
+    const stageRows = await c.env.DB.prepare(
+      'SELECT id FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id'
+    ).bind(empresaId, existing.id).all<{ id: number }>();
+    const stages = stageRows.results || [];
+    const routeStatements: D1PreparedStatement[] = [];
+    const code = (point: { codigo: string; codigo_icao: string | null }) => String(point.codigo_icao || point.codigo).trim().toUpperCase();
+    for (let index = 0; index < routePoints.length - 1; index += 1) {
+      const from = code(routePoints[index]);
+      const to = code(routePoints[index + 1]);
+      if (stages[index]) {
+        routeStatements.push(c.env.DB.prepare(`UPDATE cv_voo_etapas
+          SET numero_etapa = ?, origem_icao = ?, destino_icao = ?, updated_by = ?, updated_at = datetime('now')
+          WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL`)
+          .bind(index + 1, from, to, userId, stages[index].id, existing.id, empresaId));
+      } else {
+        routeStatements.push(c.env.DB.prepare(`INSERT INTO cv_voo_etapas
+          (empresa_id, voo_id, numero_etapa, origem_icao, destino_icao, origem_dados, created_by, updated_by, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 'MANUAL', ?, ?, datetime('now'), datetime('now'))`)
+          .bind(empresaId, existing.id, index + 1, from, to, userId, userId));
+      }
+    }
+    for (const old of stages.slice(routePoints.length - 1)) {
+      routeStatements.push(c.env.DB.prepare("UPDATE cv_voo_etapas SET deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND voo_id = ? AND deleted_at IS NULL")
+        .bind(userId, old.id, empresaId, existing.id));
+    }
+    if (routeStatements.length) await c.env.DB.batch(routeStatements);
+  }
+  if (hasPlanning) {
+    const first = await c.env.DB.prepare('SELECT pax, peso_passageiros, peso_bagagem, payload, unidade_peso FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id LIMIT 1')
+      .bind(empresaId, existing.id).first<{ pax: number | null; peso_passageiros: number | null; peso_bagagem: number | null; payload: number | null; unidade_peso: string | null }>();
+    const lb = (value: number | null) => value == null ? null : Number((value * (first?.unidade_peso === 'KG' ? 2.2046226218 : 1)).toFixed(3));
+    const cargoLb = first?.payload == null ? null : Number((first.payload * 2.2046226218).toFixed(3));
+    const planning = parseFlightPlanningInput({
+      pax_planejado: payload.pax_planejado !== undefined ? payload.pax_planejado : first?.pax,
+      peso_passageiros: payload.peso_passageiros !== undefined ? payload.peso_passageiros : lb(first?.peso_passageiros ?? null),
+      peso_bagagem: payload.peso_bagagem !== undefined ? payload.peso_bagagem : lb(first?.peso_bagagem ?? null),
+      peso_carga: payload.peso_carga !== undefined ? payload.peso_carga : cargoLb,
+      unidade_peso_planejado: 'LB',
+    });
+    await updateFlightStagePlanningIfSupported(c.env.DB, empresaId, existing.id, merged.aeronave_id ?? null, planning);
+  }
 
   await maybeRecordSystemAudit(c, 'cv_voos', 'UPDATE', id, existing, input);
   const updated = await getFlightOrThrow(c.env.DB, id, empresaId);
@@ -1390,20 +1492,16 @@ controleVoos.post('/voos/:id/status', auth(), requireControleVoosWrite(), async 
   const descricao = normalizeString(payload.descricao, 'descricao');
 
   assertStatusTransition(existing.status, status);
-  if (status === 'cancelado' && !motivoId) {
+  if (status === 'cancelado' && !motivoId && (!descricao || descricao.trim().length < 10)) {
     throw new ApiError(
       'Motivo operacional obrigatorio para cancelamento',
       400,
       'CONTROLE_VOOS_CANCEL_REASON_REQUIRED',
     );
   }
-  await assertCatalogItem(
-    c.env.DB,
-    'cv_motivos_operacionais',
-    motivoId,
-    empresaId,
-    'motivo_id',
-    status === 'cancelado' ? 'cancelamento' : undefined,
+  if (motivoId) await assertCatalogItem(
+    c.env.DB, 'cv_motivos_operacionais', motivoId, empresaId,
+    'motivo_id', status === 'cancelado' ? 'cancelamento' : undefined,
   );
 
   const [updateResult] = await c.env.DB.batch([
