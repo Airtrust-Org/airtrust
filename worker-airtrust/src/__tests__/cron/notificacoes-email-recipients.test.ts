@@ -269,6 +269,12 @@ describe('cron notificacoes — destinatarios e marcos de vencimento', () => {
       expect(summary.enviadas).toBe(1);
       expect(recipientsFrom(fetchMock)).toEqual([{ email: 'funcionario@example.com' }]);
       expect(insertedLogs[0]?.args[5]).toBe('funcionario@example.com');
+      if (days === 30) {
+        const body = requestBodyFrom(fetchMock).textContent;
+        expect(body).toContain(`Data de vencimento: ${isoDateIn(30).split('-').reverse().join('/')}`);
+        expect(body).toContain('Restam 30 dias para renovar');
+        expect(body).toContain('obrigatório para a função');
+      }
       expect(resolveSetorComplianceAlertEmails).not.toHaveBeenCalled();
     },
   );
