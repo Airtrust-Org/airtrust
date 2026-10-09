@@ -112,6 +112,7 @@ export default function ControleVoosVooDetalhe() {
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
   const [sharingFlightLog, setSharingFlightLog] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [confirmingPlan, setConfirmingPlan] = useState(false);
 
   const loadDocuments = async () => {
     if (!id) return;
@@ -198,6 +199,21 @@ export default function ControleVoosVooDetalhe() {
     }
   };
 
+  const confirmPlanning = async () => {
+    if (!voo || confirmingPlan) return;
+    setConfirmingPlan(true);
+    try {
+      const result = await apiClient.post(`/controle-voos/voos/${voo.id}/confirmar-planejamento`, { versao: voo.versao });
+      if (!result.success) throw new Error(result.error || 'Falha ao confirmar planejamento.');
+      toast.success('Planejamento confirmado. O Pilot App identificará a nova versão ao conectar.');
+      await refetchVoo();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível confirmar planejamento.');
+    } finally {
+      setConfirmingPlan(false);
+    }
+  };
+
   const aeroMap = buildAeroMap(aeroportos);
 
   if (isLoading) {
@@ -255,6 +271,7 @@ export default function ControleVoosVooDetalhe() {
           >
             <div className="flex flex-wrap items-center gap-2">
               <ControleVoosStatusBadge status={flightPresentationStatus(voo)} className="text-sm px-3 py-1" />
+              {voo.status === 'planejado' ? <span className="rounded-lg border border-cyan-300 px-3 py-1 text-xs font-semibold text-cyan-700">{voo.planejamento_status === 'confirmado' ? 'Planejamento confirmado' : 'Planejamento prévio'}</span> : null}
               {canCoordinate ? (
                 <button
                   type="button"
@@ -486,6 +503,12 @@ export default function ControleVoosVooDetalhe() {
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Ações</h2>
                 <div className="space-y-2">
+                  {canCoordinate && voo.status === 'planejado' && voo.planejamento_status !== 'confirmado' ? (
+                    <button type="button" onClick={() => void confirmPlanning()} disabled={confirmingPlan}
+                      className="flex w-full justify-center rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                      {confirmingPlan ? 'Confirmando…' : 'Confirmar planejamento para a tripulação'}
+                    </button>
+                  ) : null}
                   {canCoordinate && (
                     <button
                       type="button"
