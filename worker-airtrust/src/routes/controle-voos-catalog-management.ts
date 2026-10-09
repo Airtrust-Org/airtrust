@@ -3,6 +3,8 @@ import type { MiddlewareHandler } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import { checkPermission } from '../middleware/tenant';
+import { isControleVoosCoordinationRole } from '../middleware/controle-voos-access';
+import { getUserPermissionOverride } from '../middleware/rbac';
 import type { Env } from '../types';
 import {
   getActorId,
@@ -83,7 +85,9 @@ const MOTIVO_TYPES = new Set([
 
 function requireCatalogManager(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c, next) => {
-    if (!checkPermission(c, 'manager')) {
+    const coordinationAllowed = isControleVoosCoordinationRole(c) &&
+      (await getUserPermissionOverride(c, 'controle_voos.edit')) !== 'DENY';
+    if (!checkPermission(c, 'manager') && !coordinationAllowed) {
       throw new ApiError(
         'Permissao insuficiente para gerenciar cadastros operacionais',
         403,

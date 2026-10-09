@@ -136,6 +136,8 @@ vi.mock('../../services/controle-voos/pilot-offline-sync-apply', () => ({
 
 import pilotOfflineRoutes from '../../routes/controle-voos-pilot-offline';
 
+const documentEvents: Array<{ id: number; metadata_json: string; created_at: string }> = [];
+
 function statementFor(sql: string) {
   const normalized = sql.replace(/\s+/g, ' ').trim();
   const statement: any = {
@@ -145,6 +147,7 @@ function statementFor(sql: string) {
       return statement;
     },
     async all() {
+      if (normalized.includes('FROM cv_voo_eventos')) return { results: documentEvents };
       if (normalized.includes('FROM cv_voo_tripulantes')) {
         return {
           results: [
@@ -326,6 +329,7 @@ function createEnv() {
 describe('Pilot offline package', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    documentEvents.length = 0;
     getFlightOrThrow.mockResolvedValue({
       id: 42,
       empresa_id: 7,
@@ -526,6 +530,49 @@ describe('Pilot offline package', () => {
     );
     expect(metDossier.available_offline).toBe(false);
     expect(metDossier.integrity_state).toBe('EVIDENCE_UNAVAILABLE');
+  });
+
+  it('inclui MTAs de embarque/desembarque e varios outros anexos na preparação offline', async () => {
+    const attachment = (id: number, type: string, fileName: string) => ({
+      id,
+      created_at: '2026-10-09T12:00:00Z',
+      metadata_json: JSON.stringify({
+        action: 'flight_attachment',
+        document_type: type,
+        file_name: fileName,
+        label: type,
+        content_type: 'application/pdf',
+        size: 512,
+        content_hash: String(id).padStart(64, '0'),
+        r2_key: 'controle-voos/7/42/documentos/' + type.toLowerCase() + '/secret.pdf',
+      }),
+    });
+    documentEvents.push(
+      attachment(25, 'OUTROS', 'briefing.pdf'),
+      attachment(24, 'OUTROS', 'mapa.pdf'),
+      attachment(23, 'MTA_DESEMBARQUE', 'mta-desembarque.pdf'),
+      attachment(22, 'MTA_EMBARQUE', 'mta-embarque.pdf'),
+      attachment(21, 'PLANO_VOO', 'planejamento.pdf'),
+      attachment(20, 'WEATHER_REPORT', 'weather.pdf'),
+      attachment(19, 'MTA_EMBARQUE', 'mta-antigo.pdf'),
+    );
+    const response = await createApp().request(
+      'http://localhost/api/controle-voos/voos/42/offline-package',
+      { headers: { Authorization: 'Bearer test' } },
+      createEnv(),
+    );
+    expect(response.status).toBe(200);
+    const { data } = await response.json() as any;
+    const docs = data.workspace.planning.documentos;
+    expect(docs.map((doc: any) => doc.type)).toEqual([
+      'WEATHER_REPORT', 'PLANO_VOO', 'MTA_EMBARQUE', 'MTA_DESEMBARQUE', 'OUTROS', 'OUTROS',
+    ]);
+    expect(docs.map((doc: any) => doc.file_name)).toContain('briefing.pdf');
+    expect(docs.map((doc: any) => doc.file_name)).not.toContain('mta-antigo.pdf');
+    expect(JSON.stringify(data)).not.toContain('secret.pdf');
+    expect(data.source_revision.documents).toHaveLength(6);
+    expect(data.workspace.dossier.entries.filter((entry: any) => entry.category === 'MTA')).toHaveLength(2);
+    expect(data.workspace.dossier.entries.filter((entry: any) => entry.category === 'outros')).toHaveLength(2);
   });
 
   it('anuncia sync somente quando flag e schema 0488 estao prontos', async () => {

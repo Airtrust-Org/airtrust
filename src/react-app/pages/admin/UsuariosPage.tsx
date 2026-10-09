@@ -125,6 +125,7 @@ const PERFIS = [
   { value: 'ADMINISTRADOR', label: 'Administrador Geral', color: 'bg-red-100 text-red-800' },
   { value: 'ADMIN', label: 'Administrador Geral', color: 'bg-red-100 text-red-800' }, // alias legado
   { value: 'GESTOR', label: 'Administrador da Empresa', color: 'bg-blue-100 text-blue-700' },
+  { value: 'COORDENACAO_VOO', label: 'Coordenação de Voo', color: 'bg-cyan-100 text-cyan-800' },
   { value: 'MANAGER', label: 'Administrador da Empresa', color: 'bg-blue-100 text-blue-700' },
   { value: 'INSTRUTOR', label: 'Instrutor', color: 'bg-green-100 text-green-800' },
   { value: 'ALUNO', label: 'Aluno', color: 'bg-gray-100 text-gray-600' },
@@ -248,6 +249,7 @@ const ROLE_DEFAULTS: Record<string, string[] | null> = {
   ADMINISTRADOR: null, // wildcard — all permissions
   ADMIN: null,
   GESTOR: null,
+  COORDENACAO_VOO: ['controle_voos.view', 'controle_voos.edit', 'voos.rdv.visualizar_todos', 'voos.rdv.revisar', 'voos.rdv.corrigir', 'voos.rdv.devolver', 'voos.rdv.aprovar_coordenacao', 'voos.rdv.reabrir', 'voos.rdv.exportar_petrobras'],
   INSTRUTOR: [
     'simuladores.view',
     'simuladores.evaluate',
@@ -1038,6 +1040,7 @@ function ModalCriarUsuario({
               {perfil === 'INSTRUTOR' &&
                 'Pode visualizar programação e avaliar sessões de simulador.'}
               {perfil === 'ALUNO' && 'Visualiza apenas sua própria escala publicada e fichas.'}
+              {perfil === 'COORDENACAO_VOO' && 'Opera o Controle de Voos e revisa RDVs somente na empresa vinculada.'}
             </p>
           </div>
 
@@ -1591,6 +1594,7 @@ interface PerfilEditavel {
 const BUILTIN_COLORS: Record<string, { color: string; headerBg: string }> = {
   ADMINISTRADOR: { color: 'bg-purple-100 text-purple-800', headerBg: 'bg-purple-50' },
   GESTOR: { color: 'bg-blue-100 text-blue-800', headerBg: 'bg-blue-50' },
+  COORDENACAO_VOO: { color: 'bg-cyan-100 text-cyan-800', headerBg: 'bg-cyan-50' },
   INSTRUTOR: { color: 'bg-sky-100 text-sky-800', headerBg: 'bg-sky-50' },
   ALUNO: { color: 'bg-green-100 text-green-800', headerBg: 'bg-green-50' },
 };
@@ -1616,6 +1620,13 @@ function buildDefaultPerfisEditaveis(): PerfilEditavel[] {
       label: 'Administrador da Empresa',
       ...BUILTIN_COLORS.GESTOR,
       permissoes: ROLE_DEFAULTS.GESTOR!,
+      is_builtin: true,
+    },
+    {
+      value: 'COORDENACAO_VOO',
+      label: 'Coordenação de Voo',
+      ...BUILTIN_COLORS.COORDENACAO_VOO,
+      permissoes: ROLE_DEFAULTS.COORDENACAO_VOO!,
       is_builtin: true,
     },
     {

@@ -18,6 +18,14 @@ describe('development module administrator access', () => {
     expect(canSeeControleVoosDevelopmentModule({ email: 'coordenacao@example.test', role })).toBe(true);
   });
 
+  it('permits COORDENACAO_VOO only into the Controle de Voos surface, not privileged dashboards', () => {
+    const user = { role: 'COORDENACAO_VOO' };
+    expect(canSeeControleVoosDevelopmentModule(user)).toBe(true);
+    expect(canSeeOperationalDashboard(user)).toBe(false);
+    expect(canSeeAdministrativeDashboard(user)).toBe(false);
+    expect(canSeeDevelopmentModules(user)).toBe(false);
+  });
+
   it('allows explicit Controle de Voos grant for a common role', () => {
     expect(
       canSeeControleVoosDevelopmentModule({

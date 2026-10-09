@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { parsePositiveInteger, parseOptionalPositiveInteger, normalizeString, normalizeStatus, isIsoDateOnly, parseOperationalReadFilters, buildFlightScope, normalizeFlightInput } from './controle-voos-flight-input';
+import type { OperationalReadFilters } from './controle-voos-flight-input';
 import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
@@ -45,15 +47,6 @@ import { buildFlightRelatedStatements, normalizeFlightRouteIds, parseFlightCrewI
 import { parseFlightPlanningInput, updateFlightStagePlanningIfSupported } from '../services/controle-voos/flight-planning';
 import { enrichFlightsWithPresentation } from '../services/controle-voos/flight-presentation';
 import { getDailyPlanningWhatsAppShareHandler, getFlightWhatsAppShareHandler, sendFlightEmailHandler, sendFlightWhatsAppHandler } from './controle-voos-dispatch';
-type OperationalReadFilters = {
-  dataInicio: string;
-  dataFim: string;
-  status: FlightStatus | null;
-  aeronaveId: number | null;
-  origemId: number | null;
-  destinoId: number | null;
-};
-
 type CatalogConfig = {
   table: string;
   fields: string;
@@ -75,16 +68,6 @@ const controleVoos = new Hono<{ Bindings: Env }>();
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
-
-const allowedStatuses = new Set<FlightStatus>([
-  'planejado',
-  'liberado_operacionalmente',
-  'em_andamento',
-  'pousado',
-  'concluido_operacionalmente',
-  'cancelado',
-  'alternado_divergido',
-]);
 
 const allowedFields = new Set([
   'prefixo',
@@ -117,11 +100,12 @@ const allowedCreateFields = new Set([
   'peso_planejado',
   'peso_passageiros',
   'peso_bagagem',
+  'peso_carga',
   'unidade_peso_planejado',
   'combustivel_solicitado',
   'unidade_combustivel_solicitado',
 ]);
-const allowedFieldsWithVersion = new Set([...allowedFields, 'versao'].filter((field) => field !== 'status'));
+const allowedFieldsWithVersion = new Set([...allowedFields, 'versao', 'rota_ids', 'pax_planejado', 'peso_passageiros', 'peso_bagagem', 'peso_carga', 'unidade_peso_planejado'].filter((field) => field !== 'status'));
 
 const blockedFields = new Set([
   'id',
@@ -188,44 +172,6 @@ const catalogos: Record<string, CatalogConfig> = {
   contratos: { table: 'cv_contratos', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' },
   'funcoes-bordo': { table: 'cv_funcoes_bordo', fields: 'id, codigo, nome, descricao, ativo, ordem', orderBy: 'ordem ASC, nome ASC' }, justificativas: { table: 'cv_justificativas_voo', fields: 'id, codigo, nome, categoria, descricao, ativo, ordem', orderBy: 'categoria ASC, ordem ASC, nome ASC' },
 };
-
-function parsePositiveInteger(value: unknown, field: string): number {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new ApiError(`${field} invalido`, 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
-  }
-  return parsed;
-}
-
-function parseOptionalPositiveInteger(value: unknown, field: string): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  return parsePositiveInteger(value, field);
-}
-
-function normalizeString(value: unknown, field: string, required = false): string | null {
-  if (value === null || value === undefined) {
-    if (required) throw new ApiError(`${field} obrigatorio`, 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
-    return null;
-  }
-
-  const normalized = String(value).trim();
-  if (required && normalized.length === 0) {
-    throw new ApiError(`${field} obrigatorio`, 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
-  }
-  return normalized.length > 0 ? normalized : null;
-}
-
-function normalizeStatus(value: unknown): FlightStatus {
-  const status = String(value || '').trim() as FlightStatus;
-  if (!allowedStatuses.has(status)) {
-    throw new ApiError('Status de voo invalido', 400, 'CONTROLE_VOOS_INVALID_STATUS');
-  }
-  return status;
-}
-
-function isIsoDateOnly(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`));
-}
 
 function isIsoLikeDateTime(value: string): boolean {
   return Number.isFinite(Date.parse(value));
@@ -321,177 +267,6 @@ function assertNoTenantOverride(payload: Record<string, unknown>): void {
       'CONTROLE_VOOS_SIGVOOS_TENANT_OVERRIDE_FORBIDDEN',
     );
   }
-}
-
-function parseDateOnlyParam(
-  value: string | null | undefined,
-  field: string,
-  required = false,
-): string | null {
-  const normalized = normalizeString(value, field, required);
-  if (normalized === null) return null;
-  if (!isIsoDateOnly(normalized)) {
-    throw new ApiError(`${field} invalido`, 400, 'CONTROLE_VOOS_INVALID_PAYLOAD');
-  }
-  return normalized;
-}
-
-function parseOperationalReadFilters(
-  c: Context<{ Bindings: Env }>,
-  options?: { requireRange?: boolean },
-): OperationalReadFilters {
-  const exactDate = parseDateOnlyParam(c.req.query('data'), 'data');
-  const dataInicioQuery = parseDateOnlyParam(c.req.query('data_inicio'), 'data_inicio');
-  const dataFimQuery = parseDateOnlyParam(c.req.query('data_fim'), 'data_fim');
-
-  let dataInicio = dataInicioQuery;
-  let dataFim = dataFimQuery;
-
-  if (exactDate) {
-    dataInicio = exactDate;
-    dataFim = exactDate;
-  } else if (options?.requireRange) {
-    if (!dataInicio || !dataFim) {
-      throw new ApiError('Periodo obrigatorio', 400, 'CONTROLE_VOOS_INVALID_PERIOD');
-    }
-  } else if (!dataInicio && !dataFim) {
-    const today = new Date().toISOString().slice(0, 10);
-    dataInicio = today;
-    dataFim = today;
-  } else if (dataInicio && !dataFim) {
-    dataFim = dataInicio;
-  } else if (!dataInicio && dataFim) {
-    dataInicio = dataFim;
-  }
-
-  if (!dataInicio || !dataFim) {
-    throw new ApiError('Periodo obrigatorio', 400, 'CONTROLE_VOOS_INVALID_PERIOD');
-  }
-  if (dataFim < dataInicio) {
-    throw new ApiError('Periodo invalido', 400, 'CONTROLE_VOOS_INVALID_PERIOD');
-  }
-
-  return {
-    dataInicio,
-    dataFim,
-    status: c.req.query('status') ? normalizeStatus(c.req.query('status')) : null,
-    aeronaveId: parseOptionalPositiveInteger(c.req.query('aeronave_id'), 'aeronave_id'),
-    origemId: parseOptionalPositiveInteger(c.req.query('origem_id'), 'origem_id'),
-    destinoId: parseOptionalPositiveInteger(c.req.query('destino_id'), 'destino_id'),
-  };
-}
-
-function buildFlightScope(alias: string, empresaId: number, filters: OperationalReadFilters) {
-  const clauses = [
-    `${alias}.empresa_id = ?`,
-    `${alias}.deleted_at IS NULL`,
-    `${alias}.data_programacao >= ?`,
-    `${alias}.data_programacao <= ?`,
-  ];
-  const values: unknown[] = [empresaId, filters.dataInicio, filters.dataFim];
-
-  if (filters.status) {
-    clauses.push(`${alias}.status = ?`);
-    values.push(filters.status);
-  }
-  if (filters.aeronaveId) {
-    clauses.push(`${alias}.aeronave_id = ?`);
-    values.push(filters.aeronaveId);
-  }
-  if (filters.origemId) {
-    clauses.push(`${alias}.origem_id = ?`);
-    values.push(filters.origemId);
-  }
-  if (filters.destinoId) {
-    clauses.push(`${alias}.destino_id = ?`);
-    values.push(filters.destinoId);
-  }
-
-  return { where: clauses.join(' AND '), values };
-}
-
-function normalizeFlightInput(
-  payload: Record<string, unknown>,
-  requireBaseFields: boolean,
-): FlightInput {
-  const input: FlightInput = {};
-
-  if (payload.prefixo !== undefined || requireBaseFields) {
-    input.prefixo = normalizeString(payload.prefixo, 'prefixo', requireBaseFields) || undefined;
-  }
-  if (payload.data_programacao !== undefined || requireBaseFields) {
-    input.data_programacao =
-      normalizeString(payload.data_programacao, 'data_programacao', requireBaseFields) || undefined;
-  }
-  if (payload.origem_id !== undefined || requireBaseFields) {
-    input.origem_id = parsePositiveInteger(payload.origem_id, 'origem_id');
-  }
-  if (payload.destino_id !== undefined || requireBaseFields) {
-    input.destino_id = parsePositiveInteger(payload.destino_id, 'destino_id');
-  }
-  if (payload.numero_voo !== undefined) input.numero_voo = normalizeString(payload.numero_voo, 'numero_voo');
-  if (payload.numero_db !== undefined) input.numero_db = normalizeString(payload.numero_db, 'numero_db');
-  if (payload.petrobras_equipamento !== undefined) input.petrobras_equipamento = normalizeString(payload.petrobras_equipamento, 'petrobras_equipamento'); if (payload.petrobras_atendimento !== undefined) input.petrobras_atendimento = normalizeString(payload.petrobras_atendimento, 'petrobras_atendimento');
-  if (payload.contrato_id !== undefined || requireBaseFields) input.contrato_id = parsePositiveInteger(payload.contrato_id, 'contrato_id');
-  if (payload.tipo_voo_id !== undefined || requireBaseFields) {
-    input.tipo_voo_id = parsePositiveInteger(payload.tipo_voo_id, 'tipo_voo_id');
-  }
-  if (payload.natureza_voo_id !== undefined) {
-    input.natureza_voo_id = parsePositiveInteger(payload.natureza_voo_id, 'natureza_voo_id');
-  }
-  if (payload.aeronave_id !== undefined) {
-    input.aeronave_id = parseOptionalPositiveInteger(payload.aeronave_id, 'aeronave_id');
-  }
-  if (payload.horario_previsto_partida !== undefined || requireBaseFields) {
-    input.horario_previsto_partida =
-      normalizeString(
-        payload.horario_previsto_partida,
-        'horario_previsto_partida',
-        requireBaseFields,
-      ) || undefined;
-  }
-  if (payload.horario_previsto_chegada !== undefined || requireBaseFields) {
-    input.horario_previsto_chegada =
-      normalizeString(
-        payload.horario_previsto_chegada,
-        'horario_previsto_chegada',
-        requireBaseFields,
-      ) || undefined;
-  }
-  if (payload.horario_real_partida !== undefined) {
-    input.horario_real_partida = normalizeString(
-      payload.horario_real_partida,
-      'horario_real_partida',
-    );
-  }
-  if (payload.horario_real_chegada !== undefined) {
-    input.horario_real_chegada = normalizeString(
-      payload.horario_real_chegada,
-      'horario_real_chegada',
-    );
-  }
-  if (payload.status !== undefined) {
-    input.status = normalizeStatus(payload.status);
-  } else if (requireBaseFields) {
-    input.status = 'planejado';
-  }
-  if (payload.observacoes !== undefined) {
-    input.observacoes = normalizeString(payload.observacoes, 'observacoes');
-  }
-  if (payload.cancelado_motivo_id !== undefined) {
-    input.cancelado_motivo_id = parseOptionalPositiveInteger(
-      payload.cancelado_motivo_id,
-      'cancelado_motivo_id',
-    );
-  }
-  if (payload.alternado_destino_id !== undefined) {
-    input.alternado_destino_id = parseOptionalPositiveInteger(
-      payload.alternado_destino_id,
-      'alternado_destino_id',
-    );
-  }
-
-  return input;
 }
 
 function assertFlightTimes(input: {
@@ -699,7 +474,7 @@ async function assertCatalogsForInput(
 function assertCancellationReason(input: Pick<FlightInput, 'status' | 'cancelado_motivo_id'>) {
   if (input.status === 'cancelado' && !input.cancelado_motivo_id) {
     throw new ApiError(
-      'Motivo operacional obrigatorio para cancelamento',
+      'Informe motivo de cancelamento (pelo menos 10 caracteres) quando não houver motivo catalogado',
       400,
       'CONTROLE_VOOS_CANCEL_REASON_REQUIRED',
     );
@@ -1274,6 +1049,90 @@ controleVoos.post('/voos/:id/whatsapp', auth(), requireControleVoosWrite(), send
 controleVoos.post('/voos/:id/email', auth(), requireControleVoosWrite(), sendFlightEmailHandler);
 controleVoos.get('/voos/:id/whatsapp-share', auth(), requireControleVoosWrite(), getFlightWhatsAppShareHandler);
 
+// Confirmation of preflight planning is separate from operational flight release and RDV approval.
+controleVoos.post('/voos/:id/confirmar-planejamento', auth(), requireControleVoosWrite(), requireControleVoosCoordination(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const userId = getActorId(c);
+  const id = c.req.param('id');
+  const payload = await parseJsonPayload(c);
+  assertPayloadFields(payload, new Set(['versao']));
+  const voo = await getFlightOrThrow(c.env.DB, id, empresaId);
+  assertFlightVersion(voo, requireExpectedFlightVersion(payload));
+  if (voo.status !== 'planejado') {
+    throw new ApiError('Confirmação disponível somente para voos em planejamento', 409, 'CONTROLE_VOOS_PLANNING_WRONG_STATUS');
+  }
+  const stages = await c.env.DB.prepare(
+    'SELECT origem_icao, destino_icao, peso_passageiros, peso_bagagem, payload FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id'
+  ).bind(empresaId, voo.id).all<{ origem_icao: string | null; destino_icao: string | null; peso_passageiros: number | null; peso_bagagem: number | null; payload: number | null }>();
+  const first = stages.results?.[0];
+  if (!first || (stages.results || []).some(stage => !stage.origem_icao || !stage.destino_icao)) {
+    throw new ApiError('Confira a rota antes de confirmar o planejamento', 409, 'CONTROLE_VOOS_PLANNING_ROUTE_INCOMPLETE');
+  }
+  // Zero is a valid explicitly confirmed mass; null indicates data not yet supplied.
+  if (first.peso_passageiros == null || first.peso_bagagem == null || first.payload == null) {
+    throw new ApiError('Informe os pesos de passageiros, bagagem e carga (use zero se não houver)', 409, 'CONTROLE_VOOS_PLANNING_WEIGHTS_INCOMPLETE');
+  }
+  const crew = await c.env.DB.prepare(
+    "SELECT funcao FROM cv_voo_tripulantes WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL"
+  ).bind(empresaId, voo.id).all<{ funcao: string }>();
+  if (!crew.results?.some(row => row.funcao === 'PIC') || !crew.results?.some(row => row.funcao === 'SIC')) {
+    throw new ApiError('Informe comandante e copiloto antes de confirmar o planejamento', 409, 'CONTROLE_VOOS_PLANNING_CREW_INCOMPLETE');
+  }
+  const [updated] = await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE cv_voos SET versao = versao + 1, updated_by = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND versao = ? AND deleted_at IS NULL")
+      .bind(userId, id, empresaId, voo.versao),
+    c.env.DB.prepare(`INSERT INTO cv_voo_eventos
+      (empresa_id, voo_id, tipo_evento, status_anterior, status_novo, descricao, metadata_json, usuario_id, created_by, updated_by, created_at, updated_at)
+      SELECT ?, ?, 'sistema', ?, ?, 'Planejamento confirmado pela Coordenação', ?, ?, ?, ?, datetime('now'), datetime('now')
+      WHERE (SELECT changes()) > 0`)
+      .bind(empresaId, voo.id, voo.status, voo.status, JSON.stringify({ action: 'confirm_planning', confirmed_flight_version: voo.versao + 1 }), userId, userId, userId),
+  ]);
+  assertFlightCasApplied(updated);
+  const confirmed = await getFlightOrThrow(c.env.DB, id, empresaId);
+  return c.json({ success: true, data: (await enrichFlightsWithPresentation(c.env.DB, empresaId, [confirmed]))[0] });
+});
+
+// Soft-delete is reserved for erroneous, unpublished preliminary bookings.
+// Distributed, started or RDV-linked flights must be cancelled or corrected with audit.
+controleVoos.delete('/voos/:id', auth(), requireControleVoosWrite(), requireControleVoosCoordination(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const userId = getActorId(c);
+  const id = c.req.param('id');
+  const versao = requireExpectedFlightVersion({ versao: c.req.query('versao') });
+  const reason = String(c.req.query('motivo') || '').trim();
+  if (reason.length < 10 || reason.length > 500) {
+    throw new ApiError('Informe motivo da exclusão (10 a 500 caracteres)', 400, 'CONTROLE_VOOS_DELETE_REASON_REQUIRED');
+  }
+  const flight = await getFlightOrThrow(c.env.DB, id, empresaId);
+  assertFlightVersion(flight, versao);
+  if (flight.status !== 'planejado' || (await getActiveRdvByFlight(c.env.DB, flight.id, empresaId))) {
+    throw new ApiError('Voo já em execução ou com RDV: utilize o cancelamento ou o processo de revisão', 409, 'CONTROLE_VOOS_DELETE_PROTECTED');
+  }
+  const count = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM cv_voo_etapas
+    WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+    AND (horario_motor_ligado IS NOT NULL OR horario_decolagem IS NOT NULL OR horario_pouso IS NOT NULL OR horario_motor_desligado IS NOT NULL)`)
+    .bind(empresaId, flight.id).first<{total: number}>();
+  const distributed = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM cv_voo_eventos
+    WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+    AND (metadata_json LIKE '%whatsapp_programacao_tripulantes%' OR metadata_json LIKE '%email_programacao_tripulantes%')`)
+    .bind(empresaId, flight.id).first<{total: number}>();
+  if (Number(count?.total || 0) || Number(distributed?.total || 0)) {
+    throw new ApiError('Voo com dados realizados ou programação distribuída: cancele em vez de excluir', 409, 'CONTROLE_VOOS_DELETE_PROTECTED');
+  }
+  const [updated] = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE cv_voos
+      SET deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now'), versao = versao + 1
+      WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND versao = ?`).bind(userId, id, empresaId, versao),
+    c.env.DB.prepare(`INSERT INTO cv_voo_eventos
+      (empresa_id, voo_id, tipo_evento, status_anterior, status_novo, descricao, metadata_json, usuario_id, created_by, updated_by, created_at, updated_at)
+      SELECT ?, ?, 'sistema', ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
+      WHERE (SELECT changes()) > 0`).bind(empresaId, flight.id, flight.status, flight.status, 'Exclusão lógica: ' + reason, JSON.stringify({ action: 'soft_delete_preliminary_flight' }), userId, userId, userId),
+  ]);
+  assertFlightCasApplied(updated);
+  await maybeRecordSystemAudit(c, 'cv_voos', 'UPDATE', id, flight, { deleted_at: 'soft-deleted', motivo: reason });
+  return c.json({ success: true, data: { id: flight.id, deleted: true } });
+});
+
 controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const userId = getActorId(c);
@@ -1287,7 +1146,24 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
     throw new ApiError('Nenhum campo para atualizar', 400, 'CONTROLE_VOOS_EMPTY_PATCH');
   }
 
-  const input = normalizeFlightInput(payload, false);
+  const routeIds = normalizeFlightRouteIds(payload.rota_ids);
+  const hasPlanning = ['pax_planejado', 'peso_passageiros', 'peso_bagagem', 'peso_carga', 'unidade_peso_planejado'].some(field => Object.prototype.hasOwnProperty.call(payload, field));
+  if ((routeIds || hasPlanning) && existing.status !== 'planejado') {
+    throw new ApiError('Alterações de rota e pesos prévios exigem voo em planejamento', 409, 'CONTROLE_VOOS_PLANNING_NOT_EDITABLE');
+  }
+  const routePoints = routeIds ? await resolveFlightRoutePoints(c.env.DB, empresaId, routeIds) : null;
+  if (routeIds) {
+    const times = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM cv_voo_etapas
+      WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+        AND (horario_motor_ligado IS NOT NULL OR horario_decolagem IS NOT NULL OR horario_pouso IS NOT NULL OR horario_motor_desligado IS NOT NULL)`)
+      .bind(empresaId, existing.id).first<{total: number}>();
+    const activeRdv = await getActiveRdvByFlight(c.env.DB, existing.id, empresaId);
+    if (Number(times?.total || 0) > 0 || (activeRdv && !['rascunho', 'devolvido'].includes(activeRdv.workflow_status))) {
+      throw new ApiError('Rota já possui registros de execução ou RDV encaminhado; utilize o fluxo de revisão', 409, 'CONTROLE_VOOS_PLANNING_ROUTE_LOCKED');
+    }
+  }
+  const normalized = routeIds ? { ...payload, origem_id: routeIds[0], destino_id: routeIds[routeIds.length - 1] } : payload;
+  const input = normalizeFlightInput(normalized, false);
   const merged = buildMergedFlight(existing, input);
   assertFlightTimes(merged);
   assertCancellationReason(merged);
@@ -1347,9 +1223,9 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
       'Voo atualizado',
       merged.cancelado_motivo_id || null,
       JSON.stringify({
-        fields: Object.keys(payload)
-          .filter((field) => field !== 'versao')
-          .sort(),
+        action: 'update_planning',
+        fields: Object.keys(payload).filter(field => field !== 'versao').sort(),
+        ...(routeIds ? { route_point_ids: routeIds } : {}),
       }),
       userId,
       userId,
@@ -1358,6 +1234,49 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
   ]);
 
   assertFlightCasApplied(updateResult);
+
+  if (routePoints) {
+    const stageRows = await c.env.DB.prepare(
+      'SELECT id FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id'
+    ).bind(empresaId, existing.id).all<{ id: number }>();
+    const stages = stageRows.results || [];
+    const routeStatements: D1PreparedStatement[] = [];
+    const code = (point: { codigo: string; codigo_icao: string | null }) => String(point.codigo_icao || point.codigo).trim().toUpperCase();
+    for (let index = 0; index < routePoints.length - 1; index += 1) {
+      const from = code(routePoints[index]);
+      const to = code(routePoints[index + 1]);
+      if (stages[index]) {
+        routeStatements.push(c.env.DB.prepare(`UPDATE cv_voo_etapas
+          SET numero_etapa = ?, origem_icao = ?, destino_icao = ?, updated_by = ?, updated_at = datetime('now')
+          WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL`)
+          .bind(index + 1, from, to, userId, stages[index].id, existing.id, empresaId));
+      } else {
+        routeStatements.push(c.env.DB.prepare(`INSERT INTO cv_voo_etapas
+          (empresa_id, voo_id, numero_etapa, origem_icao, destino_icao, origem_dados, created_by, updated_by, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 'MANUAL', ?, ?, datetime('now'), datetime('now'))`)
+          .bind(empresaId, existing.id, index + 1, from, to, userId, userId));
+      }
+    }
+    for (const old of stages.slice(routePoints.length - 1)) {
+      routeStatements.push(c.env.DB.prepare("UPDATE cv_voo_etapas SET deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ? AND voo_id = ? AND deleted_at IS NULL")
+        .bind(userId, old.id, empresaId, existing.id));
+    }
+    if (routeStatements.length) await c.env.DB.batch(routeStatements);
+  }
+  if (hasPlanning) {
+    const first = await c.env.DB.prepare('SELECT pax, peso_passageiros, peso_bagagem, payload, unidade_peso FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id LIMIT 1')
+      .bind(empresaId, existing.id).first<{ pax: number | null; peso_passageiros: number | null; peso_bagagem: number | null; payload: number | null; unidade_peso: string | null }>();
+    const lb = (value: number | null) => value == null ? null : Number((value * (first?.unidade_peso === 'KG' ? 2.2046226218 : 1)).toFixed(3));
+    const cargoLb = first?.payload == null ? null : Number((first.payload * 2.2046226218).toFixed(3));
+    const planning = parseFlightPlanningInput({
+      pax_planejado: payload.pax_planejado !== undefined ? payload.pax_planejado : first?.pax,
+      peso_passageiros: payload.peso_passageiros !== undefined ? payload.peso_passageiros : lb(first?.peso_passageiros ?? null),
+      peso_bagagem: payload.peso_bagagem !== undefined ? payload.peso_bagagem : lb(first?.peso_bagagem ?? null),
+      peso_carga: payload.peso_carga !== undefined ? payload.peso_carga : cargoLb,
+      unidade_peso_planejado: 'LB',
+    });
+    await updateFlightStagePlanningIfSupported(c.env.DB, empresaId, existing.id, merged.aeronave_id ?? null, planning);
+  }
 
   await maybeRecordSystemAudit(c, 'cv_voos', 'UPDATE', id, existing, input);
   const updated = await getFlightOrThrow(c.env.DB, id, empresaId);
@@ -1389,20 +1308,16 @@ controleVoos.post('/voos/:id/status', auth(), requireControleVoosWrite(), async 
   const descricao = normalizeString(payload.descricao, 'descricao');
 
   assertStatusTransition(existing.status, status);
-  if (status === 'cancelado' && !motivoId) {
+  if (status === 'cancelado' && !motivoId && (!descricao || descricao.trim().length < 10)) {
     throw new ApiError(
       'Motivo operacional obrigatorio para cancelamento',
       400,
       'CONTROLE_VOOS_CANCEL_REASON_REQUIRED',
     );
   }
-  await assertCatalogItem(
-    c.env.DB,
-    'cv_motivos_operacionais',
-    motivoId,
-    empresaId,
-    'motivo_id',
-    status === 'cancelado' ? 'cancelamento' : undefined,
+  if (motivoId) await assertCatalogItem(
+    c.env.DB, 'cv_motivos_operacionais', motivoId, empresaId,
+    'motivo_id', status === 'cancelado' ? 'cancelamento' : undefined,
   );
 
   const [updateResult] = await c.env.DB.batch([

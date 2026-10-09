@@ -200,7 +200,9 @@ function showActiveFlightUpdateAlert(revision) {
   activeFlightUpdateAvailable = revision || {};
   if (flightUpdateMessage) {
     flightUpdateMessage.textContent =
-      'A Coordenação alterou este voo depois da preparação offline. Atualize para receber novas etapas, tripulação ou outros dados antes de concluir o lançamento.';
+      (revision?.planejamento_status === 'confirmado'
+        ? 'A Coordenação confirmou o planejamento deste voo. Atualize para receber os dados consolidados antes da partida.'
+        : 'A Coordenação alterou este voo depois da preparação offline. Atualize para receber a nova rota, os MTAs, outros documentos ou dados de voo antes de concluir o lançamento.');
   }
   flightUpdateAlert?.classList.remove('hidden');
   if (refreshFlightUpdateButton) refreshFlightUpdateButton.disabled = !navigator.onLine;
@@ -839,8 +841,16 @@ async function authenticatedBlob(path, options = {}) {
   return response.blob();
 }
 
+const FLIGHT_DOCUMENT_GROUPS = [
+  { type: 'WEATHER_REPORT', label: 'Weather Report' },
+  { type: 'PLANO_VOO', label: 'Planejamento de voo' },
+  { type: 'MTA_EMBARQUE', label: 'MTA de embarque' },
+  { type: 'MTA_DESEMBARQUE', label: 'MTA de desembarque' },
+  { type: 'OUTROS', label: 'Outros documentos' },
+];
+
 function flightDocumentLabel(type) {
-  return type === 'WEATHER_REPORT' ? 'Weather Report' : 'Planejamento de voo atualizado';
+  return FLIGHT_DOCUMENT_GROUPS.find((group) => group.type === type)?.label || 'Documento do voo';
 }
 
 function currentFlightDocuments(packageData) {
@@ -848,10 +858,13 @@ function currentFlightDocuments(packageData) {
     ? packageData.workspace.planning.documentos
     : [];
   const sorted = [...documents].sort((left, right) => Number(right?.id || 0) - Number(left?.id || 0));
-  return ['WEATHER_REPORT', 'PLANO_VOO'].flatMap((type) => {
-    const current = sorted.find((document) => String(document?.type || '').toUpperCase() === type);
-    return current ? [current] : [];
-  });
+  return [
+    ...FLIGHT_DOCUMENT_GROUPS.filter(({ type }) => type !== 'OUTROS').flatMap(({ type }) => {
+      const current = sorted.find((document) => String(document?.type || '').toUpperCase() === type);
+      return current ? [current] : [];
+    }),
+    ...sorted.filter((document) => String(document?.type || '').toUpperCase() === 'OUTROS'),
+  ];
 }
 
 function flightDocumentCacheKey(flightId, documentEventId) {
@@ -964,27 +977,29 @@ function changedFlightDocumentLabels(previousPackage, nextPackage) {
   const next = currentFlightDocuments(nextPackage);
   return next
     .filter((document) => {
-      const prior = previous.find((candidate) => candidate.type === document.type);
-      if (!prior) return true;
-      return (
-        Number(prior.id) !== Number(document.id) ||
-        String(prior.content_hash || '') !== String(document.content_hash || '')
-      );
+      // OUTROS can contain multiple independent files; never compare by type alone.
+      const prior = document.type === 'OUTROS'
+        ? previous.find((candidate) => Number(candidate.id) === Number(document.id))
+        : previous.find((candidate) => candidate.type === document.type);
+      return !prior || Number(prior.id) !== Number(document.id) ||
+        String(prior.content_hash || '') !== String(document.content_hash || '');
     })
-    .map((document) => flightDocumentLabel(document.type));
+    .map((document) => document.type === 'OUTROS'
+      ? 'Outros documentos: ' + String(document.file_name || 'arquivo')
+      : flightDocumentLabel(document.type));
 }
 
 function offlineDocumentPreparationSummary(states) {
-  const byType = new Map(states.map((state) => [String(state.type), state]));
-  return ['WEATHER_REPORT', 'PLANO_VOO']
-    .map((type) => {
-      const state = byType.get(type);
-      if (!state) return flightDocumentLabel(type) + ': ainda não recebido pela Coordenação';
-      return state.available_offline
-        ? flightDocumentLabel(type) + ': disponível offline'
-        : flightDocumentLabel(type) + ': não pôde ser salvo offline';
-    })
-    .join(' · ');
+  const byType = new Map(states.filter((state) => state.type !== 'OUTROS').map((state) => [String(state.type), state]));
+  const groups = FLIGHT_DOCUMENT_GROUPS.filter(({ type }) => type !== 'OUTROS').map(({ type }) => {
+    const state = byType.get(type);
+    if (!state) return flightDocumentLabel(type) + ': ainda não recebido pela Coordenação';
+    return flightDocumentLabel(type) + (state.available_offline ? ': disponível offline' : ': falha no download');
+  });
+  for (const state of states.filter((item) => item.type === 'OUTROS')) {
+    groups.push('Outros: ' + state.file_name + (state.available_offline ? ' — offline' : ' — falha no download'));
+  }
+  return groups.join(' · ');
 }
 
 function openFlightDocumentBlob(blob) {
@@ -1255,7 +1270,7 @@ async function notifyFlightUpdate(voo) {
   try {
     const registration = await navigator.serviceWorker?.ready;
     await registration?.showNotification?.('AirTrust — voo atualizado', {
-      body: flightListTitle(voo) + ' recebeu uma alteração da Coordenação. Abra o Pilot App e atualize o voo.',
+      body: flightListTitle(voo) + (voo?.planejamento_status === 'confirmado' ? ' teve o planejamento confirmado.' : ' recebeu uma alteração da Coordenação.') + ' Abra o Pilot App e atualize o voo.',
       tag: 'airtrust-flight-' + String(voo.id),
     });
   } catch {}
@@ -1444,6 +1459,13 @@ async function prepareFlightPackage(flightId, options = {}) {
       existing,
       options,
     );
+    // Never mark a freshly prepared version successful when any advertised file
+    // failed verification/download. Preserve the previously prepared flight.
+    const missingDocument = offlineDocuments.find((entry) => !entry.available_offline);
+    if (missingDocument) {
+      throw new Error('Falha ao baixar ' + (missingDocument.label || 'documento do voo') +
+        '. O voo anteriormente salvo foi preservado. Conecte-se e tente “Atualizar voo agora” novamente.');
+    }
     const nextRevision = Number(existing?.localRevision || 0) + 1;
     const preparedAt = new Date().toISOString();
 
@@ -2482,11 +2504,10 @@ function validatePlanningJustifications(packageData, stageDrafts, justifications
   const assignedMinutes = totalJustificationMinutes(rows);
   if (assignedMinutes !== requiredMinutes) {
     errors.push(
-      'As justificativas devem somar exatamente ' +
-        String(requiredMinutes) +
-        ' minuto(s) de diferença; informado: ' +
-        String(assignedMinutes) +
-        '.',
+      'O tempo total realizado (' + String(realizedTotalMinutes(stageDrafts)) +
+        ' min) excedeu o tempo total programado (' + String(plannedFlightMinutes(packageData)) +
+        ' min). Justifique os ' + String(requiredMinutes) +
+        ' minutos de diferença. Justificativas informadas: ' + String(assignedMinutes) + ' min.',
     );
   }
   return errors;
@@ -4529,7 +4550,7 @@ function renderStageFields() {
     ['Passageiros', 'pax', 'number', 'numeric', false, false, 'Quantidade de passageiros'],
     ['Peso dos passageiros', 'peso_passageiros', 'number', 'decimal', false, false, null],
     ['Peso da bagagem', 'peso_bagagem', 'number', 'decimal', false, false, null],
-    ['Carga', 'payload', 'number', 'decimal', false, false, null],
+    ['Peso da carga', 'payload', 'number', 'decimal', false, false, null],
     ['Peso total', 'peso_total', 'number', 'decimal', true, false, 'Calculado automaticamente'],
     [
       index === 0 ? 'Combustível inicial' : 'Combustível inicial',
@@ -4547,7 +4568,7 @@ function renderStageFields() {
   const dualWeightLabels = {
     peso_passageiros: 'Peso dos passageiros',
     peso_bagagem: 'Peso da bagagem',
-    payload: 'Carga',
+    payload: 'Peso da carga',
     peso_total: 'Peso total da aeronave',
   };
 
