@@ -1495,6 +1495,46 @@ async function captureRequiredInteractionStructure(frame) {
       }
     }
 
+    const targetLabels = ['Autorização','Tripulação','Aeronave','Ambiente'];
+    const bodyText = clean(document.body?.innerText || '');
+    const textFlags = Object.fromEntries(
+      targetLabels.map((label) => [label, bodyText.toLocaleLowerCase('pt-BR').includes(label.toLocaleLowerCase('pt-BR'))]),
+    );
+    const textAnchors = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const value = clean(node.nodeValue);
+      if (!value) continue;
+      const matched = targetLabels.find((label) =>
+        value.toLocaleLowerCase('pt-BR').includes(label.toLocaleLowerCase('pt-BR'))
+      );
+      if (!matched) continue;
+      const chain = [];
+      let el = node.parentElement;
+      for (let depth = 0; el && depth < 7; depth += 1, el = el.parentElement) {
+        chain.push(describe(el));
+      }
+      textAnchors.push({ label: matched, text_sample: value.slice(0,220), chain });
+      if (textAnchors.length >= 20) break;
+    }
+
+    const visualSurfaces = Array.from(document.querySelectorAll(
+      'img,svg,canvas,picture,object,embed,iframe,[usemap],map,area'
+    )).slice(0,80).map((el) => {
+      const item = describe(el);
+      const raw = el.getAttribute?.('src') || el.getAttribute?.('href') || el.getAttribute?.('data') || '';
+      let assetPath = null;
+      try { assetPath = raw ? new URL(raw, location.href).pathname.slice(0,260) : null; } catch {}
+      return {
+        ...item,
+        asset_path: assetPath,
+        alt: String(el.getAttribute?.('alt') || '').slice(0,180) || null,
+        usemap: String(el.getAttribute?.('usemap') || '').slice(0,120) || null,
+        map_name: String(el.getAttribute?.('name') || '').slice(0,120) || null,
+        onclick_attribute: el.hasAttribute?.('onclick') || false,
+      };
+    });
+
     const br=badge?.getBoundingClientRect();
     return {
       current:Number(match[1]), total:Number(match[2]),
@@ -1502,6 +1542,9 @@ async function captureRequiredInteractionStructure(frame) {
       badge: br ? {tag:badge.tagName.toLowerCase(),class_name:String(badge.className||'').slice(0,180),top:Math.round(br.top),bottom:Math.round(br.bottom),left:Math.round(br.left),width:Math.round(br.width),height:Math.round(br.height)} : null,
       candidates: rows,
       hit_tests: hitTests.slice(0,40),
+      target_text_present: textFlags,
+      text_anchors: textAnchors,
+      visual_surfaces: visualSurfaces,
     };
   }).catch(() => null);
 }

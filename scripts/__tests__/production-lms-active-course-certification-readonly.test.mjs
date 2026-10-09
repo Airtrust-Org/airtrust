@@ -152,6 +152,11 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /elementsFromPoint/);
   assert.match(source, /hit_tests/);
   assert.match(source, /pointer_events/);
+  assert.match(source, /target_text_present/);
+  assert.match(source, /text_anchors/);
+  assert.match(source, /visual_surfaces/);
+  assert.match(source, /createTreeWalker/);
+  assert.match(source, /NodeFilter\.SHOW_TEXT/);
   assert.match(source, /captureDriverState/);
   assert.match(source, /driver_state/);
   assert.match(source, /location: currentLocation/);
