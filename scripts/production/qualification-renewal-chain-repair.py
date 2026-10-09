@@ -4,6 +4,9 @@ import sys,json,hashlib,collections,datetime,argparse,subprocess,tempfile,os,imp
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 WORKER=ROOT/"worker-airtrust"
+# Importing the controlled evidence helper must not dirty the guarded checkout.
+# Keep the subsequent git status --porcelain check strict (including untracked files).
+sys.dont_write_bytecode = True
 SPEC=importlib.util.spec_from_file_location("qualified_evidence",ROOT/"scripts/production/reconcile-qualification-evidence-20261004.py")
 EVID=importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(EVID)

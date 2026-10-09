@@ -35,6 +35,23 @@ def plan(rows):
  return repair.sql_for(safe,keyed,'a'*64)[0]
 
 class RepairSqlTest(unittest.TestCase):
+ def test_executor_import_does_not_create_untracked_bytecode(self):
+  # The production apply rejects any untracked file in its Git checkout.
+  import os,shutil,subprocess,sys,tempfile
+  with tempfile.TemporaryDirectory() as tmp:
+   directory=Path(tmp)/'scripts'/'production'
+   directory.mkdir(parents=True)
+   for name in ('qualification-renewal-chain-repair.py','reconcile-qualification-evidence-20261004.py'):
+    shutil.copyfile(ROOT/'scripts'/'production'/name,directory/name)
+   env=os.environ.copy()
+   env.pop('PYTHONDONTWRITEBYTECODE',None)
+   code=("import runpy,sys;"
+         "runpy.run_path('scripts/production/qualification-renewal-chain-repair.py',"
+         "run_name='test_import');"
+         "assert sys.dont_write_bytecode")
+   subprocess.run([sys.executable,'-c',code],cwd=tmp,env=env,check=True,capture_output=True)
+   self.assertFalse((directory/'__pycache__').exists())
+
  def test_atomic_repair_and_audit(self):
   rows=[entry(11,'2023-05-10'),entry(12,'2026-08-10')]
   db=setup(rows)
