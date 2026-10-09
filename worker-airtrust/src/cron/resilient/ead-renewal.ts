@@ -22,7 +22,7 @@ export const LMS_RENOVACAO_EAD_JANELA_DIAS = 30;
 export const EAD_RENEWAL_DISCOVERY_BATCH = 100;
 export const EAD_RENEWAL_PROCESS_BATCH = 50;
 
-interface RenewalRow {
+export interface RenewalRow {
   qualificacao_historico_id: number;
   funcionario_id: number;
   empresa_id: number;
@@ -236,6 +236,12 @@ async function ensureRenewalMatricula(
     if (!existing) throw error;
     return ensureExistingRenewalMatricula(db, existing, payload.empresa_id);
   }
+}
+
+// O handler legado (fallback sem schema de cron resiliente) usa exatamente
+// o mesmo contrato de matrícula/ciclo, inclusive ao encontrar CONCLUIDO.
+export async function ensureEadRenewalMatriculaForRow(db: D1Database, row: RenewalRow) {
+  return ensureRenewalMatricula(db, { ...row, discovered_at: new Date().toISOString() });
 }
 
 // Renovação EAD cria/reabre a matrícula, mas não envia alerta próprio.
