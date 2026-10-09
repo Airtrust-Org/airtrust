@@ -184,7 +184,18 @@ export async function getFlightPresentationMap(
           ORDER BY voo_id ASC, numero_etapa ASC, id ASC`,
       )
       .bind(empresaId, ...ids)
-      .all<StageRow>(),
+      .all<StageRow>()
+      .catch(async (error: unknown) => {
+        // Legacy installations may not yet have every planning-weight column.
+        // Keep route/dashboard reads available without hiding other SQL faults.
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/no such column:\s*(peso_passageiros|peso_bagagem|payload|unidade_peso)/i.test(message)) throw error;
+        return db.prepare(`SELECT voo_id, numero_etapa, origem_icao, destino_icao
+          FROM cv_voo_etapas
+          WHERE empresa_id = ? AND deleted_at IS NULL AND voo_id IN (${placeholders})
+          ORDER BY voo_id ASC, numero_etapa ASC, id ASC`)
+          .bind(empresaId, ...ids).all<StageRow>();
+      }),
     db
       .prepare(
         `SELECT voo_id, tipo_evento, metadata_json

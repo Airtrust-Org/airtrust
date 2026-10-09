@@ -60,7 +60,8 @@ describe('controle de voos — planejamento de peso', () => {
     const legacyError = new Error('D1_ERROR: no such column: peso_vazio');
     const first = vi.fn().mockRejectedValue(legacyError);
     const run = vi.fn().mockResolvedValue({ meta: { changes: 1 } });
-    const bind = vi.fn((..._args: unknown[]) => ({ first, run }));
+    const all = vi.fn().mockResolvedValue({ results: [] });
+    const bind = vi.fn((..._args: unknown[]) => ({ first, run, all }));
     const prepare = vi.fn((_sql: string) => ({ bind }));
     const db = { prepare } as unknown as D1Database;
 
