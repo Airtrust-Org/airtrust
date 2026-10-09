@@ -45,7 +45,6 @@ import {
   lmsKeys,
   type LmsCurso,
   type LmsMatricula,
-  type MatriculaStatus,
   type TipoConteudo,
   useLmsCurso,
   useCreateCurso,
