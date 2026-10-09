@@ -75,13 +75,10 @@ export default function ControleVoosStatusActions({ voo, onChanged }: Props) {
     try {
       const response = await apiClient.get<unknown>('/controle-voos/catalogos/motivos');
       const rows = extract<Motivo[]>(response) || [];
-      setMotivos(
-        rows.filter(
-          (row) =>
-            (row.ativo === undefined || row.ativo === null || Boolean(row.ativo)) &&
-            String(row.tipo || '').trim().toLocaleLowerCase('pt-BR') === 'cancelamento',
-        ),
-      );
+      setMotivos(rows.filter(row =>
+        (row.ativo === undefined || row.ativo === null || Boolean(row.ativo)) &&
+        ['cancelamento', 'cancelar', 'cancel'].includes(String(row.tipo || '').trim().toLocaleLowerCase('pt-BR')),
+      ));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível carregar os motivos de cancelamento.');
     } finally {
@@ -134,7 +131,7 @@ export default function ControleVoosStatusActions({ voo, onChanged }: Props) {
               disabled={loadingMotivos}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
             >
-              <option value="">{loadingMotivos ? 'Carregando…' : 'Selecione'}</option>
+              <option value="">{loadingMotivos ? 'Carregando…' : motivos.length === 0 ? 'Sem motivo catalogado — descreva abaixo' : 'Selecione'}</option>
               {motivos.map((motivo) => (
                 <option key={motivo.id} value={motivo.id}>{motivo.nome}</option>
               ))}
@@ -144,6 +141,7 @@ export default function ControleVoosStatusActions({ voo, onChanged }: Props) {
             Observação
             <textarea
               rows={2}
+              placeholder="Descreva o motivo do cancelamento (obrigatório se não houver motivo catalogado)"
               value={cancelReason}
               onChange={(event) => setCancelReason(event.target.value)}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
@@ -160,8 +158,8 @@ export default function ControleVoosStatusActions({ voo, onChanged }: Props) {
             </button>
             <button
               type="button"
-              onClick={() => void changeStatus('cancelado', { motivo_id: Number(motivoId) })}
-              disabled={!motivoId || saving !== null}
+              onClick={() => void changeStatus('cancelado', motivoId ? { motivo_id: Number(motivoId) } : {})}
+              disabled={(!motivoId && cancelReason.trim().length < 10) || saving !== null}
               className="flex-1 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving === 'cancelado' ? 'Cancelando…' : 'Confirmar cancelamento'}

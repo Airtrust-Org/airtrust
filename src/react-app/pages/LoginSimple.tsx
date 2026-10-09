@@ -68,7 +68,7 @@ const DEV_PROFILES = [
   },
 ];
 
-type SessionRole = 'ADMINISTRADOR' | 'GESTOR' | 'INSTRUTOR' | 'ALUNO' | 'USUARIO';
+type SessionRole = 'ADMINISTRADOR' | 'GESTOR' | 'COORDENACAO_VOO' | 'INSTRUTOR' | 'ALUNO' | 'USUARIO';
 
 type SessionProfilesResponse = {
   success: boolean;
@@ -92,6 +92,7 @@ type SelectProfileResponse = {
 const PROFILE_LABELS: Record<SessionRole, string> = {
   ADMINISTRADOR: 'Administrador Geral',
   GESTOR: 'Administrador da Empresa',
+  COORDENACAO_VOO: 'Coordenação de Voo',
   INSTRUTOR: 'Instrutor',
   ALUNO: 'Aluno',
   USUARIO: 'Usuário',
@@ -100,6 +101,7 @@ const PROFILE_LABELS: Record<SessionRole, string> = {
 const PROFILE_DESCRIPTIONS: Record<SessionRole, string> = {
   ADMINISTRADOR: 'Administração completa da empresa e do sistema.',
   GESTOR: 'Administração operacional da empresa nos módulos e setores autorizados.',
+  COORDENACAO_VOO: 'Programação, acompanhamento, revisão e aprovação de voos da sua empresa.',
   INSTRUTOR: 'Atuação como instrutor, com acesso às ferramentas de instrução.',
   ALUNO: 'Acesso aos treinamentos e atividades atribuídas a você.',
   USUARIO: 'Acesso operacional padrão do seu usuário.',
@@ -151,7 +153,12 @@ export default function LoginPage() {
         setProfileOptions(roles);
         return;
       }
-
+      // An exclusively scoped coordinator has a safe legacy USER/ALUNO fallback.
+      // Select the explicit role to receive the actual authorized operations token.
+      if (roles.length === 1 && roles[0] === 'COORDENACAO_VOO') {
+        await handleProfileSelect(roles[0]);
+        return;
+      }
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : t('auth.login.error'));

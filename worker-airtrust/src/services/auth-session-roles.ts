@@ -27,12 +27,13 @@ export function parseSessionRoleFromCookieHeader(
   }
 }
 
-export type SessionRole = 'ADMINISTRADOR' | 'GESTOR' | 'INSTRUTOR' | 'ALUNO' | 'USUARIO';
+export type SessionRole = 'ADMINISTRADOR' | 'GESTOR' | 'COORDENACAO_VOO' | 'INSTRUTOR' | 'ALUNO' | 'USUARIO';
 
-const ROLE_ORDER: SessionRole[] = ['ADMINISTRADOR', 'GESTOR', 'INSTRUTOR', 'ALUNO', 'USUARIO'];
+const ROLE_ORDER: SessionRole[] = ['ADMINISTRADOR', 'GESTOR', 'COORDENACAO_VOO', 'INSTRUTOR', 'ALUNO', 'USUARIO'];
 
 export function normalizeSessionRole(value: unknown): SessionRole {
   const normalized = normalizeAirtrustRole(value);
+  if (normalized === 'COORDENACAO_VOO') return 'COORDENACAO_VOO';
   if (normalized === 'COMPLIANCE') return 'GESTOR';
   if (normalized === 'EDITOR') return 'USUARIO';
   if (normalized === 'ADMIN' || normalized === 'ADMINISTRADOR') return 'ADMINISTRADOR';

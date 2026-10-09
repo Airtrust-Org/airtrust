@@ -72,6 +72,7 @@ import {
   summarizeScormTextPayload,
 } from '../services/lms-matricula-runtime-domain';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
+import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -721,12 +722,12 @@ app.get('/:id', async (c) => {
                 },
         })
       : null;
-
+  const editionMismatch = await detectLmsEditionMismatch({
+    bucket: c.env.BUCKET, contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo, activePrefix: matricula.scorm_package_r2_prefix, empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data });
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: matricula.status as string | null,
     progressoBruto: matricula.progresso_pct as number | null,
   });
-
   return c.json({
     success: true,
     data: {
@@ -737,7 +738,7 @@ app.get('/:id', async (c) => {
       completion_reason_code: effectiveProgress.completion_reason_code,
       scorm_progresso: progressoScorm,
       xapi_summary: xapiSummary,
-      completion_diagnostic: completionDiagnostic,
+      completion_diagnostic: completionDiagnostic, edition_mismatch: editionMismatch,
     },
   });
 });
