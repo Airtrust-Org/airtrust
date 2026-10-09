@@ -11,7 +11,7 @@ const PRIMARY_ADMIN_EMAIL_ALLOWLIST = new Set(
 );
 
 const PRIMARY_ADMIN_ROLES = new Set(['ADMIN', 'ADMINISTRADOR']);
-const OPERATIONAL_DASHBOARD_ROLES = new Set(['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER']);
+const OPERATIONAL_DASHBOARD_ROLES = new Set(['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'COORDENACAO_VOO']);
 
 function normalizeEmail(email: string | null | undefined): string {
   return String(email || '')

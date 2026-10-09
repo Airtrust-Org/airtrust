@@ -58,7 +58,7 @@ const MODULOS_VALIDOS = [
 ] as const;
 
 const ACOES_VALIDAS = ['visualizar', 'editar', 'criar', 'deletar'] as const;
-const PERFIS_VALIDOS = ['GESTOR', 'INSTRUTOR', 'ALUNO'] as const;
+const PERFIS_VALIDOS = ['GESTOR', 'COORDENACAO_VOO', 'INSTRUTOR', 'ALUNO'] as const;
 
 type PermissaoRow = {
   perfil: string;

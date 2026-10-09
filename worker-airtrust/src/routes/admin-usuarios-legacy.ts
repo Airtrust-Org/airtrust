@@ -451,7 +451,7 @@ adminUsuariosRoutes.post('/', async (c) => {
   // Somente o Administrador Geral pode conceder um perfil administrativo.
   // Administradores da Empresa podem criar/gerenciar usuários operacionais,
   // mas não criar pares nem elevar alguém ao próprio nível.
-  if (perfil === 'ADMINISTRADOR' || perfil === 'ADMIN' || isManager) {
+  if (perfil === 'ADMINISTRADOR' || perfil === 'ADMIN' || isManager || perfil === 'COORDENACAO_VOO') {
     requireAdmin(callerRole, 'criar perfil administrativo');
   }
 
@@ -643,9 +643,11 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     existente.perfil.toUpperCase() === 'ADMINISTRADOR' ||
     existente.perfil.toUpperCase() === 'ADMIN' ||
     isManagerPerfil(existente.perfil) ||
+    existente.perfil.toUpperCase() === 'COORDENACAO_VOO' ||
     targetPerfil === 'ADMINISTRADOR' ||
     targetPerfil === 'ADMIN' ||
-    isManagerPerfil(targetPerfil);
+    isManagerPerfil(targetPerfil) ||
+    targetPerfil === 'COORDENACAO_VOO';
   if (targetPrivilegiado && callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
     throw forbidden('Apenas ADMINISTRADOR pode editar perfis administrativos', 'INSUFFICIENT_ROLE');
   }

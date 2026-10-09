@@ -99,6 +99,9 @@ export function normalizeTenantRole(role: unknown): TenantContext['role'] {
     case 'gestor':
     case 'compliance':
       return 'manager';
+    // Flight coordinators do not inherit tenant-wide edit privileges.
+    case 'coordenacao_voo':
+      return 'viewer';
     case 'editor':
       return 'editor';
     case 'instructor':

@@ -19,8 +19,8 @@ import { useControleVoosDate } from './hooks/useControleVoosDate';
 
 export default function ControleVoosVoos() {
   const qc = useQueryClient();
-  const { isAdmin, isGestor } = usePermissions();
-  const canCoordinate = isAdmin || isGestor;
+  const { can } = usePermissions();
+  const canCoordinate = can('controle_voos.edit');
   const [novoVooOpen, setNovoVooOpen] = useState(false);
   const [sharingTomorrow, setSharingTomorrow] = useState(false);
   const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
