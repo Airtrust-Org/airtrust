@@ -24,14 +24,22 @@ function uniqueCourses(values) {
   return [...byId.values()];
 }
 
-export function buildEnrollmentPlan(reconciliation) {
-  const gaps = Array.isArray(reconciliation?.gaps_matricula) ? reconciliation.gaps_matricula : [];
+export function buildEnrollmentPlan(reconciliation, { scope = 'ALL' } = {}) {
+  if (!['ALL', 'FDM_MNT_72'].includes(scope)) throw new Error('ENROLLMENT_SCOPE_INVALID');
+  const originalGaps = Array.isArray(reconciliation?.gaps_matricula) ? reconciliation.gaps_matricula : [];
+  const gaps = scope === 'FDM_MNT_72'
+    ? originalGaps.filter((gap) => String(gap?.qualificacao_tipo_codigo || '').trim().toUpperCase() === 'FDM-MECANICO')
+    : originalGaps;
   const plan = [];
   const unavailable = [];
   const ambiguous = [];
 
   for (const gap of gaps) {
-    const funcionarioIds = uniquePositiveInts((gap?.funcionarios || []).map((item) => item?.id));
+    const eligiblePeople = scope === 'FDM_MNT_72'
+      ? (gap?.funcionarios || []).filter((item) =>
+          ['NAO_REALIZADO', 'VENCIDO'].includes(String(item?.status_compliance || '').toUpperCase()))
+      : (gap?.funcionarios || []);
+    const funcionarioIds = uniquePositiveInts(eligiblePeople.map((item) => item?.id));
     if (funcionarioIds.length === 0) continue;
 
     const qualification = {
@@ -41,6 +49,9 @@ export function buildEnrollmentPlan(reconciliation) {
       pessoas: funcionarioIds.length,
     };
     const courses = uniqueCourses(gap?.cursos_ead);
+    if (scope === 'FDM_MNT_72' && courses.some((course) => course.id !== 72)) {
+      throw new Error('FDM72_COURSE_MAPPING_NOT_EXACT');
+    }
     if (courses.length === 0) {
       unavailable.push(qualification);
       continue;
@@ -103,6 +114,28 @@ async function login(fetchImpl, apiBaseUrl, email, password) {
   throw lastError || new Error('PRODUCTION_AUTH_FAILED');
 }
 
+// A scoped production write must be bound to Costa do Sol (tenant 6),
+// even when the admin credentials have access to multiple companies.
+async function selectFdmMaintenanceTenant(fetchImpl, apiBaseUrl, token) {
+  const companies = await authenticatedJson(fetchImpl, apiBaseUrl, token, '/api/auth/empresas');
+  if (!Array.isArray(companies?.data?.empresas) ||
+      !companies.data.empresas.some((item) => Number(item.id) === 6)) {
+    throw new Error('FDM72_TENANT_NOT_AUTHORIZED');
+  }
+  let selectedToken = token;
+  if (Number(companies.data.empresaAtualId) !== 6) {
+    const response = await authenticatedJson(fetchImpl, apiBaseUrl, token, '/api/auth/select-empresa', {
+      method: 'POST',
+      body: JSON.stringify({ empresaId: 6 }),
+    });
+    selectedToken = String(response?.data?.accessToken || '');
+    if (selectedToken.length < 20) throw new Error('FDM72_TENANT_SELECTION_FAILED');
+  }
+  const active = await authenticatedJson(fetchImpl, apiBaseUrl, selectedToken, '/api/empresas/minha');
+  if (Number(active?.data?.id) !== 6) throw new Error('FDM72_TENANT_MISMATCH');
+  return selectedToken;
+}
+
 async function authenticatedJson(fetchImpl, apiBaseUrl, token, path, options = {}) {
   const response = await fetchImpl(`${apiBaseUrl}${path}`, {
     ...options,
@@ -128,19 +161,26 @@ export async function executeSilentEnrollment({
   apiBaseUrl = DEFAULT_API_BASE_URL,
   email,
   password,
+  scope = 'ALL',
 } = {}) {
   if (!email || !password) throw new Error('PRODUCTION_SMOKE_CREDENTIALS_MISSING');
+  if (!['ALL', 'FDM_MNT_72'].includes(scope)) throw new Error('ENROLLMENT_SCOPE_INVALID');
   const normalizedApiBaseUrl = String(apiBaseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
-  const token = await login(fetchImpl, normalizedApiBaseUrl, email, password);
+  let token = await login(fetchImpl, normalizedApiBaseUrl, email, password);
+  if (scope === 'FDM_MNT_72') token = await selectFdmMaintenanceTenant(fetchImpl, normalizedApiBaseUrl, token);
   const beforeJson = await authenticatedJson(fetchImpl, normalizedApiBaseUrl, token, '/api/compliance-treinamentos/reconciliacao');
-  const before = buildEnrollmentPlan(beforeJson?.data);
+  const before = buildEnrollmentPlan(beforeJson?.data, { scope });
 
+  if (scope === 'FDM_MNT_72' && before.unavailable.length > 0) {
+    throw new Error('FDM72_PUBLISHED_COURSE_MAPPING_MISSING');
+  }
   if (before.ambiguous.length > 0) {
     const codes = before.ambiguous.map((item) => item.codigo || item.nome || item.id).join(',');
     throw new Error(`AMBIGUOUS_EAD_COURSE_MAPPING:${codes}`);
   }
 
   const summary = {
+    scope,
     groups_planned: before.plan.length,
     people_planned: before.plan.reduce((sum, item) => sum + item.funcionario_ids.length, 0),
     groups_without_ead: before.unavailable.length,
@@ -176,7 +216,7 @@ export async function executeSilentEnrollment({
   if (summary.errors > 0) throw new Error(`SILENT_ENROLLMENT_API_ERRORS:${summary.errors}`);
 
   const afterJson = await authenticatedJson(fetchImpl, normalizedApiBaseUrl, token, '/api/compliance-treinamentos/reconciliacao');
-  const after = buildEnrollmentPlan(afterJson?.data);
+  const after = buildEnrollmentPlan(afterJson?.data, { scope });
   if (after.ambiguous.length > 0) throw new Error('POSTCONDITION_AMBIGUOUS_MAPPING');
   if (after.plan.length > 0) {
     const codes = after.plan.map((item) => item.codigo || item.nome || item.id).join(',');
@@ -198,6 +238,7 @@ async function main() {
     apiBaseUrl: process.env.PROD_API_BASE_URL || DEFAULT_API_BASE_URL,
     email: process.env.E2E_EMAIL,
     password: process.env.E2E_PASSWORD,
+    scope: process.env.AIRTRUST_PRODUCTION_ENROLLMENT_SCOPE || 'ALL',
   });
   appendOutput(summary);
 }
