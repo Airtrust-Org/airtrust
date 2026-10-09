@@ -14,6 +14,20 @@ Todo treinamento novo deve ser produzido por **uma única engine versionada de a
 
 **A fábrica Aircraft Learning Factory ainda precisa adotar este contrato na sua própria fonte de geração.** Não afirmar que a padronização visual está implantada enquanto essa integração não existir.
 
+## Verificação automática do núcleo antes de cada ZIP
+
+O núcleo bloqueado recuperado em cópia histórica no Mac teve 18/18 hashes do manifesto corretos, mas o gerador ainda **não está comprovadamente sincronizado** com essa cópia. Para testar um ZIP já construído sem extrair nem publicar o conteúdo:
+
+```bash
+python3 scripts/learning-factory/verify_golden_core.py /caminho/curso.zip
+```
+
+O comando retorna exit 0 apenas quando `app.js`, `styles.css` e `scorm_api.js` são idênticos ao núcleo V2 e os manifests existem exatamente uma vez. Qualquer drift retorna exit 1 com erros legíveis em JSON. Sua própria lógica é testada no gate `build-content-gates` com cinco cenários.
+
+Em 09/10, os candidatos locais **MGO RC5** e **CFIT RC4** falharam nessa comparação; o verificador não declara defeito de conclusão, mas demonstra que seus engines não são idênticos ao Golden Master. **Não substituir um pacote ativo automaticamente apenas porque o hash não coincide**: primeiro reproduzir a versão, avaliar equivalência de estado, corrigir factory e validar nova edição governada.
+
+Esta ferramenta ainda é um gate de pré-publicação a ser ligado ao pipeline de autoria; ela não representa por si só upload bloqueado pelo Worker nem certificação funcional.
+
 ## Contrato visual imutável da engine
 
 - Design responsivo, sem impor slides rígidos 16:9: referência desktop 1468×836 com scroll vertical natural e mobile 390×844 sem overflow; não cortar controles, textos ou avaliações.
