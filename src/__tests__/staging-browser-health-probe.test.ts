@@ -45,7 +45,8 @@ describe('staging browser-origin health preflight', () => {
     const { page, params, assertFrontendSha } = setup([-1, 200], { aborted: true });
     await expect(probeRealStagingHealth(page, params)).resolves.toBe(200);
     expect(page.evaluate).toHaveBeenCalledTimes(2);
-    expect(page.waitForLoadState).toHaveBeenCalledOnce();
+    expect(page.waitForLoadState).toHaveBeenCalledTimes(2);
+    expect(page.waitForLoadState).toHaveBeenCalledWith('networkidle', { timeout: 15_000 });
     expect(assertFrontendSha).toHaveBeenCalledWith(page, '56f14db', 'login-preflight-retry');
     expect(page.off).toHaveBeenCalledOnce();
   });
@@ -54,7 +55,7 @@ describe('staging browser-origin health preflight', () => {
       const { page, params } = setup(values);
       await expect(probeRealStagingHealth(page, params)).resolves.toBe(values[0]);
       expect(page.evaluate).toHaveBeenCalledOnce();
-      expect(page.waitForLoadState).not.toHaveBeenCalled();
+      expect(page.waitForLoadState).toHaveBeenCalledOnce();
     }
   });
   it('does not retry a CORS, TLS or unrelated health request failure', async () => {
