@@ -57,6 +57,29 @@ describe('CFIT remediation — wrapper resume + autosave visual stability', () =
     expect(g.document.getElementById('status-bar')?.classList.contains('visible')).toBe(false);
   });
 
+  it('leaves a version-matched Factory/M8 native cursor intact despite a stale LMS high-water location', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      clone: () => ({ json: async () => ({ success: true, data: { progresso_pct: 76 } }) }),
+    }));
+    const native = JSON.stringify({
+      v: 3, p: 'MGO-REV15-RC7', a: 9, d: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+    });
+    const { frame } = startWithState({
+      'cmi.core.lesson_location': '35/46',
+      'cmi.core.lesson_status': 'incomplete',
+      'cmi.suspend_data': native,
+    }, 987);
+    frame.contentWindow!.document.body.innerHTML = '<div id="count">10/46</div>';
+    frame.contentWindow!.COURSE_DATA = {
+      packageVersion: 'MGO-REV15-RC7',
+      slides: Array.from({ length: 46 }, (_, i) => ({ id: `mgo_${i + 1}` })),
+    };
+    frame.dispatchEvent(new g.Event('load'));
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(frame.contentWindow!.location.hash).toBe('');
+  });
+
   it('continues legacy hash-based resume when there is no native package cursor', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true, status: 200,
