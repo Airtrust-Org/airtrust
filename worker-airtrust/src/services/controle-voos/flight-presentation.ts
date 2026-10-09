@@ -12,6 +12,10 @@ export type FlightPresentation = {
   rdv_status: string | null;
   rdv_workflow_status: string | null;
   rdv_enviado_em: string | null;
+  planejamento_status: 'previo' | 'confirmado';
+  peso_passageiros_planejado: number | null;
+  peso_bagagem_planejado: number | null;
+  peso_carga_planejado: number | null;
 };
 
 type StageRow = {
@@ -19,10 +23,15 @@ type StageRow = {
   numero_etapa: number;
   origem_icao: string | null;
   destino_icao: string | null;
+  peso_passageiros: number | null;
+  peso_bagagem: number | null;
+  payload: number | null;
+  unidade_peso: string | null;
 };
 
 type EventRow = {
   voo_id: number;
+  tipo_evento: string;
   metadata_json: string | null;
 };
 
@@ -47,6 +56,10 @@ const emptyPresentation = (): FlightPresentation => ({
   rdv_status: null,
   rdv_workflow_status: null,
   rdv_enviado_em: null,
+  planejamento_status: 'previo',
+  peso_passageiros_planejado: null,
+  peso_bagagem_planejado: null,
+  peso_carga_planejado: null,
 });
 
 function normalizeCode(value: unknown): string {
@@ -163,7 +176,7 @@ export async function getFlightPresentationMap(
   const [stageResult, eventResult, rdvResult] = await Promise.all([
     db
       .prepare(
-        `SELECT voo_id, numero_etapa, origem_icao, destino_icao
+        `SELECT voo_id, numero_etapa, origem_icao, destino_icao, peso_passageiros, peso_bagagem, payload, unidade_peso
            FROM cv_voo_etapas
           WHERE empresa_id = ?
             AND deleted_at IS NULL
@@ -174,7 +187,7 @@ export async function getFlightPresentationMap(
       .all<StageRow>(),
     db
       .prepare(
-        `SELECT voo_id, metadata_json
+        `SELECT voo_id, tipo_evento, metadata_json
            FROM cv_voo_eventos
           WHERE empresa_id = ?
             AND deleted_at IS NULL
@@ -204,9 +217,17 @@ export async function getFlightPresentationMap(
   }
 
   const eventRouteIds = new Map<number, number[]>();
+  const planningConfirmed = new Map<number, boolean>();
   for (const event of eventResult.results || []) {
     const routeIds = parseRoutePointIds(event.metadata_json);
     if (routeIds) eventRouteIds.set(Number(event.voo_id), routeIds);
+    try {
+      const metadata = JSON.parse(event.metadata_json || '{}') as { action?: string };
+      if (metadata.action === 'confirm_planning') planningConfirmed.set(Number(event.voo_id), true);
+      if (metadata.action === 'update_planning' || (event.tipo_evento === 'tripulacao' && planningConfirmed.get(Number(event.voo_id)))) {
+        planningConfirmed.set(Number(event.voo_id), false);
+      }
+    } catch { /* Ignore malformed historical event metadata. */ }
   }
 
   const allRouteIds = [...eventRouteIds.values()].flat();
@@ -219,6 +240,14 @@ export async function getFlightPresentationMap(
     const presentation = output.get(id) || emptyPresentation();
     const codes = buildRouteCodes(stagesByFlight.get(id) || []);
     presentation.rota_codigos = codes;
+    presentation.planejamento_status = planningConfirmed.get(id) ? 'confirmado' : 'previo';
+    const plannedStage = (stagesByFlight.get(id) || [])[0];
+    if (plannedStage) {
+      const toLb = (value: number | null) => value == null ? null : Number((value * (String(plannedStage.unidade_peso).toUpperCase() === 'KG' ? 2.2046226218 : 1)).toFixed(3));
+      presentation.peso_passageiros_planejado = toLb(plannedStage.peso_passageiros);
+      presentation.peso_bagagem_planejado = toLb(plannedStage.peso_bagagem);
+      presentation.peso_carga_planejado = plannedStage.payload == null ? null : Number((plannedStage.payload * 2.2046226218).toFixed(3));
+    }
 
     const exactIds = eventRouteIds.get(id) || [];
     const exactPoints = exactIds.map((pointId) => catalogById.get(pointId)).filter(Boolean) as CatalogRow[];

@@ -200,7 +200,9 @@ function showActiveFlightUpdateAlert(revision) {
   activeFlightUpdateAvailable = revision || {};
   if (flightUpdateMessage) {
     flightUpdateMessage.textContent =
-      'A Coordenação alterou este voo depois da preparação offline. Atualize para receber novas etapas, tripulação ou outros dados antes de concluir o lançamento.';
+      (revision?.planejamento_status === 'confirmado'
+        ? 'A Coordenação confirmou o planejamento deste voo. Atualize para receber os dados consolidados antes da partida.'
+        : 'A Coordenação alterou este voo depois da preparação offline. Atualize para receber novas etapas, tripulação ou outros dados antes de concluir o lançamento.');
   }
   flightUpdateAlert?.classList.remove('hidden');
   if (refreshFlightUpdateButton) refreshFlightUpdateButton.disabled = !navigator.onLine;
@@ -1255,7 +1257,7 @@ async function notifyFlightUpdate(voo) {
   try {
     const registration = await navigator.serviceWorker?.ready;
     await registration?.showNotification?.('AirTrust — voo atualizado', {
-      body: flightListTitle(voo) + ' recebeu uma alteração da Coordenação. Abra o Pilot App e atualize o voo.',
+      body: flightListTitle(voo) + (voo?.planejamento_status === 'confirmado' ? ' teve o planejamento confirmado.' : ' recebeu uma alteração da Coordenação.') + ' Abra o Pilot App e atualize o voo.',
       tag: 'airtrust-flight-' + String(voo.id),
     });
   } catch {}

@@ -383,6 +383,7 @@ pilotOffline.get(
         flight_version: flightVersion,
         rdv_version: rdvVersion,
         package_id: `pilot-offline:v1:voo:${voo.id}:v${flightVersion}:rdv:${rdvVersion}`,
+        planejamento_status: (await getFlightPresentationMap(c.env.DB, empresaId, [voo.id])).get(voo.id)?.planejamento_status || 'previo',
       },
     });
   },
@@ -722,6 +723,7 @@ pilotOffline.get(
           horario_real_partida: voo.horario_real_partida,
           horario_real_chegada: voo.horario_real_chegada,
           status: voo.status,
+          planejamento_status: routePresentationMap.get(voo.id)?.planejamento_status || 'previo',
           observacoes: voo.observacoes,
           alternado_destino_id: voo.alternado_destino_id,
           versao: voo.versao,
