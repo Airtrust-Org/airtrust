@@ -268,7 +268,7 @@ describe('LmsPlayer completion flow', () => {
     expect(screen.queryByText('Catálogo do aluno')).not.toBeInTheDocument();
   });
 
-  it('nunca conclui automaticamente um SCORM persistido antes da confirmação explícita', async () => {
+  it('registra automaticamente no AirTrust um SCORM aprovado sem segundo clique e uma única vez', async () => {
     (matriculaMock as typeof matriculaMock & { completion_diagnostic: Record<string, unknown> | null }).completion_diagnostic = {
       status: 'accepted', explicit_completion: true, reached_final_location: true,
       score_pct: 100, mastery_score: 70,
@@ -277,20 +277,16 @@ describe('LmsPlayer completion flow', () => {
     fetchWithAuthMock.mockImplementation(async (url: string) => (
       String(url).endsWith('/finalizar')
         ? { ok: true, json: async () => ({ success: true, data: { novo_status: 'CONCLUIDO' } }) }
-        : { ok: true }
+        : { ok: true, json: async () => ({ success: true, data: { diagnostics: null } }) }
     ));
     renderPlayer();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).endsWith('/finalizar'))).toBe(false);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Concluir curso' })[0]);
-    const dialog = await screen.findByRole('dialog', { name: 'Concluir curso' });
-    expect(dialog).toBeInTheDocument();
-    expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).endsWith('/finalizar'))).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar conclusão' }));
     await waitFor(() => {
-      expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).endsWith('/finalizar'))).toBe(true);
+      const posts = fetchWithAuthMock.mock.calls.filter(([url, init]) =>
+        String(url).endsWith('/finalizar') && (init as RequestInit | undefined)?.method === 'POST');
+      expect(posts).toHaveLength(1);
     });
     expect(await screen.findByText('Catálogo do aluno')).toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalled();
   });
 
   it('não anuncia sucesso quando o backend ainda registra a matrícula em andamento', async () => {
@@ -302,13 +298,13 @@ describe('LmsPlayer completion flow', () => {
     fetchWithAuthMock.mockImplementation(async (url: string) => (
       String(url).endsWith('/finalizar')
         ? { ok: true, json: async () => ({ success: true, data: { novo_status: 'CONCLUIDO' } }) }
-        : { ok: true }
+        : { ok: true, json: async () => ({ success: true, data: { diagnostics: null } }) }
     ));
     renderPlayer();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Concluir curso' })[0]);
-    await screen.findByRole('dialog', { name: 'Concluir curso' });
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar conclusão' }));
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
+    const posts = fetchWithAuthMock.mock.calls.filter(([url, init]) =>
+      String(url).endsWith('/finalizar') && (init as RequestInit | undefined)?.method === 'POST');
+    expect(posts).toHaveLength(1);
     expect(toastSuccessMock).not.toHaveBeenCalled();
     expect(screen.queryByText('Catálogo do aluno')).not.toBeInTheDocument();
   });
