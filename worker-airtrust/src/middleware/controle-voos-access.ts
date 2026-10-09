@@ -5,7 +5,7 @@ import { checkPermission } from './tenant';
 import type { Env } from '../types';
 
 export function isControleVoosCoordinationRole(c: Context<{ Bindings: Env }>): boolean {
-  return String(c.get('userRole') || '').trim().toUpperCase() === 'COORDENACAO_VOO';
+  return String((c.get as (key: string) => unknown)('userRole') || '').trim().toUpperCase() === 'COORDENACAO_VOO';
 }
 
 async function hasConfiguredAccess(

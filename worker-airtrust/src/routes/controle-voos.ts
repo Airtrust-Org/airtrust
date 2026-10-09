@@ -1355,7 +1355,7 @@ controleVoos.delete('/voos/:id', auth(), requireControleVoosWrite(), requireCont
       WHERE (SELECT changes()) > 0`).bind(empresaId, flight.id, flight.status, flight.status, 'Exclusão lógica: ' + reason, JSON.stringify({ action: 'soft_delete_preliminary_flight' }), userId, userId, userId),
   ]);
   assertFlightCasApplied(updated);
-  await maybeRecordSystemAudit(c, 'cv_voos', 'DELETE', id, flight, { deleted_at: 'soft-deleted', motivo: reason });
+  await maybeRecordSystemAudit(c, 'cv_voos', 'UPDATE', id, flight, { deleted_at: 'soft-deleted', motivo: reason });
   return c.json({ success: true, data: { id: flight.id, deleted: true } });
 });
 
