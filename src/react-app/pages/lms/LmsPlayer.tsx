@@ -176,7 +176,6 @@ export default function LmsPlayer() {
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [completed, setCompleted] = useState(false);
-  const reconciledEnrollmentRef = useRef<number | null>(null);
   const [qualificacaoGerada, setQualificacaoGerada] = useState(false);
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [liveProgress, setLiveProgress] = useState<number | null>(null);
@@ -348,7 +347,7 @@ export default function LmsPlayer() {
       ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
         granularDiagnostic.assessment.passed !== false)
       : Boolean(legacyFinalSlide && legacyAssessmentEvidence));
-  const canRequestCompletion = canFinalize || Boolean(canRequestScormCompletion);
+  const canRequestCompletion = canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm;
 
   useEffect(() => {
     if (canRequestScormCompletion && !completionDialogShownRef.current &&
@@ -667,58 +666,46 @@ export default function LmsPlayer() {
     refetchMatricula,
   ]);
 
-  // Server-verified SCORM pass can be persisted before the enrollment's
-  // qualification transaction succeeds. Repair only through the existing
-  // authenticated /finalizar endpoint, which revalidates the stored pass,
-  // certification mapping and atomic qualification. Never fabricate status.
-  useEffect(() => {
-    if (
-      !Number.isSafeInteger(id) || id <= 0 ||
-      !shouldReconcilePassedScorm ||
-      reconciledEnrollmentRef.current === id
-    ) return;
-    reconciledEnrollmentRef.current = id;
-    let cancelled = false;
-    void (async () => {
-      toast.loading('Aprovação recebida. Confirmando a conclusão no AirTrust...', {
-        id: completionToastIdRef.current,
-        duration: Infinity,
+  // A persisted SCORM pass only makes an explicit user confirmation eligible.
+  // Never reconcile from an effect, mount, autosave, or page reload.
+  async function reconcilePersistedScormCompletion() {
+    if (!shouldReconcilePassedScorm || !Number.isSafeInteger(id) || id <= 0 || isFinalizing) return;
+    setIsFinalizing(true);
+    showCompletionToast('saving', 'Confirmando a conclusão no AirTrust...');
+    try {
+      // Existing authenticated endpoint enforces SCORM/tenant/qualification gates.
+      const response = await fetchWithAuth(`/api/lms/matriculas/${id}/finalizar`, {
+        method: 'POST',
       });
-      try {
-        const response = await fetchWithAuth(`/api/lms/matriculas/${id}/finalizar`, {
-          method: 'POST',
-        });
-        const result = (await response.json()) as {
-          success?: boolean;
-          data?: { novo_status?: string };
-          code?: string;
-        };
-        if (!response.ok || result.success !== true || result.data?.novo_status !== 'CONCLUIDO') {
-          const code = sanitizeDiagnosticCode(result.code);
-          throw new Error(code
-            ? `O AirTrust ainda não confirmou a conclusão (código: ${code}).`
-            : 'O AirTrust ainda não conseguiu concluir esta matrícula.');
-        }
-        if (cancelled) return;
-        setCompleted(true);
-        void refetchMatricula();
-        toast.success('Curso concluído e registrado com sucesso.', {
-          id: completionToastIdRef.current,
-        });
-        navigate('/lms/cursos', { replace: true });
-      } catch (error) {
-        if (cancelled) return;
-        const message = error instanceof Error ? error.message : 'Falha na confirmação do curso.';
-        toast.error(message, { id: completionToastIdRef.current });
-        setCompletionState('error');
-        setCompletionMessage(message);
-        setCompletionErrorInfo({ code: 'SCORM_FINALIZATION_FAILED', reason: null, message });
+      const result = (await response.json()) as {
+        success?: boolean;
+        data?: { novo_status?: string };
+        code?: string;
+      };
+      if (!response.ok || result.success !== true || result.data?.novo_status !== 'CONCLUIDO') {
+        const code = sanitizeDiagnosticCode(result.code);
+        throw new Error(code
+          ? `O AirTrust ainda não confirmou a conclusão (código: ${code}).`
+          : 'O AirTrust ainda não conseguiu concluir esta matrícula.');
       }
-    })();
-    return () => { cancelled = true; };
-  }, [
-    shouldReconcilePassedScorm, id, navigate, refetchMatricula,
-  ]);
+      const { data: latest } = await refetchMatricula();
+      if (latest?.status !== 'CONCLUIDO') {
+        throw new Error('A matrícula ainda não consta como concluída no servidor.');
+      }
+      setCompleted(true);
+      void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
+      showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
+      navigate('/lms/cursos', { replace: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha na confirmação do curso.';
+      showCompletionToast('error', message);
+      setCompletionState('error');
+      setCompletionMessage(message);
+      setCompletionErrorInfo({ code: 'SCORM_FINALIZATION_FAILED', reason: null, message });
+    } finally {
+      setIsFinalizing(false);
+    }
+  }
 
   useEffect(() => {
     const verifyCanonicalAndReturn = () => {
@@ -1005,6 +992,10 @@ export default function LmsPlayer() {
     if (!canRequestCompletion || !matricula) return;
     setCompletionDialogOpen(false);
     if (isScormContent) {
+      if (shouldReconcilePassedScorm) {
+        void reconcilePersistedScormCompletion();
+        return;
+      }
       const frameWindow = iframeRef.current?.contentWindow;
       if (!frameWindow) {
         toast.error('Conteúdo indisponível. Reabra o curso antes de concluir.');
@@ -1309,7 +1300,7 @@ export default function LmsPlayer() {
               </div>
             ) : canRequestCompletion ? (
               <button
-                onClick={handleFinalizeAndGenerateQualification}
+                onClick={() => setCompletionDialogOpen(true)}
                 disabled={isFinalizing}
                 className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >

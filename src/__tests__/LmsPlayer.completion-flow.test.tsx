@@ -8,12 +8,14 @@ import LmsPlayer from '@/react-app/pages/lms/LmsPlayer';
 
 const {
   refetchMatriculaMock,
+  fetchWithAuthMock,
   toastLoadingMock,
   toastSuccessMock,
   toastErrorMock,
   toastDismissMock,
 } = vi.hoisted(() => ({
   refetchMatriculaMock: vi.fn(),
+  fetchWithAuthMock: vi.fn(),
   toastLoadingMock: vi.fn(),
   toastSuccessMock: vi.fn(),
   toastErrorMock: vi.fn(),
@@ -70,7 +72,7 @@ vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'http://localhost:8787/api',
   AUTH_TOKEN_CHANGED_EVENT: 'airtrust-auth-token-changed',
   ensureValidAccessToken: vi.fn(async () => 'token'),
-  fetchWithAuth: vi.fn(async () => ({ ok: true })),
+  fetchWithAuth: fetchWithAuthMock,
   getAccessToken: () => 'token',
 }));
 
@@ -124,6 +126,9 @@ async function dispatchPlayerMessage(data: Record<string, unknown>) {
 describe('LmsPlayer completion flow', () => {
   beforeEach(() => {
     matriculaMock.scorm_progresso.cmi_json = JSON.stringify({ 'cmi.location': '22/30' });
+    (matriculaMock as typeof matriculaMock & { completion_diagnostic: Record<string, unknown> | null }).completion_diagnostic = null;
+    fetchWithAuthMock.mockReset();
+    fetchWithAuthMock.mockResolvedValue({ ok: true });
     refetchMatriculaMock.mockReset();
     refetchMatriculaMock.mockResolvedValue(undefined);
     toastLoadingMock.mockReset();
@@ -259,6 +264,51 @@ describe('LmsPlayer completion flow', () => {
         { id: 'lms-scorm-completion-42', duration: Infinity },
       );
     });
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('Catálogo do aluno')).not.toBeInTheDocument();
+  });
+
+  it('nunca conclui automaticamente um SCORM persistido antes da confirmação explícita', async () => {
+    (matriculaMock as typeof matriculaMock & { completion_diagnostic: Record<string, unknown> | null }).completion_diagnostic = {
+      status: 'accepted', explicit_completion: true, reached_final_location: true,
+      score_pct: 100, mastery_score: 70,
+    };
+    refetchMatriculaMock.mockResolvedValue({ data: { ...matriculaMock, status: 'CONCLUIDO' } });
+    fetchWithAuthMock.mockImplementation(async (url: string) => (
+      String(url).endsWith('/finalizar')
+        ? { ok: true, json: async () => ({ success: true, data: { novo_status: 'CONCLUIDO' } }) }
+        : { ok: true }
+    ));
+    renderPlayer();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).endsWith('/finalizar'))).toBe(false);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Concluir curso' })[0]);
+    const dialog = await screen.findByRole('dialog', { name: 'Concluir curso' });
+    expect(dialog).toBeInTheDocument();
+    expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).endsWith('/finalizar'))).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar conclusão' }));
+    await waitFor(() => {
+      expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).endsWith('/finalizar'))).toBe(true);
+    });
+    expect(await screen.findByText('Catálogo do aluno')).toBeInTheDocument();
+  });
+
+  it('não anuncia sucesso quando o backend ainda registra a matrícula em andamento', async () => {
+    (matriculaMock as typeof matriculaMock & { completion_diagnostic: Record<string, unknown> | null }).completion_diagnostic = {
+      status: 'accepted', explicit_completion: true, reached_final_location: true,
+      score_pct: 100, mastery_score: 70,
+    };
+    refetchMatriculaMock.mockResolvedValue({ data: { ...matriculaMock, status: 'EM_ANDAMENTO' } });
+    fetchWithAuthMock.mockImplementation(async (url: string) => (
+      String(url).endsWith('/finalizar')
+        ? { ok: true, json: async () => ({ success: true, data: { novo_status: 'CONCLUIDO' } }) }
+        : { ok: true }
+    ));
+    renderPlayer();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Concluir curso' })[0]);
+    await screen.findByRole('dialog', { name: 'Concluir curso' });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar conclusão' }));
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
     expect(toastSuccessMock).not.toHaveBeenCalled();
     expect(screen.queryByText('Catálogo do aluno')).not.toBeInTheDocument();
   });
