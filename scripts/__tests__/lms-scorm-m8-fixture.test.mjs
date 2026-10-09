@@ -13,6 +13,7 @@ test('staging acceptance ZIP has an actual authored M8 assessment, not automatic
   assert.equal(deck.slides[0].questions[0].answer, 1);
   assert.ok(files['media/qa-visual.svg']);
   assert.match(read('app.js'), /LMSInitialize/);
+  assert.match(read('app.js'), /window\.parent && window\.parent\.API/);
   assert.match(read('app.js'), /LMSCommit/);
   assert.match(read('app.js'), /LMSFinish/);
   assert.match(read('app.js'), /addEventListener\('click'/);
