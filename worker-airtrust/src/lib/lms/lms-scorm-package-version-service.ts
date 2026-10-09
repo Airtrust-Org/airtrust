@@ -268,7 +268,7 @@ export async function runScormPackageConformance(params: {
   const storedResult = withScormUploadMetadata({ ...result, runtime }, originalFilename);
   await params.db.batch([
     params.db.prepare(`UPDATE lms_scorm_package_versions SET status = ?, validation_finished_at = datetime('now'), validation_result_json = ?, rejection_reasons_json = ? WHERE id = ? AND empresa_id = ? AND curso_id = ? AND package_sha256 = ?`).bind(status, JSON.stringify(storedResult), JSON.stringify(runtime.errors), candidate.id, params.empresaId, params.cursoId, candidate.package_sha256),
-    params.db.prepare(`INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`).bind(crypto.randomUUID(), params.empresaId, params.cursoId, candidate.id, runtime.status === 'PASS' ? 'VALIDATION_PASSED' : 'VALIDATION_FAILED', params.userId, runtime.errors.join('; ')),
+    params.db.prepare(`INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`).bind(crypto.randomUUID(), params.empresaId, params.cursoId, candidate.id, result.publishable ? 'VALIDATION_PASSED' : 'VALIDATION_FAILED', params.userId, runtime.errors.join('; ')),
   ]);
   return { ...result, runtime };
 }
