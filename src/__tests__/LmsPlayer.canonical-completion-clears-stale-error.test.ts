@@ -13,7 +13,7 @@ describe('LmsPlayer canonical completion precedence', () => {
 
     const canonicalBlock = source.slice(start, end);
     expect(canonicalBlock).toContain("matricula?.status === 'CONCLUIDO'");
-    expect(canonicalBlock).toContain("completionDiagnostic?.status === 'accepted'");
+    expect(canonicalBlock).not.toContain("completionDiagnostic?.status === 'accepted'");
     expect(canonicalBlock).toContain('toast.dismiss(completionToastIdRef.current)');
     expect(canonicalBlock).toContain("setCompletionState('idle')");
     expect(canonicalBlock).toContain('setCompletionMessage(null)');
