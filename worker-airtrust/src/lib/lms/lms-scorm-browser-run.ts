@@ -62,7 +62,16 @@ function analyzeTrace(candidateSha256: string, startedAt: string, trace: TraceIt
     initializeObserved: initialized, commitObserved: hasCommit, finishObserved: finished,
     completionReached: lessonStatus === 'completed' || lessonStatus === 'passed', lessonStatus,
     scoreRaw: values['cmi.core.score.raw'] ?? null, masteryScore: values['cmi.student_data.mastery_score'] ?? null,
-    lessonLocation: values['cmi.core.lesson_location'] ?? null, trace, errors, runnerVersion: RUNNER_VERSION,
+    lessonLocation: values['cmi.core.lesson_location'] ?? null,
+    // Runtime trace can include answers, individual responses or learner IDs
+    // embedded in suspend_data/interactions. Never persist the raw values in
+    // candidate validation_results_json or QA artifacts.
+    trace: trace.map((item) => ({
+      method: item.method,
+      ...(item.key === undefined ? {} : { key: String(item.key).slice(0, 120) }),
+      ...(item.value === undefined ? {} : { value: '[redacted]' }),
+    })),
+    errors, runnerVersion: RUNNER_VERSION,
   };
 }
 
