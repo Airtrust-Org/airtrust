@@ -90,6 +90,7 @@ function renderPlayer() {
       <MemoryRouter initialEntries={['/lms/player/scorm/42']}>
         <Routes>
           <Route path="/lms/player/scorm/:matriculaId" element={<LmsPlayer />} />
+          <Route path="/lms/cursos" element={<div>Catálogo do aluno</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -242,6 +243,24 @@ describe('LmsPlayer completion flow', () => {
       );
     });
     expect(alertSpy).not.toHaveBeenCalled();
+    expect(await screen.findByText('Catálogo do aluno')).toBeInTheDocument();
+  });
+
+  it('não sai nem anuncia aprovação quando a matrícula ainda está EM_ANDAMENTO', async () => {
+    refetchMatriculaMock.mockResolvedValue({ data: { ...matriculaMock, status: 'EM_ANDAMENTO' } });
+    renderPlayer();
+    await dispatchPlayerMessage({
+      type: 'lms:completed',
+      matriculaId: 42,
+    });
+    await waitFor(() => {
+      expect(toastLoadingMock).toHaveBeenCalledWith(
+        'Aprovação recebida. Aguardando confirmação da matrícula pelo AirTrust.',
+        { id: 'lms-scorm-completion-42', duration: Infinity },
+      );
+    });
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('Catálogo do aluno')).not.toBeInTheDocument();
   });
 
   it('invalida caches LMS ao desmontar o player', () => {
