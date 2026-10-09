@@ -299,11 +299,9 @@ function emitScormCommitTelemetry(
     };
   },
 ) {
-  const blocked =
-    params.decisions.blockedLocationRegression ||
-    params.decisions.blockedEmptySuspendData ||
-    params.decisions.blockedShorterSuspendData ||
-    params.decisions.blockedTerminalRegression;
+  const { blockedLocationRegression, blockedEmptySuspendData, blockedShorterSuspendData, blockedTerminalRegression } = params.decisions;
+  const blocked = blockedLocationRegression || blockedEmptySuspendData ||
+    blockedShorterSuspendData || blockedTerminalRegression;
 
   const event = blocked ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_COMMIT';
   const reason = [
@@ -312,9 +310,7 @@ function emitScormCommitTelemetry(
     params.decisions.blockedShorterSuspendData ? 'shorter-suspend-data' : null,
     params.decisions.blockedTerminalRegression ? 'terminal-status-regression' : null,
     !blocked && params.decisions.preservedLocationFromCurrent ? 'preserved-current-location' : null,
-  ]
-    .filter(Boolean)
-    .join(',');
+  ].filter(Boolean).join(',');
 
   createLogger(c, 'LmsMatriculas.scorm').info('lms_scorm_commit_telemetry', {
     matriculaId: params.matriculaId,
