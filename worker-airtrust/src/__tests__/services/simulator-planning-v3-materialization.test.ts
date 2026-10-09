@@ -69,8 +69,7 @@ describe('V3 simulator planning materialization', () => {
   });
 
   it('creates an explicit support-only crew member without training credit or ficha', async () => {
-    const solo = block('one', [101]);
-    solo.support = { employee_id: 20, employee_name: 'Crew 20', employee_role: 'COPILOTO' };
+    const solo = { ...block('one', [101]), support: { employee_id: 20, employee_name: 'Crew 20', employee_role: 'COPILOTO' } };
     const snap = snapshot([solo]);
     snap.base_needs = [{
       employee_id: 20, employee_name: 'Crew 20', employee_role: 'COPILOTO',
@@ -94,8 +93,7 @@ describe('V3 simulator planning materialization', () => {
   });
 
   it('rejects support not present in the validated proposal before session creation', async () => {
-    const solo = block('one', [101]);
-    solo.support = { employee_id: 999, employee_name: 'Out-of-scope', employee_role: 'COPILOTO' };
+    const solo = { ...block('one', [101]), support: { employee_id: 999, employee_name: 'Out-of-scope', employee_role: 'COPILOTO' } };
     const snap = snapshot([solo]);
     snap.base_needs = [{
       employee_id: 20, equipment: 'AW139', employee_name: 'Crew 20', need_id: 'peer',
