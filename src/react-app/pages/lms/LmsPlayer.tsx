@@ -661,6 +661,67 @@ export default function LmsPlayer() {
     refetchMatricula,
   ]);
 
+  // Server-verified SCORM pass can be persisted before the enrollment's
+  // qualification transaction succeeds. Repair only through the existing
+  // authenticated /finalizar endpoint, which revalidates the stored pass,
+  // certification mapping and atomic qualification. Never fabricate status.
+  useEffect(() => {
+    if (
+      !Number.isSafeInteger(id) || id <= 0 ||
+      !canReconcilePersistedScormCompletion({
+        reviewMode: effectiveReviewMode,
+        isScormContent,
+        matriculaStatus: matricula?.status,
+        diagnostic: completionDiagnostic,
+      }) ||
+      reconciledEnrollmentRef.current === id
+    ) return;
+    reconciledEnrollmentRef.current = id;
+    let cancelled = false;
+    void (async () => {
+      toast.loading('Aprovação recebida. Confirmando a conclusão no AirTrust...', {
+        id: completionToastIdRef.current,
+        duration: Infinity,
+      });
+      try {
+        const response = await fetchWithAuth(`/api/lms/matriculas/${id}/finalizar`, {
+          method: 'POST',
+        });
+        const result = (await response.json()) as {
+          success?: boolean;
+          data?: { novo_status?: string };
+          code?: string;
+        };
+        if (!response.ok || result.success !== true || result.data?.novo_status !== 'CONCLUIDO') {
+          const code = sanitizeDiagnosticCode(result.code);
+          throw new Error(code
+            ? `O AirTrust ainda não confirmou a conclusão (código: ${code}).`
+            : 'O AirTrust ainda não conseguiu concluir esta matrícula.');
+        }
+        if (cancelled) return;
+        setCompleted(true);
+        void refetchMatricula();
+        toast.success('Curso concluído e registrado com sucesso.', {
+          id: completionToastIdRef.current,
+        });
+        navigate('/lms/cursos', { replace: true });
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : 'Falha na confirmação do curso.';
+        toast.error(message, { id: completionToastIdRef.current });
+        setCompletionState('error');
+        setCompletionMessage(message);
+        setCompletionErrorInfo({ code: 'SCORM_FINALIZATION_FAILED', reason: null, message });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [
+    completionDiagnostic?.status, completionDiagnostic?.explicit_completion,
+    completionDiagnostic?.reached_final_location, completionDiagnostic?.score_pct,
+    completionDiagnostic?.mastery_score, effectiveReviewMode, id,
+    isScormContent, matricula?.status, navigate, refetchMatricula,
+  ]);
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== launchOrigin) return;
