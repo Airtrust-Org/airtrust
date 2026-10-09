@@ -145,7 +145,7 @@ describe('LmsPlayer completion flow', () => {
       'airtrust.viewed_slides': [30],
     });
     renderPlayer();
-    expect(screen.getByRole('button', { name: 'Concluir curso' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Registrar no AirTrust' })).toBeDisabled();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

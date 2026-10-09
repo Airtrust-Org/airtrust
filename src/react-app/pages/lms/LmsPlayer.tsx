@@ -1346,9 +1346,7 @@ export default function LmsPlayer() {
               >
                 {isFinalizing
                   ? 'Confirmando...'
-                  : matricula?.gerar_qualificacao_ao_concluir === 1
-                    ? 'Concluir curso'
-                    : 'Concluir curso'}
+                  : isScormContent ? 'Registrar no AirTrust' : 'Concluir curso'}
               </button>
             ) : null}
 
@@ -1403,9 +1401,7 @@ export default function LmsPlayer() {
               >
                 {isFinalizing
                   ? 'Confirmando...'
-                  : matricula?.gerar_qualificacao_ao_concluir === 1
-                    ? 'Concluir curso'
-                    : 'Concluir curso'}
+                  : isScormContent ? 'Registrar no AirTrust' : 'Concluir curso'}
               </button>
             ) : null}
           </div>
