@@ -349,7 +349,7 @@ export default function LmsPlayer() {
     (curso?.scorm_assessment_policy === 'SCORED' &&
       (matricula?.score_final != null || completionDiagnostic?.score_pct != null));
   const canRequestScormCompletion =
-    isScormContent && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
+    isScormContent && !newEditionRequired && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
     allSlidesVisited &&
     (granularDiagnostic
       ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
