@@ -56,3 +56,51 @@ test('chunkIds respects the LMS batch ceiling', () => {
   const chunks = chunkIds(ids, 200);
   assert.deepEqual(chunks.map((chunk) => chunk.length), [200, 200, 1]);
 });
+
+test('FDM Manutenção scope enrolls only expired or never-trained workers into course 72', () => {
+  const source = { gaps_matricula: [
+    { qualificacao_tipo_id: 12, qualificacao_tipo_codigo: 'FDM-MECANICO',
+      funcionarios: [
+        { id: 5, status_compliance: 'NAO_REALIZADO' },
+        { id: 6, status_compliance: 'VENCIDO' },
+        { id: 7, status_compliance: 'VENCENDO' },
+        { id: 8, status_compliance: 'CONFORME' },
+        { id: 9, status_compliance: 'EM_ANDAMENTO' },
+      ],
+      cursos_ead: [{ id: 72, titulo: 'FDM Manutenção' }] },
+    { qualificacao_tipo_id: 13, qualificacao_tipo_codigo: 'FDM-COMITE-GATEKEEPER',
+      funcionarios: [{ id: 10, status_compliance: 'NAO_REALIZADO' }],
+      cursos_ead: [{ id: 73 }] },
+    { qualificacao_tipo_id: 14, qualificacao_tipo_codigo: 'FDM-TRIPULACAO',
+      funcionarios: [{ id: 11, status_compliance: 'NAO_REALIZADO' }],
+      cursos_ead: [{ id: 71 }] },
+  ] };
+  const scoped = buildEnrollmentPlan(source, { scope: 'FDM_MNT_72' });
+  assert.equal(scoped.plan.length, 1);
+  assert.equal(scoped.plan[0].curso.id, 72);
+  assert.deepEqual(scoped.plan[0].funcionario_ids, [5, 6]);
+  assert.equal(scoped.unavailable.length, 0);
+  assert.equal(scoped.ambiguous.length, 0);
+});
+
+test('FDM scope fails closed when course 72 is mapped to a different ID', () => {
+  const gap = { qualificacao_tipo_codigo: 'FDM-MECANICO',
+    funcionarios: [{ id: 11, status_compliance: 'VENCIDO' }],
+    cursos_ead: [{ id: 74, titulo: 'Wrong LMS' }] };
+  assert.throws(() =>
+    buildEnrollmentPlan({ gaps_matricula: [gap] }, { scope: 'FDM_MNT_72' }),
+    /FDM72_COURSE_MAPPING_NOT_EXACT/);
+  const missing = buildEnrollmentPlan({ gaps_matricula: [{ ...gap, cursos_ead: [] }] },
+    { scope: 'FDM_MNT_72' });
+  assert.equal(missing.unavailable.length, 1);
+});
+
+test('FDM scope filters unchanged completed and renewal-approaching evidence', () => {
+  const result = buildEnrollmentPlan({ gaps_matricula: [{
+    qualificacao_tipo_codigo: 'FDM-MECANICO',
+    funcionarios: [{ id: 15, status_compliance: 'VENCENDO' }, { id: 16, status_compliance: 'CONFORME' }],
+    cursos_ead: [{ id: 72 }],
+  }] }, { scope: 'FDM_MNT_72' });
+  assert.equal(result.plan.length, 0);
+  assert.throws(() => buildEnrollmentPlan({}, { scope: 'UNSCOPED' }), /ENROLLMENT_SCOPE_INVALID/);
+});
