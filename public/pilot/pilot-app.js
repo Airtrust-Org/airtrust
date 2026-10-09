@@ -2504,11 +2504,10 @@ function validatePlanningJustifications(packageData, stageDrafts, justifications
   const assignedMinutes = totalJustificationMinutes(rows);
   if (assignedMinutes !== requiredMinutes) {
     errors.push(
-      'As justificativas devem somar exatamente ' +
-        String(requiredMinutes) +
-        ' minuto(s) de diferença; informado: ' +
-        String(assignedMinutes) +
-        '.',
+      'O tempo total realizado (' + String(realizedTotalMinutes(stageDrafts)) +
+        ' min) excedeu o tempo total programado (' + String(plannedFlightMinutes(packageData)) +
+        ' min). Justifique os ' + String(requiredMinutes) +
+        ' minutos de diferença. Justificativas informadas: ' + String(assignedMinutes) + ' min.',
     );
   }
   return errors;
