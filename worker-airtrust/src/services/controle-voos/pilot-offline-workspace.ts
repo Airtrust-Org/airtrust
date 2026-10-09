@@ -57,7 +57,7 @@ type FuelLike = {
 
 type FlightDocumentLike = {
   id: number;
-  type: 'WEATHER_REPORT' | 'PLANO_VOO';
+  type: 'WEATHER_REPORT' | 'PLANO_VOO' | 'MTA_EMBARQUE' | 'MTA_DESEMBARQUE' | 'OUTROS';
   label: string;
   file_name: string;
   content_type: string;
@@ -704,7 +704,7 @@ export async function buildPilotOfflineWorkspace(options: {
         ...flightDocuments.map((doc) => ({
           id: `flight-document:${doc.id}`,
           name: doc.label,
-          category: doc.type === 'WEATHER_REPORT' ? 'MET' : 'planejamento',
+          category: doc.type === 'WEATHER_REPORT' ? 'MET' : doc.type === 'PLANO_VOO' ? 'planejamento' : doc.type.startsWith('MTA_') ? 'MTA' : 'outros',
           source: 'COORDENACAO',
           updated_at: doc.created_at,
           available_offline: false,

@@ -19,8 +19,8 @@ import { useControleVoosDate } from './hooks/useControleVoosDate';
 
 export default function ControleVoosVoos() {
   const qc = useQueryClient();
-  const { isAdmin, isGestor } = usePermissions();
-  const canCoordinate = isAdmin || isGestor;
+  const { can } = usePermissions();
+  const canCoordinate = can('controle_voos.edit');
   const [novoVooOpen, setNovoVooOpen] = useState(false);
   const [sharingTomorrow, setSharingTomorrow] = useState(false);
   const { selectedDate, setSelectedDate, setToday } = useControleVoosDate();
@@ -140,7 +140,8 @@ export default function ControleVoosVoos() {
                             </td>
                             <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_previsto_partida)}</td>
                             <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">{formatTime(voo.horario_real_partida)}</td>
-                            <td className="px-4 py-3"><ControleVoosStatusBadge status={flightPresentationStatus(voo)} /></td>
+                            <td className="px-4 py-3"><ControleVoosStatusBadge status={flightPresentationStatus(voo)} />
+                              {voo.status === 'planejado' ? <span className="block mt-1 text-xs text-cyan-700">{voo.planejamento_status === 'confirmado' ? 'Planejamento confirmado' : 'Planejamento prévio'}</span> : null}</td>
                             <td className="px-4 py-3"><ControleVoosRdvWorkflowBadge status={voo.rdv_workflow_status} /></td>
                             <td className="px-4 py-3">
                               <Link
