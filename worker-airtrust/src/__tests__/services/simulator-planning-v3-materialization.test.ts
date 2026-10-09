@@ -68,6 +68,46 @@ describe('V3 simulator planning materialization', () => {
     expect(result).toMatchObject({ success: true, materialized_sessions: { b1: 601 } }); expect(executeSharedSessionCreation).toHaveBeenCalledTimes(1); expect(executeNormalSessionCreation).not.toHaveBeenCalled();
   });
 
+  it('creates an explicit support-only crew member without training credit or ficha', async () => {
+    const solo = block('one', [101]);
+    solo.support = { employee_id: 20, employee_name: 'Crew 20', employee_role: 'COPILOTO' };
+    const snap = snapshot([solo]);
+    snap.base_needs = [{
+      employee_id: 20, employee_name: 'Crew 20', employee_role: 'COPILOTO',
+      equipment: 'AW139', need_id: 'other-qualified-need',
+    }];
+    const result = await materializeSimulatorPlanningV3Draft({
+      db: db(), empresaId: 7, planningId: 9, snapshot: snap,
+      instructorId: 3, simulatorByEquipment: { AW139: 4 },
+    });
+    expect(result).toMatchObject({ success: true, created: 1, materialized_sessions: { one: 601 } });
+    expect(executeNormalSessionCreation).not.toHaveBeenCalled();
+    expect(executeSharedSessionCreation).toHaveBeenCalledTimes(1);
+    const payload = validateAndNormalizeSharedSessionRequest.mock.calls[0][0];
+    expect(payload.participantes).toEqual([
+      { funcionario_id: 1, cumpre_treinamento: true, gera_ficha: true, modelo_sessao_id: 101 },
+      { funcionario_id: 20, cumpre_treinamento: false, gera_ficha: false, modelo_sessao_id: null },
+    ]);
+    expect(payload.segmentos[0].participantes[1]).toMatchObject({
+      funcionario_id: 20, cumpre_treinamento: false, gera_ficha: false,
+    });
+  });
+
+  it('rejects support not present in the validated proposal before session creation', async () => {
+    const solo = block('one', [101]);
+    solo.support = { employee_id: 999, employee_name: 'Out-of-scope', employee_role: 'COPILOTO' };
+    const snap = snapshot([solo]);
+    snap.base_needs = [{
+      employee_id: 20, equipment: 'AW139', employee_name: 'Crew 20', need_id: 'peer',
+    }];
+    const result = await materializeSimulatorPlanningV3Draft({
+      db: db(), empresaId: 7, planningId: 9, snapshot: snap,
+      instructorId: 3, simulatorByEquipment: { AW139: 4 },
+    });
+    expect(result.error).toBe('PLANNING_HAS_UNSCHEDULED_BLOCKS');
+    expect(executeSharedSessionCreation).not.toHaveBeenCalled();
+  });
+
   it('reuses an existing session with a literal marker query instead of LIKE', async () => {
     const preparedSql: string[] = [];
     const boundValues: unknown[][] = [];
