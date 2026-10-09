@@ -404,6 +404,12 @@ describe('session-level simulator proposal', () => {
     expect(updated.support).toEqual({
       employee_id: 20, employee_name: 'Piloto 20', employee_role: 'Copiloto',
     });
+    // Support connects an operational 3+ cohort without becoming a second training need.
+    const peerBlock = pairSimulatorTrainingSessions([peer], 60)[0];
+    const cohorts = buildSimulatorTrainingClasses([updated, peerBlock]);
+    expect(cohorts).toHaveLength(1);
+    expect(cohorts[0].blocks).toHaveLength(2);
+
     expect(() => attachSimulatorSupportCrew({
       blocks,
       needs: [solo, peer],
