@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
+import { evaluateScormFunctionalCertification } from './lms-scorm-functional-certification-gate.mjs';
 import {
   assert,
   assertAllowedProductionBaseUrl,
@@ -1803,16 +1804,18 @@ async function certifyScormCourse(browser, token, listed) {
     ? await runPhase({ browser, token, course: { id }, manifest, phase: 'reopen-completed', initialValues: finalValues, maxDriveMs: 2_000 })
     : null;
 
-  const masteryPass = manifest.masteryScore == null || complete.score_raw == null || complete.score_raw >= manifest.masteryScore;
-  const noDowngrade = !reopen || reopen.completion_reached;
-  const pass = basePhasePass(suspend) && basePhasePass(complete) && complete.completion_reached && masteryPass && noDowngrade && (!reopen || basePhasePass(reopen));
+  // Protocol-only conformance is not evidence of actual completion.
+  // Explicit score/mastery and non-regression after reopen are required.
+  const functional = evaluateScormFunctionalCertification({
+    manifest, suspend, complete, reopen, phasePass: basePhasePass,
+  });
 
   return {
     course_id: id,
     titulo: String(listed.titulo || detail.titulo || ''),
     tipo_conteudo: 'scorm',
-    status: pass ? 'PASS' : 'FAIL',
-    reason: pass ? null : !complete.completion_reached ? 'COMPLETION_NOT_REACHED' : !noDowngrade ? 'STATUS_DOWNGRADE_AFTER_REOPEN' : !masteryPass ? 'MASTERY_SCORE_NOT_REACHED' : 'SCORM_LIFECYCLE_OR_ASSET_FAILURE',
+    status: functional.pass ? 'PASS' : 'FAIL',
+    reason: functional.reason,
     package_sha256: pkg?.sha256 ?? null,
     legacy_unversioned: legacyUnversioned,
     stored_gate: pkg ? {
