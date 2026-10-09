@@ -378,6 +378,46 @@ describe('simulator planning V2 manual crew replacement', () => {
     expect(unmatched.sessions[0].employee_name).toBe('Adriana');
   });
 
+  it('accepts an explicit support pilot without assigning a second qualification need', async () => {
+    const app = buildApp();
+    const other = { ...need(30, 'Castro'), need_id: '30:1:102',
+      session_model_id: 102, session_code: 'S2', session_name: 'Sessão 2', session_order: 2 };
+    const response = await app.request('/api/simuladores/planejamento-v2/reparear', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        reference_date: '2027-06-01',
+        session_needs: [need(10, 'Filipe'), other],
+        locks: [],
+        support_assignments: [{ anchor_need_id: '10:1:101', support_employee_id: 30 }],
+      }),
+    }, { DB: buildDb() } as unknown as Env);
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    const blocks = body.data.classes.flatMap((trainingClass: any) => trainingClass.blocks);
+    const supported = blocks.find((b: any) => b.support?.employee_id === 30);
+    expect(supported.pairing).toBe('APOIO_SEM_RENOVACAO');
+    expect(supported.sessions.map((n: any) => n.employee_id)).toEqual([10]);
+    expect(body.data.summary.session_requirements).toBe(2);
+    expect(body.data.summary.paired_blocks).toBe(1);
+  });
+
+  it('rejects an out-of-proposal support pilot before any scheduling', async () => {
+    const app = buildApp();
+    const response = await app.request('/api/simuladores/planejamento-v2/reparear', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        reference_date: '2027-06-01',
+        session_needs: [need(10, 'Filipe')],
+        locks: [],
+        support_assignments: [{ anchor_need_id: '10:1:101', support_employee_id: 999 }],
+      }),
+    }, { DB: buildDb() } as unknown as Env);
+    expect(response.status).toBe(400);
+    expect((await response.json() as any).error).toMatch(/apoio/i);
+  });
+
   it('rejects a manual pair whose fixed Escala 1/2 has no common FOLGA window', async () => {
     const app = buildApp();
     const response = await app.request(
