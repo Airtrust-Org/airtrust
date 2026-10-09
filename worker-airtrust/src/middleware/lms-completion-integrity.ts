@@ -125,7 +125,7 @@ async function readEnrollmentEvidence(
 ): Promise<EnrollmentEvidenceRow | null> {
   return db
     .prepare(
-      `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct,
+      `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.data_inicio,
               m.qualificacao_historico_id,
               c.id AS curso_id, c.tipo_conteudo, c.ativo, c.publicado,
               c.scorm_mastery_score, c.scorm_assessment_policy, c.scorm_package_r2_prefix, c.scorm_launch_file,
