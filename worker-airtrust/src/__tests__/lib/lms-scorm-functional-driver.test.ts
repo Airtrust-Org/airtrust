@@ -39,7 +39,7 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
       slides: [{ id: 'intro', kind: 'cover' }, { id: 'lesson', kind: 'lesson' }],
     };
     global.window.__AIRTRUST_PLAYER_TEST__ = {
-      getState: () => ({ active, completed, ended, mode: 'journey' }),
+      getState: () => ({ active, completed, ended, mode: 'journey', done: completed ? [0, 1] : active === 0 ? [] : [0] }),
     };
     const result = new Function('return ' + buildScormFunctionalDriverScript())();
     expect(result).toMatchObject({ supported: true, completed: true, steps: 2 });

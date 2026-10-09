@@ -10,6 +10,7 @@ function driveFactoryCourse() {
     mode?: string;
     completed?: boolean;
     ended?: boolean;
+    done?: number[];
     choices?: Record<string, number>;
     assess?: Record<string, { passed?: boolean }>;
   };
@@ -46,7 +47,13 @@ function driveFactoryCourse() {
   const limit = Math.min(3000, Math.max(120, slides.length * 5));
   for (let steps = 0; steps < limit; steps++) {
     const state = getState();
-    if (state?.completed && state.ended && steps >= slides.length) {
+    // A resumed course may require fewer clicks than its full slide count.
+    // Certify only when every authored slide index was completed in the
+    // package's own state, not because a short tail reached LMSFinish.
+    if (state?.completed && state.ended && steps > 0 &&
+        Array.isArray(state.done) && state.done.length === slides.length &&
+        new Set(state.done).size === slides.length &&
+        state.done.every((n) => Number.isInteger(n) && n >= 0 && n < slides.length)) {
       return { supported: true, completed: true, steps, reason: null };
     }
     if (!state || !Number.isInteger(state.active) || state.active < 0 ||
