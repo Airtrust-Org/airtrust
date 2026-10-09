@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { JSDOM } from 'jsdom';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
@@ -171,6 +172,37 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.doesNotMatch(source, /\/api\/lms\/matriculas\/scorm\/commit/);
   assert.doesNotMatch(source, /method:\s*['"](?:PUT|DELETE|PATCH)['"]/);
   assert.doesNotMatch(source, /wrangler\s+(?:deploy|d1|r2)/i);
+});
+
+test('SCORM root menu-collapsed class does not hide mandatory course cards from the certifier', () => {
+  const source = read(SCRIPT);
+  const rootExemption = '[class*="menu" i]:not(.app-shell)';
+  assert.equal(source.split(rootExemption).length - 1, 5);
+  assert.doesNotMatch(source, /\[class\*="menu" i\],\[id\*="menu" i\]/);
+  // A collapsed (or open) sidebar is not permission to ignore the whole app shell.
+  // The actual sidebar and its menu must still be classified as product chrome.
+  const markup = `
+    <div id="app" class="app-shell menu-collapsed">
+      <aside class="sidebar"><nav id="menu" class="menu"><button class="menu-item">Slide 21</button></nav></aside>
+      <main><div class="cards">
+        <div class="card"><h3>Autorização</h3><ul><li>EO</li><li>Rota</li></ul></div>
+        <div class="card"><h3>Tripulação</h3><ul><li>Recência</li><li>Qualificação</li></ul></div>
+        <div class="card"><h3>Aeronave</h3><ul><li>Configuração</li><li>Documentos</li></ul></div>
+        <div class="card"><h3>Ambiente</h3><ul><li>Meteorologia</li><li>Riscos</li></ul></div>
+      </div></main>
+    </div>`;
+  const document = new JSDOM(markup).window.document;
+  const selector = 'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],' +
+    rootExemption + ',[id*="menu" i],[class*="toc" i],[id*="toc" i]';
+  assert.equal(document.querySelectorAll('main .card').length, 4);
+  for (const card of document.querySelectorAll('main .card')) {
+    assert.equal(card.closest(selector), null, 'mandatory learner card must remain eligible');
+  }
+  assert.ok(document.querySelector('#menu .menu-item').closest(selector), 'navigation menu must stay excluded');
+  document.querySelector('#app').className = 'app-shell menu-open';
+  for (const card of document.querySelectorAll('main .card')) {
+    assert.equal(card.closest(selector), null, 'open menu state must not hide the course cards');
+  }
 });
 
 test('production certification workflow is governed, online-triggerable, SHA-pinned, secret-scoped and evidence-preserving', () => {
