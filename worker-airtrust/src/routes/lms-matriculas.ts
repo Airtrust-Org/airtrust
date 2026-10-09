@@ -17,13 +17,11 @@ import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lm
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import {
   ensureMatriculaCycle,
-  hasActiveMatriculaCycle,
   resetMatriculaForNewCycle,
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
 import {
   buildMatriculaCompletionDiagnostic,
-  buildScormCompletionDiagnostic,
   extractScormLocationFromCmiJson,
   mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
@@ -49,14 +47,11 @@ import {
   buildAppliedScormState,
   buildProgressRecoveryReference,
   buildProgressRecoverySnapshot,
-  buildRecoveryDryRunDifferences,
   evaluateProgressRecovery,
   extractLessonLocationValue,
-  normalizeStatusToken,
   safeJsonParseObject,
   summarizeProgressRecoverySnapshot,
   type ProgressRecoveryEnrollment,
-  type ProgressRecoveryEvaluation,
   type ProgressRecoveryStateSnapshot,
 } from '../services/lms-progress-recovery-domain';
 import {
