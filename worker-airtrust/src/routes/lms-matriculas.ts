@@ -722,25 +722,12 @@ app.get('/:id', async (c) => {
                 },
         })
       : null;
-
-  // Read-only, server-verified edition evidence. An old 41/41 runtime may
-  // belong to a published 37-slide package; it must not unlock completion.
-  const editionMismatch = tipoConteudo === 'scorm' && matricula.status !== 'CONCLUIDO'
-    ? await detectLmsEditionMismatch({
-        bucket: c.env.BUCKET,
-        contentType: tipoConteudo,
-        activePrefix: matricula.scorm_package_r2_prefix,
-        empresaId,
-        cursoId: Number(matricula.curso_id),
-        cmiJson: progressoScorm?.cmi_json,
-      })
-    : null;
-
+  const editionMismatch = await detectLmsEditionMismatch({
+    bucket: c.env.BUCKET, contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo, activePrefix: matricula.scorm_package_r2_prefix, empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json });
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: matricula.status as string | null,
     progressoBruto: matricula.progresso_pct as number | null,
   });
-
   return c.json({
     success: true,
     data: {
@@ -751,8 +738,7 @@ app.get('/:id', async (c) => {
       completion_reason_code: effectiveProgress.completion_reason_code,
       scorm_progresso: progressoScorm,
       xapi_summary: xapiSummary,
-      completion_diagnostic: completionDiagnostic,
-      edition_mismatch: editionMismatch,
+      completion_diagnostic: completionDiagnostic, edition_mismatch: editionMismatch,
     },
   });
 });
