@@ -5,6 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
 import { evaluateScormFunctionalCertification } from './lms-scorm-functional-certification-gate.mjs';
+import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
 import {
   assert,
   assertAllowedProductionBaseUrl,
@@ -210,70 +211,6 @@ window.API_1484_11={
 })();</script>`;
 }
 
-function extractAnswerPlan(model) {
-  const answers = [];
-  const seen = new Set();
-  function visit(value, path = '') {
-    if (!value || typeof value !== 'object') return;
-    if (seen.has(value)) return;
-    seen.add(value);
-    if (Array.isArray(value)) {
-      value.forEach((item, index) => visit(item, `${path}[${index}]`));
-      return;
-    }
-    const obj = value;
-    let options = null;
-    for (const key of ['options', 'alternatives', 'choices', 'answers', 'alternativas', 'opcoes', 'respostas']) {
-      if (Array.isArray(obj[key]) && obj[key].length) {
-        options = obj[key];
-        break;
-      }
-    }
-    if (options?.length) {
-      let indices = [];
-      for (const key of ['correctIndex', 'answerIndex', 'correctOptionIndex', 'correctAnswerIndex']) {
-        if (Number.isInteger(obj[key])) indices = [Number(obj[key])];
-      }
-      for (const key of ['correctAnswer', 'answer', 'correctOption', 'correct', 'correctLetter', 'rightAnswer', 'respostaCorreta', 'gabarito']) {
-        const raw = obj[key];
-        if (typeof raw === 'number' && Number.isInteger(raw)) indices = [raw];
-        if (Array.isArray(raw) && raw.every((item) => Number.isInteger(item))) indices = raw.map(Number);
-        if (typeof raw === 'string') {
-          const normalized = raw.trim();
-          const idx = options.findIndex((option) =>
-            String(option?.value ?? option?.text ?? option?.label ?? option).trim() === normalized
-          );
-          if (idx >= 0) indices = [idx];
-          else if (/^[A-Z]$/i.test(normalized)) {
-            const letter = normalized.toUpperCase().charCodeAt(0) - 65;
-            if (letter >= 0 && letter < options.length) indices = [letter];
-          }
-        }
-      }
-      const marked = options
-        .map((option, i) => (
-          option && typeof option === 'object' &&
-          (option.correct === true || option.isCorrect === true || option.correctAnswer === true)
-            ? i
-            : -1
-        ))
-        .filter((i) => i >= 0);
-      if (marked.length) indices = marked;
-      const unique = [...new Set(indices)].filter((i) => i >= 0 && i < options.length);
-      if (unique.length) {
-        const slideMatch = path.match(/(?:^|\.)slides\[(\d+)\]/);
-        answers.push({
-          path,
-          slideIndex: slideMatch ? Number(slideMatch[1]) + 1 : null,
-          indices: unique,
-        });
-      }
-    }
-    for (const [key, child] of Object.entries(obj)) visit(child, path ? `${path}.${key}` : key);
-  }
-  visit(model);
-  return answers;
-}
 
 async function requestAssetSession(context, token, courseId) {
   const r = await context.request.post(`${API}/api/lms/assets/session`, {
@@ -1612,8 +1549,17 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   await frame.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => undefined);
   await page.waitForTimeout(350);
 
-  const model = await frame.evaluate(() => window.AIRTRUST_COURSE_MODEL ?? null).catch(() => null);
-  const answerPlan = extractAnswerPlan(model);
+  // The M8 authoring model intentionally omits question answers. The actual
+  // certifying questions live in COURSE_DATA, so a model-only probe attempts
+  // arbitrary options and reports false completion failures. Read the exact
+  // loaded runtime package in this isolated read-only browser, not a generic
+  // synthetic gabarito. This plans clicks; it never mutates LMS enrollment.
+  const loaded = await frame.evaluate(() => ({
+    model: window.AIRTRUST_COURSE_MODEL ?? null,
+    runtime: window.COURSE_DATA ?? null,
+  })).catch(() => ({ model: null, runtime: null }));
+  const model = loaded.model;
+  const answerPlan = extractAnswerPlan(loaded.runtime ?? model);
   const modelMeta = model && typeof model === 'object'
     ? {
         schema: typeof model.schema === 'string' ? model.schema : null,

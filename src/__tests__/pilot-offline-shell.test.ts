@@ -246,7 +246,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotVault).toContain('async listJson(storeName)');
   });
 
-  it('copia documentos vigentes para o vault cifrado sem bloquear o voo quando faltam ou falham', () => {
+  it('copia todos os documentos para vault cifrado e bloqueia confirmação de nova versão se falhar download', () => {
     expect(pilotVault).toContain("payload_type: 'bytes-v1'");
     expect(pilotVault).toContain('async putBytes(storeName, id, bytes, localRevision)');
     expect(pilotVault).toContain('async getBytes(storeName, id)');
@@ -255,7 +255,12 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("await vault.getBytes('attachments', cacheKey)");
     expect(pilotApp).toContain("await sha256Hex(persisted.bytes)");
     expect(pilotApp).toContain("cache_error: 'CACHE_FAILED'");
-    expect(pilotApp).toContain('A ausência de documentos não bloqueia o voo.');
+    expect(pilotApp).toContain('const missingDocument = offlineDocuments.find((entry) => !entry.available_offline)');
+    expect(pilotApp).toContain('O voo anteriormente salvo foi preservado.');
+    expect(pilotApp).toContain('MTA_EMBARQUE');
+    expect(pilotApp).toContain('MTA_DESEMBARQUE');
+    expect(pilotApp).toContain('OUTROS');
+    expect(pilotApp).toContain("...sorted.filter((document) => String(document?.type || '').toUpperCase() === 'OUTROS')");
     expect(pilotWorkspace).toContain('Ainda não recebido pela Coordenação.');
     expect(pilotWorkspace).toContain('Não bloqueia o voo');
     expect(pilotWorkspace).toContain('Disponível offline neste tablet');
@@ -263,11 +268,12 @@ describe('Pilot Offline shell', () => {
 
   it('da à Coordenação uma preparação para saída simples com anexos substituíveis e histórico', () => {
     expect(controleVoosVooDetalhe).toContain('Preparação para saída');
-    expect(controleVoosVooDetalhe).toContain('a ausência deles nunca bloqueia o voo');
-    expect(controleVoosVooDetalhe).toContain('Planejamento de voo atualizado');
+    expect(controleVoosVooDetalhe).toContain('MTAs — embarque e desembarque');
+    expect(controleVoosVooDetalhe).toContain('Outros documentos');
+    expect(controleVoosVooDetalhe).toContain('Planejamento de voo');
     expect(controleVoosVooDetalhe).toContain("current ? 'Substituir' : 'Anexar'");
     expect(controleVoosVooDetalhe).toContain('Histórico de documentos');
-    expect(controleVoosVooDetalhe).toContain('os pilotos verão o aviso para atualizar o pacote offline');
+    expect(controleVoosVooDetalhe).toContain('A tripulação receberá aviso para atualizar o pacote offline.');
   });
 
   it('so confirma consulta offline depois do write cifrado e do read-back', () => {
@@ -569,7 +575,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('function createDualWeightField');
     expect(pilotApp).toContain("peso_passageiros: 'Peso dos passageiros'");
     expect(pilotApp).toContain("peso_bagagem: 'Peso da bagagem'");
-    expect(pilotApp).toContain("payload: 'Carga'");
+    expect(pilotApp).toContain("payload: 'Peso da carga'");
     expect(pilotApp).toContain("peso_total: 'Peso total da aeronave'");
     expect(pilotApp).toContain("formatWeightPair(rdv?.carga_kg, 'KG')");
     expect(pilotApp).not.toContain("label: 'Unidade da carga'");
