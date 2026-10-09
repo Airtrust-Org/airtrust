@@ -20,6 +20,11 @@ on:
         required: true
         type: boolean
         default: false
+      gatekeeper_legacy_transfer:
+        description: Require source Gatekeeper course 14 completed, new FDM 73, exactly two, without email
+        required: false
+        type: boolean
+        default: false
       confirmation:
         description: Type AIRTRUST_PRODUCTION_TARGETED_LMS_REMATRICULATION
         required: true
@@ -51,6 +56,7 @@ jobs:
       AIRTRUST_TARGET_EMPLOYEE_QUERIES: ${{ inputs.targets_json }}
       AIRTRUST_COURSE_QUERY: ${{ inputs.course_query }}
       AIRTRUST_SEND_EMAIL: ${{ inputs.send_email }}
+      AIRTRUST_GATEKEEPER_LEGACY_TRANSFER: ${{ inputs.gatekeeper_legacy_transfer }}
       AIRTRUST_PRODUCTION_REMATRICULATION_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
       - name: Validate immutable dispatch

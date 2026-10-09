@@ -560,6 +560,55 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0538-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight Maintenance Doutrinação bootstrap 0539
+        if: ${{ inputs.change_id == 'training-doutrinacao-bootstrap-0539' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0539-production-preflight.sh --target=airtrust-db
+
+      - name: Preflight Maintenance manual identities bootstrap 0540
+        if: ${{ inputs.change_id == 'training-maintenance-manuals-bootstrap-0540' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0540-production-preflight.sh --target=airtrust-db
+
+      - name: Preflight operational category prerequisite 0541
+        if: ${{ inputs.change_id == 'training-operational-category-bootstrap-0541' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0541-production-preflight.sh --target=airtrust-db
+
+      - name: Preflight SCORM formative policy 0542
+        if: ${{ inputs.change_id == 'lms-scorm-formative-assessment-0542' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0542-production-preflight.sh --target=airtrust-db
+
+      - name: Preflight FDM course 71/72 qualification bindings 0543
+        if: ${{ inputs.change_id == 'fdm-target-qualification-links-0543' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0543-production-preflight.sh --target=airtrust-db
+
+      - name: Preflight AVSEC corporate historical reclassification 0544
+        if: ${{ inputs.change_id == 'avsec-corporativo-historico-0544' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_WORKER_SHA: ${{ github.sha }}
+        run: bash scripts/schema-v2/validate-0544-production-preflight.sh --target=airtrust-db
+
       - name: Backup governance ledger
         shell: bash
         working-directory: worker-airtrust
@@ -635,6 +684,22 @@ jobs:
             "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='${CHANGE_ID}' AND baseline_id='${BASELINE_ID}' AND file_hash='${FILE_HASH}' AND plan_hash='${PLAN_HASH}' AND github_sha='${EVENT_SHA}';")"
           total="$(printf '%s' "$rows" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d)[0].results[0].total));")"
           [[ "$total" == '1' ]] || { echo 'Schema changed without the exact reviewed ledger row.' >&2; exit 1; }
+
+      - name: Post-validate FDM course 71/72 qualification bindings 0543
+        if: ${{ inputs.change_id == 'fdm-target-qualification-links-0543' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0543-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate AVSEC corporate historical reclassification 0544
+        if: ${{ inputs.change_id == 'avsec-corporativo-historico-0544' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0544-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate schema contract
         shell: bash
@@ -1045,6 +1110,38 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0538-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate Maintenance Doutrinação bootstrap 0539
+        if: ${{ inputs.change_id == 'training-doutrinacao-bootstrap-0539' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0539-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate Maintenance manual identities bootstrap 0540
+        if: ${{ inputs.change_id == 'training-maintenance-manuals-bootstrap-0540' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0540-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate operational category prerequisite 0541
+        if: ${{ inputs.change_id == 'training-operational-category-bootstrap-0541' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0541-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate SCORM formative policy 0542
+        if: ${{ inputs.change_id == 'lms-scorm-formative-assessment-0542' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0542-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate EAD reconciliation ledger 0453
         if: ${{ inputs.change_id == 'ead-category-reconciliation-executor-0453' }}

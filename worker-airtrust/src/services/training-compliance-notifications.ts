@@ -32,6 +32,33 @@ export type ComplianceNotificationPolicy = {
 const LEGACY_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE =
   'GERÊNCIA DE TREINAMENTO | COSTA DO SOL\n\nOlá, {{funcionario}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\nTreinamento: {{treinamento}}\nVencimento: {{data_vencimento}}\nStatus: {{status}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação e é acompanhado pela Gerência de Treinamento, inclusive para fins de auditoria.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.{{link_bloco}}\n\nMensagem automática da Gerência de Treinamento da Costa do Sol.';
 
+const PREVIOUS_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE = 'GERÊNCIA DE TREINAMENTO | COSTA DO SOL\n\nOlá, {{funcionario}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\n\nTreinamento: {{treinamento}}\nVencimento: {{data_vencimento}}\nStatus: {{status}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação e é acompanhado pela Gerência de Treinamento, inclusive para fins de auditoria.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.{{link_bloco}}\n\nEsta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.';
+const PREVIOUS_COMPLIANCE_EMPLOYEE_EMAIL_SUBJECT = 'Treinamento obrigatório: {{treinamento}} — {{status}}';
+const PREVIOUS_LONG_COMPLIANCE_EMPLOYEE_EMAIL_SUBJECT = 'Ação necessária | Capacitação obrigatória {{assunto_situacao}} – {{treinamento}}';
+const PREVIOUS_LONG_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE = [
+    'GERÊNCIA DE TREINAMENTO | COSTA DO SOL',
+    '',
+    'Olá, {{funcionario}}!',
+    '',
+    '{{introducao}}',
+    '',
+    'Curso: {{treinamento}}',
+    '{{situacao_bloco}}',
+    '',
+    'Esta capacitação é um requisito para o exercício de suas atividades e integra o programa de qualificação e segurança operacional da Costa do Sol, sendo também objeto de verificação em auditorias internas e externas.',
+    '',
+    '{{orientacao}}',
+    '',
+    '{{link_bloco}}',
+    '',
+    'Agradecemos sua colaboração e seu compromisso com a segurança operacional.',
+    '',
+    'Gerência de Treinamento',
+    'Costa do Sol',
+    '',
+    'Esta é uma comunicação automática. Não é necessário responder a este e-mail.',
+  ].join('\n');
+
 export const DEFAULT_COMPLIANCE_NOTIFICATION_POLICY: ComplianceNotificationPolicy = {
   enabled: false,
   email: true,
@@ -40,9 +67,24 @@ export const DEFAULT_COMPLIANCE_NOTIFICATION_POLICY: ComplianceNotificationPolic
   never_done_every_days: 7,
   notify_manager_on_overdue: true,
   manager_overdue_thresholds: [0, -7, -15, -30],
-  email_subject_template: 'Treinamento obrigatório: {{treinamento}} — {{status}}',
-  email_message_template:
-    'GERÊNCIA DE TREINAMENTO | COSTA DO SOL\n\nOlá, {{funcionario}}!\n\nVocê possui um treinamento obrigatório que requer sua atenção:\n\nTreinamento: {{treinamento}}\nVencimento: {{data_vencimento}}\nStatus: {{status}}\n\nEste treinamento faz parte dos requisitos obrigatórios de treinamento e conformidade da operação e é acompanhado pela Gerência de Treinamento, inclusive para fins de auditoria.\n\nPor favor, realize-o o quanto antes para manter sua situação regularizada.{{link_bloco}}\n\nEsta é uma mensagem automática da Gerência de Treinamento da Costa do Sol.',
+  email_subject_template: 'Treinamento obrigatório {{assunto_situacao}} — {{treinamento}}',
+  email_message_template: [
+    'Olá, {{funcionario}}!',
+    '',
+    '{{introducao}}',
+    '',
+    'Curso: {{treinamento}}',
+    '{{situacao_bloco}}',
+    '',
+    '{{link_bloco}}',
+    '',
+    '{{orientacao}}',
+    '',
+    'Importante: Este treinamento é obrigatório para sua função e seu cumprimento é verificado em auditorias.',
+    '',
+    'Gerência de Treinamento',
+    'Costa do Sol',
+  ].join('\n'),
   manager_subject_template: 'Pendência de treinamento — {{funcionario}} — {{treinamento}}',
   manager_message_template:
     'Gerência de Treinamento | Costa do Sol\n\nFuncionário: {{funcionario}}\nSetor: {{setor}}\nTreinamento: {{treinamento}}\nSituação: {{status}}\n\nSolicitamos apoio do gestor para regularização desta pendência obrigatória.',
@@ -128,15 +170,17 @@ function normalizePolicy(value: unknown): ComplianceNotificationPolicy {
       input.manager_overdue_thresholds,
       DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.manager_overdue_thresholds,
     ).filter((n) => n <= 0),
-    email_subject_template:
-      String(input.email_subject_template || '')
-        .trim()
-        .slice(0, 300) || DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_subject_template,
+    email_subject_template: normalizeNotificationMessageTemplate(
+      input.email_subject_template,
+      DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_subject_template,
+      300,
+      [PREVIOUS_COMPLIANCE_EMPLOYEE_EMAIL_SUBJECT, PREVIOUS_LONG_COMPLIANCE_EMPLOYEE_EMAIL_SUBJECT],
+    ),
     email_message_template: normalizeNotificationMessageTemplate(
       input.email_message_template,
       DEFAULT_COMPLIANCE_NOTIFICATION_POLICY.email_message_template,
       5000,
-      [LEGACY_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE],
+      [LEGACY_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE, PREVIOUS_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE, PREVIOUS_LONG_COMPLIANCE_EMPLOYEE_EMAIL_TEMPLATE],
     ),
     manager_subject_template:
       String(input.manager_subject_template || '')
@@ -259,18 +303,50 @@ async function resolveCourseLink(
   }
 }
 
-function complianceTemplateVariables(
+export function complianceTemplateVariables(
   target: ComplianceNotificationTarget,
   trainingUrl: string | null = null,
 ): Record<string, string> {
+  const status = target.status_compliance;
+  const dueDate = target.data_validade ? formatDateBr(target.data_validade) : null;
+  const neverDone = status === 'NAO_REALIZADO';
+  const overdue = status === 'VENCIDO';
+  const expiring = status === 'VENCENDO';
+
+  const situacao = neverDone
+    ? 'Pendente de realização'
+    : overdue
+      ? dueDate ? 'Vencido desde ' + dueDate : 'Vencido'
+      : expiring
+        ? dueDate ? 'Vence em ' + dueDate : 'Próximo do vencimento'
+        : status === 'EM_ANDAMENTO' ? 'Em andamento' : statusText(target);
+  const introducao = neverDone
+    ? 'Você tem um treinamento obrigatório pendente:'
+    : overdue
+      ? 'Você tem um treinamento obrigatório vencido:'
+      : expiring
+        ? 'Seu treinamento obrigatório está próximo do vencimento:'
+        : 'Você tem um treinamento obrigatório que precisa de atenção:';
+  const orientacao = neverDone
+    ? 'Pedimos que realize o treinamento o quanto antes para manter suas qualificações em dia.'
+    : expiring
+      ? 'Renove o treinamento até a data de vencimento para manter suas qualificações em dia.'
+      : overdue
+        ? 'Seu treinamento está vencido. Regularize o quanto antes.'
+        : 'Conclua o treinamento para manter suas qualificações em dia.';
+
   return {
     funcionario: target.funcionario_nome,
     treinamento: target.qualificacao_nome,
     data_vencimento: formatDateBr(target.data_validade),
     status: statusText(target),
     setor: target.setor_nome || 'Não informado',
+    introducao,
+    situacao_bloco: 'Situação: ' + situacao,
+    assunto_situacao: neverDone ? 'pendente' : overdue ? 'vencido' : expiring ? 'a vencer' : 'em andamento',
+    orientacao,
     link: trainingUrl || '',
-    link_bloco: trainingUrl ? `\n\nAcesse diretamente o treinamento: ${trainingUrl}` : '',
+    link_bloco: trainingUrl ? 'Acesse o curso diretamente pelo AirTrust:\n' + trainingUrl : '',
   };
 }
 
@@ -318,21 +394,21 @@ export function renderComplianceEmailHtml(message: string): string {
         return '<div style="height:12px;line-height:12px">&nbsp;</div>';
       }
 
-      if (index === 0) {
+      if (index === 0 && /^GERÊNCIA DE TREINAMENTO/.test(trimmed)) {
         return `<div style="font-size:18px;font-weight:700;color:#0f172a;margin:0 0 4px">${linkify(line)}</div>`;
       }
 
-      const field = line.match(/^(Treinamento|Vencimento|Status):\s*(.*)$/);
+      const field = line.match(/^(Curso|Situação|Importante|Treinamento|Vencimento|Status):\s*(.*)$/);
       if (field) {
         return `<div style="margin:3px 0"><strong>${escapeHtml(field[1])}:</strong> ${linkify(field[2])}</div>`;
       }
 
-      const access = line.match(/^Acesse diretamente o treinamento:\s*(.*)$/);
+      const access = line.match(/^(Acesse diretamente o treinamento|Acesse o curso diretamente pelo AirTrust):\s*(.*)$/);
       if (access) {
-        const url = access[1].trim();
+        const url = access[2].trim();
         return url
-          ? `<div style="margin:4px 0"><strong>Acesse diretamente o treinamento:</strong><br>${linkify(url)}</div>`
-          : '<div style="margin:4px 0"><strong>Acesse diretamente o treinamento:</strong></div>';
+          ? `<div style="margin:4px 0"><strong>${escapeHtml(access[1])}:</strong><br>${linkify(url)}</div>`
+          : `<div style="margin:4px 0"><strong>${escapeHtml(access[1])}:</strong></div>`;
       }
 
       return `<div style="margin:2px 0">${linkify(line)}</div>`;

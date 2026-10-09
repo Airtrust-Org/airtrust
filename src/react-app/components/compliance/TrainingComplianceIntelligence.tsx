@@ -173,6 +173,13 @@ export function TrainingComplianceIntelligence({
     queryKey: ['training-compliance', 'intelligence-pendings', setorId, funcaoId, search],
     enabled: mode === 'pendencias' || mode === 'relatorios',
     queryFn: async () => readJson<TrainingCompliancePendingRow[]>(await fetchWithAuth(pendingUrl)),
+    // Current qualification evidence and LMS completions are read on every API request.
+    // Prevent an admin from viewing stale pending rows after another user completes a course.
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: 'always',
+    refetchInterval: 120_000,
   });
 
   const communications = useQuery({
@@ -246,12 +253,12 @@ export function TrainingComplianceIntelligence({
   );
 
   useEffect(() => {
-    const validKeys = new Set(visibleRows.map(rowKey));
+    const validKeys = new Set(visibleRows.filter((row) => !row.evidencia_pendente_validacao).map(rowKey));
     setSelected((old) => new Set([...old].filter((key) => validKeys.has(key))));
   }, [visibleRows]);
 
   const selectedRows = useMemo(
-    () => visibleRows.filter((row) => selected.has(rowKey(row))),
+    () => visibleRows.filter((row) => !row.evidencia_pendente_validacao && selected.has(rowKey(row))),
     [selected, visibleRows],
   );
 
@@ -717,7 +724,8 @@ export function TrainingComplianceIntelligence({
   }
 
   const allVisibleSelected =
-    visibleRows.length > 0 && visibleRows.every((row) => selected.has(rowKey(row)));
+    visibleRows.some((row) => !row.evidencia_pendente_validacao) &&
+    visibleRows.filter((row) => !row.evidencia_pendente_validacao).every((row) => selected.has(rowKey(row)));
 
   return (
     <div className="space-y-4 p-4">
@@ -760,7 +768,7 @@ export function TrainingComplianceIntelligence({
                   type="checkbox"
                   checked={allVisibleSelected}
                   onChange={(event) =>
-                    setSelected(event.target.checked ? new Set(visibleRows.map(rowKey)) : new Set())
+                    setSelected(event.target.checked ? new Set(visibleRows.filter((row) => !row.evidencia_pendente_validacao).map(rowKey)) : new Set())
                   }
                 />
               </th>
@@ -807,6 +815,7 @@ export function TrainingComplianceIntelligence({
                       aria-label={`Selecionar ${row.funcionario_nome} — ${row.qualificacao_tipo_nome || 'treinamento'}`}
                       type="checkbox"
                       checked={selected.has(key)}
+                      disabled={row.evidencia_pendente_validacao}
                       onChange={(event) =>
                         setSelected((old) => {
                           const next = new Set(old);
@@ -848,6 +857,11 @@ export function TrainingComplianceIntelligence({
                     >
                       {complianceStatusLabel(row)}
                     </span>
+                    {row.evidencia_pendente_validacao ? (
+                      <div className="mt-1 text-xs text-amber-700">
+                        Há conclusão histórica; confira a modalidade ou o perfil antes de cobrar.
+                      </div>
+                    ) : null}
                   </td>
                   <td className="px-3 py-3">
                     <div className="text-xs text-slate-600">
@@ -875,8 +889,10 @@ export function TrainingComplianceIntelligence({
                         setNoticeOpen(true);
                       }}
                       className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      disabled={row.evidencia_pendente_validacao}
+                      title={row.evidencia_pendente_validacao ? 'Há realização registrada, mas a modalidade ou competência precisa ser validada antes da cobrança.' : undefined}
                     >
-                      {row.avisos_enviados ? 'Reenviar aviso' : 'Enviar aviso'}
+                      {row.evidencia_pendente_validacao ? 'Revisar evidência' : row.avisos_enviados ? 'Reenviar aviso' : 'Enviar aviso'}
                     </button>
                   </td>
                 </tr>

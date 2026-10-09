@@ -1,0 +1,111 @@
+name: Production LMS SCORM 99% Evidence Readonly
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: 'Exact current main source SHA'
+        required: true
+        type: string
+      confirmation:
+        description: 'Type AIRTRUST_PRODUCTION_LMS_SCORM99_PROOF_READONLY'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-lms-scorm99-proof-readonly
+  cancel-in-progress: false
+
+jobs:
+  d1_evidence:
+    name: Gather aggregate SCORM closing evidence
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - name: Enforce exact reviewed SHA
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo MAIN_ONLY >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo SHA_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo SHA_MISMATCH >&2; exit 1; }
+          [[ "$CONFIRMATION" == "AIRTRUST_PRODUCTION_LMS_SCORM99_PROOF_READONLY" ]] || { echo CONFIRMATION_INVALID >&2; exit 1; }
+      - name: Verify eight canonical release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Install D1 client
+        run: npm --prefix worker-airtrust ci
+      - name: Aggregate SCORM evidence without personal data
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          TARGET_COMPANY_ID: '6'
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo D1_ACCESS_MISSING >&2; exit 1; }
+          node scripts/production/lms-scorm99-proof-readonly.mjs > "$RUNNER_TEMP/scorm99-proof.json"
+          test -s "$RUNNER_TEMP/scorm99-proof.json"
+      - name: Publish aggregate summary only
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs=require('node:fs');
+          const j=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/scorm99-proof.json','utf8'));
+          console.log('## Production SCORM 99% evidence (tenant 6, no PII)');
+          console.log('Reviewed SHA: '+j.source_sha);
+          console.log('Incomplete at >=99: '+j.totals.incomplete_99);
+          console.log('Explicit SCORM complete but canonical pending: '+j.totals.explicit_but_pending);
+          console.log('Without final SCORM status, mastery not blocking: '+j.totals.mastery_met_missing_final);
+          console.log('Mastery not proven: '+j.totals.mastery_unproven);
+          for(const row of j.fdm13){
+            console.log('FDM13 '+row.audience+': total='+row.enrolled+', 99%='+row.incomplete_99+', concluded='+row.concluded);
+          }
+          console.log('FDM historical enrollments (including canceled and soft-deleted):');
+          for(const row of j.fdm_legacy_and_destination_history){
+            console.log('Course '+row.curso_id+' / '+row.audience+': history='+row.history_rows+', not-cancelled='+row.non_cancelled+
+              ', cancelled-or-soft-deleted='+row.cancelled_or_soft_deleted+', 99%-any='+row.raw_99_any+
+              ', explicit-SCORM-at-99='+row.raw_99_with_explicit_scorm_end);
+          }
+          console.log('FDM legacy canceled cohort reenrollment preflight (aggregate only):');
+          for(const row of j.fdm_reenrollment_preflight){
+            console.log(row.audience+': canceled='+row.source_canceled_rows+
+             ',unique='+row.unique_staff+',active='+row.active_staff_rows+
+             ',target-active='+row.already_active_at_target+
+             ',target-history='+row.any_target_history+
+             ',target-qualified='+row.linked_target_rows+
+             ',raw99='+row.legacy_raw99+
+             ',explicit100='+row.raw99_explicit_end+
+             ',mastery-proven='+row.raw99_explicit_mastery_met+
+             ',mastery-unproven='+row.raw99_explicit_mastery_unproven+
+             ',no-mastery-required='+row.raw99_explicit_no_mastery_requirement);
+          }
+          console.log('Reenrollments/administrative completions performed: 0/0');
+          console.log('Production writes: '+j.writes);
+          NODE
+      - uses: actions/upload-artifact@v7
+        with:
+          name: production-lms-scorm99-proof-${{ github.sha }}
+          path: ${{ runner.temp }}/scorm99-proof.json
+          retention-days: 30
+          if-no-files-found: error

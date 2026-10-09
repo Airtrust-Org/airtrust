@@ -342,6 +342,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         assessmentBackfillByLocation: {},
         adaptiveByLocation: {},
         answerAcceptedByLocation: {},
+        reviewVisitedByLocation: {},
       };
       const st = w.__AIRTRUST_CERT_DRIVER;
       st.clickedByLocation ??= {};
@@ -351,6 +352,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       st.assessmentBackfillByLocation ??= {};
       st.adaptiveByLocation ??= {};
       st.answerAcceptedByLocation ??= {};
+      st.reviewVisitedByLocation ??= {};
       const locationBase = String(location || 'unknown');
       // cmi.core.lesson_location tracks the slide, not the question inside it.
       // Use the learner-visible ordinal to avoid treating each new quiz question
@@ -552,6 +554,51 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         requiredInteractionMatch &&
         Number(requiredInteractionMatch[1]) < Number(requiredInteractionMatch[2])
       ) {
+        // Prefer the package's explicit interaction contract before visual
+        // heuristics. AirTrust-authored courses mark mandatory learner targets
+        // with data-touch / .touchable; these may sit inside a scrolled content
+        // surface and therefore be outside the current viewport at discovery time.
+        const all = Array.from(document.querySelectorAll('*'));
+        const explicitRequiredItems = Array.from(
+          document.querySelectorAll('[data-touch],.touchable'),
+        )
+          .filter((el) => {
+            if (el.closest(
+              'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+            )) return false;
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            const text = clean(el.textContent);
+            return (
+              rect.width > 0 &&
+              rect.height > 0 &&
+              style.visibility !== 'hidden' &&
+              style.display !== 'none' &&
+              style.opacity !== '0' &&
+              el.getAttribute('aria-hidden') !== 'true' &&
+              text.length > 0 &&
+              text.length <= 800
+            );
+          })
+          .map((el) => {
+            const index = Math.max(0, all.indexOf(el));
+            const id = clean(el.id);
+            const role = clean(el.getAttribute('role'));
+            const touch = clean(el.getAttribute('data-touch'));
+            return {
+              el,
+              index,
+              id,
+              role,
+              text: clean(el.textContent),
+              signature: ['required-explicit', touch, index, id, el.tagName.toLowerCase()].join(':'),
+            };
+          });
+        const explicitRequiredCandidate = explicitRequiredItems.find((item) => !alreadyClicked(item));
+        if (explicitRequiredCandidate) {
+          return requestTrustedClick(explicitRequiredCandidate, 'required-interaction-explicit');
+        }
+
         const scope = Array.from(document.body.querySelectorAll('*'));
         const rawCandidates = scope.filter((el) => {
           if (!visible(el)) return false;
@@ -651,7 +698,6 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
             if (!candidates.includes(el)) candidates.push(el);
           }
         }
-        const all = Array.from(document.querySelectorAll('*'));
         const candidateItems = candidates.map((el) => {
           const index = Math.max(0, all.indexOf(el));
           const id = clean(el.id);
@@ -682,6 +728,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           pendingProbe: null,
           probeQuestion: 0,
           retries: 0,
+          questionTotal: 0,
         };
         return st.adaptiveByLocation[locationBase];
       };
@@ -713,6 +760,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           1,
           Number(resultQuestionTotal || 0),
           Number(questionTotal || 0),
+          Number(adaptive.questionTotal || 0),
           observedQuestionTotal,
         );
         if (!adaptive.initialized) {
@@ -840,6 +888,61 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           }
         }
       };
+      // The AW139-style assessment exposes learner-visible review feedback after
+      // a failed attempt. Learn only from that visible feedback, visit each wrong
+      // question once, then follow the package's own "Revisar capítulo" flow.
+      const reviewAnswerButtons = Array.from(document.querySelectorAll('button.answer'));
+      const reviewCorrectIndex = reviewAnswerButtons.findIndex((el) =>
+        /(^|\s)review-correct(\s|$)/i.test(String(el.className || ''))
+      );
+      const reviewMode = reviewCorrectIndex >= 0 || reviewAnswerButtons.some((el) =>
+        /(^|\s)review-(?:correct|incorrect)(\s|$)/i.test(String(el.className || ''))
+      );
+      if (reviewMode && questionNumber && questionTotal) {
+        const adaptive = getAdaptiveState();
+        adaptive.questionTotal = Math.max(Number(adaptive.questionTotal || 0), Number(questionTotal || 0));
+        if (!adaptive.initialized) {
+          adaptive.initialized = true;
+          if (Number.isFinite(resultMetric)) adaptive.bestMetric = Number(resultMetric);
+          for (let q = 0; q < adaptive.questionTotal; q += 1) {
+            if (!Number.isInteger(adaptive.bestAnswers[q])) {
+              adaptive.bestAnswers[q] = Number.isInteger(adaptive.currentAnswers[q])
+                ? adaptive.currentAnswers[q]
+                : 0;
+            }
+          }
+        }
+        const reviewQIndex = questionNumber - 1;
+        if (reviewCorrectIndex >= 0) adaptive.bestAnswers[reviewQIndex] = reviewCorrectIndex;
+
+        const visited = new Set(
+          Array.isArray(st.reviewVisitedByLocation[locationBase])
+            ? st.reviewVisitedByLocation[locationBase]
+            : [],
+        );
+        visited.add(reviewQIndex);
+        st.reviewVisitedByLocation[locationBase] = Array.from(visited);
+        const nextWrongReview = Array.from(document.querySelectorAll('button.review-q.bad'))
+          .filter(visible)
+          .find((el) => {
+            const match = clean(el.textContent).match(/\d+/);
+            const q = match ? Number(match[0]) - 1 : -1;
+            return q >= 0 && !visited.has(q);
+          });
+        if (nextWrongReview) {
+          nextWrongReview.click();
+          logAction('assessment-review-wrong');
+          return { type: 'assessment-review-wrong', text: clean(nextWrongReview.textContent).slice(0, 80) };
+        }
+
+        const reviewChapter = items.find((item) => /revisar\s+(?:o\s+)?cap[ií]tulo/i.test(item.key));
+        if (reviewChapter) {
+          st.reviewVisitedByLocation[locationBase] = [];
+          resetAssessmentRetryState();
+          return requestTrustedClick(reviewChapter, 'assessment-review-chapter');
+        }
+      }
+
       const moduleRetry = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
       if (moduleRetry) {
         if (!allowAdaptiveRetry) return { type: 'retry-deferred' };
@@ -880,6 +983,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         );
         const adaptive = getAdaptiveState();
         const qIndex = questionNumber ? questionNumber - 1 : cursor;
+        if (questionTotal) {
+          adaptive.questionTotal = Math.max(Number(adaptive.questionTotal || 0), Number(questionTotal));
+        }
         adaptive.optionCounts[qIndex] = assessmentChoices.length;
         if (selected) adaptive.currentAnswers[qIndex] = Math.max(0, assessmentChoices.indexOf(selected));
 
@@ -925,6 +1031,25 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         }
         if ((selected || driverAccepted) && assessmentFinish && !nextQuestion) {
           return markAndClick(assessmentFinish, 'assessment-finish');
+        }
+
+        // On some M8 quizzes qNext is disabled on question N/N, but the
+        // learner's bottom navigation button is enabled once every question
+        // is answered. Use only visible evidence of full quiz coverage, never
+        // a slide index alone, to leave the assessment normally.
+        const questionDots = Array.from(document.querySelectorAll('.question-map .qdot'));
+        const allQuestionDotsAnswered = questionDots.length === questionTotal &&
+          questionDots.every((el) => el.classList.contains('answered'));
+        const allQuestionsAnswered = answeredCount === questionTotal || allQuestionDotsAnswered;
+        const bottomNext = items.find((item) =>
+          /^(?:next|nextbtn)$/i.test(item.id) && !isChoiceButton(item)
+        );
+        if (
+          !nextQuestion && !assessmentFinish && selected && bottomNext &&
+          questionNumber && questionTotal && questionNumber === questionTotal &&
+          allQuestionsAnswered
+        ) {
+          return requestTrustedClick(bottomNext, 'assessment-last-question-next');
         }
 
         const adaptiveWanted = adaptive.initialized
@@ -1737,7 +1862,8 @@ async function certifyPptxCourse(browser, token, listed) {
 
 async function main() {
   await assertPinnedProduction();
-  const token = await productionToken();
+  let token = await productionToken();
+  let tokenIssuedAt = Date.now();
   const listed = await listCourses(token);
   invariant(
     COURSE_IDS.size === 0 || listed.length === COURSE_IDS.size,
@@ -1749,6 +1875,14 @@ async function main() {
   const results = [];
   try {
     for (const course of listed) {
+      // Read-only certification can exceed a single access token's lifetime.
+      // Renew strictly via the existing scoped login/company-selection path,
+      // retaining the exact deployed SHA pin and tenant assertion on refresh.
+      if (Date.now() - tokenIssuedAt >= 15 * 60_000) {
+        await assertPinnedProduction();
+        token = await productionToken();
+        tokenIssuedAt = Date.now();
+      }
       const type = String(course?.tipo_conteudo || '').toLowerCase();
       try {
         if (type === 'scorm') results.push(await certifyScormCourse(browser, token, course));

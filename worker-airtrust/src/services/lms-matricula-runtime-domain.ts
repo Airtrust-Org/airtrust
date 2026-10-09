@@ -1,4 +1,4 @@
-import { isTrustedScorm12Finish } from './lms-progress-guardrails';
+import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish } from './lms-progress-guardrails';
 
 export type ScormCommitLike = {
   lesson_status?: string | null;
@@ -144,6 +144,27 @@ export function isScormSuccess(
   if (ss === 'passed') return cs !== 'incomplete';
   if (cs === 'completed' && (ss === 'unknown' || !ss)) return meetsMasteryScore;
   return false;
+}
+
+/** User confirmation is necessary, never sufficient: require terminal location,
+ * every distinct slide, an explicit assessment policy and course success. */
+export function canFinalizeScormEnrollment(params: {
+  commit: ScormCommitLike;
+  wasCompleted: boolean;
+  cmiJson: string | null;
+  location: { current: number; total: number | null } | null;
+  policy: 'SCORED' | 'FORMATIVE' | null | undefined;
+  masteryScore: number | null;
+  scorePct: number | null;
+}): boolean {
+  const { commit, wasCompleted, cmiJson, location, policy, masteryScore, scorePct } = params;
+  if (wasCompleted || commit.commit_event !== 'SCORM_USER_FINALIZE' ||
+      !hasCompleteScormSlideCoverage(cmiJson) || !location?.total ||
+      location.current < location.total) return false;
+  if (policy === 'FORMATIVE') return isScormSuccess(commit, { effectiveScorePct: scorePct });
+  return policy === 'SCORED' && masteryScore != null && masteryScore > 0 &&
+    scorePct != null && scorePct >= masteryScore &&
+    isScormSuccess(commit, { masteryScore, effectiveScorePct: scorePct });
 }
 
 /** Verifica se o status indica falha */

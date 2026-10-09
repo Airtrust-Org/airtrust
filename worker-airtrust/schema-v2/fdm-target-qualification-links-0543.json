@@ -1,0 +1,8 @@
+{
+  "changeId": "fdm-target-qualification-links-0543",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0543_fdm_target_qualification_links.sql",
+  "fileHash": "371ecaa3e5e0f69fee1f534ccf093ccc1aa3dcc6fbacb16adb55b6cb9a68d0d1",
+  "planPath": "worker-airtrust/schema-v2/plans/fdm-target-qualification-links-0543.md",
+  "planHash": "faca6eecf89232487eed0aad7c99ac21e5ad347fe93bdf6f51b41eb150ae325a"
+}

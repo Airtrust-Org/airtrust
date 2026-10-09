@@ -85,7 +85,13 @@ export default function HomeRouter() {
   if (isLoading || isResolvingFuncionarioContext) return null;
 
   const explicitPermissions = Array.isArray(user?.permissions) ? user.permissions : [];
+  // O GRANT individual pode continuar presente quando um usuário multi-perfil
+  // escolhe ALUNO/INSTRUTOR. Esse perfil não abre a área administrativa do
+  // Controle de Voos; seu acesso self-service permanece nas rotas próprias.
+  const activeRole = String(user?.role ?? '').trim().toUpperCase();
+  const isLearnerSession = ['ALUNO', 'STUDENT', 'INSTRUTOR', 'INSTRUCTOR'].includes(activeRole);
   const hasControleVoosGrant =
+    !isLearnerSession &&
     explicitPermissions.includes('GRANT:controle_voos.view') &&
     !explicitPermissions.includes('DENY:controle_voos.view');
 

@@ -13,6 +13,12 @@ test('production active-course certifier is preview/read-only and exact-package 
   const source = read(SCRIPT);
   assert.match(source, /assertAllowedProductionBaseUrl/);
   assert.match(source, /EXPECTED_PRODUCTION_SHA/);
+  // An all-courses run lasts longer than the short-lived production access token.
+  // No course should be reported HTTP 401 solely because the certifier expired.
+  assert.match(source, /let token = await productionToken\(\)/);
+  assert.match(source, /Date\.now\(\) - tokenIssuedAt >= 15 \* 60_000/);
+  assert.match(source, /await assertPinnedProduction\(\);\s*token = await productionToken\(\);\s*tokenIssuedAt = Date\.now\(\);/);
+
   assert.match(source, /\/api\/lms\/cursos\/\$\{id\}\/scorm-package-versions/);
   assert.match(source, /status\s*\|\|\s*''\)\.toUpperCase\(\)\s*===\s*'ACTIVE'/);
   assert.match(source, /packageSha256/);
@@ -75,7 +81,7 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /assessmentBackfillByLocation/);
   assert.match(source, /shouldStartAssessmentBackfill/);
   assert.match(source, /frame\.evaluate\(\(\{ plan, location, allowAdaptiveRetry \}\)/);
-  assert.equal((source.match(/resetAssessmentRetryState\(\)/g) || []).length, 2);
+  assert.equal((source.match(/resetAssessmentRetryState\(\)/g) || []).length, 3);
   assert.match(source, /answeredMatch/);
   assert.match(source, /assessment-prev-backfill/);
   assert.match(source, /adaptiveByLocation/);
@@ -90,6 +96,18 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /requestTrustedClick/);
   assert.match(source, /trusted_click_token/);
   assert.match(source, /answerAcceptedByLocation/);
+  assert.match(source, /questionTotal: 0/);
+  assert.match(source, /adaptive\.questionTotal/);
+  assert.match(source, /reviewVisitedByLocation/);
+  assert.match(source, /reviewCorrectIndex/);
+  assert.match(source, /assessment-review-wrong/);
+  assert.match(source, /assessment-review-chapter/);
+  assert.match(source, /assessment-last-question-next/);
+  assert.match(source, /allQuestionDotsAnswered/);
+  assert.match(source, /allQuestionsAnswered/);
+  assert.match(source, /answeredCount === questionTotal/);
+  assert.match(source, /questionNumber === questionTotal/);
+  assert.match(source, /requestTrustedClick\(bottomNext/);
   assert.match(source, /driverAccepted/);
   assert.match(source, /data-airtrust-cert-click/);
   assert.match(source, /requiredInteractionMatch/);
@@ -107,6 +125,7 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /resultScoreMatch/);
   assert.match(source, /labeledPercentMatch/);
   assert.match(source, /observedQuestionTotal/);
+  assert.match(source, /adaptive\.questionTotal \|\| 0/);
   assert.match(source, /revisar\\s\+/);
   assert.match(source, /COURSE_IDS\.size > 0 \? 3_600 : 0/);
   assert.match(source, /focusedCompletionBudgetMs/);
@@ -125,6 +144,9 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /clickedByLocation/);
   assert.match(source, /captureRequiredInteractionStructure/);
   assert.match(source, /required_interaction_structure/);
+  assert.match(source, /document\.querySelectorAll\('\[data-touch\],\.touchable'\)/);
+  assert.match(source, /required-interaction-explicit/);
+  assert.match(source, /required-explicit/);
   assert.match(source, /parent_child_count/);
   assert.match(source, /text_sample/);
   assert.match(source, /elementsFromPoint/);
