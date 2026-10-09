@@ -131,12 +131,10 @@ test('scoped executor writes only FDM72, never sends email, and validates tenant
           cursos_ead: [{ id: 71 }] },
       ] });
     }
-    if (pathname === '/api/lms/matriculas/lote') {
-      const body = JSON.parse(init.body);
-      assert.deepEqual(body.funcionario_ids, [5, 6]);
-      assert.equal(body.curso_id, 72);
-      assert.equal(body.enviar_convite_email, false);
-      return validJson({ criadas: 2, ignoradas: 0, erros: 0 });
+    if (pathname === '/api/compliance-treinamentos/reconciliacao/fdm-mnt72/sincronizar') {
+      assert.equal(init.method, 'POST');
+      assert.deepEqual(JSON.parse(init.body), { scope: 'FDM_MNT_72', course_id: 72 });
+      return validJson({ created: 1, reactivated: 1, preserved: 0 });
     }
     throw new Error('UNEXPECTED_API_ROUTE:' + pathname);
   };
@@ -144,10 +142,12 @@ test('scoped executor writes only FDM72, never sends email, and validates tenant
     fetchImpl, apiBaseUrl: 'https://api.airtrust.online',
     email: 'test@example.invalid', password: 'synthetic-not-real', scope: 'FDM_MNT_72',
   });
-  assert.equal(result.created, 2);
+  assert.equal(result.created, 1);
+  assert.equal(result.reactivated, 1);
   assert.equal(result.scope, 'FDM_MNT_72');
   assert.equal(result.groups_planned, 1);
-  assert.equal(calls.filter((entry) => entry.pathname === '/api/lms/matriculas/lote').length, 1);
+  assert.equal(calls.filter((entry) => entry.pathname === '/api/compliance-treinamentos/reconciliacao/fdm-mnt72/sincronizar').length, 1);
+  assert.equal(calls.some((entry) => entry.pathname === '/api/lms/matriculas/lote'), false);
   assert.equal(calls.some((entry) => /email|convites/.test(entry.pathname)), false);
   assert.equal(reconcileReads, 2);
 });
