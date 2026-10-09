@@ -8,6 +8,7 @@ import {
   type LmsCompletionSource,
 } from '../services/lms-completion-evidence';
 import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish, scormStatusIndicatesCompletion } from '../services/lms-progress-guardrails';
+import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
 
@@ -402,6 +403,14 @@ async function guardScormCommit(
   if (!row) return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
   const ownershipError = await enforceOwnership(c, row);
   if (ownershipError) return ownershipError;
+  const edition = await detectLmsEditionMismatch({
+    bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
+    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
+    cmiJson: row.cmi_json,
+  });
+  if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
+    'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
+    { matricula_id: matriculaId, edition_mismatch: edition });
   const assetSessionValid = await hasValidAssetSession(c, row);
   if (incoming.commit_event === 'SCORM_USER_FINALIZE' &&
       !hasCompleteScormSlideCoverage(
@@ -486,6 +495,14 @@ async function guardManualFinalize(
   const ownershipError = await enforceOwnership(c, row);
   if (ownershipError) return ownershipError;
   if (String(row.status).toUpperCase() === 'CONCLUIDO') return null;
+  const edition = await detectLmsEditionMismatch({
+    bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
+    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
+    cmiJson: row.cmi_json,
+  });
+  if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
+    'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
+    { matricula_id: matriculaId, edition_mismatch: edition });
   const assetSessionValid = await hasValidAssetSession(c, row);
   if (row.scorm_assessment_policy === 'FORMATIVE' &&
       row.tipo_conteudo === 'scorm' && !hasTerminalFormativeScormStatus(row, {})) {
