@@ -68,6 +68,24 @@ describe('SCORM Browser Run trace analysis', () => {
     expect(analyzeTrace('sha-a', startedAt, trace, {}, initialized, finished, '0').status).toBe('FAIL');
   });
 
+  it('redacts authored SCORM suspend_data and interaction values from published runtime traces', () => {
+    const confidential = '{"answers":[1,2,3],"employee":"synthetic"}';
+    const trace = [
+      { method: 'LMSInitialize' },
+      { method: 'LMSSetValue', key: 'cmi.suspend_data', value: confidential },
+      { method: 'LMSCommit' },
+      { method: 'LMSFinish' },
+    ];
+    const result = analyzeTrace('sha-a', startedAt, trace,
+      { 'cmi.core.lesson_status': 'incomplete' }, true, true, '0');
+    expect(result.status).toBe('PASS');
+    expect(JSON.stringify(result.trace)).not.toContain('answers');
+    expect(JSON.stringify(result.trace)).not.toContain('employee');
+    expect(result.trace[1]).toMatchObject({
+      method: 'LMSSetValue', key: 'cmi.suspend_data', value: '[redacted]',
+    });
+  });
+
   it('fails a mutation after finish', () => {
     expect(analyzeTrace('sha-a', startedAt, [...lifecycle, { method: 'LMSCommit' }], {}, true, true, '0').status).toBe('FAIL');
   });
