@@ -25,7 +25,7 @@ const row = {
   xapi_count: 0,
 };
 
-async function attempt(url: string, body?: unknown, activeTotal = 37) {
+async function attempt(url: string, body?: unknown, activeTotal = 37, method = 'POST') {
   const db = {
     prepare: vi.fn(() => ({
       bind: (..._args: unknown[]) => ({ first: async () => row }),
@@ -49,12 +49,12 @@ async function attempt(url: string, body?: unknown, activeTotal = 37) {
     if (rejected) return rejected;
     return next();
   });
-  app.post('*', (c) => {
+  app.all('*', (c) => {
     downstreamCalled = true;
     return c.json({ success: true });
   });
   const res = await app.fetch(new Request(`http://localhost${url}`, {
-    method: 'POST',
+    method,
     headers: { 'content-type': 'application/json' },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   }), { DB: db, BUCKET: bucket } as Env, {} as ExecutionContext);
@@ -68,6 +68,19 @@ describe('CFIT: edition mismatch prohibits canonical completion', () => {
     await expect(res.json()).resolves.toMatchObject({
       code: 'LMS_NEW_EDITION_REQUIRED',
       data: { edition_mismatch: { previous_total: 41, active_total: 37 } },
+    });
+    expect(downstreamCalled).toBe(false);
+  });
+
+  it('blocks administrative PATCH completion of obsolete 41/41', async () => {
+    const { res, downstreamCalled } = await attempt(
+      '/api/lms/matriculas/842/status',
+      { status: 'CONCLUIDO', observacoes: 'Administratively complete this course' },
+      37, 'PATCH',
+    );
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      code: 'LMS_NEW_EDITION_REQUIRED',
     });
     expect(downstreamCalled).toBe(false);
   });
