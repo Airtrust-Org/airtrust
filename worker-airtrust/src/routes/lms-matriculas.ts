@@ -294,6 +294,7 @@ function emitScormCommitTelemetry(
       blockedLocationRegression: boolean;
       blockedEmptySuspendData: boolean;
       blockedShorterSuspendData: boolean;
+      blockedTerminalRegression: boolean;
       preservedLocationFromCurrent: boolean;
     };
   },
@@ -301,13 +302,15 @@ function emitScormCommitTelemetry(
   const blocked =
     params.decisions.blockedLocationRegression ||
     params.decisions.blockedEmptySuspendData ||
-    params.decisions.blockedShorterSuspendData;
+    params.decisions.blockedShorterSuspendData ||
+    params.decisions.blockedTerminalRegression;
 
   const event = blocked ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_COMMIT';
   const reason = [
     params.decisions.blockedLocationRegression ? 'location-regression' : null,
     params.decisions.blockedEmptySuspendData ? 'empty-suspend-data' : null,
     params.decisions.blockedShorterSuspendData ? 'shorter-suspend-data' : null,
+    params.decisions.blockedTerminalRegression ? 'terminal-status-regression' : null,
     !blocked && params.decisions.preservedLocationFromCurrent ? 'preserved-current-location' : null,
   ]
     .filter(Boolean)
