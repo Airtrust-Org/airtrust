@@ -45,10 +45,9 @@ class RepairSqlTest(unittest.TestCase):
     shutil.copyfile(ROOT/'scripts'/'production'/name,directory/name)
    env=os.environ.copy()
    env.pop('PYTHONDONTWRITEBYTECODE',None)
-   code=("import importlib.util,sys;"
-         "p='scripts/production/qualification-renewal-chain-repair.py';"
-         "s=importlib.util.spec_from_file_location('renewal_repair',p);"
-         "m=importlib.util.module_from_spec(s);s.loader.exec_module(m);"
+   code=("import runpy,sys;"
+         "runpy.run_path('scripts/production/qualification-renewal-chain-repair.py',"
+         "run_name='test_import');"
          "assert sys.dont_write_bytecode")
    subprocess.run([sys.executable,'-c',code],cwd=tmp,env=env,check=True,capture_output=True)
    self.assertFalse((directory/'__pycache__').exists())
