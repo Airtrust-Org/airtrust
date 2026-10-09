@@ -1102,15 +1102,13 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
 
   if (matricula.status !== 'CONCLUIDO') {
     const mismatch = await detectLmsEditionMismatch({
-      bucket: c.env.BUCKET, db, contentType: 'scorm',
-      activePrefix: matricula.scorm_package_r2_prefix,
+      bucket: c.env.BUCKET, db, contentType: 'scorm', activePrefix: matricula.scorm_package_r2_prefix,
       empresaId, cursoId: matricula.curso_id,
       cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data,
       enrollmentStartedAt: matricula.data_inicio,
     });
     if (mismatch) throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
   }
-
   const { initialCmiJson, hasResumeState } = buildScormLaunchState(
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
