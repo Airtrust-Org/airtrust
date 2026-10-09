@@ -67,7 +67,7 @@ type DualWeightInputProps = {
   fieldClass: string;
 };
 
-function DualWeightInput({ label, valueLb, onChangeLb, readOnly = false, fieldClass }: DualWeightInputProps) {
+export function DualWeightInput({ label, valueLb, onChangeLb, readOnly = false, fieldClass }: DualWeightInputProps) {
   return (
     <div className="text-sm">
       <span className="block">{label}</span>
@@ -181,7 +181,6 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     pax_planejado: '',
     peso_passageiros: '',
     peso_bagagem: '',
-    peso_carga: '',
     unidade_peso_planejado: 'LB',
     combustivel_solicitado: '',
     unidade_combustivel_solicitado: 'LB',
@@ -438,7 +437,6 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
             pax_planejado: form.pax_planejado === '' ? null : Number(form.pax_planejado),
             peso_passageiros: form.peso_passageiros === '' ? null : Number(form.peso_passageiros),
             peso_bagagem: form.peso_bagagem === '' ? null : Number(form.peso_bagagem),
-            peso_carga: form.peso_carga === '' ? null : Number(form.peso_carga),
             unidade_peso_planejado: 'LB',
             combustivel_solicitado: form.combustivel_solicitado === '' ? null : Number(form.combustivel_solicitado),
             unidade_combustivel_solicitado: form.unidade_combustivel_solicitado,
@@ -682,12 +680,6 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
                 label="Peso da bagagem"
                 valueLb={form.peso_bagagem}
                 onChangeLb={(value) => set('peso_bagagem', value)}
-                fieldClass={fieldClass}
-              />
-              <DualWeightInput
-                label="Peso da carga"
-                valueLb={form.peso_carga}
-                onChangeLb={(value) => set('peso_carga', value)}
                 fieldClass={fieldClass}
               />
               <label className="text-sm">Combustível solicitado
