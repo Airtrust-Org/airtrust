@@ -2,7 +2,7 @@
 
 **Status:** contrato de implantação progressiva; ainda não afirma que os cursos existentes estão certificados.  
 **Coordenador:** [issue #1325](https://github.com/Airtrust-Org/airtrust/issues/1325).  
-**Base:** SCORM 1.2 / Single SCO, AirTrust Completion Manifest V1, Diagnostics V1, código canônico atual.
+**Baseline visual/técnica já aprovada para recuperação, não reinventar:** Golden Master/Core V2 da AirTrust Learning Factory (pacote `AIRTRUST_LEARNING_FACTORY_CANON_2026-09-27.zip`, validar hash antes de adotar), com a implementação NR-26 RC5 como referência visual e interativa e o PBN como referência editorial. SCORM 1.2 / Single SCO, AirTrust Completion Manifest V1, Diagnostics V1 e código canônico atual do AirTrust. O ZIP-fonte aprovado precisa ser recuperado e conferido antes de afirmar paridade real.
 
 ## Regra de arquitetura — o conteúdo não implementa o player
 
@@ -16,15 +16,15 @@ Todo treinamento novo deve ser produzido por **uma única engine versionada de a
 
 ## Contrato visual imutável da engine
 
-- Design responsivo 16:9 no desktop e ajustável ao tablet; não cortar controles, textos ou avaliações.
-- Tipografia principal de conteúdo e questões >=20 px; textos auxiliares legíveis e contrastantes; navegação anterior/próximo, índice, progresso, referências e feedback nos mesmos lugares.
+- Design responsivo, sem impor slides rígidos 16:9: referência desktop 1468×836 com scroll vertical natural e mobile 390×844 sem overflow; não cortar controles, textos ou avaliações.
+- Tipografia principal de conteúdo e questões >=20 px; textos auxiliares legíveis e contrastantes; navegação anterior/próximo, índice/drawer (fechamento apenas por ação explícita), progresso, referências e feedback nos mesmos lugares.
 - Tema corporativo coerente, imagens operacionais pertinentes e distintas; não colocar 'AirTrust Learning'. Conteúdo técnico e regulatório de fonte controlada, revisão identificada.
-- Questões com 5 alternativas quando aplicável, feedback útil, sem expor gabarito ao LMS nem depender apenas de clique automático.
+- Avaliações com alternativas adequadas ao objetivo pedagógico e feedback útil, sem expor gabarito ao LMS nem depender apenas de clique automático. Mastery parametrizado por curso, com baseline típico de 80% quando aprovado.
 - Capturas visuais de referência (golden screenshots) e comparação em Chromium e WebKit em larguras desktop/tablet antes de aceitar uma nova versão da engine.
 
 ## Contrato técnico do estado
 
-- Estado SCORM real: `cmi.core.lesson_status`, `cmi.core.lesson_location`, `cmi.suspend_data`, nota `cmi.core.score.raw`, `LMSInitialize/Commit/Finish`. Avaliação deve ser persistida antes de finalizar.
+- Estado SCORM real: `cmi.core.lesson_status`, `cmi.core.lesson_location`, `cmi.suspend_data` (orçamento recomendado <=3500 caracteres), nota `cmi.core.score.raw`, `LMSInitialize/Commit/Finish` (Commit/Finish únicos e zero chamadas posteriores). Avaliação deve ser persistida antes de finalizar.
 - Estado local isolado por tenant, curso, matrícula e **ciclo ativo**. Uma matrícula nova não recebe progresso herdado.
 - Bookmark e questões persistidos por **IDs estáveis**, não apenas por índice percentual. Troca de pacote exige declaração e teste de equivalência de IDs/avaliações. Caso incompatível, bloquear migração automática e oferecer nova edição administrativa auditável.
 - Nunca marcar `passed/completed` com base em posição final ou percentual isolados. Reabertura de aprovado é revisão read-only: não diminuir status, nota, `lesson_location` ou `suspend_data` histórico.
