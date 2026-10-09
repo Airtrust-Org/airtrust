@@ -81,7 +81,7 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /assessmentBackfillByLocation/);
   assert.match(source, /shouldStartAssessmentBackfill/);
   assert.match(source, /frame\.evaluate\(\(\{ plan, location, allowAdaptiveRetry \}\)/);
-  assert.equal((source.match(/resetAssessmentRetryState\(\)/g) || []).length, 2);
+  assert.equal((source.match(/resetAssessmentRetryState\(\)/g) || []).length, 3);
   assert.match(source, /answeredMatch/);
   assert.match(source, /assessment-prev-backfill/);
   assert.match(source, /adaptiveByLocation/);
@@ -96,6 +96,18 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /requestTrustedClick/);
   assert.match(source, /trusted_click_token/);
   assert.match(source, /answerAcceptedByLocation/);
+  assert.match(source, /questionTotal: 0/);
+  assert.match(source, /adaptive\.questionTotal/);
+  assert.match(source, /reviewVisitedByLocation/);
+  assert.match(source, /reviewCorrectIndex/);
+  assert.match(source, /assessment-review-wrong/);
+  assert.match(source, /assessment-review-chapter/);
+  assert.match(source, /assessment-last-question-next/);
+  assert.match(source, /allQuestionDotsAnswered/);
+  assert.match(source, /allQuestionsAnswered/);
+  assert.match(source, /answeredCount === questionTotal/);
+  assert.match(source, /questionNumber === questionTotal/);
+  assert.match(source, /requestTrustedClick\(bottomNext/);
   assert.match(source, /driverAccepted/);
   assert.match(source, /data-airtrust-cert-click/);
   assert.match(source, /requiredInteractionMatch/);
@@ -113,6 +125,7 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /resultScoreMatch/);
   assert.match(source, /labeledPercentMatch/);
   assert.match(source, /observedQuestionTotal/);
+  assert.match(source, /adaptive\.questionTotal \|\| 0/);
   assert.match(source, /revisar\\s\+/);
   assert.match(source, /COURSE_IDS\.size > 0 \? 3_600 : 0/);
   assert.match(source, /focusedCompletionBudgetMs/);

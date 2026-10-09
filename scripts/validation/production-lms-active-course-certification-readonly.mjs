@@ -342,6 +342,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         assessmentBackfillByLocation: {},
         adaptiveByLocation: {},
         answerAcceptedByLocation: {},
+        reviewVisitedByLocation: {},
       };
       const st = w.__AIRTRUST_CERT_DRIVER;
       st.clickedByLocation ??= {};
@@ -351,6 +352,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       st.assessmentBackfillByLocation ??= {};
       st.adaptiveByLocation ??= {};
       st.answerAcceptedByLocation ??= {};
+      st.reviewVisitedByLocation ??= {};
       const locationBase = String(location || 'unknown');
       // cmi.core.lesson_location tracks the slide, not the question inside it.
       // Use the learner-visible ordinal to avoid treating each new quiz question
@@ -726,6 +728,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           pendingProbe: null,
           probeQuestion: 0,
           retries: 0,
+          questionTotal: 0,
         };
         return st.adaptiveByLocation[locationBase];
       };
@@ -757,6 +760,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           1,
           Number(resultQuestionTotal || 0),
           Number(questionTotal || 0),
+          Number(adaptive.questionTotal || 0),
           observedQuestionTotal,
         );
         if (!adaptive.initialized) {
@@ -884,6 +888,61 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           }
         }
       };
+      // The AW139-style assessment exposes learner-visible review feedback after
+      // a failed attempt. Learn only from that visible feedback, visit each wrong
+      // question once, then follow the package's own "Revisar capítulo" flow.
+      const reviewAnswerButtons = Array.from(document.querySelectorAll('button.answer'));
+      const reviewCorrectIndex = reviewAnswerButtons.findIndex((el) =>
+        /(^|\s)review-correct(\s|$)/i.test(String(el.className || ''))
+      );
+      const reviewMode = reviewCorrectIndex >= 0 || reviewAnswerButtons.some((el) =>
+        /(^|\s)review-(?:correct|incorrect)(\s|$)/i.test(String(el.className || ''))
+      );
+      if (reviewMode && questionNumber && questionTotal) {
+        const adaptive = getAdaptiveState();
+        adaptive.questionTotal = Math.max(Number(adaptive.questionTotal || 0), Number(questionTotal || 0));
+        if (!adaptive.initialized) {
+          adaptive.initialized = true;
+          if (Number.isFinite(resultMetric)) adaptive.bestMetric = Number(resultMetric);
+          for (let q = 0; q < adaptive.questionTotal; q += 1) {
+            if (!Number.isInteger(adaptive.bestAnswers[q])) {
+              adaptive.bestAnswers[q] = Number.isInteger(adaptive.currentAnswers[q])
+                ? adaptive.currentAnswers[q]
+                : 0;
+            }
+          }
+        }
+        const reviewQIndex = questionNumber - 1;
+        if (reviewCorrectIndex >= 0) adaptive.bestAnswers[reviewQIndex] = reviewCorrectIndex;
+
+        const visited = new Set(
+          Array.isArray(st.reviewVisitedByLocation[locationBase])
+            ? st.reviewVisitedByLocation[locationBase]
+            : [],
+        );
+        visited.add(reviewQIndex);
+        st.reviewVisitedByLocation[locationBase] = Array.from(visited);
+        const nextWrongReview = Array.from(document.querySelectorAll('button.review-q.bad'))
+          .filter(visible)
+          .find((el) => {
+            const match = clean(el.textContent).match(/\d+/);
+            const q = match ? Number(match[0]) - 1 : -1;
+            return q >= 0 && !visited.has(q);
+          });
+        if (nextWrongReview) {
+          nextWrongReview.click();
+          logAction('assessment-review-wrong');
+          return { type: 'assessment-review-wrong', text: clean(nextWrongReview.textContent).slice(0, 80) };
+        }
+
+        const reviewChapter = items.find((item) => /revisar\s+(?:o\s+)?cap[ií]tulo/i.test(item.key));
+        if (reviewChapter) {
+          st.reviewVisitedByLocation[locationBase] = [];
+          resetAssessmentRetryState();
+          return requestTrustedClick(reviewChapter, 'assessment-review-chapter');
+        }
+      }
+
       const moduleRetry = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
       if (moduleRetry) {
         if (!allowAdaptiveRetry) return { type: 'retry-deferred' };
@@ -924,6 +983,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         );
         const adaptive = getAdaptiveState();
         const qIndex = questionNumber ? questionNumber - 1 : cursor;
+        if (questionTotal) {
+          adaptive.questionTotal = Math.max(Number(adaptive.questionTotal || 0), Number(questionTotal));
+        }
         adaptive.optionCounts[qIndex] = assessmentChoices.length;
         if (selected) adaptive.currentAnswers[qIndex] = Math.max(0, assessmentChoices.indexOf(selected));
 
@@ -969,6 +1031,25 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         }
         if ((selected || driverAccepted) && assessmentFinish && !nextQuestion) {
           return markAndClick(assessmentFinish, 'assessment-finish');
+        }
+
+        // On some M8 quizzes qNext is disabled on question N/N, but the
+        // learner's bottom navigation button is enabled once every question
+        // is answered. Use only visible evidence of full quiz coverage, never
+        // a slide index alone, to leave the assessment normally.
+        const questionDots = Array.from(document.querySelectorAll('.question-map .qdot'));
+        const allQuestionDotsAnswered = questionDots.length === questionTotal &&
+          questionDots.every((el) => el.classList.contains('answered'));
+        const allQuestionsAnswered = answeredCount === questionTotal || allQuestionDotsAnswered;
+        const bottomNext = items.find((item) =>
+          /^(?:next|nextbtn)$/i.test(item.id) && !isChoiceButton(item)
+        );
+        if (
+          !nextQuestion && !assessmentFinish && selected && bottomNext &&
+          questionNumber && questionTotal && questionNumber === questionTotal &&
+          allQuestionsAnswered
+        ) {
+          return requestTrustedClick(bottomNext, 'assessment-last-question-next');
         }
 
         const adaptiveWanted = adaptive.initialized
