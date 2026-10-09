@@ -115,6 +115,33 @@ const SCORM_CANDIDATE_RECHECK_DELAY_MS = 1_000;
 const SCORM_UNRESOLVED_MESSAGE =
   'O conteúdo chegou ao fim, mas não enviou a confirmação SCORM. Seu progresso foi preservado.';
 
+// Only enables an authenticated attempt at the existing server-side qualification
+// and completion gate; this predicate never marks a course as passed.
+export function canReconcilePersistedScormCompletion(params: {
+  reviewMode: boolean;
+  isScormContent: boolean;
+  matriculaStatus: string | null | undefined;
+  diagnostic: {
+    status?: string | null;
+    explicit_completion?: boolean | null;
+    reached_final_location?: boolean | null;
+    score_pct?: number | null;
+    mastery_score?: number | null;
+  } | null | undefined;
+}): boolean {
+  const { diagnostic } = params;
+  if (
+    params.reviewMode || !params.isScormContent ||
+    params.matriculaStatus === 'CONCLUIDO' ||
+    diagnostic?.status !== 'accepted' ||
+    diagnostic.explicit_completion !== true ||
+    diagnostic.reached_final_location !== true
+  ) return false;
+  const mastery = Number(diagnostic.mastery_score ?? 0);
+  const score = Number(diagnostic.score_pct);
+  return Number.isFinite(score) && score >= Math.max(0, mastery);
+}
+
 function parseSlideLocation(
   location: string | null | undefined,
 ): { current: number; total: number } | null {
@@ -149,6 +176,7 @@ export default function LmsPlayer() {
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [completed, setCompleted] = useState(false);
+  const reconciledEnrollmentRef = useRef<number | null>(null);
   const [qualificacaoGerada, setQualificacaoGerada] = useState(false);
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [liveProgress, setLiveProgress] = useState<number | null>(null);
@@ -538,8 +566,7 @@ export default function LmsPlayer() {
     // antes do refetch que confirma a conclusão; quando a matrícula já está
     // CONCLUIDO ou o diagnóstico canônico já foi aceito, qualquer erro/painel
     // de conclusão mantido no estado React é stale e deve ser descartado.
-    const canonicalCompletionAccepted =
-      matricula?.status === 'CONCLUIDO' || completionDiagnostic?.status === 'accepted';
+    const canonicalCompletionAccepted = matricula?.status === 'CONCLUIDO';
 
     if (canonicalCompletionAccepted) {
       if (candidateRetryTimerRef.current !== null) {
@@ -683,6 +710,7 @@ export default function LmsPlayer() {
           qualificationGenerated: Boolean(event.data.qualificacao_gerada),
         });
         void refetchMatricula();
+        navigate('/lms/cursos', { replace: true });
         return;
       }
 
@@ -759,6 +787,9 @@ export default function LmsPlayer() {
           setCompleted(true);
         void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
           showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
+          void refetchMatricula();
+          navigate('/lms/cursos', { replace: true });
+          return;
         }
         void refetchMatricula();
         return;
@@ -779,7 +810,7 @@ export default function LmsPlayer() {
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, launchOrigin, refetchMatricula, persistGranularDiagnostic, queryClient]);
+  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, persistGranularDiagnostic, queryClient]);
 
   async function handleFullscreen() {
     const el = iframeRef.current;
@@ -861,10 +892,10 @@ export default function LmsPlayer() {
   }
 
   function handleLeave() {
-    const shouldConfirm = !completed && matricula?.status !== 'CONCLUIDO';
+    const shouldConfirm = !isCompletedState;
     if (shouldConfirm) {
       const confirmed = window.confirm(
-        'O curso ainda não foi concluído. Deseja sair agora mesmo assim?',
+        'O AirTrust ainda não confirmou a conclusão deste curso. Deseja sair mesmo assim?',
       );
       if (!confirmed) return;
     }
