@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { extractAnswerPlan } from '../validation/lms-scorm-answer-plan.mjs';
 
 // The M8 metadata is intentionally presentation-only; answers are in
@@ -21,6 +22,13 @@ const runtime = {
 };
 
 describe('read-only SCORM complete-assessment evidence driver', () => {
+  it('the certifier actually uses the loaded runtime model and does not log an extracted answer key', () => {
+    const source = readFileSync(new URL('../validation/production-lms-active-course-certification-readonly.mjs', import.meta.url), 'utf8');
+    assert.match(source, /runtime:\s*window\.COURSE_DATA/);
+    assert.match(source, /extractAnswerPlan\(loaded\.runtime\s*\?\?\s*model\)/);
+    assert.doesNotMatch(source, /JSON\.stringify\(answerPlan\)/);
+  });
+
   it('recognizes the blind spot: M8 model has zero answers but runtime has the actual correct-answer plan', () => {
     assert.deepEqual(extractAnswerPlan(metadataOnly), []);
     const plan = extractAnswerPlan(runtime);
