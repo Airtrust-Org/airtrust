@@ -25,16 +25,20 @@ const row = {
   xapi_count: 0,
 };
 
-async function attempt(url: string, body?: unknown, activeTotal = 37, method = 'POST') {
+async function attempt(
+  url: string, body?: unknown, activeTotal = 37, method = 'POST',
+  edition?: { savedCmi: string; activeVersion: string },
+) {
   const db = {
     prepare: vi.fn(() => ({
-      bind: (..._args: unknown[]) => ({ first: async () => row }),
+      bind: (..._args: unknown[]) => ({ first: async () => edition ? { ...row, cmi_json: edition.savedCmi } : row }),
     })),
   } as unknown as D1Database;
   const bucket = {
     get: vi.fn(async () => ({
       size: 1000,
       text: async () => JSON.stringify({
+        ...(edition ? { packageVersion: edition.activeVersion } : {}),
         content: { requiredSlides: Array.from({ length: activeTotal }, (_, i) => `slide-${i}`) },
       }),
     })),
@@ -95,4 +99,25 @@ describe('CFIT: edition mismatch prohibits canonical completion', () => {
     });
     expect(downstreamCalled).toBe(false);
   });
+  it('rejects direct terminal API after same-length edition replacement (35/46, old mgo-v14 vs new mgo-v15)', async () => {
+    const savedCmi = JSON.stringify({
+      'cmi.core.lesson_location': '35/46',
+      'airtrust.total_slides': 46,
+      'cmi.suspend_data': JSON.stringify({ v: 4, p: 'mgo-v14', a: 34, d: [0, 1] }),
+    });
+    const { res, downstreamCalled } = await attempt(
+      '/api/lms/matriculas/scorm/commit',
+      { matricula_id: 842, lesson_status: 'passed', completion_candidate: true },
+      46,
+      'POST',
+      { savedCmi, activeVersion: 'mgo-v15' },
+    );
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      code: 'LMS_NEW_EDITION_REQUIRED',
+      data: { edition_mismatch: { reason: 'PACKAGE_VERSION_CHANGED', previous_total: 46, active_total: 46 } },
+    });
+    expect(downstreamCalled).toBe(false);
+  });
+
 });
