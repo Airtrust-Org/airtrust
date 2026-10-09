@@ -4531,7 +4531,7 @@ function renderStageFields() {
     ['Passageiros', 'pax', 'number', 'numeric', false, false, 'Quantidade de passageiros'],
     ['Peso dos passageiros', 'peso_passageiros', 'number', 'decimal', false, false, null],
     ['Peso da bagagem', 'peso_bagagem', 'number', 'decimal', false, false, null],
-    ['Carga', 'payload', 'number', 'decimal', false, false, null],
+    ['Peso da carga', 'payload', 'number', 'decimal', false, false, null],
     ['Peso total', 'peso_total', 'number', 'decimal', true, false, 'Calculado automaticamente'],
     [
       index === 0 ? 'Combustível inicial' : 'Combustível inicial',
@@ -4549,7 +4549,7 @@ function renderStageFields() {
   const dualWeightLabels = {
     peso_passageiros: 'Peso dos passageiros',
     peso_bagagem: 'Peso da bagagem',
-    payload: 'Carga',
+    payload: 'Peso da carga',
     peso_total: 'Peso total da aeronave',
   };
 

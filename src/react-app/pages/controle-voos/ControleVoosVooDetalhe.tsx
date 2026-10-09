@@ -111,6 +111,7 @@ export default function ControleVoosVooDetalhe() {
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [uploadingType, setUploadingType] = useState<FlightDocument['type'] | null>(null);
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [sharingWhatsapp, setSharingWhatsapp] = useState(false);
   const [sharingFlightLog, setSharingFlightLog] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [confirmingPlan, setConfirmingPlan] = useState(false);
@@ -178,6 +179,24 @@ export default function ControleVoosVooDetalhe() {
       toast.error(sendError instanceof Error ? sendError.message : 'Falha ao enviar WhatsApp');
     } finally {
       setSendingWhatsapp(false);
+    }
+  };
+
+  const shareProgramming = async () => {
+    if (!id || sharingWhatsapp) return;
+    const shareWindow = window.open('', '_blank');
+    setSharingWhatsapp(true);
+    try {
+      const response = await apiClient.get<{message: string}>(`/controle-voos/voos/${id}/whatsapp-share?tipo=programacao`);
+      if (!response.success || !response.data?.message) throw new Error(response.error || 'Não foi possível preparar a mensagem.');
+      const url = `https://wa.me/?text=${encodeURIComponent(response.data.message)}`;
+      if (shareWindow) shareWindow.location.href = url;
+      else window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      shareWindow?.close();
+      toast.error(error instanceof Error ? error.message : 'Falha ao compartilhar a programação.');
+    } finally {
+      setSharingWhatsapp(false);
     }
   };
 
@@ -536,7 +555,13 @@ export default function ControleVoosVooDetalhe() {
                       disabled={sendingWhatsapp}
                       className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                     >
-                      <MessageCircle className="h-4 w-4" /> {sendingWhatsapp ? 'Enviando…' : 'Enviar programação aos tripulantes'}
+                      <MessageCircle className="h-4 w-4" /> {sendingWhatsapp ? 'Enviando…' : 'Enviar automaticamente por WhatsApp aos tripulantes'}
+                    </button>
+                  )}
+                  {canCoordinate && (
+                    <button type="button" onClick={() => void shareProgramming()} disabled={sharingWhatsapp}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-cyan-600 px-4 py-2 text-sm font-medium text-cyan-700 disabled:opacity-50">
+                      <MessageCircle className="h-4 w-4" /> {sharingWhatsapp ? 'Preparando…' : 'Abrir WhatsApp para compartilhar programação'}
                     </button>
                   )}
                   {canCoordinate && voo.status === 'concluido_operacionalmente' && (
