@@ -303,6 +303,12 @@ export default function LmsPlayer() {
     mergedProgress,
   });
   const isScormContent = (matricula?.tipo_conteudo ?? 'scorm') === 'scorm';
+  const shouldReconcilePassedScorm = canReconcilePersistedScormCompletion({
+    reviewMode: effectiveReviewMode,
+    isScormContent,
+    matriculaStatus: matricula?.status,
+    diagnostic: completionDiagnostic,
+  });
   const canFinalize =
     !isCompletedState &&
     matricula?.status !== 'CONCLUIDO' &&
@@ -668,12 +674,7 @@ export default function LmsPlayer() {
   useEffect(() => {
     if (
       !Number.isSafeInteger(id) || id <= 0 ||
-      !canReconcilePersistedScormCompletion({
-        reviewMode: effectiveReviewMode,
-        isScormContent,
-        matriculaStatus: matricula?.status,
-        diagnostic: completionDiagnostic,
-      }) ||
+      !shouldReconcilePassedScorm ||
       reconciledEnrollmentRef.current === id
     ) return;
     reconciledEnrollmentRef.current = id;
@@ -716,10 +717,7 @@ export default function LmsPlayer() {
     })();
     return () => { cancelled = true; };
   }, [
-    completionDiagnostic?.status, completionDiagnostic?.explicit_completion,
-    completionDiagnostic?.reached_final_location, completionDiagnostic?.score_pct,
-    completionDiagnostic?.mastery_score, effectiveReviewMode, id,
-    isScormContent, matricula?.status, navigate, refetchMatricula,
+    shouldReconcilePassedScorm, id, navigate, refetchMatricula,
   ]);
 
   useEffect(() => {
