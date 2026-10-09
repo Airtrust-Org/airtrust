@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { reconcileTrainingComplianceRuleEnrollment } from '../services/training-compliance-rule-enrollment';
+import { reconcileFdmMaintenance72 } from '../services/training-compliance-fdm72-reconciliation';
 import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModalitySql } from '../services/training-compliance-history-identity';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
@@ -46,7 +47,6 @@ import { buildQualificationEvidenceProfileSql } from '../services/training-compl
 import { TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS, trainingComplianceEvidenceIsRealizedBy, trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
-
 const SCOPES = TRAINING_COMPLIANCE_SCOPES;
 const OBRIGATORIEDADES = ['OBRIGATORIA', 'RECOMENDADA', 'NAO_APLICA'] as const;
 const ORIGENS = [
@@ -59,12 +59,10 @@ const ORIGENS = [
   'EMPRESA',
   'OUTRO',
 ] as const;
-
 type Scope = TrainingComplianceScope;
 type Obrigatoriedade = (typeof OBRIGATORIEDADES)[number];
 type Origem = (typeof ORIGENS)[number];
 type ComplianceStatus = 'CONFORME' | 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO';
-
 type Employee = {
   id: number;
   nome: string;
@@ -79,7 +77,6 @@ type Employee = {
   aeronaves_modelos: string[];
   condicoes_ids: number[];
 };
-
 type Rule = {
   id: number;
   empresa_id: number;
@@ -119,7 +116,6 @@ type Rule = {
   created_at: string;
   updated_at: string;
 };
-
 type Evidence = {
   funcionario_id: number;
   tipo_id: number;
@@ -133,15 +129,12 @@ type Evidence = {
   // undefined = schema anterior a 0519 (compatibilidade de rollout); null = evidência sem perfil gravado.
   perfil_competencia?: string | null;
 };
-
 const tableExists = hasSchemaTable;
 const columnSet = getSchemaColumns;
-
 function asPositiveInt(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
-
 function normalizeEnum<T extends readonly string[]>(
   value: unknown,
   allowed: T,
@@ -152,10 +145,8 @@ function normalizeEnum<T extends readonly string[]>(
     .toUpperCase();
   return (allowed as readonly string[]).includes(normalized) ? (normalized as T[number]) : fallback;
 }
-
 export const ruleApplies = trainingComplianceRuleApplies;
 export const resolvedRules = resolveTrainingComplianceRules;
-
 async function loadEmployees(db: D1Database, empresaId: number): Promise<Employee[]> {
   const cols = await columnSet(db, 'funcionarios');
   const hasSetorId = cols.has('setor_id');
@@ -1204,6 +1195,15 @@ app.get('/regras', requireRole('admin', 'manager'), async (c) => {
       ),
     },
   });
+});
+
+app.post('/reconciliacao/fdm-mnt72/sincronizar', requireRole('admin'), async (c) => {
+  const payload = await c.req.json().catch(() => null);
+  if (payload?.scope !== 'FDM_MNT_72' || payload?.course_id !== 72) throw new ApiError('Escopo inválido', 400);
+  const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const data = await reconcileFdmMaintenance72(c.env.DB, empresaId, access, extrairUsuarioAuditoria(c), buildSnapshot);
+  return c.json({ success: true, data });
 });
 
 app.post('/regras', requireRole('admin', 'manager'), async (c) => {
