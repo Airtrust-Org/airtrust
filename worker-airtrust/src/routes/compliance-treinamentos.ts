@@ -593,7 +593,8 @@ function computeRequirement(
   let dias_para_vencer: number | null = null;
 
   if (evidence?.data_realizacao) {
-    if (rule.validade_fonte === 'EVIDENCIA' && evidence.data_vencimento) {
+    if (evidence.data_vencimento && (rule.validade_fonte === 'EVIDENCIA' ||
+      (rule.qualificacao_tipo_codigo === 'AVSEC_CONSC' && !rule.validade_meses))) {
       data_validade = evidence.data_vencimento.slice(0, 10);
     } else if (rule.validade_meses) {
       const base = new Date(`${evidence.data_realizacao.slice(0, 10)}T12:00:00Z`);
