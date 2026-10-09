@@ -115,6 +115,33 @@ const SCORM_CANDIDATE_RECHECK_DELAY_MS = 1_000;
 const SCORM_UNRESOLVED_MESSAGE =
   'O conteúdo chegou ao fim, mas não enviou a confirmação SCORM. Seu progresso foi preservado.';
 
+// Only enables an authenticated attempt at the existing server-side qualification
+// and completion gate; this predicate never marks a course as passed.
+export function canReconcilePersistedScormCompletion(params: {
+  reviewMode: boolean;
+  isScormContent: boolean;
+  matriculaStatus: string | null | undefined;
+  diagnostic: {
+    status?: string | null;
+    explicit_completion?: boolean | null;
+    reached_final_location?: boolean | null;
+    score_pct?: number | null;
+    mastery_score?: number | null;
+  } | null | undefined;
+}): boolean {
+  const { diagnostic } = params;
+  if (
+    params.reviewMode || !params.isScormContent ||
+    params.matriculaStatus === 'CONCLUIDO' ||
+    diagnostic?.status !== 'accepted' ||
+    diagnostic.explicit_completion !== true ||
+    diagnostic.reached_final_location !== true
+  ) return false;
+  const mastery = Number(diagnostic.mastery_score ?? 0);
+  const score = Number(diagnostic.score_pct);
+  return Number.isFinite(score) && score >= Math.max(0, mastery);
+}
+
 function parseSlideLocation(
   location: string | null | undefined,
 ): { current: number; total: number } | null {
@@ -275,6 +302,12 @@ export default function LmsPlayer() {
     mergedProgress,
   });
   const isScormContent = (matricula?.tipo_conteudo ?? 'scorm') === 'scorm';
+  const shouldReconcilePassedScorm = canReconcilePersistedScormCompletion({
+    reviewMode: effectiveReviewMode,
+    isScormContent,
+    matriculaStatus: matricula?.status,
+    diagnostic: completionDiagnostic,
+  });
   const canFinalize =
     !isCompletedState &&
     matricula?.status !== 'CONCLUIDO' &&
@@ -314,7 +347,7 @@ export default function LmsPlayer() {
       ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
         granularDiagnostic.assessment.passed !== false)
       : Boolean(legacyFinalSlide && legacyAssessmentEvidence));
-  const canRequestCompletion = canFinalize || Boolean(canRequestScormCompletion);
+  const canRequestCompletion = canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm;
 
   useEffect(() => {
     if (canRequestScormCompletion && !completionDialogShownRef.current &&
@@ -538,8 +571,7 @@ export default function LmsPlayer() {
     // antes do refetch que confirma a conclusão; quando a matrícula já está
     // CONCLUIDO ou o diagnóstico canônico já foi aceito, qualquer erro/painel
     // de conclusão mantido no estado React é stale e deve ser descartado.
-    const canonicalCompletionAccepted =
-      matricula?.status === 'CONCLUIDO' || completionDiagnostic?.status === 'accepted';
+    const canonicalCompletionAccepted = matricula?.status === 'CONCLUIDO';
 
     if (canonicalCompletionAccepted) {
       if (candidateRetryTimerRef.current !== null) {
@@ -634,7 +666,64 @@ export default function LmsPlayer() {
     refetchMatricula,
   ]);
 
+  // A persisted SCORM pass only makes an explicit user confirmation eligible.
+  // Never reconcile from an effect, mount, autosave, or page reload.
+  async function reconcilePersistedScormCompletion() {
+    if (!shouldReconcilePassedScorm || !Number.isSafeInteger(id) || id <= 0 || isFinalizing) return;
+    setIsFinalizing(true);
+    showCompletionToast('saving', 'Confirmando a conclusão no AirTrust...');
+    try {
+      // Existing authenticated endpoint enforces SCORM/tenant/qualification gates.
+      const response = await fetchWithAuth(`/api/lms/matriculas/${id}/finalizar`, {
+        method: 'POST',
+      });
+      const result = (await response.json()) as {
+        success?: boolean;
+        data?: { novo_status?: string };
+        code?: string;
+      };
+      if (!response.ok || result.success !== true || result.data?.novo_status !== 'CONCLUIDO') {
+        const code = sanitizeDiagnosticCode(result.code);
+        throw new Error(code
+          ? `O AirTrust ainda não confirmou a conclusão (código: ${code}).`
+          : 'O AirTrust ainda não conseguiu concluir esta matrícula.');
+      }
+      const { data: latest } = await refetchMatricula();
+      if (latest?.status !== 'CONCLUIDO') {
+        throw new Error('A matrícula ainda não consta como concluída no servidor.');
+      }
+      setCompleted(true);
+      void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
+      showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
+      navigate('/lms/cursos', { replace: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha na confirmação do curso.';
+      showCompletionToast('error', message);
+      setCompletionState('error');
+      setCompletionMessage(message);
+      setCompletionErrorInfo({ code: 'SCORM_FINALIZATION_FAILED', reason: null, message });
+    } finally {
+      setIsFinalizing(false);
+    }
+  }
+
   useEffect(() => {
+    const verifyCanonicalAndReturn = () => {
+      void refetchMatricula().then(({ data: latest }) => {
+        if (latest?.status !== 'CONCLUIDO') {
+          showCompletionToast('pending', 'Aprovação recebida. Aguardando confirmação da matrícula pelo AirTrust.');
+          return;
+        }
+        setCompleted(true);
+        setCompletionDialogOpen(false);
+        setIsFinalizing(false);
+        void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
+        showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
+        navigate('/lms/cursos', { replace: true });
+      }).catch(() => {
+        showCompletionToast('error', 'Não foi possível confirmar a matrícula. O progresso foi preservado.');
+      });
+    };
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== launchOrigin) return;
       // Só aceita mensagens do próprio iframe do curso. Sem esta checagem, qualquer
@@ -674,15 +763,8 @@ export default function LmsPlayer() {
         event.data.type === 'lms:completed' &&
         event.data.matriculaId === id
       ) {
-        setCompleted(true);
-        setCompletionDialogOpen(false);
-        setIsFinalizing(false);
-        void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
         if (event.data.qualificacao_gerada) setQualificacaoGerada(true);
-        showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
-          qualificationGenerated: Boolean(event.data.qualificacao_gerada),
-        });
-        void refetchMatricula();
+        verifyCanonicalAndReturn();
         return;
       }
 
@@ -756,9 +838,8 @@ export default function LmsPlayer() {
           setMaxVisitedSlide((prev) => Math.max(prev, event.data.slide_current));
         }
         if (event.data.novo_status === 'CONCLUIDO' && !effectiveReviewMode) {
-          setCompleted(true);
-        void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
-          showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
+          verifyCanonicalAndReturn();
+          return;
         }
         void refetchMatricula();
         return;
@@ -779,7 +860,7 @@ export default function LmsPlayer() {
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, launchOrigin, refetchMatricula, persistGranularDiagnostic, queryClient]);
+  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, persistGranularDiagnostic, queryClient]);
 
   async function handleFullscreen() {
     const el = iframeRef.current;
@@ -861,10 +942,10 @@ export default function LmsPlayer() {
   }
 
   function handleLeave() {
-    const shouldConfirm = !completed && matricula?.status !== 'CONCLUIDO';
+    const shouldConfirm = !isCompletedState;
     if (shouldConfirm) {
       const confirmed = window.confirm(
-        'O curso ainda não foi concluído. Deseja sair agora mesmo assim?',
+        'O AirTrust ainda não confirmou a conclusão deste curso. Deseja sair mesmo assim?',
       );
       if (!confirmed) return;
     }
@@ -911,6 +992,10 @@ export default function LmsPlayer() {
     if (!canRequestCompletion || !matricula) return;
     setCompletionDialogOpen(false);
     if (isScormContent) {
+      if (shouldReconcilePassedScorm) {
+        void reconcilePersistedScormCompletion();
+        return;
+      }
       const frameWindow = iframeRef.current?.contentWindow;
       if (!frameWindow) {
         toast.error('Conteúdo indisponível. Reabra o curso antes de concluir.');
@@ -1215,7 +1300,7 @@ export default function LmsPlayer() {
               </div>
             ) : canRequestCompletion ? (
               <button
-                onClick={handleFinalizeAndGenerateQualification}
+                onClick={() => setCompletionDialogOpen(true)}
                 disabled={isFinalizing}
                 className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
