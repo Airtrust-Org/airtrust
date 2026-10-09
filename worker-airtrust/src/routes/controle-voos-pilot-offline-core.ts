@@ -611,10 +611,10 @@ pilotOffline.get(
       try {
         const metadata = JSON.parse(String(row.metadata_json || '{}')) as Record<string, unknown>;
         const type = String(metadata.document_type || '').toUpperCase();
-        if (type !== 'WEATHER_REPORT' && type !== 'PLANO_VOO') return [];
+        if (!['WEATHER_REPORT', 'PLANO_VOO', 'MTA_EMBARQUE', 'MTA_DESEMBARQUE', 'OUTROS'].includes(type)) return [];
         return [{
           id: Number(row.id),
-          type: type as 'WEATHER_REPORT' | 'PLANO_VOO',
+          type: type as 'WEATHER_REPORT' | 'PLANO_VOO' | 'MTA_EMBARQUE' | 'MTA_DESEMBARQUE' | 'OUTROS',
           label: String(metadata.label || (type === 'WEATHER_REPORT' ? 'Weather report' : 'Planejamento de voo')),
           file_name: String(metadata.file_name || 'documento'),
           content_type: String(metadata.content_type || 'application/octet-stream'),
@@ -626,10 +626,15 @@ pilotOffline.get(
         return [];
       }
     });
-    const documentos = (['WEATHER_REPORT', 'PLANO_VOO'] as const).flatMap((type) => {
-      const current = documentHistory.find((document) => document.type === type);
-      return current ? [current] : [];
-    });
+    // The latest version of each named document is active; OUTROS is additive.
+    // Keep all extra files instead of silently replacing earlier uploads.
+    const documentos = [
+      ...(['WEATHER_REPORT', 'PLANO_VOO', 'MTA_EMBARQUE', 'MTA_DESEMBARQUE'] as const).flatMap((type) => {
+        const current = documentHistory.find((document) => document.type === type);
+        return current ? [current] : [];
+      }),
+      ...documentHistory.filter((document) => document.type === 'OUTROS'),
+    ];
     const generatedAt = new Date().toISOString();
     const [workspace, edbShadow, routePresentationMap] = await Promise.all([
       buildPilotOfflineWorkspace({
