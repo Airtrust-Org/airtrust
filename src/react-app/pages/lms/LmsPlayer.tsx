@@ -202,6 +202,7 @@ export default function LmsPlayer() {
   // Snapshot granular AIRTRUST_COMPLETION_DIAGNOSTICS_V1 (informativo).
   const [granularDiagnostic, setGranularDiagnostic] = useState<LmsGranularDiagnostic | null>(null);
   const [pendingPanelOpen, setPendingPanelOpen] = useState(false);
+  const [startingNewEdition, setStartingNewEdition] = useState(false);
 
   const qc = useQueryClient();
   const id = Number(matriculaId);
@@ -289,6 +290,13 @@ export default function LmsPlayer() {
     inferredLocationProgress ?? 0,
     inferredPersistedLocationProgress ?? 0,
   );
+  const editionMismatch = (matricula as (typeof matricula & {
+    edition_mismatch?: { required: true; previous_total: number; active_total: number } | null;
+  }) | undefined)?.edition_mismatch ?? null;
+  const newEditionRequired = editionMismatch?.required === true;
+  const isTenantAdmin = ['admin', 'administrador'].includes(
+    String(user?.role ?? '').trim().toLowerCase(),
+  );
   const completionDiagnostic = matricula?.completion_diagnostic ?? null;
   const completionExplanation = resolveCompletionExplanation({
     canonical: completionDiagnostic,
@@ -347,7 +355,8 @@ export default function LmsPlayer() {
       ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
         granularDiagnostic.assessment.passed !== false)
       : Boolean(legacyFinalSlide && legacyAssessmentEvidence));
-  const canRequestCompletion = canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm;
+  const canRequestCompletion = !newEditionRequired &&
+    (canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm);
 
   useEffect(() => {
     if (canRequestScormCompletion && !completionDialogShownRef.current &&
@@ -862,6 +871,33 @@ export default function LmsPlayer() {
     };
   }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, persistGranularDiagnostic, queryClient]);
 
+  async function startVerifiedNewEdition() {
+    if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
+    const confirmed = window.confirm(
+      `Iniciar a nova edição do curso? O histórico do ciclo anterior será preservado para auditoria, mas o progresso atual (${editionMismatch.previous_total}/${editionMismatch.previous_total}) não será usado na nova edição (${editionMismatch.active_total} unidades).`,
+    );
+    if (!confirmed) return;
+    setStartingNewEdition(true);
+    try {
+      const res = await fetchWithAuth(`${API_BASE_URL}/lms/matriculas/${id}/nova-edicao`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: `Início de nova edição SCORM: ${editionMismatch.previous_total} para ${editionMismatch.active_total} unidades, com preservação auditável do ciclo anterior.`,
+        }),
+      });
+      const result = await res.json() as { success?: boolean; code?: string; error?: string };
+      if (!res.ok || result.success !== true) {
+        throw new Error(result.error || result.code || `HTTP ${res.status}`);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['lms'] });
+      window.location.reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar a nova edição.');
+      setStartingNewEdition(false);
+    }
+  }
+
   async function handleFullscreen() {
     const el = iframeRef.current;
     if (!el) return;
@@ -1153,6 +1189,31 @@ export default function LmsPlayer() {
         </div>
       </header>
 
+      {newEditionRequired && editionMismatch && !effectiveReviewMode && (
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-300" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Nova edição do curso — matrícula anterior incompatível</p>
+            <p className="text-xs text-amber-200/90">
+              A matrícula possui evidências de {editionMismatch.previous_total} unidades, mas o pacote
+              ativo exige {editionMismatch.active_total}. Não é possível concluir nem reaproveitar
+              o progresso anterior nesta edição. É necessário iniciar um novo ciclo auditado.
+            </p>
+          </div>
+          {isTenantAdmin ? (
+            <button
+              onClick={() => void startVerifiedNewEdition()}
+              disabled={startingNewEdition}
+              className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
+            >
+              {startingNewEdition ? 'Preparando novo ciclo...' : 'Iniciar nova edição'}
+            </button>
+          ) : (
+            <span className="text-xs font-medium">Solicite nova matrícula à Gerência de Treinamento.</span>
+          )}
+        </div>
+      )}
+
       {effectiveReviewMode && (
         <div className="flex items-center gap-3 bg-blue-950/80 border-b border-blue-500/30 px-4 py-2.5 flex-shrink-0">
           <Eye className="h-4 w-4 text-blue-400 flex-shrink-0" />
@@ -1255,7 +1316,7 @@ export default function LmsPlayer() {
               </button>
             ) : null}
 
-            {!effectiveReviewMode && !isCompletedState && (
+            {!effectiveReviewMode && !isCompletedState && !newEditionRequired && (
               <LmsPendingPanel
                 explanation={completionExplanation}
                 open={pendingPanelOpen}
@@ -1265,7 +1326,7 @@ export default function LmsPlayer() {
           </aside>
         </div>
       </main>
-      {(canRequestCompletion ||
+      {!newEditionRequired && (canRequestCompletion ||
         completionState === 'saving' ||
         completionState === 'pending' ||
         completionState === 'error' ||
@@ -1315,7 +1376,7 @@ export default function LmsPlayer() {
         </div>
       )}
 
-      {completionDialogOpen && !isCompletedState && !effectiveReviewMode && (
+      {completionDialogOpen && !isCompletedState && !effectiveReviewMode && !newEditionRequired && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4">
           <section role="dialog" aria-modal="true" aria-labelledby="lms-finish-heading"
             className="w-full max-w-md rounded-2xl border border-slate-600 bg-slate-900 p-6 text-white shadow-2xl">
