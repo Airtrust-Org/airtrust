@@ -186,6 +186,7 @@ export async function executeSilentEnrollment({
     groups_without_ead: before.unavailable.length,
     people_without_ead: before.unavailable.reduce((sum, item) => sum + item.pessoas, 0),
     created: 0,
+    reactivated: 0,
     ignored_existing: 0,
     errors: 0,
   };
@@ -195,22 +196,40 @@ export async function executeSilentEnrollment({
     console.log(`SILENT_ENROLLMENT_NO_EAD=${before.unavailable.map((item) => item.codigo || item.nome || item.id).join(',')}`);
   }
 
-  for (const item of before.plan) {
-    for (const funcionarioIds of chunkIds(item.funcionario_ids, 200)) {
-      const result = await authenticatedJson(fetchImpl, normalizedApiBaseUrl, token, '/api/lms/matriculas/lote', {
-        method: 'POST',
-        body: JSON.stringify({
-          funcionario_ids: funcionarioIds,
-          curso_id: item.curso.id,
-          observacoes: 'Matrícula criada pela reconciliação do Compliance de Treinamentos — lote autorizado pela Gerência de Treinamento.',
-          enviar_convite_email: false,
-        }),
-      });
+  if (scope === 'FDM_MNT_72') {
+    if (before.plan.length > 0) {
+      const result = await authenticatedJson(fetchImpl, normalizedApiBaseUrl, token,
+        '/api/compliance-treinamentos/reconciliacao/fdm-mnt72/sincronizar', {
+          method: 'POST', body: JSON.stringify({ scope: 'FDM_MNT_72', course_id: 72 }),
+        });
       const data = result?.data || {};
-      summary.created += Number(data.criadas || 0);
-      summary.ignored_existing += Number(data.ignoradas || 0);
-      summary.errors += Number(data.erros || 0);
+      for (const key of ['created', 'reactivated', 'preserved']) {
+        if (!Number.isSafeInteger(Number(data[key])) || Number(data[key]) < 0)
+          throw new Error('FDM72_SYNC_SUMMARY_INVALID');
+      }
+      summary.created = Number(data.created);
+      summary.reactivated = Number(data.reactivated);
+      summary.ignored_existing = Number(data.preserved);
     }
+  } else {
+    for (const item of before.plan) {
+      for (const funcionarioIds of chunkIds(item.funcionario_ids, 200)) {
+        const result = await authenticatedJson(fetchImpl, normalizedApiBaseUrl, token, '/api/lms/matriculas/lote', {
+          method: 'POST',
+          body: JSON.stringify({
+            funcionario_ids: funcionarioIds,
+            curso_id: item.curso.id,
+            observacoes: 'Matrícula criada pela reconciliação do Compliance de Treinamentos — lote autorizado pela Gerência de Treinamento.',
+            enviar_convite_email: false,
+          }),
+        });
+        const data = result?.data || {};
+        summary.created += Number(data.criadas || 0);
+        summary.ignored_existing += Number(data.ignoradas || 0);
+        summary.errors += Number(data.erros || 0);
+      }
+    }
+  
   }
 
   if (summary.errors > 0) throw new Error(`SILENT_ENROLLMENT_API_ERRORS:${summary.errors}`);
@@ -223,7 +242,7 @@ export async function executeSilentEnrollment({
     throw new Error(`POSTCONDITION_ACTIONABLE_GAPS_REMAIN:${codes}`);
   }
 
-  console.log(`SILENT_ENROLLMENT_POSTCONDITION=PASS created=${summary.created} ignored=${summary.ignored_existing} unavailable_groups=${after.unavailable.length} unavailable_people=${after.unavailable.reduce((sum, item) => sum + item.pessoas, 0)}`);
+  console.log(`SILENT_ENROLLMENT_POSTCONDITION=PASS created=${summary.created} reactivated=${summary.reactivated} ignored=${summary.ignored_existing} unavailable_groups=${after.unavailable.length} unavailable_people=${after.unavailable.reduce((sum, item) => sum + item.pessoas, 0)}`);
   return {
     ...summary,
     remaining_without_ead_groups: after.unavailable.length,
