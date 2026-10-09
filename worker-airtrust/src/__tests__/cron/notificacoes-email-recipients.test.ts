@@ -5,6 +5,27 @@ vi.mock('../../services/setores-responsaveis-compliance', () => ({
   resolveSetorComplianceAlertEmails: vi.fn(),
 }));
 
+
+// Exercita a régua como se fosse reativada, sem retirar o hold operacional.
+// O provedor externo segue substituído por fetchMock, sem envio de e-mail real.
+vi.mock('../../services/training-alert-policy', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../services/training-alert-policy')>();
+  const getStage = (code: string | null | undefined) =>
+    original.TRAINING_ALERT_STAGES.find((stage) => stage.code === String(code || '').toUpperCase()) || null;
+  return {
+    ...original,
+    TRAINING_ALERT_DELIVERY_PAUSED: false,
+    getTrainingAlertStage: getStage,
+    trainingAlertAudience: (code: string | null, isCheck: boolean) => {
+      const stage = getStage(code);
+      return {
+        funcionario: stage?.employeeEmail || false,
+        gestores: Boolean(isCheck && stage?.managerCheckEmail),
+      };
+    },
+  };
+});
+
 import { processarNotificacoes } from '../../cron/notificacoes';
 import { resolveSetorComplianceAlertEmails } from '../../services/setores-responsaveis-compliance';
 import { TRAINING_ALERT_DELIVERY_PAUSED } from '../../services/training-alert-policy';
