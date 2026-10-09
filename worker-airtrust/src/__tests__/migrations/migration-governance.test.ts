@@ -137,7 +137,8 @@ describe('migration governance', () => {
     expect(files).toContain('0542_lms_scorm_formative_assessment_policy.sql');
     // 0543 narrowly corrects tenant-6 FDM course qualification bindings via Schema V2.
     expect(files).toContain('0543_fdm_target_qualification_links.sql');
-    const expectedLatest = 543;
+    expect(files).toContain('0545_training_compliance_canonical_pdf_alignment.sql');
+    const expectedLatest = 545;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

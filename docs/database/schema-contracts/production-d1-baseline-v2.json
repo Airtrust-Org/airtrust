@@ -1456,7 +1456,6 @@
       "reviewed_manifest": "fdm-target-qualification-links-0543.json",
       "evidence": "worker-airtrust/schema-v2/plans/fdm-target-qualification-links-0543.md",
       "note": "Only updates lms_cursos.qualificacao_tipo_id for tenant 6 courses 71 and 72, guarded by singleton qualification identities and zero destination enrollments. No changes to qualification history, employee records, SCORM, certificates, course 13 or 73. Governance requires SHA-specific permission, D1 recovery and production postconditions; manifest is not evidence of apply."
-
     },
     {
       "change_file": "0544_avsec_corporativo_historico.sql",
@@ -1469,6 +1468,18 @@
       "reviewed_manifest": "avsec-corporativo-historico-0544.json",
       "evidence": "worker-airtrust/schema-v2/plans/avsec-corporativo-historico-0544.md",
       "note": "0544 reclassifies exactly historical evidence id 5276 (employee 111) from D1 to AVSEC_CONSC by Training Management decision; dates/status/certificate note preserved and expiry remains 2026-02-19. Approved execution requires exact SHA, production recovery and Schema V2 pre/postconditions. No production write claimed."
+    },
+    {
+      "change_file": "0545_training_compliance_canonical_pdf_alignment.sql",
+      "change_id": "training-compliance-canonical-pdf-alignment-0545",
+      "sha256": "b9f95d02f919818f05fd72546f7a446fb824060b44de3dc0d92480b0be55641f",
+      "targets": [],
+      "domain": "Training Compliance canonical PDF QSMS and Safety Operational tenant 6",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-canonical-pdf-alignment-0545.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-canonical-pdf-alignment-0545.md",
+      "note": "0538 forward compensation: NR05 designated CIPA only, Regras de Ouro suspended pending target confirmation, missing function requirements filled and FDM-MECANICO hour restored. No history or enrollment writes."
     }
   ]
 }
