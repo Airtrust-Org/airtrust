@@ -93,7 +93,12 @@ test('simulator planning: resume persisted CAE workflow and export PDF', async (
     await assertLiveFrontendShaFromPage(page, releaseShortSha, 'simulator-planning');
   }
 
-  await expect(page.getByRole('heading', { name: 'Planejamentos em andamento' })).toBeVisible();
+  // The staging dashboard loads its persisted drafts asynchronously. Keep this
+  // bounded wait explicit so a slow, otherwise healthy first render is not
+  // retried as though it were a different planning lifecycle.
+  await expect(page.getByRole('heading', { name: 'Planejamentos em andamento' })).toBeVisible({
+    timeout: 15_000,
+  });
 
   const draftCard = page.getByRole('button').filter({ hasText: state.class_name }).first();
   await expect(draftCard).toBeVisible();
@@ -187,10 +192,29 @@ test.describe('stateful simulator materialization', () => {
     await expect(dateInput).toHaveValue(state.runtime_suggested_date);
     await startInput.fill(state.runtime_start_time);
     await endInput.fill(state.runtime_end_time);
+    const confirmPath = `/api/simuladores/planejamento-v2/confirmar-horarios`;
+    const confirmResponsePromise = page.waitForResponse((response) => {
+      if (response.request().method().toUpperCase() !== 'POST') return false;
+      try {
+        return new URL(response.url()).pathname === confirmPath;
+      } catch {
+        return false;
+      }
+    });
     await page.getByRole('button', { name: 'Aplicar horários confirmados' }).click();
+    const confirmResponse = await confirmResponsePromise;
+    const confirmPayload = (await confirmResponse.json().catch(() => null)) as {
+      success?: boolean;
+      error?: string;
+      data?: { success?: boolean; error?: string };
+    } | null;
+    const confirmEvidence = JSON.stringify(confirmPayload);
+    expect(confirmResponse.status(), confirmEvidence).toBe(200);
+    expect(confirmPayload?.success, confirmEvidence).toBe(true);
+    expect(confirmPayload?.data?.success ?? true, confirmEvidence).toBe(true);
     await expect(
       page.getByText('Planejamento definido com CAE', { exact: true }).first(),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15_000 });
 
     await page.getByRole('button', { name: 'Preparar agendamento em lote' }).click();
     const instructor = page.getByLabel('Instrutor');
