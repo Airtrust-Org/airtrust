@@ -462,6 +462,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (!input.checked) input.click();
       }
 
+      // The SCORM root uses `app-shell menu-collapsed`. A generic
+      // [class*="menu"] ancestor match would falsely mark every slide card
+      // as navigation chrome and block mandatory interactions (course 15).
       const isProductChrome = (el, text) => {
         const id = String(el.id || '').toLowerCase();
         const className = clean(el.className).toLowerCase();
@@ -481,7 +484,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (/(^|\s)(icon-btn|menu-btn|close-menu|drawer-close|skip-link)(\s|$)/i.test(className)) return true;
         if (bad.test(text)) return true;
         return Boolean(el.closest(
-          'aside,[class*="sidebar" i],[class*="drawer" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+          'aside,[class*="sidebar" i],[class*="drawer" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
         ));
       };
       const items = Array.from(document.querySelectorAll('button,[role=button],input[type=button],input[type=submit],a'))
@@ -564,7 +567,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         )
           .filter((el) => {
             if (el.closest(
-              'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+              'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
             )) return false;
             const style = getComputedStyle(el);
             const rect = el.getBoundingClientRect();
@@ -604,7 +607,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           if (!visible(el)) return false;
           if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
           if (el.closest(
-            'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+            'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
           )) return false;
           const style = getComputedStyle(el);
           const dataKeys = Object.keys(el.dataset || {}).join(' ');
@@ -666,7 +669,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           const structuralGroups = Array.from(document.body.querySelectorAll('*'))
             .map((parent) => {
               if (parent.closest(
-                'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+                'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
               )) return null;
               const children = Array.from(parent.children).filter((el) => {
                 if (!visible(el)) return false;
@@ -1427,7 +1430,7 @@ async function captureRequiredInteractionStructure(frame) {
         st.display !== 'none' && st.opacity !== '0' && el.getAttribute('aria-hidden') !== 'true';
     };
     const excluded = (el) => Boolean(el.closest(
-      'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+      'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
     ));
     const describe = (el) => {
       if (!el) return null;
