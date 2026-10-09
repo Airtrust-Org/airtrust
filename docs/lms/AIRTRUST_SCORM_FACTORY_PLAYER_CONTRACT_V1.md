@@ -2,7 +2,7 @@
 
 **Status:** contrato de implantação progressiva; ainda não afirma que os cursos existentes estão certificados.  
 **Coordenador:** [issue #1325](https://github.com/Airtrust-Org/airtrust/issues/1325).  
-**Baseline visual/técnica já aprovada para recuperação, não reinventar:** Golden Master/Core V2 da AirTrust Learning Factory (pacote `AIRTRUST_LEARNING_FACTORY_CANON_2026-09-27.zip`, validar hash antes de adotar), com a implementação NR-26 RC5 como referência visual e interativa e o PBN como referência editorial. SCORM 1.2 / Single SCO, AirTrust Completion Manifest V1, Diagnostics V1 e código canônico atual do AirTrust. O ZIP-fonte aprovado precisa ser recuperado e conferido antes de afirmar paridade real.
+**Fonte já aprovada — preservar, não reinventar:** [AirTrust Learning Factory — Canon 2026-09-27](https://drive.google.com/drive/folders/1EuDE_yHhbExLxrSuNj1ntsvPVqjwgBGM), Golden Master/Core V2 e Design System Aero Editorial; NR-26 RC5 como Golden Visual e PBN como benchmark editorial. A documentação do Drive referencia `10_GOLDEN_MASTER_CORE_LOCK.json` e arquivos `11_` a `14_`, mas a consulta dessa pasta não localizou todo o core: **CORE_SOURCE_INCOMPLETE** até recuperar/verificar os hashes. Não assumir que um ZIP arbitrário com nome parecido equivale ao Golden Master. Base mutável da compatibilidade: SCORM 1.2 / Single SCO, Completion Manifest V1, Diagnostics V1 e `main` atual do AirTrust.
 
 ## Regra de arquitetura — o conteúdo não implementa o player
 
@@ -17,17 +17,17 @@ Todo treinamento novo deve ser produzido por **uma única engine versionada de a
 ## Contrato visual imutável da engine
 
 - Design responsivo, sem impor slides rígidos 16:9: referência desktop 1468×836 com scroll vertical natural e mobile 390×844 sem overflow; não cortar controles, textos ou avaliações.
-- Tipografia principal de conteúdo e questões >=20 px; textos auxiliares legíveis e contrastantes; navegação anterior/próximo, índice/drawer (fechamento apenas por ação explícita), progresso, referências e feedback nos mesmos lugares.
+- **Usar tokens reais do Golden Master**, sem inventar nova escala: desktop hero 64, H1 52, H2 36, H3 27, lead 21, body 18, caption 14px; mobile hero 44, H1 38, H2 30, H3 24, lead 19, body 17, caption 14px. O gate M8 não permite CSS abaixo de 14px. Legibilidade da matéria e das avaliações deve ser auditada em seis viewports; alterações tipográficas exigem mudança governada do core. Navegação anterior/próximo, índice/drawer (fechamento só por ação explícita), progresso, referências e feedback ficam nos mesmos lugares.
 - Tema corporativo coerente, imagens operacionais pertinentes e distintas; não colocar 'AirTrust Learning'. Conteúdo técnico e regulatório de fonte controlada, revisão identificada.
 - Avaliações com alternativas adequadas ao objetivo pedagógico e feedback útil, sem expor gabarito ao LMS nem depender apenas de clique automático. Mastery parametrizado por curso, com baseline típico de 80% quando aprovado.
-- Capturas visuais de referência (golden screenshots) e comparação em Chromium e WebKit em larguras desktop/tablet antes de aceitar uma nova versão da engine.
+- Capturas de referência e comparação em Chromium e WebKit nos **seis viewports canônicos**: 1468×836, 1366×768, 1024×768, 768×1024, 390×844 e 360×800. Nenhum overflow lateral ou scroll aninhado. Falha ou diferença injustificada do core = `CORE_DRIFT` e bloqueio.
 
 ## Contrato técnico do estado
 
 - Estado SCORM real: `cmi.core.lesson_status`, `cmi.core.lesson_location`, `cmi.suspend_data` (orçamento recomendado <=3500 caracteres), nota `cmi.core.score.raw`, `LMSInitialize/Commit/Finish` (Commit/Finish únicos e zero chamadas posteriores). Avaliação deve ser persistida antes de finalizar.
 - Estado local isolado por tenant, curso, matrícula e **ciclo ativo**. Uma matrícula nova não recebe progresso herdado.
 - Bookmark e questões persistidos por **IDs estáveis**, não apenas por índice percentual. Troca de pacote exige declaração e teste de equivalência de IDs/avaliações. Caso incompatível, bloquear migração automática e oferecer nova edição administrativa auditável.
-- Nunca marcar `passed/completed` com base em posição final ou percentual isolados. Reabertura de aprovado é revisão read-only: não diminuir status, nota, `lesson_location` ou `suspend_data` histórico.
+- Nunca marcar `passed/completed` com base em posição final ou percentual isolados. Passar na avaliação **apenas habilita o botão "Concluir curso/treinamento"**; somente o clique explícito efetua o fechamento certificador. Reabertura de aprovado é revisão read-only: não diminuir status, nota, `lesson_location` ou `suspend_data` histórico.
 - O player AirTrust usa a mesma API de lançamento para todos os pacotes. Evitar correções por nome/ID/DOM; diagnóstico deve distinguir progresso salvo, slide efetivamente renderizado, edição ativa e evidência de avaliação.
 
 ## Matriz obrigatória de certificação, por hash exato
