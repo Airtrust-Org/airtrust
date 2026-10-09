@@ -14,6 +14,14 @@ on:
         description: Type AIRTRUST_PRODUCTION_TRAINING_COMPLIANCE_ENROLL_NO_EMAIL
         required: true
         type: string
+      enrollment_scope:
+        description: Restrict enrollment to FDM Manutencao course 72
+        required: true
+        type: choice
+        options:
+          - FDM_MNT_72
+          - ALL
+        default: FDM_MNT_72
 
 permissions:
   contents: read
@@ -181,6 +189,7 @@ jobs:
       E2E_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
       E2E_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
       AIRTRUST_PRODUCTION_ENROLL_CONFIRMATION: AIRTRUST_PRODUCTION_TRAINING_COMPLIANCE_ENROLL_NO_EMAIL
+      AIRTRUST_PRODUCTION_ENROLLMENT_SCOPE: ${{ inputs.enrollment_scope || 'ALL' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -203,6 +212,7 @@ jobs:
         env:
           EXPECTED_MAIN_SHA: ${{ needs.guard.outputs.expected_main_sha }}
           LIVE_WORKER_SHA: ${{ needs.guard.outputs.live_worker_sha }}
+          ENROLLMENT_SCOPE: ${{ inputs.enrollment_scope || 'ALL' }}
           CREATED: ${{ steps.enroll.outputs.created }}
           IGNORED: ${{ steps.enroll.outputs.ignored_existing }}
           GROUPS_WITHOUT_EAD: ${{ steps.enroll.outputs.remaining_without_ead_groups }}
@@ -217,6 +227,7 @@ jobs:
             echo "- already enrolled: \`${IGNORED:-unknown}\`"
             echo "- remaining groups without an EAD course: \`${GROUPS_WITHOUT_EAD:-unknown}\`"
             echo "- people in requirements without an EAD course: \`${PEOPLE_WITHOUT_EAD:-unknown}\`"
+            echo "- enrollment scope: \`$ENROLLMENT_SCOPE\`"
             echo '- enrollment e-mail: `disabled`'
             echo '- invitation endpoint: `not called`'
           } >> "$GITHUB_STEP_SUMMARY"
