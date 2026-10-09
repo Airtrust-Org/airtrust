@@ -49,7 +49,7 @@ describe('Compliance designation catalog and optional job filter', () => {
     renderEditor();
     const cargoSelect = await screen.findByLabelText('Filtrar funcionários por cargo');
     const employeeSelect = screen.getByLabelText('Funcionário');
-    expect(screen.getByRole('option', { name: 'Membro da CIPA / representante NR-05' })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Membro da CIPA / representante NR-05' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Auditor comportamental designado' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Participante de Gestão de Mudanças' })).toBeInTheDocument();
 
