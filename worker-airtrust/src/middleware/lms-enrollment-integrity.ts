@@ -220,6 +220,7 @@ async function handleRematriculation(
     ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(status);
   let editionMismatch: Awaited<ReturnType<typeof detectLmsEditionMismatch>> = null;
   let verifiedActivePrefix: string | null = null;
+  let verifiedPreviousCmi: string | null = null;
 
   if (newEdition && eligibleForNewEdition && !existing.qualificacao_historico_id) {
     const edition = await c.env.DB.prepare(
@@ -243,7 +244,10 @@ async function handleRematriculation(
       cursoId: existing.curso_id,
       cmiJson: edition?.cmi_json,
     });
-    if (editionMismatch) verifiedActivePrefix = edition?.scorm_package_r2_prefix ?? null;
+    if (editionMismatch) {
+      verifiedActivePrefix = edition?.scorm_package_r2_prefix ?? null;
+      verifiedPreviousCmi = edition?.cmi_json ?? null;
+    }
   }
   if (newEdition ? (!eligibleForNewEdition || !editionMismatch) : !normalRematriculation) {
     return errorResponse(
@@ -323,6 +327,12 @@ async function handleRematriculation(
                         AND edition_c.empresa_id = lms_matriculas.empresa_id
                         AND edition_c.deleted_at IS NULL
                         AND edition_c.scorm_package_r2_prefix = ?
+                   )
+                   AND EXISTS (
+                     SELECT 1 FROM lms_progresso_scorm old_p
+                      WHERE old_p.matricula_id = lms_matriculas.id
+                        AND old_p.empresa_id = lms_matriculas.empresa_id
+                        AND old_p.cmi_json = ?
                    )`
                 : "(deleted_at IS NOT NULL OR status = 'CANCELADO')"}`,
       ).bind(
@@ -333,7 +343,7 @@ async function handleRematriculation(
         operationMarker,
         matriculaId,
         empresaId,
-        ...(newEdition ? [verifiedActivePrefix] : []),
+        ...(newEdition ? [verifiedActivePrefix, verifiedPreviousCmi] : []),
       ),
       c.env.DB.prepare(
         `UPDATE lms_matricula_ciclos
@@ -426,8 +436,9 @@ async function handleRematriculation(
       ),
       ...(newEdition ? [c.env.DB.prepare(
         `DELETE FROM lms_completion_diagnostics_snapshots
-          WHERE empresa_id = ? AND matricula_id = ?`,
-      ).bind(empresaId, matriculaId)] : []),
+          WHERE empresa_id = ? AND matricula_id = ?
+            AND ${markerExists}`,
+      ).bind(empresaId, matriculaId, matriculaId, empresaId, operationMarker)] : []),
       c.env.DB.prepare(
         `UPDATE lms_matriculas
               SET observacoes = TRIM(REPLACE(COALESCE(observacoes, ''), ?, '')),
