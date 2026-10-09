@@ -239,6 +239,8 @@ async function handleRematriculation(
       bucket: c.env.BUCKET,
       contentType: edition?.tipo_conteudo,
       activePrefix: edition?.scorm_package_r2_prefix,
+      empresaId,
+      cursoId: existing.curso_id,
       cmiJson: edition?.cmi_json,
     });
     if (editionMismatch) verifiedActivePrefix = edition?.scorm_package_r2_prefix ?? null;
