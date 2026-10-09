@@ -16,6 +16,7 @@ import { AUTH_FILE } from '../frontend-pr-ui-qa.config';
 import { resolveCredentialPair } from '../lib/credential-pair.mjs';
 import { assertLiveFrontendShaFromPage } from '../lib/live-sha-guard.mjs';
 import { installReadOnlyGuard } from '../lib/read-only-network-guard.mjs';
+import { probeRealStagingHealth } from '../lib/staging-browser-health-probe.mjs';
 
 setup('real staging login', async ({ page }) => {
   // Guard the authentication phase too: otherwise an initial navigation could
@@ -82,16 +83,10 @@ setup('real staging login', async ({ page }) => {
     await assertLiveFrontendShaFromPage(page, releaseShortSha, 'login');
   }
 
-  // Direct browser-origin health probe: detects CORS/transport failures before
-  // sending any real credentials. Safe GET only; never a mocked auth response.
-  const browserHealthStatus = await page.evaluate(async () => {
-    try {
-      const response = await fetch(
-        'https://airtrust-api-staging.airtrust.workers.dev/api/health',
-        { method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store' },
-      );
-      return response.status;
-    } catch { return -1; }
+  // The route guard may see an aborted first GET during an initial SPA reload.
+  // Retry only when that exact browser request was aborted by navigation.
+  const browserHealthStatus = await probeRealStagingHealth(page, {
+    guard, releaseShortSha, assertFrontendSha: assertLiveFrontendShaFromPage,
   });
   if (browserHealthStatus !== 200) {
     throw new Error('QA_BROWSER_STAGING_API_PREFLIGHT_FAILED:' + browserHealthStatus);
