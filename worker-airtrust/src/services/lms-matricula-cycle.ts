@@ -483,6 +483,8 @@ export async function resetMatriculaForNewCycle(
           SET status = 'NAO_INICIADO',
               deleted_at = NULL,
               progresso_pct = 0,
+              ultimo_slide = 0,
+              ultima_pagina = 0,
               score_final = NULL,
               tentativas = 0,
               data_inicio = NULL,
@@ -521,7 +523,7 @@ export async function resetMatriculaForNewCycle(
               suspend_data = NULL,
               launch_data = NULL,
               cmi_json = NULL,
-              last_commit_at = NULL,
+              last_commit_at = datetime('now'),
               updated_at = datetime('now')
         WHERE matricula_id = ?
           AND EXISTS (
