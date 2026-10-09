@@ -74,8 +74,9 @@ type PlanningBlock = {
   equipment: string;
   duration_minutes: number;
   target_date: string;
-  pairing: 'MESMO_TREINAMENTO' | 'TREINAMENTOS_COMPATIVEIS' | 'SEM_DUPLA';
+  pairing: 'MESMO_TREINAMENTO' | 'TREINAMENTOS_COMPATIVEIS' | 'APOIO_SEM_RENOVACAO' | 'SEM_DUPLA';
   sessions: SessionNeed[];
+  support?: { employee_id: number; employee_name: string; employee_role: string | null };
   schedule_status?: 'SCHEDULED' | 'UNMATCHED_CREW' | 'NO_CAE_SLOT';
   suggested_date?: string | null;
   suggestion_status?: 'SUGGESTED' | 'WAITING_CREW' | 'NO_PROVIDER_WINDOW' | 'NO_ROSTER_DATE';
@@ -279,6 +280,7 @@ function sessionCoverageLabel(session: SessionNeed) {
 function pairingLabel(value: PlanningBlock['pairing']) {
   if (value === 'MESMO_TREINAMENTO') return 'Mesma formação';
   if (value === 'TREINAMENTOS_COMPATIVEIS') return 'Treinamentos compatíveis';
+  if (value === 'APOIO_SEM_RENOVACAO') return 'Apoio sem renovação';
   return 'Aguardando dupla';
 }
 
@@ -287,6 +289,7 @@ function blockStatus(block: PlanningBlock) {
   if (block.schedule_status === 'NO_CAE_SLOT') return 'Sem slot CAE compatível';
   if (block.pairing === 'SEM_DUPLA' || block.schedule_status === 'UNMATCHED_CREW')
     return 'Aguardando dupla';
+  if (block.pairing === 'APOIO_SEM_RENOVACAO') return 'Piloto de apoio — sem ficha ou renovação';
   return 'Dupla proposta — data a confirmar';
 }
 
@@ -537,6 +540,7 @@ export default function PlanejamentoSimuladoresV3() {
     nextLocks: PairLock[],
     availability?: CaeAvailabilityDocument | null,
     nextNeeds: SessionNeed[] = baseNeeds,
+    supportAssignments?: Array<{ anchor_need_id: string; support_employee_id: number }>,
   ): Promise<Proposal | null> => {
     if (nextNeeds.length === 0 || !proposal) return null;
     try {
@@ -548,6 +552,7 @@ export default function PlanejamentoSimuladoresV3() {
           reference_date: todayIso(),
           session_needs: nextNeeds,
           locks: nextLocks,
+          support_assignments: supportAssignments || [],
           ...(availability ? { cae_availability: availability } : {}),
         }),
       });
@@ -690,6 +695,22 @@ export default function PlanejamentoSimuladoresV3() {
     }
   };
 
+  const changeSupport = async (block: PlanningBlock, employeeId: number | null) => {
+    if (!proposal || block.sessions.length !== 1) return;
+    const current = proposal.classes.flatMap((item) => item.blocks)
+      .filter((item) => item.support && item.block_id !== block.block_id)
+      .map((item) => ({
+        anchor_need_id: item.sessions[0].need_id,
+        support_employee_id: item.support!.employee_id,
+      }));
+    if (employeeId != null) {
+      current.push({ anchor_need_id: block.sessions[0].need_id, support_employee_id: employeeId });
+    }
+    const next = await rePair(locks, caeDocument, baseNeeds, current);
+    if (draftId && next) await persistDraft(draftStatus || 'AGUARDANDO_CAE',
+      { proposal: next, locks }, true);
+  };
+
   const resetPairings = async () => {
     if (locks.length === 0) return;
     const nextProposal = await rePair([], caeDocument);
@@ -755,6 +776,7 @@ export default function PlanejamentoSimuladoresV3() {
       const pairingBlocks = proposal.classes.flatMap((trainingClass) =>
         trainingClass.blocks.map((block) => ({
           need_ids: block.sessions.map((session) => session.need_id),
+          ...(block.support ? { support_employee_id: block.support.employee_id } : {}),
         })),
       );
       const data = await apiJson<RepairResponse>('/api/simuladores/planejamento-v2/comparar-cae', {
@@ -796,6 +818,7 @@ export default function PlanejamentoSimuladoresV3() {
     proposal?.classes.flatMap((trainingClass) =>
       trainingClass.blocks.map((block) => ({
         need_ids: block.sessions.map((session) => session.need_id),
+        ...(block.support ? { support_employee_id: block.support.employee_id } : {}),
       })),
     ) || [];
 
@@ -840,6 +863,7 @@ export default function PlanejamentoSimuladoresV3() {
       .filter((block) => block.pairing !== 'SEM_DUPLA')
       .map((block) => ({
         need_ids: block.sessions.map((session) => session.need_id),
+        ...(block.support ? { support_employee_id: block.support.employee_id } : {}),
         ...(confirmedTimes[block.block_id] || {}),
       }));
     if (confirmed.some((item) => !item.date || !item.start_time || !item.end_time)) {
@@ -1072,7 +1096,7 @@ export default function PlanejamentoSimuladoresV3() {
         y += 16;
 
         for (const block of trainingClass.blocks) {
-          const participantRows = Math.max(1, block.sessions.length);
+          const participantRows = Math.max(1, block.sessions.length + (block.support ? 1 : 0));
           const cardHeight = 16 + participantRows * 23;
           ensure(cardHeight + 4);
           const palette = statusPalette(block);
@@ -1127,6 +1151,14 @@ export default function PlanejamentoSimuladoresV3() {
               });
             }
             participantY += 23;
+          }
+          if (block.support) {
+            doc.setFillColor(255, 255, 255);
+            doc.roundedRect(margin + 5, participantY, contentWidth - 10, 20, 1.5, 1.5, 'F');
+            setText(8.8, true, navy);
+            doc.text(compact('APOIO OPERACIONAL · ' + block.support.employee_name, 65), margin + 8, participantY + 6);
+            setText(7.8, false, slate);
+            doc.text('Sem realização de treinamento, ficha ou renovação de qualificação', margin + 8, participantY + 13);
           }
           y += cardHeight + 4;
         }
@@ -1685,7 +1717,10 @@ export default function PlanejamentoSimuladoresV3() {
                     {formatDate(trainingClass.reference_date)}
                   </div>
                 </div>
-                <div className="text-xs text-slate-500">{trainingClass.blocks.length} bloco(s)</div>
+                <div className="text-xs text-slate-500">{trainingClass.blocks.length} bloco(s) · {[...new Set(trainingClass.blocks.flatMap((b) => [
+                      ...b.sessions.map((need) => need.employee_id),
+                      ...(b.support ? [b.support.employee_id] : []),
+                    ]))].length} pilotos</div>
               </div>
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {trainingClass.blocks.map((block) => {
@@ -1764,6 +1799,34 @@ export default function PlanejamentoSimuladoresV3() {
                             </div>
                           );
                         })}
+                        {block.sessions.length === 1 && (
+                          <label className="flex flex-col gap-1 rounded-lg border border-slate-200 p-2 text-xs text-slate-700 dark:border-slate-800 dark:text-slate-200">
+                            Piloto de apoio sem treinamento ou renovação
+                            <select
+                              aria-label={`Piloto de apoio para ${block.sessions[0].employee_name}`}
+                              value={block.support?.employee_id || ''}
+                              disabled={loading}
+                              onChange={(event) => void changeSupport(block,
+                                event.target.value ? Number(event.target.value) : null)}
+                              className="min-h-10 rounded border border-slate-300 bg-white px-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                            >
+                              <option value="">Sem piloto de apoio</option>
+                              {[...new Map(baseNeeds
+                                .filter((need) => need.equipment === block.equipment &&
+                                  need.employee_id !== block.sessions[0].employee_id)
+                                .map((need) => [need.employee_id, need] as const)).values()]
+                                .sort((a, b) => a.employee_name.localeCompare(b.employee_name))
+                                .map((need) => (
+                                  <option key={need.employee_id} value={need.employee_id}>
+                                    {need.employee_name}
+                                  </option>
+                                ))}
+                            </select>
+                            <span className="text-[11px] text-slate-500">
+                              A escala e a disponibilidade dos dois pilotos serão validadas na confirmação.
+                            </span>
+                          </label>
+                        )}
                         {block.sessions.length === 1 && (
                           <button
                             type="button"
