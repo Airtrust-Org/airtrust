@@ -7,7 +7,7 @@ import {
   type LmsCompletionDecision,
   type LmsCompletionSource,
 } from '../services/lms-completion-evidence';
-import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish } from '../services/lms-progress-guardrails';
+import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish, scormStatusIndicatesCompletion } from '../services/lms-progress-guardrails';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
 
@@ -494,8 +494,30 @@ async function guardManualFinalize(
   const storedCompletion =
     ['completed', 'complete'].includes(normalizeStatus(row.completion_status)) ||
     Number(row.progresso_pct ?? 0) >= 100;
-  const decision = buildDecision(row, 'manual', {}, assetSessionValid, {
-    explicitCompletion: storedCompletion,
+  const isScorm = normalizeStatus(row.tipo_conteudo) === 'scorm';
+  if (isScorm) {
+    // A user-confirmed /finalizar call may reconcile an ALREADY persisted SCORM
+    // pass, but must not turn a progress percentage or final slide alone into
+    // a qualification. Every slide must have been recorded by this enrollment.
+    const terminal = scormStatusIndicatesCompletion({
+      lessonStatus: row.lesson_status,
+      completionStatus: row.completion_status,
+      successStatus: row.success_status,
+    });
+    if (!terminal || !hasCompleteScormSlideCoverage(row.cmi_json)) {
+      return decisionRejection(c, matriculaId, {
+        accepted: false,
+        code: terminal ? 'PROGRESS_EVIDENCE_MISSING' : 'COMPLETION_EVIDENCE_INSUFFICIENT',
+        scorePct: null,
+        masteryScore: row.scorm_mastery_score,
+        failurePrecedence: false,
+      });
+    }
+  }
+  // Only persisted, complete SCORM runtime evidence is evaluated as SCORM.
+  // Other manual finalizations remain in the non-SCORM, fail-closed policy.
+  const decision = buildDecision(row, isScorm ? 'scorm' : 'manual', {}, assetSessionValid, {
+    explicitCompletion: isScorm ? true : storedCompletion,
     explicitFailure:
       normalizeStatus(row.lesson_status) === 'failed' ||
       normalizeStatus(row.success_status) === 'failed',
