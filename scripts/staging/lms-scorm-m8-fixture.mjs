@@ -40,7 +40,13 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
     '</body></html>';
   const app = String.raw`
 (function () {
+  // Browser Rendering injects API in this window. The real AirTrust learner
+  // launch mounts the SCO in a same-origin iframe whose SCORM API is on parent.
   var api = window.API;
+  if (!api) {
+    try { api = window.parent && window.parent.API; }
+    catch (_crossOrigin) { api = null; }
+  }
   if (!api || api.LMSInitialize('') !== 'true') throw Error('QA_SCORM_API_NOT_INITIALIZED');
   var state = {
     active: 0, done: [], assess: { 1: { passed: false } },
