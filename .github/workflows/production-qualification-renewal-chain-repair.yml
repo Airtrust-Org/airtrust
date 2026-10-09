@@ -84,6 +84,18 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
+      # Checkout by immutable SHA produces detached HEAD. The production
+      # executor also verifies a local main branch, origin/main and the
+      # live remote main all resolve to the authorized SHA.
+      - name: Restore local main at the pinned SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_REF_REQUIRED; exit 1; }
+          git switch -C main "$GITHUB_SHA"
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo LOCAL_SHA_CHANGED; exit 1; }
+          [[ "$(git branch --show-current)" == main ]] || { echo LOCAL_MAIN_REQUIRED; exit 1; }
+
       - name: Verify eight release gates on exact SHA
         env:
           GITHUB_TOKEN: ${{ github.token }}
