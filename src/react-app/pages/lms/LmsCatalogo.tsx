@@ -83,6 +83,7 @@ import {
   getAdminCoursePreviewPath,
   supportsAdminCoursePreview as supportsContentPreview,
 } from './lmsAdminPreview';
+import { shouldShowLmsEnrollmentDeadline } from './lmsEnrollmentDeadline';
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
@@ -382,7 +383,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays < 0) {
     return {
-      label: `Vencido há ${Math.abs(diffDays)}d`,
+      label: `Prazo da matrícula vencido há ${Math.abs(diffDays)}d`,
       className: 'border-rose-200 bg-rose-50 text-rose-700',
       pulseClassName: '',
       icon: <AlertCircle className="h-3 w-3" />,
@@ -391,7 +392,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays <= 7) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'border-orange-200 bg-orange-50 text-orange-700',
       pulseClassName: 'animate-pulse',
       icon: <Clock className="h-3 w-3" />,
@@ -400,7 +401,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays <= 30) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'border-amber-200 bg-amber-50 text-amber-700',
       pulseClassName: '',
       icon: <Clock className="h-3 w-3" />,
@@ -408,7 +409,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
   }
 
   return {
-    label: `Vence em ${diffDays}d`,
+    label: `Prazo da matrícula: ${diffDays}d restantes`,
     className: 'border-slate-200 bg-slate-50 text-slate-600',
     pulseClassName: '',
     icon: <Clock className="h-3 w-3" />,
@@ -1443,7 +1444,9 @@ function CourseCard({
   const typeMeta = getTypeMeta(curso.tipo_conteudo);
   const previewPath = canManage ? getAdminCoursePreviewPath(curso) : null;
   const enrollmentProgress = getEnrollmentProgress(matricula);
-  const deadlineMeta = !canManage ? getEnrollmentDeadlineMeta(matricula?.data_expiracao) : null;
+  const deadlineMeta = !canManage && shouldShowLmsEnrollmentDeadline(matricula?.status, matricula?.data_expiracao)
+    ? getEnrollmentDeadlineMeta(matricula?.data_expiracao)
+    : null;
   const statusMeta = canManage
     ? getMatriculaStatusMeta(curso.publicado ? 'PUBLICADO' : 'RASCUNHO')
     : !matricula || matricula.status === 'CANCELADO'
