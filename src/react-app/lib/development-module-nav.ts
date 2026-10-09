@@ -11,7 +11,7 @@ const PRIMARY_ADMIN_EMAIL_ALLOWLIST = new Set(
 );
 
 const PRIMARY_ADMIN_ROLES = new Set(['ADMIN', 'ADMINISTRADOR']);
-const OPERATIONAL_DASHBOARD_ROLES = new Set(['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER', 'COORDENACAO_VOO']);
+const OPERATIONAL_DASHBOARD_ROLES = new Set(['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'MANAGER']);
 
 function normalizeEmail(email: string | null | undefined): string {
   return String(email || '')
@@ -52,7 +52,7 @@ export function canSeeControleVoosDevelopmentModule(
 
   // Controle de Voos é superfície operacional de Admin e Gestor/Manager.
   // O backend continua sendo a autoridade final de RBAC por rota/capability.
-  return OPERATIONAL_DASHBOARD_ROLES.has(normalizeRole(user.role));
+  return OPERATIONAL_DASHBOARD_ROLES.has(normalizeRole(user.role)) || normalizeRole(user.role) === 'COORDENACAO_VOO';
 }
 
 export function canSeeOperationalDashboard(
