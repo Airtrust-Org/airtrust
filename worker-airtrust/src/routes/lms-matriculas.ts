@@ -730,6 +730,8 @@ app.get('/:id', async (c) => {
         bucket: c.env.BUCKET,
         contentType: tipoConteudo,
         activePrefix: matricula.scorm_package_r2_prefix,
+        empresaId,
+        cursoId: Number(matricula.curso_id),
         cmiJson: progressoScorm?.cmi_json,
       })
     : null;
