@@ -104,6 +104,8 @@ jobs:
         run: node --test scripts/__tests__/lms-scorm99-proof-readonly.test.mjs
       - name: validate LMS active-course production certification read-only contract
         run: node --test scripts/__tests__/production-lms-active-course-certification-readonly.test.mjs
+      - name: require evidence-complete P0 SCORM functional certification verdict
+        run: node --test scripts/__tests__/lms-scorm-functional-certification-gate.test.mjs
       - name: validate 0438 legacy staging workflow guards
         run: node --test scripts/__tests__/staging-0438-legacy-validation.test.mjs
       - name: validate 0438 legacy staging workflow v2 guards
