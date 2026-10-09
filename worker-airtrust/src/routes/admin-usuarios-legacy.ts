@@ -286,7 +286,9 @@ adminUsuariosRoutes.get('/', async (c) => {
           u.id,
           u.email,
           u.nome,
-          COALESCE(ue.role, u.perfil) AS perfil,
+          COALESCE((SELECT p.perfil FROM usuarios_empresas_perfis p
+            WHERE p.usuario_id = u.id AND p.empresa_id = ue.empresa_id
+              AND p.perfil = 'COORDENACAO_VOO' AND p.ativo = 1 LIMIT 1), ue.role, u.perfil) AS perfil,
           u.active,
           u.funcionario_id,
           f.nome AS funcionario_nome,
@@ -316,7 +318,9 @@ adminUsuariosRoutes.get('/', async (c) => {
           u.id,
           u.email,
           u.nome,
-          COALESCE(ue.role, u.perfil) AS perfil,
+          COALESCE((SELECT p.perfil FROM usuarios_empresas_perfis p
+            WHERE p.usuario_id = u.id AND p.empresa_id = ue.empresa_id
+              AND p.perfil = 'COORDENACAO_VOO' AND p.ativo = 1 LIMIT 1), ue.role, u.perfil) AS perfil,
           u.active,
           u.funcionario_id,
           f.nome AS funcionario_nome,
@@ -435,6 +439,11 @@ adminUsuariosRoutes.post('/', async (c) => {
   const funcionarioId = body?.funcionario_id ?? null;
   const targetEmpresaId = Number(body?.empresa_id ?? empresaId);
   const isManager = isManagerPerfil(perfil);
+  const coordinator = perfil === 'COORDENACAO_VOO';
+  // usuarios.perfil and usuarios_empresas.role still have legacy CHECK constraints.
+  // Store coordination exclusively in the tenant-scoped, session-authoritative profile table.
+  const storedUserPerfil = coordinator ? 'ALUNO' : perfil;
+  const storedCompanyRole = coordinator ? 'USER' : perfil;
 
   if (!email || !nome) {
     throw badRequest('email e nome são obrigatórios', 'MISSING_FIELDS');
@@ -451,7 +460,7 @@ adminUsuariosRoutes.post('/', async (c) => {
   // Somente o Administrador Geral pode conceder um perfil administrativo.
   // Administradores da Empresa podem criar/gerenciar usuários operacionais,
   // mas não criar pares nem elevar alguém ao próprio nível.
-  if (perfil === 'ADMINISTRADOR' || perfil === 'ADMIN' || isManager) {
+  if (perfil === 'ADMINISTRADOR' || perfil === 'ADMIN' || isManager || perfil === 'COORDENACAO_VOO') {
     requireAdmin(callerRole, 'criar perfil administrativo');
   }
 
@@ -497,7 +506,7 @@ adminUsuariosRoutes.post('/', async (c) => {
         `INSERT INTO usuarios (email, password_hash, nome, perfil, funcionario_id, active)
          VALUES (?, ?, ?, ?, ?, 0)`,
       )
-      .bind(email, placeholderHash, nome, perfil, funcionarioId)
+      .bind(email, placeholderHash, nome, storedUserPerfil, funcionarioId)
       .run();
   } catch (insertError) {
     if (
@@ -529,7 +538,7 @@ adminUsuariosRoutes.post('/', async (c) => {
           `INSERT OR IGNORE INTO usuarios_empresas (usuario_id, empresa_id, is_primary, role)
            VALUES (?, ?, 1, ?)`,
         )
-        .bind(novoUsuarioId, targetEmpresaId, perfil),
+        .bind(novoUsuarioId, targetEmpresaId, storedCompanyRole),
       ...setorStatements,
     ]);
   } else {
@@ -538,8 +547,17 @@ adminUsuariosRoutes.post('/', async (c) => {
         `INSERT OR IGNORE INTO usuarios_empresas (usuario_id, empresa_id, is_primary, role)
          VALUES (?, ?, 1, ?)`,
       )
-      .bind(novoUsuarioId, targetEmpresaId, perfil)
+      .bind(novoUsuarioId, targetEmpresaId, storedCompanyRole)
       .run();
+  }
+
+  if (coordinator) {
+    // 0473/0475 profile membership is the authority for selecting this role in-session.
+    await db.prepare(`INSERT INTO usuarios_empresas_perfis
+      (usuario_id, empresa_id, perfil, ativo, created_at, updated_at)
+      VALUES (?, ?, 'COORDENACAO_VOO', 1, datetime('now'), datetime('now'))
+      ON CONFLICT(usuario_id, empresa_id, perfil) DO UPDATE SET ativo = 1, updated_at = datetime('now')`)
+      .bind(novoUsuarioId, targetEmpresaId).run();
   }
 
   // Vínculo automático por e-mail: se já existe um funcionário com o mesmo
@@ -638,14 +656,19 @@ adminUsuariosRoutes.put('/:id', async (c) => {
 
   // Somente o Administrador Geral pode editar um perfil administrativo ou
   // promover um usuário a Administrador da Empresa.
-  const targetPerfil = body?.perfil?.toUpperCase() || existente.perfil.toUpperCase();
+  const existingCoordinator = await db.prepare(`SELECT 1 AS active FROM usuarios_empresas_perfis
+    WHERE usuario_id = ? AND empresa_id = ? AND perfil = 'COORDENACAO_VOO' AND ativo = 1 LIMIT 1`)
+    .bind(id, empresaId).first<{active: number}>();
+  const targetPerfil = body?.perfil?.toUpperCase() || (existingCoordinator ? 'COORDENACAO_VOO' : existente.perfil.toUpperCase());
   const targetPrivilegiado =
     existente.perfil.toUpperCase() === 'ADMINISTRADOR' ||
     existente.perfil.toUpperCase() === 'ADMIN' ||
     isManagerPerfil(existente.perfil) ||
+    Boolean(existingCoordinator) ||
     targetPerfil === 'ADMINISTRADOR' ||
     targetPerfil === 'ADMIN' ||
-    isManagerPerfil(targetPerfil);
+    isManagerPerfil(targetPerfil) ||
+    targetPerfil === 'COORDENACAO_VOO';
   if (targetPrivilegiado && callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
     throw forbidden('Apenas ADMINISTRADOR pode editar perfis administrativos', 'INSUFFICIENT_ROLE');
   }
@@ -698,15 +721,29 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     binds.push(body.nome.trim());
   }
   if (body?.perfil) {
-    updates.push('perfil = ?');
-    binds.push(body.perfil.toUpperCase());
-    // Sincronizar role em usuarios_empresas na mesma transação da UPDATE
-    // de usuarios abaixo — não deixar perfil e role divergentes.
+    const selected = body.perfil.toUpperCase();
+    const coordination = selected === 'COORDENACAO_VOO';
+    // Do not write COORDENACAO_VOO into CHECK-constrained legacy role columns.
+    // The explicit per-tenant profile is authoritative for session role switching.
+    if (!coordination) {
+      updates.push('perfil = ?');
+      binds.push(selected);
+    }
     statementsAdicionais.push(
-      db
-        .prepare(`UPDATE usuarios_empresas SET role = ? WHERE usuario_id = ? AND empresa_id = ?`)
-        .bind(body.perfil.toUpperCase(), id, empresaId),
+      db.prepare('UPDATE usuarios_empresas SET role = ? WHERE usuario_id = ? AND empresa_id = ?')
+        .bind(coordination ? 'USER' : selected, id, empresaId),
+      db.prepare(`INSERT INTO usuarios_empresas_perfis
+        (usuario_id, empresa_id, perfil, ativo, created_at, updated_at)
+        VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+        ON CONFLICT(usuario_id, empresa_id, perfil) DO UPDATE SET ativo = 1, updated_at = datetime('now')`)
+        .bind(id, empresaId, selected),
     );
+    if (!coordination) {
+      // Revocation must precede session role validation on the next request.
+      statementsAdicionais.push(db.prepare(`UPDATE usuarios_empresas_perfis
+        SET ativo = 0, updated_at = datetime('now')
+        WHERE usuario_id = ? AND empresa_id = ? AND perfil = 'COORDENACAO_VOO'`).bind(id, empresaId));
+    }
   }
   if (body?.funcionario_id !== undefined) {
     updates.push('funcionario_id = ?');
@@ -717,7 +754,7 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     binds.push(body.active ? 1 : 0);
   }
 
-  if (updates.length === 0) {
+  if (updates.length === 0 && statementsAdicionais.length === 0) {
     throw badRequest('Nenhum campo para atualizar', 'NO_FIELDS');
   }
 
@@ -739,7 +776,11 @@ adminUsuariosRoutes.put('/:id', async (c) => {
 
   const atualizado = await db
     .prepare(
-      `SELECT u.id, u.email, u.nome, u.perfil, u.active, u.funcionario_id, f.nome AS funcionario_nome,
+      `SELECT u.id, u.email, u.nome,
+              COALESCE((SELECT p.perfil FROM usuarios_empresas_perfis p
+                WHERE p.usuario_id = u.id AND p.empresa_id = ue.empresa_id
+                  AND p.perfil = 'COORDENACAO_VOO' AND p.ativo = 1 LIMIT 1), ue.role, u.perfil) AS perfil,
+              u.active, u.funcionario_id, f.nome AS funcionario_nome,
               ue.empresa_id, e.nome AS empresa_nome, ue.is_primary, u.created_at, u.last_login
        FROM usuarios u
        INNER JOIN usuarios_empresas ue ON ue.usuario_id = u.id AND ue.empresa_id = ?
