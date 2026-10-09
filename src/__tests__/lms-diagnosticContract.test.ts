@@ -124,6 +124,18 @@ describe('PPSP: aceitação canônica versus matrícula em aberto', () => {
     expect(result.summary).toMatch(/AirTrust está confirmando a matrícula/);
     expect(result.summary).not.toBe(GENERIC_PENDING_FALLBACK);
   });
+  it('não confunde SCORM 1.2 aceito por LMSFinish confiável com pendências não identificadas', () => {
+    const result = resolveCompletionExplanation({
+      canonical: {
+        status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED',
+        can_finalize: false, explicit_completion: false,
+        explicit_failure: false, score_pct: 100, mastery_score: 70,
+      },
+      granular: null,
+    });
+    expect(result.registrationPending).toBe(true);
+    expect(result.summary).not.toBe(GENERIC_PENDING_FALLBACK);
+  });
   it('preserva alertas legítimos para conclusão rejeitada sem evidências', () => {
     const result = resolveCompletionExplanation({ canonical: REJECTED, granular: null });
     expect(result.registrationPending).not.toBe(true);
