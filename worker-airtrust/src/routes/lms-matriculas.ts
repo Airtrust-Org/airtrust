@@ -2963,9 +2963,7 @@ app.patch('/:id/progresso', async (c) => {
   const { progresso_pct, ultimo_slide, ultima_pagina } = parsed.data;
 
   // Verificar que a matrícula pertence à empresa e ao funcionário autenticado
-  const userId = getCallerUserId(c);
-  const userRole = hasRole(c, 'admin') ? 'ADMIN' : hasRole(c, 'manager') ? 'MANAGER' : '';
-  const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
+  const isAdmin = hasRole(c, 'admin', 'manager');
 
   const existing = await db
     .prepare(
