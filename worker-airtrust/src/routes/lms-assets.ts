@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { ApiError } from '../middleware/error-handler';
+import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 import { auth, validateAccessTokenSecurityState } from '../middleware/auth';
 import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import {
@@ -1031,7 +1032,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   const matricula = await db
     .prepare(
       `
-      SELECT m.id, m.funcionario_id, m.empresa_id, m.status,
+      SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.data_inicio,
         c.id AS curso_id, c.titulo, c.scorm_versao,
         c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado
       FROM lms_matriculas m
@@ -1045,6 +1046,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       funcionario_id: number;
       empresa_id: number;
       status: string;
+      data_inicio: string | null;
       curso_id: number;
       titulo: string;
       scorm_versao: string | null;
@@ -1097,6 +1099,17 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     )
     .bind(matricula.id, empresaId)
     .first<{ suspend_data: string | null; cmi_json: string | null }>();
+
+  if (matricula.status !== 'CONCLUIDO') {
+    const mismatch = await detectLmsEditionMismatch({
+      bucket: c.env.BUCKET, db, contentType: 'scorm',
+      activePrefix: matricula.scorm_package_r2_prefix,
+      empresaId, cursoId: matricula.curso_id,
+      cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data,
+      enrollmentStartedAt: matricula.data_inicio,
+    });
+    if (mismatch) throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
+  }
 
   const { initialCmiJson, hasResumeState } = buildScormLaunchState(
     progressoScorm?.cmi_json ?? null,
