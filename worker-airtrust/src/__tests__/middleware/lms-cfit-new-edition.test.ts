@@ -97,7 +97,7 @@ describe('CFIT 842 — rematrícula auditada de edição ativa incompatível', (
     expect(reset?.sql).toContain('old_p.cmi_json = ?');
     expect(reset?.bindings.some(v => String(v).includes('41/41'))).toBe(true);
     const diagnosticsDelete = writes.find(w => w.sql.includes('DELETE FROM lms_completion_diagnostics_snapshots'));
-    expect(diagnosticsDelete?.sql).toContain('instr(COALESCE(marker_m.observacoes'));
+    expect(diagnosticsDelete?.sql).toContain('instr(COALESCE(marker_m.observacoes');
     expect(diagnosticsDelete?.bindings).toContainEqual(expect.stringMatching(/LMS_REMATRICULATION/));
     expect(writes.find(w => w.sql.includes('INSERT INTO audit_logs'))?.bindings.some(x =>
       String(x).includes('scorm_progress'))).toBe(true);
