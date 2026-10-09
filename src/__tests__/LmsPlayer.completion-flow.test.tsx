@@ -167,6 +167,7 @@ describe('LmsPlayer completion flow', () => {
       code: 'SCORM_FINALIZATION_FAILED',
     });
     const retry = await screen.findByRole('button', { name: 'Registrar no AirTrust' });
+    expect(screen.getAllByRole('button', { name: 'Registrar no AirTrust' })).toHaveLength(1);
     fireEvent.click(retry);
     expect(postMessage).toHaveBeenCalledWith(
       { type: 'lms:request-completion', matriculaId: 42 },
