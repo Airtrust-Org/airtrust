@@ -55,6 +55,7 @@ async function readJson<T>(response: Response): Promise<T> {
 export function TrainingComplianceConditionsEditor() {
   const queryClient = useQueryClient();
   const { isAdmin } = usePermissions();
+  const [cargoFilterId, setCargoFilterId] = useState<number | null>(null);
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [conditionId, setConditionId] = useState<number | null>(null);
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
@@ -89,6 +90,23 @@ export function TrainingComplianceConditionsEditor() {
     }
     return [...map.entries()];
   }, [catalogs.data?.condicoes]);
+
+  const cargos = useMemo(() => {
+    const active = new Map<number, string>();
+    for (const employee of catalogs.data?.funcionarios || []) {
+      if (employee.funcao_id && employee.funcao_nome) {
+        active.set(employee.funcao_id, employee.funcao_nome);
+      }
+    }
+    return [...active.entries()].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
+  }, [catalogs.data?.funcionarios]);
+
+  const employeesForCargo = useMemo(
+    () => (catalogs.data?.funcionarios || []).filter(
+      (employee) => cargoFilterId === null || employee.funcao_id === cargoFilterId,
+    ),
+    [catalogs.data?.funcionarios, cargoFilterId],
+  );
 
   const invalidate = async () => {
     await Promise.all([
@@ -181,13 +199,31 @@ export function TrainingComplianceConditionsEditor() {
               Condições e designações de aplicabilidade
             </h3>
             <p className="text-sm text-slate-500">
-              Use quando setor e cargo não bastam: exposição, atividade, certificação ou designação
-              regulatória. Essas marcações podem incluir ou excluir a pessoa de qualquer requisito e
+              Escolha o cargo para localizar os funcionários e selecione a designação correspondente.
+              A seleção do cargo é apenas um filtro: ela não atribui automaticamente a designação
+              nem torna o treinamento obrigatório para todos os ocupantes. As marcações individuais
               podem ter início e fim.
             </p>
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="text-xs font-medium text-slate-600">
+            Cargo (filtro opcional)
+            <select
+              aria-label="Filtrar funcionários por cargo"
+              value={cargoFilterId ?? ''}
+              onChange={(e) => {
+                setCargoFilterId(e.target.value ? Number(e.target.value) : null);
+                setEmployeeId(null);
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Todos os cargos</option>
+              {cargos.map(([id, nome]) => (
+                <option key={id} value={id}>{nome}</option>
+              ))}
+            </select>
+          </label>
           <label className="text-xs font-medium text-slate-600">
             Funcionário
             <select
@@ -196,7 +232,7 @@ export function TrainingComplianceConditionsEditor() {
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
             >
               <option value="">Selecione</option>
-              {(catalogs.data?.funcionarios || []).map((employee) => (
+              {employeesForCargo.map((employee) => (
                 <option key={employee.id} value={employee.id}>
                   {employee.nome}
                   {employee.funcao_nome ? ` · ${employee.funcao_nome}` : ''}
