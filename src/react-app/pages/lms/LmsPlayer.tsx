@@ -184,7 +184,6 @@ export default function LmsPlayer() {
   const [liveSlideCoverage, setLiveSlideCoverage] = useState<{ count: number; total: number } | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
-  const completionDialogShownRef = useRef(false);
   // One automatic server reconciliation per mounted enrollment session; a
   // manual retry remains possible after a failed authenticated validation.
   const autoCompletionAttemptRef = useRef<number | null>(null);
@@ -361,13 +360,13 @@ export default function LmsPlayer() {
   const canRequestCompletion = !newEditionRequired &&
     (canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm);
 
-  useEffect(() => {
-    if (canRequestScormCompletion && !completionDialogShownRef.current &&
-        completionState !== 'saving') {
-      completionDialogShownRef.current = true;
-      setCompletionDialogOpen(true);
-    }
-  }, [canRequestScormCompletion, completionState]);
+  // The SCO owns its own assessment/submission control. The LMS never opens
+  // an unsolicited confirmation dialog on the last slide: its job is to
+  // reconcile the server result automatically, or offer one explicit retry
+  // only if reconciliation fails.
+  const showScormRegistrationRetry =
+    isScormContent && canRequestCompletion &&
+    (completionState === 'error' || completionState === 'unresolved');
 
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
@@ -1338,9 +1337,10 @@ export default function LmsPlayer() {
               </div>
             </section>
 
-            {!effectiveReviewMode && !isCompletedState ? (
+            {!effectiveReviewMode && !isCompletedState &&
+              (!isScormContent || showScormRegistrationRetry) ? (
               <button
-                onClick={() => setCompletionDialogOpen(true)}
+                onClick={isScormContent ? requestExplicitCompletion : () => setCompletionDialogOpen(true)}
                 disabled={!canRequestCompletion || isFinalizing}
                 className="mt-auto w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -1360,7 +1360,8 @@ export default function LmsPlayer() {
           </aside>
         </div>
       </main>
-      {!newEditionRequired && (canRequestCompletion ||
+      {!newEditionRequired && ((!isScormContent && canRequestCompletion) ||
+        showScormRegistrationRetry ||
         completionState === 'saving' ||
         completionState === 'pending' ||
         completionState === 'error' ||
@@ -1393,7 +1394,7 @@ export default function LmsPlayer() {
                   Voltar ao catálogo
                 </button>
               </div>
-            ) : canRequestCompletion ? (
+            ) : (!isScormContent && canRequestCompletion) ? (
               <button
                 onClick={() => setCompletionDialogOpen(true)}
                 disabled={isFinalizing}
@@ -1408,7 +1409,7 @@ export default function LmsPlayer() {
         </div>
       )}
 
-      {completionDialogOpen && !isCompletedState && !effectiveReviewMode && !newEditionRequired && (
+      {completionDialogOpen && !isScormContent && !isCompletedState && !effectiveReviewMode && !newEditionRequired && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4">
           <section role="dialog" aria-modal="true" aria-labelledby="lms-finish-heading"
             className="w-full max-w-md rounded-2xl border border-slate-600 bg-slate-900 p-6 text-white shadow-2xl">
