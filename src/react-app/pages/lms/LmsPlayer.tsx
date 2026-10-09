@@ -185,6 +185,9 @@ export default function LmsPlayer() {
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
   const completionDialogShownRef = useRef(false);
+  // One automatic server reconciliation per mounted enrollment session; a
+  // manual retry remains possible after a failed authenticated validation.
+  const autoCompletionAttemptRef = useRef<number | null>(null);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
   const [assetSessionReady, setAssetSessionReady] = useState(false);
   const [completionState, setCompletionState] = useState<
@@ -719,6 +722,18 @@ export default function LmsPlayer() {
       setIsFinalizing(false);
     }
   }
+
+  // Once the server has accepted explicit SCORM completion, confirm the
+  // matrícula automatically through the EXISTING backend finalization gate.
+  // Never infer completion from 100%, a score alone, an orange SCO button,
+  // or a stale previous edition. The server remains the only authority.
+  useEffect(() => {
+    if (!shouldReconcilePassedScorm || newEditionRequired || isFinalizing ||
+        !Number.isSafeInteger(id) || id <= 0 ||
+        autoCompletionAttemptRef.current === id) return;
+    autoCompletionAttemptRef.current = id;
+    void reconcilePersistedScormCompletion();
+  }, [id, shouldReconcilePassedScorm, newEditionRequired, isFinalizing]);
 
   useEffect(() => {
     const verifyCanonicalAndReturn = () => {
@@ -1352,7 +1367,7 @@ export default function LmsPlayer() {
         completionState === 'pending' ||
         completionState === 'error' ||
         completionState === 'unresolved') && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4">
+        <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4${completionState === 'idle' && canRequestCompletion ? ' md:hidden' : ''}`}>
           <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-emerald-300/30 bg-slate-900/90 p-3 shadow-2xl backdrop-blur">
             <div className="mb-2 text-xs text-emerald-200/90">
               {completionMessage || 'Conclusão recebida, mas ainda não confirmada pelo servidor.'}

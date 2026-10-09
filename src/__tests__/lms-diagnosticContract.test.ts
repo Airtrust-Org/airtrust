@@ -107,6 +107,30 @@ describe('formatPendingItemDisplay', () => {
   });
 });
 
+describe('PPSP: aceitação canônica versus matrícula em aberto', () => {
+  it('não inventa pendências para SCORM aprovado que aguarda o registro da matrícula', () => {
+    const result = resolveCompletionExplanation({
+      canonical: {
+        status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED',
+        can_finalize: false, explicit_completion: true,
+        explicit_failure: false, mastery_score: 70, score_pct: 100,
+      },
+      granular: null,
+    });
+    expect(result.canComplete).toBe(false);
+    expect(result.registrationPending).toBe(true);
+    expect(result.items).toEqual([]);
+    expect(result.adminItems).toEqual([]);
+    expect(result.summary).toMatch(/AirTrust está confirmando a matrícula/);
+    expect(result.summary).not.toBe(GENERIC_PENDING_FALLBACK);
+  });
+  it('preserva alertas legítimos para conclusão rejeitada sem evidências', () => {
+    const result = resolveCompletionExplanation({ canonical: REJECTED, granular: null });
+    expect(result.registrationPending).not.toBe(true);
+    expect(result.summary).toBe(GENERIC_PENDING_FALLBACK);
+  });
+});
+
 describe('resolveCompletionExplanation', () => {
   it('returns exactly 3 items for 3 missing slides (test 1)', () => {
     const result = resolveCompletionExplanation({
