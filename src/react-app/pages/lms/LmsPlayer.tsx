@@ -1337,10 +1337,9 @@ export default function LmsPlayer() {
               </div>
             </section>
 
-            {!effectiveReviewMode && !isCompletedState &&
-              (!isScormContent || showScormRegistrationRetry) ? (
+            {!effectiveReviewMode && !isCompletedState && !isScormContent ? (
               <button
-                onClick={isScormContent ? requestExplicitCompletion : () => setCompletionDialogOpen(true)}
+                onClick={() => setCompletionDialogOpen(true)}
                 disabled={!canRequestCompletion || isFinalizing}
                 className="mt-auto w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
