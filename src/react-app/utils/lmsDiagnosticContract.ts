@@ -364,7 +364,7 @@ export function resolveCompletionExplanation(params: {
   // A successful SCO is not an LMS enrollment completion. When the backend
   // accepts SCORM evidence but the matrícula is still open, do not manufacture
   // missing content/items or show a misleading "pendências" warning.
-  if (canonical?.status === 'accepted' && canonical?.explicit_completion === true) {
+  if (canonical?.status === 'accepted') {
     return {
       canComplete: false,
       category: 'SCORM_STATUS',
