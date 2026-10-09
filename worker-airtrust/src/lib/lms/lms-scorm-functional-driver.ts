@@ -62,7 +62,8 @@ function driveFactoryCourse() {
     }
     const current = state.active;
     const slide = slides[current];
-    if (slide.kind === 'decision' && state.choices?.[slide.id] === undefined) {
+    if ((slide.kind === 'decision' || slide.kind === 'scenario') &&
+        state.choices?.[slide.id] === undefined) {
       if (!click('button[data-choice]')) return fail('DECISION_CONTROL_MISSING', steps);
     }
     if (slide.kind === 'assessment' && !state.assess?.[String(slide.chapter)]?.passed) {

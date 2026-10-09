@@ -50,5 +50,10 @@ describe('SCORM package quality gate', () => {
     expect(applyRuntimeConformance(staticResult, passed, 'sha-a').publishable).toBe(true);
     expect(applyRuntimeConformance(staticResult, { ...passed, scoreRaw: '69' }, 'sha-a').publishable).toBe(false);
     expect(applyRuntimeConformance(staticResult, { ...passed, functionalCompletionVerified: false }, 'sha-a').publishable).toBe(false);
+    expect(applyRuntimeConformance(staticResult, { ...passed, masteryScore: null }, 'sha-a').publishable).toBe(false);
+    expect(applyRuntimeConformance(staticResult, { ...passed, scoreRaw: null }, 'sha-a').publishable).toBe(false);
+    expect(applyRuntimeConformance(staticResult, { ...passed, lessonStatus: 'completed', expectedSuccessStatus: 'passed' }, 'sha-a').publishable).toBe(false);
+    expect(applyRuntimeConformance(staticResult, { ...passed, requiresAssessmentEvidence: false, masteryScore: null, scoreRaw: null, lessonStatus: 'completed', expectedSuccessStatus: 'completed' }, 'sha-a').publishable).toBe(true);
+    expect(applyRuntimeConformance(staticResult, { ...passed, requiresAssessmentEvidence: true, masteryScore: null, scoreRaw: null }, 'sha-a').publishable).toBe(false);
   });
 });

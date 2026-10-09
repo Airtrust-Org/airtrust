@@ -124,12 +124,19 @@ export async function runScormBrowserConformance(params: {
     const runtime = analyzeTrace(params.candidateSha256, startedAt, observed.trace, observed.values, observed.initialized, observed.finished, observed.lastError);
     const contractBytes = assets.get('airtrust-completion-manifest.json');
     let masteryScore: number | null = null;
+    let expectedSuccessStatus: string | null = null;
+    let requiresAssessmentEvidence = true;
     if (contractBytes) {
       try {
         const contract = JSON.parse(new TextDecoder().decode(contractBytes)) as {
-          assessment?: { masteryScore?: unknown };
+          assessment?: { masteryScore?: unknown; requiredInteractions?: unknown; successStatus?: unknown };
         };
         const declared = contract?.assessment?.masteryScore;
+        expectedSuccessStatus = typeof contract?.assessment?.successStatus === 'string'
+          ? contract.assessment.successStatus : null;
+        if (Array.isArray(contract?.assessment?.requiredInteractions)) {
+          requiresAssessmentEvidence = contract.assessment.requiredInteractions.length > 0;
+        }
         if (typeof declared === 'number' && Number.isFinite(declared) &&
             declared >= 0 && declared <= 100) masteryScore = declared;
       } catch {
@@ -141,6 +148,8 @@ export async function runScormBrowserConformance(params: {
       masteryScore: masteryScore === null ? runtime.masteryScore : String(masteryScore),
       functionalCompletionVerified: functional.supported && functional.completed && functional.steps > 0,
       functionalCompletionReason: functional.reason,
+      expectedSuccessStatus,
+      requiresAssessmentEvidence,
     };
   } catch (error) {
     const timedOut = error instanceof Error && /timeout/i.test(error.message);
