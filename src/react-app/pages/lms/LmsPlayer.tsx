@@ -721,6 +721,22 @@ export default function LmsPlayer() {
   ]);
 
   useEffect(() => {
+    const verifyCanonicalAndReturn = () => {
+      void refetchMatricula().then(({ data: latest }) => {
+        if (latest?.status !== 'CONCLUIDO') {
+          showCompletionToast('pending', 'Aprovação recebida. Aguardando confirmação da matrícula pelo AirTrust.');
+          return;
+        }
+        setCompleted(true);
+        setCompletionDialogOpen(false);
+        setIsFinalizing(false);
+        void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
+        showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
+        navigate('/lms/cursos', { replace: true });
+      }).catch(() => {
+        showCompletionToast('error', 'Não foi possível confirmar a matrícula. O progresso foi preservado.');
+      });
+    };
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== launchOrigin) return;
       // Só aceita mensagens do próprio iframe do curso. Sem esta checagem, qualquer
@@ -760,16 +776,8 @@ export default function LmsPlayer() {
         event.data.type === 'lms:completed' &&
         event.data.matriculaId === id
       ) {
-        setCompleted(true);
-        setCompletionDialogOpen(false);
-        setIsFinalizing(false);
-        void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
         if (event.data.qualificacao_gerada) setQualificacaoGerada(true);
-        showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
-          qualificationGenerated: Boolean(event.data.qualificacao_gerada),
-        });
-        void refetchMatricula();
-        navigate('/lms/cursos', { replace: true });
+        verifyCanonicalAndReturn();
         return;
       }
 
@@ -843,11 +851,7 @@ export default function LmsPlayer() {
           setMaxVisitedSlide((prev) => Math.max(prev, event.data.slide_current));
         }
         if (event.data.novo_status === 'CONCLUIDO' && !effectiveReviewMode) {
-          setCompleted(true);
-        void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
-          showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
-          void refetchMatricula();
-          navigate('/lms/cursos', { replace: true });
+          verifyCanonicalAndReturn();
           return;
         }
         void refetchMatricula();
