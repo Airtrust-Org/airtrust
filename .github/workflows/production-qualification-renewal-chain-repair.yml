@@ -77,10 +77,11 @@ jobs:
             echo INVALID_MODE; exit 1
           fi
 
-      - name: Checkout exact main
+      - name: Checkout dispatched main SHA
         uses: actions/checkout@v7
         with:
-          ref: main
+          # Pin source to the immutable dispatch candidate, not a moving main branch.
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Verify eight release gates on exact SHA
@@ -128,6 +129,13 @@ jobs:
           [[ "$(jq -r .source_sha "$file")" == "$GITHUB_SHA" ]] || { echo REVIEWED_SHA_MISMATCH; exit 1; }
           [[ "$(jq -r .plan_hash "$file")" == "$PLAN_HASH" ]] || { echo REVIEWED_PLAN_MISMATCH; exit 1; }
           [[ "$(jq -r .eligible_change_count "$file")" == "$PLAN_COUNT" ]] || { echo REVIEWED_COUNT_MISMATCH; exit 1; }
+
+      - name: Recheck exact current main before D1 access
+        shell: bash
+        run: |
+          set -euo pipefail
+          current_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          [[ "$current_main" == "$GITHUB_SHA" ]] || { echo MAIN_ADVANCED_SINCE_DISPATCH; exit 1; }
 
       - name: Run reviewed read-only preview or guarded audited repair
         shell: bash
