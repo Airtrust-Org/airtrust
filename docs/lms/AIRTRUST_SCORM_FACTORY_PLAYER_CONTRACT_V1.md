@@ -60,7 +60,7 @@ Esta ferramenta ainda é um gate de pré-publicação a ser ligado ao pipeline d
 | Isolamento | outras matrículas, ciclos e tenants não herdam estado |
 | UX | desktop/tablet, feedback e acessibilidade verificáveis |
 
-O teste técnico `runScormBrowserConformance` atualmente executa apenas lançamento e encerramento de sessão. **Seu PASS não é o PASS funcional da tabela**. Um ZIP só será declarado `FUNCTIONALLY_CERTIFIED` com bateria completa e evidência de navegadores, instrumento/runner e SHA. Resultado sem evidência suficiente é `UNCERTIFIED`, jamais PASS.
+O veredito de protocolo (`LMSInitialize`, `LMSCommit`, `LMSFinish`) continua **independente do fechamento pedagógico**. Na PR #1331, o Quality Gate passa a exigir também um executor de navegador que navegue pelas telas e avaliações do pacote M8, verifique a cobertura completa das unidades, compare a nota ao `masteryScore` declarado e confirme o `successStatus` esperado. Protocolo `PASS` com curso `incomplete`, nota ausente ou avaliação não executada **não autoriza publicação**. Pacotes sem um executor funcional compatível permanecem `UNCERTIFIED`/não publicáveis; não se pode simular aprovações alterando diretamente o CMI. O staging usa um ZIP M8 sintético que exige cliques reais, inclusive uma tentativa com resposta incorreta. **Este gate de upload ainda não substitui** testes end-to-end de matrícula, `CONCLUIDO`, geração de qualificação, histórico e retomada contra Worker/D1 reais. Um ZIP só será declarado `FUNCTIONALLY_CERTIFIED` em todos os níveis após demonstrar essas etapas com o SHA exato; sem evidência suficiente, permanece `UNCERTIFIED`.
 
 ## Inventário e lote de publicação
 
