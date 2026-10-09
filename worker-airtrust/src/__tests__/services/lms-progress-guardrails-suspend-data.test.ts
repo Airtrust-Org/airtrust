@@ -44,3 +44,54 @@ describe('mergeScormRuntimeState — proteção de suspend_data', () => {
     expect(result.suspendData).toBe(current);
   });
 });
+
+describe('mergeScormRuntimeState — never overwrite terminal evidence on SCORM reopening', () => {
+  it('preserves passed status, score, bookmark and suspend data after a downgraded reopen', () => {
+    const current = {
+      'cmi.core.lesson_status': 'passed',
+      'cmi.core.score.raw': '100',
+      'cmi.core.lesson_location': '53/53',
+      'cmi.suspend_data': 'completed-checkpoint',
+    };
+    const incoming = {
+      'cmi.core.lesson_status': 'incomplete',
+      'cmi.core.score.raw': '0',
+      'cmi.core.lesson_location': '52/53',
+      'cmi.suspend_data': 'restarted',
+    };
+    const result = mergeScormRuntimeState({
+      currentCmiJson: JSON.stringify(current),
+      incomingCmiJson: JSON.stringify(incoming),
+      currentSuspendData: 'completed-checkpoint',
+      incomingSuspendData: 'restarted',
+    });
+    expect(result.decisions.blockedTerminalRegression).toBe(true);
+    expect(JSON.parse(result.cmiJson!)).toMatchObject(current);
+    expect(result.suspendData).toBe('completed-checkpoint');
+    expect(result.location?.current).toBe(53);
+  });
+
+  it('retains ordinary incomplete-course progress updates', () => {
+    const result = mergeScormRuntimeState({
+      currentCmiJson: JSON.stringify({
+        'cmi.core.lesson_status': 'incomplete', 'cmi.core.lesson_location': '21/53',
+      }),
+      incomingCmiJson: JSON.stringify({
+        'cmi.core.lesson_status': 'incomplete', 'cmi.core.lesson_location': '22/53',
+      }),
+    });
+    expect(result.decisions.blockedTerminalRegression).toBe(false);
+    expect(result.location?.current).toBe(22);
+  });
+
+  it('allows a later legitimate passed result to replace incomplete state', () => {
+    const result = mergeScormRuntimeState({
+      currentCmiJson: JSON.stringify({ 'cmi.core.lesson_status': 'incomplete' }),
+      incomingCmiJson: JSON.stringify({
+        'cmi.core.lesson_status': 'passed', 'cmi.core.score.raw': '100',
+      }),
+    });
+    expect(result.decisions.blockedTerminalRegression).toBe(false);
+    expect(JSON.parse(result.cmiJson!)['cmi.core.lesson_status']).toBe('passed');
+  });
+});

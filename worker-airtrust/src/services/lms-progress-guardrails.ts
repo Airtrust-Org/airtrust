@@ -349,7 +349,25 @@ export function mergeScormRuntimeState(params: {
 }) {
   const currentCmi = parseScormCmiJson(params.currentCmiJson);
   const incomingCmi = parseScormCmiJson(params.incomingCmiJson);
-  const mergedCmi = incomingCmi ? { ...incomingCmi } : currentCmi ? { ...currentCmi } : null;
+  const isTerminalCmi = (cmi: Record<string, unknown> | null) =>
+    scormStatusIndicatesCompletion({
+      lessonStatus: typeof cmi?.['cmi.core.lesson_status'] === 'string'
+        ? cmi['cmi.core.lesson_status'] : null,
+      completionStatus: typeof cmi?.['cmi.completion_status'] === 'string'
+        ? cmi['cmi.completion_status'] : null,
+      successStatus: typeof cmi?.['cmi.success_status'] === 'string'
+        ? cmi['cmi.success_status'] : null,
+    });
+  // The SCORM package can reset lesson_status/score/location when reopening
+  // a passed lesson. Never replace an already terminal CMI snapshot with
+  // incomplete runtime state before the student's explicit confirmation.
+  // Ordinary incomplete sessions and genuine terminal updates still merge.
+  const blockedTerminalRegression = Boolean(
+    currentCmi && incomingCmi && isTerminalCmi(currentCmi) && !isTerminalCmi(incomingCmi),
+  );
+  const mergedCmi = blockedTerminalRegression
+    ? { ...currentCmi }
+    : incomingCmi ? { ...incomingCmi } : currentCmi ? { ...currentCmi } : null;
 
   const currentLocationValue = readScormLocationValue(currentCmi);
   const incomingLocationValue = readScormLocationValue(incomingCmi);
@@ -359,7 +377,7 @@ export function mergeScormRuntimeState(params: {
   const blockedLocationRegression = isRegressiveScormLocation(currentLocation, incomingLocation);
   const preservedLocationFromCurrent =
     Boolean(currentLocationValue) && (!incomingLocationValue || blockedLocationRegression);
-  const mergedLocationValue = preservedLocationFromCurrent
+  const mergedLocationValue = blockedTerminalRegression || preservedLocationFromCurrent
     ? currentLocationValue
     : (incomingLocationValue ?? currentLocationValue);
 
@@ -378,7 +396,7 @@ export function mergeScormRuntimeState(params: {
       currentSuspendData.length < SUSPEND_DATA_NEAR_LIMIT_THRESHOLD,
   );
   const mergedSuspendData: string | null = (() => {
-    if (blockedEmptySuspendData || blockedShorterSuspendData) {
+    if (blockedTerminalRegression || blockedEmptySuspendData || blockedShorterSuspendData) {
       return currentSuspendData ?? null;
     }
     return incomingSuspendData ?? currentSuspendData ?? null;
@@ -401,6 +419,7 @@ export function mergeScormRuntimeState(params: {
       blockedLocationRegression,
       blockedEmptySuspendData,
       blockedShorterSuspendData,
+      blockedTerminalRegression,
       preservedLocationFromCurrent,
     },
   };
