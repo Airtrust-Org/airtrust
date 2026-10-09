@@ -26,7 +26,13 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /\/api\/lms\/assets\/session/);
   assert.match(source, /preview:\s*true/);
   assert.match(source, /\/api\/lms\/scorm\/preview\/\$\{course\.id\}/);
-  assert.match(source, /COMPLETION_NOT_REACHED/);
+  // The completion verdict is a pure, testable shared helper. The certifier
+  // must actually invoke it; merely containing a reason string is insufficient.
+  const verdictSource = read('scripts/validation/lms-scorm-functional-certification-gate.mjs');
+  assert.match(source, /evaluateScormFunctionalCertification\(/);
+  assert.match(verdictSource, /COMPLETION_NOT_REACHED/);
+  assert.match(verdictSource, /STATUS_DOWNGRADE_AFTER_REOPEN/);
+  assert.match(verdictSource, /SCORE_DOWNGRADE_AFTER_REOPEN/);
   assert.match(source, /reopen-completed/);
   assert.match(source, /locator\('#scorm-frame'\)/);
   assert.match(source, /contentFrame\(\)/);
