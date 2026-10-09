@@ -718,7 +718,7 @@ app.get('/:id', async (c) => {
         })
       : null;
   const editionMismatch = await detectLmsEditionMismatch({
-    bucket: c.env.BUCKET, contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo, activePrefix: matricula.scorm_package_r2_prefix, empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data });
+    bucket: c.env.BUCKET, contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo, activePrefix: matricula.scorm_package_r2_prefix, empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data, db, enrollmentStartedAt: matricula.data_inicio });
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: matricula.status as string | null,
     progressoBruto: matricula.progresso_pct as number | null,

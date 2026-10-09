@@ -245,6 +245,7 @@ async function handleRematriculation(
       cursoId: existing.curso_id,
       cmiJson: edition?.cmi_json,
       suspendData: edition?.suspend_data,
+      db: c.env.DB, enrollmentStartedAt: existing.data_inicio,
     });
     if (editionMismatch) {
       verifiedActivePrefix = edition?.scorm_package_r2_prefix ?? null;
