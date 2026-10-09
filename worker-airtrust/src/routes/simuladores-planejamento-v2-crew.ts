@@ -14,6 +14,7 @@ import {
 } from '../services/cae-planning-policy';
 import {
   buildSimulatorTrainingClasses,
+  attachSimulatorSupportCrew,
   canManuallyShareSimulatorTrainingSessions,
   canShareSimulatorTrainingSessions,
   pairSimulatorTrainingSessions,
@@ -849,6 +850,7 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
     reference_date?: unknown;
     session_needs?: unknown;
     locks?: unknown;
+    support_assignments?: unknown;
     cae_availability?: unknown;
   } | null;
   const referenceDate = String(body?.reference_date || new Date().toISOString().slice(0, 10));
@@ -857,12 +859,14 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
     .map(parseNeed)
     .filter((item): item is SimulatorTrainingSessionNeed => Boolean(item));
   const rawLocks = Array.isArray(body?.locks) ? body?.locks : [];
+  const rawSupports = Array.isArray(body?.support_assignments) ? body.support_assignments : [];
   if (
     !isIsoDate(referenceDate) ||
     rawNeeds.length === 0 ||
     rawNeeds.length > MAX_NEEDS ||
     needs.length !== rawNeeds.length ||
-    rawLocks.length > MAX_LOCKS
+    rawLocks.length > MAX_LOCKS ||
+    rawSupports.length > MAX_NEEDS
   ) {
     return c.json({ success: false, error: 'Repareamento inválido' }, 400);
   }
@@ -1003,7 +1007,27 @@ app.post('/reparear', requirePermission('simuladores', 'editar', 'admin', 'manag
     config.allow_shared_session,
     automaticRoster.pairEligibility,
   );
-  const blocks = [...lockedBlocks, ...automaticBlocks];
+  let blocks: SimulatorTrainingSessionBlock[];
+  try {
+    blocks = attachSimulatorSupportCrew({
+      blocks: [...lockedBlocks, ...automaticBlocks],
+      needs,
+      assignments: rawSupports.map((raw) => {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+          throw new Error('Apoio operacional inválido');
+        const row = raw as Record<string, unknown>;
+        return {
+          anchor_need_id: String(row.anchor_need_id || ''),
+          support_employee_id: Number(row.support_employee_id),
+        };
+      }),
+    });
+  } catch (error) {
+    return c.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Apoio operacional inválido',
+    }, 400);
+  }
   const baseClasses = buildSimulatorTrainingClasses(blocks);
   let classes: unknown = baseClasses;
   let caeComparison: unknown = null;
@@ -1129,7 +1153,20 @@ function buildPreservedProposalBlocks(params: {
   if (used.size !== params.needs.length) {
     return { blocks: [], error: 'A proposta informada não contém todas as sessões' };
   }
-  return { blocks, error: null };
+  try {
+    const assignments = params.rawBlocks.flatMap((raw) => {
+      const block = raw as Record<string, unknown>;
+      if (block.support_employee_id == null) return [];
+      const ids = block.need_ids as string[];
+      return [{ anchor_need_id: String(ids[0] || ''), support_employee_id: Number(block.support_employee_id) }];
+    });
+    return {
+      blocks: attachSimulatorSupportCrew({ blocks, needs: params.needs, assignments }),
+      error: null,
+    };
+  } catch (error) {
+    return { blocks: [], error: error instanceof Error ? error.message : 'Apoio inválido' };
+  }
 }
 
 function timeToMinutes(value: unknown): number | null {
@@ -1316,7 +1353,7 @@ app.post(
         state: string;
         reason: string;
       }> = [];
-      for (const session of block.sessions) {
+      for (const session of [...block.sessions, ...(block.support ? [block.support] : [])]) {
         const roster = await resolveEmployeeFortnightDayFromD1({
           db: c.env.DB,
           empresaId,
@@ -1487,66 +1524,11 @@ app.post(
     }
 
     const config = await loadConfig(c.env.DB, empresaId);
-    const needById = new Map(needs.map((need) => [need.need_id, need]));
-    const used = new Set<string>();
-    const blocks: SimulatorTrainingSessionBlock[] = [];
-
-    for (const raw of rawBlocks) {
-      if (!raw || typeof raw !== 'object') {
-        return c.json({ success: false, error: 'Bloco da proposta inválido' }, 400);
-      }
-      const ids = Array.isArray((raw as Record<string, unknown>).need_ids)
-        ? ((raw as Record<string, unknown>).need_ids as unknown[]).map((value) =>
-            String(value || ''),
-          )
-        : [];
-      if (ids.length < 1 || ids.length > 2 || new Set(ids).size !== ids.length) {
-        return c.json(
-          { success: false, error: 'Bloco da proposta deve conter uma ou duas sessões' },
-          400,
-        );
-      }
-      const sessions = ids.map((id) => needById.get(id));
-      if (sessions.some((session) => !session) || ids.some((id) => used.has(id))) {
-        return c.json(
-          { success: false, error: 'Bloco da proposta contém sessão ausente ou duplicada' },
-          400,
-        );
-      }
-      const resolved = sessions as SimulatorTrainingSessionNeed[];
-      const first = resolved[0];
-      if (resolved.length === 2) {
-        const second = resolved[1];
-        if (
-          !canManuallyShareSimulatorTrainingSessions(first, second) ||
-          daysDistance(first.expiry_date, second.expiry_date) > config.planning_horizon_days
-        ) {
-          return c.json(
-            {
-              success: false,
-              error: 'Dupla preservada incompatível com currículo/equipamento/horizonte',
-            },
-            400,
-          );
-        }
-      }
-      ids.forEach((id) => used.add(id));
-      blocks.push({
-        block_id: ids.slice().sort().join('+'),
-        equipment: first.equipment,
-        duration_minutes: first.duration_minutes,
-        target_date: resolved.map((session) => session.expiry_date).sort()[0],
-        pairing: resolved.length === 2 ? pairKind(resolved[0], resolved[1]) : 'SEM_DUPLA',
-        sessions: resolved,
-      });
-    }
-
-    if (used.size !== needs.length) {
-      return c.json(
-        { success: false, error: 'A proposta informada não contém todas as sessões' },
-        400,
-      );
-    }
+    const preserved = buildPreservedProposalBlocks({
+      rawBlocks, needs, planningHorizonDays: config.planning_horizon_days,
+    });
+    if (preserved.error) return c.json({ success: false, error: preserved.error }, 400);
+    const blocks = preserved.blocks;
 
     const validation = validateAndNormalizeCaeAvailability(body.cae_availability);
     if (!validation.ok) {
