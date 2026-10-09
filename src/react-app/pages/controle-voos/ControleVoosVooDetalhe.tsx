@@ -27,7 +27,7 @@ import { flightOperationalRouteLabel, flightOperationalDestinationLabel , flight
 
 type FlightDocument = {
   id: number;
-  type: 'WEATHER_REPORT' | 'PLANO_VOO';
+  type: 'WEATHER_REPORT' | 'PLANO_VOO' | 'MTA_EMBARQUE' | 'MTA_DESEMBARQUE' | 'OUTROS';
   label: string;
   file_name: string;
   content_type: string;
@@ -138,20 +138,26 @@ export default function ControleVoosVooDetalhe() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const uploadDocument = async (type: FlightDocument['type'], file: File | null) => {
-    if (!id || !file) return;
+  const uploadDocuments = async (type: FlightDocument['type'], files: File[]) => {
+    if (!id || files.length === 0 || uploadingType !== null) return;
     setUploadingType(type);
+    let uploaded = 0;
     try {
-      const form = new FormData();
-      form.set('tipo', type);
-      form.set('file', file);
-      const response = await apiClient(`/controle-voos/voos/${id}/documentos`, { method: 'POST', body: form });
-      if (!response.success) throw new Error(response.error || 'Falha ao anexar documento');
-      toast.success(`${type === 'WEATHER_REPORT' ? 'Weather Report' : 'Planejamento de voo atualizado'} anexado. O voo foi atualizado e os pilotos verão o aviso para atualizar o pacote offline.`);
-      await Promise.all([loadDocuments(), refetchVoo()]);
+      // Sequential uploads preserve the flight version sequence and individual R2 audit records.
+      for (const file of files) {
+        const form = new FormData();
+        form.set('tipo', type);
+        form.set('file', file);
+        const response = await apiClient(`/controle-voos/voos/${id}/documentos`, { method: 'POST', body: form });
+        if (!response.success) throw new Error(response.error || 'Falha ao anexar ' + file.name);
+        uploaded++;
+      }
+      toast.success(`${uploaded} documento(s) anexado(s). A tripulação receberá aviso para atualizar o pacote offline.`);
     } catch (uploadError) {
-      toast.error(uploadError instanceof Error ? uploadError.message : 'Falha ao anexar documento');
+      toast.error(`${uploaded} arquivo(s) enviado(s). ` +
+        (uploadError instanceof Error ? uploadError.message : 'Falha ao anexar documento'));
     } finally {
+      await Promise.all([loadDocuments(), refetchVoo()]);
       setUploadingType(null);
     }
   };
@@ -288,12 +294,20 @@ export default function ControleVoosVooDetalhe() {
   }
 
   const origem = aeroMap.get(voo.origem_id);
-  const currentWeatherReport = documents.find((document) => document.type === 'WEATHER_REPORT') ?? null;
-  const currentFlightPlan = documents.find((document) => document.type === 'PLANO_VOO') ?? null;
-  const currentDocumentIds = new Set(
-    [currentWeatherReport?.id, currentFlightPlan?.id].filter((value): value is number => typeof value === 'number'),
-  );
-  const historicalDocuments = documents.filter((document) => !currentDocumentIds.has(document.id));
+  const currentDocuments = ([
+    { type: 'WEATHER_REPORT', label: 'Weather Report' },
+    { type: 'PLANO_VOO', label: 'Planejamento de voo' },
+    { type: 'MTA_EMBARQUE', label: 'MTA de embarque' },
+    { type: 'MTA_DESEMBARQUE', label: 'MTA de desembarque' },
+  ] as const).map(({ type, label }) => ({
+    type,
+    label,
+    current: documents.find((document) => document.type === type) ?? null,
+  }));
+  const otherDocuments = documents.filter((document) => document.type === 'OUTROS');
+  const currentDocumentIds = new Set(currentDocuments.map((entry) => entry.current?.id).filter((id): id is number => typeof id === 'number'));
+  const historicalDocuments = documents.filter((document) =>
+    document.type !== 'OUTROS' && !currentDocumentIds.has(document.id));
 
   return (
     <AppLayout>
@@ -456,7 +470,7 @@ export default function ControleVoosVooDetalhe() {
                   <FileText className="h-4 w-4 text-cyan-600" /> Preparação para saída
                 </h2>
                 <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
-                  Atualize a programação e anexe os documentos que estiverem disponíveis. Weather Report e planejamento atualizado acompanham o piloto offline, mas a ausência deles nunca bloqueia o voo.
+                  Anexe Weather Report, planejamento de voo, MTAs de embarque e desembarque e outros documentos. Todos os arquivos disponíveis são baixados automaticamente quando a tripulação prepara ou atualiza o voo para uso offline.
                 </p>
                 <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
                   Dados do voo · versão {voo.versao} · atualizados em {formatDateTime(voo.updated_at)}
@@ -465,10 +479,11 @@ export default function ControleVoosVooDetalhe() {
                   <p className="text-xs text-slate-500">Carregando documentos…</p>
                 ) : (
                   <div className="space-y-3">
-                    {([
-                      { type: 'WEATHER_REPORT' as const, label: 'Weather Report', current: currentWeatherReport },
-                      { type: 'PLANO_VOO' as const, label: 'Planejamento de voo atualizado', current: currentFlightPlan },
-                    ]).map(({ type, label, current }) => (
+                    {currentDocuments.map(({ type, label, current }) => (
+                      <div key={type}>
+                      {type === 'MTA_EMBARQUE' && (
+                        <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">MTAs — embarque e desembarque</h3>
+                      )}
                       <div key={type} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
@@ -502,9 +517,9 @@ export default function ControleVoosVooDetalhe() {
                                   accept="application/pdf,image/png,image/jpeg,image/webp,image/heic,image/heif"
                                   disabled={uploadingType !== null}
                                   onChange={(event) => {
-                                    const file = event.currentTarget.files?.[0] || null;
+                                    const files = Array.from(event.currentTarget.files || []);
                                     event.currentTarget.value = '';
-                                    void uploadDocument(type, file);
+                                    void uploadDocuments(type, files);
                                   }}
                                 />
                               </label>
@@ -512,7 +527,40 @@ export default function ControleVoosVooDetalhe() {
                           </div>
                         </div>
                       </div>
+                      </div>
                     ))}
+                    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Outros documentos</h3>
+                        {canCoordinate && (
+                          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-cyan-300 bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-800 hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-300">
+                            <Upload className="h-3.5 w-3.5" /> {uploadingType === 'OUTROS' ? 'Enviando…' : 'Adicionar documentos'}
+                            <input type="file" multiple className="sr-only"
+                              accept="application/pdf,image/png,image/jpeg,image/webp,image/heic,image/heif"
+                              disabled={uploadingType !== null}
+                              onChange={(event) => {
+                                const files = Array.from(event.currentTarget.files || []);
+                                event.currentTarget.value = '';
+                                void uploadDocuments('OUTROS', files);
+                              }} />
+                          </label>
+                        )}
+                      </div>
+                      {otherDocuments.length === 0 ? (
+                        <p className="mt-2 text-xs text-slate-500">Nenhum documento adicional.</p>
+                      ) : (
+                        <div className="mt-3 space-y-2">
+                          {otherDocuments.map((document) => (
+                            <button key={document.id} type="button" onClick={() => void openDocument(document)}
+                              className="block w-full rounded-md border border-slate-200 px-3 py-2 text-left text-xs hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                              <span className="block font-semibold">{document.file_name}</span>
+                              <span className="text-slate-500">{formatFileSize(document.size)} · {formatDateTime(document.created_at)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <p className="mt-2 text-xs text-slate-500">É possível adicionar vários arquivos; os anteriores permanecem disponíveis para os pilotos.</p>
+                    </div>
                     {historicalDocuments.length > 0 ? (
                       <details className="rounded-lg border border-slate-200 px-3 py-2 text-xs dark:border-slate-700">
                         <summary className="cursor-pointer font-medium text-slate-600 dark:text-slate-300">
