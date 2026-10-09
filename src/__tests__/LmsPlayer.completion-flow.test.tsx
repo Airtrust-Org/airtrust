@@ -145,23 +145,29 @@ describe('LmsPlayer completion flow', () => {
       'airtrust.viewed_slides': [30],
     });
     renderPlayer();
-    expect(screen.getByRole('button', { name: 'Registrar no AirTrust' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Registrar no AirTrust' })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('opens fallback completion dialog only after every slide and confirms through the SCORM wrapper', async () => {
+  it('does not open an unsolicited second confirmation; failed SCORM may be retried in one click', async () => {
     matriculaMock.scorm_progresso.cmi_json = JSON.stringify({
       'cmi.location': '30/30',
       'airtrust.total_slides': 30,
       'airtrust.viewed_slides': Array.from({ length: 30 }, (_, i) => i + 1),
     });
     renderPlayer();
-    const dialog = await screen.findByRole('dialog', { name: 'Concluir curso' });
-    expect(dialog).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Concluir curso' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Registrar no AirTrust' })).not.toBeInTheDocument();
     const frame = await frameWindow();
     expect(frame).toBeDefined();
     const postMessage = vi.spyOn(frame!, 'postMessage').mockImplementation(() => {});
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar conclusão' }));
+    await dispatchPlayerMessage({
+      type: 'lms:completion-error',
+      matriculaId: 42,
+      code: 'SCORM_FINALIZATION_FAILED',
+    });
+    const retry = await screen.findByRole('button', { name: 'Registrar no AirTrust' });
+    fireEvent.click(retry);
     expect(postMessage).toHaveBeenCalledWith(
       { type: 'lms:request-completion', matriculaId: 42 },
       'http://localhost:8787',
