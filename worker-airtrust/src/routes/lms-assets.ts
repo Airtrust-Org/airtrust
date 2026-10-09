@@ -11,6 +11,7 @@ import { auth, validateAccessTokenSecurityState } from '../middleware/auth';
 import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import {
   buildScormLocationHelpersScript,
+  buildScormNativeResumeOwnershipScript,
   buildScormProgressParsersScript,
   buildScormSessionCloseRuntimeScript,
 } from '../services/lms-scorm-wrapper-runtime';
@@ -1736,15 +1737,7 @@ ${buildScormLocationHelpersScript()}
 ${buildScormProgressParsersScript()}
 
   // Native cursor wins over the LMS location high-water mark.
-  function isNativeCourseResumeOwner(w, doc) {
-    if (!doc?.getElementById('slide') || !doc.getElementById('counter') ||
-        typeof w.Scorm?.get !== 'function') return false;
-    try {
-      var state = JSON.parse(cmi['cmi.suspend_data'] || 'null');
-      return state && Number.isInteger(state.s) && state.s >= 0 &&
-        Array.isArray(state.d) && state.mq && typeof state.mq === 'object';
-    } catch (_error) { return false; }
-  }
+${buildScormNativeResumeOwnershipScript()}
 
   function navigateFrameToSlide(frameWindow, target) {
     try {

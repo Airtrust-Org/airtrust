@@ -5,12 +5,15 @@ const cmi = (total: number) => JSON.stringify({
   'cmi.core.lesson_location': `${total}/${total}`,
   'airtrust.total_slides': total,
 });
-function bucket(total: number, malformed = false): R2Bucket {
+function bucket(total: number, malformed = false, version?: string, ids?: string[]): R2Bucket {
   return { get: vi.fn(async () => ({
     size: 900,
     text: async () => malformed
       ? '{invalid'
-      : JSON.stringify({ content: { requiredSlides: Array.from({ length: total }, (_, i) => `unit-${i + 1}`) } }),
+      : JSON.stringify({
+        ...(version ? { packageVersion: version } : {}),
+        content: { requiredSlides: ids ?? Array.from({ length: total }, (_, i) => `unit-${i + 1}`) },
+      }),
   })) } as unknown as R2Bucket;
 }
 const base = {
@@ -48,4 +51,70 @@ describe('published SCORM edition mismatch (CFIT 41 → 37)', () => {
     expect(await detectLmsEditionMismatch({ ...base, empresaId: 99, bucket: bucket(37) })).toBeNull();
     expect(await detectLmsEditionMismatch({ ...base, contentType: 'pdf', bucket: bucket(37) })).toBeNull();
   });
+  it('recognizes MGO-like same-count replacement from native authored version instead of using 35/46 as proof', async () => {
+    const previous = JSON.stringify({
+      'cmi.core.lesson_location': '35/46',
+      'airtrust.total_slides': 46,
+      'cmi.suspend_data': JSON.stringify({ v: 4, p: 'mgo-rev14', a: 34, d: [0, 1, 2] }),
+    });
+    expect(await detectLmsEditionMismatch({
+      ...base, cmiJson: previous, bucket: bucket(46, false, 'mgo-rev15'),
+    })).toEqual({
+      required: true,
+      previous_total: 46,
+      active_total: 46,
+      reason: 'PACKAGE_VERSION_CHANGED',
+      previous_version: 'mgo-rev14',
+      active_version: 'mgo-rev15',
+    });
+  });
+  it('uses separately persisted SCORM suspend_data when older CMI snapshots omit the field', async () => {
+    const cmiWithoutSuspend = JSON.stringify({
+      'cmi.core.lesson_location': '35/46',
+      'airtrust.total_slides': 46,
+    });
+    const storedSuspendData = JSON.stringify({
+      v: 3, p: 'mgo-rev14', a: 34, d: [0, 1, 2],
+    });
+    expect(await detectLmsEditionMismatch({
+      ...base,
+      cmiJson: cmiWithoutSuspend,
+      suspendData: storedSuspendData,
+      bucket: bucket(46, false, 'mgo-rev15'),
+    })).toMatchObject({
+      required: true,
+      reason: 'PACKAGE_VERSION_CHANGED',
+      previous_total: 46,
+      active_total: 46,
+    });
+  });
+
+  it('retains an unchanged edition when packageVersion and totals match', async () => {
+    const previous = JSON.stringify({
+      'cmi.core.lesson_location': '35/46',
+      'cmi.suspend_data': JSON.stringify({ v: 4, p: 'mgo-rev15', a: 34 }),
+    });
+    expect(await detectLmsEditionMismatch({
+      ...base, cmiJson: previous, bucket: bucket(46, false, 'mgo-rev15'),
+    })).toBeNull();
+  });
+  it('detects different stable slide IDs even if total and packageVersion are unchanged', async () => {
+    const previous = JSON.stringify({
+      'cmi.core.lesson_location': '2/3',
+      'cmi.suspend_data': JSON.stringify({ v: 5, p: 'same-name', ids: ['a', 'b', 'c'] }),
+    });
+    expect(await detectLmsEditionMismatch({
+      ...base, cmiJson: previous, bucket: bucket(3, false, 'same-name', ['a', 'changed', 'c']),
+    })).toEqual({
+      required: true, previous_total: 3, active_total: 3, reason: 'SLIDE_IDS_CHANGED',
+    });
+  });
+  it('does not treat a legacy cursor with no edition identity as proven changed', async () => {
+    expect(await detectLmsEditionMismatch({
+      ...base,
+      cmiJson: JSON.stringify({ 'cmi.core.lesson_location': '35/46', 'cmi.suspend_data': '{bad' }),
+      bucket: bucket(46, false, 'mgo-rev15'),
+    })).toBeNull();
+  });
+
 });

@@ -291,7 +291,7 @@ export default function LmsPlayer() {
     inferredPersistedLocationProgress ?? 0,
   );
   const editionMismatch = (matricula as (typeof matricula & {
-    edition_mismatch?: { required: true; previous_total: number; active_total: number } | null;
+    edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' } | null;
   }) | undefined)?.edition_mismatch ?? null;
   const newEditionRequired = editionMismatch?.required === true;
   const isTenantAdmin = ['admin', 'administrador'].includes(
@@ -403,6 +403,10 @@ export default function LmsPlayer() {
   const prevSessionKeyRef = useRef<string | null>(null);
 
   const launchUrl = (() => {
+    // An edition mismatch must not even mount the active ZIP against an old
+    // matrícula. Otherwise package initialization can autosave empty state
+    // over the previous edition before the administrator starts a new cycle.
+    if (newEditionRequired && !effectiveReviewMode) return null;
     // The iframe URL never carries the access token. A short-lived,
     // HttpOnly cookie is established before the URL becomes available.
     if (!assetSessionReady || assetSessionKeyRef.current !== sessionKey || !matricula) {
@@ -874,7 +878,7 @@ export default function LmsPlayer() {
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
     const confirmed = window.confirm(
-      `Iniciar a nova edição do curso? O histórico do ciclo anterior será preservado para auditoria, mas o progresso atual (${editionMismatch.previous_total}/${editionMismatch.previous_total}) não será usado na nova edição (${editionMismatch.active_total} unidades).`,
+      `Iniciar a nova edição do curso? O histórico e as evidências do ciclo anterior serão preservados. O progresso desta matrícula (${displayProgress}%) pertence à edição anterior e não será transferido automaticamente para as ${editionMismatch.active_total} unidades da nova edição.`, 
     );
     if (!confirmed) return;
     setStartingNewEdition(true);
@@ -883,7 +887,7 @@ export default function LmsPlayer() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          reason: `Início de nova edição SCORM: ${editionMismatch.previous_total} para ${editionMismatch.active_total} unidades, com preservação auditável do ciclo anterior.`,
+          reason: `Início de nova edição SCORM: ${editionMismatch.reason ?? 'QUANTIDADE_UNIDADES_ALTERADA'} (${editionMismatch.previous_total} para ${editionMismatch.active_total} unidades), com preservação auditável do ciclo anterior.`, 
         }),
       });
       const result = await res.json() as { success?: boolean; code?: string; error?: string };
@@ -1195,9 +1199,12 @@ export default function LmsPlayer() {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">Nova edição do curso — matrícula anterior incompatível</p>
             <p className="text-xs text-amber-200/90">
-              A matrícula possui evidências de {editionMismatch.previous_total} unidades, mas o pacote
-              ativo exige {editionMismatch.active_total}. Não é possível concluir nem reaproveitar
-              o progresso anterior nesta edição. É necessário iniciar um novo ciclo auditado.
+              {editionMismatch.reason === 'PACKAGE_VERSION_CHANGED' || editionMismatch.reason === 'SLIDE_IDS_CHANGED'
+                ? 'A versão ou a identidade das unidades mudou, mesmo que a quantidade de telas seja igual. '
+                : `O pacote anterior registra ${editionMismatch.previous_total} unidades e a edição ativa exige ${editionMismatch.active_total}. `}
+              O progresso de {displayProgress}% pertence ao ciclo anterior e não representa o avanço
+              na nova edição. As evidências serão preservadas; não é permitido reaproveitar
+              automaticamente essa conclusão. É necessário iniciar um novo ciclo auditado.
             </p>
           </div>
           {isTenantAdmin ? (
@@ -1238,6 +1245,20 @@ export default function LmsPlayer() {
               </div>
             ) : null}
 
+            {newEditionRequired && !effectiveReviewMode ? (
+              <div role="alert" className="absolute inset-0 flex items-center justify-center bg-slate-950 px-8 text-center">
+                <div className="max-w-lg space-y-3 text-white">
+                  <AlertTriangle className="mx-auto h-9 w-9 text-amber-300" />
+                  <p className="text-base font-semibold">Treinamento temporariamente bloqueado para preservar o progresso anterior</p>
+                  <p className="text-sm text-white/70">
+                    Esta matrícula pertence a outra edição. O pacote atualizado não será aberto
+                    até a criação de um novo ciclo auditado, evitando sobrescrever respostas ou
+                    registros anteriores.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
             {launchUrl ? (
               <iframe
                 ref={iframeRef}
@@ -1272,9 +1293,9 @@ export default function LmsPlayer() {
                 Progresso e sessão
               </h3>
               <div className="space-y-1.5 text-xs text-white/75">
-                <p>Progresso: {displayProgress}%</p>
-                <p>Restante: {remainingProgress}%</p>
-                <p>Posição: {liveLocation || persistedLocation || 'sem marcador'}</p>
+                <p>{newEditionRequired ? 'Progresso da edição anterior' : 'Progresso'}: {displayProgress}%</p>
+                {!newEditionRequired ? <p>Restante: {remainingProgress}%</p> : <p>Nova edição: execução bloqueada até a abertura de novo ciclo.</p>}
+                <p>{newEditionRequired ? 'Posição anterior' : 'Posição'}: {liveLocation || persistedLocation || 'sem marcador'}</p>
                 <p>
                   Carga horária:{' '}
                   {formatMinutes(curso?.carga_horaria_minutos ?? matricula.carga_horaria_minutos)}
