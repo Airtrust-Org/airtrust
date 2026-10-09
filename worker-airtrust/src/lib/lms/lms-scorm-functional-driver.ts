@@ -28,7 +28,7 @@ function driveFactoryCourse() {
       querySelector: (selector: string) => { disabled?: boolean; click: () => void } | null;
     };
   };
-  const w = globalThis as unknown as DriverWindow;
+  const w = globalThis as DriverWindow;
   const slides = w.COURSE_DATA?.slides;
   const getState = w.__AIRTRUST_PLAYER_TEST__?.getState;
   if (!Array.isArray(slides) || slides.length === 0 || slides.length > 1000 ||
