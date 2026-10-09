@@ -145,10 +145,8 @@ function normalizeEnum<T extends readonly string[]>(
     .toUpperCase();
   return (allowed as readonly string[]).includes(normalized) ? (normalized as T[number]) : fallback;
 }
-
 export const ruleApplies = trainingComplianceRuleApplies;
 export const resolvedRules = resolveTrainingComplianceRules;
-
 async function loadEmployees(db: D1Database, empresaId: number): Promise<Employee[]> {
   const cols = await columnSet(db, 'funcionarios');
   const hasSetorId = cols.has('setor_id');
@@ -1200,6 +1198,8 @@ app.get('/regras', requireRole('admin', 'manager'), async (c) => {
 });
 
 app.post('/reconciliacao/fdm-mnt72/sincronizar', requireRole('admin'), async (c) => {
+  const payload = await c.req.json().catch(() => null);
+  if (payload?.scope !== 'FDM_MNT_72' || payload?.course_id !== 72) throw new ApiError('Escopo inválido', 400);
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
   const data = await reconcileFdmMaintenance72(c.env.DB, empresaId, access, extrairUsuarioAuditoria(c), buildSnapshot);
