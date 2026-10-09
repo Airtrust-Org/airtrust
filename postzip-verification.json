@@ -1,0 +1,12 @@
+{
+  "package": "CFIT_EM_HELICOPTEROS_PREVENCAO_OPERACIONAL_AIRTRUST_V3_3_RC2_SCORM12.zip",
+  "sha256": "4bcf6e004bb0937c025f8216ec0cb2e78223c267ddf061daf06bf4a9ded896ff",
+  "bytes": 5732975,
+  "crc": "PASS",
+  "postzip_match": "52/52",
+  "media": 37,
+  "slides": 37,
+  "assessments": 4,
+  "questions": 40,
+  "reuses_max": 1
+}
