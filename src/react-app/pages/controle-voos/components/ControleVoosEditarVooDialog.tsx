@@ -91,7 +91,7 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
   const [contratos, setContratos] = useState<CatalogItem[]>([]);
   const [tipos, setTipos] = useState<CatalogItem[]>([]);
   const [aeroportos, setAeroportos] = useState<CatalogItem[]>([]);
-  const [routeIds, setRouteIds] = useState<string[]>(voo.rota_pontos?.map(point => point.id == null ? '' : String(point.id)) || []);
+  const [routeIds, setRouteIds] = useState<string[]>(voo.rota_pontos?.length ? voo.rota_pontos.map(point => point.id == null ? '' : String(point.id)) : [String(voo.origem_id), String(voo.destino_id)]);
   const [form, setForm] = useState({
     numero_voo: voo.numero_voo || '',
     numero_db: voo.numero_db || '',
@@ -131,7 +131,7 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
       peso_carga: voo.peso_carga_planejado == null ? '' : String(voo.peso_carga_planejado),
       observacoes: voo.observacoes || '',
     });
-    setRouteIds(voo.rota_pontos?.map(point => point.id == null ? '' : String(point.id)) || []);
+    setRouteIds(voo.rota_pontos?.length ? voo.rota_pontos.map(point => point.id == null ? '' : String(point.id)) : [String(voo.origem_id), String(voo.destino_id)]);
     setLoadingCatalogs(true);
     void Promise.all([
       apiClient.get<unknown>('/aeronaves?somente_ativas=1'),

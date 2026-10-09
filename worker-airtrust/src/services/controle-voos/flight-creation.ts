@@ -96,7 +96,7 @@ export function buildFlightRelatedStatements(
     unidadeCombustivelSolicitado?: string | null;
   },
 ): D1PreparedStatement[] {
-  const { empresaId, vooId, userId, routePoints, picFuncionarioId, sicFuncionarioId, picFuncaoBordoId = null, sicFuncaoBordoId = null, paxPlanejado = null, pesoPlanejado = null, pesoCarga = null, unidadePesoPlanejado = 'KG', combustivelSolicitado = null, unidadeCombustivelSolicitado = 'KG' } = input;
+  const { empresaId, vooId, userId, routePoints, picFuncionarioId, sicFuncionarioId, picFuncaoBordoId = null, sicFuncaoBordoId = null, paxPlanejado = null, pesoCarga = null, unidadePesoPlanejado = 'KG', combustivelSolicitado = null, unidadeCombustivelSolicitado = 'KG' } = input;
   const statements: D1PreparedStatement[] = [];
   if (picFuncionarioId && sicFuncionarioId) {
     statements.push(

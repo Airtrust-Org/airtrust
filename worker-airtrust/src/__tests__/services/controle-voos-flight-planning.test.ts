@@ -18,6 +18,7 @@ describe('controle de voos — planejamento de peso', () => {
       pesoPlanejado: null,
       pesoPassageiros: 900,
       pesoBagagem: 180,
+      pesoCarga: null,
       unidadePesoPlanejado: 'LB',
       combustivelSolicitado: 1200,
       unidadeCombustivelSolicitado: 'LB',
@@ -36,6 +37,7 @@ describe('controle de voos — planejamento de peso', () => {
       pesoPlanejado: null,
       pesoPassageiros: 900,
       pesoBagagem: 180,
+      pesoCarga: null,
       unidadePesoPlanejado: 'LB',
       combustivelSolicitado: 1200,
       unidadeCombustivelSolicitado: 'LB',
@@ -48,7 +50,7 @@ describe('controle de voos — planejamento de peso', () => {
     expect(String(prepare.mock.calls[1][0])).toContain('empresa_id = ?');
     expect(String(prepare.mock.calls[1][0])).not.toContain('numero_etapa = 1 AND');
     expect(bind).toHaveBeenNthCalledWith(1, 99, 6);
-    expect(bind).toHaveBeenNthCalledWith(2, 900, 180, 9259.415, 'LB', 6, 42);
+    expect(bind).toHaveBeenNthCalledWith(2, 900, 180, null, 9259.415, 'LB', 6, 42);
     expect(run).toHaveBeenCalledOnce();
   });
 
@@ -66,6 +68,7 @@ describe('controle de voos — planejamento de peso', () => {
         pesoPlanejado: null,
         pesoPassageiros: null,
         pesoBagagem: null,
+        pesoCarga: null,
         unidadePesoPlanejado: 'LB',
         combustivelSolicitado: null,
         unidadeCombustivelSolicitado: 'LB',
