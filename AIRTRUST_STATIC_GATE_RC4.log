@@ -1,0 +1,13 @@
+
+ RUN  v2.1.9 /Users/filipedaumas/SAAS/Airtrust/worker-airtrust
+
+stdout | src/__tests__/lib/__cfit_rc4_exact_final_gate.test.ts > AirTrust M8 exact CFIT RC4 final ZIP > checks structural, manifest, diagnostics under current main
+RC4_OFFICIAL_GATE {"sha":"69d69ab6e65271304f578a5c1c8c9d3f35d415d66c3c14e9fb7bbe2ac83e8548","structural":{"status":"PASS","errors":[],"warnings":[]},"manifest":"PASS","diagnostics":"PASS","conformance":"NOT_SUPPORTED"}
+
+ ✓ src/__tests__/lib/__cfit_rc4_exact_final_gate.test.ts (1 test) 33ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  00:16:24
+   Duration  537ms (transform 40ms, setup 0ms, collect 39ms, tests 33ms, environment 0ms, prepare 54ms)
+

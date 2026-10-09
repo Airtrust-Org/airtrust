@@ -1,0 +1,13 @@
+{
+  "package": "CFIT_EM_HELICOPTEROS_PREVENCAO_OPERACIONAL_AIRTRUST_V3_3_RC4_SEMANTICA_MIDIA_SCORM12.zip",
+  "sha256": "69d69ab6e65271304f578a5c1c8c9d3f35d415d66c3c14e9fb7bbe2ac83e8548",
+  "bytes": 3039580,
+  "crc": "PASS",
+  "postzip_match": "55/55",
+  "media": 20,
+  "noPhoto": 17,
+  "slides": 37,
+  "assessments": 4,
+  "questions": 40,
+  "reuses_max": 1
+}

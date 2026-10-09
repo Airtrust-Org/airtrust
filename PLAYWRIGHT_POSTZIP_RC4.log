@@ -1,0 +1,6 @@
+PREVIEW_READONLY_PASS
+END_STATUS {"status":"passed","score":"100","commits":92,"finishes":1,"afterFinish":0,"ready":true}
+FULL_JOURNEY_RESUME_PASS
+VIEWPORTS {"1468x836":{"fits":28,"seen":28,"pct":100,"min":14,"overflow":0},"1366x768":{"fits":28,"seen":28,"pct":100,"min":14,"overflow":0},"1024x768":{"fits":28,"seen":28,"pct":100,"min":14,"overflow":0},"768x1024":{"fits":28,"seen":28,"pct":100,"min":14,"overflow":0},"390x844":{"fits":2,"seen":28,"pct":7,"min":14,"overflow":0},"360x800":{"fits":2,"seen":28,"pct":7,"min":14,"overflow":0}}
+PAGE_ERRORS 0 []
+CFIT_NEW_RC1_PLAYWRIGHT_PASS
