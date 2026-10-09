@@ -387,8 +387,15 @@ function blocksShareCrew(
   left: SimulatorTrainingSessionBlock,
   right: SimulatorTrainingSessionBlock,
 ): boolean {
-  const leftEmployees = new Set(left.sessions.map((session) => session.employee_id));
-  return right.sessions.some((session) => leftEmployees.has(session.employee_id));
+  const leftEmployees = new Set([
+    ...left.sessions.map((session) => session.employee_id),
+    ...(left.support ? [left.support.employee_id] : []),
+  ]);
+  const rightEmployees = [
+    ...right.sessions.map((session) => session.employee_id),
+    ...(right.support ? [right.support.employee_id] : []),
+  ];
+  return rightEmployees.some((employeeId) => leftEmployees.has(employeeId));
 }
 
 /**
