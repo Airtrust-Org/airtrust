@@ -15,12 +15,17 @@ export async function detectLmsEditionMismatch(params: {
   bucket: R2Bucket | null | undefined;
   contentType: unknown;
   activePrefix: unknown;
+  empresaId: number;
+  cursoId: number;
   cmiJson: unknown;
 }): Promise<LmsEditionMismatch | null> {
   if (String(params.contentType ?? '').toLowerCase() !== 'scorm') return null;
   if (!params.bucket || typeof params.activePrefix !== 'string') return null;
   const prefix = params.activePrefix.trim();
-  if (!prefix.startsWith('lms/scorm/') || prefix.includes('..') || prefix.includes('\\')) return null;
+  const tenantPrefix = `lms/scorm/${params.empresaId}/${params.cursoId}/`;
+  if (!Number.isSafeInteger(params.empresaId) || params.empresaId <= 0 ||
+      !Number.isSafeInteger(params.cursoId) || params.cursoId <= 0 ||
+      !prefix.startsWith(tenantPrefix) || prefix.includes('..') || prefix.includes('\\')) return null;
 
   let priorTotal: number | null = null;
   try {
