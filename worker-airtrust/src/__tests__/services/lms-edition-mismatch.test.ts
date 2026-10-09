@@ -89,6 +89,36 @@ describe('published SCORM edition mismatch (CFIT 41 → 37)', () => {
     });
   });
 
+  it('proves a same-count legacy MGO replacement from distinct activation SHAs and enrollment start', async () => {
+    const raw = JSON.stringify({
+      'cmi.core.lesson_location': '46/46',
+      'airtrust.total_slides': 46,
+      'cmi.suspend_data': 'legacy cursor without a version',
+    });
+    const state = {
+      previous_sha: 'a'.repeat(64), active_sha: 'b'.repeat(64),
+      activated_at: '2026-10-09 19:30:00',
+    };
+    const first = vi.fn(async () => state);
+    const db = {
+      prepare: vi.fn(() => ({ bind: vi.fn(() => ({ first })) })),
+    } as unknown as D1Database;
+    const params = {
+      ...base, bucket: bucket(46, false, 'mgo-rev15'),
+      cmiJson: raw, db, enrollmentStartedAt: '2026-10-09 15:00:00',
+    };
+    expect(await detectLmsEditionMismatch(params)).toMatchObject({
+      required: true, previous_total: 46, active_total: 46,
+      reason: 'PACKAGE_SHA_CHANGED',
+    });
+    expect(db.prepare).toHaveBeenCalledTimes(1);
+    expect(await detectLmsEditionMismatch({ ...params, enrollmentStartedAt: '2026-10-09 20:00:00' })).toBeNull();
+    expect(await detectLmsEditionMismatch({ ...params, enrollmentStartedAt: null })).toBeNull();
+    expect(await detectLmsEditionMismatch({ ...params, db: undefined })).toBeNull();
+    state.previous_sha = state.active_sha;
+    expect(await detectLmsEditionMismatch(params)).toBeNull();
+  });
+
   it('retains an unchanged edition when packageVersion and totals match', async () => {
     const previous = JSON.stringify({
       'cmi.core.lesson_location': '35/46',

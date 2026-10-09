@@ -20,6 +20,7 @@ type EnrollmentEvidenceRow = {
   funcionario_id: number;
   status: string;
   progresso_pct: number | null;
+  data_inicio: string | null;
   qualificacao_historico_id: number | null;
   curso_id: number;
   tipo_conteudo: string | null;
@@ -124,7 +125,7 @@ async function readEnrollmentEvidence(
 ): Promise<EnrollmentEvidenceRow | null> {
   return db
     .prepare(
-      `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct,
+      `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.data_inicio,
               m.qualificacao_historico_id,
               c.id AS curso_id, c.tipo_conteudo, c.ativo, c.publicado,
               c.scorm_mastery_score, c.scorm_assessment_policy, c.scorm_package_r2_prefix, c.scorm_launch_file,
@@ -407,7 +408,7 @@ async function guardScormCommit(
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
     activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
     cmiJson: row.cmi_json,
-    suspendData: row.suspend_data,
+    suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
   });
   if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
     'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
@@ -500,7 +501,7 @@ async function guardManualFinalize(
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
     activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
     cmiJson: row.cmi_json,
-    suspendData: row.suspend_data,
+    suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
   });
   if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
     'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
@@ -574,7 +575,7 @@ async function guardAdministrativeStatus(
       bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
       activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
       cmiJson: row.cmi_json,
-    suspendData: row.suspend_data,
+    suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
     });
     if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
       'A conclusão administrativa não pode usar evidências de outra edição.',
