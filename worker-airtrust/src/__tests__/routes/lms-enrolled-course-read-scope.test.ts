@@ -18,7 +18,7 @@ describe('LMS player: acesso aos metadados do curso pela matrícula', () => {
     expect(sql).toContain('m.curso_id = ?');
     expect(sql).toContain('m.funcionario_id = ?');
     expect(sql).toContain('m.deleted_at IS NULL');
-    expect(sql).toContain("COALESCE(m.status, '') <> 'CANCELADO'");
+    expect(sql).toContain("UPPER(COALESCE(m.status, '')) <> 'CANCELADO'");
     expect(sql).toContain('f.deleted_at IS NULL');
     expect(sql).toContain("COALESCE(f.ativo, 1) = 1");
   });
