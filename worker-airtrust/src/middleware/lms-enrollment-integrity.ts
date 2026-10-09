@@ -219,6 +219,7 @@ async function handleRematriculation(
   const eligibleForNewEdition = !existing.deleted_at &&
     ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(status);
   let editionMismatch: Awaited<ReturnType<typeof detectLmsEditionMismatch>> = null;
+  let verifiedActivePrefix: string | null = null;
 
   if (newEdition && eligibleForNewEdition && !existing.qualificacao_historico_id) {
     const edition = await c.env.DB.prepare(
@@ -240,6 +241,7 @@ async function handleRematriculation(
       activePrefix: edition?.scorm_package_r2_prefix,
       cmiJson: edition?.cmi_json,
     });
+    if (editionMismatch) verifiedActivePrefix = edition?.scorm_package_r2_prefix ?? null;
   }
   if (newEdition ? (!eligibleForNewEdition || !editionMismatch) : !normalRematriculation) {
     return errorResponse(
@@ -312,7 +314,14 @@ async function handleRematriculation(
               AND empresa_id = ?
               AND qualificacao_historico_id IS NULL
               AND ${newEdition
-                ? "status IN ('NAO_INICIADO','EM_ANDAMENTO')"
+                ? `status IN ('NAO_INICIADO','EM_ANDAMENTO')
+                   AND EXISTS (
+                     SELECT 1 FROM lms_cursos edition_c
+                      WHERE edition_c.id = lms_matriculas.curso_id
+                        AND edition_c.empresa_id = lms_matriculas.empresa_id
+                        AND edition_c.deleted_at IS NULL
+                        AND edition_c.scorm_package_r2_prefix = ?
+                   )`
                 : "(deleted_at IS NOT NULL OR status = 'CANCELADO')"}`,
       ).bind(
         expiration,
@@ -322,11 +331,12 @@ async function handleRematriculation(
         operationMarker,
         matriculaId,
         empresaId,
+        ...(newEdition ? [verifiedActivePrefix] : []),
       ),
       c.env.DB.prepare(
         `UPDATE lms_matricula_ciclos
               SET ciclo_atual = 0,
-                  status = 'CANCELADO',
+                  status = ${newEdition ? 'status' : "'CANCELADO'"},
                   updated_at = datetime('now')
             WHERE matricula_id = ?
               AND empresa_id = ?
