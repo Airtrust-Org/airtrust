@@ -1448,7 +1448,10 @@ app.post(
           duration_minutes: block.duration_minutes,
           state: 'CONFIRMED' as const,
           company: null,
-          participants_mentioned: block.sessions.map((session) => session.employee_name),
+          participants_mentioned: [
+            ...block.sessions.map((session) => session.employee_name),
+            ...(block.support ? [block.support.employee_name] : []),
+          ],
           source_ref: { page: null, section: 'Confirmação manual CAI', raw_text: null },
           confidence: 1,
         };
