@@ -403,6 +403,10 @@ export default function LmsPlayer() {
   const prevSessionKeyRef = useRef<string | null>(null);
 
   const launchUrl = (() => {
+    // An edition mismatch must not even mount the active ZIP against an old
+    // matrícula. Otherwise package initialization can autosave empty state
+    // over the previous edition before the administrator starts a new cycle.
+    if (newEditionRequired && !effectiveReviewMode) return null;
     // The iframe URL never carries the access token. A short-lived,
     // HttpOnly cookie is established before the URL becomes available.
     if (!assetSessionReady || assetSessionKeyRef.current !== sessionKey || !matricula) {
@@ -1237,6 +1241,20 @@ export default function LmsPlayer() {
                 <div className="text-center">
                   <Loader2 className="mx-auto h-10 w-10 animate-spin text-white/30" />
                   <p className="mt-3 text-sm text-white/60">Montando o ambiente do curso...</p>
+                </div>
+              </div>
+            ) : null}
+
+            {newEditionRequired && !effectiveReviewMode ? (
+              <div role="alert" className="absolute inset-0 flex items-center justify-center bg-slate-950 px-8 text-center">
+                <div className="max-w-lg space-y-3 text-white">
+                  <AlertTriangle className="mx-auto h-9 w-9 text-amber-300" />
+                  <p className="text-base font-semibold">Treinamento temporariamente bloqueado para preservar o progresso anterior</p>
+                  <p className="text-sm text-white/70">
+                    Esta matrícula pertence a outra edição. O pacote atualizado não será aberto
+                    até a criação de um novo ciclo auditado, evitando sobrescrever respostas ou
+                    registros anteriores.
+                  </p>
                 </div>
               </div>
             ) : null}
