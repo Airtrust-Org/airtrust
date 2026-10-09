@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-08",
-    "last_reconciled_against": "0544 reviewed tenant-6 AVSEC corporate history reclassification; remote apply pending, no production write claimed",
-    "schema_v2_digest": "1983a4427bcd2343856496c5028cc47044d5a088362212297c10ae6b7b88d1a9",
+    "last_reconciled_at": "2026-10-09",
+    "last_reconciled_against": "0545 reviewed tenant-6 QSMS/Safety canonical PDF compliance compensation; remote apply pending, no production write claimed",
+    "schema_v2_digest": "07b0fdb5c3727ab7afae73db885cea40a7463e1acc4ace948d375944aa2bf2d3",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
