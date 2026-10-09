@@ -174,6 +174,9 @@ jobs:
   public-e2e:
     name: public-e2e
     runs-on: ubuntu-latest
+    # The npm lock pins @playwright/test 1.58.2. Avoid runner apt mirrors
+    # (two 5-minute exit-124 timeouts) without skipping browser assertions.
+    container: mcr.microsoft.com/playwright:v1.58.2-noble
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -195,24 +198,20 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - name: Install Playwright browser dependencies
-        timeout-minutes: 6
+      - name: Verify preinstalled Chromium and WebKit launch safely
         shell: bash
         run: |
           set -euo pipefail
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
-          sudo tee /etc/apt/apt.conf.d/99airtrust-ci-network >/dev/null <<'EOF'
-          Acquire::Retries "3";
-          Acquire::http::Timeout "30";
-          Acquire::https::Timeout "30";
-          DPkg::Lock::Timeout "60";
-          EOF
-          timeout --signal=TERM 5m npx playwright install-deps chromium webkit
-      - name: Install Playwright browsers
-        timeout-minutes: 6
-        env:
-          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: 120000
-        run: npx playwright install chromium webkit
+          node --input-type=module <<'NODE'
+          import { chromium, webkit } from '@playwright/test';
+          for (const [name, type] of [['chromium', chromium], ['webkit', webkit]]) {
+            const browser = await type.launch({ headless: true });
+            const page = await browser.newPage();
+            await page.goto('about:blank');
+            await browser.close();
+            console.log(`PUBLIC_E2E_BROWSER_READY=${name}`);
+          }
+          NODE
       - name: Run public auth-boundary E2E with dev bypass disabled
         shell: bash
         run: |
