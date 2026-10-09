@@ -33,6 +33,9 @@ describe('Schema V2 0546 canonical CIPA category integrity',()=>{
   const wf=read('.github/workflows/apply-schema-change-v2.yml');
   expect(wf).toContain('Preflight Training Compliance canonical category-safe PDF 0546');
   expect(wf).toContain('Post-validate Training Compliance canonical category-safe PDF 0546');
+  const condition = "inputs.change_id == 'training-compliance-canonical-category-repair-0546'";
+  expect(wf.split(condition)).toHaveLength(3);
+  expect(wf).not.toContain('training-compliance-canonical-pdf-alignment-0546');
   expect(read('.github/workflows/staging-d1-schema-change.yml')).toContain('0546_training_compliance_canonical_category_repair.sql');
   expect(read('scripts/staging/apply-approved-migration-with-recovery-point.sh')).toContain('SPECIALIZED_PREFLIGHT_0546_OK');
   expect(read('scripts/schema-v2/validate-0546-production-preflight.sh')).toContain('assert_count models 28');
