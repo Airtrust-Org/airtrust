@@ -19,6 +19,7 @@ import {
 import {
   assertCursoWriteScope,
   buildCourseSetorScope,
+  hasOwnLmsCourseEnrollment,
   getCourseSetorSchema,
 } from './lms-cursos-setor-scope';
 import { getEmpresaIdSafe } from './escalas-shared';
@@ -1821,22 +1822,27 @@ app.get('/:id{[0-9]+}', async (c) => {
 
   if (!curso) throw new ApiError('Curso não encontrado', 404);
 
-  // ── Sector scope check for restricted users ─────────────────────────
+  // Uma matrícula válida do próprio funcionário permite consultar o curso no
+  // player. Não amplia a visão dos gestores sobre cursos de outros setores.
   if (access.mode !== 'all') {
-    const courseSectorScope = buildCourseSetorScope(access, 'c', courseSetorSchema);
-    const inScope = await db
-      .prepare(
-        `SELECT 1 as ok FROM lms_cursos c
-         WHERE c.id = ? AND c.empresa_id = ? AND c.deleted_at IS NULL
-         ${courseSectorScope.clause}`,
-      )
-      .bind(cursoId, empresaId, ...courseSectorScope.bindings)
-      .first();
-    if (!inScope) {
-      return c.json(
-        { success: false, error: 'Acesso negado: curso fora do seu escopo de setor' },
-        403,
-      );
+    const ownEnrollment = access.mode === 'self' &&
+      await hasOwnLmsCourseEnrollment(db, empresaId, cursoId, access.funcionarioId);
+    if (!ownEnrollment) {
+      const courseSectorScope = buildCourseSetorScope(access, 'c', courseSetorSchema);
+      const inScope = await db
+        .prepare(
+          `SELECT 1 as ok FROM lms_cursos c
+           WHERE c.id = ? AND c.empresa_id = ? AND c.deleted_at IS NULL
+           ${courseSectorScope.clause}`,
+        )
+        .bind(cursoId, empresaId, ...courseSectorScope.bindings)
+        .first();
+      if (!inScope) {
+        return c.json(
+          { success: false, error: 'Acesso negado: curso fora do seu escopo de setor' },
+          403,
+        );
+      }
     }
   }
 
