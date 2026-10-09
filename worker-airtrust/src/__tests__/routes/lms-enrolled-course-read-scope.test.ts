@@ -3,8 +3,8 @@ import { hasOwnLmsCourseEnrollment } from '../../routes/lms-cursos-setor-scope';
 
 function dbWithResult(row: { ok: number } | null) {
   const first = vi.fn(async () => row);
-  const bind = vi.fn(() => ({ first }));
-  const prepare = vi.fn(() => ({ bind }));
+  const bind = vi.fn((_empresaId: number, _cursoId: number, _funcionarioId: number) => ({ first }));
+  const prepare = vi.fn((_sql: string) => ({ bind }));
   return { db: { prepare } as unknown as D1Database, first, bind, prepare };
 }
 
