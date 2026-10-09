@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Clock, FileText, Shield, CheckCircle, XCircle, Upload, MessageCircle, Pencil } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { apiClient } from '@/react-app/services/apiClient';
@@ -101,6 +101,7 @@ function StatusTimeline({ status }: { status: CvFlightStatus }) {
 
 export default function ControleVoosVooDetalhe() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { can } = usePermissions();
   const canCoordinate = can('controle_voos.edit');
   const { data: voo, isLoading, error, refetch: refetchVoo } = useControleVoosVoo(id);
@@ -113,6 +114,9 @@ export default function ControleVoosVooDetalhe() {
   const [sharingFlightLog, setSharingFlightLog] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [confirmingPlan, setConfirmingPlan] = useState(false);
+  const [showDeleteFlight, setShowDeleteFlight] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deletingFlight, setDeletingFlight] = useState(false);
 
   const loadDocuments = async () => {
     if (!id) return;
@@ -211,6 +215,22 @@ export default function ControleVoosVooDetalhe() {
       toast.error(err instanceof Error ? err.message : 'Não foi possível confirmar planejamento.');
     } finally {
       setConfirmingPlan(false);
+    }
+  };
+
+  const deletePreliminaryFlight = async () => {
+    if (!voo || deletingFlight || deleteReason.trim().length < 10) return;
+    setDeletingFlight(true);
+    try {
+      const query = new URLSearchParams({ versao: String(voo.versao), motivo: deleteReason.trim() });
+      const response = await apiClient.delete(`/controle-voos/voos/${voo.id}?${query.toString()}`);
+      if (!response.success) throw new Error(response.error || 'Não foi possível excluir este lançamento.');
+      toast.success('Lançamento excluído do planejamento. Registro preservado para auditoria.');
+      navigate('/controle-voos/voos');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Use o cancelamento para voos já distribuídos ou executados.');
+    } finally {
+      setDeletingFlight(false);
     }
   };
 
@@ -532,6 +552,16 @@ export default function ControleVoosVooDetalhe() {
                   <a href="#tripulacao" className="block w-full rounded-lg bg-cyan-700 px-4 py-2 text-center text-sm font-medium text-white">Alterar Tripulação</a>
                   {canCoordinate ? (
                     <ControleVoosStatusActions voo={voo} onChanged={() => void refetchVoo()} />
+                  ) : null}
+                  {canCoordinate && voo.status === 'planejado' && !rdv ? (
+                    <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+                      <button type="button" className="text-sm text-red-700 underline" onClick={() => setShowDeleteFlight(state => !state)}>Excluir lançamento incorreto</button>
+                      {showDeleteFlight ? <div className="space-y-2">
+                        <p className="text-xs text-slate-600">Disponível somente antes da distribuição e da execução. Caso contrário, cancele o voo.</p>
+                        <textarea aria-label="Motivo da exclusão" rows={2} className="w-full rounded border border-slate-300 p-2 text-sm" placeholder="Motivo da exclusão (mínimo 10 caracteres)" value={deleteReason} onChange={event => setDeleteReason(event.target.value)} />
+                        <button type="button" className="w-full rounded bg-red-700 px-3 py-2 text-sm text-white disabled:opacity-50" disabled={deletingFlight || deleteReason.trim().length < 10} onClick={() => void deletePreliminaryFlight()}>{deletingFlight ? 'Excluindo…' : 'Confirmar exclusão do lançamento'}</button>
+                      </div> : null}
+                    </div>
                   ) : null}
                 </div>
               </div>

@@ -1318,6 +1318,47 @@ controleVoos.post('/voos/:id/confirmar-planejamento', auth(), requireControleVoo
   return c.json({ success: true, data: (await enrichFlightsWithPresentation(c.env.DB, empresaId, [confirmed]))[0] });
 });
 
+// Soft-delete is reserved for erroneous, unpublished preliminary bookings.
+// Distributed, started or RDV-linked flights must be cancelled or corrected with audit.
+controleVoos.delete('/voos/:id', auth(), requireControleVoosWrite(), requireControleVoosCoordination(), async (c) => {
+  const empresaId = getEmpresaIdSafe(c);
+  const userId = getActorId(c);
+  const id = c.req.param('id');
+  const versao = requireExpectedFlightVersion({ versao: c.req.query('versao') });
+  const reason = String(c.req.query('motivo') || '').trim();
+  if (reason.length < 10 || reason.length > 500) {
+    throw new ApiError('Informe motivo da exclusão (10 a 500 caracteres)', 400, 'CONTROLE_VOOS_DELETE_REASON_REQUIRED');
+  }
+  const flight = await getFlightOrThrow(c.env.DB, id, empresaId);
+  assertFlightVersion(flight, versao);
+  if (flight.status !== 'planejado' || (await getActiveRdvByFlight(c.env.DB, flight.id, empresaId))) {
+    throw new ApiError('Voo já em execução ou com RDV: utilize o cancelamento ou o processo de revisão', 409, 'CONTROLE_VOOS_DELETE_PROTECTED');
+  }
+  const count = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM cv_voo_etapas
+    WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+    AND (horario_motor_ligado IS NOT NULL OR horario_decolagem IS NOT NULL OR horario_pouso IS NOT NULL OR horario_motor_desligado IS NOT NULL)`)
+    .bind(empresaId, flight.id).first<{total: number}>();
+  const distributed = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM cv_voo_eventos
+    WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+    AND (metadata_json LIKE '%whatsapp_programacao_tripulantes%' OR metadata_json LIKE '%email_programacao_tripulantes%')`)
+    .bind(empresaId, flight.id).first<{total: number}>();
+  if (Number(count?.total || 0) || Number(distributed?.total || 0)) {
+    throw new ApiError('Voo com dados realizados ou programação distribuída: cancele em vez de excluir', 409, 'CONTROLE_VOOS_DELETE_PROTECTED');
+  }
+  const [updated] = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE cv_voos
+      SET deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now'), versao = versao + 1
+      WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND versao = ?`).bind(userId, id, empresaId, versao),
+    c.env.DB.prepare(`INSERT INTO cv_voo_eventos
+      (empresa_id, voo_id, tipo_evento, status_anterior, status_novo, descricao, metadata_json, usuario_id, created_by, updated_by, created_at, updated_at)
+      SELECT ?, ?, 'sistema', ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
+      WHERE (SELECT changes()) > 0`).bind(empresaId, flight.id, flight.status, flight.status, 'Exclusão lógica: ' + reason, JSON.stringify({ action: 'soft_delete_preliminary_flight' }), userId, userId, userId),
+  ]);
+  assertFlightCasApplied(updated);
+  await maybeRecordSystemAudit(c, 'cv_voos', 'DELETE', id, flight, { deleted_at: 'soft-deleted', motivo: reason });
+  return c.json({ success: true, data: { id: flight.id, deleted: true } });
+});
+
 controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const userId = getActorId(c);
