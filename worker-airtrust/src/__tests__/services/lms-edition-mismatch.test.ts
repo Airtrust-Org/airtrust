@@ -16,6 +16,8 @@ function bucket(total: number, malformed = false): R2Bucket {
 const base = {
   contentType: 'scorm',
   activePrefix: 'lms/scorm/6/119/_candidates/active/',
+  empresaId: 6,
+  cursoId: 119,
   cmiJson: cmi(41),
 };
 describe('published SCORM edition mismatch (CFIT 41 → 37)', () => {
@@ -43,6 +45,7 @@ describe('published SCORM edition mismatch (CFIT 41 → 37)', () => {
     expect(await detectLmsEditionMismatch({ ...base, bucket: null })).toBeNull();
     expect(await detectLmsEditionMismatch({ ...base, bucket: bucket(37, true) })).toBeNull();
     expect(await detectLmsEditionMismatch({ ...base, activePrefix: '../secrets', bucket: bucket(37) })).toBeNull();
+    expect(await detectLmsEditionMismatch({ ...base, empresaId: 99, bucket: bucket(37) })).toBeNull();
     expect(await detectLmsEditionMismatch({ ...base, contentType: 'pdf', bucket: bucket(37) })).toBeNull();
   });
 });
