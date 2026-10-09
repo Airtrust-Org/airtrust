@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-08",
-    "last_reconciled_against": "0543 reviewed FDM qualification links for tenant 6; remote apply pending, no production write claimed",
-    "schema_v2_digest": "02c7e2d3432dbe8f7b83d07df9e573cb5691b5384a239cabe115c3b58397eb78",
+    "last_reconciled_against": "0544 reviewed tenant-6 AVSEC corporate history reclassification; remote apply pending, no production write claimed",
+    "schema_v2_digest": "1983a4427bcd2343856496c5028cc47044d5a088362212297c10ae6b7b88d1a9",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1457,6 +1457,18 @@
       "evidence": "worker-airtrust/schema-v2/plans/fdm-target-qualification-links-0543.md",
       "note": "Only updates lms_cursos.qualificacao_tipo_id for tenant 6 courses 71 and 72, guarded by singleton qualification identities and zero destination enrollments. No changes to qualification history, employee records, SCORM, certificates, course 13 or 73. Governance requires SHA-specific permission, D1 recovery and production postconditions; manifest is not evidence of apply."
 
+    },
+    {
+      "change_file": "0544_avsec_corporativo_historico.sql",
+      "change_id": "avsec-corporativo-historico-0544",
+      "sha256": "f8e43d6ad12f634eebeb56598e2ecc5823426a09db1d1a5b4a50ddaa0c8e5dd1",
+      "targets": [],
+      "domain": "Compliance AVSEC / tenant-6 singular historical conscientiousness certificate reclassification",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "avsec-corporativo-historico-0544.json",
+      "evidence": "worker-airtrust/schema-v2/plans/avsec-corporativo-historico-0544.md",
+      "note": "0544 reclassifies exactly historical evidence id 5276 (employee 111) from D1 to AVSEC_CONSC by Training Management decision; dates/status/certificate note preserved and expiry remains 2026-02-19. Approved execution requires exact SHA, production recovery and Schema V2 pre/postconditions. No production write claimed."
     }
   ]
 }
