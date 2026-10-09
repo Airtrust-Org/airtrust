@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-09",
-    "last_reconciled_against": "0545 reviewed tenant-6 QSMS/Safety canonical PDF compliance compensation; remote apply pending, no production write claimed",
-    "schema_v2_digest": "07b0fdb5c3727ab7afae73db885cea40a7463e1acc4ace948d375944aa2bf2d3",
+    "last_reconciled_against": "0546 category-FK-compliant compensation replacing unapplied 0545; production remote apply pending",
+    "schema_v2_digest": "b75242e9b3cd17fc0b18fdf3d2cd2ed170fd4f5a5679bd27ab126d66782bf4ea",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1480,6 +1480,18 @@
       "reviewed_manifest": "training-compliance-canonical-pdf-alignment-0545.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-canonical-pdf-alignment-0545.md",
       "note": "0538 forward compensation: NR05 designated CIPA only, Regras de Ouro suspended pending target confirmation, missing function requirements filled and FDM-MECANICO hour restored. No history or enrollment writes."
+    },
+    {
+      "change_file": "0546_training_compliance_canonical_category_repair.sql",
+      "change_id": "training-compliance-canonical-category-repair-0546",
+      "sha256": "6be8d112321f5294447573c760a7fc9a0985b9ff3aaef85a133a929c98651789",
+      "targets": [],
+      "domain": "Compliance QSMS tenant-6 category-FK compliant 0545 replacement",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-canonical-category-repair-0546.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-canonical-category-repair-0546.md",
+      "note": "0546 fully replaces unapplied 0545. Preserves 28-model target and adds valid category TREINAMENTO_GERAL for NR05. No production write claimed."
     }
   ]
 }
