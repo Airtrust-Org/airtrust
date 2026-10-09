@@ -11,7 +11,10 @@ Changes relative to previous V6/0538:
 - FDM-MECANICO: lifetime validity and 1-hour EAD metadata; retain later FDM-MNT naming and two existing role rules.
 - Preserve individual AUD_COMP/MUDA, Brigada/LOSA/Primeiros Socorros designations, GESTOR-only PPSP_SUP/BOWTIEXP, RBAC119/Tripulação CRM exclusions, remaining correct models and separate FDM three-audience 0536 extension.
 - No changes to employee assignments or LMS evidence. No production write before governable Schema V2 0545 deployment approved for exact SHA.
-\n## Tabela canônica integral (28 modelos)\n\n## QSMS
+
+## Tabela canônica integral (28 modelos)
+
+## QSMS
 
 | Código | Modelo | Categoria | Validade | Carga | Aplicabilidade |
 | --- | --- | --- | --- | --- | --- |
