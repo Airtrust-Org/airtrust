@@ -817,6 +817,25 @@ describe('Administrador da Empresa privilege boundary', () => {
     expect(response.status).toBe(403);
   });
 
+  it('GESTOR não pode remover acesso nem alterar permissões de uma Coordenação de Voo', async () => {
+    const companyTarget = () => createDb({
+      targetExists: true,
+      targetPerfil: 'COORDENACAO_VOO',
+      targetEmpresaId: 1,
+      targetHasVinculo: true,
+    });
+    const deletion = await adminRequest('DELETE', '/200', {
+      callerId: 10, callerRole: 'GESTOR', callerEmpresaId: 1, db: companyTarget(),
+    });
+    expect(deletion.status).toBe(403);
+    const permissions = await adminRequest('PUT', '/200/permissoes', {
+      callerId: 10, callerRole: 'GESTOR', callerEmpresaId: 1,
+      body: { permissoes: [{ permissao: 'controle_voos.edit', tipo: 'GRANT' as const }] },
+      db: companyTarget(),
+    });
+    expect(permissions.status).toBe(403);
+  });
+
   it('GESTOR não pode remover acesso de outro Administrador da Empresa', async () => {
     const response = await adminRequest('DELETE', '/200', {
       callerId: 10,

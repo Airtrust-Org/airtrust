@@ -291,7 +291,7 @@ export default function LmsPlayer() {
     inferredPersistedLocationProgress ?? 0,
   );
   const editionMismatch = (matricula as (typeof matricula & {
-    edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' } | null;
+    edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' | 'PACKAGE_SHA_CHANGED' } | null;
   }) | undefined)?.edition_mismatch ?? null;
   const newEditionRequired = editionMismatch?.required === true;
   const isTenantAdmin = ['admin', 'administrador'].includes(

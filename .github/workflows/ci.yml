@@ -108,6 +108,8 @@ jobs:
         run: node --test scripts/__tests__/lms-scorm-functional-certification-gate.test.mjs
       - name: verify SCORM M8 runtime assessment answer provenance
         run: node --test scripts/__tests__/lms-scorm-answer-plan.test.mjs
+      - name: ensure staging success fixture requires real learner interactions
+        run: node --test scripts/__tests__/lms-scorm-m8-fixture.test.mjs
       - name: verify frozen Factory SCORM core lock is fail-closed
         run: python3 -m unittest scripts/__tests__/test_scorm_golden_core_lock.py -v
       - name: validate 0438 legacy staging workflow guards
