@@ -21,7 +21,7 @@ RC1 executava LMSFinish somente ao completar o curso. O AirTrust Browser Runner 
 ## Evidências para o ZIP exato
 - CRC e reextração 52/52: PASS.
 - Quality Gate oficial AirTrust: structural PASS, completionManifest PASS, diagnostics PASS.
-- Conformance remoto do AirTrust: NÃO EXECUTADO — runner não disponibilizado no gate estático, NOT_SUPPORTED.
+- Conformance: gate estático NOT_SUPPORTED por desenho, **mas Browser Runner real Cloudflare/AirTrust V1: PASS** para o ZIP SHA-256 indicado; trace e resultado em AIRTRUST_BROWSER_RUN_RC2.json.
 - Teste Playwright com API SCORM equivalente à instrumentação oficial e mesma sequência de eventos: saída imediata PASS; saída na pré-visualização PASS; conclusão completa PASS. Em todos, Finish observado uma vez, Commit prévio e nenhuma chamada após Finish.
 - Percurso completo 37 unidades, 40 questões e 4 avaliações: PASS.
 - Retomada parcial e pré-visualização read-only: PASS.
@@ -29,4 +29,4 @@ RC1 executava LMSFinish somente ao completar o curso. O AirTrust Browser Runner 
 - 37 fotografias contextuais distintas, fontes/licenças incluídas, sem SVG esquemáticos.
 
 ## Publicação
-Criar matrícula/ciclo novo; a RC2 não deve herdar progresso e status do CFIT antigo. O Quality Gate remoto ainda precisa emitir PASS para o SHA acima antes de tratar o pacote como certificável.
+Criar matrícula/ciclo novo; a RC2 não deve herdar progresso e status do CFIT antigo. O Browser Runner remoto confirmou PASS para este SHA. O upload, catalogação e matrícula no AirTrust real continuam NÃO EXECUTADOS nesta sessão; não confundir conformance do runtime com homologação ponta a ponta do LMS.
