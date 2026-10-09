@@ -174,16 +174,24 @@ jobs:
   public-e2e:
     name: public-e2e
     runs-on: ubuntu-latest
+    # The npm lock pins @playwright/test 1.58.2. Avoid runner apt mirrors
+    # (two 5-minute exit-124 timeouts) without skipping browser assertions.
+    container: mcr.microsoft.com/playwright:v1.58.2-noble
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Trust only the runner-owned checked-out repo inside pinned container
+        shell: bash
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Verify exact source SHA
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
         run: |
+          set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           git fetch origin main --quiet
       - uses: actions/setup-node@v7
@@ -195,24 +203,20 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - name: Install Playwright browser dependencies
-        timeout-minutes: 6
+      - name: Verify preinstalled Chromium and WebKit launch safely
         shell: bash
         run: |
           set -euo pipefail
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
-          sudo tee /etc/apt/apt.conf.d/99airtrust-ci-network >/dev/null <<'EOF'
-          Acquire::Retries "3";
-          Acquire::http::Timeout "30";
-          Acquire::https::Timeout "30";
-          DPkg::Lock::Timeout "60";
-          EOF
-          timeout --signal=TERM 5m npx playwright install-deps chromium webkit
-      - name: Install Playwright browsers
-        timeout-minutes: 6
-        env:
-          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: 120000
-        run: npx playwright install chromium webkit
+          node --input-type=module <<'NODE'
+          import { chromium, webkit } from '@playwright/test';
+          for (const [name, type] of [['chromium', chromium], ['webkit', webkit]]) {
+            const browser = await type.launch({ headless: true });
+            const page = await browser.newPage();
+            await page.goto('about:blank');
+            await browser.close();
+            console.log(`PUBLIC_E2E_BROWSER_READY=${name}`);
+          }
+          NODE
       - name: Run public auth-boundary E2E with dev bypass disabled
         shell: bash
         run: |
@@ -227,26 +231,41 @@ jobs:
             rm -f worker-airtrust/.dev.vars
           }
           trap cleanup EXIT
-          npm run dev:worker:local > /tmp/worker.log 2>&1 &
+          # Wrangler defaults to localhost, which can resolve to IPv6-only
+          # inside the pinned Playwright container. E2E targets IPv4 127.0.0.1.
+          npm run dev:worker:local -- --ip 127.0.0.1 > /tmp/worker.log 2>&1 &
           WORKER_PID=$!
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then
+          # A TCP-connected but unresponsive local Worker once stalled a
+          # bare curl for >40m. Treat health as a bounded preflight, preserve
+          # the Worker diagnostic log, and never skip the real E2E assertions.
+          worker_ready=0
+          for i in $(seq 1 30); do
+            if curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
+              http://127.0.0.1:8787/api/health >/dev/null 2>/tmp/airtrust-e2e-health-curl.log; then
+              worker_ready=1
               break
             fi
-            if [[ "$i" -eq 60 ]]; then
-              cat /tmp/worker.log
+            if ! kill -0 "$WORKER_PID" 2>/dev/null; then
+              echo "PUBLIC_E2E_WORKER_EXITED_EARLY" >&2
+              tail -n 150 /tmp/worker.log >&2
               exit 1
             fi
-            sleep 1
+            sleep 2
           done
+          if [[ "$worker_ready" != 1 ]]; then
+            echo "PUBLIC_E2E_LOCAL_API_NOT_READY" >&2
+            tail -n 150 /tmp/worker.log >&2
+            cat /tmp/airtrust-e2e-health-curl.log >&2 || true
+            exit 1
+          fi
           CI=true VITE_API_URL=http://127.0.0.1:8787 \
-            npx playwright test \
+            timeout --signal=TERM 15m npx playwright test \
               --config=playwright.ci.config.ts \
               --project=chromium \
               e2e/ci/login-public-smoke.spec.ts \
               e2e/ci/pilot-offline-persistence.spec.ts
           CI=true VITE_API_URL=http://127.0.0.1:8787 \
-            npx playwright test \
+            timeout --signal=TERM 15m npx playwright test \
               --config=playwright.ci.config.ts \
               --project=webkit-ipad \
               e2e/ci/pilot-offline-persistence.spec.ts
