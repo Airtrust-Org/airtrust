@@ -224,7 +224,7 @@ async function handleRematriculation(
 
   if (newEdition && eligibleForNewEdition && !existing.qualificacao_historico_id) {
     const edition = await c.env.DB.prepare(
-      `SELECT c.tipo_conteudo, c.scorm_package_r2_prefix, p.cmi_json
+      `SELECT c.tipo_conteudo, c.scorm_package_r2_prefix, p.cmi_json, p.suspend_data
          FROM lms_matriculas m
          JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
            AND c.deleted_at IS NULL AND c.ativo = 1 AND c.publicado = 1
@@ -235,6 +235,7 @@ async function handleRematriculation(
       tipo_conteudo: string | null;
       scorm_package_r2_prefix: string | null;
       cmi_json: string | null;
+      suspend_data: string | null;
     }>();
     editionMismatch = await detectLmsEditionMismatch({
       bucket: c.env.BUCKET,
@@ -243,6 +244,7 @@ async function handleRematriculation(
       empresaId,
       cursoId: existing.curso_id,
       cmiJson: edition?.cmi_json,
+      suspendData: edition?.suspend_data,
     });
     if (editionMismatch) {
       verifiedActivePrefix = edition?.scorm_package_r2_prefix ?? null;

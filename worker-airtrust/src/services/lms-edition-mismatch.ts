@@ -21,6 +21,7 @@ export async function detectLmsEditionMismatch(params: {
   empresaId: number;
   cursoId: number;
   cmiJson: unknown;
+  suspendData?: unknown;
 }): Promise<LmsEditionMismatch | null> {
   if (String(params.contentType ?? '').toLowerCase() !== 'scorm') return null;
   if (!params.bucket || typeof params.activePrefix !== 'string') return null;
@@ -48,7 +49,8 @@ export async function detectLmsEditionMismatch(params: {
     // Native Factory snapshots carry their original authored package version.
     // A 46-slide replacement can be incompatible with a previous 46-slide
     // edition; comparing only totals cannot establish transferability.
-    const saved = cmi['cmi.suspend_data'];
+    const inline = cmi['cmi.suspend_data'];
+    const saved = typeof inline === 'string' && inline.trim() ? inline : params.suspendData;
     if (typeof saved === 'string' && saved.length <= 65_536) {
       try {
         const native = JSON.parse(saved) as Record<string, unknown>;

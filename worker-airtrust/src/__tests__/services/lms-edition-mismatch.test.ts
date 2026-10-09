@@ -68,6 +68,27 @@ describe('published SCORM edition mismatch (CFIT 41 → 37)', () => {
       active_version: 'mgo-rev15',
     });
   });
+  it('uses separately persisted SCORM suspend_data when older CMI snapshots omit the field', async () => {
+    const cmiWithoutSuspend = JSON.stringify({
+      'cmi.core.lesson_location': '35/46',
+      'airtrust.total_slides': 46,
+    });
+    const storedSuspendData = JSON.stringify({
+      v: 3, p: 'mgo-rev14', a: 34, d: [0, 1, 2],
+    });
+    expect(await detectLmsEditionMismatch({
+      ...base,
+      cmiJson: cmiWithoutSuspend,
+      suspendData: storedSuspendData,
+      bucket: bucket(46, false, 'mgo-rev15'),
+    })).toMatchObject({
+      required: true,
+      reason: 'PACKAGE_VERSION_CHANGED',
+      previous_total: 46,
+      active_total: 46,
+    });
+  });
+
   it('retains an unchanged edition when packageVersion and totals match', async () => {
     const previous = JSON.stringify({
       'cmi.core.lesson_location': '35/46',
