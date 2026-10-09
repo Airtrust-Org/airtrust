@@ -8,16 +8,14 @@ const root = join(process.cwd(), '..');
 const file = (p: string) => readFileSync(join(root, p), 'utf8');
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const sqlPath = 'worker-airtrust/schema-v2/changes/0544_avsec_corporativo_historico.sql';
-const mirror = 'worker-airtrust/migrations/0544_avsec_corporativo_historico.sql';
 const planPath = 'worker-airtrust/schema-v2/plans/avsec-corporativo-historico-0544.md';
 const manifestPath = 'worker-airtrust/schema-v2/avsec-corporativo-historico-0544.json';
 
 describe('Schema V2 AVSEC corporativo historico 0544', () => {
-  it('mantem SQL/plano revisados, hash, baseline e migration mirror identicos', () => {
+  it('mantem SQL/plano revisados, hashes e baseline somente no Schema V2', () => {
     const sql = file(sqlPath);
     const plan = file(planPath);
     const manifest = JSON.parse(file(manifestPath));
-    expect(file(mirror)).toBe(sql);
     expect(manifest.changeId).toBe('avsec-corporativo-historico-0544');
     expect(manifest.baselineId).toBe('production-d1-baseline-v2-20260714');
     expect(manifest.filePath).toBe(sqlPath);
