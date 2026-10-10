@@ -47,6 +47,8 @@ import { buildFlightRelatedStatements, normalizeFlightRouteIds, parseFlightCrewI
 import { parseFlightPlanningInput, updateFlightStagePlanningIfSupported } from '../services/controle-voos/flight-planning';
 import { enrichFlightsWithPresentation } from '../services/controle-voos/flight-presentation';
 import { getDailyPlanningWhatsAppShareHandler, getFlightWhatsAppShareHandler, sendFlightEmailHandler, sendFlightWhatsAppHandler } from './controle-voos-dispatch';
+import { getFlightFatigueHandler } from './controle-voos-fatigue';
+import { getFlightQualificationsHandler } from './controle-voos-qualifications';
 type CatalogConfig = {
   table: string;
   fields: string;
@@ -1048,6 +1050,8 @@ controleVoos.get(
 controleVoos.post('/voos/:id/whatsapp', auth(), requireControleVoosWrite(), sendFlightWhatsAppHandler);
 controleVoos.post('/voos/:id/email', auth(), requireControleVoosWrite(), sendFlightEmailHandler);
 controleVoos.get('/voos/:id/whatsapp-share', auth(), requireControleVoosWrite(), getFlightWhatsAppShareHandler);
+controleVoos.get('/voos/:id/fadiga', auth(), requireControleVoosWrite(), getFlightFatigueHandler);
+controleVoos.get('/voos/:id/qualificacoes', auth(), requireControleVoosWrite(), getFlightQualificationsHandler);
 
 // Confirmation of preflight planning is separate from operational flight release and RDV approval.
 controleVoos.post('/voos/:id/confirmar-planejamento', auth(), requireControleVoosWrite(), requireControleVoosCoordination(), async (c) => {
