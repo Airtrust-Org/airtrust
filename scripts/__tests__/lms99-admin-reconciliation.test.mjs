@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { plan } from '../production/lms99-admin-reconciliation.mjs';
+import { plan, administrativeObservations } from '../production/lms99-admin-reconciliation.mjs';
 test('includes only 100% raw not completed and stable idempotent hash',()=>{
  const cohort=[{id:4,enrollments:[{id:1,status:'EM_ANDAMENTO',progresso_bruto:100},{id:2,status:'CONCLUIDO',progresso_bruto:100},{id:3,status:'CANCELADO',progresso_bruto:100},{id:4,status:'REPROVADO',progresso_bruto:100}]}];
  const r=plan(cohort);
@@ -26,4 +26,12 @@ test('relative-path CLI actually enters fail-closed main, rather than silently e
   });
   assert.equal(run.status,1,`entrypoint should fail closed: ${run.stderr}`);
   assert.match(run.stderr,/LMS99_GITHUB_MAIN_REQUIRED/);
+});
+
+test('preserves existing LMS notes when appending audited administrative reason',()=>{
+  const before='Treinamento realizado em viagem operacional';
+  const after=administrativeObservations(before);
+  assert.ok(after.startsWith(before+'\n\n'));
+  assert.match(after,/Regularizacao administrativa/);
+  assert.equal(administrativeObservations(null).startsWith('Regularizacao administrativa'),true);
 });
