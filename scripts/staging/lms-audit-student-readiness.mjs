@@ -4,6 +4,7 @@ import {
   assert,
   assertAllowedStagingBaseUrl,
   assertArrayPayload,
+  decodeJwtPayload,
   extractAccessToken,
   fetchJson,
   login,
@@ -42,6 +43,9 @@ async function main() {
     token = extractAccessToken(switched.json);
   }
 
+  const claims = decodeJwtPayload(token);
+  assert(Number(claims?.funcionario_id) > 0, 'STUDENT_EMPLOYEE_LINK_MISSING');
+
   const me = await fetchJson(`${API}/api/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -58,6 +62,7 @@ async function main() {
       result: 'QA_LMS_STUDENT_READY',
       environment: 'staging',
       role: 'student',
+      employee_link: true,
       isolated_tenant: true,
       catalog_access: 'read_only',
       visible_course_count: courses.length,

@@ -82,6 +82,8 @@ jobs:
           STAGING_SMOKE_USER_NOME: Auditoria LMS AirTrust
           STAGING_SMOKE_PERFIL: ALUNO
           STAGING_SMOKE_ROLE: student
+          STAGING_SMOKE_FUNCIONARIO_MATRICULA: QA-LMS-E2E
+          STAGING_SMOKE_FUNCIONARIO_NOME_GUERRA: AUDITOR LMS
         run: node scripts/seed-staging-smoke-user.mjs
 
       - name: Provision isolated LMS audit student
@@ -93,6 +95,8 @@ jobs:
           STAGING_SMOKE_USER_NOME: Auditoria LMS AirTrust
           STAGING_SMOKE_PERFIL: ALUNO
           STAGING_SMOKE_ROLE: student
+          STAGING_SMOKE_FUNCIONARIO_MATRICULA: QA-LMS-E2E
+          STAGING_SMOKE_FUNCIONARIO_NOME_GUERRA: AUDITOR LMS
         run: node scripts/seed-staging-smoke-user.mjs --apply --confirm-staging-baseline
 
       - name: Verify isolated LMS student with learner permissions

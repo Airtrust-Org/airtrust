@@ -114,6 +114,8 @@ async function main() {
   const usuarioNome = String(process.env.STAGING_SMOKE_USER_NOME || DEFAULT_USUARIO_NOME).trim();
   const perfil = validatePerfil(process.env.STAGING_SMOKE_PERFIL);
   const tenantRole = validateTenantRole(process.env.STAGING_SMOKE_ROLE);
+  const funcionarioMatricula = String(process.env.STAGING_SMOKE_FUNCIONARIO_MATRICULA || '').trim().toUpperCase();
+  const funcionarioNomeGuerra = String(process.env.STAGING_SMOKE_FUNCIONARIO_NOME_GUERRA || '').trim();
 
   const missing = [];
   if (!email) missing.push('STAGING_SMOKE_EMAIL');
@@ -121,12 +123,19 @@ async function main() {
   if (!empresaCodigo) missing.push('STAGING_SMOKE_EMPRESA_CODIGO');
   if (!empresaNome) missing.push('STAGING_SMOKE_EMPRESA_NOME');
   if (!usuarioNome) missing.push('STAGING_SMOKE_USER_NOME');
+  if (funcionarioMatricula && perfil !== 'ALUNO') {
+    throw new Error('STAGING_SMOKE_FUNCIONARIO_MATRICULA exige STAGING_SMOKE_PERFIL=ALUNO.');
+  }
+  if (funcionarioMatricula && !funcionarioNomeGuerra) {
+    throw new Error('STAGING_SMOKE_FUNCIONARIO_NOME_GUERRA obrigatorio com matricula de funcionario.');
+  }
 
   log(`TARGET_DB=${dbName}`);
   log(`SMOKE_EMAIL=${maskEmail(email)}`);
   log(`MODE=${apply ? 'apply' : 'dry-run'}`);
   log(`PERFIL=${perfil}`);
   log(`TENANT_ROLE=${tenantRole}`);
+  if (funcionarioMatricula) log(`FUNCIONARIO_FIXTURE=${funcionarioMatricula}`);
 
   if (missing.length > 0) {
     log(`MISSING_ENV=${missing.join(',')}`);
@@ -160,6 +169,8 @@ async function main() {
     usuarioNome,
     perfil,
     tenantRole,
+    funcionarioMatricula,
+    funcionarioNomeGuerra,
   });
 
   if (!apply) {
@@ -191,8 +202,52 @@ async function main() {
   }
 }
 
-function buildSeedSql({ email, passwordHash, empresaCodigo, empresaNome, usuarioNome, perfil, tenantRole }) {
+function buildSeedSql({
+  email,
+  passwordHash,
+  empresaCodigo,
+  empresaNome,
+  usuarioNome,
+  perfil,
+  tenantRole,
+  funcionarioMatricula,
+  funcionarioNomeGuerra,
+}) {
   const e = sqlString;
+  const funcionarioSeed = funcionarioMatricula
+    ? `
+INSERT INTO setores (codigo, nome, descricao, responsavel, ativo, created_at, updated_at, deleted_at, empresa_id)
+SELECT 'QA-SETOR-LMS', 'Setor QA LMS', 'Setor sintético exclusivo da auditoria LMS.', ${e(usuarioNome)}, 1, datetime('now'), datetime('now'), NULL, emp.id
+FROM empresas emp
+WHERE emp.codigo = ${e(empresaCodigo)}
+  AND NOT EXISTS (
+    SELECT 1 FROM setores s WHERE s.codigo = 'QA-SETOR-LMS' AND s.empresa_id = emp.id AND s.deleted_at IS NULL
+  );
+
+UPDATE setores
+SET nome = 'Setor QA LMS', descricao = 'Setor sintético exclusivo da auditoria LMS.', responsavel = ${e(usuarioNome)}, ativo = 1, deleted_at = NULL, updated_at = datetime('now')
+WHERE codigo = 'QA-SETOR-LMS'
+  AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(empresaCodigo)} AND deleted_at IS NULL);
+
+INSERT INTO funcionarios (nome, matricula, cargo, setor, setor_id, status, is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at, deleted_at, guerra)
+SELECT ${e(usuarioNome)}, ${e(funcionarioMatricula)}, 'Aluno QA LMS', 'Setor QA LMS', s.id, 'ATIVO', 0, 0, 1, emp.id, datetime('now'), datetime('now'), NULL, ${e(funcionarioNomeGuerra)}
+FROM empresas emp
+JOIN setores s ON s.empresa_id = emp.id AND s.codigo = 'QA-SETOR-LMS' AND s.deleted_at IS NULL
+WHERE emp.codigo = ${e(empresaCodigo)}
+  AND NOT EXISTS (SELECT 1 FROM funcionarios WHERE matricula = ${e(funcionarioMatricula)} AND empresa_id = emp.id AND deleted_at IS NULL);
+
+UPDATE funcionarios
+SET nome = ${e(usuarioNome)}, cargo = 'Aluno QA LMS', setor = 'Setor QA LMS', setor_id = (
+  SELECT s.id FROM setores s JOIN empresas emp ON emp.id = s.empresa_id
+  WHERE emp.codigo = ${e(empresaCodigo)} AND s.codigo = 'QA-SETOR-LMS' AND s.deleted_at IS NULL
+), status = 'ATIVO', is_instrutor = 0, is_examinador = 0, ativo = 1, deleted_at = NULL, guerra = ${e(funcionarioNomeGuerra)}, updated_at = datetime('now')
+WHERE matricula = ${e(funcionarioMatricula)}
+  AND empresa_id = (SELECT id FROM empresas WHERE codigo = ${e(empresaCodigo)} AND deleted_at IS NULL);
+`
+    : '';
+  const funcionarioId = funcionarioMatricula
+    ? `(SELECT f.id FROM funcionarios f JOIN empresas emp ON emp.id = f.empresa_id WHERE f.matricula = ${e(funcionarioMatricula)} AND emp.codigo = ${e(empresaCodigo)} AND f.deleted_at IS NULL LIMIT 1)`
+    : 'NULL';
   // D1 não suporta BEGIN TRANSACTION/COMMIT — cada statement é
   // executado individualmente. A atomicidade é garantida pelo wrangler.
   return `
@@ -232,6 +287,8 @@ UPDATE empresas SET
   updated_at = datetime('now')
 WHERE codigo = ${e(empresaCodigo)};
 
+${funcionarioSeed}
+
 INSERT INTO usuarios (
   email,
   password_hash,
@@ -248,7 +305,7 @@ SELECT
   ${e(passwordHash)},
   ${e(usuarioNome)},
   ${e(perfil)},
-  NULL,
+  ${funcionarioId},
   NULL,
   datetime('now'),
   datetime('now'),
@@ -262,6 +319,7 @@ SET
   password_hash = ${e(passwordHash)},
   nome = ${e(usuarioNome)},
   perfil = ${e(perfil)},
+  ${funcionarioMatricula ? `funcionario_id = ${funcionarioId},` : ''}
   deleted_at = NULL,
   active = 1,
   updated_at = datetime('now')
