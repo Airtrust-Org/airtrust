@@ -3,6 +3,7 @@
 // Training Manager: canonical tenant-scoped API, never raw SQL or forged SCORM.
 import process from 'node:process';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { assertAllowedProductionBaseUrl, extractAccessToken, fetchJson, login } from '../smoke-auth-common.mjs';
 const API=assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL || 'https://api.airtrust.online');
 const MODE=process.env.LMS99_MODE;
@@ -98,6 +99,10 @@ function report(p,results){
     writes:results.completed||0,results,scorm_cmi_changed:false,personal_data:false,
     completion_date_rule:'CANONICAL_SERVER_DATE',historical_training_date_not_fabricated:true};
 }
+export function administrativeObservations(existing){
+  const prior=String(existing??'').trim();
+  return prior?prior+'\n\n'+REASON:REASON;
+}
 async function main(){
   valid(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_REF==='refs/heads/main','GITHUB_MAIN_REQUIRED');
   valid(/^[a-f0-9]{40}$/.test(MAIN)&&process.env.GITHUB_SHA===MAIN,'SOURCE_SHA_CHANGED');
@@ -117,7 +122,7 @@ async function main(){
     valid(upper(data.status)===row.status&&Number(data.curso_id)===row.cid&&progress(data)===100,'ROW_DRIFT');
     const res=await fetchJson(API+'/api/lms/matriculas/'+row.id+'/status',{
       method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-      body:JSON.stringify({status:'CONCLUIDO',observacoes:REASON})});
+      body:JSON.stringify({status:'CONCLUIDO',observacoes:administrativeObservations(data.observacoes)})});
     if(res.status===409){results.rejected_409++;continue;}
     if(res.status===403){results.rejected_403++;continue;}
     if(res.status!==200||res.json?.success!==true){results.other_error++;break;}
@@ -131,4 +136,4 @@ async function main(){
   process.stdout.write(JSON.stringify(report(cohort,results),null,2));
   valid(results.other_error===0&&results.rejected_409===0&&results.rejected_403===0,'RECONCILIATION_PARTIAL_REVIEW_REQUIRED');
 }
-if(import.meta.url==='file://'+process.argv[1])main().catch(e=>{console.error('LMS99_GOVERNED_FAILED:'+String(e.message).slice(0,90));process.exitCode=1;});
+if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(e=>{console.error('LMS99_GOVERNED_FAILED:'+String(e.message).slice(0,90));process.exitCode=1;});
