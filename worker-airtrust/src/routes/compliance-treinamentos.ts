@@ -1910,29 +1910,36 @@ app.post('/reconciliacao/limpeza', requireRole('admin'), async (c) => {
   }
   let canceladas = 0;
   if (aplicar && elegiveis.length) {
-    const writes = await db.batch(elegiveis.map((row) => db.prepare(
-      `UPDATE lms_matriculas SET status='CANCELADO',deleted_at=datetime('now'),updated_at=datetime('now')
-        WHERE id=? AND empresa_id=? AND deleted_at IS NULL
-          AND UPPER(TRIM(COALESCE(status,'')))=?`,
-    ).bind(row.id, empresaId, String(row.status || '').trim().toUpperCase())));
-    for (let i = 0; i < writes.length; i += 1) {
-      if (Number(writes[i].meta?.changes || 0) !== 1) continue;
-      const row = elegiveis[i];
+    // Escrita e auditoria são parte da mesma transação. Sem trilha central, não há limpeza.
+    if (!(await tableExists(db, 'auditoria_avancada_v2'))) {
+      throw new ApiError('Auditoria governada indisponível; limpeza não executada', 409);
+    }
+    const actor = extrairUsuarioAuditoria(c);
+    const statements = elegiveis.flatMap((row) => [
+      db.prepare(
+        `UPDATE lms_matriculas SET status='CANCELADO',deleted_at=datetime('now'),updated_at=datetime('now')
+          WHERE id=? AND empresa_id=? AND deleted_at IS NULL
+            AND UPPER(TRIM(COALESCE(status,'')))=?`,
+      ).bind(row.id, empresaId, String(row.status || '').trim().toUpperCase()),
+      db.prepare(
+        `INSERT INTO auditoria_avancada_v2
+           (tabela,acao,registro_id,dados_anteriores,dados_novos,usuario_id,ip_address,user_agent,origem,created_at)
+         SELECT 'lms_matriculas','UPDATE',?,?,?,?,?,?,?,'api',datetime('now')
+          WHERE changes()=1`,
+      ).bind(
+        String(row.id),
+        JSON.stringify({ empresa_id: empresaId, status: row.status }),
+        JSON.stringify({ empresa_id: empresaId, status: 'CANCELADO', motivo: 'Matriz QSMS/Segurança Operacional 0534 — matrícula sem requisito' }),
+        actor.usuario_id || null,
+        actor.ip_address || null,
+        actor.user_agent || null,
+      ),
+    ]);
+    const writes = await db.batch(statements);
+    for (let i = 0; i < elegiveis.length; i += 1) {
+      if (Number(writes[2 * i].meta?.changes || 0) !== 1) continue;
       canceladas += 1;
-      await syncMatriculaCycleFromMatricula(db, { matriculaId: row.id });
-      await registrarAuditoria({
-        db,
-        tabela: 'lms_matriculas',
-        acao: 'UPDATE',
-        registro_id: row.id,
-        dados_anteriores: { status: row.status, empresa_id: empresaId },
-        dados_novos: {
-          status: 'CANCELADO',
-          motivo: 'Reconciliação matriz QSMS/Segurança Operacional 0534 — sem requisito',
-          empresa_id: empresaId,
-        },
-        ...extrairUsuarioAuditoria(c),
-      });
+      await syncMatriculaCycleFromMatricula(db, { matriculaId: elegiveis[i].id });
     }
   }
   return c.json({
