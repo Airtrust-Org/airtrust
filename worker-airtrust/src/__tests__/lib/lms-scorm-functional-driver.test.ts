@@ -336,6 +336,57 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
     expect(scenario.scenario).toBe(1);
   });
 
+  it('scopes scenario clicks to the active slide when hidden slides reuse option indexes', () => {
+    const slides = [
+      { id: 'scenario-a', kind: 'scenario', content: { options: [{ correct: false }, { correct: true }] } },
+      { id: 'scenario-b', kind: 'scenario', content: { options: [{ correct: false }, { correct: true }] } },
+    ];
+    let active = 1;
+    const done = [0];
+    const scenarioState: Record<string, number | null> = { 'scenario-a': 0, 'scenario-b': null };
+    const hidden = global.document.createElement('section');
+    hidden.className = 'screen';
+    const hiddenChoice = global.document.createElement('button');
+    hiddenChoice.dataset.scenario = 'scenario-a';
+    hiddenChoice.dataset.opt = '1';
+    hiddenChoice.addEventListener('click', () => { scenarioState['scenario-a'] = 1; });
+    hidden.append(hiddenChoice);
+    const current = global.document.createElement('section');
+    current.className = 'screen active';
+    const currentChoice = global.document.createElement('button');
+    currentChoice.dataset.scenario = 'scenario-b';
+    currentChoice.dataset.opt = '1';
+    currentChoice.addEventListener('click', () => {
+      scenarioState['scenario-b'] = 1;
+      next.disabled = false;
+    });
+    current.append(currentChoice);
+    const next = global.document.createElement('button');
+    next.id = 'next';
+    next.disabled = true;
+    let courseCompleted = false;
+    next.addEventListener('click', () => {
+      done.push(active);
+      courseCompleted = true;
+    });
+    global.document.body.append(hidden, current, next);
+    global.window.COURSE_DATA = { slides };
+    global.window.__AIRTRUST_PLAYER_TEST__ = {
+      getState: () => ({
+        active,
+        done: [...done],
+        scenarioState: { ...scenarioState },
+        courseCompleted,
+        completionReady: courseCompleted,
+        mode: 'journey',
+      }),
+    };
+
+    const result = new Function('return ' + buildScormFunctionalDriverScript())();
+    expect(result).toMatchObject({ supported: true, completed: true, reason: null });
+    expect(scenarioState).toEqual({ 'scenario-a': 0, 'scenario-b': 1 });
+  });
+
   it('rejects courses without an actionable next control', () => {
     global.window.COURSE_DATA = {
       slides: [{ id: 'intro', kind: 'cover' }],
