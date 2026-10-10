@@ -39,50 +39,6 @@ function toLocalInput(value: string | null | undefined) {
   return shifted.toISOString().slice(0, 16);
 }
 
-function movePlannedDate(
-  dateText: string,
-  departureText: string,
-  arrivalText: string,
-): { departure: string; arrival: string } {
-  const departure = new Date(departureText);
-  const arrival = new Date(arrivalText);
-  const base = new Date(dateText + 'T12:00:00');
-  if (
-    Number.isNaN(departure.getTime()) ||
-    Number.isNaN(arrival.getTime()) ||
-    Number.isNaN(base.getTime())
-  ) {
-    return { departure: departureText, arrival: arrivalText };
-  }
-
-  const dayOffset = Math.max(
-    0,
-    Math.round(
-      (new Date(arrival.getFullYear(), arrival.getMonth(), arrival.getDate()).getTime() -
-        new Date(departure.getFullYear(), departure.getMonth(), departure.getDate()).getTime()) /
-        86_400_000,
-    ),
-  );
-  const nextDeparture = new Date(
-    base.getFullYear(),
-    base.getMonth(),
-    base.getDate(),
-    departure.getHours(),
-    departure.getMinutes(),
-  );
-  const nextArrival = new Date(
-    base.getFullYear(),
-    base.getMonth(),
-    base.getDate() + dayOffset,
-    arrival.getHours(),
-    arrival.getMinutes(),
-  );
-  return {
-    departure: toLocalInput(nextDeparture.toISOString()),
-    arrival: toLocalInput(nextArrival.toISOString()),
-  };
-}
-
 export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [loadingCatalogs, setLoadingCatalogs] = useState(false);
@@ -94,14 +50,10 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
   const [routeIds, setRouteIds] = useState<string[]>(voo.rota_pontos?.length ? voo.rota_pontos.map(point => point.id == null ? '' : String(point.id)) : [String(voo.origem_id), String(voo.destino_id)]);
   const [form, setForm] = useState({
     numero_voo: voo.numero_voo || '',
-    numero_db: voo.numero_db || '',
-    petrobras_equipamento: voo.petrobras_equipamento || '',
-    petrobras_atendimento: voo.petrobras_atendimento || '',
     aeronave_id: voo.aeronave_id ? String(voo.aeronave_id) : '',
     prefixo: voo.prefixo || '',
     contrato_id: voo.contrato_id ? String(voo.contrato_id) : '',
     tipo_voo_id: String(voo.tipo_voo_id),
-    data_programacao: voo.data_programacao.slice(0, 10),
     horario_previsto_partida: toLocalInput(voo.horario_previsto_partida),
     horario_previsto_chegada: toLocalInput(voo.horario_previsto_chegada),
     peso_passageiros: voo.peso_passageiros_planejado == null ? '' : String(voo.peso_passageiros_planejado),
@@ -116,14 +68,10 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
     setError(null);
     setForm({
       numero_voo: voo.numero_voo || '',
-      numero_db: voo.numero_db || '',
-      petrobras_equipamento: voo.petrobras_equipamento || '',
-      petrobras_atendimento: voo.petrobras_atendimento || '',
       aeronave_id: voo.aeronave_id ? String(voo.aeronave_id) : '',
       prefixo: voo.prefixo || '',
       contrato_id: voo.contrato_id ? String(voo.contrato_id) : '',
       tipo_voo_id: String(voo.tipo_voo_id),
-      data_programacao: voo.data_programacao.slice(0, 10),
       horario_previsto_partida: toLocalInput(voo.horario_previsto_partida),
       horario_previsto_chegada: toLocalInput(voo.horario_previsto_chegada),
       peso_passageiros: voo.peso_passageiros_planejado == null ? '' : String(voo.peso_passageiros_planejado),
@@ -196,14 +144,10 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
       const response = await apiClient.patch<unknown>(`/controle-voos/voos/${voo.id}`, {
         versao: voo.versao,
         numero_voo: form.numero_voo.trim() || null,
-        numero_db: form.numero_db.trim() || null,
-        petrobras_equipamento: form.petrobras_equipamento.trim() || null,
-        petrobras_atendimento: form.petrobras_atendimento.trim() || null,
         prefixo: form.prefixo.trim().toUpperCase(),
         aeronave_id: Number(form.aeronave_id),
         contrato_id: Number(form.contrato_id),
         tipo_voo_id: Number(form.tipo_voo_id),
-        data_programacao: form.data_programacao,
         horario_previsto_partida: departure.toISOString(),
         horario_previsto_chegada: arrival.toISOString(),
         observacoes: form.observacoes.trim() || null,
@@ -253,18 +197,6 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Número do voo
             <input className={fieldClass} value={form.numero_voo} onChange={(event) => setForm((prev) => ({ ...prev, numero_voo: event.target.value }))} />
-          </label>
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            Número DB
-            <input className={fieldClass} value={form.numero_db} onChange={(event) => setForm((prev) => ({ ...prev, numero_db: event.target.value }))} />
-          </label>
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            Equipamento Petrobras
-            <input className={fieldClass} value={form.petrobras_equipamento} onChange={(event) => setForm((prev) => ({ ...prev, petrobras_equipamento: event.target.value }))} placeholder="Ex.: 30131647" />
-          </label>
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            Atendimento Petrobras
-            <input className={fieldClass} value={form.petrobras_atendimento} onChange={(event) => setForm((prev) => ({ ...prev, petrobras_atendimento: event.target.value }))} placeholder="Ex.: 509573593" />
           </label>
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Aeronave
@@ -329,31 +261,6 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
             </select>
           </label>
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            Data da programação
-            <input
-              type="date"
-              required
-              className={fieldClass}
-              value={form.data_programacao}
-              onChange={(event) => {
-                const data_programacao = event.target.value;
-                setForm((prev) => {
-                  const moved = movePlannedDate(
-                    data_programacao,
-                    prev.horario_previsto_partida,
-                    prev.horario_previsto_chegada,
-                  );
-                  return {
-                    ...prev,
-                    data_programacao,
-                    horario_previsto_partida: moved.departure,
-                    horario_previsto_chegada: moved.arrival,
-                  };
-                });
-              }}
-            />
-          </label>
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Partida prevista
             <input type="datetime-local" required className={fieldClass} value={form.horario_previsto_partida} onChange={(event) => setForm((prev) => ({ ...prev, horario_previsto_partida: event.target.value }))} />
           </label>
@@ -363,7 +270,7 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
           </label>
           {voo.status === 'planejado' ? (
             <div className="sm:col-span-2 lg:col-span-3 space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-              <h3 className="text-sm font-semibold">Rota programada</h3>
+              <h3 className="text-sm font-semibold">Rota programada (origem, paradas e destino)</h3>
               <p className="text-xs text-slate-500">Altere a sequência completa da rota antes de confirmar o planejamento.</p>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {routeIds.map((routeId, index) => (
@@ -393,7 +300,7 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
           ) : null}
           <label className="sm:col-span-2 lg:col-span-3 text-sm font-medium text-slate-700 dark:text-slate-300">
             Observações
-            <textarea rows={3} className={fieldClass} value={form.observacoes} onChange={(event) => setForm((prev) => ({ ...prev, observacoes: event.target.value }))} />
+            <textarea rows={2} className={fieldClass} value={form.observacoes} onChange={(event) => setForm((prev) => ({ ...prev, observacoes: event.target.value }))} />
           </label>
         </div>
         </div>
