@@ -353,8 +353,8 @@ export default function ControleVoosVooDetalhe() {
             </div>
           </ControleVoosPageHeader>
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-6">
+          <div className="grid items-start gap-5 xl:grid-cols-5">
+            <div className="min-w-0 space-y-5 xl:col-span-3">
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Dados gerais</h2>
@@ -375,8 +375,8 @@ export default function ControleVoosVooDetalhe() {
                     <dd className="text-slate-800 dark:text-slate-200 font-medium">{voo.prefixo}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Aeronave (ID)</dt>
-                    <dd className="text-slate-800 dark:text-slate-200">{voo.aeronave_id ?? '—'}</dd>
+                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Modelo da aeronave</dt>
+                    <dd className="text-slate-800 dark:text-slate-200">{voo.modelo_aeronave || 'Modelo não informado'}</dd>
                   </div>
                   <div>
                     <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Origem</dt>
@@ -394,13 +394,15 @@ export default function ControleVoosVooDetalhe() {
                     <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Tipo de voo (ID)</dt>
                     <dd className="text-slate-800 dark:text-slate-200">{voo.tipo_voo_id}</dd>
                   </div>
-                  <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Horário previsto (saída)</dt>
-                    <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatDateTime(voo.horario_previsto_partida)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Chegada prevista</dt>
-                    <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatDateTime(voo.horario_previsto_chegada)}</dd>
+                  <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+                    <div>
+                      <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Partida prevista</dt>
+                      <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatDateTime(voo.horario_previsto_partida)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Chegada prevista</dt>
+                      <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatDateTime(voo.horario_previsto_chegada)}</dd>
+                    </div>
                   </div>
                   {voo.horario_real_partida && (
                     <>
@@ -436,12 +438,6 @@ export default function ControleVoosVooDetalhe() {
                 aeronaveId={voo.aeronave_id}
                 rdvVersion={rdv?.versao}
               />
-            </div>
-
-            <div className="space-y-6">
-              <ControleVoosQualificacoesCard vooId={voo.id} versao={voo.versao} />
-
-              <ControleVoosFadigaCard vooId={voo.id} versao={voo.versao} />
 
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -645,6 +641,13 @@ export default function ControleVoosVooDetalhe() {
                   ) : null}
                 </div>
               </div>
+            </div>
+
+            <div className="min-w-0 space-y-5 xl:col-span-2">
+              <ControleVoosFadigaCard vooId={voo.id} versao={voo.versao} />
+
+              <ControleVoosQualificacoesCard vooId={voo.id} versao={voo.versao} />
+
             </div>
           </div>
         </ControleVoosPageShell>

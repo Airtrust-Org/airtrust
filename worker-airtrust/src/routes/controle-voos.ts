@@ -1037,7 +1037,13 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
 controleVoos.get('/voos/:id', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const flight = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
-  return c.json({ success: true, data: (await enrichFlightsWithPresentation(c.env.DB, empresaId, [flight]))[0] });
+  const [presented] = await enrichFlightsWithPresentation(c.env.DB, empresaId, [flight]);
+  const aircraft = flight.aeronave_id
+    ? await c.env.DB.prepare(
+      'SELECT modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1'
+    ).bind(flight.aeronave_id, empresaId).first<{ modelo: string | null }>()
+    : null;
+  return c.json({ success: true, data: { ...presented, modelo_aeronave: aircraft?.modelo ?? null } });
 });
 
 controleVoos.get(

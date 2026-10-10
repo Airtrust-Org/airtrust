@@ -57,6 +57,7 @@ export interface CvVoo {
   tipo_voo_id: number;
   natureza_voo_id: number;
   aeronave_id: number | null;
+  modelo_aeronave?: string | null;
   horario_previsto_partida: string;
   horario_previsto_chegada: string;
   horario_real_partida: string | null;
@@ -198,6 +199,7 @@ export interface CvRdvFilaItem {
   motivo_devolucao: string | null;
   prefixo: string;
   aeronave_id: number | null;
+  modelo_aeronave?: string | null;
   data_programacao: string;
   origem_id: number;
   flight_status: CvFlightStatus;
@@ -251,6 +253,7 @@ export interface CvFrmsCrewDispatchAssessment {
 export interface CvFrmsFlightDispatchItem {
   voo_id: number;
   prefixo: string;
+  modelo_aeronave?: string | null;
   status: CvFlightStatus;
   horario_previsto_partida: string;
   aeronave_id: number | null;
