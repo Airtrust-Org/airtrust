@@ -50,7 +50,12 @@ async function main() {
     headers: { Authorization: `Bearer ${token}` },
   });
   assert(me.status === 200, `STUDENT_ME_HTTP_${me.status}`);
-  assert(String(me.json?.data?.role).toLowerCase() === 'student', 'STUDENT_EFFECTIVE_ROLE_INVALID');
+  // /api/auth/me returns the canonical persisted AirTrust profile role, so the
+  // tenant membership role `student` is exposed as `ALUNO` here.
+  assert(
+    String(me.json?.data?.role).trim().toUpperCase() === 'ALUNO',
+    'STUDENT_EFFECTIVE_ROLE_INVALID',
+  );
 
   const catalog = await fetchJson(`${API}/api/lms/cursos?limit=100`, {
     headers: { Authorization: `Bearer ${token}` },
