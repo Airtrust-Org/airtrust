@@ -38,4 +38,6 @@ test('staging QA chooses and validates 0546 without bypassing the 0534 baseline'
   assert.match(validator, /overlay_0546/);
   assert.match(validator, /POSTCONDITION_SUPERSEDED=regras-ouro-company-rule-by-0546/);
   assert.match(validator, /assert_count nr26-extra 0/);
+  assert.match(validator, /POSTCONDITION_SUPERSEDED=fdm-mecanico-missing-by-0546-staging-fixture-gap/);
+  assert.match(workflow, /TRAINING_COMPLIANCE_QA_0546_BASELINE_INVALID/);
 });
