@@ -3,6 +3,7 @@ import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
 import { getEmpresaIdSafe, getFlightOrThrow } from '../repositories/controle-voos/rdv-repository';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
+import { CERTIFICATE_ELIGIBLE_QUALIFICATION_STATUS_VALUES, sqlStatusEqualsAny } from '../lib/status/status-codes';
 
 type QualificationRow = {
   funcionario_id: number;
@@ -89,6 +90,7 @@ export async function getFlightQualificationsHandler(c: Context<{ Bindings: Env 
   if (!ids.length) return c.json({ success: true, data: { date, tripulantes: [] } });
   const parameters = ids.map(() => '?').join(', ');
   const expiry = getQualificacoesVencimentoExpr('qh', 'qt');
+  const realizedStatus = sqlStatusEqualsAny("UPPER(COALESCE(qh.status, ''))", CERTIFICATE_ELIGIBLE_QUALIFICATION_STATUS_VALUES);
   const result = await c.env.DB.prepare(
     `SELECT qh.funcionario_id, qh.id AS registro_id,
       COALESCE(NULLIF(TRIM(qt.codigo), ''), NULLIF(TRIM(qh.qualificacao_codigo), ''), CAST(qh.qualificacao_id AS TEXT), NULLIF(TRIM(qh.tipo), ''), CAST(qh.id AS TEXT)) AS codigo,
@@ -102,7 +104,7 @@ export async function getFlightQualificationsHandler(c: Context<{ Bindings: Env 
       AND qh.deleted_at IS NULL
       AND qh.data_conclusao IS NOT NULL
       AND date(qh.data_conclusao) <= date(?)
-      AND UPPER(COALESCE(qh.status, '')) NOT IN ('CANCELADA', 'CANCELADO', 'PLANEJADA', 'PLANEJADO')
+      AND ${realizedStatus}
     ORDER BY qh.funcionario_id, qh.data_conclusao DESC, qh.id DESC`,
   ).bind(empresaId, ...ids, date).all<QualificationRow>();
   return c.json({
