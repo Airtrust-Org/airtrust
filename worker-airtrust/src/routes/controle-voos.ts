@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import { requireControleVoosCoordination, requireControleVoosSigvoosPreview, requireControleVoosWrite } from '../middleware/controle-voos-access';
+import { assertControleVoosCoordination, requireControleVoosCoordination, requireControleVoosSigvoosPreview, requireControleVoosWrite } from '../middleware/controle-voos-access';
 import {
   parseSigvoosRealPreviewRequest,
   runSigvoosRealApiPreview,
@@ -1037,15 +1037,24 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
 // These are administrative completion warnings, not flight-safety clearance gates.
 // Final RDV approval and Petrobras XML export retain their own validation rules.
 async function listFlightPlanningPendencies(db: D1Database, empresaId: number, vooId: number): Promise<string[]> {
-  const stages = await db.prepare(
-    'SELECT origem_icao, destino_icao, peso_passageiros, peso_bagagem, payload FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id'
-  ).bind(empresaId, vooId).all<{
+  type PlanningStage = {
     origem_icao: string | null;
     destino_icao: string | null;
-    peso_passageiros: number | null;
-    peso_bagagem: number | null;
-    payload: number | null;
-  }>();
+    peso_passageiros?: number | null;
+    peso_bagagem?: number | null;
+    payload?: number | null;
+  };
+  const stages = await db.prepare(
+    'SELECT origem_icao, destino_icao, peso_passageiros, peso_bagagem, payload FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id'
+  ).bind(empresaId, vooId).all<PlanningStage>().catch(async (error: unknown) => {
+    // Match flight-presentation's legacy-schema handling: missing weight
+    // columns remain explicit pendencies instead of breaking the flight detail.
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/no such column:\\s*(peso_passageiros|peso_bagagem|payload)/i.test(message)) throw error;
+    return db.prepare(
+      'SELECT origem_icao, destino_icao FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id'
+    ).bind(empresaId, vooId).all<PlanningStage>();
+  });
   const rows = stages.results || [];
   const pendencias: string[] = [];
   if (!rows.length) {
@@ -1190,6 +1199,11 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
 
   const routeIds = normalizeFlightRouteIds(payload.rota_ids);
   const hasPlanning = ['pax_planejado', 'peso_passageiros', 'peso_bagagem', 'peso_carga', 'unidade_peso_planejado'].some(field => Object.prototype.hasOwnProperty.call(payload, field));
+  // Post-release planning corrections are a Coordination privilege, not an
+  // expansion of the general flight-editor capability.
+  if (existing.status === 'liberado_operacionalmente' && (routeIds || hasPlanning)) {
+    assertControleVoosCoordination(c);
+  }
   if ((routeIds || hasPlanning) && !['planejado', 'liberado_operacionalmente'].includes(existing.status)) {
     throw new ApiError('Use o fluxo de revisão do RDV para corrigir dados após o início do voo', 409, 'CONTROLE_VOOS_PLANNING_NOT_EDITABLE');
   }
