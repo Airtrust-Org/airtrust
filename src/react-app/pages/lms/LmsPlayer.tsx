@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -27,10 +27,8 @@ import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/use
 import { formatMinutes } from './lmsUi';
 import {
   parseGranularDiagnostic,
-  resolveCompletionExplanation,
   type LmsGranularDiagnostic,
 } from '@/react-app/utils/lmsDiagnosticContract';
-import { LmsPendingPanel } from './LmsPendingPanel';
 
 /**
  * Sanitiza um código/razão de diagnóstico vindo de lms:completion-error.
@@ -207,62 +205,14 @@ export default function LmsPlayer() {
   } | null>(null);
   // Snapshot granular AIRTRUST_COMPLETION_DIAGNOSTICS_V1 (informativo).
   const [granularDiagnostic, setGranularDiagnostic] = useState<LmsGranularDiagnostic | null>(null);
-  const [pendingPanelOpen, setPendingPanelOpen] = useState(false);
   const [startingNewEdition, setStartingNewEdition] = useState(false);
 
   const qc = useQueryClient();
   const id = Number(matriculaId);
 
-  /**
-   * Persiste o último snapshot granular. Best-effort: falhas são silenciosas,
-   * pois o diagnóstico é informativo e jamais deve quebrar o curso.
-   */
-  const persistGranularDiagnostic = useCallback(
-    async (snapshot: LmsGranularDiagnostic) => {
-      if (!Number.isFinite(id) || id <= 0) return;
-      try {
-        await fetchWithAuth(`${API_BASE_URL}/lms/matriculas/${id}/completion-diagnostics`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ diagnostics: snapshot }),
-        });
-      } catch {
-        // Silencioso por design.
-      }
-    },
-    [id],
-  );
-  // Recupera o último snapshot granular persistido, para que o painel de
-  // pendências sobreviva a um reload da página.
-  useEffect(() => {
-    if (!Number.isFinite(id) || id <= 0) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetchWithAuth(
-          `${API_BASE_URL}/lms/matriculas/${id}/completion-diagnostics`,
-        );
-        if (!res.ok) return;
-        const body = (await res.json()) as { success?: boolean; data?: { diagnostics?: unknown } };
-        const parsed = parseGranularDiagnostic(body?.data?.diagnostics);
-        if (parsed && !cancelled) setGranularDiagnostic((prev) => prev ?? parsed);
-      } catch {
-        // Silencioso: ausência de snapshot é normal (pacotes legados).
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  // Abre automaticamente o painel quando uma tentativa de conclusão é
-  // rejeitada ou fica inconclusiva.
-  useEffect(() => {
-    if (completionState === 'error' || completionState === 'unresolved') {
-      setPendingPanelOpen(true);
-    }
-  }, [completionState]);
-
+  // Diagnósticos SCORM continuam somente em memória para o gate de conclusão.
+  // Não carregar/persistir snapshots auxiliares no player do aluno: além de
+  // estarem sujeitos a escopo de acesso próprio, podem ser de outra tentativa.
   const completionToastIdRef = useRef(`lms-scorm-completion-${id}`);
   const candidateRetryTimerRef = useRef<number | null>(null);
   const unresolvedRef = useRef(false);
@@ -304,10 +254,6 @@ export default function LmsPlayer() {
     String(user?.role ?? '').trim().toLowerCase(),
   );
   const completionDiagnostic = matricula?.completion_diagnostic ?? null;
-  const completionExplanation = resolveCompletionExplanation({
-    canonical: completionDiagnostic,
-    granular: granularDiagnostic,
-  });
   const hasCompletionDate = Boolean(matricula?.data_conclusao);
   const isCompletedState = completed || matricula?.status === 'CONCLUIDO' || hasCompletionDate;
   const displayProgress = resolveLmsDisplayProgress({
@@ -602,7 +548,6 @@ export default function LmsPlayer() {
       setCompletionState('idle');
       setCompletionMessage(null);
       setCompletionErrorInfo(null);
-      setPendingPanelOpen(false);
 
       if (matricula?.status === 'CONCLUIDO' && !effectiveReviewMode) {
         showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
@@ -770,10 +715,7 @@ export default function LmsPlayer() {
         // IDs afirmados pelo payload são ignorados: o contexto é sempre o
         // autenticado (`id`, empresa do token).
         const parsed = parseGranularDiagnostic(event.data.diagnostics);
-        if (parsed) {
-          setGranularDiagnostic(parsed);
-          if (!effectiveReviewMode) void persistGranularDiagnostic(parsed);
-        }
+        if (parsed) setGranularDiagnostic(parsed);
         return;
       }
 
@@ -889,7 +831,7 @@ export default function LmsPlayer() {
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, persistGranularDiagnostic, queryClient]);
+  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, queryClient]);
 
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
@@ -1376,13 +1318,6 @@ export default function LmsPlayer() {
               </button>
             ) : null}
 
-            {!effectiveReviewMode && !isCompletedState && !newEditionRequired && (
-              <LmsPendingPanel
-                explanation={completionExplanation}
-                open={pendingPanelOpen}
-                onToggle={() => setPendingPanelOpen((v) => !v)}
-              />
-            )}
           </aside>
         </div>
       </main>
