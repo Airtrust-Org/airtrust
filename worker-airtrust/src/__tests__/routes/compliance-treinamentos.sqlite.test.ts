@@ -1047,7 +1047,7 @@ describe('training compliance engine', () => {
         change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL
       );
       INSERT INTO airtrust_schema_changes_v2 VALUES
-        ('training-compliance-canonical-category-repair-0546', 'production-d1-baseline-v2-20260714');
+        ('training-compliance-regras-ouro-corporate-0547', 'production-d1-baseline-v2-20260714');
       CREATE TABLE auditoria_avancada_v2 (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tabela TEXT, acao TEXT, registro_id TEXT, dados_anteriores TEXT,
@@ -1091,7 +1091,41 @@ describe('training compliance engine', () => {
     expect(repeated.status).toBe(409);
   });
 
-  it('bloqueia toda limpeza sem a migração final 0546 comprovada', async () => {
+
+  it('mostra pendencia operacional sem matricular automaticamente durante o preview', async () => {
+    tenantMock.id = 6;
+    sqlite.database.exec(`
+      ALTER TABLE lms_cursos ADD COLUMN ativo INTEGER DEFAULT 1;
+      ALTER TABLE lms_cursos ADD COLUMN publicado INTEGER DEFAULT 1;
+      CREATE TABLE airtrust_schema_changes_v2 (
+        change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL
+      );
+      INSERT INTO airtrust_schema_changes_v2 VALUES
+        ('training-compliance-regras-ouro-corporate-0547', 'production-d1-baseline-v2-20260714');
+      INSERT INTO empresas (id) VALUES (6);
+      UPDATE setores SET empresa_id=6 WHERE id=10;
+      UPDATE funcoes SET empresa_id=6 WHERE id=1;
+      UPDATE funcionarios SET empresa_id=6 WHERE id=1000;
+      UPDATE qualificacoes_tipos SET empresa_id=6,codigo='REGRAS_OURO_PETROBRAS' WHERE id=100;
+      INSERT INTO treinamento_requisitos (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem)
+      VALUES (6,100,'EMPRESA','OBRIGATORIA','EMPRESA');
+      INSERT INTO lms_cursos (id,empresa_id,titulo,qualificacao_tipo_id)
+      VALUES (600,6,'Regras de Ouro',100);
+    `);
+    const app = createApp(sqlite.asD1());
+    const preview = await app.request('/reconciliacao/matricular-pendentes', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ aplicar: false }),
+    });
+    const body = await preview.json() as any;
+    expect(preview.status).toBe(200);
+    expect(body.data).toMatchObject({
+      modo: 'PREVIEW', pendentes: 1, matriculadas: 0, sem_curso_unico: 0,
+    });
+    expect((sqlite.database.prepare('SELECT COUNT(*) n FROM lms_matriculas').get() as any).n).toBe(0);
+  });
+
+  it('bloqueia toda limpeza sem a migração final 0547 comprovada', async () => {
     tenantMock.id = 6;
     sqlite.database.exec(`
       INSERT INTO empresas (id) VALUES (6);
@@ -1102,7 +1136,7 @@ describe('training compliance engine', () => {
       body: JSON.stringify({ matricula_ids: [700], aplicar: true }),
     });
     expect(response.status).toBe(409);
-    expect((await response.json() as any).error).toContain('0546');
+    expect((await response.json() as any).error).toContain('0547');
   });
 
   it('recusa cancelar uma matrícula que tenha recebido requisito ativo depois do preview', async () => {
@@ -1112,7 +1146,7 @@ describe('training compliance engine', () => {
         change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL
       );
       INSERT INTO airtrust_schema_changes_v2 VALUES
-        ('training-compliance-canonical-category-repair-0546', 'production-d1-baseline-v2-20260714');
+        ('training-compliance-regras-ouro-corporate-0547', 'production-d1-baseline-v2-20260714');
       INSERT INTO empresas (id) VALUES (6);
       UPDATE setores SET empresa_id=6 WHERE id=10;
       UPDATE funcoes SET empresa_id=6 WHERE id=1;
