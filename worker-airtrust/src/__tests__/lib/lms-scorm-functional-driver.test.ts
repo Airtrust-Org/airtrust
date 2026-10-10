@@ -112,6 +112,109 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
     expect(done).toEqual([0, 1, 2]);
   });
 
+  it('supports the authored Factory PBN view/scenario/assessment contract', () => {
+    const slides = [
+      { id: 'scenario', kind: 'scenario', content: { options: [{ correct: false }, { correct: true }] } },
+      { id: 'assessment', kind: 'assessment', content: { questions: [
+        { options: ['wrong', 'right'], answer: 1 },
+        { options: ['right', 'wrong'], answer: 0 },
+      ] } },
+      { id: 'finish', kind: 'lesson' },
+    ];
+    let view = 0;
+    let journey = 0;
+    let question = 0;
+    let ready = false;
+    const done: number[] = [];
+    const scenarioState: Record<string, number> = {};
+    const assessmentState: Record<string, { q: number; passed: boolean }> = {
+      assessment: { q: 0, passed: false },
+    };
+    const selected: number[] = [];
+    const choice = global.document.createElement('button');
+    choice.setAttribute('data-scenario', '');
+    choice.setAttribute('data-opt', '1');
+    choice.addEventListener('click', () => { scenarioState.scenario = 1; });
+    global.document.body.append(choice);
+    const assessment = global.document.createElement('div');
+    assessment.setAttribute('data-assessment', 'assessment');
+    global.document.body.append(assessment);
+    const answer0 = global.document.createElement('button');
+    answer0.className = 'ans';
+    answer0.setAttribute('data-i', '0');
+    answer0.addEventListener('click', () => selected.push(0));
+    assessment.append(answer0);
+    const answer1 = global.document.createElement('button');
+    answer1.className = 'ans';
+    answer1.setAttribute('data-i', '1');
+    answer1.addEventListener('click', () => selected.push(1));
+    assessment.append(answer1);
+    const qNext = global.document.createElement('button');
+    qNext.className = 'qnext';
+    qNext.addEventListener('click', () => { question++; assessmentState.assessment.q = question; });
+    assessment.append(qNext);
+    const next = global.document.createElement('button');
+    next.id = 'next';
+    next.addEventListener('click', () => {
+      if (view === 1 && !assessmentState.assessment.passed) {
+        assessmentState.assessment.passed = question === 1 && selected.join(',') === '1,0';
+      } else {
+        done.push(journey);
+        if (journey < slides.length - 1) journey++;
+        view = journey;
+        ready = assessmentState.assessment.passed && done.length === slides.length;
+      }
+    });
+    global.document.body.append(next);
+    global.window.COURSE_DATA = { packageVersion: 'V4.9.0', slides };
+    global.window.__AIRTRUST_PLAYER_TEST__ = {
+      getState: () => ({ view, journey, mode: 'journey', done: [...done], scenarioState: { ...scenarioState }, assessmentState: { ...assessmentState }, completionReady: ready }),
+    };
+
+    const result = new Function('return ' + buildScormFunctionalDriverScript())();
+    expect(result).toMatchObject({ supported: true, completed: true, steps: 3 });
+    expect(scenarioState.scenario).toBe(1);
+    expect(selected).toEqual([1, 0]);
+    expect(done).toEqual([0, 1, 2]);
+  });
+
+  it('supports safety course tuple choices and gate interactions using visible controls', () => {
+    const slides = [
+      { id: 'lesson', kind: 'lesson', gateItems: ['a', 'b'] },
+      { id: 'scenario', kind: 'scenario', options: [['wrong', false], ['right', true]] },
+    ];
+    let active = 0;
+    const done: number[] = [];
+    const gateSeen: string[] = [];
+    const scenario: Record<string, number> = {};
+    for (const index of [0, 1]) {
+      const gate = global.document.createElement('button');
+      gate.setAttribute('data-gate', String(index));
+      gate.addEventListener('click', () => { gateSeen.push(`lesson:${index}`); });
+      global.document.body.append(gate);
+    }
+    const option = global.document.createElement('button');
+    option.setAttribute('data-opt', '1');
+    option.addEventListener('click', () => { scenario.scenario = 1; });
+    global.document.body.append(option);
+    const next = global.document.createElement('button');
+    next.id = 'next';
+    next.addEventListener('click', () => {
+      done.push(active);
+      if (active < slides.length - 1) active++;
+    });
+    global.document.body.append(next);
+    global.window.COURSE_DATA = { packageVersion: 'RC8.1', slides };
+    global.window.__AIRTRUST_PLAYER_TEST__ = {
+      getState: () => ({ active, done: [...done], gateSeen: [...gateSeen], scenario: { ...scenario }, courseCompleted: done.length === slides.length, completionReady: true, mode: 'journey' }),
+    };
+
+    const result = new Function('return ' + buildScormFunctionalDriverScript())();
+    expect(result).toMatchObject({ supported: true, completed: true, steps: 2 });
+    expect(gateSeen).toEqual(['lesson:0', 'lesson:1']);
+    expect(scenario.scenario).toBe(1);
+  });
+
   it('rejects courses without an actionable next control', () => {
     global.window.COURSE_DATA = {
       slides: [{ id: 'intro', kind: 'cover' }],

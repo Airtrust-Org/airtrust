@@ -1,25 +1,37 @@
 /**
- * Browser-only certification driver for the versioned AirTrust Factory M8 SCO.
+ * Browser-only certification driver for supported AirTrust Factory M8 SCOs.
  * It clicks the package's actual controls in sequence. It never writes LMS
  * progress directly, calls SCORM API itself, or exposes answer keys in traces.
  * Unknown packages fail closed as unverified rather than claiming publication.
  */
 function driveFactoryCourse() {
   type DriverState = {
-    active: number;
+    active?: number;
+    view?: number;
+    journey?: number;
     mode?: string;
     completed?: boolean;
     ended?: boolean;
+    courseCompleted?: boolean;
     done?: number[];
     choices?: Record<string, number>;
-    assess?: Record<string, { passed?: boolean }>;
+    scenarioState?: Record<string, number>;
+    scenario?: Record<string, number>;
+    gateSeen?: string[];
+    assess?: Record<string, { passed?: boolean; q?: number }>;
+    assessmentState?: Record<string, { passed?: boolean; q?: number }>;
+    assessments?: Record<string, { passed?: boolean; q?: number }>;
+    completionReady?: boolean;
   };
   type DriverSlide = {
     id: string;
     kind: string;
     chapter?: number;
+    questions?: Array<{ answer?: unknown; correctIndex?: unknown; options?: unknown[] }>;
+    content?: { options?: unknown[]; questions?: Array<{ answer?: unknown; correctIndex?: unknown; options?: unknown[] }> };
+    gateItems?: unknown[];
+    sectionGroups?: unknown[];
     options?: unknown[];
-    questions?: Array<{ answer?: unknown; options?: unknown[] }>;
   };
   type DriverWindow = {
     COURSE_DATA?: { slides?: DriverSlide[]; packageVersion?: string };
@@ -44,54 +56,102 @@ function driveFactoryCourse() {
   const fail = (reason: string, steps: number) => ({
     supported: true, completed: false, steps, reason,
   });
+  const activeIndex = (state: DriverState): number | null => {
+    const value = [state.active, state.journey, state.view].find(Number.isInteger);
+    return typeof value === 'number' ? value : null;
+  };
+  const assessmentState = (state: DriverState, slide: DriverSlide) => {
+    const bag = state.assessmentState ?? state.assessments ?? state.assess;
+    return bag?.[slide.id] ?? bag?.[String(slide.chapter)];
+  };
+  const scenarioState = (state: DriverState, slide: DriverSlide) =>
+    state.choices?.[slide.id] ?? state.scenarioState?.[slide.id] ?? state.scenario?.[slide.id];
+  const authoredQuestions = (slide: DriverSlide) => slide.questions ?? slide.content?.questions ?? [];
+  const allSlidesDone = (state: DriverState) =>
+    Array.isArray(state.done) && state.done.length === slides.length &&
+    new Set(state.done).size === slides.length &&
+    state.done.every((n) => Number.isInteger(n) && n >= 0 && n < slides.length);
   const limit = Math.min(3000, Math.max(120, slides.length * 5));
   for (let steps = 0; steps < limit; steps++) {
     const state = getState();
     // A resumed course may require fewer clicks than its full slide count.
     // Certify only when every authored slide index was completed in the
     // package's own state, not because a short tail reached LMSFinish.
-    if (state?.completed && state.ended && steps > 0 &&
-        Array.isArray(state.done) && state.done.length === slides.length &&
-        new Set(state.done).size === slides.length &&
-        state.done.every((n) => Number.isInteger(n) && n >= 0 && n < slides.length)) {
+    if (steps > 0 && allSlidesDone(state) &&
+        ((state.completed === true && state.ended === true) ||
+         (state.courseCompleted === true && state.completionReady === true) ||
+         (state.completionReady === true && activeIndex(state) === slides.length - 1))) {
       return { supported: true, completed: true, steps, reason: null };
     }
-    if (!state || !Number.isInteger(state.active) || state.active < 0 ||
-        state.active >= slides.length || state.mode === 'preview') {
+    const current = activeIndex(state);
+    if (current === null || current < 0 || current >= slides.length || state.mode === 'preview') {
       return fail('INVALID_FACTORY_STATE', steps);
     }
-    const current = state.active;
     const slide = slides[current];
     if ((slide.kind === 'decision' || slide.kind === 'scenario') &&
-        state.choices?.[slide.id] === undefined) {
-      if (!click('button[data-choice]')) return fail('DECISION_CONTROL_MISSING', steps);
+        scenarioState(state, slide) === undefined) {
+      const options = slide.content?.options ?? slide.options ?? [];
+      const correct = options.findIndex((option) =>
+        Array.isArray(option)
+          ? option[1] === true
+          : Boolean(option && typeof option === 'object' && 'correct' in option && option.correct === true),
+      );
+      const selected = correct >= 0 ? correct : 0;
+      if (!click(`button[data-choice="${selected}"]`) &&
+          !click(`[data-scenario][data-opt="${selected}"]`) &&
+          !click(`[data-opt="${selected}"]`)) {
+        return fail('DECISION_CONTROL_MISSING', steps);
+      }
     }
-    if (slide.kind === 'assessment' && !state.assess?.[String(slide.chapter)]?.passed) {
-      if (!Array.isArray(slide.questions) || !slide.questions.length ||
-          slide.questions.length > 100) return fail('ASSESSMENT_FORMAT_UNSUPPORTED', steps);
-      for (let index = 0; index < slide.questions.length; index++) {
-        const question = slide.questions[index];
+    const gates = slide.gateItems ?? slide.sectionGroups ?? [];
+    if (gates.length > 0 && Array.isArray(state.gateSeen)) {
+      for (let index = 0; index < gates.length; index++) {
+        const gateKey = `${slide.id}:${index}`;
+        if (!state.gateSeen.includes(gateKey) &&
+            !click(`[data-gate="${index}"]`)) {
+          return fail('REQUIRED_INTERACTION_CONTROL_MISSING', steps);
+        }
+      }
+    }
+    if (slide.kind === 'assessment' && !assessmentState(state, slide)?.passed) {
+      const questions = authoredQuestions(slide);
+      if (!Array.isArray(questions) || !questions.length || questions.length > 100) {
+        return fail('ASSESSMENT_FORMAT_UNSUPPORTED', steps);
+      }
+      for (let index = 0; index < questions.length; index++) {
+        const question = questions[index];
         if (!question || !Array.isArray(question.options)) {
           return fail('ASSESSMENT_FORMAT_UNSUPPORTED', steps);
         }
-        const correct = question.answer;
+        const correct = question.answer ?? question.correctIndex;
         if (!Number.isInteger(correct) || Number(correct) < 0 ||
             Number(correct) >= question.options.length) {
           return fail('AUTHORED_ANSWER_UNAVAILABLE', steps);
         }
-        if (index > 0 && !click('#qNext')) return fail('QUESTION_NEXT_MISSING', steps);
-        if (!click('button[data-answer="' + String(correct) + '"]')) {
+        const qState = assessmentState(getState(), slide);
+        const currentQuestion = Number.isInteger(qState?.q) ? Number(qState?.q) : index;
+        if (currentQuestion !== index) return fail('ASSESSMENT_QUESTION_STATE_INVALID', steps);
+        const answerSelector = `button[data-answer="${String(correct)}"]`;
+        const scopedAnswerSelector = `[data-assessment="${slide.id}"] .ans[data-i="${String(correct)}"]`;
+        if (!click(answerSelector) && !click(scopedAnswerSelector)) {
           return fail('ANSWER_CONTROL_MISSING', steps);
+        }
+        if (index < questions.length - 1 &&
+            !click('#qNext') && !click(`[data-assessment="${slide.id}"] .qnext`)) {
+          return fail('QUESTION_NEXT_MISSING', steps);
         }
       }
       if (!click('#next')) return fail('ASSESSMENT_SUBMIT_MISSING', steps);
-      if (!getState().assess?.[String(slide.chapter)]?.passed) {
+      if (!assessmentState(getState(), slide)?.passed) {
         return fail('ASSESSMENT_NOT_MASTERED', steps);
       }
     }
     if (!click('#next')) return fail('COURSE_NEXT_MISSING', steps);
     const after = getState();
-    if (after.active === current && !after.ended) return fail('COURSE_NOT_ADVANCED', steps);
+    if (activeIndex(after) === current && after.ended !== true && after.courseCompleted !== true &&
+        !(after.completionReady === true && allSlidesDone(after))) {
+      return fail('COURSE_NOT_ADVANCED', steps);
+    }
   }
   return fail('MAX_FACTORY_STEPS_EXCEEDED', limit);
 }

@@ -6,8 +6,6 @@
 // rollback_plan_required: reseed with a new env-supplied password or soft-delete the synthetic tenant/user rows in the same staging D1 during an approved rollback window.
 
 import { createRequire } from 'node:module';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -178,28 +176,27 @@ async function main() {
     return;
   }
 
-  const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-staging-smoke-'));
-  const sqlFile = join(tempDir, 'seed.sql');
-  writeFileSync(sqlFile, sql, 'utf8');
-
-  try {
-    const result = spawnSync(
-      'npx',
-      ['wrangler', 'd1', 'execute', dbName, '--remote', '--file', sqlFile, '--json'],
-      {
-        cwd: join(process.cwd(), 'worker-airtrust'),
-        encoding: 'utf8',
-      },
-    );
-
-    if (result.status !== 0) {
-      throw new Error(result.stderr || result.stdout || 'wrangler d1 execute falhou');
-    }
-
-    log('SEED_APPLIED');
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
+  if (sql.length > 100_000) {
+    throw new Error('SEED_SQL_EXCEEDS_QUERY_TRANSPORT_LIMIT');
   }
+
+  // Remote --file invokes D1's bulk-import/reset path and can fail with
+  // D1_RESET_DO for this bounded seed. Use the normal query transport, as in
+  // other reviewed staging seeders; the database name remains hard-allowlisted.
+  const result = spawnSync(
+    'npx',
+    ['wrangler', 'd1', 'execute', dbName, '--remote', `--command=${sql}`, '--json'],
+    {
+      cwd: join(process.cwd(), 'worker-airtrust'),
+      encoding: 'utf8',
+    },
+  );
+
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || 'wrangler d1 execute falhou');
+  }
+
+  log('SEED_APPLIED');
 }
 
 function buildSeedSql({
