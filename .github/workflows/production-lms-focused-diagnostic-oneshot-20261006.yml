@@ -1,0 +1,110 @@
+name: Production LMS Focused Diagnostic One-shot 20261006
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/production-lms-focused-diagnostic-oneshot-20261006.yml'
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+  pull-requests: read
+
+concurrency:
+  group: production-lms-focused-diagnostic-oneshot-20261006
+  cancel-in-progress: false
+
+env:
+  PROD_API_BASE_URL: https://api.airtrust.online
+  TARGET_COMPANY_ID: '6'
+  CERT_BROWSER: chromium
+  CERT_COURSE_IDS: '56,32,41,47'
+  CERT_REPORT_PATH: qa-state/lms-focused-diagnostic-chromium.json
+  CERT_COURSE_TIMEOUT_MS: '25000'
+  CERT_MAX_STEPS: '240'
+
+jobs:
+  diagnostic:
+    name: Focused LMS diagnostic (read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: production
+    env:
+      PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+      - name: Resolve and guard live production SHA
+        id: prod
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]]
+          live="$(curl -fsS https://api.airtrust.online/api/version | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);const b=j.data&&typeof j.data==='object'?j.data:j;const v=String(b.sourceSha||b.source_sha||'').toLowerCase();if(!/^[0-9a-f]{40}$/.test(v))process.exit(2);process.stdout.write(v)})")"
+          git cat-file -e "$live^{commit}"
+          git merge-base --is-ancestor "$live" HEAD
+          EXPECTED_SHA="$live" RELEASE_SHA="$live" node scripts/ci/verify-release-gates.mjs
+          echo "sha=$live" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - name: Install Chromium dependencies
+        run: npx playwright install-deps chromium
+      - name: Install Chromium
+        env:
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: 120000
+        run: npx playwright install chromium
+      - name: Run focused exact-package diagnostic
+        id: cert
+        shell: bash
+        env:
+          EXPECTED_PRODUCTION_SHA: ${{ steps.prod.outputs.sha }}
+        run: |
+          set +e
+          node scripts/validation/production-lms-active-course-certification-readonly.mjs
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          test -s "$CERT_REPORT_PATH"
+      - name: Publish focused diagnostic summary
+        if: always()
+        shell: bash
+        run: |
+          test -s "$CERT_REPORT_PATH" || exit 1
+          node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('node:fs');
+          const r = JSON.parse(fs.readFileSync(process.env.CERT_REPORT_PATH, 'utf8'));
+          console.log('## LMS focused diagnostic — Chromium');
+          console.log('');
+          console.log(`- production SHA: \`${r.production_sha}\``);
+          console.log(`- course filter: \`${(r.course_filter || []).join(',')}\``);
+          console.log(`- PASS: \`${r.pass_count}\``);
+          console.log(`- FAIL: \`${r.fail_count}\``);
+          console.log(`- writes: \`${r.writes}\``);
+          for (const item of r.results) {
+            console.log(`- ${item.status} — #${item.course_id} ${item.titulo}${item.reason ? ` — ${item.reason}` : ''}`);
+          }
+          NODE
+      - name: Upload focused diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-lms-focused-diagnostic-chromium-${{ steps.prod.outputs.sha }}
+          path: ${{ env.CERT_REPORT_PATH }}
+          if-no-files-found: error
+          retention-days: 30
+      - name: Assert read-only diagnostic executed
+        if: always()
+        shell: bash
+        run: |
+          test -s "$CERT_REPORT_PATH"
+          node -e "const r=require('./' + process.env.CERT_REPORT_PATH); if(!String(r.writes||'').startsWith('none')) process.exit(1); if(JSON.stringify(r.course_filter)!==JSON.stringify([32,41,47,56])) process.exit(1)"
