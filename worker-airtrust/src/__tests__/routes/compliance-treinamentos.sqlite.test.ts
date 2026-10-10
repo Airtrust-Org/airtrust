@@ -1106,7 +1106,7 @@ describe('training compliance engine', () => {
       UPDATE setores SET empresa_id=6 WHERE id=10;
       UPDATE funcoes SET empresa_id=6 WHERE id=1;
       UPDATE funcionarios SET empresa_id=6 WHERE id=1000;
-      UPDATE qualificacoes_tipos SET empresa_id=6,codigo='REGRAS_OURO_PETROBRAS' WHERE id=100;
+      UPDATE qualificacoes_tipos SET empresa_id=6,codigo='REGRAS_OURO_PETROBRAS',categoria='EAD' WHERE id=100;
       INSERT INTO treinamento_requisitos (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem)
       VALUES (6,100,'EMPRESA','OBRIGATORIA','EMPRESA');
       INSERT INTO lms_cursos (id,empresa_id,titulo,qualificacao_tipo_id)
