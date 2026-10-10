@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-10",
-    "last_reconciled_against": "0547 forward corporate Regras de Ouro requirement after 0546; production remote apply pending",
-    "schema_v2_digest": "70e86d74b39344240b2bb8aa3d570c4b7c924234ad645e0641bbd21c430c14da",
+    "last_reconciled_against": "0548 maintenance IIO/APRS assistant requirement queued; production remote apply pending",
+    "schema_v2_digest": "c8978ddb2c9e2b024fed018a0d4c232bd1c775971ac301766a587728942ed9f8",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1504,6 +1504,18 @@
       "reviewed_manifest": "training-compliance-regras-ouro-corporate-0547.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-regras-ouro-corporate-0547.md",
       "note": "2026-10-10 Management explicitly makes Regras de Ouro mandatory for all employees. Forward compensation after governed 0546; no automatic remote write or historical enrollment modification. Only eligible pending LMS cycles are created separately after source-specific approval."
+    },
+    {
+      "change_file": "0548_training_compliance_maintenance_iio_aprs_assistants.sql",
+      "change_id": "training-compliance-maintenance-iio-aprs-assistants-0548",
+      "sha256": "2bb266e9ff84e67ccb839e2e3c22bcbb2773eb31d3804316181a7b8672a894ef",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 maintenance IIO/APRS mandatory training assistant applicability",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-maintenance-iio-aprs-assistants-0548.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-maintenance-iio-aprs-assistants-0548.md",
+      "note": "Requirement-only: includes six active Auxiliar de Manutenção employees in IIO/APRS training. No signature authority or production write claimed. Distinct governed Schema V2 apply requires precise authorization."
     }
   ]
 }
