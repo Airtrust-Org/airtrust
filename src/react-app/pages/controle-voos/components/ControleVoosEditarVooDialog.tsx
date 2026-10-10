@@ -39,6 +39,12 @@ function toLocalInput(value: string | null | undefined) {
   return shifted.toISOString().slice(0, 16);
 }
 
+function initialRoute(voo: CvVoo): string[] {
+  return voo.rota_pontos?.length
+    ? voo.rota_pontos.map(point => point.id == null ? '' : String(point.id))
+    : [String(voo.origem_id), String(voo.destino_id)];
+}
+
 export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [loadingCatalogs, setLoadingCatalogs] = useState(false);
