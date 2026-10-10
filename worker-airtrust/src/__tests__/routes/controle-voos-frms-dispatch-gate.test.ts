@@ -219,7 +219,9 @@ function createSqliteD1(): SqliteD1 {
       );
       CREATE TABLE IF NOT EXISTS aeronaves (
         id INTEGER PRIMARY KEY,
-        modelo TEXT
+        empresa_id INTEGER NOT NULL,
+        modelo TEXT,
+        deleted_at TEXT
       );
       CREATE TABLE IF NOT EXISTS auditoria (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
