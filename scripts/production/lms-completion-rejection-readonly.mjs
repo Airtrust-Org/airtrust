@@ -44,6 +44,24 @@ const CANONICAL_CATEGORY_SQL = `SELECT id, codigo, ativo, lms_integrada
   WHERE empresa_id = 6 AND deleted_at IS NULL AND COALESCE(lms_integrada, 0) = 1
   ORDER BY id LIMIT 10`;
 
+// Production schema has historically lacked the 0457 flag. Match the
+// runtime's exact legacy EAD-code compatibility instead of presuming a
+// migration file was applied to production.
+const CATEGORY_COLUMN_SUPPORT_SQL = `SELECT COUNT(*) AS total
+  FROM pragma_table_info('qualificacoes_categorias')
+ WHERE name = 'lms_integrada'`;
+
+const CATEGORY_SQL_LEGACY = CATEGORY_SQL.replace(
+  'COALESCE(qc.lms_integrada, 0) <> 1',
+  "UPPER(TRIM(COALESCE(qc.codigo, ''))) <> 'EAD'",
+);
+
+const CANONICAL_CATEGORY_SQL_LEGACY = `SELECT id, codigo, ativo, 1 AS lms_integrada
+  FROM qualificacoes_categorias
+  WHERE empresa_id = 6 AND deleted_at IS NULL
+    AND UPPER(TRIM(codigo)) = 'EAD'
+  ORDER BY id LIMIT 10`;
+
 function ensure(condition, code) {
   if (!condition) throw new Error(code);
 }
@@ -129,7 +147,7 @@ export function summarizeCategoryMappings(rows, canonicalRows) {
 }
 
 function query(sql) {
-  ensure(sql === SQL || sql === CATEGORY_SQL || sql === CANONICAL_CATEGORY_SQL, 'UNREVIEWED_SQL_REJECTED');
+  ensure([SQL, CATEGORY_SQL, CANONICAL_CATEGORY_SQL, CATEGORY_SQL_LEGACY, CANONICAL_CATEGORY_SQL_LEGACY, CATEGORY_COLUMN_SUPPORT_SQL].includes(sql), 'UNREVIEWED_SQL_REJECTED');
   ensure(/^SELECT\b/i.test(sql), 'NON_SELECT_SQL');
   ensure(!/\b(?:INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|ATTACH|DETACH|PRAGMA|REPLACE|VACUUM)\b/i.test(sql.replace(/'[^']*'/g, "''")), 'SQL_MUTATION_NOT_ALLOWED');
   ensure(!sql.includes(';'), 'MULTI_STATEMENT_REJECTED');
@@ -149,7 +167,14 @@ async function main() {
   ensure(process.env.TARGET_COMPANY_ID === '6', 'TENANT_INVALID');
   ensure(Boolean(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID), 'PRODUCTION_D1_CREDENTIALS_UNAVAILABLE');
   const output = summarizeFailures(query(SQL));
-  output.qualification_category_contract = summarizeCategoryMappings(query(CATEGORY_SQL), query(CANONICAL_CATEGORY_SQL));
+  const support = query(CATEGORY_COLUMN_SUPPORT_SQL);
+  ensure(support.length === 1 && [0, 1].includes(Number(support[0]?.total)), 'CATEGORY_SCHEMA_SUPPORT_UNEXPECTED');
+  const hasFlag = Number(support[0].total) === 1;
+  output.qualification_category_contract = summarizeCategoryMappings(
+    query(hasFlag ? CATEGORY_SQL : CATEGORY_SQL_LEGACY),
+    query(hasFlag ? CANONICAL_CATEGORY_SQL : CANONICAL_CATEGORY_SQL_LEGACY),
+  );
+  output.qualification_category_contract.schema_mode = hasFlag ? 'explicit' : 'legacy-code-compat';
   process.stdout.write(JSON.stringify(output) + '\n');
 }
 
