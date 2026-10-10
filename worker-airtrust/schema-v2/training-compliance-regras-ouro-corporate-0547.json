@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-regras-ouro-corporate-0547",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0547_training_compliance_regras_ouro_corporate.sql",
+  "fileHash": "d963d2119fa9252dae66cadcc823e6405bcffd9b46d7ad2e79081f1f0edf1b78",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-regras-ouro-corporate-0547.md",
+  "planHash": "7bb9387699bb838cec1fd4655cf25ceb51ca3255f0b6bbe9883397f3bb33ff21"
+}
