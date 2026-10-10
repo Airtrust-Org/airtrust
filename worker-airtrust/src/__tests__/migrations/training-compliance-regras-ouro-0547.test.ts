@@ -32,6 +32,14 @@ describe('corporate Regras de Ouro 0547', () => {
     expect(sql).toContain('NOT EXISTS');
   });
 
+  it('uses 0547 postconditions in production readonly smoke after applying the compensating requirement', () => {
+    const smoke = read('.github/workflows/production-training-compliance-readonly-smoke.yml');
+    expect(smoke).toContain("change_id='training-compliance-regras-ouro-corporate-0547'");
+    expect(smoke).toContain('validate-0547-production-postconditions.sh');
+    expect(smoke).toContain('validate-0546-production-postconditions.sh');
+    expect(smoke).toContain('applied_0547');
+  });
+
   it('requires official Schema V2 preflight and postconditions', () => {
     const workflow = read('.github/workflows/apply-schema-change-v2.yml');
     expect(workflow).toContain("inputs.change_id == 'training-compliance-regras-ouro-corporate-0547'");
