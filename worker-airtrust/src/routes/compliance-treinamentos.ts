@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
 import { reconcileTrainingComplianceRuleEnrollment } from '../services/training-compliance-rule-enrollment';
 import { reconcileFdmMaintenance72 } from '../services/training-compliance-fdm72-reconciliation';
 import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModalitySql } from '../services/training-compliance-history-identity';
@@ -49,6 +50,15 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 const SCOPES = TRAINING_COMPLIANCE_SCOPES;
 const OBRIGATORIEDADES = ['OBRIGATORIA', 'RECOMENDADA', 'NAO_APLICA'] as const;
+// Somente os modelos da matriz QSMS/Segurança Operacional final (0534).
+// Outros cursos, inclusive FDM legado/Comitê, têm remediações e designações próprias.
+const QSMS_SAFETY_MATRIX_CODES = new Set([
+  'AUD_COMP', 'BRIGADA_INCENDIO', 'COD_ETICA', 'INTRO_SGQ', 'COL_SEL',
+  'MUDA', 'INTEGRA', 'NR-05', 'NR06', 'NR-11', 'NR-12', 'NR-20',
+  'NR-26', 'NR-35', 'PRIMEIROS_SOCORROS', 'REGRAS_OURO_PETROBRAS',
+  'CRM_CORP', 'CRM_DIR_RBAC119', 'JUST_CULTURE', 'FOD', 'LOSA',
+  'PPSP_SUP', 'PPSP', 'PRE', 'D2', 'STOP_WORK', 'FDM-MECANICO', 'BOWTIEXP',
+]);
 const ORIGENS = [
   'REGULATORIO',
   'PTO',
@@ -1754,6 +1764,8 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
       continue;
     }
     if (situacao === 'MATRICULA_AVULSA_RECONCILIADA') avulsasReconciliadas += 1;
+    // Conclusões são evidência histórica, não uma matrícula ativa a cancelar.
+    if (['CONCLUIDO', 'CONCLUIDA'].includes(String(enrollment.status || '').trim().toUpperCase())) continue;
     matriculasRevisao.push({
       matricula_id: Number(enrollment.id),
       funcionario_id: Number(enrollment.funcionario_id),
@@ -1799,7 +1811,15 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
       ),
     );
   const convitesMatricula = enrollments
-    .filter((row) => String(row.status || '').toUpperCase() === 'NAO_INICIADO')
+    .filter((row) => {
+      if (String(row.status || '').trim().toUpperCase() !== 'NAO_INICIADO' || !row.qualificacao_tipo_id) return false;
+      const employee = peopleById.get(Number(row.funcionario_id));
+      if (!employee) return false;
+      return resolvedRules(snapshot.rules, employee).some(
+        (rule) => rule.qualificacao_tipo_id === Number(row.qualificacao_tipo_id)
+          && rule.obrigatoriedade === 'OBRIGATORIA',
+      );
+    })
     .map((row) => ({
       matricula_id: Number(row.id),
       funcionario_id: Number(row.funcionario_id),
@@ -1836,6 +1856,94 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
       convites_matricula: convitesMatricula,
     },
     meta: { reconciliation_ready: await tableExists(db, 'treinamento_matricula_reconciliacoes') },
+  });
+});
+
+// Limpeza governada por demanda: preview por padrão, escrita apenas após confirmação.
+// Nunca cancela curso fora da matriz, matrícula concluída ou designação avulsa mantida.
+// Uma alteração de cargo/requisito entre preview e aplicação é revalidada no servidor.
+app.post('/reconciliacao/limpeza', requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  if (empresaId !== 6) throw new ApiError('Limpeza exclusiva da matriz Costa do Sol', 403);
+  const payload = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const rawIds = payload.matricula_ids;
+  if (!Array.isArray(rawIds) || !rawIds.length || rawIds.length > 100 ||
+      rawIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    throw new ApiError('Informe de 1 a 100 IDs de matrícula válidos', 400);
+  }
+  const ids = [...new Set(rawIds as number[])];
+  const aplicar = payload.aplicar === true;
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const [snapshot, enrollments, decisions] = await Promise.all([
+    buildSnapshot(db, empresaId, access),
+    loadLmsEnrollments(db, empresaId),
+    loadReconciliationDecisions(db, empresaId),
+  ]);
+  const byId = new Map(enrollments.map((row) => [Number(row.id), row]));
+  const peopleById = new Map(snapshot.people.map((p) => [Number(p.id), p]));
+  const elegiveis: LmsEnrollment[] = [];
+  const bloqueadas: Array<{ matricula_id: number; motivo: string }> = [];
+  for (const id of ids) {
+    const row = byId.get(id);
+    const person = row ? peopleById.get(Number(row.funcionario_id)) : null;
+    const code = String(row?.qualificacao_tipo_codigo || '').trim().toUpperCase();
+    const status = String(row?.status || '').trim().toUpperCase();
+    let motivo = '';
+    if (!row || !person) motivo = 'MATRICULA_NAO_LOCALIZADA_NO_ESCOPO';
+    else if (!QSMS_SAFETY_MATRIX_CODES.has(code)) motivo = 'FORA_DA_MATRIZ_OU_SEM_MODELO';
+    else if (decisions.get(id)?.decisao === 'MANTER_AVULSA') motivo = 'DESIGNACAO_AVULSA_MANTIDA';
+    else if (['CONCLUIDO', 'CONCLUIDA'].includes(status)) motivo = 'CONCLUSAO_HISTORICA_PRESERVADA';
+    else if (!['NAO_INICIADO', 'EM_ANDAMENTO'].includes(status)) motivo = 'STATUS_REQUER_REVISAO';
+    else {
+      const efetiva = resolvedRules(snapshot.rules, person).find(
+        (rule) => rule.qualificacao_tipo_id === Number(row.qualificacao_tipo_id),
+      );
+      if (efetiva && efetiva.obrigatoriedade !== 'NAO_APLICA') motivo = 'REQUISITO_OU_DESIGNACAO_ATIVA';
+    }
+    if (motivo) bloqueadas.push({ matricula_id: id, motivo });
+    else if (row) elegiveis.push(row);
+  }
+  // Falha fechada: um lote misto não pode cancelar parcialmente matrículas válidas.
+  if (aplicar && bloqueadas.length) {
+    return c.json({ success: false, error: 'Lote alterado ou contém matrículas protegidas', data: { bloqueadas } }, 409);
+  }
+  let canceladas = 0;
+  if (aplicar && elegiveis.length) {
+    const writes = await db.batch(elegiveis.map((row) => db.prepare(
+      `UPDATE lms_matriculas SET status='CANCELADO',deleted_at=datetime('now'),updated_at=datetime('now')
+        WHERE id=? AND empresa_id=? AND deleted_at IS NULL
+          AND UPPER(TRIM(COALESCE(status,'')))=?`,
+    ).bind(row.id, empresaId, String(row.status || '').trim().toUpperCase())));
+    for (let i = 0; i < writes.length; i += 1) {
+      if (Number(writes[i].meta?.changes || 0) !== 1) continue;
+      const row = elegiveis[i];
+      canceladas += 1;
+      await syncMatriculaCycleFromMatricula(db, { matriculaId: row.id });
+      await registrarAuditoria({
+        db,
+        tabela: 'lms_matriculas',
+        acao: 'UPDATE',
+        registro_id: row.id,
+        dados_anteriores: { status: row.status, empresa_id: empresaId },
+        dados_novos: {
+          status: 'CANCELADO',
+          motivo: 'Reconciliação matriz QSMS/Segurança Operacional 0534 — sem requisito',
+          empresa_id: empresaId,
+        },
+        ...extrairUsuarioAuditoria(c),
+      });
+    }
+  }
+  return c.json({
+    success: true,
+    data: {
+      modo: aplicar ? 'APLICACAO' : 'PREVIEW',
+      avaliadas: ids.length,
+      elegiveis: elegiveis.map((row) => ({ matricula_id: row.id, status: row.status })),
+      bloqueadas,
+      canceladas,
+    },
   });
 });
 
