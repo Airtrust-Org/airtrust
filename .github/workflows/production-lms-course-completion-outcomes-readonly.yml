@@ -150,7 +150,7 @@ jobs:
           NODE
 
   inventory:
-    name: Production LMS per-course completion read-only audit
+    name: Production LMS per-course completion and D1 read-only audit
     needs: guard
     runs-on: ubuntu-latest
     timeout-minutes: 30
