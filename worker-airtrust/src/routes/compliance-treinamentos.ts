@@ -1780,9 +1780,15 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
       if (String(row.status || '').trim().toUpperCase() !== 'NAO_INICIADO' || !row.qualificacao_tipo_id) return false;
       const employee = peopleById.get(Number(row.funcionario_id));
       if (!employee) return false;
-      return resolvedRules(snapshot.rules, employee).some(
-        (rule) => rule.qualificacao_tipo_id === Number(row.qualificacao_tipo_id)
-          && rule.obrigatoriedade === 'OBRIGATORIA',
+      const req = employee.requisitos.find(
+        (item) => item.qualificacao_tipo_id === Number(row.qualificacao_tipo_id),
+      );
+      // Nunca convidar alguém já qualificado e válido só porque ainda existe
+      // uma matrícula operacional redundante aguardando conciliação.
+      return Boolean(
+        req?.obrigatoriedade === 'OBRIGATORIA'
+        && !req.evidencia_pendente_validacao
+        && trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer),
       );
     })
     .map((row) => ({
