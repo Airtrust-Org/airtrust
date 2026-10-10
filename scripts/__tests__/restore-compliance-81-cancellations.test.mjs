@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { buildRestoreSql } from '../production/restore-compliance-81-cancellations.mjs';
+import { buildRestoreSql, allowedStatusTrigger } from '../production/restore-compliance-81-cancellations.mjs';
 
 function mockCandidates(){
   const rows=[];let id=0;
@@ -56,4 +56,12 @@ test('actual SQL batch restores 81 original cycles atomically in SQLite and reje
   assert.match(check.stdout,/POSITIVE:81-original-matriculas-and-cycles-restored/);
   assert.match(check.stdout,/NEGATIVE:altered_cycle:PASS/);
   assert.match(check.stdout,/NEGATIVE:concurrent_audit:PASS/);
+});
+
+test('only the canonical timestamp-only enrollment trigger is allowed before writes',()=>{
+  const benign={name:'trg_lms_matriculas_updated_at',tbl_name:'lms_matriculas',sql:"CREATE TRIGGER IF NOT EXISTS trg_lms_matriculas_updated_at AFTER UPDATE ON lms_matriculas FOR EACH ROW BEGIN UPDATE lms_matriculas SET updated_at = datetime('now') WHERE id = NEW.id; END;"};
+  assert.equal(allowedStatusTrigger(benign),true);
+  assert.equal(allowedStatusTrigger({...benign,name:'trg_lms_completion_audit'}),false);
+  assert.equal(allowedStatusTrigger({...benign,sql:benign.sql+' INSERT INTO certificados DEFAULT VALUES;'}),false);
+  assert.equal(allowedStatusTrigger({...benign,tbl_name:'lms_matricula_ciclos'}),false);
 });
