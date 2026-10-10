@@ -167,8 +167,11 @@ jobs:
                 console.error("TRAINING_COMPLIANCE_QA_LEDGER_INVALID"); process.exit(1);
               }
               if (c === 1) {
-                // 0538 changes NR-05/manager rules: a 0534-only check cannot certify it.
-                console.error("TRAINING_COMPLIANCE_QA_0538_OVERLAY_REQUIRES_FULL_VALIDATOR"); process.exit(1);
+                // Validate unaffected 0534 invariants plus the explicit 0538 overlay postconditions.
+                if (b !== 1 || a !== 1) {
+                  console.error("TRAINING_COMPLIANCE_QA_0538_BASELINE_INVALID"); process.exit(1);
+                }
+                process.stdout.write("0538"); return;
               }
               if (b === 1 && a === 1) { process.stdout.write("0534"); return; }
               if (b === 0 && a === 1) { process.stdout.write("0526"); return; }
@@ -178,6 +181,10 @@ jobs:
           case "$schema_state" in
             0534) bash scripts/staging/validate-0534-postconditions.sh --target="$STAGING_D1_NAME" ;;
             0526) bash scripts/staging/validate-0526-postconditions.sh --target="$STAGING_D1_NAME" ;;
+            0538)
+              bash scripts/staging/validate-0534-postconditions.sh --target="$STAGING_D1_NAME"
+              bash scripts/staging/validate-0538-postconditions.sh --target="$STAGING_D1_NAME"
+              ;;
             *) echo "TRAINING_COMPLIANCE_QA_SCHEMA_SELECTION_INVALID" >&2; exit 1 ;;
           esac
           echo "TRAINING_COMPLIANCE_QA_VALIDATED_SCHEMA=$schema_state"

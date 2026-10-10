@@ -224,7 +224,7 @@ describe('ControleVoosEditarVooDialog', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Versao do voo desatualizada/);
     expect(onClose).not.toHaveBeenCalled();
   });
-  it('abre com área rolável, largura ampla e pesos em branco sem exigir zero', async () => {
+  it('abre com área rolável, largura ampla e preserva pesos em branco sem enviar zeros implícitos', async () => {
     patchMock.mockResolvedValue({ success: true, data: { ...voo, versao: 5 } });
     render(<ControleVoosEditarVooDialog open voo={voo} onClose={vi.fn()} onSaved={vi.fn()} />);
     await waitCatalogsReady();
@@ -236,9 +236,25 @@ describe('ControleVoosEditarVooDialog', () => {
     expect(screen.getByLabelText('Peso da bagagem (lb)')).toHaveValue(null);
     fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
     await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
-    expect(patchMock.mock.calls[0][1]).toMatchObject({
-      peso_passageiros: null, peso_bagagem: null, peso_carga: null,
-    });
+    const patch = patchMock.mock.calls[0][1];
+    expect(patch).not.toHaveProperty('peso_passageiros');
+    expect(patch).not.toHaveProperty('peso_bagagem');
+    expect(patch).not.toHaveProperty('peso_carga');
+    expect(patch).not.toHaveProperty('unidade_peso_planejado');
+  });
+
+  it('permite limpar explicitamente um peso já informado, preservando os demais', async () => {
+    patchMock.mockResolvedValue({ success: true, data: { ...voo, versao: 5 } });
+    const comPeso = { ...voo, peso_passageiros_planejado: 100, peso_bagagem_planejado: 50 };
+    render(<ControleVoosEditarVooDialog open voo={comPeso} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await waitCatalogsReady();
+    fireEvent.change(screen.getByLabelText('Peso da bagagem (lb)'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
+    const patch = patchMock.mock.calls[0][1];
+    expect(patch.peso_bagagem).toBeNull();
+    expect(patch).not.toHaveProperty('peso_passageiros');
+    expect(patch).not.toHaveProperty('peso_carga');
   });
 
 });
