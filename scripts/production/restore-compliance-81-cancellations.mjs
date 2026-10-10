@@ -60,6 +60,16 @@ export function buildRestoreSql(candidates,sha) {
   ].join('\n\n')+'\n';
 }
 
+export function allowedStatusTrigger(t) {
+  if(t?.name!=='trg_lms_matriculas_updated_at'||t?.tbl_name!=='lms_matriculas')return false;
+  const canonical=String(t.sql||'').replace(/\s+/g,' ').trim().toUpperCase();
+  return /^CREATE TRIGGER (?:IF NOT EXISTS )?TRG_LMS_MATRICULAS_UPDATED_AT AFTER UPDATE ON LMS_MATRICULAS FOR EACH ROW BEGIN UPDATE LMS_MATRICULAS SET UPDATED_AT = DATETIME\('NOW'\) WHERE ID = NEW\.ID; END;?$/.test(canonical);
+}
+function verifyStatusTriggers() {
+  const triggers=queryD1("SELECT name,tbl_name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name IN ('lms_matriculas','lms_matricula_ciclos')");
+  check(triggers.every(allowedStatusTrigger),'UNREVIEWED_STATUS_TRIGGER');
+}
+
 function readCandidates() {
   const rows=queryD1(AUDIT_QUERY).map(r=>({
     id:Number(r.id),originalStatus:r.original_status,status:r.status,
@@ -89,6 +99,7 @@ async function main(){
   check(['dry-run','apply'].includes(mode),'INVALID_MODE');
   check(process.env.COMPLIANCE_81_CONFIRMATION===(mode==='apply'?APPLY_CONFIRM:DRY_CONFIRM),'CONFIRMATION_INVALID');
   check(Boolean(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),'CREDENTIALS_MISSING');
+  verifyStatusTriggers();
   const {report,candidates}=readCandidates();
   check(report.candidate_sha256===candidateHash(candidates),'DIGEST_MISMATCH');
   if(mode==='dry-run'){
