@@ -184,7 +184,9 @@ export default function LmsPlayer() {
   const [liveSlideCoverage, setLiveSlideCoverage] = useState<{ count: number; total: number } | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
-  const completionDialogShownRef = useRef(false);
+  // One automatic server reconciliation per mounted enrollment session; a
+  // manual retry remains possible after a failed authenticated validation.
+  const autoCompletionAttemptRef = useRef<number | null>(null);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
   const [assetSessionReady, setAssetSessionReady] = useState(false);
   const [completionState, setCompletionState] = useState<
@@ -358,13 +360,12 @@ export default function LmsPlayer() {
   const canRequestCompletion = !newEditionRequired &&
     (canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm);
 
-  useEffect(() => {
-    if (canRequestScormCompletion && !completionDialogShownRef.current &&
-        completionState !== 'saving') {
-      completionDialogShownRef.current = true;
-      setCompletionDialogOpen(true);
-    }
-  }, [canRequestScormCompletion, completionState]);
+  // The SCO owns its own assessment/submission control. The LMS never opens
+  // an unsolicited confirmation dialog on the last slide: its job is to
+  // reconcile the server result automatically, or offer one explicit retry
+  // only if reconciliation fails.
+  const showScormRegistrationRetry =
+    isScormContent && !effectiveReviewMode && completionState === 'error';
 
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
@@ -720,6 +721,18 @@ export default function LmsPlayer() {
     }
   }
 
+  // Once the server has accepted explicit SCORM completion, confirm the
+  // matrícula automatically through the EXISTING backend finalization gate.
+  // Never infer completion from 100%, a score alone, an orange SCO button,
+  // or a stale previous edition. The server remains the only authority.
+  useEffect(() => {
+    if (!shouldReconcilePassedScorm || newEditionRequired || isFinalizing ||
+        !Number.isSafeInteger(id) || id <= 0 ||
+        autoCompletionAttemptRef.current === id) return;
+    autoCompletionAttemptRef.current = id;
+    void reconcilePersistedScormCompletion();
+  }, [id, shouldReconcilePassedScorm, newEditionRequired, isFinalizing]);
+
   useEffect(() => {
     const verifyCanonicalAndReturn = () => {
       void refetchMatricula().then(({ data: latest }) => {
@@ -1051,6 +1064,27 @@ export default function LmsPlayer() {
     void handleFinalizeAndGenerateQualification();
   }
 
+  function retryScormCompletionRegistration() {
+    if (
+      !isScormContent ||
+      effectiveReviewMode ||
+      newEditionRequired ||
+      completionState !== 'error'
+    ) {
+      return;
+    }
+    const frameWindow = iframeRef.current?.contentWindow;
+    if (!frameWindow) {
+      showCompletionToast('error', 'Conteúdo indisponível. Reabra o curso antes de concluir.');
+      return;
+    }
+    setIsFinalizing(true);
+    showCompletionToast('saving', 'Verificando e registrando a conclusão...');
+    // Retry asks the wrapper to re-check real SCORM state; the backend remains
+    // responsible for all enrollment and completion gates.
+    frameWindow.postMessage({ type: 'lms:request-completion', matriculaId: id }, launchOrigin);
+  }
+
   async function handleFinalizeAndGenerateQualification() {
     if (!matricula) return;
     // Conclusão SCORM nunca é aceita por finalização manual: exige status
@@ -1323,7 +1357,7 @@ export default function LmsPlayer() {
               </div>
             </section>
 
-            {!effectiveReviewMode && !isCompletedState ? (
+            {!effectiveReviewMode && !isCompletedState && !isScormContent ? (
               <button
                 onClick={() => setCompletionDialogOpen(true)}
                 disabled={!canRequestCompletion || isFinalizing}
@@ -1331,9 +1365,7 @@ export default function LmsPlayer() {
               >
                 {isFinalizing
                   ? 'Confirmando...'
-                  : matricula?.gerar_qualificacao_ao_concluir === 1
-                    ? 'Concluir curso'
-                    : 'Concluir curso'}
+                  : isScormContent ? 'Registrar no AirTrust' : 'Concluir curso'}
               </button>
             ) : null}
 
@@ -1347,12 +1379,13 @@ export default function LmsPlayer() {
           </aside>
         </div>
       </main>
-      {!newEditionRequired && (canRequestCompletion ||
+      {!newEditionRequired && ((!isScormContent && canRequestCompletion) ||
+        showScormRegistrationRetry ||
         completionState === 'saving' ||
         completionState === 'pending' ||
         completionState === 'error' ||
         completionState === 'unresolved') && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4">
+        <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4${completionState === 'idle' && canRequestCompletion ? ' md:hidden' : ''}`}>
           <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-emerald-300/30 bg-slate-900/90 p-3 shadow-2xl backdrop-blur">
             <div className="mb-2 text-xs text-emerald-200/90">
               {completionMessage || 'Conclusão recebida, mas ainda não confirmada pelo servidor.'}
@@ -1380,24 +1413,26 @@ export default function LmsPlayer() {
                   Voltar ao catálogo
                 </button>
               </div>
-            ) : canRequestCompletion ? (
+            ) : (showScormRegistrationRetry || (!isScormContent && canRequestCompletion)) ? (
               <button
-                onClick={() => setCompletionDialogOpen(true)}
+                onClick={() =>
+                  showScormRegistrationRetry
+                    ? retryScormCompletionRegistration()
+                    : setCompletionDialogOpen(true)
+                }
                 disabled={isFinalizing}
                 className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isFinalizing
                   ? 'Confirmando...'
-                  : matricula?.gerar_qualificacao_ao_concluir === 1
-                    ? 'Concluir curso'
-                    : 'Concluir curso'}
+                  : isScormContent ? 'Registrar no AirTrust' : 'Concluir curso'}
               </button>
             ) : null}
           </div>
         </div>
       )}
 
-      {completionDialogOpen && !isCompletedState && !effectiveReviewMode && !newEditionRequired && (
+      {completionDialogOpen && !isScormContent && !isCompletedState && !effectiveReviewMode && !newEditionRequired && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4">
           <section role="dialog" aria-modal="true" aria-labelledby="lms-finish-heading"
             className="w-full max-w-md rounded-2xl border border-slate-600 bg-slate-900 p-6 text-white shadow-2xl">
