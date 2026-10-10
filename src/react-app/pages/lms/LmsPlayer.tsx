@@ -365,8 +365,7 @@ export default function LmsPlayer() {
   // reconcile the server result automatically, or offer one explicit retry
   // only if reconciliation fails.
   const showScormRegistrationRetry =
-    isScormContent && canRequestCompletion &&
-    (completionState === 'error' || completionState === 'unresolved');
+    isScormContent && !effectiveReviewMode && completionState === 'error';
 
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
@@ -1065,6 +1064,27 @@ export default function LmsPlayer() {
     void handleFinalizeAndGenerateQualification();
   }
 
+  function retryScormCompletionRegistration() {
+    if (
+      !isScormContent ||
+      effectiveReviewMode ||
+      newEditionRequired ||
+      completionState !== 'error'
+    ) {
+      return;
+    }
+    const frameWindow = iframeRef.current?.contentWindow;
+    if (!frameWindow) {
+      showCompletionToast('error', 'Conteúdo indisponível. Reabra o curso antes de concluir.');
+      return;
+    }
+    setIsFinalizing(true);
+    showCompletionToast('saving', 'Verificando e registrando a conclusão...');
+    // Retry asks the wrapper to re-check real SCORM state; the backend remains
+    // responsible for all enrollment and completion gates.
+    frameWindow.postMessage({ type: 'lms:request-completion', matriculaId: id }, launchOrigin);
+  }
+
   async function handleFinalizeAndGenerateQualification() {
     if (!matricula) return;
     // Conclusão SCORM nunca é aceita por finalização manual: exige status
@@ -1393,9 +1413,13 @@ export default function LmsPlayer() {
                   Voltar ao catálogo
                 </button>
               </div>
-            ) : (!isScormContent && canRequestCompletion) ? (
+            ) : (showScormRegistrationRetry || (!isScormContent && canRequestCompletion)) ? (
               <button
-                onClick={() => setCompletionDialogOpen(true)}
+                onClick={() =>
+                  showScormRegistrationRetry
+                    ? retryScormCompletionRegistration()
+                    : setCompletionDialogOpen(true)
+                }
                 disabled={isFinalizing}
                 className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
