@@ -148,6 +148,7 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
         aeronave_id: Number(form.aeronave_id),
         contrato_id: Number(form.contrato_id),
         tipo_voo_id: Number(form.tipo_voo_id),
+        data_programacao: form.horario_previsto_partida.slice(0, 10),
         horario_previsto_partida: departure.toISOString(),
         horario_previsto_chegada: arrival.toISOString(),
         observacoes: form.observacoes.trim() || null,
