@@ -3,6 +3,7 @@
 // Training Manager: canonical tenant-scoped API, never raw SQL or forged SCORM.
 import process from 'node:process';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { assertAllowedProductionBaseUrl, extractAccessToken, fetchJson, login } from '../smoke-auth-common.mjs';
 const API=assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL || 'https://api.airtrust.online');
 const MODE=process.env.LMS99_MODE;
@@ -131,4 +132,4 @@ async function main(){
   process.stdout.write(JSON.stringify(report(cohort,results),null,2));
   valid(results.other_error===0&&results.rejected_409===0&&results.rejected_403===0,'RECONCILIATION_PARTIAL_REVIEW_REQUIRED');
 }
-if(import.meta.url==='file://'+process.argv[1])main().catch(e=>{console.error('LMS99_GOVERNED_FAILED:'+String(e.message).slice(0,90));process.exitCode=1;});
+if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(e=>{console.error('LMS99_GOVERNED_FAILED:'+String(e.message).slice(0,90));process.exitCode=1;});
