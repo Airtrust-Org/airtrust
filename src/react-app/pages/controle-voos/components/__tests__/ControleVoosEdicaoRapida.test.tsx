@@ -23,7 +23,7 @@ const voo = {
 describe('ControleVoosEdicaoRapida', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('salva campos gerais e rota pelo PATCH CAS sem alterar tripulantes', async () => {
+  it('salva campos gerais sem reescrever rota intacta nem tripulantes', async () => {
     patchMock.mockResolvedValue({ success: true, data: { success: true, data: { ...voo, versao: 3 } } });
     const onSaved = vi.fn();
     render(<ControleVoosEdicaoRapida voo={voo} onSaved={onSaved} onCancel={vi.fn()} />);
@@ -31,7 +31,8 @@ describe('ControleVoosEdicaoRapida', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar dados' }));
     await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
     expect(patchMock.mock.calls[0][1]).toMatchObject({ versao: 2, numero_voo: '999' });
-    expect(patchMock.mock.calls[0][1]).toMatchObject({ rota_ids: [1, 2], data_programacao: '2026-10-10' });
+    expect(patchMock.mock.calls[0][1]).toMatchObject({ data_programacao: '2026-10-10' });
+    expect(patchMock.mock.calls[0][1]).not.toHaveProperty('rota_ids');
     expect(patchMock.mock.calls[0][1]).not.toHaveProperty('numero_db');
     expect(patchMock.mock.calls[0][1]).not.toHaveProperty('tripulantes');
     expect(onSaved).toHaveBeenCalledTimes(1);
