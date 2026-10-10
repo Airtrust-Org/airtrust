@@ -279,16 +279,28 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
   });
 
   const cleanup = useMutation({
-    mutationFn: async (args: { ids: number[]; aplicar: boolean }) =>
-      readJson<{
-        elegiveis: Array<{ matricula_id: number; status: string }>;
-        bloqueadas: Array<{ matricula_id: number; motivo: string }>;
-        canceladas: number;
-      }>(await fetchWithAuth('/api/compliance-treinamentos/reconciliacao/limpeza', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricula_ids: args.ids, aplicar: args.aplicar }),
-      })),
+    mutationFn: async (args: { ids: number[]; aplicar: boolean }) => {
+      const result = {
+        elegiveis: [] as Array<{ matricula_id: number; status: string }>,
+        bloqueadas: [] as Array<{ matricula_id: number; motivo: string }>,
+        canceladas: 0,
+      };
+      // O backend aceita no maximo 100 por transacao; executar todos os lotes
+      // existentes na revisao sem exigir que o administrador repita manualmente.
+      for (let i = 0; i < args.ids.length; i += 100) {
+        const data = await readJson<typeof result>(
+          await fetchWithAuth('/api/compliance-treinamentos/reconciliacao/limpeza', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ matricula_ids: args.ids.slice(i, i + 100), aplicar: args.aplicar }),
+          }),
+        );
+        result.elegiveis.push(...data.elegiveis);
+        result.bloqueadas.push(...data.bloqueadas);
+        result.canceladas += data.canceladas;
+      }
+      return result;
+    },
     onSuccess: async (result, args) => {
       if (!args.aplicar) {
         setCleanupPreview(result);
@@ -322,7 +334,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
       ['MATRICULADO_SEM_REQUISITO', 'NAO_APLICA_MATRICULADO'].includes(row.situacao) &&
       ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(row.matricula_status || '').trim().toUpperCase()),
   );
-  const cleanupIds = cleanupCandidates.slice(0, 100).map((row) => row.matricula_id);
+  const cleanupIds = cleanupCandidates.map((row) => row.matricula_id);
   const sortedReviews = useMemo(
     () =>
       sortComplianceRows(data?.matriculas_revisao || [], reviewSort, (row, key) => {
@@ -581,7 +593,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
               <p className="font-semibold text-slate-900">Limpeza de matrículas sem requisito</p>
               <p className="mt-1 text-slate-600">
-                Analisa até 100 matrículas por lote. Apenas QSMS/Segurança Operacional sem requisito
+                Processa todas as matrículas em lotes transacionais de até 100. Apenas QSMS/Segurança Operacional sem requisito
                 vigente podem ser canceladas. Cursos fora dessa matriz, designações mantidas e
                 conclusões históricas permanecem preservados. O progresso existente não é apagado.
               </p>
