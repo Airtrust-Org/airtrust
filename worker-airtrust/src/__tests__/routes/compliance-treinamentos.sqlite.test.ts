@@ -1136,9 +1136,11 @@ describe('training compliance engine', () => {
     const app = createApp(sqlite.asD1());
     const reconciliation = await app.request('/reconciliacao');
     expect(reconciliation.status).toBe(200);
-    expect((await reconciliation.json() as any).data.matriculas_revisao).toEqual([
+    const reconciled = (await reconciliation.json() as any).data;
+    expect(reconciled.matriculas_revisao).toEqual([
       expect.objectContaining({ matricula_id: 700, situacao: 'MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA' }),
     ]);
+    expect(reconciled.convites_matricula).toEqual([]);
     const send = (aplicar: boolean) => app.request('/reconciliacao/limpeza', {
       method: 'POST',headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ matricula_ids: [700], aplicar }),
