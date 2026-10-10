@@ -73,6 +73,39 @@ jobs:
           set -euo pipefail
           node scripts/seed-staging-smoke-user.mjs --apply --confirm-staging-baseline
 
+      - name: Validate isolated LMS student seed in dry-run mode
+        shell: bash
+        env:
+          STAGING_SMOKE_EMAIL: qa-lms-e2e@staging.airtrust.invalid
+          STAGING_SMOKE_EMPRESA_CODIGO: qa_lms_catalog_audit_smoke
+          STAGING_SMOKE_EMPRESA_NOME: QA LMS Catalog Audit Smoke
+          STAGING_SMOKE_USER_NOME: Auditoria LMS AirTrust
+          STAGING_SMOKE_PERFIL: ALUNO
+          STAGING_SMOKE_ROLE: student
+          STAGING_SMOKE_FUNCIONARIO_MATRICULA: QA-LMS-E2E
+          STAGING_SMOKE_FUNCIONARIO_NOME_GUERRA: AUDITOR LMS
+        run: node scripts/seed-staging-smoke-user.mjs
+
+      - name: Provision isolated LMS audit student
+        shell: bash
+        env:
+          STAGING_SMOKE_EMAIL: qa-lms-e2e@staging.airtrust.invalid
+          STAGING_SMOKE_EMPRESA_CODIGO: qa_lms_catalog_audit_smoke
+          STAGING_SMOKE_EMPRESA_NOME: QA LMS Catalog Audit Smoke
+          STAGING_SMOKE_USER_NOME: Auditoria LMS AirTrust
+          STAGING_SMOKE_PERFIL: ALUNO
+          STAGING_SMOKE_ROLE: student
+          STAGING_SMOKE_FUNCIONARIO_MATRICULA: QA-LMS-E2E
+          STAGING_SMOKE_FUNCIONARIO_NOME_GUERRA: AUDITOR LMS
+        run: node scripts/seed-staging-smoke-user.mjs --apply --confirm-staging-baseline
+
+      - name: Verify isolated LMS student with learner permissions
+        shell: bash
+        env:
+          QA_LMS_STUDENT_EMAIL: qa-lms-e2e@staging.airtrust.invalid
+          QA_LMS_STUDENT_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+        run: node scripts/staging/lms-audit-student-readiness.mjs
+
       - name: Reseed synthetic QA examiner fixture
         shell: bash
         env:
@@ -178,5 +211,7 @@ jobs:
             echo '- password source: GitHub Environment `staging` / `STAGING_SMOKE_PASSWORD` and `QA_EXAMINER_ADMIN_PASSWORD`'
             echo '- target: staging only'
             echo '- legacy synthetic login retirement: enforced'
+            echo '- isolated LMS audit student: `qa-lms-e2e@staging.airtrust.invalid` (ALUNO/student)'
+            echo '- LMS audit student password source: GitHub Environment `staging` / `STAGING_SMOKE_PASSWORD`'
             echo '- cleartext password output: none'
           } >> "$GITHUB_STEP_SUMMARY"

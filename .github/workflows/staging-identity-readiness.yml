@@ -125,9 +125,24 @@ jobs:
           }
           NODE
 
+  lms-student-identity:
+    name: Isolated LMS Audit Student
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      QA_LMS_STUDENT_EMAIL: qa-lms-e2e@staging.airtrust.invalid
+      QA_LMS_STUDENT_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Verify learner role, employee link and isolated LMS catalog access
+        run: node scripts/staging/lms-audit-student-readiness.mjs
+
   readiness:
     name: Staging Application Identities Ready
-    needs: [smoke-identity, examiner-identity]
+    needs: [smoke-identity, examiner-identity, lms-student-identity]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -135,6 +150,7 @@ jobs:
         env:
           SMOKE_RESULT: ${{ needs.smoke-identity.result }}
           EXAMINER_RESULT: ${{ needs.examiner-identity.result }}
+          LMS_STUDENT_RESULT: ${{ needs.lms-student-identity.result }}
         shell: bash
         run: |
           set -euo pipefail
@@ -143,9 +159,11 @@ jobs:
             echo ''
             echo "- general smoke identity: $SMOKE_RESULT"
             echo "- examiner synthetic QA identity: $EXAMINER_RESULT"
+            echo "- isolated LMS audit student: $LMS_STUDENT_RESULT"
             echo '- source: GitHub Environment `staging`'
             echo '- secret values exposed: no'
           } >> "$GITHUB_STEP_SUMMARY"
           [[ "$SMOKE_RESULT" == 'success' ]] || exit 1
           [[ "$EXAMINER_RESULT" == 'success' ]] || exit 1
+          [[ "$LMS_STUDENT_RESULT" == 'success' ]] || exit 1
           echo 'STAGING_APPLICATION_IDENTITIES_READY'
