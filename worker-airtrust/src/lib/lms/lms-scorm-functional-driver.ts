@@ -72,11 +72,16 @@ function driveFactoryCourse() {
       querySelector: (selector: string) => { disabled?: boolean; click: () => void } | null;
       querySelectorAll: (selector: string) => ArrayLike<{
         disabled?: boolean;
-        offsetParent?: unknown;
+        getBoundingClientRect?: () => { width: number; height: number };
         click: () => void;
       }>;
     };
     Scorm?: { get?: (key: string) => string | null };
+    getComputedStyle?: (element: unknown) => {
+      display?: string;
+      visibility?: string;
+      pointerEvents?: string;
+    };
   };
   const w = globalThis as DriverWindow;
   const slides = w.COURSE_DATA?.slides;
@@ -91,7 +96,14 @@ function driveFactoryCourse() {
     const items = Array.from(w.document?.querySelectorAll('.screen.active [data-gate-id]') ?? []);
     let clicked = 0;
     for (const item of items) {
-      if (item.disabled || item.offsetParent === null) continue;
+      const style = w.getComputedStyle?.(item);
+      const rect = item.getBoundingClientRect?.();
+      // Match the package's own requiredInteractionItems() visibility rule.
+      // offsetParent is null for visible fixed-position controls, so it cannot
+      // be used as a visibility test here.
+      if (item.disabled || !style || style.display === 'none' ||
+          style.visibility === 'hidden' || style.pointerEvents === 'none' ||
+          !rect || rect.width <= 0 || rect.height <= 0) continue;
       item.click();
       clicked++;
     }

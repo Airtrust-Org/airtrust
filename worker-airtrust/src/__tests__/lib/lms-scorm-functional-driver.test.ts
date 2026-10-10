@@ -187,8 +187,12 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
     first.className = 'screen active';
     const gate = global.document.createElement('button');
     gate.setAttribute('data-gate-id', 'micro-0');
-    // jsdom has no layout; model a visible browser control for offsetParent.
+    // jsdom has no layout; model a visible browser control.
     Object.defineProperty(gate, 'offsetParent', { configurable: true, value: first });
+    gate.getBoundingClientRect = () => ({
+      x: 10, y: 10, top: 10, right: 110, bottom: 40, left: 10,
+      width: 100, height: 30, toJSON: () => ({}),
+    });
     first.append(gate);
     const second = global.document.createElement('section');
     second.className = 'screen';
@@ -343,5 +347,34 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
     expect(result).toMatchObject({
       supported: true, completed: false, reason: 'COURSE_NEXT_MISSING',
     });
+  });
+
+  it('clicks visible fixed-position interaction gates even when offsetParent is null', () => {
+    const slides = [{ id: 'fixed-gate', kind: 'lesson' }];
+    let active = 0;
+    let completed = false;
+    const screen = global.document.createElement('section');
+    screen.className = 'screen active';
+    const gate = global.document.createElement('button');
+    gate.setAttribute('data-gate-id', 'fixed-control');
+    Object.defineProperty(gate, 'offsetParent', { get: () => null });
+    gate.getBoundingClientRect = () => ({
+      x: 10, y: 10, top: 10, right: 110, bottom: 40, left: 10,
+      width: 100, height: 30, toJSON: () => ({}),
+    });
+    const next = global.document.createElement('button');
+    next.id = 'next';
+    next.disabled = true;
+    gate.addEventListener('click', () => { next.disabled = false; });
+    next.addEventListener('click', () => { completed = true; });
+    screen.append(gate);
+    global.document.body.append(screen, next);
+    global.window.COURSE_DATA = { slides };
+    global.window.__AIRTRUST_PLAYER_TEST__ = {
+      getState: () => ({ active, done: completed ? [0] : [], courseCompleted: completed, completionReady: completed, mode: 'journey' }),
+    };
+
+    const result = new Function('return ' + buildScormFunctionalDriverScript())();
+    expect(result).toMatchObject({ supported: true, completed: true, steps: 1 });
   });
 });
