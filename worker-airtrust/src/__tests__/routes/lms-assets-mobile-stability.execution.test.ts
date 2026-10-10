@@ -227,6 +227,58 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     expect(body.cmi_json).toContain('airtrust.viewed_slides');
   });
 
+  it('não deixa eventos de saída rebaixarem um SCORM_FINISH enfileirado durante autosave', async () => {
+    let releaseAutosave: (response: unknown) => void = () => {};
+    const pendingAutosave = new Promise<unknown>((resolve) => { releaseAutosave = resolve; });
+    const response = {
+      ok: true,
+      status: 200,
+      clone() {
+        return { json: async () => ({ success: true, data: { progresso_pct: 100 } }) };
+      },
+    };
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => pendingAutosave)
+      .mockImplementation(() => Promise.resolve(response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId: 346,
+      titulo: 'Curso SCORM com saída imediata',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/7/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: '',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_location': '57/57',
+        'cmi.core.lesson_status': 'completed',
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+
+    // 1. A routine save holds the network slot.
+    // 2. SCORM package finishes before the learner leaves.
+    // 3. Browser unload/visibility must not erase that finish evidence.
+    api.LMSCommit();
+    api.LMSFinish();
+    g.window.dispatchEvent(new g.Event('beforeunload'));
+    g.window.dispatchEvent(new g.Event('pagehide'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    releaseAutosave(response);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const request = fetchMock.mock.calls[1][1] as { body: string; keepalive: boolean };
+    expect(JSON.parse(request.body)).toMatchObject({
+      matricula_id: 346,
+      commit_event: 'SCORM_FINISH',
+      completion_candidate: null,
+      lesson_status: 'completed',
+    });
+    expect(request.keepalive).toBe(true);
+  });
+
   it('repete o mesmo Finish apos falha temporaria, sem criar conclusao automatica', async () => {
     vi.useFakeTimers();
     const fetchMock = vi
