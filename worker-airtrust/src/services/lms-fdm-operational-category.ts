@@ -15,7 +15,7 @@
 export type FdmOperationalCategoryContext = {
   db: D1Database;
   empresaId: number;
-  cursoId: number | null | undefined;
+  cursoId?: number | null;
   matriculaId: number;
   funcionarioId: number;
   qualificacaoTipoId: number;
