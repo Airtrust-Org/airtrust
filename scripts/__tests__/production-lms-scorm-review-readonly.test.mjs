@@ -36,3 +36,11 @@ test('real-player review blocks all non-read HTTP requests and never targets SCO
   assert.doesNotMatch(script, /LMSSetValue|LMSCommit|LMSFinish|cmi\.core\.lesson_status/);
   assert.match(script, /writes:\s*'none/);
 });
+
+test('failed launch preserves only a sanitized blocked-state report for the artifact', () => {
+  assert.match(script, /if \(!launch\.ok\)/);
+  assert.match(script, /errorCode.*LMS_NEW_EDITION_REQUIRED/s);
+  assert.match(script, /result:\s*'BLOCKED'/);
+  assert.match(script, /writeReport\(/);
+  assert.match(script, /mode:\s*0o600/);
+});
