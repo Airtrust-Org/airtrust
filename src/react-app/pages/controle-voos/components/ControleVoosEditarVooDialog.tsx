@@ -229,12 +229,12 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-labelledby="editar-voo-title">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="editar-voo-title">
       <form
         onSubmit={submit}
-        className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl dark:bg-slate-900"
+        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl bg-white p-4 shadow-xl sm:max-h-[calc(100dvh-2rem)] sm:p-5 dark:bg-slate-900"
       >
-        <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="mb-3 flex shrink-0 items-start justify-between gap-4">
           <div>
             <h2 id="editar-voo-title" className="text-lg font-semibold text-slate-900 dark:text-white">
               Editar programação — {voo.prefixo}
@@ -248,7 +248,8 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
           </button>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1" data-testid="flight-edit-scroll-region">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Número do voo
             <input className={fieldClass} value={form.numero_voo} onChange={(event) => setForm((prev) => ({ ...prev, numero_voo: event.target.value }))} />
@@ -352,7 +353,6 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
               }}
             />
           </label>
-          <div />
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Partida prevista
             <input type="datetime-local" required className={fieldClass} value={form.horario_previsto_partida} onChange={(event) => setForm((prev) => ({ ...prev, horario_previsto_partida: event.target.value }))} />
@@ -362,9 +362,10 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
             <input type="datetime-local" required className={fieldClass} value={form.horario_previsto_chegada} onChange={(event) => setForm((prev) => ({ ...prev, horario_previsto_chegada: event.target.value }))} />
           </label>
           {voo.status === 'planejado' ? (
-            <div className="sm:col-span-2 space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <div className="sm:col-span-2 lg:col-span-3 space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
               <h3 className="text-sm font-semibold">Rota programada</h3>
               <p className="text-xs text-slate-500">Altere a sequência completa da rota antes de confirmar o planejamento.</p>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {routeIds.map((routeId, index) => (
                 <div key={index} className="flex gap-2 items-end">
                   <label className="flex-1 text-xs">Ponto {index + 1}
@@ -377,6 +378,7 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
                   {routeIds.length > 2 ? <button type="button" className="rounded border px-3 py-2 text-sm" onClick={() => setRouteIds(items => items.filter((_, i) => i !== index))}>Remover</button> : null}
                 </div>
               ))}
+              </div>
               <button type="button" className="rounded-lg border border-cyan-600 px-3 py-2 text-sm text-cyan-700"
                 onClick={() => setRouteIds(items => [...items, ''])} disabled={routeIds.length >= 20}>+ Ponto da rota</button>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -387,13 +389,13 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
                 <DualWeightInput label="Peso da carga" valueLb={form.peso_carga}
                   onChangeLb={value => setForm(state => ({ ...state, peso_carga: value }))} fieldClass={fieldClass} />
               </div>
-              <p className="text-xs text-slate-500">Os três pesos aceitam lb ou kg. Preencha 0 quando não houver bagagem ou carga.</p>
             </div>
           ) : null}
-          <label className="sm:col-span-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label className="sm:col-span-2 lg:col-span-3 text-sm font-medium text-slate-700 dark:text-slate-300">
             Observações
             <textarea rows={3} className={fieldClass} value={form.observacoes} onChange={(event) => setForm((prev) => ({ ...prev, observacoes: event.target.value }))} />
           </label>
+        </div>
         </div>
 
         {error ? (
@@ -402,7 +404,7 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
           </p>
         ) : null}
 
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-3 flex shrink-0 justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
           <button type="button" onClick={onClose} disabled={saving} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
             Cancelar
           </button>
