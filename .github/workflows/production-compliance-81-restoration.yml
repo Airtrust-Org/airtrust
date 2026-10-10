@@ -33,8 +33,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  restore:
-    name: Governed tenant-6 historical enrollment restoration
+  d1_restore:
+    name: Governed tenant-6 D1 historical enrollment restoration
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
