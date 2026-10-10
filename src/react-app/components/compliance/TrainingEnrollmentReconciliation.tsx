@@ -77,6 +77,7 @@ async function readJson<T>(response: Response): Promise<T> {
 
 const situationLabels: Record<string, string> = {
   MATRICULADO_SEM_REQUISITO: 'Matriculado sem requisito',
+  MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA: 'Treinamento já válido no histórico',
   NAO_APLICA_MATRICULADO: 'Não aplicável, mas matriculado',
   CURSO_SEM_MODELO: 'Curso sem modelo de qualificação',
   MATRICULA_AVULSA_RECONCILIADA: 'Matrícula avulsa conciliada',
@@ -334,7 +335,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
   );
   const cleanupCandidates = (data?.matriculas_revisao || []).filter(
     (row) =>
-      ['MATRICULADO_SEM_REQUISITO', 'NAO_APLICA_MATRICULADO'].includes(row.situacao) &&
+      ['MATRICULADO_SEM_REQUISITO', 'NAO_APLICA_MATRICULADO', 'MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA'].includes(row.situacao) &&
       ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(row.matricula_status || '').trim().toUpperCase()),
   );
   const cleanupIds = cleanupCandidates.map((row) => row.matricula_id);
@@ -573,10 +574,10 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
           </p>
           {cleanupIds.length ? (
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-              <p className="font-semibold text-slate-900">Limpeza de matrículas sem requisito</p>
+              <p className="font-semibold text-slate-900">Limpeza de matrículas indevidas ou já atendidas</p>
               <p className="mt-1 text-slate-600">
-                Processa todas as matrículas em lotes transacionais de até 100. Apenas QSMS/Segurança Operacional sem requisito
-                vigente podem ser canceladas. Cursos fora dessa matriz, designações mantidas e
+                Processa todas as matrículas em lotes transacionais de até 100. Apenas QSMS/Segurança Operacional sem requisito vigente ou com qualificação já válida
+                podem ser canceladas; ciclos com evidência/progresso são preservados. Cursos fora dessa matriz, designações mantidas e
                 conclusões históricas permanecem preservados. O progresso existente não é apagado.
               </p>
               {!cleanupPreview ? (
