@@ -35,6 +35,8 @@ type ApiEnvelope = {
       status?: string;
       functionalCompletionVerified?: boolean;
       functionalCompletionReason?: string | null;
+      failureStage?: string;
+      failureCategory?: string;
       initializeObserved?: boolean;
       commitObserved?: boolean;
       finishObserved?: boolean;
@@ -160,6 +162,8 @@ test('LMS SCORM staging: real success, rejection, timeout and visible progress',
     functional_evidence: evidence?.status ?? null,
     functional_reason: evidence?.detail ?? null,
     runtime_status: conformanceVerdict?.runtime?.status ?? null,
+    runtime_failure_stage: conformanceVerdict?.runtime?.failureStage ?? null,
+    runtime_failure_category: conformanceVerdict?.runtime?.failureCategory ?? null,
     runtime_driver_reason: conformanceVerdict?.runtime?.functionalCompletionReason ?? null,
     runtime_driver_completed: conformanceVerdict?.runtime?.functionalCompletionVerified ?? false,
     initialized: conformanceVerdict?.runtime?.initializeObserved ?? false,

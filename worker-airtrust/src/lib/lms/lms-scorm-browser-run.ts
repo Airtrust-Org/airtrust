@@ -75,18 +75,32 @@ function analyzeTrace(candidateSha256: string, startedAt: string, trace: TraceIt
   };
 }
 
+/** Sanitized failure category for QA and audit summaries: never expose browser exception text. */
+export function classifyScormBrowserError(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  if (/\\b(?:429|quota|rate.limit|too many requests)\\b/i.test(message)) return 'BROWSER_QUOTA';
+  if (/\\b(?:403|401|forbidden|access.denied|unauthorized)\\b/i.test(message)) return 'BROWSER_ACCESS';
+  if (/\\b(?:502|503|504|service unavailable|browser service)\\b/i.test(message)) return 'BROWSER_SERVICE';
+  if (/timeout|timed out|deadline/i.test(message)) return 'BROWSER_TIMEOUT';
+  if (/connection|disconnected|network|socket|websocket/i.test(message)) return 'BROWSER_CONNECTION';
+  return 'BROWSER_OTHER';
+}
+
 export async function runScormBrowserConformance(params: {
   browserBinding: unknown; candidateSha256: string; launchFile: string; assets: CandidateAsset[];
 }): Promise<ScormRuntimeConformance> {
   const startedAt = new Date().toISOString();
-  if (!params.browserBinding) return { status: 'ERROR', candidateSha256: params.candidateSha256, startedAt, finishedAt: new Date().toISOString(), initializeObserved: false, commitObserved: false, finishObserved: false, completionReached: false, lessonStatus: null, scoreRaw: null, masteryScore: null, lessonLocation: null, trace: [], errors: ['SCORM_BROWSER não configurado'], runnerVersion: RUNNER_VERSION };
+  if (!params.browserBinding) return { status: 'ERROR', candidateSha256: params.candidateSha256, startedAt, finishedAt: new Date().toISOString(), initializeObserved: false, commitObserved: false, finishObserved: false, completionReached: false, lessonStatus: null, scoreRaw: null, masteryScore: null, lessonLocation: null, trace: [], errors: ['SCORM_BROWSER não configurado'], failureStage: 'BINDING_MISSING', failureCategory: 'BROWSER_ACCESS', runnerVersion: RUNNER_VERSION };
   const assets = new Map(params.assets.map((asset) => [asset.path, asset.data]));
   const launch = assets.get(params.launchFile);
   if (!launch) throw new Error('Launch file do candidato não encontrado');
   let browser: Browser | undefined;
+  let failureStage = 'BROWSER_LAUNCH';
   try {
     browser = await puppeteer.launch(params.browserBinding as BrowserWorker);
+    failureStage = 'CREATE_PAGE';
     const page = await browser.newPage();
+    failureStage = 'SET_REQUEST_INTERCEPTION';
     await page.setRequestInterception(true);
     page.on('request', async (request: HTTPRequest) => {
       const url = new URL(request.url());
@@ -96,9 +110,11 @@ export async function runScormBrowserConformance(params: {
       if (!asset) return request.respond({ status: 404, body: 'not found' });
       return request.respond({ status: 200, body: asset, headers: { 'Content-Type': path.endsWith('.js') ? 'application/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.html') ? 'text/html' : 'application/octet-stream' } });
     });
+    failureStage = 'LOAD_SCO_ASSETS';
     await page.setContent(`<base href="${CANDIDATE_ORIGIN}">${injectBeforePackageScripts(new TextDecoder().decode(launch))}`, { waitUntil: 'networkidle0', timeout: TIMEOUT_MS });
     // Drive authored M8 interactions by actually clicking course controls,
     // never by calling SCORMSetValue or forcing internal course state.
+    failureStage = 'DRIVE_SCO_INTERACTIONS';
     const functional = await page.evaluate(buildScormFunctionalDriverScript()) as {
       supported: boolean; completed: boolean; steps: number; reason: string | null;
     };
@@ -115,11 +131,13 @@ export async function runScormBrowserConformance(params: {
     // real code, synchronously, exactly as it would on an actual tab close.
     // The harness never calls window.API.LMSFinish itself; only the
     // package's own handler can do that.
+    failureStage = 'CLOSE_SCO_SESSION';
     await page.evaluate(
       "window.dispatchEvent(new Event('beforeunload'));" +
         "window.dispatchEvent(new Event('pagehide'));" +
         "window.dispatchEvent(new Event('unload'));",
     );
+    failureStage = 'READ_SCORM_TRACE';
     const observed = await page.evaluate('window.__AIRTRUST_SCORM_TRACE()') as ObservedTrace;
     const runtime = analyzeTrace(params.candidateSha256, startedAt, observed.trace, observed.values, observed.initialized, observed.finished, observed.lastError);
     const contractBytes = assets.get('airtrust-completion-manifest.json');
@@ -153,7 +171,7 @@ export async function runScormBrowserConformance(params: {
     };
   } catch (error) {
     const timedOut = error instanceof Error && /timeout/i.test(error.message);
-    return { status: timedOut ? 'TIMEOUT' : 'ERROR', candidateSha256: params.candidateSha256, startedAt, finishedAt: new Date().toISOString(), initializeObserved: false, commitObserved: false, finishObserved: false, completionReached: false, lessonStatus: null, scoreRaw: null, masteryScore: null, lessonLocation: null, trace: [], errors: [error instanceof Error ? error.message : 'Browser Run falhou'], runnerVersion: RUNNER_VERSION };
+    return { status: timedOut ? 'TIMEOUT' : 'ERROR', candidateSha256: params.candidateSha256, startedAt, finishedAt: new Date().toISOString(), initializeObserved: false, commitObserved: false, finishObserved: false, completionReached: false, lessonStatus: null, scoreRaw: null, masteryScore: null, lessonLocation: null, trace: [], errors: [error instanceof Error ? error.message : 'Browser Run falhou'], failureStage, failureCategory: classifyScormBrowserError(error), runnerVersion: RUNNER_VERSION };
   } finally {
     if (browser) await browser.close().catch(() => undefined);
   }
