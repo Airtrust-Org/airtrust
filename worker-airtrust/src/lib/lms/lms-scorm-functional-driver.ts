@@ -72,6 +72,7 @@ function driveFactoryCourse() {
       querySelector: (selector: string) => { disabled?: boolean; click: () => void } | null;
       querySelectorAll: (selector: string) => ArrayLike<{
         disabled?: boolean;
+        dataset?: Record<string, string | undefined>;
         getBoundingClientRect?: () => { width: number; height: number };
         click: () => void;
       }>;
@@ -90,6 +91,35 @@ function driveFactoryCourse() {
     const control = w.document?.querySelector(selector);
     if (!control || control.disabled) return false;
     control.click();
+    return true;
+  };
+  const clickScenarioOption = (slideId: string, selected: number): boolean => {
+    const controls = Array.from(w.document?.querySelectorAll('.screen.active [data-scenario][data-opt]') ?? []);
+    const authored = controls.find((control) =>
+      control.dataset?.scenario === slideId && control.dataset?.opt === String(selected),
+    );
+    if (authored && !authored.disabled) {
+      authored.click();
+      return true;
+    }
+
+    const activeScreenControls = Array.from(w.document?.querySelectorAll(
+      '.screen.active [data-choice], .screen.active [data-opt]',
+    ) ?? []);
+    const active = activeScreenControls.find((control) =>
+      (control.dataset?.choice ?? control.dataset?.opt) === String(selected),
+    );
+    if (active && !active.disabled) {
+      active.click();
+      return true;
+    }
+
+    // Keep support for the minimal legacy Factory markup used by existing
+    // packages and tests when it exposes a single unscoped option control.
+    const legacy = Array.from(w.document?.querySelectorAll('[data-choice], [data-opt]') ?? [])
+      .filter((control) => (control.dataset?.choice ?? control.dataset?.opt) === String(selected));
+    if (legacy.length !== 1 || legacy[0].disabled) return false;
+    legacy[0].click();
     return true;
   };
   const clickRequiredInteractions = (): number => {
@@ -254,9 +284,7 @@ function driveFactoryCourse() {
           : Boolean(option && typeof option === 'object' && 'correct' in option && option.correct === true),
       );
       const selected = correct >= 0 ? correct : 0;
-      if (!click(`button[data-choice="${selected}"]`) &&
-          !click(`[data-scenario][data-opt="${selected}"]`) &&
-          !click(`[data-opt="${selected}"]`)) {
+      if (!clickScenarioOption(slide.id, selected)) {
         return fail('DECISION_CONTROL_MISSING', steps);
       }
     }
