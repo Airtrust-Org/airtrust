@@ -36,6 +36,7 @@ export interface CvVoo {
   destino_id: number;
   rota_codigos?: string[];
   planejamento_status?: 'previo' | 'confirmado';
+  pendencias_planejamento?: string[];
   peso_passageiros_planejado?: number | null;
   peso_bagagem_planejado?: number | null;
   peso_carga_planejado?: number | null;
