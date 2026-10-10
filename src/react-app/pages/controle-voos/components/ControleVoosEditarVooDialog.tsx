@@ -150,6 +150,14 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
       setError('Para alterar a rota, informe pontos válidos sem duplicação consecutiva.');
       return;
     }
+    const changedWeights = {
+      ...(form.peso_passageiros !== (voo.peso_passageiros_planejado == null ? '' : String(voo.peso_passageiros_planejado))
+        ? { peso_passageiros: form.peso_passageiros === '' ? null : Number(form.peso_passageiros) } : {}),
+      ...(form.peso_bagagem !== (voo.peso_bagagem_planejado == null ? '' : String(voo.peso_bagagem_planejado))
+        ? { peso_bagagem: form.peso_bagagem === '' ? null : Number(form.peso_bagagem) } : {}),
+      ...(form.peso_carga !== (voo.peso_carga_planejado == null ? '' : String(voo.peso_carga_planejado))
+        ? { peso_carga: form.peso_carga === '' ? null : Number(form.peso_carga) } : {}),
+    };
     setSaving(true);
     try {
       const response = await apiClient.patch<unknown>(`/controle-voos/voos/${voo.id}`, {
@@ -165,10 +173,8 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
         observacoes: form.observacoes.trim() || null,
         ...(canEditPlanning ? {
           ...(routeChanged ? { rota_ids: routeIds.map(Number) } : {}),
-          peso_passageiros: form.peso_passageiros === '' ? null : Number(form.peso_passageiros),
-          peso_bagagem: form.peso_bagagem === '' ? null : Number(form.peso_bagagem),
-          peso_carga: form.peso_carga === '' ? null : Number(form.peso_carga),
-          unidade_peso_planejado: 'LB',
+          ...changedWeights,
+          ...(Object.keys(changedWeights).length ? { unidade_peso_planejado: 'LB' } : {}),
         } : {}),
       });
       onSaved(extract<CvVoo>(response));
