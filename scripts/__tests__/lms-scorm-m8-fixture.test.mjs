@@ -12,6 +12,8 @@ test('staging acceptance ZIP has an actual authored M8 assessment, not automatic
   assert.deepEqual(model.slides.map(x => x.id), ['qa-slide-1']);
   assert.equal(deck.slides[0].questions[0].answer, 1);
   assert.ok(files['media/qa-visual.svg']);
+  assert.ok(files['scorm.js']);
+  assert.match(read('scorm.js'), /window\.AirTrustSCORM/);
   assert.match(read('app.js'), /LMSInitialize/);
   assert.match(read('app.js'), /window\.parent && window\.parent\.API/);
   assert.match(read('app.js'), /LMSCommit/);
@@ -19,5 +21,8 @@ test('staging acceptance ZIP has an actual authored M8 assessment, not automatic
   assert.match(read('app.js'), /addEventListener\('click'/);
   assert.match(read('app.js'), /state\.assess\[1\]\.passed = true/);
   assert.match(read('app.js'), /state\.done = \[0\]/);
-  assert.match(read('app.js'), /cmi\.core\.lesson_status', 'passed'/);
+  assert.match(read('app.js'), /cmi\.suspend_data/);
+  assert.match(read('app.js'), /complete\.addEventListener\('click'/);
+  assert.match(read('app.js'), /modelState\.passed = true/);
+  assert.match(read('app.js'), /modelState\.assessmentPassed \? 'passed' : 'failed'/);
 });
