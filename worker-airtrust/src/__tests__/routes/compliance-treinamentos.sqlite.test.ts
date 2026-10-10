@@ -69,6 +69,7 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
                        codigo = CASE id WHEN 10 THEN 'MAN' WHEN 11 THEN 'OPS' ELSE 'OUT' END;
 
     ALTER TABLE qualificacoes_tipos ADD COLUMN nome TEXT;
+    ALTER TABLE qualificacoes_tipos ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1;
     UPDATE qualificacoes_tipos SET nome = codigo;
 
     ALTER TABLE funcionarios ADD COLUMN funcao_id INTEGER;
