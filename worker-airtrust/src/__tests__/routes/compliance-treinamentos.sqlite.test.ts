@@ -14,6 +14,12 @@ vi.mock('../../middleware/tenant', () => ({
 }));
 vi.mock('../../services/lms-matricula-cycle', () => ({
   syncMatriculaCycleFromMatricula: vi.fn(async () => undefined),
+  ensureMatriculaCycle: vi.fn(async () => 1),
+  resetMatriculaForNewCycle: vi.fn(async () => undefined),
+  canReuseMatriculaCycle: (row: { status: string; deleted_at: string | null } | null) =>
+    Boolean(row && (row.deleted_at || ['CONCLUIDO', 'REPROVADO', 'CANCELADO'].includes(row.status))),
+  hasActiveMatriculaCycle: (row: { status: string; deleted_at: string | null } | null) =>
+    Boolean(row && !row.deleted_at && ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(row.status)),
 }));
 
 vi.mock('../../middleware/rbac', () => ({
@@ -148,7 +154,8 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
       empresa_id INTEGER NOT NULL,
       curso_id INTEGER NOT NULL,
       funcionario_id INTEGER NOT NULL,
-      status TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'NAO_INICIADO',
+      observacoes TEXT,
       data_conclusao TEXT,
       created_at TEXT,
       updated_at TEXT,
@@ -1123,6 +1130,54 @@ describe('training compliance engine', () => {
       modo: 'PREVIEW', pendentes: 1, matriculadas: 0, sem_curso_unico: 0,
     });
     expect((sqlite.database.prepare('SELECT COUNT(*) n FROM lms_matriculas').get() as any).n).toBe(0);
+  });
+
+  it('gera a matrícula Regras de Ouro uma vez, sem reabrir ciclo já ativo', async () => {
+    tenantMock.id = 6;
+    sqlite.database.exec(`
+      ALTER TABLE lms_cursos ADD COLUMN ativo INTEGER DEFAULT 1;
+      ALTER TABLE lms_cursos ADD COLUMN publicado INTEGER DEFAULT 1;
+      CREATE TABLE airtrust_schema_changes_v2 (
+        change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL
+      );
+      INSERT INTO airtrust_schema_changes_v2 VALUES
+        ('training-compliance-regras-ouro-corporate-0547', 'production-d1-baseline-v2-20260714');
+      INSERT INTO empresas (id) VALUES (6);
+      UPDATE setores SET empresa_id=6 WHERE id=10;
+      UPDATE funcoes SET empresa_id=6 WHERE id=1;
+      UPDATE funcionarios SET empresa_id=6 WHERE id=1000;
+      UPDATE qualificacoes_tipos SET empresa_id=6,codigo='REGRAS_OURO_PETROBRAS',categoria='EAD' WHERE id=100;
+      INSERT INTO treinamento_requisitos
+        (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem)
+      VALUES (6,100,'EMPRESA','OBRIGATORIA','EMPRESA');
+      INSERT INTO lms_cursos (id,empresa_id,titulo,qualificacao_tipo_id)
+      VALUES (600,6,'Regras de Ouro',100);
+      CREATE TABLE auditoria_avancada_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tabela TEXT, acao TEXT, registro_id TEXT, dados_anteriores TEXT,
+        dados_novos TEXT, usuario_id TEXT, ip_address TEXT, user_agent TEXT,
+        origem TEXT, created_at TEXT
+      );
+    `);
+    const app = createApp(sqlite.asD1());
+    const send = () => app.request('/reconciliacao/matricular-pendentes', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ aplicar: true }),
+    });
+    const first = await send();
+    expect(first.status).toBe(200);
+    expect((await first.json() as any).data.matriculadas).toBe(1);
+    const row = sqlite.database.prepare(
+      'SELECT status,deleted_at FROM lms_matriculas WHERE empresa_id=6 AND curso_id=600 AND funcionario_id=1000',
+    ).get() as any;
+    expect(row.status).toBe('NAO_INICIADO');
+    expect(row.deleted_at).toBeNull();
+    const next = await send();
+    expect(next.status).toBe(200);
+    expect((await next.json() as any).data.matriculadas).toBe(0);
+    expect((sqlite.database.prepare(
+      'SELECT COUNT(*) n FROM lms_matriculas WHERE empresa_id=6 AND curso_id=600',
+    ).get() as any).n).toBe(1);
   });
 
   it('bloqueia toda limpeza sem a migração final 0547 comprovada', async () => {
