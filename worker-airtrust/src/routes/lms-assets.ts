@@ -1980,11 +1980,24 @@ ${buildScormNativeResumeOwnershipScript()}
     return status === 408 || status === 425 || status === 429 || status >= 500;
   }
 
+  function queuedCommitPriority(eventType) {
+    // Do not demote an observed package Finish to an unload/visibility autosave.
+    // A student-confirmed finalization is always the highest priority.
+    switch (String(eventType || 'SCORM_COMMIT').toUpperCase()) {
+      case 'SCORM_USER_FINALIZE': return 5;
+      case 'SCORM_FINISH': return 4;
+      case 'SCORM_COMPLETION_CANDIDATE': return 3;
+      case 'SCORM_BEFORE_UNLOAD_COMMIT':
+      case 'SCORM_VISIBILITY_COMMIT': return 2;
+      default: return 1;
+    }
+  }
+
   function queueLatestCommit(data, eventType) {
-    // A regular autosave/close must never replace the student's queued final request.
-    if (queuedCommit && queuedCommit.eventType === 'SCORM_USER_FINALIZE' &&
-        eventType !== 'SCORM_USER_FINALIZE') return;
-    if (!queuedCommit || isFinalCommitEvent(eventType) || !isFinalCommitEvent(queuedCommit.eventType)) {
+    // Preserve the most important pending commit and its matching evidence.
+    // Equal-priority autosaves may retain their latest payload.
+    if (!queuedCommit ||
+        queuedCommitPriority(eventType) >= queuedCommitPriority(queuedCommit.eventType)) {
       queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
     }
   }
