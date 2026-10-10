@@ -236,6 +236,7 @@ router.post('/limpeza', requireRole('admin'), async (c) => {
   const byId = new Map(enrollments.map((row) => [Number(row.id), row]));
   const peopleById = new Map(snapshot.people.map((p) => [Number(p.id), p]));
   const elegiveis: LmsEnrollment[] = [];
+  const motivos = new Map<number, string>();
   const bloqueadas: Array<{ matricula_id: number; motivo: string }> = [];
   for (const id of ids) {
     const row = byId.get(id);
@@ -249,8 +250,34 @@ router.post('/limpeza', requireRole('admin'), async (c) => {
     else if (['CONCLUIDO', 'CONCLUIDA'].includes(status)) motivo = 'CONCLUSAO_HISTORICA_PRESERVADA';
     else if (!['NAO_INICIADO', 'EM_ANDAMENTO'].includes(status)) motivo = 'STATUS_REQUER_REVISAO';
     else {
-      if (deps.isRequired(snapshot, person, Number(row.qualificacao_tipo_id))) {
+      const typeId = Number(row.qualificacao_tipo_id);
+      const hasRequirement = deps.isRequired(snapshot, person, typeId);
+      const req = person.requisitos.find((item) => item.qualificacao_tipo_id === typeId);
+      const validEvidence = req?.obrigatoriedade === 'OBRIGATORIA'
+        && !req.evidencia_pendente_validacao
+        && req.status_compliance === 'CONFORME'
+        && !trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer);
+      if (hasRequirement && (!validEvidence || status !== 'NAO_INICIADO')) {
         motivo = 'REQUISITO_OU_DESIGNACAO_ATIVA';
+      } else if (hasRequirement && validEvidence) {
+        // A qualificacao ja cumpre a regra; apenas o ciclo comprovadamente nunca
+        // iniciado pode ser encerrado, sem perder progresso/evidencia SCORM.
+        const progress = await db.prepare(
+          `SELECT COALESCE(progresso_pct,0) AS pct,data_inicio,data_conclusao,qualificacao_historico_id
+             FROM lms_matriculas
+            WHERE id=? AND empresa_id=? AND deleted_at IS NULL LIMIT 1`,
+        ).bind(id, empresaId).first<{
+          pct: number; data_inicio: string | null;
+          data_conclusao: string | null; qualificacao_historico_id: number | null;
+        }>();
+        if (!progress || Number(progress.pct) > 0 || progress.data_inicio ||
+            progress.data_conclusao || progress.qualificacao_historico_id) {
+          motivo = 'PROGRESSO_OU_EVIDENCIA_PRESERVADOS';
+        } else {
+          motivos.set(id, 'MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA');
+        }
+      } else {
+        motivos.set(id, 'MATRICULA_SEM_REQUISITO');
       }
     }
     if (motivo) bloqueadas.push({ matricula_id: id, motivo });
@@ -281,7 +308,7 @@ router.post('/limpeza', requireRole('admin'), async (c) => {
       ).bind(
         String(row.id),
         JSON.stringify({ empresa_id: empresaId, status: row.status }),
-        JSON.stringify({ empresa_id: empresaId, status: 'CANCELADO', motivo: 'Matriz QSMS/Segurança Operacional 0534 — matrícula sem requisito' }),
+        JSON.stringify({ empresa_id: empresaId, status: 'CANCELADO', motivo: motivos.get(row.id) || 'MATRICULA_SEM_REQUISITO' }),
         actor.usuario_id || null,
         actor.ip_address || null,
         actor.user_agent || null,
