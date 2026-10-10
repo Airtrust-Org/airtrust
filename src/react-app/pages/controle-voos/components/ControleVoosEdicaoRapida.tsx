@@ -36,7 +36,8 @@ export default function ControleVoosEdicaoRapida({ voo, onSaved, onCancel }: {
     setRouteIds(initialRoute(voo));
   }, [voo]);
 
-  const canEditRoute = voo.status === 'planejado';
+  // A Coordenação pode regularizar a rota após liberar, até o início da execução.
+  const canEditRoute = voo.status === 'planejado' || voo.status === 'liberado_operacionalmente';
   async function save(event: FormEvent) {
     event.preventDefault();
     const start = new Date(departure);

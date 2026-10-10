@@ -946,7 +946,13 @@ async function cacheFlightDocumentForOffline(flightId, document, existingRecord,
       cached_at: new Date().toISOString(),
       cache_error: null,
     };
-  } catch {
+  } catch (error) {
+    // Keep the flight accessible, but never misreport a failed file as cached.
+    const cacheError = error instanceof PilotOnlineRequestError && error.status
+      ? 'HTTP_' + String(error.status)
+      : error instanceof Error && /integridade|tamanho.*diverge|verificação local/i.test(error.message)
+        ? 'INTEGRITY_MISMATCH'
+        : 'CACHE_FAILED';
     return {
       id: Number(document.id),
       type: String(document.type),
@@ -958,7 +964,7 @@ async function cacheFlightDocumentForOffline(flightId, document, existingRecord,
       cache_key: cacheKey,
       available_offline: false,
       cached_at: null,
-      cache_error: 'CACHE_FAILED',
+      cache_error: cacheError,
     };
   }
 }
@@ -1459,13 +1465,10 @@ async function prepareFlightPackage(flightId, options = {}) {
       existing,
       options,
     );
-    // Never mark a freshly prepared version successful when any advertised file
-    // failed verification/download. Preserve the previously prepared flight.
-    const missingDocument = offlineDocuments.find((entry) => !entry.available_offline);
-    if (missingDocument) {
-      throw new Error('Falha ao baixar ' + (missingDocument.label || 'documento do voo') +
-        '. O voo anteriormente salvo foi preservado. Conecte-se e tente “Atualizar voo agora” novamente.');
-    }
+    // Download failures must not prevent flight/RDV access. Keep each failed
+    // attachment explicitly unavailable; the package itself remains encrypted
+    // and is only confirmed after the local read-back below.
+    const missingDocuments = offlineDocuments.filter((entry) => !entry.available_offline);
     const nextRevision = Number(existing?.localRevision || 0) + 1;
     const preparedAt = new Date().toISOString();
 
@@ -1497,10 +1500,14 @@ async function prepareFlightPackage(flightId, options = {}) {
       : '';
     setSessionMessage(
       updateNotice +
-        'Voo preparado neste tablet. ' +
+        (missingDocuments.length
+          ? 'Dados do voo salvos offline, com documentos pendentes de download. '
+          : 'Voo preparado neste tablet. ') +
         offlineDocumentPreparationSummary(offlineDocuments) +
-        '. A ausência de documentos não bloqueia o voo.',
-      'ok',
+        (missingDocuments.length
+          ? '. Os anexos pendentes não estarão disponíveis sem internet. Atualize antes da saída e verifique com a Coordenação os documentos operacionais exigidos.'
+          : '.'),
+      missingDocuments.length ? 'attention' : 'ok',
     );
     await loadCachedPackages();
     if (offlineFlightLocked && options.allowDuringFlight === true) {
