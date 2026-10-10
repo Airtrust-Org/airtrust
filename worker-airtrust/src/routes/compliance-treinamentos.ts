@@ -1866,6 +1866,20 @@ app.post('/reconciliacao/limpeza', requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   if (empresaId !== 6) throw new ApiError('Limpeza exclusiva da matriz Costa do Sol', 403);
+  // Nunca reconciliar a partir da configuração anterior ao PDF canônico de 09/10.
+  // A 0546 remove Regras de Ouro do Compliance e corrige públicos incompletos
+  // (NR-26/FOD/PPSP/NR-11/NR-35); sem essa base cancelaríamos matrículas legítimas.
+  if (!(await tableExists(db, 'airtrust_schema_changes_v2'))) {
+    throw new ApiError('Matriz final 0546 ainda não comprovada no banco; limpeza bloqueada', 409);
+  }
+  const finalMatrix = await db.prepare(
+    `SELECT change_id FROM airtrust_schema_changes_v2
+      WHERE change_id=? AND baseline_id=? LIMIT 1`,
+  ).bind('training-compliance-canonical-category-repair-0546', 'production-d1-baseline-v2-20260714')
+    .first<{ change_id: string }>();
+  if (!finalMatrix) {
+    throw new ApiError('Matriz final 0546 ainda não aplicada neste ambiente; limpeza bloqueada', 409);
+  }
   const payload = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const rawIds = payload.matricula_ids;
   if (!Array.isArray(rawIds) || !rawIds.length || rawIds.length > 100 ||
