@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-09",
-    "last_reconciled_against": "0546 category-FK-compliant compensation replacing unapplied 0545; production remote apply pending",
-    "schema_v2_digest": "b75242e9b3cd17fc0b18fdf3d2cd2ed170fd4f5a5679bd27ab126d66782bf4ea",
+    "last_reconciled_at": "2026-10-10",
+    "last_reconciled_against": "0547 forward corporate Regras de Ouro requirement after 0546; production remote apply pending",
+    "schema_v2_digest": "70e86d74b39344240b2bb8aa3d570c4b7c924234ad645e0641bbd21c430c14da",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1492,6 +1492,18 @@
       "reviewed_manifest": "training-compliance-canonical-category-repair-0546.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-canonical-category-repair-0546.md",
       "note": "0546 fully replaces unapplied 0545. Preserves 28-model target and adds valid category TREINAMENTO_GERAL for NR05. No production write claimed."
+    },
+    {
+      "change_file": "0547_training_compliance_regras_ouro_corporate.sql",
+      "change_id": "training-compliance-regras-ouro-corporate-0547",
+      "sha256": "d963d2119fa9252dae66cadcc823e6405bcffd9b46d7ad2e79081f1f0edf1b78",
+      "targets": [],
+      "domain": "QSMS/Safety Training Compliance requirement / tenant-6 corporate Regras de Ouro",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-regras-ouro-corporate-0547.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-regras-ouro-corporate-0547.md",
+      "note": "2026-10-10 Management explicitly makes Regras de Ouro mandatory for all employees. Forward compensation after governed 0546; no automatic remote write or historical enrollment modification. Only eligible pending LMS cycles are created separately after source-specific approval."
     }
   ]
 }
