@@ -94,6 +94,11 @@ export function summarizeFailures(rows) {
 }
 
 
+function safeCategoryCode(value) {
+  const code = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  return /^[A-Z0-9_-]{1,32}$/.test(code) ? code : null;
+}
+
 export function summarizeCategoryMappings(rows, canonicalRows) {
   ensure(Array.isArray(rows) && rows.length <= 250, 'COURSE_MAPPING_ROWS_INVALID');
   ensure(Array.isArray(canonicalRows) && canonicalRows.length <= 10, 'CANONICAL_CATEGORY_ROWS_INVALID');
@@ -111,10 +116,10 @@ export function summarizeCategoryMappings(rows, canonicalRows) {
     ensure(categoryId == null || Number.isSafeInteger(categoryId) && categoryId > 0, 'CATEGORY_ID_INVALID');
     seen.add(courseId);
     return { course_id: courseId, type_id: typeId, category_id: categoryId,
-      category_code: typeof row.category_code === 'string' ? row.category_code.slice(0, 32) : null, state };
+      category_code: safeCategoryCode(row.category_code), state };
   });
   const canonical = canonicalRows.map(row => ({
-    id: Number(row.id), code: String(row.codigo || '').slice(0, 32),
+    id: Number(row.id), code: safeCategoryCode(row.codigo),
     active: Number(row.ativo) === 1, integrated: Number(row.lms_integrada) === 1,
   }));
   ensure(canonical.every(x=>Number.isSafeInteger(x.id) && x.id > 0 && x.integrated), 'CANONICAL_CATEGORY_INVALID');
