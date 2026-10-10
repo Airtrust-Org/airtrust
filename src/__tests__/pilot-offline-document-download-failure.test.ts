@@ -72,7 +72,7 @@ function setupSandbox(options: { rejectPackageWrite?: boolean } = {}) {
     authenticatedGet: async () => ({ data: packageData }),
     authenticatedBlob: async (path: string) => {
       if (path.endsWith('/101')) throw new PilotOnlineRequestError(503);
-      if (path.endsWith('/102')) return new Blob([new Uint8Array([1, 2])], { type: 'application/pdf' });
+      if (path.endsWith('/102')) return { type: 'application/pdf', arrayBuffer: async () => new Uint8Array([1, 2]).buffer };
       throw new Error(`Unexpected document ${path}`);
     },
     verifyCachedFlightDocument: async () => null,
