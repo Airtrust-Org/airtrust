@@ -98,7 +98,7 @@ export function evaluateAudit(rows, subsequentAuditCount) {
   };
 }
 
-const AUDIT_QUERY = [
+export const AUDIT_QUERY = [
   "WITH event AS (",
   "SELECT CAST(entity_id AS INTEGER) id, json_extract(old_values,'$.status') original_status",
   "FROM audit_logs WHERE empresa_id=6 AND action='LMS_MATRICULA_COMPLIANCE_MATRIX_REPAIR'",
@@ -129,7 +129,7 @@ const AUDIT_QUERY = [
   "ORDER BY e.id"
 ].join(' ');
 
-const LATER_AUDITS_QUERY = [
+export const LATER_AUDITS_QUERY = [
   "SELECT COUNT(*) count FROM audit_logs WHERE empresa_id=6",
   "AND entity_type='lms_matriculas' AND created_at>'2026-10-10 19:10:05'",
   "AND entity_id IN (SELECT entity_id FROM audit_logs",
@@ -137,7 +137,7 @@ const LATER_AUDITS_QUERY = [
   "AND entity_type='lms_matriculas' AND created_at='2026-10-10 19:10:05')"
 ].join(' ');
 
-function queryD1(sql) {
+export function queryD1(sql) {
   assert(/^(WITH|SELECT)\s/i.test(sql), 'NON_READ_QUERY_REJECTED');
   assert(!/\b(?:UPDATE|DELETE|INSERT|DROP|ALTER|CREATE|REPLACE|PRAGMA)\b/i.test(sql), 'UNSAFE_SQL');
   const response = spawnSync('npx', ['wrangler', 'd1', 'execute', 'airtrust-db',
