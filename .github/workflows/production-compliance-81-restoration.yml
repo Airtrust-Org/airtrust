@@ -1,0 +1,167 @@
+name: Production Compliance 81 Historical Restoration
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact reviewed current main commit SHA
+        required: true
+        type: string
+      mode:
+        description: Read-only dry-run or reviewed restoration apply
+        required: true
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      confirmation:
+        description: AIRTRUST_PRODUCTION_COMPLIANCE_81_RESTORE_DRY_RUN or AIRTRUST_PRODUCTION_COMPLIANCE_81_RESTORE_APPLY_NO_EMAIL
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Required for apply, successful dry-run run on exact same SHA
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-training-compliance-matrix-enrollment-repair
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    name: Governed tenant-6 historical enrollment restoration
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_sha }}
+      COMPLIANCE_81_CONFIRMATION: ${{ inputs.confirmation }}
+      TARGET_COMPANY_ID: '6'
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Validate exact main SHA and current intent
+        shell: bash
+        env:
+          EXECUTION_MODE: ${{ inputs.mode }}
+          REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_REF_REQUIRED >&2; exit 1; }
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo SHA_FORMAT_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_MAIN_SHA" == "$GITHUB_SHA" ]] || { echo EXACT_SHA_MISMATCH >&2; exit 1; }
+          if [[ "$EXECUTION_MODE" == dry-run ]]; then
+            [[ "$COMPLIANCE_81_CONFIRMATION" == AIRTRUST_PRODUCTION_COMPLIANCE_81_RESTORE_DRY_RUN ]] || exit 1
+          elif [[ "$EXECUTION_MODE" == apply ]]; then
+            [[ "$COMPLIANCE_81_CONFIRMATION" == AIRTRUST_PRODUCTION_COMPLIANCE_81_RESTORE_APPLY_NO_EMAIL ]] || exit 1
+            [[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]] || { echo PRIOR_DRY_RUN_REQUIRED >&2; exit 1; }
+          else
+            echo EXECUTION_MODE_INVALID >&2; exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - run: npm --prefix worker-airtrust ci
+
+      - name: Verify all eight official release gates on exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Check production D1 credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || {
+            echo PRODUCTION_D1_CREDENTIALS_REQUIRED >&2
+            exit 1
+          }
+
+      - name: Verify reviewed dry-run artifact from this exact SHA
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          info="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
+          [[ "$(jq -r .name <<<"$info")" == 'Production Compliance 81 Historical Restoration' ]] || exit 1
+          [[ "$(jq -r .head_sha <<<"$info")" == "$EXPECTED_MAIN_SHA" ]] || exit 1
+          [[ "$(jq -r .event <<<"$info")" == workflow_dispatch ]] || exit 1
+          [[ "$(jq -r .conclusion <<<"$info")" == success ]] || exit 1
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "compliance-81-restore-dry-run-$EXPECTED_MAIN_SHA" \
+            --dir "$RUNNER_TEMP/reviewed"
+          evidence="$RUNNER_TEMP/reviewed/result.json"
+          test -s "$evidence"
+          [[ "$(jq -r .mode "$evidence")" == dry-run-only ]] || exit 1
+          [[ "$(jq -r .source_sha "$evidence")" == "$EXPECTED_MAIN_SHA" ]] || exit 1
+          [[ "$(jq -r .event_total "$evidence")" == 96 ]] || exit 1
+          [[ "$(jq -r .mandatory_restore_candidates "$evidence")" == 81 ]] || exit 1
+          [[ "$(jq -r .completed_awaiting_individual_review "$evidence")" == 5 ]] || exit 1
+          [[ "$(jq -r .not_started_without_current_requirement "$evidence")" == 10 ]] || exit 1
+          [[ "$(jq -r .writes_performed "$evidence")" == false ]] || exit 1
+          candidate="$(jq -r .candidate_sha256 "$evidence")"
+          [[ "$candidate" =~ ^[a-f0-9]{64}$ ]] || exit 1
+          echo "COMPLIANCE_81_REVIEWED_CANDIDATE_SHA256=$candidate" >> "$GITHUB_ENV"
+          echo "COMPLIANCE_81_REVIEWED_CANDIDATE_COUNT=81" >> "$GITHUB_ENV"
+          echo "REVIEWED_RESTORATION_DRY_RUN_ID=$REVIEWED_RUN" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record D1 Time Travel recovery point
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: worker-airtrust
+        shell: bash
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$ts" > "$RUNNER_TEMP/compliance81-recovery.txt"
+          test -s "$RUNNER_TEMP/compliance81-recovery.txt"
+          echo "COMPLIANCE_81_RECOVERY_READY=yes" >> "$GITHUB_ENV"
+          echo "D1_TIME_TRAVEL_RECOVERY_TIMESTAMP_UTC=$ts" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$RUNNER_TEMP/compliance81-recovery.txt"
+
+      - name: Evaluate and execute reviewed restoration
+        shell: bash
+        env:
+          EXECUTION_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          node scripts/production/restore-compliance-81-cancellations.mjs "$EXECUTION_MODE" > "$RUNNER_TEMP/result.json"
+          test -s "$RUNNER_TEMP/result.json"
+
+      - name: Publish sanitized audit summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -s "$RUNNER_TEMP/result.json" ]]; then
+            jq '{mode,source_sha,event_total,mandatory_restore_candidates,candidate_sha256,
+              original_status_counts,course_counts,completed_awaiting_individual_review,
+              not_started_without_current_requirement,restored_enrollments,
+              restored_existing_cycles,postconditions_verified,writes_performed,
+              email_sent,emails_sent,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Retain sanitized dry-run evidence
+        if: ${{ inputs.mode == 'dry-run' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: compliance-81-restore-dry-run-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: error
+          retention-days: 30
