@@ -1043,6 +1043,11 @@ describe('training compliance engine', () => {
   it('pré-visualiza, cancela logicamente somente a matrícula NR-26 órfã e preserva o tenant', async () => {
     tenantMock.id = 6;
     sqlite.database.exec(`
+      CREATE TABLE airtrust_schema_changes_v2 (
+        change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL
+      );
+      INSERT INTO airtrust_schema_changes_v2 VALUES
+        ('training-compliance-canonical-category-repair-0546', 'production-d1-baseline-v2-20260714');
       CREATE TABLE auditoria_avancada_v2 (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tabela TEXT, acao TEXT, registro_id TEXT, dados_anteriores TEXT,
@@ -1086,9 +1091,28 @@ describe('training compliance engine', () => {
     expect(repeated.status).toBe(409);
   });
 
+  it('bloqueia toda limpeza sem a migração final 0546 comprovada', async () => {
+    tenantMock.id = 6;
+    sqlite.database.exec(`
+      INSERT INTO empresas (id) VALUES (6);
+    `);
+    const response = await createApp(sqlite.asD1()).request('/reconciliacao/limpeza', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ matricula_ids: [700], aplicar: true }),
+    });
+    expect(response.status).toBe(409);
+    expect((await response.json() as any).error).toContain('0546');
+  });
+
   it('recusa cancelar uma matrícula que tenha recebido requisito ativo depois do preview', async () => {
     tenantMock.id = 6;
     sqlite.database.exec(`
+      CREATE TABLE airtrust_schema_changes_v2 (
+        change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL
+      );
+      INSERT INTO airtrust_schema_changes_v2 VALUES
+        ('training-compliance-canonical-category-repair-0546', 'production-d1-baseline-v2-20260714');
       INSERT INTO empresas (id) VALUES (6);
       UPDATE setores SET empresa_id=6 WHERE id=10;
       UPDATE funcoes SET empresa_id=6 WHERE id=1;
