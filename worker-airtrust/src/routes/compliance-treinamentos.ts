@@ -1880,6 +1880,10 @@ app.post('/reconciliacao/matricular-pendentes', requireRole('admin'), async (c) 
   if (!applied) throw new ApiError('Aplicar primeiro a matriz corrigida 0547', 409);
   const payload = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const aplicar = payload.aplicar === true;
+  const requestedType = payload.qualificacao_tipo_id === undefined ? null : asPositiveInt(payload.qualificacao_tipo_id);
+  if (payload.qualificacao_tipo_id !== undefined && !requestedType) {
+    throw new ApiError('Modelo de qualificação inválido para matrícula', 400);
+  }
   const limit = 40;
   const access = await getEmployeeSectorAccess(c, empresaId);
   const [snapshot, active, courses] = await Promise.all([
@@ -1905,6 +1909,7 @@ app.post('/reconciliacao/matricular-pendentes', requireRole('admin'), async (c) 
   let semCursoUnico = 0;
   for (const person of snapshot.people) {
     for (const req of person.requisitos) {
+      if (requestedType && Number(req.qualificacao_tipo_id) !== requestedType) continue;
       if (req.obrigatoriedade !== 'OBRIGATORIA' ||
           req.evidencia_pendente_validacao ||
           !trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer) ||
