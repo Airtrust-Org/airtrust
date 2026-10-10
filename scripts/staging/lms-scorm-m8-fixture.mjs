@@ -13,6 +13,14 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
     packageVersion,
     navigationGate: 'module-assessment',
     slides: [{ id: 'qa-slide-1', kind: 'assessment', media: 'media/qa-visual.svg' }],
+    assessment: {
+      masteryScore: 70,
+      questions: [{
+        id: 'qa-interaction-1',
+        correct: 1,
+        a: ['Ignorar', 'Confirmar após verificar'],
+      }],
+    },
     auditClosure: {
       typographyMinPx: 18,
       moduleGate: true,
