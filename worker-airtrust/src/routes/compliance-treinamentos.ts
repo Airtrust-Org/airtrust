@@ -1673,8 +1673,7 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
     for (const req of person.requisitos) {
       const key = `${person.id}:${req.qualificacao_tipo_id}`;
       if (blockingEnrollmentKeys.has(key)) continue;
-      if (req.evidencia_pendente_validacao ||
-          !trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;
+      if (req.evidencia_pendente_validacao || !trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;
       // Requisito ja concluido e valido nao deve ser contado como matricula faltante.
       requisitosSemMatricula += 1;
       const current = gaps.get(req.qualificacao_tipo_id) || {
@@ -1702,14 +1701,11 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
           (rule) => rule.qualificacao_tipo_id === Number(enrollment.qualificacao_tipo_id),
         )
       : undefined;
-    const requirement = enrollment.qualificacao_tipo_id
-      ? employee.requisitos.find((req) => req.qualificacao_tipo_id === Number(enrollment.qualificacao_tipo_id))
-      : undefined;
+    const requirement = employee.requisitos.find((req) => req.qualificacao_tipo_id === Number(enrollment.qualificacao_tipo_id));
     const redundantWithValidEvidence = requirement?.obrigatoriedade === 'OBRIGATORIA'
-      && !requirement.evidencia_pendente_validacao
-      && requirement.status_compliance === 'CONFORME'
+      && !requirement.evidencia_pendente_validacao && requirement.status_compliance === 'CONFORME'
       && !trainingComplianceNeedsEnrollment(requirement.status_compliance, requirement.dias_para_vencer)
-      && String(enrollment.status || '').trim().toUpperCase() === 'NAO_INICIADO';
+      && enrollment.status === 'NAO_INICIADO';
     let situacao:
       | 'MATRICULA_COM_REQUISITO'
       | 'MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA'
