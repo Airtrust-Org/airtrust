@@ -12,19 +12,21 @@ test('NR-26 staging validator compares accented canonical functions correctly us
   for (const accent of ['ã', 'â', 'ç', 'õ', 'é']) {
     assert.ok(sql.includes("'" + accent + "'"), 'missing accent normalization ' + accent);
   }
+  // Read-only SQLite VALUES fixtures: no DML and no operational database access.
+  const roles = ['Auxiliar de Manutenção', 'Gerente de Manutenção', 'Gerente de Operações',
+    'Gerente de Segurança Operacional', 'Mecânico', 'Técnico de Segurança do Trabalho', 'Auxiliar de CTM'];
+  const roleRows = roles.map((name, i) => `(${i + 1},'${name.replaceAll("'", "''")}')`).join(',');
+  const ruleRows = roles.map((_, i) => `(${i + 1},6,1,${i + 1},'FUNCAO',1,NULL)`).join(',');
+  const fixture = `WITH qualificacoes_tipos(id,empresa_id,codigo) AS (VALUES(1,6,'NR-26')),
+     funcoes(id,nome) AS (VALUES ${roleRows}),
+     treinamento_requisitos(id,empresa_id,qualificacao_tipo_id,funcao_id,escopo,ativo,deleted_at)
+       AS (VALUES ${ruleRows}) ${sql}`;
   const python = [
     'import sqlite3,sys',
     'db=sqlite3.connect(":memory:")',
-    'db.executescript("""CREATE TABLE qualificacoes_tipos(id INTEGER,empresa_id INTEGER,codigo TEXT);CREATE TABLE funcoes(id INTEGER,nome TEXT);CREATE TABLE treinamento_requisitos(id INTEGER,empresa_id INTEGER,qualificacao_tipo_id INTEGER,funcao_id INTEGER,escopo TEXT,ativo INTEGER,deleted_at TEXT);""")',
-    'db.execute("INSERT INTO qualificacoes_tipos VALUES(1,6,?)",("NR-26",))',
-    'roles=["Auxiliar de Manutenção","Gerente de Manutenção","Gerente de Operações","Gerente de Segurança Operacional","Mecânico","Técnico de Segurança do Trabalho","Auxiliar de CTM"]',
-    'for i,name in enumerate(roles,1):',
-    ' db.execute("INSERT INTO funcoes VALUES(?,?)",(i,name))',
-    ' db.execute("INSERT INTO treinamento_requisitos VALUES(?,?,?, ?,?,?,NULL)",(i,6,1,i,"FUNCAO",1))',
-    'result=db.execute(sys.argv[1]).fetchone()[0]',
-    'print(result)',
+    'print(db.execute(sys.argv[1]).fetchone()[0])',
   ].join('\n');
-  const actual = execFileSync('python3', ['-c', python, sql], { encoding: 'utf8' }).trim();
+  const actual = execFileSync('python3', ['-c', python, fixture], { encoding: 'utf8' }).trim();
   assert.equal(actual, '1', 'only true extra Auxiliar de CTM should fail the canonical role list');
 });
 
