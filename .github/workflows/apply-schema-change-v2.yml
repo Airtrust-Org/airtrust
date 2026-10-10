@@ -616,6 +616,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0547-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight maintenance IIO/APRS assistants 0548
+        if: ${{ inputs.change_id == 'training-compliance-maintenance-iio-aprs-assistants-0548' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0548-production-preflight.sh --target=airtrust-db
+
       - name: Preflight Training Compliance canonical category-safe PDF 0546
         if: ${{ inputs.change_id == 'training-compliance-canonical-category-repair-0546' }}
         shell: bash
@@ -732,6 +740,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0547-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate maintenance IIO/APRS assistants 0548
+        if: ${{ inputs.change_id == 'training-compliance-maintenance-iio-aprs-assistants-0548' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0548-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate Training Compliance canonical category-safe PDF 0546
         if: ${{ inputs.change_id == 'training-compliance-canonical-category-repair-0546' }}
