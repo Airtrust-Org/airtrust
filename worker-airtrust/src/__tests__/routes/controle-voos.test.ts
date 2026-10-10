@@ -841,6 +841,65 @@ afterEach(() => {
 });
 
 describe('controle voos routes', () => {
+  it('confirma planejamento com rota e pesos pendentes e informa as pendencias sem bloquear a liberacao', async () => {
+    const db = createSqliteD1();
+    seedCrewForFlight601(db);
+    runSql(db.databasePath, `
+      INSERT INTO cv_voo_tripulantes (empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by)
+      VALUES (1, 601, 1002, 'SIC', 10, 10);
+      INSERT INTO cv_voo_etapas
+        (empresa_id, voo_id, numero_etapa, origem_icao, destino_icao, created_by, updated_by)
+      VALUES (1, 601, 1, 'SBRJ', NULL, 10, 10);
+    `);
+
+    const initial = await request(db, '/api/controle-voos/voos/601');
+    expect(initial.status).toBe(200);
+    const before = (await initial.json()) as { data: { versao: number; pendencias_planejamento: string[] } };
+    expect(before.data.pendencias_planejamento).toEqual(expect.arrayContaining([
+      'Completar origem e destino das etapas',
+      'Informar peso de passageiros',
+      'Informar peso de bagagem',
+      'Informar peso de carga',
+    ]));
+
+    const confirm = await request(db, '/api/controle-voos/voos/601/confirmar-planejamento', {
+      method: 'POST',
+      body: JSON.stringify({ versao: before.data.versao }),
+    });
+    expect(confirm.status).toBe(200);
+    const confirmed = (await confirm.json()) as { data: { versao: number; pendencias_planejamento: string[] } };
+    expect(confirmed.data.pendencias_planejamento).toHaveLength(4);
+    expect(confirmed.data.versao).toBe(before.data.versao + 1);
+
+    const release = await request(db, '/api/controle-voos/voos/601/status', {
+      method: 'POST',
+      body: JSON.stringify({ versao: confirmed.data.versao, status: 'liberado_operacionalmente' }),
+    });
+    expect(release.status).toBe(200);
+
+    const detail = await request(db, '/api/controle-voos/voos/601');
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      data: {
+        status: 'liberado_operacionalmente',
+        pendencias_planejamento: confirmed.data.pendencias_planejamento,
+      },
+    });
+  });
+
+  it('mantem a exigencia de PIC/SIC para confirmar planejamento destinado a tripulacao', async () => {
+    const db = createSqliteD1();
+    const flight = await request(db, '/api/controle-voos/voos/601');
+    const body = (await flight.json()) as { data: { versao: number } };
+    const confirm = await request(db, '/api/controle-voos/voos/601/confirmar-planejamento', {
+      method: 'POST',
+      body: JSON.stringify({ versao: body.data.versao }),
+    });
+    expect(confirm.status).toBe(409);
+    await expect(confirm.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_PLANNING_CREW_INCOMPLETE',
+    });
+  });
   it('cria voo valido e registra evento operacional', async () => {
     const db = createSqliteD1();
 
