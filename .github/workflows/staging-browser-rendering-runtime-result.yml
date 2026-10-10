@@ -36,4 +36,4 @@ jobs:
           - runtime secrets: nomes canônicos, valores não registrados
           - production action: none
           EOF
-          gh issue comment 568 --repo "$REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
+          gh issue comment 1325 --repo "$REPOSITORY" --body-file "$RUNNER_TEMP/body.md"

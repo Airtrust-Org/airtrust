@@ -13,13 +13,15 @@ const resultWorkflow = readFileSync(
 );
 
 describe('staging Browser Rendering runtime sync', () => {
-  it('runs only after a reviewed merge to main changes this controlled workflow', () => {
+  it('runs after reviewed main changes or explicit manual confirmation on main', () => {
     expect(workflow).toMatch(/on:\n\s+push:\n\s+branches:\n\s+- main/);
     expect(workflow).toContain("'.github/workflows/staging-browser-rendering-runtime-sync.yml'");
     expect(workflow).toContain(
       "'worker-airtrust/src/__tests__/ops/staging-browser-rendering-runtime-sync.test.ts'",
     );
-    expect(workflow).not.toMatch(/^\s*workflow_dispatch:/m);
+    expect(workflow).toContain('workflow_dispatch:');
+    expect(workflow).toContain('inputs.confirmation');
+    expect(workflow).toContain('AIRTRUST_STAGING_BROWSER_RENDERING_SYNC');
     expect(workflow).not.toMatch(/^\s*schedule:/m);
   });
 
@@ -76,7 +78,7 @@ describe('staging Browser Rendering runtime sync', () => {
     expect(resultWorkflow).toContain('Staging Browser Rendering Runtime Sync');
     expect(resultWorkflow).toContain("github.event.workflow_run.head_branch == 'main'");
     expect(resultWorkflow).toContain('issues: write');
-    expect(resultWorkflow).toContain('gh issue comment 568');
+    expect(resultWorkflow).toContain('gh issue comment 1325');
     expect(resultWorkflow).toContain('github.event.workflow_run.id');
     expect(resultWorkflow).toContain('github.event.workflow_run.conclusion');
     expect(resultWorkflow).not.toContain('actions/checkout');
