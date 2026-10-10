@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { buildScormFunctionalDriverScript } from '../../lib/lms/lms-scorm-functional-driver';
+import { buildScormFunctionalDriverScript, wrapScormBrowserDriver } from '../../lib/lms/lms-scorm-functional-driver';
 
 type TestWindow = typeof globalThis & Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const global = globalThis as TestWindow;
@@ -10,6 +10,16 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
     global.document.body.innerHTML = '';
     delete global.window.COURSE_DATA;
     delete global.window.__AIRTRUST_PLAYER_TEST__;
+  });
+
+  it('executes bundled inner function annotations without leaking bundler globals', () => {
+    // esbuild with keepNames emits __name(...) inside serialized function
+    // bodies. The isolated Chromium context has no ambient __name global.
+    const bundleStyleFunction =
+      'function () { const next = __name((value) => value + 1, "next"); return next(41); }';
+    const script = wrapScormBrowserDriver(bundleStyleFunction);
+    expect(new Function('return ' + script)()).toBe(42);
+    expect(script).not.toContain('LMSSetValue');
   });
 
   it('fails closed on packages without the Factory authoring contract', () => {

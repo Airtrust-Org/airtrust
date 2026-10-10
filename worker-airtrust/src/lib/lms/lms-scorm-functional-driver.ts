@@ -96,6 +96,18 @@ function driveFactoryCourse() {
   return fail('MAX_FACTORY_STEPS_EXCEEDED', limit);
 }
 
+/**
+ * The Worker bundler may preserve inner function names by emitting __name(...)
+ * inside driveFactoryCourse. Function.toString() copies that reference into
+ * Browser Rendering, where the bundler's outer helper is not defined.
+ * Supply a tiny, local name-annotation no-op so the authored DOM driver
+ * stays self-contained in the isolated browser. This helper does NOT write
+ * SCORM state or bypass any completion/assessment gate.
+ */
+export function wrapScormBrowserDriver(source: string): string {
+  return '(() => { const __name = (target) => target; return (' + source + ')(); })()';
+}
+
 export function buildScormFunctionalDriverScript(): string {
-  return '(' + driveFactoryCourse.toString() + ')()';
+  return wrapScormBrowserDriver(driveFactoryCourse.toString());
 }
