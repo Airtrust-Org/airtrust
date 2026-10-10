@@ -9,6 +9,8 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
   beforeEach(() => {
     global.document.body.innerHTML = '';
     delete global.window.COURSE_DATA;
+    delete global.window.AIRTRUST_COURSE_MODEL;
+    delete global.window.AirTrustSCORM;
     delete global.window.__AIRTRUST_PLAYER_TEST__;
     for (const key of [
       'SLIDES', 'current', 'completed', 'scenarioDone', 'interactions', 'moduleQuiz',
@@ -427,5 +429,98 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
 
     const result = new Function('return ' + buildScormFunctionalDriverScript())();
     expect(result).toMatchObject({ supported: true, completed: true, steps: 1 });
+  });
+
+  it('drives AIRTRUST_TRAINING_MODEL_M8 through visible controls and authored assessment', () => {
+    const model = {
+      schema: 'AIRTRUST_TRAINING_MODEL_M8',
+      navigationGate: 'module-assessment',
+      slides: [
+        { id: 's01', kind: 'cover' },
+        { id: 's02', kind: 'lesson', gateItems: [{ id: 'g1' }], hotspots: [{ id: 'h1' }] },
+        { id: 's03', kind: 'scenario', choices: [{ ok: false }, { ok: true }] },
+        { id: 's04', kind: 'assessment' },
+      ],
+      assessment: {
+        masteryScore: 80,
+        questions: [
+          { id: 'q1', correct: 1, a: ['wrong', 'right'] },
+          { id: 'q2', correct: 0, a: ['right', 'wrong'] },
+        ],
+      },
+    };
+    const state: {
+      a: number; c: string[]; d: Record<string, number>; g: Record<string, string[]>;
+      q: Record<string, number>; assessmentPassed: boolean; assessmentEvaluated: boolean;
+      failed: boolean; passed: boolean; best: number;
+    } = {
+      a: 0, c: [], d: {}, g: {}, q: {}, assessmentPassed: false,
+      assessmentEvaluated: false, failed: false, passed: false, best: 0,
+    };
+    const values: Record<string, string> = { 'cmi.core.lesson_status': 'incomplete' };
+    const persist = () => { values['cmi.suspend_data'] = JSON.stringify(state); };
+    const counter = global.document.createElement('span');
+    counter.id = 'counter';
+    const updateCounter = () => { counter.textContent = `${state.a + 1}/${model.slides.length}`; };
+    const addButton = (selector: string, handler: () => void) => {
+      const match = selector.match(/^(?:#([\w-]+)|\[([\w-]+)="([^"]+)"\])$/);
+      if (!match) throw new Error(`Unsupported test selector: ${selector}`);
+      const button = global.document.createElement('button');
+      if (match[1]) button.id = match[1];
+      else button.setAttribute(match[2], match[3]);
+      button.addEventListener('click', handler);
+      global.document.body.append(button);
+      return button;
+    };
+    global.document.body.append(counter);
+    addButton('[data-gate="g1"]', () => { state.g.s02 = ['g1']; persist(); });
+    addButton('[data-hotspot="h1"]', () => { state.g.s02 = [...(state.g.s02 ?? []), 'h1']; persist(); });
+    addButton('[data-choice="1"]', () => { state.d.s03 = 1; persist(); });
+    let questionIndex = 0;
+    addButton('[data-answer="0"]', () => {
+      state.q[model.assessment.questions[questionIndex].id] = 0;
+      persist();
+    });
+    addButton('[data-answer="1"]', () => {
+      state.q[model.assessment.questions[questionIndex].id] = 1;
+      persist();
+    });
+    addButton('#qNext', () => { questionIndex += 1; });
+    addButton('#submitAssessment', () => {
+      state.assessmentEvaluated = true;
+      state.assessmentPassed = state.q.q1 === 1 && state.q.q2 === 0;
+      state.best = state.assessmentPassed ? 100 : 0;
+      values['cmi.core.score.raw'] = String(state.best);
+      persist();
+    });
+    addButton('#completeCourse', () => {
+      state.passed = true;
+      state.c = model.slides.map((slide) => slide.id);
+      state.a = model.slides.length - 1;
+      values['cmi.core.lesson_status'] = 'passed';
+      persist();
+      updateCounter();
+    });
+    addButton('#nextBtn', () => {
+      const slide = model.slides[state.a];
+      if (slide.id === 's02' && !state.g.s02?.includes('g1')) return;
+      if (slide.id === 's03' && state.d.s03 !== 1) return;
+      state.c.push(slide.id);
+      state.a += 1;
+      persist();
+      updateCounter();
+    });
+    updateCounter();
+    persist();
+    global.window.AIRTRUST_COURSE_MODEL = model;
+    global.window.AirTrustSCORM = { get: (key: string) => values[key] ?? '' };
+
+    const result = new Function('return ' + buildScormFunctionalDriverScript())();
+
+    expect(result).toMatchObject({ supported: true, completed: true, reason: null });
+    expect(state.c).toEqual(['s01', 's02', 's03', 's04']);
+    expect(state.d.s03).toBe(1);
+    expect(state.assessmentPassed).toBe(true);
+    expect(values['cmi.core.lesson_status']).toBe('passed');
   });
 });

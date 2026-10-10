@@ -65,11 +65,40 @@ function driveFactoryCourse() {
     resultShown?: boolean;
     score?: number;
   };
+  type AirTrustCourseModelSlide = {
+    id: string;
+    kind: string;
+    gateItems?: Array<{ id: string }>;
+    hotspots?: Array<{ id: string }>;
+    choices?: Array<{ ok?: boolean }>;
+  };
+  type AirTrustCourseModel = {
+    schema?: string;
+    navigationGate?: string;
+    slides?: AirTrustCourseModelSlide[];
+    assessment?: {
+      masteryScore?: number;
+      questions?: Array<{ id: string; correct?: unknown; a?: unknown[] }>;
+    };
+  };
+  type AirTrustCourseModelState = {
+    a?: number;
+    c?: string[];
+    d?: Record<string, number>;
+    g?: Record<string, string[]>;
+    q?: Record<string, number>;
+    best?: number;
+    assessmentPassed?: boolean;
+    passed?: boolean;
+    failed?: boolean;
+    assessmentEvaluated?: boolean;
+  };
   type DriverWindow = {
     COURSE_DATA?: { slides?: DriverSlide[]; packageVersion?: string };
+    AIRTRUST_COURSE_MODEL?: AirTrustCourseModel;
     __AIRTRUST_PLAYER_TEST__?: { getState?: () => DriverState };
     document?: {
-      querySelector: (selector: string) => { disabled?: boolean; click: () => void } | null;
+      querySelector: (selector: string) => { disabled?: boolean; textContent?: string | null; click: () => void } | null;
       querySelectorAll: (selector: string) => ArrayLike<{
         disabled?: boolean;
         dataset?: Record<string, string | undefined>;
@@ -78,6 +107,8 @@ function driveFactoryCourse() {
       }>;
     };
     Scorm?: { get?: (key: string) => string | null };
+    API?: { LMSGetValue?: (key: string) => string | null };
+    AirTrustSCORM?: { get?: (key: string) => string | null };
     getComputedStyle?: (element: unknown) => {
       display?: string;
       visibility?: string;
@@ -85,6 +116,140 @@ function driveFactoryCourse() {
     };
   };
   const w = globalThis as DriverWindow;
+  const authoredModel = w.AIRTRUST_COURSE_MODEL;
+  if (authoredModel?.schema === 'AIRTRUST_TRAINING_MODEL_M8' &&
+      authoredModel.navigationGate === 'module-assessment') {
+    const modelSlides = authoredModel.slides;
+    const assessment = authoredModel.assessment;
+    const questions = assessment?.questions;
+    const scorm = w.AirTrustSCORM;
+    const doc = w.document;
+    const modelClick = (selector: string): boolean => {
+      const control = doc?.querySelector(selector);
+      if (!control || control.disabled) return false;
+      control.click();
+      return true;
+    };
+    const modelClickData = (attribute: string, value: string): boolean => {
+      const control = Array.from(doc?.querySelectorAll(`[data-${attribute}]`) ?? [])
+        .find((item) => item.dataset?.[attribute] === value);
+      if (!control || control.disabled) return false;
+      control.click();
+      return true;
+    };
+    const readCmiValue = (key: string): string => {
+      try {
+        const value = w.API?.LMSGetValue?.(key);
+        if (value !== undefined && value !== null) return String(value);
+      } catch {
+        // Fall back to the package's read-only SCORM adapter when direct API access is unavailable.
+      }
+      return String(scorm?.get?.(key) ?? '');
+    };
+    const readModelState = (): AirTrustCourseModelState | null => {
+      try {
+        const raw = readCmiValue('cmi.suspend_data');
+        if (!raw) return {};
+        const parsed = JSON.parse(raw) as unknown;
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+          ? parsed as AirTrustCourseModelState
+          : null;
+      } catch {
+        return null;
+      }
+    };
+    if (!Array.isArray(modelSlides) || modelSlides.length === 0 || modelSlides.length > 1000 ||
+        !Array.isArray(questions) || questions.length === 0 || questions.length > 100 ||
+        !doc || !scorm?.get) {
+      return { supported: false, completed: false, steps: 0, reason: 'NO_AIRTRUST_COURSE_MODEL_DRIVER' };
+    }
+    const mastery = Number(assessment?.masteryScore);
+    if (!Number.isFinite(mastery) || mastery <= 0 || questions.some((question) =>
+      !question || typeof question.id !== 'string' || !Array.isArray(question.a) ||
+      !Number.isInteger(question.correct) || Number(question.correct) < 0 ||
+      Number(question.correct) >= question.a.length,
+    )) {
+      return { supported: true, completed: false, steps: 0, reason: 'AIRTRUST_COURSE_MODEL_ANSWER_UNAVAILABLE' };
+    }
+    const last = modelSlides[modelSlides.length - 1];
+    const limit = Math.min(4000, Math.max(120, modelSlides.length * 20));
+    for (let step = 0; step < limit; step++) {
+      const state = readModelState();
+      if (!state) return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_STATE_INVALID' };
+      const completed = Array.isArray(state.c) ? state.c : [];
+      const lessonStatus = readCmiValue('cmi.core.lesson_status').toLowerCase();
+      const score = Number(readCmiValue('cmi.core.score.raw'));
+      if (state.passed === true && completed.length >= modelSlides.length &&
+          modelSlides.every((slide) => completed.includes(slide.id)) && lessonStatus === 'passed' &&
+          Number.isFinite(score) && score >= mastery) {
+        return { supported: true, completed: true, steps: step, reason: null };
+      }
+      const rawCounter = doc.querySelector('#counter')?.textContent ?? '';
+      const counter = rawCounter.match(/^(\d+)\s*\/\s*(\d+)$/);
+      const index = counter ? Number(counter[1]) - 1 : Number(state.a ?? 0);
+      if (!Number.isInteger(index) || index < 0 || index >= modelSlides.length ||
+          (counter && Number(counter[2]) !== modelSlides.length)) {
+        return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_POSITION_INVALID' };
+      }
+      const slide = modelSlides[index];
+      if (!slide?.id) return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_SLIDE_INVALID' };
+      if (slide.kind === 'scenario' && state.d?.[slide.id] === undefined) {
+        const correct = (slide.choices ?? []).findIndex((choice) => choice?.ok === true);
+        if (correct < 0 || !modelClick(`[data-choice="${correct}"]`)) {
+          return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_SCENARIO_CONTROL_MISSING' };
+        }
+      }
+      for (const item of [...(slide.gateItems ?? []), ...(slide.hotspots ?? [])]) {
+        const seen = state.g?.[slide.id] ?? [];
+        if (typeof item?.id !== 'string' || !seen.includes(item.id)) {
+          const attribute = slide.hotspots?.some((hotspot) => hotspot.id === item?.id)
+            ? 'hotspot'
+            : 'gate';
+          if (typeof item?.id !== 'string' || !modelClickData(attribute, item.id)) {
+            return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_INTERACTION_MISSING' };
+          }
+        }
+      }
+      if (slide.kind === 'assessment') {
+        const assessmentState = readModelState();
+        if (!assessmentState?.assessmentPassed) {
+          if (assessmentState?.assessmentEvaluated || assessmentState?.failed) {
+            if (!modelClick('#retryAssessment')) {
+              return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_ASSESSMENT_RETRY_MISSING' };
+            }
+          }
+          for (let questionIndex = 0; questionIndex < questions.length; questionIndex++) {
+            const question = questions[questionIndex];
+            if (readModelState()?.q?.[question.id] === Number(question.correct)) {
+              // Resume safely when a correct learner answer is already persisted.
+            } else if (!modelClick(`[data-answer="${Number(question.correct)}"]`)) {
+              return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_ANSWER_CONTROL_MISSING' };
+            }
+            if (questionIndex < questions.length - 1 && !modelClick('#qNext')) {
+              return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_QUESTION_NEXT_MISSING' };
+            }
+          }
+          if (!modelClick('#submitAssessment')) {
+            return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_ASSESSMENT_SUBMIT_MISSING' };
+          }
+          if (!readModelState()?.assessmentPassed) {
+            return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_ASSESSMENT_NOT_MASTERED' };
+          }
+          if (!modelClick('#completeCourse')) {
+            return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_COMPLETE_CONTROL_MISSING' };
+          }
+          continue;
+        }
+      }
+      if (index === modelSlides.length - 1 && slide.id === last.id) {
+        return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_COMPLETION_EVIDENCE_MISSING' };
+      }
+      if (!modelClick('#nextBtn')) {
+        return { supported: true, completed: false, steps: step, reason: 'AIRTRUST_COURSE_MODEL_NEXT_CONTROL_MISSING' };
+      }
+    }
+    return { supported: true, completed: false, steps: limit, reason: 'AIRTRUST_COURSE_MODEL_MAX_STEPS_EXCEEDED' };
+  }
   const slides = w.COURSE_DATA?.slides;
   const getState = w.__AIRTRUST_PLAYER_TEST__?.getState;
   const click = (selector: string): boolean => {
