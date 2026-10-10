@@ -108,7 +108,15 @@ async function findTargetInTenant(
     .prepare(
       `SELECT
          u.id,
-         COALESCE(ue.role, u.perfil) AS perfil,
+         COALESCE(
+           (SELECT p.perfil
+              FROM usuarios_empresas_perfis p
+             WHERE p.usuario_id = u.id
+               AND p.empresa_id = ue.empresa_id
+               AND p.perfil = 'COORDENACAO_VOO' AND p.ativo = 1
+             LIMIT 1),
+           ue.role, u.perfil
+         ) AS perfil,
          (SELECT COUNT(*) FROM usuarios_empresas all_ue WHERE all_ue.usuario_id = u.id)
            AS membership_count
        FROM usuarios u
@@ -129,7 +137,15 @@ async function findTargetForPlatformAdmin(
     .prepare(
       `SELECT
          u.id,
-         COALESCE(ue.role, u.perfil) AS perfil,
+         COALESCE(
+           (SELECT p.perfil
+              FROM usuarios_empresas_perfis p
+             WHERE p.usuario_id = u.id
+               AND p.empresa_id = ue.empresa_id
+               AND p.perfil = 'COORDENACAO_VOO' AND p.ativo = 1
+             LIMIT 1),
+           ue.role, u.perfil
+         ) AS perfil,
          ue.empresa_id,
          (SELECT COUNT(*) FROM usuarios_empresas all_ue WHERE all_ue.usuario_id = u.id)
            AS membership_count
@@ -183,7 +199,7 @@ async function resolveTargetAccess(
 }
 
 function assertManagerMayManageTarget(callerRole: string, targetRole: string): void {
-  const privilegedTarget = ['ADMINISTRADOR', 'ADMIN', 'GESTOR', 'MANAGER'].includes(
+  const privilegedTarget = ['ADMINISTRADOR', 'ADMIN', 'GESTOR', 'MANAGER', 'COORDENACAO_VOO'].includes(
     targetRole.toUpperCase(),
   );
   if (privilegedTarget && !['ADMINISTRADOR', 'ADMIN'].includes(callerRole)) {
@@ -231,6 +247,8 @@ protectedAdminUsuariosRoutes.get('/', async (c) => {
              ORDER BY CASE UPPER(uep.perfil)
                WHEN 'ADMINISTRADOR' THEN 5
                WHEN 'ADMIN' THEN 5
+               -- A coordination profile must not be hidden by older USER/ALUNO rows.
+               WHEN 'COORDENACAO_VOO' THEN 4.5
                WHEN 'GESTOR' THEN 4
                WHEN 'MANAGER' THEN 4
                WHEN 'INSTRUTOR' THEN 3
