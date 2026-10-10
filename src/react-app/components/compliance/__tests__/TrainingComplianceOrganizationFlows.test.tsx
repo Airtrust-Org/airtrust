@@ -341,4 +341,43 @@ describe('Training enrollment reconciliation', () => {
 
     expect(toastMock.success).toHaveBeenCalled();
   });
+  it('exige preview e confirmação explícita antes de cancelar matrícula sem requisito', async () => {
+    const data = structuredClone(reconciliationData);
+    data.matriculas_revisao[0].matricula_status = 'NAO_INICIADO';
+    data.matriculas_revisao[0].qualificacao_tipo_codigo = 'NR-26';
+    fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/compliance-treinamentos/reconciliacao/limpeza') {
+        const body = JSON.parse(String(init?.body));
+        expect(body.matricula_ids).toEqual([501]);
+        return ok({
+          elegiveis: [{ matricula_id: 501, status: 'NAO_INICIADO' }],
+          bloqueadas: [],
+          canceladas: body.aplicar ? 1 : 0,
+        });
+      }
+      if (url.includes('/reconciliacao') && (!init?.method || init.method === 'GET'))
+        return ok(data);
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    renderWithClient(<TrainingEnrollmentReconciliation setorId={3} funcaoId={9} />);
+    await screen.findAllByText('CRM EAD');
+    fireEvent.click(screen.getByRole('button', { name: /Revisar/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Analisar limpeza/ }));
+    await screen.findByText(/1 elegível\(is\) para cancelamento lógico/);
+    const writesBefore = fetchWithAuthMock.mock.calls.filter(([url, init]) =>
+      url === '/api/compliance-treinamentos/reconciliacao/limpeza' &&
+      JSON.parse(String((init as RequestInit).body)).aplicar === true,
+    );
+    expect(writesBefore).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar cancelamento/ }));
+    await waitFor(() =>
+      expect(fetchWithAuthMock.mock.calls.filter(([url, init]) =>
+        url === '/api/compliance-treinamentos/reconciliacao/limpeza' &&
+        JSON.parse(String((init as RequestInit).body)).aplicar === true,
+      )).toHaveLength(1),
+    );
+    expect(toastMock.success).toHaveBeenCalled();
+  });
+
 });
