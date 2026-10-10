@@ -1034,50 +1034,11 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
   return c.json({ success: true, data: created }, 201);
 });
 
-// These are administrative completion warnings, not flight-safety clearance gates.
-// Final RDV approval and Petrobras XML export retain their own validation rules.
-async function listFlightPlanningPendencies(db: D1Database, empresaId: number, vooId: number): Promise<string[]> {
-  type PlanningStage = {
-    origem_icao: string | null;
-    destino_icao: string | null;
-    peso_passageiros?: number | null;
-    peso_bagagem?: number | null;
-    payload?: number | null;
-  };
-  const stages = await db.prepare(
-    'SELECT origem_icao, destino_icao, peso_passageiros, peso_bagagem, payload FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id'
-  ).bind(empresaId, vooId).all<PlanningStage>().catch(async (error: unknown) => {
-    // Match flight-presentation's legacy-schema handling: missing weight
-    // columns remain explicit pendencies instead of breaking the flight detail.
-    const message = error instanceof Error ? error.message : String(error);
-    if (!/no such column:\\s*(peso_passageiros|peso_bagagem|payload)/i.test(message)) throw error;
-    return db.prepare(
-      'SELECT origem_icao, destino_icao FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id'
-    ).bind(empresaId, vooId).all<PlanningStage>();
-  });
-  const rows = stages.results || [];
-  const pendencias: string[] = [];
-  if (!rows.length) {
-    pendencias.push('Etapas e rota ainda não informadas');
-  } else {
-    if (rows.some(stage => !String(stage.origem_icao || '').trim() || !String(stage.destino_icao || '').trim())) {
-      pendencias.push('Completar origem e destino das etapas');
-    }
-    // Zero is an explicitly supplied valid weight; only missing values are pending.
-    const first = rows[0];
-    if (first.peso_passageiros == null) pendencias.push('Informar peso de passageiros');
-    if (first.peso_bagagem == null) pendencias.push('Informar peso de bagagem');
-    if (first.payload == null) pendencias.push('Informar peso de carga');
-  }
-  return pendencias;
-}
-
 controleVoos.get('/voos/:id', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const flight = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
-  const [presentation, pendenciasPlanejamento, aircraft] = await Promise.all([
+  const [presentation, aircraft] = await Promise.all([
     enrichFlightsWithPresentation(c.env.DB, empresaId, [flight]),
-    listFlightPlanningPendencies(c.env.DB, empresaId, flight.id),
     flight.aeronave_id
       ? c.env.DB.prepare(
         'SELECT modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1'
@@ -1088,7 +1049,6 @@ controleVoos.get('/voos/:id', auth(), async (c) => {
   return c.json({ success: true, data: {
     ...presented,
     modelo_aeronave: aircraft?.modelo ?? null,
-    pendencias_planejamento: pendenciasPlanejamento,
   } });
 });
 
@@ -1117,9 +1077,8 @@ controleVoos.post('/voos/:id/confirmar-planejamento', auth(), requireControleVoo
   if (voo.status !== 'planejado') {
     throw new ApiError('Confirmação disponível somente para voos em planejamento', 409, 'CONTROLE_VOOS_PLANNING_WRONG_STATUS');
   }
-  // Coordination may confirm preliminary planning with missing route/weights.
-  // The warnings remain visible and must be resolved before the final XML when applicable.
-  const pendenciasPlanejamento = await listFlightPlanningPendencies(c.env.DB, empresaId, voo.id);
+  // Missing planning fields are reported by flight-presentation and do not
+  // block this preliminary confirmation. Crew validation remains mandatory.
   const crew = await c.env.DB.prepare(
     "SELECT funcao FROM cv_voo_tripulantes WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL"
   ).bind(empresaId, voo.id).all<{ funcao: string }>();
@@ -1133,14 +1092,11 @@ controleVoos.post('/voos/:id/confirmar-planejamento', auth(), requireControleVoo
       (empresa_id, voo_id, tipo_evento, status_anterior, status_novo, descricao, metadata_json, usuario_id, created_by, updated_by, created_at, updated_at)
       SELECT ?, ?, 'sistema', ?, ?, 'Planejamento confirmado pela Coordenação', ?, ?, ?, ?, datetime('now'), datetime('now')
       WHERE (SELECT changes()) > 0`)
-      .bind(empresaId, voo.id, voo.status, voo.status, JSON.stringify({ action: 'confirm_planning', confirmed_flight_version: voo.versao + 1, pending_count: pendenciasPlanejamento.length }), userId, userId, userId),
+      .bind(empresaId, voo.id, voo.status, voo.status, JSON.stringify({ action: 'confirm_planning', confirmed_flight_version: voo.versao + 1 }), userId, userId, userId),
   ]);
   assertFlightCasApplied(updated);
   const confirmed = await getFlightOrThrow(c.env.DB, id, empresaId);
-  return c.json({ success: true, data: {
-    ...(await enrichFlightsWithPresentation(c.env.DB, empresaId, [confirmed]))[0],
-    pendencias_planejamento: pendenciasPlanejamento,
-  } });
+  return c.json({ success: true, data: (await enrichFlightsWithPresentation(c.env.DB, empresaId, [confirmed]))[0] });
 });
 
 // Soft-delete is reserved for erroneous, unpublished preliminary bookings.
