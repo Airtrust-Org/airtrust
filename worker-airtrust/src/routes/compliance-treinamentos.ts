@@ -1673,8 +1673,10 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
     for (const req of person.requisitos) {
       const key = `${person.id}:${req.qualificacao_tipo_id}`;
       if (blockingEnrollmentKeys.has(key)) continue;
+      if (req.evidencia_pendente_validacao ||
+          !trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;
+      // Requisito ja concluido e valido nao deve ser contado como matricula faltante.
       requisitosSemMatricula += 1;
-      if (req.evidencia_pendente_validacao || !trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;
       const current = gaps.get(req.qualificacao_tipo_id) || {
         qualificacao_tipo_id: req.qualificacao_tipo_id,
         qualificacao_tipo_nome: req.qualificacao_tipo_nome,
