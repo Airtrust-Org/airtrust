@@ -10,6 +10,9 @@ test('classifies SQL errors into bounded non-sensitive reasons', () => {
   assert.equal(classifyReason('UNIQUE constraint failed: qualificacoes_historico.funcionario_id, qualificacoes_historico.data_conclusao'), 'UNIQUE_CONSTRAINT');
   assert.equal(classifyReason('NOT NULL constraint failed: qualification.secret@example.com'), 'NOT_NULL_CONSTRAINT');
   assert.equal(classifyReason('FOREIGN KEY constraint failed'), 'FOREIGN_KEY_CONSTRAINT');
+  assert.equal(classifyReason('Histórico existente #999 tem status incompatível para reuso: RENOVADA'), 'HISTORY_STATUS_INCOMPATIBLE');
+  assert.equal(classifyReason('Tipo de qualificação sem categoria_id canônico no tenant da matrícula'), 'QUALIFICATION_TYPE_MAPPING_INVALID');
+  assert.equal(classifyReason('Categoria do tipo de qualificação não está integrada ao LMS'), 'CATEGORY_CONFIG_INVALID');
   assert.equal(classifyReason('no such column: private_column'), 'MISSING_COLUMN');
   assert.equal(classifyReason('trg_QUALIFICATION_HISTORY_CATEGORY_INVALID'), 'CATEGORY_CONSTRAINT');
   assert.equal(classifyReason('stack secret'), 'OTHER_REDACTED');
