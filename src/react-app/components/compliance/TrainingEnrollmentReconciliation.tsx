@@ -240,10 +240,10 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
 
   const syncPending = useMutation({
     mutationFn: async (aplicar: boolean) => {
-      const call = () => readJson<{
+      const call = async () => readJson<{
         modo: string; pendentes: number; matriculadas: number;
         restantes_estimadas: number; sem_curso_unico: number;
-      }>(fetchWithAuth('/api/compliance-treinamentos/reconciliacao/matricular-pendentes', {
+      }>(await fetchWithAuth('/api/compliance-treinamentos/reconciliacao/matricular-pendentes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ aplicar }),
