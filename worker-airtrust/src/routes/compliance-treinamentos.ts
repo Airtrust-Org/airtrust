@@ -1886,9 +1886,12 @@ app.post('/reconciliacao/matricular-pendentes', requireRole('admin'), async (c) 
     buildSnapshot(db, empresaId, access),
     loadLmsEnrollments(db, empresaId),
     db.prepare(
-      `SELECT id,qualificacao_tipo_id FROM lms_cursos
-        WHERE empresa_id=? AND ativo=1 AND publicado=1 AND deleted_at IS NULL
-          AND qualificacao_tipo_id IS NOT NULL ORDER BY id`,
+      `SELECT c.id,c.qualificacao_tipo_id FROM lms_cursos c
+         JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id
+           AND qt.empresa_id=c.empresa_id AND qt.ativo=1 AND qt.deleted_at IS NULL
+        WHERE c.empresa_id=? AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL
+          AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
+        ORDER BY c.id`,
     ).bind(empresaId).all<{ id: number; qualificacao_tipo_id: number }>(),
   ]);
   const byType = new Map<number, number[]>();
