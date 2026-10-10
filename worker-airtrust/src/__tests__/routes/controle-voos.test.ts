@@ -843,6 +843,16 @@ afterEach(() => {
 describe('controle voos routes', () => {
   it('confirma planejamento com rota e pesos pendentes e informa as pendencias sem bloquear a liberacao', async () => {
     const db = createSqliteD1();
+    // The legacy fixture omits modern stage-weight columns. Exercise the
+    // correction path with the actual stage columns, not a non-persisting fallback.
+    runSql(db.databasePath, `
+      ALTER TABLE cv_voo_etapas ADD COLUMN peso_passageiros REAL;
+      ALTER TABLE cv_voo_etapas ADD COLUMN peso_bagagem REAL;
+      ALTER TABLE cv_voo_etapas ADD COLUMN peso_vazio REAL;
+      ALTER TABLE cv_voo_etapas ADD COLUMN peso_tripulacao REAL;
+      ALTER TABLE cv_voo_etapas ADD COLUMN peso_total REAL;
+      ALTER TABLE cv_voo_etapas ADD COLUMN unidade_peso TEXT;
+    `);
     seedCrewForFlight601(db);
     runSql(db.databasePath, `
       INSERT INTO cv_voo_tripulantes (empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by)
