@@ -36,7 +36,8 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
     '<button data-answer="0" type="button">Ignorar</button>' +
     '<button data-answer="1" type="button">Confirmar após verificar</button>' +
     '<button id="next" type="button" disabled>Avançar</button></main>' +
-    '<script src="course-model.js"></script><script src="course_data.js"></script><script src="app.js"></script>' +
+    '<script src="scorm.js"></script><script src="course-model.js"></script>' +
+    '<script src="course_data.js"></script><script src="app.js"></script>' +
     '</body></html>';
   const app = String.raw`
 (function () {
@@ -52,14 +53,37 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
     active: 0, done: [], assess: { 1: { passed: false } },
     choices: {}, completed: false, ended: false, mode: 'journey',
   };
+  var modelState = {
+    a: 0, c: [], d: {}, g: {}, q: {}, best: 0,
+    assessmentPassed: false, passed: false, failed: false, assessmentEvaluated: false,
+  };
   var selected = null;
+  var apiAdapter = window.AirTrustSCORM;
+  var submit = document.createElement('button');
+  submit.id = 'submitAssessment';
+  submit.type = 'button';
+  submit.textContent = 'Concluir avaliação';
+  submit.disabled = true;
+  var complete = document.createElement('button');
+  complete.id = 'completeCourse';
+  complete.type = 'button';
+  complete.textContent = 'Concluir curso';
+  complete.hidden = true;
+  document.querySelector('main').appendChild(submit);
+  document.querySelector('main').appendChild(complete);
+  var persistModelState = function () {
+    api.LMSSetValue('cmi.suspend_data', JSON.stringify(modelState));
+    api.LMSCommit('');
+  };
   var closed = false;
   window.__AIRTRUST_PLAYER_TEST__ = {
     getState: function () { return JSON.parse(JSON.stringify(state)); },
+    getModelState: function () { return JSON.parse(JSON.stringify(modelState)); },
   };
+  if (!apiAdapter || typeof apiAdapter.get !== 'function') throw Error('QA_SCORM_ADAPTER_NOT_INITIALIZED');
   api.LMSSetValue('cmi.core.lesson_status', 'incomplete');
   api.LMSSetValue('cmi.core.lesson_location', '1/1');
-  api.LMSCommit('');
+  persistModelState();
   api.LMSGetLastError();
   api.LMSGetErrorString('0');
   api.LMSGetDiagnostic('0');
@@ -67,6 +91,8 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
     button.addEventListener('click', function () {
       if (state.ended) return;
       selected = Number(button.getAttribute('data-answer'));
+      modelState.q['qa-interaction-1'] = selected;
+      persistModelState();
       document.querySelector('#next').disabled = false;
     });
   });
@@ -74,23 +100,40 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
     if (state.ended || selected !== 1) return;
     if (!state.assess[1].passed) {
       state.assess[1].passed = true;
-      api.LMSSetValue('cmi.core.score.raw', '100');
-      return;
     }
+  });
+  submit.addEventListener('click', function () {
+    if (modelState.q['qa-interaction-1'] === undefined || modelState.assessmentEvaluated) return;
+    modelState.assessmentEvaluated = true;
+    modelState.assessmentPassed = modelState.q['qa-interaction-1'] === 1;
+    modelState.best = modelState.assessmentPassed ? 100 : 0;
+    modelState.failed = !modelState.assessmentPassed;
+    state.assess[1].passed = modelState.assessmentPassed;
+    api.LMSSetValue('cmi.core.score.raw', String(modelState.best));
+    api.LMSSetValue('cmi.core.lesson_status', modelState.assessmentPassed ? 'passed' : 'failed');
+    persistModelState();
+    submit.disabled = true;
+    complete.hidden = !modelState.assessmentPassed;
+  });
+  complete.addEventListener('click', function () {
+    if (!modelState.assessmentPassed || modelState.passed) return;
+    modelState.passed = true;
+    modelState.c = ['qa-slide-1'];
     state.done = [0];
     state.completed = true;
     state.ended = true;
     state.mode = 'review';
     api.LMSSetValue('cmi.core.lesson_status', 'passed');
+    api.LMSSetValue('cmi.core.score.raw', String(modelState.best));
     api.LMSSetValue('cmi.core.lesson_location', '1/1');
-    api.LMSCommit('');
+    persistModelState();
+    document.querySelector('#next').disabled = true;
     window.parent.postMessage({
       type: 'AIRTRUST_COMPLETION_DIAGNOSTICS_V1',
       payload: { currentSlide: 'qa-slide-1', slides: { completed: 1, total: 1 },
         assessment: { approved: true, score: 100 }, packageStatus: 'passed',
         updatedAt: new Date().toISOString() },
     }, '*');
-    document.querySelector('#next').disabled = true;
   });
   function finish() {
     if (closed) return;
@@ -106,6 +149,20 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
   const dataJs = 'window.COURSE_DATA = ' + JSON.stringify(data) + ';';
   return {
     'index.html': strToU8(html),
+    'scorm.js': strToU8(String.raw`(function () {
+  var api = window.API;
+  if (!api) { try { api = window.parent && window.parent.API; } catch (_) { api = null; } }
+  if (!api) throw Error('QA_SCORM_API_MISSING');
+  var finished = false;
+  window.AirTrustSCORM = {
+    initialize: function () { return String(api.LMSInitialize('')).toLowerCase() === 'true'; },
+    get: function (key) { return String(api.LMSGetValue(key) ?? ''); },
+    set: function (key, value) { return String(api.LMSSetValue(key, String(value))).toLowerCase() === 'true'; },
+    commit: function () { return String(api.LMSCommit('')).toLowerCase() === 'true'; },
+    finish: function () { if (finished) return true; finished = String(api.LMSFinish('')).toLowerCase() === 'true'; return finished; },
+    isFinished: function () { return finished; }
+  };
+})();`),
     'app.js': strToU8(app),
     'course-model.js': strToU8(modelJs),
     'course_data.js': strToU8(dataJs),
