@@ -8,7 +8,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { resolve, dirname } from 'node:path';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -249,4 +251,45 @@ test('STAGING_SMOKE_ROLE invalido falha antes de gerar SQL', () => {
   });
   assert.notEqual(status, 0);
   assert.ok(stderr.includes('STAGING_SMOKE_ROLE invalido'), `stderr deveria rejeitar role invalido: ${stderr}`);
+});
+
+test('apply usa D1 query transport limitado e nao o bulk-import --file', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'airtrust-staging-smoke-command-test-'));
+  const fakeNpx = join(tempDir, 'npx');
+  const capturePath = join(tempDir, 'capture.json');
+  writeFileSync(
+    fakeNpx,
+    `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const command = args.find((arg) => arg.startsWith('--command=')) || '';
+fs.writeFileSync(process.env.SEED_TRANSPORT_CAPTURE, JSON.stringify({
+  args: args.map((arg) => arg.startsWith('--command=') ? '--command=[SQL]' : arg),
+  commandLength: command.length,
+}));
+`,
+    'utf8',
+  );
+  chmodSync(fakeNpx, 0o755);
+
+  try {
+    const env = {
+      STAGING_D1_NAME: 'airtrust-db-staging-baseline-20260701',
+      CONFIRM_STAGING_D1: 'airtrust-db-staging-baseline-20260701',
+      PATH: `${tempDir}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH || ''}`,
+      SEED_TRANSPORT_CAPTURE: capturePath,
+    };
+    const { status, stdout, stderr } = runSeed(env, ['--apply', '--confirm-staging-baseline']);
+    assert.equal(status, 0, stderr);
+    assert.match(stdout, /SEED_APPLIED/);
+
+    const captured = JSON.parse(readFileSync(capturePath, 'utf8'));
+    assert.ok(captured.args.includes('airtrust-db-staging-baseline-20260701'));
+    assert.ok(captured.args.includes('--remote'));
+    assert.ok(captured.args.includes('--command=[SQL]'));
+    assert.ok(!captured.args.includes('--file'));
+    assert.ok(captured.commandLength > 0 && captured.commandLength <= 100_000);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
