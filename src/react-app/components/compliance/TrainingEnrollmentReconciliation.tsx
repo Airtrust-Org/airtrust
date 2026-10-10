@@ -90,6 +90,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
   const queryClient = useQueryClient();
   const [courses, setCourses] = useState<Record<number, number>>({});
   const [actions, setActions] = useState<Record<number, string>>({});
+  const [syncPreview, setSyncPreview] = useState<{ pendentes: number; sem_curso_unico: number } | null>(null);
   const [cleanupPreview, setCleanupPreview] = useState<{
     elegiveis: Array<{ matricula_id: number; status: string }>;
     bloqueadas: Array<{ matricula_id: number; motivo: string }>;
@@ -237,6 +238,46 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
       showToast.error(error instanceof Error ? error.message : 'Erro ao reconciliar matrícula'),
   });
 
+  const syncPending = useMutation({
+    mutationFn: async (aplicar: boolean) => {
+      const call = () => readJson<{
+        modo: string; pendentes: number; matriculadas: number;
+        restantes_estimadas: number; sem_curso_unico: number;
+      }>(fetchWithAuth('/api/compliance-treinamentos/reconciliacao/matricular-pendentes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aplicar }),
+      }));
+      if (!aplicar) return call();
+      let total = 0;
+      let finalResult = await call();
+      total += finalResult.matriculadas;
+      // Cada chamada executa no maximo 40 ciclos; parar se nao houve progresso.
+      for (let lote = 1; lote < 50 && finalResult.restantes_estimadas > 0; lote += 1) {
+        if (!finalResult.matriculadas) throw new Error('Sincronizacao sem progresso; rever bloqueios no LMS.');
+        finalResult = await call();
+        total += finalResult.matriculadas;
+      }
+      if (finalResult.restantes_estimadas > 0)
+        throw new Error('Ainda existem pendencias; execute uma nova conciliacao.');
+      return { ...finalResult, matriculadas: total };
+    },
+    onSuccess: async (result, aplicar) => {
+      if (!aplicar) {
+        setSyncPreview({ pendentes: result.pendentes, sem_curso_unico: result.sem_curso_unico });
+        return;
+      }
+      setSyncPreview(null);
+      showToast.success(`${result.matriculadas} ciclo(s) LMS criado(s) ou renovado(s) sem e-mail.`);
+      await invalidate();
+    },
+    onError: (error) => {
+      setSyncPreview(null);
+      showToast.error(error instanceof Error ? error.message : 'Erro ao criar matriculas pendentes');
+      void invalidate();
+    },
+  });
+
   const cleanup = useMutation({
     mutationFn: async (args: { ids: number[]; aplicar: boolean }) =>
       readJson<{
@@ -339,6 +380,39 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
       {section === 'gaps' ? (
         <section>
           <h3 className="font-semibold text-slate-900">A matricular</h3>
+          <div className="my-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+            <p className="font-medium text-slate-900">Conciliar requisitos e matrículas de todos os cargos</p>
+            <p className="mt-1 text-slate-600">
+              Usa o histórico de qualificações para matricular quem nunca fez, está vencido ou
+              entrou na janela de renovação de 60 dias. Conserva treinamentos concluídos e
+              matrículas em andamento. Cursos presenciais e sem vínculo EAD único são sinalizados.
+            </p>
+            {!syncPreview ? (
+              <button type="button"
+                disabled={syncPending.isPending}
+                onClick={() => syncPending.mutate(false)}
+                className="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                Analisar matrículas pendentes
+              </button>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <p>{syncPreview.pendentes} novo(s) ciclo(s) necessário(s);
+                  {' '}{syncPreview.sem_curso_unico} pendência(s) sem curso EAD publicado único.</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button"
+                    disabled={syncPending.isPending || syncPreview.pendentes === 0}
+                    onClick={() => syncPending.mutate(true)}
+                    className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                    Confirmar matrículas pendentes
+                  </button>
+                  <button type="button" onClick={() => setSyncPreview(null)}
+                    className="rounded-md border border-slate-300 px-3 py-2 text-xs">
+                    Voltar sem alterar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <p className="mt-1 text-sm text-slate-500">
             Requisitos sem matrícula correspondente. A matrícula é criada sem envio de e-mail.
           </p>
