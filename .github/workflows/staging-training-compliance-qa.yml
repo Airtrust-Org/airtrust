@@ -182,8 +182,16 @@ jobs:
             0534) bash scripts/staging/validate-0534-postconditions.sh --target="$STAGING_D1_NAME" ;;
             0526) bash scripts/staging/validate-0526-postconditions.sh --target="$STAGING_D1_NAME" ;;
             0538)
+              set +e
               bash scripts/staging/validate-0534-postconditions.sh --target="$STAGING_D1_NAME"
+              baseline_status=$?
               bash scripts/staging/validate-0538-postconditions.sh --target="$STAGING_D1_NAME"
+              overlay_status=$?
+              set -e
+              if [[ "$baseline_status" -ne 0 || "$overlay_status" -ne 0 ]]; then
+                echo "TRAINING_COMPLIANCE_QA_VALIDATOR_FAILURE baseline=$baseline_status overlay=$overlay_status" >&2
+                exit 1
+              fi
               ;;
             *) echo "TRAINING_COMPLIANCE_QA_SCHEMA_SELECTION_INVALID" >&2; exit 1 ;;
           esac
