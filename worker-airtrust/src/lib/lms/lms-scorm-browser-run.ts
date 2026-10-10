@@ -78,9 +78,9 @@ function analyzeTrace(candidateSha256: string, startedAt: string, trace: TraceIt
 /** Sanitized failure category for QA and audit summaries: never expose browser exception text. */
 export function classifyScormBrowserError(error: unknown): string {
   const message = error instanceof Error ? error.message : '';
-  if (/\\b(?:429|quota|rate.limit|too many requests)\\b/i.test(message)) return 'BROWSER_QUOTA';
-  if (/\\b(?:403|401|forbidden|access.denied|unauthorized)\\b/i.test(message)) return 'BROWSER_ACCESS';
-  if (/\\b(?:502|503|504|service unavailable|browser service)\\b/i.test(message)) return 'BROWSER_SERVICE';
+  if (/\b(?:429|quota|rate.limit|too many requests)\b/i.test(message)) return 'BROWSER_QUOTA';
+  if (/\b(?:403|401|forbidden|access.denied|unauthorized)\b/i.test(message)) return 'BROWSER_ACCESS';
+  if (/\b(?:502|503|504|service unavailable|browser service)\b/i.test(message)) return 'BROWSER_SERVICE';
   if (/timeout|timed out|deadline/i.test(message)) return 'BROWSER_TIMEOUT';
   if (/connection|disconnected|network|socket|websocket/i.test(message)) return 'BROWSER_CONNECTION';
   return 'BROWSER_OTHER';
