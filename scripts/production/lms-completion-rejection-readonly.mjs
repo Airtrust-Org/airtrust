@@ -25,7 +25,10 @@ export function classifyReason(reason) {
   const raw = typeof reason === 'string' ? reason.slice(0, 700) : '';
   const reasonText = raw.toUpperCase();
   if (!raw) return 'NO_INTERNAL_REASON';
-  if (/UNIQUE CONSTRAINT FAILED|SQLITE_CONSTRAINT_UNIQUE/.test(reasonText)) return 'UNIQUE_CONSTRAINT';
+  if (/STATUS INCOMPAT[IÍ]VEL PARA REUSO|REGISTRO COM STATUS|QUALIFICA[CÇ][AÃ]O_STATUS_INCOMPATIBLE/.test(reasonText)) return 'HISTORY_STATUS_INCOMPATIBLE';
+  if (/SEM CATEGORIA_ID CAN[OÔ]NICO|SEM TIPO VINCULADO|SEM C[OÓ]DIGO DEFINIDO/.test(reasonText)) return 'QUALIFICATION_TYPE_MAPPING_INVALID';
+  if (/N[AÃ]O EST[AÁ] INTEGRADA AO LMS|CATEGORIA DO TIPO/.test(reasonText)) return 'CATEGORY_CONFIG_INVALID';
+    if (/UNIQUE CONSTRAINT FAILED|SQLITE_CONSTRAINT_UNIQUE/.test(reasonText)) return 'UNIQUE_CONSTRAINT';
   if (/FOREIGN KEY CONSTRAINT FAILED|SQLITE_CONSTRAINT_FOREIGNKEY/.test(reasonText)) return 'FOREIGN_KEY_CONSTRAINT';
   if (/NOT NULL CONSTRAINT FAILED/.test(reasonText)) return 'NOT_NULL_CONSTRAINT';
   if (/CHECK CONSTRAINT FAILED/.test(reasonText)) return 'CHECK_CONSTRAINT';
