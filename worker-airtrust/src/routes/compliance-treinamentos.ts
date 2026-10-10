@@ -1700,14 +1700,24 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
           (rule) => rule.qualificacao_tipo_id === Number(enrollment.qualificacao_tipo_id),
         )
       : undefined;
+    const requirement = enrollment.qualificacao_tipo_id
+      ? employee.requisitos.find((req) => req.qualificacao_tipo_id === Number(enrollment.qualificacao_tipo_id))
+      : undefined;
+    const redundantWithValidEvidence = requirement?.obrigatoriedade === 'OBRIGATORIA'
+      && !requirement.evidencia_pendente_validacao
+      && requirement.status_compliance === 'CONFORME'
+      && !trainingComplianceNeedsEnrollment(requirement.status_compliance, requirement.dias_para_vencer)
+      && String(enrollment.status || '').trim().toUpperCase() === 'NAO_INICIADO';
     let situacao:
       | 'MATRICULA_COM_REQUISITO'
+      | 'MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA'
       | 'MATRICULADO_SEM_REQUISITO'
       | 'NAO_APLICA_MATRICULADO'
       | 'CURSO_SEM_MODELO'
       | 'MATRICULA_AVULSA_RECONCILIADA';
     if (!enrollment.qualificacao_tipo_id) situacao = 'CURSO_SEM_MODELO';
     else if (effective?.obrigatoriedade === 'NAO_APLICA') situacao = 'NAO_APLICA_MATRICULADO';
+    else if (redundantWithValidEvidence) situacao = 'MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA';
     else if (effective) situacao = 'MATRICULA_COM_REQUISITO';
     else if (decisions.get(Number(enrollment.id))?.decisao === 'MANTER_AVULSA') {
       situacao = 'MATRICULA_AVULSA_RECONCILIADA';
