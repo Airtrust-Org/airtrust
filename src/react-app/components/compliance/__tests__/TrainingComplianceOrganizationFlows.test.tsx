@@ -255,7 +255,7 @@ describe('Training enrollment reconciliation', () => {
       if (url.includes('/reconciliacao') && (!init?.method || init.method === 'GET')) {
         return ok(reconciliationData);
       }
-      if (url === '/api/lms/matriculas/lote') return ok({ criadas: 2, ignoradas: 0, erros: 0 });
+      if (url === '/api/compliance-treinamentos/reconciliacao/matricular-pendentes') return ok({ matriculadas: 2, restantes_estimadas: 0 });
       if (url === '/api/lms/matriculas/convites/lote')
         return ok({ enviados: 2, sem_email: 0, falhas: 0, nao_encontradas: 0 });
       if (url.includes('/reconciliacao/') && url.endsWith('/decisao')) return ok({ id: 1 });
@@ -266,26 +266,21 @@ describe('Training enrollment reconciliation', () => {
     renderWithClient(<TrainingEnrollmentReconciliation setorId={3} funcaoId={9} />);
     await screen.findAllByText('CRM EAD');
     expect(screen.getByText(/6 matrícula\(s\) alinhada\(s\)/)).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Curso EAD para CRM Periódico' })).toHaveClass(
-      'text-xs',
-      'leading-5',
-      'text-slate-700',
-    );
+    expect(screen.getAllByText('CRM EAD').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /Matricular gaps \(sem e-mail\)/ }));
     await waitFor(() =>
       expect(fetchWithAuthMock).toHaveBeenCalledWith(
-        '/api/lms/matriculas/lote',
+        '/api/compliance-treinamentos/reconciliacao/matricular-pendentes',
         expect.objectContaining({ method: 'POST' }),
       ),
     );
     const enrollmentCall = fetchWithAuthMock.mock.calls.find(
-      ([url]) => url === '/api/lms/matriculas/lote',
+      ([url]) => url === '/api/compliance-treinamentos/reconciliacao/matricular-pendentes',
     );
     expect(JSON.parse(String((enrollmentCall?.[1] as RequestInit)?.body))).toMatchObject({
-      funcionario_ids: [1, 2],
-      curso_id: 77,
-      enviar_convite_email: false,
+      aplicar: true,
+      qualificacao_tipo_id: 100,
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Convites/ }));
