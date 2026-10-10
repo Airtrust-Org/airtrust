@@ -15,6 +15,7 @@ import {
   buildScormNativeResumeOwnershipScript,
   buildScormProgressParsersScript,
   buildScormSessionCloseRuntimeScript,
+  buildScormQueuedCommitScript,
 } from '../services/lms-scorm-wrapper-runtime';
 import { generateJWT, verifyJWT } from '../utils/security';
 import { getEmpresaIdOptional } from './escalas-shared';
@@ -1980,14 +1981,7 @@ ${buildScormNativeResumeOwnershipScript()}
     return status === 408 || status === 425 || status === 429 || status >= 500;
   }
 
-  function queueLatestCommit(data, eventType) {
-    // A regular autosave/close must never replace the student's queued final request.
-    if (queuedCommit && queuedCommit.eventType === 'SCORM_USER_FINALIZE' &&
-        eventType !== 'SCORM_USER_FINALIZE') return;
-    if (!queuedCommit || isFinalCommitEvent(eventType) || !isFinalCommitEvent(queuedCommit.eventType)) {
-      queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
-    }
-  }
+${buildScormQueuedCommitScript()}
 
   function flushQueuedCommit() {
     if (commitInFlight || !queuedCommit) return;
