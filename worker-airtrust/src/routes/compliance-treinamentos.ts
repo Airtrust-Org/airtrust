@@ -50,9 +50,6 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 const SCOPES = TRAINING_COMPLIANCE_SCOPES;
 const OBRIGATORIEDADES = ['OBRIGATORIA', 'RECOMENDADA', 'NAO_APLICA'] as const;
-// Somente os modelos da matriz QSMS/Segurança Operacional final (0534).
-// Outros cursos, inclusive FDM legado/Comitê, têm remediações e designações próprias.
-
 const ORIGENS = [
   'REGULATORIO',
   'PTO',
@@ -144,9 +141,7 @@ function normalizeEnum<T extends readonly string[]>(
   allowed: T,
   fallback: T[number],
 ): T[number] {
-  const normalized = String(value || '')
-    .trim()
-    .toUpperCase();
+  const normalized = String(value || '').trim().toUpperCase();
   return (allowed as readonly string[]).includes(normalized) ? (normalized as T[number]) : fallback;
 }
 export const ruleApplies = trainingComplianceRuleApplies;
@@ -158,7 +153,6 @@ async function loadEmployees(db: D1Database, empresaId: number): Promise<Employe
   const statusExpr = cols.has('status') ? "UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'" : '1 = 1';
   const ativoExpr = cols.has('ativo') ? 'AND COALESCE(f.ativo, 1) = 1' : '';
   const deletedExpr = cols.has('deleted_at') ? 'AND f.deleted_at IS NULL' : '';
-
   const { results } = await db
     .prepare(
       `SELECT f.id, f.nome,
