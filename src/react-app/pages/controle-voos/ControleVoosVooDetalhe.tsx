@@ -249,7 +249,12 @@ export default function ControleVoosVooDetalhe() {
     try {
       const result = await apiClient.post(`/controle-voos/voos/${voo.id}/confirmar-planejamento`, { versao: voo.versao });
       if (!result.success) throw new Error(result.error || 'Falha ao confirmar planejamento.');
-      toast.success('Planejamento confirmado. O Pilot App identificará a nova versão ao conectar.');
+      const data = result.data as { pendencias_planejamento?: string[] } | undefined;
+      if (data?.pendencias_planejamento?.length) {
+        toast.warning('Planejamento confirmado com pendências. A Coordenação poderá corrigir os dados depois.');
+      } else {
+        toast.success('Planejamento confirmado. O Pilot App identificará a nova versão ao conectar.');
+      }
       await refetchVoo();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível confirmar planejamento.');
@@ -590,6 +595,16 @@ export default function ControleVoosVooDetalhe() {
               </div>
 
               <EdbShadowReadinessCard flightId={voo.id} />
+
+              {Boolean(voo.pendencias_planejamento?.length) && (
+                <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100" aria-label="Pendências de planejamento">
+                  <h2 className="text-sm font-semibold">Planejamento com pendências para regularizar</h2>
+                  <p className="mt-1 text-xs">Estas informações podem ser corrigidas pela Coordenação após confirmar ou liberar o voo. Verifique os requisitos do fechamento e do XML antes da finalização.</p>
+                  <ul className="mt-2 list-disc pl-5 text-sm">
+                    {voo.pendencias_planejamento?.map((pendencia) => <li key={pendencia}>{pendencia}</li>)}
+                  </ul>
+                </section>
+              )}
 
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Ações</h2>
