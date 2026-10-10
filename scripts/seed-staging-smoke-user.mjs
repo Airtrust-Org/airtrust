@@ -64,7 +64,7 @@ const DEFAULT_TENANT_ROLE = 'admin';
 const ALLOWED_PERFIL_VALUES = ['ADMIN', 'ADMINISTRADOR', 'GESTOR', 'INSTRUTOR', 'ALUNO', 'COMPLIANCE', 'USUARIO'];
 // usuarios_empresas.role nao tem CHECK constraint, mas o app so reconhece estes valores
 // (middleware/tenant.ts normalizeTenantRole / ROLE_HIERARCHY); qualquer outro cai em 'viewer'.
-const ALLOWED_TENANT_ROLE_VALUES = ['admin', 'manager', 'editor', 'viewer'];
+const ALLOWED_TENANT_ROLE_VALUES = ['admin', 'manager', 'editor', 'instructor', 'student', 'viewer'];
 
 function validatePerfil(value) {
   const perfil = String(value || DEFAULT_PERFIL).trim().toUpperCase();
