@@ -21,11 +21,13 @@ export function LmsPendingPanel({
   if (explanation.canComplete) return null;
 
   const { items, adminItems, summary } = explanation;
+  const registrationPending = explanation.registrationPending === true;
+  const heading = registrationPending ? 'Registro da conclusão' : 'Pendências para concluir';
 
   return (
     <section
       data-testid="lms-pending-panel"
-      aria-label="Pendências para concluir"
+      aria-label={heading}
       className="mt-4 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40"
     >
       <button
@@ -36,7 +38,7 @@ export function LmsPendingPanel({
       >
         <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
         <span className="flex-1 text-sm font-semibold text-amber-900 dark:text-amber-100">
-          Pendências para concluir
+          {heading}
         </span>
         {open ? (
           <ChevronUp className="h-4 w-4 text-amber-700 dark:text-amber-300" />
