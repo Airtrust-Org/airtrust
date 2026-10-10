@@ -155,16 +155,22 @@ jobs:
           # A later governed migration supersedes the 0526 matrix cycle, so
           # validating 0526's historical values against a 0534 DB is incorrect.
           # Select from the live staging ledger, with no D1 mutations.
-          ledger_json="$(cd worker-airtrust && npx wrangler d1 execute "$STAGING_D1_NAME" --env staging --remote --json --command "SELECT (SELECT COUNT(*) FROM d1_migrations WHERE name='0526_training_compliance_matrix_alignment.sql') AS m0526, (SELECT COUNT(*) FROM d1_migrations WHERE name='0534_training_compliance_final_matrix.sql') AS m0534, (SELECT COUNT(*) FROM d1_migrations WHERE name='0538_training_compliance_manager_designation_nr05.sql') AS m0538;")"
+          ledger_json="$(cd worker-airtrust && npx wrangler d1 execute "$STAGING_D1_NAME" --env staging --remote --json --command "SELECT (SELECT COUNT(*) FROM d1_migrations WHERE name='0526_training_compliance_matrix_alignment.sql') AS m0526, (SELECT COUNT(*) FROM d1_migrations WHERE name='0534_training_compliance_final_matrix.sql') AS m0534, (SELECT COUNT(*) FROM d1_migrations WHERE name='0538_training_compliance_manager_designation_nr05.sql') AS m0538, (SELECT COUNT(*) FROM d1_migrations WHERE name='0546_training_compliance_canonical_category_repair.sql') AS m0546;")"
           schema_state="$(printf '%s' "$ledger_json" | node -e '
             let text = "";
             process.stdin.on("data", c => text += c);
             process.stdin.on("end", () => {
               let row;
               try { row = JSON.parse(text)?.[0]?.results?.[0]; } catch {}
-              const a = Number(row?.m0526), b = Number(row?.m0534), c = Number(row?.m0538);
-              if (![a, b, c].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 1)) {
+              const a = Number(row?.m0526), b = Number(row?.m0534), c = Number(row?.m0538), d = Number(row?.m0546);
+              if (![a, b, c, d].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 1)) {
                 console.error("TRAINING_COMPLIANCE_QA_LEDGER_INVALID"); process.exit(1);
+              }
+              if (d === 1) {
+                if (a !== 1 || b !== 1 || c !== 1) {
+                  console.error("TRAINING_COMPLIANCE_QA_0546_BASELINE_INVALID"); process.exit(1);
+                }
+                process.stdout.write("0546"); return;
               }
               if (c === 1) {
                 // Validate unaffected 0534 invariants plus the explicit 0538 overlay postconditions.
@@ -181,6 +187,18 @@ jobs:
           case "$schema_state" in
             0534) bash scripts/staging/validate-0534-postconditions.sh --target="$STAGING_D1_NAME" ;;
             0526) bash scripts/staging/validate-0526-postconditions.sh --target="$STAGING_D1_NAME" ;;
+            0546)
+              set +e
+              bash scripts/staging/validate-0534-postconditions.sh --target="$STAGING_D1_NAME"
+              baseline_status=$?
+              bash scripts/staging/validate-0546-postconditions.sh --target="$STAGING_D1_NAME"
+              overlay_status=$?
+              set -e
+              if [[ "$baseline_status" -ne 0 || "$overlay_status" -ne 0 ]]; then
+                echo "TRAINING_COMPLIANCE_QA_VALIDATOR_FAILURE baseline=$baseline_status overlay=$overlay_status" >&2
+                exit 1
+              fi
+              ;;
             0538)
               set +e
               bash scripts/staging/validate-0534-postconditions.sh --target="$STAGING_D1_NAME"
@@ -259,7 +277,7 @@ jobs:
             echo '## Staging Training Compliance QA'
             echo ''
             echo "- deployed SHA: \`$EXPECTED_DEPLOYED_SHA\`"
-            echo '- Schemas 0491 + 0492 + 0494 + 0508 + ledger-selected matrix (0526/0534): `${{ needs.d1_fixture.result }}`'
+            echo '- Schemas 0491 + 0492 + 0494 + 0508 + ledger-selected matrix (0526/0534/0538/0546): `${{ needs.d1_fixture.result }}`'
             echo '- Synthetic never-realized case: `${{ needs.browser.result }}`'
             echo '- Synthetic cleanup: `${{ needs.d1_cleanup.result }}`'
             echo '- Production action: `none`'
