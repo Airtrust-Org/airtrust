@@ -7,14 +7,17 @@ const student: EmployeeSectorAccess = {
 };
 
 function enrollmentDb(allowedTriples: Array<[number, number, number]>) {
-  const prepare = vi.fn((sql: string) => ({
-    bind: (empresaId: number, cursoId: number, funcionarioId: number) => ({
+  const prepare = vi.fn((sql: string) => {
+    if (!sql.includes('FROM lms_matriculas')) throw new Error('Unexpected query');
+    return {
+      bind: (empresaId: number, cursoId: number, funcionarioId: number) => ({
       first: async () => ({
         allowed: allowedTriples.some(([empresa, curso, funcionario]) =>
           empresa === empresaId && curso === cursoId && funcionario === funcionarioId) ? 1 : 0,
       }),
     }),
-  }));
+    };
+  });
   return { db: { prepare } as unknown as D1Database, prepare };
 }
 
