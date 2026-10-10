@@ -363,3 +363,29 @@ export function buildScormNativeResumeOwnershipScript(): string {
 
 `;
 }
+
+/**
+ * Final event queue priority lives in the wrapper IIFE. Preserve the exact
+ * Finish/finalization payload when unload autosaves race with an in-flight commit.
+ * This is runtime JavaScript, not TypeScript executed on the Worker.
+ */
+export function buildScormQueuedCommitScript(): string {
+  return `
+  function queuedCommitPriority(eventType) {
+    switch (String(eventType || 'SCORM_COMMIT').toUpperCase()) {
+      case 'SCORM_USER_FINALIZE': return 5;
+      case 'SCORM_FINISH': return 4;
+      case 'SCORM_COMPLETION_CANDIDATE': return 3;
+      case 'SCORM_BEFORE_UNLOAD_COMMIT':
+      case 'SCORM_VISIBILITY_COMMIT': return 2;
+      default: return 1;
+    }
+  }
+
+  function queueLatestCommit(data, eventType) {
+    if (!queuedCommit ||
+        queuedCommitPriority(eventType) >= queuedCommitPriority(queuedCommit.eventType)) {
+      queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
+    }
+  }`;
+}
