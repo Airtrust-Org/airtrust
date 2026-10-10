@@ -4,6 +4,7 @@
 // rollback_plan_required: dedicated governed D1 Time Travel workflow and forward-only compensation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { buildRestoreSql } from '../production/restore-compliance-81-cancellations.mjs';
 
 function mockCandidates(){
@@ -46,4 +47,13 @@ test('SQL string is deterministic on input order and includes 15 preserved cance
   const rows=mockCandidates();
   assert.equal(buildRestoreSql(rows,SHA),buildRestoreSql(rows.slice().reverse(),SHA));
   assert.match(buildRestoreSql(rows,SHA),/mandatory_applicable=0 AND status='CANCELADO'/);
+});
+
+test('actual SQL batch restores 81 original cycles atomically in SQLite and rejects drift',()=>{
+  const plan=buildRestoreSql(mockCandidates(),SHA);
+  const check=spawnSync('python3',['scripts/__tests__/restore-compliance-81-sql-fixture.py'],{encoding:'utf8',input:plan,maxBuffer:1024*1024});
+  assert.equal(check.status,0,(check.stderr||'').slice(0,1500));
+  assert.match(check.stdout,/POSITIVE:81-original-matriculas-and-cycles-restored/);
+  assert.match(check.stdout,/NEGATIVE:altered_cycle:PASS/);
+  assert.match(check.stdout,/NEGATIVE:concurrent_audit:PASS/);
 });
