@@ -38,6 +38,11 @@ function driveFactoryCourse() {
     __AIRTRUST_PLAYER_TEST__?: { getState?: () => DriverState };
     document?: {
       querySelector: (selector: string) => { disabled?: boolean; click: () => void } | null;
+      querySelectorAll: (selector: string) => ArrayLike<{
+        disabled?: boolean;
+        offsetParent?: unknown;
+        click: () => void;
+      }>;
     };
   };
   const w = globalThis as DriverWindow;
@@ -52,6 +57,16 @@ function driveFactoryCourse() {
     if (!control || control.disabled) return false;
     control.click();
     return true;
+  };
+  const clickRequiredInteractions = (): number => {
+    const items = Array.from(w.document?.querySelectorAll('.screen.active [data-gate-id]') ?? []);
+    let clicked = 0;
+    for (const item of items) {
+      if (item.disabled || item.offsetParent === null) continue;
+      item.click();
+      clicked++;
+    }
+    return clicked;
   };
   const fail = (reason: string, steps: number) => ({
     supported: true, completed: false, steps, reason,
@@ -146,6 +161,12 @@ function driveFactoryCourse() {
         return fail('ASSESSMENT_NOT_MASTERED', steps);
       }
     }
+    // Some authored Factory packages gate progression on learner exploration of
+    // visible DOM interactions (tabs, checklists, system diagrams and timelines).
+    // Their test state intentionally does not expose gate keys, so drive the
+    // package's real active-screen controls and let their own click handlers
+    // record the interactions before attempting the course's Next control.
+    clickRequiredInteractions();
     if (!click('#next')) return fail('COURSE_NEXT_MISSING', steps);
     const after = getState();
     if (activeIndex(after) === current && after.ended !== true && after.courseCompleted !== true &&

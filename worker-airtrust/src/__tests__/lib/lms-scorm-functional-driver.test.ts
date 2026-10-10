@@ -178,6 +178,59 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
     expect(done).toEqual([0, 1, 2]);
   });
 
+  it('clicks visible authored interaction gates before advancing the learner journey', () => {
+    const first = global.document.createElement('section');
+    first.className = 'screen active';
+    const gate = global.document.createElement('button');
+    gate.setAttribute('data-gate-id', 'micro-0');
+    // jsdom has no layout; model a visible browser control for offsetParent.
+    Object.defineProperty(gate, 'offsetParent', { configurable: true, value: first });
+    first.append(gate);
+    const second = global.document.createElement('section');
+    second.className = 'screen';
+    global.document.body.append(first, second);
+
+    let active = 0;
+    let gateVisited = false;
+    let completed = false;
+    let ended = false;
+    const done: number[] = [];
+    const next = global.document.createElement('button');
+    next.id = 'next';
+    next.disabled = true;
+    next.addEventListener('click', () => {
+      if (active === 0 && !gateVisited) return;
+      done.push(active);
+      if (active === 0) {
+        active = 1;
+        first.classList.remove('active');
+        second.classList.add('active');
+        next.disabled = false;
+      } else {
+        completed = true;
+        ended = true;
+      }
+    });
+    gate.addEventListener('click', () => {
+      gateVisited = true;
+      next.disabled = false;
+    });
+    global.document.body.append(next);
+    global.window.COURSE_DATA = {
+      slides: [{ id: 'interactive', kind: 'lesson' }, { id: 'finish', kind: 'lesson' }],
+    };
+    global.window.__AIRTRUST_PLAYER_TEST__ = {
+      getState: () => ({
+        active, done: [...done], completed, ended, mode: 'journey',
+      }),
+    };
+
+    const result = new Function('return ' + buildScormFunctionalDriverScript())();
+    expect(result).toMatchObject({ supported: true, completed: true, steps: 2 });
+    expect(gateVisited).toBe(true);
+    expect(done).toEqual([0, 1]);
+  });
+
   it('supports safety course tuple choices and gate interactions using visible controls', () => {
     const slides = [
       { id: 'lesson', kind: 'lesson', gateItems: ['a', 'b'] },
