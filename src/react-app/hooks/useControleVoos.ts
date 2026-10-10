@@ -253,6 +253,7 @@ export interface CvFrmsCrewDispatchAssessment {
 export interface CvFrmsFlightDispatchItem {
   voo_id: number;
   prefixo: string;
+  modelo_aeronave?: string | null;
   status: CvFlightStatus;
   horario_previsto_partida: string;
   aeronave_id: number | null;
