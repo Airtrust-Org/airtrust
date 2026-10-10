@@ -124,30 +124,33 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
 
   const enroll = useMutation({
     mutationFn: async (gap: Reconciliation['gaps_matricula'][number]) => {
-      const cursoId =
-        courses[gap.qualificacao_tipo_id] ||
-        (gap.cursos_ead.length === 1 ? gap.cursos_ead[0].id : 0);
-      if (!cursoId) throw new Error('Selecione qual curso EAD será usado para a matrícula.');
-      const response = await fetchWithAuth('/api/lms/matriculas/lote', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          funcionario_ids: gap.funcionarios.map((f) => f.id),
-          curso_id: cursoId,
-          observacoes: 'Matrícula criada pela reconciliação do Compliance de Treinamentos.',
-          enviar_convite_email: false,
-        }),
-      });
-      return readJson<{ criadas: number; ignoradas: number; erros: number }>(response);
+      if (gap.cursos_ead.length !== 1) {
+        throw new Error('Matrícula exige exatamente um curso EAD vinculado ao requisito.');
+      }
+      let criadas = 0;
+      let restantes = 0;
+      for (let lote = 0; lote < 50; lote += 1) {
+        const result = await readJson<{ matriculadas: number; restantes_estimadas: number }>(
+          await fetchWithAuth('/api/compliance-treinamentos/reconciliacao/matricular-pendentes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aplicar: true, qualificacao_tipo_id: gap.qualificacao_tipo_id }),
+          }),
+        );
+        criadas += result.matriculadas;
+        restantes = result.restantes_estimadas;
+        if (!restantes) break;
+        if (!result.matriculadas) throw new Error('Reconciliacao sem progresso; verificar o curso publicado.');
+      }
+      if (restantes > 0) throw new Error('Restam matriculas para processar. Execute novamente.');
+      return { criadas };
     },
     onSuccess: async (data) => {
-      showToast.success(
-        `${data.criadas} matrícula(s) criada(s); ${data.ignoradas} já existente(s).`,
-      );
+      showToast.success(`${data.criadas} matricula(s) criada(s) ou renovada(s) conforme historico.`);
       await invalidate();
     },
     onError: (error) =>
-      showToast.error(error instanceof Error ? error.message : 'Erro ao matricular gaps'),
+      showToast.error(error instanceof Error ? error.message : 'Erro ao matricular requisitos'),
   });
 
   const invite = useMutation({
@@ -513,7 +516,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                       <button
                         type="button"
                         aria-label="Matricular gaps (sem e-mail)"
-                        disabled={!gap.cursos_ead.length || enroll.isPending}
+                        disabled={gap.cursos_ead.length !== 1 || enroll.isPending}
                         onClick={() => enroll.mutate(gap)}
                         className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
                       >
