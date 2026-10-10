@@ -123,6 +123,10 @@ function sanitizeBoolean(value: unknown): boolean {
   return value === true;
 }
 
+function sanitizePackageBoolean(value: unknown): boolean {
+  return value === true || (typeof value === 'number' && Number.isFinite(value) && value > 0);
+}
+
 function sanitizeSlideRef(value: unknown): LmsDiagnosticSlideRef | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
@@ -143,6 +147,18 @@ function sanitizeSlideRefList(value: unknown): LmsDiagnosticSlideRef[] {
   return out;
 }
 
+function sanitizePackageRefList(value: unknown): LmsDiagnosticSlideRef[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, MAX_ITEMS_PER_COLLECTION).flatMap((entry) => {
+    if (typeof entry === 'string') {
+      const id = sanitizeText(entry, 120);
+      return id ? [{ id, index: null, title: null }] : [];
+    }
+    const ref = sanitizeSlideRef(entry);
+    return ref ? [ref] : [];
+  });
+}
+
 function sanitizeModuleResultList(value: unknown): LmsDiagnosticModuleResult[] {
   if (!Array.isArray(value)) return [];
   const out: LmsDiagnosticModuleResult[] = [];
@@ -150,7 +166,10 @@ function sanitizeModuleResultList(value: unknown): LmsDiagnosticModuleResult[] {
   for (const entry of value.slice(0, MAX_ITEMS_PER_COLLECTION)) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
     const raw = entry as Record<string, unknown>;
-    const module = sanitizeSlideRef(raw.module);
+    const moduleId = typeof raw.module === 'string' ? sanitizeText(raw.module, 120) : null;
+    const module = moduleId
+      ? { id: moduleId, index: null, title: null }
+      : sanitizeSlideRef(raw.module);
     if (!module) continue;
 
     const assessmentRaw =
@@ -162,11 +181,11 @@ function sanitizeModuleResultList(value: unknown): LmsDiagnosticModuleResult[] {
     out.push({
       module,
       assessment: {
-        required: sanitizeBoolean(assessmentRaw.required),
-        completed: sanitizeBoolean(assessmentRaw.completed),
-        scoreRaw: sanitizeFiniteNumber(assessmentRaw.scoreRaw),
-        masteryScore: sanitizeFiniteNumber(assessmentRaw.masteryScore),
-        passed: typeof passedRaw === 'boolean' ? passedRaw : null,
+        required: sanitizePackageBoolean(assessmentRaw.required ?? raw.passed != null),
+        completed: sanitizePackageBoolean(assessmentRaw.completed ?? raw.passed),
+        scoreRaw: sanitizeFiniteNumber(assessmentRaw.scoreRaw ?? raw.scoreRaw),
+        masteryScore: sanitizeFiniteNumber(assessmentRaw.masteryScore ?? raw.masteryScore),
+        passed: typeof (passedRaw ?? raw.passed) === 'boolean' ? (passedRaw ?? raw.passed) as boolean : null,
       },
     });
   }
@@ -224,16 +243,18 @@ export function parseGranularDiagnostic(raw: unknown): LmsGranularDiagnostic | n
     slides: {
       totalRequired: sanitizeFiniteNumber(slidesRaw.totalRequired),
       completedRequired: sanitizeFiniteNumber(slidesRaw.completedRequired),
-      missing: sanitizeSlideRefList(slidesRaw.missing),
+      missing: sanitizePackageRefList(slidesRaw.missing),
     },
     assessment: {
-      required: sanitizeBoolean(assessmentRaw.required),
-      completed: sanitizeBoolean(assessmentRaw.completed),
+      required: sanitizePackageBoolean(assessmentRaw.required),
+      completed: typeof assessmentRaw.required === 'number' && typeof assessmentRaw.completed === 'number'
+        ? assessmentRaw.completed >= assessmentRaw.required
+        : sanitizePackageBoolean(assessmentRaw.completed),
       scoreRaw: sanitizeFiniteNumber(assessmentRaw.scoreRaw),
       masteryScore: sanitizeFiniteNumber(assessmentRaw.masteryScore),
       passed: typeof passedRaw === 'boolean' ? passedRaw : null,
-      unanswered: sanitizeSlideRefList(assessmentRaw.unanswered),
-      incomplete: sanitizeSlideRefList(assessmentRaw.incomplete),
+      unanswered: sanitizePackageRefList(assessmentRaw.unanswered),
+      incomplete: sanitizePackageRefList(assessmentRaw.incomplete),
     },
     moduleResults: sanitizeModuleResultList(data.moduleResults),
     packageStatus: {

@@ -63,6 +63,31 @@ describe('parseGranularDiagnostic', () => {
     expect(parsed?.slides.missing).toEqual([]);
   });
 
+  it('normalizes the V1 package diagnostic shape used by authored SCORM packages', () => {
+    const parsed = parseGranularDiagnostic({
+      version: 1,
+      courseId: 'pbn-pilotos',
+      slides: { totalRequired: 59, completedRequired: 59, missing: [] },
+      assessment: {
+        required: 6,
+        completed: 6,
+        scoreRaw: 100,
+        masteryScore: 80,
+        passed: true,
+        unanswered: [],
+        incomplete: [],
+      },
+      moduleResults: [{ module: 'pilot_assess_05', assessment: 'pilot_assess_05', scoreRaw: 100, masteryScore: 80, passed: true }],
+      packageStatus: { lessonStatus: 'passed', finishRequested: true },
+    });
+
+    expect(parsed?.assessment).toMatchObject({ required: true, completed: true, passed: true });
+    expect(parsed?.moduleResults).toMatchObject([{
+      module: { id: 'pilot_assess_05' },
+      assessment: { required: true, completed: true, passed: true, scoreRaw: 100 },
+    }]);
+  });
+
   it('ignores tenant/enrollment identifiers asserted by the payload (test 9)', () => {
     const parsed = parseGranularDiagnostic({
       version: 1,

@@ -318,10 +318,15 @@ export function buildScormSessionCloseRuntimeScript(): string {
       return false;
     }
     if (typeof serialized !== 'string' || serialized.length > MAX_RELAYED_DIAGNOSTICS_CHARS) return false;
+    var diagnostics = JSON.parse(serialized);
+    // The message type is the package's V1 contract marker. Some published
+    // SCORM packages carry that marker only on the envelope, while the LMS
+    // parser expects it on the payload as well.
+    if (diagnostics.version == null) diagnostics.version = 1;
     postToParent({
       type: 'lms:completion-diagnostics',
       matriculaId: MATRICULA_ID,
-      diagnostics: JSON.parse(serialized),
+      diagnostics: diagnostics,
     });
     return true;
   }`;
