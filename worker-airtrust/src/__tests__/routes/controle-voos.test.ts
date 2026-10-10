@@ -841,6 +841,83 @@ afterEach(() => {
 });
 
 describe('controle voos routes', () => {
+  it('confirma planejamento com rota e pesos pendentes e informa as pendencias sem bloquear a liberacao', async () => {
+    const db = createSqliteD1();
+    // The legacy fixture omits modern stage-weight columns. Exercise the
+    // correction path with the actual stage columns, not a non-persisting fallback.
+    runSql(db.databasePath, `
+      ALTER TABLE cv_voo_etapas ADD COLUMN peso_passageiros REAL;
+      ALTER TABLE cv_voo_etapas ADD COLUMN peso_bagagem REAL;
+      ALTER TABLE cv_voo_etapas ADD COLUMN peso_vazio REAL;
+      ALTER TABLE cv_voo_etapas ADD COLUMN peso_tripulacao REAL;
+      ALTER TABLE cv_voo_etapas ADD COLUMN peso_total REAL;
+      ALTER TABLE cv_voo_etapas ADD COLUMN unidade_peso TEXT;
+    `);
+    seedCrewForFlight601(db);
+    runSql(db.databasePath, `
+      INSERT INTO cv_voo_tripulantes (empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by)
+      VALUES (1, 601, 1002, 'SIC', 10, 10);
+      INSERT INTO cv_voo_etapas
+        (empresa_id, voo_id, numero_etapa, origem_icao, destino_icao, created_by, updated_by)
+      VALUES (1, 601, 1, 'SBRJ', NULL, 10, 10);
+    `);
+
+    const initial = await request(db, '/api/controle-voos/voos/601');
+    expect(initial.status).toBe(200);
+    const before = (await initial.json()) as { data: { versao: number; pendencias_planejamento: string[] } };
+    expect(before.data.pendencias_planejamento).toEqual(expect.arrayContaining([
+      'Completar origem e destino das etapas',
+      'Informar peso de passageiros',
+      'Informar peso de bagagem',
+      'Informar peso de carga',
+    ]));
+
+    const confirm = await request(db, '/api/controle-voos/voos/601/confirmar-planejamento', {
+      method: 'POST',
+      body: JSON.stringify({ versao: before.data.versao }),
+    });
+    expect(confirm.status).toBe(200);
+    const confirmed = (await confirm.json()) as { data: { versao: number; pendencias_planejamento: string[] } };
+    expect(confirmed.data.pendencias_planejamento).toHaveLength(4);
+    expect(confirmed.data.versao).toBe(before.data.versao + 1);
+
+    const release = await request(db, '/api/controle-voos/voos/601/status', {
+      method: 'POST',
+      body: JSON.stringify({ versao: confirmed.data.versao, status: 'liberado_operacionalmente' }),
+    });
+    expect(release.status).toBe(200);
+
+    const detail = await request(db, '/api/controle-voos/voos/601');
+    expect(detail.status).toBe(200);
+    const detailData = (await detail.json()) as { data: { status: string; versao: number; pendencias_planejamento: string[] } };
+    expect(detailData.data.status).toBe('liberado_operacionalmente');
+    expect(detailData.data.pendencias_planejamento).toEqual(confirmed.data.pendencias_planejamento);
+
+    const fixWeight = await request(db, '/api/controle-voos/voos/601', {
+      method: 'PATCH',
+      body: JSON.stringify({ versao: detailData.data.versao, peso_passageiros: 100 }),
+    });
+    expect(fixWeight.status).toBe(200);
+
+    const corrected = await request(db, '/api/controle-voos/voos/601');
+    const correctedData = (await corrected.json()) as { data: { pendencias_planejamento: string[] } };
+    expect(correctedData.data.pendencias_planejamento).not.toContain('Informar peso de passageiros');
+    expect(correctedData.data.pendencias_planejamento).toContain('Completar origem e destino das etapas');
+  });
+
+  it('mantem a exigencia de PIC/SIC para confirmar planejamento destinado a tripulacao', async () => {
+    const db = createSqliteD1();
+    const flight = await request(db, '/api/controle-voos/voos/601');
+    const body = (await flight.json()) as { data: { versao: number } };
+    const confirm = await request(db, '/api/controle-voos/voos/601/confirmar-planejamento', {
+      method: 'POST',
+      body: JSON.stringify({ versao: body.data.versao }),
+    });
+    expect(confirm.status).toBe(409);
+    await expect(confirm.json()).resolves.toMatchObject({
+      code: 'CONTROLE_VOOS_PLANNING_CREW_INCOMPLETE',
+    });
+  });
   it('cria voo valido e registra evento operacional', async () => {
     const db = createSqliteD1();
 

@@ -39,6 +39,12 @@ function toLocalInput(value: string | null | undefined) {
   return shifted.toISOString().slice(0, 16);
 }
 
+function initialRoute(voo: CvVoo): string[] {
+  return voo.rota_pontos?.length
+    ? voo.rota_pontos.map(point => point.id == null ? '' : String(point.id))
+    : [String(voo.origem_id), String(voo.destino_id)];
+}
+
 export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [loadingCatalogs, setLoadingCatalogs] = useState(false);
@@ -116,6 +122,8 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
   const fieldClass =
     'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
 
+  const canEditPlanning = voo.status === 'planejado' || voo.status === 'liberado_operacionalmente';
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
@@ -135,10 +143,21 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
       return;
     }
 
-    if (voo.status === 'planejado' && (routeIds.length < 2 || routeIds.some((id, index) => !id || (index > 0 && id === routeIds[index - 1])))) {
-      setError('Informe a rota completa, com pelo menos origem e destino distintos.');
+    const originalRoute = initialRoute(voo);
+    const routeChanged = canEditPlanning && (routeIds.length !== originalRoute.length ||
+      routeIds.some((id, index) => id !== originalRoute[index]));
+    if (routeChanged && (routeIds.length < 2 || routeIds.some((id, index) => !id || (index > 0 && id === routeIds[index - 1])))) {
+      setError('Para alterar a rota, informe pontos válidos sem duplicação consecutiva.');
       return;
     }
+    const changedWeights = {
+      ...(form.peso_passageiros !== (voo.peso_passageiros_planejado == null ? '' : String(voo.peso_passageiros_planejado))
+        ? { peso_passageiros: form.peso_passageiros === '' ? null : Number(form.peso_passageiros) } : {}),
+      ...(form.peso_bagagem !== (voo.peso_bagagem_planejado == null ? '' : String(voo.peso_bagagem_planejado))
+        ? { peso_bagagem: form.peso_bagagem === '' ? null : Number(form.peso_bagagem) } : {}),
+      ...(form.peso_carga !== (voo.peso_carga_planejado == null ? '' : String(voo.peso_carga_planejado))
+        ? { peso_carga: form.peso_carga === '' ? null : Number(form.peso_carga) } : {}),
+    };
     setSaving(true);
     try {
       const response = await apiClient.patch<unknown>(`/controle-voos/voos/${voo.id}`, {
@@ -152,12 +171,10 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
         horario_previsto_partida: departure.toISOString(),
         horario_previsto_chegada: arrival.toISOString(),
         observacoes: form.observacoes.trim() || null,
-        ...(voo.status === 'planejado' ? {
-          rota_ids: routeIds.map(Number),
-          peso_passageiros: form.peso_passageiros === '' ? null : Number(form.peso_passageiros),
-          peso_bagagem: form.peso_bagagem === '' ? null : Number(form.peso_bagagem),
-          peso_carga: form.peso_carga === '' ? null : Number(form.peso_carga),
-          unidade_peso_planejado: 'LB',
+        ...(canEditPlanning ? {
+          ...(routeChanged ? { rota_ids: routeIds.map(Number) } : {}),
+          ...changedWeights,
+          ...(Object.keys(changedWeights).length ? { unidade_peso_planejado: 'LB' } : {}),
         } : {}),
       });
       onSaved(extract<CvVoo>(response));
@@ -269,10 +286,10 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
             Chegada prevista
             <input type="datetime-local" required className={fieldClass} value={form.horario_previsto_chegada} onChange={(event) => setForm((prev) => ({ ...prev, horario_previsto_chegada: event.target.value }))} />
           </label>
-          {voo.status === 'planejado' ? (
+          {canEditPlanning ? (
             <div className="sm:col-span-2 lg:col-span-3 space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
               <h3 className="text-sm font-semibold">Rota programada (origem, paradas e destino)</h3>
-              <p className="text-xs text-slate-500">Altere a sequência completa da rota antes de confirmar o planejamento.</p>
+              <p className="text-xs text-slate-500">Rota e pesos podem ser completados após a liberação, antes da execução. Não é necessário alterar a rota para corrigir apenas os pesos.</p>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {routeIds.map((routeId, index) => (
                 <div key={index} className="flex gap-2 items-end">

@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import { requireControleVoosCoordination, requireControleVoosSigvoosPreview, requireControleVoosWrite } from '../middleware/controle-voos-access';
+import { assertControleVoosCoordination, requireControleVoosCoordination, requireControleVoosSigvoosPreview, requireControleVoosWrite } from '../middleware/controle-voos-access';
 import {
   parseSigvoosRealPreviewRequest,
   runSigvoosRealApiPreview,
@@ -1037,13 +1037,19 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
 controleVoos.get('/voos/:id', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const flight = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
-  const [presented] = await enrichFlightsWithPresentation(c.env.DB, empresaId, [flight]);
-  const aircraft = flight.aeronave_id
-    ? await c.env.DB.prepare(
-      'SELECT modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1'
-    ).bind(flight.aeronave_id, empresaId).first<{ modelo: string | null }>()
-    : null;
-  return c.json({ success: true, data: { ...presented, modelo_aeronave: aircraft?.modelo ?? null } });
+  const [presentation, aircraft] = await Promise.all([
+    enrichFlightsWithPresentation(c.env.DB, empresaId, [flight]),
+    flight.aeronave_id
+      ? c.env.DB.prepare(
+        'SELECT modelo FROM aeronaves WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1'
+      ).bind(flight.aeronave_id, empresaId).first<{ modelo: string | null }>()
+      : Promise.resolve(null),
+  ]);
+  const [presented] = presentation;
+  return c.json({ success: true, data: {
+    ...presented,
+    modelo_aeronave: aircraft?.modelo ?? null,
+  } });
 });
 
 controleVoos.get(
@@ -1071,17 +1077,8 @@ controleVoos.post('/voos/:id/confirmar-planejamento', auth(), requireControleVoo
   if (voo.status !== 'planejado') {
     throw new ApiError('Confirmação disponível somente para voos em planejamento', 409, 'CONTROLE_VOOS_PLANNING_WRONG_STATUS');
   }
-  const stages = await c.env.DB.prepare(
-    'SELECT origem_icao, destino_icao, peso_passageiros, peso_bagagem, payload FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL ORDER BY numero_etapa, id'
-  ).bind(empresaId, voo.id).all<{ origem_icao: string | null; destino_icao: string | null; peso_passageiros: number | null; peso_bagagem: number | null; payload: number | null }>();
-  const first = stages.results?.[0];
-  if (!first || (stages.results || []).some(stage => !stage.origem_icao || !stage.destino_icao)) {
-    throw new ApiError('Confira a rota antes de confirmar o planejamento', 409, 'CONTROLE_VOOS_PLANNING_ROUTE_INCOMPLETE');
-  }
-  // Zero is a valid explicitly confirmed mass; null indicates data not yet supplied.
-  if (first.peso_passageiros == null || first.peso_bagagem == null || first.payload == null) {
-    throw new ApiError('Informe os pesos de passageiros, bagagem e carga (use zero se não houver)', 409, 'CONTROLE_VOOS_PLANNING_WEIGHTS_INCOMPLETE');
-  }
+  // Missing planning fields are reported by flight-presentation and do not
+  // block this preliminary confirmation. Crew validation remains mandatory.
   const crew = await c.env.DB.prepare(
     "SELECT funcao FROM cv_voo_tripulantes WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL"
   ).bind(empresaId, voo.id).all<{ funcao: string }>();
@@ -1158,18 +1155,23 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
 
   const routeIds = normalizeFlightRouteIds(payload.rota_ids);
   const hasPlanning = ['pax_planejado', 'peso_passageiros', 'peso_bagagem', 'peso_carga', 'unidade_peso_planejado'].some(field => Object.prototype.hasOwnProperty.call(payload, field));
-  if ((routeIds || hasPlanning) && existing.status !== 'planejado') {
-    throw new ApiError('Alterações de rota e pesos prévios exigem voo em planejamento', 409, 'CONTROLE_VOOS_PLANNING_NOT_EDITABLE');
+  // Post-release planning corrections are a Coordination privilege, not an
+  // expansion of the general flight-editor capability.
+  if (existing.status === 'liberado_operacionalmente' && (routeIds || hasPlanning)) {
+    assertControleVoosCoordination(c);
+  }
+  if ((routeIds || hasPlanning) && !['planejado', 'liberado_operacionalmente'].includes(existing.status)) {
+    throw new ApiError('Use o fluxo de revisão do RDV para corrigir dados após o início do voo', 409, 'CONTROLE_VOOS_PLANNING_NOT_EDITABLE');
   }
   const routePoints = routeIds ? await resolveFlightRoutePoints(c.env.DB, empresaId, routeIds) : null;
-  if (routeIds) {
+  if (routeIds || hasPlanning) {
     const times = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM cv_voo_etapas
       WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
         AND (horario_motor_ligado IS NOT NULL OR horario_decolagem IS NOT NULL OR horario_pouso IS NOT NULL OR horario_motor_desligado IS NOT NULL)`)
       .bind(empresaId, existing.id).first<{total: number}>();
     const activeRdv = await getActiveRdvByFlight(c.env.DB, existing.id, empresaId);
     if (Number(times?.total || 0) > 0 || (activeRdv && !['rascunho', 'devolvido'].includes(activeRdv.workflow_status))) {
-      throw new ApiError('Rota já possui registros de execução ou RDV encaminhado; utilize o fluxo de revisão', 409, 'CONTROLE_VOOS_PLANNING_ROUTE_LOCKED');
+      throw new ApiError('Voo já possui execução ou RDV encaminhado; utilize o fluxo de revisão para alterar rota ou pesos', 409, 'CONTROLE_VOOS_PLANNING_ROUTE_LOCKED');
     }
   }
   const normalized = routeIds ? { ...payload, origem_id: routeIds[0], destino_id: routeIds[routeIds.length - 1] } : payload;
