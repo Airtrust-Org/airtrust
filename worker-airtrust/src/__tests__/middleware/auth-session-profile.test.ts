@@ -254,6 +254,38 @@ describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () =>
   });
 });
 
+describe('Coordenação de Voo — perfil canônico por empresa', () => {
+  it('aceita somente o vínculo explícito ativo da mesma empresa', async () => {
+    const db = createDb({
+      userId: 41, empresaId: 500, perfil: 'ALUNO', membershipRole: 'USER',
+      explicitProfilesByEmpresa: {
+        500: [{ perfil: 'COORDENACAO_VOO', ativo: 1 }],
+        600: [{ perfil: 'COORDENACAO_VOO', ativo: 0 }],
+      },
+    });
+    expect(await resolveAvailableSessionRoles(db, 41, 500)).toEqual(['COORDENACAO_VOO']);
+    const { token } = await makeToken(41, 500);
+    const response = await buildApp(db, 'auth')({
+      headers: { Authorization: 'Bearer ' + token, ...withCookie('COORDENACAO_VOO') },
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()) as { userRole: string }).toMatchObject({ userRole: 'COORDENACAO_VOO' });
+  });
+  it('nega cookie de perfil revogado em outro tenant', async () => {
+    const db = createDb({
+      userId: 41, empresaId: 600, perfil: 'ALUNO', membershipRole: 'USER',
+      explicitProfilesByEmpresa: {
+        500: [{ perfil: 'COORDENACAO_VOO', ativo: 1 }],
+        600: [{ perfil: 'COORDENACAO_VOO', ativo: 0 }],
+      },
+    });
+    const { token } = await makeToken(41, 600);
+    const response = await buildApp(db, 'auth')({
+      headers: { Authorization: 'Bearer ' + token, ...withCookie('COORDENACAO_VOO') },
+    });
+    expect(response.status).toBe(401);
+  });
+});
 describe('auth() — perfil ativo de sessão (multi-perfil)', () => {
   it('sem cookie de seleção: usa a role canônica sem alteração', async () => {
     const db = createDb({

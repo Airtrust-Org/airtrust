@@ -129,8 +129,17 @@ describe('migration governance', () => {
     // 0528 separates sector Compliance alert responsibility from operational sector access.
     // 0530 adds the governed placeholder qualification models for planned EAD packages.
     // 0531 repairs the reviewed tenant-6 NR-20 HIBRIDO requirement modality after 0526.
-    // 0533 adds governed metadata; 0534 aligns the final matrix; 0535 repairs the missing INTEGRA prerequisite discovered in staging; 0536 adds the reviewed FDM audiences; 0537 reconciles source-backed catalog metadata.
-    const expectedLatest = 537;
+    // 0533 adds governed metadata; 0534 aligns the final matrix; 0535 repairs INTEGRA; 0536 adds reviewed FDM audiences; 0537 reconciles source-backed metadata; 0538 adds Gestor/NR-05 policy; 0539 repairs Doutrinação; 0540 restores missing Maintenance manual identities.
+    // 0541 adds the governed tenant-6 operational training category prerequisite for FDM 0536.
+    // Its canonical migration and Schema V2 reviewed manifest are pinned by the 0541 tests.
+    // 0542 makes formative-vs-scored SCORM policy explicit; defaults remain SCORED.
+    expect(files).toContain('0541_training_operational_category_bootstrap.sql');
+    expect(files).toContain('0542_lms_scorm_formative_assessment_policy.sql');
+    // 0543 narrowly corrects tenant-6 FDM course qualification bindings via Schema V2.
+    expect(files).toContain('0543_fdm_target_qualification_links.sql');
+    expect(files).toContain('0545_training_compliance_canonical_pdf_alignment.sql');
+    expect(files).toContain('0546_training_compliance_canonical_category_repair.sql');
+    const expectedLatest = 546;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

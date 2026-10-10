@@ -1,4 +1,8 @@
 import { Hono } from 'hono';
+import { createTrainingComplianceReconciliationActions, loadReconciliationDecisions, type LmsEnrollment, type ReconciliationDecision } from './compliance-treinamentos-reconciliation-actions';
+import { reconcileTrainingComplianceRuleEnrollment } from '../services/training-compliance-rule-enrollment';
+import { reconcileFdmMaintenance72 } from '../services/training-compliance-fdm72-reconciliation';
+import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModalitySql } from '../services/training-compliance-history-identity';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
@@ -37,13 +41,13 @@ import {
   hydrateTrainingComplianceConditions,
   trainingComplianceEvidenceMeetsRequiredModality,
   normalizeTrainingComplianceRequiredModality,
+  trainingComplianceEligibleCategorySql,
   type TrainingComplianceScope,
 } from '../services/training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from '../services/training-compliance-evidence-profile';
 import { TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS, trainingComplianceEvidenceIsRealizedBy, trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
-
 const SCOPES = TRAINING_COMPLIANCE_SCOPES;
 const OBRIGATORIEDADES = ['OBRIGATORIA', 'RECOMENDADA', 'NAO_APLICA'] as const;
 const ORIGENS = [
@@ -56,12 +60,10 @@ const ORIGENS = [
   'EMPRESA',
   'OUTRO',
 ] as const;
-
 type Scope = TrainingComplianceScope;
 type Obrigatoriedade = (typeof OBRIGATORIEDADES)[number];
 type Origem = (typeof ORIGENS)[number];
 type ComplianceStatus = 'CONFORME' | 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO';
-
 type Employee = {
   id: number;
   nome: string;
@@ -76,7 +78,6 @@ type Employee = {
   aeronaves_modelos: string[];
   condicoes_ids: number[];
 };
-
 type Rule = {
   id: number;
   empresa_id: number;
@@ -116,7 +117,6 @@ type Rule = {
   created_at: string;
   updated_at: string;
 };
-
 type Evidence = {
   funcionario_id: number;
   tipo_id: number;
@@ -130,29 +130,22 @@ type Evidence = {
   // undefined = schema anterior a 0519 (compatibilidade de rollout); null = evidência sem perfil gravado.
   perfil_competencia?: string | null;
 };
-
 const tableExists = hasSchemaTable;
 const columnSet = getSchemaColumns;
-
 function asPositiveInt(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
-
 function normalizeEnum<T extends readonly string[]>(
   value: unknown,
   allowed: T,
   fallback: T[number],
 ): T[number] {
-  const normalized = String(value || '')
-    .trim()
-    .toUpperCase();
+  const normalized = String(value || '').trim().toUpperCase();
   return (allowed as readonly string[]).includes(normalized) ? (normalized as T[number]) : fallback;
 }
-
 export const ruleApplies = trainingComplianceRuleApplies;
 export const resolvedRules = resolveTrainingComplianceRules;
-
 async function loadEmployees(db: D1Database, empresaId: number): Promise<Employee[]> {
   const cols = await columnSet(db, 'funcionarios');
   const hasSetorId = cols.has('setor_id');
@@ -160,7 +153,6 @@ async function loadEmployees(db: D1Database, empresaId: number): Promise<Employe
   const statusExpr = cols.has('status') ? "UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'" : '1 = 1';
   const ativoExpr = cols.has('ativo') ? 'AND COALESCE(f.ativo, 1) = 1' : '';
   const deletedExpr = cols.has('deleted_at') ? 'AND f.deleted_at IS NULL' : '';
-
   const { results } = await db
     .prepare(
       `SELECT f.id, f.nome,
@@ -274,7 +266,6 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
     : tipoCols.has('validade_meses')
       ? 'qt.validade_meses'
       : 'NULL';
-
   if (!hasV2) {
     if (!(await tableExists(db, 'matriz_treinamento_funcao'))) return [];
     const { results } = await db
@@ -300,6 +291,7 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
            LEFT JOIN funcoes fn
              ON fn.id = m.funcao_id AND fn.empresa_id = m.empresa_id AND fn.deleted_at IS NULL
           WHERE m.empresa_id = ? AND m.ativo = 1 AND m.deleted_at IS NULL
+            AND ${trainingComplianceEligibleCategorySql('qt.categoria')}
           ORDER BY qt.nome ASC, m.id ASC`,
       )
       .bind(empresaId)
@@ -360,6 +352,7 @@ async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
         WHERE tr.empresa_id = ?
           AND tr.ativo = 1
           AND tr.deleted_at IS NULL
+          AND ${trainingComplianceEligibleCategorySql('qt.categoria')}
           AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio) <= date('now'))
           AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim) >= date('now'))
         ORDER BY qt.nome ASC, tr.id ASC`,
@@ -381,24 +374,13 @@ async function loadQualificationEvidence(
   const map = new Map<string, Evidence[]>();
   if (!(await tableExists(db, 'qualificacoes_historico'))) return map;
   const cols = await columnSet(db, 'qualificacoes_historico');
-  const tipoCol = cols.has('tipo_qualificacao_id')
-    ? 'tipo_qualificacao_id'
-    : cols.has('qualificacao_id')
-      ? 'qualificacao_id'
-      : cols.has('tipo_id')
-        ? 'tipo_id'
-        : null;
+  const tipoCol = ['tipo_qualificacao_id', 'qualificacao_id', 'tipo_id'].find((name) =>
+    cols.has(name)) ?? null;
   if (!tipoCol) return map;
-  const dataCol = cols.has('data_realizacao')
-    ? 'data_realizacao'
-    : cols.has('data_conclusao')
-      ? 'data_conclusao'
-      : null;
-  const vencCol = cols.has('data_vencimento')
-    ? 'data_vencimento'
-    : cols.has('data_validade')
-      ? 'data_validade'
-      : null;
+  const dataCol = ['data_realizacao', 'data_conclusao'].find((name) =>
+    cols.has(name)) ?? null;
+  const vencCol = ['data_vencimento', 'data_validade'].find((name) =>
+    cols.has(name)) ?? null;
   if (!dataCol) return map;
   const statusExpr = cols.has('status') ? "UPPER(COALESCE(qh.status, ''))" : "''";
   const empresaExpr = cols.has('empresa_id') ? 'qh.empresa_id = ?' : 'f.empresa_id = ?';
@@ -409,24 +391,29 @@ async function loadQualificationEvidence(
       ? 'qh.created_at'
       : `qh.${dataCol}`;
   const vencSelect = vencCol ? `qh.${vencCol}` : 'NULL';
-  const modalitySelect = cols.has('formato_codigo')
-    ? `UPPER(TRIM(COALESCE(qh.formato_codigo,'')))`
-    : "''";
+  const qualificationTypeCols = await columnSet(db, 'qualificacoes_tipos');
+  const modalitySelect = trainingComplianceHistoricalModalitySql(
+    cols.has('formato_codigo'), qualificationTypeCols.has('tipo'), cols.has('qualificacao_codigo'), qualificationTypeCols.has('categoria'),
+  );
+  const { joins: typeIdentityJoins, resolvedTypeSql: resolvedTipoSelect } = trainingComplianceHistoryIdentitySql(
+    tipoCol, cols.has('qualificacao_codigo'), qualificationTypeCols.has('ativo'),
+  );
   const profileSql = await buildQualificationEvidenceProfileSql(db, cols);
 
   const { results } = await db
     .prepare(
-      `SELECT qh.id, qh.funcionario_id, qh.${tipoCol} AS tipo_id,
+      `SELECT qh.id, qh.funcionario_id, ${resolvedTipoSelect} AS tipo_id,
               qh.${dataCol} AS data_realizacao, ${vencSelect} AS data_vencimento,
               ${modalitySelect} AS modalidade, ${profileSql.select} AS perfil_competencia
          FROM qualificacoes_historico qh
          JOIN funcionarios f ON f.id = qh.funcionario_id
+         ${typeIdentityJoins}
          ${profileSql.joins}
         WHERE ${empresaExpr}
           ${deletedExpr}
           AND NOT (${sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES)})
           AND NOT (${sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES)})
-        ORDER BY qh.funcionario_id, qh.${tipoCol},
+        ORDER BY qh.funcionario_id, ${resolvedTipoSelect},
                  datetime(COALESCE(qh.${dataCol}, ${updatedExpr}, ${vencSelect})) DESC, qh.id DESC`,
     )
     .bind(empresaId)
@@ -596,7 +583,7 @@ function computeRequirement(
   let dias_para_vencer: number | null = null;
 
   if (evidence?.data_realizacao) {
-    if (rule.validade_fonte === 'EVIDENCIA' && evidence.data_vencimento) {
+    if (evidence.data_vencimento && (rule.validade_fonte === 'EVIDENCIA' || (rule.qualificacao_tipo_codigo === 'AVSEC_CONSC' && !rule.validade_meses))) {
       data_validade = evidence.data_vencimento.slice(0, 10);
     } else if (rule.validade_meses) {
       const base = new Date(`${evidence.data_realizacao.slice(0, 10)}T12:00:00Z`);
@@ -627,6 +614,11 @@ function computeRequirement(
   ) {
     status_compliance = 'EM_ANDAMENTO';
   }
+
+  const evidenceReviewReason =
+    status_compliance !== 'NAO_REALIZADO' ? null :
+    modalityMismatch && candidateEvidence?.data_realizacao ? 'MODALIDADE' :
+    profileMismatch && allHistory.some((item) => trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, today)) ? 'PERFIL' : null;
 
   const status_legacy =
     status_compliance === 'VENCIDO'
@@ -672,6 +664,8 @@ function computeRequirement(
     evidencia_perfil_incompativel: profileMismatch,
     evidencia_modalidade: evidence?.modalidade ?? candidateEvidence?.modalidade ?? null,
     evidencia_modalidade_incompativel: modalityMismatch,
+    evidencia_pendente_validacao: evidenceReviewReason !== null,
+    evidencia_pendente_motivo: evidenceReviewReason,
     evidencia_id: evidence?.origem_id ?? null,
     curso_ead_titulo: currentLms?.origem_titulo ?? evidence?.origem_titulo ?? null,
     lms_status:
@@ -739,29 +733,6 @@ export async function buildSnapshot(
 
 export type TrainingComplianceSnapshot = Awaited<ReturnType<typeof buildSnapshot>>;
 
-type LmsEnrollment = {
-  id: number;
-  funcionario_id: number;
-  curso_id: number;
-  curso_titulo: string;
-  qualificacao_tipo_id: number | null;
-  qualificacao_tipo_nome: string | null;
-  qualificacao_tipo_codigo: string | null;
-  funcionario_nome: string;
-  status: string;
-  setor_id: number | null;
-  setor_nome: string | null;
-  funcao_id: number | null;
-  funcao_nome: string | null;
-};
-
-type ReconciliationDecision = {
-  matricula_id: number;
-  decisao: 'MANTER_AVULSA';
-  observacoes: string | null;
-  updated_at: string;
-};
-
 async function loadLmsEnrollments(db: D1Database, empresaId: number): Promise<LmsEnrollment[]> {
   if (!(await tableExists(db, 'lms_matriculas')) || !(await tableExists(db, 'lms_cursos')))
     return [];
@@ -784,31 +755,14 @@ async function loadLmsEnrollments(db: D1Database, empresaId: number): Promise<Lm
          LEFT JOIN setores s ON s.id=f.setor_id AND s.empresa_id=f.empresa_id AND s.deleted_at IS NULL
          LEFT JOIN funcoes fn ON fn.id=f.funcao_id AND fn.empresa_id=f.empresa_id AND fn.deleted_at IS NULL
         WHERE m.empresa_id=? AND m.deleted_at IS NULL
-          AND UPPER(COALESCE(m.status,'')) <> 'CANCELADO'
+          AND UPPER(TRIM(COALESCE(m.status,''))) IN ('NAO_INICIADO','EM_ANDAMENTO')
+          AND (qt.id IS NULL OR ${trainingComplianceEligibleCategorySql('qt.categoria')})
           ${deletedFuncionario} ${activeExpr} ${statusExpr}
         ORDER BY c.titulo, f.nome, m.id`,
     )
     .bind(empresaId)
     .all<LmsEnrollment>();
   return results || [];
-}
-
-async function loadReconciliationDecisions(
-  db: D1Database,
-  empresaId: number,
-): Promise<Map<number, ReconciliationDecision>> {
-  const map = new Map<number, ReconciliationDecision>();
-  if (!(await tableExists(db, 'treinamento_matricula_reconciliacoes'))) return map;
-  const { results } = await db
-    .prepare(
-      `SELECT matricula_id, decisao, observacoes, updated_at
-         FROM treinamento_matricula_reconciliacoes
-        WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL`,
-    )
-    .bind(empresaId)
-    .all<ReconciliationDecision>();
-  for (const row of results || []) map.set(Number(row.matricula_id), row);
-  return map;
 }
 
 async function loadActiveLmsCourses(db: D1Database, empresaId: number) {
@@ -865,13 +819,10 @@ async function validateRuleReferences(
 ) {
   const qualificacaoTipoId = asPositiveInt(payload.qualificacao_tipo_id);
   if (!qualificacaoTipoId) throw new ApiError('qualificacao_tipo_id é obrigatório', 400);
-  const tipo = await db
-    .prepare(
-      'SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-    )
-    .bind(qualificacaoTipoId, empresaId)
-    .first<{ id: number }>();
-  if (!tipo) throw new ApiError('Tipo de qualificação inválido para a empresa atual', 400);
+  const tipo = await db.prepare(
+    `SELECT id FROM qualificacoes_tipos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND ${trainingComplianceEligibleCategorySql('categoria')}`,
+  ).bind(qualificacaoTipoId, empresaId).first<{ id: number }>();
+  if (!tipo) throw new ApiError('Tipo de qualificação inválido ou categoria excluída do Compliance', 400);
 
   const escopo = normalizeEnum(payload.escopo, SCOPES, 'FUNCAO');
   const setorId = asPositiveInt(payload.setor_id);
@@ -1203,6 +1154,15 @@ app.get('/regras', requireRole('admin', 'manager'), async (c) => {
   });
 });
 
+app.post('/reconciliacao/fdm-mnt72/sincronizar', requireRole('admin'), async (c) => {
+  const payload = await c.req.json().catch(() => null);
+  if (payload?.scope !== 'FDM_MNT_72' || payload?.course_id !== 72) throw new ApiError('Escopo inválido', 400);
+  const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const data = await reconcileFdmMaintenance72(c.env.DB, empresaId, access, extrairUsuarioAuditoria(c), buildSnapshot);
+  return c.json({ success: true, data });
+});
+
 app.post('/regras', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
@@ -1227,7 +1187,8 @@ app.post('/regras', requireRole('admin', 'manager'), async (c) => {
     dados_novos: { empresa_id: empresaId, ...data },
     ...extrairUsuarioAuditoria(c),
   });
-  return c.json({ success: true, data: { id } }, 201);
+  const enrollment = await reconcileTrainingComplianceRuleEnrollment(db, empresaId, id, access, extrairUsuarioAuditoria(c), buildSnapshot);
+  return c.json({ success: true, data: { id, ...enrollment } }, 201);
 });
 
 app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
@@ -1265,7 +1226,10 @@ app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
     dados_novos: { empresa_id: empresaId, ...data },
     ...extrairUsuarioAuditoria(c),
   });
-  return c.json({ success: true });
+  const enrollment = await reconcileTrainingComplianceRuleEnrollment(
+    db, empresaId, id, access, extrairUsuarioAuditoria(c), buildSnapshot,
+  );
+  return c.json({ success: true, data: enrollment });
 });
 
 app.delete('/regras/:id', requireRole('admin', 'manager'), async (c) => {
@@ -1531,7 +1495,7 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
     db
       .prepare(
         `SELECT id,codigo,nome FROM qualificacoes_tipos
-          WHERE empresa_id=? ${tipoDeletedExpr} ${tipoAtivoExpr}
+          WHERE empresa_id=? ${tipoDeletedExpr} ${tipoAtivoExpr} AND ${trainingComplianceEligibleCategorySql('categoria')}
           ORDER BY nome`,
       )
       .bind(empresaId)
@@ -1573,14 +1537,9 @@ app.get('/matriz-organizacao', requireRole('admin', 'manager'), async (c) => {
           rule.aeronave_modelo === aeronaveModelo,
       ) || null;
     const preview = selectedEmployees.map((employee) => {
-      const employeeEffective = rules
-        .filter(
-          (rule) => rule.qualificacao_tipo_id === Number(tipo.id) && ruleApplies(rule, employee),
-        )
-        .sort(
-          (a, b) =>
-            trainingComplianceRulePriority(b) - trainingComplianceRulePriority(a) || b.id - a.id,
-        )[0];
+      const employeeEffective = resolvedRules(rules, employee).find(
+        (rule) => rule.qualificacao_tipo_id === Number(tipo.id),
+      );
       const requirement =
         employeeEffective && employeeEffective.obrigatoriedade !== 'NAO_APLICA'
           ? computeRequirement(
@@ -1708,8 +1667,9 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
     for (const req of person.requisitos) {
       const key = `${person.id}:${req.qualificacao_tipo_id}`;
       if (blockingEnrollmentKeys.has(key)) continue;
+      if (req.evidencia_pendente_validacao || !trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;
+      // Requisito ja concluido e valido nao deve ser contado como matricula faltante.
       requisitosSemMatricula += 1;
-      if (!trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;
       const current = gaps.get(req.qualificacao_tipo_id) || {
         qualificacao_tipo_id: req.qualificacao_tipo_id,
         qualificacao_tipo_nome: req.qualificacao_tipo_nome,
@@ -1735,14 +1695,21 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
           (rule) => rule.qualificacao_tipo_id === Number(enrollment.qualificacao_tipo_id),
         )
       : undefined;
+    const requirement = employee.requisitos.find((req) => req.qualificacao_tipo_id === Number(enrollment.qualificacao_tipo_id));
+    const redundantWithValidEvidence = requirement?.obrigatoriedade === 'OBRIGATORIA'
+      && !requirement.evidencia_pendente_validacao && requirement.status_compliance === 'CONFORME'
+      && !trainingComplianceNeedsEnrollment(requirement.status_compliance, requirement.dias_para_vencer)
+      && enrollment.status === 'NAO_INICIADO';
     let situacao:
       | 'MATRICULA_COM_REQUISITO'
+      | 'MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA'
       | 'MATRICULADO_SEM_REQUISITO'
       | 'NAO_APLICA_MATRICULADO'
       | 'CURSO_SEM_MODELO'
       | 'MATRICULA_AVULSA_RECONCILIADA';
     if (!enrollment.qualificacao_tipo_id) situacao = 'CURSO_SEM_MODELO';
     else if (effective?.obrigatoriedade === 'NAO_APLICA') situacao = 'NAO_APLICA_MATRICULADO';
+    else if (redundantWithValidEvidence) situacao = 'MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA';
     else if (effective) situacao = 'MATRICULA_COM_REQUISITO';
     else if (decisions.get(Number(enrollment.id))?.decisao === 'MANTER_AVULSA') {
       situacao = 'MATRICULA_AVULSA_RECONCILIADA';
@@ -1752,6 +1719,8 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
       continue;
     }
     if (situacao === 'MATRICULA_AVULSA_RECONCILIADA') avulsasReconciliadas += 1;
+    // Conclusões são evidência histórica, não uma matrícula ativa a cancelar.
+    if (['CONCLUIDO', 'CONCLUIDA'].includes(String(enrollment.status || '').trim().toUpperCase())) continue;
     matriculasRevisao.push({
       matricula_id: Number(enrollment.id),
       funcionario_id: Number(enrollment.funcionario_id),
@@ -1797,7 +1766,21 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
       ),
     );
   const convitesMatricula = enrollments
-    .filter((row) => String(row.status || '').toUpperCase() === 'NAO_INICIADO')
+    .filter((row) => {
+      if (String(row.status || '').trim().toUpperCase() !== 'NAO_INICIADO' || !row.qualificacao_tipo_id) return false;
+      const employee = peopleById.get(Number(row.funcionario_id));
+      if (!employee) return false;
+      const req = employee.requisitos.find(
+        (item) => item.qualificacao_tipo_id === Number(row.qualificacao_tipo_id),
+      );
+      // Nunca convidar alguém já qualificado e válido só porque ainda existe
+      // uma matrícula operacional redundante aguardando conciliação.
+      return Boolean(
+        req?.obrigatoriedade === 'OBRIGATORIA'
+        && !req.evidencia_pendente_validacao
+        && trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer),
+      );
+    })
     .map((row) => ({
       matricula_id: Number(row.id),
       funcionario_id: Number(row.funcionario_id),
@@ -1836,6 +1819,19 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
     meta: { reconciliation_ready: await tableExists(db, 'treinamento_matricula_reconciliacoes') },
   });
 });
+
+// Limpeza governada por demanda: preview por padrão, escrita apenas após confirmação.
+// Nunca cancela curso fora da matriz, matrícula concluída ou designação avulsa mantida.
+// Uma alteração de cargo/requisito entre preview e aplicação é revalidada no servidor.
+app.route('/reconciliacao', createTrainingComplianceReconciliationActions({
+  buildSnapshot,
+  loadLmsEnrollments,
+  loadReconciliationDecisions,
+  tableExists,
+  isRequired: (snapshot, person, typeId) => resolvedRules(snapshot.rules, person).some(
+    (rule) => Number(rule.qualificacao_tipo_id) === typeId && rule.obrigatoriedade !== 'NAO_APLICA',
+  ),
+}));
 
 app.post('/reconciliacao/:matriculaId/decisao', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;

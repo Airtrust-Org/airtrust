@@ -58,6 +58,7 @@ interface FlightRowForGate {
   data_programacao: string;
   horario_previsto_partida: string;
   aeronave_id: number | null;
+  modelo_aeronave: string | null;
 }
 
 /**
@@ -77,10 +78,13 @@ controleVoosDispatchGate.get(
     const data = normalizeDateParam(c.req.query('data'));
 
     const flightsResult = await c.env.DB.prepare(
-      `SELECT id, prefixo, status, data_programacao, horario_previsto_partida, aeronave_id
-       FROM cv_voos
-       WHERE empresa_id = ? AND data_programacao = ? AND deleted_at IS NULL
-       ORDER BY horario_previsto_partida ASC, id ASC`,
+      `SELECT v.id, v.prefixo, v.status, v.data_programacao, v.horario_previsto_partida, v.aeronave_id,
+         a.modelo AS modelo_aeronave
+       FROM cv_voos v
+       LEFT JOIN aeronaves a ON a.id = v.aeronave_id
+         AND a.empresa_id = v.empresa_id AND a.deleted_at IS NULL
+       WHERE v.empresa_id = ? AND v.data_programacao = ? AND v.deleted_at IS NULL
+       ORDER BY v.horario_previsto_partida ASC, v.id ASC`,
     )
       .bind(empresaId, data)
       .all<FlightRowForGate>();
@@ -101,6 +105,7 @@ controleVoosDispatchGate.get(
         return {
           voo_id: voo.id,
           prefixo: voo.prefixo,
+          modelo_aeronave: voo.modelo_aeronave,
           status: voo.status,
           horario_previsto_partida: voo.horario_previsto_partida,
           aeronave_id: voo.aeronave_id,

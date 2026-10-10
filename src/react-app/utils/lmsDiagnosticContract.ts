@@ -94,6 +94,8 @@ export interface LmsCompletionExplanation {
   adminItems: LmsPendingItem[];
   /** false quando nenhum payload granular V1 válido está disponível (pacote legado). */
   diagnosticsAvailable: boolean;
+  /** Status SCORM aceito; matrícula ainda depende de registro no servidor. */
+  registrationPending?: boolean;
 }
 
 export const GENERIC_PENDING_FALLBACK =
@@ -121,6 +123,10 @@ function sanitizeBoolean(value: unknown): boolean {
   return value === true;
 }
 
+function sanitizePackageBoolean(value: unknown): boolean {
+  return value === true || (typeof value === 'number' && Number.isFinite(value) && value > 0);
+}
+
 function sanitizeSlideRef(value: unknown): LmsDiagnosticSlideRef | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
@@ -141,6 +147,18 @@ function sanitizeSlideRefList(value: unknown): LmsDiagnosticSlideRef[] {
   return out;
 }
 
+function sanitizePackageRefList(value: unknown): LmsDiagnosticSlideRef[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, MAX_ITEMS_PER_COLLECTION).flatMap((entry) => {
+    if (typeof entry === 'string') {
+      const id = sanitizeText(entry, 120);
+      return id ? [{ id, index: null, title: null }] : [];
+    }
+    const ref = sanitizeSlideRef(entry);
+    return ref ? [ref] : [];
+  });
+}
+
 function sanitizeModuleResultList(value: unknown): LmsDiagnosticModuleResult[] {
   if (!Array.isArray(value)) return [];
   const out: LmsDiagnosticModuleResult[] = [];
@@ -148,7 +166,10 @@ function sanitizeModuleResultList(value: unknown): LmsDiagnosticModuleResult[] {
   for (const entry of value.slice(0, MAX_ITEMS_PER_COLLECTION)) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
     const raw = entry as Record<string, unknown>;
-    const module = sanitizeSlideRef(raw.module);
+    const moduleId = typeof raw.module === 'string' ? sanitizeText(raw.module, 120) : null;
+    const module = moduleId
+      ? { id: moduleId, index: null, title: null }
+      : sanitizeSlideRef(raw.module);
     if (!module) continue;
 
     const assessmentRaw =
@@ -160,11 +181,11 @@ function sanitizeModuleResultList(value: unknown): LmsDiagnosticModuleResult[] {
     out.push({
       module,
       assessment: {
-        required: sanitizeBoolean(assessmentRaw.required),
-        completed: sanitizeBoolean(assessmentRaw.completed),
-        scoreRaw: sanitizeFiniteNumber(assessmentRaw.scoreRaw),
-        masteryScore: sanitizeFiniteNumber(assessmentRaw.masteryScore),
-        passed: typeof passedRaw === 'boolean' ? passedRaw : null,
+        required: sanitizePackageBoolean(assessmentRaw.required ?? raw.passed != null),
+        completed: sanitizePackageBoolean(assessmentRaw.completed ?? raw.passed),
+        scoreRaw: sanitizeFiniteNumber(assessmentRaw.scoreRaw ?? raw.scoreRaw),
+        masteryScore: sanitizeFiniteNumber(assessmentRaw.masteryScore ?? raw.masteryScore),
+        passed: typeof (passedRaw ?? raw.passed) === 'boolean' ? (passedRaw ?? raw.passed) as boolean : null,
       },
     });
   }
@@ -222,16 +243,18 @@ export function parseGranularDiagnostic(raw: unknown): LmsGranularDiagnostic | n
     slides: {
       totalRequired: sanitizeFiniteNumber(slidesRaw.totalRequired),
       completedRequired: sanitizeFiniteNumber(slidesRaw.completedRequired),
-      missing: sanitizeSlideRefList(slidesRaw.missing),
+      missing: sanitizePackageRefList(slidesRaw.missing),
     },
     assessment: {
-      required: sanitizeBoolean(assessmentRaw.required),
-      completed: sanitizeBoolean(assessmentRaw.completed),
+      required: sanitizePackageBoolean(assessmentRaw.required),
+      completed: typeof assessmentRaw.required === 'number' && typeof assessmentRaw.completed === 'number'
+        ? assessmentRaw.completed >= assessmentRaw.required
+        : sanitizePackageBoolean(assessmentRaw.completed),
       scoreRaw: sanitizeFiniteNumber(assessmentRaw.scoreRaw),
       masteryScore: sanitizeFiniteNumber(assessmentRaw.masteryScore),
       passed: typeof passedRaw === 'boolean' ? passedRaw : null,
-      unanswered: sanitizeSlideRefList(assessmentRaw.unanswered),
-      incomplete: sanitizeSlideRefList(assessmentRaw.incomplete),
+      unanswered: sanitizePackageRefList(assessmentRaw.unanswered),
+      incomplete: sanitizePackageRefList(assessmentRaw.incomplete),
     },
     moduleResults: sanitizeModuleResultList(data.moduleResults),
     packageStatus: {
@@ -276,6 +299,7 @@ export interface CanonicalCompletionDiagnosticLike {
   status?: string | null;
   code?: string | null;
   can_finalize?: boolean | null;
+  explicit_completion?: boolean | null;
   explicit_failure?: boolean | null;
   mastery_score?: number | null;
   score_pct?: number | null;
@@ -355,6 +379,51 @@ export function resolveCompletionExplanation(params: {
       items: [],
       adminItems,
       diagnosticsAvailable,
+    };
+  }
+
+  // A successful SCO is not an LMS enrollment completion. When the backend
+  // accepts SCORM evidence but the matrícula is still open, do not manufacture
+  // missing content/items or show a misleading "pendências" warning.
+  const confirmedScoreConsistent =
+    canonical?.score_pct == null || canonical?.mastery_score == null ||
+    canonical.score_pct >= canonical.mastery_score;
+  if (canonical?.status === 'accepted' &&
+      canonical.explicit_failure !== true && confirmedScoreConsistent) {
+    return {
+      canComplete: false,
+      category: 'SCORM_STATUS',
+      summary: 'Conteúdo aprovado no SCORM. O AirTrust está confirmando a matrícula. Não há pendências de conteúdo identificadas.',
+      items: [],
+      adminItems,
+      diagnosticsAvailable,
+      registrationPending: true,
+    };
+  }
+
+  // A package can prove that all of its own requirements passed before the
+  // enrollment API has observed the learner's explicit AirTrust registration.
+  // Keep that state distinct from missing content while leaving completion
+  // entirely to the canonical server flow.
+  const granularPackagePassed = granular?.packageStatus?.lessonStatus === 'passed' &&
+    granular.packageStatus?.finishRequested === true &&
+    granular.slides.totalRequired != null && granular.slides.totalRequired > 0 &&
+    granular.slides.completedRequired === granular.slides.totalRequired &&
+    granular.slides.missing.length === 0 &&
+    (!granular.assessment.required ||
+      (granular.assessment.completed && granular.assessment.passed !== false &&
+        granular.assessment.unanswered.length === 0 && granular.assessment.incomplete.length === 0)) &&
+    (granular.moduleResults ?? []).every((module) => !module.assessment.required ||
+      (module.assessment.completed && module.assessment.passed !== false));
+  if (granularPackagePassed) {
+    return {
+      canComplete: false,
+      category: 'SCORM_STATUS',
+      summary: 'Conteúdo aprovado no SCORM. Registre a conclusão no AirTrust para finalizar a matrícula.',
+      items: [],
+      adminItems,
+      diagnosticsAvailable,
+      registrationPending: true,
     };
   }
 

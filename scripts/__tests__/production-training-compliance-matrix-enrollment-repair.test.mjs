@@ -22,7 +22,7 @@ test('missing enrollment target is organizational-role only and defers designati
     assert.match(script, new RegExp(`'${code.replaceAll('-', '\-')}'`));
   }
   assert.match(script, /FROM enrollment_target e/);
-  assert.match(script, /LEFT JOIN expected e ON e\.funcionario_id=a\.funcionario_id/);
+  assert.match(script, /LEFT JOIN mandatory_applicable e ON e\.funcionario_id=a\.funcionario_id/);
 });
 
 
@@ -34,6 +34,11 @@ test('repair uses canonical compliance evidence and a 60-day renewal window befo
   assert.match(script, /CANONICAL_REQUIREMENT_AMBIGUOUS/);
   assert.match(script, /CANONICAL_REQUIREMENT_MISSING/);
   assert.match(script, /CANONICAL_FUTURE_EVIDENCE_REQUIRES_WORKER_FIX/);
+});
+
+test('completed historical evidence requiring validation is never automatically rematriculated', () => {
+  assert.match(script, /requirement\?\.evidencia_pendente_validacao === true/);
+  assert.match(script, /if \(!needsEnrollment\)/);
 });
 
 test('completed LMS with incompatible required modality is manual review, not duplicate enrollment', () => {
@@ -82,13 +87,20 @@ test('global wrong enrollment audit covers all active employees and preserves ex
   assert.match(script, /qualificacoes_historico/);
 });
 
-test('dry-run reports evidenced wrong enrollments and apply preserves evidence while cancelling active state', () => {
+test('non-EAD mandatory and historic/progress LMS records never become automated cancellations', () => {
+  assert.match(script, /mandatory_applicable AS/);
+  assert.match(script, /wrongEligible = topology\.wrongRows\.filter\(isProvablyUnstartedEnrollment\)/);
+  assert.match(script, /wrong_rows: wrongEligible/);
+  assert.match(script, /wrong_manual_review_count: unsafeWrong\.length/);
+  assert.match(script, /WRONG_ENROLLMENT_UNSTARTED_GUARD_CHANGED/);
+  assert.match(script, /recheck_wrong_unstarted_guard/);
   assert.match(script, /unsafe_wrong_count: state\.unsafe_wrong_count/);
   assert.match(script, /wrong_with_evidence_count: state\.unsafe_wrong_count/);
   assert.match(script, /historical_evidence_preserved: true/);
   assert.doesNotMatch(script, /SET status='CANCELADO',deleted_at=datetime\('now'\)/);
   assert.match(script, /SET status='CANCELADO',updated_at=datetime\('now'\)/);
-  assert.match(script, /cancelled_wrong_with_evidence_enrollments = before\.unsafe_wrong_count/);
+  assert.match(script, /summary\.cancelled_wrong_with_evidence_enrollments = 0/);
+  assert.doesNotMatch(script, /summary\.cancelled_wrong_with_evidence_enrollments = before\.unsafe_wrong_count/);
 });
 
 test('workflow is exact-SHA, dry-run-first and recovery guarded', () => {

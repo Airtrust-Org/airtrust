@@ -26,6 +26,19 @@ describe('admin usuarios P0 security boundaries', () => {
     expect(listing).not.toContain('COALESCE(ue.role, u.perfil)');
   });
 
+  it('shows the active flight coordination profile ahead of legacy user/student profiles', () => {
+    const listing = source.slice(
+      source.indexOf("protectedAdminUsuariosRoutes.get('/',"),
+      source.indexOf("protectedAdminUsuariosRoutes.delete('/:id'"),
+    );
+    expect(listing).toContain("WHEN 'COORDENACAO_VOO' THEN 4.5");
+    expect(listing.indexOf("WHEN 'COORDENACAO_VOO'")).toBeLessThan(listing.indexOf("WHEN 'GESTOR'"));
+    const tenantTarget = source.slice(source.indexOf('async function findTargetInTenant('), source.indexOf('async function resolveTargetAccess('));
+    expect(tenantTarget.match(/p.perfil = 'COORDENACAO_VOO'/g)).toHaveLength(2);
+    const privilegeGuard = source.slice(source.indexOf('function assertManagerMayManageTarget('), source.indexOf('function normalizePermissions('));
+    expect(privilegeGuard).toContain("'COORDENACAO_VOO'");
+  });
+
   it('fails closed when platform access cannot resolve an unambiguous target company', () => {
     expect(source).toContain('async function resolveTargetAccess(');
     expect(source).toContain('AMBIGUOUS_TARGET_TENANT');

@@ -151,7 +151,7 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('LMSFinish no slide final envia candidato de conclusão confiável uma única vez', async () => {
+  it('LMSFinish apenas persiste evidência; sem clique do aluno não envia candidato', async () => {
     const fetchMock = mockOkFetch();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -183,14 +183,109 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     expect(body).toMatchObject({
       matricula_id: 346,
       commit_event: 'SCORM_FINISH',
-      completion_candidate: true,
+      completion_candidate: null,
       lesson_status: 'incomplete',
       score_raw: 96,
     });
-    expect(body.completion_observed_at).toEqual(expect.any(String));
+    expect(body.completion_observed_at).toBeNull();
   });
 
-  it('repete o mesmo Finish após falha HTTP transitória sem perder o candidato final', async () => {
+  it('o clique confirmar dispara SCORM_USER_FINALIZE com evidência de todas as telas', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const html = buildLaunchPage({
+      matriculaId: 346,
+      titulo: 'Curso formativo',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/119/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: '',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_status': 'incomplete',
+        'cmi.core.lesson_location': '3/3',
+        'airtrust.total_slides': 3,
+        'airtrust.viewed_slides': [1, 2, 3],
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSInitialize();
+    g.window.dispatchEvent(new g.MessageEvent('message', {
+      origin: '',
+      source: g.window.parent,
+      data: { type: 'lms:request-completion', matriculaId: 346 },
+    }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
+    expect(body).toMatchObject({
+      commit_event: 'SCORM_USER_FINALIZE',
+      completion_candidate: true,
+      lesson_status: 'incomplete',
+    });
+    expect(body.cmi_json).toContain('airtrust.viewed_slides');
+  });
+
+  it('não deixa eventos de saída rebaixarem um SCORM_FINISH enfileirado durante autosave', async () => {
+    const matriculaId = 987654;
+    let releaseAutosave: (response: unknown) => void = () => {};
+    const pendingAutosave = new Promise<unknown>((resolve) => { releaseAutosave = resolve; });
+    const response = {
+      ok: true,
+      status: 200,
+      clone() {
+        return { json: async () => ({ success: true, data: { progresso_pct: 100 } }) };
+      },
+    };
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => pendingAutosave)
+      .mockImplementation(() => Promise.resolve(response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId,
+      titulo: 'Curso SCORM com saída imediata',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/7/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: '',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_location': '57/57',
+        'cmi.core.lesson_status': 'completed',
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+
+    // 1. A routine save holds the network slot.
+    // 2. SCORM package finishes before the learner leaves.
+    // 3. Browser unload/visibility must not erase that finish evidence.
+    api.LMSCommit();
+    api.LMSFinish();
+    g.window.dispatchEvent(new g.Event('beforeunload'));
+    g.window.dispatchEvent(new g.Event('pagehide'));
+    // Other tests also attach unload listeners to jsdom's shared window;
+    // isolate this specific wrapper's commits by enrollment, not total fetches.
+    const ownRequests = () => fetchMock.mock.calls.filter(([, options]) =>
+      JSON.parse((options as { body: string }).body).matricula_id === matriculaId
+    );
+    expect(ownRequests()).toHaveLength(1);
+
+    releaseAutosave(response);
+    await vi.waitFor(() => expect(ownRequests()).toHaveLength(2));
+    const request = ownRequests()[1][1] as { body: string; keepalive: boolean };
+    expect(JSON.parse(request.body)).toMatchObject({
+      matricula_id: matriculaId,
+      commit_event: 'SCORM_FINISH',
+      completion_candidate: null,
+      lesson_status: 'completed',
+    });
+    expect(request.keepalive).toBe(true);
+  });
+
+  it('repete o mesmo Finish apos falha temporaria, sem criar conclusao automatica', async () => {
     vi.useFakeTimers();
     const fetchMock = vi
       .fn()
@@ -236,7 +331,7 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     const [, retryRequest] = fetchMock.mock.calls[1] as [string, { body: string }];
     expect(JSON.parse(retryRequest.body)).toMatchObject({
       commit_event: 'SCORM_FINISH',
-      completion_candidate: true,
+      completion_candidate: null,
       lesson_status: 'incomplete',
     });
   });
@@ -321,7 +416,7 @@ describe('Wrapper SCORM real (execução em jsdom) — REVIEW_MODE nunca chama o
   });
 });
 
-describe('Wrapper SCORM real (execução em jsdom) — keepalive só no unload/hide', () => {
+describe('Wrapper SCORM real (execução em jsdom) — keepalive em commits finais', () => {
   beforeEach(() => {
     setupDom();
     g.localStorage?.clear();
@@ -381,6 +476,62 @@ describe('Wrapper SCORM real (execução em jsdom) — keepalive só no unload/h
     const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
     expect(lastCall[1].keepalive).toBe(true);
   });
+
+  it('SCORM_FINISH usa keepalive se a página for fechada logo após a conclusão', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId: 42,
+      titulo: 'Curso teste',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/1/2/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/scorm/commit/42',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: '{}',
+      hasResumeState: false,
+    });
+
+    new Function(extractWrapperScript(html))();
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
+
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSFinish();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(fetchMock).toHaveBeenCalled();
+    const [, options] = fetchMock.mock.calls[0];
+    expect(options.keepalive).toBe(true);
+    expect(JSON.parse(options.body).commit_event).toBe('SCORM_FINISH');
+  });
+
+  it('SCORM_COMPLETION_CANDIDATE usa keepalive durante o encerramento final', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = buildLaunchPage({
+      matriculaId: 42,
+      titulo: 'Curso teste',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/1/2/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/scorm/commit/42',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: '{}',
+      hasResumeState: false,
+    });
+
+    new Function(extractWrapperScript(html))();
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
+
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSSetValue('cmi.core.lesson_status', 'passed');
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(fetchMock).toHaveBeenCalled();
+    const [, options] = fetchMock.mock.calls[0];
+    expect(options.keepalive).toBe(true);
+    expect(JSON.parse(options.body).commit_event).toBe('SCORM_COMPLETION_CANDIDATE');
+  });
 });
 
 describe('Wrapper SCORM real (execução em jsdom) — tratamento de erros non-2xx e sanitização', () => {
@@ -423,6 +574,9 @@ describe('Wrapper SCORM real (execução em jsdom) — tratamento de erros non-2
       isScorm2004: false,
       initialCmiJson: JSON.stringify({
         'cmi.core.lesson_location': '108/108',
+        'cmi.core.lesson_status': 'incomplete',
+        'airtrust.total_slides': 108,
+        'airtrust.viewed_slides': Array.from({length:108},(_,i)=>i+1),
         'cmi.core.score.raw': '100',
       }),
       hasResumeState: false,
@@ -432,7 +586,11 @@ describe('Wrapper SCORM real (execução em jsdom) — tratamento de erros non-2
     g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
 
     const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
-    api.LMSFinish();
+    api.LMSInitialize();
+    g.window.dispatchEvent(new g.MessageEvent('message', {
+      origin: '', source: g.window.parent,
+      data: {type:'lms:request-completion',matriculaId:390},
+    }));
 
     await new Promise((r) => setTimeout(r, 100));
 

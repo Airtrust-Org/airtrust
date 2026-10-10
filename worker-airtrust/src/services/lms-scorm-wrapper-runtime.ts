@@ -271,6 +271,34 @@ export function buildScormSessionCloseRuntimeScript(): string {
     }
   }
 
+  // Explicit completion is a user action, not an inferred progress threshold.
+  // A single, authenticated wrapper-owned final commit is sent only after the
+  // player has displayed its confirmation dialog. Never synthesize a score or
+  // a SCORM passed/completed status: backend retains the evidence decision.
+  function performExplicitCompletionRequest() {
+    if (PREVIEW_MODE || REVIEW_MODE || completed || sessionCloseHandled || !apiInitialized) {
+      postToParent({ type: 'lms:completion-error', matriculaId: MATRICULA_ID,
+        code: 'SCORM_SESSION_NOT_READY', message: 'Reabra o curso para finalizar a sessão.' });
+      return;
+    }
+    try { probeFrameProgress(); } catch (_ignored) { /* do not infer completion */ }
+    var location = parseScormLocationPair(getScormLocation());
+    var status = String(cmi['cmi.core.lesson_status'] || cmi['cmi.success_status'] || '').toLowerCase();
+    var visited = Array.isArray(cmi['airtrust.viewed_slides']) ? cmi['airtrust.viewed_slides'] : [];
+    var fullyVisited = location && location.total <= 1000 &&
+      Number(cmi['airtrust.total_slides']) === location.total &&
+      visited.length === location.total &&
+      visited.every(function(n, index) { return n === index + 1; });
+    if (!fullyVisited || status === 'failed') {
+      postToParent({ type: 'lms:completion-error', matriculaId: MATRICULA_ID,
+        code: 'SCORM_REQUIREMENTS_PENDING',
+        message: 'Ainda faltam requisitos do conteúdo ou da avaliação.' });
+      return;
+    }
+    notifyCompletionPending('saving', 'user-confirmed-finish');
+    void commit(buildPayload(), 0, 'SCORM_USER_FINALIZE');
+  }
+
   // Relay the inner SCORM package's raw completion diagnostics
   // (AIRTRUST_COMPLETION_DIAGNOSTICS_V1) up to React as lms:completion-diagnostics.
   // Trust ONLY the exact scorm-frame window as the source; ignore any IDs the
@@ -290,11 +318,74 @@ export function buildScormSessionCloseRuntimeScript(): string {
       return false;
     }
     if (typeof serialized !== 'string' || serialized.length > MAX_RELAYED_DIAGNOSTICS_CHARS) return false;
+    var diagnostics = JSON.parse(serialized);
+    // The message type is the package's V1 contract marker. Some published
+    // SCORM packages carry that marker only on the envelope, while the LMS
+    // parser expects it on the payload as well.
+    if (diagnostics.version == null) diagnostics.version = 1;
     postToParent({
       type: 'lms:completion-diagnostics',
       matriculaId: MATRICULA_ID,
-      diagnostics: JSON.parse(serialized),
+      diagnostics: diagnostics,
     });
     return true;
+  }`;
+}
+
+/** Native M8/legacy package cursor ownership; injected at the same wrapper scope. */
+export function buildScormNativeResumeOwnershipScript(): string {
+  return `
+  function isNativeCourseResumeOwner(w, doc) {
+    try {
+      var state = JSON.parse(cmi['cmi.suspend_data'] || 'null');
+      if (!state || typeof state !== 'object' || Array.isArray(state)) return false;
+
+      // Versioned M8/Factory courses own their position through suspend_data.a.
+      // Never force a generic hash jump from an obsolete LMS high-water mark
+      // when the SAME package has already restored its own cursor.
+      var authored = w.COURSE_DATA;
+      if (authored && typeof authored.packageVersion === 'string' &&
+          state.p === authored.packageVersion && Array.isArray(authored.slides) &&
+          authored.slides.length > 0 && Number.isInteger(state.a) &&
+          state.a >= 0 && state.a < authored.slides.length &&
+          Array.isArray(state.d) &&
+          state.d.every(function(n) {
+            return Number.isInteger(n) && n >= 0 && n < authored.slides.length;
+          })) return true;
+
+      // Older package engine owns its own SCORM cursor in suspend_data.s.
+      if (!doc?.getElementById('slide') || !doc.getElementById('counter') ||
+          typeof w.Scorm?.get !== 'function') return false;
+      return Number.isInteger(state.s) && state.s >= 0 &&
+        Array.isArray(state.d) && state.mq && typeof state.mq === 'object';
+    } catch (_error) { return false; }
+  }
+
+`;
+}
+
+/**
+ * Final event queue priority lives in the wrapper IIFE. Preserve the exact
+ * Finish/finalization payload when unload autosaves race with an in-flight commit.
+ * This is runtime JavaScript, not TypeScript executed on the Worker.
+ */
+export function buildScormQueuedCommitScript(): string {
+  return `
+  function queuedCommitPriority(eventType) {
+    switch (String(eventType || 'SCORM_COMMIT').toUpperCase()) {
+      case 'SCORM_USER_FINALIZE': return 5;
+      case 'SCORM_FINISH': return 4;
+      case 'SCORM_COMPLETION_CANDIDATE': return 3;
+      case 'SCORM_BEFORE_UNLOAD_COMMIT':
+      case 'SCORM_VISIBILITY_COMMIT': return 2;
+      default: return 1;
+    }
+  }
+
+  function queueLatestCommit(data, eventType) {
+    if (!queuedCommit ||
+        queuedCommitPriority(eventType) >= queuedCommitPriority(queuedCommit.eventType)) {
+      queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
+    }
   }`;
 }

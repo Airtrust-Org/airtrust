@@ -12,6 +12,11 @@ export type FlightPresentation = {
   rdv_status: string | null;
   rdv_workflow_status: string | null;
   rdv_enviado_em: string | null;
+  planejamento_status: 'previo' | 'confirmado';
+  pendencias_planejamento: string[];
+  peso_passageiros_planejado: number | null;
+  peso_bagagem_planejado: number | null;
+  peso_carga_planejado: number | null;
 };
 
 type StageRow = {
@@ -19,10 +24,15 @@ type StageRow = {
   numero_etapa: number;
   origem_icao: string | null;
   destino_icao: string | null;
+  peso_passageiros: number | null;
+  peso_bagagem: number | null;
+  payload: number | null;
+  unidade_peso: string | null;
 };
 
 type EventRow = {
   voo_id: number;
+  tipo_evento: string;
   metadata_json: string | null;
 };
 
@@ -47,6 +57,11 @@ const emptyPresentation = (): FlightPresentation => ({
   rdv_status: null,
   rdv_workflow_status: null,
   rdv_enviado_em: null,
+  planejamento_status: 'previo',
+  pendencias_planejamento: [],
+  peso_passageiros_planejado: null,
+  peso_bagagem_planejado: null,
+  peso_carga_planejado: null,
 });
 
 function normalizeCode(value: unknown): string {
@@ -62,6 +77,23 @@ function buildRouteCodes(stages: StageRow[]): string[] {
     if (destination && route[route.length - 1] !== destination) route.push(destination);
   }
   return route;
+}
+
+// Pure projection: use the same tenant-scoped stage snapshot already loaded for
+// flight presentation. A warning is not a flight safety clearance decision.
+function planningPendencies(stages: StageRow[]): string[] {
+  if (!stages.length) return ['Etapas e rota ainda não informadas'];
+  const pendencias: string[] = [];
+  if (stages.some((stage) => !normalizeCode(stage.origem_icao) || !normalizeCode(stage.destino_icao))) {
+    pendencias.push('Completar origem e destino das etapas');
+  }
+  const first = stages[0];
+  // Zero is an explicitly supplied mass; a missing column in an older schema
+  // is also a pending value, never a silently accepted zero.
+  if (first.peso_passageiros == null) pendencias.push('Informar peso de passageiros');
+  if (first.peso_bagagem == null) pendencias.push('Informar peso de bagagem');
+  if (first.payload == null) pendencias.push('Informar peso de carga');
+  return pendencias;
 }
 
 function parseRoutePointIds(metadataJson: string | null): number[] | null {
@@ -163,7 +195,7 @@ export async function getFlightPresentationMap(
   const [stageResult, eventResult, rdvResult] = await Promise.all([
     db
       .prepare(
-        `SELECT voo_id, numero_etapa, origem_icao, destino_icao
+        `SELECT voo_id, numero_etapa, origem_icao, destino_icao, peso_passageiros, peso_bagagem, payload, unidade_peso
            FROM cv_voo_etapas
           WHERE empresa_id = ?
             AND deleted_at IS NULL
@@ -171,10 +203,21 @@ export async function getFlightPresentationMap(
           ORDER BY voo_id ASC, numero_etapa ASC, id ASC`,
       )
       .bind(empresaId, ...ids)
-      .all<StageRow>(),
+      .all<StageRow>()
+      .catch(async (error: unknown) => {
+        // Legacy installations may not yet have every planning-weight column.
+        // Keep route/dashboard reads available without hiding other SQL faults.
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/no such column:\s*(peso_passageiros|peso_bagagem|payload|unidade_peso)/i.test(message)) throw error;
+        return db.prepare(`SELECT voo_id, numero_etapa, origem_icao, destino_icao
+          FROM cv_voo_etapas
+          WHERE empresa_id = ? AND deleted_at IS NULL AND voo_id IN (${placeholders})
+          ORDER BY voo_id ASC, numero_etapa ASC, id ASC`)
+          .bind(empresaId, ...ids).all<StageRow>();
+      }),
     db
       .prepare(
-        `SELECT voo_id, metadata_json
+        `SELECT voo_id, tipo_evento, metadata_json
            FROM cv_voo_eventos
           WHERE empresa_id = ?
             AND deleted_at IS NULL
@@ -204,9 +247,17 @@ export async function getFlightPresentationMap(
   }
 
   const eventRouteIds = new Map<number, number[]>();
+  const planningConfirmed = new Map<number, boolean>();
   for (const event of eventResult.results || []) {
     const routeIds = parseRoutePointIds(event.metadata_json);
     if (routeIds) eventRouteIds.set(Number(event.voo_id), routeIds);
+    try {
+      const metadata = JSON.parse(event.metadata_json || '{}') as { action?: string };
+      if (metadata.action === 'confirm_planning') planningConfirmed.set(Number(event.voo_id), true);
+      if (metadata.action === 'update_planning' || (event.tipo_evento === 'tripulacao' && planningConfirmed.get(Number(event.voo_id)))) {
+        planningConfirmed.set(Number(event.voo_id), false);
+      }
+    } catch { /* Ignore malformed historical event metadata. */ }
   }
 
   const allRouteIds = [...eventRouteIds.values()].flat();
@@ -217,8 +268,18 @@ export async function getFlightPresentationMap(
 
   for (const id of ids) {
     const presentation = output.get(id) || emptyPresentation();
-    const codes = buildRouteCodes(stagesByFlight.get(id) || []);
+    const flightStages = stagesByFlight.get(id) || [];
+    const codes = buildRouteCodes(flightStages);
     presentation.rota_codigos = codes;
+    presentation.pendencias_planejamento = planningPendencies(flightStages);
+    presentation.planejamento_status = planningConfirmed.get(id) ? 'confirmado' : 'previo';
+    const plannedStage = (stagesByFlight.get(id) || [])[0];
+    if (plannedStage) {
+      const toLb = (value: number | null) => value == null ? null : Number((value * (String(plannedStage.unidade_peso).toUpperCase() === 'KG' ? 2.2046226218 : 1)).toFixed(3));
+      presentation.peso_passageiros_planejado = toLb(plannedStage.peso_passageiros);
+      presentation.peso_bagagem_planejado = toLb(plannedStage.peso_bagagem);
+      presentation.peso_carga_planejado = plannedStage.payload == null ? null : Number((plannedStage.payload * 2.2046226218).toFixed(3));
+    }
 
     const exactIds = eventRouteIds.get(id) || [];
     const exactPoints = exactIds.map((pointId) => catalogById.get(pointId)).filter(Boolean) as CatalogRow[];

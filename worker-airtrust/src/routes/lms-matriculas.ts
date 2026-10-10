@@ -60,18 +60,19 @@ import {
   type ProgressRecoveryStateSnapshot,
 } from '../services/lms-progress-recovery-domain';
 import {
+  canFinalizeScormEnrollment,
   clampPct,
   extractProgressPctFromCmiJson,
   formatScormLocationTelemetry,
   isMatriculaUniqueConstraintError,
   isScormFailed,
-  isScormSuccess,
   parsePositiveInt,
   requiresServerValidatedNonScormEvidence,
   resolveScormScorePct,
   summarizeScormTextPayload,
 } from '../services/lms-matricula-runtime-domain';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
+import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -294,24 +295,23 @@ function emitScormCommitTelemetry(
       blockedLocationRegression: boolean;
       blockedEmptySuspendData: boolean;
       blockedShorterSuspendData: boolean;
+      blockedTerminalRegression: boolean;
       preservedLocationFromCurrent: boolean;
     };
   },
 ) {
-  const blocked =
-    params.decisions.blockedLocationRegression ||
-    params.decisions.blockedEmptySuspendData ||
-    params.decisions.blockedShorterSuspendData;
+  const { blockedLocationRegression, blockedEmptySuspendData, blockedShorterSuspendData, blockedTerminalRegression } = params.decisions;
+  const blocked = blockedLocationRegression || blockedEmptySuspendData ||
+    blockedShorterSuspendData || blockedTerminalRegression;
 
   const event = blocked ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_COMMIT';
   const reason = [
     params.decisions.blockedLocationRegression ? 'location-regression' : null,
     params.decisions.blockedEmptySuspendData ? 'empty-suspend-data' : null,
     params.decisions.blockedShorterSuspendData ? 'shorter-suspend-data' : null,
+    params.decisions.blockedTerminalRegression ? 'terminal-status-regression' : null,
     !blocked && params.decisions.preservedLocationFromCurrent ? 'preserved-current-location' : null,
-  ]
-    .filter(Boolean)
-    .join(',');
+  ].filter(Boolean).join(',');
 
   createLogger(c, 'LmsMatriculas.scorm').info('lms_scorm_commit_telemetry', {
     matriculaId: params.matriculaId,
@@ -722,12 +722,12 @@ app.get('/:id', async (c) => {
                 },
         })
       : null;
-
+  const editionMismatch = await detectLmsEditionMismatch({
+    bucket: c.env.BUCKET, contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo, activePrefix: matricula.scorm_package_r2_prefix, empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data, db, enrollmentStartedAt: matricula.data_inicio });
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: matricula.status as string | null,
     progressoBruto: matricula.progresso_pct as number | null,
   });
-
   return c.json({
     success: true,
     data: {
@@ -738,7 +738,7 @@ app.get('/:id', async (c) => {
       completion_reason_code: effectiveProgress.completion_reason_code,
       scorm_progresso: progressoScorm,
       xapi_summary: xapiSummary,
-      completion_diagnostic: completionDiagnostic,
+      completion_diagnostic: completionDiagnostic, edition_mismatch: editionMismatch,
     },
   });
 });
@@ -1324,7 +1324,7 @@ app.post('/scorm/commit', async (c) => {
       `
       SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.tentativas,
         m.qualificacao_historico_id,
-        c.id AS curso_id, c.scorm_mastery_score, c.gerar_qualificacao_ao_concluir,
+        c.id AS curso_id, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
         c.qualificacao_tipo_id, c.titulo AS curso_titulo,
         qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
         qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1345,7 +1345,8 @@ app.post('/scorm/commit', async (c) => {
       tentativas: number;
       qualificacao_historico_id: number | null;
       curso_id: number;
-      scorm_mastery_score: number;
+      scorm_mastery_score: number | null;
+      scorm_assessment_policy: 'FORMATIVE' | 'SCORED' | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       curso_titulo: string;
@@ -1446,12 +1447,11 @@ app.post('/scorm/commit', async (c) => {
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
-  // "Rever" replay: nunca recomputar sucesso/falha (preserva data_conclusao/tentativas).
-  const sucesso =
-    !matriculaWasConcluido &&
-    isScormSuccess(d, { masteryScore: matricula.scorm_mastery_score, effectiveScorePct });
+  const sucesso = canFinalizeScormEnrollment({
+    commit: d, wasCompleted: matriculaWasConcluido, cmiJson: mergedCmiJson,
+    location: mergedLocation, policy: matricula.scorm_assessment_policy,
+    masteryScore: matricula.scorm_mastery_score, scorePct: effectiveScorePct });
   const falha = !matriculaWasConcluido && isScormFailed(d);
-
   let progressoPct = progressoAnterior;
   if (sucesso) {
     progressoPct = 100;

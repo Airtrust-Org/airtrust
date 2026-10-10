@@ -151,6 +151,42 @@ describe('training compliance reports', () => {
     expect(criticalPending.some((row) => row.qualificacao_tipo_nome === 'SOP')).toBe(false);
   });
 
+  it('não coloca evidência histórica a validar no relatório de pendências dos gestores', () => {
+    const withReview = {
+      ...snapshot,
+      people: snapshot.people.map((person) =>
+        person.id !== 1
+          ? person
+          : {
+              ...person,
+              requisitos: [
+                ...person.requisitos,
+                {
+                  ...person.requisitos[0],
+                  qualificacao_tipo_id: 300,
+                  qualificacao_tipo_nome: 'CA-EBS',
+                  qualificacao_tipo_codigo: 'CA-EBS',
+                  status_compliance: 'NAO_REALIZADO',
+                  ultima_data: '2026-02-26',
+                  evidencia_pendente_validacao: true,
+                  evidencia_pendente_motivo: 'MODALIDADE',
+                },
+              ],
+            },
+      ),
+    } as TrainingComplianceSnapshot;
+    const rows = buildTrainingComplianceReportRows(withReview, {
+      setor_id: 10,
+      statuses: ['NAO_REALIZADO', 'VENCIDO'],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      funcionario_nome: 'Bruno Copiloto',
+      status_compliance: 'VENCIDO',
+    });
+    expect(rows.some((row) => row.qualificacao_tipo_codigo === 'CA-EBS')).toBe(false);
+  });
+
   it('gera PDF válido para envio aos gestores', async () => {
     const rows = buildTrainingComplianceReportRows(snapshot, {
       setor_id: 10,

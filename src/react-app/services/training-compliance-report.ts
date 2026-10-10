@@ -13,6 +13,8 @@ export type TrainingCompliancePendingRow = {
   data_validade: string | null;
   dias_para_vencer: number | null;
   ultima_data: string | null;
+  evidencia_pendente_validacao?: boolean;
+  evidencia_pendente_motivo?: 'MODALIDADE' | 'PERFIL' | null;
   critico_operacional: boolean;
   referencia_normativa: string | null;
   curso_ead_titulo: string | null;
@@ -65,7 +67,14 @@ function dateBr(value: string | null): string {
 }
 
 export function complianceStatusLabel(row: TrainingCompliancePendingRow): string {
-  if (row.status_compliance === 'NAO_REALIZADO') return 'Nunca realizou';
+  if (row.status_compliance === 'NAO_REALIZADO') {
+    if (row.evidencia_pendente_validacao) {
+      return row.evidencia_pendente_motivo === 'MODALIDADE'
+        ? 'Modalidade a validar'
+        : 'Competência a validar';
+    }
+    return 'Nunca realizou';
+  }
   if (row.status_compliance === 'EM_ANDAMENTO') return 'Em andamento';
   if (row.status_compliance === 'VENCENDO') {
     return row.dias_para_vencer == null ? 'Vencendo' : `Vence em ${row.dias_para_vencer} dia(s)`;

@@ -733,7 +733,7 @@ describe('lms matriculas progress integrity', () => {
     expect(mergedCmi['cmi.suspend_data']).toBe('quiz-checkpoint-state');
   });
 
-  it('conclui commit SCORM 1.2 quando lesson_status=completed e score atende mastery', async () => {
+  it('conclui SCORM 1.2 apenas no pedido explicito com slides vistos e mastery satisfeito', async () => {
     const { db } = createMockDb([
       [
         'FROM lms_matriculas m',
@@ -746,6 +746,7 @@ describe('lms matriculas progress integrity', () => {
             progresso_pct: 0,
             tentativas: 0,
             qualificacao_historico_id: null,
+            scorm_assessment_policy: 'SCORED',
             scorm_mastery_score: 70,
             gerar_qualificacao_ao_concluir: 1,
             qualificacao_tipo_id: 125,
@@ -792,11 +793,15 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 163,
+          commit_event: 'SCORM_USER_FINALIZE',
           lesson_status: 'completed',
           score_raw: 85,
           score_max: 100,
           cmi_json: JSON.stringify({
             'cmi.core.lesson_status': 'completed',
+            'cmi.core.lesson_location': '3/3',
+            'airtrust.total_slides': 3,
+            'airtrust.viewed_slides': [1, 2, 3],
             'cmi.core.score.raw': '85',
           }),
         }),
@@ -827,7 +832,7 @@ describe('lms matriculas progress integrity', () => {
     );
   });
 
-  it('conclui commit SCORM 2004 quando completion_status=completed e success_status=passed', async () => {
+  it('conclui SCORM 2004 somente apos confirmacao explicita e todos os slides', async () => {
     const { db } = createMockDb([
       [
         'FROM lms_matriculas m',
@@ -840,6 +845,7 @@ describe('lms matriculas progress integrity', () => {
             progresso_pct: 40,
             tentativas: 0,
             qualificacao_historico_id: null,
+            scorm_assessment_policy: 'SCORED',
             scorm_mastery_score: 70,
             gerar_qualificacao_ao_concluir: 0,
             qualificacao_tipo_id: null,
@@ -880,6 +886,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 164,
+          commit_event: 'SCORM_USER_FINALIZE',
           completion_status: 'completed',
           success_status: 'passed',
           score_raw: 92,
@@ -888,6 +895,9 @@ describe('lms matriculas progress integrity', () => {
           cmi_json: JSON.stringify({
             'cmi.completion_status': 'completed',
             'cmi.success_status': 'passed',
+            'cmi.location': '3/3',
+            'airtrust.total_slides': 3,
+            'airtrust.viewed_slides': [1, 2, 3],
             'cmi.score.raw': '92',
           }),
         }),
@@ -990,7 +1000,7 @@ describe('lms matriculas progress integrity', () => {
     expect(matriculaUpdate?.args[1]).toBe(55);
   });
 
-  it('conclui SCORM 1.2 no Finish confiavel quando mastery e slide final foram confirmados', async () => {
+  it('preserva progresso no LMSFinish, sem finalizar antes da confirmacao do aluno', async () => {
     const { db } = createMockDb([
       [
         'FROM lms_matriculas m',
@@ -1084,7 +1094,7 @@ describe('lms matriculas progress integrity', () => {
       success: true,
       data: {
         matricula_id: 326,
-        novo_status: 'CONCLUIDO',
+        novo_status: 'EM_ANDAMENTO',
         qualificacao_gerada: null,
         completion_diagnostic: {
           status: 'accepted',
@@ -1095,14 +1105,7 @@ describe('lms matriculas progress integrity', () => {
         },
       },
     });
-    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
-    expect(logAuditMock).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        action: 'SCORM_COMPLETION_ACCEPTED',
-        entityId: 326,
-      }),
-    );
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   it('trata Finish duplicado de matrícula já concluída como idempotente e não regride estado', async () => {

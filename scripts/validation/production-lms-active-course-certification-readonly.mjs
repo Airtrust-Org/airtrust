@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
+import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
+import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
 import {
   assert,
   assertAllowedProductionBaseUrl,
@@ -209,70 +211,6 @@ window.API_1484_11={
 })();</script>`;
 }
 
-function extractAnswerPlan(model) {
-  const answers = [];
-  const seen = new Set();
-  function visit(value, path = '') {
-    if (!value || typeof value !== 'object') return;
-    if (seen.has(value)) return;
-    seen.add(value);
-    if (Array.isArray(value)) {
-      value.forEach((item, index) => visit(item, `${path}[${index}]`));
-      return;
-    }
-    const obj = value;
-    let options = null;
-    for (const key of ['options', 'alternatives', 'choices', 'answers', 'alternativas', 'opcoes', 'respostas']) {
-      if (Array.isArray(obj[key]) && obj[key].length) {
-        options = obj[key];
-        break;
-      }
-    }
-    if (options?.length) {
-      let indices = [];
-      for (const key of ['correctIndex', 'answerIndex', 'correctOptionIndex', 'correctAnswerIndex']) {
-        if (Number.isInteger(obj[key])) indices = [Number(obj[key])];
-      }
-      for (const key of ['correctAnswer', 'answer', 'correctOption', 'correct', 'correctLetter', 'rightAnswer', 'respostaCorreta', 'gabarito']) {
-        const raw = obj[key];
-        if (typeof raw === 'number' && Number.isInteger(raw)) indices = [raw];
-        if (Array.isArray(raw) && raw.every((item) => Number.isInteger(item))) indices = raw.map(Number);
-        if (typeof raw === 'string') {
-          const normalized = raw.trim();
-          const idx = options.findIndex((option) =>
-            String(option?.value ?? option?.text ?? option?.label ?? option).trim() === normalized
-          );
-          if (idx >= 0) indices = [idx];
-          else if (/^[A-Z]$/i.test(normalized)) {
-            const letter = normalized.toUpperCase().charCodeAt(0) - 65;
-            if (letter >= 0 && letter < options.length) indices = [letter];
-          }
-        }
-      }
-      const marked = options
-        .map((option, i) => (
-          option && typeof option === 'object' &&
-          (option.correct === true || option.isCorrect === true || option.correctAnswer === true)
-            ? i
-            : -1
-        ))
-        .filter((i) => i >= 0);
-      if (marked.length) indices = marked;
-      const unique = [...new Set(indices)].filter((i) => i >= 0 && i < options.length);
-      if (unique.length) {
-        const slideMatch = path.match(/(?:^|\.)slides\[(\d+)\]/);
-        answers.push({
-          path,
-          slideIndex: slideMatch ? Number(slideMatch[1]) + 1 : null,
-          indices: unique,
-        });
-      }
-    }
-    for (const [key, child] of Object.entries(obj)) visit(child, path ? `${path}.${key}` : key);
-  }
-  visit(model);
-  return answers;
-}
 
 async function requestAssetSession(context, token, courseId) {
   const r = await context.request.post(`${API}/api/lms/assets/session`, {
@@ -342,6 +280,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         assessmentBackfillByLocation: {},
         adaptiveByLocation: {},
         answerAcceptedByLocation: {},
+        reviewVisitedByLocation: {},
       };
       const st = w.__AIRTRUST_CERT_DRIVER;
       st.clickedByLocation ??= {};
@@ -351,6 +290,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       st.assessmentBackfillByLocation ??= {};
       st.adaptiveByLocation ??= {};
       st.answerAcceptedByLocation ??= {};
+      st.reviewVisitedByLocation ??= {};
       const locationBase = String(location || 'unknown');
       // cmi.core.lesson_location tracks the slide, not the question inside it.
       // Use the learner-visible ordinal to avoid treating each new quiz question
@@ -460,6 +400,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (!input.checked) input.click();
       }
 
+      // The SCORM root uses `app-shell menu-collapsed`. A generic
+      // [class*="menu"] ancestor match would falsely mark every slide card
+      // as navigation chrome and block mandatory interactions (course 15).
       const isProductChrome = (el, text) => {
         const id = String(el.id || '').toLowerCase();
         const className = clean(el.className).toLowerCase();
@@ -479,7 +422,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (/(^|\s)(icon-btn|menu-btn|close-menu|drawer-close|skip-link)(\s|$)/i.test(className)) return true;
         if (bad.test(text)) return true;
         return Boolean(el.closest(
-          'aside,[class*="sidebar" i],[class*="drawer" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+          'aside,[class*="sidebar" i],[class*="drawer" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
         ));
       };
       const items = Array.from(document.querySelectorAll('button,[role=button],input[type=button],input[type=submit],a'))
@@ -552,12 +495,57 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         requiredInteractionMatch &&
         Number(requiredInteractionMatch[1]) < Number(requiredInteractionMatch[2])
       ) {
+        // Prefer the package's explicit interaction contract before visual
+        // heuristics. AirTrust-authored courses mark mandatory learner targets
+        // with data-touch / .touchable; these may sit inside a scrolled content
+        // surface and therefore be outside the current viewport at discovery time.
+        const all = Array.from(document.querySelectorAll('*'));
+        const explicitRequiredItems = Array.from(
+          document.querySelectorAll('[data-touch],.touchable'),
+        )
+          .filter((el) => {
+            if (el.closest(
+              'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+            )) return false;
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            const text = clean(el.textContent);
+            return (
+              rect.width > 0 &&
+              rect.height > 0 &&
+              style.visibility !== 'hidden' &&
+              style.display !== 'none' &&
+              style.opacity !== '0' &&
+              el.getAttribute('aria-hidden') !== 'true' &&
+              text.length > 0 &&
+              text.length <= 800
+            );
+          })
+          .map((el) => {
+            const index = Math.max(0, all.indexOf(el));
+            const id = clean(el.id);
+            const role = clean(el.getAttribute('role'));
+            const touch = clean(el.getAttribute('data-touch'));
+            return {
+              el,
+              index,
+              id,
+              role,
+              text: clean(el.textContent),
+              signature: ['required-explicit', touch, index, id, el.tagName.toLowerCase()].join(':'),
+            };
+          });
+        const explicitRequiredCandidate = explicitRequiredItems.find((item) => !alreadyClicked(item));
+        if (explicitRequiredCandidate) {
+          return requestTrustedClick(explicitRequiredCandidate, 'required-interaction-explicit');
+        }
+
         const scope = Array.from(document.body.querySelectorAll('*'));
         const rawCandidates = scope.filter((el) => {
           if (!visible(el)) return false;
           if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
           if (el.closest(
-            'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+            'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
           )) return false;
           const style = getComputedStyle(el);
           const dataKeys = Object.keys(el.dataset || {}).join(' ');
@@ -619,7 +607,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           const structuralGroups = Array.from(document.body.querySelectorAll('*'))
             .map((parent) => {
               if (parent.closest(
-                'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+                'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
               )) return null;
               const children = Array.from(parent.children).filter((el) => {
                 if (!visible(el)) return false;
@@ -651,7 +639,6 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
             if (!candidates.includes(el)) candidates.push(el);
           }
         }
-        const all = Array.from(document.querySelectorAll('*'));
         const candidateItems = candidates.map((el) => {
           const index = Math.max(0, all.indexOf(el));
           const id = clean(el.id);
@@ -682,6 +669,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           pendingProbe: null,
           probeQuestion: 0,
           retries: 0,
+          questionTotal: 0,
         };
         return st.adaptiveByLocation[locationBase];
       };
@@ -713,6 +701,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           1,
           Number(resultQuestionTotal || 0),
           Number(questionTotal || 0),
+          Number(adaptive.questionTotal || 0),
           observedQuestionTotal,
         );
         if (!adaptive.initialized) {
@@ -840,6 +829,61 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           }
         }
       };
+      // The AW139-style assessment exposes learner-visible review feedback after
+      // a failed attempt. Learn only from that visible feedback, visit each wrong
+      // question once, then follow the package's own "Revisar capítulo" flow.
+      const reviewAnswerButtons = Array.from(document.querySelectorAll('button.answer'));
+      const reviewCorrectIndex = reviewAnswerButtons.findIndex((el) =>
+        /(^|\s)review-correct(\s|$)/i.test(String(el.className || ''))
+      );
+      const reviewMode = reviewCorrectIndex >= 0 || reviewAnswerButtons.some((el) =>
+        /(^|\s)review-(?:correct|incorrect)(\s|$)/i.test(String(el.className || ''))
+      );
+      if (reviewMode && questionNumber && questionTotal) {
+        const adaptive = getAdaptiveState();
+        adaptive.questionTotal = Math.max(Number(adaptive.questionTotal || 0), Number(questionTotal || 0));
+        if (!adaptive.initialized) {
+          adaptive.initialized = true;
+          if (Number.isFinite(resultMetric)) adaptive.bestMetric = Number(resultMetric);
+          for (let q = 0; q < adaptive.questionTotal; q += 1) {
+            if (!Number.isInteger(adaptive.bestAnswers[q])) {
+              adaptive.bestAnswers[q] = Number.isInteger(adaptive.currentAnswers[q])
+                ? adaptive.currentAnswers[q]
+                : 0;
+            }
+          }
+        }
+        const reviewQIndex = questionNumber - 1;
+        if (reviewCorrectIndex >= 0) adaptive.bestAnswers[reviewQIndex] = reviewCorrectIndex;
+
+        const visited = new Set(
+          Array.isArray(st.reviewVisitedByLocation[locationBase])
+            ? st.reviewVisitedByLocation[locationBase]
+            : [],
+        );
+        visited.add(reviewQIndex);
+        st.reviewVisitedByLocation[locationBase] = Array.from(visited);
+        const nextWrongReview = Array.from(document.querySelectorAll('button.review-q.bad'))
+          .filter(visible)
+          .find((el) => {
+            const match = clean(el.textContent).match(/\d+/);
+            const q = match ? Number(match[0]) - 1 : -1;
+            return q >= 0 && !visited.has(q);
+          });
+        if (nextWrongReview) {
+          nextWrongReview.click();
+          logAction('assessment-review-wrong');
+          return { type: 'assessment-review-wrong', text: clean(nextWrongReview.textContent).slice(0, 80) };
+        }
+
+        const reviewChapter = items.find((item) => /revisar\s+(?:o\s+)?cap[ií]tulo/i.test(item.key));
+        if (reviewChapter) {
+          st.reviewVisitedByLocation[locationBase] = [];
+          resetAssessmentRetryState();
+          return requestTrustedClick(reviewChapter, 'assessment-review-chapter');
+        }
+      }
+
       const moduleRetry = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
       if (moduleRetry) {
         if (!allowAdaptiveRetry) return { type: 'retry-deferred' };
@@ -880,6 +924,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         );
         const adaptive = getAdaptiveState();
         const qIndex = questionNumber ? questionNumber - 1 : cursor;
+        if (questionTotal) {
+          adaptive.questionTotal = Math.max(Number(adaptive.questionTotal || 0), Number(questionTotal));
+        }
         adaptive.optionCounts[qIndex] = assessmentChoices.length;
         if (selected) adaptive.currentAnswers[qIndex] = Math.max(0, assessmentChoices.indexOf(selected));
 
@@ -925,6 +972,25 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         }
         if ((selected || driverAccepted) && assessmentFinish && !nextQuestion) {
           return markAndClick(assessmentFinish, 'assessment-finish');
+        }
+
+        // On some M8 quizzes qNext is disabled on question N/N, but the
+        // learner's bottom navigation button is enabled once every question
+        // is answered. Use only visible evidence of full quiz coverage, never
+        // a slide index alone, to leave the assessment normally.
+        const questionDots = Array.from(document.querySelectorAll('.question-map .qdot'));
+        const allQuestionDotsAnswered = questionDots.length === questionTotal &&
+          questionDots.every((el) => el.classList.contains('answered'));
+        const allQuestionsAnswered = answeredCount === questionTotal || allQuestionDotsAnswered;
+        const bottomNext = items.find((item) =>
+          /^(?:next|nextbtn)$/i.test(item.id) && !isChoiceButton(item)
+        );
+        if (
+          !nextQuestion && !assessmentFinish && selected && bottomNext &&
+          questionNumber && questionTotal && questionNumber === questionTotal &&
+          allQuestionsAnswered
+        ) {
+          return requestTrustedClick(bottomNext, 'assessment-last-question-next');
         }
 
         const adaptiveWanted = adaptive.initialized
@@ -1302,8 +1368,32 @@ async function captureRequiredInteractionStructure(frame) {
         st.display !== 'none' && st.opacity !== '0' && el.getAttribute('aria-hidden') !== 'true';
     };
     const excluded = (el) => Boolean(el.closest(
-      'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i],[id*="menu" i],[class*="toc" i],[id*="toc" i]',
+      'aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
     ));
+    const describe = (el) => {
+      if (!el) return null;
+      const r=el.getBoundingClientRect(), st=getComputedStyle(el), parent=el.parentElement;
+      return {
+        tag: el.tagName?.toLowerCase?.() || null,
+        id: String(el.id || '').slice(0,80) || null,
+        class_name: String(el.className || '').slice(0,180) || null,
+        role: el.getAttribute?.('role') || null,
+        parent_tag: parent?.tagName?.toLowerCase() || null,
+        parent_class_name: String(parent?.className || '').slice(0,180) || null,
+        parent_child_count: parent?.children?.length ?? null,
+        direct_child_count: el.children?.length ?? 0,
+        li_count: el.querySelectorAll?.('li')?.length ?? 0,
+        heading_count: el.querySelectorAll?.('h1,h2,h3,h4,h5,h6')?.length ?? 0,
+        cursor: st.cursor || null,
+        pointer_events: st.pointerEvents || null,
+        position: st.position || null,
+        border_radius: st.borderRadius || null,
+        border_top_width: st.borderTopWidth || null,
+        box_shadow: st.boxShadow || null,
+        rect: {top:Math.round(r.top),left:Math.round(r.left),width:Math.round(r.width),height:Math.round(r.height)},
+        text_sample: clean(el.textContent).slice(0,220),
+      };
+    };
     const badges = Array.from(document.body.querySelectorAll('*')).filter((el) => {
       const text = clean(el.textContent);
       return visible(el) && text.length <= 260 &&
@@ -1314,41 +1404,88 @@ async function captureRequiredInteractionStructure(frame) {
       return ar.width*ar.height - br.width*br.height;
     })[0] || null;
     const bottom = badge?.getBoundingClientRect().bottom || 0;
-    const rows = Array.from(document.body.querySelectorAll('div,section,article,ul,li'))
+    const rows = Array.from(document.body.querySelectorAll('*'))
       .filter((el) => {
-        if (!visible(el) || excluded(el)) return false;
+        if (!visible(el) || excluded(el) || el === badge || el.contains(badge)) return false;
         const r=el.getBoundingClientRect(), text=clean(el.textContent);
-        return r.top >= bottom-12 && r.width >= 80 && r.height >= 30 &&
-          r.width <= innerWidth*0.9 && r.height <= innerHeight*0.8 &&
-          text.length >= 6 && text.length <= 1200;
+        return r.top >= bottom-16 && r.width >= 40 && r.height >= 18 &&
+          r.width <= innerWidth*0.95 && r.height <= innerHeight*0.9 &&
+          text.length >= 2 && text.length <= 1400;
       })
-      .map((el) => {
-        const r=el.getBoundingClientRect(), st=getComputedStyle(el), parent=el.parentElement;
-        return {
-          tag: el.tagName.toLowerCase(),
-          id: String(el.id || '').slice(0,80) || null,
-          class_name: String(el.className || '').slice(0,180) || null,
-          parent_tag: parent?.tagName?.toLowerCase() || null,
-          parent_class_name: String(parent?.className || '').slice(0,180) || null,
-          parent_child_count: parent?.children?.length ?? null,
-          direct_child_count: el.children?.length ?? 0,
-          li_count: el.querySelectorAll('li').length,
-          heading_count: el.querySelectorAll('h1,h2,h3,h4,h5,h6').length,
-          cursor: st.cursor || null,
-          border_radius: st.borderRadius || null,
-          border_top_width: st.borderTopWidth || null,
-          box_shadow: st.boxShadow || null,
-          rect: {top:Math.round(r.top),left:Math.round(r.left),width:Math.round(r.width),height:Math.round(r.height)},
-          text_sample: clean(el.textContent).slice(0,220),
-        };
+      .map(describe)
+      .sort((a,b) => {
+        const dy = a.rect.top - b.rect.top;
+        if (Math.abs(dy) > 4) return dy;
+        return (a.rect.width*a.rect.height) - (b.rect.width*b.rect.height);
       })
-      .sort((a,b) => a.rect.width*a.rect.height - b.rect.width*b.rect.height)
-      .slice(0,80);
+      .slice(0,120);
+
+    const hitTests = [];
+    const yValues = [bottom + 45, bottom + 95, bottom + 155, bottom + 215]
+      .filter((y) => y > 0 && y < innerHeight - 10);
+    const xValues = [0.08,0.22,0.36,0.50,0.64,0.78,0.92]
+      .map((f) => Math.round(innerWidth * f))
+      .filter((x) => x > 10 && x < innerWidth - 10);
+    for (const y of yValues) {
+      for (const x of xValues) {
+        const stack = document.elementsFromPoint(x, y)
+          .filter((el) => el && !excluded(el))
+          .slice(0, 8)
+          .map(describe);
+        if (stack.length) hitTests.push({ x, y: Math.round(y), stack });
+      }
+    }
+
+    const targetLabels = ['Autorização','Tripulação','Aeronave','Ambiente'];
+    const bodyText = clean(document.body?.innerText || '');
+    const textFlags = Object.fromEntries(
+      targetLabels.map((label) => [label, bodyText.toLocaleLowerCase('pt-BR').includes(label.toLocaleLowerCase('pt-BR'))]),
+    );
+    const textAnchors = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const value = clean(node.nodeValue);
+      if (!value) continue;
+      const matched = targetLabels.find((label) =>
+        value.toLocaleLowerCase('pt-BR').includes(label.toLocaleLowerCase('pt-BR'))
+      );
+      if (!matched) continue;
+      const chain = [];
+      let el = node.parentElement;
+      for (let depth = 0; el && depth < 7; depth += 1, el = el.parentElement) {
+        chain.push(describe(el));
+      }
+      textAnchors.push({ label: matched, text_sample: value.slice(0,220), chain });
+      if (textAnchors.length >= 20) break;
+    }
+
+    const visualSurfaces = Array.from(document.querySelectorAll(
+      'img,svg,canvas,picture,object,embed,iframe,[usemap],map,area'
+    )).slice(0,80).map((el) => {
+      const item = describe(el);
+      const raw = el.getAttribute?.('src') || el.getAttribute?.('href') || el.getAttribute?.('data') || '';
+      let assetPath = null;
+      try { assetPath = raw ? new URL(raw, location.href).pathname.slice(0,260) : null; } catch {}
+      return {
+        ...item,
+        asset_path: assetPath,
+        alt: String(el.getAttribute?.('alt') || '').slice(0,180) || null,
+        usemap: String(el.getAttribute?.('usemap') || '').slice(0,120) || null,
+        map_name: String(el.getAttribute?.('name') || '').slice(0,120) || null,
+        onclick_attribute: el.hasAttribute?.('onclick') || false,
+      };
+    });
+
     const br=badge?.getBoundingClientRect();
     return {
       current:Number(match[1]), total:Number(match[2]),
+      viewport:{width:innerWidth,height:innerHeight},
       badge: br ? {tag:badge.tagName.toLowerCase(),class_name:String(badge.className||'').slice(0,180),top:Math.round(br.top),bottom:Math.round(br.bottom),left:Math.round(br.left),width:Math.round(br.width),height:Math.round(br.height)} : null,
       candidates: rows,
+      hit_tests: hitTests.slice(0,40),
+      target_text_present: textFlags,
+      text_anchors: textAnchors,
+      visual_surfaces: visualSurfaces,
     };
   }).catch(() => null);
 }
@@ -1412,8 +1549,17 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   await frame.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => undefined);
   await page.waitForTimeout(350);
 
-  const model = await frame.evaluate(() => window.AIRTRUST_COURSE_MODEL ?? null).catch(() => null);
-  const answerPlan = extractAnswerPlan(model);
+  // The M8 authoring model intentionally omits question answers. The actual
+  // certifying questions live in COURSE_DATA, so a model-only probe attempts
+  // arbitrary options and reports false completion failures. Read the exact
+  // loaded runtime package in this isolated read-only browser, not a generic
+  // synthetic gabarito. This plans clicks; it never mutates LMS enrollment.
+  const loaded = await frame.evaluate(() => ({
+    model: window.AIRTRUST_COURSE_MODEL ?? null,
+    runtime: window.COURSE_DATA ?? null,
+  })).catch(() => ({ model: null, runtime: null }));
+  const model = loaded.model;
+  const answerPlan = extractAnswerPlan(loaded.runtime ?? model);
   const modelMeta = model && typeof model === 'object'
     ? {
         schema: typeof model.schema === 'string' ? model.schema : null,
@@ -1604,16 +1750,20 @@ async function certifyScormCourse(browser, token, listed) {
     ? await runPhase({ browser, token, course: { id }, manifest, phase: 'reopen-completed', initialValues: finalValues, maxDriveMs: 2_000 })
     : null;
 
-  const masteryPass = manifest.masteryScore == null || complete.score_raw == null || complete.score_raw >= manifest.masteryScore;
-  const noDowngrade = !reopen || reopen.completion_reached;
-  const pass = basePhasePass(suspend) && basePhasePass(complete) && complete.completion_reached && masteryPass && noDowngrade && (!reopen || basePhasePass(reopen));
+  // Protocol-only conformance is not evidence of actual completion.
+  // Explicit score/mastery and non-regression after reopen are required.
+  const functional = evaluateScormFunctionalCertification({
+    manifest, suspend, complete, reopen, phasePass: basePhasePass,
+  });
+  const classification = classifyScormProbeResult({ verdict: functional, complete });
 
   return {
     course_id: id,
     titulo: String(listed.titulo || detail.titulo || ''),
     tipo_conteudo: 'scorm',
-    status: pass ? 'PASS' : 'FAIL',
-    reason: pass ? null : !complete.completion_reached ? 'COMPLETION_NOT_REACHED' : !noDowngrade ? 'STATUS_DOWNGRADE_AFTER_REOPEN' : !masteryPass ? 'MASTERY_SCORE_NOT_REACHED' : 'SCORM_LIFECYCLE_OR_ASSET_FAILURE',
+    status: classification.status,
+    reason: functional.reason,
+    certification_evidence: classification.evidence,
     package_sha256: pkg?.sha256 ?? null,
     legacy_unversioned: legacyUnversioned,
     stored_gate: pkg ? {
@@ -1666,7 +1816,8 @@ async function certifyPptxCourse(browser, token, listed) {
 
 async function main() {
   await assertPinnedProduction();
-  const token = await productionToken();
+  let token = await productionToken();
+  let tokenIssuedAt = Date.now();
   const listed = await listCourses(token);
   invariant(
     COURSE_IDS.size === 0 || listed.length === COURSE_IDS.size,
@@ -1678,6 +1829,14 @@ async function main() {
   const results = [];
   try {
     for (const course of listed) {
+      // Read-only certification can exceed a single access token's lifetime.
+      // Renew strictly via the existing scoped login/company-selection path,
+      // retaining the exact deployed SHA pin and tenant assertion on refresh.
+      if (Date.now() - tokenIssuedAt >= 15 * 60_000) {
+        await assertPinnedProduction();
+        token = await productionToken();
+        tokenIssuedAt = Date.now();
+      }
       const type = String(course?.tipo_conteudo || '').toLowerCase();
       try {
         if (type === 'scorm') results.push(await certifyScormCourse(browser, token, course));
@@ -1702,6 +1861,7 @@ async function main() {
     course_count: results.length,
     pass_count: results.filter((r) => r.status === 'PASS').length,
     fail_count: results.filter((r) => r.status === 'FAIL').length,
+    inconclusive_count: results.filter((r) => r.status === 'INCONCLUSIVE').length,
     scorm_count: results.filter((r) => r.tipo_conteudo === 'scorm').length,
     pptx_count: results.filter((r) => r.tipo_conteudo === 'pptx').length,
     writes: 'none (authentication/company-selection/asset-session POSTs only; no LMS progress/enrollment/certificate/course mutations)',
@@ -1709,8 +1869,9 @@ async function main() {
   };
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, course_count: report.course_count })}\n`);
-  if (report.fail_count > 0) process.exitCode = 2;
+  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, inconclusive_count: report.inconclusive_count, course_count: report.course_count })}\n`);
+  // Both explicit failures and inconclusive runs block certification/release.
+  if (report.fail_count + report.inconclusive_count > 0) process.exitCode = 2;
 }
 
 main().catch((error) => {

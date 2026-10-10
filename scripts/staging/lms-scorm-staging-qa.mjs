@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { strToU8, zipSync } from 'fflate';
+import { buildInteractiveM8QaFiles } from './lms-scorm-m8-fixture.mjs';
 
 import {
   assertAllowedStagingBaseUrl,
@@ -212,6 +213,9 @@ function makeZip(kind) {
   };
   if (kind !== 'reject') {
     files['airtrust-completion-manifest.json'] = strToU8(completionManifest(id));
+  }
+  if (kind === 'success') {
+    Object.assign(files, buildInteractiveM8QaFiles(id, `qa-${RUN_MARKER}`));
   }
   return zipSync(files, { level: 6 });
 }

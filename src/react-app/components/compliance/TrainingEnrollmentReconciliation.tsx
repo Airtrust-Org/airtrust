@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Link2, UserPlus } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
+import { notifyComplianceSaveWithEnrollment } from './complianceEnrollmentFeedback';
 import {
   nextComplianceTableSort,
   sortComplianceRows,
@@ -56,6 +57,7 @@ type Reconciliation = {
     curso_titulo: string;
     qualificacao_tipo_id: number | null;
     qualificacao_tipo_nome: string | null;
+    qualificacao_tipo_codigo?: string | null;
     matricula_status: string;
     situacao: string;
     regra_efetiva: { id: number; escopo: string; obrigatoriedade: string } | null;
@@ -75,6 +77,7 @@ async function readJson<T>(response: Response): Promise<T> {
 
 const situationLabels: Record<string, string> = {
   MATRICULADO_SEM_REQUISITO: 'Matriculado sem requisito',
+  MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA: 'Treinamento já válido no histórico',
   NAO_APLICA_MATRICULADO: 'Não aplicável, mas matriculado',
   CURSO_SEM_MODELO: 'Curso sem modelo de qualificação',
   MATRICULA_AVULSA_RECONCILIADA: 'Matrícula avulsa conciliada',
@@ -86,8 +89,13 @@ type ReviewSortKey = 'person' | 'sector' | 'enrollment' | 'situation' | 'action'
 
 export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
   const queryClient = useQueryClient();
-  const [courses, setCourses] = useState<Record<number, number>>({});
+
   const [actions, setActions] = useState<Record<number, string>>({});
+  const [syncPreview, setSyncPreview] = useState<{ pendentes: number; sem_curso_unico: number } | null>(null);
+  const [cleanupPreview, setCleanupPreview] = useState<{
+    elegiveis: Array<{ matricula_id: number; status: string }>;
+    bloqueadas: Array<{ matricula_id: number; motivo: string }>;
+  } | null>(null);
   const [section, setSection] = useState<'gaps' | 'convites' | 'revisao'>('gaps');
   const [gapSort, setGapSort] = useState<TableSortState<GapSortKey>>({
     key: 'training',
@@ -117,30 +125,33 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
 
   const enroll = useMutation({
     mutationFn: async (gap: Reconciliation['gaps_matricula'][number]) => {
-      const cursoId =
-        courses[gap.qualificacao_tipo_id] ||
-        (gap.cursos_ead.length === 1 ? gap.cursos_ead[0].id : 0);
-      if (!cursoId) throw new Error('Selecione qual curso EAD será usado para a matrícula.');
-      const response = await fetchWithAuth('/api/lms/matriculas/lote', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          funcionario_ids: gap.funcionarios.map((f) => f.id),
-          curso_id: cursoId,
-          observacoes: 'Matrícula criada pela reconciliação do Compliance de Treinamentos.',
-          enviar_convite_email: false,
-        }),
-      });
-      return readJson<{ criadas: number; ignoradas: number; erros: number }>(response);
+      if (gap.cursos_ead.length !== 1) {
+        throw new Error('Matrícula exige exatamente um curso EAD vinculado ao requisito.');
+      }
+      let criadas = 0;
+      let restantes = 0;
+      for (let lote = 0; lote < 50; lote += 1) {
+        const result = await readJson<{ matriculadas: number; restantes_estimadas: number }>(
+          await fetchWithAuth('/api/compliance-treinamentos/reconciliacao/matricular-pendentes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aplicar: true, qualificacao_tipo_id: gap.qualificacao_tipo_id }),
+          }),
+        );
+        criadas += result.matriculadas;
+        restantes = result.restantes_estimadas;
+        if (!restantes) break;
+        if (!result.matriculadas) throw new Error('Reconciliacao sem progresso; verificar o curso publicado.');
+      }
+      if (restantes > 0) throw new Error('Restam matriculas para processar. Execute novamente.');
+      return { criadas };
     },
     onSuccess: async (data) => {
-      showToast.success(
-        `${data.criadas} matrícula(s) criada(s); ${data.ignoradas} já existente(s).`,
-      );
+      showToast.success(`${data.criadas} matricula(s) criada(s) ou renovada(s) conforme historico.`);
       await invalidate();
     },
     onError: (error) =>
-      showToast.error(error instanceof Error ? error.message : 'Erro ao matricular gaps'),
+      showToast.error(error instanceof Error ? error.message : 'Erro ao matricular requisitos'),
   });
 
   const invite = useMutation({
@@ -223,12 +234,91 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
         }),
       );
     },
-    onSuccess: async () => {
-      showToast.success('Reconciliação aplicada.');
+    onSuccess: async (result) => {
+      notifyComplianceSaveWithEnrollment(result, 'Reconciliação aplicada.');
       await invalidate();
     },
     onError: (error) =>
       showToast.error(error instanceof Error ? error.message : 'Erro ao reconciliar matrícula'),
+  });
+
+  const syncPending = useMutation({
+    mutationFn: async (aplicar: boolean) => {
+      const call = async () => readJson<{
+        modo: string; pendentes: number; matriculadas: number;
+        restantes_estimadas: number; sem_curso_unico: number;
+      }>(await fetchWithAuth('/api/compliance-treinamentos/reconciliacao/matricular-pendentes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aplicar }),
+      }));
+      if (!aplicar) return call();
+      let total = 0;
+      let finalResult = await call();
+      total += finalResult.matriculadas;
+      // Cada chamada executa no maximo 40 ciclos; parar se nao houve progresso.
+      for (let lote = 1; lote < 50 && finalResult.restantes_estimadas > 0; lote += 1) {
+        if (!finalResult.matriculadas) throw new Error('Sincronizacao sem progresso; rever bloqueios no LMS.');
+        finalResult = await call();
+        total += finalResult.matriculadas;
+      }
+      if (finalResult.restantes_estimadas > 0)
+        throw new Error('Ainda existem pendencias; execute uma nova conciliacao.');
+      return { ...finalResult, matriculadas: total };
+    },
+    onSuccess: async (result, aplicar) => {
+      if (!aplicar) {
+        setSyncPreview({ pendentes: result.pendentes, sem_curso_unico: result.sem_curso_unico });
+        return;
+      }
+      setSyncPreview(null);
+      showToast.success(`${result.matriculadas} ciclo(s) LMS criado(s) ou renovado(s) sem e-mail.`);
+      await invalidate();
+    },
+    onError: (error) => {
+      setSyncPreview(null);
+      showToast.error(error instanceof Error ? error.message : 'Erro ao criar matriculas pendentes');
+      void invalidate();
+    },
+  });
+
+  const cleanup = useMutation({
+    mutationFn: async (args: { ids: number[]; aplicar: boolean }) => {
+      const result = {
+        elegiveis: [] as Array<{ matricula_id: number; status: string }>,
+        bloqueadas: [] as Array<{ matricula_id: number; motivo: string }>,
+        canceladas: 0,
+      };
+      // O backend aceita no maximo 100 por transacao; executar todos os lotes
+      // existentes na revisao sem exigir que o administrador repita manualmente.
+      for (let i = 0; i < args.ids.length; i += 100) {
+        const data = await readJson<typeof result>(
+          await fetchWithAuth('/api/compliance-treinamentos/reconciliacao/limpeza', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ matricula_ids: args.ids.slice(i, i + 100), aplicar: args.aplicar }),
+          }),
+        );
+        result.elegiveis.push(...data.elegiveis);
+        result.bloqueadas.push(...data.bloqueadas);
+        result.canceladas += data.canceladas;
+      }
+      return result;
+    },
+    onSuccess: async (result, args) => {
+      if (!args.aplicar) {
+        setCleanupPreview(result);
+        return;
+      }
+      setCleanupPreview(null);
+      showToast.success(`${result.canceladas} matrícula(s) indevida(s) cancelada(s) logicamente. Histórico preservado.`);
+      await invalidate();
+    },
+    onError: (error) => {
+      setCleanupPreview(null);
+      showToast.error(error instanceof Error ? error.message : 'Falha na limpeza de matrículas');
+      void invalidate();
+    },
   });
 
   const data = reconciliation.data;
@@ -243,6 +333,12 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
       }),
     [data?.gaps_matricula, gapSort],
   );
+  const cleanupCandidates = (data?.matriculas_revisao || []).filter(
+    (row) =>
+      ['MATRICULADO_SEM_REQUISITO', 'NAO_APLICA_MATRICULADO', 'MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA'].includes(row.situacao) &&
+      ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(row.matricula_status || '').trim().toUpperCase()),
+  );
+  const cleanupIds = cleanupCandidates.map((row) => row.matricula_id);
   const sortedReviews = useMemo(
     () =>
       sortComplianceRows(data?.matriculas_revisao || [], reviewSort, (row, key) => {
@@ -300,6 +396,39 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
       {section === 'gaps' ? (
         <section>
           <h3 className="font-semibold text-slate-900">A matricular</h3>
+          <div className="my-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+            <p className="font-medium text-slate-900">Conciliar requisitos e matrículas de todos os cargos</p>
+            <p className="mt-1 text-slate-600">
+              Usa o histórico de qualificações para matricular quem nunca fez, está vencido ou
+              entrou na janela de renovação de 60 dias. Conserva treinamentos concluídos e
+              matrículas em andamento. Cursos presenciais e sem vínculo EAD único são sinalizados.
+            </p>
+            {!syncPreview ? (
+              <button type="button"
+                disabled={syncPending.isPending}
+                onClick={() => syncPending.mutate(false)}
+                className="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                Analisar matrículas pendentes
+              </button>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <p>{syncPreview.pendentes} novo(s) ciclo(s) necessário(s);
+                  {' '}{syncPreview.sem_curso_unico} pendência(s) sem curso EAD publicado único.</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button"
+                    disabled={syncPending.isPending || syncPreview.pendentes === 0}
+                    onClick={() => syncPending.mutate(true)}
+                    className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                    Confirmar matrículas pendentes
+                  </button>
+                  <button type="button" onClick={() => setSyncPreview(null)}
+                    className="rounded-md border border-slate-300 px-3 py-2 text-xs">
+                    Voltar sem alterar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <p className="mt-1 text-sm text-slate-500">
             Requisitos sem matrícula correspondente. A matrícula é criada sem envio de e-mail.
           </p>
@@ -357,38 +486,17 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                     <td className="px-3 py-3 text-right text-red-700">{gap.vencidos}</td>
                     <td className="px-3 py-3 text-right text-orange-700">{gap.nunca_realizados}</td>
                     <td className="px-3 py-3">
-                      <select
-                        aria-label={`Curso EAD para ${gap.qualificacao_tipo_nome}`}
-                        value={
-                          courses[gap.qualificacao_tipo_id] ??
-                          (gap.cursos_ead.length === 1 ? gap.cursos_ead[0].id : '')
-                        }
-                        onChange={(e) =>
-                          setCourses((old) => ({
-                            ...old,
-                            [gap.qualificacao_tipo_id]: Number(e.target.value),
-                          }))
-                        }
-                        className="max-w-[280px] rounded-md border border-slate-300 px-2 py-1.5 text-xs leading-5 text-slate-700"
-                        disabled={!gap.cursos_ead.length}
-                      >
-                        {!gap.cursos_ead.length ? (
-                          <option value="">Sem EAD vinculado</option>
-                        ) : (
-                          <option value="">Selecione o curso</option>
-                        )}
-                        {gap.cursos_ead.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.titulo}
-                          </option>
-                        ))}
-                      </select>
+                      {gap.cursos_ead.length === 1
+                        ? gap.cursos_ead[0].titulo
+                        : gap.cursos_ead.length === 0
+                          ? 'Sem EAD publicado vinculado'
+                          : 'Vínculo ambíguo: revisar cursos publicados'}
                     </td>
                     <td className="px-3 py-3 text-right">
                       <button
                         type="button"
                         aria-label="Matricular gaps (sem e-mail)"
-                        disabled={!gap.cursos_ead.length || enroll.isPending}
+                        disabled={gap.cursos_ead.length !== 1 || enroll.isPending}
                         onClick={() => enroll.mutate(gap)}
                         className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
                       >
@@ -464,6 +572,53 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
           <p className="mt-1 text-sm text-slate-500">
             Vincule a matrícula à necessidade correta ou confirme que ela deve permanecer avulsa.
           </p>
+          {cleanupIds.length ? (
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="font-semibold text-slate-900">Limpeza de matrículas indevidas ou já atendidas</p>
+              <p className="mt-1 text-slate-600">
+                Processa todas as matrículas em lotes transacionais de até 100. Apenas QSMS/Segurança Operacional sem requisito vigente ou com qualificação já válida
+                podem ser canceladas; ciclos com evidência/progresso são preservados. Cursos fora dessa matriz, designações mantidas e
+                conclusões históricas permanecem preservados. O progresso existente não é apagado.
+              </p>
+              {!cleanupPreview ? (
+                <button
+                  type="button"
+                  disabled={cleanup.isPending}
+                  onClick={() => cleanup.mutate({ ids: cleanupIds, aplicar: false })}
+                  className="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                >
+                  Analisar limpeza ({cleanupIds.length} matrícula(s))
+                </button>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <p>
+                    {cleanupPreview.elegiveis.length} elegível(is) para cancelamento lógico;
+                    {' '}{cleanupPreview.bloqueadas.length} bloqueada(s)/preservada(s).
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={!cleanupPreview.elegiveis.length || cleanup.isPending}
+                      onClick={() => cleanup.mutate({
+                        ids: cleanupPreview.elegiveis.map((item) => item.matricula_id),
+                        aplicar: true,
+                      })}
+                      className="rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      Confirmar cancelamento das {cleanupPreview.elegiveis.length} elegível(is)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCleanupPreview(null)}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-xs"
+                    >
+                      Voltar sem alterar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
           <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">

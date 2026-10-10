@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { analyzeTrace } from '../../lib/lms/lms-scorm-browser-run';
+import { analyzeTrace, classifyScormBrowserError } from '../../lib/lms/lms-scorm-browser-run';
 
 const startedAt = '2026-08-22T00:00:00.000Z';
 const lifecycle = [
@@ -9,6 +9,19 @@ const lifecycle = [
   { method: 'LMSCommit' },
   { method: 'LMSFinish' },
 ];
+
+describe('SCORM Browser Run failure reporting', () => {
+  it('classifies a browser connection failure without exporting the raw error', () => {
+    expect(classifyScormBrowserError(new Error('WebSocket disconnected from internal worker endpoint'))).toBe('BROWSER_CONNECTION');
+  });
+  it('classifies quota and access errors as stable categories', () => {
+    expect(classifyScormBrowserError(new Error('429 Too many requests'))).toBe('BROWSER_QUOTA');
+    expect(classifyScormBrowserError(new Error('403 Forbidden'))).toBe('BROWSER_ACCESS');
+  });
+  it('does not echo sensitive or unknown exception messages', () => {
+    expect(classifyScormBrowserError(new Error('sensitive@example.invalid token=secret'))).toBe('BROWSER_OTHER');
+  });
+});
 
 describe('SCORM Browser Run trace analysis', () => {
   it('accepts lifecycle with incomplete as a runtime PASS, without claiming completion', () => {
@@ -66,6 +79,24 @@ describe('SCORM Browser Run trace analysis', () => {
     ['Finish', lifecycle.slice(0, -1), true, false],
   ])('fails when %s is absent', (_name, trace, initialized, finished) => {
     expect(analyzeTrace('sha-a', startedAt, trace, {}, initialized, finished, '0').status).toBe('FAIL');
+  });
+
+  it('redacts authored SCORM suspend_data and interaction values from published runtime traces', () => {
+    const confidential = '{"answers":[1,2,3],"employee":"synthetic"}';
+    const trace = [
+      { method: 'LMSInitialize' },
+      { method: 'LMSSetValue', key: 'cmi.suspend_data', value: confidential },
+      { method: 'LMSCommit' },
+      { method: 'LMSFinish' },
+    ];
+    const result = analyzeTrace('sha-a', startedAt, trace,
+      { 'cmi.core.lesson_status': 'incomplete' }, true, true, '0');
+    expect(result.status).toBe('PASS');
+    expect(JSON.stringify(result.trace)).not.toContain('answers');
+    expect(JSON.stringify(result.trace)).not.toContain('employee');
+    expect(result.trace[1]).toMatchObject({
+      method: 'LMSSetValue', key: 'cmi.suspend_data', value: '[redacted]',
+    });
   });
 
   it('fails a mutation after finish', () => {

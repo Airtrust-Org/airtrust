@@ -2,8 +2,8 @@
  * AIRTRUST_COMPLETION_DIAGNOSTICS_V1 no LmsPlayer.
  *
  * Cobre a superfície de segurança do postMessage (origin/source/payload) e o
- * painel "Pendências para concluir", incluindo o fallback para pacotes legados
- * e a garantia de que o modo de revisão não persiste nada.
+ * isolamento do diagnóstico informativo em memória, sem consulta extra
+ * que possa produzir 403 na sessão de aluno nem quadro prematuro de pendências.
  */
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -167,119 +167,117 @@ describe('LmsPlayer — diagnóstico granular de conclusão', () => {
     });
   });
 
-  it('mostra as pendências informadas pelo pacote (test 1 e 4)', async () => {
+  it('reconcilia automaticamente PPSP aprovado pelo SCORM uma única vez usando o gate servidor', async () => {
+    matriculaMock = {
+      ...baseMatricula(), status: 'EM_ANDAMENTO', progresso_pct: 99, score_final: 100,
+      completion_diagnostic: {
+        status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED',
+        can_finalize: false, explicit_completion: true, explicit_failure: false,
+        reached_final_location: true, score_pct: 100, mastery_score: 70,
+      },
+    };
+    fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/lms/matriculas/42/finalizar') && init?.method === 'POST') {
+        return { ok: true, json: async () => ({ success: true, data: { novo_status: 'CONCLUIDO' } }) };
+      }
+      return { ok: true, json: async () => ({ success: true, data: { diagnostics: null } }) };
+    });
+    refetchMatriculaMock.mockResolvedValue({ data: { status: 'CONCLUIDO' } });
+    renderPlayer();
+
+    await waitFor(() => {
+      const calls = fetchWithAuthMock.mock.calls.filter(([url, init]) =>
+        String(url).endsWith('/lms/matriculas/42/finalizar') &&
+        (init as RequestInit | undefined)?.method === 'POST');
+      expect(calls).toHaveLength(1);
+    });
+    expect(screen.queryByText('O curso informou que ainda há pendências, mas não identificou quais itens.')).not.toBeInTheDocument();
+  });
+
+  it('não tenta concluir automaticamente por nota 100 sem conclusão SCORM explícita', async () => {
+    matriculaMock = {
+      ...baseMatricula(), progresso_pct: 99, score_final: 100,
+      completion_diagnostic: {
+        status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED',
+        can_finalize: false, explicit_completion: false, explicit_failure: false,
+        reached_final_location: true, score_pct: 100, mastery_score: 70,
+      },
+    };
+    renderPlayer();
+    await act(async () => { await Promise.resolve(); });
+    expect(fetchWithAuthMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/lms/matriculas/42/finalizar'))).toHaveLength(0);
+  });
+
+  it('não faz reconciliação automática em matrícula de edição incompatível', async () => {
+    matriculaMock = {
+      ...baseMatricula(), progresso_pct: 99, score_final: 100,
+      edition_mismatch: { required: true, previous_total: 41, active_total: 37 },
+      completion_diagnostic: {
+        status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED',
+        can_finalize: false, explicit_completion: true, explicit_failure: false,
+        reached_final_location: true, score_pct: 100, mastery_score: 70,
+      },
+    };
+    renderPlayer();
+    await act(async () => { await Promise.resolve(); });
+    expect(fetchWithAuthMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/lms/matriculas/42/finalizar'))).toHaveLength(0);
+  });
+
+  it('abre o player do aluno sem consultar diagnóstico auxiliar nem exibir pendências', async () => {
+    renderPlayer();
+    await frameWindow();
+
+    expect(screen.queryByTestId('lms-pending-panel')).not.toBeInTheDocument();
+    expect(fetchWithAuthMock.mock.calls.some(([url]) =>
+      String(url).includes('/completion-diagnostics'))).toBe(false);
+    expect(screen.queryByText(/Nota obtida 0 — mínimo exigido 70/i)).not.toBeInTheDocument();
+  });
+
+  it('mantém o diagnóstico SCORM válido somente em memória, sem gravar snapshot', async () => {
     renderPlayer();
     await dispatchDiagnostics(GRANULAR_PAYLOAD);
 
-    // O painel abre e lista exatamente os 3 slides pendentes.
-    await act(async () => {
-      screen.getByRole('button', { name: /Pendências para concluir/i }).click();
-    });
-
-    const items = await screen.findAllByTestId('lms-pending-item');
-    expect(items).toHaveLength(3);
-    expect(items[0]).toHaveTextContent('Slide 3 — Motores');
-
-    // LMSFinish com incomplete não conclui o curso.
+    expect(screen.queryByTestId('lms-pending-panel')).not.toBeInTheDocument();
+    expect(fetchWithAuthMock.mock.calls.some(([url]) =>
+      String(url).includes('/completion-diagnostics'))).toBe(false);
     expect(screen.queryByText('Curso concluído')).not.toBeInTheDocument();
   });
 
-  it('rejeita mensagem de origem diferente da origem de lançamento (test 7)', async () => {
+  it('ignora mensagens de origem ou janela não autorizadas', async () => {
     renderPlayer();
     await dispatchDiagnostics(GRANULAR_PAYLOAD, { origin: 'https://evil.example.com' });
-
-    await act(async () => {
-      screen.getByRole('button', { name: /Pendências para concluir/i }).click();
-    });
-
-    // Nada foi absorvido: cai no fallback genérico.
-    expect(screen.queryAllByTestId('lms-pending-item')).toHaveLength(0);
-    expect(
-      screen.getByText(
-        'O curso informou que ainda há pendências, mas não identificou quais itens.',
-      ),
-    ).toBeInTheDocument();
-    expect(persistCalls()).toHaveLength(0);
-  });
-
-  it('rejeita mensagem cujo source não é o iframe do curso (test 8)', async () => {
-    renderPlayer();
-    // Simula outra janela na mesma origem tentando forjar o diagnóstico.
     await dispatchDiagnostics(GRANULAR_PAYLOAD, { source: window });
 
-    await act(async () => {
-      screen.getByRole('button', { name: /Pendências para concluir/i }).click();
-    });
-
-    expect(screen.queryAllByTestId('lms-pending-item')).toHaveLength(0);
+    expect(screen.queryByTestId('lms-pending-panel')).not.toBeInTheDocument();
     expect(persistCalls()).toHaveLength(0);
+    expect(fetchWithAuthMock.mock.calls.some(([url]) =>
+      String(url).includes('/completion-diagnostics'))).toBe(false);
   });
 
-  it('ignora payloads malformados sem quebrar o curso (test 6)', async () => {
+  it('ignora payloads inválidos sem interromper o treinamento', async () => {
     renderPlayer();
     for (const bad of [null, 'texto', 42, [], { version: 99 }, { nope: true }]) {
       await dispatchDiagnostics(bad);
     }
 
-    // O player continua vivo e o iframe permanece montado.
     expect(document.querySelector('iframe')).not.toBeNull();
+    expect(screen.queryByTestId('lms-pending-panel')).not.toBeInTheDocument();
     expect(persistCalls()).toHaveLength(0);
   });
 
-  it('fallback genérico para pacote legado, sem inventar itens (test 5)', async () => {
-    renderPlayer();
-    await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
-
-    await act(async () => {
-      screen.getByRole('button', { name: /Pendências para concluir/i }).click();
-    });
-
-    expect(screen.queryAllByTestId('lms-pending-item')).toHaveLength(0);
-    expect(
-      screen.getByText(
-        'O curso informou que ainda há pendências, mas não identificou quais itens.',
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it('não persiste nem finaliza nada no modo de revisão (test 17)', async () => {
+  it('não envia diagnóstico no modo consulta', async () => {
     reviewMode = true;
     renderPlayer();
     await dispatchDiagnostics(GRANULAR_PAYLOAD);
 
-    expect(persistCalls()).toHaveLength(0);
-    // Em revisão o painel de pendências não é exibido.
+    expect(fetchWithAuthMock.mock.calls.some(([url]) =>
+      String(url).includes('/completion-diagnostics'))).toBe(false);
     expect(screen.queryByTestId('lms-pending-panel')).not.toBeInTheDocument();
   });
 
-  it('persiste o snapshot quando o pacote emite um payload válido', async () => {
-    renderPlayer();
-    await dispatchDiagnostics(GRANULAR_PAYLOAD);
-
-    await waitFor(() => expect(persistCalls()).toHaveLength(1));
-    const [url, init] = persistCalls()[0] as [string, RequestInit];
-    expect(String(url)).toContain('/lms/matriculas/42/completion-diagnostics');
-    const body = JSON.parse(String(init.body)) as { diagnostics: { slides: { missing: unknown[] } } };
-    expect(body.diagnostics.slides.missing).toHaveLength(3);
-  });
-
-  it('recupera o snapshot persistido no reload (test 12)', async () => {
-    fetchWithAuthMock.mockReset().mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true, data: { diagnostics: GRANULAR_PAYLOAD } }),
-    });
-
-    renderPlayer();
-
-    await act(async () => {
-      (await screen.findByRole('button', { name: /Pendências para concluir/i })).click();
-    });
-
-    const items = await screen.findAllByTestId('lms-pending-item');
-    expect(items).toHaveLength(3);
-  });
-
-  it('não conclui quando o pacote diz completo mas o canônico rejeita (test 10)', async () => {
+  it('não conclui quando o pacote diz completo, mas o servidor não aceitou', async () => {
     renderPlayer();
     await dispatchDiagnostics({
       ...GRANULAR_PAYLOAD,
@@ -288,8 +286,7 @@ describe('LmsPlayer — diagnóstico granular de conclusão', () => {
       packageStatus: { lessonStatus: 'completed', finishRequested: true },
     });
 
-    // O diagnóstico canônico segue rejeitando: nenhuma conclusão acontece.
     expect(screen.queryByText('Curso concluído')).not.toBeInTheDocument();
-    expect(screen.getByTestId('lms-pending-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('lms-pending-panel')).not.toBeInTheDocument();
   });
 });

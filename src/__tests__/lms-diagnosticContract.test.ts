@@ -63,6 +63,31 @@ describe('parseGranularDiagnostic', () => {
     expect(parsed?.slides.missing).toEqual([]);
   });
 
+  it('normalizes the V1 package diagnostic shape used by authored SCORM packages', () => {
+    const parsed = parseGranularDiagnostic({
+      version: 1,
+      courseId: 'pbn-pilotos',
+      slides: { totalRequired: 59, completedRequired: 59, missing: [] },
+      assessment: {
+        required: 6,
+        completed: 6,
+        scoreRaw: 100,
+        masteryScore: 80,
+        passed: true,
+        unanswered: [],
+        incomplete: [],
+      },
+      moduleResults: [{ module: 'pilot_assess_05', assessment: 'pilot_assess_05', scoreRaw: 100, masteryScore: 80, passed: true }],
+      packageStatus: { lessonStatus: 'passed', finishRequested: true },
+    });
+
+    expect(parsed?.assessment).toMatchObject({ required: true, completed: true, passed: true });
+    expect(parsed?.moduleResults).toMatchObject([{
+      module: { id: 'pilot_assess_05' },
+      assessment: { required: true, completed: true, passed: true, scoreRaw: 100 },
+    }]);
+  });
+
   it('ignores tenant/enrollment identifiers asserted by the payload (test 9)', () => {
     const parsed = parseGranularDiagnostic({
       version: 1,
@@ -104,6 +129,54 @@ describe('formatPendingItemDisplay', () => {
   it('never invents a title when none is supplied', () => {
     expect(formatPendingItemDisplay({ id: 's12', index: 12, title: null }, 'slide')).toBe('Slide 12');
     expect(formatPendingItemDisplay(null, 'question')).toBe('Questão');
+  });
+});
+
+describe('PPSP: aceitação canônica versus matrícula em aberto', () => {
+  it('não inventa pendências para SCORM aprovado que aguarda o registro da matrícula', () => {
+    const result = resolveCompletionExplanation({
+      canonical: {
+        status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED',
+        can_finalize: false, explicit_completion: true,
+        explicit_failure: false, mastery_score: 70, score_pct: 100,
+      },
+      granular: null,
+    });
+    expect(result.canComplete).toBe(false);
+    expect(result.registrationPending).toBe(true);
+    expect(result.items).toEqual([]);
+    expect(result.adminItems).toEqual([]);
+    expect(result.summary).toMatch(/AirTrust está confirmando a matrícula/);
+    expect(result.summary).not.toBe(GENERIC_PENDING_FALLBACK);
+  });
+  it('não confunde SCORM 1.2 aceito por LMSFinish confiável com pendências não identificadas', () => {
+    const result = resolveCompletionExplanation({
+      canonical: {
+        status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED',
+        can_finalize: false, explicit_completion: false,
+        explicit_failure: false, score_pct: 100, mastery_score: 70,
+      },
+      granular: null,
+    });
+    expect(result.registrationPending).toBe(true);
+    expect(result.summary).not.toBe(GENERIC_PENDING_FALLBACK);
+  });
+  it('preserva alertas legítimos para conclusão rejeitada sem evidências', () => {
+    const result = resolveCompletionExplanation({ canonical: REJECTED, granular: null });
+    expect(result.registrationPending).not.toBe(true);
+    expect(result.summary).toBe(GENERIC_PENDING_FALLBACK);
+  });
+
+  it('explica pacote aprovado que aguarda o registro explícito no AirTrust', () => {
+    const granular = baseGranular({
+      packageStatus: { lessonStatus: 'passed', finishRequested: true },
+    });
+    const result = resolveCompletionExplanation({ canonical: null, granular });
+
+    expect(result.canComplete).toBe(false);
+    expect(result.registrationPending).toBe(true);
+    expect(result.items).toEqual([]);
+    expect(result.summary).toContain('Registre a conclusão no AirTrust');
   });
 });
 

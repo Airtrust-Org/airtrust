@@ -142,6 +142,7 @@ describe('ControleVoosCoordenacaoFila', () => {
             motivo_devolucao: null,
             prefixo: 'ATX-1001',
             aeronave_id: 5,
+            modelo_aeronave: 'S-76',
             data_programacao: '2026-06-14',
             origem_id: 101,
             destino_id: 101,
@@ -162,6 +163,7 @@ describe('ControleVoosCoordenacaoFila', () => {
     renderWithClient(<ControleVoosCoordenacaoFila />);
 
     await waitFor(() => expect(screen.getByText('RDV-0001')).toBeInTheDocument());
+    expect(screen.getByText('S-76')).toBeInTheDocument();
     expect(screen.getByText('Enviado à Coordenação')).toBeInTheDocument();
     expect(screen.getByText('Voo realizado')).toBeInTheDocument();
     expect(screen.getByText('Macaé, RJ (SBME) → Unidade Teste (PAGS · 9PGS)')).toBeInTheDocument();

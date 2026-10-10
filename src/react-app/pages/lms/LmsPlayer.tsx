@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -27,10 +27,8 @@ import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/use
 import { formatMinutes } from './lmsUi';
 import {
   parseGranularDiagnostic,
-  resolveCompletionExplanation,
   type LmsGranularDiagnostic,
 } from '@/react-app/utils/lmsDiagnosticContract';
-import { LmsPendingPanel } from './LmsPendingPanel';
 
 /**
  * Sanitiza um código/razão de diagnóstico vindo de lms:completion-error.
@@ -77,6 +75,23 @@ function readLocationFromCmiJson(cmiJson: string | null | undefined): string | n
   }
 }
 
+/** Runtime proof of each visited slide, scoped to this SCORM enrollment. */
+export function readScormSlideCoverage(cmiJson: string | null | undefined): {
+  count: number; total: number;
+} | null {
+  if (!cmiJson) return null;
+  try {
+    const state = JSON.parse(cmiJson) as Record<string, unknown>;
+    const slides = state['airtrust.viewed_slides'];
+    const total = state['airtrust.total_slides'];
+    if (!Array.isArray(slides) || typeof total !== 'number' || total < 1 || total > 1000 ||
+      slides.some((value, index) => value !== index + 1)) return null;
+    return { count: slides.length, total };
+  } catch {
+    return null;
+  }
+}
+
 export function resolveLmsDisplayProgress(params: {
   completed: boolean;
   matriculaStatus: string | null | undefined;
@@ -85,6 +100,10 @@ export function resolveLmsDisplayProgress(params: {
   return params.completed || params.matriculaStatus === 'CONCLUIDO'
     ? 100
     : Math.min(99, params.mergedProgress);
+}
+
+export function shouldVerifyCanonicalProgress(status: string | null | undefined) {
+  return status === 'CONCLUIDO';
 }
 
 /**
@@ -97,6 +116,33 @@ const SCORM_CANDIDATE_RECHECK_DELAY_MS = 1_000;
 
 const SCORM_UNRESOLVED_MESSAGE =
   'O conteúdo chegou ao fim, mas não enviou a confirmação SCORM. Seu progresso foi preservado.';
+
+// Only enables an authenticated attempt at the existing server-side qualification
+// and completion gate; this predicate never marks a course as passed.
+export function canReconcilePersistedScormCompletion(params: {
+  reviewMode: boolean;
+  isScormContent: boolean;
+  matriculaStatus: string | null | undefined;
+  diagnostic: {
+    status?: string | null;
+    explicit_completion?: boolean | null;
+    reached_final_location?: boolean | null;
+    score_pct?: number | null;
+    mastery_score?: number | null;
+  } | null | undefined;
+}): boolean {
+  const { diagnostic } = params;
+  if (
+    params.reviewMode || !params.isScormContent ||
+    params.matriculaStatus === 'CONCLUIDO' ||
+    diagnostic?.status !== 'accepted' ||
+    diagnostic.explicit_completion !== true ||
+    diagnostic.reached_final_location !== true
+  ) return false;
+  const mastery = Number(diagnostic.mastery_score ?? 0);
+  const score = Number(diagnostic.score_pct);
+  return Number.isFinite(score) && score >= Math.max(0, mastery);
+}
 
 function parseSlideLocation(
   location: string | null | undefined,
@@ -126,6 +172,7 @@ function parseSlideLocation(
 export default function LmsPlayer() {
   const { matriculaId } = useParams<{ matriculaId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { token, user, empresaAtualId } = useAuth();
   const [searchParams] = useSearchParams();
 
@@ -136,7 +183,12 @@ export default function LmsPlayer() {
   const [liveProgress, setLiveProgress] = useState<number | null>(null);
   const [liveLocation, setLiveLocation] = useState<string | null>(null);
   const [maxVisitedSlide, setMaxVisitedSlide] = useState(0);
+  const [liveSlideCoverage, setLiveSlideCoverage] = useState<{ count: number; total: number } | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  // One automatic server reconciliation per mounted enrollment session; a
+  // manual retry remains possible after a failed authenticated validation.
+  const autoCompletionAttemptRef = useRef<number | null>(null);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
   const [assetSessionReady, setAssetSessionReady] = useState(false);
   const [completionState, setCompletionState] = useState<
@@ -153,61 +205,14 @@ export default function LmsPlayer() {
   } | null>(null);
   // Snapshot granular AIRTRUST_COMPLETION_DIAGNOSTICS_V1 (informativo).
   const [granularDiagnostic, setGranularDiagnostic] = useState<LmsGranularDiagnostic | null>(null);
-  const [pendingPanelOpen, setPendingPanelOpen] = useState(false);
+  const [startingNewEdition, setStartingNewEdition] = useState(false);
 
   const qc = useQueryClient();
   const id = Number(matriculaId);
 
-  /**
-   * Persiste o último snapshot granular. Best-effort: falhas são silenciosas,
-   * pois o diagnóstico é informativo e jamais deve quebrar o curso.
-   */
-  const persistGranularDiagnostic = useCallback(
-    async (snapshot: LmsGranularDiagnostic) => {
-      if (!Number.isFinite(id) || id <= 0) return;
-      try {
-        await fetchWithAuth(`${API_BASE_URL}/lms/matriculas/${id}/completion-diagnostics`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ diagnostics: snapshot }),
-        });
-      } catch {
-        // Silencioso por design.
-      }
-    },
-    [id],
-  );
-  // Recupera o último snapshot granular persistido, para que o painel de
-  // pendências sobreviva a um reload da página.
-  useEffect(() => {
-    if (!Number.isFinite(id) || id <= 0) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetchWithAuth(
-          `${API_BASE_URL}/lms/matriculas/${id}/completion-diagnostics`,
-        );
-        if (!res.ok) return;
-        const body = (await res.json()) as { success?: boolean; data?: { diagnostics?: unknown } };
-        const parsed = parseGranularDiagnostic(body?.data?.diagnostics);
-        if (parsed && !cancelled) setGranularDiagnostic((prev) => prev ?? parsed);
-      } catch {
-        // Silencioso: ausência de snapshot é normal (pacotes legados).
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  // Abre automaticamente o painel quando uma tentativa de conclusão é
-  // rejeitada ou fica inconclusiva.
-  useEffect(() => {
-    if (completionState === 'error' || completionState === 'unresolved') {
-      setPendingPanelOpen(true);
-    }
-  }, [completionState]);
-
+  // Diagnósticos SCORM continuam somente em memória para o gate de conclusão.
+  // Não carregar/persistir snapshots auxiliares no player do aluno: além de
+  // estarem sujeitos a escopo de acesso próprio, podem ser de outra tentativa.
   const completionToastIdRef = useRef(`lms-scorm-completion-${id}`);
   const candidateRetryTimerRef = useRef<number | null>(null);
   const unresolvedRef = useRef(false);
@@ -224,6 +229,12 @@ export default function LmsPlayer() {
   const persistedLocation = readLocationFromCmiJson(
     (matricula?.scorm_progresso as { cmi_json?: string | null } | null | undefined)?.cmi_json,
   );
+  const persistedSlideCoverage = readScormSlideCoverage(
+    (matricula?.scorm_progresso as { cmi_json?: string | null } | null | undefined)?.cmi_json,
+  );
+  const currentSlideCoverage = liveSlideCoverage ?? persistedSlideCoverage;
+  const allSlidesVisited = currentSlideCoverage != null &&
+    currentSlideCoverage.count === currentSlideCoverage.total;
   const currentLocation = liveLocation ?? persistedLocation;
   const parsedCurrentLocation = parseSlideLocation(currentLocation);
   const currentSlideIndex = parsedCurrentLocation?.current ?? null;
@@ -235,11 +246,14 @@ export default function LmsPlayer() {
     inferredLocationProgress ?? 0,
     inferredPersistedLocationProgress ?? 0,
   );
+  const editionMismatch = (matricula as (typeof matricula & {
+    edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' | 'PACKAGE_SHA_CHANGED' } | null;
+  }) | undefined)?.edition_mismatch ?? null;
+  const newEditionRequired = editionMismatch?.required === true;
+  const isTenantAdmin = ['admin', 'administrador'].includes(
+    String(user?.role ?? '').trim().toLowerCase(),
+  );
   const completionDiagnostic = matricula?.completion_diagnostic ?? null;
-  const completionExplanation = resolveCompletionExplanation({
-    canonical: completionDiagnostic,
-    granular: granularDiagnostic,
-  });
   const hasCompletionDate = Boolean(matricula?.data_conclusao);
   const isCompletedState = completed || matricula?.status === 'CONCLUIDO' || hasCompletionDate;
   const displayProgress = resolveLmsDisplayProgress({
@@ -248,12 +262,61 @@ export default function LmsPlayer() {
     mergedProgress,
   });
   const isScormContent = (matricula?.tipo_conteudo ?? 'scorm') === 'scorm';
+  const shouldReconcilePassedScorm = canReconcilePersistedScormCompletion({
+    reviewMode: effectiveReviewMode,
+    isScormContent,
+    matriculaStatus: matricula?.status,
+    diagnostic: completionDiagnostic,
+  });
   const canFinalize =
     !isCompletedState &&
     matricula?.status !== 'CONCLUIDO' &&
     !isScormContent &&
     completionDiagnostic?.can_finalize === true &&
     !isFinalizing;
+  // Prefer a package-authored granular checklist. Position alone (45/45) is
+  // not proof that earlier slides or every questionnaire were completed.
+  const diagnosticSlidesDone = granularDiagnostic?.slides.totalRequired != null &&
+    granularDiagnostic.slides.totalRequired > 0 &&
+    granularDiagnostic.slides.completedRequired === granularDiagnostic.slides.totalRequired &&
+    granularDiagnostic.slides.missing.length === 0;
+  const diagnosticAssessmentDone = granularDiagnostic != null &&
+    (!granularDiagnostic.assessment.required ||
+      (granularDiagnostic.assessment.completed &&
+        granularDiagnostic.assessment.unanswered.length === 0 &&
+        granularDiagnostic.assessment.incomplete.length === 0)) &&
+    granularDiagnostic.moduleResults.every((module) =>
+      !module.assessment.required || module.assessment.completed);
+  // Legacy formative packages do not always provide granular diagnostics.
+  // Only a real terminal package event / server guard can confirm them; do not
+  // unlock a browser-side completion solely from a final slide counter.
+  // Older published packages may have no granular contract. For those, the
+  // final position plus the SCORM assessment policy / persisted score is the
+  // conservative fallback; the server will validate final status and score.
+  // A reported quiz failure never enables completion.
+  const legacyFinalSlide = parsedCurrentLocation != null &&
+    parsedCurrentLocation.total > 0 &&
+    parsedCurrentLocation.current >= parsedCurrentLocation.total;
+  const legacyAssessmentEvidence = curso?.scorm_assessment_policy === 'FORMATIVE' ||
+    (curso?.scorm_assessment_policy === 'SCORED' &&
+      (matricula?.score_final != null || completionDiagnostic?.score_pct != null));
+  const canRequestScormCompletion =
+    isScormContent && !newEditionRequired && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
+    allSlidesVisited &&
+    (granularDiagnostic
+      ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
+        granularDiagnostic.assessment.passed !== false)
+      : Boolean(legacyFinalSlide && legacyAssessmentEvidence));
+  const canRequestCompletion = !newEditionRequired &&
+    (canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm);
+
+  // The SCO owns its own assessment/submission control. The LMS never opens
+  // an unsolicited confirmation dialog on the last slide: its job is to
+  // reconcile the server result automatically, or offer one explicit retry
+  // only if reconciliation fails.
+  const showScormRegistrationRetry =
+    isScormContent && !effectiveReviewMode && completionState === 'error';
+
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
   const canGoNextViewedOnly =
@@ -291,6 +354,10 @@ export default function LmsPlayer() {
   const prevSessionKeyRef = useRef<string | null>(null);
 
   const launchUrl = (() => {
+    // An edition mismatch must not even mount the active ZIP against an old
+    // matrícula. Otherwise package initialization can autosave empty state
+    // over the previous edition before the administrator starts a new cycle.
+    if (newEditionRequired && !effectiveReviewMode) return null;
     // The iframe URL never carries the access token. A short-lived,
     // HttpOnly cookie is established before the URL becomes available.
     if (!assetSessionReady || assetSessionKeyRef.current !== sessionKey || !matricula) {
@@ -468,8 +535,7 @@ export default function LmsPlayer() {
     // antes do refetch que confirma a conclusão; quando a matrícula já está
     // CONCLUIDO ou o diagnóstico canônico já foi aceito, qualquer erro/painel
     // de conclusão mantido no estado React é stale e deve ser descartado.
-    const canonicalCompletionAccepted =
-      matricula?.status === 'CONCLUIDO' || completionDiagnostic?.status === 'accepted';
+    const canonicalCompletionAccepted = matricula?.status === 'CONCLUIDO';
 
     if (canonicalCompletionAccepted) {
       if (candidateRetryTimerRef.current !== null) {
@@ -482,7 +548,6 @@ export default function LmsPlayer() {
       setCompletionState('idle');
       setCompletionMessage(null);
       setCompletionErrorInfo(null);
-      setPendingPanelOpen(false);
 
       if (matricula?.status === 'CONCLUIDO' && !effectiveReviewMode) {
         showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
@@ -564,7 +629,76 @@ export default function LmsPlayer() {
     refetchMatricula,
   ]);
 
+  // A persisted SCORM pass only makes an explicit user confirmation eligible.
+  // Never reconcile from an effect, mount, autosave, or page reload.
+  async function reconcilePersistedScormCompletion() {
+    if (!shouldReconcilePassedScorm || !Number.isSafeInteger(id) || id <= 0 || isFinalizing) return;
+    setIsFinalizing(true);
+    showCompletionToast('saving', 'Confirmando a conclusão no AirTrust...');
+    try {
+      // Existing authenticated endpoint enforces SCORM/tenant/qualification gates.
+      const response = await fetchWithAuth(`/api/lms/matriculas/${id}/finalizar`, {
+        method: 'POST',
+      });
+      const result = (await response.json()) as {
+        success?: boolean;
+        data?: { novo_status?: string };
+        code?: string;
+      };
+      if (!response.ok || result.success !== true || result.data?.novo_status !== 'CONCLUIDO') {
+        const code = sanitizeDiagnosticCode(result.code);
+        throw new Error(code
+          ? `O AirTrust ainda não confirmou a conclusão (código: ${code}).`
+          : 'O AirTrust ainda não conseguiu concluir esta matrícula.');
+      }
+      const { data: latest } = await refetchMatricula();
+      if (latest?.status !== 'CONCLUIDO') {
+        throw new Error('A matrícula ainda não consta como concluída no servidor.');
+      }
+      setCompleted(true);
+      void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
+      showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
+      navigate('/lms/cursos', { replace: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha na confirmação do curso.';
+      showCompletionToast('error', message);
+      setCompletionState('error');
+      setCompletionMessage(message);
+      setCompletionErrorInfo({ code: 'SCORM_FINALIZATION_FAILED', reason: null, message });
+    } finally {
+      setIsFinalizing(false);
+    }
+  }
+
+  // Once the server has accepted explicit SCORM completion, confirm the
+  // matrícula automatically through the EXISTING backend finalization gate.
+  // Never infer completion from 100%, a score alone, an orange SCO button,
+  // or a stale previous edition. The server remains the only authority.
   useEffect(() => {
+    if (!shouldReconcilePassedScorm || newEditionRequired || isFinalizing ||
+        !Number.isSafeInteger(id) || id <= 0 ||
+        autoCompletionAttemptRef.current === id) return;
+    autoCompletionAttemptRef.current = id;
+    void reconcilePersistedScormCompletion();
+  }, [id, shouldReconcilePassedScorm, newEditionRequired, isFinalizing]);
+
+  useEffect(() => {
+    const verifyCanonicalAndReturn = () => {
+      void refetchMatricula().then(({ data: latest }) => {
+        if (latest?.status !== 'CONCLUIDO') {
+          showCompletionToast('pending', 'Aprovação recebida. Aguardando confirmação da matrícula pelo AirTrust.');
+          return;
+        }
+        setCompleted(true);
+        setCompletionDialogOpen(false);
+        setIsFinalizing(false);
+        void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
+        showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
+        navigate('/lms/cursos', { replace: true });
+      }).catch(() => {
+        showCompletionToast('error', 'Não foi possível confirmar a matrícula. O progresso foi preservado.');
+      });
+    };
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== launchOrigin) return;
       // Só aceita mensagens do próprio iframe do curso. Sem esta checagem, qualquer
@@ -581,10 +715,7 @@ export default function LmsPlayer() {
         // IDs afirmados pelo payload são ignorados: o contexto é sempre o
         // autenticado (`id`, empresa do token).
         const parsed = parseGranularDiagnostic(event.data.diagnostics);
-        if (parsed) {
-          setGranularDiagnostic(parsed);
-          if (!effectiveReviewMode) void persistGranularDiagnostic(parsed);
-        }
+        if (parsed) setGranularDiagnostic(parsed);
         return;
       }
 
@@ -604,12 +735,8 @@ export default function LmsPlayer() {
         event.data.type === 'lms:completed' &&
         event.data.matriculaId === id
       ) {
-        setCompleted(true);
         if (event.data.qualificacao_gerada) setQualificacaoGerada(true);
-        showCompletionToast('success', 'Curso concluído e registrado com sucesso.', {
-          qualificationGenerated: Boolean(event.data.qualificacao_gerada),
-        });
-        void refetchMatricula();
+        verifyCanonicalAndReturn();
         return;
       }
 
@@ -644,8 +771,13 @@ export default function LmsPlayer() {
           typeof event.data.message === 'string' && event.data.message.trim()
             ? event.data.message.trim()
             : 'Conclusão recebida, mas ainda não confirmada pelo servidor.';
-        const displayMessage = code ? `${baseMessage} (código: ${code})` : baseMessage;
-        setCompletionErrorInfo({ code, reason, message: baseMessage });
+        const actionableMessage =
+          code === 'SCORE_MISSING' || code === 'MASTERY_SCORE_MISSING'
+            ? 'O conteúdo terminou, mas o curso está configurado para exigir uma nota que o pacote não forneceu. A Gerência de Treinamento precisa corrigir a configuração; a pendência não é uma questão não respondida.'
+            : baseMessage;
+        const displayMessage = code ? `${actionableMessage} (código: ${code})` : actionableMessage;
+        setIsFinalizing(false);
+        setCompletionErrorInfo({ code, reason, message: actionableMessage });
         showCompletionToast('error', displayMessage);
         void refetchMatricula();
         return;
@@ -657,6 +789,13 @@ export default function LmsPlayer() {
         event.data.type === 'lms:progress' &&
         event.data.matriculaId === id
       ) {
+        if (typeof event.data.viewed_slide_count === 'number' &&
+            typeof event.data.viewed_slide_total === 'number' &&
+            event.data.viewed_slide_count >= 0 && event.data.viewed_slide_total > 0) {
+          setLiveSlideCoverage({
+            count: event.data.viewed_slide_count, total: event.data.viewed_slide_total,
+          });
+        }
         if (typeof event.data.progresso_pct === 'number') {
           setLiveProgress(event.data.progresso_pct);
         }
@@ -670,11 +809,10 @@ export default function LmsPlayer() {
         if (typeof event.data.slide_current === 'number' && Number.isFinite(event.data.slide_current)) {
           setMaxVisitedSlide((prev) => Math.max(prev, event.data.slide_current));
         }
-        if (event.data.novo_status === 'CONCLUIDO' && !effectiveReviewMode) {
-          setCompleted(true);
-          showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
+        if (shouldVerifyCanonicalProgress(event.data.novo_status) && !effectiveReviewMode) {
+          verifyCanonicalAndReturn();
+          return;
         }
-        void refetchMatricula();
         return;
       }
 
@@ -693,7 +831,34 @@ export default function LmsPlayer() {
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, launchOrigin, refetchMatricula, persistGranularDiagnostic]);
+  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, queryClient]);
+
+  async function startVerifiedNewEdition() {
+    if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
+    const confirmed = window.confirm(
+      `Iniciar a nova edição do curso? O histórico e as evidências do ciclo anterior serão preservados. O progresso desta matrícula (${displayProgress}%) pertence à edição anterior e não será transferido automaticamente para as ${editionMismatch.active_total} unidades da nova edição.`, 
+    );
+    if (!confirmed) return;
+    setStartingNewEdition(true);
+    try {
+      const res = await fetchWithAuth(`${API_BASE_URL}/lms/matriculas/${id}/nova-edicao`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: `Início de nova edição SCORM: ${editionMismatch.reason ?? 'QUANTIDADE_UNIDADES_ALTERADA'} (${editionMismatch.previous_total} para ${editionMismatch.active_total} unidades), com preservação auditável do ciclo anterior.`, 
+        }),
+      });
+      const result = await res.json() as { success?: boolean; code?: string; error?: string };
+      if (!res.ok || result.success !== true) {
+        throw new Error(result.error || result.code || `HTTP ${res.status}`);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['lms'] });
+      window.location.reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar a nova edição.');
+      setStartingNewEdition(false);
+    }
+  }
 
   async function handleFullscreen() {
     const el = iframeRef.current;
@@ -775,10 +940,10 @@ export default function LmsPlayer() {
   }
 
   function handleLeave() {
-    const shouldConfirm = !completed && matricula?.status !== 'CONCLUIDO';
+    const shouldConfirm = !isCompletedState;
     if (shouldConfirm) {
       const confirmed = window.confirm(
-        'O curso ainda não foi concluído. Deseja sair agora mesmo assim?',
+        'O AirTrust ainda não confirmou a conclusão deste curso. Deseja sair mesmo assim?',
       );
       if (!confirmed) return;
     }
@@ -821,6 +986,50 @@ export default function LmsPlayer() {
     frameWindow.postMessage({ type: 'lms:session-close', reason: 'user-exit' }, launchOrigin);
   }
 
+  function requestExplicitCompletion() {
+    if (!canRequestCompletion || !matricula) return;
+    setCompletionDialogOpen(false);
+    if (isScormContent) {
+      if (shouldReconcilePassedScorm) {
+        void reconcilePersistedScormCompletion();
+        return;
+      }
+      const frameWindow = iframeRef.current?.contentWindow;
+      if (!frameWindow) {
+        toast.error('Conteúdo indisponível. Reabra o curso antes de concluir.');
+        return;
+      }
+      setIsFinalizing(true);
+      showCompletionToast('saving', 'Verificando e registrando a conclusão...');
+      frameWindow.postMessage({ type: 'lms:request-completion', matriculaId: id }, launchOrigin);
+      // The wrapper/backend are the only authorities for status and qualification.
+      // Errors and confirmations reset this loading state through postMessage.
+      return;
+    }
+    void handleFinalizeAndGenerateQualification();
+  }
+
+  function retryScormCompletionRegistration() {
+    if (
+      !isScormContent ||
+      effectiveReviewMode ||
+      newEditionRequired ||
+      completionState !== 'error'
+    ) {
+      return;
+    }
+    const frameWindow = iframeRef.current?.contentWindow;
+    if (!frameWindow) {
+      showCompletionToast('error', 'Conteúdo indisponível. Reabra o curso antes de concluir.');
+      return;
+    }
+    setIsFinalizing(true);
+    showCompletionToast('saving', 'Verificando e registrando a conclusão...');
+    // Retry asks the wrapper to re-check real SCORM state; the backend remains
+    // responsible for all enrollment and completion gates.
+    frameWindow.postMessage({ type: 'lms:request-completion', matriculaId: id }, launchOrigin);
+  }
+
   async function handleFinalizeAndGenerateQualification() {
     if (!matricula) return;
     // Conclusão SCORM nunca é aceita por finalização manual: exige status
@@ -843,6 +1052,7 @@ export default function LmsPlayer() {
       }
 
       setCompleted(true);
+      void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
       setLiveProgress(100);
       setQualificacaoGerada(Boolean(json.data?.qualificacao_gerada));
       void refetchMatricula();
@@ -962,6 +1172,34 @@ export default function LmsPlayer() {
         </div>
       </header>
 
+      {newEditionRequired && editionMismatch && !effectiveReviewMode && (
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-300" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Nova edição do curso — matrícula anterior incompatível</p>
+            <p className="text-xs text-amber-200/90">
+              {editionMismatch.reason === 'PACKAGE_VERSION_CHANGED' || editionMismatch.reason === 'SLIDE_IDS_CHANGED'
+                ? 'A versão ou a identidade das unidades mudou, mesmo que a quantidade de telas seja igual. '
+                : `O pacote anterior registra ${editionMismatch.previous_total} unidades e a edição ativa exige ${editionMismatch.active_total}. `}
+              O progresso de {displayProgress}% pertence ao ciclo anterior e não representa o avanço
+              na nova edição. As evidências serão preservadas; não é permitido reaproveitar
+              automaticamente essa conclusão. É necessário iniciar um novo ciclo auditado.
+            </p>
+          </div>
+          {isTenantAdmin ? (
+            <button
+              onClick={() => void startVerifiedNewEdition()}
+              disabled={startingNewEdition}
+              className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
+            >
+              {startingNewEdition ? 'Preparando novo ciclo...' : 'Iniciar nova edição'}
+            </button>
+          ) : (
+            <span className="text-xs font-medium">Solicite nova matrícula à Gerência de Treinamento.</span>
+          )}
+        </div>
+      )}
+
       {effectiveReviewMode && (
         <div className="flex items-center gap-3 bg-blue-950/80 border-b border-blue-500/30 px-4 py-2.5 flex-shrink-0">
           <Eye className="h-4 w-4 text-blue-400 flex-shrink-0" />
@@ -982,6 +1220,20 @@ export default function LmsPlayer() {
                 <div className="text-center">
                   <Loader2 className="mx-auto h-10 w-10 animate-spin text-white/30" />
                   <p className="mt-3 text-sm text-white/60">Montando o ambiente do curso...</p>
+                </div>
+              </div>
+            ) : null}
+
+            {newEditionRequired && !effectiveReviewMode ? (
+              <div role="alert" className="absolute inset-0 flex items-center justify-center bg-slate-950 px-8 text-center">
+                <div className="max-w-lg space-y-3 text-white">
+                  <AlertTriangle className="mx-auto h-9 w-9 text-amber-300" />
+                  <p className="text-base font-semibold">Treinamento temporariamente bloqueado para preservar o progresso anterior</p>
+                  <p className="text-sm text-white/70">
+                    Esta matrícula pertence a outra edição. O pacote atualizado não será aberto
+                    até a criação de um novo ciclo auditado, evitando sobrescrever respostas ou
+                    registros anteriores.
+                  </p>
                 </div>
               </div>
             ) : null}
@@ -1020,9 +1272,9 @@ export default function LmsPlayer() {
                 Progresso e sessão
               </h3>
               <div className="space-y-1.5 text-xs text-white/75">
-                <p>Progresso: {displayProgress}%</p>
-                <p>Restante: {remainingProgress}%</p>
-                <p>Posição: {liveLocation || persistedLocation || 'sem marcador'}</p>
+                <p>{newEditionRequired ? 'Progresso da edição anterior' : 'Progresso'}: {displayProgress}%</p>
+                {!newEditionRequired ? <p>Restante: {remainingProgress}%</p> : <p>Nova edição: execução bloqueada até a abertura de novo ciclo.</p>}
+                <p>{newEditionRequired ? 'Posição anterior' : 'Posição'}: {liveLocation || persistedLocation || 'sem marcador'}</p>
                 <p>
                   Carga horária:{' '}
                   {formatMinutes(curso?.carga_horaria_minutos ?? matricula.carga_horaria_minutos)}
@@ -1050,36 +1302,32 @@ export default function LmsPlayer() {
               </div>
             </section>
 
-            {canFinalize ? (
+            {(!effectiveReviewMode && !isCompletedState && !isScormContent) ||
+            (isScormContent && !effectiveReviewMode && canRequestScormCompletion && !showScormRegistrationRetry) ? (
               <button
-                onClick={handleFinalizeAndGenerateQualification}
-                disabled={isFinalizing}
+                onClick={() => {
+                  if (isScormContent) requestExplicitCompletion();
+                  else setCompletionDialogOpen(true);
+                }}
+                disabled={!canRequestCompletion || isFinalizing}
                 className="mt-auto w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isFinalizing
                   ? 'Confirmando...'
-                  : matricula?.gerar_qualificacao_ao_concluir === 1
-                    ? 'Confirmar conclusao e gerar qualificacao'
-                    : 'Confirmar conclusao'}
+                  : 'Registrar no AirTrust'}
               </button>
             ) : null}
 
-            {!effectiveReviewMode && !isCompletedState && (
-              <LmsPendingPanel
-                explanation={completionExplanation}
-                open={pendingPanelOpen}
-                onToggle={() => setPendingPanelOpen((v) => !v)}
-              />
-            )}
           </aside>
         </div>
       </main>
-      {(canFinalize ||
+      {!newEditionRequired && ((!isScormContent && canRequestCompletion) ||
+        showScormRegistrationRetry ||
         completionState === 'saving' ||
         completionState === 'pending' ||
         completionState === 'error' ||
         completionState === 'unresolved') && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4">
+        <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4${completionState === 'idle' && canRequestCompletion ? ' md:hidden' : ''}`}>
           <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-emerald-300/30 bg-slate-900/90 p-3 shadow-2xl backdrop-blur">
             <div className="mb-2 text-xs text-emerald-200/90">
               {completionMessage || 'Conclusão recebida, mas ainda não confirmada pelo servidor.'}
@@ -1107,20 +1355,44 @@ export default function LmsPlayer() {
                   Voltar ao catálogo
                 </button>
               </div>
-            ) : canFinalize ? (
+            ) : (showScormRegistrationRetry || (!isScormContent && canRequestCompletion)) ? (
               <button
-                onClick={handleFinalizeAndGenerateQualification}
+                onClick={() => isScormContent
+                  ? showScormRegistrationRetry
+                    ? retryScormCompletionRegistration()
+                    : requestExplicitCompletion()
+                  : setCompletionDialogOpen(true)}
                 disabled={isFinalizing}
                 className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isFinalizing
                   ? 'Confirmando...'
-                  : matricula?.gerar_qualificacao_ao_concluir === 1
-                    ? 'Confirmar conclusao e gerar qualificacao'
-                    : 'Confirmar conclusao'}
+                  : isScormContent ? 'Registrar no AirTrust' : 'Concluir curso'}
               </button>
             ) : null}
           </div>
+        </div>
+      )}
+
+      {completionDialogOpen && !isScormContent && !isCompletedState && !effectiveReviewMode && !newEditionRequired && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4">
+          <section role="dialog" aria-modal="true" aria-labelledby="lms-finish-heading"
+            className="w-full max-w-md rounded-2xl border border-slate-600 bg-slate-900 p-6 text-white shadow-2xl">
+            <h2 id="lms-finish-heading" className="text-xl font-semibold">Concluir curso</h2>
+            <p className="mt-3 text-sm text-slate-200">
+              Confirme a conclusão do treinamento. O sistema verificará o registro das telas
+              obrigatórias e, quando houver avaliação, de todos os questionários.
+              A conclusão e eventual qualificação só serão exibidas após confirmação do servidor.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setCompletionDialogOpen(false)}
+                className="rounded-lg bg-white/10 px-4 py-2 text-sm">Voltar ao curso</button>
+              <button onClick={requestExplicitCompletion} disabled={!canRequestCompletion || isFinalizing}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold disabled:opacity-50">
+                {isFinalizing ? 'Validando...' : 'Confirmar conclusão'}
+              </button>
+            </div>
+          </section>
         </div>
       )}
 

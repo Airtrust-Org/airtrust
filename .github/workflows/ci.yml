@@ -4,6 +4,7 @@
 name: CI (fast gates)
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -91,12 +92,30 @@ jobs:
         run: node --test scripts/__tests__/staging-frms-0464-bootstrap-repair.test.mjs
       - name: validate production release read-only preflight contract
         run: node --test scripts/__tests__/production-release-readonly-preflight.test.mjs
+      - name: validate production LMS SCORM enrollment review read-only contract
+        run: |
+          node --test scripts/__tests__/lms-enrollment-readonly-review-helpers.test.mjs
+          node --test scripts/__tests__/production-lms-scorm-review-readonly.test.mjs
       - name: validate FRMS production assignment read-only inventory contract
         run: node --test scripts/__tests__/frms-production-assignment-readonly-inventory.test.mjs
       - name: validate LMS production catalog read-only inventory contract
         run: node --test scripts/__tests__/production-lms-catalog-readonly-inventory.test.mjs
+      - name: validate sanitized LMS completion outcomes contract
+        run: node --test scripts/__tests__/lms-course-completion-outcomes-readonly.test.mjs
+      - name: verify FDM13 transfer dry-run contract
+        run: node --test scripts/__tests__/lms-fdm13-reassignment-preflight-readonly.test.mjs
+      - name: verify SCORM 99 percent production proof is read only
+        run: node --test scripts/__tests__/lms-scorm99-proof-readonly.test.mjs
       - name: validate LMS active-course production certification read-only contract
         run: node --test scripts/__tests__/production-lms-active-course-certification-readonly.test.mjs
+      - name: require evidence-complete P0 SCORM functional certification verdict
+        run: node --test scripts/__tests__/lms-scorm-functional-certification-gate.test.mjs
+      - name: verify SCORM M8 runtime assessment answer provenance
+        run: node --test scripts/__tests__/lms-scorm-answer-plan.test.mjs
+      - name: ensure staging success fixture requires real learner interactions
+        run: node --test scripts/__tests__/lms-scorm-m8-fixture.test.mjs
+      - name: verify frozen Factory SCORM core lock is fail-closed
+        run: python3 -m unittest scripts/__tests__/test_scorm_golden_core_lock.py -v
       - name: validate 0438 legacy staging workflow guards
         run: node --test scripts/__tests__/staging-0438-legacy-validation.test.mjs
       - name: validate 0438 legacy staging workflow v2 guards

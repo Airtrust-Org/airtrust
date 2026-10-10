@@ -55,6 +55,7 @@ async function readJson<T>(response: Response): Promise<T> {
 export function TrainingComplianceConditionsEditor() {
   const queryClient = useQueryClient();
   const { isAdmin } = usePermissions();
+  const [cargoFilterId, setCargoFilterId] = useState<number | null>(null);
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [conditionId, setConditionId] = useState<number | null>(null);
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
@@ -90,6 +91,23 @@ export function TrainingComplianceConditionsEditor() {
     return [...map.entries()];
   }, [catalogs.data?.condicoes]);
 
+  const cargos = useMemo(() => {
+    const active = new Map<number, string>();
+    for (const employee of catalogs.data?.funcionarios || []) {
+      if (employee.funcao_id && employee.funcao_nome) {
+        active.set(employee.funcao_id, employee.funcao_nome);
+      }
+    }
+    return [...active.entries()].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
+  }, [catalogs.data?.funcionarios]);
+
+  const employeesForCargo = useMemo(
+    () => (catalogs.data?.funcionarios || []).filter(
+      (employee) => cargoFilterId === null || employee.funcao_id === cargoFilterId,
+    ),
+    [catalogs.data?.funcionarios, cargoFilterId],
+  );
+
   const invalidate = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['training-compliance', 'condition-catalogs'] }),
@@ -103,7 +121,7 @@ export function TrainingComplianceConditionsEditor() {
   const assign = useMutation({
     mutationFn: async () => {
       if (!employeeId || !conditionId) throw new Error('Selecione funcionário e condição.');
-      return readJson<{ id: number }>(
+      return readJson<{ id:number; auto_enrollment:{created:number;reactivated:number;preserved:number;skipped_valid_evidence:number;unavailable_course:number}|null; auto_enrollment_warning:string|null }>(
         await fetchWithAuth('/api/compliance-treinamentos/condicoes/atribuicoes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -119,10 +137,12 @@ export function TrainingComplianceConditionsEditor() {
         }),
       );
     },
-    onSuccess: async () => {
-      showToast.success('Condição atribuída ao funcionário.');
-      setReason('');
-      await invalidate();
+    onSuccess: async (result) => {
+      const enrolled=Number(result.auto_enrollment?.created||0)+Number(result.auto_enrollment?.reactivated||0);
+      showToast.success(enrolled>0?`Designação atribuída. ${enrolled} treinamento(s) disponibilizado(s) automaticamente.`:'Designação atribuída ao funcionário.');
+      if(Number(result.auto_enrollment?.unavailable_course||0)>0) showToast.warning('Designação salva, mas existe treinamento sem um único curso EAD publicado e vinculado.');
+      else if(result.auto_enrollment_warning) showToast.warning('Designação salva, mas a matrícula automática precisará ser reconciliada.');
+      setReason(''); await invalidate();
     },
     onError: (error) =>
       showToast.error(error instanceof Error ? error.message : 'Erro ao atribuir condição'),
@@ -179,13 +199,31 @@ export function TrainingComplianceConditionsEditor() {
               Condições e designações de aplicabilidade
             </h3>
             <p className="text-sm text-slate-500">
-              Use quando setor e cargo não bastam: exposição, atividade, certificação ou designação
-              regulatória. Essas marcações podem incluir ou excluir a pessoa de qualquer requisito e
+              Escolha o cargo para localizar os funcionários e selecione a designação correspondente.
+              A seleção do cargo é apenas um filtro: ela não atribui automaticamente a designação
+              nem torna o treinamento obrigatório para todos os ocupantes. As marcações individuais
               podem ter início e fim.
             </p>
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="text-xs font-medium text-slate-600">
+            Cargo (filtro opcional)
+            <select
+              aria-label="Filtrar funcionários por cargo"
+              value={cargoFilterId ?? ''}
+              onChange={(e) => {
+                setCargoFilterId(e.target.value ? Number(e.target.value) : null);
+                setEmployeeId(null);
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Todos os cargos</option>
+              {cargos.map(([id, nome]) => (
+                <option key={id} value={id}>{nome}</option>
+              ))}
+            </select>
+          </label>
           <label className="text-xs font-medium text-slate-600">
             Funcionário
             <select
@@ -194,7 +232,7 @@ export function TrainingComplianceConditionsEditor() {
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
             >
               <option value="">Selecione</option>
-              {(catalogs.data?.funcionarios || []).map((employee) => (
+              {employeesForCargo.map((employee) => (
                 <option key={employee.id} value={employee.id}>
                   {employee.nome}
                   {employee.funcao_nome ? ` · ${employee.funcao_nome}` : ''}

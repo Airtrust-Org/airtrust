@@ -4,6 +4,10 @@ import { getUserPermissionOverride } from './rbac';
 import { checkPermission } from './tenant';
 import type { Env } from '../types';
 
+export function isControleVoosCoordinationRole(c: Context<{ Bindings: Env }>): boolean {
+  return String((c.get as (key: string) => unknown)('userRole') || '').trim().toUpperCase() === 'COORDENACAO_VOO';
+}
+
 async function hasConfiguredAccess(
   c: Context<{ Bindings: Env }>,
   permission: 'controle_voos.edit' | 'controle_voos.sigvoos_preview',
@@ -12,6 +16,7 @@ async function hasConfiguredAccess(
   const override = await getUserPermissionOverride(c, permission);
   if (override === 'DENY') return false;
   if (override === 'GRANT') return true;
+  if (permission === 'controle_voos.edit' && isControleVoosCoordinationRole(c)) return true;
   return checkPermission(c, fallbackRole);
 }
 
@@ -25,7 +30,7 @@ export function requireControleVoosWrite(): MiddlewareHandler<{ Bindings: Env }>
 }
 
 export function assertControleVoosCoordination(c: Context<{ Bindings: Env }>): void {
-  if (!checkPermission(c, 'manager')) {
+  if (!checkPermission(c, 'manager') && !isControleVoosCoordinationRole(c)) {
     throw new ApiError(
       'Permissao insuficiente para Coordenacao',
       403,
@@ -36,6 +41,10 @@ export function assertControleVoosCoordination(c: Context<{ Bindings: Env }>): v
 
 export function requireControleVoosCoordination(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c, next) => {
+    if (isControleVoosCoordinationRole(c)) {
+      const permission = await getUserPermissionOverride(c, 'controle_voos.edit');
+      if (permission === 'DENY') throw new ApiError('Permissao insuficiente', 403, 'CONTROLE_VOOS_COORDINATION_RBAC_FORBIDDEN');
+    }
     assertControleVoosCoordination(c);
     await next();
   };

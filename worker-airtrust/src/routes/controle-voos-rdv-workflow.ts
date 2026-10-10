@@ -63,7 +63,8 @@ import { exportDailyPetrobrasRveXmlHandler } from './controle-voos-rdv-petrobras
 const rdvWorkflow = new Hono<{ Bindings: Env }>();
 
 const FLIGHT_DOCUMENT_MAX_BYTES = 15 * 1024 * 1024;
-const FLIGHT_DOCUMENT_TYPES = new Set(['WEATHER_REPORT', 'PLANO_VOO']);
+const FLIGHT_DOCUMENT_TYPES = new Set(['WEATHER_REPORT', 'PLANO_VOO', 'MTA_EMBARQUE', 'MTA_DESEMBARQUE', 'OUTROS']);
+type FlightDocumentType = 'WEATHER_REPORT' | 'PLANO_VOO' | 'MTA_EMBARQUE' | 'MTA_DESEMBARQUE' | 'OUTROS';
 const FLIGHT_DOCUMENT_CONTENT_TYPES: Record<string, string> = {
   'application/pdf': 'pdf',
   'image/png': 'png',
@@ -73,12 +74,12 @@ const FLIGHT_DOCUMENT_CONTENT_TYPES: Record<string, string> = {
   'image/heif': 'heif',
 };
 
-function normalizeFlightDocumentType(value: unknown): 'WEATHER_REPORT' | 'PLANO_VOO' {
+function normalizeFlightDocumentType(value: unknown): FlightDocumentType {
   const normalized = String(value || '').trim().toUpperCase();
   if (!FLIGHT_DOCUMENT_TYPES.has(normalized)) {
     throw new ApiError('Tipo de documento invalido', 400, 'CONTROLE_VOOS_DOCUMENT_TYPE_INVALID');
   }
-  return normalized as 'WEATHER_REPORT' | 'PLANO_VOO';
+  return normalized as FlightDocumentType;
 }
 
 function sanitizeFlightDocumentName(value: string): string {
@@ -86,8 +87,14 @@ function sanitizeFlightDocumentName(value: string): string {
   return normalized.slice(0, 180) || 'documento';
 }
 
-function flightDocumentLabel(type: 'WEATHER_REPORT' | 'PLANO_VOO'): string {
-  return type === 'WEATHER_REPORT' ? 'Weather report' : 'Planejamento de voo';
+function flightDocumentLabel(type: FlightDocumentType): string {
+  switch (type) {
+    case 'WEATHER_REPORT': return 'Weather Report';
+    case 'PLANO_VOO': return 'Planejamento de voo';
+    case 'MTA_EMBARQUE': return 'MTA de embarque';
+    case 'MTA_DESEMBARQUE': return 'MTA de desembarque';
+    case 'OUTROS': return 'Outros documentos';
+  }
 }
 
 function addDaysToDateOnly(dateText: string, days: number): string {
@@ -765,10 +772,13 @@ rdvWorkflow.get(
         r.id, r.voo_id, r.numero, r.data_voo, r.status, r.workflow_status, r.versao,
         r.responsavel_preenchimento_id, r.enviado_em, r.devolvido_em, r.aprovado_coordenacao_em,
         r.finalizado_workflow_em, r.reaberto_em, r.motivo_devolucao,
-        v.prefixo, v.aeronave_id, v.data_programacao, v.origem_id, v.destino_id,
+        v.prefixo, v.aeronave_id, a.modelo AS modelo_aeronave,
+        v.data_programacao, v.origem_id, v.destino_id,
         v.status AS flight_status, v.horario_real_partida, v.horario_real_chegada
       FROM cv_rdv_operacional r
       INNER JOIN cv_voos v ON v.id = r.voo_id AND v.empresa_id = r.empresa_id
+      LEFT JOIN aeronaves a ON a.id = v.aeronave_id
+        AND a.empresa_id = v.empresa_id AND a.deleted_at IS NULL
       WHERE ${filters.join(' AND ')}
       ORDER BY r.data_voo DESC, r.id DESC
       LIMIT 100

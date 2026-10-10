@@ -135,6 +135,12 @@ function baseCte() {
        AND r.obrigatoriedade='OBRIGATORIA'
        AND qt.deleted_at IS NULL AND COALESCE(qt.ativo,1)=1
        AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
+  ), mandatory_applicable AS (
+    SELECT r.funcionario_id,r.qualificacao_tipo_id
+      FROM ranked r
+      JOIN qualificacoes_tipos qt ON qt.id=r.qualificacao_tipo_id AND qt.empresa_id=${EMPRESA_ID}
+     WHERE r.rn=1 AND r.obrigatoriedade='OBRIGATORIA'
+       AND qt.deleted_at IS NULL AND COALESCE(qt.ativo,1)=1
   ), enrollment_target AS (
     SELECT *
       FROM expected
@@ -175,6 +181,7 @@ function isCompletedEnrollmentStatus(status) {
 }
 
 function requirementNeedsEnrollment(requirement) {
+  if (requirement?.evidencia_pendente_validacao === true) return false;
   const realizedOn = String(requirement?.ultima_data || '').slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
   if (realizedOn && realizedOn > today) fail('CANONICAL_FUTURE_EVIDENCE_REQUIRES_WORKER_FIX');
@@ -306,13 +313,9 @@ function readD1Topology() {
      )
      SELECT a.id,a.funcionario_id,a.qualificacao_tipo_id,a.categoria,a.status,a.progresso_pct,a.data_inicio,a.data_conclusao,a.qualificacao_historico_id,a.has_scorm,a.has_xapi,a.has_diag,a.has_history
        FROM active_global a
-       LEFT JOIN expected e ON e.funcionario_id=a.funcionario_id AND e.qualificacao_tipo_id=a.qualificacao_tipo_id
+       LEFT JOIN mandatory_applicable e ON e.funcionario_id=a.funcionario_id AND e.qualificacao_tipo_id=a.qualificacao_tipo_id
       WHERE a.keep_standalone=0
-        AND (
-          a.qualificacao_tipo_id IS NULL
-          OR UPPER(TRIM(COALESCE(a.categoria,''))) NOT IN ('EAD','TREINAMENTO EAD')
-          OR e.funcionario_id IS NULL
-        )
+        AND (a.qualificacao_tipo_id IS NULL OR e.funcionario_id IS NULL)
       ORDER BY a.id`,
     'wrong_global_pairs',
   );
@@ -363,6 +366,9 @@ async function readState(token) {
     else redundantManualReviewRows.push(row);
   }
 
+  // Concluded, started or evidenced cycles are never silently removed from the LMS,
+  // even if the current mandatory matrix no longer requires that training.
+  const wrongEligible = topology.wrongRows.filter(isProvablyUnstartedEnrollment);
   const unsafeWrong = topology.wrongRows.filter((row) => !isProvablyUnstartedEnrollment(row));
   const noCourseTypesMap = new Map();
   const ambiguousCourseTypesMap = new Map();
@@ -374,7 +380,7 @@ async function readState(token) {
   }
 
   const missingKeys = missingRows.map((row) => pairKey(row.funcionario_id, row.qualificacao_tipo_id)).sort();
-  const wrongIds = topology.wrongRows.map((row) => Number(row.id)).sort((a, b) => a - b);
+  const wrongIds = wrongEligible.map((row) => Number(row.id)).sort((a, b) => a - b);
   const redundantIds = redundantRows.map((row) => Number(row.id)).sort((a, b) => a - b);
   const noCourseTypes = [...noCourseTypesMap.values()].sort((a, b) => a.id - b.id);
   const ambiguousCourseTypes = [...ambiguousCourseTypesMap.values()].sort((a, b) => a.id - b.id);
@@ -387,8 +393,9 @@ async function readState(token) {
     missing_rows: missingRows,
     missing_count: missingRows.length,
     missing_hash: sha(missingKeys),
-    wrong_rows: topology.wrongRows,
-    wrong_count: topology.wrongRows.length,
+    wrong_rows: wrongEligible,
+    wrong_count: wrongEligible.length,
+    wrong_manual_review_count: unsafeWrong.length,
     wrong_hash: sha(wrongIds.map(String)),
     unsafe_wrong_count: unsafeWrong.length,
     redundant_rows: redundantRows,
@@ -533,6 +540,22 @@ async function enrollMissingPairs(token) {
 function cancelReviewedWrongEnrollments(ids) {
   if (ids.length === 0) return 0;
   const idList = ids.join(',');
+  // Recheck the whole set immediately before any writes: never cancel a course
+  // with completion, progress, SCORM, xAPI, diagnostics or qualification history.
+  const canCancel = runWrangler(
+    `SELECT COUNT(*) AS count FROM lms_matriculas m
+      WHERE m.empresa_id=${EMPRESA_ID} AND m.id IN (${idList}) AND m.deleted_at IS NULL
+        AND UPPER(COALESCE(m.status,''))='NAO_INICIADO'
+        AND COALESCE(m.progresso_pct,0)=0
+        AND m.data_inicio IS NULL AND m.data_conclusao IS NULL
+        AND m.qualificacao_historico_id IS NULL
+        AND NOT EXISTS(SELECT 1 FROM lms_progresso_scorm s WHERE s.empresa_id=m.empresa_id AND s.matricula_id=m.id)
+        AND NOT EXISTS(SELECT 1 FROM lms_xapi_statements s WHERE s.empresa_id=m.empresa_id AND s.matricula_id=m.id)
+        AND NOT EXISTS(SELECT 1 FROM lms_completion_diagnostics_snapshots s WHERE s.empresa_id=m.empresa_id AND s.matricula_id=m.id)
+        AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico h WHERE h.empresa_id=m.empresa_id AND h.lms_matricula_id=m.id AND h.deleted_at IS NULL)`,
+    'recheck_wrong_unstarted_guard',
+  );
+  if (Number(canCancel[0]?.count) !== ids.length) fail('WRONG_ENROLLMENT_UNSTARTED_GUARD_CHANGED');
   runWrangler(
     `INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
      SELECT NULL,'LMS_MATRICULA_COMPLIANCE_MATRIX_REPAIR','lms_matriculas',m.id,
@@ -645,6 +668,7 @@ function sanitizedSummary(state) {
     wrong_count: state.wrong_count,
     wrong_hash: state.wrong_hash,
     unsafe_wrong_count: state.unsafe_wrong_count,
+    wrong_manual_review_count: state.wrong_manual_review_count,
     wrong_with_evidence_count: state.unsafe_wrong_count,
     redundant_count: state.redundant_count,
     redundant_hash: state.redundant_hash,
@@ -695,7 +719,8 @@ async function main() {
   summary.cancelled_wrong_enrollments = cancelReviewedWrongEnrollments(
     before.wrong_rows.map((row) => Number(row.id)).sort((a, b) => a - b),
   );
-  summary.cancelled_wrong_with_evidence_enrollments = before.unsafe_wrong_count;
+  // Evidenced/cancelled-historical candidates are intentionally review-only.
+  summary.cancelled_wrong_with_evidence_enrollments = 0;
   summary.cancelled_redundant_valid_evidence_enrollments = cancelReviewedRedundantEnrollments(
     before.redundant_rows.map((row) => Number(row.id)).sort((a, b) => a - b),
   );
@@ -705,7 +730,7 @@ async function main() {
   if (after.wrong_count !== 0) fail(`POST_WRONG_GLOBAL_PAIRS_${after.wrong_count}`);
   if (after.redundant_count !== 0) fail(`POST_REDUNDANT_VALID_EVIDENCE_ENROLLMENTS_${after.redundant_count}`);
   if (after.no_course_count !== 0) fail(`POST_REQUIRED_EAD_COURSE_MISSING_${after.no_course_count}`);
-  if (after.unsafe_wrong_count !== 0) fail('POST_UNSAFE_WRONG_ENROLLMENTS');
+  // Manual review candidates with evidence must remain untouched and may persist.
 
   Object.assign(summary, {
     mutation_executed: true,
