@@ -114,7 +114,6 @@ describe('ControleVoosEditarVooDialog', () => {
       expect.objectContaining({
         versao: 4,
         numero_voo: 'V999',
-        numero_db: 'DB456',
         data_programacao: '2026-09-21',
         observacoes: 'Atualizado',
       }),
@@ -159,7 +158,7 @@ describe('ControleVoosEditarVooDialog', () => {
     );
   });
 
-  it('ao mudar a data preserva os horários na nova data antes de salvar', async () => {
+  it('deriva data operacional da partida prevista sem campo de data duplicado', async () => {
     patchMock.mockResolvedValue({
       success: true,
       data: { ...voo, data_programacao: '2026-09-22', versao: 5 },
@@ -170,8 +169,15 @@ describe('ControleVoosEditarVooDialog', () => {
     );
     await waitCatalogsReady();
 
-    fireEvent.change(screen.getByLabelText('Data da programação'), {
-      target: { value: '2026-09-22' },
+    expect(screen.queryByLabelText('Data da programação')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Número DB')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Equipamento Petrobras')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Atendimento Petrobras')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Partida prevista'), {
+      target: { value: '2026-09-22T13:00' },
+    });
+    fireEvent.change(screen.getByLabelText('Chegada prevista'), {
+      target: { value: '2026-09-22T15:00' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
 
