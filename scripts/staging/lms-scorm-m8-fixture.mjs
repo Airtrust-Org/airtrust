@@ -101,6 +101,7 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
       selected = Number(button.getAttribute('data-answer'));
       modelState.q['qa-interaction-1'] = selected;
       persistModelState();
+      submit.disabled = false;
       document.querySelector('#next').disabled = false;
     });
   });

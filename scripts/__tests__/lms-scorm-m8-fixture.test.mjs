@@ -25,6 +25,7 @@ test('staging acceptance ZIP has an actual authored M8 assessment, not automatic
   assert.match(read('app.js'), /LMSCommit/);
   assert.match(read('app.js'), /LMSFinish/);
   assert.match(read('app.js'), /addEventListener\('click'/);
+  assert.match(read('app.js'), /submit\.disabled = false/);
   assert.match(read('app.js'), /state\.assess\[1\]\.passed = true/);
   assert.match(read('app.js'), /state\.done = \[0\]/);
   assert.match(read('app.js'), /cmi\.suspend_data/);
