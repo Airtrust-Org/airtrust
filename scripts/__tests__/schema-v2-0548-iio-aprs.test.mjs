@@ -1,3 +1,7 @@
+// source_reference: Costa do Sol tenant-6 production D1 read-only IIO/APRS role audit, 2026-10-10.
+// operational_decision: include maintenance assistants in mandatory training without APRS technical authority.
+// dry_run_required: synthetic in-memory SQLite fixture; no remote writes.
+// rollback_plan_required: worker-airtrust/schema-v2/plans/training-compliance-maintenance-iio-aprs-assistants-0548.md
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
