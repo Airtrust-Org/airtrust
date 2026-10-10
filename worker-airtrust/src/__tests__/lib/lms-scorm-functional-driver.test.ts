@@ -10,6 +10,10 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
     global.document.body.innerHTML = '';
     delete global.window.COURSE_DATA;
     delete global.window.__AIRTRUST_PLAYER_TEST__;
+    for (const key of [
+      'SLIDES', 'current', 'completed', 'scenarioDone', 'interactions', 'moduleQuiz',
+      'MODULE_QUIZZES', 'completionReady', 'Scorm',
+    ]) delete global[key];
   });
 
   it('executes bundled inner function annotations without leaking bundler globals', () => {
@@ -229,6 +233,66 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
     expect(result).toMatchObject({ supported: true, completed: true, steps: 2 });
     expect(gateVisited).toBe(true);
     expect(done).toEqual([0, 1]);
+  });
+
+  it('drives the earlier modular Factory contract only through authored learner controls', () => {
+    const slides = [
+      { id: 'interactive', layout: 'objectives', required: true, objectives: [{}, {}] },
+      { id: 'finish', layout: 'cover' },
+    ];
+    let current = 0;
+    const completed = new Set<string>();
+    const scenarioDone = new Set<string>();
+    const interactions = new Map<string, Set<number>>();
+    let lessonStatus = 'incomplete';
+    let score = '0';
+    global.SLIDES = slides;
+    global.current = current;
+    global.completed = completed;
+    global.scenarioDone = scenarioDone;
+    global.interactions = interactions;
+    global.moduleQuiz = {};
+    global.MODULE_QUIZZES = {};
+    global.completionReady = () => current === 1 && completed.has('finish');
+    global.Scorm = {
+      get: (key: string) => key === 'cmi.core.lesson_status' ? lessonStatus : score,
+    };
+
+    const first = global.document.createElement('section');
+    const seen = new Set<number>();
+    for (const index of [0, 1]) {
+      const item = global.document.createElement('button');
+      item.setAttribute('data-touch', String(index));
+      item.addEventListener('click', () => {
+        seen.add(index);
+        interactions.set('interactive', new Set(seen));
+        if (seen.size === 2) next.disabled = false;
+      });
+      first.append(item);
+    }
+    global.document.body.append(first);
+    const next = global.document.createElement('button');
+    next.id = 'nextBtn';
+    next.disabled = true;
+    next.addEventListener('click', () => {
+      if (current === 0 && seen.size === 2) {
+        completed.add('interactive');
+        current = 1;
+        global.current = current;
+        next.disabled = false;
+      } else if (current === 1) {
+        completed.add('finish');
+        lessonStatus = 'passed';
+        score = '100';
+      }
+    });
+    global.document.body.append(next);
+    global.SLIDES = slides;
+
+    const result = new Function('return ' + buildScormFunctionalDriverScript())();
+    expect(result).toMatchObject({ supported: true, completed: true, reason: null });
+    expect(seen).toEqual(new Set([0, 1]));
+    expect(completed).toEqual(new Set(['interactive', 'finish']));
   });
 
   it('supports safety course tuple choices and gate interactions using visible controls', () => {
