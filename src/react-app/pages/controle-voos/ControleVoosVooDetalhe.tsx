@@ -181,11 +181,20 @@ export default function ControleVoosVooDetalhe() {
     if (!id || sendingWhatsapp) return;
     setSendingWhatsapp(true);
     try {
-      const response = await apiClient<{ sent: number; failed: number }>(`/controle-voos/voos/${id}/whatsapp`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
-      });
-      if (!response.success) throw new Error(response.error || 'Falha ao enviar WhatsApp');
-      toast.success(`Programação enviada por WhatsApp para ${response.data?.sent ?? 0} tripulante(s).`);
+      const response = await apiClient.post<{
+        success: boolean;
+        data?: { sent: number; failed: number };
+        error?: string;
+      }>(`/controle-voos/voos/${id}/whatsapp`, {});
+      // HTTP client preserves the backend envelope; POST must retain the
+      // centralized CSRF and authentication headers.
+      if (!response.success || response.data?.success !== true) {
+        throw new Error(response.data?.error || response.error || 'Falha ao enviar WhatsApp');
+      }
+      const sent = response.data.data?.sent ?? 0;
+      const failed = response.data.data?.failed ?? 0;
+      if (failed > 0) toast.warning(`Enviado para ${sent} tripulante(s); falhou para ${failed}.`);
+      else toast.success(`Programação enviada por WhatsApp para ${sent} tripulante(s).`);
     } catch (sendError) {
       toast.error(sendError instanceof Error ? sendError.message : 'Falha ao enviar WhatsApp');
     } finally {
