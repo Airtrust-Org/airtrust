@@ -37,6 +37,11 @@ function safe(value) {
     .slice(0, 500);
 }
 
+function writeReport(report) {
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+}
+
 async function authJson(token, route, options = {}) {
   return fetchJson(`${api}${route}`, {
     method: options.method || 'GET',
@@ -183,6 +188,29 @@ async function run() {
   const launch = await fetch(`${api}/api/lms/scorm/launch/${matricula}`, {
     headers: { Cookie: cookie },
   });
+  if (!launch.ok) {
+    const responseBody = await launch.clone().json().catch(() => null);
+    const rawError = responseBody?.error || responseBody?.code || '';
+    const errorCode = String(rawError).match(/\bLMS_NEW_EDITION_REQUIRED\b/)?.[0] || null;
+    writeReport({
+      schema_version: 1,
+      generated_at: new Date().toISOString(),
+      result: 'BLOCKED',
+      writes: 'none (authentication/tenant selection/asset session POSTs only)',
+      enrollment: enrollmentSummary,
+      expected: {
+        tenant_id: expectedTenantId,
+        cycle_number: expectedCycle || null,
+        progress_pct: expectedProgress,
+      },
+      launch: {
+        http_status: launch.status,
+        error_code: errorCode,
+        player_opened: false,
+      },
+      blocked_write_attempt_count: 0,
+    });
+  }
   invariant(launch.ok, `LAUNCH_HTTP_${launch.status}`);
   const html = await launch.text();
   invariant(html.includes(`var MATRICULA_ID = ${matricula};`), 'LAUNCH_MATRICULA_MISMATCH');
@@ -272,8 +300,7 @@ async function run() {
     },
   };
 
-  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
-  fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+  writeReport(report);
   process.stdout.write(`${JSON.stringify(report)}\n`);
   if (result !== 'PASS') process.exitCode = 2;
 }
