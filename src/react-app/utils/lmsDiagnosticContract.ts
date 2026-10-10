@@ -94,6 +94,8 @@ export interface LmsCompletionExplanation {
   adminItems: LmsPendingItem[];
   /** false quando nenhum payload granular V1 válido está disponível (pacote legado). */
   diagnosticsAvailable: boolean;
+  /** Status SCORM aceito; matrícula ainda depende de registro no servidor. */
+  registrationPending?: boolean;
 }
 
 export const GENERIC_PENDING_FALLBACK =
@@ -276,6 +278,7 @@ export interface CanonicalCompletionDiagnosticLike {
   status?: string | null;
   code?: string | null;
   can_finalize?: boolean | null;
+  explicit_completion?: boolean | null;
   explicit_failure?: boolean | null;
   mastery_score?: number | null;
   score_pct?: number | null;
@@ -355,6 +358,25 @@ export function resolveCompletionExplanation(params: {
       items: [],
       adminItems,
       diagnosticsAvailable,
+    };
+  }
+
+  // A successful SCO is not an LMS enrollment completion. When the backend
+  // accepts SCORM evidence but the matrícula is still open, do not manufacture
+  // missing content/items or show a misleading "pendências" warning.
+  const confirmedScoreConsistent =
+    canonical?.score_pct == null || canonical?.mastery_score == null ||
+    canonical.score_pct >= canonical.mastery_score;
+  if (canonical?.status === 'accepted' &&
+      canonical.explicit_failure !== true && confirmedScoreConsistent) {
+    return {
+      canComplete: false,
+      category: 'SCORM_STATUS',
+      summary: 'Conteúdo aprovado no SCORM. O AirTrust está confirmando a matrícula. Não há pendências de conteúdo identificadas.',
+      items: [],
+      adminItems,
+      diagnosticsAvailable,
+      registrationPending: true,
     };
   }
 

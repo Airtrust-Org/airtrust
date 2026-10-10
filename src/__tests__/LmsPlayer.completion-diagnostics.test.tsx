@@ -167,6 +167,64 @@ describe('LmsPlayer — diagnóstico granular de conclusão', () => {
     });
   });
 
+  it('reconcilia automaticamente PPSP aprovado pelo SCORM uma única vez usando o gate servidor', async () => {
+    matriculaMock = {
+      ...baseMatricula(), status: 'EM_ANDAMENTO', progresso_pct: 99, score_final: 100,
+      completion_diagnostic: {
+        status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED',
+        can_finalize: false, explicit_completion: true, explicit_failure: false,
+        reached_final_location: true, score_pct: 100, mastery_score: 70,
+      },
+    };
+    fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/lms/matriculas/42/finalizar') && init?.method === 'POST') {
+        return { ok: true, json: async () => ({ success: true, data: { novo_status: 'CONCLUIDO' } }) };
+      }
+      return { ok: true, json: async () => ({ success: true, data: { diagnostics: null } }) };
+    });
+    refetchMatriculaMock.mockResolvedValue({ data: { status: 'CONCLUIDO' } });
+    renderPlayer();
+
+    await waitFor(() => {
+      const calls = fetchWithAuthMock.mock.calls.filter(([url, init]) =>
+        String(url).endsWith('/lms/matriculas/42/finalizar') &&
+        (init as RequestInit | undefined)?.method === 'POST');
+      expect(calls).toHaveLength(1);
+    });
+    expect(screen.queryByText('O curso informou que ainda há pendências, mas não identificou quais itens.')).not.toBeInTheDocument();
+  });
+
+  it('não tenta concluir automaticamente por nota 100 sem conclusão SCORM explícita', async () => {
+    matriculaMock = {
+      ...baseMatricula(), progresso_pct: 99, score_final: 100,
+      completion_diagnostic: {
+        status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED',
+        can_finalize: false, explicit_completion: false, explicit_failure: false,
+        reached_final_location: true, score_pct: 100, mastery_score: 70,
+      },
+    };
+    renderPlayer();
+    await act(async () => { await Promise.resolve(); });
+    expect(fetchWithAuthMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/lms/matriculas/42/finalizar'))).toHaveLength(0);
+  });
+
+  it('não faz reconciliação automática em matrícula de edição incompatível', async () => {
+    matriculaMock = {
+      ...baseMatricula(), progresso_pct: 99, score_final: 100,
+      edition_mismatch: { required: true, previous_total: 41, active_total: 37 },
+      completion_diagnostic: {
+        status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED',
+        can_finalize: false, explicit_completion: true, explicit_failure: false,
+        reached_final_location: true, score_pct: 100, mastery_score: 70,
+      },
+    };
+    renderPlayer();
+    await act(async () => { await Promise.resolve(); });
+    expect(fetchWithAuthMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/lms/matriculas/42/finalizar'))).toHaveLength(0);
+  });
+
   it('mostra as pendências informadas pelo pacote (test 1 e 4)', async () => {
     renderPlayer();
     await dispatchDiagnostics(GRANULAR_PAYLOAD);

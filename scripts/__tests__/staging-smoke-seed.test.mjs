@@ -202,6 +202,37 @@ test('STAGING_SMOKE_PERFIL=ALUNO e STAGING_SMOKE_ROLE=viewer sao aceitos', () =>
   assert.ok(stdout.includes('TENANT_ROLE=viewer'), `stdout deveria conter TENANT_ROLE=viewer: ${stdout}`);
 });
 
+test('STAGING_SMOKE_PERFIL=ALUNO e STAGING_SMOKE_ROLE=student geram papel de aluno', () => {
+  const result = runSeed({
+    STAGING_SMOKE_PERFIL: 'ALUNO',
+    STAGING_SMOKE_ROLE: 'student',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /PERFIL=ALUNO/);
+  assert.match(result.stdout, /TENANT_ROLE=student/);
+});
+
+test('vinculo de funcionario QA so e permitido para perfil ALUNO', () => {
+  const { status, stdout, stderr } = runSeed({
+    STAGING_D1_NAME: 'airtrust-db-staging-baseline-20260701',
+    STAGING_SMOKE_PERFIL: 'ALUNO',
+    STAGING_SMOKE_ROLE: 'student',
+    STAGING_SMOKE_FUNCIONARIO_MATRICULA: 'QA-LMS-E2E',
+    STAGING_SMOKE_FUNCIONARIO_NOME_GUERRA: 'AUDITOR LMS',
+  });
+  assert.equal(status, 0, stderr);
+  assert.match(stdout, /FUNCIONARIO_FIXTURE=QA-LMS-E2E/);
+
+  const rejected = runSeed({
+    STAGING_D1_NAME: 'airtrust-db-staging-baseline-20260701',
+    STAGING_SMOKE_PERFIL: 'ADMIN',
+    STAGING_SMOKE_FUNCIONARIO_MATRICULA: 'QA-LMS-E2E',
+    STAGING_SMOKE_FUNCIONARIO_NOME_GUERRA: 'AUDITOR LMS',
+  });
+  assert.notEqual(rejected.status, 0);
+  assert.match(rejected.stderr, /exige STAGING_SMOKE_PERFIL=ALUNO/);
+});
+
 test('STAGING_SMOKE_PERFIL invalido falha antes de gerar SQL', () => {
   const { status, stderr } = runSeed({
     STAGING_D1_NAME: 'airtrust-db-staging-baseline-20260701',
