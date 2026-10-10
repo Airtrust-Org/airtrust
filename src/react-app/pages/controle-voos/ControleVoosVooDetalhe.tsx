@@ -14,6 +14,7 @@ import ControleVoosTripulacaoCard from './components/ControleVoosTripulacaoCard'
 import ControleVoosEditarVooDialog from './components/ControleVoosEditarVooDialog';
 import ControleVoosEdicaoRapida from './components/ControleVoosEdicaoRapida';
 import ControleVoosFadigaCard from './components/ControleVoosFadigaCard';
+import ControleVoosQualificacoesCard from './components/ControleVoosQualificacoesCard';
 import ControleVoosStatusActions from './components/ControleVoosStatusActions';
 import ControleVoosPlanoVooCard from './components/ControleVoosPlanoVooCard';
 import {
@@ -438,6 +439,8 @@ export default function ControleVoosVooDetalhe() {
             </div>
 
             <div className="space-y-6">
+              <ControleVoosQualificacoesCard vooId={voo.id} versao={voo.versao} />
+
               <ControleVoosFadigaCard vooId={voo.id} versao={voo.versao} />
 
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
