@@ -26,9 +26,12 @@ test('active candidate can be resolved from the tenant-scoped enrollment read', 
   assert.match(script, /EXPECTED_CANDIDATE_ID\s*\|\|\s*'auto'/);
 });
 
-test('production review does not execute SCORM or call enrollment/progress write routes', () => {
+test('real-player review blocks all non-read HTTP requests and never targets SCORM commit', () => {
   assert.match(script, /\/api\/lms\/assets\/session/);
   assert.match(script, /\/api\/lms\/scorm\/launch\/\$\{matricula\}/);
+  assert.match(script, /import \{ chromium \} from '@playwright\/test'/);
+  assert.match(script, /context\.route\('\*\*\/\*'/);
+  assert.match(script, /await route\.abort\('blockedbyclient'\)/);
   assert.doesNotMatch(script, /\/api\/lms\/matriculas\/scorm\/commit/);
   assert.doesNotMatch(script, /LMSSetValue|LMSCommit|LMSFinish|cmi\.core\.lesson_status/);
   assert.match(script, /writes:\s*'none/);

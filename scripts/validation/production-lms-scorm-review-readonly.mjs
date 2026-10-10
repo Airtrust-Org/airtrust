@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { chromium } from '@playwright/test';
 import {
   assertAllowedProductionBaseUrl,
   extractAccessToken,
@@ -109,6 +110,66 @@ function readAssetCandidate(response, candidateId, label) {
   return assetKey;
 }
 
+async function inspectPlayerReadOnly(cookie, candidateId) {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext();
+  const separator = cookie.indexOf('=');
+  invariant(separator > 0, 'ASSET_COOKIE_INVALID');
+  await context.addCookies([{
+    name: cookie.slice(0, separator),
+    value: cookie.slice(separator + 1),
+    url: api,
+  }]);
+
+  const blockedWrites = {};
+  const assetFailures = [];
+  const page = await context.newPage();
+  await context.route('**/*', async (route) => {
+    const request = route.request();
+    const method = request.method().toUpperCase();
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      blockedWrites[method] = Number(blockedWrites[method] || 0) + 1;
+      await route.abort('blockedbyclient');
+      return;
+    }
+    await route.continue();
+  });
+  page.on('response', (response) => {
+    const url = new URL(response.url());
+    if (url.pathname.includes('/api/lms/scorm/assets/') && response.status() >= 400) {
+      assetFailures.push(response.status());
+    }
+  });
+
+  try {
+    const response = await page.goto(`${api}/api/lms/scorm/launch/${matricula}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 25_000,
+    });
+    invariant(response?.ok(), `BROWSER_LAUNCH_HTTP_${response?.status() || 0}`);
+    const frame = page.frames().find((item) => item !== page.mainFrame());
+    invariant(frame, 'SCORM_FRAME_NOT_ATTACHED');
+    await frame.waitForLoadState('domcontentloaded', { timeout: 25_000 });
+    await frame.locator('body').waitFor({ state: 'attached', timeout: 10_000 });
+    const frameState = await frame.evaluate(() => ({
+      ready_state: document.readyState,
+      body_text_length: document.body?.innerText?.length || 0,
+    }));
+    return {
+      launch_http_status: response.status(),
+      frame_loaded: ['interactive', 'complete'].includes(frameState.ready_state),
+      frame_candidate_matches_enrollment: frame.url().includes(`/_candidates/${candidateId}/`),
+      body_text_length: frameState.body_text_length,
+      failed_scorm_asset_count: assetFailures.length,
+      blocked_write_attempt_count: Object.values(blockedWrites).reduce((sum, count) => sum + count, 0),
+      blocked_write_methods: blockedWrites,
+    };
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+}
+
 async function run() {
   invariant(Number.isInteger(matricula) && matricula > 0, 'MATRICULA_ID_INVALID');
   invariant(Number.isInteger(expectedTenantId) && expectedTenantId > 0, 'EXPECTED_TENANT_ID_INVALID');
@@ -152,6 +213,7 @@ async function run() {
   const masteryMatches = model.ok && Number.isFinite(expectedMastery)
     ? packageMastery === expectedMastery
     : null;
+  const player = await inspectPlayerReadOnly(cookie, candidateId);
 
   const launchLocation =
     cmi['cmi.core.lesson_location'] ?? cmi['cmi.location'] ?? null;
@@ -167,13 +229,18 @@ async function run() {
     (launchLocation == null || launchLocation === '') &&
     !String(launchSuspendData || '').length &&
     cycle.preview_mode === false;
-  const courseOpens = index.ok && (!model.ok || Boolean(modelKey));
+  const courseOpens =
+    index.ok &&
+    (!model.ok || Boolean(modelKey)) &&
+    player.frame_loaded &&
+    player.frame_candidate_matches_enrollment &&
+    player.failed_scorm_asset_count === 0;
   const result = courseOpens && stateMatches && masteryMatches !== false ? 'PASS' : 'FAIL';
   const report = {
     schema_version: 1,
     generated_at: new Date().toISOString(),
     result,
-    writes: 'none (authentication/tenant selection/asset session POSTs only; enrollment, progress, cycle, qualification and certificate data are read-only)',
+    writes: 'none (authentication/tenant selection/asset session POSTs only; all non-GET browser requests are blocked; enrollment, progress, cycle, qualification and certificate data are read-only)',
     enrollment: enrollmentSummary,
     expected: {
       tenant_id: expectedTenantId,
@@ -191,6 +258,7 @@ async function run() {
       initial_lesson_location_present: launchLocation != null && launchLocation !== '',
       initial_suspend_data_present: String(launchSuspendData || '').length > 0,
     },
+    player,
     package: {
       candidate_matches_enrollment: true,
       index_http_status: index.status,
