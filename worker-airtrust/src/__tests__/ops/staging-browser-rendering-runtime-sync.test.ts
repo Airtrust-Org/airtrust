@@ -13,15 +13,11 @@ const resultWorkflow = readFileSync(
 );
 
 describe('staging Browser Rendering runtime sync', () => {
-  it('runs after reviewed main changes or explicit manual confirmation on main', () => {
-    expect(workflow).toMatch(/on:\n\s+push:\n\s+branches:\n\s+- main/);
-    expect(workflow).toContain("'.github/workflows/staging-browser-rendering-runtime-sync.yml'");
-    expect(workflow).toContain(
-      "'worker-airtrust/src/__tests__/ops/staging-browser-rendering-runtime-sync.test.ts'",
-    );
+  it('runs only by explicit manual confirmation on main', () => {
     expect(workflow).toContain('workflow_dispatch:');
     expect(workflow).toContain('inputs.confirmation');
     expect(workflow).toContain('AIRTRUST_STAGING_BROWSER_RENDERING_SYNC');
+    expect(workflow).not.toMatch(/^\s*push:/m);
     expect(workflow).not.toMatch(/^\s*schedule:/m);
   });
 

@@ -1,12 +1,6 @@
 name: Staging Browser Rendering Runtime Sync
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/staging-browser-rendering-runtime-sync.yml'
-      - 'worker-airtrust/src/__tests__/ops/staging-browser-rendering-runtime-sync.test.ts'
   workflow_dispatch:
     inputs:
       confirmation:
@@ -44,16 +38,14 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Assert staging-only target and explicit manual confirmation
+      - name: Assert main-only staging target and explicit confirmation
         shell: bash
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_ONLY" >&2; exit 1; }
-          if [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]]; then
-            [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_BROWSER_RENDERING_SYNC' ]] || { echo "CONFIRMATION_REJECTED" >&2; exit 1; }
-          fi
+          [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_BROWSER_RENDERING_SYNC' ]] || { echo "CONFIRMATION_REJECTED" >&2; exit 1; }
           [[ "$STAGING_API_BASE_URL" == "https://airtrust-api-staging.airtrust.workers.dev" ]] || { echo "STAGING_HOST_REJECTED" >&2; exit 1; }
           [[ "$STAGING_API_BASE_URL" != *"$BLOCKED_PRODUCTION_HOST"* ]] || { echo "PRODUCTION_HOST_REJECTED" >&2; exit 1; }
           [[ "$ALLOWED_STAGING_DB_ID" != "$BLOCKED_PRODUCTION_DB_ID" ]] || { echo "PRODUCTION_DB_REJECTED" >&2; exit 1; }
