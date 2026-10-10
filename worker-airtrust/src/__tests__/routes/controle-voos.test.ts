@@ -879,12 +879,20 @@ describe('controle voos routes', () => {
 
     const detail = await request(db, '/api/controle-voos/voos/601');
     expect(detail.status).toBe(200);
-    await expect(detail.json()).resolves.toMatchObject({
-      data: {
-        status: 'liberado_operacionalmente',
-        pendencias_planejamento: confirmed.data.pendencias_planejamento,
-      },
+    const detailData = (await detail.json()) as { data: { status: string; versao: number; pendencias_planejamento: string[] } };
+    expect(detailData.data.status).toBe('liberado_operacionalmente');
+    expect(detailData.data.pendencias_planejamento).toEqual(confirmed.data.pendencias_planejamento);
+
+    const fixWeight = await request(db, '/api/controle-voos/voos/601', {
+      method: 'PATCH',
+      body: JSON.stringify({ versao: detailData.data.versao, peso_passageiros: 100 }),
     });
+    expect(fixWeight.status).toBe(200);
+
+    const corrected = await request(db, '/api/controle-voos/voos/601');
+    const correctedData = (await corrected.json()) as { data: { pendencias_planejamento: string[] } };
+    expect(correctedData.data.pendencias_planejamento).not.toContain('Informar peso de passageiros');
+    expect(correctedData.data.pendencias_planejamento).toContain('Completar origem e destino das etapas');
   });
 
   it('mantem a exigencia de PIC/SIC para confirmar planejamento destinado a tripulacao', async () => {
