@@ -540,6 +540,22 @@ async function enrollMissingPairs(token) {
 function cancelReviewedWrongEnrollments(ids) {
   if (ids.length === 0) return 0;
   const idList = ids.join(',');
+  // Recheck the whole set immediately before any writes: never cancel a course
+  // with completion, progress, SCORM, xAPI, diagnostics or qualification history.
+  const canCancel = runWrangler(
+    `SELECT COUNT(*) AS count FROM lms_matriculas m
+      WHERE m.empresa_id=${EMPRESA_ID} AND m.id IN (${idList}) AND m.deleted_at IS NULL
+        AND UPPER(COALESCE(m.status,''))='NAO_INICIADO'
+        AND COALESCE(m.progresso_pct,0)=0
+        AND m.data_inicio IS NULL AND m.data_conclusao IS NULL
+        AND m.qualificacao_historico_id IS NULL
+        AND NOT EXISTS(SELECT 1 FROM lms_progresso_scorm s WHERE s.empresa_id=m.empresa_id AND s.matricula_id=m.id)
+        AND NOT EXISTS(SELECT 1 FROM lms_xapi_statements s WHERE s.empresa_id=m.empresa_id AND s.matricula_id=m.id)
+        AND NOT EXISTS(SELECT 1 FROM lms_completion_diagnostics_snapshots s WHERE s.empresa_id=m.empresa_id AND s.matricula_id=m.id)
+        AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico h WHERE h.empresa_id=m.empresa_id AND h.lms_matricula_id=m.id AND h.deleted_at IS NULL)`,
+    'recheck_wrong_unstarted_guard',
+  );
+  if (Number(canCancel[0]?.count) !== ids.length) fail('WRONG_ENROLLMENT_UNSTARTED_GUARD_CHANGED');
   runWrangler(
     `INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
      SELECT NULL,'LMS_MATRICULA_COMPLIANCE_MATRIX_REPAIR','lms_matriculas',m.id,
