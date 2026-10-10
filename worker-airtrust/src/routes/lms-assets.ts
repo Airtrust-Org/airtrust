@@ -2026,7 +2026,7 @@ ${buildScormNativeResumeOwnershipScript()}
     }, data);
     // The wrapper never receives an access bearer. The browser sends only the
     // short-lived, HttpOnly, enrollment-scoped LMS capability cookie.
-    var needsKeepalive = eventType === 'SCORM_BEFORE_UNLOAD_COMMIT' || eventType === 'SCORM_VISIBILITY_COMMIT';
+    var needsKeepalive = isFinalCommitEvent(eventType); // Preserve completion if the learner exits immediately.
     var requestPromise = fetch(COMMIT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
