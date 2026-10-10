@@ -62,6 +62,10 @@ test('identifies only broken LMS qualification/category links without employee d
   assert.equal(report.evaluated, 3);
   assert.equal(report.writes, 0);
   assert.equal(report.contains_personal_data, false);
+  const sanitized = summarizeCategoryMappings([
+    { course_id: 71, state: 'VALID', category_code: 'private@example.com' },
+  ], []);
+  assert.equal(sanitized.mismatches[0].category_code, null);
 });
 
 test('fails closed on invalid category inventory payloads', () => {
