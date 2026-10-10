@@ -228,6 +228,7 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
   });
 
   it('não deixa eventos de saída rebaixarem um SCORM_FINISH enfileirado durante autosave', async () => {
+    const matriculaId = 987654;
     let releaseAutosave: (response: unknown) => void = () => {};
     const pendingAutosave = new Promise<unknown>((resolve) => { releaseAutosave = resolve; });
     const response = {
@@ -243,7 +244,7 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     vi.stubGlobal('fetch', fetchMock);
 
     const html = buildLaunchPage({
-      matriculaId: 346,
+      matriculaId,
       titulo: 'Curso SCORM com saída imediata',
       launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/7/index.html',
       commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
@@ -265,13 +266,18 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     api.LMSFinish();
     g.window.dispatchEvent(new g.Event('beforeunload'));
     g.window.dispatchEvent(new g.Event('pagehide'));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // Other tests also attach unload listeners to jsdom's shared window;
+    // isolate this specific wrapper's commits by enrollment, not total fetches.
+    const ownRequests = () => fetchMock.mock.calls.filter(([, options]) =>
+      JSON.parse((options as { body: string }).body).matricula_id === matriculaId
+    );
+    expect(ownRequests()).toHaveLength(1);
 
     releaseAutosave(response);
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    const request = fetchMock.mock.calls[1][1] as { body: string; keepalive: boolean };
+    await vi.waitFor(() => expect(ownRequests()).toHaveLength(2));
+    const request = ownRequests()[1][1] as { body: string; keepalive: boolean };
     expect(JSON.parse(request.body)).toMatchObject({
-      matricula_id: 346,
+      matricula_id: matriculaId,
       commit_event: 'SCORM_FINISH',
       completion_candidate: null,
       lesson_status: 'completed',
