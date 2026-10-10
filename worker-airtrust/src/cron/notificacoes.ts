@@ -613,7 +613,14 @@ async function enviarNotificacao(
       ),
     };
     const corpoBase = interpolarTemplate(config.template, templateVars);
-    const corpo = trainingUrl ? `${corpoBase}\n\nAcesse o treinamento: ${trainingUrl}` : corpoBase;
+    const is30DayTrainingEmail =
+      tipoCanal === 'EMAIL' &&
+      inferTrainingAlertStageCode(config) === 'QUALIFICACAO_30D' &&
+      !isCmaQualificacao(qualificacao);
+    const corpoComPrazo = is30DayTrainingEmail
+      ? `${corpoBase}\n\nData de vencimento: ${templateVars.data_vencimento}.\nRestam ${diasAteVencimento} ${diasAteVencimento === 1 ? 'dia' : 'dias'} para renovar. Este treinamento é obrigatório para a função e deve ser realizado antes do vencimento, com prioridade.`
+      : corpoBase;
+    const corpo = trainingUrl ? `${corpoComPrazo}\n\nAcesse o treinamento: ${trainingUrl}` : corpoComPrazo;
 
     const urgenciaIcon = diasAteVencimento <= 7 ? '🚨' : diasAteVencimento <= 15 ? '⚠️' : '📅';
     const assuntoPadrao =
