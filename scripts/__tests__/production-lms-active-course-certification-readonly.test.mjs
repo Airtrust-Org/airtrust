@@ -239,6 +239,10 @@ test('production certification workflow is governed, online-triggerable, SHA-pin
   assert.match(workflow, /actions\/upload-artifact@v7/);
   assert.match(workflow, /lms-active-certification-diagnostics/);
   assert.match(workflow, /Enforce zero certification failures/);
+  assert.match(workflow, /pull-requests:\s*write/);
+  assert.match(workflow, /AIRTRUST_LMS_CERTIFICATION_RESULT/);
+  assert.match(workflow, /context\.runId/);
+  assert.match(workflow, /github\.rest\.issues\.createComment/);
 
   assert.match(resolver, /COMMENT_ACTOR_MISMATCH/);
   assert.match(resolver, /COMMENT_COMMAND_MUST_BE_SINGLE_LINE/);
