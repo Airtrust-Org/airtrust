@@ -186,8 +186,8 @@ describe('ControleVoosEditarVooDialog', () => {
       '/controle-voos/voos/77',
       expect.objectContaining({
         data_programacao: '2026-09-22',
-        horario_previsto_partida: expect.stringContaining('2026-09-22T13:00:00'),
-        horario_previsto_chegada: expect.stringContaining('2026-09-22T15:00:00'),
+        horario_previsto_partida: new Date('2026-09-22T13:00').toISOString(),
+        horario_previsto_chegada: new Date('2026-09-22T15:00').toISOString(),
       }),
     );
   });
