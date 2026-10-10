@@ -1043,6 +1043,12 @@ describe('training compliance engine', () => {
   it('pré-visualiza, cancela logicamente somente a matrícula NR-26 órfã e preserva o tenant', async () => {
     tenantMock.id = 6;
     sqlite.database.exec(`
+      CREATE TABLE auditoria_avancada_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tabela TEXT, acao TEXT, registro_id TEXT, dados_anteriores TEXT,
+        dados_novos TEXT, usuario_id TEXT, ip_address TEXT, user_agent TEXT,
+        origem TEXT, created_at TEXT
+      );
       INSERT INTO empresas (id) VALUES (6);
       UPDATE setores SET empresa_id=6 WHERE id=10;
       UPDATE funcoes SET empresa_id=6 WHERE id=1;
@@ -1073,6 +1079,9 @@ describe('training compliance engine', () => {
     const row = sqlite.database.prepare('SELECT status,deleted_at FROM lms_matriculas WHERE id=700 AND empresa_id=6').get() as any;
     expect(row.status).toBe('CANCELADO');
     expect(row.deleted_at).toBeTruthy();
+    const audit = sqlite.database.prepare('SELECT registro_id,dados_novos FROM auditoria_avancada_v2').get() as any;
+    expect(audit.registro_id).toBe('700');
+    expect(JSON.parse(audit.dados_novos)).toMatchObject({ empresa_id: 6, status: 'CANCELADO' });
     const repeated = await send(true);
     expect(repeated.status).toBe(409);
   });
