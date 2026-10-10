@@ -50,6 +50,9 @@ export default function ControleVoosEdicaoRapida({ voo, onSaved, onCancel }: {
       setError('Informe a rota completa, sem pontos consecutivos iguais.');
       return;
     }
+    const previousRoute = initialRoute(voo);
+    const routeChanged = canEditRoute &&
+      (routeIds.length !== previousRoute.length || routeIds.some((point, index) => point !== previousRoute[index]));
     setSaving(true);
     setError(null);
     try {
@@ -61,7 +64,7 @@ export default function ControleVoosEdicaoRapida({ voo, onSaved, onCancel }: {
         horario_previsto_partida: start.toISOString(),
         horario_previsto_chegada: end.toISOString(),
         observacoes: obs.trim() || null,
-        ...(canEditRoute ? { rota_ids: routeIds.map(Number) } : {}),
+        ...(routeChanged ? { rota_ids: routeIds.map(Number) } : {}),
       });
       const envelope: unknown = response.data;
       const result = envelope && typeof envelope === 'object' && 'success' in envelope
