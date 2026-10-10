@@ -218,4 +218,21 @@ describe('ControleVoosEditarVooDialog', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Versao do voo desatualizada/);
     expect(onClose).not.toHaveBeenCalled();
   });
+  it('abre com área rolável, largura ampla e pesos em branco sem exigir zero', async () => {
+    patchMock.mockResolvedValue({ success: true, data: { ...voo, versao: 5 } });
+    render(<ControleVoosEditarVooDialog open voo={voo} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await waitCatalogsReady();
+    expect(screen.getByRole('dialog').querySelector('[data-testid="flight-edit-scroll-region"]'))
+      .toHaveClass('overflow-y-auto');
+    expect(screen.getByRole('dialog').querySelector('form'))
+      .toHaveClass('max-w-6xl');
+    expect(screen.queryByText(/Preencha 0 quando não houver/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Peso da bagagem (lb)')).toHaveValue(null);
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
+    expect(patchMock.mock.calls[0][1]).toMatchObject({
+      peso_passageiros: null, peso_bagagem: null, peso_carga: null,
+    });
+  });
+
 });

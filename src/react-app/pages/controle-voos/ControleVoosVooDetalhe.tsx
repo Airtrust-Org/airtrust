@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Clock, FileText, Shield, CheckCircle, XCircle, Upload, MessageCircle, Pencil } from 'lucide-react';
+import { Clock, FileText, CheckCircle, XCircle, Upload, MessageCircle, Pencil } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { apiClient } from '@/react-app/services/apiClient';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
@@ -12,6 +12,9 @@ import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import EdbShadowReadinessCard from './components/EdbShadowReadinessCard';
 import ControleVoosTripulacaoCard from './components/ControleVoosTripulacaoCard';
 import ControleVoosEditarVooDialog from './components/ControleVoosEditarVooDialog';
+import ControleVoosEdicaoRapida from './components/ControleVoosEdicaoRapida';
+import ControleVoosFadigaCard from './components/ControleVoosFadigaCard';
+import ControleVoosQualificacoesCard from './components/ControleVoosQualificacoesCard';
 import ControleVoosStatusActions from './components/ControleVoosStatusActions';
 import ControleVoosPlanoVooCard from './components/ControleVoosPlanoVooCard';
 import {
@@ -114,6 +117,7 @@ export default function ControleVoosVooDetalhe() {
   const [sharingWhatsapp, setSharingWhatsapp] = useState(false);
   const [sharingFlightLog, setSharingFlightLog] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [quickEditOpen, setQuickEditOpen] = useState(false);
   const [confirmingPlan, setConfirmingPlan] = useState(false);
   const [showDeleteFlight, setShowDeleteFlight] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
@@ -178,9 +182,20 @@ export default function ControleVoosVooDetalhe() {
     if (!id || sendingWhatsapp) return;
     setSendingWhatsapp(true);
     try {
-      const response = await apiClient.post<{ sent: number; failed: number }>(`/controle-voos/voos/${id}/whatsapp`, {});
-      if (!response.success) throw new Error(response.error || 'Falha ao enviar WhatsApp');
-      toast.success(`Programação enviada por WhatsApp para ${response.data?.sent ?? 0} tripulante(s).`);
+      const response = await apiClient.post<{
+        success: boolean;
+        data?: { sent: number; failed: number };
+        error?: string;
+      }>(`/controle-voos/voos/${id}/whatsapp`, {});
+      // HTTP client preserves the backend envelope; POST must retain the
+      // centralized CSRF and authentication headers.
+      if (!response.success || response.data?.success !== true) {
+        throw new Error(response.data?.error || response.error || 'Falha ao enviar WhatsApp');
+      }
+      const sent = response.data.data?.sent ?? 0;
+      const failed = response.data.data?.failed ?? 0;
+      if (failed > 0) toast.warning(`Enviado para ${sent} tripulante(s); falhou para ${failed}.`);
+      else toast.success(`Programação enviada por WhatsApp para ${sent} tripulante(s).`);
     } catch (sendError) {
       toast.error(sendError instanceof Error ? sendError.message : 'Falha ao enviar WhatsApp');
     } finally {
@@ -193,7 +208,7 @@ export default function ControleVoosVooDetalhe() {
     const shareWindow = window.open('', '_blank');
     setSharingWhatsapp(true);
     try {
-      const response = await apiClient.get<{message: string}>(`/controle-voos/voos/${id}/whatsapp-share?tipo=programacao`);
+      const response = await apiClient<{message: string}>(`/controle-voos/voos/${id}/whatsapp-share?tipo=programacao`);
       if (!response.success || !response.data?.message) throw new Error(response.error || 'Não foi possível preparar a mensagem.');
       const url = `https://wa.me/?text=${encodeURIComponent(response.data.message)}`;
       if (shareWindow) shareWindow.location.href = url;
@@ -211,7 +226,7 @@ export default function ControleVoosVooDetalhe() {
     const shareWindow = window.open('', '_blank');
     setSharingFlightLog(true);
     try {
-      const response = await apiClient.get<{ message: string }>(
+      const response = await apiClient<{ message: string }>(
         `/controle-voos/voos/${id}/whatsapp-share?tipo=flight_log`,
       );
       if (!response.success || !response.data?.message) {
@@ -341,7 +356,19 @@ export default function ControleVoosVooDetalhe() {
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-6">
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-                <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Dados gerais</h2>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Dados gerais</h2>
+                  {canCoordinate && <button type="button" onClick={() => setQuickEditOpen((open) => !open)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-cyan-300 px-2.5 py-1.5 text-xs font-medium text-cyan-800 hover:bg-cyan-50">
+                    <Pencil className="h-3.5 w-3.5" /> {quickEditOpen ? "Fechar edição" : "Editar dados aqui"}
+                  </button>}
+                </div>
+                {quickEditOpen && canCoordinate && <ControleVoosEdicaoRapida voo={voo}
+                  onCancel={() => setQuickEditOpen(false)} onSaved={() => {
+                    setQuickEditOpen(false);
+                    toast.success("Dados gerais atualizados.");
+                    void refetchVoo();
+                  }} />}
                 <dl className="grid gap-3 sm:grid-cols-2 text-sm">
                   <div>
                     <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Prefixo</dt>
@@ -412,28 +439,9 @@ export default function ControleVoosVooDetalhe() {
             </div>
 
             <div className="space-y-6">
-              <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-                <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-blue-500" /> Verificações (demonstrativo)
-                </h2>
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">Qualificações</span>
-                    <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">CMA / ASO</span>
-                    <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">FRMS</span>
-                    <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>
-                  </div>
-                  <p className="text-xs text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-2 mt-2">
-                    Verificações automáticas não disponíveis no N1 — implementação futura.
-                  </p>
-                </div>
-              </div>
+              <ControleVoosQualificacoesCard vooId={voo.id} versao={voo.versao} />
+
+              <ControleVoosFadigaCard vooId={voo.id} versao={voo.versao} />
 
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -622,7 +630,6 @@ export default function ControleVoosVooDetalhe() {
                       <MessageCircle className="h-4 w-4" /> {sharingFlightLog ? 'Preparando…' : 'Compartilhar Flight Log no WhatsApp'}
                     </button>
                   )}
-                  <a href="#tripulacao" className="block w-full rounded-lg bg-cyan-700 px-4 py-2 text-center text-sm font-medium text-white">Alterar Tripulação</a>
                   {canCoordinate ? (
                     <ControleVoosStatusActions voo={voo} onChanged={() => void refetchVoo()} />
                   ) : null}
