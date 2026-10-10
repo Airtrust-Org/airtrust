@@ -405,8 +405,8 @@ export function resolveCompletionExplanation(params: {
   // enrollment API has observed the learner's explicit AirTrust registration.
   // Keep that state distinct from missing content while leaving completion
   // entirely to the canonical server flow.
-  const granularPackagePassed = granular?.packageStatus.lessonStatus === 'passed' &&
-    granular.packageStatus.finishRequested &&
+  const granularPackagePassed = granular?.packageStatus?.lessonStatus === 'passed' &&
+    granular.packageStatus?.finishRequested === true &&
     granular.slides.totalRequired != null && granular.slides.totalRequired > 0 &&
     granular.slides.completedRequired === granular.slides.totalRequired &&
     granular.slides.missing.length === 0 &&
