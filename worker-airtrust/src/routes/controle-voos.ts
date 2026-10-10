@@ -1190,18 +1190,18 @@ controleVoos.patch('/voos/:id', auth(), requireControleVoosWrite(), async (c) =>
 
   const routeIds = normalizeFlightRouteIds(payload.rota_ids);
   const hasPlanning = ['pax_planejado', 'peso_passageiros', 'peso_bagagem', 'peso_carga', 'unidade_peso_planejado'].some(field => Object.prototype.hasOwnProperty.call(payload, field));
-  if ((routeIds || hasPlanning) && existing.status !== 'planejado') {
-    throw new ApiError('Alterações de rota e pesos prévios exigem voo em planejamento', 409, 'CONTROLE_VOOS_PLANNING_NOT_EDITABLE');
+  if ((routeIds || hasPlanning) && !['planejado', 'liberado_operacionalmente'].includes(existing.status)) {
+    throw new ApiError('Use o fluxo de revisão do RDV para corrigir dados após o início do voo', 409, 'CONTROLE_VOOS_PLANNING_NOT_EDITABLE');
   }
   const routePoints = routeIds ? await resolveFlightRoutePoints(c.env.DB, empresaId, routeIds) : null;
-  if (routeIds) {
+  if (routeIds || hasPlanning) {
     const times = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM cv_voo_etapas
       WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
         AND (horario_motor_ligado IS NOT NULL OR horario_decolagem IS NOT NULL OR horario_pouso IS NOT NULL OR horario_motor_desligado IS NOT NULL)`)
       .bind(empresaId, existing.id).first<{total: number}>();
     const activeRdv = await getActiveRdvByFlight(c.env.DB, existing.id, empresaId);
     if (Number(times?.total || 0) > 0 || (activeRdv && !['rascunho', 'devolvido'].includes(activeRdv.workflow_status))) {
-      throw new ApiError('Rota já possui registros de execução ou RDV encaminhado; utilize o fluxo de revisão', 409, 'CONTROLE_VOOS_PLANNING_ROUTE_LOCKED');
+      throw new ApiError('Voo já possui execução ou RDV encaminhado; utilize o fluxo de revisão para alterar rota ou pesos', 409, 'CONTROLE_VOOS_PLANNING_ROUTE_LOCKED');
     }
   }
   const normalized = routeIds ? { ...payload, origem_id: routeIds[0], destino_id: routeIds[routeIds.length - 1] } : payload;
