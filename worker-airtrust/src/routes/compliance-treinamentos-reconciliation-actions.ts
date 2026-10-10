@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { hasSchemaTable } from '../utils/db-schema';
 import type { Env } from '../types';
 import { ApiError } from '../middleware/error-handler';
 import { requireRole } from '../middleware/rbac';
@@ -8,7 +9,50 @@ import { trainingComplianceNeedsEnrollment } from '../services/training-complian
 import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle, syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
-import type { TrainingComplianceSnapshot, LmsEnrollment, ReconciliationDecision } from './compliance-treinamentos';
+import type { TrainingComplianceSnapshot } from './compliance-treinamentos';
+
+export type LmsEnrollment = {
+  id: number;
+  funcionario_id: number;
+  curso_id: number;
+  curso_titulo: string;
+  qualificacao_tipo_id: number | null;
+  qualificacao_tipo_nome: string | null;
+  qualificacao_tipo_codigo: string | null;
+  funcionario_nome: string;
+  status: string;
+  setor_id: number | null;
+  setor_nome: string | null;
+  funcao_id: number | null;
+  funcao_nome: string | null;
+};
+
+export type ReconciliationDecision = {
+  matricula_id: number;
+  decisao: 'MANTER_AVULSA';
+  observacoes: string | null;
+  updated_at: string;
+};
+
+export async function loadReconciliationDecisions(
+  db: D1Database,
+  empresaId: number,
+): Promise<Map<number, ReconciliationDecision>> {
+  const map = new Map<number, ReconciliationDecision>();
+  if (!(await hasSchemaTable(db, 'treinamento_matricula_reconciliacoes'))) return map;
+  const { results } = await db
+    .prepare(
+      `SELECT matricula_id, decisao, observacoes, updated_at
+         FROM treinamento_matricula_reconciliacoes
+        WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL`,
+    )
+    .bind(empresaId)
+    .all<ReconciliationDecision>();
+  for (const row of results || []) map.set(Number(row.matricula_id), row);
+  return map;
+}
+
+
 
 type ReconciliationDeps = {
   tableExists: (db: D1Database, table: string) => Promise<boolean>;
