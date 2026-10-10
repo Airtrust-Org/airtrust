@@ -8,8 +8,12 @@ vi.mock('../../middleware/auth', () => ({
   auth: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
+const tenantMock = vi.hoisted(() => ({ id: 1 }));
 vi.mock('../../middleware/tenant', () => ({
-  getEmpresaId: () => 1,
+  getEmpresaId: () => tenantMock.id,
+}));
+vi.mock('../../services/lms-matricula-cycle', () => ({
+  syncMatriculaCycleFromMatricula: vi.fn(async () => undefined),
 }));
 
 vi.mock('../../middleware/rbac', () => ({
@@ -170,6 +174,7 @@ describe('training compliance engine', () => {
   let sqlite: SqliteD1Database;
 
   beforeEach(() => {
+    tenantMock.id = 1;
     sectorAccessMock.access = { mode: 'all', setorIds: [], funcionarioId: null };
     sqlite = new SqliteD1Database();
     patchComplianceSchema(sqlite);
@@ -1033,6 +1038,70 @@ describe('training compliance engine', () => {
     const row = sqlite.database.prepare('SELECT status,deleted_at FROM lms_matriculas WHERE id=700').get() as any;
     expect(row.status).toBe('NAO_INICIADO');
     expect(row.deleted_at).toBeNull();
+  });
+
+  it('pré-visualiza, cancela logicamente somente a matrícula NR-26 órfã e preserva o tenant', async () => {
+    tenantMock.id = 6;
+    sqlite.database.exec(`
+      INSERT INTO empresas (id) VALUES (6);
+      UPDATE setores SET empresa_id=6 WHERE id=10;
+      UPDATE funcoes SET empresa_id=6 WHERE id=1;
+      UPDATE funcionarios SET empresa_id=6 WHERE id=1000;
+      UPDATE qualificacoes_tipos SET empresa_id=6,codigo='NR-26' WHERE id=100;
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
+      VALUES (500, 6, 'NR-26 Produtos Químicos', 100);
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, created_at, updated_at)
+      VALUES (700, 6, 500, 1000, 'NAO_INICIADO', '2026-10-10', '2026-10-10');
+    `);
+    const app = createApp(sqlite.asD1());
+    const send = (aplicar: boolean) => app.request('/reconciliacao/limpeza', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ matricula_ids: [700], aplicar }),
+    });
+    const preview = await send(false);
+    expect(preview.status).toBe(200);
+    expect((await preview.json() as any).data).toMatchObject({
+      modo: 'PREVIEW', canceladas: 0,
+      elegiveis: [{ matricula_id: 700, status: 'NAO_INICIADO' }],
+    });
+    expect((sqlite.database.prepare('SELECT status FROM lms_matriculas WHERE id=700').get() as any).status).toBe('NAO_INICIADO');
+    const applied = await send(true);
+    expect(applied.status).toBe(200);
+    expect((await applied.json() as any).data.canceladas).toBe(1);
+    const row = sqlite.database.prepare('SELECT status,deleted_at FROM lms_matriculas WHERE id=700 AND empresa_id=6').get() as any;
+    expect(row.status).toBe('CANCELADO');
+    expect(row.deleted_at).toBeTruthy();
+    const repeated = await send(true);
+    expect(repeated.status).toBe(409);
+  });
+
+  it('recusa cancelar uma matrícula que tenha recebido requisito ativo depois do preview', async () => {
+    tenantMock.id = 6;
+    sqlite.database.exec(`
+      INSERT INTO empresas (id) VALUES (6);
+      UPDATE setores SET empresa_id=6 WHERE id=10;
+      UPDATE funcoes SET empresa_id=6 WHERE id=1;
+      UPDATE funcionarios SET empresa_id=6 WHERE id=1000;
+      UPDATE qualificacoes_tipos SET empresa_id=6,codigo='NR-26' WHERE id=100;
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id) VALUES (500, 6, 'NR-26', 100);
+      INSERT INTO lms_matriculas (id, empresa_id, curso_id, funcionario_id, status)
+      VALUES (700, 6, 500, 1000, 'NAO_INICIADO');
+    `);
+    const app = createApp(sqlite.asD1());
+    const input = { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ matricula_ids: [700], aplicar: true }) };
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (6, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    const response = await app.request('/reconciliacao/limpeza', input);
+    expect(response.status).toBe(409);
+    const body = await response.json() as any;
+    expect(body.data.bloqueadas[0].motivo).toBe('REQUISITO_OU_DESIGNACAO_ATIVA');
+    expect((sqlite.database.prepare('SELECT status FROM lms_matriculas WHERE id=700').get() as any).status).toBe('NAO_INICIADO');
   });
 
   it('inclui requisito recomendado e permite renovação quando só existe matrícula concluída', async () => {
