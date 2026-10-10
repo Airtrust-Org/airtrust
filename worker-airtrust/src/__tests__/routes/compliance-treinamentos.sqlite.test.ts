@@ -157,6 +157,9 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
       funcionario_id INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'NAO_INICIADO',
       observacoes TEXT,
+      progresso_pct REAL DEFAULT 0,
+      data_inicio TEXT,
+      qualificacao_historico_id INTEGER,
       data_conclusao TEXT,
       created_at TEXT,
       updated_at TEXT,
@@ -1099,6 +1102,93 @@ describe('training compliance engine', () => {
     expect(repeated.status).toBe(409);
   });
 
+
+  it('revisa e cancela matrícula não iniciada quando Regras de Ouro já consta válida no histórico', async () => {
+    tenantMock.id = 6;
+    sqlite.database.exec(`
+      CREATE TABLE airtrust_schema_changes_v2 (change_id TEXT PRIMARY KEY,baseline_id TEXT NOT NULL);
+      INSERT INTO airtrust_schema_changes_v2 VALUES
+        ('training-compliance-regras-ouro-corporate-0547','production-d1-baseline-v2-20260714');
+      CREATE TABLE auditoria_avancada_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,tabela TEXT,acao TEXT,registro_id TEXT,
+        dados_anteriores TEXT,dados_novos TEXT,usuario_id TEXT,ip_address TEXT,user_agent TEXT,
+        origem TEXT,created_at TEXT
+      );
+      INSERT INTO empresas(id) VALUES(6);
+      UPDATE setores SET empresa_id=6 WHERE id=10;
+      UPDATE funcoes SET empresa_id=6 WHERE id=1;
+      UPDATE funcionarios SET empresa_id=6 WHERE id=1000;
+      UPDATE qualificacoes_tipos SET empresa_id=6,codigo='REGRAS_OURO_PETROBRAS',
+        categoria='EAD',validade=24 WHERE id=100;
+      INSERT INTO treinamento_requisitos
+        (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem)
+      VALUES(6,100,'EMPRESA','OBRIGATORIA','EMPRESA');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id,qualificacao_id,qualificacao_codigo,categoria,data_conclusao,
+         data_vencimento,status,empresa_id)
+      VALUES(1000,100,'REGRAS_OURO_PETROBRAS','EAD','2026-06-01',
+             '2028-06-01','CONCLUIDA',6);
+      INSERT INTO lms_cursos(id,empresa_id,titulo,qualificacao_tipo_id)
+      VALUES(600,6,'Regras de Ouro',100);
+      INSERT INTO lms_matriculas(id,empresa_id,curso_id,funcionario_id,status,created_at)
+      VALUES(700,6,600,1000,'NAO_INICIADO','2026-10-10');
+    `);
+    const app = createApp(sqlite.asD1());
+    const reconciliation = await app.request('/reconciliacao');
+    expect(reconciliation.status).toBe(200);
+    expect((await reconciliation.json() as any).data.matriculas_revisao).toEqual([
+      expect.objectContaining({ matricula_id: 700, situacao: 'MATRICULA_REDUNDANTE_EVIDENCIA_VALIDA' }),
+    ]);
+    const send = (aplicar: boolean) => app.request('/reconciliacao/limpeza', {
+      method: 'POST',headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ matricula_ids: [700], aplicar }),
+    });
+    const preview = await send(false);
+    expect(preview.status).toBe(200);
+    expect((await preview.json() as any).data.elegiveis).toEqual([{ matricula_id: 700,status: 'NAO_INICIADO' }]);
+    const result = await send(true);
+    expect(result.status).toBe(200);
+    expect((await result.json() as any).data.canceladas).toBe(1);
+    expect((sqlite.database.prepare('SELECT status FROM lms_matriculas WHERE id=700').get() as any).status)
+      .toBe('CANCELADO');
+    expect((sqlite.database.prepare('SELECT COUNT(*) n FROM qualificacoes_historico WHERE empresa_id=6 AND funcionario_id=1000').get() as any).n)
+      .toBe(1);
+  });
+
+  it('bloqueia limpeza de matrícula com progresso mesmo quando a qualificação está válida', async () => {
+    tenantMock.id = 6;
+    sqlite.database.exec(`
+      CREATE TABLE airtrust_schema_changes_v2 (change_id TEXT PRIMARY KEY,baseline_id TEXT NOT NULL);
+      INSERT INTO airtrust_schema_changes_v2 VALUES
+        ('training-compliance-regras-ouro-corporate-0547','production-d1-baseline-v2-20260714');
+      INSERT INTO empresas(id) VALUES(6);
+      UPDATE setores SET empresa_id=6 WHERE id=10;
+      UPDATE funcoes SET empresa_id=6 WHERE id=1;
+      UPDATE funcionarios SET empresa_id=6 WHERE id=1000;
+      UPDATE qualificacoes_tipos SET empresa_id=6,codigo='REGRAS_OURO_PETROBRAS',
+        categoria='EAD',validade=24 WHERE id=100;
+      INSERT INTO treinamento_requisitos
+        (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem)
+      VALUES(6,100,'EMPRESA','OBRIGATORIA','EMPRESA');
+      INSERT INTO qualificacoes_historico
+        (funcionario_id,qualificacao_id,qualificacao_codigo,categoria,data_conclusao,
+         data_vencimento,status,empresa_id)
+      VALUES(1000,100,'REGRAS_OURO_PETROBRAS','EAD','2026-06-01',
+             '2028-06-01','CONCLUIDA',6);
+      INSERT INTO lms_cursos(id,empresa_id,titulo,qualificacao_tipo_id)
+      VALUES(600,6,'Regras de Ouro',100);
+      INSERT INTO lms_matriculas
+        (id,empresa_id,curso_id,funcionario_id,status,progresso_pct,created_at)
+      VALUES(700,6,600,1000,'NAO_INICIADO',25,'2026-10-10');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/reconciliacao/limpeza', {
+      method: 'POST',headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ matricula_ids: [700], aplicar: false }),
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json() as any).data.bloqueadas)
+      .toEqual([{ matricula_id: 700,motivo: 'PROGRESSO_OU_EVIDENCIA_PRESERVADOS' }]);
+  });
 
   it('mostra pendencia operacional sem matricular automaticamente durante o preview', async () => {
     tenantMock.id = 6;
