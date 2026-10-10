@@ -988,6 +988,7 @@ describe('training compliance engine', () => {
     const body = (await response.json()) as any;
     expect(response.status).toBe(200);
     expect(body.data.resumo.matriculados_sem_requisito).toBe(1);
+    expect(body.data.convites_matricula).toEqual([]); // matrícula sem requisito não recebe convite
     expect(body.data.resumo.gaps_matricula_acionaveis).toBe(2);
     expect(body.data.matriculas_revisao[0]).toMatchObject({
       matricula_id: 700,
@@ -998,6 +999,40 @@ describe('training compliance engine', () => {
     const mntGap = body.data.gaps_matricula.find((item: any) => item.qualificacao_tipo_id === 100);
     expect(mntGap).toMatchObject({ pessoas: 2, nunca_realizados: 2 });
     expect(mntGap.cursos_ead).toEqual([{ id: 501, titulo: 'MNT EAD' }]);
+  });
+
+  it('preserva conclusão histórica órfã fora da fila de limpeza', async () => {
+    sqlite.database.exec(`
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
+      VALUES (500, 1, 'Curso histórico', 101);
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, data_conclusao, created_at, updated_at)
+      VALUES (700, 1, 500, 1000, 'CONCLUIDO', '2026-01-01', '2026-01-01', '2026-01-01');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/reconciliacao');
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(200);
+    expect(body.data.matriculas_revisao).toEqual([]);
+    expect(body.data.convites_matricula).toEqual([]);
+  });
+
+  it('impede limpeza de matrículas fora do tenant Costa do Sol', async () => {
+    sqlite.database.exec(`
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
+      VALUES (500, 1, 'NR-26', 101);
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, created_at, updated_at)
+      VALUES (700, 1, 500, 1000, 'NAO_INICIADO', '2026-09-10', '2026-09-10');
+    `);
+    const response = await createApp(sqlite.asD1()).request('/reconciliacao/limpeza', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ matricula_ids: [700], aplicar: true }),
+    });
+    expect(response.status).toBe(403);
+    const row = sqlite.database.prepare('SELECT status,deleted_at FROM lms_matriculas WHERE id=700').get() as any;
+    expect(row.status).toBe('NAO_INICIADO');
+    expect(row.deleted_at).toBeNull();
   });
 
   it('inclui requisito recomendado e permite renovação quando só existe matrícula concluída', async () => {
