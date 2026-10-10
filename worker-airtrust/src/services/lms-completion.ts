@@ -126,7 +126,7 @@ function isConcurrentQualificationUniqueConstraint(error: unknown): boolean {
   );
 }
 
-async function resolveCompletionCategory(
+export async function resolveCompletionCategory(
   db: D1Database,
   params: CompleteLmsMatriculaParams,
 ) {
