@@ -24,7 +24,22 @@ type ApiEnvelope = {
   data?: {
     status?: string;
     publishable?: boolean;
-    runtime?: { status?: string };
+    structural?: { status?: string };
+    completionManifest?: { status?: string };
+    diagnostics?: { status?: string };
+    conformance?: {
+      status?: string;
+      tests?: Array<{ name?: string; status?: string; detail?: string }>;
+    };
+    runtime?: {
+      status?: string;
+      functionalCompletionVerified?: boolean;
+      functionalCompletionReason?: string | null;
+      initializeObserved?: boolean;
+      commitObserved?: boolean;
+      finishObserved?: boolean;
+      completionReached?: boolean;
+    };
   };
 };
 
@@ -125,6 +140,37 @@ test('LMS SCORM staging: real success, rejection, timeout and visible progress',
     timeout: 30_000,
   });
   await expect(page.getByText('65%', { exact: true })).toBeVisible();
+  // The API may reject conformance before activation. Report its sanitized
+  // contract verdict instead of masking the cause behind a 30-second UI timeout.
+  await expect.poll(() => successConformance !== null, {
+    timeout: 35_000,
+    message: 'A API de conformidade não retornou resposta à auditoria SCORM',
+  }).toBe(true);
+  const conformanceVerdict = successConformance?.data;
+  const evidence = conformanceVerdict?.conformance?.tests?.find(
+    (item) => item.name === 'FUNCTIONAL_COMPLETION_EVIDENCE',
+  );
+  const safeDiagnostic = {
+    api_success: successConformance?.success ?? false,
+    publishable: conformanceVerdict?.publishable ?? false,
+    structural: conformanceVerdict?.structural?.status ?? null,
+    manifest: conformanceVerdict?.completionManifest?.status ?? null,
+    diagnostics: conformanceVerdict?.diagnostics?.status ?? null,
+    conformance: conformanceVerdict?.conformance?.status ?? null,
+    functional_evidence: evidence?.status ?? null,
+    functional_reason: evidence?.detail ?? null,
+    runtime_status: conformanceVerdict?.runtime?.status ?? null,
+    runtime_driver_reason: conformanceVerdict?.runtime?.functionalCompletionReason ?? null,
+    runtime_driver_completed: conformanceVerdict?.runtime?.functionalCompletionVerified ?? false,
+    initialized: conformanceVerdict?.runtime?.initializeObserved ?? false,
+    committed: conformanceVerdict?.runtime?.commitObserved ?? false,
+    finished: conformanceVerdict?.runtime?.finishObserved ?? false,
+    completion_reached: conformanceVerdict?.runtime?.completionReached ?? false,
+  };
+  // Do not print URLs, learner identities, tokens, SCORM CMI or uploaded content.
+  expect(conformanceVerdict?.publishable, 
+    `SCORM_STAGING_CONFORMANCE_NOT_PUBLISHABLE:${JSON.stringify(safeDiagnostic)}`,
+  ).toBe(true);
   await expect(page.getByText('Ativando nova versão...', { exact: true })).toBeVisible({
     timeout: 30_000,
   });
