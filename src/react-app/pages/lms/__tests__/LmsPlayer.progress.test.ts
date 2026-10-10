@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { canReconcilePersistedScormCompletion, resolveLmsDisplayProgress } from '../LmsPlayer';
+import {
+  canReconcilePersistedScormCompletion,
+  resolveLmsDisplayProgress,
+  shouldVerifyCanonicalProgress,
+} from '../LmsPlayer';
 
 describe('resolveLmsDisplayProgress', () => {
   it('keeps an incomplete SCORM enrollment at 99% even at its final location', () => {
@@ -17,6 +21,17 @@ describe('resolveLmsDisplayProgress', () => {
       matriculaStatus: 'CONCLUIDO',
       mergedProgress: 99,
     })).toBe(100);
+  });
+});
+
+describe('SCORM progress event reconciliation', () => {
+  it('does not require a matrícula refetch for ordinary progress events', () => {
+    expect(shouldVerifyCanonicalProgress(null)).toBe(false);
+    expect(shouldVerifyCanonicalProgress('EM_ANDAMENTO')).toBe(false);
+  });
+
+  it('verifies the canonical matrícula only when progress reports completion', () => {
+    expect(shouldVerifyCanonicalProgress('CONCLUIDO')).toBe(true);
   });
 });
 

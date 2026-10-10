@@ -104,6 +104,10 @@ export function resolveLmsDisplayProgress(params: {
     : Math.min(99, params.mergedProgress);
 }
 
+export function shouldVerifyCanonicalProgress(status: string | null | undefined) {
+  return status === 'CONCLUIDO';
+}
+
 /**
  * Quantas reconsultas canônicas toleramos após o SCORM sinalizar conclusão.
  * Se a mesma resposta `candidate` permanecer após esse limite, o player sai
@@ -863,11 +867,10 @@ export default function LmsPlayer() {
         if (typeof event.data.slide_current === 'number' && Number.isFinite(event.data.slide_current)) {
           setMaxVisitedSlide((prev) => Math.max(prev, event.data.slide_current));
         }
-        if (event.data.novo_status === 'CONCLUIDO' && !effectiveReviewMode) {
+        if (shouldVerifyCanonicalProgress(event.data.novo_status) && !effectiveReviewMode) {
           verifyCanonicalAndReturn();
           return;
         }
-        void refetchMatricula();
         return;
       }
 
