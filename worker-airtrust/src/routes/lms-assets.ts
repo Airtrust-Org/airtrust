@@ -2026,11 +2026,7 @@ ${buildScormNativeResumeOwnershipScript()}
     }, data);
     // The wrapper never receives an access bearer. The browser sends only the
     // short-lived, HttpOnly, enrollment-scoped LMS capability cookie.
-    // Completion can be saved just before the learner closes or reloads the
-    // player. Keep final commits alive across page teardown, just like the
-    // explicit unload/visibility snapshots, so a successful SCORM Finish is
-    // not lost when the iframe is immediately navigated away from.
-    var needsKeepalive = isFinalCommitEvent(eventType);
+    var needsKeepalive = isFinalCommitEvent(eventType); // Preserve completion if the learner exits immediately.
     var requestPromise = fetch(COMMIT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
