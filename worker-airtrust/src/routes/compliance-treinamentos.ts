@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createTrainingComplianceReconciliationActions } from './compliance-treinamentos-reconciliation-actions';
+import { createTrainingComplianceReconciliationActions, loadReconciliationDecisions, type LmsEnrollment, type ReconciliationDecision } from './compliance-treinamentos-reconciliation-actions';
 import { reconcileTrainingComplianceRuleEnrollment } from '../services/training-compliance-rule-enrollment';
 import { reconcileFdmMaintenance72 } from '../services/training-compliance-fdm72-reconciliation';
 import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModalitySql } from '../services/training-compliance-history-identity';
@@ -739,29 +739,6 @@ export async function buildSnapshot(
 
 export type TrainingComplianceSnapshot = Awaited<ReturnType<typeof buildSnapshot>>;
 
-export type LmsEnrollment = {
-  id: number;
-  funcionario_id: number;
-  curso_id: number;
-  curso_titulo: string;
-  qualificacao_tipo_id: number | null;
-  qualificacao_tipo_nome: string | null;
-  qualificacao_tipo_codigo: string | null;
-  funcionario_nome: string;
-  status: string;
-  setor_id: number | null;
-  setor_nome: string | null;
-  funcao_id: number | null;
-  funcao_nome: string | null;
-};
-
-export type ReconciliationDecision = {
-  matricula_id: number;
-  decisao: 'MANTER_AVULSA';
-  observacoes: string | null;
-  updated_at: string;
-};
-
 async function loadLmsEnrollments(db: D1Database, empresaId: number): Promise<LmsEnrollment[]> {
   if (!(await tableExists(db, 'lms_matriculas')) || !(await tableExists(db, 'lms_cursos')))
     return [];
@@ -792,24 +769,6 @@ async function loadLmsEnrollments(db: D1Database, empresaId: number): Promise<Lm
     .bind(empresaId)
     .all<LmsEnrollment>();
   return results || [];
-}
-
-async function loadReconciliationDecisions(
-  db: D1Database,
-  empresaId: number,
-): Promise<Map<number, ReconciliationDecision>> {
-  const map = new Map<number, ReconciliationDecision>();
-  if (!(await tableExists(db, 'treinamento_matricula_reconciliacoes'))) return map;
-  const { results } = await db
-    .prepare(
-      `SELECT matricula_id, decisao, observacoes, updated_at
-         FROM treinamento_matricula_reconciliacoes
-        WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL`,
-    )
-    .bind(empresaId)
-    .all<ReconciliationDecision>();
-  for (const row of results || []) map.set(Number(row.matricula_id), row);
-  return map;
 }
 
 async function loadActiveLmsCourses(db: D1Database, empresaId: number) {
