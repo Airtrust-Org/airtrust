@@ -88,7 +88,7 @@ type ReviewSortKey = 'person' | 'sector' | 'enrollment' | 'situation' | 'action'
 
 export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
   const queryClient = useQueryClient();
-  const [courses, setCourses] = useState<Record<number, number>>({});
+
   const [actions, setActions] = useState<Record<number, string>>({});
   const [syncPreview, setSyncPreview] = useState<{ pendentes: number; sem_curso_unico: number } | null>(null);
   const [cleanupPreview, setCleanupPreview] = useState<{
@@ -485,32 +485,11 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                     <td className="px-3 py-3 text-right text-red-700">{gap.vencidos}</td>
                     <td className="px-3 py-3 text-right text-orange-700">{gap.nunca_realizados}</td>
                     <td className="px-3 py-3">
-                      <select
-                        aria-label={`Curso EAD para ${gap.qualificacao_tipo_nome}`}
-                        value={
-                          courses[gap.qualificacao_tipo_id] ??
-                          (gap.cursos_ead.length === 1 ? gap.cursos_ead[0].id : '')
-                        }
-                        onChange={(e) =>
-                          setCourses((old) => ({
-                            ...old,
-                            [gap.qualificacao_tipo_id]: Number(e.target.value),
-                          }))
-                        }
-                        className="max-w-[280px] rounded-md border border-slate-300 px-2 py-1.5 text-xs leading-5 text-slate-700"
-                        disabled={!gap.cursos_ead.length}
-                      >
-                        {!gap.cursos_ead.length ? (
-                          <option value="">Sem EAD vinculado</option>
-                        ) : (
-                          <option value="">Selecione o curso</option>
-                        )}
-                        {gap.cursos_ead.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.titulo}
-                          </option>
-                        ))}
-                      </select>
+                      {gap.cursos_ead.length === 1
+                        ? gap.cursos_ead[0].titulo
+                        : gap.cursos_ead.length === 0
+                          ? 'Sem EAD publicado vinculado'
+                          : 'Vínculo ambíguo: revisar cursos publicados'}
                     </td>
                     <td className="px-3 py-3 text-right">
                       <button
