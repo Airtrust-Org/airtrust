@@ -1343,6 +1343,32 @@ async function attachUploadedContentToCurso(
   return upload;
 }
 
+/**
+ * A learner with an existing enrollment can view that course even when its
+ * publication sector differs from the learner's own sector. This does not
+ * grant catalog-wide access, affect managers, or allow enrollment changes.
+ */
+export async function hasOwnEnrolledCourseReadAccess(
+  db: D1Database,
+  empresaId: number,
+  cursoId: number,
+  access: EmployeeSectorAccess,
+): Promise<boolean> {
+  if (access.mode !== 'self' || !Number.isSafeInteger(cursoId) || cursoId <= 0) return false;
+
+  const ownEnrollment = await db.prepare(
+    `SELECT 1 AS allowed
+       FROM lms_matriculas
+      WHERE empresa_id = ? AND curso_id = ? AND funcionario_id = ?
+        AND deleted_at IS NULL
+        AND status IN ('NAO_INICIADO', 'EM_ANDAMENTO', 'CONCLUIDO', 'REPROVADO')
+      LIMIT 1`,
+  ).bind(empresaId, cursoId, access.funcionarioId).first<{ allowed: number }>();
+
+  return ownEnrollment?.allowed === 1;
+}
+
+
 // ── Listar cursos ────────────────────────────────────────────────────────────
 
 app.get('/', async (c) => {
@@ -1832,7 +1858,7 @@ app.get('/:id{[0-9]+}', async (c) => {
       )
       .bind(cursoId, empresaId, ...courseSectorScope.bindings)
       .first();
-    if (!inScope) {
+    if (!inScope && !(await hasOwnEnrolledCourseReadAccess(db, empresaId, cursoId, access))) {
       return c.json(
         { success: false, error: 'Acesso negado: curso fora do seu escopo de setor' },
         403,

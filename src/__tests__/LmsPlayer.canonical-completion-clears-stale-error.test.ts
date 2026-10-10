@@ -18,6 +18,7 @@ describe('LmsPlayer canonical completion precedence', () => {
     expect(canonicalBlock).toContain("setCompletionState('idle')");
     expect(canonicalBlock).toContain('setCompletionMessage(null)');
     expect(canonicalBlock).toContain('setCompletionErrorInfo(null)');
-    expect(canonicalBlock).toContain('setPendingPanelOpen(false)');
+    // The misleading pending panel is intentionally absent from the learner player.
+    expect(source).not.toContain('setPendingPanelOpen');
   });
 });

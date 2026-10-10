@@ -150,7 +150,7 @@ jobs:
           NODE
 
   inventory:
-    name: Production LMS per-course completion read-only audit
+    name: Production LMS per-course completion and D1 read-only audit
     needs: guard
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -179,6 +179,20 @@ jobs:
           node scripts/production/lms-course-completion-outcomes-readonly.mjs > "$RUNNER_TEMP/lms-course-outcomes.json"
           test -s "$RUNNER_TEMP/lms-course-outcomes.json"
 
+      - name: Install D1 read-only client
+        run: npm --prefix worker-airtrust ci --ignore-scripts
+
+      - name: Diagnose LMS completion rejections (D1 SELECT-only)
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CONFIRMATION: AIRTRUST_PRODUCTION_LMS_COMPLETION_OUTCOMES_READONLY
+        run: |
+          set -euo pipefail
+          node scripts/production/lms-completion-rejection-readonly.mjs > "$RUNNER_TEMP/lms-completion-rejections.json"
+          test -s "$RUNNER_TEMP/lms-completion-rejections.json"
+
       - name: Publish sanitized aggregate summary
         shell: bash
         run: |
@@ -198,12 +212,20 @@ jobs:
             console.log('- #' + r.curso_id + ' ' + r.titulo + ': completed=' + r.concluidas + ', at_99=' + r.pendentes_99_ou_mais + ', total=' + r.matriculas);
           }
           console.log('Writes: ' + report.writes);
+          const rejects = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/lms-completion-rejections.json', 'utf8'));
+          console.log('Recent qualification-completion rollbacks (sanitized, last 10 days): ' + rejects.events_scanned);
+          for (const group of rejects.groups) {
+            console.log('- Course #' + group.course_id + ': ' + group.reason + '=' + group.count);
+          }
+          console.log('D1 writes: ' + rejects.writes);
           NODE
 
       - name: Upload sanitized completion outcome evidence
         uses: actions/upload-artifact@v7
         with:
           name: production-lms-course-completion-outcomes-readonly-${{ needs.guard.outputs.expected_sha }}
-          path: ${{ runner.temp }}/lms-course-outcomes.json
+          path: |
+            ${{ runner.temp }}/lms-course-outcomes.json
+            ${{ runner.temp }}/lms-completion-rejections.json
           if-no-files-found: error
           retention-days: 30
