@@ -57,6 +57,7 @@ type Reconciliation = {
     curso_titulo: string;
     qualificacao_tipo_id: number | null;
     qualificacao_tipo_nome: string | null;
+    qualificacao_tipo_codigo?: string | null;
     matricula_status: string;
     situacao: string;
     regra_efetiva: { id: number; escopo: string; obrigatoriedade: string } | null;
@@ -89,6 +90,10 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
   const queryClient = useQueryClient();
   const [courses, setCourses] = useState<Record<number, number>>({});
   const [actions, setActions] = useState<Record<number, string>>({});
+  const [cleanupPreview, setCleanupPreview] = useState<{
+    elegiveis: Array<{ matricula_id: number; status: string }>;
+    bloqueadas: Array<{ matricula_id: number; motivo: string }>;
+  } | null>(null);
   const [section, setSection] = useState<'gaps' | 'convites' | 'revisao'>('gaps');
   const [gapSort, setGapSort] = useState<TableSortState<GapSortKey>>({
     key: 'training',
@@ -232,6 +237,33 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
       showToast.error(error instanceof Error ? error.message : 'Erro ao reconciliar matrícula'),
   });
 
+  const cleanup = useMutation({
+    mutationFn: async (args: { ids: number[]; aplicar: boolean }) =>
+      readJson<{
+        elegiveis: Array<{ matricula_id: number; status: string }>;
+        bloqueadas: Array<{ matricula_id: number; motivo: string }>;
+        canceladas: number;
+      }>(await fetchWithAuth('/api/compliance-treinamentos/reconciliacao/limpeza', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricula_ids: args.ids, aplicar: args.aplicar }),
+      })),
+    onSuccess: async (result, args) => {
+      if (!args.aplicar) {
+        setCleanupPreview(result);
+        return;
+      }
+      setCleanupPreview(null);
+      showToast.success(`${result.canceladas} matrícula(s) indevida(s) cancelada(s) logicamente. Histórico preservado.`);
+      await invalidate();
+    },
+    onError: (error) => {
+      setCleanupPreview(null);
+      showToast.error(error instanceof Error ? error.message : 'Falha na limpeza de matrículas');
+      void invalidate();
+    },
+  });
+
   const data = reconciliation.data;
   const sortedGaps = useMemo(
     () =>
@@ -244,6 +276,12 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
       }),
     [data?.gaps_matricula, gapSort],
   );
+  const cleanupCandidates = (data?.matriculas_revisao || []).filter(
+    (row) =>
+      ['MATRICULADO_SEM_REQUISITO', 'NAO_APLICA_MATRICULADO'].includes(row.situacao) &&
+      ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(row.matricula_status || '').trim().toUpperCase()),
+  );
+  const cleanupIds = cleanupCandidates.slice(0, 100).map((row) => row.matricula_id);
   const sortedReviews = useMemo(
     () =>
       sortComplianceRows(data?.matriculas_revisao || [], reviewSort, (row, key) => {
@@ -465,6 +503,53 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
           <p className="mt-1 text-sm text-slate-500">
             Vincule a matrícula à necessidade correta ou confirme que ela deve permanecer avulsa.
           </p>
+          {cleanupIds.length ? (
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="font-semibold text-slate-900">Limpeza de matrículas sem requisito</p>
+              <p className="mt-1 text-slate-600">
+                Analisa até 100 matrículas por lote. Apenas QSMS/Segurança Operacional sem requisito
+                vigente podem ser canceladas. Cursos fora dessa matriz, designações mantidas e
+                conclusões históricas permanecem preservados. O progresso existente não é apagado.
+              </p>
+              {!cleanupPreview ? (
+                <button
+                  type="button"
+                  disabled={cleanup.isPending}
+                  onClick={() => cleanup.mutate({ ids: cleanupIds, aplicar: false })}
+                  className="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                >
+                  Analisar limpeza ({cleanupIds.length} matrícula(s))
+                </button>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <p>
+                    {cleanupPreview.elegiveis.length} elegível(is) para cancelamento lógico;
+                    {' '}{cleanupPreview.bloqueadas.length} bloqueada(s)/preservada(s).
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={!cleanupPreview.elegiveis.length || cleanup.isPending}
+                      onClick={() => cleanup.mutate({
+                        ids: cleanupPreview.elegiveis.map((item) => item.matricula_id),
+                        aplicar: true,
+                      })}
+                      className="rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      Confirmar cancelamento das {cleanupPreview.elegiveis.length} elegível(is)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCleanupPreview(null)}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-xs"
+                    >
+                      Voltar sem alterar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
           <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
