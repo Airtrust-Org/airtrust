@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// source_reference: production tenant-6 D1 audit event 2026-10-10 19:10:05 UTC (read-only).
+// operational_decision: classify only 81 active mandatory role-qualified cancellations for governed restoration.
+// dry_run_required: true; no apply mode, D1 mutation or notifications implemented here.
+// rollback_plan_required: issue #1376; future production recovery must specify D1 Time Travel and compensating restoration.
 // Read-only, tenant-6, bounded audit of the 2026-10-10 erroneous cancellation event.
 // NEVER prints matrícula, employee, name or email IDs. No mutation or credential output.
 // Follow-up apply requires a separate governed, reviewed workflow and exact-SHA authority.
