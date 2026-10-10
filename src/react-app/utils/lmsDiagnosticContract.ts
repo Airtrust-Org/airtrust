@@ -401,6 +401,32 @@ export function resolveCompletionExplanation(params: {
     };
   }
 
+  // A package can prove that all of its own requirements passed before the
+  // enrollment API has observed the learner's explicit AirTrust registration.
+  // Keep that state distinct from missing content while leaving completion
+  // entirely to the canonical server flow.
+  const granularPackagePassed = granular?.packageStatus?.lessonStatus === 'passed' &&
+    granular.packageStatus?.finishRequested === true &&
+    granular.slides.totalRequired != null && granular.slides.totalRequired > 0 &&
+    granular.slides.completedRequired === granular.slides.totalRequired &&
+    granular.slides.missing.length === 0 &&
+    (!granular.assessment.required ||
+      (granular.assessment.completed && granular.assessment.passed !== false &&
+        granular.assessment.unanswered.length === 0 && granular.assessment.incomplete.length === 0)) &&
+    (granular.moduleResults ?? []).every((module) => !module.assessment.required ||
+      (module.assessment.completed && module.assessment.passed !== false));
+  if (granularPackagePassed) {
+    return {
+      canComplete: false,
+      category: 'SCORM_STATUS',
+      summary: 'Conteúdo aprovado no SCORM. Registre a conclusão no AirTrust para finalizar a matrícula.',
+      items: [],
+      adminItems,
+      diagnosticsAvailable,
+      registrationPending: true,
+    };
+  }
+
   // Autoridade canônica: score/mastery/decisão canônicos, quando presentes,
   // vencem o snapshot granular (que é apenas explicativo e pode estar stale).
   const scorePct = canonical?.score_pct ?? null;

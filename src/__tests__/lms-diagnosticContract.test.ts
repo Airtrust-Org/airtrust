@@ -166,6 +166,18 @@ describe('PPSP: aceitação canônica versus matrícula em aberto', () => {
     expect(result.registrationPending).not.toBe(true);
     expect(result.summary).toBe(GENERIC_PENDING_FALLBACK);
   });
+
+  it('explica pacote aprovado que aguarda o registro explícito no AirTrust', () => {
+    const granular = baseGranular({
+      packageStatus: { lessonStatus: 'passed', finishRequested: true },
+    });
+    const result = resolveCompletionExplanation({ canonical: null, granular });
+
+    expect(result.canComplete).toBe(false);
+    expect(result.registrationPending).toBe(true);
+    expect(result.items).toEqual([]);
+    expect(result.summary).toContain('Registre a conclusão no AirTrust');
+  });
 });
 
 describe('resolveCompletionExplanation', () => {
