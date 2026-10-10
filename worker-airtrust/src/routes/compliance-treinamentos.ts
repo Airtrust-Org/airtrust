@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
+import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle, syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
+import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { reconcileTrainingComplianceRuleEnrollment } from '../services/training-compliance-rule-enrollment';
 import { reconcileFdmMaintenance72 } from '../services/training-compliance-fdm72-reconciliation';
 import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModalitySql } from '../services/training-compliance-history-identity';
@@ -790,7 +791,7 @@ async function loadLmsEnrollments(db: D1Database, empresaId: number): Promise<Lm
          LEFT JOIN setores s ON s.id=f.setor_id AND s.empresa_id=f.empresa_id AND s.deleted_at IS NULL
          LEFT JOIN funcoes fn ON fn.id=f.funcao_id AND fn.empresa_id=f.empresa_id AND fn.deleted_at IS NULL
         WHERE m.empresa_id=? AND m.deleted_at IS NULL
-          AND UPPER(COALESCE(m.status,'')) <> 'CANCELADO'
+          AND UPPER(TRIM(COALESCE(m.status,''))) IN ('NAO_INICIADO','EM_ANDAMENTO')
           AND (qt.id IS NULL OR ${trainingComplianceEligibleCategorySql('qt.categoria')})
           ${deletedFuncionario} ${activeExpr} ${statusExpr}
         ORDER BY c.titulo, f.nome, m.id`,
@@ -1862,23 +1863,139 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
 // Limpeza governada por demanda: preview por padrão, escrita apenas após confirmação.
 // Nunca cancela curso fora da matriz, matrícula concluída ou designação avulsa mantida.
 // Uma alteração de cargo/requisito entre preview e aplicação é revalidada no servidor.
+// Reconciliação operacional: o requisito vem da matriz, a pendência do histórico
+// e a matrícula é apenas o ciclo de execução. A conclusão anterior permanece no
+// histórico e nunca bloqueia uma nova matrícula de renovação.
+app.post('/reconciliacao/matricular-pendentes', requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  if (empresaId !== 6) throw new ApiError('Reconciliação exclusiva da Costa do Sol', 403);
+  if (!(await tableExists(db, 'airtrust_schema_changes_v2'))) {
+    throw new ApiError('Matriz corrigida 0547 não comprovada no banco', 409);
+  }
+  const applied = await db.prepare(
+    'SELECT change_id FROM airtrust_schema_changes_v2 WHERE change_id=? AND baseline_id=? LIMIT 1',
+  ).bind('training-compliance-regras-ouro-corporate-0547', 'production-d1-baseline-v2-20260714')
+    .first();
+  if (!applied) throw new ApiError('Aplicar primeiro a matriz corrigida 0547', 409);
+  const payload = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const aplicar = payload.aplicar === true;
+  const limit = 40;
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const [snapshot, active, courses] = await Promise.all([
+    buildSnapshot(db, empresaId, access),
+    loadLmsEnrollments(db, empresaId),
+    db.prepare(
+      `SELECT id,qualificacao_tipo_id FROM lms_cursos
+        WHERE empresa_id=? AND ativo=1 AND publicado=1 AND deleted_at IS NULL
+          AND qualificacao_tipo_id IS NOT NULL ORDER BY id`,
+    ).bind(empresaId).all<{ id: number; qualificacao_tipo_id: number }>(),
+  ]);
+  const byType = new Map<number, number[]>();
+  for (const course of courses.results || []) {
+    const key = Number(course.qualificacao_tipo_id);
+    byType.set(key, [...(byType.get(key) || []), Number(course.id)]);
+  }
+  const activeKeys = new Set(active.filter(row => row.qualificacao_tipo_id != null)
+    .map(row => `${row.funcionario_id}:${row.qualificacao_tipo_id}`));
+  const pendentes: Array<{ funcionarioId: number; qualificacaoTipoId: number; cursoId: number }> = [];
+  let semCursoUnico = 0;
+  for (const person of snapshot.people) {
+    for (const req of person.requisitos) {
+      if (req.obrigatoriedade !== 'OBRIGATORIA' ||
+          req.evidencia_pendente_validacao ||
+          !trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer) ||
+          (req.modalidade_requerida && req.modalidade_requerida !== 'EAD') ||
+          activeKeys.has(`${person.id}:${req.qualificacao_tipo_id}`)) continue;
+      const mapped = byType.get(Number(req.qualificacao_tipo_id)) || [];
+      if (mapped.length !== 1) { semCursoUnico++; continue; }
+      pendentes.push({ funcionarioId: person.id, qualificacaoTipoId: req.qualificacao_tipo_id, cursoId: mapped[0] });
+    }
+  }
+  const total = pendentes.length;
+  if (!aplicar) {
+    return c.json({ success: true, data: {
+      modo: 'PREVIEW', pendentes: total, sem_curso_unico: semCursoUnico,
+      limite_por_lote: limit, matriculadas: 0,
+    } });
+  }
+  if (!(await tableExists(db, 'auditoria_avancada_v2'))) {
+    throw new ApiError('Trilha de auditoria indisponível; matrícula bloqueada', 409);
+  }
+  let matriculadas = 0;
+  let preservadas = 0;
+  let falhas = 0;
+  const audit = extrairUsuarioAuditoria(c);
+  for (const pending of pendentes.slice(0, limit)) {
+    try {
+      const existing = await db.prepare(
+        `SELECT id,status,deleted_at FROM lms_matriculas WHERE empresa_id=? AND curso_id=? AND funcionario_id=?
+         ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END,id DESC LIMIT 1`,
+      ).bind(empresaId, pending.cursoId, pending.funcionarioId)
+        .first<{ id: number; status: string; deleted_at: string | null }>();
+      if (hasActiveMatriculaCycle(existing)) { preservadas++; continue; }
+      let id: number;
+      if (existing) {
+        if (!canReuseMatriculaCycle(existing)) { preservadas++; continue; }
+        await resetMatriculaForNewCycle(db, {
+          matriculaId: existing.id, empresaId, origin: 'AUTO_RENOVACAO',
+          observacoes: 'Matrícula gerada por requisito pendente na matriz QSMS/SO (sem e-mail)',
+        });
+        id = existing.id;
+      } else {
+        const inserted = await db.prepare(
+          `INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id,observacoes)
+           VALUES (?,?,?,'Matrícula gerada por requisito pendente na matriz QSMS/SO (sem e-mail)')`,
+        ).bind(empresaId, pending.cursoId, pending.funcionarioId).run();
+        id = Number(inserted.meta.last_row_id);
+        if (!id) throw new Error('LMS_ENROLLMENT_NOT_CREATED');
+      }
+      await ensureMatriculaCycle(db, { matriculaId: id, empresaId, origin: 'AUTO_RENOVACAO' });
+      await stampLmsEnrollmentEvidenceProfile(db, {
+        empresaId, matriculaId: id, funcionarioId: pending.funcionarioId,
+        qualificacaoTipoId: pending.qualificacaoTipoId,
+      });
+      await registrarAuditoria({
+        db, tabela: 'lms_matriculas', acao: existing ? 'UPDATE' : 'INSERT', registro_id: id,
+        dados_anteriores: existing ? { status: existing.status, empresa_id: empresaId } : null,
+        dados_novos: { status: 'NAO_INICIADO', empresa_id: empresaId, curso_id: pending.cursoId,
+          motivo: 'REQUISITO_PENDENTE_QSMS_20261010' },
+        ...audit,
+      });
+      matriculadas++;
+    } catch (error) {
+      falhas++;
+      console.error('[compliance] Falha em ciclo de matrícula (sem dados pessoais)', {
+        qualificacao_tipo_id: pending.qualificacaoTipoId,
+        error: error instanceof Error ? error.name : 'Unknown',
+      });
+    }
+  }
+  return c.json({
+    success: falhas === 0,
+    data: { modo: 'APLICACAO', pendentes: total, matriculadas,
+      preservadas, falhas, sem_curso_unico: semCursoUnico,
+      restantes_estimadas: Math.max(0, total - matriculadas - preservadas) },
+    ...(falhas ? { error: 'Reconciliação parcialmente aplicada; reexecute após resolver os bloqueios' } : {}),
+  }, falhas ? 409 : 200);
+});
+
 app.post('/reconciliacao/limpeza', requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   if (empresaId !== 6) throw new ApiError('Limpeza exclusiva da matriz Costa do Sol', 403);
-  // Nunca reconciliar a partir da configuração anterior ao PDF canônico de 09/10.
-  // A 0546 remove Regras de Ouro do Compliance e corrige públicos incompletos
-  // (NR-26/FOD/PPSP/NR-11/NR-35); sem essa base cancelaríamos matrículas legítimas.
+  // A nova decisão de 10/10 torna Regras de Ouro obrigatória para toda a
+  // empresa. Exigir a correção governada 0547 antes de cancelar qualquer LMS.
   if (!(await tableExists(db, 'airtrust_schema_changes_v2'))) {
-    throw new ApiError('Matriz final 0546 ainda não comprovada no banco; limpeza bloqueada', 409);
+    throw new ApiError('Matriz corrigida 0547 ainda não comprovada no banco; limpeza bloqueada', 409);
   }
   const finalMatrix = await db.prepare(
     `SELECT change_id FROM airtrust_schema_changes_v2
       WHERE change_id=? AND baseline_id=? LIMIT 1`,
-  ).bind('training-compliance-canonical-category-repair-0546', 'production-d1-baseline-v2-20260714')
+  ).bind('training-compliance-regras-ouro-corporate-0547', 'production-d1-baseline-v2-20260714')
     .first<{ change_id: string }>();
   if (!finalMatrix) {
-    throw new ApiError('Matriz final 0546 ainda não aplicada neste ambiente; limpeza bloqueada', 409);
+    throw new ApiError('Matriz corrigida 0547 ainda não aplicada neste ambiente; limpeza bloqueada', 409);
   }
   const payload = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const rawIds = payload.matricula_ids;
