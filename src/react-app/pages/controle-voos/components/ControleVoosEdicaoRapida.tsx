@@ -50,7 +50,10 @@ export default function ControleVoosEdicaoRapida({ voo, onSaved, onCancel }: {
       });
       // The modern client wraps the server's envelope. Do not treat a server-side
       // business error as success even when the HTTP request itself succeeded.
-      const result = response.data as unknown as { success?: boolean; error?: string } | undefined;
+      const envelope: unknown = response.data;
+      const result = envelope && typeof envelope === 'object' && 'success' in envelope
+        ? envelope as { success?: boolean; error?: string }
+        : undefined;
       if (!response.success || result?.success === false) {
         throw new Error(result?.error || response.error || 'Falha ao salvar os dados.');
       }
