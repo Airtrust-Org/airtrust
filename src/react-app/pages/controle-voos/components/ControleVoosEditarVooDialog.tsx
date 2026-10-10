@@ -116,6 +116,8 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
   const fieldClass =
     'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
 
+  const canEditPlanning = voo.status === 'planejado' || voo.status === 'liberado_operacionalmente';
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
@@ -135,8 +137,11 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
       return;
     }
 
-    if (voo.status === 'planejado' && (routeIds.length < 2 || routeIds.some((id, index) => !id || (index > 0 && id === routeIds[index - 1])))) {
-      setError('Informe a rota completa, com pelo menos origem e destino distintos.');
+    const originalRoute = initialRoute(voo);
+    const routeChanged = canEditPlanning && (routeIds.length !== originalRoute.length ||
+      routeIds.some((id, index) => id !== originalRoute[index]));
+    if (routeChanged && (routeIds.length < 2 || routeIds.some((id, index) => !id || (index > 0 && id === routeIds[index - 1])))) {
+      setError('Para alterar a rota, informe pontos válidos sem duplicação consecutiva.');
       return;
     }
     setSaving(true);
@@ -152,8 +157,8 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
         horario_previsto_partida: departure.toISOString(),
         horario_previsto_chegada: arrival.toISOString(),
         observacoes: form.observacoes.trim() || null,
-        ...(voo.status === 'planejado' ? {
-          rota_ids: routeIds.map(Number),
+        ...(canEditPlanning ? {
+          ...(routeChanged ? { rota_ids: routeIds.map(Number) } : {}),
           peso_passageiros: form.peso_passageiros === '' ? null : Number(form.peso_passageiros),
           peso_bagagem: form.peso_bagagem === '' ? null : Number(form.peso_bagagem),
           peso_carga: form.peso_carga === '' ? null : Number(form.peso_carga),
@@ -269,10 +274,10 @@ export default function ControleVoosEditarVooDialog({ open, voo, onClose, onSave
             Chegada prevista
             <input type="datetime-local" required className={fieldClass} value={form.horario_previsto_chegada} onChange={(event) => setForm((prev) => ({ ...prev, horario_previsto_chegada: event.target.value }))} />
           </label>
-          {voo.status === 'planejado' ? (
+          {canEditPlanning ? (
             <div className="sm:col-span-2 lg:col-span-3 space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
               <h3 className="text-sm font-semibold">Rota programada (origem, paradas e destino)</h3>
-              <p className="text-xs text-slate-500">Altere a sequência completa da rota antes de confirmar o planejamento.</p>
+              <p className="text-xs text-slate-500">Rota e pesos podem ser completados após a liberação, antes da execução. Não é necessário alterar a rota para corrigir apenas os pesos.</p>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {routeIds.map((routeId, index) => (
                 <div key={index} className="flex gap-2 items-end">
