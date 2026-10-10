@@ -3,6 +3,7 @@ import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { requireActiveQualificationCategoryById } from './qualification-category-contract';
 import { ensureCertificateForQualification } from './ensure-certificate';
+import { hasApprovedFdmOperationalQualificationLink } from './lms-fdm-operational-category';
 
 export type LmsCompletionOutcome =
   | 'qualification_created'
@@ -125,22 +126,21 @@ function isConcurrentQualificationUniqueConstraint(error: unknown): boolean {
   );
 }
 
-async function resolveCompletionCategory(
+export async function resolveCompletionCategory(
   db: D1Database,
-  empresaId: number,
-  qualificacaoTipoId: number,
+  params: CompleteLmsMatriculaParams,
 ) {
   const type = await db
     .prepare(
-      `SELECT id, categoria_id
+      `SELECT id, categoria_id, codigo
          FROM qualificacoes_tipos
         WHERE id = ?
           AND empresa_id = ?
           AND deleted_at IS NULL
         LIMIT 1`,
     )
-    .bind(qualificacaoTipoId, empresaId)
-    .first<{ id: number; categoria_id: number | null }>();
+    .bind(params.qualificacaoTipoId, params.empresaId)
+    .first<{ id: number; categoria_id: number | null; codigo: string }>();
 
   if (!type?.categoria_id) {
     throw new LmsCompletionRejectedError(
@@ -151,7 +151,7 @@ async function resolveCompletionCategory(
 
   let category;
   try {
-    category = await requireActiveQualificationCategoryById(db, empresaId, type.categoria_id);
+    category = await requireActiveQualificationCategoryById(db, params.empresaId, type.categoria_id);
   } catch (error) {
     throw new LmsCompletionRejectedError(
       'Categoria do tipo de qualificação não está ativa no tenant da matrícula',
@@ -160,7 +160,12 @@ async function resolveCompletionCategory(
     );
   }
 
-  if (!category.lmsIntegrada) {
+  if (!category.lmsIntegrada && !(await hasApprovedFdmOperationalQualificationLink({
+    ...params,
+    qualificacaoTipoId: type.id,
+    qualificacaoTipoCodigo: type.codigo,
+    categoriaCodigo: category.codigo,
+  }))) {
     throw new LmsCompletionRejectedError(
       'Categoria do tipo de qualificação não está integrada ao LMS',
       'LMS_QUALIFICATION_CATEGORY_NOT_INTEGRATED',
@@ -674,7 +679,7 @@ export async function completeLmsMatricula(
 
   let category;
   try {
-    category = await resolveCompletionCategory(db, params.empresaId, params.qualificacaoTipoId);
+    category = await resolveCompletionCategory(db, params);
   } catch (error) {
     const rejected =
       error instanceof LmsCompletionRejectedError

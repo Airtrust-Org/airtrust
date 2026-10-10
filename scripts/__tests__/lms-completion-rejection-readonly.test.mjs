@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   classifyReason,
   summarizeFailures,
+  summarizeCategoryMappings,
 } from '../production/lms-completion-rejection-readonly.mjs';
 
 test('classifies SQL errors into bounded non-sensitive reasons', () => {
@@ -45,4 +46,30 @@ test('rejects invalid D1 rows and result sets beyond the fixed cap', () => {
   assert.throws(() => summarizeFailures([{ course_id: 0, audit_json: '{}' }]), /COURSE_ID_INVALID/);
   assert.throws(() => summarizeFailures(Array.from({ length: 301 }, () => ({ course_id: 71 }))), /RESULTS_TOO_LARGE/);
   assert.throws(() => summarizeFailures({}), /RESULTS_TOO_LARGE/);
+});
+
+test('identifies only broken LMS qualification/category links without employee data', () => {
+  const report = summarizeCategoryMappings([
+    { course_id: 71, type_id: 400, type_category_id: 5, category_code: 'OPERACOES', state: 'CATEGORY_NOT_INTEGRATED' },
+    { course_id: 73, type_id: 401, type_category_id: 8, category_code: 'EAD', state: 'VALID' },
+    { course_id: 74, type_id: 402, type_category_id: null, category_code: null, state: 'TYPE_WITHOUT_CATEGORY' },
+  ], [{ id: 8, codigo: 'EAD', ativo: 1, lms_integrada: 1 }]);
+  assert.deepEqual(report.mismatches, [
+    { course_id: 71, type_id: 400, category_id: 5, category_code: 'OPERACOES', state: 'CATEGORY_NOT_INTEGRATED' },
+    { course_id: 74, type_id: 402, category_id: null, category_code: null, state: 'TYPE_WITHOUT_CATEGORY' },
+  ]);
+  assert.equal(report.invalid, 2);
+  assert.equal(report.evaluated, 3);
+  assert.equal(report.writes, 0);
+  assert.equal(report.contains_personal_data, false);
+  const sanitized = summarizeCategoryMappings([
+    { course_id: 71, state: 'VALID', category_code: 'private@example.com' },
+  ], []);
+  assert.equal(sanitized.mismatches[0].category_code, null);
+});
+
+test('fails closed on invalid category inventory payloads', () => {
+  assert.throws(() => summarizeCategoryMappings([{ course_id: 71, state: 'PERMISSION_BYPASS' }], []), /CATEGORY_STATE_INVALID/);
+  assert.throws(() => summarizeCategoryMappings([{ course_id: 71, state: 'VALID' }, { course_id: 71, state: 'VALID' }], []), /COURSE_ID_INVALID/);
+  assert.throws(() => summarizeCategoryMappings([], [{ id: 8, codigo: 'EAD', ativo: 1, lms_integrada: 0 }]), /CANONICAL_CATEGORY_INVALID/);
 });
