@@ -70,6 +70,11 @@ const QSMS_SAFETY_MATRIX_CODES = new Set([
   'PPSP_SUP', 'PPSP', 'PRE', 'D2', 'STOP_WORK', 'FDM-MECANICO', 'BOWTIEXP',
 ]);
 
+function asPositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 export function createTrainingComplianceReconciliationActions(deps: ReconciliationDeps) {
   const router = new Hono<{ Bindings: Env }>();
 // Reconciliação operacional: o requisito vem da matriz, a pendência do histórico
