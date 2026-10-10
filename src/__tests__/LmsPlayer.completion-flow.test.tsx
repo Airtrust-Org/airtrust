@@ -149,7 +149,7 @@ describe('LmsPlayer completion flow', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('does not open an unsolicited second confirmation; failed SCORM may be retried in one click', async () => {
+  it('offers an explicit SCORM registration after complete evidence and allows one-click retry after failure', async () => {
     matriculaMock.scorm_progresso.cmi_json = JSON.stringify({
       'cmi.location': '30/30',
       'airtrust.total_slides': 30,
@@ -157,10 +157,15 @@ describe('LmsPlayer completion flow', () => {
     });
     renderPlayer();
     expect(screen.queryByRole('dialog', { name: 'Concluir curso' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Registrar no AirTrust' })).not.toBeInTheDocument();
+    const register = await screen.findByRole('button', { name: 'Registrar no AirTrust' });
     const frame = await frameWindow();
     expect(frame).toBeDefined();
     const postMessage = vi.spyOn(frame!, 'postMessage').mockImplementation(() => {});
+    fireEvent.click(register);
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'lms:request-completion', matriculaId: 42 },
+      'http://localhost:8787',
+    );
     await dispatchPlayerMessage({
       type: 'lms:completion-error',
       matriculaId: 42,

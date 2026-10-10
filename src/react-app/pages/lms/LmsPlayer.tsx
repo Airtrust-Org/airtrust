@@ -1357,15 +1357,19 @@ export default function LmsPlayer() {
               </div>
             </section>
 
-            {!effectiveReviewMode && !isCompletedState && !isScormContent ? (
+            {(!effectiveReviewMode && !isCompletedState && !isScormContent) ||
+            (isScormContent && !effectiveReviewMode && canRequestScormCompletion && !showScormRegistrationRetry) ? (
               <button
-                onClick={() => setCompletionDialogOpen(true)}
+                onClick={() => {
+                  if (isScormContent) requestExplicitCompletion();
+                  else setCompletionDialogOpen(true);
+                }}
                 disabled={!canRequestCompletion || isFinalizing}
                 className="mt-auto w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isFinalizing
                   ? 'Confirmando...'
-                  : isScormContent ? 'Registrar no AirTrust' : 'Concluir curso'}
+                  : 'Registrar no AirTrust'}
               </button>
             ) : null}
 
@@ -1415,11 +1419,11 @@ export default function LmsPlayer() {
               </div>
             ) : (showScormRegistrationRetry || (!isScormContent && canRequestCompletion)) ? (
               <button
-                onClick={() =>
-                  showScormRegistrationRetry
+                onClick={() => isScormContent
+                  ? showScormRegistrationRetry
                     ? retryScormCompletionRegistration()
-                    : setCompletionDialogOpen(true)
-                }
+                    : requestExplicitCompletion()
+                  : setCompletionDialogOpen(true)}
                 disabled={isFinalizing}
                 className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
