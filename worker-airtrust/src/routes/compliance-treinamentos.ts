@@ -1924,7 +1924,7 @@ app.post('/reconciliacao/limpeza', requireRole('admin'), async (c) => {
       db.prepare(
         `INSERT INTO auditoria_avancada_v2
            (tabela,acao,registro_id,dados_anteriores,dados_novos,usuario_id,ip_address,user_agent,origem,created_at)
-         SELECT 'lms_matriculas','UPDATE',?,?,?,?,?,?,?,'api',datetime('now')
+         SELECT 'lms_matriculas','UPDATE',?,?,?,?,?,?,'api',datetime('now')
           WHERE changes()=1`,
       ).bind(
         String(row.id),
