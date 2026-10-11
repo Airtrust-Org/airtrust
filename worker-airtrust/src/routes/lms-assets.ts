@@ -532,7 +532,7 @@ app.post('/assets/session', auth(), async (c) => {
 
   if (matriculaId > 0) {
     const matricula = await c.env.DB.prepare(
-      `SELECT m.id, m.curso_id, m.funcionario_id, m.status, c.ativo, c.publicado, c.scorm_package_r2_prefix
+      `SELECT m.id, m.curso_id, m.funcionario_id, m.status, c.ativo, c.publicado, c.tipo_conteudo, c.scorm_package_r2_prefix
            FROM lms_matriculas m
            JOIN lms_cursos c
              ON c.id = m.curso_id
@@ -550,10 +550,15 @@ app.post('/assets/session', auth(), async (c) => {
         status: string;
         ativo: number;
         publicado: number;
+        tipo_conteudo: string | null;
         scorm_package_r2_prefix: string | null;
       }>();
 
     if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
+    // Never mint a SCORM media capability for a Native enrollment.
+    if (String(matricula.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
+      throw new ApiError('Curso nativo exige os assets do player próprio.', 409);
+    }
 
     const canManage = isPrivilegedRole(accessPayload.role);
     const callerFuncionarioId = Number(accessPayload.funcionario_id ?? 0);
@@ -693,14 +698,18 @@ async function ensureCourseAssetAccess(
 
   const curso = await db
     .prepare(
-      `SELECT id, ativo, publicado, scorm_package_r2_prefix
+      `SELECT id, ativo, publicado, tipo_conteudo, scorm_package_r2_prefix
          FROM lms_cursos
         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
     .bind(cursoId, empresaId)
-    .first<{ id: number; ativo: number; publicado: number; scorm_package_r2_prefix: string | null }>();
+    .first<{ id: number; ativo: number; publicado: number; tipo_conteudo: string | null; scorm_package_r2_prefix: string | null }>();
   if (!curso) {
     throw new ApiError('Curso não encontrado', 404);
+  }
+  // This shared guard also covers direct SCORM asset reads (including admin).
+  if (String(curso.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
+    throw new ApiError('Curso nativo exige os assets do player próprio.', 409);
   }
 
   if (canManage) {
@@ -1173,7 +1182,7 @@ app.get('/scorm/preview/:curso_id', async (c) => {
   const curso = await db
     .prepare(
       `
-      SELECT id, empresa_id, titulo, scorm_versao, scorm_launch_file, scorm_package_r2_prefix
+      SELECT id, empresa_id, titulo, scorm_versao, tipo_conteudo, scorm_launch_file, scorm_package_r2_prefix
       FROM lms_cursos
       WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
     `,
@@ -1184,11 +1193,15 @@ app.get('/scorm/preview/:curso_id', async (c) => {
       empresa_id: number;
       titulo: string;
       scorm_versao: string | null;
+      tipo_conteudo: string | null;
       scorm_launch_file: string | null;
       scorm_package_r2_prefix: string | null;
     }>();
 
   if (!curso) throw new ApiError('Curso não encontrado', 404);
+  if (String(curso.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
+    throw new ApiError('Curso nativo não pode usar a prévia SCORM.', 409);
+  }
   assertCourseAssetToken(payload, curso.id, { preview: true });
   if (!curso.scorm_launch_file)
     throw new ApiError('Este curso não tem conteúdo SCORM configurado', 400);
