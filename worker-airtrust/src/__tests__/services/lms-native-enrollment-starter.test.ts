@@ -1,116 +1,118 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   startNativeEnrollment,
 } from '../../services/lms-native-enrollment-starter';
 
-const ctx = {
+const context = {
   actorUserId: 900, empresaId: 6, matriculaId: 101,
   cursoId: 31, cicloId: 1001, editionHash: 'a'.repeat(64),
 };
-function fixture(options: {
-  status?: string | null;
-  owner?: number;
-  digest?: string;
-  active?: boolean;
-  startFails?: boolean;
+
+type BoundStatement = { sql: string; binds: unknown[] };
+type BatchResult = { success: boolean; meta: { changes: number } };
+
+function fakeDb(options: {
+  matriculaChanges?: number;
+  cycleChanges?: number;
+  batchThrows?: boolean;
+  incompleteResults?: boolean;
 } = {}) {
-  const statements: Array<{ query: string; binds: unknown[] }> = [];
-  let status = options.status === undefined ? 'NAO_INICIADO' : options.status;
+  const prepared: BoundStatement[] = [];
+  const batch = vi.fn(async (statements: BoundStatement[]): Promise<BatchResult[]> => {
+    if (options.batchThrows) throw new Error('D1_ROLLBACK');
+    if (options.incompleteResults) return [];
+    expect(statements).toHaveLength(4);
+    return [
+      { success: true, meta: { changes: 0 } },
+      { success: true, meta: { changes: options.matriculaChanges ?? 1 } },
+      { success: true, meta: { changes: options.cycleChanges ?? 1 } },
+      { success: true, meta: { changes: 0 } },
+    ];
+  });
   const db = {
-    prepare(query: string) {
-      return {
-        bind(...binds: unknown[]) {
-          statements.push({ query, binds });
-          return {
-            async run() {
-              if (!query.startsWith('UPDATE lms_matriculas')) throw Error('UNEXPECTED_WRITE');
-              if (options.startFails) throw Error('D1_FAILURE');
-              const expected = [101, 6, 31, options.owner ?? 900, 1001, options.digest ?? ctx.editionHash];
-              if (status === 'NAO_INICIADO' && options.active !== false &&
-                  JSON.stringify(binds) === JSON.stringify(expected)) {
-                status = 'EM_ANDAMENTO';
-                return { success: true, meta: { changes: 1 } };
-              }
-              return { success: true, meta: { changes: 0 } };
-            },
-            async first() {
-              if (!query.startsWith('SELECT m.status')) throw Error('UNEXPECTED_READ');
-              if (options.active === false || options.owner === 0 ||
-                  options.digest === 'b'.repeat(64)) return null;
-              return status === null ? null : { status };
-            },
-          };
-        },
-      };
-    },
+    prepare: vi.fn((sql: string) => ({
+      bind: (...binds: unknown[]) => {
+        const stmt = { sql, binds };
+        prepared.push(stmt);
+        return stmt;
+      },
+    })),
+    batch,
   } as unknown as D1Database;
-  const start = (override: Partial<typeof ctx> = {}) =>
-    startNativeEnrollment({ db, ...ctx, ...override });
-  return { start, statements };
+  const start = (override: Partial<typeof context>={}) =>
+    startNativeEnrollment({ db, ...context, ...override });
+  return { batch, prepared, start };
 }
 
-describe('Native LMS start — single-transaction tenant/cycle/edition pin gate', () => {
-  it('starts a pinned NAO_INICIADO enrollment without inventing completion evidence', async () => {
-    const f = fixture();
-    await expect(f.start()).resolves.toEqual({
-      state: 'STARTED', cicloId: 1001, editionHash: ctx.editionHash,
+describe('Native start transaction — D1 batch and tenant/cycle scope', () => {
+  it('uses one atomic D1 batch with preflight, matrícula, cycle and postcheck', async () => {
+    const f = fakeDb();
+    expect(await f.start()).toEqual({
+      state: 'STARTED', cicloId: 1001, editionHash: context.editionHash,
     });
-    expect(f.statements).toHaveLength(1);
-    expect(f.statements[0].binds).toEqual([101,6,31,900,1001,ctx.editionHash]);
-    const sql = f.statements[0].query;
-    expect(sql).toContain("status='NAO_INICIADO'");
-    expect(sql).toContain("ed.status='PUBLISHED'");
-    expect(sql).toContain('ed.artifact_sha256=?');
-    expect(sql).toContain('u.funcionario_id=lms_matriculas.funcionario_id');
-    expect(sql).toContain('c.tipo_conteudo=\'native\'');
-    expect(sql).toContain('ciclo.ciclo_atual=1');
-    expect(sql).not.toContain('CONCLUIDO');
-    expect(sql).not.toContain('qualificacao_historico');
-  });
-
-  it('is idempotent when the same authenticated enrollment was already started', async () => {
-    const f = fixture();
-    expect((await f.start()).state).toBe('STARTED');
-    expect((await f.start()).state).toBe('ALREADY_STARTED');
-    expect(f.statements.filter((s) => s.query.startsWith('SELECT'))).toHaveLength(1);
-  });
-
-  it('rejects completed and canceled enrollments instead of silently reopening them', async () => {
-    for (const status of ['CONCLUIDO','CANCELADO','REPROVADO']) {
-      const f = fixture({ status });
-      await expect(f.start()).rejects.toMatchObject({
-        code: 'NATIVE_START_ACCESS_OR_STATE_DENIED',
-      });
+    expect(f.batch).toHaveBeenCalledTimes(1);
+    expect(f.prepared).toHaveLength(4);
+    expect(f.prepared.every((stmt) => stmt.binds.join(':') === [
+      900,101,6,31,1001,context.editionHash,
+    ].join(':'))).toBe(true);
+    expect(f.prepared[0].sql).toContain('NATIVE_START_SCOPE_OR_STATUS_DRIFT');
+    expect(f.prepared[1].sql).toContain('UPDATE lms_matriculas');
+    expect(f.prepared[1].sql).toContain("ciclo.status='NAO_INICIADO'");
+    expect(f.prepared[2].sql).toContain('UPDATE lms_matricula_ciclos');
+    expect(f.prepared[2].sql).toContain('m.data_inicio');
+    expect(f.prepared[3].sql).toContain('NATIVE_START_ATOMIC_SYNC_FAILED');
+    for (const statement of f.prepared) {
+      expect(statement.sql).toContain("ed.status='PUBLISHED'");
+      expect(statement.sql).toContain('ciclo.ciclo_atual=1');
+      expect(statement.sql).toContain("c.tipo_conteudo='native'");
+      expect(statement.sql).toContain('u.funcionario_id=m.funcionario_id');
+      expect(statement.sql).toContain('ed.artifact_sha256=?');
+      expect(statement.sql).not.toContain('qualificacoes_historico');
+      expect(statement.sql).not.toContain('certificados');
     }
   });
 
-  it('refuses a revoked edition or cycle in both update and replay', async () => {
-    const f = fixture({ active: false });
-    await expect(f.start()).rejects.toMatchObject({ code: 'NATIVE_START_ACCESS_OR_STATE_DENIED' });
+  it('returns idempotent receipt only after transactional postcheck', async () => {
+    const f = fakeDb({ matriculaChanges: 0, cycleChanges: 0 });
+    expect(await f.start()).toEqual({
+      state: 'ALREADY_STARTED', cicloId: 1001, editionHash: context.editionHash,
+    });
+    expect(f.batch).toHaveBeenCalledOnce();
   });
 
-  it('rejects invalid tenant, user, cycle and SHA before SQL', async () => {
-    const f = fixture();
-    for (const override of [
+  it('never claims success on mixed transition counts', async () => {
+    const f = fakeDb({ matriculaChanges: 1, cycleChanges: 0 });
+    await expect(f.start()).rejects.toMatchObject({
+      code: 'NATIVE_START_INCONSISTENT_CHANGES',
+    });
+  });
+
+  it('does not recover from a rolled back batch by guessing start state', async () => {
+    const f = fakeDb({ batchThrows: true });
+    await expect(f.start()).rejects.toMatchObject({
+      code: 'NATIVE_START_ATOMIC_SYNC_REJECTED',
+    });
+    expect(f.batch).toHaveBeenCalledOnce();
+  });
+
+  it('refuses incomplete D1 results instead of reporting completed', async () => {
+    const f = fakeDb({ incompleteResults: true });
+    await expect(f.start()).rejects.toMatchObject({
+      code: 'NATIVE_START_ATOMIC_SYNC_REJECTED',
+    });
+  });
+
+  it('validates all trusted context before touching D1', async () => {
+    const f = fakeDb();
+    for (const invalid of [
       { actorUserId: 0 }, { empresaId: 0 }, { matriculaId: -1 },
-      { cursoId: NaN }, { cicloId: 0 }, { editionHash: 'b' },
+      { cursoId: NaN }, { cicloId: 0 }, { editionHash: 'x' },
     ]) {
-      await expect(f.start(override)).rejects.toMatchObject({
+      await expect(f.start(invalid)).rejects.toMatchObject({
         code: 'NATIVE_START_INVALID_CONTEXT',
       });
     }
-    expect(f.statements).toHaveLength(0);
-  });
-
-  it('propagates D1 failures rather than claiming a successful start', async () => {
-    const f = fixture({ startFails: true });
-    await expect(f.start()).rejects.toThrow('D1_FAILURE');
-  });
-
-  it('rechecks pinned tenant, employee and edition on retry', async () => {
-    const f = fixture({ status: 'EM_ANDAMENTO', owner: 0 });
-    await expect(f.start()).rejects.toMatchObject({ code: 'NATIVE_START_ACCESS_OR_STATE_DENIED' });
-    const altered = fixture({ status: 'EM_ANDAMENTO', digest: 'b'.repeat(64) });
-    await expect(altered.start()).rejects.toMatchObject({ code: 'NATIVE_START_ACCESS_OR_STATE_DENIED' });
+    expect(f.batch).not.toHaveBeenCalled();
+    expect(f.prepared).toHaveLength(0);
   });
 });
