@@ -260,6 +260,22 @@ function contentEvidenceValidated(row: EnrollmentEvidenceRow, source: LmsComplet
   return false;
 }
 
+/**
+ * Native V1 has a separate immutable edition/ledger contract. None of the
+ * legacy SCORM, xAPI, manual or administrative completion paths may infer a
+ * Native completion from a browser percentage or old runtime fields.
+ */
+function nativeLegacyCompletionBlocked(
+  c: Context<LmsIntegrityContext>,
+  row: EnrollmentEvidenceRow,
+): Response | null {
+  if (String(row.tipo_conteudo ?? '').trim().toLowerCase() !== 'native') return null;
+  return errorResponse(
+    c, 409, 'NATIVE_CANONICAL_EVIDENCE_REQUIRED',
+    'O curso nativo exige validação de evidências pelo fluxo próprio do player.',
+  );
+}
+
 function hasTerminalFormativeScormStatus(row: EnrollmentEvidenceRow, incoming: JsonRecord): boolean {
   // Formative completion requires a real SCORM terminal signal. Client-side
   // completion_candidate, slide count and generic PATCH progress do not count.
@@ -308,6 +324,12 @@ function buildDecision(
     administrativeReason?: unknown;
   } = {},
 ): LmsCompletionDecision {
+  if (String(row.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
+    return {
+      accepted: false, code: 'CONTENT_EVIDENCE_REQUIRED',
+      scorePct: null, masteryScore: null, failurePrecedence: false,
+    };
+  }
   const interactive = isInteractive(row);
   const incomingLesson = incoming.lesson_status;
   const incomingCompletion = incoming.completion_status;
@@ -404,6 +426,8 @@ async function guardScormCommit(
   if (!row) return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
   const ownershipError = await enforceOwnership(c, row);
   if (ownershipError) return ownershipError;
+  const nativeBlocked = nativeLegacyCompletionBlocked(c, row);
+  if (nativeBlocked) return nativeBlocked;
   const edition = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
     activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
@@ -460,6 +484,8 @@ async function guardXapiStatement(
   if (!row) return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
   const ownershipError = await enforceOwnership(c, row);
   if (ownershipError) return ownershipError;
+  const nativeBlocked = nativeLegacyCompletionBlocked(c, row);
+  if (nativeBlocked) return nativeBlocked;
   const assetSessionValid = await hasValidAssetSession(c, row);
   const score =
     result.score && typeof result.score === 'object' ? (result.score as JsonRecord) : {};
@@ -496,6 +522,8 @@ async function guardManualFinalize(
   if (!row) return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
   const ownershipError = await enforceOwnership(c, row);
   if (ownershipError) return ownershipError;
+  const nativeBlocked = nativeLegacyCompletionBlocked(c, row);
+  if (nativeBlocked) return nativeBlocked;
   if (String(row.status).toUpperCase() === 'CONCLUIDO') return null;
   const edition = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
@@ -556,6 +584,10 @@ async function guardAdministrativeStatus(
     .toUpperCase();
   const row = await readEnrollmentEvidence(c.env.DB, empresaId, matriculaId);
   if (!row) return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
+  if (requestedStatus === 'CONCLUIDO') {
+    const nativeBlocked = nativeLegacyCompletionBlocked(c, row);
+    if (nativeBlocked) return nativeBlocked;
+  }
 
   if (String(row.status).toUpperCase() === 'CONCLUIDO' && requestedStatus !== 'CONCLUIDO') {
     return errorResponse(
