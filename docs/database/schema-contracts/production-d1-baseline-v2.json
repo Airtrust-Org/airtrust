@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-11",
-    "last_reconciled_against": "0549 FDM Tripulação model consolidation queued; production remote apply pending",
-    "schema_v2_digest": "fd92c0a15f734f449fb9326c50108706210bdeee555d3af1c951c8ca447392a6",
+    "last_reconciled_against": "0550 empty LGPD model retirement queued; production remote apply pending",
+    "schema_v2_digest": "303a4b6eec479785e8a914de3bc7819592247b05fe23fec003854b23b315405d",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1528,6 +1528,18 @@
       "reviewed_manifest": "fdm-tripulacao-model-consolidation-0549.json",
       "evidence": "worker-airtrust/schema-v2/plans/fdm-tripulacao-model-consolidation-0549.md",
       "note": "Data-only consolidation: preserves published course 71, its nine completed and two open enrolments, nine historical completions and two function requirements while retiring FDM-TRIPULACAO. Governed production application requires the exact reviewed manifest, D1 recovery point and postconditions."
+    },
+    {
+      "change_file": "0550_retire_empty_lgpd_seg_info_model.sql",
+      "change_id": "retire-empty-lgpd-seg-info-model-0550",
+      "sha256": "1860c065f007b2249717249772c3ab433b6ad967b8c2c76d88543ceba07f98d8",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 empty LGPD qualification model retirement",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "retire-empty-lgpd-seg-info-model-0550.json",
+      "evidence": "worker-airtrust/schema-v2/plans/retire-empty-lgpd-seg-info-model-0550.md",
+      "note": "Data-only retirement permitted only when all checked active references are zero. The governed apply soft-deletes LGPD_SEG_INFO without generating transfers, enrolments or notifications."
     }
   ]
 }
