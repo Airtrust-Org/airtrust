@@ -22,6 +22,7 @@
     `trg_lms_cursos_updated_at`.
 - Três tabelas no mesmo staging contêm referências FK SQL explícitas a `lms_cursos`:
   `lms_cursos_setores`, `lms_matriculas` e `lms_scorm_package_versions`.
+  Uma consulta adicional a `pragma_foreign_key_list` confirmou que as três apontam por `curso_id` e declaram `ON DELETE NO ACTION` (não CASCADE). Isso reduz um risco específico, mas **não prova** que qualquer sequência de DROP/RENAME seja transacionalmente segura no executor real.
 - A consulta read-only ao inventário das quatro tabelas do Schema V2 0549 confirmou **nenhuma presente em staging**. Portanto 0549 não foi aplicado nesse ambiente.
 
 Os hashes descrevem apenas o snapshot de staging capturado: não inferir equivalência com produção, nem presumir validade após avanço do schema.
