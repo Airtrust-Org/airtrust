@@ -10,6 +10,7 @@ import {
   toNativeLearnerCourse,
   validateNativeCourseArtifact,
   type NativeLearnerCourse,
+  type NativeCourseArtifact,
 } from '../lib/lms/lms-native-course-contract';
 import {
   resolveNativeEnrollmentAdmission,
@@ -33,6 +34,18 @@ const HASH = /^[a-f0-9]{64}$/;
 const VERSION = /^n-[a-f0-9]{32}$/;
 const MAX_NATIVE_JSON_BYTES = 4 * 1024 * 1024;
 
+/**
+ * Private artifact is only available within the Worker; must never be used
+ * directly in c.json(), R2 public links or the client-side player.
+ */
+export type NativePrivateCourse = {
+  artifact: NativeCourseArtifact;
+  editionHash: string;
+  cicloId: number;
+  cursoId: number;
+  mode: NativeAdmission['mode'];
+};
+
 export type NativePublishedCourse = {
   course: NativeLearnerCourse;
   editionHash: string;
@@ -51,13 +64,13 @@ async function sha256Hex(value: ArrayBuffer): Promise<string> {
 }
 
 /** Read after canonical auth; never accept empresaId/userId from request body. */
-export async function loadNativePublishedCourse(params: {
+export async function loadNativePrivateCourse(params: {
   db: D1Database;
   bucket: R2Bucket;
   empresaId: number;
   matriculaId: number;
   actorUserId: number;
-}): Promise<NativePublishedCourse> {
+}): Promise<NativePrivateCourse> {
   const admission = await resolveNativeEnrollmentAdmission({
     db: params.db,
     empresaId: params.empresaId,
@@ -121,13 +134,32 @@ export async function loadNativePublishedCourse(params: {
   if (artifact.packageVersion !== row.package_version) {
     reject('NATIVE_PUBLISHED_EDITION_VERSION_MISMATCH');
   }
-  // Authoring answer keys remain server-side; only the safe learner projection
-  // leaves this function, never artifact or raw R2 bytes.
   return {
-    course: toNativeLearnerCourse(artifact),
+    artifact,
     editionHash: row.artifact_sha256,
     cicloId: row.ciclo_id,
     cursoId: admission.cursoId,
     mode: admission.mode,
+  };
+}
+
+/**
+ * Only this sanitized wrapper may be used by the staging learner API.
+ * Never serialize a NativePrivateCourse directly in an HTTP response.
+ */
+export async function loadNativePublishedCourse(params: {
+  db: D1Database;
+  bucket: R2Bucket;
+  empresaId: number;
+  matriculaId: number;
+  actorUserId: number;
+}): Promise<NativePublishedCourse> {
+  const verified = await loadNativePrivateCourse(params);
+  return {
+    course: toNativeLearnerCourse(verified.artifact),
+    editionHash: verified.editionHash,
+    cicloId: verified.cicloId,
+    cursoId: verified.cursoId,
+    mode: verified.mode,
   };
 }
