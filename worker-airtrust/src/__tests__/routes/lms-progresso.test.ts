@@ -46,6 +46,7 @@ vi.mock('../../utils/db', () => ({
 
 import lmsProgressoRoutes from '../../routes/lms-progresso';
 import { LmsCompletionRejectedError } from '../../services/lms-completion';
+import { ApiError } from '../../middleware/error-handler';
 
 type QueryHandler = {
   first?: (args: unknown[]) => Promise<unknown> | unknown;
@@ -116,6 +117,11 @@ describe('lms progresso xapi router', () => {
       ['FROM lms_progresso_scorm', { first: legacyReads }],
     ]);
     const app = new Hono<{ Bindings: Env }>();
+    // Production mounts the shared ApiError handler; mirror its HTTP status
+    // mapping here rather than letting isolated Hono return generic 500.
+    app.onError((error, c) => error instanceof ApiError
+      ? c.json({ success: false, error: error.message }, error.statusCode as 409)
+      : c.json({ success: false }, 500));
     app.route('/', lmsProgressoRoutes);
     const response = await app.fetch(
       new Request('http://localhost/scorm/state/10'),
