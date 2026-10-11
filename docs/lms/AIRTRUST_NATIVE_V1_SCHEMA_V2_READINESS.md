@@ -88,6 +88,24 @@ Antes de liberar `tipo_conteudo='native'` no catálogo, o Worker deve impedir qu
 
 Os testes focados de middleware e handlers verificam estas barreiras. A **conclusão Native futura** terá de passar por um ponto de entrada dedicado que obtenha a matrícula, ciclo e edição do servidor, revalide as evidências imutáveis e delegue a persistência ao `completeLmsMatricula` sem enfraquecer a política existente. Estes bloqueios não equivalem à implementação desse ponto de entrada; ele continua deliberadamente indisponível.
 
+## Endpoints de evidências Native V1 — preparados, desligados e restritos a staging
+
+A PR implementa endpoints internos sob `/api/lms/native`, com o middleware JWT/tenant existente e **dois flags independentes** que devem incluir o `empresa_id` exato (CSV; wildcard proibido):
+
+- `NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS` — acesso à prévia de conteúdo, obrigatório para qualquer escrita.
+- `NATIVE_LEARNER_WRITE_ENABLED_TENANTS` — autorização técnica adicional de escrita de **evidências**, nunca habilitada automaticamente. Ausente/vazio: responde 404 sem consultar D1/R2.
+
+Em `ENVIRONMENT=production`, todos os endpoints abaixo recusam operação mesmo que os flags sejam indevidamente preenchidos. **Não configurar esses flags em ambientes remotos antes de migration/publicação/homologação e autorização específicas.**
+
+| Rota | Evidência recebida | Persistência e resposta |
+| --- | --- | --- |
+| `POST /api/lms/native/matriculas/:id/checkpoints` | Apenas `eventId`, `sequence`, `unitId` de aula | Worker acrescenta hash da edição encontrado no banco/R2, valida evidências anteriores, executa INSERT atômico e devolve recibo sem conclusão |
+| `POST /api/lms/native/matriculas/:id/tentativas` | Apenas `attemptNumber` e pares `questionId`/`optionId` | Worker reavalia com gabarito privado da edição, executa INSERT atômico e devolve nota/satisfação da avaliação, **sem qualificação/certificado** |
+
+Ambas as rotas exigem matrícula própria, edição imutável, `mode=LEARN`, formato Native, curso publicado e ciclo ativo; não permitem `empresaId`, `cursoId`, `cicloId`, `artifactHash`, `scorePct`, `completed` ou chaves de correção no JSON do usuário. Tamanho máximo de body JSON: 128 KiB; repetições idênticas são idempotentes e divergências são 409. A leitura da edição privada e dos seus gabaritos nunca é devolvida ao navegador.
+
+**Limitações funcionais intencionais:** ainda não há start governado para matrículas `NAO_INICIADO`, sincronização operacional de progresso percentual, retomada offline assinada, validação real do consumo de vídeo nem finalização pelo `completeLmsMatricula`. Estas rotas **não** equivalem a curso operacional. O código e testes são preparação para E2E de staging, sem ativação no ambiente remoto.
+
 ## Aceitação funcional antes de matrícula real
 
 - upload/revisão de candidato Native, versão por hash e reabertura da mesma edição em nova sessão;
