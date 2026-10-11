@@ -117,6 +117,19 @@ A prévia React consulta primeiro o curso e depois esse estado. Só aceita a ret
 
 **Escopo:** retomada técnica de navegação na prévia, sem gravação ou status oficial no LMS. Persistência entre dispositivos somente poderá ser comprovada no D1/R2 de staging **após** migrar e publicar o pacote de teste no fluxo governado. Não é retomada offline assinada nem implantação em produção.
 
+## QA estrutural sobre os pacotes SCORM fornecidos (dados privados)
+
+Inspeção **offline, somente leitura**, do ZIP privado de treinamentos fornecido à conversa (arquivos e mídia **não** anexados ao GitHub): nove pacotes, dos quais **sete** usam `window.COURSE_DATA` com slides `lesson/scenario/assessment` e **dois** usam apenas `window.AIRTRUST_COURSE_MODEL` com contratos de slides/avaliação especializados. A inspeção verifica estrutura e formatos, **não** equivale a executar a conversão, revisar conteúdo pedagógico ou homologar certificados.
+
+Resultados relevantes:
+
+- Nos sete cursos `COURSE_DATA`, todas as referências principais `media` das unidades examinadas correspondem a entradas no arquivo original. Há conteúdo pedagógico em `steps`, `columns`, `sectionGroups` e `gateItems` que o primeiro compilador ignorava. O compilador agora transforma essas estruturas em headings/listas, preservando texto e ordem dos grupos. O relatório fornece `richContentFieldsConverted`. A paridade **visual** de layouts originais (grades, colunas, botões) ainda não está certificada.
+- Em um dos sete cursos existe vídeo MP4 com cerca de **18,7 MiB**, acima do limite de **12 MiB** do transporte de mídia autenticado do piloto Native. O compilador agora devolve `mediaTransportBlockers` com identificação do asset, tamanho real e motivo `REQUIRES_APPROVED_LARGE_MEDIA_TRANSPORT`. A preparação para R2 continua bloqueando a mídia; não contornar por link público sem autenticação.
+- Os dois formatos especializados continuam **fora da cobertura certificada do compilador**: usam tipos como `matrix`, `roadmap`, `bowtie`, `quiz` ou assessment de escopo global, inclusive decisões de cenário com outras estruturas de alternativas. Devem receber adaptadores testados e crosswalk próprio de requisitos de conclusão, sem interpretar `cover`/`quiz` como prova genérica.
+- Nenhum dos nove cursos foi automaticamente declarado publicável, e não houve importação no catálogo, migration, gravação de histórico, publicação R2 ou alteração dos ZIPs originais.
+
+Os testes unitários da fábrica são sintéticos; sua aprovação demonstra contratos de transformação e bloqueio, mas não comprova que os nove pacotes reais passam integralmente pela pipeline. A QA por curso ainda terá de comparar slides, mídias, decisões obrigatórias, notas e referências com o SCORM de origem.
+
 ## Aceitação funcional antes de matrícula real
 
 - upload/revisão de candidato Native, versão por hash e reabertura da mesma edição em nova sessão;
