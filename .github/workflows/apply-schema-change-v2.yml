@@ -624,6 +624,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0548-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight FDM Tripulação model consolidation 0549
+        if: ${{ inputs.change_id == 'fdm-tripulacao-model-consolidation-0549' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0549-production-preflight.sh --target=airtrust-db
+
       - name: Preflight Training Compliance canonical category-safe PDF 0546
         if: ${{ inputs.change_id == 'training-compliance-canonical-category-repair-0546' }}
         shell: bash
@@ -748,6 +756,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0548-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate FDM Tripulação model consolidation 0549
+        if: ${{ inputs.change_id == 'fdm-tripulacao-model-consolidation-0549' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0549-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate Training Compliance canonical category-safe PDF 0546
         if: ${{ inputs.change_id == 'training-compliance-canonical-category-repair-0546' }}
