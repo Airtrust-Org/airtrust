@@ -218,7 +218,7 @@ export function validateNativeCourseArtifact(input: unknown): NativeCourseArtifa
     if (unit.kind === 'scenario' && !questionIds.length) fail('NATIVE_EMPTY_SCENARIO');
     if (questionIds.some((q) => !knownQuestions.has(q))) fail('NATIVE_UNKNOWN_QUESTION');
     referencedQuestions.push(...questionIds);
-    const blocks = boundedArray(unit.blocks, 100, unit.kind === 'assessment');
+    const blocks = boundedArray(unit.blocks, 100, unit.kind !== 'lesson');
     for (const item of blocks) {
       const block = record(item, 'NATIVE_INVALID_BLOCK');
       if (block.type === 'heading' || block.type === 'paragraph') {
