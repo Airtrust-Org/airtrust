@@ -107,7 +107,17 @@ describe('Native R2 immutable learner content loader', () => {
     expect(result.course.schema).toBe('AIRTRUST_NATIVE_COURSE_V1');
     expect(result.cicloId).toBe(600);
     expect(result.mode).toBe('LEARN');
-    expect(f.calls[2].binds).toEqual([6, 101, 31]);
+    expect(f.calls[2].binds).toEqual([900, 6, 101, 31]);
+    // A stale/adversarial cycle pin must not survive a separate admission
+    // query when someone changes employee, lifecycle status or course.
+    const editionSql = f.calls[2].sql;
+    expect(editionSql).toContain('u.id=? AND u.deleted_at IS NULL');
+    expect(editionSql).toContain('u.funcionario_id=m.funcionario_id');
+    expect(editionSql).toContain('cycle.funcionario_id=m.funcionario_id');
+    expect(editionSql).toContain('cycle.status=m.status');
+    expect(editionSql).toContain('cycle.ciclo_atual=1');
+    expect(editionSql).toContain("c.tipo_conteudo='native'");
+    expect(editionSql).toContain("ed.status='PUBLISHED'");
     expect(f.r2Calls).toEqual([`lms/native/6/31/${result.editionHash}/native-private-candidate.json`]);
     const serialized = JSON.stringify(result.course);
     expect(serialized).not.toContain('correctOptionId');
