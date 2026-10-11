@@ -223,7 +223,7 @@ app.post('/xapi/statements', async (c) => {
       `
       SELECT m.id, m.funcionario_id, m.status, m.empresa_id, m.progresso_pct, m.score_final,
         m.qualificacao_historico_id,
-        c.id AS curso_id, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
+        c.id AS curso_id, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
         c.titulo AS curso_titulo,
         c.scorm_mastery_score,
         qt.codigo AS qualificacao_codigo,
@@ -248,6 +248,7 @@ app.post('/xapi/statements', async (c) => {
       score_final: number | null;
       qualificacao_historico_id: number | null;
       curso_id: number;
+      tipo_conteudo: string | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       curso_titulo: string;
@@ -265,6 +266,11 @@ app.post('/xapi/statements', async (c) => {
     if (!callerFuncionarioId || matricula.funcionario_id !== callerFuncionarioId) {
       throw new ApiError('Acesso negado', 403);
     }
+  }
+  // A non-terminal xAPI statement is still a write. It must not modify the
+  // private Native enrollment ledger or indirectly alter its LMS status.
+  if (String(matricula.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
+    throw new ApiError('Curso nativo exige eventos e avaliações do player próprio.', 409);
   }
 
   const verbId = stmt.verb.id;
