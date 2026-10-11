@@ -12,10 +12,10 @@ const mappings = [
   { course: 71, type: 204, model: 'FDM-TRIPULACAO', category: 'TREINAMENTO_OPERACIONAL' },
 ] as const;
 
-function fixture(mapping = mappings[0]) {
-  const first = vi.fn(async () => ({ allowed: 1 }));
+function fixture(mapping: (typeof mappings)[number] = mappings[0]) {
+  const first = vi.fn(async (): Promise<{ allowed: number } | null> => ({ allowed: 1 }));
   const bind = vi.fn(() => ({ first }));
-  const prepare = vi.fn(() => ({ bind }));
+  const prepare = vi.fn((_sql: string) => ({ bind }));
   const params: ScormCategoryCompatibilityContext = {
     db: { prepare } as unknown as D1Database,
     empresaId: 6,
