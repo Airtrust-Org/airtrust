@@ -101,6 +101,35 @@ describe('AirTrust native server-side grading', () => {
     }
   });
 
+  it('requires correct scenario decisions without inflating or diluting certification scores', () => {
+    const base = course();
+    const scenario = { ...base.questions[0], id: 'scenario-q1' };
+    const enriched = validateNativeCourseArtifact({
+      ...base,
+      questions: [...base.questions, scenario],
+      units: [
+        base.units[0],
+        { id: 'decision', kind: 'scenario', title: 'Decisão', blocks: [], questionIds: ['scenario-q1'] },
+        base.units[1],
+      ],
+    });
+    const wrongDecision = evaluateNativeAssessment(enriched, [
+      ...good, { questionId: 'scenario-q1', optionId: 'b' },
+    ]);
+    expect(wrongDecision).toEqual({
+      mode: 'SCORED', answered: 3, total: 3, scorePct: 100,
+      assessmentSatisfied: false,
+    });
+    const correctDecision = evaluateNativeAssessment(enriched, [
+      ...good, { questionId: 'scenario-q1', optionId: 'a' },
+    ]);
+    expect(correctDecision).toMatchObject({ scorePct: 100, assessmentSatisfied: true });
+    const badExam = evaluateNativeAssessment(enriched, [
+      ...bad, { questionId: 'scenario-q1', optionId: 'a' },
+    ]);
+    expect(badExam).toMatchObject({ scorePct: 0, assessmentSatisfied: false });
+  });
+
   it('does not modify private answer keys when scoring', () => {
     const input = course();
     evaluateNativeAssessment(input, good);
