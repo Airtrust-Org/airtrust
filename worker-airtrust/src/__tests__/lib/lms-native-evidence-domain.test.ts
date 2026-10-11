@@ -114,6 +114,26 @@ describe('Native V1 — optimistic checkpoint sequence, version pinning and repl
     )).reason).toBe('ASSESSMENT_NOT_SATISFIED');
   });
 
+  it('refuses fabricated 100 percent coverage without a complete server event ledger', () => {
+    const missingEvents: NativeProgressSnapshot = {
+      scope, nextSequence: 3, seenLessonIds: ['intro', 'safety'], recordedEvents: [],
+    };
+    expect(assessNativeCompletionReadiness(course, proof(missingEvents)).reason)
+      .toBe('LESSON_EVIDENCE_MISSING');
+    const skippedSequence: NativeProgressSnapshot = {
+      scope, nextSequence: 3, seenLessonIds: ['intro', 'safety'],
+      recordedEvents: [
+        { eventId: 'event-1', sequence: 1, unitId: 'intro' },
+        { eventId: 'event-3', sequence: 3, unitId: 'safety' },
+      ],
+    };
+    expect(assessNativeCompletionReadiness(course, proof(skippedSequence)).readyForCanonicalCompletion)
+      .toBe(false);
+    expect(() => validateNativeCheckpoint(course, skippedSequence, {
+      eventId: 'event-4', sequence: 3, artifactHash: sha, unitId: 'safety',
+    })).toThrowError('NATIVE_INVALID_PERSISTED_EVIDENCE');
+  });
+
   it('never accepts the progress of another tenant, enrollment, cycle or edition', () => {
     const saved: NativeProgressSnapshot = {
       scope, nextSequence: 3, seenLessonIds: ['intro', 'safety'],
