@@ -99,7 +99,7 @@ export default function NativeCoursePreview({ course, resolveAssetHref }: Previe
         <h2 id="native-preview-unit-title" className="text-2xl font-semibold">{unit.title}</h2>
         {unit.blocks.map(renderBlock)}
 
-        {unit.kind === 'assessment' && unit.questionIds.map((questionId) => {
+        {(unit.kind === 'assessment' || unit.kind === 'scenario') && unit.questionIds.map((questionId) => {
           const question = questionMap.get(questionId);
           if (!question) return <p role="alert" key={questionId}>Questão indisponível</p>;
           return (
