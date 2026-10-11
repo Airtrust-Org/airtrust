@@ -140,6 +140,21 @@ O piloto agora inclui `scripts/learning-factory/normalize_scorm_model.py` para d
 
 **Evidência:** testes sintéticos do adaptador em conjunto com importador e compilador, sem cópia de conteúdo proprietário ao GitHub. Verificações de formato/arquivo privado mostraram nove pacotes intactos, sete `COURSE_DATA` extraídos por leitura offline (42+26+20+20+19+29+25 = **181 slides**) e dois modelos especiais estruturalmente elegíveis para normalização. **Isso ainda não equivale a nove cursos integralmente convertidos e homologados**.
 
+## Conversão privada em lote — sem publicar, sem R2/D1
+
+A fábrica inclui `scripts/learning-factory/batch_convert_scorm_to_native.py` para arquivos como `SMS(3).zip` que contêm diversos ZIPs SCORM em subpastas. O comando verifica caminhos, symlinks e limites; ignora apenas metadados Finder AppleDouble seguros, bloqueia nomes duplicados e preserva os originais. Para cada curso chama extração + compilação em diretório privado independente e registra resultado com `publishable=false`. Um pacote malformado é isolado, sem perder candidatos dos demais.
+
+```bash
+umask 077
+python3 scripts/learning-factory/batch_convert_scorm_to_native.py \
+  "/caminho/privado/SMS(3).zip" \
+  "/caminho/privado/nativo-candidatos-NOVO"
+```
+
+A saída contém `draft/` e `candidate/` por curso, incluindo **gabaritos privados**, e um `batch-conversion-review.json` sem opções corretas ou feedback confidencial. Diretório existente nunca é sobrescrito. `publicationPerformed=false` e `remoteUploadPerformed=false` são invariantes; o script não acessa GitHub, D1, R2, Pages ou produção.
+
+**Condição para encerrar a conversão:** executar o lote sobre todos os ZIPs originais em ambiente privado, revisar os resultados reais, conferir a paridade de aulas, interações, notas e imagens, corrigir os casos especiais e obter aprovação pedagógica/técnica. Testes sintéticos do lote não são homologação do conteúdo real. O vídeo de 18,7 MiB e as 10 justificativas ausentes de Resíduos continuam bloqueadores do respectivo curso.
+
 ## Aceitação funcional antes de matrícula real
 
 - upload/revisão de candidato Native, versão por hash e reabertura da mesma edição em nova sessão;
