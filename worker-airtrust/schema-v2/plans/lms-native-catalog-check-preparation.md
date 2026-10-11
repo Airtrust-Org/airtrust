@@ -72,6 +72,18 @@ Após o ensaio offline, as [instruções oficiais do Cloudflare D1](https://deve
 
 **Decisão de segurança:** *não executar* `DROP/RENAME` de `lms_cursos` no D1, nem promover o runner de ensaio a executor remoto. A frente seguinte deve verificar primeiro um **marcador nativo aditivo em tabela/coluna separada** e sua compatibilidade com as rotas legadas e o Schema V2 0549. Essa alternativa precisa de auditoria de dados, tenant e contratos antes de ser adotada. Se for indispensável manter `tipo_conteudo='native'`, será necessária uma estratégia de migração referencial muito mais ampla, explicitamente autorizada, sem pressupor que o D1 suporta o rebuild local.
 
+## Mapa mínimo de compatibilidade para alternativa aditiva
+
+Levantamento no **HEAD da PR #1389**, sem alterações de schema nem decisão de migração:
+
+- **DB 0549:** quatro predicados `c.tipo_conteudo='native'` em triggers de pin, eventos e tentativas.
+- **Serviços Worker:** dois predicados em `lms-native-checkpoint-writer.ts`, dois em `lms-native-attempt-writer.ts`, um em `lms-native-enrollment-starter.ts`, um em `lms-native-readiness-repository.ts` e admissão em `lms-native-enrollment-access.ts`.
+- **Proteção legada crítica:** `lms-completion-integrity.ts` (finalização, administração, SCORM, xAPI, progresso), `lms-matriculas.ts` (commit SCORM mesmo não terminal) e `lms-progresso.ts` (xAPI não terminal). Todos devem reconhecer o formato nativo **antes** de qualquer write legado, ainda que a coluna antiga fisicamente permaneça `scorm`.
+- **UX/catálogo:** conferir rotas administrativas, seletor de formato, matrícula, relatórios, conteúdo LMS e exposição de SCORM assets, para impedir que um curso marcado Native seja lançado por uma tela/rota de SCORM legado.
+- **Testes:** atualizar os predicados SQL, fixtures de 0549, autorização multi-tenant, sequência de eventos, conclusão negada por legados, regressão SCORM sem marcador e fail-closed quando a extensão de schema não existir.
+
+**Critério para escolher abordagem:** preferir mutação **estritamente aditiva** (coluna booleana validada ou tabela de vínculo tenant+curso), que o executor Schema V2 atual aceite e que não dependa de desativar FKs. O sinal Native tem de ser autoritativo no backend e não conflitar com `tipo_conteudo` legado. Proibir atalhos como registrar um curso Native como SCORM e deixá-lo completar por regras antigas. Somente adotar após testar compatibilidade integral, inclusive UI, dados, auditoria e certificado.
+
 ## Riscos e próximos gates para a migration efetiva
 
 1. **Pré-flight real** de produção separadamente, incluindo `sqlite_master`, `PRAGMA table_info`, `PRAGMA foreign_key_list`, contagem de linhas, integridade e dependentes transitivos. Só consultas read-only. Nunca reutilizar fingerprint de staging como autorização para produção.
