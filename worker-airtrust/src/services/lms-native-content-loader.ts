@@ -107,7 +107,7 @@ export async function loadNativePublishedCourse(params: {
 
   let candidate: unknown;
   try {
-    candidate = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer));
+    candidate = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(buffer));
   } catch {
     reject('NATIVE_PUBLISHED_ARTIFACT_INVALID_JSON');
   }
