@@ -62,20 +62,31 @@ export function evaluateNativeAssessment(
 
   const answered = answerMap.size;
   const total = course.questions.length;
+  const scenarios = new Set(course.units.filter((unit) => unit.kind === 'scenario').flatMap((unit) => unit.questionIds));
+  const exams = new Set(course.units.filter((unit) => unit.kind === 'assessment').flatMap((unit) => unit.questionIds));
+  // Required scenario decisions and certifying exam questions are independent.
+  // Otherwise non-certifying practice questions could dilute or inflate the grade.
+  const decisionsSatisfied = course.questions
+    .filter((q) => scenarios.has(q.id))
+    .every((q) => answerMap.get(q.id) === q.correctOptionId);
   if (course.policy.mode === 'FORMATIVE') {
-    return { mode: 'FORMATIVE', answered, total, scorePct: null, assessmentSatisfied: answered === total };
+    return {
+      mode: 'FORMATIVE', answered, total, scorePct: null,
+      assessmentSatisfied: answered === total && decisionsSatisfied,
+    };
   }
 
   if (answered !== total) {
     return { mode: 'SCORED', answered, total, scorePct: null, assessmentSatisfied: false };
   }
-  const correct = course.questions.filter((q) => answerMap.get(q.id) === q.correctOptionId).length;
-  const scorePct = Math.round((100 * correct) / total);
+  const certifying = course.questions.filter((q) => exams.has(q.id));
+  const correct = certifying.filter((q) => answerMap.get(q.id) === q.correctOptionId).length;
+  const scorePct = Math.round((100 * correct) / certifying.length);
   return {
     mode: 'SCORED',
     answered,
     total,
     scorePct,
-    assessmentSatisfied: correct * 100 >= course.policy.masteryScore * total,
+    assessmentSatisfied: decisionsSatisfied && correct * 100 >= course.policy.masteryScore * certifying.length,
   };
 }
