@@ -63,12 +63,35 @@ async function readSmallJson(c: { req: { header(name: string): string | undefine
   if (!c.req.header('content-type')?.toLowerCase().startsWith('application/json')) {
     throw new Error('NATIVE_JSON_REQUIRED');
   }
-  const body = await c.req.raw.text();
-  if (new TextEncoder().encode(body).byteLength > MAX_INPUT_BYTES) {
-    throw new Error('NATIVE_INPUT_TOO_LARGE');
+  // Content-Length can be absent or false for streamed requests. Never
+  // buffer the whole body before enforcing the server-owned byte limit.
+  const reader = c.req.raw.body?.getReader();
+  if (!reader) throw new Error('NATIVE_INVALID_JSON');
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_INPUT_BYTES) {
+        // Best-effort stop of a chunked/streamed oversized request.
+        void reader.cancel().catch(() => undefined);
+        throw new Error('NATIVE_INPUT_TOO_LARGE');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
   }
   try {
-    return JSON.parse(body);
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   } catch {
     throw new Error('NATIVE_INVALID_JSON');
   }
