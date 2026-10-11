@@ -5,6 +5,7 @@
  * never request JSON. Never writes enrollment, qualification or certificate.
  */
 import { type NativeCourseArtifact, validateNativeCourseArtifact } from '../lib/lms/lms-native-course-contract';
+import { readNativeEventLedger } from './lms-native-event-ledger';
 import {
   assessNativeCompletionReadiness, gradeNativeSubmittedAnswers,
   type NativeReadinessVerdict, type NativeSessionScope, type NativeProgressSnapshot,
@@ -17,7 +18,6 @@ export class NativeEvidenceReadError extends Error {
   }
 }
 type Binding = { id: number; status: string };
-type EventRow = { event_id: string; sequencia: number; unidade_id: string };
 type AttemptRow = {
   id: number; tentativa_numero: number; answers_json: string; answers_sha256: string;
   policy: string; score_pct: number | null; assessment_satisfied: number;
@@ -37,10 +37,6 @@ const BINDING_SQL = [
   "AND m.deleted_at IS NULL AND cycle.deleted_at IS NULL AND cycle.ciclo_atual=1",
   "AND c.deleted_at IS NULL AND c.tipo_conteudo='native' AND c.ativo=1 AND c.publicado=1",
   "LIMIT 1",
-].join(' ');
-const EVENT_SQL = [
-  "SELECT event_id, sequencia, unidade_id FROM lms_native_eventos",
-  "WHERE vinculo_id=? ORDER BY sequencia ASC LIMIT 10001",
 ].join(' ');
 const ATTEMPT_SQL = [
   "SELECT id, tentativa_numero, answers_json, answers_sha256, policy, score_pct, assessment_satisfied",
@@ -99,11 +95,12 @@ export async function readNativeLearnerSession(params: {
     fail('NATIVE_READ_ACCESS_OR_VERSION_DENIED');
   }
 
-  const events = await db.prepare(EVENT_SQL).bind(binding.id).all<EventRow>();
-  if (!events.success || !Array.isArray(events.results) || events.results.length > 10000) {
+  let rows: Awaited<ReturnType<typeof readNativeEventLedger>>;
+  try {
+    rows = await readNativeEventLedger(db, binding.id);
+  } catch {
     fail('NATIVE_READ_INVALID_EVENT_LEDGER');
   }
-  const rows = events.results;
   // A malformed or reordered server ledger is a consistency incident, not
   // an opportunity to guess a location or award course completion.
   const lessons = new Set(artifact.units.filter((unit) => unit.kind === 'lesson').map((unit) => unit.id));
