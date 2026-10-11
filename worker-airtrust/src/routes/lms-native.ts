@@ -12,7 +12,7 @@ import { getEmpresaIdSafe } from './escalas-shared';
 import { loadNativePublishedCourse, loadNativePrivateCourse, NativeContentLoadError } from '../services/lms-native-content-loader';
 import { readNativeLearnerSession, NativeEvidenceReadError } from '../services/lms-native-readiness-repository';
 import { loadNativeVerifiedAsset } from '../services/lms-native-asset-loader';
-import nativeWriteRoutes from './lms-native-write';
+import nativeWriteRoutes, { canWriteNative } from './lms-native-write';
 import {
   NativeAdmissionError,
   resolveNativeEnrollmentAdmission,
@@ -102,6 +102,8 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
         mode: published.mode,
         edition_sha256: published.editionHash,
         course: published.course,
+        // Client capability hints never replace the exact-tenant server checks on POST.
+        evidence_write_enabled: canWriteNative(c.env, empresaId) && published.mode === 'LEARN',
         // Progress, grading and native certificate endpoints are not enabled.
         completion_supported: false,
       },

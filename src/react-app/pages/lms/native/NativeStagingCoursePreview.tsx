@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import type { NativeAsset, NativeLearnerCourse } from '../../../../../worker-airtrust/src/lib/lms/lms-native-course-contract';
 import NativeCoursePreview from './NativeCoursePreview';
+import NativeStagingLearnerControls, { type NativePilotSession } from './NativeStagingLearnerControls';
 
 type PreviewResponse = {
   success: boolean;
@@ -16,6 +17,7 @@ type PreviewResponse = {
     edition_sha256: string;
     mode: 'LEARN' | 'REVIEW';
     completion_supported: boolean;
+    evidence_write_enabled?: boolean;
     course: NativeLearnerCourse;
   };
 };
@@ -30,23 +32,27 @@ type ResumeResponse = {
     last_visited_unit_id: string | null;
     next_sequence: number;
     seen_lesson_ids: string[];
+    latest_attempt?: {
+      attempt_number: number;
+      score_pct: number | null;
+      assessment_satisfied: boolean;
+    } | null;
     completion_supported: boolean;
   };
 };
-type NativeResume = {
-  initialUnitId: string | null;
-  seenLessonIds: string[];
-};
+type NativeResume = NativePilotSession & { initialUnitId: string | null };
 
 export default function NativeStagingCoursePreview({ matriculaId }: { matriculaId: number }) {
   const [course, setCourse] = useState<NativeLearnerCourse | null>(null);
   const [resume, setResume] = useState<NativeResume | null>(null);
   const [status, setStatus] = useState<'LOADING' | 'READY' | 'UNAVAILABLE'>('LOADING');
+  const [writeScope, setWriteScope] = useState<{ cycleId: number; editionHash: string; enabled: boolean } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     setCourse(null);
     setResume(null);
+    setWriteScope(null);
     setStatus('LOADING');
     if (!Number.isSafeInteger(matriculaId) || matriculaId <= 0) {
       setStatus('UNAVAILABLE');
@@ -104,7 +110,15 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
         setCourse(payload.data.course);
         setResume({
           initialUnitId: state.last_visited_unit_id,
+          lastVisitedUnitId: state.last_visited_unit_id,
           seenLessonIds: state.seen_lesson_ids,
+          nextSequence: state.next_sequence,
+          latestAttempt: state.latest_attempt ?? null,
+        });
+        setWriteScope({
+          cycleId: payload.data.ciclo_id,
+          editionHash: payload.data.edition_sha256,
+          enabled: payload.data.evidence_write_enabled === true && payload.data.mode === 'LEARN',
         });
         setStatus('READY');
       }
@@ -145,6 +159,17 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
         ? 'Carregando prévia do treinamento…'
         : 'Prévia nativa indisponível. Nenhum progresso foi alterado.'}
     </p>;
+  }
+  if (writeScope?.enabled) {
+    return <NativeStagingLearnerControls
+      key={`${matriculaId}:${writeScope.cycleId}:${writeScope.editionHash}`}
+      course={course}
+      matriculaId={matriculaId}
+      cycleId={writeScope.cycleId}
+      editionHash={writeScope.editionHash}
+      initialSession={resume}
+      fetchAuthorizedAsset={fetchAsset}
+    />;
   }
   return (
     <NativeCoursePreview

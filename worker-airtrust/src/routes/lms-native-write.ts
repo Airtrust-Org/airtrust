@@ -50,7 +50,7 @@ function isTenantAllowed(raw: string | undefined, tenant: number): boolean {
   return raw.split(',').some((part) => part.trim() === String(tenant));
 }
 
-function canWriteNative(env: Env, tenant: number): boolean {
+export function canWriteNative(env: Env, tenant: number): boolean {
   return env.ENVIRONMENT === 'staging' &&
     isTenantAllowed(env.NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS, tenant) &&
     isTenantAllowed(env.NATIVE_LEARNER_WRITE_ENABLED_TENANTS, tenant);
