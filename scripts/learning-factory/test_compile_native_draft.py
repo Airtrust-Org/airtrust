@@ -61,7 +61,19 @@ class CompileNativeDraftTests(unittest.TestCase):
             self.assertEqual(report['scenarioQuestions'], 1)
             self.assertFalse(report['publishable'])
             self.assertEqual(report['certification'], 'BLOCKED_UNTIL_LMS_STAGING_E2E')
-            self.assertEqual(candidate['packageVersion'], 'v-' + report['originalArchiveSha256'][:24])
+            self.assertEqual(candidate['packageVersion'], 'n-' + report['nativeCandidateSha256'][:32])
+
+    def test_converter_version_changes_when_content_changes_but_scorm_source_is_same(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            first, first_report = compile_candidate(draft, location)
+            draft['course']['slides'][0]['lead'] = 'Texto revisado pela engenharia'
+            second, second_report = compile_candidate(draft, location)
+            self.assertEqual(first_report['originalArchiveSha256'],
+                             second_report['originalArchiveSha256'])
+            self.assertNotEqual(first['packageVersion'], second['packageVersion'])
+            self.assertNotEqual(first_report['nativeCandidateSha256'],
+                                second_report['nativeCandidateSha256'])
 
     def test_fail_closed_on_missing_source_or_unmapped_slide(self):
         with tempfile.TemporaryDirectory() as d:
