@@ -99,6 +99,8 @@ describe('Native V1 private server-graded attempt persistence', () => {
     expect(f.rows[0]?.answers_sha256).toMatch(/^[a-f0-9]{64}$/);
     const insert=f.calls.find((call)=>call.sql.startsWith('INSERT'));
     expect(insert?.sql).toContain("m.status='EM_ANDAMENTO'");
+    expect(insert?.sql).toContain("cycle.status='EM_ANDAMENTO'");
+    expect(insert?.sql).toContain('cycle.funcionario_id=m.funcionario_id');
     expect(insert?.sql).toContain("c.tipo_conteudo='native'");
     expect(insert?.sql).toContain('u.funcionario_id=m.funcionario_id');
     expect(insert?.binds[4]).toBe(100);
