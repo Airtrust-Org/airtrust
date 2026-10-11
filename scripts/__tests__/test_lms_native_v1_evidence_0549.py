@@ -11,11 +11,11 @@ def db_fixture():
     db = sqlite3.connect(':memory:')
     db.execute('PRAGMA foreign_keys=ON')
     db.executescript("""
-      CREATE TABLE lms_cursos(id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,tipo_conteudo TEXT NOT NULL,deleted_at TEXT);
-      CREATE TABLE lms_matriculas(id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,curso_id INTEGER NOT NULL,deleted_at TEXT);
+      CREATE TABLE lms_cursos(id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,tipo_conteudo TEXT NOT NULL,deleted_at TEXT,ativo INTEGER NOT NULL DEFAULT 1,publicado INTEGER NOT NULL DEFAULT 1);
+      CREATE TABLE lms_matriculas(id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,curso_id INTEGER NOT NULL,deleted_at TEXT,status TEXT NOT NULL DEFAULT 'EM_ANDAMENTO');
       CREATE TABLE lms_matricula_ciclos(id INTEGER PRIMARY KEY,matricula_id INTEGER NOT NULL,empresa_id INTEGER NOT NULL,curso_id INTEGER NOT NULL,deleted_at TEXT,ciclo_atual INTEGER);
-      INSERT INTO lms_cursos VALUES (10,6,'native',NULL),(11,7,'native',NULL),(12,6,'scorm',NULL);
-      INSERT INTO lms_matriculas VALUES (100,6,10,NULL),(110,7,11,NULL);
+      INSERT INTO lms_cursos(id,empresa_id,tipo_conteudo,deleted_at) VALUES (10,6,'native',NULL),(11,7,'native',NULL),(12,6,'scorm',NULL);
+      INSERT INTO lms_matriculas(id,empresa_id,curso_id,deleted_at) VALUES (100,6,10,NULL),(110,7,11,NULL);
       INSERT INTO lms_matricula_ciclos VALUES (1000,100,6,10,NULL,1),(1100,110,7,11,NULL,1);
     """)
     return db
@@ -110,6 +110,30 @@ class Native0549Tests(unittest.TestCase):
             self.db.execute(statement,(99999,'e3',1,'slide3','a'*64))
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("UPDATE lms_native_eventos SET unidade_id='forged' WHERE id=1")
+
+    def test_event_writes_require_active_published_edition_cycle_and_enrollment(self):
+        event_sql = """INSERT INTO lms_native_eventos
+          (vinculo_id,event_id,sequencia,unidade_id,payload_sha256) VALUES (?,?,?,?,?)"""
+        e=create_edition(self.db);publish(self.db,e);b=bind(self.db,e)
+        self.db.execute("UPDATE lms_matriculas SET status='CONCLUIDO' WHERE id=100")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(event_sql,(b,'after-completion',1,'intro','a'*64))
+        self.db.execute("UPDATE lms_matriculas SET status='EM_ANDAMENTO' WHERE id=100")
+        self.db.execute("UPDATE lms_matricula_ciclos SET ciclo_atual=0 WHERE id=1000")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(event_sql,(b,'old-cycle',1,'intro','a'*64))
+        self.db.execute("UPDATE lms_matricula_ciclos SET ciclo_atual=1 WHERE id=1000")
+        self.db.execute("UPDATE lms_native_edicoes SET status='REVOKED' WHERE id=?",(e,))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(event_sql,(b,'revoked',1,'intro','a'*64))
+
+    def test_attempt_writes_rejected_after_course_unpublished(self):
+        e=create_edition(self.db);publish(self.db,e);b=bind(self.db,e)
+        self.db.execute("UPDATE lms_cursos SET publicado=0 WHERE id=10")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("""INSERT INTO lms_native_tentativas(vinculo_id,tentativa_numero,
+               answers_json,answers_sha256,policy,score_pct,assessment_satisfied)
+               VALUES (?,?,?,?,?,?,?)""",(b,1,'[]','a'*64,'FORMATIVE',None,1))
 
     def test_private_attempt_sequence_status_and_immutability(self):
         e=create_edition(self.db);publish(self.db,e);b=bind(self.db,e)
