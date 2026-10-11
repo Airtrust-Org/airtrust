@@ -37,34 +37,35 @@ describe('Native staging learner — evidence-only interaction', () => {
   beforeEach(() => api.fetchWithAuth.mockReset());
 
   it('starts, commits a lesson visit and submits only selections to server grading', async () => {
-    let sessionReads = 0;
-    api.fetchWithAuth.mockImplementation(async (url: string) => {
-      if (url.endsWith('/iniciar')) return respond({
+    const session = (visit: boolean, attempted: boolean) => respond({
+      success: true, data: {
+        ...scope, next_sequence: visit ? 2 : 1,
+        seen_lesson_ids: visit ? ['intro'] : [],
+        last_visited_unit_id: visit ? 'intro' : null,
+        latest_attempt: attempted ? {
+          attempt_number: 1, score_pct: null, assessment_satisfied: true,
+        } : null,
+      },
+    });
+    // Ordered mock receipts make unintended extra reads/writes visible
+    // instead of allowing any URL to accidentally consume the right receipt.
+    api.fetchWithAuth
+      .mockResolvedValueOnce(respond({
         success: true, data: { ciclo_id: 9, edition_sha256: editionHash,
           completion_supported: false, state: 'STARTED' },
-      });
-      if (url.endsWith('/checkpoints')) return respond({
+      }))
+      .mockResolvedValueOnce(session(false, false))
+      .mockResolvedValueOnce(respond({
         success: true, data: { committed_sequence: 1, edition_sha256: editionHash,
           completion_supported: false, state: 'APPLIED' },
-      });
-      if (url.endsWith('/tentativas')) return respond({
+      }))
+      .mockResolvedValueOnce(session(true, false))
+      .mockResolvedValueOnce(respond({
         success: true, data: { attempt_number: 1, edition_sha256: editionHash,
           completion_supported: false, state: 'APPLIED',
           score_pct: null, assessment_satisfied: true },
-      });
-      if (url.endsWith('/sessao')) {
-        sessionReads += 1;
-        return respond({ success: true, data: {
-          ...scope, next_sequence: sessionReads >= 2 ? 2 : 1,
-          seen_lesson_ids: sessionReads >= 2 ? ['intro'] : [],
-          last_visited_unit_id: sessionReads >= 2 ? 'intro' : null,
-          latest_attempt: sessionReads >= 3 ? {
-            attempt_number: 1, score_pct: null, assessment_satisfied: true,
-          } : null,
-        } });
-      }
-      throw new Error('Unexpected request: ' + url);
-    });
+      }))
+      .mockResolvedValueOnce(session(true, true));
     render(<NativeStagingLearnerControls
       matriculaId={101} cycleId={9} editionHash={editionHash}
       course={course} initialSession={initialSession}
@@ -98,7 +99,8 @@ describe('Native staging learner — evidence-only interaction', () => {
     expect(attempt).toEqual({ attemptNumber: 1,
       answers: [{ questionId: 'q1', optionId: 'a' }] });
     expect(JSON.stringify(attempt)).not.toMatch(/correctOptionId|score_pct|assessment_satisfied/);
-    expect(sessionReads).toBe(3);
+    expect(api.fetchWithAuth.mock.calls.filter(([url]) => typeof url === 'string' && url.endsWith('/sessao'))).toHaveLength(3);
+    expect(api.fetchWithAuth).toHaveBeenCalledTimes(6);
   });
 
   it('locks subsequent writes if start receipt conflicts with pinned edition', async () => {
