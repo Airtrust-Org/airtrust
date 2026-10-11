@@ -23,6 +23,12 @@ app.use('*', auth());
 
 app.get('/matriculas/:matriculaId/admissao', async (c) => {
   c.header('Cache-Control', 'private, no-store');
+  const empresaId = getEmpresaIdSafe(c);
+  // Admission metadata is part of the Native pilot. Do not expose it to
+  // production or non-allowlisted tenants before the Native catalog is live.
+  if (!canPreviewNativeInStaging(c.env, empresaId)) {
+    return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED' }, 404);
+  }
   const rawId = c.req.param('matriculaId');
   if (!/^[1-9][0-9]{0,15}$/.test(rawId)) {
     return c.json({ success: false, code: 'NATIVE_INVALID_ENROLLMENT_CONTEXT' }, 400);
@@ -32,7 +38,7 @@ app.get('/matriculas/:matriculaId/admissao', async (c) => {
   try {
     const admission = await resolveNativeEnrollmentAdmission({
       db: c.env.DB,
-      empresaId: getEmpresaIdSafe(c),
+      empresaId,
       matriculaId: Number(rawId),
       actorUserId: actorUserId as number,
     });
