@@ -19,7 +19,8 @@ MEDIA_MIME = {
     '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
     '.webp': 'image/webp', '.mp4': 'video/mp4', '.webm': 'video/webm',
 }
-IDENTIFIER = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}
+IDENTIFIER = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$')
+MAX_NATIVE_PREVIEW_ASSET_BYTES = 12 * 1024 * 1024
 
 
 class NativeCompileError(ValueError):
