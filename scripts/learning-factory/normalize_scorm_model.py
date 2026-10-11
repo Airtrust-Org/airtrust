@@ -72,6 +72,21 @@ def normalize_specialized_course_model(model: dict) -> dict:
         'rule_exception', 'scenario', 'quiz', 'compare', 'process', 'bowtie',
         'lesson', 'assessment',
     }
+    # New authoring fields require deliberate review, not accidental dropping.
+    supported_fields = {
+        'id', 'module', 'title', 'kind', 'source', 'kicker', 'subtitle',
+        'objective', 'outcomes', 'ordinal', 'media', 'lead', 'cards',
+        'intro', 'steps', 'callout', 'conceptNodes', 'headers', 'rows',
+        'items', 'context', 'question', 'scenarioOptions', 'scenarioCorrect',
+        'requiredDecision', 'questions', 'columns', 'center', 'left', 'right',
+        'chapter', 'image', 'caption', 'bullets', 'layout', 'gateItems',
+        'choices', 'hotspots',
+    }
+    unexpected = {
+        key for slide in original_slides if isinstance(slide, dict)
+        for key in slide if key not in supported_fields
+    }
+    need(not unexpected, 'SPECIALIZED_NEW_FIELDS_REQUIRE_MAPPING')
     total_missing_feedback = 0
     spatial_hotspots = 0
     for source in original_slides:
