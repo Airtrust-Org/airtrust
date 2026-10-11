@@ -50,7 +50,7 @@ function ProtectedNativeMedia({ asset, type, alt, fetchAsset }: {
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [asset.id, asset.path, asset.sha256, asset.mime, fetchAsset]);
+  }, [asset, fetchAsset]);
 
   if (!href) {
     return <p role="status">{failed ? 'Mídia indisponível' : 'Carregando mídia'}: {alt}</p>;
