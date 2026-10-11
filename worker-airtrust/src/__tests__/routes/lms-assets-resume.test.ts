@@ -8,6 +8,22 @@ import {
   buildScormLaunchState,
 } from '../../routes/lms-assets';
 
+describe('legacy SCORM launch must not open Native evidence courses', () => {
+  it('rejects Native physical format after scoped enrollment auth and before storage/runtime', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-assets.ts'), 'utf8');
+    const begin = source.indexOf("app.get('/scorm/launch/:matricula_id'");
+    const end = source.indexOf("app.get('/scorm/preview/:curso_id'", begin);
+    expect(begin).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(begin);
+    const launch = source.slice(begin, end);
+    expect(launch).toContain('c.tipo_conteudo');
+    expect(launch).toContain('c.empresa_id = m.empresa_id');
+    expect(launch).toContain('matricula.tipo_conteudo?.trim().toLowerCase()');
+    expect(launch.indexOf("=== 'native'")).toBeLessThan(launch.indexOf('resolveScormLaunchFile('));
+    expect(launch.indexOf("=== 'native'")).toBeLessThan(launch.indexOf('FROM lms_progresso_scorm'));
+  });
+});
+
 describe('SCORM resume restore helpers', () => {
   it('parseia marcadores numericos simples usados por alguns pacotes AW', () => {
     expect(parseScormLocationMarker('238')).toEqual({ current: 238, total: null });
