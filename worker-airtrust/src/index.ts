@@ -146,6 +146,7 @@ import adminSimuladoresMatrizRemediationExecutorRoutes from './routes/admin-simu
 import adminEadCategoryReconciliationRoutes from './routes/admin-ead-category-reconciliation';
 import lmsCursosRoutes from './routes/lms-cursos';
 import lmsMatriculasRoutes from './routes/lms-matriculas';
+import lmsNativeRoutes from './routes/lms-native';
 import lmsMatriculasMelManutencaoRoutes from './routes/lms-matriculas-mel-manutencao';
 import lmsMatriculasCompletionDiagnosticsRoutes from './routes/lms-matriculas-completion-diagnostics';
 import lmsAssetsRoutes from './routes/lms-assets';
@@ -798,6 +799,7 @@ app.route('/api/notificacoes', notificacoesConvocacaoRoutes);
 app.route('/api/lms/cursos', lmsCursosRoutes);
 app.route('/api/lms/matriculas', lmsMatriculasCompletionDiagnosticsRoutes);
 app.route('/api/lms/matriculas', lmsMatriculasRoutes);
+app.route('/api/lms/native', lmsNativeRoutes);
 app.route('/api/lms/matriculas/mel-manutencao', lmsMatriculasMelManutencaoRoutes);
 app.route('/api/lms', lmsProgressoRoutes);
 app.route('/api/lms', lmsAssetsRoutes);
