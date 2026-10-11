@@ -205,17 +205,29 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
     native = {
         'schema': 'AIRTRUST_NATIVE_COURSE_V1',
         'courseId': course_id,
-        'packageVersion': 'v-' + archive_sha[:24],
+        'packageVersion': 'pending-candidate-digest',
         'title': title, 'locale': 'pt-BR',
         'policy': {'mode': 'SCORED', 'masteryScore': policy_score},
         'assets': assets, 'units': units, 'questions': questions,
         'references': references,
     }
+    # Content-address the *converted artifact*, not only its SCORM source.
+    # A converter update or correction to a question must change the version
+    # even when the uploaded SCORM archive bytes are identical.
+    canonical = json.dumps(
+        {'compiler': 'airtrust-native-compiler-v1', 'artifact': {
+            k: v for k, v in native.items() if k != 'packageVersion'
+        }},
+        ensure_ascii=False, sort_keys=True, separators=(',', ':'),
+    ).encode('utf-8')
+    native_sha = hashlib.sha256(canonical).hexdigest()
+    native['packageVersion'] = 'n-' + native_sha[:32]
     report = {
         'status': 'REQUIRES_PEDAGOGICAL_AND_TECHNICAL_REVIEW',
         'publishable': False,
         'originalPackageVersion': version,
         'originalArchiveSha256': archive_sha,
+        'nativeCandidateSha256': native_sha,
         'unitsConverted': len(units),
         'questionsConverted': len(questions),
         'assessmentQuestions': sum(len(u['questionIds']) for u in units if u['kind'] == 'assessment'),
