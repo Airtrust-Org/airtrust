@@ -14,7 +14,7 @@ const course: NativeLearnerCourse = {
   assets: [{ id: 'hero', path: 'media/hero.webp', sha256: 'a'.repeat(64), mime: 'image/webp' }],
   units: [
     {
-      id: 'intro', title: 'Introdução', kind: 'lesson', questionIds: [],
+      id: 'intro', title: 'Introdução', kind: 'lesson', questionIds: [], sourceRefs: ['NR6'],
       blocks: [
         { type: 'heading', text: 'Segurança no trabalho' },
         { type: 'paragraph', text: '<img src=x onerror=alert(1)>' },
@@ -38,6 +38,7 @@ describe('NativeCoursePreview — display only', () => {
     const resolve = vi.fn(() => '/api/lms/native/assets/hero');
     const { container } = render(<NativeCoursePreview course={course} resolveAssetHref={resolve} />);
     expect(screen.getByRole('heading', { name: 'NR-6 — EPI' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Referências da unidade' })).toHaveTextContent('NR6');
     expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
     expect(container.querySelector('img[onerror]')).toBeNull();
     expect(screen.getByRole('img', { name: 'Capacete e EPI' }).getAttribute('src'))
