@@ -78,9 +78,8 @@ BEGIN
        AND c.tipo_conteudo='native' AND c.deleted_at IS NULL
   );
   SELECT RAISE(ABORT,'NATIVE_EDITION_R2_SCOPE') WHERE
-    substr(NEW.r2_prefix,1,length('lms/native/' || NEW.empresa_id || '/' || NEW.curso_id || '/')) !=
-    ('lms/native/' || NEW.empresa_id || '/' || NEW.curso_id || '/') OR
-    instr(NEW.r2_prefix,char(92))>0;
+    NEW.r2_prefix != ('lms/native/' || NEW.empresa_id || '/' ||
+                      NEW.curso_id || '/' || NEW.artifact_sha256 || '/');
   SELECT RAISE(ABORT,'NATIVE_EDITION_REVIEW_GATE') WHERE
     NEW.status!='DRAFT' OR NEW.reviewed_at IS NOT NULL OR NEW.published_at IS NOT NULL;
 END;
