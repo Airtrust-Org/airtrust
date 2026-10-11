@@ -106,6 +106,16 @@ Ambas as rotas exigem matrícula própria, edição imutável, `mode=LEARN`, for
 
 **Limitações funcionais intencionais:** ainda não há start governado para matrículas `NAO_INICIADO`, sincronização operacional de progresso percentual, retomada offline assinada, validação real do consumo de vídeo nem finalização pelo `completeLmsMatricula`. Estas rotas **não** equivalem a curso operacional. O código e testes são preparação para E2E de staging, sem ativação no ambiente remoto.
 
+## Consulta autenticada de sessão e retomada (somente leitura)
+
+`GET /api/lms/native/matriculas/:matriculaId/sessao` é uma nova rota staging-only, sob o `auth()` existente e a allowlist exata `NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS`. Nunca é acessível em produção nem consulta D1/R2 com o flag desabilitado. Exige matrícula própria, edição publicada e JSON **privado** com SHA-256 e schema validados. Consulta o ledger do ciclo atual, verifica ordem/identificadores/unidades e recalcula a última avaliação internamente com gabarito privado.
+
+A resposta traz apenas `edition_sha256`, `ciclo_id`, `mode`, `next_sequence`, `seen_lesson_ids`, `last_visited_unit_id`, `total_lessons` e um resumo limitado da última tentativa (número, nota e aprovação da avaliação). **Não expõe eventos brutos, answers_json, IDs de respostas escolhidas, gabaritos, feedback privado, readiness de conclusão, qualificação ou certificados.** Retorna `completion_supported=false` para não sugerir que este fluxo certifica o aluno.
+
+A prévia React consulta primeiro o curso e depois esse estado. Só aceita a retomada se **matrícula, ciclo, SHA da edição e modo coincidirem** e todas as unidades referenciadas pertencerem ao curso recuperado. Se alguma verificação falhar, não usa progresso parcial nem mídias; caso válido, abre diretamente a última unidade visitada, sem carregar antes a mídia da primeira página. A interface identifica a contagem como *registros de visita*, nunca como conclusão pedagógica.
+
+**Escopo:** retomada técnica de navegação na prévia, sem gravação ou status oficial no LMS. Persistência entre dispositivos somente poderá ser comprovada no D1/R2 de staging **após** migrar e publicar o pacote de teste no fluxo governado. Não é retomada offline assinada nem implantação em produção.
+
 ## Aceitação funcional antes de matrícula real
 
 - upload/revisão de candidato Native, versão por hash e reabertura da mesma edição em nova sessão;
