@@ -15,6 +15,8 @@ import stat
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile, BadZipFile
 
+from normalize_scorm_model import normalize_specialized_course_model, SpecializedModelError
+
 MAX_ENTRIES = 3000
 MAX_UNCOMPRESSED = 350 * 1024 * 1024
 MAX_DATA_FILE = 8 * 1024 * 1024
@@ -84,7 +86,11 @@ def extract_draft(source: Path, destination: Path) -> dict:
             data = source_json(archive, 'course_data.js')
             if model is None and data is None:
                 raise ConversionError('UNSUPPORTED_AUTHORING_FORMAT')
-            authored = data if isinstance(data, dict) and isinstance(data.get('slides'), list) else model
+            authored = data if isinstance(data, dict) and isinstance(data.get('slides'), list) else None
+            # Special authoring formats are explicitly normalized; their
+            # private originals remain in legacyAuthoringModel for QA.
+            if authored is None and isinstance(model, dict):
+                authored = normalize_specialized_course_model(model)
             if not isinstance(authored, dict):
                 raise ConversionError('MISSING_SLIDES')
             slides = authored.get('slides')
@@ -128,6 +134,8 @@ def extract_draft(source: Path, destination: Path) -> dict:
                 'authoringSources': authored.get('sources') if isinstance(authored.get('sources'), list) else [],
                 'authoringMasteryScore': authored.get('masteryScore', (model or {}).get('masteryScore', (model or {}).get('passingScore'))),
                 'legacyAuthoringModel': model,
+                'specializedAdapter': authored.get('adapter'),
+                'adapterReview': authored.get('adapterReview'),
                 'media': [],
                 'reviewReasons': [
                     'Legacy interaction and evaluation semantics must be mapped and verified',
