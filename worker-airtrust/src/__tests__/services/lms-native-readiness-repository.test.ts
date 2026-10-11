@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readNativeCanonicalReadiness } from '../../services/lms-native-readiness-repository';
+import { readNativeCanonicalReadiness, readNativeLearnerSession } from '../../services/lms-native-readiness-repository';
 import { validateNativeCourseArtifact } from '../../lib/lms/lms-native-course-contract';
 import type { NativeSessionScope } from '../../lib/lms/lms-native-evidence-domain';
 
@@ -20,7 +20,7 @@ async function digest(input: string) {
   return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 type Attempt = {
-  id: number; answers_json: string; answers_sha256: string;
+  id: number; tentativa_numero: number; answers_json: string; answers_sha256: string;
   policy: string; score_pct: number | null; assessment_satisfied: number;
 };
 function dbMock(settings: {
@@ -62,7 +62,7 @@ const run = (db: D1Database, actorUserId=12, override: Partial<NativeSessionScop
 describe('Native V1 persisted-readiness bridge (read only)', () => {
   it('recomputes correct private quiz grade from persisted answers, then allows readiness', async () => {
     const attempt: Attempt = {
-      id: 80, answers_json: answers, answers_sha256: await digest(answers),
+      id: 80, tentativa_numero: 2, answers_json: answers, answers_sha256: await digest(answers),
       policy: 'SCORED', score_pct: 100, assessment_satisfied: 1,
     };
     const { db, calls } = dbMock({ attempt });
@@ -83,7 +83,7 @@ describe('Native V1 persisted-readiness bridge (read only)', () => {
 
   it('rejects tampered answer hashes without exposing the answer key', async () => {
     const { db } = dbMock({ attempt: {
-      id: 80, answers_json: answers, answers_sha256: 'f'.repeat(64),
+      id: 80, tentativa_numero: 2, answers_json: answers, answers_sha256: 'f'.repeat(64),
       policy: 'SCORED', score_pct: 100, assessment_satisfied: 1,
     } });
     await expect(run(db)).rejects.toMatchObject({ code: 'NATIVE_READ_ATTEMPT_HASH_CONFLICT' });
@@ -95,7 +95,7 @@ describe('Native V1 persisted-readiness bridge (read only)', () => {
       { questionId: 'exam-question-001', optionId: 'option-1' },
     ]);
     const { db } = dbMock({ attempt: {
-      id: 80, answers_json: wrong, answers_sha256: await digest(wrong),
+      id: 80, tentativa_numero: 2, answers_json: wrong, answers_sha256: await digest(wrong),
       policy: 'SCORED', score_pct: 100, assessment_satisfied: 1,
     } });
     await expect(run(db)).rejects.toMatchObject({ code: 'NATIVE_READ_GRADE_RECONCILIATION_CONFLICT' });
@@ -123,14 +123,58 @@ describe('Native V1 persisted-readiness bridge (read only)', () => {
     }
   });
 
+  it('projects ordered learner checkpoint state but never discloses private answers', async () => {
+    const attempt: Attempt = {
+      id: 80, tentativa_numero: 2,
+      answers_json: answers, answers_sha256: await digest(answers),
+      policy: 'SCORED', score_pct: 100, assessment_satisfied: 1,
+    };
+    const { db, calls } = dbMock({ attempt });
+    const result = await readNativeLearnerSession({ db, actorUserId: 12, scope, artifact });
+    expect(result.summary).toEqual({
+      editionHash: scope.artifactHash,
+      cicloId: 1000,
+      mode: 'LEARN',
+      nextSequence: 2,
+      seenLessonIds: ['opening'],
+      lastVisitedUnitId: 'opening',
+      totalLessons: 1,
+      latestAttempt: {
+        attemptNumber: 2, scorePct: 100, assessmentSatisfied: true,
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('option-2');
+    expect(serialized).not.toContain('correctOptionId');
+    expect(serialized).not.toContain('answers_json');
+    expect(calls.every((c) => c.query.trimStart().startsWith('SELECT'))).toBe(true);
+  });
+
+  it('uses REVIEW mode for a completed enrollment without changing progress', async () => {
+    const { db } = dbMock({ binding: { id: 41, status: 'CONCLUIDO' }, events: [] });
+    const { summary, readiness } = await readNativeLearnerSession({ db, actorUserId: 12, scope, artifact });
+    expect(summary).toMatchObject({ mode: 'REVIEW', nextSequence: 1, seenLessonIds: [] });
+    expect(readiness.reason).toBe('NOT_ACTIVE');
+  });
+
+  it('rejects duplicate event identifiers in the persisted ledger', async () => {
+    const events = [
+      { event_id: 'event-1', sequencia: 1, unidade_id: 'opening' },
+      { event_id: 'event-1', sequencia: 2, unidade_id: 'opening' },
+    ];
+    const { db } = dbMock({ events });
+    await expect(readNativeLearnerSession({ db, actorUserId: 12, scope, artifact }))
+      .rejects.toMatchObject({ code: 'NATIVE_READ_INVALID_EVENT_LEDGER' });
+  });
+
   it('refuses forged full coverage when the event sequence has a gap', async () => {
     const attempt: Attempt = {
-      id: 80, answers_json: answers, answers_sha256: await digest(answers),
+      id: 80, tentativa_numero: 2, answers_json: answers, answers_sha256: await digest(answers),
       policy: 'SCORED', score_pct: 100, assessment_satisfied: 1,
     };
     const { db } = dbMock({ attempt, events: [{ event_id: 'visit-2', sequencia: 2, unidade_id: 'opening' }] });
-    await expect(run(db)).resolves.toMatchObject({
-      readyForCanonicalCompletion: false, reason: 'LESSON_EVIDENCE_MISSING',
+    await expect(run(db)).rejects.toMatchObject({
+      code: 'NATIVE_READ_INVALID_EVENT_LEDGER',
     });
   });
 });
