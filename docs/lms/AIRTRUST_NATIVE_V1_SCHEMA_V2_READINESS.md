@@ -77,6 +77,17 @@ python3 scripts/learning-factory/stage_native_r2_package.py \
 
 O conteúdo contém **gabaritos privados**, portanto o diretório de saída não pode ser colocado em GitHub, Drive aberto, Pages ou storage público. A ferramenta verifica digest do JSON e das mídias, impede overwrite e symlinks e rejeita mídias acima do limite de 12 MiB suportado pela prévia atual. Não executa JavaScript de SCORM. Mesmo quando a montagem funciona, `publishable=false` e `remoteUploadPerformed=false`; o catálogo de revisões e autorizações é uma etapa posterior. Cópia local não prova aprendizagem, matrícula ou certificação.
 
+## Barreiras de compatibilidade com o LMS legado
+
+Antes de liberar `tipo_conteudo='native'` no catálogo, o Worker deve impedir que rotas antigas interpretem esse formato como conteúdo informativo ou SCORM/H5P:
+
+- `POST /api/lms/matriculas/:id/finalizar`: a middleware de integridade responde `NATIVE_CANONICAL_EVIDENCE_REQUIRED`, sem inferir conclusão a partir de 100% de páginas.
+- `PATCH /api/lms/matriculas/:id/status` solicitando CONCLUIDO: a middleware bloqueia a conclusão administrativa genérica de um curso Native, independentemente do papel, até existir finalização nativa governada.
+- `POST /api/lms/matriculas/scorm/commit` e `POST /api/lms/xapi/statements`: além de bloquear qualquer sinal de conclusão nativa, os **handlers legados de gravação** também rejeitam eventos parciais. Um SCORM `incomplete` ou statement xAPI `experienced` não pode contaminar progresso, notas ou histórico do novo formato.
+- `PATCH /api/lms/matriculas/:id/progresso`: rejeita porcentagens e slides escolhidos pelo navegador em matrícula Native (`NATIVE_CHECKPOINT_REQUIRED`); aceita apenas os formatos legados autorizados conforme o contrato existente.
+
+Os testes focados de middleware e handlers verificam estas barreiras. A **conclusão Native futura** terá de passar por um ponto de entrada dedicado que obtenha a matrícula, ciclo e edição do servidor, revalide as evidências imutáveis e delegue a persistência ao `completeLmsMatricula` sem enfraquecer a política existente. Estes bloqueios não equivalem à implementação desse ponto de entrada; ele continua deliberadamente indisponível.
+
 ## Aceitação funcional antes de matrícula real
 
 - upload/revisão de candidato Native, versão por hash e reabertura da mesma edição em nova sessão;
