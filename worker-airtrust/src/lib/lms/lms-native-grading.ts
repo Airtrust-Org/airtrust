@@ -76,6 +76,6 @@ export function evaluateNativeAssessment(
     answered,
     total,
     scorePct,
-    assessmentSatisfied: scorePct >= course.policy.masteryScore,
+    assessmentSatisfied: correct * 100 >= course.policy.masteryScore * total,
   };
 }
