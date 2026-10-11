@@ -54,7 +54,7 @@ async function fetchMeasuredJson(url, accessToken) {
     try {
       json = rawText ? JSON.parse(rawText) : null;
     } catch {
-      throw new Error(`${url} retornou corpo nao JSON (${response.status})`);
+      throw new Error(`STAGING_READONLY_NON_JSON_RESPONSE_HTTP_${response.status}`);
     }
     return { status: response.status, json, elapsedMs, bytes };
   } finally {
