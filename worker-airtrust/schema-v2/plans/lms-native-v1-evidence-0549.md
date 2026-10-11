@@ -8,7 +8,7 @@ O aplicativo Native V1 **não recebe autorização para matrícula ou emissão d
 
 ## Modelo persistido
 
-- `lms_native_edicoes`: empresa, curso, SHA-256 do artefato validado, versão, prefixo R2 escopado, estados DRAFT / REVIEWED / PUBLISHED / REVOKED. Sem substituir objeto publicado. Validação de identidade tenant/curso na inserção, prefixo R2 governado e transições limitadas. Publicação exige revisão e carimbo.
+- `lms_native_edicoes`: empresa, curso, SHA-256 do artefato validado, versão, prefixo R2 escopado, estados DRAFT / REVIEWED / PUBLISHED / REVOKED. Sem substituir objeto publicado. Validação de identidade tenant/curso na inserção, prefixo R2 **exatamente** `lms/native/{empresa_id}/{curso_id}/{artifact_sha256}/` (o hash corresponde aos bytes integrais de `native-private-candidate.json`), e transições limitadas. Publicação exige revisão e carimbo.
 - `lms_native_matricula_edicoes`: pin **imutável** da edição por empresa/matrícula/ciclo. Trigger valida vínculo atual da matrícula ao curso, tenant e edição publicada; UNIQUE impede troca silenciosa de versão durante uma matrícula/ciclo ativo.
 - `lms_native_eventos`: recibos de cobertura de unidade por matrícula/ciclo/edição, com hash de payload, event_id idempotente e sequência contígua; UNIQUE/eventos sem UPDATE/DELETE. O evento só é aceitável após as verificações do Worker sobre conteúdo e matrícula, e a gravação deve ser atômica.
 - `lms_native_tentativas`: tentativas de quiz/decisão e resultado de correção pelo Worker, sem gabarito persistido no registro do aluno. Dados de respostas são privados e devem ter limites/retenção governados. UNIQUE por tentativa/ciclo, sem UPDATE/DELETE.
