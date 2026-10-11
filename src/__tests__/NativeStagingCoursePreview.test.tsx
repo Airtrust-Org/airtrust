@@ -31,6 +31,16 @@ const payload = (extra: Record<string, unknown>={}) => ({
     mode: 'LEARN', completion_supported: false, course, ...extra,
   },
 });
+const resume = (extra: Record<string, unknown>={}) => ({
+  success: true,
+  data: {
+    matricula_id: 101, ciclo_id: 11, edition_sha256: 'b'.repeat(64),
+    mode: 'LEARN', completion_supported: false,
+    next_sequence: 2, seen_lesson_ids: ['intro'],
+    last_visited_unit_id: 'intro',
+    ...extra,
+  },
+});
 const response = (data: unknown) => new Response(JSON.stringify(data), {
   status: 200, headers: { 'Content-Type': 'application/json' },
 });
@@ -53,15 +63,17 @@ describe('Native pilot preview — authenticated read-only React', () => {
   it('requests one enrolled course and its media through the existing bearer-aware client', async () => {
     api.fetchWithAuth
       .mockResolvedValueOnce(response(payload()))
+      .mockResolvedValueOnce(response(resume()))
       .mockResolvedValueOnce(media());
     const { unmount } = render(<NativeStagingCoursePreview matriculaId={101} />);
     expect(await screen.findByRole('heading', { name: 'Treinamento NR-6' })).toBeInTheDocument();
     expect(await screen.findByRole('img', { name: 'Equipamento de proteção' })).toHaveAttribute(
       'src', 'blob:http://localhost/verified-asset',
     );
-    expect(api.fetchWithAuth).toHaveBeenCalledTimes(2);
+    expect(api.fetchWithAuth).toHaveBeenCalledTimes(3);
     expect(api.fetchWithAuth.mock.calls.map(([url]) => url)).toEqual([
       '/api/lms/native/matriculas/101/curso',
+      '/api/lms/native/matriculas/101/sessao',
       '/api/lms/native/matriculas/101/assets/hero',
     ]);
     expect(api.fetchWithAuth.mock.calls.every(([, opts]) =>
@@ -96,9 +108,56 @@ describe('Native pilot preview — authenticated read-only React', () => {
     expect(api.fetchWithAuth).not.toHaveBeenCalled();
   });
 
+  it('restores the last server-confirmed unit without inventing certification', async () => {
+    const twoUnits = {
+      ...course,
+      units: [...course.units, {
+        id: 'module2', title: 'Revisão de EPI', kind: 'lesson',
+        blocks: [{ type: 'paragraph', text: 'Conteúdo revisado' }], questionIds: [],
+      }],
+    };
+    api.fetchWithAuth
+      .mockResolvedValueOnce(response(payload({ course: twoUnits })))
+      .mockResolvedValueOnce(response(resume({
+        next_sequence: 3, seen_lesson_ids: ['intro', 'module2'],
+        last_visited_unit_id: 'module2',
+      })));
+    render(<NativeStagingCoursePreview matriculaId={101} />);
+    expect(await screen.findByRole('heading', { name: 'Revisão de EPI' })).toBeInTheDocument();
+    expect(screen.getByText(/Aulas com registro de visita no servidor: 2/)).toBeInTheDocument();
+    expect(screen.getByText(/não comprovam conclusão ou aprovação/)).toBeInTheDocument();
+    expect(api.fetchWithAuth).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed when resume belongs to another edition or enrollment cycle', async () => {
+    for (const invalid of [{ ciclo_id: 12 }, { edition_sha256: 'c'.repeat(64) }]) {
+      api.fetchWithAuth.mockReset();
+      api.fetchWithAuth
+        .mockResolvedValueOnce(response(payload()))
+        .mockResolvedValueOnce(response(resume(invalid)));
+      const result = render(<NativeStagingCoursePreview matriculaId={101} />);
+      expect(await screen.findByRole('alert')).toHaveTextContent('Prévia nativa indisponível');
+      expect(screen.queryByRole('heading', { name: 'Treinamento NR-6' })).toBeNull();
+      result.unmount();
+    }
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('rejects a resume snapshot with an unknown visited unit', async () => {
+    api.fetchWithAuth
+      .mockResolvedValueOnce(response(payload()))
+      .mockResolvedValueOnce(response(resume({
+        seen_lesson_ids: ['not-this-course'], last_visited_unit_id: 'not-this-course',
+      })));
+    render(<NativeStagingCoursePreview matriculaId={101} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Prévia nativa indisponível');
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
   it('does not turn unauthorized binary responses into Blob URLs', async () => {
     api.fetchWithAuth
       .mockResolvedValueOnce(response(payload()))
+      .mockResolvedValueOnce(response(resume()))
       .mockResolvedValueOnce(new Response('Denied', { status: 403 }));
     render(<NativeStagingCoursePreview matriculaId={101} />);
     expect(await screen.findByRole('heading', { name: 'Treinamento NR-6' })).toBeInTheDocument();
