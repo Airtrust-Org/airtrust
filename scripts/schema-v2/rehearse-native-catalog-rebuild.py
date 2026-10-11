@@ -172,6 +172,29 @@ def rehearse_snapshot(snapshot: list, expected_hash: str,
             db.commit()
         except Exception:
             db.rollback()
+            if inject_fault_after_drop:
+                # Prove a failed DROP/RENAME series restored both its schema
+                # and its synthetic data. An exception alone is not proof.
+                restored=db.execute(
+                    "SELECT sql FROM sqlite_master WHERE name='lms_cursos'"
+                ).fetchone()
+                preserved=db.execute(
+                    'SELECT COUNT(*) FROM lms_cursos'
+                ).fetchone()[0]
+                dependencies=[
+                    db.execute('SELECT sql FROM sqlite_master WHERE name=?',
+                               (entry['name'],)).fetchone()
+                    for entry in indexes+triggers
+                ]
+                if (not restored or restored[0]!=original_ddl or
+                    preserved!=original_catalog_count or
+                    any(not actual or actual[0]!=entry['sql'] for actual,entry in
+                        zip(dependencies,indexes+triggers)) or
+                    db.execute('PRAGMA foreign_key_check').fetchall() or
+                    db.execute(
+                        "SELECT seq FROM sqlite_sequence WHERE name='lms_cursos'"
+                    ).fetchone()[0]!=original_seq):
+                    fail('CATALOG_INJECTED_ROLLBACK_INCOMPLETE')
             raise
         finally:
             db.execute('PRAGMA foreign_keys=ON')
