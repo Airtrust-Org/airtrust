@@ -23,7 +23,7 @@ export type NativeBlock =
 export type NativeUnit = {
   id: string;
   title: string;
-  kind: 'lesson' | 'assessment';
+  kind: 'lesson' | 'scenario' | 'assessment';
   blocks: NativeBlock[];
   questionIds: string[];
 };
@@ -194,11 +194,12 @@ export function validateNativeCourseArtifact(input: unknown): NativeCourseArtifa
     keys(unit, ['id', 'title', 'kind', 'blocks', 'questionIds']);
     id(unit.id);
     text(unit.title, 200);
-    if (unit.kind !== 'lesson' && unit.kind !== 'assessment') fail('NATIVE_INVALID_UNIT_KIND');
+    if (unit.kind !== 'lesson' && unit.kind !== 'scenario' && unit.kind !== 'assessment') fail('NATIVE_INVALID_UNIT_KIND');
     const questionIds = boundedArray(unit.questionIds, MAX_QUESTIONS, true).map(id);
     unique(questionIds);
     if (unit.kind === 'lesson' && questionIds.length > 0) fail('NATIVE_QUESTIONS_IN_LESSON');
     if (unit.kind === 'assessment' && !questionIds.length) fail('NATIVE_EMPTY_ASSESSMENT');
+    if (unit.kind === 'scenario' && !questionIds.length) fail('NATIVE_EMPTY_SCENARIO');
     if (questionIds.some((q) => !knownQuestions.has(q))) fail('NATIVE_UNKNOWN_QUESTION');
     referencedQuestions.push(...questionIds);
     const blocks = boundedArray(unit.blocks, 100, unit.kind === 'assessment');
@@ -228,7 +229,7 @@ export function validateNativeCourseArtifact(input: unknown): NativeCourseArtifa
   unique(units.map((unit) => unit.id));
   unique(referencedQuestions);
   if (referencedQuestions.length !== questions.length) fail('NATIVE_UNUSED_QUESTION');
-  if (policy.mode === 'SCORED' && !questions.length) fail('NATIVE_SCORED_WITHOUT_QUESTIONS');
+  if (policy.mode === 'SCORED' && !units.some((unit) => unit.kind === 'assessment')) fail('NATIVE_SCORED_WITHOUT_QUESTIONS');
   return raw as NativeCourseArtifact;
 }
 
