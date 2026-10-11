@@ -78,7 +78,7 @@ describe('Native integration admission endpoint — read only and tenant scoped'
   it('completed course admits review only, never re-enrollment', async () => {
     data = { ...base, status: 'CONCLUIDO' };
     const response = await fetch(req());
-    expect((await response.json()).data.mode).toBe('REVIEW');
+    expect((await response.json() as { data: { mode: string } }).data.mode).toBe('REVIEW');
   });
 
   it('denies another employee and does not leak the owner', async () => {
