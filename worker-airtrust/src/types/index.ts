@@ -42,6 +42,10 @@ export interface Env {
   // Staging-only pilot for Native V1 read-only learner course projection.
   // Exact CSV tenant IDs, absent/empty means OFF. Never enabled in production.
   NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS?: string;
+  // Independent opt-in for synthetic Native checkpoints/quiz writes in staging.
+  // Defaults OFF. An allowlisted tenant also requires Preview, Schema V2 and R2 pin.
+  // Do not activate without governed staging authorization and E2E validation.
+  NATIVE_LEARNER_WRITE_ENABLED_TENANTS?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
