@@ -85,6 +85,8 @@ export async function run() {
   const parity = pagesParity(prefix, productionSha);
   const mainDifference = await read(API + '/compare/' + productionSha + '...' + mainSha);
   const { prs, truncated } = await recentMergedPulls(Date.now() - 14 * 86400_000);
+  const openPulls = await read(API + '/pulls?state=open&sort=updated&direction=desc&per_page=100');
+  const openNumbers = openPulls.map((pr) => pr.number);
   const rows = [];
   for (let i = 0; i < prs.length; i += 6) {
     rows.push(...await Promise.all(prs.slice(i, i + 6).map((pr) => classify(pr, productionSha))));
@@ -100,11 +102,14 @@ export async function run() {
     '- Pages entry SHA prefix: ' + (prefix || 'unknown'),
     '- Worker/Pages prefix parity: ' + parity,
     '- main against production: ' + mainDifference.status,
+    '- open PRs (not merged; never treat as released): ' + openNumbers.length,
+    '- open PR pagination possibly incomplete: ' + (openNumbers.length === 100),
     '- merged PRs checked (14 days): ' + rows.length,
     '- code ancestry confirmed in production: ' + (groups.CODE_IN_PRODUCTION || []).length,
     '- merged PRs NOT in published source: ' + unreleased.length,
     '- PR ancestry unverified: ' + uncertain.length,
     '- truncated audit window: ' + truncated,
+    '- open PR numbers: ' + openNumbers.map((n) => '#' + n).join(', '),
     '',
     '| PR | Code ancestry |',
     '| --- | --- |',
@@ -119,6 +124,7 @@ export async function run() {
   process.stdout.write(JSON.stringify({
     main_sha: mainSha, production_sha: productionSha, pages_sha_prefix: prefix,
     parity, main_relation: mainDifference.status,
+    open_not_merged: openNumbers, open_scan_truncated: openNumbers.length === 100,
     checked: rows.length, confirmed: (groups.CODE_IN_PRODUCTION || []).length,
     merged_not_deployed: unreleased, unverified: uncertain, truncated,
   }) + '\n');
