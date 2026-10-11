@@ -93,7 +93,7 @@ export async function startNativeEnrollment(params: {
     throw new NativeEnrollmentStartError('NATIVE_START_INVALID_CONTEXT');
   }
 
-  const binds = [matriculaId, empresaId, cursoId, actorUserId, cicloId, editionHash] as const;
+  const binds = [actorUserId, matriculaId, empresaId, cursoId, cicloId, editionHash] as const;
   // D1.batch is transactional; a failed assertion rolls back both writes.
   // Do not break this into separate .run() calls.
   let results: D1Result[];
