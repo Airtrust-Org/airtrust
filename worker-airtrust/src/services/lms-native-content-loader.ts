@@ -85,14 +85,24 @@ export async function loadNativePrivateCourse(params: {
     'FROM lms_native_matricula_edicoes b',
     'JOIN lms_native_edicoes ed ON ed.id=b.edicao_id',
     'AND ed.empresa_id=b.empresa_id AND ed.curso_id=b.curso_id',
+    'JOIN lms_matriculas m ON m.id=b.matricula_id',
+    'AND m.empresa_id=b.empresa_id AND m.curso_id=b.curso_id',
+    'AND m.deleted_at IS NULL',
+    'JOIN usuarios u ON u.funcionario_id=m.funcionario_id',
+    'AND u.id=? AND u.deleted_at IS NULL',
+    'JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id',
+    "AND c.tipo_conteudo='native' AND c.ativo=1 AND c.publicado=1",
+    'AND c.deleted_at IS NULL',
     'JOIN lms_matricula_ciclos cycle ON cycle.id=b.ciclo_id',
     'AND cycle.matricula_id=b.matricula_id AND cycle.empresa_id=b.empresa_id',
     'AND cycle.curso_id=b.curso_id AND cycle.deleted_at IS NULL AND cycle.ciclo_atual=1',
+    'AND cycle.funcionario_id=m.funcionario_id AND cycle.status=m.status',
+    "AND m.status IN ('NAO_INICIADO','EM_ANDAMENTO','CONCLUIDO')",
     'WHERE b.empresa_id=? AND b.matricula_id=? AND b.curso_id=?',
     "AND ed.status='PUBLISHED'",
     'LIMIT 1',
   ].join(' ')).bind(
-    admission.empresaId, admission.matriculaId, admission.cursoId,
+    params.actorUserId, admission.empresaId, admission.matriculaId, admission.cursoId,
   ).first<NativeEditionRow>();
 
   if (!row || !Number.isSafeInteger(row.ciclo_id) || row.ciclo_id <= 0) {
