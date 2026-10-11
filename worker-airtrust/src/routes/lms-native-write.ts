@@ -8,7 +8,7 @@
  * Does not update lms_matriculas, issue qualifications/certificates or claim
  * completed status. Native completion must pass a separate canonical gate.
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
 import { getEmpresaIdSafe } from './escalas-shared';
@@ -72,7 +72,7 @@ async function readSmallJson(c: { req: { header(name: string): string | undefine
   }
 }
 
-async function execute(c: Parameters<Parameters<typeof app.post>[1]>[0],
+async function execute(c: Context<{ Bindings: Env }>,
   kind: 'checkpoint' | 'attempt') {
   c.header('Cache-Control', 'private, no-store');
   const empresaId = getEmpresaIdSafe(c);
