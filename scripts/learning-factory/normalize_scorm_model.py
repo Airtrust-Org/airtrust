@@ -116,7 +116,7 @@ def normalize_specialized_course_model(model: dict) -> dict:
                 body.append(pair_text(item, 'SPECIALIZED_OUTCOME') if isinstance(item, dict)
                             else label(item, 'SPECIALIZED_OUTCOME', 4000))
         if source.get('bullets') is not None:
-            for item in list_of(source['bullets'], 'SPECIALIZED_BULLETS'):
+            for item in list_of(source['bullets'], 'SPECIALIZED_BULLETS', minimum=0):
                 body.append(label(item, 'SPECIALIZED_BULLET', 4000))
         if source.get('cards') is not None:
             for item in list_of(source['cards'], 'SPECIALIZED_CARDS'):
