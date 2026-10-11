@@ -155,6 +155,16 @@ A saída contém `draft/` e `candidate/` por curso, incluindo **gabaritos privad
 
 **Condição para encerrar a conversão:** executar o lote sobre todos os ZIPs originais em ambiente privado, revisar os resultados reais, conferir a paridade de aulas, interações, notas e imagens, corrigir os casos especiais e obter aprovação pedagógica/técnica. Testes sintéticos do lote não são homologação do conteúdo real. O vídeo de 18,7 MiB e as 10 justificativas ausentes de Resíduos continuam bloqueadores do respectivo curso.
 
+## Evidência real de schema em staging (2026-10-10, consultas somente leitura)
+
+A consulta direta ao D1 `airtrust-db-staging-baseline-20260701` confirmou que o CHECK de `lms_cursos.tipo_conteudo` ainda restringe os cinco formatos legados; as quatro tabelas `lms_native_*` da change 0549 **não existem** em staging. Foram inventariados a tabela do catálogo, seus **seis índices e cinco triggers**, além de **três tabelas com FKs** para `lms_cursos`: `lms_matriculas`, `lms_cursos_setores` e `lms_scorm_package_versions`.
+
+O snapshot capturado teve fingerprint SHA-256 `bb867870b5524b0dda21784a017fd0d3f855f116b3c8ff49fd947f05f80a89de` para os 12 objetos. A ferramenta `scripts/schema-v2/native-v1-catalog-readonly-preflight.mjs` foi testada contra esse snapshot e bloqueia qualquer drift; **não gera nem aplica SQL de reconstrução**. O plano de riscos e comandos read-only estão em `worker-airtrust/schema-v2/plans/lms-native-catalog-check-preparation.md`.
+
+A implementação de início de matrícula agora usa uma única transação `D1.batch()` para sincronizar `lms_matriculas.status` **e** `lms_matricula_ciclos.status`, exigindo invariantes antes e depois das duas atualizações. Sete testes SQLite executam o SQL real extraído do TypeScript e verificam rollback integral em falhas, drift, revogação e cross-tenant. O endpoint permanece duplamente gated e não está ativado remotamente.
+
+**Atenção:** o snapshot vale só para staging no momento da consulta. Não inferir paridade com produção, não reconstruir `lms_cursos` sem prova de FKs/índices/triggers/rollback, nem habilitar Native com Schema V2 ainda não aplicado.
+
 ## Aceitação funcional antes de matrícula real
 
 - upload/revisão de candidato Native, versão por hash e reabertura da mesma edição em nova sessão;
