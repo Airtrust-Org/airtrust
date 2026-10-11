@@ -25,6 +25,22 @@ def rehearse_additive_marker(snapshot: list, expected_hash: str) -> dict:
     ddl, indexes, triggers, fingerprint = parse_snapshot(snapshot, expected_hash)
     db = create_synthetic_db(ddl, indexes, triggers)
     try:
+        # The captured 0457 triggers reference qualification metadata tables
+        # beyond the original rebuild helper's minimal synthetic fixtures.
+        # Supply only their expected column *shapes* (no real records).
+        # This does not replace a governed review of real FK dependencies.
+        for table, columns in (
+            ('qualificacoes_tipos', (
+                'empresa_id INTEGER', 'categoria_id INTEGER', 'deleted_at TEXT',
+                'dominio_codigo TEXT',
+            )),
+            ('qualificacoes_categorias', (
+                'empresa_id INTEGER', 'ativo INTEGER', 'deleted_at TEXT',
+                'nome TEXT', 'dominio_codigo TEXT',
+            )),
+        ):
+            for column in columns:
+                db.execute(f'ALTER TABLE {table} ADD COLUMN {column}')
         old_seq = db.execute(
             "SELECT seq FROM sqlite_sequence WHERE name='lms_cursos'"
         ).fetchone()[0]
