@@ -179,6 +179,21 @@ class SpecializedCourseAdapterTests(unittest.TestCase):
                           [item for block in candidate['units'][1]['blocks']
                            if block['type'] == 'bullets' for item in block['items']])
 
+    def test_residuos_real_cover_has_legitimate_empty_bullets(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            model = residuos_model()
+            model['slides'][0]['bullets'] = []
+            normalized = normalize_specialized_course_model(model)
+            self.assertEqual(normalized['slides'][0]['kind'], 'lesson')
+            self.assertNotIn('bullets', normalized['slides'][0])
+            make_zip(root/'source.zip', model)
+            extract_draft(root/'source.zip', root/'draft')
+            draft = json.loads((root/'draft/native-import-draft.json').read_text())
+            course, report = compile_candidate(draft, root/'draft')
+            self.assertEqual(len(course['units']), 4)
+            self.assertFalse(report['publishable'])
+
     def test_unknown_specialized_model_fails_closed(self):
         model = sgso_model()
         model.pop('requiredSlideIds')
