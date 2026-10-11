@@ -1034,11 +1034,11 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     .prepare(
       `
       SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.data_inicio,
-        c.id AS curso_id, c.titulo, c.scorm_versao,
+        c.id AS curso_id, c.titulo, c.scorm_versao, c.tipo_conteudo,
         c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado
       FROM lms_matriculas m
-      JOIN lms_cursos c ON c.id = m.curso_id
-      WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL
+      JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
+      WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL AND c.deleted_at IS NULL
     `,
     )
     .bind(matriculaId, empresaId)
@@ -1051,6 +1051,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       curso_id: number;
       titulo: string;
       scorm_versao: string | null;
+      tipo_conteudo: string | null;
       scorm_package_r2_prefix: string | null;
       scorm_launch_file: string | null;
       ativo: number;
@@ -1072,6 +1073,8 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       throw new ApiError('Curso não disponível para este usuário', 403);
     }
   }
+  if (matricula.tipo_conteudo?.trim().toLowerCase() === 'native')
+    throw new ApiError('Curso nativo exige o player próprio.', 409);
   if (!matricula.scorm_launch_file)
     throw new ApiError('Este curso não tem conteúdo SCORM configurado', 400);
 
