@@ -125,6 +125,7 @@ def extract_draft(source: Path, destination: Path) -> dict:
                     'slideIds': ids, 'slides': slides,
                 },
                 'legacyCompletionManifest': completion,
+                'authoringSources': authored.get('sources') if isinstance(authored.get('sources'), list) else [],
                 'legacyAuthoringModel': model,
                 'media': [],
                 'reviewReasons': [
