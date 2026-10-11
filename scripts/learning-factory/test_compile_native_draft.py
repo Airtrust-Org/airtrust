@@ -62,6 +62,9 @@ class CompileNativeDraftTests(unittest.TestCase):
             self.assertFalse(report['publishable'])
             self.assertEqual(report['certification'], 'BLOCKED_UNTIL_LMS_STAGING_E2E')
             self.assertEqual(candidate['packageVersion'], 'n-' + report['nativeCandidateSha256'][:32])
+            self.assertEqual(report['artifactBytesSha256'], hashlib.sha256(
+                (json.dumps(candidate, ensure_ascii=False, indent=2) + '\n').encode('utf-8')
+            ).hexdigest())
 
     def test_compiled_candidate_matches_cross_runtime_golden_fixture(self):
         with tempfile.TemporaryDirectory() as d:
