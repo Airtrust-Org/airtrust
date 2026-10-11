@@ -22,6 +22,7 @@ import { getEmpresaIdOptional } from './escalas-shared';
 import type { Env, JwtPayload } from '../types';
 import { buildLmsContentSecurityPolicy } from '../lib/lms/security-headers';
 import { LMS_ASSET_TOKEN_COOKIE } from '../lib/lms/lms-asset-session';
+import { assertScormAssetEligibility, isPrivilegedRole } from '../lib/lms/lms-scorm-asset-eligibility';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -57,13 +58,6 @@ function shouldUseSecureAssetCookie(request: Request): boolean {
   } catch {
     return true;
   }
-}
-
-function isPrivilegedRole(rawRole: unknown): boolean {
-  const role = String(rawRole ?? '')
-    .trim()
-    .toLowerCase();
-  return ['admin', 'administrador', 'manager', 'gestor', 'instrutor', 'instructor'].includes(role);
 }
 
 export function parseScormLocationMarker(
@@ -555,10 +549,7 @@ app.post('/assets/session', auth(), async (c) => {
       }>();
 
     if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
-    // Never mint a SCORM media capability for a Native enrollment.
-    if (String(matricula.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
-      throw new ApiError('Curso nativo exige os assets do player próprio.', 409);
-    }
+    assertScormAssetEligibility(matricula.tipo_conteudo, 'Curso nativo exige os assets do player próprio.');
 
     const canManage = isPrivilegedRole(accessPayload.role);
     const callerFuncionarioId = Number(accessPayload.funcionario_id ?? 0);
@@ -707,10 +698,7 @@ async function ensureCourseAssetAccess(
   if (!curso) {
     throw new ApiError('Curso não encontrado', 404);
   }
-  // This shared guard also covers direct SCORM asset reads (including admin).
-  if (String(curso.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
-    throw new ApiError('Curso nativo exige os assets do player próprio.', 409);
-  }
+  assertScormAssetEligibility(curso.tipo_conteudo, 'Curso nativo exige os assets do player próprio.');
 
   if (canManage) {
     return curso;
@@ -1082,8 +1070,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       throw new ApiError('Curso não disponível para este usuário', 403);
     }
   }
-  if (matricula.tipo_conteudo?.trim().toLowerCase() === 'native')
-    throw new ApiError('Curso nativo exige o player próprio.', 409);
+  assertScormAssetEligibility(matricula.tipo_conteudo, 'Curso nativo exige o player próprio.');
   if (!matricula.scorm_launch_file)
     throw new ApiError('Este curso não tem conteúdo SCORM configurado', 400);
 
@@ -1199,9 +1186,7 @@ app.get('/scorm/preview/:curso_id', async (c) => {
     }>();
 
   if (!curso) throw new ApiError('Curso não encontrado', 404);
-  if (String(curso.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
-    throw new ApiError('Curso nativo não pode usar a prévia SCORM.', 409);
-  }
+  assertScormAssetEligibility(curso.tipo_conteudo, 'Curso nativo não pode usar a prévia SCORM.');
   assertCourseAssetToken(payload, curso.id, { preview: true });
   if (!curso.scorm_launch_file)
     throw new ApiError('Este curso não tem conteúdo SCORM configurado', 400);
