@@ -5,8 +5,8 @@
  * Requires TWO separate exact-tenant staging allowlists and an approved,
  * published, hash-pinned private edition. OFF by default.
  *
- * Does not update lms_matriculas, issue qualifications/certificates or claim
- * completed status. Native completion must pass a separate canonical gate.
+ * Start may atomically change NAO_INICIADO to EM_ANDAMENTO; no endpoint
+ * awards completion, qualifications or certificates.
  */
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
@@ -24,6 +24,7 @@ import {
 } from '../services/lms-native-attempt-writer';
 import { NativeCheckpointError } from '../lib/lms/lms-native-evidence-domain';
 import { NativeSubmissionError } from '../lib/lms/lms-native-grading';
+import { startNativeEnrollment, NativeEnrollmentStartError } from '../services/lms-native-enrollment-starter';
 
 const app = new Hono<{ Bindings: Env }>();
 const exactId = /^[1-9][0-9]{0,15}$/;
@@ -34,6 +35,7 @@ const CheckpointBody = z.object({
   sequence: z.number().int().min(1).max(10000),
   unitId: z.string().regex(smallId),
 }).strict();
+const StartBody = z.object({}).strict();
 const AttemptBody = z.object({
   attemptNumber: z.number().int().min(1).max(500),
   answers: z.array(z.object({
@@ -73,7 +75,7 @@ async function readSmallJson(c: { req: { header(name: string): string | undefine
 }
 
 async function execute(c: Context<{ Bindings: Env }>,
-  kind: 'checkpoint' | 'attempt') {
+  kind: 'start' | 'checkpoint' | 'attempt') {
   c.header('Cache-Control', 'private, no-store');
   const empresaId = getEmpresaIdSafe(c);
   if (!canWriteNative(c.env, empresaId)) {
@@ -94,8 +96,8 @@ async function execute(c: Context<{ Bindings: Env }>,
   catch {
     return c.json({ success: false, code: 'NATIVE_INVALID_INPUT' }, 400);
   }
-  const parsed = kind === 'checkpoint' ?
-    CheckpointBody.safeParse(input) : AttemptBody.safeParse(input);
+  const parsed = kind === 'start' ? StartBody.safeParse(input) :
+    kind === 'checkpoint' ? CheckpointBody.safeParse(input) : AttemptBody.safeParse(input);
   if (!parsed.success) {
     return c.json({ success: false, code: 'NATIVE_INVALID_INPUT' }, 400);
   }
@@ -116,6 +118,17 @@ async function execute(c: Context<{ Bindings: Env }>,
       cursoId: verified.cursoId,
       artifactHash: verified.editionHash,
     };
+    if (kind === 'start') {
+      const result = await startNativeEnrollment({
+        db: c.env.DB, actorUserId, empresaId,
+        matriculaId: Number(matriculaRaw), cursoId: verified.cursoId,
+        cicloId: verified.cicloId, editionHash: verified.editionHash,
+      });
+      return c.json({ success: true, data: {
+        state: result.state, ciclo_id: result.cicloId,
+        edition_sha256: result.editionHash, completion_supported: false,
+      } }, result.state === 'STARTED' ? 201 : 200);
+    }
     if (kind === 'checkpoint' && 'eventId' in parsed.data) {
       const result = await commitNativeLessonCheckpoint({
         db: c.env.DB, actorUserId, artifact: verified.artifact, scope,
@@ -154,13 +167,14 @@ async function execute(c: Context<{ Bindings: Env }>,
     if (error instanceof NativeSubmissionError || error instanceof NativeCheckpointError) {
       return c.json({ success: false, code: 'NATIVE_INVALID_EVIDENCE' }, 409);
     }
-    if (error instanceof NativeCheckpointWriteError || error instanceof NativeAttemptWriteError) {
+    if (error instanceof NativeEnrollmentStartError || error instanceof NativeCheckpointWriteError || error instanceof NativeAttemptWriteError) {
       return c.json({ success: false, code: 'NATIVE_EVIDENCE_CONFLICT' }, 409);
     }
     throw error;
   }
 }
 
+app.post('/matriculas/:matriculaId/iniciar', (c) => execute(c, 'start'));
 app.post('/matriculas/:matriculaId/checkpoints', (c) => execute(c, 'checkpoint'));
 app.post('/matriculas/:matriculaId/tentativas', (c) => execute(c, 'attempt'));
 
