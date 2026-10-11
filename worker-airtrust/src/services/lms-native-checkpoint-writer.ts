@@ -1,9 +1,9 @@
 /**
  * Native V1 checkpoint persistence service.
  *
- * NOT MOUNTED ON A ROUTE. Only an authenticated Worker handler with an
- * integrity-verified PRIVATE artifact may call this after Schema V2 is
- * applied and the course edition is explicitly published.
+ * Called only by the authenticated, staging-only Native evidence route with
+ * dual exact-tenant flags, and an integrity-verified PRIVATE R2 artifact.
+ * Remote writes additionally require governed Schema V2 and a published edition.
  *
  * Exactly-once durable semantics use D1 UNIQUE(event_id, sequence), a
  * contiguous-sequence trigger and a scope-rechecked INSERT in the DB.
