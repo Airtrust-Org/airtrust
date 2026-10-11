@@ -83,6 +83,34 @@ class NativeCatalogRehearsalTests(unittest.TestCase):
             mod.rehearse_snapshot([{'results':rows}],sha(rows),
                                  inject_fault_after_drop=True)
 
+    def test_fk_defer_inside_transaction_is_not_a_safe_parent_rebuild(self):
+        # Referencing rows with ON DELETE NO ACTION may still cause a commit
+        # failure after DROP TABLE, even if pragma_foreign_key_check is empty
+        # at the end of the transaction. The normal Schema V2 executor must
+        # not infer that defer_foreign_keys alone makes this operation safe.
+        rows=synthetic_objects()
+        table,indexes,triggers,_=mod.parse_snapshot([{'results':rows}],sha(rows))
+        db=mod.create_synthetic_db(table,indexes,triggers)
+        try:
+            db.execute('BEGIN')
+            db.execute('PRAGMA defer_foreign_keys=ON')
+            db.execute('CREATE TABLE lms_cursos__new '
+                       '(id INTEGER PRIMARY KEY, empresa_id INTEGER, titulo TEXT)')
+            db.execute('INSERT INTO lms_cursos__new(id,empresa_id,titulo) '
+                       'SELECT id,empresa_id,titulo FROM lms_cursos')
+            db.execute('DROP TABLE lms_cursos')
+            db.execute('ALTER TABLE lms_cursos__new RENAME TO lms_cursos')
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+            with self.assertRaises(Exception):
+                db.commit()
+            db.rollback()
+            self.assertIsNotNone(db.execute(
+                "SELECT sql FROM sqlite_master WHERE name='lms_cursos'"
+            ).fetchone())
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+        finally:
+            db.close()
+
     def test_schema_fingerprint_drift_rejected_before_any_rebuild(self):
         rows=synthetic_objects()
         expected=sha(rows)
