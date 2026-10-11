@@ -24,7 +24,7 @@ O pacote guarda dois digests diferentes: `nativeCandidateSha256` identifica a ve
 
 ## API/serviço em desenvolvimento
 
-- `GET /api/lms/native/matriculas/:matriculaId/admissao`: **já implementada como leitura**, autenticada e tenant-scoped; responde com modo de aprendizagem/revisão e `native_package=NOT_YET_ENABLED`. Como `native` não está habilitado no catálogo, não é rota de lançamento de conteúdo e não prova que o novo player está operativo.
+- `GET /api/lms/native/matriculas/:matriculaId/admissao`: **leitura autenticada e estritamente staging-only**, exigindo a allowlist exata `NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS` **antes de consultar D1**; retorna modo aprendizagem/revisão e `native_package=NOT_YET_ENABLED`. Produção e tenants fora da allowlist recebem 404. Como `native` não está habilitado no catálogo, não é rota de lançamento operacional.
 - `GET /api/lms/native/matriculas/:matriculaId/curso`: **preview de leitura staging-only**, autorizado apenas com `NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS` em ambiente de staging. Usa matrícula/ciclo/edição escopados, verifica SHA-256 dos bytes exatos do JSON no R2 e retorna apenas a projeção sem gabarito; produz `completion_supported=false`. A flag ausente/vazia ou ambiente de produção responde 404, sem consultar D1/R2. **Ainda depende de catálogo `native` e Schema V2 aplicados; a rota não está operacional em runtime.**
 - `validateNativeCheckpoint`: valida hash da edição, sequência monotônica, evento idempotente e unidade permitida, a partir de ledger pré-carregado e validado. **Não grava nada**.
 - `assessNativeCompletionReadiness`: verifica evidências efetivamente persistidas e tentativa corrigida no servidor. **Não conclui matrícula nem gera qualificações**.
