@@ -59,9 +59,12 @@ def normalize_specialized_course_model(model: dict) -> dict:
         decisions = model.get('requiredInteractionIds')
         need(isinstance(required, list) and set(required) == set(ids),
              'SPECIALIZED_SLIDE_GATE_MISMATCH')
-        scenario_ids = {s['id'] for s in original_slides if s.get('kind') == 'scenario'}
-        need(isinstance(decisions, list) and set(decisions) == scenario_ids,
-             'SPECIALIZED_DECISION_GATE_MISMATCH')
+        # In this SGSO authoring family requiredInteractionIds reference the
+        # five certifying QUIZ slides, while scenario slides independently carry
+        # requiredDecision=true. Do not confuse those two completion gates.
+        quiz_ids = {s['id'] for s in original_slides if s.get('kind') == 'quiz'}
+        need(isinstance(decisions, list) and set(decisions) == quiz_ids,
+             'SPECIALIZED_EXAM_GATE_MISMATCH')
 
     lessons = []
     mapped_kinds = {
