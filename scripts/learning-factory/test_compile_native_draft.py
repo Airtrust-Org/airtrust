@@ -89,6 +89,75 @@ class CompileNativeDraftTests(unittest.TestCase):
             self.assertNotEqual(first_report['nativeCandidateSha256'],
                                 second_report['nativeCandidateSha256'])
 
+    def test_preserves_authored_steps_columns_sections_and_gate_items(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            intro = draft['course']['slides'][0]
+            intro['steps'] = ['Conferir a situação', 'Comunicar o responsável']
+            intro['columns'] = [
+                {'title': 'Antes da atividade', 'items': ['Verificar EPI', 'Confirmar documentação']},
+                {'title': 'Durante a atividade', 'items': ['Manter atenção']},
+            ]
+            intro['sectionGroups'] = [
+                {'title': 'Procedimentos', 'range': 'Itens 2-4',
+                 'items': ['Planejamento', 'Execução controlada']},
+            ]
+            intro['gateItems'] = [
+                ['Bloqueio de segurança', 'Interromper a atividade'],
+            ]
+            candidate, report = compile_candidate(draft, location)
+            blocks = candidate['units'][0]['blocks']
+            texts = [block.get('text') for block in blocks if block['type'] == 'heading']
+            bullets = [
+                item
+                for block in blocks if block['type'] == 'bullets'
+                for item in block['items']
+            ]
+            self.assertIn('Etapas', texts)
+            self.assertIn('Antes da atividade', texts)
+            self.assertIn('Durante a atividade', texts)
+            self.assertIn('Procedimentos (Itens 2-4)', texts)
+            self.assertIn('Pontos de atenção', texts)
+            self.assertIn('Conferir a situação', bullets)
+            self.assertIn('Manter atenção', bullets)
+            self.assertIn('Planejamento', bullets)
+            self.assertIn('Bloqueio de segurança: Interromper a atividade', bullets)
+            self.assertEqual(
+                report['richContentFieldsConverted'],
+                ['columns', 'gateItems', 'sectionGroups', 'steps']
+            )
+            self.assertTrue(all(field not in report['unmappedLayoutFields']
+                                for field in report['richContentFieldsConverted']))
+            self.assertFalse(report['publishable'])
+
+    def test_rejects_malformed_authored_rich_content_instead_of_dropping_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            intro = draft['course']['slides'][0]
+            for name, value in [
+                ('steps', []),
+                ('steps', [{'unexpected': 'dict'}]),
+                ('columns', [{'title': 'Checklist', 'items': [9]}]),
+                ('sectionGroups', [{'title': 'Requisitos', 'range': '1-3'}]),
+                ('gateItems', [['Apenas o rótulo']]),
+                ('gateItems', [['EPI', 'O' * 1001]]),
+            ]:
+                with self.subTest(name=name, value=str(value)[:40]):
+                    intro[name] = value
+                    with self.assertRaises(NativeCompileError):
+                        compile_candidate(draft, location)
+                    intro.pop(name)
+
+    def test_content_addressed_version_changes_for_step_revisions(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            intro = draft['course']['slides'][0]
+            intro['steps'] = ['Ação inicial', 'Ação final']
+            initial, _ = compile_candidate(draft, location)
+            intro['steps'][1] = 'Ação final revisada'
+            modified, _ = compile_candidate(draft, location)
+            self.assertNotEqual(initial['packageVersion'], modified['packageVersion'])
+
     def test_fail_closed_on_missing_source_or_unmapped_slide(self):
         with tempfile.TemporaryDirectory() as d:
             draft, location = self.prepare(Path(d))
