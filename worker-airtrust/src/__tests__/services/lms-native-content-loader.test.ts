@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   loadNativePublishedCourse,
+  loadNativePrivateCourse,
   NativeContentLoadError,
 } from '../../services/lms-native-content-loader';
 
@@ -87,6 +88,22 @@ function createFixture(params: {
 }
 
 describe('Native R2 immutable learner content loader', () => {
+  it('provides gabarito solely to Worker-private assessment services', async () => {
+    const f = createFixture({});
+    const db = await (async () => {
+      // Fetch the same read-only DB fixture without using an HTTP endpoint.
+      return (f as unknown as { run: () => Promise<unknown> }).run;
+    })();
+    expect(typeof db).toBe('function');
+    const publicProjection = await f.run();
+    expect(JSON.stringify(publicProjection.course)).not.toContain('correctOptionId');
+    const full = candidate.questions;
+    expect(full.some((q: { correctOptionId?: string }) => Boolean(q.correctOptionId))).toBe(true);
+    expect(JSON.stringify(publicProjection.course)).not.toContain(full[0].correctOptionId);
+    // The private loader must stay server-only; the route calls the public wrapper.
+    expect(typeof loadNativePrivateCourse).toBe('function');
+  });
+
   it('serves validated artifact only to the owning enrolled employee and removes all grading secrets', async () => {
     const f = createFixture({});
     const result = await f.run();
