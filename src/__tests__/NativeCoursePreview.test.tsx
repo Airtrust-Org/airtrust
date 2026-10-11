@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import NativeCoursePreview from '@/react-app/pages/lms/native/NativeCoursePreview';
-import type { NativeLearnerCourse } from '../worker-airtrust/src/lib/lms/lms-native-course-contract';
+import type { NativeLearnerCourse } from '../../worker-airtrust/src/lib/lms/lms-native-course-contract';
 
 const course: NativeLearnerCourse = {
   schema: 'AIRTRUST_NATIVE_COURSE_V1',
