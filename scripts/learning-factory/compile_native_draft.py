@@ -88,7 +88,7 @@ def make_questions(slide: dict, is_scenario: bool) -> list[dict]:
     return result
 
 
-# The existing COUR​SE_DATA family uses these semantic lesson containers.
+# The existing COURSE_DATA family uses these semantic lesson containers.
 # Flattening to headings/bullets preserves authored information in Native V1,
 # whose strict renderer has no interactive grid/card layout yet.
 # Unknown or malformed rich structures remain review blockers, never omitted.
