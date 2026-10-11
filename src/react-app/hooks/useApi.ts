@@ -91,6 +91,8 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
   const hasFetchedInitialRef = useRef(false);
   const isMountedRef = useRef(true);
   const inFlightRef = useRef(false);
+  // Uma resposta da consulta anterior nunca pode sobrescrever um filtro/URL mais recente.
+  const requestGenerationRef = useRef(0);
   const retryTimeoutRef = useRef<number | null>(null);
 
   const clearRetryTimeout = useCallback(() => {
@@ -118,6 +120,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
         return;
       }
       if (inFlightRef.current && attemptNumber === 0) return;
+      const requestGeneration = ++requestGenerationRef.current;
       inFlightRef.current = true;
 
       try {
@@ -157,6 +160,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
           method,
           headers,
         });
+        if (requestGeneration !== requestGenerationRef.current) return;
 
         if (response.status === 401) {
           logout();
@@ -167,6 +171,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
         }
 
         const result = await response.json().catch(() => undefined);
+        if (requestGeneration !== requestGenerationRef.current) return;
         assertTenantDataScope(scope);
         if (!response.ok) {
           const message =
@@ -186,6 +191,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
           inMemoryGetCache.set(cacheKey, nextData, staleTime);
         }
       } catch (caught) {
+        if (requestGeneration !== requestGenerationRef.current) return;
         const classified = classifyFrontendError(caught);
         const canRetry =
           !['permission', 'session-expired', 'stale-tenant'].includes(classified.kind) &&
@@ -201,8 +207,10 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
           hasFetchedInitialRef.current = false;
         }
       } finally {
-        inFlightRef.current = false;
-        setLoading(false);
+        if (requestGeneration === requestGenerationRef.current) {
+          inFlightRef.current = false;
+          setLoading(false);
+        }
       }
     },
     [
@@ -234,6 +242,8 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
     }
     void fetchData();
     return () => {
+      // Invalida resultados de promises já iniciadas antes do próximo filtro/tenant.
+      requestGenerationRef.current += 1;
       hasFetchedInitialRef.current = false;
       isMountedRef.current = false;
       clearRetryTimeout();
