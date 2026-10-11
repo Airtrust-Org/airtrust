@@ -1,7 +1,7 @@
 # AirTrust Native V1 — schema/readiness e sequência de integração (SEM apply)
 
-**Estado:** somente especificação técnica para PR #1389 / incidente #1325.
-**Não é** manifest Schema V2, migration executável, autorização de staging ou produção.
+**Estado:** especificação e mudança Schema V2 `lms-native-v1-evidence-0549` versionadas na PR #1389 / incidente #1325, com testes SQLite sintéticos. **Nenhuma migration aplicada em staging/produção.**
+**Não é** autorização de staging ou produção; o manifesto versionado não aplica SQL por si só.
 **Fonte canônica:** GitHub/main + D1 schema efetivo de cada ambiente (verificar ao vivo antes de preparar o SQL).
 **Risco:** alto — LMS multi-tenant com matrículas e certificados regulamentares.
 
@@ -13,18 +13,19 @@ O esquema **real** tem colunas, índices, gatilhos e FKs posteriores a 0341. Por
 
 ## Modelo persistido pretendido
 
-As tabelas abaixo são proposta, NÃO existem no runtime por causa desta PR:
+As quatro tabelas abaixo estão definidas no SQL Schema V2 **0549**, mas NÃO foram aplicadas em runtime por esta PR:
 
 1. `lms_native_edicoes`: `empresa_id`, `curso_id`, `artifact_sha256` (64 hex), `package_version`, `r2_prefix`, status revisado/ativo/revogado, hash de conteúdo e revisão QA. Unicidade por tenant/curso/hash. Versão imutável; não reescrever R2 ativo.
 2. `lms_native_matricula_edicoes`: vínculo entre `empresa_id`, `matricula_id`, `ciclo_id` e `edicao_id`. Unicidade de vínculo por ciclo; nunca atualizar o conteúdo de quem começou uma edição sem migração explícita comprovada.
-3. `lms_native_eventos`: ledger imutável, com `empresa_id`, `matricula_id`, `ciclo_id`, `edicao_id`, `event_id`, `sequencia`, `unit_id`, tempo gerado no servidor, hash de payload e resultado de validação. UNIQUE da chave do evento e da sequência no escopo. Condicional atômica (não fazer leitura+gravação sem proteção contra concorrência).
-4. `lms_native_tentativas`: resultado de correção **no Worker**, vinculado ao tenant, matrícula, ciclo, edição, política, tentativa e conteúdo imutável. Não confiar em score/status enviados pelo navegador. Proteger questões e gabaritos no backend; não incluir respostas particulares em logs.
+3. `lms_native_eventos`: ledger imutável vinculado por `vinculo_id` à edição e à matrícula/ciclo/empresa, com `event_id`, `sequencia`, `unidade_id`, tempo no servidor e hash de payload; o backend valida o resultado. UNIQUE da chave do evento e da sequência no escopo. Condicional atômica (não fazer leitura+gravação sem proteção contra concorrência).
+4. `lms_native_tentativas`: resultado de correção **no Worker**, vinculado por `vinculo_id` ao tenant/matrícula/ciclo/edição, com política, tentativa e conteúdo imutável. Não confiar em score/status enviados pelo navegador. Proteger questões e gabaritos no backend; não incluir respostas particulares em logs.
 
-Critérios exatos de índices, FOREIGN KEY, unicidades compostas e versões dos campos precisam ser consolidados pelo schema contract vigente. Um prefixo R2 escopado por empresa/curso/edição nunca pode se resolver via listagem oportunista de versões antigas.
+O pacote guarda dois digests diferentes: `nativeCandidateSha256` identifica a versão da conversão; `artifactBytesSha256` é o SHA-256 dos **bytes exatos** do JSON privado publicado. A coluna `lms_native_edicoes.artifact_sha256` e o prefixo `lms/native/{empresa_id}/{curso_id}/{artifact_sha256}/` usam o segundo. Não resolver versões por listagem R2 ou por `latest`. Os índices, FKs e unicidades devem ser confrontados com o schema contract real antes da aplicação.
 
 ## API/serviço em desenvolvimento
 
 - `GET /api/lms/native/matriculas/:matriculaId/admissao`: **já implementada como leitura**, autenticada e tenant-scoped; responde com modo de aprendizagem/revisão e `native_package=NOT_YET_ENABLED`. Como `native` não está habilitado no catálogo, não é rota de lançamento de conteúdo e não prova que o novo player está operativo.
+- `GET /api/lms/native/matriculas/:matriculaId/curso`: **preview de leitura staging-only**, autorizado apenas com `NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS` em ambiente de staging. Usa matrícula/ciclo/edição escopados, verifica SHA-256 dos bytes exatos do JSON no R2 e retorna apenas a projeção sem gabarito; produz `completion_supported=false`. A flag ausente/vazia ou ambiente de produção responde 404, sem consultar D1/R2. **Ainda depende de catálogo `native` e Schema V2 aplicados; a rota não está operacional em runtime.**
 - `validateNativeCheckpoint`: valida hash da edição, sequência monotônica, evento idempotente e unidade permitida, a partir de ledger pré-carregado e validado. **Não grava nada**.
 - `assessNativeCompletionReadiness`: verifica evidências efetivamente persistidas e tentativa corrigida no servidor. **Não conclui matrícula nem gera qualificações**.
 - Para a fase de escrita: APIs de launch/sessão, gravação atômica por evento, avaliação e encaminhamento à **única transação canônica de LMS** já existente. Certificado/Compliance/Qualificações devem derivar de `lms_matriculas` e `qualificacoes_historico` via regras oficiais, nunca de tabela paralela.
