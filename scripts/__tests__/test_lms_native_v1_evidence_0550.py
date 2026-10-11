@@ -1,10 +1,10 @@
-"""Native V1 Schema V2 0549: synthetic, offline SQLite contract only."""
+"""Native V1 Schema V2 0550: synthetic, offline SQLite contract only."""
 import sqlite3
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0549_lms_native_v1_evidence.sql'
+CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0550_lms_native_v1_evidence.sql'
 
 
 def db_fixture():

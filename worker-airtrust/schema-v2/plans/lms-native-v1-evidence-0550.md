@@ -1,4 +1,4 @@
-# lms-native-v1-evidence-0549 — Schema V2 additivo (NÃO APLICAR SEM PREFLIGHT)
+# lms-native-v1-evidence-0550 — Schema V2 additivo (NÃO APLICAR SEM PREFLIGHT)
 
 ## Objetivo e escopo
 
@@ -25,7 +25,7 @@ O aplicativo Native V1 **não recebe autorização para matrícula ou emissão d
 
 ## Testes locais e pós-condições
 
-`scripts/__tests__/test_lms_native_v1_evidence_0549.py` usa somente SQLite em memória. Exercita ausência de alteração do LMS existente, recusa a segunda aplicação, integridade por tenant e tipo, ciclo/curso errado, edição não revisada, alteração de hash, vinculação e eventos imutáveis, sequência/duplicata, tentativas formativas/notas e FKs desabilitadas onde aplicável.
+`scripts/__tests__/test_lms_native_v1_evidence_0550.py` usa somente SQLite em memória. Exercita ausência de alteração do LMS existente, recusa a segunda aplicação, integridade por tenant e tipo, ciclo/curso errado, edição não revisada, alteração de hash, vinculação e eventos imutáveis, sequência/duplicata, tentativas formativas/notas e FKs desabilitadas onde aplicável.
 
 Após aplicação autorizada, confirmar **quatro tabelas e todos os triggers/índices presentes**, sem quaisquer registros Native criados; snapshots de contagem/checksum das tabelas legadas inalterados. Confirmar que o player SCORM, cursos PDF/PPTX/H5P e o processo atual de conclusão não mudaram.
 
