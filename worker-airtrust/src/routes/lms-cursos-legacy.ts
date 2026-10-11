@@ -1486,10 +1486,11 @@ app.get('/', async (c) => {
          ORDER BY s.nome ASC)`
     : 'NULL';
 
-  const total = await db
+  // A contagem e a página consultam o mesmo snapshot lógico sem escrita.
+  // Preparar ambas antes de executar evita serializar duas leituras D1 independentes.
+  const totalStatement = db
     .prepare(`SELECT COUNT(*) as n FROM lms_cursos c ${where}`)
-    .bind(...binds)
-    .first<{ n: number }>();
+    .bind(...binds);
 
   const formatoJoin = courseSetorSchema.hasLmsCursosFormato
     ? `LEFT JOIN qualificacoes_formatos qf
@@ -1501,7 +1502,7 @@ app.get('/', async (c) => {
     ? 'qf.codigo AS formato_codigo, qf.nome AS formato_nome,'
     : '';
 
-  const rows = await db
+  const rowsStatement = db
     .prepare(
       `
       SELECT c.*,
@@ -1526,8 +1527,12 @@ app.get('/', async (c) => {
       LIMIT ? OFFSET ?
     `,
     )
-    .bind(...matriculaScope.bindings, ...matriculaScope.bindings, ...binds, limit, offset)
-    .all<Record<string, unknown>>();
+    .bind(...matriculaScope.bindings, ...matriculaScope.bindings, ...binds, limit, offset);
+
+  const [total, rows] = await Promise.all([
+    totalStatement.first<{ n: number }>(),
+    rowsStatement.all<Record<string, unknown>>(),
+  ]);
 
   const data = (rows.results ?? []).map((row) => {
     const setoresJson = row.setores_json as string | null;
