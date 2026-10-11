@@ -87,6 +87,63 @@ def make_questions(slide: dict, is_scenario: bool) -> list[dict]:
     return result
 
 
+# The existing COUR​SE_DATA family uses these semantic lesson containers.
+# Flattening to headings/bullets preserves authored information in Native V1,
+# whose strict renderer has no interactive grid/card layout yet.
+# Unknown or malformed rich structures remain review blockers, never omitted.
+RICH_LESSON_FIELDS = frozenset({'steps', 'columns', 'sectionGroups', 'gateItems', 'bullets'})
+
+
+def rich_content_blocks(slide: dict) -> tuple[list[dict], set[str]]:
+    blocks: list[dict] = []
+    mapped: set[str] = set()
+
+    def lines(items: Any, name: str) -> list[str]:
+        if not isinstance(items, list) or not 1 <= len(items) <= 40:
+            raise NativeCompileError('UNSUPPORTED_RICH_' + name)
+        return [ensure_text(v, 'RICH_ITEM', 1000) for v in items]
+
+    for name in slide:
+        if name not in RICH_LESSON_FIELDS:
+            continue
+        raw = slide[name]
+        if not isinstance(raw, list) or not 1 <= len(raw) <= 40:
+            raise NativeCompileError('UNSUPPORTED_RICH_' + name.upper())
+        mapped.add(name)
+
+        if name in ('steps', 'bullets'):
+            blocks.append({'type': 'heading', 'text':
+                           'Etapas' if name == 'steps' else 'Tópicos'})
+            blocks.append({'type': 'bullets', 'items': lines(raw, name.upper())})
+        elif name == 'gateItems':
+            items = []
+            for entry in raw:
+                if not isinstance(entry, list) or len(entry) != 2:
+                    raise NativeCompileError('UNSUPPORTED_RICH_GATEITEMS')
+                label = ensure_text(entry[0], 'RICH_GATE_LABEL', 400)
+                detail = ensure_text(entry[1], 'RICH_GATE_DETAIL', 600)
+                items.append(ensure_text(f'{label}: {detail}', 'RICH_GATE_ITEM', 1000))
+            blocks.append({'type': 'heading', 'text': 'Pontos de atenção'})
+            blocks.append({'type': 'bullets', 'items': items})
+        elif name in ('columns', 'sectionGroups'):
+            for group in raw:
+                if not isinstance(group, dict):
+                    raise NativeCompileError('UNSUPPORTED_RICH_GROUP')
+                title = ensure_text(group.get('title'), 'RICH_GROUP_TITLE', 200)
+                if name == 'sectionGroups' and group.get('range') is not None:
+                    range_label = ensure_text(group['range'], 'RICH_SECTION_RANGE', 120)
+                    title = ensure_text(f'{title} ({range_label})', 'RICH_GROUP_TITLE', 350)
+                blocks.append({'type': 'heading', 'text': title})
+                blocks.append({
+                    'type': 'bullets',
+                    'items': lines(group.get('items'), 'GROUP_ITEMS'),
+                })
+
+    if len(blocks) > 95:
+        raise NativeCompileError('RICH_CONTENT_BLOCK_LIMIT_EXCEEDED')
+    return blocks, mapped
+
+
 def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
     if draft.get('schema') != 'AIRTRUST_NATIVE_IMPORT_DRAFT_V1' or draft.get('publishable') is not False:
         raise NativeCompileError('INVALID_OR_PUBLISHABLE_DRAFT')
@@ -124,6 +181,7 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
     units = []
     questions = []
     source_fields_unmapped = set()
+    rich_fields_converted = set()
     for slide in slides:
         if not isinstance(slide, dict):
             raise NativeCompileError('INVALID_SLIDE')
@@ -143,6 +201,11 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
                 blocks.append({'type': 'bullets', 'items': [ensure_text(x, 'SLIDE_BODY', 1000) for x in body]})
             else:
                 raise NativeCompileError('UNSUPPORTED_BODY_FORMAT')
+        # Render the existing training author's structured information; no
+        # steps, columns, section groups or inspection prompts may disappear.
+        rich_blocks, converted = rich_content_blocks(slide)
+        blocks.extend(rich_blocks)
+        rich_fields_converted.update(converted)
         image = slide.get('media')
         if image is not None:
             if not isinstance(image, str) or image not in media_index:
@@ -187,7 +250,7 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
         units.append(unit)
         accounted = {'id','title','kind','lead','body','media','visualAlt','sourceRefs',
                      'question','options','questions'}
-        source_fields_unmapped.update(k for k in slide if k not in accounted)
+        source_fields_unmapped.update(k for k in slide if k not in accounted and k not in converted)
     if len(set(unit['id'] for unit in units)) != len(units):
         raise NativeCompileError('DUPLICATE_SLIDE_ID')
     if not any(unit['kind'] == 'assessment' for unit in units):
@@ -238,6 +301,7 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
         'assessmentQuestions': sum(len(u['questionIds']) for u in units if u['kind'] == 'assessment'),
         'scenarioQuestions': sum(len(u['questionIds']) for u in units if u['kind'] == 'scenario'),
         'unmappedLayoutFields': sorted(source_fields_unmapped),
+        'richContentFieldsConverted': sorted(rich_fields_converted),
         'unreferencedMedia': sorted(set(media_index) -
                                     {s.get('media') for s in slides if isinstance(s, dict)}),
         'certification': 'BLOCKED_UNTIL_LMS_STAGING_E2E',
