@@ -225,6 +225,66 @@ describe('Native staging guarded checkpoint + private assessment HTTP APIs', () 
     expect(mock.loadPrivate).not.toHaveBeenCalled();
   });
 
+  it('rejects over-limit streaming JSON when Content-Length is absent', async () => {
+    let canceled = false;
+    let consumed = 0;
+    const bytes = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        consumed++;
+        controller.enqueue(bytes.encode(' '.repeat(65_537)));
+        if (consumed === 4) controller.close();
+      },
+      cancel() { canceled = true; },
+    });
+    const res = await app().fetch(new Request(
+      'http://localhost/api/lms/native/matriculas/101/checkpoints', {
+        method: 'POST',
+        headers: { 'x-test-user': '900', 'x-test-tenant': '6', 'content-type': 'application/json' },
+        body: stream,
+        duplex: 'half',
+      } as RequestInit,
+    ), {
+      ENVIRONMENT: 'staging',
+      NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS: '6',
+      NATIVE_LEARNER_WRITE_ENABLED_TENANTS: '6',
+      DB: {} as D1Database,
+      BUCKET: {} as R2Bucket,
+    } as unknown as Env);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'NATIVE_INVALID_INPUT' });
+    expect(consumed).toBeLessThanOrEqual(3);
+    expect(canceled).toBe(true);
+    expect(mock.loadPrivate).not.toHaveBeenCalled();
+  });
+
+  it('parses a valid JSON body delivered as separate UTF-8 chunks', async () => {
+    const pieces = ['{ "eventId": "visit-first-001",', ' "sequence": 1,', ' "unitId": "opening" }'];
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const piece = pieces.shift();
+        if (piece) controller.enqueue(new TextEncoder().encode(piece));
+        else controller.close();
+      },
+    });
+    const res = await app().fetch(new Request(
+      'http://localhost/api/lms/native/matriculas/101/checkpoints', {
+        method: 'POST',
+        headers: { 'x-test-user': '900', 'x-test-tenant': '6', 'content-type': 'application/json' },
+        body: stream,
+        duplex: 'half',
+      } as RequestInit,
+    ), {
+      ENVIRONMENT: 'staging',
+      NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS: '6',
+      NATIVE_LEARNER_WRITE_ENABLED_TENANTS: '6',
+      DB: {} as D1Database,
+      BUCKET: {} as R2Bucket,
+    } as unknown as Env);
+    expect(res.status).toBe(201);
+    expect(mock.checkpoint).toHaveBeenCalledOnce();
+  });
+
   it('is read-only for REVIEW sessions and does not write another attempt', async () => {
     mock.loadPrivate.mockResolvedValueOnce({
       artifact: {}, editionHash: sha, cursoId: 31, cicloId: 11, mode: 'REVIEW',
