@@ -124,7 +124,7 @@ describe('AirTrust Native V1: fail-closed authoring contract', () => {
 
   it('keeps the proof policy separate from a display of progress', () => {
     const course = clone();
-    course.units[0].questionIds.push('q1');
+    (course.units[0] as { questionIds: string[] }).questionIds = ['q1'];
     expectError(course, 'NATIVE_QUESTIONS_IN_LESSON');
     const second = clone();
     second.units[1].questionIds = [];
