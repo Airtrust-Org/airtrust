@@ -18,9 +18,10 @@ describe('legacy SCORM launch must not open Native evidence courses', () => {
     const launch = source.slice(begin, end);
     expect(launch).toContain('c.tipo_conteudo');
     expect(launch).toContain('c.empresa_id = m.empresa_id');
-    expect(launch).toContain('matricula.tipo_conteudo?.trim().toLowerCase()');
-    expect(launch.indexOf("=== 'native'")).toBeLessThan(launch.indexOf('resolveScormLaunchFile('));
-    expect(launch.indexOf("=== 'native'")).toBeLessThan(launch.indexOf('FROM lms_progresso_scorm'));
+    const nativeGuard = "assertScormAssetEligibility(matricula.tipo_conteudo, 'Curso nativo exige o player próprio.');";
+    expect(launch).toContain(nativeGuard);
+    expect(launch.indexOf(nativeGuard)).toBeLessThan(launch.indexOf('resolveScormLaunchFile('));
+    expect(launch.indexOf(nativeGuard)).toBeLessThan(launch.indexOf('FROM lms_progresso_scorm'));
   });
 });
 
