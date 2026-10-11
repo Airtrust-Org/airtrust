@@ -316,6 +316,8 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
         # Compilation succeeds for review, but staging does not accept files
         # above the authenticated 12 MiB transport limit.
         'mediaTransportBlockers': media_transport_blockers,
+        'specializedAdapter': draft.get('specializedAdapter'),
+        'adapterReview': draft.get('adapterReview'),
         'unreferencedMedia': sorted(set(media_index) -
                                     {s.get('media') for s in slides if isinstance(s, dict)}),
         'certification': 'BLOCKED_UNTIL_LMS_STAGING_E2E',
