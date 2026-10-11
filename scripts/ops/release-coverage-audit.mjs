@@ -27,7 +27,8 @@ export function pagesParity(prefix, workerSha) {
 }
 
 async function read(url, textResponse = false) {
-  const headers = { Accept: textResponse ? 'text/html' : 'application/vnd.github+json' };
+  const headers = { Accept: textResponse ? 'text/html' :
+    (url.startsWith('https://api.github.com/') ? 'application/vnd.github+json' : 'application/json') };
   if (url.startsWith('https://api.github.com/')) {
     headers['X-GitHub-Api-Version'] = '2022-11-28';
     if (process.env.GITHUB_TOKEN) headers.Authorization = 'Bearer ' + process.env.GITHUB_TOKEN;
