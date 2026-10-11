@@ -124,16 +124,40 @@ END;
 -- differs between local SQLite and D1 runtime. A gap/reordering is rejected.
 CREATE TRIGGER lms_native_event_scope_sequence BEFORE INSERT ON lms_native_eventos
 BEGIN
-  SELECT RAISE(ABORT,'NATIVE_EVENT_BINDING_REQUIRED') WHERE NOT EXISTS (
-    SELECT 1 FROM lms_native_matricula_edicoes WHERE id=NEW.vinculo_id
+  SELECT RAISE(ABORT,'NATIVE_EVENT_BINDING_NOT_ACTIVE') WHERE NOT EXISTS (
+    SELECT 1 FROM lms_native_matricula_edicoes b
+    JOIN lms_native_edicoes ed
+      ON ed.id=b.edicao_id AND ed.empresa_id=b.empresa_id AND ed.curso_id=b.curso_id
+    JOIN lms_matriculas m
+      ON m.id=b.matricula_id AND m.empresa_id=b.empresa_id AND m.curso_id=b.curso_id
+    JOIN lms_matricula_ciclos ciclo
+      ON ciclo.id=b.ciclo_id AND ciclo.matricula_id=m.id
+     AND ciclo.empresa_id=m.empresa_id AND ciclo.curso_id=m.curso_id
+    JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+    WHERE b.id=NEW.vinculo_id AND ed.status='PUBLISHED'
+      AND m.status='EM_ANDAMENTO' AND m.deleted_at IS NULL
+      AND ciclo.ciclo_atual=1 AND ciclo.deleted_at IS NULL
+      AND c.tipo_conteudo='native' AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL
   );
   SELECT RAISE(ABORT,'NATIVE_EVENT_SEQUENCE_CONFLICT') WHERE NEW.sequencia !=
     (SELECT COALESCE(MAX(sequencia),0)+1 FROM lms_native_eventos WHERE vinculo_id=NEW.vinculo_id);
 END;
 CREATE TRIGGER lms_native_attempt_scope BEFORE INSERT ON lms_native_tentativas
 BEGIN
-  SELECT RAISE(ABORT,'NATIVE_ATTEMPT_BINDING_REQUIRED') WHERE NOT EXISTS (
-    SELECT 1 FROM lms_native_matricula_edicoes WHERE id=NEW.vinculo_id
+  SELECT RAISE(ABORT,'NATIVE_ATTEMPT_BINDING_NOT_ACTIVE') WHERE NOT EXISTS (
+    SELECT 1 FROM lms_native_matricula_edicoes b
+    JOIN lms_native_edicoes ed
+      ON ed.id=b.edicao_id AND ed.empresa_id=b.empresa_id AND ed.curso_id=b.curso_id
+    JOIN lms_matriculas m
+      ON m.id=b.matricula_id AND m.empresa_id=b.empresa_id AND m.curso_id=b.curso_id
+    JOIN lms_matricula_ciclos ciclo
+      ON ciclo.id=b.ciclo_id AND ciclo.matricula_id=m.id
+     AND ciclo.empresa_id=m.empresa_id AND ciclo.curso_id=m.curso_id
+    JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+    WHERE b.id=NEW.vinculo_id AND ed.status='PUBLISHED'
+      AND m.status='EM_ANDAMENTO' AND m.deleted_at IS NULL
+      AND ciclo.ciclo_atual=1 AND ciclo.deleted_at IS NULL
+      AND c.tipo_conteudo='native' AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL
   );
   SELECT RAISE(ABORT,'NATIVE_ATTEMPT_SEQUENCE_CONFLICT') WHERE NEW.tentativa_numero !=
     (SELECT COALESCE(MAX(tentativa_numero),0)+1 FROM lms_native_tentativas WHERE vinculo_id=NEW.vinculo_id);
