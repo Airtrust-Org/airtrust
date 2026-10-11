@@ -35,7 +35,7 @@ function fixtures(options: {
                 return { id: 204, categoria_id: 17, codigo: typeCode };
               }
               if (sql.includes('FROM lms_cursos c')) {
-                const expected = [71, 6, 204, 700, 6, 77];
+                const expected = [71, 6, 204, 'FDM-TRIPULACAO', 'TREINAMENTO_OPERACIONAL', 700, 6, 77];
                 if (!sql.includes('c.ativo = 1') ||
                   !sql.includes('c.publicado = 1') ||
                   !sql.includes("m.status IN ('EM_ANDAMENTO', 'CONCLUIDO')") ||
@@ -77,7 +77,7 @@ describe('LMS FDM operational category — exact guarded completion', () => {
     expect(category.codigo).toBe('TREINAMENTO_OPERACIONAL');
     expect(prepared.some(x=>x.sql.includes('FROM lms_cursos c'))).toBe(true);
     expect(prepared.filter(x=>x.sql.includes('FROM lms_cursos c'))[0].args)
-      .toEqual([71, 6, 204, 700, 6, 77]);
+      .toEqual([71, 6, 204, 'FDM-TRIPULACAO', 'TREINAMENTO_OPERACIONAL', 700, 6, 77]);
   });
 
   it('nunca libera outro curso ou outro tenant com categoria operacional', async () => {
