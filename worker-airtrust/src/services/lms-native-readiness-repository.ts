@@ -1,6 +1,7 @@
 /**
  * Read-only bridge from future Schema V2 Native evidence into canonical LMS.
- * Not mounted until governed migrations, trusted R2 loader and staging E2E.
+ * Learner resume is read-only under staging-only authenticated preview;
+ * canonical Native completion remains unavailable pending governed E2E.
  * The private authoring artifact MUST come from integrity-verified server R2,
  * never request JSON. Never writes enrollment, qualification or certificate.
  */
