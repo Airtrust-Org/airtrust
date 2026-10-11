@@ -9,6 +9,8 @@ type PreviewProps = {
   course: NativeLearnerCourse;
   /** Must resolve to an authenticated same-origin LMS asset URL. */
   resolveAssetHref: (asset: NativeAsset) => string | null;
+  /** Optional authenticated media fetch; Blob URLs are created and revoked here. */
+  fetchAuthorizedAsset?: (asset: NativeAsset, signal: AbortSignal) => Promise<Blob>;
 };
 
 function safeLmsAssetUrl(url: string | null): string | null {
@@ -22,7 +24,46 @@ function safeLmsAssetUrl(url: string | null): string | null {
  * Non-certifying read-only preview. It cannot update progress, grade a quiz,
  * finish an enrollment or issue qualifications. Those belong to Worker APIs.
  */
-export default function NativeCoursePreview({ course, resolveAssetHref }: PreviewProps) {
+function ProtectedNativeMedia({ asset, type, alt, fetchAsset }: {
+  asset: NativeAsset;
+  type: 'image' | 'video';
+  alt: string;
+  fetchAsset: (asset: NativeAsset, signal: AbortSignal) => Promise<Blob>;
+}) {
+  const [href, setHref] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    setFailed(false);
+    setHref(null);
+    void fetchAsset(asset, controller.signal).then((blob) => {
+      if (controller.signal.aborted) return;
+      if (blob.type !== asset.mime) throw new Error('NATIVE_ASSET_MIME_CONFLICT');
+      objectUrl = URL.createObjectURL(blob);
+      setHref(objectUrl);
+    }).catch(() => {
+      if (!controller.signal.aborted) setFailed(true);
+    });
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [asset.id, asset.path, asset.sha256, asset.mime, fetchAsset]);
+
+  if (!href) {
+    return <p role="status">{failed ? 'Mídia indisponível' : 'Carregando mídia'}: {alt}</p>;
+  }
+  return type === 'image'
+    ? <img src={href} alt={alt} className="max-w-full h-auto rounded-lg" />
+    : <figure>
+        <video src={href} controls preload="metadata" className="w-full max-w-3xl" aria-label={alt} />
+        <figcaption className="text-sm text-slate-600">{alt}</figcaption>
+      </figure>;
+}
+
+export default function NativeCoursePreview({ course, resolveAssetHref, fetchAuthorizedAsset }: PreviewProps) {
   const [unitIndex, setUnitIndex] = useState(0);
   const [choices, setChoices] = useState<Record<string, string>>({});
 
@@ -56,6 +97,12 @@ export default function NativeCoursePreview({ course, resolveAssetHref }: Previe
       return <ul key={index} className="list-disc pl-6 text-lg">{block.items.map((item, i) => <li key={i}>{item}</li>)}</ul>;
     }
     const asset = assets.get(block.assetId);
+    if (asset && fetchAuthorizedAsset) {
+      return <ProtectedNativeMedia
+        key={index} asset={asset} type={block.type} alt={block.alt}
+        fetchAsset={fetchAuthorizedAsset}
+      />;
+    }
     const href = asset ? safeLmsAssetUrl(resolveAssetHref(asset)) : null;
     if (!href) {
       return <p key={index} role="status">Mídia indisponível nesta visualização: {block.alt}</p>;
