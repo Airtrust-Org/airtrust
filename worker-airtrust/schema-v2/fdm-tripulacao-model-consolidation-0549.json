@@ -1,0 +1,8 @@
+{
+  "changeId": "fdm-tripulacao-model-consolidation-0549",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0549_fdm_tripulacao_model_consolidation.sql",
+  "fileHash": "8fbdf20ffcec94043b5a97123ac90bffb42813a23ac872290dfe13618103dee1",
+  "planPath": "worker-airtrust/schema-v2/plans/fdm-tripulacao-model-consolidation-0549.md",
+  "planHash": "d0f974eff129903ebe5809a4213397b47560318748f2dfb7acf7eef499a4d294"
+}
