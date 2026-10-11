@@ -13,7 +13,7 @@ O esquema **real** tem colunas, índices, gatilhos e FKs posteriores a 0341. Por
 
 ## Modelo persistido pretendido
 
-As quatro tabelas abaixo estão definidas no SQL Schema V2 **0549**, mas NÃO foram aplicadas em runtime por esta PR:
+As quatro tabelas abaixo estão definidas no SQL Schema V2 **0550**, mas NÃO foram aplicadas em runtime por esta PR:
 
 1. `lms_native_edicoes`: `empresa_id`, `curso_id`, `artifact_sha256` (64 hex), `package_version`, `r2_prefix`, status revisado/ativo/revogado, hash de conteúdo e revisão QA. Unicidade por tenant/curso/hash. Versão imutável; não reescrever R2 ativo.
 2. `lms_native_matricula_edicoes`: vínculo entre `empresa_id`, `matricula_id`, `ciclo_id` e `edicao_id`. Unicidade de vínculo por ciclo; nunca atualizar o conteúdo de quem começou uma edição sem migração explícita comprovada.
@@ -59,7 +59,7 @@ Duas funções de backend foram implementadas e verificadas com testes focados. 
 
 **Limitação pedagógica:** registro de visita a uma unidade, por si, não garante que a pessoa leu, permaneceu tempo suficiente ou assistiu todo o vídeo. Antes de uso regulamentar, definir evidências verificáveis de consumo de mídia/atividades e política para conexão intermitente, sem transformar porcentagem de navegação em certificação. Esse requisito não está resolvido apenas pelo ledger.
 
-**Dependências para ativar escrita/início:** schema 0549 efetivamente aplicado + CHECK `native` governado no catálogo + upload/publicação privada e revisão pedagógica da edição + fluxo de sessão seguro que obtenha scope/artefato somente do servidor + autorização explícita de staging, testes com D1/R2 reais, idempotência concorrente e recuperação. Até lá as rotas permanecem **desabilitadas por configuração**, e o frontend é preview read-only.
+**Dependências para ativar escrita/início:** schema 0550 efetivamente aplicado + CHECK `native` governado no catálogo + upload/publicação privada e revisão pedagógica da edição + fluxo de sessão seguro que obtenha scope/artefato somente do servidor + autorização explícita de staging, testes com D1/R2 reais, idempotência concorrente e recuperação. Até lá as rotas permanecem **desabilitadas por configuração**, e o frontend é preview read-only.
 
 ## Montagem offline do pacote R2 para revisão (NÃO é upload)
 
@@ -157,7 +157,7 @@ A saída contém `draft/` e `candidate/` por curso, incluindo **gabaritos privad
 
 ## Evidência real de schema em staging (2026-10-10, consultas somente leitura)
 
-A consulta direta ao D1 `airtrust-db-staging-baseline-20260701` confirmou que o CHECK de `lms_cursos.tipo_conteudo` ainda restringe os cinco formatos legados; as quatro tabelas `lms_native_*` da change 0549 **não existem** em staging. Foram inventariados a tabela do catálogo, seus **seis índices e cinco triggers**, além de **três tabelas com FKs** para `lms_cursos`: `lms_matriculas`, `lms_cursos_setores` e `lms_scorm_package_versions`.
+A consulta direta ao D1 `airtrust-db-staging-baseline-20260701` confirmou que o CHECK de `lms_cursos.tipo_conteudo` ainda restringe os cinco formatos legados; as quatro tabelas `lms_native_*` da change 0550 **não existem** em staging. Foram inventariados a tabela do catálogo, seus **seis índices e cinco triggers**, além de **três tabelas com FKs** para `lms_cursos`: `lms_matriculas`, `lms_cursos_setores` e `lms_scorm_package_versions`.
 
 O snapshot capturado teve fingerprint SHA-256 `bb867870b5524b0dda21784a017fd0d3f855f116b3c8ff49fd947f05f80a89de` para os 12 objetos. A ferramenta `scripts/schema-v2/native-v1-catalog-readonly-preflight.mjs` foi testada contra esse snapshot e bloqueia qualquer drift; **não gera nem aplica SQL de reconstrução**. O plano de riscos e comandos read-only estão em `worker-airtrust/schema-v2/plans/lms-native-catalog-check-preparation.md`.
 
@@ -165,11 +165,11 @@ A implementação de início de matrícula agora usa uma única transação `D1.
 
 **Atenção:** o snapshot vale só para staging no momento da consulta. Não inferir paridade com produção, não reconstruir `lms_cursos` sem prova de FKs/índices/triggers/rollback, nem habilitar Native com Schema V2 ainda não aplicado.
 
-## Harden 0549 — integridade de ciclo e contrato de edição
+## Harden 0550 — integridade de ciclo e contrato de edição
 
 A mudança governada `lms-native-v1-evidence-0550` agora valida no próprio SQLite que **o funcionário e o status da matrícula correspondem aos do ciclo atual** antes de vincular uma edição. Vinculações em matrículas canceladas/concluídas não são admitidas; inserções de eventos e tentativas exigem `EM_ANDAMENTO` em **ambos** os registros. O identificador de versão imutável da edição deve seguir o padrão `n-` + 32 caracteres hexadecimais minúsculos. O Worker aplica as mesmas verificações em suas consultas autenticadas.
 
-**Validações sem escrita remota:** 13 testes SQLite sintéticos da change 0549, incluindo divergência de funcionário/status e formato inválido de versão; 37 testes Worker focados de writers, readiness, paginação e guardas arquiteturais; TypeScript Worker aprovado. Os hashes novos do SQL e do plano foram sincronizados no manifest e conferidos pelo construtor oficial `build-reviewed-schema-apply.mjs`. O SQL resultante foi gerado **apenas em arquivo temporário local**, sem aplicação a staging ou produção.
+**Validações sem escrita remota:** 13 testes SQLite sintéticos da change 0550, incluindo divergência de funcionário/status e formato inválido de versão; 37 testes Worker focados de writers, readiness, paginação e guardas arquiteturais; TypeScript Worker aprovado. Os hashes novos do SQL e do plano foram sincronizados no manifest e conferidos pelo construtor oficial `build-reviewed-schema-apply.mjs`. O SQL resultante foi gerado **apenas em arquivo temporário local**, sem aplicação a staging ou produção.
 
 **Dependência não resolvida:** antes de ativar o formato `native` em qualquer empresa, ainda será necessária a migration independente do CHECK do catálogo, via executor governado com preservação de FKs, índices, triggers e rollback testado. Nenhuma alteração estrutural foi aplicada remotamente nesta etapa.
 
