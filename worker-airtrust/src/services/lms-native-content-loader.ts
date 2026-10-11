@@ -37,6 +37,7 @@ export type NativePublishedCourse = {
   course: NativeLearnerCourse;
   editionHash: string;
   cicloId: number;
+  cursoId: number;
   mode: NativeAdmission['mode'];
 };
 
@@ -126,6 +127,7 @@ export async function loadNativePublishedCourse(params: {
     course: toNativeLearnerCourse(artifact),
     editionHash: row.artifact_sha256,
     cicloId: row.ciclo_id,
+    cursoId: admission.cursoId,
     mode: admission.mode,
   };
 }
