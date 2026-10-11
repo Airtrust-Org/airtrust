@@ -52,6 +52,14 @@ def batch_convert_scorm(
         seen_names = set()
         total_size = 0
         for item in members:
+            # Finder resource-fork files are not courses. Skip the recognized
+            # AppleDouble directory only after checking that its components
+            # cannot escape a ZIP path or impersonate a parent segment.
+            raw_name = item.filename
+            if raw_name.startswith('__MACOSX/') and '\\' not in raw_name and (
+                '\x00' not in raw_name
+            ) and all(part not in ('', '.', '..') for part in raw_name.split('/')):
+                continue
             name = verify_entry(item)
             if name in seen_paths:
                 raise NativeBatchError('BATCH_DUPLICATE_ENTRY')
