@@ -213,7 +213,7 @@ export default function NativeCoursePreview({ course, resolveAssetHref, fetchAut
         <div className="space-y-2 rounded border p-3">
           <button type="button"
             disabled={evidenceBusy || course.questions.some((q) => !choices[q.id])}
-            onClick={() => onSubmitAssessment(course.questions.map((q) => ({ questionId: q.id, optionId: choices[q.id] }))}
+            onClick={() => onSubmitAssessment(course.questions.map((q) => ({ questionId: q.id, optionId: choices[q.id] })))}
             className="rounded border px-4 py-2 disabled:opacity-50">
             Enviar respostas para avaliação
           </button>
