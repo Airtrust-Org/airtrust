@@ -174,15 +174,21 @@ app.get('/scorm/state/:matriculaId', async (c) => {
   // Verificar que a matrícula pertence à empresa (multi-tenancy)
   const matricula = await db
     .prepare(
-      'SELECT id, status, funcionario_id FROM lms_matriculas WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      'SELECT m.id, m.status, m.funcionario_id, c.tipo_conteudo FROM lms_matriculas m JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL AND c.deleted_at IS NULL',
     )
     .bind(matriculaId, empresaId)
-    .first<{ id: number; status: string; funcionario_id: number }>();
+    .first<{ id: number; status: string; funcionario_id: number; tipo_conteudo: string }>();
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
   if (!canManage) {
     if (!callerFuncionarioId || matricula.funcionario_id !== callerFuncionarioId) {
       throw new ApiError('Acesso negado', 403);
     }
+  }
+
+  // A Native edition must never receive SCORM suspend_data from an
+  // obsolete player session, including read-only resume by a manager.
+  if (String(matricula.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
+    throw new ApiError('Curso nativo exige sessão do player próprio.', 409);
   }
 
   const progresso = await db
