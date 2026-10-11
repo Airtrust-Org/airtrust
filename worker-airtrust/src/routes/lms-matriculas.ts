@@ -1324,7 +1324,7 @@ app.post('/scorm/commit', async (c) => {
       `
       SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.tentativas,
         m.qualificacao_historico_id,
-        c.id AS curso_id, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
+        c.id AS curso_id, c.tipo_conteudo, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
         c.qualificacao_tipo_id, c.titulo AS curso_titulo,
         qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
         qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1345,6 +1345,7 @@ app.post('/scorm/commit', async (c) => {
       tentativas: number;
       qualificacao_historico_id: number | null;
       curso_id: number;
+      tipo_conteudo: string | null;
       scorm_mastery_score: number | null;
       scorm_assessment_policy: 'FORMATIVE' | 'SCORED' | null;
       gerar_qualificacao_ao_concluir: number;
@@ -1386,6 +1387,12 @@ app.post('/scorm/commit', async (c) => {
     if (!callerFuncionarioId || matricula.funcionario_id !== callerFuncionarioId) {
       throw new ApiError('Acesso negado', 403);
     }
+  }
+  // Even pure SCORM progress (without a terminal completion signal) cannot
+  // poison a Native enrollment's score, last slide or completion status.
+  // The native player uses its own pinned-edition event ledger instead.
+  if (String(matricula.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
+    throw new ApiError('Curso nativo exige checkpoints do player próprio.', 409);
   }
 
   // ─── Guard: prevent CONCLUIDO downgrade via SCORM commit ─────────────────
