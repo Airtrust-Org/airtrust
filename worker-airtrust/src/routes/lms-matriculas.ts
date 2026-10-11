@@ -1389,10 +1389,8 @@ app.post('/scorm/commit', async (c) => {
     }
   }
   if (matricula.tipo_conteudo?.trim().toLowerCase() === 'native') throw new ApiError('Curso nativo exige checkpoints do player próprio.', 409);
-
   // ─── Guard: prevent CONCLUIDO downgrade via SCORM commit ─────────────────
-  // Completed enrollments must never be downgraded to incomplete/failed/not attempted.
-  // Only idempotent commits preserving completion state are allowed.
+  // Completed enrollments allow only idempotent non-downgrading SCORM commits.
   const matriculaWasConcluido = matricula.status === 'CONCLUIDO';
   if (matriculaWasConcluido) {
     const incomingStatus = (d.lesson_status ?? d.completion_status ?? '').toLowerCase();
