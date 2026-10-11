@@ -12,11 +12,11 @@ def db_fixture():
     db.execute('PRAGMA foreign_keys=ON')
     db.executescript("""
       CREATE TABLE lms_cursos(id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,tipo_conteudo TEXT NOT NULL,deleted_at TEXT,ativo INTEGER NOT NULL DEFAULT 1,publicado INTEGER NOT NULL DEFAULT 1);
-      CREATE TABLE lms_matriculas(id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,curso_id INTEGER NOT NULL,deleted_at TEXT,status TEXT NOT NULL DEFAULT 'EM_ANDAMENTO');
-      CREATE TABLE lms_matricula_ciclos(id INTEGER PRIMARY KEY,matricula_id INTEGER NOT NULL,empresa_id INTEGER NOT NULL,curso_id INTEGER NOT NULL,deleted_at TEXT,ciclo_atual INTEGER);
+      CREATE TABLE lms_matriculas(id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,curso_id INTEGER NOT NULL,funcionario_id INTEGER NOT NULL,deleted_at TEXT,status TEXT NOT NULL DEFAULT 'EM_ANDAMENTO');
+      CREATE TABLE lms_matricula_ciclos(id INTEGER PRIMARY KEY,matricula_id INTEGER NOT NULL,empresa_id INTEGER NOT NULL,curso_id INTEGER NOT NULL,funcionario_id INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'EM_ANDAMENTO',deleted_at TEXT,ciclo_atual INTEGER);
       INSERT INTO lms_cursos(id,empresa_id,tipo_conteudo,deleted_at) VALUES (10,6,'native',NULL),(11,7,'native',NULL),(12,6,'scorm',NULL);
-      INSERT INTO lms_matriculas(id,empresa_id,curso_id,deleted_at) VALUES (100,6,10,NULL),(110,7,11,NULL);
-      INSERT INTO lms_matricula_ciclos VALUES (1000,100,6,10,NULL,1),(1100,110,7,11,NULL,1);
+      INSERT INTO lms_matriculas(id,empresa_id,curso_id,funcionario_id,deleted_at) VALUES (100,6,10,69,NULL),(110,7,11,70,NULL);
+      INSERT INTO lms_matricula_ciclos (id,matricula_id,empresa_id,curso_id,funcionario_id,status,deleted_at,ciclo_atual) VALUES (1000,100,6,10,69,'EM_ANDAMENTO',NULL,1),(1100,110,7,11,70,'EM_ANDAMENTO',NULL,1);
     """)
     return db
 
@@ -84,6 +84,51 @@ class Native0549Tests(unittest.TestCase):
         self.db.execute("UPDATE lms_native_edicoes SET status='REVOKED' WHERE id=?",(e,))
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("UPDATE lms_native_edicoes SET status='PUBLISHED' WHERE id=?",(e,))
+
+    def test_exact_private_package_version_shape_is_required(self):
+        for version in ['n-abc', 'n-'+'A'*32, 'n-'+'a'*31, 'v1.2.3', 'n-'+'x'*32]:
+            with self.subTest(version=version), self.assertRaises(sqlite3.IntegrityError):
+                self.db.execute("""INSERT INTO lms_native_edicoes
+                  (empresa_id,curso_id,artifact_sha256,package_version,r2_prefix)
+                  VALUES (6,10,?,?,?)""",
+                  ('a'*64,version,'lms/native/6/10/'+'a'*64+'/'))
+
+    def test_binding_requires_same_employee_and_cycle_status(self):
+        edition=create_edition(self.db)
+        publish(self.db,edition)
+        for change,reset in [
+            ("UPDATE lms_matricula_ciclos SET funcionario_id=999 WHERE id=1000",
+             "UPDATE lms_matricula_ciclos SET funcionario_id=69 WHERE id=1000"),
+            ("UPDATE lms_matricula_ciclos SET status='NAO_INICIADO' WHERE id=1000",
+             "UPDATE lms_matricula_ciclos SET status='EM_ANDAMENTO' WHERE id=1000"),
+            ("UPDATE lms_matriculas SET status='CONCLUIDO' WHERE id=100",
+             "UPDATE lms_matriculas SET status='EM_ANDAMENTO' WHERE id=100"),
+        ]:
+            with self.subTest(change=change):
+                self.db.execute(change)
+                with self.assertRaises(sqlite3.IntegrityError):
+                    bind(self.db,edition)
+                self.db.execute(reset)
+        binding=bind(self.db,edition)
+        self.assertGreater(binding,0)
+
+    def test_event_and_attempt_refuse_a_drifted_active_cycle_status(self):
+        edition=create_edition(self.db)
+        publish(self.db,edition)
+        binding=bind(self.db,edition)
+        self.db.execute("UPDATE lms_matricula_ciclos SET status='NAO_INICIADO' WHERE id=1000")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("""INSERT INTO lms_native_eventos
+                (vinculo_id,event_id,sequencia,unidade_id,payload_sha256)
+                VALUES (?,?,?,?,?)""",(binding,'visit',1,'opening','a'*64))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("""INSERT INTO lms_native_tentativas
+                (vinculo_id,tentativa_numero,answers_json,answers_sha256,policy,score_pct,assessment_satisfied)
+                VALUES (?,?,?,?,?,?,?)""",(binding,1,'[]','a'*64,'SCORED',100,1))
+        self.db.execute("UPDATE lms_matricula_ciclos SET status='EM_ANDAMENTO' WHERE id=1000")
+        self.db.execute("""INSERT INTO lms_native_eventos
+                (vinculo_id,event_id,sequencia,unidade_id,payload_sha256)
+                VALUES (?,?,?,?,?)""",(binding,'visit',1,'opening','a'*64))
 
     def test_cycle_pin_and_tenant_link_fail_closed(self):
         e=create_edition(self.db)
