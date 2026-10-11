@@ -39,6 +39,9 @@ export interface Env {
   EDB_SHADOW_PILOT_TENANTS?: string;
   // Conhecimento Ativo: fail-closed. Use 'all' ou CSV de empresa_id após homologação técnica.
   CONHECIMENTO_ATIVO_ENABLED_TENANTS?: string;
+  // Staging-only pilot for Native V1 read-only learner course projection.
+  // Exact CSV tenant IDs, absent/empty means OFF. Never enabled in production.
+  NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
