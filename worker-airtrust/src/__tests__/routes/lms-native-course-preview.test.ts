@@ -40,7 +40,7 @@ function fetchRoute(config: {
   user?: number;
   anonymous?: boolean;
 } = {}) {
-  const headers = config.anonymous ? {} : {
+  const headers: Record<string, string> = config.anonymous ? {} : {
     'x-test-user': String(config.user ?? 900),
     'x-test-tenant': String(config.tenant ?? 6),
   };
