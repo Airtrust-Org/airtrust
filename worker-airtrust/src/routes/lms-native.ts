@@ -9,7 +9,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaIdSafe } from './escalas-shared';
-import { loadNativePublishedCourse, NativeContentLoadError } from '../services/lms-native-content-loader';
+import { loadNativePublishedCourse, loadNativePrivateCourse, NativeContentLoadError } from '../services/lms-native-content-loader';
+import { readNativeLearnerSession, NativeEvidenceReadError } from '../services/lms-native-readiness-repository';
 import { loadNativeVerifiedAsset } from '../services/lms-native-asset-loader';
 import nativeWriteRoutes from './lms-native-write';
 import {
@@ -106,6 +107,69 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
     if (error instanceof NativeContentLoadError) {
       // Return a generic error code: details remain private to the server.
       return c.json({ success: false, code: 'NATIVE_CONTENT_UNAVAILABLE' }, 409);
+    }
+    throw error;
+  }
+});
+
+/**
+ * Read-only, version-bound resume state. This endpoint is not an authority
+ * to conclude or certify a course, and never returns quiz answer selections.
+ */
+app.get('/matriculas/:matriculaId/sessao', async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  const empresaId = getEmpresaIdSafe(c);
+  if (!canPreviewNativeInStaging(c.env, empresaId)) {
+    return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED' }, 404);
+  }
+  const rawId = c.req.param('matriculaId');
+  if (!/^[1-9][0-9]{0,15}$/.test(rawId)) {
+    return c.json({ success: false, code: 'NATIVE_INVALID_ENROLLMENT_CONTEXT' }, 400);
+  }
+  const rawActor = c.get('userId' as never) as unknown;
+  const actorUserId = typeof rawActor === 'number' ? rawActor :
+    typeof rawActor === 'string' ? Number(rawActor) : NaN;
+  if (!Number.isSafeInteger(actorUserId) || actorUserId <= 0) {
+    return c.json({ success: false, code: 'NATIVE_ACCESS_DENIED' }, 403);
+  }
+  try {
+    const edition = await loadNativePrivateCourse({
+      db: c.env.DB, bucket: c.env.BUCKET,
+      empresaId, matriculaId: Number(rawId), actorUserId,
+    });
+    const { summary } = await readNativeLearnerSession({
+      db: c.env.DB, actorUserId, artifact: edition.artifact,
+      scope: {
+        empresaId, matriculaId: Number(rawId), cursoId: edition.cursoId,
+        cicloId: edition.cicloId, artifactHash: edition.editionHash,
+      },
+    });
+    // Only whitelisted navigation metadata leaves the Worker.
+    return c.json({
+      success: true,
+      data: {
+        matricula_id: Number(rawId),
+        ciclo_id: summary.cicloId,
+        edition_sha256: summary.editionHash,
+        mode: summary.mode,
+        next_sequence: summary.nextSequence,
+        seen_lesson_ids: summary.seenLessonIds,
+        last_visited_unit_id: summary.lastVisitedUnitId,
+        total_lessons: summary.totalLessons,
+        latest_attempt: summary.latestAttempt ? {
+          attempt_number: summary.latestAttempt.attemptNumber,
+          score_pct: summary.latestAttempt.scorePct,
+          assessment_satisfied: summary.latestAttempt.assessmentSatisfied,
+        } : null,
+        completion_supported: false,
+      },
+    });
+  } catch (error) {
+    if (error instanceof NativeAdmissionError) {
+      return c.json({ success: false, code: error.code }, error.status);
+    }
+    if (error instanceof NativeContentLoadError || error instanceof NativeEvidenceReadError) {
+      return c.json({ success: false, code: 'NATIVE_SESSION_UNAVAILABLE' }, 409);
     }
     throw error;
   }
