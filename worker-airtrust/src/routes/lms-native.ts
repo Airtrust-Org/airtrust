@@ -11,6 +11,7 @@ import { auth } from '../middleware/auth';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { loadNativePublishedCourse, NativeContentLoadError } from '../services/lms-native-content-loader';
 import { loadNativeVerifiedAsset } from '../services/lms-native-asset-loader';
+import nativeWriteRoutes from './lms-native-write';
 import {
   NativeAdmissionError,
   resolveNativeEnrollmentAdmission,
@@ -177,5 +178,9 @@ app.get('/matriculas/:matriculaId/assets/:assetId', async (c) => {
     throw error;
   }
 });
+
+// Inherits auth() and tenant isolation from this parent. The write router
+// additionally requires two independent exact-tenant staging allowlists.
+app.route('/', nativeWriteRoutes);
 
 export default app;
