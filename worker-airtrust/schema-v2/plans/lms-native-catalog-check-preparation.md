@@ -47,6 +47,23 @@ O checker rejeita mudanças de tabela, trigger, índice, CHECK e fingerprint.
 Saída aceita = `REVIEW_ONLY_REBUILD_REQUIRED`, **não** SQL executável.
 Qualquer drift exige novo snapshot e revisão do delta, nunca atualização cega do hash.
 
+## Ensaio offline do rebuild com DDL real (sem aplicar migration)
+
+Um novo runner de validação **somente local**, `scripts/schema-v2/rehearse-native-catalog-rebuild.py`, recebe a captura read-only do `sqlite_master`, confirma a fingerprint dos **12 objetos** e reproduz a reconstrução em um banco `:memory:` com **registros sintéticos**, contendo três tabelas referenciadoras `ON DELETE NO ACTION`. O runner não recebe token Cloudflare, não consulta D1, não escreve arquivos de SQL executável e retorna `migrationPrepared=false` e `remoteMutationPerformed=false`.
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  scripts/schema-v2/rehearse-native-catalog-rebuild.py \
+  /caminho/privado/lms-catalog-staging-schema.json \
+  bb867870b5524b0dda21784a017fd0d3f855f116b3c8ff49fd947f05f80a89de
+```
+
+**Executado na captura real de staging:** `foreignKeyCheck=PASS`, `integrityCheck=PASS`, `dependentDefinitionsPreserved=11` (seis índices e cinco triggers), `originalAutoincrementPreserved=true` e `syntheticNativeWrite=PASS`. O teste de falha injetada após `DROP TABLE` confirmou **rollback completo**, inclusive restauração de colunas, dependentes, referências e `sqlite_sequence`. O conjunto adicional de sete testes cobre fingerprint, drift, registros, índices ausentes, CHECK indevidamente alterado e falha injetada.
+
+**Conclusão importante de engenharia:** um teste específico com `PRAGMA defer_foreign_keys=ON` dentro da transação demonstrou que `DROP TABLE` da tabela pai pode aparentar `PRAGMA foreign_key_check` vazio e **ainda assim falhar no COMMIT** por `ON DELETE NO ACTION`. Por isso **não basta ativar deferência de FK na migration Schema V2 existente**. O teste offline utiliza isolamento em memória e controle explícito de `foreign_keys` antes da transação; esse mecanismo **não pode ser copiado para um comando Wrangler remoto** sem um executor governado que prove sessão, rollback, recovery e proveniência. A proteção `NON_ATOMIC_TABLE_REBUILD_REQUIRES_DEDICATED_EXECUTOR` permanece intacta.
+
+O ensaio com um único registro sintético **não comprova segurança para todos os dados reais**, relações transitivas ou semântica Cloudflare D1. Antes de qualquer apply, será necessário um plano governado de reconstrução, validação de estado remoto atual, backup e autorização específica de ambiente e SHA.
+
 ## Riscos e próximos gates para a migration efetiva
 
 1. **Pré-flight real** de produção separadamente, incluindo `sqlite_master`, `PRAGMA table_info`, `PRAGMA foreign_key_list`, contagem de linhas, integridade e dependentes transitivos. Só consultas read-only. Nunca reutilizar fingerprint de staging como autorização para produção.
