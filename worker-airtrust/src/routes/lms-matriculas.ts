@@ -1388,12 +1388,7 @@ app.post('/scorm/commit', async (c) => {
       throw new ApiError('Acesso negado', 403);
     }
   }
-  // Even pure SCORM progress (without a terminal completion signal) cannot
-  // poison a Native enrollment's score, last slide or completion status.
-  // The native player uses its own pinned-edition event ledger instead.
-  if (String(matricula.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
-    throw new ApiError('Curso nativo exige checkpoints do player próprio.', 409);
-  }
+  if (matricula.tipo_conteudo?.trim().toLowerCase() === 'native') throw new ApiError('Curso nativo exige checkpoints do player próprio.', 409);
 
   // ─── Guard: prevent CONCLUIDO downgrade via SCORM commit ─────────────────
   // Completed enrollments must never be downgraded to incomplete/failed/not attempted.
