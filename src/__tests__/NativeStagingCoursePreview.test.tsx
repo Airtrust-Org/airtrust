@@ -34,7 +34,7 @@ const payload = (extra: Record<string, unknown>={}) => ({
 const response = (data: unknown) => new Response(JSON.stringify(data), {
   status: 200, headers: { 'Content-Type': 'application/json' },
 });
-const media = () => new Response(new Blob([new Uint8Array([1,2,3])], { type: 'image/webp' }), {
+const media = () => new Response(new Uint8Array([1,2,3]), {
   status: 200, headers: { 'Content-Type': 'image/webp', 'Content-Length': '3' },
 });
 
