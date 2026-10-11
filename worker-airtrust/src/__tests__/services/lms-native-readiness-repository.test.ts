@@ -71,6 +71,8 @@ describe('Native V1 persisted-readiness bridge (read only)', () => {
     expect(calls.every((call) => call.query.trimStart().startsWith('SELECT'))).toBe(true);
     expect(calls[0].query).toContain("c.tipo_conteudo='native'");
     expect(calls[0].query).toContain("cycle.ciclo_atual=1");
+    expect(calls[0].query).toContain('cycle.status=m.status');
+    expect(calls[0].query).toContain('cycle.funcionario_id=m.funcionario_id');
     expect(calls[0].query).toContain('u.funcionario_id=m.funcionario_id');
   });
 
