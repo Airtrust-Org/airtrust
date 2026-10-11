@@ -94,7 +94,7 @@ ALTER TABLE lms_cursos ADD COLUMN native_pilot_format INTEGER
   NOT NULL DEFAULT 0 CHECK(native_pilot_format IN (0,1));
 ```
 
-Resultado reproduzido no snapshot real, **sem acessar nem escrever no D1 remoto**: `foreignKeyCheck=PASS`, `integrityCheck=PASS`, **11 índices/triggers preservados**, curso legado existente permanece `native_pilot_format=0`, outro curso sintético pode receber marcador 1 sem alterar seu `tipo_conteudo`, e flags fora de 0/1 são rejeitadas. Três testes verificam compatibilidade sintética, drift de DDL e assinatura inválida.
+Resultado reproduzido no snapshot real, **sem acessar nem escrever no D1 remoto**: `foreignKeyCheck=PASS`, `integrityCheck=PASS`, **11 índices/triggers preservados**, curso legado existente permanece `native_pilot_format=0`, outro curso sintético pode receber marcador 1 sem alterar seu `tipo_conteudo`, e flags fora de 0/1 são rejeitadas. **Quatro testes** verificam compatibilidade sintética, drift de DDL, assinatura inválida e rollback de uma falha injetada após `ALTER TABLE` e `UPDATE`: a transação com `foreign_keys=ON` restaura a DDL original, dados e todos os índices/triggers.
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 \
