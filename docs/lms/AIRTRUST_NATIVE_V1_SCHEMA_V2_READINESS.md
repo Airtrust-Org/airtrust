@@ -130,6 +130,16 @@ Resultados relevantes:
 
 Os testes unitários da fábrica são sintéticos; sua aprovação demonstra contratos de transformação e bloqueio, mas não comprova que os nove pacotes reais passam integralmente pela pipeline. A QA por curso ainda terá de comparar slides, mídias, decisões obrigatórias, notas e referências com o SCORM de origem.
 
+## Adaptadores de formatos especiais — desenvolvimento e QA
+
+O piloto agora inclui `scripts/learning-factory/normalize_scorm_model.py` para dois tipos do arquivo privado de nove SCORM recebido:
+
+- **SGSO M10.4**: normaliza slides `cover/content/roadmap/concept_map/matrix/rule_exception/scenario/quiz/compare/process/bowtie` para aulas, cenários obrigatórios e avaliações Native, preservando os textos, gráficos vinculados e questões da origem em candidato privado. O modelo real revelou duas regras distintas: `requiredSlideIds` referencia todos os slides; `requiredInteractionIds` referencia os **cinco slides de quiz**, não os slides de cenário. O adaptador verifica as provas obrigatórias separadamente das decisões `requiredDecision=true`.
+- **Gerenciamento de Resíduos RC4.1**: normaliza decisões `choices` e a avaliação global `assessment.questions` para um exame Native; preserva pontos `gateItems` e texto dos `hotspots`, mas as coordenadas/efeitos visuais desses hotspots continuam pendentes de QA. **As 10 questões da prova original não incluem justificativa pedagógica**: o adaptador identifica `missingPedagogicalFeedback=10` e registra placeholder explícito, sem criar explicação normativa fictícia. O curso continua bloqueado para publicação.
+- A fonte original completa permanece em `legacyAuthoringModel` somente no rascunho privado. Qualquer campo de slide novo/desconhecido bloqueia a conversão até haver mapeamento explícito. Todos os cursos exigem revisão visual, crosswalk de interações, notas e fonte normativa antes de certificação.
+
+**Evidência:** testes sintéticos do adaptador em conjunto com importador e compilador, sem cópia de conteúdo proprietário ao GitHub. Verificações de formato/arquivo privado mostraram nove pacotes intactos, sete `COURSE_DATA` extraídos por leitura offline (42+26+20+20+19+29+25 = **181 slides**) e dois modelos especiais estruturalmente elegíveis para normalização. **Isso ainda não equivale a nove cursos integralmente convertidos e homologados**.
+
 ## Aceitação funcional antes de matrícula real
 
 - upload/revisão de candidato Native, versão por hash e reabertura da mesma edição em nova sessão;
