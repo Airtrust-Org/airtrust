@@ -16,7 +16,7 @@ CREATE TABLE lms_native_edicoes (
   empresa_id INTEGER NOT NULL CHECK(empresa_id > 0),
   curso_id INTEGER NOT NULL CHECK(curso_id > 0),
   artifact_sha256 TEXT NOT NULL CHECK(length(artifact_sha256)=64 AND artifact_sha256 NOT GLOB '*[^0-9a-f]*'),
-  package_version TEXT NOT NULL CHECK(length(package_version) BETWEEN 3 AND 80),
+  package_version TEXT NOT NULL CHECK(length(package_version)=34 AND substr(package_version,1,2)='n-' AND substr(package_version,3) NOT GLOB '*[^0-9a-f]*'),
   r2_prefix TEXT NOT NULL CHECK(length(r2_prefix) BETWEEN 20 AND 300 AND r2_prefix NOT LIKE '%..%' AND r2_prefix NOT LIKE '%\%'),
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','REVIEWED','PUBLISHED','REVOKED')),
   reviewed_at TEXT,
@@ -116,7 +116,13 @@ BEGIN
       ON e.id=NEW.edicao_id AND e.curso_id=m.curso_id AND e.empresa_id=m.empresa_id
     WHERE m.id=NEW.matricula_id AND m.empresa_id=NEW.empresa_id
       AND m.curso_id=NEW.curso_id AND m.deleted_at IS NULL
-      AND ciclo.deleted_at IS NULL AND ciclo.ciclo_atual=1 AND e.status='PUBLISHED'
+      AND ciclo.deleted_at IS NULL AND ciclo.ciclo_atual=1
+      AND ciclo.funcionario_id=m.funcionario_id AND ciclo.status=m.status
+      AND m.status IN ('NAO_INICIADO','EM_ANDAMENTO')
+      AND EXISTS (SELECT 1 FROM lms_cursos c WHERE c.id=m.curso_id
+         AND c.empresa_id=m.empresa_id AND c.tipo_conteudo='native'
+         AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL)
+      AND e.status='PUBLISHED'
   );
 END;
 
@@ -136,6 +142,7 @@ BEGIN
     JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
     WHERE b.id=NEW.vinculo_id AND ed.status='PUBLISHED'
       AND m.status='EM_ANDAMENTO' AND m.deleted_at IS NULL
+      AND ciclo.status='EM_ANDAMENTO' AND ciclo.funcionario_id=m.funcionario_id
       AND ciclo.ciclo_atual=1 AND ciclo.deleted_at IS NULL
       AND c.tipo_conteudo='native' AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL
   );
@@ -156,6 +163,7 @@ BEGIN
     JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
     WHERE b.id=NEW.vinculo_id AND ed.status='PUBLISHED'
       AND m.status='EM_ANDAMENTO' AND m.deleted_at IS NULL
+      AND ciclo.status='EM_ANDAMENTO' AND ciclo.funcionario_id=m.funcionario_id
       AND ciclo.ciclo_atual=1 AND ciclo.deleted_at IS NULL
       AND c.tipo_conteudo='native' AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL
   );
