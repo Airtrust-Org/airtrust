@@ -98,6 +98,14 @@ export default function NativeCoursePreview({ course, resolveAssetHref }: Previe
       <article aria-labelledby="native-preview-unit-title" className="space-y-5">
         <h2 id="native-preview-unit-title" className="text-2xl font-semibold">{unit.title}</h2>
         {unit.blocks.map(renderBlock)}
+        {unit.sourceRefs && unit.sourceRefs.length > 0 && (
+          <aside aria-label="Referências da unidade" className="rounded-md border p-3">
+            <h3 className="font-semibold">Referências</h3>
+            <ul className="list-disc pl-6">
+              {unit.sourceRefs.map((ref, index) => <li key={index}>{ref}</li>)}
+            </ul>
+          </aside>
+        )}
 
         {(unit.kind === 'assessment' || unit.kind === 'scenario') && unit.questionIds.map((questionId) => {
           const question = questionMap.get(questionId);
