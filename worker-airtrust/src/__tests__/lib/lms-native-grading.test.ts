@@ -57,6 +57,27 @@ describe('AirTrust native server-side grading', () => {
     });
   });
 
+  it('does not grant eligibility when a rounded display score reaches mastery prematurely', () => {
+    const base = course();
+    const extraQuestion = {
+      ...base.questions[0],
+      id: 'q3',
+    };
+    const input = validateNativeCourseArtifact({
+      ...base,
+      policy: { mode: 'SCORED', masteryScore: 67 },
+      questions: [...base.questions, extraQuestion],
+      units: base.units.map((unit) => unit.kind === 'assessment'
+        ? { ...unit, questionIds: [...unit.questionIds, 'q3'] }
+        : unit),
+    });
+    const result = evaluateNativeAssessment(input, [
+      ...good,
+      { questionId: 'q3', optionId: 'b' },
+    ]);
+    expect(result).toMatchObject({ scorePct: 67, assessmentSatisfied: false });
+  });
+
   it('formative participation does not invent numerical scores', () => {
     expect(evaluateNativeAssessment(course('FORMATIVE'), good)).toEqual({
       mode: 'FORMATIVE', answered: 2, total: 2, scorePct: null, assessmentSatisfied: true,
