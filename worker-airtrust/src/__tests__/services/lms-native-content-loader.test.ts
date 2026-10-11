@@ -84,24 +84,21 @@ function createFixture(params: {
   const run = async () => loadNativePublishedCourse({
     db: await makeDb(), bucket, empresaId: 6, matriculaId: 101, actorUserId: 900,
   });
-  return { run, calls, r2Calls, setBytes: (bytes: Uint8Array) => { objectBytes = bytes; } };
+  const runPrivate = async () => loadNativePrivateCourse({
+    db: await makeDb(), bucket, empresaId: 6, matriculaId: 101, actorUserId: 900,
+  });
+  return { run, runPrivate, calls, r2Calls, setBytes: (bytes: Uint8Array) => { objectBytes = bytes; } };
 }
 
 describe('Native R2 immutable learner content loader', () => {
-  it('provides gabarito solely to Worker-private assessment services', async () => {
+  it('keeps private grading keys inside the Worker, never in learner output', async () => {
     const f = createFixture({});
-    const db = await (async () => {
-      // Fetch the same read-only DB fixture without using an HTTP endpoint.
-      return (f as unknown as { run: () => Promise<unknown> }).run;
-    })();
-    expect(typeof db).toBe('function');
-    const publicProjection = await f.run();
-    expect(JSON.stringify(publicProjection.course)).not.toContain('correctOptionId');
-    const full = candidate.questions;
-    expect(full.some((q: { correctOptionId?: string }) => Boolean(q.correctOptionId))).toBe(true);
-    expect(JSON.stringify(publicProjection.course)).not.toContain(full[0].correctOptionId);
-    // The private loader must stay server-only; the route calls the public wrapper.
-    expect(typeof loadNativePrivateCourse).toBe('function');
+    const privateCourse = await f.runPrivate();
+    const publicCourse = await f.run();
+    expect(privateCourse.artifact.questions[0]?.correctOptionId).toBe('option-2');
+    expect(privateCourse.artifact.questions[1]?.correctOptionId).toBe('option-2');
+    expect(JSON.stringify(publicCourse)).not.toContain('correctOptionId');
+    expect(JSON.stringify(publicCourse)).not.toContain('feedbackCorrect');
   });
 
   it('serves validated artifact only to the owning enrolled employee and removes all grading secrets', async () => {
