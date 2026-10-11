@@ -47,9 +47,9 @@ export async function loadNativeVerifiedAsset(params: {
   }
   // The NativeCourse V1 validator has already rejected absolute paths,
   // external URLs, traversal and unknown MIME classes.
-  const prefix = `lms/native/${params.empresaId}/${published.course.courseId}/`;
-  // Asset R2 hierarchy uses numeric course IDs, NOT the content's courseId.
-  const r2Prefix = `lms/native/${params.empresaId}/${published.courseIdNumeric}/${published.editionHash}/`;
+  // Asset R2 hierarchy uses the authenticated numeric LMS course ID,
+  // not the editable native authoring courseId.
+  const r2Prefix = `lms/native/${params.empresaId}/${published.cursoId}/${published.editionHash}/`;
   const object = await params.bucket.get(r2Prefix + asset.path);
   if (!object || object.size <= 0 || object.size > MAX_ASSET_BYTES) {
     throw new NativeContentLoadError('NATIVE_ASSET_MISSING_OR_TOO_LARGE');
