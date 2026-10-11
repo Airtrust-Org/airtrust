@@ -105,6 +105,39 @@ describe('lms progresso xapi router', () => {
     logAuditMock.mockResolvedValue(undefined);
   });
 
+  it('xAPI nonterminal statements cannot poison a Native enrollment', async () => {
+    const writes = vi.fn();
+    const { db, calls } = createMockDb([
+      ['FROM lms_matriculas m', { first: () => ({
+        id: 10, funcionario_id: 77, status: 'EM_ANDAMENTO',
+        empresa_id: 1, tipo_conteudo: 'native',
+        qualificacao_historico_id: null, gerar_qualificacao_ao_concluir: 0,
+      }) }],
+      ['INSERT INTO lms_xapi_statements', { run: writes }],
+      ['UPDATE lms_matriculas', { run: writes }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+    const response = await app.fetch(
+      new Request('http://localhost/xapi/statements', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 10,
+          actor: { mbox: 'mailto:aluno@example.invalid' },
+          verb: { id: 'http://adlnet.gov/expapi/verbs/experienced' },
+          object: { id: 'h5p:20' },
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(writes).not.toHaveBeenCalled();
+    expect(calls.some((entry) => entry.method === 'run')).toBe(false);
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+  });
+
   it('concludes on completed verb even when xAPI result flags are omitted', async () => {
     const { db, calls } = createMockDb([
       [
