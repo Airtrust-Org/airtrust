@@ -116,6 +116,8 @@ jobs:
         run: node --test scripts/__tests__/lms-scorm-m8-fixture.test.mjs
       - name: verify frozen Factory SCORM core lock is fail-closed
         run: python3 -m unittest scripts/__tests__/test_scorm_golden_core_lock.py -v
+      - name: verify SCORM to Native V1 private conversion is fail-closed
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/learning-factory -p 'test_*native*.py' -v
       - name: validate 0438 legacy staging workflow guards
         run: node --test scripts/__tests__/staging-0438-legacy-validation.test.mjs
       - name: validate 0438 legacy staging workflow v2 guards
