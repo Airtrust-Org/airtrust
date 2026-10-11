@@ -173,6 +173,12 @@ class SpecializedCourseAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(SpecializedModelError, 'SPECIALIZED_CHOICES_AMBIGUOUS'):
             normalize_specialized_course_model(model)
 
+    def test_future_unknown_authoring_fields_require_explicit_adapter_mapping(self):
+        model = sgso_model()
+        model['slides'][0]['unreviewedRegulatoryControl'] = 'never silently ignored'
+        with self.assertRaisesRegex(SpecializedModelError, 'SPECIALIZED_NEW_FIELDS_REQUIRE_MAPPING'):
+            normalize_specialized_course_model(model)
+
     def test_required_structural_content_must_not_disappear(self):
         model = sgso_model()
         model['slides'][0]['outcomes'] = [{'unexpected': 'object'}]
