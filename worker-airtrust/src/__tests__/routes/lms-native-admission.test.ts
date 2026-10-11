@@ -52,7 +52,12 @@ const req = (params: { id?: string; tenant?: string; user?: string } = {}) =>
       'x-test-tenant': params.tenant ?? '6',
     },
   });
-const fetch = (request: Request) => app().fetch(request, { DB: makeDb() } as unknown as Env);
+const fetch = (request: Request, config: { environment?: string; allowlist?: string } = {}) =>
+  app().fetch(request, {
+    DB: makeDb(),
+    ENVIRONMENT: config.environment ?? 'staging',
+    NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS: config.allowlist ?? '6',
+  } as unknown as Env);
 
 describe('Native integration admission endpoint — read only and tenant scoped', () => {
   beforeEach(() => {
@@ -73,6 +78,21 @@ describe('Native integration admission endpoint — read only and tenant scoped'
     expect(bindings[0]).toEqual([51, 6]);
     expect(bindings[1]).toEqual([100]);
     expect(statements.every((sql) => sql.trimStart().toUpperCase().startsWith('SELECT'))).toBe(true);
+  });
+
+  it('never reads admission data outside explicitly allowlisted staging tenants', async () => {
+    for (const config of [
+      { environment: 'production', allowlist: '6' },
+      { environment: 'staging', allowlist: '' },
+      { environment: 'staging', allowlist: '*' },
+      { environment: 'staging', allowlist: '60' },
+    ]) {
+      const response = await fetch(req(), config);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ code: 'NATIVE_PLAYER_NOT_ENABLED' });
+    }
+    expect(statements).toHaveLength(0);
+    expect(bindings).toHaveLength(0);
   });
 
   it('completed course admits review only, never re-enrollment', async () => {
