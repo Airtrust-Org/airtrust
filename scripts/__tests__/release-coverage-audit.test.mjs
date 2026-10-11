@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,4 +28,13 @@ test('published Pages entry must carry the Worker SHA prefix', () => {
 test('Actions relative script entrypoint is actually invoked', () => {
   const output = execFileSync('node', ['scripts/ops/release-coverage-audit.mjs', '--help'], { encoding: 'utf8' });
   assert.match(output, /Read-only merge-vs-production SHA ancestry/);
+});
+
+test('release audit runs after real deployment and from explicit manual/scheduled entrypoints', () => {
+  const yaml = readFileSync('.github/workflows/release-coverage-audit.yml', 'utf8');
+  assert.match(yaml, /workflow_dispatch:/);
+  assert.match(yaml, /schedule:/);
+  assert.match(yaml, /workflows: \['Deploy AirTrust'\]/);
+  assert.match(yaml, /github\.event\.workflow_run\.conclusion == 'success'/);
+  assert.match(yaml, /permissions:\s+contents: read\s+pull-requests: read/);
 });
