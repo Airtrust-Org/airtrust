@@ -23,7 +23,7 @@
 - Três tabelas no mesmo staging contêm referências FK SQL explícitas a `lms_cursos`:
   `lms_cursos_setores`, `lms_matriculas` e `lms_scorm_package_versions`.
   Uma consulta adicional a `pragma_foreign_key_list` confirmou que as três apontam por `curso_id` e declaram `ON DELETE NO ACTION` (não CASCADE). Isso reduz um risco específico, mas **não prova** que qualquer sequência de DROP/RENAME seja transacionalmente segura no executor real.
-- A consulta read-only ao inventário das quatro tabelas do Schema V2 0549 confirmou **nenhuma presente em staging**. Portanto 0549 não foi aplicado nesse ambiente.
+- A consulta read-only ao inventário das quatro tabelas do Schema V2 0550 confirmou **nenhuma presente em staging**. Portanto 0550 não foi aplicado nesse ambiente.
 
 Os hashes descrevem apenas o snapshot de staging capturado: não inferir equivalência com produção, nem presumir validade após avanço do schema.
 
@@ -70,17 +70,17 @@ Após o ensaio offline, as [instruções oficiais do Cloudflare D1](https://deve
 
 **Prova reproduzida no teste:** com FK ativa e `defer_foreign_keys=ON`, é possível observar `foreign_key_check` vazio antes do COMMIT e ainda ter `FOREIGN KEY constraint failed` no COMMIT ao dropar a tabela pai; o rollback recupera o esquema. Isso corresponde à advertência do [issue técnico do workerd](https://github.com/cloudflare/workerd/issues/2471) e impede converter o ensaio bem-sucedido em `:memory:` (onde a FK foi desabilitada **antes** da transação) numa migration D1 viável.
 
-**Decisão de segurança:** *não executar* `DROP/RENAME` de `lms_cursos` no D1, nem promover o runner de ensaio a executor remoto. A frente seguinte deve verificar primeiro um **marcador nativo aditivo em tabela/coluna separada** e sua compatibilidade com as rotas legadas e o Schema V2 0549. Essa alternativa precisa de auditoria de dados, tenant e contratos antes de ser adotada. Se for indispensável manter `tipo_conteudo='native'`, será necessária uma estratégia de migração referencial muito mais ampla, explicitamente autorizada, sem pressupor que o D1 suporta o rebuild local.
+**Decisão de segurança:** *não executar* `DROP/RENAME` de `lms_cursos` no D1, nem promover o runner de ensaio a executor remoto. A frente seguinte deve verificar primeiro um **marcador nativo aditivo em tabela/coluna separada** e sua compatibilidade com as rotas legadas e o Schema V2 0550. Essa alternativa precisa de auditoria de dados, tenant e contratos antes de ser adotada. Se for indispensável manter `tipo_conteudo='native'`, será necessária uma estratégia de migração referencial muito mais ampla, explicitamente autorizada, sem pressupor que o D1 suporta o rebuild local.
 
 ## Mapa mínimo de compatibilidade para alternativa aditiva
 
 Levantamento no **HEAD da PR #1389**, sem alterações de schema nem decisão de migração:
 
-- **DB 0549:** quatro predicados `c.tipo_conteudo='native'` em triggers de pin, eventos e tentativas.
+- **DB 0550:** quatro predicados `c.tipo_conteudo='native'` em triggers de pin, eventos e tentativas.
 - **Serviços Worker:** dois predicados em `lms-native-checkpoint-writer.ts`, dois em `lms-native-attempt-writer.ts`, um em `lms-native-enrollment-starter.ts`, um em `lms-native-readiness-repository.ts` e admissão em `lms-native-enrollment-access.ts`.
 - **Proteção legada crítica:** `lms-completion-integrity.ts` (finalização, administração, SCORM, xAPI, progresso), `lms-matriculas.ts` (commit SCORM mesmo não terminal) e `lms-progresso.ts` (xAPI não terminal). Todos devem reconhecer o formato nativo **antes** de qualquer write legado, ainda que a coluna antiga fisicamente permaneça `scorm`.
 - **UX/catálogo:** conferir rotas administrativas, seletor de formato, matrícula, relatórios, conteúdo LMS e exposição de SCORM assets, para impedir que um curso marcado Native seja lançado por uma tela/rota de SCORM legado.
-- **Testes:** atualizar os predicados SQL, fixtures de 0549, autorização multi-tenant, sequência de eventos, conclusão negada por legados, regressão SCORM sem marcador e fail-closed quando a extensão de schema não existir.
+- **Testes:** atualizar os predicados SQL, fixtures de 0550, autorização multi-tenant, sequência de eventos, conclusão negada por legados, regressão SCORM sem marcador e fail-closed quando a extensão de schema não existir.
 
 **Critério para escolher abordagem:** preferir mutação **estritamente aditiva** (coluna booleana validada ou tabela de vínculo tenant+curso), que o executor Schema V2 atual aceite e que não dependa de desativar FKs. O sinal Native tem de ser autoritativo no backend e não conflitar com `tipo_conteudo` legado. Proibir atalhos como registrar um curso Native como SCORM e deixá-lo completar por regras antigas. Somente adotar após testar compatibilidade integral, inclusive UI, dados, auditoria e certificado.
 
@@ -135,7 +135,7 @@ Esta é **apenas uma alternativa de design**: não existe migration 0550 ou qual
 1. **Pré-flight real** de produção separadamente, incluindo `sqlite_master`, `PRAGMA table_info`, `PRAGMA foreign_key_list`, contagem de linhas, integridade e dependentes transitivos. Só consultas read-only. Nunca reutilizar fingerprint de staging como autorização para produção.
 2. Alterar o CHECK do SQLite exige mecanismo de reconstrução de tabela, não apenas `ALTER COLUMN`. **O builder oficial atual `scripts/schema-v2/build-reviewed-schema-apply.mjs` bloqueia explicitamente `DROP TABLE` combinado com `ALTER TABLE ... RENAME TO`, emitindo `NON_ATOMIC_TABLE_REBUILD_REQUIRES_DEDICATED_EXECUTOR`.** Essa proteção é um bloqueio correto; não modificá-la nem contorná-la para liberar o Native. O procedimento precisa preservar **todas** as colunas e defaults do schema real, seus seis índices, cinco triggers, e relações FK/cascatas nas três tabelas identificadas, além de dependentes transitivos e políticas de qualificação. Não usar `PRAGMA writable_schema`, `foreign_keys=OFF` remoto improvisado nem troca de nomes que reescreva FKs sem plano.
 3. Preparar migration Schema V2 **separada** com ID único atual, manifest/hash, executor suportado, plano de rollback/compensação e recovery point. Exigir prova de atomicidade e `PRAGMA foreign_key_check` em fixture representativa antes de staging; não aplicar a partir desta nota.
-4. Aplicar em staging somente após autorização do escopo, mantendo 0549 e o CHECK em ordem governada, sem writers nativos habilitados. Publicar pacote privado revisado e matrícula fictícia somente após schema comprovado.
+4. Aplicar em staging somente após autorização do escopo, mantendo 0550 e o CHECK em ordem governada, sem writers nativos habilitados. Publicar pacote privado revisado e matrícula fictícia somente após schema comprovado.
 5. Executar E2E completo do LMS: início, ciclo SSOT, evidências, prova/reprovação, reentrada, qualificação/certificado/Compliance. Produção requer autorização explícita para SHA/artefatos/escopo.
 
 **Situação real:** a migration do CHECK não foi criada/aplicada porque, sem executor de reconstrução SQLite referencialmente seguro, fazê-lo seria um risco de dados maior que o bloqueio atual. Nenhuma rota Native foi habilitada.
