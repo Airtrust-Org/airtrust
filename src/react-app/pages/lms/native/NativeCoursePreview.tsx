@@ -68,7 +68,11 @@ function ProtectedNativeMedia({ asset, type, alt, fetchAsset }: {
 }
 
 export default function NativeCoursePreview({ course, resolveAssetHref, fetchAuthorizedAsset, initialUnitId, serverSeenLessonIds }: PreviewProps) {
-  const [unitIndex, setUnitIndex] = useState(0);
+  const [unitIndex, setUnitIndex] = useState(() => {
+    const index = initialUnitId
+      ? course.units.findIndex((unit) => unit.id === initialUnitId) : -1;
+    return index >= 0 ? index : 0;
+  });
   const [choices, setChoices] = useState<Record<string, string>>({});
 
   useEffect(() => {
