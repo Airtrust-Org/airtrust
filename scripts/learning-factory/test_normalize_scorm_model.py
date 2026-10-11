@@ -127,6 +127,36 @@ class SpecializedCourseAdapterTests(unittest.TestCase):
             self.assertEqual(report['scenarioQuestions'], 1)
             self.assertFalse(report['publishable'])
 
+    def test_real_sgso_objective_and_quiz_metadata_are_preserved_or_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            model = sgso_model()
+            model['slides'][0]['outcomes'] = [
+                {'title': 'Meta operacional', 'text': 'Reconhecer a barreira'}
+            ]
+            question = model['slides'][2]['questions'][0]
+            question['originalText'] = 'Redação original distinta da pergunta mostrada'
+            question['source'] = {
+                'referenceBasis': 'Manual da avaliação', 'generated': '2026-01-01',
+            }
+            normalized = normalize_specialized_course_model(model)
+            self.assertEqual(normalized['adapterReview']['originalQuestionWordingPending'], 1)
+            self.assertEqual(normalized['adapterReview']['questionSourceReviewRequired'], 1)
+            self.assertIn('Meta operacional: Reconhecer a barreira',
+                          normalized['slides'][0]['body'])
+            self.assertIn('Manual da avaliação', normalized['slides'][2]['sourceRefs'])
+            make_zip(root/'source.zip', model)
+            extract_draft(root/'source.zip', root/'draft')
+            draft = json.loads((root/'draft/native-import-draft.json').read_text())
+            candidate, review = compile_candidate(draft, root/'draft')
+            self.assertFalse(review['publishable'])
+            self.assertEqual(review['adapterReview']['originalQuestionWordingPending'], 1)
+            self.assertEqual(review['adapterReview']['questionSourceReviewRequired'], 1)
+            self.assertEqual(len(candidate['questions']), 2)
+            self.assertEqual(candidate['questions'][-1]['prompt'], 'Qual prevenção?')
+            self.assertIn('Redação original distinta',
+                          json.dumps(draft['legacyAuthoringModel'], ensure_ascii=False))
+
     def test_residuos_uses_global_exam_and_requires_missing_rationale_review(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
