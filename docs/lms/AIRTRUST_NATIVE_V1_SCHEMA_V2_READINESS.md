@@ -99,7 +99,7 @@ Em `ENVIRONMENT=production`, todos os endpoints abaixo recusam operação mesmo 
 
 | Rota | Evidência recebida | Persistência e resposta |
 | --- | --- | --- |
-| `POST /api/lms/native/matriculas/:id/iniciar` | Corpo JSON estrito `{}`; matrícula determinada apenas pela rota autenticada | Inicia `NAO_INICIADO` → `EM_ANDAMENTO` em `lms_matriculas`, com UPDATE condicional por usuário/empresa/curso/ciclo e SHA-256 da edição publicada. Retry da mesma edição é idempotente; sem qualificação, nota ou certificado |
+| `POST /api/lms/native/matriculas/:id/iniciar` | Corpo JSON estrito `{}`; matrícula determinada apenas pela rota autenticada | Inicia `NAO_INICIADO` → `EM_ANDAMENTO` **simultaneamente na matrícula e no ciclo ativo** por transação `D1.batch()` com preflight/postcheck; valida usuário, empresa, curso, ciclo e SHA-256 da edição. Retry íntegro é idempotente; divergência entre status causa rollback; sem qualificação, nota ou certificado |
 | `POST /api/lms/native/matriculas/:id/checkpoints` | Apenas `eventId`, `sequence`, `unitId` de aula | Worker acrescenta hash da edição encontrado no banco/R2, valida evidências anteriores, executa INSERT atômico e devolve recibo sem conclusão |
 | `POST /api/lms/native/matriculas/:id/tentativas` | Apenas `attemptNumber` e pares `questionId`/`optionId` | Worker reavalia com gabarito privado da edição, executa INSERT atômico e devolve nota/satisfação da avaliação, **sem qualificação/certificado** |
 
