@@ -40,6 +40,14 @@ O pacote guarda dois digests diferentes: `nativeCandidateSha256` identifica a ve
 5. Usar workflow governado com autorização específica, recovery point e pós-condições. Nunca rodar `wrangler d1 execute --remote` avulso.
 6. Compatibilizar versões do Worker/Pages com esquema de staging primeiro; evitar deploy de Worker que exija tabelas inexistentes no ambiente de destino.
 
+## Prévia técnica de mídia (staging, ainda não publicada)
+
+- `GET /api/lms/native/matriculas/:matriculaId/assets/:assetId` usa o mesmo `auth()`, a allowlist exata do tenant e a restrição **staging-only** da prévia de curso. A entrada externa é somente o asset ID, nunca o caminho R2.
+- O Worker resolve a matrícula do próprio usuário e a edição imutável, valida o JSON privado por SHA-256, encontra o asset citado por unidade e compara o SHA-256 dos bytes da mídia. Proíbe caminhos improvisados, arquivos sem referência, tamanho inválido e acesso cruzado.
+- Limite inicial intencional: **12 MiB por mídia**, com respostas `no-store`, `nosniff`, mesmo domínio e um único intervalo HTTP `Range` para vídeos curtos. Acima disso o transporte não é liberado: vídeos grandes/streaming dependerão de solução revisada de integridade e faixas.
+- O componente `NativeStagingCoursePreview` usa `fetchWithAuth` existente (JWT em header, jamais URL); cria `Blob URL` local somente após receber a mídia autorizada, invalida em desmontagem/troca de unidade e não contém botão de conclusão. **Ainda não foi associado às rotas públicas do frontend.**
+- Os testes locais provam transporte, range, bloqueio de R2 adulterado, tenant/usuário indevido, allowlist desativada, privacidade do gabarito, falha de autenticação e revogação dos `Blob URLs`. Nenhum desses testes substitui o fluxo navegador + D1/R2 real em staging.
+
 ## Aceitação funcional antes de matrícula real
 
 - upload/revisão de candidato Native, versão por hash e reabertura da mesma edição em nova sessão;
