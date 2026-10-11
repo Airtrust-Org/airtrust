@@ -84,6 +84,29 @@ Levantamento no **HEAD da PR #1389**, sem alterações de schema nem decisão de
 
 **Critério para escolher abordagem:** preferir mutação **estritamente aditiva** (coluna booleana validada ou tabela de vínculo tenant+curso), que o executor Schema V2 atual aceite e que não dependa de desativar FKs. O sinal Native tem de ser autoritativo no backend e não conflitar com `tipo_conteudo` legado. Proibir atalhos como registrar um curso Native como SCORM e deixá-lo completar por regras antigas. Somente adotar após testar compatibilidade integral, inclusive UI, dados, auditoria e certificado.
 
+## Ensaio adicional: marcador aditivo, mantendo FKs habilitadas (11/10/2026)
+
+A prova offline `scripts/schema-v2/rehearse-native-additive-marker.py` reutiliza a captura SHA-256 exata do catálogo de staging, reproduz os **12 objetos catalogados** e inclui modelos sintéticos mínimos das tabelas de qualificações referidas pelos triggers 0457. Numa base em memória com `PRAGMA foreign_keys=ON`, testa a alternativa ilustrativa:
+
+```sql
+-- APENAS EXEMPLO NO RUNNER OFFLINE — NÃO APLICAR A D1
+ALTER TABLE lms_cursos ADD COLUMN native_pilot_format INTEGER
+  NOT NULL DEFAULT 0 CHECK(native_pilot_format IN (0,1));
+```
+
+Resultado reproduzido no snapshot real, **sem acessar nem escrever no D1 remoto**: `foreignKeyCheck=PASS`, `integrityCheck=PASS`, **11 índices/triggers preservados**, curso legado existente permanece `native_pilot_format=0`, outro curso sintético pode receber marcador 1 sem alterar seu `tipo_conteudo`, e flags fora de 0/1 são rejeitadas. Três testes verificam compatibilidade sintética, drift de DDL e assinatura inválida.
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  scripts/schema-v2/rehearse-native-additive-marker.py \
+  /caminho/privado/lms-catalog-staging-schema.json \
+  bb867870b5524b0dda21784a017fd0d3f855f116b3c8ff49fd947f05f80a89de
+```
+
+**Achado crítico:** a coluna aditiva é tecnicamente possível com FKs ativas, porém **não resolve isoladamente o suporte Native**. Um curso marcado 1 continua com o valor físico `tipo_conteudo='scorm'` exigido pelo CHECK legado. Sem alterar e testar as rotas de player/upload/SCORM/xAPI/status/progresso, tarefas administrativas, catálogo, qualificações e certificados, esse curso seria elegível ao caminho SCORM e poderia burlar requisitos de evidência. **É proibido ativar esse marcador até todas as rotas legadas reconhecerem o estado efetivo Native e falharem fechadas, com testes de não regressão SCORM e multi-tenant.**
+
+Esta é **apenas uma alternativa de design**: não existe migration 0550 ou qualquer apply gerado, nenhuma edição remota, nenhum campo novo na D1 real e nenhuma autorização para habilitar cursos. Para chegar a uma migration de produção, será necessário comparar o escopo de isolamento de todas as rotas legadas e estabelecer como o frontend evita exibir/exportar um curso Native como SCORM. O rebuild do CHECK continua bloqueado pelo contrato Schema V2.
+
 ## Riscos e próximos gates para a migration efetiva
 
 1. **Pré-flight real** de produção separadamente, incluindo `sqlite_master`, `PRAGMA table_info`, `PRAGMA foreign_key_list`, contagem de linhas, integridade e dependentes transitivos. Só consultas read-only. Nunca reutilizar fingerprint de staging como autorização para produção.
