@@ -50,6 +50,50 @@ class NativeAdditiveRehearsalTests(unittest.TestCase):
         self.assertFalse(result['migrationPrepared'])
         self.assertFalse(result['remoteMutationPerformed'])
 
+    def test_injected_failure_rolls_back_additive_ddl_with_foreign_keys_on(self):
+        snapshot, fingerprint = synthetic()
+        table, indexes, triggers, _ = module.parse_snapshot(snapshot, fingerprint)
+        db = module.create_synthetic_db(table, indexes, triggers)
+        try:
+            original = db.execute(
+                "SELECT sql FROM sqlite_master WHERE name='lms_cursos'"
+            ).fetchone()[0]
+            objects = {
+                row['name']: db.execute(
+                    "SELECT sql FROM sqlite_master WHERE name=?", (row['name'],)
+                ).fetchone()[0] for row in indexes + triggers
+            }
+            self.assertEqual(db.execute('PRAGMA foreign_keys').fetchone()[0], 1)
+            with self.assertRaisesRegex(RuntimeError, 'INJECTED_FAILURE'):
+                db.execute('BEGIN IMMEDIATE')
+                try:
+                    db.execute(
+                        "ALTER TABLE lms_cursos ADD COLUMN native_pilot_format INTEGER "
+                        "NOT NULL DEFAULT 0 CHECK(native_pilot_format IN (0,1))"
+                    )
+                    db.execute("UPDATE lms_cursos SET native_pilot_format=1 WHERE id=1")
+                    raise RuntimeError('INJECTED_FAILURE')
+                except Exception:
+                    db.rollback()
+                    raise
+            self.assertEqual(
+                db.execute("SELECT sql FROM sqlite_master WHERE name='lms_cursos'"
+                           ).fetchone()[0], original
+            )
+            self.assertNotIn('native_pilot_format', [
+                row[1] for row in db.execute('PRAGMA table_info(lms_cursos)')
+            ])
+            for name, ddl in objects.items():
+                self.assertEqual(db.execute(
+                    "SELECT sql FROM sqlite_master WHERE name=?", (name,)
+                ).fetchone()[0], ddl)
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+            self.assertEqual(db.execute(
+                "SELECT tipo_conteudo FROM lms_cursos WHERE id=1"
+            ).fetchone()[0], 'scorm')
+        finally:
+            db.close()
+
     def test_any_schema_drift_refuses_the_rehearsal(self):
         snapshot, fingerprint=synthetic()
         snapshot[0]['results'][0]['sql'] += ' -- unwanted drift'
