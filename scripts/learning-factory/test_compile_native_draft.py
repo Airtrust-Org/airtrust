@@ -3,6 +3,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -157,6 +158,21 @@ class CompileNativeDraftTests(unittest.TestCase):
             intro['steps'][1] = 'Ação final revisada'
             modified, _ = compile_candidate(draft, location)
             self.assertNotEqual(initial['packageVersion'], modified['packageVersion'])
+
+    def test_preview_asset_limit_is_a_blocking_review_finding_not_silent_loss(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            # Simulate a protected-media payload beyond the active preview
+            # budget without checking any private training files into GitHub.
+            with patch('compile_native_draft.MAX_NATIVE_PREVIEW_ASSET_BYTES', 10):
+                candidate, report = compile_candidate(draft, location)
+            self.assertEqual(len(report['mediaTransportBlockers']), 1)
+            blocker = report['mediaTransportBlockers'][0]
+            self.assertEqual(blocker['sourcePath'], 'media/hero.webp')
+            self.assertEqual(blocker['reason'], 'REQUIRES_APPROVED_LARGE_MEDIA_TRANSPORT')
+            self.assertEqual(blocker['previewLimitBytes'], 10)
+            self.assertFalse(report['publishable'])
+            self.assertEqual(len(candidate['assets']), 1)
 
     def test_fail_closed_on_missing_source_or_unmapped_slide(self):
         with tempfile.TemporaryDirectory() as d:
