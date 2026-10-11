@@ -150,6 +150,27 @@ describe('AirTrust Native V1: fail-closed authoring contract', () => {
     expectError(noExam, 'NATIVE_SCORED_WITHOUT_QUESTIONS');
   });
 
+  it('preserves source traceability and required scenario questions without leaking answers', () => {
+    const input = clone();
+    const scenarioQuestion = { ...input.questions[0], id: 'q2' };
+    const candidate = {
+      ...input,
+      references: [{ id: 'ref-001', label: 'NR-6', detail: 'Fonte revisada' }],
+      questions: [...input.questions, scenarioQuestion],
+      units: [
+        { ...input.units[0], sourceRefs: ['NR6'] },
+        { id: 'scenario-1', title: 'Decisão operacional', kind: 'scenario', blocks: [], questionIds: ['q2'] },
+        input.units[1],
+      ],
+    };
+    const validated = validateNativeCourseArtifact(candidate);
+    expect(validated.units[0]?.sourceRefs).toEqual(['NR6']);
+    const learner = toNativeLearnerCourse(validated);
+    expect(learner.references?.[0]?.label).toBe('NR-6');
+    expect(learner.units[1]?.kind).toBe('scenario');
+    expect(JSON.stringify(learner)).not.toContain('correctOptionId');
+  });
+
   it('permits explicit formative courses without invented score or answers', () => {
     const course = clone();
     course.policy = { mode: 'FORMATIVE' } as Editable['policy'];
