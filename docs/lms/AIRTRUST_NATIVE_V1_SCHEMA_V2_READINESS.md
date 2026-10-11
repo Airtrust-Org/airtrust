@@ -61,6 +61,22 @@ Duas funções de backend estão implementadas e verificadas com testes focados,
 
 **Dependências para ativar escrita:** schema 0549 efetivamente aplicado + CHECK `native` governado no catálogo + upload/publicação privada e revisão pedagógica da edição + fluxo de sessão seguro que obtenha scope/artefato somente do servidor + autorização explícita de staging, testes com D1/R2 reais, idempotência concorrente e recuperação. Até lá as funções permanecem internas e o frontend é preview read-only.
 
+## Montagem offline do pacote R2 para revisão (NÃO é upload)
+
+A fábrica agora oferece `scripts/learning-factory/stage_native_r2_package.py`. Após gerar o rascunho e o candidato Native privado, a ferramenta monta em diretório **novo e exclusivo** os bytes exatos de `native-private-candidate.json` e suas mídias declaradas. Ela calcula a chave `lms/native/{empresa_id}/{curso_id}/{artifactBytesSha256}/`, que corresponde ao loader e ao Schema V2. O catálogo de objetos `private-publication-review.json` inclui hash, tamanho e MIME de cada arquivo, sem autenticação remota ou alteração de estado do LMS.
+
+Exemplo de execução **local**, com IDs de tenant/curso de ambiente de desenvolvimento:
+
+```bash
+python3 scripts/learning-factory/stage_native_r2_package.py \
+  /caminho/privado/candidato \
+  /caminho/privado/rascunho \
+  /caminho/privado/destino-novo \
+  --empresa-id 6 --curso-id 31
+```
+
+O conteúdo contém **gabaritos privados**, portanto o diretório de saída não pode ser colocado em GitHub, Drive aberto, Pages ou storage público. A ferramenta verifica digest do JSON e das mídias, impede overwrite e symlinks e rejeita mídias acima do limite de 12 MiB suportado pela prévia atual. Não executa JavaScript de SCORM. Mesmo quando a montagem funciona, `publishable=false` e `remoteUploadPerformed=false`; o catálogo de revisões e autorizações é uma etapa posterior. Cópia local não prova aprendizagem, matrícula ou certificação.
+
 ## Aceitação funcional antes de matrícula real
 
 - upload/revisão de candidato Native, versão por hash e reabertura da mesma edição em nova sessão;
