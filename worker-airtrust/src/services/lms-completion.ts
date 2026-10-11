@@ -3,7 +3,7 @@ import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { requireActiveQualificationCategoryById } from './qualification-category-contract';
 import { ensureCertificateForQualification } from './ensure-certificate';
-import { hasApprovedFdmOperationalQualificationLink } from './lms-fdm-operational-category';
+import { hasApprovedScormCategoryLink } from './lms-scorm-category-compatibility';
 
 export type LmsCompletionOutcome =
   | 'qualification_created'
@@ -160,7 +160,7 @@ export async function resolveCompletionCategory(
     );
   }
 
-  if (!category.lmsIntegrada && !(await hasApprovedFdmOperationalQualificationLink({
+  if (!category.lmsIntegrada && !(await hasApprovedScormCategoryLink({
     ...params,
     qualificacaoTipoId: type.id,
     qualificacaoTipoCodigo: type.codigo,
