@@ -222,12 +222,17 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
     ).encode('utf-8')
     native_sha = hashlib.sha256(canonical).hexdigest()
     native['packageVersion'] = 'n-' + native_sha[:32]
+    # SHA of the *exact bytes* written to R2, distinct from the content-addressed
+    # version digest above. The Worker compares this digest before parsing JSON.
+    artifact_bytes = (json.dumps(native, ensure_ascii=False, indent=2) + '\n').encode('utf-8')
+    artifact_bytes_sha = hashlib.sha256(artifact_bytes).hexdigest()
     report = {
         'status': 'REQUIRES_PEDAGOGICAL_AND_TECHNICAL_REVIEW',
         'publishable': False,
         'originalPackageVersion': version,
         'originalArchiveSha256': archive_sha,
         'nativeCandidateSha256': native_sha,
+        'artifactBytesSha256': artifact_bytes_sha,
         'unitsConverted': len(units),
         'questionsConverted': len(questions),
         'assessmentQuestions': sum(len(u['questionIds']) for u in units if u['kind'] == 'assessment'),
