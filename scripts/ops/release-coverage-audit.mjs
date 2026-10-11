@@ -2,6 +2,8 @@
 // Read-only audit of PR merge ancestry in the production Worker release.
 // An ancestor SHA proves shipped source code, not functional acceptance or D1 state.
 import { appendFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 const REPO = 'Airtrust-Org/airtrust';
 const API = 'https://api.github.com/repos/' + REPO;
@@ -128,8 +130,10 @@ export async function run() {
   }
 }
 
-if (process.argv[1] && import.meta.url === new URL('file://' + process.argv[1]).href) {
-  run().catch((error) => {
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  if (process.argv.includes('--help')) {
+    process.stdout.write('Read-only merge-vs-production SHA ancestry and Pages prefix check. Use FAIL_ON_UNPUBLISHED=true to fail closed.\n');
+  } else run().catch((error) => {
     process.stderr.write('RELEASE_COVERAGE_AUDIT_FAILED ' + (error?.message || 'unknown') + '\n');
     process.exitCode = 1;
   });
