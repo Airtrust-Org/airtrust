@@ -20,13 +20,33 @@ type PreviewResponse = {
   };
 };
 
+type ResumeResponse = {
+  success: boolean;
+  data?: {
+    matricula_id: number;
+    ciclo_id: number;
+    edition_sha256: string;
+    mode: 'LEARN' | 'REVIEW';
+    last_visited_unit_id: string | null;
+    next_sequence: number;
+    seen_lesson_ids: string[];
+    completion_supported: boolean;
+  };
+};
+type NativeResume = {
+  initialUnitId: string | null;
+  seenLessonIds: string[];
+};
+
 export default function NativeStagingCoursePreview({ matriculaId }: { matriculaId: number }) {
   const [course, setCourse] = useState<NativeLearnerCourse | null>(null);
+  const [resume, setResume] = useState<NativeResume | null>(null);
   const [status, setStatus] = useState<'LOADING' | 'READY' | 'UNAVAILABLE'>('LOADING');
 
   useEffect(() => {
     const controller = new AbortController();
     setCourse(null);
+    setResume(null);
     setStatus('LOADING');
     if (!Number.isSafeInteger(matriculaId) || matriculaId <= 0) {
       setStatus('UNAVAILABLE');
@@ -50,8 +70,42 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
           payload.data.course.questions.some((q) =>
             'correctOptionId' in q || 'feedbackCorrect' in q || 'feedbackIncorrect' in q
           )) throw new Error('NATIVE_UNSAFE_PREVIEW_PAYLOAD');
+      // A resume snapshot is accepted only for the exact edition, cycle,
+      // enrollment and mode already authenticated by the course endpoint.
+      const resumeResponse = await fetchWithAuth(
+        `${API_BASE_URL}/lms/native/matriculas/${matriculaId}/sessao`,
+        { method: 'GET', signal: controller.signal, cache: 'no-store' },
+      );
+      if (!resumeResponse.ok) throw new Error('NATIVE_RESUME_UNAVAILABLE');
+      const resumePayload = await resumeResponse.json() as ResumeResponse;
+      const state = resumePayload.data;
+      if (!resumePayload.success || !state ||
+          state.matricula_id !== matriculaId ||
+          state.edition_sha256 !== payload.data.edition_sha256 ||
+          state.ciclo_id !== payload.data.ciclo_id ||
+          state.mode !== payload.data.mode ||
+          state.completion_supported !== false ||
+          !Number.isSafeInteger(state.next_sequence) || state.next_sequence < 1 ||
+          !Array.isArray(state.seen_lesson_ids) ||
+          state.seen_lesson_ids.some((id) => typeof id !== 'string') ||
+          (state.last_visited_unit_id !== null &&
+            typeof state.last_visited_unit_id !== 'string')) {
+        throw new Error('NATIVE_RESUME_EDITION_CONFLICT');
+      }
+      const lessonIds = new Set(payload.data.course.units
+        .filter((unit) => unit.kind === 'lesson').map((unit) => unit.id));
+      if (new Set(state.seen_lesson_ids).size !== state.seen_lesson_ids.length ||
+          state.seen_lesson_ids.some((id) => !lessonIds.has(id)) ||
+          (state.last_visited_unit_id !== null &&
+            !state.seen_lesson_ids.includes(state.last_visited_unit_id))) {
+        throw new Error('NATIVE_RESUME_INVALID_UNITS');
+      }
       if (!controller.signal.aborted) {
         setCourse(payload.data.course);
+        setResume({
+          initialUnitId: state.last_visited_unit_id,
+          seenLessonIds: state.seen_lesson_ids,
+        });
         setStatus('READY');
       }
     })().catch(() => {
@@ -85,7 +139,7 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
     return blob;
   }, [matriculaId]);
 
-  if (status !== 'READY' || !course) {
+  if (status !== 'READY' || !course || !resume) {
     return <p role={status === 'UNAVAILABLE' ? 'alert' : 'status'}>
       {status === 'LOADING'
         ? 'Carregando prévia do treinamento…'
@@ -97,6 +151,8 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
       course={course}
       resolveAssetHref={() => null}
       fetchAuthorizedAsset={fetchAsset}
+      initialUnitId={resume.initialUnitId}
+      serverSeenLessonIds={resume.seenLessonIds}
     />
   );
 }
