@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -21,4 +22,9 @@ test('published Pages entry must carry the Worker SHA prefix', () => {
   assert.equal(pagesParity('59b395a', sha), 'PREFIX_MATCH');
   assert.equal(pagesParity('0000000', sha), 'MISMATCH');
   assert.equal(pagesParity(null, sha), 'UNVERIFIED');
+});
+
+test('Actions relative script entrypoint is actually invoked', () => {
+  const output = execFileSync('node', ['scripts/ops/release-coverage-audit.mjs', '--help'], { encoding: 'utf8' });
+  assert.match(output, /Read-only merge-vs-production SHA ancestry/);
 });
