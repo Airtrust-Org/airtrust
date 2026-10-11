@@ -10,6 +10,7 @@
  * A page-visit checkpoint is NOT proof of knowledge or certification.
  */
 import { type NativeCourseArtifact, validateNativeCourseArtifact } from '../lib/lms/lms-native-course-contract';
+import { readNativeEventLedger } from './lms-native-event-ledger';
 import {
   validateNativeCheckpoint,
   type NativeCheckpoint,
@@ -31,7 +32,6 @@ type EventRow = {
   unidade_id: string;
   payload_sha256: string;
 };
-const MAX_EVENTS = 10000;
 
 function reject(code: string): never {
   throw new NativeCheckpointWriteError(code);
@@ -63,11 +63,6 @@ const BINDING_SQL = [
   'AND cycle.ciclo_atual=1 AND cycle.deleted_at IS NULL',
   "AND c.tipo_conteudo='native' AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL",
   'LIMIT 1',
-].join(' ');
-
-const EVENT_SQL = [
-  'SELECT event_id, sequencia, unidade_id, payload_sha256',
-  'FROM lms_native_eventos WHERE vinculo_id=? ORDER BY sequencia LIMIT 10001',
 ].join(' ');
 
 // Re-check the exact authenticated user/tenant/enrollment/cycle/edition in
@@ -128,11 +123,12 @@ export async function commitNativeLessonCheckpoint(params: {
     reject('NATIVE_CHECKPOINT_ACCESS_DENIED');
   }
 
-  const events = await db.prepare(EVENT_SQL).bind(binding.id).all<EventRow>();
-  if (!events.success || !Array.isArray(events.results) || events.results.length > MAX_EVENTS) {
+  let rows: Awaited<ReturnType<typeof readNativeEventLedger>>;
+  try {
+    rows = await readNativeEventLedger(db, binding.id);
+  } catch {
     reject('NATIVE_CHECKPOINT_INVALID_LEDGER');
   }
-  const rows = events.results;
   const snapshot: NativeProgressSnapshot = {
     scope,
     nextSequence: rows.length + 1,
