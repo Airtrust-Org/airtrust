@@ -124,7 +124,9 @@ export function validateNativeCheckpoint(
       snapshot.recordedEvents.some((entry) => !EVENT_ID.test(entry.eventId) ||
         !lessons.has(entry.unitId) || !Number.isSafeInteger(entry.sequence) ||
         entry.sequence < 1 || entry.sequence >= snapshot.nextSequence) ||
-      new Set(snapshot.recordedEvents.map((entry) => entry.eventId)).size !== snapshot.recordedEvents.length) {
+      new Set(snapshot.recordedEvents.map((entry) => entry.eventId)).size !== snapshot.recordedEvents.length ||
+      new Set(snapshot.recordedEvents.map((entry) => entry.sequence)).size !== snapshot.recordedEvents.length ||
+      snapshot.seenLessonIds.some((id) => !snapshot.recordedEvents.some((entry) => entry.unitId === id))) {
     reject('NATIVE_INVALID_PERSISTED_EVENTS');
   }
   // Requests are idempotent only if all fields match the original committed
@@ -176,6 +178,15 @@ export function assessNativeCompletionReadiness(
     return { readyForCanonicalCompletion: false, reason: 'ASSESSMENT_EVIDENCE_MISSING' };
   }
   if (proof.gradedAttempt.assessment.mode !== artifact.policy.mode) {
+    return { readyForCanonicalCompletion: false, reason: 'ASSESSMENT_EVIDENCE_MISSING' };
+  }
+  const grade = proof.gradedAttempt.assessment;
+  if (!Number.isSafeInteger(grade.total) || grade.total !== artifact.questions.length ||
+      grade.answered !== grade.total ||
+      (grade.mode === 'SCORED' &&
+        (typeof grade.scorePct !== 'number' || !Number.isFinite(grade.scorePct) ||
+          grade.scorePct < artifact.policy.masteryScore)) ||
+      (grade.mode === 'FORMATIVE' && grade.scorePct !== null)) {
     return { readyForCanonicalCompletion: false, reason: 'ASSESSMENT_EVIDENCE_MISSING' };
   }
   if (!proof.gradedAttempt.assessment.assessmentSatisfied) {
