@@ -10,6 +10,7 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { loadNativePublishedCourse, NativeContentLoadError } from '../services/lms-native-content-loader';
+import { loadNativeVerifiedAsset } from '../services/lms-native-asset-loader';
 import {
   NativeAdmissionError,
   resolveNativeEnrollmentAdmission,
@@ -103,6 +104,74 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
     }
     if (error instanceof NativeContentLoadError) {
       // Return a generic error code: details remain private to the server.
+      return c.json({ success: false, code: 'NATIVE_CONTENT_UNAVAILABLE' }, 409);
+    }
+    throw error;
+  }
+});
+
+/**
+ * Staging-only media transport. Browser clients must send the authenticated
+ * Authorization header via fetch/Blob URLs; never put JWTs in media query
+ * parameters or expose R2 keys.
+ */
+app.get('/matriculas/:matriculaId/assets/:assetId', async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('Cross-Origin-Resource-Policy', 'same-origin');
+  const empresaId = getEmpresaIdSafe(c);
+  if (!canPreviewNativeInStaging(c.env, empresaId)) {
+    return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED' }, 404);
+  }
+  const rawId = c.req.param('matriculaId');
+  const assetId = c.req.param('assetId');
+  if (!/^[1-9][0-9]{0,15}$/.test(rawId) ||
+      !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(assetId)) {
+    return c.json({ success: false, code: 'NATIVE_INVALID_ASSET_REQUEST' }, 400);
+  }
+  const rawUser = c.get('userId' as never) as unknown;
+  const actorUserId = typeof rawUser === 'string' ? Number(rawUser) : rawUser;
+  try {
+    const verified = await loadNativeVerifiedAsset({
+      db: c.env.DB, bucket: c.env.BUCKET,
+      empresaId, matriculaId: Number(rawId),
+      actorUserId: actorUserId as number, assetId,
+    });
+    const buffer = new Uint8Array(verified.bytes);
+    const range = c.req.header('Range');
+    const headers: Record<string, string> = {
+      'Content-Type': verified.contentType,
+      'Content-Disposition': 'inline',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Cross-Origin-Resource-Policy': 'same-origin',
+    };
+    if (range) {
+      const match = /^bytes=(\\d+)-(\\d*)$/.exec(range);
+      const start = match ? Number(match[1]) : NaN;
+      const end = match && match[2] ? Number(match[2]) : buffer.length - 1;
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
+          start < 0 || start >= buffer.length || end < start || end >= buffer.length) {
+        return c.body(null, 416, {
+          ...headers, 'Content-Range': 'bytes */' + buffer.length,
+        });
+      }
+      const data = buffer.slice(start, end + 1);
+      return c.body(data.buffer, 206, {
+        ...headers,
+        'Content-Length': String(data.byteLength),
+        'Content-Range': `bytes ${start}-${end}/${buffer.length}`,
+      });
+    }
+    return c.body(buffer.buffer, 200, {
+      ...headers, 'Content-Length': String(buffer.byteLength),
+    });
+  } catch (error) {
+    if (error instanceof NativeAdmissionError) {
+      return c.json({ success: false, code: error.code }, error.status);
+    }
+    if (error instanceof NativeContentLoadError) {
       return c.json({ success: false, code: 'NATIVE_CONTENT_UNAVAILABLE' }, 409);
     }
     throw error;
