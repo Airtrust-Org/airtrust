@@ -12,7 +12,7 @@ test('Git tree parser handles paths with whitespace without reading large media'
   const tree = Buffer.from(
     '100644 blob ' + SHA + ' 300000\t' + ROOT + '/Course A/media file.mp4\0' +
     '100644 blob ' + SHA + ' 300000\t' + ROOT + '/Course B/media file.mp4\0' +
-    '100644 blob ' + OTHER + ' 20\t' + ROOT + '/Course A/imsmanifest.xml\0',
+    '100644 blob ' + OTHER + '     20\t' + ROOT + '/Course A/imsmanifest.xml\0',
   );
   assert.equal(parseGitTree(tree).length, 3);
   assert.equal(parseGitTree(tree)[0].file, ROOT + '/Course A/media file.mp4');
