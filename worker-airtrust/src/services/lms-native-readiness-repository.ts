@@ -19,7 +19,7 @@ export class NativeEvidenceReadError extends Error {
 type Binding = { id: number; status: string };
 type EventRow = { event_id: string; sequencia: number; unidade_id: string };
 type AttemptRow = {
-  id: number; answers_json: string; answers_sha256: string;
+  id: number; tentativa_numero: number; answers_json: string; answers_sha256: string;
   policy: string; score_pct: number | null; assessment_satisfied: number;
 };
 const VALID_HASH = /^[a-f0-9]{64}$/;
@@ -43,7 +43,7 @@ const EVENT_SQL = [
   "WHERE vinculo_id=? ORDER BY sequencia ASC LIMIT 10001",
 ].join(' ');
 const ATTEMPT_SQL = [
-  "SELECT id, answers_json, answers_sha256, policy, score_pct, assessment_satisfied",
+  "SELECT id, tentativa_numero, answers_json, answers_sha256, policy, score_pct, assessment_satisfied",
   "FROM lms_native_tentativas WHERE vinculo_id=? ORDER BY tentativa_numero DESC LIMIT 1",
 ].join(' ');
 
@@ -56,12 +56,32 @@ async function sha256(input: string): Promise<string> {
 }
 
 /** Used only after auth and integrity-checked edition lookup. */
-export async function readNativeCanonicalReadiness(params: {
+export type NativeSessionSummary = Readonly<{
+  editionHash: string;
+  cicloId: number;
+  mode: 'LEARN' | 'REVIEW';
+  nextSequence: number;
+  seenLessonIds: readonly string[];
+  lastVisitedUnitId: string | null;
+  totalLessons: number;
+  latestAttempt: null | {
+    attemptNumber: number;
+    scorePct: number | null;
+    assessmentSatisfied: boolean;
+  };
+}>;
+
+/**
+ * Returns only sanitized navigation and attempt-summary data to the caller.
+ * PRIVATE quiz answers and correct options are recalculated in the Worker
+ * but never appear in this projection. The caller still controls HTTP auth.
+ */
+export async function readNativeLearnerSession(params: {
   db: D1Database;
   actorUserId: number;
   scope: NativeSessionScope;
   artifact: NativeCourseArtifact;
-}): Promise<NativeReadinessVerdict> {
+}): Promise<{ summary: NativeSessionSummary; readiness: NativeReadinessVerdict }> {
   const { db, scope, actorUserId } = params;
   const artifact = validateNativeCourseArtifact(params.artifact);
   if (!Number.isSafeInteger(actorUserId) || actorUserId <= 0 ||
@@ -84,6 +104,16 @@ export async function readNativeCanonicalReadiness(params: {
     fail('NATIVE_READ_INVALID_EVENT_LEDGER');
   }
   const rows = events.results;
+  // A malformed or reordered server ledger is a consistency incident, not
+  // an opportunity to guess a location or award course completion.
+  const lessons = new Set(artifact.units.filter((unit) => unit.kind === 'lesson').map((unit) => unit.id));
+  if (rows.some((row, index) =>
+      row.sequencia !== index + 1 || typeof row.event_id !== 'string' ||
+      !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(row.event_id) ||
+      !lessons.has(row.unidade_id)) ||
+      new Set(rows.map((row) => row.event_id)).size !== rows.length) {
+    fail('NATIVE_READ_INVALID_EVENT_LEDGER');
+  }
   const snapshot: NativeProgressSnapshot = {
     scope,
     nextSequence: rows.length + 1,
@@ -97,6 +127,7 @@ export async function readNativeCanonicalReadiness(params: {
   let gradedAttempt = null;
   if (stored) {
     if (!Number.isSafeInteger(stored.id) || stored.id <= 0 ||
+        !Number.isSafeInteger(stored.tentativa_numero) || stored.tentativa_numero <= 0 ||
         typeof stored.answers_json !== 'string' ||
         typeof stored.answers_sha256 !== 'string' ||
         (await sha256(stored.answers_json)) !== stored.answers_sha256) {
@@ -117,8 +148,36 @@ export async function readNativeCanonicalReadiness(params: {
     gradedAttempt = { scope, attemptId: stored.id, assessment: calculated };
   }
 
-  return assessNativeCompletionReadiness(artifact, {
+  const readiness = assessNativeCompletionReadiness(artifact, {
     scope, persistedSnapshot: snapshot, gradedAttempt,
     enrollmentStatus: binding.status,
   });
+  return {
+    summary: {
+      editionHash: scope.artifactHash,
+      cicloId: scope.cicloId,
+      mode: binding.status === 'CONCLUIDO' ? 'REVIEW' : 'LEARN',
+      nextSequence: snapshot.nextSequence,
+      seenLessonIds: snapshot.seenLessonIds,
+      lastVisitedUnitId: rows.at(-1)?.unidade_id ?? null,
+      totalLessons: lessons.size,
+      latestAttempt: stored && gradedAttempt ? {
+        attemptNumber: stored.tentativa_numero,
+        scorePct: gradedAttempt.assessment.scorePct,
+        assessmentSatisfied: gradedAttempt.assessment.assessmentSatisfied,
+      } : null,
+    },
+    readiness,
+  };
+}
+
+/** The canonical completion gate consumes only Worker-calculated readiness. */
+export async function readNativeCanonicalReadiness(params: {
+  db: D1Database;
+  actorUserId: number;
+  scope: NativeSessionScope;
+  artifact: NativeCourseArtifact;
+}): Promise<NativeReadinessVerdict> {
+  const result = await readNativeLearnerSession(params);
+  return result.readiness;
 }
