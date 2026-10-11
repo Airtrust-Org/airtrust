@@ -89,6 +89,8 @@ def normalize_specialized_course_model(model: dict) -> dict:
     need(not unexpected, 'SPECIALIZED_NEW_FIELDS_REQUIRE_MAPPING')
     total_missing_feedback = 0
     spatial_hotspots = 0
+    original_question_wording_pending = 0
+    question_source_review_required = 0
     for source in original_slides:
         need(isinstance(source, dict) and source.get('kind') in mapped_kinds,
              'SPECIALIZED_SLIDE_KIND_UNSUPPORTED')
@@ -110,7 +112,9 @@ def normalize_specialized_course_model(model: dict) -> dict:
                 body.append(label(source[name], 'SPECIALIZED_TEXT_' + name, 8000))
         if source.get('outcomes') is not None:
             for item in list_of(source['outcomes'], 'SPECIALIZED_OUTCOMES'):
-                body.append(label(item, 'SPECIALIZED_OUTCOME', 4000))
+                # SGSO's real objectives are {title,text}, not bare strings.
+                body.append(pair_text(item, 'SPECIALIZED_OUTCOME') if isinstance(item, dict)
+                            else label(item, 'SPECIALIZED_OUTCOME', 4000))
         if source.get('bullets') is not None:
             for item in list_of(source['bullets'], 'SPECIALIZED_BULLETS'):
                 body.append(label(item, 'SPECIALIZED_BULLET', 4000))
@@ -225,12 +229,27 @@ def normalize_specialized_course_model(model: dict) -> dict:
             out['questions'] = []
             for q in questions:
                 need(isinstance(q, dict), 'SPECIALIZED_QUIZ_ENTRY')
+                need(set(q) <= {'text','originalText','options','correct','feedback','source'},
+                     'SPECIALIZED_QUIZ_UNMAPPED_FIELD')
+                prompt = label(q.get('text'), 'SPECIALIZED_QUIZ_PROMPT', 4000)
+                if q.get('originalText') is not None:
+                    original = label(q['originalText'], 'SPECIALIZED_ORIGINAL_QUIZ_WORDING', 4000)
+                    if original != prompt:
+                        original_question_wording_pending += 1
+                if q.get('source') is not None:
+                    question_source = q['source']
+                    need(isinstance(question_source, dict), 'SPECIALIZED_QUIZ_SOURCE_INVALID')
+                    source_basis = label(question_source.get('referenceBasis'),
+                                         'SPECIALIZED_QUIZ_SOURCE_BASIS', 250)
+                    if source_basis not in out['sourceRefs']:
+                        out['sourceRefs'].append(source_basis)
+                    question_source_review_required += 1
                 answers = list_of(q.get('options'), 'SPECIALIZED_QUIZ_OPTIONS', 2, 10)
                 correct = q.get('correct')
                 need(type(correct) is int and 0 <= correct < len(answers),
                      'SPECIALIZED_QUIZ_CORRECT')
                 out['questions'].append({
-                    'q': label(q.get('text'), 'SPECIALIZED_QUIZ_PROMPT', 4000),
+                    'q': prompt,
                     'options': [label(v, 'SPECIALIZED_QUIZ_OPTION', 2000) for v in answers],
                     'answer': correct,
                     'explain': label(q.get('feedback'), 'SPECIALIZED_QUIZ_FEEDBACK', 4000),
@@ -269,6 +288,8 @@ def normalize_specialized_course_model(model: dict) -> dict:
         'adapterReview': {
             'missingPedagogicalFeedback': total_missing_feedback,
             'spatialHotspotsRequiringVisualReview': spatial_hotspots,
+            'originalQuestionWordingPending': original_question_wording_pending,
+            'questionSourceReviewRequired': question_source_review_required,
             'sourceSlideCount': len(original_slides),
         },
     }
