@@ -63,6 +63,17 @@ class CompileNativeDraftTests(unittest.TestCase):
             self.assertEqual(report['certification'], 'BLOCKED_UNTIL_LMS_STAGING_E2E')
             self.assertEqual(candidate['packageVersion'], 'n-' + report['nativeCandidateSha256'][:32])
 
+    def test_compiled_candidate_matches_cross_runtime_golden_fixture(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            candidate, report = compile_candidate(draft, location)
+            expected = json.loads(
+                (Path(__file__).parent / 'fixtures/native-v1-synthetic.json').read_text(encoding='utf-8')
+            )
+            self.assertEqual(candidate, expected)
+            self.assertEqual(report['nativeCandidateSha256'],
+                             '74b62b661a6ed4334474cab1c6109c28' + report['nativeCandidateSha256'][32:])
+
     def test_converter_version_changes_when_content_changes_but_scorm_source_is_same(self):
         with tempfile.TemporaryDirectory() as d:
             draft, location = self.prepare(Path(d))
