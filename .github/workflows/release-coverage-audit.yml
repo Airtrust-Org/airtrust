@@ -10,6 +10,9 @@ on:
         default: false
   schedule:
     - cron: '15 11 * * *'
+  workflow_run:
+    workflows: ['Deploy AirTrust']
+    types: [completed]
 
 permissions:
   contents: read
@@ -21,6 +24,8 @@ concurrency:
 
 jobs:
   release-coverage:
+    # Release checks run immediately after a successful official production deploy.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
