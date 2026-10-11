@@ -6,6 +6,7 @@ const mock = vi.hoisted(() => ({
   loadPrivate: vi.fn(),
   checkpoint: vi.fn(),
   attempt: vi.fn(),
+  start: vi.fn(),
 }));
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: {
@@ -33,6 +34,10 @@ vi.mock('../../services/lms-native-attempt-writer', async (original) => {
   const mod = await original<typeof import('../../services/lms-native-attempt-writer')>();
   return { ...mod, commitNativeAssessmentAttempt: mock.attempt };
 });
+vi.mock('../../services/lms-native-enrollment-starter', async (original) => {
+  const mod = await original<typeof import('../../services/lms-native-enrollment-starter')>();
+  return { ...mod, startNativeEnrollment: mock.start };
+});
 import nativeRoutes from '../../routes/lms-native';
 
 const sha = 'a'.repeat(64);
@@ -45,7 +50,7 @@ function app() {
   return parent;
 }
 function request(options: {
-  mode?: 'checkpoint' | 'attempt';
+  mode?: 'checkpoint' | 'attempt' | 'start';
   environment?: string;
   preview?: string;
   writes?: string;
@@ -68,11 +73,11 @@ function request(options: {
   }
   headers['content-type'] = options.contentType ?? 'application/json';
   const url = 'http://localhost/api/lms/native/matriculas/' + matricula +
-    (mode === 'checkpoint' ? '/checkpoints' : '/tentativas');
+    (mode === 'checkpoint' ? '/checkpoints' : mode === 'start' ? '/iniciar' : '/tentativas');
   return app().fetch(new Request(url, {
     method: 'POST', headers,
     body: options.rawBody ?? JSON.stringify(options.body ?? (mode === 'checkpoint'
-      ? lesson : { attemptNumber: 1, answers })),
+      ? lesson : mode === 'start' ? {} : { attemptNumber: 1, answers })),
   }), {
     ENVIRONMENT: environment,
     NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS: preview,
@@ -92,6 +97,7 @@ describe('Native staging guarded checkpoint + private assessment HTTP APIs', () 
     mock.checkpoint.mockResolvedValue({
       state: 'APPLIED', committedSequence: 1, editionHash: sha,
     });
+    mock.start.mockResolvedValue({ state: 'STARTED', cicloId: 11, editionHash: sha });
     mock.attempt.mockResolvedValue({
       state: 'APPLIED', attemptNumber: 1, editionHash: sha,
       scorePct: 50, assessmentSatisfied: false,
@@ -99,7 +105,7 @@ describe('Native staging guarded checkpoint + private assessment HTTP APIs', () 
   });
 
   it('denies both endpoints in production regardless of tenant allowlists', async () => {
-    for (const mode of ['checkpoint','attempt'] as const) {
+    for (const mode of ['checkpoint','attempt','start'] as const) {
       const res = await request({ mode, environment: 'production' });
       expect(res.status).toBe(404);
       expect(await res.json()).toMatchObject({ code: 'NATIVE_EVIDENCE_WRITE_NOT_ENABLED' });
@@ -107,6 +113,7 @@ describe('Native staging guarded checkpoint + private assessment HTTP APIs', () 
     expect(mock.loadPrivate).not.toHaveBeenCalled();
     expect(mock.checkpoint).not.toHaveBeenCalled();
     expect(mock.attempt).not.toHaveBeenCalled();
+    expect(mock.start).not.toHaveBeenCalled();
   });
 
   it('requires BOTH exact staging tenant allowlists and refuses wildcard', async () => {
@@ -124,6 +131,40 @@ describe('Native staging guarded checkpoint + private assessment HTTP APIs', () 
     expect((await request({ anonymous: true })).status).toBe(401);
     expect((await request({ matricula: '1e9' })).status).toBe(400);
     expect((await request({ user: 0 })).status).toBe(403);
+    expect(mock.loadPrivate).not.toHaveBeenCalled();
+  });
+
+  it('starts only the authenticated pinned cycle with no qualification or certificate side effect', async () => {
+    const res = await request({ mode: 'start' });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ success: true, data: {
+      state: 'STARTED', ciclo_id: 11, edition_sha256: sha, completion_supported: false,
+    } });
+    expect(mock.start).toHaveBeenCalledWith({
+      db: expect.anything(), actorUserId: 900, empresaId: 6,
+      matriculaId: 101, cursoId: 31, cicloId: 11, editionHash: sha,
+    });
+    expect(mock.checkpoint).not.toHaveBeenCalled();
+    expect(mock.attempt).not.toHaveBeenCalled();
+  });
+
+  it('returns idempotent start only after the server validates the same edition', async () => {
+    mock.start.mockResolvedValueOnce({ state: 'ALREADY_STARTED', cicloId: 11, editionHash: sha });
+    const res = await request({ mode: 'start' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      data: { state: 'ALREADY_STARTED', completion_supported: false },
+    });
+  });
+
+  it('refuses client-controlled Native start metadata', async () => {
+    for (const body of [
+      { matriculaId: 102 }, { status: 'CONCLUIDO' }, { score_pct: 100 },
+      { empresaId: 7 }, { cicloId: 12 }, { editionHash: sha },
+    ]) {
+      expect((await request({ mode: 'start', body })).status).toBe(400);
+    }
+    expect(mock.start).not.toHaveBeenCalled();
     expect(mock.loadPrivate).not.toHaveBeenCalled();
   });
 
