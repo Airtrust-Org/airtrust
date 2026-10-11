@@ -150,7 +150,7 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
             info = media_index[image]
             path = str(info.get('localPath', ''))
             origin = location / path
-            if not path.startswith('media/') or not origin.is_file():
+            if not path.startswith('media/') or not origin.resolve().is_relative_to((location / 'media').resolve()) or not origin.is_file():
                 raise NativeCompileError('MISSING_COPIED_MEDIA')
             sha = hashlib.sha256(origin.read_bytes()).hexdigest()
             if sha != info.get('sha256'):
