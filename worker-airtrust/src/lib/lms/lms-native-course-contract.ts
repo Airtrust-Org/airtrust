@@ -20,12 +20,15 @@ export type NativeBlock =
   | { type: 'bullets'; items: string[] }
   | { type: 'image' | 'video'; assetId: string; alt: string };
 
+export type NativeSourceReference = { id: string; label: string; detail: string };
+
 export type NativeUnit = {
   id: string;
   title: string;
   kind: 'lesson' | 'scenario' | 'assessment';
   blocks: NativeBlock[];
   questionIds: string[];
+  sourceRefs?: string[];
 };
 
 export type NativeQuestion = {
@@ -47,6 +50,7 @@ export type NativeCourseArtifact = {
   assets: NativeAsset[];
   units: NativeUnit[];
   questions: NativeQuestion[];
+  references?: NativeSourceReference[];
 };
 
 /** Public projection. Answers and privileged grading feedback stay server-side. */
@@ -127,7 +131,18 @@ function assetPath(value: unknown): string {
  */
 export function validateNativeCourseArtifact(input: unknown): NativeCourseArtifact {
   const raw = record(input, 'NATIVE_INVALID_ROOT');
-  keys(raw, ['schema', 'courseId', 'packageVersion', 'title', 'locale', 'policy', 'assets', 'units', 'questions']);
+  keys(raw, ['schema', 'courseId', 'packageVersion', 'title', 'locale', 'policy', 'assets', 'units', 'questions'], ['references']);
+  if (raw.references !== undefined) {
+    const references = boundedArray(raw.references, 200, true);
+    const refIds = references.map((item) => {
+      const ref = record(item, 'NATIVE_INVALID_REFERENCE');
+      keys(ref, ['id', 'label', 'detail']);
+      text(ref.label, 600);
+      text(ref.detail, 4000);
+      return id(ref.id);
+    });
+    unique(refIds);
+  }
   if (raw.schema !== NATIVE_COURSE_SCHEMA || raw.locale !== 'pt-BR') fail('NATIVE_UNSUPPORTED_SCHEMA');
   id(raw.courseId);
   id(raw.packageVersion);
@@ -191,7 +206,8 @@ export function validateNativeCourseArtifact(input: unknown): NativeCourseArtifa
   const rawUnits = boundedArray(raw.units, MAX_UNITS);
   const units = rawUnits.map((item) => {
     const unit = record(item, 'NATIVE_INVALID_UNIT');
-    keys(unit, ['id', 'title', 'kind', 'blocks', 'questionIds']);
+    keys(unit, ['id', 'title', 'kind', 'blocks', 'questionIds'], ['sourceRefs']);
+    if (unit.sourceRefs !== undefined) boundedArray(unit.sourceRefs, 100, true).forEach((ref) => text(ref, 250));
     id(unit.id);
     text(unit.title, 200);
     if (unit.kind !== 'lesson' && unit.kind !== 'scenario' && unit.kind !== 'assessment') fail('NATIVE_INVALID_UNIT_KIND');
@@ -249,7 +265,9 @@ export function toNativeLearnerCourse(input: NativeCourseArtifact): NativeLearne
       ...unit,
       blocks: unit.blocks.map((block) => ({ ...block })),
       questionIds: [...unit.questionIds],
+      ...(unit.sourceRefs ? { sourceRefs: [...unit.sourceRefs] } : {}),
     })),
+    ...(source.references ? { references: source.references.map((ref) => ({ ...ref })) } : {}),
     questions: source.questions.map(({ id, prompt, options }) => ({
       id, prompt, options: options.map(({ id: optionId, text: label }) => ({ id: optionId, text: label })),
     })),
