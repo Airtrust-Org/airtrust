@@ -21,7 +21,7 @@ def db_fixture():
     return db
 
 
-def create_edition(db, company=6, course=10, prefix='lms/native/6/10/sha-abc/'):
+def create_edition(db, company=6, course=10, prefix='lms/native/6/10/'+'a'*64+'/'):
     return db.execute("""INSERT INTO lms_native_edicoes
       (empresa_id,curso_id,artifact_sha256,package_version,r2_prefix)
       VALUES (?,?,?,?,?)""", (company,course,'a'*64,'n-'+'a'*32,prefix)).lastrowid
@@ -64,6 +64,7 @@ class Native0549Tests(unittest.TestCase):
             {'prefix':'lms/native/7/10/version/'},
             {'prefix':'lms/native/6/10/../../other/'},
             {'prefix':'lms/native/6/10/secret\\asset/'},
+            {'prefix':'lms/native/6/10/'+'b'*64+'/'},
         ]:
             with self.subTest(opts=opts), self.assertRaises(sqlite3.IntegrityError):
                 create_edition(self.db,**opts)
@@ -72,7 +73,7 @@ class Native0549Tests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("""INSERT INTO lms_native_edicoes
                (empresa_id,curso_id,artifact_sha256,package_version,r2_prefix,status)
-               VALUES (6,10,?,?,?,'PUBLISHED')""",('a'*64,'n-abc','lms/native/6/10/sha-abc/'))
+               VALUES (6,10,?,?,?,'PUBLISHED')""",('a'*64,'n-abc','lms/native/6/10/'+'a'*64+'/'))
         e=create_edition(self.db)
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("UPDATE lms_native_edicoes SET status='PUBLISHED' WHERE id=?",(e,))
@@ -129,7 +130,7 @@ class Native0549Tests(unittest.TestCase):
             self.db.execute("""INSERT INTO lms_native_edicoes
               (empresa_id,curso_id,artifact_sha256,package_version,r2_prefix,status,reviewed_at,published_at)
               VALUES (6,10,?,?,?,'PUBLISHED',datetime('now'),datetime('now'))""",
-              ('a'*64,'n-'+'a'*32,'lms/native/6/10/version/'))
+              ('a'*64,'n-'+'a'*32,'lms/native/6/10/'+'a'*64+'/'))
 
 
 if __name__ == '__main__':
