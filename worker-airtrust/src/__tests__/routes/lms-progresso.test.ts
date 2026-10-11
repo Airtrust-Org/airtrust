@@ -105,6 +105,53 @@ describe('lms progresso xapi router', () => {
     logAuditMock.mockResolvedValue(undefined);
   });
 
+  it('does not expose legacy SCORM suspend_data for a Native enrollment', async () => {
+    const legacyReads = vi.fn(async () => ({
+      suspend_data: 'OLD_SCORM_RESUME_SHOULD_NOT_BE_RETURNED',
+    }));
+    const { db, calls } = createMockDb([
+      ['FROM lms_matriculas m JOIN lms_cursos c', { first: () => ({
+        id: 10, status: 'EM_ANDAMENTO', funcionario_id: 77, tipo_conteudo: 'native',
+      }) }],
+      ['FROM lms_progresso_scorm', { first: legacyReads }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/state/10'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    expect(JSON.stringify(await response.json())).not.toContain('OLD_SCORM_RESUME_SHOULD_NOT_BE_RETURNED');
+    expect(legacyReads).not.toHaveBeenCalled();
+    expect(calls[0]?.query).toContain('c.empresa_id = m.empresa_id');
+    expect(calls[0]?.args).toEqual([10, 1]);
+  });
+
+  it('preserves normal SCORM resume for a valid legacy enrollment', async () => {
+    const { db, calls } = createMockDb([
+      ['FROM lms_matriculas m JOIN lms_cursos c', { first: () => ({
+        id: 10, status: 'EM_ANDAMENTO', funcionario_id: 77, tipo_conteudo: 'scorm',
+      }) }],
+      ['FROM lms_progresso_scorm', { first: () => ({
+        suspend_data: 'LEGACY_LEARNER_PROGRESS',
+      }) }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/state/10'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      success: true, data: { progresso: { suspend_data: 'LEGACY_LEARNER_PROGRESS' } },
+    });
+    expect(calls).toHaveLength(2);
+  });
+
   it('xAPI nonterminal statements cannot poison a Native enrollment', async () => {
     const writes = vi.fn();
     const { db, calls } = createMockDb([
