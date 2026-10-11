@@ -91,7 +91,7 @@ async function readSmallJson(c: { req: { header(name: string): string | undefine
     offset += chunk.byteLength;
   }
   try {
-    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes));
   } catch {
     throw new Error('NATIVE_INVALID_JSON');
   }
