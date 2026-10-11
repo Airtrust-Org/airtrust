@@ -48,6 +48,19 @@ O pacote guarda dois digests diferentes: `nativeCandidateSha256` identifica a ve
 - O componente `NativeStagingCoursePreview` usa `fetchWithAuth` existente (JWT em header, jamais URL); cria `Blob URL` local somente após receber a mídia autorizada, invalida em desmontagem/troca de unidade e não contém botão de conclusão. **Ainda não foi associado às rotas públicas do frontend.**
 - Os testes locais provam transporte, range, bloqueio de R2 adulterado, tenant/usuário indevido, allowlist desativada, privacidade do gabarito, falha de autenticação e revogação dos `Blob URLs`. Nenhum desses testes substitui o fluxo navegador + D1/R2 real em staging.
 
+## Escritas governadas em preparação (não montadas em rotas)
+
+Duas funções de backend estão implementadas e verificadas com testes focados, mas **não foram expostas como API** e não têm permissão de alterar dados remotos até a aplicação governada do Schema V2 e a validação real da fonte de identidade/edição:
+
+- `commitNativeLessonCheckpoint`: lê a matrícula e vínculo de edição/ciclo pelo usuário autenticado, valida a sequência e unidade da versão privada do curso, cria hash do evento e usa **INSERT...SELECT com rechecagem atômica** de tenant/funcionário, matrícula, edição, curso publicado e ciclo ativo. O banco também exige sequência contígua e UNIQUE. Evento repetido só é reconhecido se todos os campos e hash persistidos coincidirem; colisões divergentes falham.
+- `commitNativeAssessmentAttempt`: avalia as escolhas exclusivamente no Worker com gabarito privado da edição imutável; rejeita payload com nota/aprovação inventada, prova obrigatória incompleta e tentativa fora de sequência. Persiste respostas privadas e hash, política, nota calculada e resultado por INSERT...SELECT com escopo novamente conferido. Retry idêntico é idempotente; concorrência diferente falha.
+- `loadNativePrivateCourse`: mantém a validação já existente de matrícula/ciclo, SHA do objeto R2 e schema, mas fornece o gabarito **somente a serviços internos do Worker**. A resposta HTTP do aluno continua usando `loadNativePublishedCourse` e sua projeção sem respostas corretas.
+- `readNativeCanonicalReadiness`: recupera histórico D1, verifica hash das respostas da última tentativa, recalcula a nota e avalia se há evidência suficiente. **Não chama** `completeLmsMatricula`, não emite certificado, não grava qualificação nem atualiza o Compliance.
+
+**Limitação pedagógica:** registro de visita a uma unidade, por si, não garante que a pessoa leu, permaneceu tempo suficiente ou assistiu todo o vídeo. Antes de uso regulamentar, definir evidências verificáveis de consumo de mídia/atividades e política para conexão intermitente, sem transformar porcentagem de navegação em certificação. Esse requisito não está resolvido apenas pelo ledger.
+
+**Dependências para ativar escrita:** schema 0549 efetivamente aplicado + CHECK `native` governado no catálogo + upload/publicação privada e revisão pedagógica da edição + fluxo de sessão seguro que obtenha scope/artefato somente do servidor + autorização explícita de staging, testes com D1/R2 reais, idempotência concorrente e recuperação. Até lá as funções permanecem internas e o frontend é preview read-only.
+
 ## Aceitação funcional antes de matrícula real
 
 - upload/revisão de candidato Native, versão por hash e reabertura da mesma edição em nova sessão;
