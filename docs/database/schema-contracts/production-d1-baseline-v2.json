@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-10",
     "last_reconciled_against": "0549 Native V1 evidence governance metadata prepared in PR #1389; no remote apply or production structure claimed",
-    "schema_v2_digest": "2eb3b388da890a1c9eb74a90567179af0bba23696396d48dd9cc1c703911ccfd",
+    "schema_v2_digest": "ab470efaa0a2c14c28b0b13666aeafd890f449c73c0e28d6bc691986eea0000a",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1520,7 +1520,7 @@
     {
       "change_file": "0549_lms_native_v1_evidence.sql",
       "change_id": "lms-native-v1-evidence-0549",
-      "sha256": "b19f3f0ce490ac88bc902c0555d9e5399b86b4154b8c4eae7180e84586c11652",
+      "sha256": "e8a077d9ae2bf271922f008e8590f279c476800414b0fc5b1b9db174526f8711",
       "targets": [
         "lms_native_edicoes",
         "lms_native_eventos",
