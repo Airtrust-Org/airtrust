@@ -15,7 +15,8 @@ export type NativeAsset = {
 };
 
 export type NativeBlock =
-  | { type: 'heading' | 'paragraph'; text: string }
+  | { type: 'heading'; text: string }
+  | { type: 'paragraph'; text: string }
   | { type: 'bullets'; items: string[] }
   | { type: 'image' | 'video'; assetId: string; alt: string };
 
@@ -85,7 +86,7 @@ function record(value: unknown, code: string): Record<string, unknown> {
 }
 function keys(value: Record<string, unknown>, required: string[], optional: string[] = []): void {
   const expected = new Set([...required, ...optional]);
-  if (!required.every((key) => Object.hasOwn(value, key)) ||
+  if (!required.every((key) => Object.prototype.hasOwnProperty.call(value, key)) ||
       Object.keys(value).some((key) => !expected.has(key))) fail('NATIVE_UNEXPECTED_FIELD');
 }
 function text(value: unknown, max = 8000): string {
@@ -152,7 +153,7 @@ export function validateNativeCourseArtifact(input: unknown): NativeCourseArtifa
     id(entry.id);
     const path = assetPath(entry.path);
     if (typeof entry.sha256 !== 'string' || !SHA256_PATTERN.test(entry.sha256)) fail('NATIVE_INVALID_ASSET_HASH');
-    if (typeof entry.mime !== 'string' || !Object.hasOwn(MIME_SUFFIX, entry.mime)) fail('NATIVE_INVALID_ASSET_MIME');
+    if (typeof entry.mime !== 'string' || !Object.prototype.hasOwnProperty.call(MIME_SUFFIX, entry.mime)) fail('NATIVE_INVALID_ASSET_MIME');
     if (!MIME_SUFFIX[entry.mime as NativeAsset['mime']].some((suffix) => path.toLowerCase().endsWith(suffix))) {
       fail('NATIVE_MIME_MISMATCH');
     }
