@@ -64,6 +64,14 @@ PYTHONDONTWRITEBYTECODE=1 python3 \
 
 O ensaio com um único registro sintético **não comprova segurança para todos os dados reais**, relações transitivas ou semântica Cloudflare D1. Antes de qualquer apply, será necessário um plano governado de reconstrução, validação de estado remoto atual, backup e autorização específica de ambiente e SHA.
 
+## Compatibilidade efetiva do Cloudflare D1 — limitador de arquitetura (11/10/2026)
+
+Após o ensaio offline, as [instruções oficiais do Cloudflare D1](https://developers.cloudflare.com/d1/sql-api/foreign-keys/) foram confrontadas com o caso real de três tabelas referenciadoras `ON DELETE NO ACTION`. O D1 impõe `foreign_keys=ON` em transações implícitas, inclusive migrations, e **não permite desativar essa checagem com `PRAGMA foreign_keys=OFF`** dentro da execução. A alternativa oficial `PRAGMA defer_foreign_keys=ON` só posterga a validação; não neutraliza a semântica `ON DELETE`.
+
+**Prova reproduzida no teste:** com FK ativa e `defer_foreign_keys=ON`, é possível observar `foreign_key_check` vazio antes do COMMIT e ainda ter `FOREIGN KEY constraint failed` no COMMIT ao dropar a tabela pai; o rollback recupera o esquema. Isso corresponde à advertência do [issue técnico do workerd](https://github.com/cloudflare/workerd/issues/2471) e impede converter o ensaio bem-sucedido em `:memory:` (onde a FK foi desabilitada **antes** da transação) numa migration D1 viável.
+
+**Decisão de segurança:** *não executar* `DROP/RENAME` de `lms_cursos` no D1, nem promover o runner de ensaio a executor remoto. A frente seguinte deve verificar primeiro um **marcador nativo aditivo em tabela/coluna separada** e sua compatibilidade com as rotas legadas e o Schema V2 0549. Essa alternativa precisa de auditoria de dados, tenant e contratos antes de ser adotada. Se for indispensável manter `tipo_conteudo='native'`, será necessária uma estratégia de migração referencial muito mais ampla, explicitamente autorizada, sem pressupor que o D1 suporta o rebuild local.
+
 ## Riscos e próximos gates para a migration efetiva
 
 1. **Pré-flight real** de produção separadamente, incluindo `sqlite_master`, `PRAGMA table_info`, `PRAGMA foreign_key_list`, contagem de linhas, integridade e dependentes transitivos. Só consultas read-only. Nunca reutilizar fingerprint de staging como autorização para produção.
