@@ -80,7 +80,7 @@ async function execute(c: Context<{ Bindings: Env }>,
     return c.json({ success: false, code: 'NATIVE_EVIDENCE_WRITE_NOT_ENABLED' }, 404);
   }
   const matriculaRaw = c.req.param('matriculaId');
-  if (!exactId.test(matriculaRaw)) {
+  if (!exactId.test(matriculaRaw ?? '')) {
     return c.json({ success: false, code: 'NATIVE_INVALID_ENROLLMENT_CONTEXT' }, 400);
   }
   const rawActor = c.get('userId' as never) as unknown;
