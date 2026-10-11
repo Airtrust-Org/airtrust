@@ -195,7 +195,7 @@ export function assessNativeCompletionReadiness(
       (grade.mode === 'SCORED' &&
         (typeof grade.scorePct !== 'number' || !Number.isFinite(grade.scorePct) ||
           grade.scorePct > 100 ||
-          (grade.assessmentSatisfied && grade.scorePct < artifact.policy.masteryScore))) ||
+          (grade.assessmentSatisfied && artifact.policy.mode === 'SCORED' && grade.scorePct < artifact.policy.masteryScore))) ||
       (grade.mode === 'FORMATIVE' && grade.scorePct !== null)) {
     return { readyForCanonicalCompletion: false, reason: 'ASSESSMENT_EVIDENCE_MISSING' };
   }
