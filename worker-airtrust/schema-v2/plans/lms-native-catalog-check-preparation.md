@@ -107,6 +107,29 @@ PYTHONDONTWRITEBYTECODE=1 python3 \
 
 Esta é **apenas uma alternativa de design**: não existe migration 0550 ou qualquer apply gerado, nenhuma edição remota, nenhum campo novo na D1 real e nenhuma autorização para habilitar cursos. Para chegar a uma migration de produção, será necessário comparar o escopo de isolamento de todas as rotas legadas e estabelecer como o frontend evita exibir/exportar um curso Native como SCORM. O rebuild do CHECK continua bloqueado pelo contrato Schema V2.
 
+## Progresso do isolamento obrigatório de rotas legadas (11/10/2026)
+
+**Implementação incremental anterior à migration aditiva, com `tipo_conteudo='native'` no contrato atual:**
+
+- `worker-airtrust/src/routes/lms-progresso.ts`: agora bloqueia também `GET /scorm/state/:matriculaId` para curso Native, após validar tenant e funcionário, antes de consultar `lms_progresso_scorm`. O `POST /xapi/statements` já negava escrita Native; os testes validam a recusa e a continuidade de SCORM legítimo.
+- `worker-airtrust/src/routes/lms-native-write.ts`: o corpo JSON de evidências é limitado a 128 KiB **durante o consumo da stream**, mesmo sem `Content-Length`. Testes cobrem envio por partes, recusa de excesso e ausência de acesso privado R2 após requisição inválida.
+- `worker-airtrust/src/services/lms-native-content-loader.ts`: edição privada revalidada em SELECT conjunto, incluindo funcionário dono, status de matrícula e ciclo, tenant e publicação antes de acessar o R2.
+
+**Riscos ainda não isolados para o possível `native_pilot_format=1` com `tipo_conteudo='scorm'`:**
+
+| Superfície de produção | Entradas relevantes | Estado para o marcador aditivo |
+| --- | --- | --- |
+| `lms-assets.ts` | `/scorm/assets/:empresa_id/:curso_id/*`, `/scorm/assets-by-curso/:cursoId/*`, `/scorm/launch/:matricula_id`, `/scorm/preview/:curso_id`, `/assets/session` | Requer teste de fail-closed usando **formato efetivo** |
+| `lms-matriculas.ts` | `/scorm/commit`, `/:id/finalizar`, `/:id/status`, `/:id/progresso`, recuperações administrativas | Bloqueia Native físico; **marcador aditivo ainda não reconhecido** |
+| `lms-progresso.ts` | `/xapi/statements`, `/scorm/state/:matriculaId` | Bloqueia Native físico; **marcador aditivo ainda não reconhecido** |
+| `lms-completion-integrity.ts` | SCORM, xAPI, manual, administração, finalização | Bloqueia Native físico; **marcador aditivo ainda não reconhecido** |
+| `lms-cursos-upload-routes.ts` e serviços de versionamento | Upload, ativação, conformidade de pacote SCORM/H5P | Precisa bloquear no estado Native efetivo, inclusive administrador |
+| `lms-cursos-legacy.ts` | CRUD, edição e cadastro, publicação do catálogo | Precisa distinguir com segurança formato efetivo, validação e permissões |
+| Frontend `LmsCatalogo`, `LmsPlayer`, `LmsCursoDetalhe`, `LmsAdminCursos`, `useLms` | Exibição, lançamento, matrícula e navegação | Não apresentar player SCORM para Native marcado; não inferir certificação |
+| Histórico, qualificações, certificado e Compliance | Integração com finalização `completeLmsMatricula` | Proibido concluir antes de readiness Native server-owned e transação canônica |
+
+**Decisão:** nenhuma coluna ou migration aditiva é aplicada enquanto os caminhos que usam o campo físico SCORM não forem todos protegidos e testados, mantendo o legado inalterado. As alterações desta etapa reduzem exposição do Native físico, mas **não são suficientes para habilitar o marcador**.
+
 ## Riscos e próximos gates para a migration efetiva
 
 1. **Pré-flight real** de produção separadamente, incluindo `sqlite_master`, `PRAGMA table_info`, `PRAGMA foreign_key_list`, contagem de linhas, integridade e dependentes transitivos. Só consultas read-only. Nunca reutilizar fingerprint de staging como autorização para produção.
