@@ -11,6 +11,10 @@ type PreviewProps = {
   resolveAssetHref: (asset: NativeAsset) => string | null;
   /** Optional authenticated media fetch; Blob URLs are created and revoked here. */
   fetchAuthorizedAsset?: (asset: NativeAsset, signal: AbortSignal) => Promise<Blob>;
+  /** Server-confirmed last lesson; not a client-side completion claim. */
+  initialUnitId?: string | null;
+  /** Only persisted visit receipts. These are NOT pedagogy/completion proof. */
+  serverSeenLessonIds?: readonly string[];
 };
 
 function safeLmsAssetUrl(url: string | null): string | null {
@@ -63,14 +67,19 @@ function ProtectedNativeMedia({ asset, type, alt, fetchAsset }: {
       </figure>;
 }
 
-export default function NativeCoursePreview({ course, resolveAssetHref, fetchAuthorizedAsset }: PreviewProps) {
+export default function NativeCoursePreview({ course, resolveAssetHref, fetchAuthorizedAsset, initialUnitId, serverSeenLessonIds }: PreviewProps) {
   const [unitIndex, setUnitIndex] = useState(0);
   const [choices, setChoices] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    setUnitIndex(0);
+    // Resume only to an existing unit in the same course; never synthesize
+    // progress or let a missing/stale unit select an arbitrary page.
+    const index = initialUnitId
+      ? course.units.findIndex((unit) => unit.id === initialUnitId)
+      : -1;
+    setUnitIndex(index >= 0 ? index : 0);
     setChoices({});
-  }, [course.courseId, course.packageVersion]);
+  }, [course.courseId, course.packageVersion, course.units, initialUnitId]);
 
   const assets = useMemo(
     () => new Map(course.assets.map((asset) => [asset.id, asset])),
@@ -126,6 +135,12 @@ export default function NativeCoursePreview({ course, resolveAssetHref, fetchAut
         </p>
         <h1 className="text-2xl font-bold">{course.title}</h1>
         <p className="text-base">Unidade {unitIndex + 1} de {course.units.length}</p>
+        {serverSeenLessonIds && (
+          <p className="text-sm">
+            Aulas com registro de visita no servidor: {serverSeenLessonIds.length}.
+            Registros de visita não comprovam conclusão ou aprovação.
+          </p>
+        )}
       </header>
 
       <nav aria-label="Unidades do curso" className="flex flex-wrap gap-2">
