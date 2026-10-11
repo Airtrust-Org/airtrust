@@ -43,3 +43,13 @@ test('organizational, enrollment and intelligent-compliance schemas are validate
   assert.match(spec, /tendencias/);
   assert.match(spec, /comunicacoes/);
 });
+
+test('unrelated issue comments do not manufacture a failed Compliance QA run', () => {
+  // guard=skipped is expected for comments that do not request a governed QA.
+  // Explicit QA dispatches and valid comments still fail closed on real errors.
+  assert.match(workflow, /if: always\(\) && needs\.guard\.result != 'skipped'/);
+  assert.match(workflow, /needs\.guard\.result/);
+  assert.match(workflow, /needs\.d1_fixture\.result/);
+  assert.match(workflow, /needs\.browser\.result/);
+  assert.match(workflow, /needs\.d1_cleanup\.result/);
+});
