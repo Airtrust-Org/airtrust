@@ -17,7 +17,7 @@ const SOURCE_ROOT = 'Arquivos - EAD/';
 
 export function parseGitTree(buffer) {
   return Buffer.from(buffer).toString('utf8').split('\0').flatMap((line) => {
-    const match = line.match(/^[0-7]{6} blob ([a-f0-9]{40}) ([0-9]+)\t(.+)$/);
+    const match = line.match(/^[0-7]{6} blob ([a-f0-9]{40}) +([0-9]+)\t(.+)$/);
     return match ? [{ sha: match[1], bytes: Number(match[2]), file: match[3] }] : [];
   });
 }
