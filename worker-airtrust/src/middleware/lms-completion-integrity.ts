@@ -655,9 +655,12 @@ async function handleProgressPatch(
   }
 
   const existing = await c.env.DB.prepare(
-    `SELECT id, status, funcionario_id, progresso_pct, ultimo_slide, ultima_pagina
-         FROM lms_matriculas
-        WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+    `SELECT m.id, m.status, m.funcionario_id, m.progresso_pct, m.ultimo_slide, m.ultima_pagina,
+              c.tipo_conteudo
+         FROM lms_matriculas m
+         JOIN lms_cursos c ON c.id = m.curso_id
+          AND c.empresa_id = m.empresa_id AND c.deleted_at IS NULL
+        WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL
         LIMIT 1`,
   )
     .bind(matriculaId, empresaId)
@@ -668,6 +671,7 @@ async function handleProgressPatch(
       progresso_pct: number | null;
       ultimo_slide: number | null;
       ultima_pagina: number | null;
+      tipo_conteudo: string | null;
     }>();
   if (!existing)
     return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
@@ -682,6 +686,12 @@ async function handleProgressPatch(
         'Sem permissão para atualizar esta matrícula.',
       );
     }
+  }
+  if (String(existing.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
+    return errorResponse(
+      c, 409, 'NATIVE_CHECKPOINT_REQUIRED',
+      'O progresso nativo deve ser registrado por evidências verificadas do player.',
+    );
   }
   if (String(existing.status).toUpperCase() === 'CANCELADO') {
     return errorResponse(
