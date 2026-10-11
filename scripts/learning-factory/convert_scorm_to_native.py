@@ -126,6 +126,7 @@ def extract_draft(source: Path, destination: Path) -> dict:
                 },
                 'legacyCompletionManifest': completion,
                 'authoringSources': authored.get('sources') if isinstance(authored.get('sources'), list) else [],
+                'authoringMasteryScore': authored.get('masteryScore', (model or {}).get('masteryScore', (model or {}).get('passingScore'))),
                 'legacyAuthoringModel': model,
                 'media': [],
                 'reviewReasons': [
