@@ -265,7 +265,9 @@ jobs:
   summary:
     name: Training Compliance QA Summary
     needs: [guard, d1_fixture, browser, d1_cleanup]
-    if: always()
+    # Unrelated PR comments do not request Compliance QA. They must not
+    # manufacture failed runs when the governed guard intentionally skips.
+    if: always() && needs.guard.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
