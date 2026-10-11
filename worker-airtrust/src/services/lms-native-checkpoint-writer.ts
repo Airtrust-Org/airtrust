@@ -61,6 +61,7 @@ const BINDING_SQL = [
   "AND ed.artifact_sha256=? AND ed.status='PUBLISHED'",
   "AND m.status='EM_ANDAMENTO' AND m.deleted_at IS NULL",
   'AND cycle.ciclo_atual=1 AND cycle.deleted_at IS NULL',
+  "AND cycle.status='EM_ANDAMENTO' AND cycle.funcionario_id=m.funcionario_id",
   "AND c.tipo_conteudo='native' AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL",
   'LIMIT 1',
 ].join(' ');
@@ -84,6 +85,7 @@ const INSERT_SQL = [
   "AND ed.artifact_sha256=? AND ed.status='PUBLISHED'",
   "AND m.status='EM_ANDAMENTO' AND m.deleted_at IS NULL",
   'AND cycle.ciclo_atual=1 AND cycle.deleted_at IS NULL',
+  "AND cycle.status='EM_ANDAMENTO' AND cycle.funcionario_id=m.funcionario_id",
   "AND c.tipo_conteudo='native' AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL",
   'AND NOT EXISTS (SELECT 1 FROM lms_native_eventos prior',
   'WHERE prior.vinculo_id=b.id AND (prior.event_id=? OR prior.sequencia=?))',
