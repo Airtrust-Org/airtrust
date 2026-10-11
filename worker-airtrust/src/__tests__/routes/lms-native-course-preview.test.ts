@@ -4,6 +4,7 @@ import type { Env } from '../../types';
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(),
+  asset: vi.fn(),
 }));
 
 vi.mock('../../middleware/auth', () => ({
@@ -25,6 +26,11 @@ vi.mock('../../services/lms-native-content-loader', async (importOriginal) => {
   return { ...original, loadNativePublishedCourse: mocks.load };
 });
 
+vi.mock('../../services/lms-native-asset-loader', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../services/lms-native-asset-loader')>();
+  return { ...original, loadNativeVerifiedAsset: mocks.asset };
+});
+
 import nativeRoutes from '../../routes/lms-native';
 
 function app() {
@@ -39,13 +45,17 @@ function fetchRoute(config: {
   tenant?: number;
   user?: number;
   anonymous?: boolean;
+  assetId?: string;
+  range?: string;
 } = {}) {
   const headers: Record<string, string> = config.anonymous ? {} : {
     'x-test-user': String(config.user ?? 900),
     'x-test-tenant': String(config.tenant ?? 6),
   };
+  if (config.range) headers.Range = config.range;
   return app().fetch(new Request(
-    'http://localhost/api/lms/native/matriculas/' + (config.path ?? '101') + '/curso',
+    'http://localhost/api/lms/native/matriculas/' + (config.path ?? '101') +
+    (config.assetId ? '/assets/' + config.assetId : '/curso'),
     { headers },
   ), {
     ENVIRONMENT: config.environment ?? 'staging',
@@ -57,6 +67,10 @@ function fetchRoute(config: {
 describe('Native V1 staging-only content preview route', () => {
   beforeEach(() => {
     mocks.load.mockReset();
+    mocks.asset.mockReset();
+    mocks.asset.mockResolvedValue({
+      bytes: new Uint8Array([0,1,2,3,4,5]).buffer, contentType: 'video/mp4',
+    });
     mocks.load.mockResolvedValue({
       course: {
         schema: 'AIRTRUST_NATIVE_COURSE_V1', title: 'Curso demonstrativo',
@@ -121,4 +135,53 @@ describe('Native V1 staging-only content preview route', () => {
     expect(r.status).toBe(409);
     expect(await r.json()).toEqual({ success: false, code: 'NATIVE_CONTENT_UNAVAILABLE' });
   });
+  it('serves an authenticated asset and supports a single bounded video range', async () => {
+    const r = await fetchRoute({ assetId: 'intro-video', range: 'bytes=1-3' });
+    expect(r.status).toBe(206);
+    expect(r.headers.get('content-range')).toBe('bytes 1-3/6');
+    expect(r.headers.get('content-type')).toContain('video/mp4');
+    expect(r.headers.get('cache-control')).toContain('no-store');
+    expect(r.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(Array.from(new Uint8Array(await r.arrayBuffer()))).toEqual([1,2,3]);
+    expect(mocks.asset).toHaveBeenCalledWith(expect.objectContaining({
+      actorUserId: 900, empresaId: 6, matriculaId: 101, assetId: 'intro-video',
+    }));
+  });
+
+  it('returns the exact verified bytes without a Range header', async () => {
+    const r = await fetchRoute({ assetId: 'intro-video' });
+    expect(r.status).toBe(200);
+    expect(Array.from(new Uint8Array(await r.arrayBuffer()))).toEqual([0,1,2,3,4,5]);
+    expect(r.headers.get('content-length')).toBe('6');
+  });
+
+  it('rejects malicious ranges and missing asset IDs without leaking media', async () => {
+    const invalidRanges = ['bytes=0-99', 'bytes=5-1', 'bytes=-1', 'bytes=0-1,4-5'];
+    for (const range of invalidRanges) {
+      const r = await fetchRoute({ assetId: 'intro-video', range });
+      expect(r.status).toBe(416);
+      expect(r.headers.get('content-range')).toBe('bytes */6');
+    }
+    const invalid = await fetchRoute({ assetId: '..%2Fsecret' });
+    expect([400,404]).toContain(invalid.status);
+  });
+
+  it('denies staging media without tenant allowlist, or in production', async () => {
+    for (const settings of [
+      { allowlist: '' },
+      { environment: 'production', allowlist: '6' },
+      { allowlist: '7' },
+    ]) {
+      const r = await fetchRoute({ ...settings, assetId: 'intro-video' });
+      expect(r.status).toBe(404);
+    }
+    expect(mocks.asset).not.toHaveBeenCalled();
+  });
+
+  it('rejects unauthenticated asset requests before touching storage', async () => {
+    const r = await fetchRoute({ anonymous: true, assetId: 'intro-video' });
+    expect(r.status).toBe(401);
+    expect(mocks.asset).not.toHaveBeenCalled();
+  });
+
 });
