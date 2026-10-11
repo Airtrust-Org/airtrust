@@ -17,14 +17,19 @@ def statement(name, extra=None):
     match = re.search(r'const ' + name + r' = \[\n(.*?)\n\]\.join\(\x27 \x27\);', SRC, re.S)
     if not match:
         raise AssertionError('SQL_NOT_FOUND_' + name)
+    # Parse the simple string/constant TS array as Python-compatible
+    # literal syntax. PINNED_SCOPE is the only allowed variable reference.
+    node = ast.parse('[' + match.group(1) + ']', mode='eval').body
+    if not isinstance(node, ast.List):
+        raise AssertionError('SQL_NOT_A_LITERAL_ARRAY_' + name)
     tokens = []
-    for line in match.group(1).splitlines():
-        token = line.strip().rstrip(',')
-        if token == 'PINNED_SCOPE':
-            assert extra is not None
+    for token in node.elts:
+        if isinstance(token, ast.Name) and token.id == 'PINNED_SCOPE' and extra:
             tokens.append(extra)
-        elif token:
-            tokens.append(ast.literal_eval(token))
+        elif isinstance(token, ast.Constant) and isinstance(token.value, str):
+            tokens.append(token.value)
+        else:
+            raise AssertionError('UNSAFE_DYNAMIC_SQL_' + name)
     return ' '.join(tokens)
 
 
