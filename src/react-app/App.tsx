@@ -243,6 +243,7 @@ const LmsCursoDetalhe = lazyWithRetry(
 );
 const LmsAdminCursos = lazyWithRetry(() => import('./pages/lms/LmsAdminCursos'), 'LmsAdminCursos');
 const LmsPlayer = lazyWithRetry(() => import('./pages/lms/LmsPlayer'), 'LmsPlayer');
+const LmsNativePlayer = lazyWithRetry(() => import('./pages/lms/LmsNativePlayer'), 'LmsNativePlayer');
 const LmsPreviewPlayer = lazyWithRetry(
   () => import('./pages/lms/LmsPreviewPlayer'),
   'LmsPreviewPlayer',
@@ -1138,6 +1139,14 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <LmsPlayer />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/lms/player/native/:matriculaId"
+                      element={
+                        <ProtectedRoute>
+                          <LmsNativePlayer />
                         </ProtectedRoute>
                       }
                     />
