@@ -97,6 +97,8 @@ describe('Native V1 atomic checkpoint writer — no LMS completion side effects'
     const insert = f.calls.find((call) => call.sql.startsWith('INSERT'));
     expect(insert?.sql).toContain('AND m.status=\'EM_ANDAMENTO\'');
     expect(insert?.sql).toContain('AND cycle.ciclo_atual=1');
+    expect(insert?.sql).toContain("cycle.status='EM_ANDAMENTO'");
+    expect(insert?.sql).toContain('cycle.funcionario_id=m.funcionario_id');
     expect(insert?.sql).toContain('AND ed.artifact_sha256=?');
     expect(insert?.sql).not.toContain('UPDATE lms_matriculas');
     expect(f.calls.every((call) => /^(SELECT|INSERT)/.test(call.sql))).toBe(true);
