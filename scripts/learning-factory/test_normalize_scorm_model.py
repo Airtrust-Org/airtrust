@@ -17,7 +17,7 @@ def sgso_model():
         'courseId': 'sgso-reference', 'title': 'Safety Reference',
         'version': 'M10.4', 'passingScore': 70,
         'requiredSlideIds': ['cover', 'decision', 'quiz'],
-        'requiredInteractionIds': ['decision'],
+        'requiredInteractionIds': ['quiz'],
         'slides': [
             {
                 'id': 'cover', 'title': 'Capa', 'kind': 'cover',
@@ -158,7 +158,13 @@ class SpecializedCourseAdapterTests(unittest.TestCase):
     def test_revoked_required_scenario_gate_is_never_dropped(self):
         model = sgso_model()
         model['requiredInteractionIds'] = []
-        with self.assertRaisesRegex(SpecializedModelError, 'SPECIALIZED_DECISION_GATE_MISMATCH'):
+        with self.assertRaisesRegex(SpecializedModelError, 'SPECIALIZED_EXAM_GATE_MISMATCH'):
+            normalize_specialized_course_model(model)
+
+    def test_sgso_scenario_gate_is_independent_of_quiz_completion_gate(self):
+        model = sgso_model()
+        model['slides'][1]['requiredDecision'] = False
+        with self.assertRaisesRegex(SpecializedModelError, 'SPECIALIZED_REQUIRED_DECISION_MISSING'):
             normalize_specialized_course_model(model)
 
     def test_incorrect_scenario_source_fails_instead_of_guessing_correct_answer(self):
