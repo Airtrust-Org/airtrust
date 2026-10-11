@@ -148,7 +148,7 @@ app.get('/matriculas/:matriculaId/assets/:assetId', async (c) => {
       'Cross-Origin-Resource-Policy': 'same-origin',
     };
     if (range) {
-      const match = /^bytes=(\\d+)-(\\d*)$/.exec(range);
+      const match = /^bytes=(\d+)-(\d*)$/.exec(range);
       const start = match ? Number(match[1]) : NaN;
       const end = match && match[2] ? Number(match[2]) : buffer.length - 1;
       if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
