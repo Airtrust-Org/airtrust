@@ -165,6 +165,14 @@ A implementação de início de matrícula agora usa uma única transação `D1.
 
 **Atenção:** o snapshot vale só para staging no momento da consulta. Não inferir paridade com produção, não reconstruir `lms_cursos` sem prova de FKs/índices/triggers/rollback, nem habilitar Native com Schema V2 ainda não aplicado.
 
+## Harden 0549 — integridade de ciclo e contrato de edição
+
+A mudança governada `lms-native-v1-evidence-0549` agora valida no próprio SQLite que **o funcionário e o status da matrícula correspondem aos do ciclo atual** antes de vincular uma edição. Vinculações em matrículas canceladas/concluídas não são admitidas; inserções de eventos e tentativas exigem `EM_ANDAMENTO` em **ambos** os registros. O identificador de versão imutável da edição deve seguir o padrão `n-` + 32 caracteres hexadecimais minúsculos. O Worker aplica as mesmas verificações em suas consultas autenticadas.
+
+**Validações sem escrita remota:** 13 testes SQLite sintéticos da change 0549, incluindo divergência de funcionário/status e formato inválido de versão; 37 testes Worker focados de writers, readiness, paginação e guardas arquiteturais; TypeScript Worker aprovado. Os hashes novos do SQL e do plano foram sincronizados no manifest e conferidos pelo construtor oficial `build-reviewed-schema-apply.mjs`. O SQL resultante foi gerado **apenas em arquivo temporário local**, sem aplicação a staging ou produção.
+
+**Dependência não resolvida:** antes de ativar o formato `native` em qualquer empresa, ainda será necessária a migration independente do CHECK do catálogo, via executor governado com preservação de FKs, índices, triggers e rollback testado. Nenhuma alteração estrutural foi aplicada remotamente nesta etapa.
+
 ## Aceitação funcional antes de matrícula real
 
 - upload/revisão de candidato Native, versão por hash e reabertura da mesma edição em nova sessão;
