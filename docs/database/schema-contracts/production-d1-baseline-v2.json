@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-10",
-    "last_reconciled_against": "0548 maintenance IIO/APRS assistant requirement queued; production remote apply pending",
-    "schema_v2_digest": "c8978ddb2c9e2b024fed018a0d4c232bd1c775971ac301766a587728942ed9f8",
+    "last_reconciled_against": "0549 Native V1 evidence governance metadata prepared in PR #1389; no remote apply or production structure claimed",
+    "schema_v2_digest": "2eb3b388da890a1c9eb74a90567179af0bba23696396d48dd9cc1c703911ccfd",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1516,6 +1516,23 @@
       "reviewed_manifest": "training-compliance-maintenance-iio-aprs-assistants-0548.json",
       "evidence": "worker-airtrust/schema-v2/plans/training-compliance-maintenance-iio-aprs-assistants-0548.md",
       "note": "Requirement-only: includes six active Auxiliar de Manutenção employees in IIO/APRS training. No signature authority or production write claimed. Distinct governed Schema V2 apply requires precise authorization."
+    },
+    {
+      "change_file": "0549_lms_native_v1_evidence.sql",
+      "change_id": "lms-native-v1-evidence-0549",
+      "sha256": "b19f3f0ce490ac88bc902c0555d9e5399b86b4154b8c4eae7180e84586c11652",
+      "targets": [
+        "lms_native_edicoes",
+        "lms_native_eventos",
+        "lms_native_matricula_edicoes",
+        "lms_native_tentativas"
+      ],
+      "domain": "LMS Native V1 / tenant-scoped immutable course editions, enrollment-cycle pins, evidence ledger and private assessment attempts",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-native-v1-evidence-0549.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0549.md",
+      "note": "Governed additive Schema V2 candidate only. No remote D1 application or catalog native CHECK change claimed. Four new tables do not belong to the 13 scoped production snapshot tables. Staging/production preflight, backup and current SHA authorization remain required."
     }
   ]
 }
