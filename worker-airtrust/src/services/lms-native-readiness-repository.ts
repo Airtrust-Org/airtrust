@@ -36,6 +36,7 @@ const BINDING_SQL = [
   "WHERE b.empresa_id=? AND b.matricula_id=? AND b.ciclo_id=? AND b.curso_id=?",
   "AND ed.artifact_sha256=? AND ed.status='PUBLISHED'",
   "AND m.deleted_at IS NULL AND cycle.deleted_at IS NULL AND cycle.ciclo_atual=1",
+  "AND cycle.status=m.status AND cycle.funcionario_id=m.funcionario_id",
   "AND c.deleted_at IS NULL AND c.tipo_conteudo='native' AND c.ativo=1 AND c.publicado=1",
   "LIMIT 1",
 ].join(' ');
