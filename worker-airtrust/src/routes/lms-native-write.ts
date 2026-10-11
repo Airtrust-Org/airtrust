@@ -129,10 +129,11 @@ async function execute(c: Context<{ Bindings: Env }>,
         edition_sha256: result.editionHash, completion_supported: false,
       } }, result.state === 'STARTED' ? 201 : 200);
     }
-    if (kind === 'checkpoint' && 'eventId' in parsed.data) {
+    if (kind === 'checkpoint') {
+      const checkpoint = CheckpointBody.parse(parsed.data);
       const result = await commitNativeLessonCheckpoint({
         db: c.env.DB, actorUserId, artifact: verified.artifact, scope,
-        event: { ...parsed.data, artifactHash: verified.editionHash },
+        event: { ...checkpoint, artifactHash: verified.editionHash },
       });
       return c.json({ success: true, data: {
         state: result.state,
@@ -141,11 +142,12 @@ async function execute(c: Context<{ Bindings: Env }>,
         completion_supported: false,
       } }, result.state === 'APPLIED' ? 201 : 200);
     }
-    if (kind === 'attempt' && 'attemptNumber' in parsed.data) {
+    if (kind === 'attempt') {
+      const attempt = AttemptBody.parse(parsed.data);
       const result = await commitNativeAssessmentAttempt({
         db: c.env.DB, actorUserId, artifact: verified.artifact, scope,
-        attemptNumber: parsed.data.attemptNumber,
-        answers: parsed.data.answers,
+        attemptNumber: attempt.attemptNumber,
+        answers: attempt.answers,
       });
       return c.json({ success: true, data: {
         state: result.state,
