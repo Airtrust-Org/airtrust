@@ -8,6 +8,7 @@
  * 0551 review-only candidate blocks ungoverned Native completion.
  */
 import type { Env } from '../types';
+import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import { canProvisionNative } from './lms-native-enrollment-provisioner';
 import { NATIVE_ACTIVE_EMPLOYEE_JOIN, NATIVE_ACTIVE_USER_CONDITION } from './lms-native-active-learner-sql';
 import type { NativeReadinessVerdict } from '../lib/lms/lms-native-evidence-domain';
@@ -36,6 +37,7 @@ export type NativeCompletionPreflight =
         qualificacaoNome: string | null;
         qualificacaoCategoria: string | null;
         validade: number | null;
+        vencimentoFimMes: VencimentoMode | null;
         existingHistoricoId: number | null;
         /** Durable evidence snapshot verified against the private R2 key. */
         evidenceSnapshot: {
@@ -57,6 +59,7 @@ type CourseRow = {
   qualificacao_nome: string | null;
   qualificacao_categoria: string | null;
   qualificacao_validade: number | null;
+  qualificacao_vencimento_fim_mes: number | null;
   qualificacao_historico_id: number | null;
 };
 
@@ -108,7 +111,7 @@ export async function preflightNativeCanonicalCompletion(params: {
     'c.qualificacao_tipo_id,qt.id AS qualificacao_tipo_ativo_id,',
     'qt.categoria_id AS qualificacao_categoria_id,qt.codigo AS qualificacao_codigo,',
     'qt.nome AS qualificacao_nome,qt.categoria AS qualificacao_categoria,',
-    'qt.validade AS qualificacao_validade,',
+    'qt.validade AS qualificacao_validade,qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes,',
     'm.qualificacao_historico_id',
     'FROM lms_matriculas m',
     'JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id',
@@ -156,6 +159,11 @@ export async function preflightNativeCanonicalCompletion(params: {
   )) {
     return { ready: false, reason: 'QUALIFICATION_MAPPING_INCOMPLETE' };
   }
+  if (requireQualification && row.qualificacao_vencimento_fim_mes !== null &&
+      row.qualificacao_vencimento_fim_mes !== 0 &&
+      row.qualificacao_vencimento_fim_mes !== 1) {
+    return { ready:false, reason:'QUALIFICATION_MAPPING_INCOMPLETE' };
+  }
   if (!String(row.titulo ?? '').trim()) {
     return { ready: false, reason: 'COURSE_OR_CYCLE_CHANGED' };
   }
@@ -196,6 +204,7 @@ export async function preflightNativeCanonicalCompletion(params: {
       qualificacaoNome: row.qualificacao_nome,
       qualificacaoCategoria: categoriaNome,
       validade: row.qualificacao_validade,
+      vencimentoFimMes: row.qualificacao_vencimento_fim_mes as VencimentoMode | null,
       existingHistoricoId: row.qualificacao_historico_id,
       evidenceSnapshot: {
         eventCount: summary.nextSequence - 1,

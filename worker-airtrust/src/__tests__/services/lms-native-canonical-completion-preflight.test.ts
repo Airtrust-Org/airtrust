@@ -22,7 +22,8 @@ const accepted = {
   qualificacao_tipo_id: 99, qualificacao_tipo_ativo_id: 99,
   qualificacao_categoria_id: 44, qualificacao_codigo: 'EAD',
   qualificacao_nome: 'Treinamento EAD', qualificacao_categoria: 'EAD',
-  qualificacao_validade: 12, qualificacao_historico_id: null,
+  qualificacao_validade: 12, qualificacao_vencimento_fim_mes: 1,
+  qualificacao_historico_id: null,
 };
 function make(row: unknown = accepted) {
   const reads: Array<{ sql: string; binds: unknown[] }> = [];
@@ -69,6 +70,7 @@ describe('Native canonical completion: read-only preflight, never certificate au
         empresaId: 6, matriculaId: 101, cicloId: 1001,
         cursoId: 31, funcionarioId: 51, gerarQualificacaoAoConcluir: true,
         qualificacaoCategoriaId: 44, qualificacaoCategoriaCodigo: 'EAD',
+        vencimentoFimMes:1,
         evidenceSnapshot: { eventCount: 6, distinctLessonCount: 3,
           latestAttemptNumber: 2, scorePct: 86 },
       },
@@ -123,6 +125,7 @@ describe('Native canonical completion: read-only preflight, never certificate au
       { qualificacao_categoria_id: null },
       { qualificacao_codigo: null, qualificacao_nome: null },
       { gerar_qualificacao_ao_concluir: 2 },
+      { qualificacao_vencimento_fim_mes: 99 },
     ]) {
       const f=make({ ...accepted, ...change });
       await expect(f.call()).resolves.toEqual({
