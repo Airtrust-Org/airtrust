@@ -65,7 +65,12 @@ export async function selectNativeEnrollmentEdition(params: {
   if (!object || object.size <= 0 || object.size > MAX_PRIVATE_BYTES) {
     throw new NativeEditionSelectionError('NATIVE_EDITION_ARTIFACT_UNAVAILABLE');
   }
-  const bytes = await object.arrayBuffer();
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await object.arrayBuffer();
+  } catch {
+    throw new NativeEditionSelectionError('NATIVE_EDITION_ARTIFACT_UNAVAILABLE');
+  }
   if (bytes.byteLength !== object.size || bytes.byteLength > MAX_PRIVATE_BYTES) {
     throw new NativeEditionSelectionError('NATIVE_EDITION_ARTIFACT_SIZE_MISMATCH');
   }
