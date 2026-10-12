@@ -24,6 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SQL_0550 = ROOT / 'worker-airtrust/schema-v2/changes/0550_lms_native_v1_evidence.sql'
 SQL_0551 = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0551.REVIEW-ONLY.sql.txt'
+SQL_0552 = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-canonical-completion-0552.REVIEW-ONLY.sql.txt'
 
 REQUIRED_TABLES = frozenset({
     'empresas', 'funcionarios', 'usuarios', 'lms_cursos', 'lms_matriculas',
@@ -84,6 +85,7 @@ def rehearse(snapshot):
         # Never apply or modify versioned migration SQL in the rehearsal.
         db.executescript(SQL_0550.read_text(encoding='utf8'))
         db.executescript(SQL_0551.read_text(encoding='utf8'))
+        db.executescript(SQL_0552.read_text(encoding='utf8'))
         if db.execute('PRAGMA foreign_key_check').fetchall():
             raise ValueError('NATIVE_SCHEMA_FK_CHECK_FAILED')
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
@@ -94,16 +96,18 @@ def rehearse(snapshot):
             'lms_native_edicoes','lms_native_matricula_edicoes',
             'lms_native_eventos','lms_native_tentativas',
             'lms_native_catalog_activation','lms_native_enrollment_intents',
-            'lms_native_uncommittable_intent_guard')
+            'lms_native_uncommittable_intent_guard',
+            'lms_native_completion_intents')
         """).fetchone()[0]
-        if native_table_count != 7:
+        if native_table_count != 8:
             raise ValueError('NATIVE_SCHEMA_OBJECT_COUNT_DRIFT')
         fingerprint=hashlib.sha256(
             '\n'.join(ddl[k] for k in sorted(ddl)).encode('utf8')
         ).hexdigest()
         return {'staging_ddl_sha256':fingerprint,'base_tables':len(ddl),
                 'native_tables':native_table_count,'fk_check':'ok',
-                'integrity_check':'ok','mode':'OFFLINE_ONLY'}
+                'integrity_check':'ok','mode':'OFFLINE_ONLY',
+                'applied_concepts':['0550','0551_REVIEW_ONLY','0552_REVIEW_ONLY']}
     finally:
         db.close()
 
