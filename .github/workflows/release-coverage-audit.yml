@@ -16,6 +16,15 @@ on:
         options:
           - recent
           - historical
+          - historical-batch
+      anchor_utc:
+        description: 'Immutable UTC merge cutoff for historical-batch (YYYY-MM-DDTHH:MM:SSZ)'
+        type: string
+        required: false
+      batch_offset:
+        description: 'Historical-batch offset in merge-time descending candidate list (0, 80, 160...)'
+        type: string
+        required: false
   schedule:
     - cron: '15 11 * * *'
   workflow_run:
@@ -48,4 +57,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FAIL_ON_UNPUBLISHED: ${{ inputs.fail_on_unpublished || 'false' }}
           RELEASE_AUDIT_SCOPE: ${{ inputs.scope || 'recent' }}
+          RELEASE_AUDIT_ANCHOR_UTC: ${{ inputs.anchor_utc || '' }}
+          RELEASE_AUDIT_BATCH_OFFSET: ${{ inputs.batch_offset || '' }}
+          RELEASE_AUDIT_ARTIFACT: ${{ runner.temp }}/release-coverage-batch.json
         run: node scripts/ops/release-coverage-audit.mjs
+      - name: Preserve sanitized historical-batch evidence
+        if: ${{ inputs.scope == 'historical-batch' && success() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-coverage-batch-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-coverage-batch.json
+          retention-days: 30
+          if-no-files-found: error

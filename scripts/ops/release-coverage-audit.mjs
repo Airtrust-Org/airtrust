@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Read-only audit of PR merge ancestry in the production Worker release.
 // An ancestor SHA proves shipped source code, not functional acceptance or D1 state.
-import { appendFile } from 'node:fs/promises';
+import { appendFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -10,6 +10,7 @@ const API = 'https://api.github.com/repos/' + REPO;
 const AUDIT_SCOPES = Object.freeze({
   recent: { windowDays: 14, maxPrs: 80, maxPages: 6 },
   historical: { windowDays: 365, maxPrs: 300, maxPages: 25 },
+  'historical-batch': { windowDays: 365, maxPrs: 2500, maxPages: 25 },
 });
 
 export function auditScopeOptions(scope = 'recent') {
@@ -84,6 +85,57 @@ export async function recentMergedPulls(cutoffMs, {
   };
 }
 
+const HISTORY_BATCH_SIZE = 80;
+const HISTORY_RATE_RESERVE = 120;
+const SHA40 = /^[a-f0-9]{40}$/i;
+
+export function historicalBatchInput(anchorUtc, rawOffset) {
+  if (typeof anchorUtc !== 'string' ||
+      !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(anchorUtc)) {
+    throw Error('HISTORICAL_BATCH_ANCHOR_REQUIRED');
+  }
+  const anchorMs = Date.parse(anchorUtc);
+  if (!Number.isFinite(anchorMs) || new Date(anchorMs).toISOString().replace('.000Z', 'Z') !== anchorUtc ||
+      anchorMs > Date.now()) throw Error('HISTORICAL_BATCH_ANCHOR_INVALID');
+  if (!/^(0|[1-9]\d{0,3})$/.test(String(rawOffset ?? ''))) {
+    throw Error('HISTORICAL_BATCH_OFFSET_INVALID');
+  }
+  const offset = Number(rawOffset);
+  if (offset > 2500) throw Error('HISTORICAL_BATCH_OFFSET_OUT_OF_RANGE');
+  return { anchorUtc, anchorMs, offset };
+}
+
+export function selectHistoricalBatch(scan, input, batchSize = HISTORY_BATCH_SIZE) {
+  // Only complete inventory scans can be sliced into durable cursor ranges.
+  // Merge timestamps are immutable; the fixed upper and lower date anchors
+  // exclude later merges between separate workflow runs.
+  if (scan.truncated) throw Error('HISTORICAL_INVENTORY_TRUNCATED');
+  if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 80) {
+    throw Error('HISTORICAL_BATCH_SIZE_INVALID');
+  }
+  const eligible = scan.prs.filter((pr) =>
+    Number.isFinite(Date.parse(pr.mergedAt)) && Date.parse(pr.mergedAt) <= input.anchorMs);
+  if (input.offset > eligible.length) throw Error('HISTORICAL_BATCH_OFFSET_OUT_OF_RANGE');
+  const prs = eligible.slice(input.offset, input.offset + batchSize);
+  const nextOffset = input.offset + prs.length < eligible.length
+    ? input.offset + prs.length : null;
+  return {
+    prs, truncated: nextOffset !== null,
+    pagesScanned: scan.pagesScanned, matchesFound: eligible.length,
+    limitReason: nextOffset === null ? null : 'NEXT_BATCH',
+    nextOffset, batchOffset: input.offset, anchorUtc: input.anchorUtc,
+    inventoryComplete: true,
+  };
+}
+
+export function checkGithubRateBudget(remaining, count) {
+  const required = count * 5 + HISTORY_RATE_RESERVE; // compare + at most four changed-file pages
+  if (!Number.isInteger(remaining) || remaining < required) {
+    throw Error('GITHUB_CORE_RATE_BUDGET_INSUFFICIENT');
+  }
+  return { remaining, required, reserve: HISTORY_RATE_RESERVE };
+}
+
 export function classifyChangeSurfaces(files) {
   if (!Array.isArray(files) || !files.length) return ['UNKNOWN'];
   const surfaces = new Set();
@@ -147,8 +199,22 @@ export async function run() {
   const parity = pagesParity(prefix, productionSha);
   const mainDifference = await read(API + '/compare/' + productionSha + '...' + mainSha);
   const audit = auditScopeOptions(process.env.RELEASE_AUDIT_SCOPE || 'recent');
-  const { prs, truncated, pagesScanned, matchesFound, limitReason } =
-    await recentMergedPulls(Date.now() - audit.windowDays * 86400_000, audit);
+  const isBatch = audit.scope === 'historical-batch';
+  const input = isBatch ? historicalBatchInput(
+    process.env.RELEASE_AUDIT_ANCHOR_UTC,
+    process.env.RELEASE_AUDIT_BATCH_OFFSET,
+  ) : null;
+  const scan = await recentMergedPulls(
+    (input?.anchorMs ?? Date.now()) - audit.windowDays * 86400_000,
+    audit,
+  );
+  const selection = isBatch ? selectHistoricalBatch(scan, input) : scan;
+  const { prs, truncated, pagesScanned, matchesFound, limitReason } = selection;
+  // A job token typically has 1,000 core calls/hour; reserve the maximum
+  // possible count of comparison and changed-file requests BEFORE processing.
+  const rateBudget = isBatch
+    ? checkGithubRateBudget((await read('https://api.github.com/rate_limit'))?.resources?.core?.remaining, prs.length)
+    : null;
   const openPulls = await read(API + '/pulls?state=open&sort=updated&direction=desc&per_page=100');
   const openNumbers = openPulls.map((pr) => pr.number);
   const rows = [];
@@ -174,6 +240,14 @@ export async function run() {
     '- scan pages / matching PRs before cap: ' + pagesScanned + ' / ' + matchesFound,
     '- checked PR cap / scan page cap: ' + audit.maxPrs + ' / ' + audit.maxPages,
     '- truncation reason: ' + (limitReason || 'none'),
+    ...(isBatch ? [
+      '- immutable merge-date upper anchor UTC: ' + input.anchorUtc,
+      '- batch offset / next offset: ' + input.offset + ' / ' + (selection.nextOffset ?? 'COMPLETE'),
+      '- candidate inventory complete: ' + selection.inventoryComplete,
+      '- checked batch size / total candidates: ' + prs.length + ' / ' + matchesFound,
+      '- GitHub core budget remaining / reserved request estimate: ' + rateBudget.remaining + ' / ' + rateBudget.required,
+      '- pagination safety: merge-date anchored; complete candidate inventory rescanned for each batch',
+    ] : []),
     '- merged PRs checked: ' + rows.length,
     '- code ancestry confirmed in production: ' + (groups.CODE_IN_PRODUCTION || []).length,
     '- merged PRs NOT in published source: ' + unreleased.length,
@@ -193,7 +267,7 @@ export async function run() {
   if (process.env.GITHUB_STEP_SUMMARY) {
     await appendFile(process.env.GITHUB_STEP_SUMMARY, summary + '\n', 'utf8');
   }
-  process.stdout.write(JSON.stringify({
+  const result = {
     main_sha: mainSha, production_sha: productionSha, pages_sha_prefix: prefix,
     parity, main_relation: mainDifference.status,
     open_not_merged: openNumbers, open_scan_truncated: openNumbers.length === 100,
@@ -204,7 +278,16 @@ export async function run() {
     truncation_reason: limitReason, unknown_surface: unknownSurfaces,
     worker_changed_prs: bySurface('WORKER'), pages_changed_prs: bySurface('PAGES'),
     schema_v2_changed_prs: bySurface('SCHEMA_V2'),
-  }) + '\n');
+    ...(isBatch ? { anchor_utc: input.anchorUtc, batch_offset: input.offset,
+      next_offset: selection.nextOffset, inventory_complete: selection.inventoryComplete,
+      rate_budget: rateBudget } : {}),
+  };
+  if (isBatch && process.env.RELEASE_AUDIT_ARTIFACT) {
+    await writeFile(process.env.RELEASE_AUDIT_ARTIFACT, JSON.stringify({
+      ...result, pr_rows: rows,
+    }, null, 2) + '\n', 'utf8');
+  }
+  process.stdout.write(JSON.stringify(result) + '\n');
   if (unreleased.length) process.stdout.write('::warning::Merged PRs absent from the production Worker commit history.\n');
   if (uncertain.length || truncated || unknownSurfaces.length) process.stdout.write('::warning::Release audit incomplete, surface unknown or provenance unverified.\n');
   if (parity !== 'PREFIX_MATCH') throw Error('WORKER_PAGES_PREFIX_PARITY_' + parity);
