@@ -81,11 +81,24 @@ describe('Native provision transaction is staging-only and unmounted', () => {
     expect(f.statements.every(stmt => !/certificados|qualificacoes_historico/.test(stmt.sql))).toBe(true);
   });
   it('never reports enrollment success after a failed batch or mixed changes', async () => {
-    for (const opts of [{ failBatch: true }, { changes: 0 }]) {
+    for (const opts of [{ failBatch: true, row: null }, { changes: 0 }]) {
       const f = harness(opts);
       await expect(f.execute()).rejects.toMatchObject({ code: 'NATIVE_PROVISION_ATOMIC_REJECTED' });
     }
   });
+  it('recovers a lost response only when the exact pinned enrollment can be verified', async () => {
+    const f = harness({ failBatch: true });
+    await expect(f.execute()).resolves.toEqual({ matriculaId: 42, cicloId: 51, edicaoId: 7 });
+    expect(f.batch).toHaveBeenCalledTimes(1);
+    const receipt = f.statements.find(statement => statement.sql.includes('SELECT m.id AS matricula_id'));
+    expect(receipt?.sql).toContain('JOIN lms_native_catalog_activation a');
+    expect(receipt?.sql).toContain('f.empresa_id=m.empresa_id');
+    expect(receipt?.sql).toContain("cy.status=m.status");
+    expect(receipt?.sql).toContain("ed.status='PUBLISHED'");
+    expect(receipt?.sql).toContain("m.status IN ('NAO_INICIADO','EM_ANDAMENTO')");
+    expect(receipt?.bindings).toEqual([900,6,10,7]);
+  });
+
   it('does not fabricate a receipt if postcommit D1 lookup fails', async () => {
     const f = harness({ row: null });
     await expect(f.execute()).rejects.toMatchObject({ code: 'NATIVE_PROVISION_RECEIPT_UNAVAILABLE' });

@@ -136,6 +136,45 @@ export type NativeProvisionReceipt = Readonly<{
   matriculaId: number; cicloId: number; edicaoId: number;
 }>;
 
+async function readPinnedReceipt(
+  db: D1Database, actorUserId: number, empresaId: number, cursoId: number, edicaoId: number,
+): Promise<NativeProvisionReceipt | null> {
+  let result: ProvisionRow | null;
+  try {
+    result = await db.prepare([
+      'SELECT m.id AS matricula_id,cy.id AS ciclo_id,b.edicao_id',
+      'FROM lms_matriculas m',
+      'JOIN usuarios u ON u.funcionario_id=m.funcionario_id AND u.id=?',
+      'AND u.deleted_at IS NULL',
+      'JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id',
+      "AND f.deleted_at IS NULL AND f.ativo=1",
+      "AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'",
+      'JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id',
+      "AND c.tipo_conteudo='scorm' AND c.ativo=1 AND c.publicado=1",
+      'AND c.deleted_at IS NULL',
+      'JOIN lms_native_catalog_activation a ON a.curso_id=c.id AND a.empresa_id=c.empresa_id',
+      'JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id',
+      'AND cy.empresa_id=m.empresa_id AND cy.curso_id=m.curso_id',
+      'AND cy.funcionario_id=m.funcionario_id AND cy.ciclo_atual=1',
+      'AND cy.status=m.status AND cy.deleted_at IS NULL',
+      'JOIN lms_native_matricula_edicoes b ON b.matricula_id=m.id',
+      'AND b.ciclo_id=cy.id AND b.empresa_id=m.empresa_id AND b.curso_id=m.curso_id',
+      'JOIN lms_native_edicoes ed ON ed.id=b.edicao_id',
+      "AND ed.empresa_id=b.empresa_id AND ed.curso_id=b.curso_id AND ed.status='PUBLISHED'",
+      'WHERE m.empresa_id=? AND m.curso_id=? AND m.deleted_at IS NULL',
+      "AND m.status IN ('NAO_INICIADO','EM_ANDAMENTO')",
+      'AND b.edicao_id=? LIMIT 1',
+    ].join(' ')).bind(actorUserId, empresaId, cursoId, edicaoId).first<ProvisionRow>();
+  } catch {
+    return null;
+  }
+  if (!result || ![result.matricula_id, result.ciclo_id, result.edicao_id].every(
+    value => Number.isSafeInteger(value) && value > 0,
+  ) || result.edicao_id !== edicaoId) return null;
+  return { matriculaId: result.matricula_id, cicloId: result.ciclo_id, edicaoId };
+}
+
+
 /**
  * New enrollments only. Existing enrollment/cycles must be reconciled by a
  * separately reviewed service; never silently reset a regulated LMS record.
@@ -188,29 +227,15 @@ export async function provisionNativeEnrollment(params: {
       throw new NativeProvisionError('NATIVE_PROVISION_BATCH_INCONSISTENT');
     }
   } catch {
-    // D1.batch is atomic; never retry a partial or conflicted enrollment by
-    // bypassing uniqueness or creating a second current cycle.
+    // A prior D1 batch can commit even when the HTTP response is lost. Only
+    // recover an already-existing, ACTIVE, SAME-EDITION enrollment belonging
+    // to this exact authenticated employee. Do not create any second cycle.
+    const existing = await readPinnedReceipt(db, actorUserId, empresaId, cursoId, edicaoId);
+    if (existing) return existing;
     throw new NativeProvisionError('NATIVE_PROVISION_ATOMIC_REJECTED');
   }
 
-  const result = await db.prepare([
-    'SELECT m.id AS matricula_id,cy.id AS ciclo_id,b.edicao_id',
-    'FROM lms_matriculas m',
-    'JOIN usuarios u ON u.funcionario_id=m.funcionario_id AND u.id=?',
-    'AND u.deleted_at IS NULL',
-    'JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id',
-    'AND cy.empresa_id=m.empresa_id AND cy.curso_id=m.curso_id',
-    'AND cy.funcionario_id=m.funcionario_id AND cy.ciclo_atual=1',
-    "AND cy.status='NAO_INICIADO' AND cy.deleted_at IS NULL",
-    'JOIN lms_native_matricula_edicoes b ON b.matricula_id=m.id',
-    'AND b.ciclo_id=cy.id AND b.empresa_id=m.empresa_id AND b.curso_id=m.curso_id',
-    'WHERE m.empresa_id=? AND m.curso_id=?',
-    'AND m.deleted_at IS NULL AND b.edicao_id=? LIMIT 1',
-  ].join(' ')).bind(actorUserId, empresaId, cursoId, edicaoId).first<ProvisionRow>();
-  if (!result || ![result.matricula_id,result.ciclo_id,result.edicao_id].every(
-    value => Number.isSafeInteger(value) && value > 0
-  ) || result.edicao_id !== edicaoId) {
-    throw new NativeProvisionError('NATIVE_PROVISION_RECEIPT_UNAVAILABLE');
-  }
-  return { matriculaId: result.matricula_id, cicloId: result.ciclo_id, edicaoId };
+  const receipt = await readPinnedReceipt(db, actorUserId, empresaId, cursoId, edicaoId);
+  if (!receipt) throw new NativeProvisionError('NATIVE_PROVISION_RECEIPT_UNAVAILABLE');
+  return receipt;
 }
