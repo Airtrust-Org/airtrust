@@ -62,6 +62,7 @@ import {
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
 import { uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
+import { getLmsPlayerRoute } from './lmsPlayerRoute';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -1832,19 +1833,7 @@ export default function LmsCatalogo() {
   });
 
   function navPlayer(curso: LmsCurso, matriculaId: number) {
-    if (curso.tipo_conteudo === 'h5p') {
-      navigate(`/lms/player/h5p/${matriculaId}`);
-      return;
-    }
-    if (curso.tipo_conteudo === 'pdf') {
-      navigate(`/lms/player/pdf/${matriculaId}`);
-      return;
-    }
-    if (curso.tipo_conteudo === 'pptx') {
-      navigate(`/lms/player/pptx/${matriculaId}`);
-      return;
-    }
-    navigate(`/lms/player/${matriculaId}`);
+    navigate(getLmsPlayerRoute(curso.tipo_conteudo, matriculaId));
   }
 
   async function handleCardAction(curso: LmsCurso) {
@@ -1855,15 +1844,7 @@ export default function LmsCatalogo() {
     const mat = matriculasByCurso.get(curso.id);
     if (mat && mat.status !== 'CANCELADO') {
       if (mat.status === 'CONCLUIDO') {
-        const base =
-          curso.tipo_conteudo === 'h5p'
-            ? `/lms/player/h5p/${mat.id}`
-            : curso.tipo_conteudo === 'pdf'
-              ? `/lms/player/pdf/${mat.id}`
-              : curso.tipo_conteudo === 'pptx'
-                ? `/lms/player/pptx/${mat.id}`
-                : `/lms/player/${mat.id}`;
-        navigate(`${base}?review=1`);
+        navigate(getLmsPlayerRoute(curso.tipo_conteudo, mat.id, true));
         return;
       } else navPlayer(curso, mat.id);
       return;
