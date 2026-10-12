@@ -52,6 +52,7 @@ test('merged pull pagination reports incomplete inventory when the hard cap is r
   const updated = '2026-10-11T21:00:00Z';
   const page = Array.from({ length: 100 }, (_, i) => ({
     number: i + 1, merged_at: updated, updated_at: updated, merge_commit_sha: 'a'.repeat(40),
+    base: { ref: 'main' },
   }));
   const capped = await recentMergedPulls(Date.parse('2026-10-10'), {
     maxPrs: 5, maxPages: 2, fetchPage: async () => page,
@@ -160,4 +161,30 @@ test('manual batches have fixed UTC anchor and artifact retention without changi
   assert.match(yaml, /RELEASE_AUDIT_ANCHOR_UTC/);
   assert.match(yaml, /RELEASE_AUDIT_BATCH_OFFSET/);
   assert.match(yaml, /release-coverage-batch-\$\{\{ github\.run_id \}\}/);
+});
+
+
+test('off-main PR merges cannot be represented as main release provenance', async () => {
+  const { recentMergedPulls } = await import('../ops/release-coverage-audit.mjs');
+  const updated = '2026-10-11T21:00:00Z';
+  const input = [
+    { number: 42, merged_at: updated, updated_at: updated,
+      merge_commit_sha: 'a'.repeat(40), base: { ref: 'main' } },
+    { number: 61, merged_at: updated, updated_at: updated,
+      merge_commit_sha: 'b'.repeat(40), base: { ref: 'fix/lms-e2e-reliability-final-20260827' } },
+    { number: 55, merged_at: null, updated_at: updated,
+      merge_commit_sha: null, base: { ref: 'main' } },
+  ];
+  const result = await recentMergedPulls(Date.parse('2026-10-10'), {
+    fetchPage: async () => input,
+  });
+  assert.deepEqual(result.prs.map(x => x.number), [42]);
+  assert.deepEqual(result.offMainMergedExcluded, [61]);
+  assert.equal(result.truncated, false);
+  await assert.rejects(
+    recentMergedPulls(Date.parse('2026-10-10'), {
+      fetchPage: async () => [{ number: 63, merged_at: updated, updated_at: updated }],
+    }),
+    /MERGED_PR_BASE_UNVERIFIED/,
+  );
 });
