@@ -5,6 +5,7 @@ memory. Tests a transient enrollment intent visible within one transaction but
 never left committed; legacy enrollment is denied without such an intent.
 Not a Schema V2 migration, remote apply, or production-ready enrollment API.
 """
+import re
 import sqlite3
 import unittest
 from pathlib import Path
@@ -70,7 +71,13 @@ def fixture():
         id INTEGER PRIMARY KEY AUTOINCREMENT, matricula_id INTEGER NOT NULL
           REFERENCES lms_matriculas(id), empresa_id INTEGER NOT NULL,
         curso_id INTEGER NOT NULL, funcionario_id INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'NAO_INICIADO', ciclo_atual INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'NAO_INICIADO'
+          CHECK(status IN ('NAO_INICIADO','EM_ANDAMENTO','CONCLUIDO','REPROVADO',
+                           'CANCELADO','PENDENTE_VINCULO')),
+        ciclo_atual INTEGER NOT NULL DEFAULT 1,
+        origem TEXT NOT NULL DEFAULT 'LMS'
+          CHECK(origem IN ('LMS','MANUAL','AUTO_RENOVACAO','IMPORTADO_EDAPP')),
+        numero_ciclo INTEGER NOT NULL DEFAULT 1,
         deleted_at TEXT, UNIQUE(matricula_id, ciclo_atual));
       CREATE TABLE lms_native_catalog_activation(
         curso_id INTEGER PRIMARY KEY REFERENCES lms_cursos(id) ON DELETE RESTRICT,
@@ -95,14 +102,18 @@ def fixture():
     db.commit()
     return db
 
-def assertion(db, condition, code):
+def assertion(db, condition, code, values=()):
     # sqlite json() aborts the entire transaction if the condition is false.
-    db.execute(f"SELECT json(CASE WHEN ({condition}) THEN 'null' ELSE ? END)", (code,))
+    # All external values remain SQL bind parameters, including the nonce.
+    db.execute(f"SELECT json(CASE WHEN ({condition}) THEN 'null' ELSE ? END)",
+               (*values, code))
 
 def provision(db, *, nonce='f'*64, empresa=6, curso=10,
               funcionario=69, actor=900, edition=1, fault=None):
     # Mirrors D1.batch: no intermediate write is externally observable.
     # Never split these into independently committed worker .run() calls.
+    if not re.fullmatch(r'[0-9a-f]{64}', nonce):
+        raise ValueError('NATIVE_PROVISION_INVALID_NONCE')
     with db:
         db.execute("BEGIN IMMEDIATE")
         db.execute("""
@@ -124,8 +135,8 @@ def provision(db, *, nonce='f'*64, empresa=6, curso=10,
               WHERE m.empresa_id=c.empresa_id AND m.curso_id=c.id
                 AND m.funcionario_id=u.funcionario_id)
         """, (nonce, actor, funcionario, curso, empresa, edition))
-        assertion(db, "(SELECT COUNT(*) FROM lms_native_enrollment_intents WHERE nonce=?)=1"
-                  .replace('?', "'"+nonce+"'"), 'NATIVE_PROVISION_SCOPE_DENIED')
+        assertion(db, "(SELECT COUNT(*) FROM lms_native_enrollment_intents WHERE nonce=?)=1",
+                  'NATIVE_PROVISION_SCOPE_DENIED', (nonce,))
         if fault == 'before_enrollment':
             raise RuntimeError('INJECTED_BEFORE_ENROLLMENT')
         db.execute("""
@@ -160,11 +171,11 @@ def provision(db, *, nonce='f'*64, empresa=6, curso=10,
               AND ed.status='PUBLISHED'
           WHERE i.nonce=?
         """, (nonce,))
-        assertion(db, f"""(SELECT COUNT(*) FROM lms_native_matricula_edicoes b
+        assertion(db, """(SELECT COUNT(*) FROM lms_native_matricula_edicoes b
           JOIN lms_native_enrollment_intents i
           ON i.matricula_id=b.matricula_id AND i.ciclo_id=b.ciclo_id
           AND i.edicao_id=b.edicao_id AND i.empresa_id=b.empresa_id
-          WHERE i.nonce='{nonce}')=1""", 'NATIVE_PROVISION_PIN_MISSING')
+          WHERE i.nonce=?)=1""", 'NATIVE_PROVISION_PIN_MISSING', (nonce,))
         if fault == 'before_intent_cleanup':
             raise RuntimeError('INJECTED_BEFORE_CLEANUP')
         db.execute('DELETE FROM lms_native_enrollment_intents WHERE nonce=?', (nonce,))
@@ -186,6 +197,8 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
             self.assertEqual(db.execute('SELECT COUNT(*) FROM lms_native_enrollment_intents').fetchone()[0],0)
             self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
             self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
+            self.assertEqual(db.execute("""SELECT origem FROM lms_matricula_ciclos
+                 WHERE matricula_id=?""",(receipt[0],)).fetchone()[0],'LMS')
             with self.assertRaisesRegex(sqlite3.IntegrityError,'NATIVE_ENROLLMENT_INTENT_REQUIRED'):
                 db.execute("""INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id)
                   VALUES(6,10,70)""")
@@ -224,6 +237,14 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
             self.assertEqual(self._counts(db),(0,1,1,1))
         finally:
             db.close()
+
+    def test_rejects_untrusted_nonce_before_creating_any_intent(self):
+        db=fixture()
+        try:
+            with self.assertRaisesRegex(ValueError, 'NATIVE_PROVISION_INVALID_NONCE'):
+                provision(db, nonce="x' OR 1=1 --")
+            self.assertEqual(self._counts(db),(0,0,0,0))
+        finally: db.close()
 
     def test_unmarked_scorm_course_keeps_legacy_enrollment(self):
         db=fixture()
