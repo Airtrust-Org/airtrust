@@ -45,7 +45,10 @@ describe('Native V1 read-only enrollment admission / integration contract', () =
     expect(calls[0]?.sql).toContain('m.deleted_at IS NULL');
     expect(calls[0]?.sql).toContain('c.deleted_at IS NULL');
     expect(calls[0]?.bindings).toEqual([99, 6]);
-    expect(calls[1]?.bindings).toEqual([101]);
+    expect(calls[1]?.bindings).toEqual([99, 6, 101]);
+    expect(calls[1]?.sql).toContain('u.active=1');
+    expect(calls[1]?.sql).toContain('f.empresa_id=m.empresa_id');
+    expect(calls[1]?.sql).toContain('f.ativo=1');
   });
 
   it('read-only completed enrollment is REVIEW, not a new training cycle', async () => {
@@ -97,7 +100,7 @@ describe('Native V1 read-only enrollment admission / integration contract', () =
     });
     const marker = queries.find((q) => q.sql.includes('FROM lms_native_catalog_activation'));
     expect(marker?.bindings).toEqual([6, 8]);
-    expect(queries.find((q) => q.sql.includes('FROM usuarios'))?.bindings).toEqual([101]);
+    expect(queries.find((q) => q.sql.includes('FROM usuarios'))?.bindings).toEqual([99, 6, 101]);
   });
 
   it('rejects physical SCORM despite staging admission preview when no marker exists', async () => {

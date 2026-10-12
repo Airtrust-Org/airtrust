@@ -7,6 +7,7 @@
  * funcionario_id or a display percent to grant access or completion.
  */
 import type { Env } from '../types';
+import { NATIVE_ACTIVE_EMPLOYEE_JOIN } from './lms-native-active-learner-sql';
 import { isNativeForLegacyLmsPath } from './lms-native-catalog-legacy-guard';
 
 export type NativeAdmission = {
@@ -64,9 +65,12 @@ export async function resolveNativeEnrollmentAdmission(params: {
   // funcionarioId or user-provided identification. Global auth guards tenant
   // membership, but the individual enrollment still needs exact ownership.
   const actor = await db.prepare(
-    `SELECT funcionario_id FROM usuarios
-       WHERE id = ? AND deleted_at IS NULL LIMIT 1`
-  ).bind(actorUserId).first<{ funcionario_id: number | null }>();
+    `SELECT u.funcionario_id FROM usuarios u
+       JOIN lms_matriculas m ON m.id=? AND m.empresa_id=? AND m.funcionario_id=u.funcionario_id
+       AND m.deleted_at IS NULL
+       ${NATIVE_ACTIVE_EMPLOYEE_JOIN}
+       WHERE u.id=? AND u.deleted_at IS NULL AND u.active=1 LIMIT 1`
+  ).bind(matriculaId, empresaId, actorUserId).first<{ funcionario_id: number | null }>();
   if (!actor || !Number.isSafeInteger(actor.funcionario_id) ||
       Number(actor.funcionario_id) <= 0 ||
       actor.funcionario_id !== enrollment.funcionario_id) {

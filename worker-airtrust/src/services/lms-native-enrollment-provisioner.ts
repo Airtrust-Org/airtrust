@@ -8,6 +8,7 @@
  */
 import type { Env } from '../types';
 import { canReadNativeCatalogActivation } from './lms-native-catalog-legacy-guard';
+import { NATIVE_ACTIVE_USER_CONDITION } from './lms-native-active-learner-sql';
 
 export class NativeProvisionError extends Error {
   constructor(public readonly code: string) {
@@ -31,6 +32,7 @@ const SCOPE = [
   'JOIN lms_native_catalog_activation a ON a.curso_id=c.id AND a.empresa_id=c.empresa_id',
   'JOIN lms_native_edicoes ed ON ed.curso_id=c.id AND ed.empresa_id=c.empresa_id',
   'JOIN usuarios u ON u.id=? AND u.deleted_at IS NULL',
+  NATIVE_ACTIVE_USER_CONDITION,
   'JOIN funcionarios f ON f.id=u.funcionario_id',
   'AND f.empresa_id=c.empresa_id AND f.deleted_at IS NULL AND f.ativo=1',
   "AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'",
@@ -146,6 +148,7 @@ async function readPinnedReceipt(
       'FROM lms_matriculas m',
       'JOIN usuarios u ON u.funcionario_id=m.funcionario_id AND u.id=?',
       'AND u.deleted_at IS NULL',
+      NATIVE_ACTIVE_USER_CONDITION,
       'JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id',
       "AND f.deleted_at IS NULL AND f.ativo=1",
       "AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'",
