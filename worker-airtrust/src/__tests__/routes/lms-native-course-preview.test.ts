@@ -145,6 +145,7 @@ describe('Native V1 staging-only content preview route', () => {
     expect(Array.from(new Uint8Array(await r.arrayBuffer()))).toEqual([1,2,3]);
     expect(mocks.asset).toHaveBeenCalledWith(expect.objectContaining({
       actorUserId: 900, empresaId: 6, matriculaId: 101, assetId: 'intro-video',
+      env: expect.objectContaining({ ENVIRONMENT: 'staging' }),
     }));
   });
 

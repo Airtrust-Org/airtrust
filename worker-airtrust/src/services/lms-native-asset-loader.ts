@@ -9,6 +9,7 @@
 import {
   loadNativePublishedCourse, NativeContentLoadError,
 } from './lms-native-content-loader';
+import type { Env } from '../types';
 
 export type NativeVerifiedAsset = {
   bytes: ArrayBuffer;
@@ -25,6 +26,7 @@ async function hashBytes(bytes: ArrayBuffer) {
 }
 
 export async function loadNativeVerifiedAsset(params: {
+  env?: Env;
   db: D1Database;
   bucket: R2Bucket;
   empresaId: number;

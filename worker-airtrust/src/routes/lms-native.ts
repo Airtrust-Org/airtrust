@@ -208,7 +208,7 @@ app.get('/matriculas/:matriculaId/assets/:assetId', async (c) => {
   const actorUserId = typeof rawUser === 'string' ? Number(rawUser) : rawUser;
   try {
     const verified = await loadNativeVerifiedAsset({
-      db: c.env.DB, bucket: c.env.BUCKET,
+      env: c.env, db: c.env.DB, bucket: c.env.BUCKET,
       empresaId, matriculaId: Number(rawId),
       actorUserId: actorUserId as number, assetId,
     });
