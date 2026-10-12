@@ -27,12 +27,21 @@ HASH = 'a' * 64
 # INSERT has no intent and is rejected by the trigger. IDs are tied to an
 # edition, authenticated user and employee; the nonce never appears in HTTP.
 ENROLLMENT_GATE = """
+-- A deferred FK to an UNFILLABLE sentinel prevents any persistent orphan
+-- intent at COMMIT. Within a single transaction the intent may exist briefly,
+-- but it MUST be deleted after the matching enrollment/cycle/pin is verified.
+CREATE TABLE lms_native_uncommittable_intent_guard(
+  id INTEGER PRIMARY KEY CHECK(0)
+);
 CREATE TABLE lms_native_enrollment_intents(
   nonce TEXT PRIMARY KEY CHECK(length(nonce)=64),
   empresa_id INTEGER NOT NULL, curso_id INTEGER NOT NULL,
   funcionario_id INTEGER NOT NULL, actor_user_id INTEGER NOT NULL,
   edicao_id INTEGER NOT NULL REFERENCES lms_native_edicoes(id),
-  matricula_id INTEGER, ciclo_id INTEGER
+  matricula_id INTEGER, ciclo_id INTEGER,
+  uncommittable INTEGER NOT NULL DEFAULT 1
+    REFERENCES lms_native_uncommittable_intent_guard(id)
+    DEFERRABLE INITIALLY DEFERRED
 );
 CREATE TRIGGER native_intent_required BEFORE INSERT ON lms_matriculas
 WHEN EXISTS(SELECT 1 FROM lms_native_catalog_activation a
@@ -212,6 +221,38 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
                 db.execute("""INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id)
                   VALUES(6,10,70)""")
             self.assertEqual(db.execute("SELECT tipo_conteudo FROM lms_cursos WHERE id=10").fetchone()[0],'scorm')
+        finally:
+            db.close()
+
+    def test_orphan_intent_cannot_commit_or_make_permanent_legacy_bypass(self):
+        db=fixture()
+        try:
+            self.assertEqual(db.execute('PRAGMA foreign_keys').fetchone()[0],1)
+            # Even a privileged accidental standalone INSERT cannot commit
+            # the temporary privilege without an atomic consume-and-pin.
+            with self.assertRaises(sqlite3.IntegrityError):
+                with db:
+                    db.execute('BEGIN IMMEDIATE')
+                    db.execute("""INSERT INTO lms_native_enrollment_intents(
+                        nonce,empresa_id,curso_id,funcionario_id,actor_user_id,edicao_id
+                      ) VALUES(?,?,?,?,?,?)""",('b'*64,6,10,69,900,1))
+            self.assertEqual(self._counts(db),(0,0,0,0))
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute('INSERT INTO lms_native_uncommittable_intent_guard(id) VALUES(1)')
+        finally:
+            db.close()
+
+    def test_legacy_retarget_and_scorm_package_paths_remain_blocked(self):
+        db=fixture()
+        try:
+            db.execute("""INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id)
+              VALUES(6,11,70)""")
+            db.commit()
+            with self.assertRaisesRegex(sqlite3.IntegrityError,'NATIVE_CATALOG_ENROLLMENT_REQUIRES_NATIVE_PIN'):
+                db.execute('UPDATE lms_matriculas SET curso_id=10 WHERE curso_id=11')
+            with self.assertRaisesRegex(sqlite3.IntegrityError,'NATIVE_CATALOG_SCORM_VERSION_DENIED'):
+                db.execute('INSERT INTO lms_scorm_package_versions(curso_id) VALUES(10)')
+            self.assertEqual(self._counts(db),(0,1,0,0))
         finally:
             db.close()
 
