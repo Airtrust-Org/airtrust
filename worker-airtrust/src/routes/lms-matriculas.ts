@@ -1382,16 +1382,13 @@ app.post('/scorm/commit', async (c) => {
       launch_data: string | null;
       cmi_json: string | null;
     }>();
-
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
   if (!canManage) {
     if (!callerFuncionarioId || matricula.funcionario_id !== callerFuncionarioId) {
       throw new ApiError('Acesso negado', 403);
     }
   }
-  if (await isNativeForLegacyLmsPath(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo)) {
-    throw new ApiError('Curso nativo exige checkpoints do player próprio.', 409);
-  }
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo)) throw new ApiError('Curso nativo exige checkpoints do player próprio.', 409);
   // ─── Guard: prevent CONCLUIDO downgrade via SCORM commit ─────────────────
   // Completed enrollments allow only idempotent non-downgrading SCORM commits.
   const matriculaWasConcluido = matricula.status === 'CONCLUIDO';
