@@ -182,6 +182,34 @@ class CompileNativeDraftTests(unittest.TestCase):
                         compile_candidate(draft, location)
                     slide.pop(name)
 
+    def test_scorm_presentation_families_select_eight_noncertifying_layouts(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            expected = {
+                'cover': 'image-overlay',
+                'editorial-briefing': 'media-right',
+                'comparison': 'media-left',
+                'process': 'wide-top',
+                'synthesis': 'wide-bottom',
+                'checklist': 'banner-list',
+                'visual-explainer': 'double-crop',
+                'assessment': 'editorial-dashboard',
+            }
+            baseline, _ = compile_candidate(draft, location)
+            for family, template in expected.items():
+                with self.subTest(family=family):
+                    draft['course']['slides'][0]['family'] = family
+                    candidate, report = compile_candidate(draft, location)
+                    self.assertEqual(candidate['units'][0]['presentationTemplate'], template)
+                    self.assertEqual(candidate['questions'], baseline['questions'])
+                    self.assertEqual(candidate['policy'], baseline['policy'])
+                    self.assertEqual(candidate['assets'], baseline['assets'])
+                    self.assertNotIn('family', report['unmappedLayoutFields'])
+                    self.assertFalse(report['publishable'])
+            draft['course']['slides'][0]['family'] = 'unsupported-experiment'
+            with self.assertRaisesRegex(NativeCompileError, 'UNSUPPORTED_PRESENTATION_FAMILY'):
+                compile_candidate(draft, location)
+
     def test_preserves_gate_label_when_source_has_no_detail(self):
         # Real SCORM authoring includes label-only gate items; they remain
         # visible, without fake pedagogical explanations or dropped content.
