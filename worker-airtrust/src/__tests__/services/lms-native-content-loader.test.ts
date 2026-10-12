@@ -68,7 +68,7 @@ function createFixture(params: {
                     ativo: 1, publicado: 1,
                   };
                 }
-                if (sql.includes('SELECT funcionario_id FROM usuarios')) {
+                if (sql.includes('SELECT u.funcionario_id FROM usuarios u')) {
                   return { funcionario_id: params.funcionarioId ?? 51 };
                 }
                 if (sql.includes('FROM lms_native_matricula_edicoes')) return params.edition === null ? null : course;
@@ -107,11 +107,17 @@ describe('Native R2 immutable learner content loader', () => {
     expect(result.course.schema).toBe('AIRTRUST_NATIVE_COURSE_V1');
     expect(result.cicloId).toBe(600);
     expect(result.mode).toBe('LEARN');
+    expect(f.calls[1].binds).toEqual([101, 6, 900]);
+    expect(f.calls[1].sql).toContain('u.active=1');
+    expect(f.calls[1].sql).toContain('f.empresa_id=m.empresa_id');
     expect(f.calls[2].binds).toEqual([900, 6, 101, 31]);
     // A stale/adversarial cycle pin must not survive a separate admission
     // query when someone changes employee, lifecycle status or course.
     const editionSql = f.calls[2].sql;
     expect(editionSql).toContain('u.id=? AND u.deleted_at IS NULL');
+    expect(editionSql).toContain('u.active=1');
+    expect(editionSql).toContain('f.empresa_id=m.empresa_id');
+    expect(editionSql).toContain('f.ativo=1');
     expect(editionSql).toContain('u.funcionario_id=m.funcionario_id');
     expect(editionSql).toContain('cycle.funcionario_id=m.funcionario_id');
     expect(editionSql).toContain('cycle.status=m.status');
