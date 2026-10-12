@@ -2,6 +2,7 @@
  * LMS — Rotas de Cursos
  * CRUD do catálogo, upload e extração de pacotes SCORM para R2.
  */
+import { projectNativeCatalogCourses } from '../services/lms-native-catalog-course-projection';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -1368,7 +1369,6 @@ export async function hasOwnEnrolledCourseReadAccess(
   return ownEnrollment?.allowed === 1;
 }
 
-
 // ── Listar cursos ────────────────────────────────────────────────────────────
 
 app.get('/', async (c) => {
@@ -1534,7 +1534,8 @@ app.get('/', async (c) => {
     rowsStatement.all<Record<string, unknown>>(),
   ]);
 
-  const data = (rows.results ?? []).map((row) => {
+  const displayRows = await projectNativeCatalogCourses(c.env, empresaId, rows.results ?? []);
+  const data = displayRows.map((row) => {
     const setoresJson = row.setores_json as string | null;
     const { setores_json: _, ...rest } = row;
     return {
@@ -1874,7 +1875,8 @@ app.get('/:id{[0-9]+}', async (c) => {
   await assertLmsCursoDetailDomainAccess({ db, empresaId, c, cursoId });
 
   const setoresJson = curso.setores_json as string | null;
-  const { setores_json: _, ...cursoRest } = curso;
+  const [projectedCourse] = await projectNativeCatalogCourses(c.env, empresaId, [curso]);
+  const { setores_json: _, ...cursoRest } = projectedCourse;
   const data = {
     ...cursoRest,
     setores: setoresJson ? (JSON.parse(setoresJson) as { id: number; nome: string }[]) : [],

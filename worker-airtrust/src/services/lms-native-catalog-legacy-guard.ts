@@ -12,6 +12,12 @@ function exactTenantAllowed(raw: string | undefined, empresaId: number): boolean
     raw.split(',').some((value) => value.trim() === String(empresaId));
 }
 
+export function canReadNativeCatalogActivation(env: Env, empresaId: number): boolean {
+  return env.ENVIRONMENT === 'staging' &&
+    Number.isSafeInteger(empresaId) && empresaId > 0 &&
+    exactTenantAllowed(env.NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS, empresaId);
+}
+
 export async function isNativeForLegacyLmsPath(
   env: Env, empresaId: number, cursoId: number, tipoConteudo: string | null | undefined,
 ): Promise<boolean> {
