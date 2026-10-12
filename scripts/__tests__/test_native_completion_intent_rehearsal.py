@@ -120,6 +120,9 @@ class NativeCompletionIntentReviewTests(unittest.TestCase):
         try:
             with self.assertRaises(sqlite3.IntegrityError):
                 intent(db,m,cy,b,att,nonce='not-a-valid-nonce')
+            # A rejected statement can leave an implicit SQLite transaction
+            # open; the next independent test case needs an explicit rollback.
+            db.rollback()
             db.execute('BEGIN IMMEDIATE')
             intent(db,m,cy,b,att)
             with self.assertRaisesRegex(sqlite3.IntegrityError,'NATIVE_TERMINAL_INTENT_IMMUTABLE'):
