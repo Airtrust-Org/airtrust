@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
-const mocks = vi.hoisted(() => ({ loadPrivate: vi.fn(), readiness: vi.fn() }));
+const mocks = vi.hoisted(() => ({ loadPrivate: vi.fn(), readiness: vi.fn(), category: vi.fn() }));
 vi.mock('../../services/lms-native-content-loader', () => ({
   loadNativePrivateCourse: mocks.loadPrivate,
 }));
 vi.mock('../../services/lms-native-readiness-repository', () => ({
   readNativeCanonicalReadiness: mocks.readiness,
+}));
+vi.mock('../../services/qualification-category-contract', () => ({
+  requireActiveQualificationCategoryById: mocks.category,
 }));
 import { preflightNativeCanonicalCompletion } from '../../services/lms-native-canonical-completion-preflight';
 
@@ -16,7 +19,8 @@ const accepted = {
   ciclo_id: 1001, status: 'EM_ANDAMENTO',
   artifact_sha256: sha, titulo: 'Curso Native',
   gerar_qualificacao_ao_concluir: 1,
-  qualificacao_tipo_id: 99, qualificacao_tipo_ativo_id: 99, qualificacao_codigo: 'EAD',
+  qualificacao_tipo_id: 99, qualificacao_tipo_ativo_id: 99,
+  qualificacao_categoria_id: 44, qualificacao_codigo: 'EAD',
   qualificacao_nome: 'Treinamento EAD', qualificacao_categoria: 'EAD',
   qualificacao_validade: 12, qualificacao_historico_id: null,
 };
@@ -50,6 +54,10 @@ describe('Native canonical completion: read-only preflight, never certificate au
     mocks.readiness.mockReset().mockResolvedValue({
       readyForCanonicalCompletion: true, reason: 'READY',
     });
+    mocks.category.mockReset().mockResolvedValue({
+      id: 44, empresaId: 6, codigo: 'EAD', nome: 'Treinamento EAD',
+      ativo: true, lmsIntegrada: true,
+    });
   });
   it('requires real private course and server-verified persisted readiness', async () => {
     const f=make();
@@ -57,6 +65,7 @@ describe('Native canonical completion: read-only preflight, never certificate au
       ready: true, canonical: {
         empresaId: 6, matriculaId: 101, cicloId: 1001,
         cursoId: 31, funcionarioId: 51, gerarQualificacaoAoConcluir: true,
+        qualificacaoCategoriaId: 44, qualificacaoCategoriaCodigo: 'EAD',
       },
     });
     expect(mocks.loadPrivate).toHaveBeenCalledWith(expect.objectContaining({
@@ -77,6 +86,7 @@ describe('Native canonical completion: read-only preflight, never certificate au
     expect(f.reads[0].sql).toContain('u.active=1');
     expect(f.reads[0].sql).toContain('f.empresa_id=m.empresa_id');
     expect(f.reads.every(x => x.sql.startsWith('SELECT'))).toBe(true);
+    expect(mocks.category).toHaveBeenCalledWith(f.env.DB, 6, 44);
   });
   it('never reads qualification metadata when lesson/assessment evidence is missing', async () => {
     mocks.readiness.mockResolvedValueOnce({
@@ -103,6 +113,7 @@ describe('Native canonical completion: read-only preflight, never certificate au
   it('refuses to claim ready for unmapped qualification type or code', async () => {
     for (const change of [
       { qualificacao_tipo_id: null }, { qualificacao_tipo_ativo_id: null },
+      { qualificacao_categoria_id: null },
       { qualificacao_codigo: null, qualificacao_nome: null },
       { gerar_qualificacao_ao_concluir: 2 },
     ]) {
@@ -112,6 +123,22 @@ describe('Native canonical completion: read-only preflight, never certificate au
       });
     }
   });
+  it('requires an active and LMS-integrated canonical category for Native certification', async () => {
+    for (const category of [
+      { id: 44, empresaId: 6, codigo: 'OTHER', nome: 'Other', lmsIntegrada: false },
+      { id: 44, empresaId: 7, codigo: 'EAD', nome: 'EAD', lmsIntegrada: true },
+    ]) {
+      mocks.category.mockResolvedValueOnce(category);
+      const f=make();
+      await expect(f.call()).resolves.toEqual({
+        ready: false, reason: 'QUALIFICATION_MAPPING_INCOMPLETE',
+      });
+    }
+    mocks.category.mockRejectedValueOnce(Error('INACTIVE_OR_DELETED_CATEGORY'));
+    await expect(make().call()).resolves.toEqual({
+      ready: false, reason: 'QUALIFICATION_MAPPING_INCOMPLETE',
+    });
+  });
   it('allows a non-qualification course without inventing a history record', async () => {
     const f=make({ ...accepted, qualificacao_tipo_id: null,
       qualificacao_codigo: null, gerar_qualificacao_ao_concluir: 0 });
@@ -119,8 +146,10 @@ describe('Native canonical completion: read-only preflight, never certificate au
       ready: true, canonical: {
         gerarQualificacaoAoConcluir: false, qualificacaoTipoId: null,
         existingHistoricoId: null,
+        qualificacaoCategoriaId: null,
       },
     });
+    expect(mocks.category).not.toHaveBeenCalled();
   });
   it('never touches D1 or R2 if production or exact tenant Native staging gate is closed', async () => {
     const f=make();

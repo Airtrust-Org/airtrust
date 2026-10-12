@@ -13,6 +13,7 @@ import { NATIVE_ACTIVE_EMPLOYEE_JOIN, NATIVE_ACTIVE_USER_CONDITION } from './lms
 import type { NativeReadinessVerdict } from '../lib/lms/lms-native-evidence-domain';
 import { loadNativePrivateCourse } from './lms-native-content-loader';
 import { readNativeCanonicalReadiness } from './lms-native-readiness-repository';
+import { requireActiveQualificationCategoryById } from './qualification-category-contract';
 
 export type NativeCompletionPreflight =
   | Readonly<{ ready: false; reason:
@@ -29,6 +30,8 @@ export type NativeCompletionPreflight =
         cursoTitulo: string;
         gerarQualificacaoAoConcluir: boolean;
         qualificacaoTipoId: number | null;
+        qualificacaoCategoriaId: number | null;
+        qualificacaoCategoriaCodigo: string | null;
         qualificacaoCodigo: string | null;
         qualificacaoNome: string | null;
         qualificacaoCategoria: string | null;
@@ -42,6 +45,7 @@ type CourseRow = {
   titulo: string; gerar_qualificacao_ao_concluir: number;
   qualificacao_tipo_id: number | null;
   qualificacao_tipo_ativo_id: number | null;
+  qualificacao_categoria_id: number | null;
   qualificacao_codigo: string | null;
   qualificacao_nome: string | null;
   qualificacao_categoria: string | null;
@@ -85,7 +89,8 @@ export async function preflightNativeCanonicalCompletion(params: {
   const sql = [
     'SELECT m.id,m.curso_id,m.funcionario_id,m.status,cy.id AS ciclo_id,',
     'ed.artifact_sha256,c.titulo,c.gerar_qualificacao_ao_concluir,',
-    'c.qualificacao_tipo_id,qt.id AS qualificacao_tipo_ativo_id,qt.codigo AS qualificacao_codigo,',
+    'c.qualificacao_tipo_id,qt.id AS qualificacao_tipo_ativo_id,',
+    'qt.categoria_id AS qualificacao_categoria_id,qt.codigo AS qualificacao_codigo,',
     'qt.nome AS qualificacao_nome,qt.categoria AS qualificacao_categoria,',
     'qt.validade AS qualificacao_validade,',
     'm.qualificacao_historico_id',
@@ -138,6 +143,29 @@ export async function preflightNativeCanonicalCompletion(params: {
   if (!String(row.titulo ?? '').trim()) {
     return { ready: false, reason: 'COURSE_OR_CYCLE_CHANGED' };
   }
+  // Use the same canonical active-category contract as the existing
+  // qualification writer. A Native course must not acquire a certificate
+  // via the separate SCORM compatibility-link exception.
+  let categoriaId: number | null = null;
+  let categoriaCodigo: string | null = null;
+  let categoriaNome: string | null = null;
+  if (requireQualification) {
+    const id = row.qualificacao_categoria_id;
+    if (!Number.isSafeInteger(id) || (id ?? 0) <= 0) {
+      return { ready: false, reason: 'QUALIFICATION_MAPPING_INCOMPLETE' };
+    }
+    try {
+      const category = await requireActiveQualificationCategoryById(env.DB, empresaId, id!);
+      if (!category.lmsIntegrada || category.empresaId !== empresaId) {
+        return { ready: false, reason: 'QUALIFICATION_MAPPING_INCOMPLETE' };
+      }
+      categoriaId = category.id;
+      categoriaCodigo = category.codigo;
+      categoriaNome = category.nome;
+    } catch {
+      return { ready: false, reason: 'QUALIFICATION_MAPPING_INCOMPLETE' };
+    }
+  }
   return {
     ready: true, reason: 'READY',
     canonical: {
@@ -146,9 +174,11 @@ export async function preflightNativeCanonicalCompletion(params: {
       editionHash: verified.editionHash, cursoTitulo: row.titulo,
       gerarQualificacaoAoConcluir: requireQualification,
       qualificacaoTipoId: row.qualificacao_tipo_id,
+      qualificacaoCategoriaId: categoriaId,
+      qualificacaoCategoriaCodigo: categoriaCodigo,
       qualificacaoCodigo: row.qualificacao_codigo,
       qualificacaoNome: row.qualificacao_nome,
-      qualificacaoCategoria: row.qualificacao_categoria,
+      qualificacaoCategoria: categoriaNome,
       validade: row.qualificacao_validade,
       existingHistoricoId: row.qualificacao_historico_id,
     },
