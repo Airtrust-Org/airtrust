@@ -148,7 +148,7 @@ app.get('/matriculas/:matriculaId/sessao', async (c) => {
       empresaId, matriculaId: Number(rawId), actorUserId,
     });
     const { summary } = await readNativeLearnerSession({
-      db: c.env.DB, actorUserId, artifact: edition.artifact,
+      env: c.env, db: c.env.DB, actorUserId, artifact: edition.artifact,
       scope: {
         empresaId, matriculaId: Number(rawId), cursoId: edition.cursoId,
         cicloId: edition.cicloId, artifactHash: edition.editionHash,

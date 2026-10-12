@@ -12,6 +12,9 @@ import {
   type NativeReadinessVerdict, type NativeSessionScope, type NativeProgressSnapshot,
 } from '../lib/lms/lms-native-evidence-domain';
 
+import type { Env } from '../types';
+import { nativeScopedSql } from './lms-native-catalog-legacy-guard';
+
 export class NativeEvidenceReadError extends Error {
   constructor(public readonly code: string) {
     super(code);
@@ -76,6 +79,7 @@ export type NativeSessionSummary = Readonly<{
  */
 export async function readNativeLearnerSession(params: {
   db: D1Database;
+  env?: Env;
   actorUserId: number;
   scope: NativeSessionScope;
   artifact: NativeCourseArtifact;
@@ -89,7 +93,7 @@ export async function readNativeLearnerSession(params: {
 
   // Enforce exact authenticated user -> employee -> enrollment and pinned
   // edition on the server. No admin role bypass or client-owned employee ID.
-  const binding = await db.prepare(BINDING_SQL).bind(
+  const binding = await db.prepare(nativeScopedSql(BINDING_SQL, params.env, scope.empresaId)).bind(
     actorUserId, scope.empresaId, scope.matriculaId, scope.cicloId,
     scope.cursoId, scope.artifactHash,
   ).first<Binding>();
@@ -173,6 +177,7 @@ export async function readNativeLearnerSession(params: {
 /** The canonical completion gate consumes only Worker-calculated readiness. */
 export async function readNativeCanonicalReadiness(params: {
   db: D1Database;
+  env?: Env;
   actorUserId: number;
   scope: NativeSessionScope;
   artifact: NativeCourseArtifact;

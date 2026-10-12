@@ -18,6 +18,9 @@ import {
   type NativeSessionScope,
 } from '../lib/lms/lms-native-evidence-domain';
 
+import type { Env } from '../types';
+import { nativeScopedSql } from './lms-native-catalog-legacy-guard';
+
 export class NativeCheckpointWriteError extends Error {
   constructor(public readonly code: string) {
     super(code);
@@ -103,6 +106,7 @@ export type NativeCheckpointReceipt = Readonly<{
  */
 export async function commitNativeLessonCheckpoint(params: {
   db: D1Database;
+  env?: Env;
   actorUserId: number;
   scope: NativeSessionScope;
   event: NativeCheckpoint;
@@ -117,7 +121,7 @@ export async function commitNativeLessonCheckpoint(params: {
     reject('NATIVE_CHECKPOINT_INVALID_CONTEXT');
   }
 
-  const binding = await db.prepare(BINDING_SQL).bind(
+  const binding = await db.prepare(nativeScopedSql(BINDING_SQL, params.env, scope.empresaId)).bind(
     actorUserId, scope.empresaId, scope.matriculaId, scope.cicloId,
     scope.cursoId, scope.artifactHash,
   ).first<BoundRow>();
@@ -154,7 +158,7 @@ export async function commitNativeLessonCheckpoint(params: {
   // The CHECK/UNIQUE/trigger constraints are authoritative under two-device
   // races; there is no unprotected read/then-write sequence assignment.
   try {
-    const result = await db.prepare(INSERT_SQL).bind(
+    const result = await db.prepare(nativeScopedSql(INSERT_SQL, params.env, scope.empresaId)).bind(
       event.eventId, event.sequence, event.unitId, digest,
       actorUserId, binding.id,
       scope.empresaId, scope.matriculaId, scope.cicloId, scope.cursoId,

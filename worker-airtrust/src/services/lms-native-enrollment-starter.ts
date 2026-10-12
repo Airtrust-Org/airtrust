@@ -6,6 +6,9 @@
  * lms_matricula_ciclos row) are transitioned in a single D1.batch()
  * transaction. Never manufacture completion or qualification evidence.
  */
+import type { Env } from '../types';
+import { nativeScopedSql } from './lms-native-catalog-legacy-guard';
+
 export class NativeEnrollmentStartError extends Error {
   constructor(public readonly code: string) {
     super(code);
@@ -79,6 +82,7 @@ export type NativeEnrollmentStartReceipt = Readonly<{
 
 export async function startNativeEnrollment(params: {
   db: D1Database;
+  env?: Env;
   actorUserId: number;
   empresaId: number;
   matriculaId: number;
@@ -99,10 +103,10 @@ export async function startNativeEnrollment(params: {
   let results: D1Result[];
   try {
     results = await db.batch([
-      db.prepare(PREFLIGHT_SQL).bind(...binds),
-      db.prepare(START_MATRICULA_SQL).bind(...binds),
-      db.prepare(START_CYCLE_SQL).bind(...binds),
-      db.prepare(POSTCHECK_SQL).bind(...binds),
+      db.prepare(nativeScopedSql(PREFLIGHT_SQL, params.env, empresaId)).bind(...binds),
+      db.prepare(nativeScopedSql(START_MATRICULA_SQL, params.env, empresaId)).bind(...binds),
+      db.prepare(nativeScopedSql(START_CYCLE_SQL, params.env, empresaId)).bind(...binds),
+      db.prepare(nativeScopedSql(POSTCHECK_SQL, params.env, empresaId)).bind(...binds),
     ]);
   } catch {
     throw new NativeEnrollmentStartError('NATIVE_START_ATOMIC_SYNC_REJECTED');

@@ -13,6 +13,9 @@ import {
 import { evaluateNativeAssessment } from '../lib/lms/lms-native-grading';
 import type { NativeSessionScope } from '../lib/lms/lms-native-evidence-domain';
 
+import type { Env } from '../types';
+import { nativeScopedSql } from './lms-native-catalog-legacy-guard';
+
 export class NativeAttemptWriteError extends Error {
   constructor(public readonly code: string) {
     super(code);
@@ -102,6 +105,7 @@ export type NativeAttemptReceipt = Readonly<{
 
 export async function commitNativeAssessmentAttempt(params: {
   db: D1Database;
+  env?: Env;
   actorUserId: number;
   scope: NativeSessionScope;
   artifact: NativeCourseArtifact;
@@ -131,7 +135,7 @@ export async function commitNativeAssessmentAttempt(params: {
   }
   const digest = await sha256(answerJson);
 
-  const binding = await db.prepare(BINDING_SQL).bind(
+  const binding = await db.prepare(nativeScopedSql(BINDING_SQL, params.env, scope.empresaId)).bind(
     actorUserId, scope.empresaId, scope.matriculaId,
     scope.cicloId, scope.cursoId, scope.artifactHash,
   ).first<Binding>();
@@ -161,7 +165,7 @@ export async function commitNativeAssessmentAttempt(params: {
   }
 
   try {
-    const result = await db.prepare(INSERT_SQL).bind(
+    const result = await db.prepare(nativeScopedSql(INSERT_SQL, params.env, scope.empresaId)).bind(
       attemptNumber, answerJson, digest, grade.mode,
       grade.scorePct, Number(grade.assessmentSatisfied),
       actorUserId, binding.id, scope.empresaId,

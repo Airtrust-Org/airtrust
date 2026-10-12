@@ -30,6 +30,18 @@ export function nativeCourseIdentityPredicate(env: Env | undefined, empresaId: n
     "WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id)))";
 }
 
+/**
+ * Replace exactly the course-format assertion, never any tenant/user/edition
+ * constraints. Legacy SQL remains unchanged when staged activation is OFF.
+ */
+export function nativeScopedSql(sql: string, env: Env | undefined, empresaId: number): string {
+  const needle = "c.tipo_conteudo='native'";
+  if (sql.split(needle).length !== 2) {
+    throw new Error('NATIVE_SQL_SCOPE_CONTRACT_INVALID');
+  }
+  return sql.replace(needle, nativeCourseIdentityPredicate(env, empresaId));
+}
+
 export async function isNativeForLegacyLmsPath(
   env: Env, empresaId: number, cursoId: number, tipoConteudo: string | null | undefined,
 ): Promise<boolean> {
