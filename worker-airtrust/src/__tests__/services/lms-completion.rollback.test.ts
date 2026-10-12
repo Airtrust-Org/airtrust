@@ -239,10 +239,13 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
       preComAnterior,
     );
 
-    // Falha injetada no INSERT do novo Histórico (statement 0): o anterior
-    // NUNCA deve virar RENOVADA sem sucessor real.
+    // Falha injetada no INSERT do novo Histórico, após a nova
+    // assertion atômica do predecessor.
+    const insertIndex = statements.findIndex((s) =>
+      s.sql.includes('INSERT INTO qualificacoes_historico'));
+    expect(insertIndex).toBeGreaterThanOrEqual(0);
     const corrupted = statements.map((s, i) =>
-      i === 0
+      i === insertIndex
         ? {
             sql: s.sql.replace(
               'INSERT INTO qualificacoes_historico',
@@ -279,6 +282,38 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
     )[0] as Record<string, unknown>;
     expect(novo.renovacao_de).toBe(500);
   });
+
+  it.each(['CANCELADA', 'RENOVADA', 'PLANEJADA'])(
+    'bloqueia sucessor de histórico revogado após preflight (%s)', (status) => {
+      seedMatricula(10);
+      execSql(dbPath, `
+        INSERT INTO qualificacoes_historico
+          (id, empresa_id, funcionario_id, qualificacao_codigo, data_conclusao, status, renovada)
+        VALUES (800, 6, 77, 'QUAL-X', '2025-07-30', 'CONCLUIDA', 0);`);
+      const pre = {
+        ...preNoAnterior, anteriorAtivaId: 800,
+        anteriorAtivaObservacoes: null,
+      };
+      const statements = buildCompletionBatchStatements(
+        baseParams({ matriculaId: 10 }), pre);
+      execSql(dbPath, `UPDATE qualificacoes_historico
+        SET status='${status}' WHERE id=800;`);
+      const result = runSqliteBatch(dbPath, statements);
+      expect(result.committed).toBe(false);
+      expect(result.stderr).toContain('malformed JSON');
+      const original = querySql(dbPath,
+        'SELECT status, renovada FROM qualificacoes_historico WHERE id=800;')[0]
+        as Record<string, unknown>;
+      expect(original.status).toBe(status);
+      expect(original.renovada).toBe(0);
+      expect(querySql(dbPath, 'SELECT * FROM qualificacoes_historico;')).toHaveLength(1);
+      expect((querySql(dbPath,
+        'SELECT status FROM lms_matriculas WHERE id=10;')[0] as Record<string, unknown>).status)
+        .toBe('EM_ANDAMENTO');
+      expect(querySql(dbPath, 'SELECT * FROM lms_matricula_ciclos;')).toHaveLength(0);
+      expect(querySql(dbPath, 'SELECT * FROM audit_logs;')).toHaveLength(0);
+    },
+  );
 
   it('duas conclusões concorrentes: a segunda perde a UNIQUE constraint, seu batch inteiro reverte, retry vira reuso', () => {
     seedMatricula(4);
