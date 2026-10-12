@@ -11,6 +11,9 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 vi.mock('../../routes/escalas-shared', () => ({ getEmpresaIdSafe: () => 6 }));
+vi.mock('../../services/lms-edition-mismatch', () => ({
+  detectLmsEditionMismatch: vi.fn(async () => ({ mismatch: false })),
+}));
 
 import matriculas from '../../routes/lms-matriculas';
 
@@ -35,6 +38,7 @@ function state(flag = '6', environment = 'staging', marked = true) {
           return {
             first: async () => {
               if (sql.includes('COUNT(*) AS n')) return { n: list.length };
+              if (sql.includes('FROM lms_matriculas m')) return { ...list[0] };
               throw Error('UNEXPECTED_READ');
             },
             all: async () => {
@@ -65,6 +69,23 @@ describe('Effective Native enrollment identity for authenticated learner lists',
     const lookup = calls.find(call => call.sql.includes('FROM lms_native_catalog_activation'));
     expect(lookup?.values).toEqual([6,9,8]);
   });
+  it('returns effective Native on enrollment detail and never consults SCORM progress', async () => {
+    const { env, calls } = state();
+    const response = await testApp().fetch(new Request(
+      'http://localhost/api/lms/matriculas/101'), env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    const json = await response.json() as { data: {
+      tipo_conteudo: string; scorm_progresso: unknown; completion_diagnostic: unknown;
+    } };
+    expect(json.data.tipo_conteudo).toBe('native');
+    expect(json.data.scorm_progresso).toBeNull();
+    expect(json.data.completion_diagnostic).toBeNull();
+    expect(calls.some(call => call.sql.includes('FROM lms_progresso_scorm'))).toBe(false);
+    expect(calls.some(call => call.sql.includes('FROM lms_xapi_statements'))).toBe(false);
+    expect(calls.find(call => call.sql.includes('lms_native_catalog_activation'))?.values)
+      .toEqual([6,9]);
+  });
+
   it('does not query a non-existent activation table when flag is disabled', async () => {
     const { env, calls } = state('');
     const res = await testApp().fetch(new Request(
