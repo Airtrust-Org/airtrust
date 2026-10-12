@@ -65,6 +65,7 @@ const SQL=[
   'SELECT 1 FROM qualificacoes_tipos qt',
   'JOIN qualificacoes_categorias qc ON qc.id=qt.categoria_id',
   'AND qc.empresa_id=qt.empresa_id AND qc.ativo=1 AND qc.deleted_at IS NULL',
+  'AND qc.lms_integrada=1',
   'WHERE qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id',
   'AND qt.ativo=1 AND qt.deleted_at IS NULL AND qc.id=?',
   '))',
