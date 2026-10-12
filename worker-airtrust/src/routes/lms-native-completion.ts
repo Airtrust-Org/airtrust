@@ -74,13 +74,29 @@ app.post('/matriculas/:matriculaId/concluir',async c=>{
       userAgent:c.req.header('user-agent')??undefined,
       nativeTerminalAnchor:terminalAnchor,
     });
+    // A canonical writer must return a receipt for THIS enrollment and the
+    // qualification contract preflighted for THIS course. Never report HTTP
+    // 200 for a failed, absent or cross-enrollment qualification result.
+    const qualificationExpected=canonical.gerarQualificacaoAoConcluir;
+    const verifiedReceipt=result.matriculaId===matriculaId && (
+      qualificationExpected
+        ? (result.outcome==='qualification_created' ||
+           result.outcome==='qualification_reused') &&
+          Number.isSafeInteger(result.qualificacaoHistoricoId) &&
+          (result.qualificacaoHistoricoId ?? 0)>0
+        : result.outcome==='qualification_not_required' &&
+          result.qualificacaoHistoricoId===null
+    );
+    if(!verifiedReceipt){
+      return c.json({success:false,code:'NATIVE_COMPLETION_RECEIPT_UNCONFIRMED'},503);
+    }
     // Historical qualification + certificate generation are distinct:
     // do not promise a document was issued by this HTTP response.
     return c.json({success:true,data:{
-      matricula_id:result.matriculaId,
+      matricula_id:matriculaId,
       status:'CONCLUIDO',
       qualification_outcome:result.outcome,
-      certificate_state:result.qualificacaoHistoricoId
+      certificate_state:qualificationExpected
         ? 'REQUIRES_VERIFICATION' : 'NOT_APPLICABLE',
     }},200);
   }catch(error){
