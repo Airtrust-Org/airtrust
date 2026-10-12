@@ -7,7 +7,15 @@ import path from 'node:path';
 
 const REPO = 'Airtrust-Org/airtrust';
 const API = 'https://api.github.com/repos/' + REPO;
-const MAX_PRS = 80;
+const AUDIT_SCOPES = Object.freeze({
+  recent: { windowDays: 14, maxPrs: 80, maxPages: 6 },
+  historical: { windowDays: 365, maxPrs: 300, maxPages: 25 },
+});
+
+export function auditScopeOptions(scope = 'recent') {
+  if (!Object.hasOwn(AUDIT_SCOPES, scope)) throw Error('INVALID_RELEASE_AUDIT_SCOPE');
+  return { scope, ...AUDIT_SCOPES[scope] };
+}
 
 export function classifyReleaseComparison(status) {
   if (status === 'ahead' || status === 'identical') return 'CODE_IN_PRODUCTION';
@@ -38,36 +46,90 @@ async function read(url, textResponse = false) {
   return textResponse ? response.text() : response.json();
 }
 
-async function recentMergedPulls(cutoffMs) {
+export async function recentMergedPulls(cutoffMs, {
+  maxPrs = 80,
+  maxPages = 6,
+  fetchPage = (page) => read(API + '/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=' + page),
+} = {}) {
+  if (!Number.isFinite(cutoffMs) || !Number.isInteger(maxPrs) || maxPrs < 1 ||
+      !Number.isInteger(maxPages) || maxPages < 1) throw Error('INVALID_AUDIT_SCAN_LIMITS');
   const merged = [];
   let scanComplete = false;
-  for (let page = 1; page <= 6; page++) {
-    const batch = await read(API + '/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=' + page);
+  let pagesScanned = 0;
+  for (let page = 1; page <= maxPages; page++) {
+    const batch = await fetchPage(page);
+    if (!Array.isArray(batch) || batch.length > 100) throw Error('INVALID_GITHUB_PULL_PAGE');
+    pagesScanned++;
     for (const pr of batch) {
       if (pr.merged_at && Date.parse(pr.merged_at) >= cutoffMs) {
         merged.push({ number: pr.number, sha: pr.merge_commit_sha, mergedAt: pr.merged_at });
       }
     }
-    if (batch.length < 100 || batch.every((pr) => Date.parse(pr.updated_at) < cutoffMs)) {
+    // GitHub returns "updated desc", so later pages cannot be newer than the
+    // oldest row in this page. Never use merge date as the pagination order.
+    const oldestUpdate = Date.parse(batch[batch.length - 1]?.updated_at ?? '');
+    if (batch.length < 100 || (Number.isFinite(oldestUpdate) && oldestUpdate < cutoffMs)) {
       scanComplete = true;
       break;
     }
+    if (merged.length > maxPrs) break;
   }
   merged.sort((a, b) => Date.parse(b.mergedAt) - Date.parse(a.mergedAt));
-  return { prs: merged.slice(0, MAX_PRS), truncated: !scanComplete || merged.length > MAX_PRS };
+  const capped = merged.length > maxPrs;
+  return {
+    prs: merged.slice(0, maxPrs),
+    truncated: !scanComplete || capped,
+    pagesScanned, matchesFound: merged.length,
+    limitReason: capped ? 'MAX_PRS' : (!scanComplete ? 'MAX_SCAN_PAGES' : null),
+  };
+}
+
+export function classifyChangeSurfaces(files) {
+  if (!Array.isArray(files) || !files.length) return ['UNKNOWN'];
+  const surfaces = new Set();
+  for (const file of files) {
+    const name = typeof file === 'string' ? file : file?.filename;
+    if (!name || typeof name !== 'string') { surfaces.add('UNKNOWN'); continue; }
+    if (/^worker-airtrust\/schema-v2\//.test(name)) surfaces.add('SCHEMA_V2');
+    else if (/^(?:src|worker-airtrust\/src)\/(?:__tests__\/|.*(?:\/__tests__\/|\.test\.|\.spec\.))/.test(name) ||
+             /^scripts\/__tests__\//.test(name)) surfaces.add('CI_OPS');
+    else if (/^worker-airtrust\/src\//.test(name) || /^worker-airtrust\/(?:wrangler|package)/.test(name)) surfaces.add('WORKER');
+    else if (/^(?:src\/|public\/|index\.html$|vite\.config\.)/.test(name)) surfaces.add('PAGES');
+    else if (/^(?:package(?:-lock)?\.json$)/.test(name)) {
+      surfaces.add('WORKER'); surfaces.add('PAGES');
+    } else if (/^(?:\.github\/|scripts\/|docs\/|worker-airtrust\/src\/__tests__\/|README|AGENTS\.md$)/.test(name)) {
+      surfaces.add('CI_OPS');
+    } else surfaces.add('UNKNOWN');
+  }
+  return [...surfaces].sort();
+}
+
+async function changedSurfaces(number) {
+  const files = [];
+  for (let page = 1; page <= 4; page++) {
+    const batch = await read(API + '/pulls/' + number + '/files?per_page=100&page=' + page);
+    if (!Array.isArray(batch) || batch.length > 100) return ['UNKNOWN'];
+    files.push(...batch);
+    if (batch.length < 100) return classifyChangeSurfaces(files);
+  }
+  // Cannot classify when changed-file pagination itself was truncated.
+  return ['UNKNOWN'];
 }
 
 async function classify(pr, deployedSha) {
-  if (!/^[a-f0-9]{40}$/i.test(pr.sha || '')) {
-    return { number: pr.number, status: 'PROVENANCE_UNVERIFIED' };
-  }
-  try {
-    // PR merge SHA is the base; deployed SHA is the head.
-    const compare = await read(API + '/compare/' + pr.sha + '...' + deployedSha);
-    return { number: pr.number, status: classifyReleaseComparison(compare.status) };
-  } catch {
-    return { number: pr.number, status: 'PROVENANCE_UNVERIFIED' };
-  }
+  const [comparison, changedFiles] = await Promise.allSettled([
+    /^[a-f0-9]{40}$/i.test(pr.sha || '')
+      ? read(API + '/compare/' + pr.sha + '...' + deployedSha)
+      : Promise.reject(Error('MERGE_SHA_UNAVAILABLE')),
+    changedSurfaces(pr.number),
+  ]);
+  return {
+    number: pr.number,
+    status: comparison.status === 'fulfilled'
+      ? classifyReleaseComparison(comparison.value.status)
+      : 'PROVENANCE_UNVERIFIED',
+    surfaces: changedFiles.status === 'fulfilled' ? changedFiles.value : ['UNKNOWN'],
+  };
 }
 
 export async function run() {
@@ -84,7 +146,9 @@ export async function run() {
   const prefix = pagesEntryPrefix(html);
   const parity = pagesParity(prefix, productionSha);
   const mainDifference = await read(API + '/compare/' + productionSha + '...' + mainSha);
-  const { prs, truncated } = await recentMergedPulls(Date.now() - 14 * 86400_000);
+  const audit = auditScopeOptions(process.env.RELEASE_AUDIT_SCOPE || 'recent');
+  const { prs, truncated, pagesScanned, matchesFound, limitReason } =
+    await recentMergedPulls(Date.now() - audit.windowDays * 86400_000, audit);
   const openPulls = await read(API + '/pulls?state=open&sort=updated&direction=desc&per_page=100');
   const openNumbers = openPulls.map((pr) => pr.number);
   const rows = [];
@@ -94,6 +158,8 @@ export async function run() {
   const groups = Object.groupBy(rows, (row) => row.status);
   const unreleased = (groups.MERGED_NOT_DEPLOYED || []).map((x) => x.number);
   const uncertain = (groups.PROVENANCE_UNVERIFIED || []).map((x) => x.number);
+  const unknownSurfaces = rows.filter((x) => x.surfaces.includes('UNKNOWN')).map((x) => x.number);
+  const bySurface = (surface) => rows.filter((x) => x.surfaces.includes(surface)).map((x) => x.number);
   const summary = [
     '# AirTrust — read-only release coverage',
     '',
@@ -104,17 +170,23 @@ export async function run() {
     '- main against production: ' + mainDifference.status,
     '- open PRs (not merged; never treat as released): ' + openNumbers.length,
     '- open PR pagination possibly incomplete: ' + (openNumbers.length === 100),
-    '- merged PRs checked (14 days): ' + rows.length,
+    '- audit scope / window: ' + audit.scope + ' / ' + audit.windowDays + ' days',
+    '- scan pages / matching PRs before cap: ' + pagesScanned + ' / ' + matchesFound,
+    '- checked PR cap / scan page cap: ' + audit.maxPrs + ' / ' + audit.maxPages,
+    '- truncation reason: ' + (limitReason || 'none'),
+    '- merged PRs checked: ' + rows.length,
     '- code ancestry confirmed in production: ' + (groups.CODE_IN_PRODUCTION || []).length,
     '- merged PRs NOT in published source: ' + unreleased.length,
     '- PR ancestry unverified: ' + uncertain.length,
+    '- changed-file surface unverified: ' + unknownSurfaces.length,
+    '- NOTE: SCHEMA_V2 means migration file merged, NOT applied to D1.',
     '- truncated audit window: ' + truncated,
     '- open PR numbers: ' + openNumbers.map((n) => '#' + n).join(', '),
     '',
-    '| PR | Code ancestry |',
-    '| --- | --- |',
-    ...rows.map(({ number, status }) =>
-      '| [#' + number + '](https://github.com/' + REPO + '/pull/' + number + ') | ' + status + ' |'),
+    '| PR | Source ancestry | Changed-file surfaces (heuristic, not release proof) |',
+    '| --- | --- | --- |',
+    ...rows.map(({ number, status, surfaces }) =>
+      '| [#' + number + '](https://github.com/' + REPO + '/pull/' + number + ') | ' + status + ' | ' + surfaces.join(', ') + ' |'),
     '',
     'CAUTION: CODE_IN_PRODUCTION does not mean D1 migrations or functional acceptance were validated.',
   ].join('\n');
@@ -127,12 +199,17 @@ export async function run() {
     open_not_merged: openNumbers, open_scan_truncated: openNumbers.length === 100,
     checked: rows.length, confirmed: (groups.CODE_IN_PRODUCTION || []).length,
     merged_not_deployed: unreleased, unverified: uncertain, truncated,
+    scope: audit.scope, window_days: audit.windowDays, pages_scanned: pagesScanned,
+    matches_found: matchesFound, max_prs: audit.maxPrs, max_scan_pages: audit.maxPages,
+    truncation_reason: limitReason, unknown_surface: unknownSurfaces,
+    worker_changed_prs: bySurface('WORKER'), pages_changed_prs: bySurface('PAGES'),
+    schema_v2_changed_prs: bySurface('SCHEMA_V2'),
   }) + '\n');
   if (unreleased.length) process.stdout.write('::warning::Merged PRs absent from the production Worker commit history.\n');
-  if (uncertain.length || truncated) process.stdout.write('::warning::Release audit incomplete or provenance unverified.\n');
+  if (uncertain.length || truncated || unknownSurfaces.length) process.stdout.write('::warning::Release audit incomplete, surface unknown or provenance unverified.\n');
   if (parity !== 'PREFIX_MATCH') throw Error('WORKER_PAGES_PREFIX_PARITY_' + parity);
   if (process.env.FAIL_ON_UNPUBLISHED === 'true' &&
-      (unreleased.length || uncertain.length || truncated)) {
+      (unreleased.length || uncertain.length || truncated || unknownSurfaces.length)) {
     throw Error('UNPUBLISHED_OR_UNVERIFIED_PRS');
   }
 }

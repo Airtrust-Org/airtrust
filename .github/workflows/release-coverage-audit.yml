@@ -8,6 +8,14 @@ on:
         type: boolean
         required: false
         default: false
+      scope:
+        description: 'recent = fast daily window; historical = bounded one-year inventory'
+        type: choice
+        required: false
+        default: recent
+        options:
+          - recent
+          - historical
   schedule:
     - cron: '15 11 * * *'
   workflow_run:
@@ -39,4 +47,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FAIL_ON_UNPUBLISHED: ${{ inputs.fail_on_unpublished || 'false' }}
+          RELEASE_AUDIT_SCOPE: ${{ inputs.scope || 'recent' }}
         run: node scripts/ops/release-coverage-audit.mjs
