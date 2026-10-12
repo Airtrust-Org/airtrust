@@ -4,6 +4,8 @@ import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { requireActiveQualificationCategoryById } from './qualification-category-contract';
 import { ensureCertificateForQualification } from './ensure-certificate';
 import { hasApprovedScormCategoryLink } from './lms-scorm-category-compatibility';
+import { buildNativeTerminalTransactionGuard, type NativeTerminalAnchor } from './lms-native-terminal-transaction-guard';
+import { canProvisionNative } from './lms-native-enrollment-provisioner';
 
 export type LmsCompletionOutcome =
   | 'qualification_created'
@@ -58,6 +60,8 @@ export interface CompleteLmsMatriculaParams {
   actorUserId?: number;
   ipAddress?: string;
   userAgent?: string;
+  /** Only a Worker-verified Native snapshot can enable this atomic assertion. */
+  nativeTerminalAnchor?: NativeTerminalAnchor;
 }
 
 type PreBatchState = {
@@ -642,6 +646,38 @@ function buildNotRequiredBatchStatements(
   return statements;
 }
 
+/**
+ * Insert an evidence snapshot assertion as the FIRST statement of the same
+ * canonical D1.batch. Existing SCORM calls remain unchanged when absent.
+ *
+ * This is NOT a Native terminal endpoint: governed Schema V2 still blocks
+ * completion until an audited, transaction-scoped completion intent exists.
+ */
+function withNativeAtomicGuard(
+  params: CompleteLmsMatriculaParams,
+  statements: { sql: string; args: unknown[] }[],
+): { sql: string; args: unknown[] }[] {
+  const a=params.nativeTerminalAnchor;
+  if (!a) return statements;
+  if (!params.env || !canProvisionNative(params.env,params.empresaId) ||
+      a.empresaId !== params.empresaId || a.matriculaId !== params.matriculaId ||
+      a.cursoId !== params.cursoId || a.funcionarioId !== params.funcionarioId ||
+      a.actorUserId !== params.actorUserId ||
+      a.gerarQualificacaoAoConcluir !== params.gerarQualificacaoAoConcluir ||
+      a.qualificacaoTipoId !== params.qualificacaoTipoId ||
+      a.qualificacaoCategoriaId !== (params.qualificacaoCategoriaId ?? null) ||
+      a.scorePct !== (params.scoreFinal ?? null) ||
+      (params.progressoPct ?? 100) !== 100 ||
+      params.action !== 'LMS_NATIVE_CANONICAL_CONCLUIDA') {
+    throw new LmsCompletionRejectedError(
+      'Snapshot Native não corresponde à conclusão canônica solicitada',
+      'NATIVE_TERMINAL_ANCHOR_MISMATCH',
+    );
+  }
+  const gate=buildNativeTerminalTransactionGuard(a);
+  return [{sql:gate.sql,args:[...gate.bindings]},...statements];
+}
+
 export async function completeLmsMatricula(
   params: CompleteLmsMatriculaParams,
 ): Promise<LmsCompletionResult> {
@@ -649,7 +685,9 @@ export async function completeLmsMatricula(
 
   if (!params.gerarQualificacaoAoConcluir) {
     const pre = await readPreBatchState(db, params, '');
-    const statements = buildNotRequiredBatchStatements(params, pre);
+    const statements = withNativeAtomicGuard(
+      params,buildNotRequiredBatchStatements(params, pre),
+    );
     await db.batch(
       statements.map((statement) => db.prepare(statement.sql).bind(...statement.args)),
     );
@@ -723,7 +761,9 @@ export async function completeLmsMatricula(
   }
 
   const wasReuse = pre.existingHistoricoId !== null;
-  const statements = buildCompletionBatchStatements(canonicalParams, pre);
+  const statements = withNativeAtomicGuard(
+    canonicalParams,buildCompletionBatchStatements(canonicalParams, pre),
+  );
 
   try {
     await db.batch(
@@ -733,7 +773,9 @@ export async function completeLmsMatricula(
     if (isConcurrentQualificationUniqueConstraint(error)) {
       const retryPre = await readPreBatchState(db, canonicalParams, qualificacaoCodigo);
       if (retryPre.existingHistoricoId) {
-        const retryStatements = buildCompletionBatchStatements(canonicalParams, retryPre);
+        const retryStatements = withNativeAtomicGuard(
+          canonicalParams,buildCompletionBatchStatements(canonicalParams, retryPre),
+        );
         try {
           await db.batch(
             retryStatements.map((statement) => db.prepare(statement.sql).bind(...statement.args)),

@@ -28,6 +28,7 @@ type TerminalRow = {
 export type NativeTerminalPreparation =
   | { ready: false; reason: string }
   | { ready: true; canonical: Ready['canonical'];
+      terminalAnchor: NativeTerminalAnchor;
       atomicGuard: ReturnType<typeof buildNativeTerminalTransactionGuard> };
 const SHA=/^[a-f0-9]{64}$/;
 
@@ -105,5 +106,6 @@ export async function prepareNativeTerminalGuard(params: {
     qualificacaoTipoId:p.gerarQualificacaoAoConcluir?p.qualificacaoTipoId:null,
     qualificacaoCategoriaId:p.gerarQualificacaoAoConcluir?p.qualificacaoCategoriaId:null,
   };
-  return {ready:true,canonical:p,atomicGuard:buildNativeTerminalTransactionGuard(anchor)};
+  return {ready:true,canonical:p,terminalAnchor:anchor,
+    atomicGuard:buildNativeTerminalTransactionGuard(anchor)};
 }
