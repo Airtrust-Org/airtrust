@@ -132,6 +132,8 @@ def provision(db, *, nonce='f'*64, empresa=6, curso=10,
     # Never split these into independently committed worker .run() calls.
     if not re.fullmatch(r'[0-9a-f]{64}', nonce):
         raise ValueError('NATIVE_PROVISION_INVALID_NONCE')
+    if db.execute('PRAGMA foreign_keys').fetchone()[0] != 1:
+        raise RuntimeError('NATIVE_PROVISION_FOREIGN_KEYS_REQUIRED')
     with db:
         db.execute("BEGIN IMMEDIATE")
         db.execute("""
@@ -221,6 +223,17 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
                 db.execute("""INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id)
                   VALUES(6,10,70)""")
             self.assertEqual(db.execute("SELECT tipo_conteudo FROM lms_cursos WHERE id=10").fetchone()[0],'scorm')
+        finally:
+            db.close()
+
+    def test_foreign_keys_off_never_starts_provisioning(self):
+        db=fixture()
+        try:
+            db.execute('PRAGMA foreign_keys=OFF')
+            with self.assertRaisesRegex(RuntimeError,'NATIVE_PROVISION_FOREIGN_KEYS_REQUIRED'):
+                provision(db)
+            self.assertEqual(self._counts(db),(0,0,0,0))
+            db.execute('PRAGMA foreign_keys=ON')
         finally:
             db.close()
 
