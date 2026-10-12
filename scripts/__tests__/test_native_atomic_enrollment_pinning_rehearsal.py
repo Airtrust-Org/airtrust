@@ -6,12 +6,14 @@ never left committed; legacy enrollment is denied without such an intent.
 Not a Schema V2 migration, remote apply, or production-ready enrollment API.
 """
 import re
+import runpy
 import sqlite3
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0550_lms_native_v1_evidence.sql'
+ACTIVATION_RUNNER = ROOT / 'scripts/schema-v2/rehearse-native-catalog-activation-table.py'
 OLD_NATIVE = "c.tipo_conteudo='native'"
 EFFECTIVE_NATIVE = """(c.tipo_conteudo='native' OR (
   c.tipo_conteudo='scorm' AND EXISTS (
@@ -44,10 +46,6 @@ BEGIN
      AND i.ciclo_id IS NULL
  );
 END;
-CREATE TRIGGER native_retarget_denied BEFORE UPDATE OF curso_id ON lms_matriculas
-WHEN EXISTS(SELECT 1 FROM lms_native_catalog_activation a
-             WHERE a.empresa_id=NEW.empresa_id AND a.curso_id=NEW.curso_id)
-BEGIN SELECT RAISE(ABORT,'NATIVE_ENROLLMENT_RETARGET_DENIED'); END;
 """
 
 def fixture():
@@ -59,7 +57,10 @@ def fixture():
         tipo_conteudo TEXT NOT NULL CHECK(tipo_conteudo IN
           ('scorm','h5p','video','pdf','pptx')),
         ativo INTEGER NOT NULL DEFAULT 1, publicado INTEGER NOT NULL DEFAULT 1,
+        scorm_launch_file TEXT, scorm_package_r2_prefix TEXT,
         deleted_at TEXT);
+      CREATE TABLE lms_scorm_package_versions(
+        id INTEGER PRIMARY KEY,curso_id INTEGER REFERENCES lms_cursos(id));
       CREATE TABLE usuarios(
         id INTEGER PRIMARY KEY, funcionario_id INTEGER, deleted_at TEXT);
       CREATE TABLE lms_matriculas(
@@ -79,14 +80,22 @@ def fixture():
           CHECK(origem IN ('LMS','MANUAL','AUTO_RENOVACAO','IMPORTADO_EDAPP')),
         numero_ciclo INTEGER NOT NULL DEFAULT 1,
         deleted_at TEXT, UNIQUE(matricula_id, ciclo_atual));
-      CREATE TABLE lms_native_catalog_activation(
-        curso_id INTEGER PRIMARY KEY REFERENCES lms_cursos(id) ON DELETE RESTRICT,
-        empresa_id INTEGER NOT NULL);
       INSERT INTO lms_cursos(id,empresa_id,tipo_conteudo)
       VALUES(10,6,'scorm'),(11,6,'scorm'),(12,7,'scorm');
       INSERT INTO usuarios(id,funcionario_id) VALUES(900,69),(901,70);
-      INSERT INTO lms_native_catalog_activation(curso_id,empresa_id) VALUES(10,6);
     """)
+    # Reuse the actual candidate activation DDL, omitting ONLY its pilot
+    # blanket enrollment-insert ban. The replacement gate below requires
+    # a transaction-scoped edition+tenant+actor intent instead.
+    activation = runpy.run_path(str(ACTIVATION_RUNNER))['ACTIVATION_DDL']
+    old_gate = 'CREATE TRIGGER trg_native_catalog_no_legacy_enrollment_insert'
+    next_gate = 'CREATE TRIGGER trg_native_catalog_no_legacy_enrollment_retarget'
+    if activation.count(old_gate) != 1 or activation.count(next_gate) != 1:
+        raise AssertionError('NATIVE_ACTIVATION_CANDIDATE_GATE_DRIFT')
+    first, last = activation.index(old_gate), activation.index(next_gate)
+    db.executescript(activation[:first] + activation[last:])
+    db.execute('INSERT INTO lms_native_catalog_activation(curso_id,empresa_id) VALUES(10,6)')
+    db.commit()
     ddl = CHANGE.read_text(encoding='utf8')
     if ddl.count(OLD_NATIVE) != 4:
         raise AssertionError('NATIVE_0550_PREDICATE_CONTRACT_DRIFT')
