@@ -26,8 +26,8 @@ function isGenericFirefighterCargo(value: string): boolean {
  * Resolve o perfil FRMS a partir do cargo funcional.
  *
  * Regra de negócio: MECÂNICO e INSPETOR pertencem ao perfil de manutenção.
- * `funcao` só é usada como compatibilidade quando `cargo` está vazio; um cargo
- * explícito nunca é sobrescrito por uma função genérica/legada.
+ * `funcao` só é usada quando `cargo` está vazio, exceto nos cargos militares
+ * genéricos com função aeronáutica explícita; cargos civis continuam prevalecendo.
  */
 export function resolveFrmsWorkforceProfile(
   cargo: unknown,
