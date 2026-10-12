@@ -103,6 +103,75 @@ describe('Native staging learner — evidence-only interaction', () => {
     expect(api.fetchWithAuth).toHaveBeenCalledTimes(6);
   });
 
+  it('finishes only after a second verified server session and confirms the receipt', async () => {
+    const readySession=respond({success:true,data:{
+      ...scope,completion_supported:true,
+      next_sequence:2,seen_lesson_ids:['intro'],last_visited_unit_id:'intro',
+      latest_attempt:{attempt_number:1,score_pct:null,assessment_satisfied:true},
+    }});
+    api.fetchWithAuth
+      .mockResolvedValueOnce(respond({success:true,data:{
+        ciclo_id:9,edition_sha256:editionHash,completion_supported:false,state:'ALREADY_STARTED',
+      }}))
+      .mockResolvedValueOnce(readySession)
+      .mockResolvedValueOnce(readySession)
+      .mockResolvedValueOnce(respond({success:true,data:{
+        matricula_id:101,status:'CONCLUIDO',
+        qualification_outcome:'qualification_created',
+        certificate_state:'REQUIRES_VERIFICATION',
+      }}));
+    render(<NativeStagingLearnerControls
+      matriculaId={101} cycleId={9} editionHash={editionHash}
+      course={course} initialSession={initialSession}
+      completionSupported
+      fetchAuthorizedAsset={vi.fn()}
+    />);
+    expect(screen.queryByRole('button', {name:'Finalizar treinamento'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:/Iniciar ou retomar/}));
+    expect(await screen.findByRole('button',{name:'Finalizar treinamento'})).toBeEnabled();
+    fireEvent.click(screen.getByRole('button',{name:'Finalizar treinamento'}));
+    expect(await screen.findByText(/Treinamento concluído pelo servidor/)).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Finalizar treinamento'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'Registrar visita a esta aula'})).toBeNull();
+    const urls=api.fetchWithAuth.mock.calls.map(([url])=>url);
+    expect(urls).toEqual([
+      '/api/lms/native/matriculas/101/iniciar',
+      '/api/lms/native/matriculas/101/sessao',
+      '/api/lms/native/matriculas/101/sessao',
+      '/api/lms/native/matriculas/101/concluir',
+    ]);
+    expect(api.fetchWithAuth.mock.calls[3][1]).toMatchObject({method:'POST',cache:'no-store'});
+    expect(api.fetchWithAuth.mock.calls[3][1]).not.toHaveProperty('body');
+  });
+
+  it('never attempts completion when stale evidence fails the second server recheck', async () => {
+    api.fetchWithAuth
+      .mockResolvedValueOnce(respond({success:true,data:{
+        ciclo_id:9,edition_sha256:editionHash,completion_supported:false,state:'ALREADY_STARTED',
+      }}))
+      .mockResolvedValueOnce(respond({success:true,data:{
+        ...scope,completion_supported:true,next_sequence:2,
+        seen_lesson_ids:['intro'],last_visited_unit_id:'intro',
+        latest_attempt:{attempt_number:1,score_pct:null,assessment_satisfied:true},
+      }}))
+      .mockResolvedValueOnce(respond({success:true,data:{
+        ...scope,completion_supported:true,next_sequence:2,
+        seen_lesson_ids:['intro'],last_visited_unit_id:'intro',
+        latest_attempt:{attempt_number:2,score_pct:null,assessment_satisfied:false},
+      }}));
+    render(<NativeStagingLearnerControls
+      matriculaId={101} cycleId={9} editionHash={editionHash}
+      course={course} initialSession={initialSession}
+      completionSupported fetchAuthorizedAsset={vi.fn()}
+    />);
+    fireEvent.click(screen.getByRole('button',{name:/Iniciar ou retomar/}));
+    fireEvent.click(await screen.findByRole('button',{name:'Finalizar treinamento'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Atualize a página');
+    expect(api.fetchWithAuth.mock.calls.map(([url])=>url)).not.toContain(
+      '/api/lms/native/matriculas/101/concluir',
+    );
+  });
+
   it('locks subsequent writes if start receipt conflicts with pinned edition', async () => {
     api.fetchWithAuth.mockResolvedValue(respond({
       success: true, data: { ciclo_id: 9, edition_sha256: 'f'.repeat(64),

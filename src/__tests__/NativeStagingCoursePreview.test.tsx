@@ -84,11 +84,26 @@ describe('Native pilot preview — authenticated read-only React', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/verified-asset');
   });
 
-  it('does not load media when server signals an unsupported completion contract', async () => {
-    api.fetchWithAuth.mockResolvedValueOnce(response(payload({ completion_supported: true })));
+  it('fails closed when independently loaded course and session disagree about completion', async () => {
+    api.fetchWithAuth.mockResolvedValueOnce(response(payload({ completion_supported: true })))
+      .mockResolvedValueOnce(response(resume({ completion_supported: false })));
     render(<NativeStagingCoursePreview matriculaId={101} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Prévia nativa indisponível');
-    expect(api.fetchWithAuth).toHaveBeenCalledTimes(1);
+    expect(api.fetchWithAuth).toHaveBeenCalledTimes(2);
+  });
+
+  it('only renders completion-capable controls when both verified server snapshots agree', async () => {
+    api.fetchWithAuth.mockResolvedValueOnce(response(payload({
+      completion_supported: true, evidence_write_enabled: true,
+    }))).mockResolvedValueOnce(response(resume({
+      completion_supported: true, latest_attempt: {
+        attempt_number: 1, score_pct: null, assessment_satisfied: true,
+      },
+    })));
+    render(<NativeStagingCoursePreview matriculaId={101} />);
+    expect(await screen.findByRole('button', { name: /Iniciar ou retomar/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Finalizar treinamento/ })).toBeNull();
+    expect(api.fetchWithAuth).toHaveBeenCalledTimes(2);
   });
 
   it('rejects leaked server grading keys before rendering any authored content', async () => {
