@@ -109,7 +109,7 @@ describe('Native pilot preview — authenticated read-only React', () => {
     ]);
   });
 
-  it('rejects leaked server grading keys before rendering any authored content', async () {
+  it('rejects leaked server grading keys before rendering any authored content', async () => {
     api.fetchWithAuth.mockResolvedValueOnce(response(payload({
       course: { ...course, questions: [
         { id: 'q1', prompt: 'Pergunta', options: [], correctOptionId: 'secret' },
