@@ -20,6 +20,33 @@ type PreviewProps = {
   evidenceBusy?: boolean;
 };
 
+const TEMPLATE_VARIANTS = [
+  'media-right', 'media-left', 'wide-top', 'wide-bottom',
+  'image-overlay', 'banner-list', 'double-crop', 'editorial-dashboard',
+] as const;
+type NativeTemplate = typeof TEMPLATE_VARIANTS[number];
+
+/**
+ * Reusable across all source courses. This is visual navigation only, never
+ * learner progress or an authoring/certification policy. Dense evaluations
+ * retain an accessible internal scroll area instead of cropping questions.
+ */
+export function selectNativeLessonTemplate(index: number, unit: NativeLearnerCourse['units'][number]): NativeTemplate {
+  const media = unit.blocks.filter((b) => b.type === 'image' || b.type === 'video');
+  const textWeight = unit.title.length + unit.blocks.reduce((sum, b) => (
+    sum + (b.type === 'heading' || b.type === 'paragraph' ? b.text.length :
+      b.type === 'bullets' ? b.items.join(' ').length : 0)
+  ), 0);
+  if (!media.length) return 'editorial-dashboard';
+  if (unit.kind === 'assessment' && unit.questionIds.length > 2) return 'editorial-dashboard';
+  const selected = TEMPLATE_VARIANTS[index % TEMPLATE_VARIANTS.length];
+  if (selected === 'double-crop' && media[0].type === 'video') return 'media-right';
+  if (textWeight > 850 && ['wide-top', 'wide-bottom', 'image-overlay', 'banner-list'].includes(selected)) {
+    return 'media-right';
+  }
+  return selected;
+}
+
 function safeLmsAssetUrl(url: string | null): string | null {
   if (!url || !url.startsWith('/api/lms/') || url.includes('\\') ||
       /[%?#]/.test(url) || url.split('/').includes('..')) return null;
@@ -27,10 +54,11 @@ function safeLmsAssetUrl(url: string | null): string | null {
 }
 
 /** Load protected media as a Blob, revoking object URLs after use. Never publish R2 URLs. */
-function ProtectedNativeMedia({ asset, type, alt, fetchAsset }: {
+function ProtectedNativeMedia({ asset, type, alt, stacked = false, fetchAsset }: {
   asset: NativeAsset;
   type: 'image' | 'video';
   alt: string;
+  stacked?: boolean;
   fetchAsset: (asset: NativeAsset, signal: AbortSignal) => Promise<Blob>;
 }) {
   const [href, setHref] = useState<string | null>(null);
@@ -62,6 +90,12 @@ function ProtectedNativeMedia({ asset, type, alt, fetchAsset }: {
       </div>
     );
   }
+  if (type === 'image' && stacked) return (
+    <div className="grid h-full w-full min-h-0 grid-rows-2 gap-2">
+      <img src={href} alt={alt} className="h-full min-h-0 w-full object-cover object-center" />
+      <img src={href} alt="" aria-hidden="true" className="h-full min-h-0 w-full object-cover object-bottom" />
+    </div>
+  );
   return type === 'image'
     ? <img src={href} alt={alt} className="h-full w-full object-cover" />
     : <video src={href} controls preload="metadata" className="h-full w-full object-contain" aria-label={alt} />;
@@ -102,6 +136,28 @@ export default function NativeCoursePreview({
   const mediaBlocks = unit.blocks.filter((block) => block.type === 'image' || block.type === 'video');
   const contentBlocks = unit.blocks.filter((block) => block.type !== 'image' && block.type !== 'video');
   const isActivity = unit.kind === 'scenario' || unit.kind === 'assessment';
+  const template = selectNativeLessonTemplate(unitIndex, unit);
+  const vertical = template === 'wide-top' || template === 'wide-bottom' || template === 'banner-list';
+  const reversed = template === 'media-left' || template === 'editorial-dashboard';
+  const stacked = template === 'double-crop';
+  const overlay = template === 'image-overlay';
+  const hasMedia = mediaBlocks.length > 0;
+  const layoutClass = !hasMedia ? 'flex flex-col' : overlay
+    ? 'relative flex h-full flex-col justify-center lg:block'
+    : vertical ? (template === 'wide-bottom'
+      ? 'flex min-h-0 flex-col gap-4'
+      : 'flex min-h-0 flex-col-reverse gap-4')
+    : 'grid min-h-0 grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-8';
+  const textClass = 'min-w-0 space-y-4 overflow-y-auto overscroll-contain ' +
+    (vertical ? 'lg:flex-1' : 'lg:h-full') +
+    (reversed ? ' lg:order-2' : ' lg:order-1') +
+    (overlay ? ' relative z-10 rounded-2xl bg-white/95 p-5 shadow-xl lg:my-8 lg:ml-7 lg:w-[53%] lg:max-h-[calc(100%-64px)] lg:p-8' : '') +
+    (template === 'banner-list' && !isActivity ? ' lg:grid lg:grid-cols-2 lg:gap-x-5' : '');
+  const imageClass = 'min-h-[180px] min-w-0 overflow-hidden ' +
+    (vertical ? 'h-[min(35vh,260px)] shrink-0' : 'lg:h-full') +
+    (reversed ? ' lg:order-1' : ' lg:order-2') +
+    (overlay ? ' lg:absolute lg:inset-0 lg:h-full' : '');
+
   const unitLabel = unit.kind === 'lesson' ? 'CONTEÚDO DO TREINAMENTO'
     : unit.kind === 'scenario' ? 'DECISÃO OPERACIONAL' : 'AVALIAÇÃO';
   const navigationProgress = ((unitIndex + 1) / course.units.length) * 100;
@@ -116,17 +172,22 @@ export default function NativeCoursePreview({
     const href = asset && !fetchAuthorizedAsset ? safeLmsAssetUrl(resolveAssetHref(asset)) : null;
     const missing = !asset || (!fetchAuthorizedAsset && !href);
     return (
-      <figure key={index} className="relative isolate flex min-h-[260px] flex-1 overflow-hidden rounded-[24px] bg-[#102c43] shadow-[0_28px_65px_rgba(8,27,48,0.18)] lg:min-h-[380px] lg:[clip-path:polygon(10%_0,100%_0,100%_100%,0_100%)]">
+      <figure key={index} className={'relative isolate flex h-full min-h-[180px] w-full flex-1 overflow-hidden rounded-[22px] bg-[#102c43] shadow-[0_18px_44px_rgba(8,27,48,0.15)] ' +
+        (template === 'media-right' || template === 'media-left'
+          ? 'lg:[clip-path:polygon(8%_0,100%_0,100%_100%,0_100%)]' : '')}>
         {missing ? (
           <div role="status" className="flex h-full w-full items-center justify-center p-8 text-center text-sm text-white">
             Mídia indisponível nesta visualização: {block.alt}
           </div>
         ) : fetchAuthorizedAsset && asset ? (
           <ProtectedNativeMedia
-            asset={asset} type={block.type} alt={block.alt} fetchAsset={fetchAuthorizedAsset}
+            asset={asset} type={block.type} alt={block.alt} stacked={stacked} fetchAsset={fetchAuthorizedAsset}
           />
         ) : block.type === 'image' ? (
-          <img src={href!} alt={block.alt} className="h-full w-full object-cover" loading="lazy" />
+          stacked ? <div className="grid h-full w-full grid-rows-2 gap-2">
+            <img src={href!} alt={block.alt} className="h-full min-h-0 w-full object-cover" loading="lazy" />
+            <img src={href!} alt="" aria-hidden="true" className="h-full min-h-0 w-full object-cover object-bottom" loading="lazy" />
+          </div> : <img src={href!} alt={block.alt} className="h-full w-full object-cover" loading="lazy" />
         ) : (
           <video src={href!} controls preload="metadata" className="h-full w-full object-contain" aria-label={block.alt} />
         )}
@@ -166,7 +227,7 @@ export default function NativeCoursePreview({
 
   return (
     <section data-testid="native-course-player-v2" aria-label="Prévia do curso nativo"
-      className="relative mx-auto flex min-h-[610px] w-full max-w-[1520px] flex-col overflow-hidden rounded-[22px] border border-[#d5e0e7] bg-white text-[#10243d] shadow-[0_24px_70px_rgba(8,27,48,0.10)]">
+      className="relative mx-auto flex h-[min(840px,calc(100dvh-24px))] min-h-[500px] w-full max-w-[1520px] flex-col overflow-hidden rounded-[22px] border border-[#d5e0e7] bg-white text-[#10243d] shadow-[0_24px_70px_rgba(8,27,48,0.10)]">
       <header className="z-10 flex min-h-[72px] items-center gap-3 border-b border-[#dce5ed] bg-white px-4 sm:gap-5 sm:px-7">
         <button type="button" aria-label="Abrir menu de unidades" aria-expanded={menuOpen}
           onClick={() => setMenuOpen(true)}
@@ -174,9 +235,10 @@ export default function NativeCoursePreview({
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#102e49] text-lg font-black text-white">
-            A<span className="text-[#f28b49]">.</span>
-          </div>
+          {course.courseId.startsWith('costa-do-sol-') || course.courseId === 'SGSO' ? (
+            <img src="/branding/costa-do-sol-scorm.svg" alt="Costa do Sol Táxi Aéreo"
+              className="h-12 w-[144px] shrink-0 object-contain sm:w-[174px]" />
+          ) : null}
           <div className="min-w-0">
             <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#e65300]">PLATAFORMA DE TREINAMENTO</p>
             <h1 className="truncate text-sm font-extrabold text-[#10243d] sm:text-base">{course.title}</h1>
@@ -229,17 +291,17 @@ export default function NativeCoursePreview({
         </div>
       )}
 
-      <main className="relative flex-1 bg-white">
-        <div className="mx-auto w-full max-w-[1440px] px-5 py-6 sm:px-9 sm:py-9 lg:px-11">
+      <main className="relative min-h-0 flex-1 overflow-y-auto bg-white lg:overflow-hidden">
+        <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col px-5 py-4 sm:px-8 lg:px-10">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
             <p className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.13em] text-[#e65300]">
               <span className="h-px w-6 bg-[#e65300]" /> {unitLabel}
             </p>
             <span className="text-xs font-semibold text-[#6a8092]">Etapa {unitIndex + 1} / {course.units.length}</span>
           </div>
-          <article aria-labelledby="native-preview-unit-title"
-            className={mediaBlocks.length > 0 ? 'grid items-start gap-8 lg:grid-cols-[minmax(0,1.06fr)_minmax(360px,0.94fr)] lg:gap-12' : 'max-w-[1100px]'}>
-            <div className="min-w-0 space-y-6">
+          <article data-native-template={template} aria-labelledby="native-preview-unit-title"
+            className={'min-h-0 flex-1 ' + layoutClass}>
+            <div className={textClass}>
               <h2 id="native-preview-unit-title"
                 className="max-w-[760px] text-[clamp(30px,3.3vw,52px)] font-black leading-[1.06] tracking-[-0.035em] text-[#081b30]">
                 {unit.title}
@@ -317,7 +379,7 @@ export default function NativeCoursePreview({
             </div>
 
             {mediaBlocks.length > 0 && (
-              <div className="flex min-w-0 flex-col gap-4 self-start lg:sticky lg:top-5">
+              <div className={imageClass}>
                 {mediaBlocks.map((block, i) =>
                   (block.type === 'image' || block.type === 'video') ? mediaFrame(block, i) : null)}
               </div>
