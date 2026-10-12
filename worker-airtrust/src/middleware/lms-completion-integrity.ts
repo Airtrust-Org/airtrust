@@ -585,10 +585,10 @@ async function guardAdministrativeStatus(
     .toUpperCase();
   const row = await readEnrollmentEvidence(c.env.DB, empresaId, matriculaId);
   if (!row) return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
-  if (requestedStatus === 'CONCLUIDO') {
-    const nativeBlocked = await nativeLegacyCompletionBlocked(c, row);
-    if (nativeBlocked) return nativeBlocked;
-  }
+  // A Native enrollment can only transition through the audited Native lifecycle.
+  // Reject even non-terminal administrative status mutations through legacy PATCH.
+  const nativeBlocked = await nativeLegacyCompletionBlocked(c, row);
+  if (nativeBlocked) return nativeBlocked;
 
   if (String(row.status).toUpperCase() === 'CONCLUIDO' && requestedStatus !== 'CONCLUIDO') {
     return errorResponse(

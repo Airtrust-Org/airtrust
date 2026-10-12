@@ -79,6 +79,53 @@ async function exercise(path: string, method: 'POST' | 'PATCH', body: Record<str
   return { response, db };
 }
 
+
+describe('Native catalog activation marker blocks old endpoints even while physical type is SCORM', () => {
+  const physicalScorm = { ...nativeEnrollment, tipo_conteudo: 'scorm' };
+  const markedDb = () => {
+    const prepare = vi.fn((sql: string) => {
+      const first = vi.fn(async () => sql.includes('lms_native_catalog_activation')
+        ? { curso_id: 39 }
+        : physicalScorm);
+      const bind = vi.fn(() => ({ first }));
+      return { bind, first };
+    });
+    const db = { prepare, batch: vi.fn(() => {
+      throw new Error('MUST_NOT_WRITE_MARKED_NATIVE_AS_SCORM');
+    }) } as unknown as D1Database;
+    return { db, prepare };
+  };
+
+  it.each([
+    ['/api/lms/matriculas/696/finalizar', 'POST', {}],
+    ['/api/lms/matriculas/scorm/commit', 'POST',
+      { matricula_id: 696, completion_candidate: true, lesson_status: 'passed' }],
+    ['/api/lms/xapi/statements', 'POST',
+      { matricula_id: 696, completion_intent: 'USER_CONFIRMED',
+        verb: { id: 'https://w3id.org/xapi/adl/verbs/completed' } }],
+    ['/api/lms/matriculas/696/status', 'PATCH', { status: 'EM_ANDAMENTO' }],
+    ['/api/lms/matriculas/696/progresso', 'PATCH', { progresso_pct: 40 }],
+  ] as const)('rejects marked Native on %s without legacy database writes', async (path, method, body) => {
+    const { db, prepare } = markedDb();
+    const app = testApp();
+    const response = await app.fetch(new Request('http://localhost' + path, {
+      method, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }), {
+      DB: db,
+      ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6',
+    } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: path.endsWith('/progresso')
+        ? 'NATIVE_CHECKPOINT_REQUIRED' : 'NATIVE_CANONICAL_EVIDENCE_REQUIRED',
+    });
+    expect(prepare.mock.calls.some(([sql]) => String(sql).includes('lms_native_catalog_activation'))).toBe(true);
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+});
+
 describe('Native LMS must never enter an old completion/progress endpoint', () => {
   it('blocks legacy manual finalize, even with 100 percent progress and passed runtime fields', async () => {
     const { response, db } = await exercise('/api/lms/matriculas/696/finalizar', 'POST', {});

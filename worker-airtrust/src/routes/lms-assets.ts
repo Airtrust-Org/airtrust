@@ -27,7 +27,6 @@ import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-
 
 const app = new Hono<{ Bindings: Env }>();
 
-
 const LMS_ASSET_TOKEN_MAX_AGE_SECONDS = 15 * 60;
 const LMS_PPTX_VIEWER_TOKEN_MAX_AGE_SECONDS = 5 * 60;
 
