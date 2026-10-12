@@ -675,7 +675,31 @@ function withNativeAtomicGuard(
     );
   }
   const gate=buildNativeTerminalTransactionGuard(a);
-  return [{sql:gate.sql,args:[...gate.bindings]},...statements];
+  const nonce=Array.from(crypto.getRandomValues(new Uint8Array(32)),
+    byte=>byte.toString(16).padStart(2,'0')).join('');
+  const insertIntent={
+    sql: `INSERT INTO lms_native_completion_intents(
+      nonce,empresa_id,curso_id,matricula_id,ciclo_id,funcionario_id,
+      actor_user_id,edicao_id,vinculo_id,tentativa_id,tentativa_numero,
+      answers_sha256,score_pct,event_count,distinct_lesson_count,
+      gerar_qualificacao,qualificacao_tipo_id,qualificacao_categoria_id
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    args: [
+      nonce,a.empresaId,a.cursoId,a.matriculaId,a.cicloId,a.funcionarioId,
+      a.actorUserId,a.edicaoId,a.bindingId,a.latestAttemptId,a.latestAttemptNumber,
+      a.answersHash,a.scorePct,a.eventCount,a.distinctLessonCount,
+      Number(a.gerarQualificacaoAoConcluir),a.qualificacaoTipoId,a.qualificacaoCategoriaId,
+    ],
+  };
+  // A deferred FK to a non-fillable sentinel in the REVIEW-ONLY 0552 SQL
+  // prevents an orphan intent from surviving COMMIT. Never run separate
+  // batches for the anchor, canonical writes and intent consumption.
+  return [
+    {sql:gate.sql,args:[...gate.bindings]},
+    insertIntent,
+    ...statements,
+    {sql:'DELETE FROM lms_native_completion_intents WHERE nonce=?',args:[nonce]},
+  ];
 }
 
 export async function completeLmsMatricula(

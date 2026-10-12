@@ -159,6 +159,15 @@ describe('completeLmsMatricula', () => {
     expect(firstGuard).toBeGreaterThanOrEqual(0);
     expect(firstMutation).toBeGreaterThan(firstGuard);
     expect(db.batch).toHaveBeenCalledTimes(1);
+    const intent=calls.findIndex(x=>x.includes('INSERT INTO lms_native_completion_intents'));
+    const consume=calls.findIndex(x=>x.includes('DELETE FROM lms_native_completion_intents'));
+    expect(intent).toBe(firstGuard+1);
+    expect(firstMutation).toBeGreaterThan(intent);
+    expect(consume).toBeGreaterThan(firstMutation);
+    // Both D1-bound intent operations must remain in this ONE batch.
+    const batchCalls=(db as unknown as {__batchCalls:unknown[][]}).__batchCalls;
+    expect(batchCalls).toHaveLength(1);
+    expect(batchCalls[0].length).toBeGreaterThan(4);
   });
 
   it('Native refuses the wrong actor, score, course, progress, action or missing staging flags before batch',async()=>{
