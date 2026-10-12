@@ -13,6 +13,7 @@ import {
   type NativeCourseArtifact,
 } from '../lib/lms/lms-native-course-contract';
 import type { Env } from '../types';
+import { NATIVE_ACTIVE_EMPLOYEE_JOIN, NATIVE_ACTIVE_USER_CONDITION } from './lms-native-active-learner-sql';
 import { nativeCourseIdentityPredicate } from './lms-native-catalog-legacy-guard';
 import {
   resolveNativeEnrollmentAdmission,
@@ -94,6 +95,8 @@ export async function loadNativePrivateCourse(params: {
     'AND m.deleted_at IS NULL',
     'JOIN usuarios u ON u.funcionario_id=m.funcionario_id',
     'AND u.id=? AND u.deleted_at IS NULL',
+    NATIVE_ACTIVE_USER_CONDITION,
+    NATIVE_ACTIVE_EMPLOYEE_JOIN,
     'JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id',
     'AND ' + nativeCourseIdentityPredicate(params.env, admission.empresaId) + ' AND c.ativo=1 AND c.publicado=1',
     'AND c.deleted_at IS NULL',

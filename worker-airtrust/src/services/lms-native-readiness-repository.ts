@@ -13,6 +13,7 @@ import {
 } from '../lib/lms/lms-native-evidence-domain';
 
 import type { Env } from '../types';
+import { NATIVE_ACTIVE_EMPLOYEE_JOIN, NATIVE_ACTIVE_USER_CONDITION } from './lms-native-active-learner-sql';
 import { nativeScopedSql } from './lms-native-catalog-legacy-guard';
 
 export class NativeEvidenceReadError extends Error {
@@ -36,6 +37,8 @@ const BINDING_SQL = [
   "AND cycle.empresa_id=m.empresa_id AND cycle.curso_id=m.curso_id",
   "JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id",
   "JOIN usuarios u ON u.id=? AND u.funcionario_id=m.funcionario_id AND u.deleted_at IS NULL",
+  NATIVE_ACTIVE_USER_CONDITION,
+  NATIVE_ACTIVE_EMPLOYEE_JOIN,
   "WHERE b.empresa_id=? AND b.matricula_id=? AND b.ciclo_id=? AND b.curso_id=?",
   "AND ed.artifact_sha256=? AND ed.status='PUBLISHED'",
   "AND m.deleted_at IS NULL AND cycle.deleted_at IS NULL AND cycle.ciclo_atual=1",

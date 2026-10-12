@@ -7,6 +7,7 @@
  * transaction. Never manufacture completion or qualification evidence.
  */
 import type { Env } from '../types';
+import { NATIVE_ACTIVE_EMPLOYEE_JOIN, NATIVE_ACTIVE_USER_CONDITION } from './lms-native-active-learner-sql';
 import { nativeScopedSql } from './lms-native-catalog-legacy-guard';
 
 export class NativeEnrollmentStartError extends Error {
@@ -23,6 +24,8 @@ export class NativeEnrollmentStartError extends Error {
 const PINNED_SCOPE = [
   'FROM lms_matriculas m',
   'JOIN usuarios u ON u.id=? AND u.funcionario_id=m.funcionario_id AND u.deleted_at IS NULL',
+  NATIVE_ACTIVE_USER_CONDITION,
+  NATIVE_ACTIVE_EMPLOYEE_JOIN,
   'JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id',
   'JOIN lms_native_matricula_edicoes b ON b.matricula_id=m.id',
   'AND b.empresa_id=m.empresa_id AND b.curso_id=m.curso_id',
