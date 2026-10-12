@@ -209,7 +209,7 @@ export default function NativeCoursePreview({ course, resolveAssetHref, fetchAut
         })}
       </article>
 
-      {onSubmitAssessment && unitIndex === course.units.length - 1 && course.questions.length > 0 && (
+      {onSubmitAssessment && (unit.kind === 'assessment' || unit.kind === 'scenario') && course.questions.length > 0 && (
         <div className="space-y-2 rounded border p-3">
           <button type="button"
             disabled={evidenceBusy || course.questions.some((q) => !choices[q.id])}

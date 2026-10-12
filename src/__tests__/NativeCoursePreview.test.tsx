@@ -69,6 +69,34 @@ describe('NativeCoursePreview — display only', () => {
     }
   });
 
+
+  it('permits server submission on an assessment that is not the final unit', () => {
+    const onSubmitAssessment = vi.fn();
+    const trailingLesson: NativeLearnerCourse = {
+      ...course,
+      units: [...course.units, {
+        id: 'final', title: 'Encerramento', kind: 'lesson', questionIds: [],
+        blocks: [{ type: 'paragraph', text: 'Revisão dos conceitos' }],
+      }],
+    };
+    render(<NativeCoursePreview
+      course={trailingLesson}
+      resolveAssetHref={() => null}
+      onSubmitAssessment={onSubmitAssessment}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
+    expect(screen.getByRole('heading', { name: 'Avaliação' })).toBeInTheDocument();
+    const send = screen.getByRole('button', { name: 'Enviar respostas para avaliação' });
+    expect(send).toBeDisabled();
+    fireEvent.click(screen.getByRole('radio', { name: 'Verificar o EPI' }));
+    fireEvent.click(send);
+    expect(onSubmitAssessment).toHaveBeenCalledExactlyOnceWith([{ questionId: 'q1', optionId: 'b' }]);
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
+    expect(screen.getByRole('heading', { name: 'Encerramento' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Enviar respostas para avaliação' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /concluir|certificado/i })).toBeNull();
+  });
+
   it('shows no client grading or server writes at any step', () => {
     const resolve = vi.fn(() => null);
     render(<NativeCoursePreview course={course} resolveAssetHref={resolve} />);
