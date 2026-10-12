@@ -1,5 +1,5 @@
 -- NON-DEPLOYABLE REVIEW CANDIDATE: Native catalog activation (0551 concept).
--- This file is intentionally under schema-v2/plans, NOT schema-v2/changes.
+-- This is a .sql.txt reference file, not an executable .sql change or an allowed reviewed Schema V2 SQL path.
 -- NO manifest, SHA authorization, recovery point or Schema V2 apply exists.
 -- Requires governed application of 0550 first on a verified EMPTY Native schema.
 -- Do not enable staging tenant flags until D1 batch, audits and rollback are validated.
