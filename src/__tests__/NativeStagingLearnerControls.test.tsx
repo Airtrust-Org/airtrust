@@ -104,7 +104,7 @@ describe('Native staging learner — evidence-only interaction', () => {
   });
 
   it('finishes only after a second verified server session and confirms the receipt', async () => {
-    const readySession=respond({success:true,data:{
+    const readySession=()=>respond({success:true,data:{
       ...scope,completion_supported:true,
       next_sequence:2,seen_lesson_ids:['intro'],last_visited_unit_id:'intro',
       latest_attempt:{attempt_number:1,score_pct:null,assessment_satisfied:true},
@@ -113,8 +113,8 @@ describe('Native staging learner — evidence-only interaction', () => {
       .mockResolvedValueOnce(respond({success:true,data:{
         ciclo_id:9,edition_sha256:editionHash,completion_supported:false,state:'ALREADY_STARTED',
       }}))
-      .mockResolvedValueOnce(readySession)
-      .mockResolvedValueOnce(readySession)
+      .mockResolvedValueOnce(readySession())
+      .mockResolvedValueOnce(readySession())
       .mockResolvedValueOnce(respond({success:true,data:{
         matricula_id:101,status:'CONCLUIDO',
         qualification_outcome:'qualification_created',

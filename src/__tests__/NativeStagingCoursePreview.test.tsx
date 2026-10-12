@@ -103,10 +103,13 @@ describe('Native pilot preview — authenticated read-only React', () => {
     render(<NativeStagingCoursePreview matriculaId={101} />);
     expect(await screen.findByRole('button', { name: /Iniciar ou retomar/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Finalizar treinamento/ })).toBeNull();
-    expect(api.fetchWithAuth).toHaveBeenCalledTimes(2);
+    expect(api.fetchWithAuth.mock.calls.slice(0,2).map(([url]) => url)).toEqual([
+      '/api/lms/native/matriculas/101/curso',
+      '/api/lms/native/matriculas/101/sessao',
+    ]);
   });
 
-  it('rejects leaked server grading keys before rendering any authored content', async () => {
+  it('rejects leaked server grading keys before rendering any authored content', async () {
     api.fetchWithAuth.mockResolvedValueOnce(response(payload({
       course: { ...course, questions: [
         { id: 'q1', prompt: 'Pergunta', options: [], correctOptionId: 'secret' },
