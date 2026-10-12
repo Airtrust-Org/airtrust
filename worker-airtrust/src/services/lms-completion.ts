@@ -75,6 +75,13 @@ type PreBatchState = {
 
 const LMS_REUSABLE_STATUSES = new Set(['CONCLUIDA', 'PLANEJADA', 'PLANEJADO']);
 
+function hasNonReusableHistory(pre: PreBatchState): boolean {
+  // A null/unknown status is not a completed qualification. Never finalize
+  // an LMS enrollment using a canceled, renewed or ambiguous history row.
+  return pre.existingHistoricoId !== null &&
+    !LMS_REUSABLE_STATUSES.has(pre.existingHistoricoStatus ?? '');
+}
+
 function isCanonicalEadCategory(category: { codigo?: string | null; nome?: string | null }): boolean {
   const code = String(category.codigo || '').trim().toUpperCase();
   const name = String(category.nome || '').trim().toUpperCase();
@@ -768,11 +775,7 @@ export async function completeLmsMatricula(
   // closed — the matricula must NOT be marked CONCLUIDO on top of a
   // CANCELADA or already-RENOVADA (superseded) qualification record, nor on
   // an unrecognized status. Reject before touching lms_matriculas at all.
-  if (
-    pre.existingHistoricoId &&
-    pre.existingHistoricoStatus !== null &&
-    !LMS_REUSABLE_STATUSES.has(pre.existingHistoricoStatus)
-  ) {
+  if (hasNonReusableHistory(pre)) {
     await logRejectionAudit(
       db,
       params,
@@ -797,6 +800,20 @@ export async function completeLmsMatricula(
     if (isConcurrentQualificationUniqueConstraint(error)) {
       const retryPre = await readPreBatchState(db, canonicalParams, qualificacaoCodigo);
       if (retryPre.existingHistoricoId) {
+        // A concurrent UNIQUE winner is only reusable if its persisted status
+        // matches the same allowlist enforced on the initial read. Otherwise
+        // retries could certify a CANCELADA/RENOVADA/null history row.
+        if (hasNonReusableHistory(retryPre)) {
+          await logRejectionAudit(
+            db,
+            params,
+            `Histórico concorrente #${retryPre.existingHistoricoId} tem status incompatível para reuso: ${retryPre.existingHistoricoStatus}`,
+          );
+          throw new LmsCompletionRejectedError(
+            'Histórico concorrente com status incompatível; conclusão não autorizada',
+            'LMS_QUALIFICATION_STATUS_INCOMPATIBLE',
+          );
+        }
         const retryStatements = withNativeAtomicGuard(
           canonicalParams,buildCompletionBatchStatements(canonicalParams, retryPre),
         );
