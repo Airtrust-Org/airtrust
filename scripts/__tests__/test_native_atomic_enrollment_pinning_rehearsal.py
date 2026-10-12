@@ -337,6 +337,55 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
                     self.assertEqual(self._counts(db),(0,0,0,0))
                 finally: db.close()
 
+    def test_candidate_accepts_evidence_only_for_pinned_active_native_cycle(self):
+        db=fixture()
+        try:
+            matricula, ciclo, binding=provision(db)
+            db.execute("UPDATE lms_matriculas SET status='EM_ANDAMENTO' WHERE id=?",(matricula,))
+            db.execute("UPDATE lms_matricula_ciclos SET status='EM_ANDAMENTO' WHERE id=?",(ciclo,))
+            db.execute("""INSERT INTO lms_native_eventos(
+                vinculo_id,event_id,sequencia,unidade_id,payload_sha256
+              ) VALUES(?,'visit-001',1,'opening',?)""",(binding,HASH))
+            db.execute("""INSERT INTO lms_native_tentativas(
+                vinculo_id,tentativa_numero,answers_json,answers_sha256,
+                policy,score_pct,assessment_satisfied
+              ) VALUES(?,1,'[]',?,'SCORED',100,1)""",(binding,HASH))
+            self.assertEqual(db.execute(
+                'SELECT COUNT(*) FROM lms_native_eventos WHERE vinculo_id=?',
+                (binding,)).fetchone()[0],1)
+            self.assertEqual(db.execute(
+                'SELECT COUNT(*) FROM lms_native_tentativas WHERE vinculo_id=?',
+                (binding,)).fetchone()[0],1)
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+            self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
+            self.assertEqual(db.execute(
+                'SELECT tipo_conteudo FROM lms_cursos WHERE id=10'
+            ).fetchone()[0],'scorm')
+            with self.assertRaisesRegex(sqlite3.IntegrityError,'NATIVE_EVENT_SEQUENCE_CONFLICT'):
+                db.execute("""INSERT INTO lms_native_eventos(
+                  vinculo_id,event_id,sequencia,unidade_id,payload_sha256
+                ) VALUES(?,'visit-002',3,'opening',?)""",(binding,HASH))
+            with self.assertRaisesRegex(sqlite3.IntegrityError,'NATIVE_ATTEMPT_SEQUENCE_CONFLICT'):
+                db.execute("""INSERT INTO lms_native_tentativas(
+                  vinculo_id,tentativa_numero,answers_json,answers_sha256,
+                  policy,score_pct,assessment_satisfied
+                ) VALUES(?,3,'[]',?,'SCORED',100,1)""",(binding,HASH))
+        finally:
+            db.close()
+
+    def test_candidate_rejects_forged_tenant_activation_before_creating_edition(self):
+        db=fixture()
+        try:
+            with self.assertRaisesRegex(sqlite3.IntegrityError,
+                                        'NATIVE_CATALOG_TENANT_OR_SOURCE_CONFLICT'):
+                db.execute("""INSERT INTO lms_native_catalog_activation(
+                  curso_id,empresa_id) VALUES(12,6)""")
+            self.assertEqual(db.execute(
+                'SELECT COUNT(*) FROM lms_native_catalog_activation'
+            ).fetchone()[0],1)
+        finally:
+            db.close()
+
     def test_employee_inactive_status_rejected_without_any_enrollment_write(self):
         for field, value in (('status','INATIVO'), ('ativo',0), ('deleted_at','2026-10-12')):
             with self.subTest(field=field):
