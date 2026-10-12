@@ -122,8 +122,15 @@ def rich_content_blocks(slide: dict) -> tuple[list[dict], set[str]]:
                 if not isinstance(entry, list) or len(entry) != 2:
                     raise NativeCompileError('UNSUPPORTED_RICH_GATEITEMS')
                 label = ensure_text(entry[0], 'RICH_GATE_LABEL', 400)
-                detail = ensure_text(entry[1], 'RICH_GATE_DETAIL', 600)
-                items.append(ensure_text(f'{label}: {detail}', 'RICH_GATE_ITEM', 1000))
+                # A label-only gateItem is valid in authored SCORM content.
+                # Preserve the label verbatim without inventing a detail; an
+                # explicitly malformed/non-string detail still fails closed.
+                if entry[1] == '':
+                    item_text = label
+                else:
+                    detail = ensure_text(entry[1], 'RICH_GATE_DETAIL', 600)
+                    item_text = f'{label}: {detail}'
+                items.append(ensure_text(item_text, 'RICH_GATE_ITEM', 1000))
             blocks.append({'type': 'heading', 'text': 'Pontos de atenção'})
             blocks.append({'type': 'bullets', 'items': items})
         elif name in ('columns', 'sectionGroups'):
