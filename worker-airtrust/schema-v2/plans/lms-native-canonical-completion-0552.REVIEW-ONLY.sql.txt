@@ -12,6 +12,8 @@ SELECT json(CASE WHEN
       AND name IN ('trg_native_catalog_no_ungoverned_matricula_completion_update',
                    'trg_native_catalog_no_ungoverned_cycle_completion_update'))=2
  AND (SELECT COUNT(*) FROM sqlite_master WHERE name='lms_native_completion_intents')=0
+ AND (SELECT COUNT(*) FROM pragma_table_info('qualificacoes_categorias')
+      WHERE name='lms_integrada')=1
 THEN 'null' ELSE 'NATIVE_0552_REVIEW_PREFLIGHT_DENIED' END);
 
 -- A matching one-transaction intent is required by both terminal UPDATE
