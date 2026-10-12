@@ -139,3 +139,11 @@ Esta é **apenas uma alternativa de design**: não existe migration 0550 ou qual
 5. Executar E2E completo do LMS: início, ciclo SSOT, evidências, prova/reprovação, reentrada, qualificação/certificado/Compliance. Produção requer autorização explícita para SHA/artefatos/escopo.
 
 **Situação real:** a migration do CHECK não foi criada/aplicada porque, sem executor de reconstrução SQLite referencialmente seguro, fazê-lo seria um risco de dados maior que o bloqueio atual. Nenhuma rota Native foi habilitada.
+
+## Segunda alternativa em estudo: tabela de ativação imutável (11/10/2026)
+
+Em vez de `ALTER TABLE lms_cursos` ou `DROP/RENAME`, o novo ensaio **somente offline** `scripts/schema-v2/rehearse-native-catalog-activation-table.py` usa a mesma captura SHA-256 dos 12 objetos de `sqlite_master` e cria uma tabela filha para indicar *identidade efetiva Native*. A coluna física `tipo_conteudo` continua `scorm` devido ao CHECK legado, mas uma consulta **tenant-scoped** com `LEFT JOIN` é capaz de distinguir um curso Native novo. `PRAGMA foreign_keys=ON` permanece ativo; os seis índices e cinco triggers legados são preservados literalmente.
+
+O ensaio não aceita ativação de um curso já matriculado ou com versões de pacote SCORM; a linha de ativação deve apontar para o curso da mesma empresa, sem `scorm_launch_file` nem `scorm_package_r2_prefix`. Triggers sintéticos tornam a ativação imutável e impedem transformar depois o curso em H5P ou atribuir pacote SCORM. O propósito é provar viabilidade de DDL aditiva **sem tocar em matrículas atuais**. Não são executadas migrations, e o SQL contido no runner não é um bundle de aplicação.
+
+**Atenção: a alternativa continua NÃO PRONTA**. Qualquer rota legada que apenas leia `tipo_conteudo='scorm'`, sem consultar a tabela filha, ainda permitiria playback, progresso ou conclusão indevida. Antes de produzir `schema-v2/changes` é obrigatório incluir o isolamento de **todas** as entradas legadas (mídia, launch, upload, SCORM/xAPI, manual/admin, histórico, certificado e Compliance), propagar o formato efetivo no frontend e criar um mecanismo de ativação governado e auditável. O ensaio não concede permissão de publicação e não substitui preflight D1 atual, manifest, hashes, recovery, autorização staging e E2E.
