@@ -9,6 +9,7 @@
  */
 import type { Env } from '../types';
 import { canProvisionNative } from './lms-native-enrollment-provisioner';
+import { NATIVE_ACTIVE_EMPLOYEE_JOIN, NATIVE_ACTIVE_USER_CONDITION } from './lms-native-active-learner-sql';
 import type { NativeReadinessVerdict } from '../lib/lms/lms-native-evidence-domain';
 import { loadNativePrivateCourse } from './lms-native-content-loader';
 import { readNativeCanonicalReadiness } from './lms-native-readiness-repository';
@@ -40,6 +41,7 @@ type CourseRow = {
   status: string; ciclo_id: number; artifact_sha256: string;
   titulo: string; gerar_qualificacao_ao_concluir: number;
   qualificacao_tipo_id: number | null;
+  qualificacao_tipo_ativo_id: number | null;
   qualificacao_codigo: string | null;
   qualificacao_nome: string | null;
   qualificacao_categoria: string | null;
@@ -83,7 +85,7 @@ export async function preflightNativeCanonicalCompletion(params: {
   const sql = [
     'SELECT m.id,m.curso_id,m.funcionario_id,m.status,cy.id AS ciclo_id,',
     'ed.artifact_sha256,c.titulo,c.gerar_qualificacao_ao_concluir,',
-    'c.qualificacao_tipo_id,qt.codigo AS qualificacao_codigo,',
+    'c.qualificacao_tipo_id,qt.id AS qualificacao_tipo_ativo_id,qt.codigo AS qualificacao_codigo,',
     'qt.nome AS qualificacao_nome,qt.categoria AS qualificacao_categoria,',
     'qt.validade AS qualificacao_validade,',
     'm.qualificacao_historico_id',
@@ -94,6 +96,8 @@ export async function preflightNativeCanonicalCompletion(params: {
     'JOIN lms_native_catalog_activation a ON a.curso_id=c.id AND a.empresa_id=c.empresa_id',
     'JOIN usuarios u ON u.id=? AND u.funcionario_id=m.funcionario_id',
     'AND u.deleted_at IS NULL',
+    NATIVE_ACTIVE_USER_CONDITION,
+    NATIVE_ACTIVE_EMPLOYEE_JOIN,
     'JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id',
     'AND cy.empresa_id=m.empresa_id AND cy.curso_id=m.curso_id',
     'AND cy.funcionario_id=m.funcionario_id AND cy.ciclo_atual=1',
@@ -104,7 +108,7 @@ export async function preflightNativeCanonicalCompletion(params: {
     'AND ed.empresa_id=b.empresa_id AND ed.curso_id=b.curso_id',
     "AND ed.status='PUBLISHED' AND ed.artifact_sha256=?",
     'LEFT JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id',
-    'AND qt.empresa_id=c.empresa_id AND qt.deleted_at IS NULL',
+    'AND qt.empresa_id=c.empresa_id AND qt.deleted_at IS NULL AND qt.ativo=1',
     "WHERE m.id=? AND m.empresa_id=? AND m.curso_id=?",
     "AND m.deleted_at IS NULL AND m.status='EM_ANDAMENTO'",
     'LIMIT 1',
@@ -126,6 +130,7 @@ export async function preflightNativeCanonicalCompletion(params: {
   if (requireQualification && (
       !Number.isSafeInteger(row.qualificacao_tipo_id) ||
       (row.qualificacao_tipo_id ?? 0) <= 0 ||
+      row.qualificacao_tipo_ativo_id !== row.qualificacao_tipo_id ||
       !String(row.qualificacao_codigo ?? row.qualificacao_nome ?? '').trim()
   )) {
     return { ready: false, reason: 'QUALIFICATION_MAPPING_INCOMPLETE' };

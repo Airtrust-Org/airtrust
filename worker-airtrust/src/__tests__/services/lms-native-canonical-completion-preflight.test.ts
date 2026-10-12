@@ -16,7 +16,7 @@ const accepted = {
   ciclo_id: 1001, status: 'EM_ANDAMENTO',
   artifact_sha256: sha, titulo: 'Curso Native',
   gerar_qualificacao_ao_concluir: 1,
-  qualificacao_tipo_id: 99, qualificacao_codigo: 'EAD',
+  qualificacao_tipo_id: 99, qualificacao_tipo_ativo_id: 99, qualificacao_codigo: 'EAD',
   qualificacao_nome: 'Treinamento EAD', qualificacao_categoria: 'EAD',
   qualificacao_validade: 12, qualificacao_historico_id: null,
 };
@@ -73,6 +73,9 @@ describe('Native canonical completion: read-only preflight, never certificate au
     expect(f.reads[0].sql).toContain('cy.status=m.status');
     expect(f.reads[0].sql).toContain("m.status='EM_ANDAMENTO'");
     expect(f.reads[0].sql).toContain('qt.empresa_id=c.empresa_id');
+    expect(f.reads[0].sql).toContain('qt.ativo=1');
+    expect(f.reads[0].sql).toContain('u.active=1');
+    expect(f.reads[0].sql).toContain('f.empresa_id=m.empresa_id');
     expect(f.reads.every(x => x.sql.startsWith('SELECT'))).toBe(true);
   });
   it('never reads qualification metadata when lesson/assessment evidence is missing', async () => {
@@ -99,7 +102,8 @@ describe('Native canonical completion: read-only preflight, never certificate au
   });
   it('refuses to claim ready for unmapped qualification type or code', async () => {
     for (const change of [
-      { qualificacao_tipo_id: null }, { qualificacao_codigo: null, qualificacao_nome: null },
+      { qualificacao_tipo_id: null }, { qualificacao_tipo_ativo_id: null },
+      { qualificacao_codigo: null, qualificacao_nome: null },
       { gerar_qualificacao_ao_concluir: 2 },
     ]) {
       const f=make({ ...accepted, ...change });
