@@ -42,6 +42,14 @@ export function getTypeMeta(type: TipoConteudo | null | undefined): {
   chipClass: string;
   artworkClass: string;
 } {
+  if (type === 'native') {
+    return {
+      label: 'Native',
+      icon: <Layers className="h-3.5 w-3.5" />,
+      chipClass: 'border border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300',
+      artworkClass: 'bg-indigo-50 text-indigo-700',
+    };
+  }
   if (type === 'h5p') {
     return {
       label: 'H5P',
