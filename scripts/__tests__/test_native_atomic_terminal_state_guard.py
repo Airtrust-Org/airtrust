@@ -102,6 +102,46 @@ class NativeAtomicTerminalGuardTests(unittest.TestCase):
         self.db.execute("UPDATE qualificacoes_tipos SET empresa_id=7 WHERE id=44")
         self.denied()
 
+    def test_canonical_batch_cannot_leave_history_if_native_terminal_is_ungoverned(self):
+        # Existing 0551 review candidate intentionally forbids CONCLUIDO.
+        # Even with a READY + unchanged atomic assertion, the canonical
+        # history/audit/status batch must roll back until a separate
+        # governed completion-intent/recovery contract has been approved.
+        self.db.execute("""
+          CREATE TABLE qualificacoes_historico(
+            id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,
+            funcionario_id INTEGER NOT NULL,status TEXT)
+        """)
+        self.db.execute("""
+          CREATE TABLE audit_logs(
+            id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,
+            action TEXT NOT NULL)
+        """)
+        self.db.commit()
+        with self.assertRaisesRegex(sqlite3.IntegrityError,
+                                     'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'):
+            with self.db:
+                self.db.execute('BEGIN IMMEDIATE')
+                self.assertEqual(self.permitted(),'null')
+                self.db.execute("""INSERT INTO qualificacoes_historico(
+                    empresa_id,funcionario_id,status
+                ) VALUES(6,69,'CONCLUIDA')""")
+                self.db.execute("""UPDATE lms_matriculas
+                    SET status='CONCLUIDO',progresso_pct=100,
+                        data_conclusao='2026-10-12'
+                    WHERE id=?""",(self.matricula,))
+                self.db.execute("""INSERT INTO audit_logs(empresa_id,action)
+                    VALUES(6,'LMS_NATIVE_CANONICAL_CONCLUIDA')""")
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM qualificacoes_historico'
+                                          ).fetchone()[0],0)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM audit_logs'
+                                          ).fetchone()[0],0)
+        self.assertEqual(self.db.execute('SELECT status FROM lms_matriculas WHERE id=?',
+                                          (self.matricula,)).fetchone()[0],'EM_ANDAMENTO')
+        self.assertEqual(self.db.execute('SELECT status FROM lms_matricula_ciclos WHERE id=?',
+                                          (self.ciclo,)).fetchone()[0],'EM_ANDAMENTO')
+        self.assertEqual(self.db.execute('PRAGMA foreign_key_check').fetchall(),[])
+
     def test_status_or_conclusion_change_never_allows_stale_terminal_write(self):
         # The SQL gate itself must reject even if future migration allows
         # a separate reviewed completion intent for canonical terminal update.
