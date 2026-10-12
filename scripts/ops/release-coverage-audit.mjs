@@ -55,6 +55,7 @@ export async function recentMergedPulls(cutoffMs, {
   if (!Number.isFinite(cutoffMs) || !Number.isInteger(maxPrs) || maxPrs < 1 ||
       !Number.isInteger(maxPages) || maxPages < 1) throw Error('INVALID_AUDIT_SCAN_LIMITS');
   const merged = [];
+  const offMainMergedExcluded = [];
   let scanComplete = false;
   let pagesScanned = 0;
   for (let page = 1; page <= maxPages; page++) {
@@ -63,6 +64,15 @@ export async function recentMergedPulls(cutoffMs, {
     pagesScanned++;
     for (const pr of batch) {
       if (pr.merged_at && Date.parse(pr.merged_at) >= cutoffMs) {
+        // A PR can be merged into a feature branch without ever joining main.
+        // Branch-to-branch maintenance commits must not dilute release parity.
+        if (typeof pr.base?.ref !== 'string' || !pr.base.ref) {
+          throw Error('MERGED_PR_BASE_UNVERIFIED');
+        }
+        if (pr.base.ref !== 'main') {
+          offMainMergedExcluded.push(pr.number);
+          continue;
+        }
         merged.push({ number: pr.number, sha: pr.merge_commit_sha, mergedAt: pr.merged_at });
       }
     }
@@ -80,7 +90,7 @@ export async function recentMergedPulls(cutoffMs, {
   return {
     prs: merged.slice(0, maxPrs),
     truncated: !scanComplete || capped,
-    pagesScanned, matchesFound: merged.length,
+    pagesScanned, matchesFound: merged.length, offMainMergedExcluded,
     limitReason: capped ? 'MAX_PRS' : (!scanComplete ? 'MAX_SCAN_PAGES' : null),
   };
 }
@@ -123,7 +133,7 @@ export function selectHistoricalBatch(scan, input, batchSize = HISTORY_BATCH_SIZ
     pagesScanned: scan.pagesScanned, matchesFound: eligible.length,
     limitReason: nextOffset === null ? null : 'NEXT_BATCH',
     nextOffset, batchOffset: input.offset, anchorUtc: input.anchorUtc,
-    inventoryComplete: true,
+    inventoryComplete: true, offMainMergedExcluded: scan.offMainMergedExcluded,
   };
 }
 
@@ -208,7 +218,7 @@ export async function run() {
     audit,
   );
   const selection = isBatch ? selectHistoricalBatch(scan, input) : scan;
-  const { prs, truncated, pagesScanned, matchesFound, limitReason } = selection;
+  const { prs, truncated, pagesScanned, matchesFound, limitReason, offMainMergedExcluded } = selection;
   // A job token typically has 1,000 core calls/hour; reserve the maximum
   // possible count of comparison and changed-file requests BEFORE processing.
   const rateBudget = isBatch
@@ -251,6 +261,8 @@ export async function run() {
     '- code ancestry confirmed in production: ' + (groups.CODE_IN_PRODUCTION || []).length,
     '- merged PRs NOT in published source: ' + unreleased.length,
     '- PR ancestry unverified: ' + uncertain.length,
+    '- off-main branch merges excluded from release population: ' + offMainMergedExcluded.length,
+    '- off-main PR numbers: ' + offMainMergedExcluded.map((n) => '#' + n).join(', '),
     '- changed-file surface unverified: ' + unknownSurfaces.length,
     '- NOTE: SCHEMA_V2 means migration file merged, NOT applied to D1.',
     '- truncated audit window: ' + truncated,
@@ -275,6 +287,7 @@ export async function run() {
     scope: audit.scope, window_days: audit.windowDays, pages_scanned: pagesScanned,
     matches_found: matchesFound, max_prs: audit.maxPrs, max_scan_pages: audit.maxPages,
     truncation_reason: limitReason, unknown_surface: unknownSurfaces,
+    off_main_merged_excluded: offMainMergedExcluded,
     worker_changed_prs: bySurface('WORKER'), pages_changed_prs: bySurface('PAGES'),
     schema_v2_changed_prs: bySurface('SCHEMA_V2'),
     ...(isBatch ? { anchor_utc: input.anchorUtc, batch_offset: input.offset,
