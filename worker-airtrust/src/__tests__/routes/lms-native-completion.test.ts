@@ -148,7 +148,7 @@ describe('Native terminal HTTP entry: fifth gate and server-issued proof only',(
   });
   it('maps a guarded canonical batch rejection to conflict, never success',async()=>{
     const {LmsCompletionRejectedError}=await import('../../services/lms-completion');
-    mocks.complete.mockRejectedValueOnce(new LmsCompletionRejectedError());
+    mocks.complete.mockRejectedValueOnce(new LmsCompletionRejectedError('batch rejected'));
     const r=await call();
     expect(r.status).toBe(409);
     expect(await r.json()).toEqual({success:false,
