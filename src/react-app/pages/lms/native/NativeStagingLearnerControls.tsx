@@ -81,7 +81,7 @@ export default function NativeStagingLearnerControls({
         (typeof (latest as Record<string, unknown>).score_pct !== 'number' ||
          !Number.isFinite((latest as Record<string, number>).score_pct) ||
          (latest as Record<string, number>).score_pct < 0 ||
-         (latest as Record<string, number>).score_pct > 100)))
+         (latest as Record<string, number>).score_pct > 100))
     )) throw new Error('NATIVE_SESSION_INVALID_ATTEMPT');
     const next: NativePilotSession = {
       nextSequence: data.next_sequence as number,
