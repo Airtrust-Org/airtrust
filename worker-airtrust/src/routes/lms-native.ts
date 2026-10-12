@@ -14,6 +14,7 @@ import { readNativeLearnerSession, NativeEvidenceReadError } from '../services/l
 import { loadNativeVerifiedAsset } from '../services/lms-native-asset-loader';
 import nativeWriteRoutes, { canWriteNative } from './lms-native-write';
 import nativeEnrollmentRoutes from './lms-native-enrollment';
+import nativeCompletionPreflightRoutes from './lms-native-completion-preflight';
 import {
   NativeAdmissionError,
   resolveNativeEnrollmentAdmission,
@@ -259,5 +260,7 @@ app.get('/matriculas/:matriculaId/assets/:assetId', async (c) => {
 app.route('/', nativeWriteRoutes);
 // Separate fourth tenant gate; this route never accepts client employee or edition IDs.
 app.route('/', nativeEnrollmentRoutes);
+// Separate read-only completion diagnostics, not a terminal write endpoint.
+app.route('/', nativeCompletionPreflightRoutes);
 
 export default app;
