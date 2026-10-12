@@ -12,7 +12,7 @@ import { canProvisionNative } from './lms-native-enrollment-provisioner';
 import { NATIVE_ACTIVE_EMPLOYEE_JOIN, NATIVE_ACTIVE_USER_CONDITION } from './lms-native-active-learner-sql';
 import type { NativeReadinessVerdict } from '../lib/lms/lms-native-evidence-domain';
 import { loadNativePrivateCourse } from './lms-native-content-loader';
-import { readNativeCanonicalReadiness } from './lms-native-readiness-repository';
+import { readNativeLearnerSession } from './lms-native-readiness-repository';
 import { requireActiveQualificationCategoryById } from './qualification-category-contract';
 
 export type NativeCompletionPreflight =
@@ -37,6 +37,13 @@ export type NativeCompletionPreflight =
         qualificacaoCategoria: string | null;
         validade: number | null;
         existingHistoricoId: number | null;
+        /** Durable evidence snapshot verified against the private R2 key. */
+        evidenceSnapshot: {
+          eventCount: number;
+          distinctLessonCount: number;
+          latestAttemptNumber: number;
+          scorePct: number | null;
+        };
       } }>;
 
 type CourseRow = {
@@ -76,11 +83,20 @@ export async function preflightNativeCanonicalCompletion(params: {
     empresaId, matriculaId, cursoId: verified.cursoId,
     cicloId: verified.cicloId, artifactHash: verified.editionHash,
   };
-  const readiness = await readNativeCanonicalReadiness({
+  const { summary, readiness } = await readNativeLearnerSession({
     env, db: env.DB, actorUserId, scope, artifact: verified.artifact,
   });
   if (!readiness.readyForCanonicalCompletion) {
     return { ready: false, reason: readiness.reason };
+  }
+  const attempt = summary.latestAttempt;
+  if (summary.mode !== 'LEARN' ||
+      !Number.isSafeInteger(summary.nextSequence) || summary.nextSequence < 2 ||
+      !Number.isSafeInteger(summary.seenLessonIds.length) ||
+      summary.seenLessonIds.length < 1 ||
+      !attempt || !attempt.assessmentSatisfied ||
+      !Number.isSafeInteger(attempt.attemptNumber) || attempt.attemptNumber < 1) {
+    return { ready: false, reason: 'ASSESSMENT_EVIDENCE_MISSING' };
   }
 
   // Bind metadata to precisely the same authenticated employee, course,
@@ -181,6 +197,12 @@ export async function preflightNativeCanonicalCompletion(params: {
       qualificacaoCategoria: categoriaNome,
       validade: row.qualificacao_validade,
       existingHistoricoId: row.qualificacao_historico_id,
+      evidenceSnapshot: {
+        eventCount: summary.nextSequence - 1,
+        distinctLessonCount: summary.seenLessonIds.length,
+        latestAttemptNumber: attempt.attemptNumber,
+        scorePct: attempt.scorePct,
+      },
     },
   };
 }

@@ -6,7 +6,7 @@ vi.mock('../../services/lms-native-content-loader', () => ({
   loadNativePrivateCourse: mocks.loadPrivate,
 }));
 vi.mock('../../services/lms-native-readiness-repository', () => ({
-  readNativeCanonicalReadiness: mocks.readiness,
+  readNativeLearnerSession: mocks.readiness,
 }));
 vi.mock('../../services/qualification-category-contract', () => ({
   requireActiveQualificationCategoryById: mocks.category,
@@ -52,7 +52,10 @@ describe('Native canonical completion: read-only preflight, never certificate au
       editionHash: sha, cicloId: 1001, cursoId: 31, mode: 'LEARN',
     });
     mocks.readiness.mockReset().mockResolvedValue({
-      readyForCanonicalCompletion: true, reason: 'READY',
+      readiness: { readyForCanonicalCompletion: true, reason: 'READY' },
+      summary: { mode: 'LEARN', nextSequence: 7,
+        seenLessonIds: ['lesson-1','lesson-2','lesson-3'],
+        latestAttempt: { attemptNumber: 2, scorePct: 86, assessmentSatisfied: true } },
     });
     mocks.category.mockReset().mockResolvedValue({
       id: 44, empresaId: 6, codigo: 'EAD', nome: 'Treinamento EAD',
@@ -66,6 +69,8 @@ describe('Native canonical completion: read-only preflight, never certificate au
         empresaId: 6, matriculaId: 101, cicloId: 1001,
         cursoId: 31, funcionarioId: 51, gerarQualificacaoAoConcluir: true,
         qualificacaoCategoriaId: 44, qualificacaoCategoriaCodigo: 'EAD',
+        evidenceSnapshot: { eventCount: 6, distinctLessonCount: 3,
+          latestAttemptNumber: 2, scorePct: 86 },
       },
     });
     expect(mocks.loadPrivate).toHaveBeenCalledWith(expect.objectContaining({
@@ -78,6 +83,7 @@ describe('Native canonical completion: read-only preflight, never certificate au
       },
     }));
     expect(f.reads[0].binds).toEqual([900,sha,101,6,31]);
+    expect(mocks.readiness).toHaveBeenCalledTimes(1);
     expect(f.reads[0].sql).toContain('a.empresa_id=c.empresa_id');
     expect(f.reads[0].sql).toContain('cy.status=m.status');
     expect(f.reads[0].sql).toContain("m.status='EM_ANDAMENTO'");
@@ -90,7 +96,8 @@ describe('Native canonical completion: read-only preflight, never certificate au
   });
   it('never reads qualification metadata when lesson/assessment evidence is missing', async () => {
     mocks.readiness.mockResolvedValueOnce({
-      readyForCanonicalCompletion: false, reason: 'ASSESSMENT_EVIDENCE_MISSING',
+      readiness: { readyForCanonicalCompletion: false, reason: 'ASSESSMENT_EVIDENCE_MISSING' },
+      summary: { mode: 'LEARN', nextSequence: 1, seenLessonIds: [], latestAttempt: null },
     });
     const f=make();
     await expect(f.call()).resolves.toEqual({
