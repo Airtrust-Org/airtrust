@@ -299,7 +299,8 @@ describe('FrmsDashboard simplificado', () => {
 
     renderDashboard();
 
-    expect(screen.getByText(/Atividade fora da quinzena ativa — confirmar se é extensão operacional/i)).toBeInTheDocument();
+    expect(screen.getByText(/Atividade sem vínculo confirmado com a quinzena operacional/i)).toBeInTheDocument();
+    expect(screen.getByText(/Confirmar extensão autorizada ou corrigir a escala/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Extensão/i }));
     const drawer = within(screen.getByRole('dialog'));
     expect(drawer.getByText('Fora da quinzena ativa')).toBeInTheDocument();
@@ -311,32 +312,33 @@ describe('FrmsDashboard simplificado', () => {
     renderDashboard();
 
     const summary = within(screen.getByLabelText('Resumo operacional'));
-    expect(summary.getByText('Atenção')).toBeInTheDocument();
+    expect(summary.getByText('Prioritários')).toBeInTheDocument();
     expect(summary.getByText('Avaliar')).toBeInTheDocument();
     expect(summary.getByText('Verificar')).toBeInTheDocument();
     expect(summary.queryByText('Sem pendência')).not.toBeInTheDocument();
     expect(screen.getByText(/pessoa\(s\) sem pendência no recorte atual/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Como interpretar' })).toHaveAttribute('href', '/frms/conceitos');
-    expect(screen.getByText(/Abra o registro para ver motivo, dados de origem e ação esperada/i)).toBeInTheDocument();
+    expect(screen.getByText(/O check-in diário, o motivo e a providência aparecem aqui/i)).toBeInTheDocument();
   });
 
-  it('mostra os quatro sinais operacionais em cada linha da fila', () => {
+  it('mantém check-in e ação principal visíveis e os quatro sinais técnicos no detalhe', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(
       state({ data: [item({ checkin_status: 'AUSENTE', fortnight_indicator: null, estado_operacional: 'ATENCAO' })] }),
     );
 
     renderDashboard();
 
-    const list = screen.getByLabelText('Sinais operacionais do dia');
-    const chips = within(list);
-    expect(chips.getByLabelText('Check-in diário: Não realizada — crítico')).toBeInTheDocument();
-    expect(chips.getByLabelText('Risco do período: Dados incompletos — sem dado')).toBeInTheDocument();
-    const effectiveness = chips.getByLabelText(
-      'Efetividade: 92,0% — normal — sinal positivo já apurado; a decisão operacional ainda requer avaliação dos demais sinais.',
-    );
+    expect(screen.getByText('Check-in diário')).toBeInTheDocument();
+    expect(screen.getByText('Não realizado')).toBeInTheDocument();
+    expect(screen.getByText('O que fazer?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Max/i }));
+    const drawer = within(screen.getByRole('dialog'));
+    const grid = within(drawer.getByLabelText('Status operacional do dia'));
+    expect(grid.getByLabelText('Check-in diário: Não realizada — crítico')).toBeInTheDocument();
+    expect(grid.getByLabelText('Risco do período: Dados incompletos — sem dado')).toBeInTheDocument();
+    const effectiveness = grid.getByLabelText('Efetividade: 92,0% — normal');
     expect(effectiveness).toHaveClass('bg-emerald-50');
-    expect(effectiveness).not.toHaveClass('bg-slate-50');
-    expect(chips.getByLabelText('Prontidão: Não avaliado — sem dado')).toBeInTheDocument();
+    expect(grid.getByLabelText('Prontidão: Não avaliado — sem dado')).toBeInTheDocument();
   });
 
   it('trata dado incompleto como confirmação, esconde efetividade não confiável e explica o que falta', () => {
@@ -354,11 +356,12 @@ describe('FrmsDashboard simplificado', () => {
 
     expect(screen.getAllByText('Verificar').length).toBeGreaterThan(0);
     expect(screen.getByText('Jornada ainda não consolidada.')).toBeInTheDocument();
-    expect(screen.getByLabelText('Efetividade: Não calculada — sem dado')).toBeInTheDocument();
+    expect(screen.getByText('O que fazer?')).toBeInTheDocument();
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Max/i }));
     const drawer = within(screen.getByRole('dialog'));
+    expect(within(drawer.getByLabelText('Status operacional do dia')).getByLabelText('Efetividade: Não calculada — sem dado')).toBeInTheDocument();
     expect(drawer.getByText(/Falta: sem jornada/i)).toBeInTheDocument();
     expect(drawer.getByText('Jornada: ausente')).toBeInTheDocument();
     expect(drawer.getByText('Jornada: ausente')).toHaveClass('bg-slate-50');
@@ -456,7 +459,7 @@ describe('FrmsDashboard simplificado', () => {
 
       renderDashboard('/frms?data=2026-09-29');
       expect(screen.getByText(/Leitura do dia em curso/i)).toBeInTheDocument();
-      expect(screen.getByText(/jornada real será confirmada após a operação/i)).toBeInTheDocument();
+      expect(screen.getByText(/jornada realizada fecha depois da operação/i)).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: /Max/i }));
       const drawer = within(screen.getByRole('dialog'));
@@ -485,7 +488,7 @@ describe('FrmsDashboard simplificado', () => {
 
     const drawer = within(screen.getByRole('dialog'));
     expect(screen.getAllByText('Limite operacional excedido.').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Não despachar até mitigação.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Não recomendar liberação. Encaminhar à gestão operacional/i).length).toBeGreaterThan(0);
     expect(drawer.getByText(/Consultas secundárias — abrem outra tela/i)).toBeInTheDocument();
     expect(drawer.getByRole('link', { name: 'Abrir histórico (outra tela)' })).toHaveAttribute(
       'href', '/frms/tripulante/30?origem=operacao&data=2026-08-27',

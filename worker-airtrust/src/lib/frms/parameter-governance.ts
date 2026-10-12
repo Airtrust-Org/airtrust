@@ -10,6 +10,8 @@ import { resolveFadigaBusinessPolicy, type FadigaBusinessPolicy } from './fadiga
 import { resolveFortnightPolicy, type FrmsFortnightPolicy } from './fortnight-indicator';
 
 export const FRMS_OFFSHORE_PROFILE = 'HELICOPTER_OFFSHORE' as const;
+/** New distinct aviation tenant profile; activation requires approved regulatory evidence and complete governed revisions. */
+export const FRMS_FIREFIGHTER_AVIATION_PROFILE = 'FIREFIGHTER_AVIATION' as const;
 export const FRMS_LEGACY_MODEL_VERSION = 'LEGACY_MODEL_V2' as const;
 export const FRMS_APPROVED_OPERATIONAL_POLICY_SOURCE = 'APPROVED_OPERATIONAL_POLICY' as const;
 

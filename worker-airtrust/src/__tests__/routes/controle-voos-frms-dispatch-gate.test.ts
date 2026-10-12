@@ -684,6 +684,23 @@ describe('GET /api/controle-voos/operacional', () => {
     expect(body.data.resumo.tripulantes_checkin_pendente).toBeGreaterThanOrEqual(1);
   });
 
+  it('conta como não confirmado também check-in indisponível por falta de snapshot', async () => {
+    const db = createSqliteD1();
+    mockSnapshot([]);
+
+    const response = await request(db, '/api/controle-voos/operacional?data=2026-06-14');
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: {
+        resumo: { tripulantes_checkin_pendente: number };
+        voos: Array<{ voo_id: number; tripulacao: Array<{ checkin_status: string }> }>;
+      };
+    };
+    expect(body.data.resumo.tripulantes_checkin_pendente).toBe(2);
+    expect(body.data.voos.find((voo) => voo.voo_id === 601)?.tripulacao.map((crew) => crew.checkin_status))
+      .toEqual(['INDISPONIVEL', 'INDISPONIVEL']);
+  });
+
   it('10) viewer/student sem capability recebe 403 no painel da Coordenacao', async () => {
     const db = createSqliteD1();
     mockSnapshot([]);

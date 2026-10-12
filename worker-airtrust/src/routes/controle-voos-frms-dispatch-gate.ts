@@ -126,7 +126,7 @@ controleVoosDispatchGate.get(
       tripulantes_checkin_pendente: items.reduce(
         (acc, item) =>
           acc +
-          item.tripulacao.filter((membro) => membro.reasons.includes('CHECKIN_DIARIO_PENDENTE'))
+          item.tripulacao.filter((membro) => membro.checkin_status !== 'RECEBIDO')
             .length,
         0,
       ),
