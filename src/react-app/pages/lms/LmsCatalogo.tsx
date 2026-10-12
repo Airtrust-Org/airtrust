@@ -2134,6 +2134,7 @@ export default function LmsCatalogo() {
                 <MultiSelect
                   options={[
                     { value: 'scorm', label: 'SCORM' },
+                    { value: 'native', label: 'Native' },
                     { value: 'h5p', label: 'H5P' },
                     { value: 'video', label: 'Vídeo' },
                     { value: 'pdf', label: 'PDF' },
