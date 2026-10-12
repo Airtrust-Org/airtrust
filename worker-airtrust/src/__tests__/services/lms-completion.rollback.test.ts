@@ -301,9 +301,9 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
       const result = runSqliteBatch(dbPath, statements);
       expect(result.committed).toBe(false);
       expect(result.stderr).toContain('malformed JSON');
-      const original = querySql(dbPath,
-        'SELECT status, renovada FROM qualificacoes_historico WHERE id=800;')[0]
-        as Record<string, unknown>;
+      const original = querySql(
+        dbPath, 'SELECT status, renovada FROM qualificacoes_historico WHERE id=800;',
+      )[0] as Record<string, unknown>;
       expect(original.status).toBe(status);
       expect(original.renovada).toBe(0);
       expect(querySql(dbPath, 'SELECT * FROM qualificacoes_historico;')).toHaveLength(1);
