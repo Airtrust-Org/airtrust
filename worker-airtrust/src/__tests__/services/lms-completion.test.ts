@@ -127,6 +127,59 @@ describe('completeLmsMatricula', () => {
     ensureCertificateForQualificationMock.mockResolvedValue({ state: 'CREATED', documentoId: 321 });
   });
 
+  const nativeAnchor=(qualificacao:boolean)=>({
+    empresaId:6,matriculaId:1,cicloId:1001,cursoId:31,
+    actorUserId:42,funcionarioId:77,edicaoId:7,editionHash:'a'.repeat(64),
+    bindingId:13,latestAttemptId:8,latestAttemptNumber:2,
+    answersHash:'b'.repeat(64),scorePct:85,eventCount:4,distinctLessonCount:4,
+    gerarQualificacaoAoConcluir:qualificacao,
+    qualificacaoTipoId:qualificacao?55:null,qualificacaoCategoriaId:qualificacao?13:null,
+  });
+  const nativeEnv=()=>({
+    ENVIRONMENT:'staging',
+    NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS:'6',
+    NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS:'6',
+    NATIVE_LEARNER_WRITE_ENABLED_TENANTS:'6',
+  });
+
+  it.each([false,true])('Native canonical batch prepends the SQL evidence guard (qualification=%s)',async qual=>{
+    let n=0;
+    const db=makeFakeDb({ historicoLookup:()=> ++n===1 ? null : {id:901} });
+    await completeLmsMatricula(baseParams(db,{
+      env:nativeEnv(),cursoId:31,gerarQualificacaoAoConcluir:qual,
+      qualificacaoTipoId:qual?55:null,qualificacaoCategoriaId:qual?13:null,
+      scoreFinal:85,progressoPct:100,action:'LMS_NATIVE_CANONICAL_CONCLUIDA',
+      nativeTerminalAnchor:nativeAnchor(qual),
+    }) as never);
+    const calls=(db.prepare as ReturnType<typeof vi.fn>).mock.calls
+      .map((args:unknown[])=>String(args[0]));
+    const firstGuard=calls.findIndex(x=>x.startsWith('SELECT json(CASE WHEN')&&
+      x.includes('NATIVE_TERMINAL_STATE_CHANGED'));
+    const firstMutation=calls.findIndex(x=>x.includes('UPDATE lms_matriculas'));
+    expect(firstGuard).toBeGreaterThanOrEqual(0);
+    expect(firstMutation).toBeGreaterThan(firstGuard);
+    expect(db.batch).toHaveBeenCalledTimes(1);
+  });
+
+  it('Native refuses the wrong actor, score, course, progress, action or missing staging flags before batch',async()=>{
+    const db=makeFakeDb({});
+    const base={
+      env:nativeEnv(),cursoId:31,gerarQualificacaoAoConcluir:false,
+      qualificacaoTipoId:null,qualificacaoCategoriaId:null,
+      scoreFinal:85,progressoPct:100,action:'LMS_NATIVE_CANONICAL_CONCLUIDA',
+      nativeTerminalAnchor:nativeAnchor(false),
+    };
+    for (const patch of [
+      {actorUserId:41},{cursoId:32},{scoreFinal:99},
+      {progressoPct:50},{action:'LMS_MATRICULA_CONCLUIDA'},
+      {env:{...nativeEnv(),ENVIRONMENT:'production'}},
+    ]) {
+      await expect(completeLmsMatricula(baseParams(db,{...base,...patch}) as never))
+        .rejects.toMatchObject({code:'NATIVE_TERMINAL_ANCHOR_MISMATCH'});
+    }
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
   it('curso sem qualificação exigida: outcome qualification_not_required, um único batch', async () => {
     const db = makeFakeDb({});
     const result = await completeLmsMatricula(
