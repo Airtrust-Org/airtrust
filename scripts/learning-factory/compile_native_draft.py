@@ -22,6 +22,26 @@ MEDIA_MIME = {
 IDENTIFIER = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$')
 MAX_NATIVE_PREVIEW_ASSET_BYTES = 12 * 1024 * 1024
 
+# Strict design translation of Costa do Sol's authored SCORM families.
+# Unrecognized authoring families are blockers, not silently remapped.
+NATIVE_PRESENTATION_BY_FAMILY = {
+    'cover': 'image-overlay',
+    'editorial-briefing': 'media-right',
+    'comparison': 'media-left',
+    'process': 'wide-top',
+    'synthesis': 'wide-bottom',
+    'video': 'wide-top',
+    'section-map': 'banner-list',
+    'grouped-map': 'banner-list',
+    'checklist': 'banner-list',
+    'visual-explainer': 'double-crop',
+    'interactive-hotspot': 'double-crop',
+    'hotspot': 'double-crop',
+    'scenario': 'editorial-dashboard',
+    'assessment': 'editorial-dashboard',
+    'data-evidence': 'editorial-dashboard',
+}
+
 
 class NativeCompileError(ValueError):
     pass
@@ -271,11 +291,18 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
             raise NativeCompileError('INVALID_SOURCE_REFS')
         unit = {'id': slide_id, 'title': ensure_text(slide.get('title'), 'SLIDE_TITLE', 200),
                 'kind': kind, 'blocks': blocks, 'questionIds': [q['id'] for q in slide_questions]}
+        family = slide.get('family', slide.get('layout'))
+        if family is not None:
+            family_name = ensure_text(family, 'PRESENTATION_FAMILY', 80)
+            template = NATIVE_PRESENTATION_BY_FAMILY.get(family_name)
+            if template is None:
+                raise NativeCompileError('UNSUPPORTED_PRESENTATION_FAMILY')
+            unit['presentationTemplate'] = template
         if source_refs:
             unit['sourceRefs'] = source_refs
         units.append(unit)
         accounted = {'id','title','kind','module','eyebrow','lead','body','media',
-                     'visualAlt','sourceRefs','question','options','questions'}
+                     'visualAlt','sourceRefs','question','options','questions','family','layout'}
         source_fields_unmapped.update(k for k in slide if k not in accounted and k not in converted)
     if len(set(unit['id'] for unit in units)) != len(units):
         raise NativeCompileError('DUPLICATE_SLIDE_ID')
