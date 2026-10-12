@@ -91,7 +91,7 @@ export function classifyChangeSurfaces(files) {
     const name = typeof file === 'string' ? file : file?.filename;
     if (!name || typeof name !== 'string') { surfaces.add('UNKNOWN'); continue; }
     if (/^worker-airtrust\/schema-v2\//.test(name)) surfaces.add('SCHEMA_V2');
-    else if (/^(?:src|worker-airtrust\/src)\/.*(?:\/__tests__\/|\.test\.|\.spec\.)/.test(name) ||
+    else if (/^(?:src|worker-airtrust\/src)\/(?:__tests__\/|.*(?:\/__tests__\/|\.test\.|\.spec\.))/.test(name) ||
              /^scripts\/__tests__\//.test(name)) surfaces.add('CI_OPS');
     else if (/^worker-airtrust\/src\//.test(name) || /^worker-airtrust\/(?:wrangler|package)/.test(name)) surfaces.add('WORKER');
     else if (/^(?:src\/|public\/|index\.html$|vite\.config\.)/.test(name)) surfaces.add('PAGES');
