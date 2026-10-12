@@ -22,6 +22,13 @@ export type NativeBlock =
 
 export type NativeSourceReference = { id: string; label: string; detail: string };
 
+/** Visual-only SCORM-aware layout; never determines enrollment or completion. */
+export const NATIVE_PRESENTATION_TEMPLATES = [
+  'media-right', 'media-left', 'wide-top', 'wide-bottom',
+  'image-overlay', 'banner-list', 'double-crop', 'editorial-dashboard',
+] as const;
+export type NativePresentationTemplate = typeof NATIVE_PRESENTATION_TEMPLATES[number];
+
 export type NativeUnit = {
   id: string;
   title: string;
@@ -29,6 +36,7 @@ export type NativeUnit = {
   blocks: NativeBlock[];
   questionIds: string[];
   sourceRefs?: string[];
+  presentationTemplate?: NativePresentationTemplate;
 };
 
 export type NativeQuestion = {
@@ -211,7 +219,11 @@ export function validateNativeCourseArtifact(input: unknown): NativeCourseArtifa
   const rawUnits = boundedArray(raw.units, MAX_UNITS);
   const units = rawUnits.map((item) => {
     const unit = record(item, 'NATIVE_INVALID_UNIT');
-    keys(unit, ['id', 'title', 'kind', 'blocks', 'questionIds'], ['sourceRefs']);
+    keys(unit, ['id', 'title', 'kind', 'blocks', 'questionIds'], ['sourceRefs', 'presentationTemplate']);
+    if (unit.presentationTemplate !== undefined &&
+        !NATIVE_PRESENTATION_TEMPLATES.some((template) => template === unit.presentationTemplate)) {
+      fail('NATIVE_INVALID_PRESENTATION_TEMPLATE');
+    }
     if (unit.sourceRefs !== undefined) boundedArray(unit.sourceRefs, 100, true).forEach((ref) => text(ref, 250));
     id(unit.id);
     text(unit.title, 200);
