@@ -71,7 +71,7 @@ describe('Native provision transaction is staging-only and unmounted', () => {
     expect(f.statements[1].bindings.slice(1)).toEqual([900,10,6,7]);
     expect(f.statements[0].sql).toContain("ed.status='PUBLISHED'");
     expect(f.statements[1].sql).toContain('JOIN funcionarios f');
-    expect(f.statements[6].sql).toContain("cy"); // covered by sequence assertions below
+    expect(f.statements[6].sql).toContain('INSERT INTO lms_matricula_ciclos');
     expect(f.statements[6].sql).toContain("'LMS','NAO_INICIADO',1");
     expect(f.statements[9].sql).toContain('INSERT INTO lms_native_matricula_edicoes');
     expect(f.statements[12].sql).toContain('NATIVE_PROVISION_ORPHAN_INTENT');
