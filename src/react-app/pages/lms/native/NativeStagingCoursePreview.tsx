@@ -91,7 +91,19 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
           state.ciclo_id !== payload.data.ciclo_id ||
           state.mode !== payload.data.mode ||
           state.completion_supported !== payload.data.completion_supported ||
-          !Number.isSafeInteger(state.next_sequence) || state.next_sequence < 1 ||
+          !Number.isSafeInteger(state.next_sequence) ||
+          state.next_sequence < 1 || state.next_sequence > 10001 ||
+          (state.latest_attempt != null && (
+            !Number.isSafeInteger(state.latest_attempt.attempt_number) ||
+            state.latest_attempt.attempt_number < 1 ||
+            state.latest_attempt.attempt_number > 500 ||
+            typeof state.latest_attempt.assessment_satisfied !== 'boolean' ||
+            (state.latest_attempt.score_pct !== null &&
+              (typeof state.latest_attempt.score_pct !== 'number' ||
+                !Number.isFinite(state.latest_attempt.score_pct) ||
+                state.latest_attempt.score_pct < 0 ||
+                state.latest_attempt.score_pct > 100))
+          )) ||
           !Array.isArray(state.seen_lesson_ids) ||
           state.seen_lesson_ids.some((id) => typeof id !== 'string') ||
           (state.last_visited_unit_id !== null &&

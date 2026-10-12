@@ -161,6 +161,24 @@ describe('Native pilot preview — authenticated read-only React', () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
+  it('rejects malformed resumed grades and out-of-range evidence sequence', async () => {
+    for (const invalid of [
+      { next_sequence: 10002 },
+      { latest_attempt: { attempt_number: 0, score_pct: 50, assessment_satisfied: true } },
+      { latest_attempt: { attempt_number: 1, score_pct: 120, assessment_satisfied: true } },
+      { latest_attempt: { attempt_number: 1, score_pct: null, assessment_satisfied: 'true' } },
+    ]) {
+      api.fetchWithAuth.mockReset();
+      api.fetchWithAuth
+        .mockResolvedValueOnce(response(payload()))
+        .mockResolvedValueOnce(response(resume(invalid)));
+      const view = render(<NativeStagingCoursePreview matriculaId={101} />);
+      expect(await screen.findByRole('alert')).toHaveTextContent('Prévia nativa indisponível');
+      expect(screen.queryByRole('heading', { name: 'Treinamento NR-6' })).toBeNull();
+      view.unmount();
+    }
+  });
+
   it('rejects a resume snapshot with an unknown visited unit', async () => {
     api.fetchWithAuth
       .mockResolvedValueOnce(response(payload()))
