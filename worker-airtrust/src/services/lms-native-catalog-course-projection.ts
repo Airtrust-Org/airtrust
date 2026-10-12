@@ -54,3 +54,29 @@ export async function projectNativeCatalogCourses<T extends Record<string, unkno
     return { ...row, tipo_conteudo: 'native' };
   });
 }
+
+/** Reclassify enrollment rows by their course_id, not the matrícula id. */
+export async function projectNativeCatalogEnrollments<T extends Record<string, unknown>>(
+  env: Env, empresaId: number, rows: readonly T[],
+): Promise<T[]> {
+  if (!rows.length || !canReadNativeCatalogActivation(env, empresaId)) return [...rows];
+  const courses = new Map<number, string>();
+  for (const row of rows) {
+    const id = Number(row.curso_id);
+    const type = String(row.tipo_conteudo ?? '').trim().toLowerCase();
+    if (!Number.isSafeInteger(id) || id <= 0 ||
+        !['scorm','native','h5p','pdf','pptx','video'].includes(type) ||
+        (courses.has(id) && courses.get(id) !== type)) {
+      throw new ApiError('Matrícula com identidade de curso inválida.', 503,
+        'NATIVE_CATALOG_INVALID_ENROLLMENT_COURSE');
+    }
+    courses.set(id,type);
+  }
+  const projected = await projectNativeCatalogCourses(env, empresaId,
+    [...courses].map(([id, tipo_conteudo]) => ({ id, tipo_conteudo })));
+  const effective = new Map(projected.map(row => [row.id, row.tipo_conteudo]));
+  return rows.map(row => {
+    const type = effective.get(Number(row.curso_id));
+    return type === row.tipo_conteudo ? row : { ...row, tipo_conteudo: type };
+  });
+}

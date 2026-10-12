@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { projectNativeCatalogCourses } from '../../services/lms-native-catalog-course-projection';
+import { projectNativeCatalogCourses, projectNativeCatalogEnrollments } from '../../services/lms-native-catalog-course-projection';
 import type { Env } from '../../types';
 
 const courses = [
@@ -67,6 +67,39 @@ describe('Native catalog API effective type projection', () => {
     await expect(projectNativeCatalogCourses(env, 6, [
       { id: 8, tipo_conteudo: 'scorm' }, { id: 8, tipo_conteudo: 'scorm' },
     ])).rejects.toMatchObject({ code: 'NATIVE_CATALOG_INVALID_COURSE_IDS' });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+});
+
+describe('Native enrollment effective-type projection uses curso_id', () => {
+  it('deduplicates different matricula IDs for one course', async () => {
+    const { env, bind } = setup([{ curso_id: 9 }]);
+    const rows = [
+      { id: 101, curso_id: 9, tipo_conteudo: 'scorm' },
+      { id: 102, curso_id: 9, tipo_conteudo: 'scorm' },
+      { id: 103, curso_id: 8, tipo_conteudo: 'scorm' },
+    ];
+    const result = await projectNativeCatalogEnrollments(env,6,rows);
+    expect(result.map(x=>x.tipo_conteudo)).toEqual(['native','native','scorm']);
+    expect(result.map(x=>x.id)).toEqual([101,102,103]);
+    expect(bind).toHaveBeenCalledWith(6,9,8);
+    expect(rows[0].tipo_conteudo).toBe('scorm');
+  });
+  it('keeps SCORM unchanged without flag or on production', async () => {
+    const rows=[{id:101,curso_id:9,tipo_conteudo:'scorm'}];
+    for (const [flag,envType] of [['','staging'],['6','production']] as const) {
+      const {env,prepare}=setup([{curso_id:9}],flag,envType);
+      expect(await projectNativeCatalogEnrollments(env,6,rows)).toEqual(rows);
+      expect(prepare).not.toHaveBeenCalled();
+    }
+  });
+  it('fails closed for invalid course IDs or conflicting course types', async () => {
+    const {env,prepare}=setup([]);
+    await expect(projectNativeCatalogEnrollments(env,6,[{curso_id:-1,tipo_conteudo:'scorm'}]))
+      .rejects.toMatchObject({code:'NATIVE_CATALOG_INVALID_ENROLLMENT_COURSE'});
+    await expect(projectNativeCatalogEnrollments(env,6,[
+      {curso_id:9,tipo_conteudo:'scorm'},{curso_id:9,tipo_conteudo:'pdf'},
+    ])).rejects.toMatchObject({code:'NATIVE_CATALOG_INVALID_ENROLLMENT_COURSE'});
     expect(prepare).not.toHaveBeenCalled();
   });
 });

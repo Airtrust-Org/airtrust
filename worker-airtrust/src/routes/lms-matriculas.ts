@@ -7,6 +7,7 @@
  * - Geração automática de qualificação ao concluir
  */
 import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-guard';
+import { projectNativeCatalogEnrollments } from '../services/lms-native-catalog-course-projection';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -74,11 +75,9 @@ import {
 } from '../services/lms-matricula-runtime-domain';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
-
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 app.route('/convites', lmsMatriculasConvitesRoutes);
-
 function getCallerFuncionarioId(c: Context): number | null {
   const raw = c.get('funcionarioId' as never) as unknown;
   const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
@@ -406,7 +405,7 @@ app.get('/minhas-ead', async (c) => {
     .bind(funcionarioId, empresaId)
     .all<Record<string, unknown>>();
 
-  const data = (rows.results ?? []).map((row) => {
+  const data = (await projectNativeCatalogEnrollments(c.env, empresaId, rows.results ?? [])).map((row) => {
     const effectiveProgress = resolveLmsEffectiveProgress({
       status: row.status as string | null,
       progressoBruto: row.progresso_pct as number | null,
@@ -467,7 +466,7 @@ app.get('/minhas', async (c) => {
     .bind(funcionarioId, empresaId, limit, offset)
     .all<Record<string, unknown>>();
 
-  const data = (rows.results ?? []).map((row) => {
+  const data = (await projectNativeCatalogEnrollments(c.env, empresaId, rows.results ?? [])).map((row) => {
     const effectiveProgress = resolveLmsEffectiveProgress({
       status: row.status as string | null,
       progressoBruto: row.progresso_pct as number | null,
@@ -602,7 +601,7 @@ app.get('/:id', async (c) => {
   const canManage = hasRole(c, 'admin', 'manager');
   const callerFuncionarioId = canManage ? null : await resolveCallerFuncionarioId(c, db);
 
-  const matricula = await db
+  let matricula = await db
     .prepare(
       `
       SELECT m.*, c.titulo, c.tipo_conteudo, c.scorm_versao, c.scorm_launch_file, c.scorm_package_r2_prefix,
@@ -652,6 +651,7 @@ app.get('/:id', async (c) => {
     }
   }
 
+  [matricula] = await projectNativeCatalogEnrollments(c.env, empresaId, [matricula]);
   const tipoConteudo = (matricula.tipo_conteudo as string) ?? 'scorm';
 
   // Para SCORM: retornar progresso SCORM
