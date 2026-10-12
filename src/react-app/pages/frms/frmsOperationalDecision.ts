@@ -176,6 +176,7 @@ export function resolveFrmsCoordinationGuidance(
   const base = { requiresCheckin, checkinComplete, checkinLabel };
   const fortnight = item.fortnight_indicator;
   const isCritical = item.estado_operacional === 'CRITICO_VIOLACAO' ||
+    item.snapshot_status === 'CRITICO' ||
     fortnight?.status_quinzena === 'CRITICO';
   const serious = item.estado_operacional === 'MITIGACAO_NECESSARIA';
   const fortnightNeedsReview = fortnight?.status_quinzena === 'ATENCAO';
