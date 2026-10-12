@@ -15,7 +15,7 @@ import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lm
 
 const app=new Hono<{Bindings:Env}>();
 const ID=/^[1-9][0-9]{0,15}$/;
-function completionEnabled(env:Env,tenant:number):boolean{
+export function canCompleteNative(env:Env,tenant:number):boolean{
   const allowlist=env.NATIVE_COMPLETION_WRITE_ENABLED_TENANTS;
   return canProvisionNative(env,tenant) && !!allowlist && !allowlist.includes('*') &&
     allowlist.split(',').some(p=>p.trim()===String(tenant));
@@ -24,7 +24,7 @@ function completionEnabled(env:Env,tenant:number):boolean{
 app.post('/matriculas/:matriculaId/concluir',async c=>{
   c.header('Cache-Control','private, no-store');
   const empresaId=getEmpresaIdSafe(c);
-  if(!completionEnabled(c.env,empresaId)){
+  if(!canCompleteNative(c.env,empresaId)){
     return c.json({success:false,code:'NATIVE_COMPLETION_NOT_ENABLED'},404);
   }
   const raw=c.req.param('matriculaId');

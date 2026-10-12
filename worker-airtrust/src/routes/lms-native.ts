@@ -15,7 +15,7 @@ import { loadNativeVerifiedAsset } from '../services/lms-native-asset-loader';
 import nativeWriteRoutes, { canWriteNative } from './lms-native-write';
 import nativeEnrollmentRoutes from './lms-native-enrollment';
 import nativeCompletionPreflightRoutes from './lms-native-completion-preflight';
-import nativeCompletionRoutes from './lms-native-completion';
+import nativeCompletionRoutes, { canCompleteNative } from './lms-native-completion';
 import {
   NativeAdmissionError,
   resolveNativeEnrollmentAdmission,
@@ -109,8 +109,9 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
         course: published.course,
         // Client capability hints never replace the exact-tenant server checks on POST.
         evidence_write_enabled: canWriteNative(c.env, empresaId) && published.mode === 'LEARN',
-        // Progress, grading and native certificate endpoints are not enabled.
-        completion_supported: false,
+        // This capability flag is server-owned, exact-tenant, staging only.
+        // It does not imply that certificate issuance already succeeded.
+        completion_supported: canCompleteNative(c.env, empresaId) && published.mode === 'LEARN',
       },
     });
   } catch (error) {
@@ -174,7 +175,7 @@ app.get('/matriculas/:matriculaId/sessao', async (c) => {
           score_pct: summary.latestAttempt.scorePct,
           assessment_satisfied: summary.latestAttempt.assessmentSatisfied,
         } : null,
-        completion_supported: false,
+        completion_supported: canCompleteNative(c.env, empresaId) && summary.mode === 'LEARN',
       },
     });
   } catch (error) {
