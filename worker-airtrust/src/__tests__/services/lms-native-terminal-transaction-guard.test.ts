@@ -30,6 +30,7 @@ describe('Native terminal guard is an atomic D1 assertion, NOT completion', () =
     expect(built.sql).toContain('att.assessment_satisfied=1');
     expect(built.sql).toContain('newer.tentativa_numero>att.tentativa_numero');
     expect(built.sql).toContain('qc.empresa_id=qt.empresa_id');
+    expect(built.sql).toContain('qc.lms_integrada=1');
     expect(built.sql).not.toMatch(/(?:UPDATE|DELETE|INSERT)\s+(?:INTO|lms_)/);
   });
   it('declares an unqualified course only with zero qualification identifiers', () => {
