@@ -140,11 +140,13 @@ describe('Native V1 staging-only content preview route', () => {
       {completion:'6',catalog:'6',write:''},
       {completion:'60',catalog:'6',write:'6'},
       {completion:'*',catalog:'6',write:'6'},
-      {completion:'6',environment:'production'},
     ]) {
       const r = await fetchRoute(args);
       expect((await r.json() as {data:{completion_supported:boolean}}).data.completion_supported).toBe(false);
     }
+    const production=await fetchRoute({completion:'6',environment:'production'});
+    expect(production.status).toBe(404);
+    expect(await production.json()).toMatchObject({code:'NATIVE_PLAYER_NOT_ENABLED'});
     const enabled=await fetchRoute({completion:'6',catalog:'6',write:'6'});
     expect((await enabled.json() as {data:{completion_supported:boolean}}).data.completion_supported).toBe(true);
     mocks.load.mockResolvedValueOnce({
