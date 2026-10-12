@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import NativeCoursePreview from '@/react-app/pages/lms/native/NativeCoursePreview';
+import NativeCoursePreview, { selectNativeLessonTemplate } from '@/react-app/pages/lms/native/NativeCoursePreview';
 import type { NativeLearnerCourse } from '../../worker-airtrust/src/lib/lms/lms-native-course-contract';
 
 const course: NativeLearnerCourse = {
@@ -34,6 +34,40 @@ const course: NativeLearnerCourse = {
 };
 
 describe('NativeCoursePreview — display only', () => {
+  it('selects all eight approved 16:9 layouts across source lessons without altering grading', () => {
+    const expected = ['media-right', 'media-left', 'wide-top', 'wide-bottom',
+      'image-overlay', 'banner-list', 'double-crop', 'editorial-dashboard'];
+    const lesson: NativeLearnerCourse['units'][number] = {
+      id: 'source-lesson', kind: 'lesson', title: 'Operações de segurança',
+      questionIds: [], blocks: [
+        { type: 'paragraph', text: 'Treinamento da Costa do Sol' },
+        { type: 'image', assetId: 'hero', alt: 'Helicóptero' },
+      ],
+    };
+    expect(expected.map((_, i) => selectNativeLessonTemplate(i, lesson))).toEqual(expected);
+    expect(selectNativeLessonTemplate(6, { ...lesson, blocks: [
+      { type: 'video', assetId: 'hero', alt: 'Vídeo original' },
+    ] })).toBe('media-right');
+    expect(selectNativeLessonTemplate(1, { ...lesson, blocks: [
+      { type: 'paragraph', text: 'Conteúdo sem fotografia' },
+    ] })).toBe('editorial-dashboard');
+    const dense = { ...lesson, blocks: [
+      { type: 'paragraph' as const, text: 'Texto técnico completo. '.repeat(100) },
+      { type: 'image' as const, assetId: 'hero', alt: 'Contexto real' },
+    ] };
+    expect(selectNativeLessonTemplate(4, dense)).toBe('media-right');
+  });
+
+  it('shows Costa do Sol SCORM identity for its courses, without branding another tenant', () => {
+    const source = { ...course, courseId: 'costa-do-sol-nr6-epi' };
+    const { unmount } = render(<NativeCoursePreview course={source} resolveAssetHref={() => null} />);
+    expect(screen.getByRole('img', { name: 'Costa do Sol Táxi Aéreo' })).toHaveAttribute(
+      'src', '/branding/costa-do-sol-scorm.svg');
+    unmount();
+    render(<NativeCoursePreview course={course} resolveAssetHref={() => null} />);
+    expect(screen.queryByRole('img', { name: 'Costa do Sol Táxi Aéreo' })).not.toBeInTheDocument();
+  });
+
   it('renders content literally and does not execute user-authored markup', () => {
     const resolve = vi.fn(() => '/api/lms/native/assets/hero');
     const { container } = render(<NativeCoursePreview course={course} resolveAssetHref={resolve} />);
