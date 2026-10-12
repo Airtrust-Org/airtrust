@@ -64,6 +64,7 @@ import {
 import { uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
 import { createNativeEnrollment } from './lmsNativeEnrollment';
 import { getLmsPlayerRoute } from './lmsPlayerRoute';
+import { shouldShowLmsEnrollmentDeadline } from './lmsEnrollmentDeadline';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -1445,7 +1446,9 @@ function CourseCard({
   const typeMeta = getTypeMeta(curso.tipo_conteudo);
   const previewPath = canManage ? getAdminCoursePreviewPath(curso) : null;
   const enrollmentProgress = getEnrollmentProgress(matricula);
-  const deadlineMeta = !canManage ? getEnrollmentDeadlineMeta(matricula?.data_expiracao) : null;
+  const deadlineMeta = !canManage && shouldShowLmsEnrollmentDeadline(matricula?.status, matricula?.data_expiracao)
+    ? getEnrollmentDeadlineMeta(matricula?.data_expiracao)
+    : null;
   const statusMeta = canManage
     ? getMatriculaStatusMeta(curso.publicado ? 'PUBLICADO' : 'RASCUNHO')
     : !matricula || matricula.status === 'CANCELADO'
