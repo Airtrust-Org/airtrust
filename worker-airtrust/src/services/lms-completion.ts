@@ -345,6 +345,26 @@ export function buildCompletionBatchStatements(
   const statements: { sql: string; args: unknown[] }[] = [];
   const needsInsert = !pre.existingHistoricoId;
 
+  if (!needsInsert) {
+    // Preflight alone cannot authorize an existing qualification: its status,
+    // owner or date may change before the canonical D1.batch begins.
+    // Keep this assertion in the SAME transaction, BEFORE any LMS/history
+    // mutation; invalid JSON deliberately aborts the entire batch.
+    statements.push({
+      sql: `SELECT json(CASE WHEN EXISTS (
+              SELECT 1 FROM qualificacoes_historico
+               WHERE id = ? AND empresa_id = ? AND funcionario_id = ?
+                 AND qualificacao_codigo = ? AND data_conclusao = ?
+                 AND deleted_at IS NULL AND status = ?
+                 AND status IN ('CONCLUIDA', 'PLANEJADA', 'PLANEJADO')
+            ) THEN 'null' ELSE 'LMS_QUALIFICATION_REUSE_STATE_CHANGED' END)`,
+      args: [
+        pre.existingHistoricoId, params.empresaId, params.funcionarioId,
+        qualificacaoCodigo, params.dataConclusao, pre.existingHistoricoStatus,
+      ],
+    });
+  }
+
   if (needsInsert) {
     const validadeMeses =
       typeof params.validade === 'number' && params.validade > 0 ? params.validade : null;
