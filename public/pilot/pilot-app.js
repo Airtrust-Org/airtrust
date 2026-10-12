@@ -8,6 +8,7 @@ import { PILOT_OFFLINE_APP_VERSION } from '/pilot/pilot-lease-trust.js';
 import {
   applySafeStageAggregates,
   applyStageContinuity,
+  applyStandardPassengerBaggageWeight,
   assertPackageIdentity,
   buildCommonFlightFields,
   assertVerifiedLeaseAllowsDraft,
@@ -1835,8 +1836,9 @@ async function getCoordinationState() {
   );
   const justificationBlocker =
     packageRequiredJustificationMinutes > 0 &&
+    packageAssignedJustificationMinutes > 0 &&
     packageAssignedJustificationMinutes !== packageRequiredJustificationMinutes
-      ? 'A diferença entre o voo planejado e o realizado precisa ser justificada exatamente antes de finalizar.'
+      ? 'Se optar por justificar, os minutos precisam fechar a diferença. Também é possível concluir sem justificativas.'
       : null;
 
   const editableWorkflow = ['rascunho', 'devolvido'].includes(
@@ -2494,7 +2496,7 @@ function validatePlanningJustifications(packageData, stageDrafts, justifications
   const errors = [];
   const requiredMinutes = requiredJustificationMinutes(packageData, stageDrafts);
   const rows = Array.isArray(justifications) ? justifications : [];
-  if (requiredMinutes <= 0) return errors;
+  if (requiredMinutes <= 0 || rows.length === 0) return errors;
 
   const usedCodes = new Set();
   rows.forEach((item, index) => {
@@ -4290,10 +4292,10 @@ function renderRdvFormFields() {
   headingNote.textContent =
     'Planejado ' + minutesToHhMm(plannedMinutes) +
     ' · Tempo total realizado ' + minutesToHhMm(realizedMinutes) +
-    ' · Diferença a justificar ' + String(requiredMinutes) + ' min.';
+    ' · Desvio ' + String(requiredMinutes) + ' min (justificativa opcional).';
   const sourceGuidance = document.createElement('span');
   sourceGuidance.className = 'field-note justification-guidance';
-  sourceGuidance.textContent = 'Busque sempre a causa raiz do motivo do atraso.';
+  sourceGuidance.textContent = 'Opcional. Caso registre um motivo, escolha a causa operacional real do desvio.';
   justificationTitle.append(headingStrong, headingNote, sourceGuidance);
   const addJustification = document.createElement('button');
   addJustification.type = 'button';
@@ -4318,14 +4320,16 @@ function renderRdvFormFields() {
 
   const status = document.createElement('div');
   const remaining = requiredMinutes - assignedMinutes;
-  status.className = 'statusline ' + (requiredMinutes === assignedMinutes ? 'ok' : 'attention');
+  status.className = 'statusline ' + (assignedMinutes === 0 || remaining === 0 ? 'ok' : 'attention');
   status.textContent = requiredMinutes <= 0
     ? 'O tempo realizado não excede o planejado. Nenhuma justificativa é necessária.'
-    : remaining === 0
-      ? 'Justificativas fecham exatamente os ' + String(requiredMinutes) + ' minutos de diferença.'
-      : remaining > 0
-        ? 'Ainda faltam justificar ' + String(remaining) + ' minuto(s).'
-        : 'As justificativas excedem a diferença em ' + String(Math.abs(remaining)) + ' minuto(s).';
+    : assignedMinutes === 0
+      ? 'Justificativa opcional: você pode concluir o voo sem selecionar um motivo.'
+      : remaining === 0
+        ? 'Justificativas fecham exatamente os ' + String(requiredMinutes) + ' minutos de diferença.'
+        : remaining > 0
+          ? 'Justificativas preenchidas: ainda faltam ' + String(remaining) + ' minuto(s).'
+          : 'As justificativas excedem a diferença em ' + String(Math.abs(remaining)) + ' minuto(s).';
   justificationPanel.append(status);
 
   const options = (Array.isArray(packageData?.catalogos?.justificativas_voo)
@@ -4417,14 +4421,16 @@ function refreshStageDerivedTimes(stageDraft) {
     fields.horario_motor_ligado,
     fields.horario_motor_desligado || fields.horario_pouso,
   );
-  fields.starts = String(fields.horario_motor_ligado || '').trim() ? '1' : '';
   const totalWeight = calcStageTotalWeight(fields);
   fields.peso_total = totalWeight === null ? '' : String(totalWeight);
 }
 
 function refreshAllStageDerivedTimes() {
   applyStageContinuity(activeStageDrafts);
-  for (const stageDraft of activeStageDrafts) refreshStageDerivedTimes(stageDraft);
+  for (const stageDraft of activeStageDrafts) {
+    applyStandardPassengerBaggageWeight(stageDraft.fields || {});
+    refreshStageDerivedTimes(stageDraft);
+  }
 }
 
 function applyQuickTiming(stage, field, action) {
@@ -4534,6 +4540,28 @@ function renderStageFields() {
   }
   card.append(quick);
 
+  // Opção por etapa, desmarcada por padrão; nunca sobrescrever peso real sem opt-in.
+  const standardWeightOption = document.createElement('label');
+  standardWeightOption.className = 'pilot-standard-weight-toggle';
+  const standardWeightCheck = document.createElement('input');
+  standardWeightCheck.type = 'checkbox';
+  standardWeightCheck.checked = fields.peso_padrao_ativo === true;
+  standardWeightCheck.disabled = operationalSyncInFlight;
+  const standardWeightCaption = document.createElement('span');
+  standardWeightCaption.textContent = 'Utilizar peso padrão (180 lb passageiro + 20 lb bagagem por pessoa)';
+  standardWeightOption.append(standardWeightCheck, standardWeightCaption);
+  standardWeightCheck.addEventListener('change', () => {
+    fields.peso_padrao_ativo = standardWeightCheck.checked;
+    if (standardWeightCheck.checked) applyStandardPassengerBaggageWeight(fields);
+    // Desmarcar preserva valores; editar pesos também desmarca automaticamente.
+    refreshAllStageDerivedTimes();
+    activeRdvDraft.form = applySafeStageAggregates(activeRdvDraft.form, activeStageDrafts);
+    scheduleOperationalSave();
+    renderStageFields();
+    refreshDraftValidationPresentation();
+  });
+  card.append(standardWeightOption);
+
   refreshAllStageDerivedTimes();
   const grid = document.createElement('div');
   grid.className = 'editor-grid';
@@ -4553,7 +4581,7 @@ function renderStageFields() {
     ['Tempo total', 'tempo_total', 'text', null, true, false, 'Calculado: partida → corte; sem corte, partida → pouso'],
     ['IFR (duração)', 'tempo_ifr', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
     ['Noturno (duração)', 'tempo_noturno', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
-    ['Partidas', 'starts', 'number', 'numeric', true, false, 'Calculado automaticamente pela hora de partida'],
+    ['Partidas', 'starts', 'number', 'numeric', false, false, 'Informe 0 quando não houver novo acionamento dos motores nesta etapa'],
     ['Passageiros', 'pax', 'number', 'numeric', false, false, 'Quantidade de passageiros'],
     ['Peso dos passageiros', 'peso_passageiros', 'number', 'decimal', false, false, null],
     ['Peso da bagagem', 'peso_bagagem', 'number', 'decimal', false, false, null],
@@ -4587,11 +4615,16 @@ function renderStageFields() {
         readOnly,
         note: readOnly
           ? 'Calculado automaticamente e exibido em lb e kg.'
-          : 'Digite em lb ou kg; a outra unidade é calculada automaticamente.',
+          : key === 'peso_passageiros'
+             ? 'Peso padrão ativado: 180 lb por passageiro. Editar desmarca o padrão.'
+             : key === 'peso_bagagem'
+               ? 'Peso padrão ativado: 20 lb de bagagem por passageiro. Editar desmarca o padrão.'
+               : 'Digite em lb ou kg; a outra unidade é calculada automaticamente.',
         onChangeLb: readOnly
           ? null
           : (value) => {
               fields[key] = value;
+              if (key === 'peso_passageiros' || key === 'peso_bagagem') fields.peso_padrao_ativo = false;
               if (key === 'payload') fields.unidade_payload = 'LB';
               else fields.unidade_peso = 'LB';
               refreshAllStageDerivedTimes();
@@ -4624,7 +4657,12 @@ function renderStageFields() {
         ? null
         : (value) => {
             fields[key] = value;
-            if (key === 'horario_motor_ligado') stageDraft.continuity_start_derived = false;
+            if (key === 'horario_motor_ligado') {
+              stageDraft.continuity_start_derived = false;
+              if (index === 0 && value && String(fields.starts ?? '').trim() === '') fields.starts = '1';
+            }
+            if (key === 'starts') stageDraft.starts_auto_derived = false;
+            if (key === 'pax') applyStandardPassengerBaggageWeight(fields);
             if (key === 'combustivel_inicio' && index > 0) {
               const previousFields = activeStageDrafts[index - 1]?.fields || {};
               previousFields.combustivel_fim = value;
@@ -4791,6 +4829,12 @@ function addOperationalFueling() {
 function renderFuelingFields() {
   rdvFuelingFields.replaceChildren();
   const fuelings = Array.isArray(activeRdvDraft.fuelings) ? activeRdvDraft.fuelings : [];
+  if (fuelings.length === 0) {
+    const notice = document.createElement('p');
+    notice.className = 'field-note';
+    notice.textContent = 'Sem abastecimentos. Use “+ Incluir nota” quando houver uma nota de abastecimento.';
+    rdvFuelingFields.append(notice);
+  }
   fuelings.forEach((fueling, index) => {
     const card = document.createElement('section');
     card.className = 'editor-stage';
@@ -4835,6 +4879,20 @@ function renderFuelingFields() {
       }));
     }
     card.append(grid);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'secondary stage-delete';
+    remove.textContent = 'Excluir nota do rascunho';
+    remove.disabled = operationalSyncInFlight;
+    remove.addEventListener('click', () => {
+      if (!fuelingRowIsEmpty(fueling) &&
+        !window.confirm('Excluir esta nota do rascunho local? Notas já recebidas pelo servidor não serão excluídas.')) return;
+      activeRdvDraft.fuelings.splice(index, 1);
+      scheduleOperationalSave();
+      renderFuelingFields();
+      refreshDraftValidationPresentation();
+    });
+    card.append(remove);
     rdvFuelingFields.append(card);
   });
 }

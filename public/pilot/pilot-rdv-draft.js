@@ -195,6 +195,17 @@ export function convertWeight(value, fromUnit, toUnit) {
   return null;
 }
 
+/** Peso opcional estimado: 180 lb por pessoa e 20 lb de bagagem por pessoa. */
+export function applyStandardPassengerBaggageWeight(fields) {
+  if (fields?.peso_padrao_ativo !== true) return false;
+  const pax = parseNumber(fields.pax);
+  if (!Number.isInteger(pax) || pax < 0) return false;
+  fields.peso_passageiros = String(pax * 180);
+  fields.peso_bagagem = String(pax * 20);
+  fields.unidade_peso = 'LB';
+  return true;
+}
+
 export function calcStageTotalWeight(fields) {
   const unit = String(fields?.unidade_peso || '').trim().toUpperCase();
   const emptyWeight = parseNumber(fields?.peso_vazio);
@@ -391,14 +402,7 @@ export function buildDraftSnapshot(packageData, previousSequence = 0) {
       form: buildRdvFormFromPackage(packageData),
       common: buildCommonFlightFields(packageData),
       flight_update: {},
-      fuelings: [{
-        local_id: crypto.randomUUID(),
-        hora: toInputTime(now),
-        etapa_numero: Number(buildStageDraftsFromPackage(packageData)[0]?.numero_etapa || 1),
-        empresa_abastecimento_codigo: '',
-        numero_nota: '',
-        litros_abastecidos: '',
-      }],
+      fuelings: [],
       justifications: (Array.isArray(packageData?.justificativas) ? packageData.justificativas : []).map((item) => ({
         local_id: crypto.randomUUID(),
         justificativa_codigo: String(item?.codigo || ''),
@@ -587,7 +591,10 @@ export function applyStageContinuity(stageDrafts) {
     // Uma nova partida só existe quando houve corte ao fim da etapa anterior.
     // Se o motor permaneceu ligado entre duas pernas, a etapa seguinte não
     // acrescenta uma partida ao total do voo.
-    current.starts = previousCut ? 1 : 0;
+    if (String(current.starts ?? '').trim() === '' || currentDraft?.starts_auto_derived === true) {
+      current.starts = previousCut ? '1' : '0';
+      if (canTrackDerived) currentDraft.starts_auto_derived = true;
+    }
 
     // Continuidade operacional obrigatória entre pernas: o combustível final
     // de uma perna é sempre o combustível inicial da perna seguinte.

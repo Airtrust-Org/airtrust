@@ -59,6 +59,13 @@ describe('Controle de Voos RDV planning deviation finalization guard', () => {
     });
   });
 
+  it('permite finalização com desvio positivo e nenhuma justificativa', async () => {
+    const db = makeDb([
+      { horario_motor_ligado: '10:00', horario_decolagem: '10:05', horario_pouso: '12:00', horario_motor_desligado: '12:05' },
+    ], 0);
+    await expect(assertPlanningDeviationJustified(db, 7, flight)).resolves.toBeUndefined();
+  });
+
   it('allows finalization when justification minutes exactly equal the positive total-time deviation', async () => {
     const db = makeDb(
       [
