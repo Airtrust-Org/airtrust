@@ -35,7 +35,7 @@ function call(opts: { environment?: string; create?: string; preview?: string;
   anonymous?: boolean; course?: string; body?: string } = {}) {
   const root = new Hono<{ Bindings: Env }>();
   root.route('/api/lms/native', nativeRoutes);
-  const headers = opts.anonymous ? {} : {
+  const headers: Record<string,string> = opts.anonymous ? {} : {
     'x-test-user': String(opts.user ?? 900), 'x-test-tenant': String(opts.company ?? 6),
   };
   return root.fetch(new Request('http://localhost/api/lms/native/cursos/' +

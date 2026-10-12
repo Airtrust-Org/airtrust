@@ -77,7 +77,7 @@ export async function selectNativeEnrollmentEdition(params: {
   }
   let artifact: unknown;
   try {
-    artifact = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    artifact = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes));
     const verified = validateNativeCourseArtifact(artifact);
     if (verified.packageVersion !== edition.package_version) {
       throw new Error('version mismatch');
