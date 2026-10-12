@@ -270,7 +270,7 @@ export default function NativeCoursePreview({
                                   ? 'border-[#e65300] bg-[#fff1e6] shadow-[0_0_0_1px_#e65300]'
                                   : 'border-[#d8e4ec] bg-white hover:border-[#e9a077]')
                               }>
-                              <input type="radio" name={question.id} value={option.id}
+                              <input type="radio" name={question.id} value={option.id} aria-label={option.text}
                                 checked={choices[question.id] === option.id}
                                 onChange={() => setChoices((current) => ({ ...current, [question.id]: option.id }))}
                                 className="sr-only" />
