@@ -78,7 +78,8 @@ def fixture():
         active INTEGER NOT NULL DEFAULT 1,deleted_at TEXT);
       CREATE TABLE qualificacoes_categorias(
         id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,
-        ativo INTEGER NOT NULL DEFAULT 1,deleted_at TEXT);
+        ativo INTEGER NOT NULL DEFAULT 1,lms_integrada INTEGER NOT NULL DEFAULT 0,
+        deleted_at TEXT);
       CREATE TABLE qualificacoes_tipos(
         id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,
         categoria_id INTEGER REFERENCES qualificacoes_categorias(id),
@@ -108,7 +109,7 @@ def fixture():
       VALUES(10,6,'scorm'),(11,6,'scorm'),(12,7,'scorm');
       INSERT INTO funcionarios(id,empresa_id) VALUES(69,6),(70,7),(71,6);
       INSERT INTO usuarios(id,funcionario_id) VALUES(900,69),(901,70),(902,71);
-      INSERT INTO qualificacoes_categorias(id,empresa_id) VALUES(45,6),(46,7);
+      INSERT INTO qualificacoes_categorias(id,empresa_id,lms_integrada) VALUES(45,6,1),(46,7,0);
       INSERT INTO qualificacoes_tipos(id,empresa_id,categoria_id) VALUES(44,6,45);
     """)
     # 0550 stays byte-for-byte versioned. The 0551 review-only candidate
