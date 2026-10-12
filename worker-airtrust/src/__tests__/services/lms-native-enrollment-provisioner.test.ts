@@ -81,7 +81,7 @@ describe('Native provision transaction is staging-only and unmounted', () => {
     expect(f.statements.every(stmt => !/certificados|qualificacoes_historico/.test(stmt.sql))).toBe(true);
   });
   it('never reports enrollment success after a failed batch or mixed changes', async () => {
-    for (const opts of [{ failBatch: true, row: null }, { changes: 0 }]) {
+    for (const opts of [{ failBatch: true, row: null }, { changes: 0, row: null }]) {
       const f = harness(opts);
       await expect(f.execute()).rejects.toMatchObject({ code: 'NATIVE_PROVISION_ATOMIC_REJECTED' });
     }
