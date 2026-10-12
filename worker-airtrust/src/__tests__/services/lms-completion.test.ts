@@ -15,7 +15,7 @@ vi.mock('../../services/ensure-certificate', () => ({
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../../services/lms-completion';
 
 function makeFakeDb(options: {
-  historicoLookup?: () => { id: number } | null;
+  historicoLookup?: () => { id: number; status?: string | null } | null;
   cycleLookup?: () => { id: number } | null;
   maxCiclo?: number;
   typeCategoryId?: number | null;
@@ -217,7 +217,7 @@ describe('completeLmsMatricula', () => {
   });
 
   it('Histórico já vinculado (existingHistoricoId): outcome qualification_reused, sem novo lookup pré-batch', async () => {
-    const db = makeFakeDb({ historicoLookup: () => ({ id: 777 }) });
+    const db = makeFakeDb({ historicoLookup: () => ({ id: 777, status: 'CONCLUIDA' }) });
 
     const result = await completeLmsMatricula(
       baseParams(db, { existingHistoricoId: 777 }) as never,
@@ -226,6 +226,39 @@ describe('completeLmsMatricula', () => {
     expect(result.outcome).toBe('qualification_reused');
     expect(result.qualificacaoHistoricoId).toBe(777);
   });
+
+  it.each(['CANCELADA', 'RENOVADA', null])(
+    'rejeita histórico existente com status não reutilizável (%s)', async (status) => {
+      const db = makeFakeDb({
+        historicoLookup: () => ({ id: 777, status }),
+      });
+      await expect(completeLmsMatricula(
+        baseParams(db, { existingHistoricoId: 777 }) as never,
+      )).rejects.toMatchObject({ code: 'LMS_QUALIFICATION_STATUS_INCOMPATIBLE' });
+      expect(db.batch).not.toHaveBeenCalled();
+      expect(ensureCertificateForQualificationMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['CANCELADA', 'RENOVADA', null])(
+    'corrida UNIQUE não reaproveita histórico inválido (%s)', async (status) => {
+      let lookupCount = 0;
+      const db = makeFakeDb({
+        historicoLookup: () => ++lookupCount === 1
+          ? null : { id: 999, status },
+        batchImpl: async () => {
+          throw new Error(
+            'D1_ERROR: UNIQUE constraint failed: qualificacoes_historico.funcionario_id, qualificacoes_historico.qualificacao_codigo, qualificacoes_historico.data_conclusao',
+          );
+        },
+      });
+      await expect(completeLmsMatricula(baseParams(db) as never))
+        .rejects.toMatchObject({ code: 'LMS_QUALIFICATION_STATUS_INCOMPATIBLE' });
+      // Rejection audit is allowed; no second terminal D1.batch may run.
+      expect(db.batch).toHaveBeenCalledTimes(1);
+      expect(ensureCertificateForQualificationMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('gera certificado automaticamente quando a categoria canônica é EAD', async () => {
     let lookupCount = 0;
@@ -291,7 +324,7 @@ describe('completeLmsMatricula', () => {
         lookupCount += 1;
         // 1ª leitura (pré-batch da 1ª tentativa): ainda não existe.
         // 2ª leitura (pré-batch do retry): a concorrente já inseriu.
-        return lookupCount === 1 ? null : { id: 999 };
+        return lookupCount === 1 ? null : { id: 999, status: 'CONCLUIDA' };
       },
       batchImpl: async () => {
         batchAttempt += 1;
