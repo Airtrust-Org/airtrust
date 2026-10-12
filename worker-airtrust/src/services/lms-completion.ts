@@ -107,12 +107,28 @@ async function ensureEadCertificateAfterCompletion(
     return;
   }
 
-  const result = await ensureCertificateForQualification(
-    params.env,
-    historicoId,
-    params.empresaId,
-    { actorUserId: params.actorUserId },
-  );
+  // The canonical D1.batch already committed. A secondary certificate
+  // service exception must not turn an actually completed enrollment into
+  // an HTTP failure (and an impossible retry on CONCLUIDO status).
+  let result: Awaited<ReturnType<typeof ensureCertificateForQualification>>;
+  try {
+    result = await ensureCertificateForQualification(
+      params.env,
+      historicoId,
+      params.empresaId,
+      { actorUserId: params.actorUserId },
+    );
+  } catch {
+    // Avoid logging an arbitrary provider exception, which may contain
+    // credentials or private details. Certificate state remains unverified.
+    console.error(JSON.stringify({
+      event: 'LMS_EAD_CERTIFICATE_SERVICE_THROWN',
+      empresa_id: params.empresaId,
+      matricula_id: params.matriculaId,
+      qualificacao_historico_id: historicoId,
+    }));
+    return;
+  }
 
   if (result.state === 'ERROR' || result.state === 'SKIPPED') {
     console.error(
