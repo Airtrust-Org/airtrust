@@ -48,6 +48,7 @@ export interface Env {
   NATIVE_LEARNER_WRITE_ENABLED_TENANTS?: string;
   /** OFF until governed catalog side-table exists; staged legacy-path read barrier only. */
   NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS?: string;
+  NATIVE_LEARNER_ENROLLMENT_CREATE_ENABLED_TENANTS?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
