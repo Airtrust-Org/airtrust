@@ -365,6 +365,33 @@ export function buildCompletionBatchStatements(
     });
   }
 
+  // The previously-active qualification may also be revoked, renewed,
+  // transferred or backdated after the read-only predecessor lookup.
+  // Recheck it inside the same D1.batch before creating a successor or
+  // changing any qualification history. It is not part of an idempotent
+  // CONCLUIDA reuse, which performs no predecessor renewal.
+  const creatingOrRealizing = needsInsert ||
+    pre.existingHistoricoStatus === 'PLANEJADA' ||
+    pre.existingHistoricoStatus === 'PLANEJADO';
+  if (creatingOrRealizing && pre.anteriorAtivaId !== null) {
+    statements.push({
+      sql: `SELECT json(CASE WHEN EXISTS (
+              SELECT 1 FROM qualificacoes_historico
+               WHERE id = ? AND empresa_id = ? AND funcionario_id = ?
+                 AND qualificacao_codigo = ? AND deleted_at IS NULL
+                 AND COALESCE(renovada, 0) = 0
+                 AND UPPER(COALESCE(status, '')) NOT IN (
+                   'PLANEJADA', 'PLANEJADO', 'CANCELADA', 'CANCELADO', 'RENOVADA'
+                 )
+                 AND date(COALESCE(data_conclusao, '1900-01-01')) < date(?)
+            ) THEN 'null' ELSE 'LMS_QUALIFICATION_PREDECESSOR_CHANGED' END)`,
+      args: [
+        pre.anteriorAtivaId, params.empresaId, params.funcionarioId,
+        qualificacaoCodigo, params.dataConclusao,
+      ],
+    });
+  }
+
   if (needsInsert) {
     const validadeMeses =
       typeof params.validade === 'number' && params.validade > 0 ? params.validade : null;
