@@ -87,7 +87,6 @@ export async function recentMergedPulls(cutoffMs, {
 
 const HISTORY_BATCH_SIZE = 80;
 const HISTORY_RATE_RESERVE = 120;
-const SHA40 = /^[a-f0-9]{40}$/i;
 
 export function historicalBatchInput(anchorUtc, rawOffset) {
   if (typeof anchorUtc !== 'string' ||
