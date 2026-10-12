@@ -161,6 +161,17 @@ describe('Native canonical completion: read-only preflight, never certificate au
     });
     expect(mocks.category).not.toHaveBeenCalled();
   });
+  it('ignores stale qualification metadata when a course awards no qualification', async () => {
+    const f=make({ ...accepted, gerar_qualificacao_ao_concluir: 0,
+      qualificacao_historico_id: 123 });
+    await expect(f.call()).resolves.toMatchObject({ ready:true, canonical:{
+      gerarQualificacaoAoConcluir:false, qualificacaoTipoId:null,
+      qualificacaoCategoriaId:null, qualificacaoCodigo:null,
+      qualificacaoNome:null, validade:null, vencimentoFimMes:null,
+      existingHistoricoId:null,
+    }});
+    expect(mocks.category).not.toHaveBeenCalled();
+  });
   it('never touches D1 or R2 if production or exact tenant Native staging gate is closed', async () => {
     const f=make();
     f.env.ENVIRONMENT = 'production';

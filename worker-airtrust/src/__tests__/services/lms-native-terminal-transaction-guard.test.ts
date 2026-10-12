@@ -19,7 +19,7 @@ describe('Native terminal guard is an atomic D1 assertion, NOT completion', () =
     expect(built.sql).toMatch(/^SELECT json\(CASE WHEN/);
     expect(built.bindings).toEqual([
       900,101,6,31,51,1001,102,7,'a'.repeat(64),
-      88,2,'b'.repeat(64),80,8,6,1,44,1,45,
+      88,2,'b'.repeat(64),80,8,6,1,1,44,1,45,
     ]);
     expect(built.sql).toContain("c.tipo_conteudo='scorm'");
     expect(built.sql).toContain('activation.empresa_id=c.empresa_id');
@@ -31,6 +31,7 @@ describe('Native terminal guard is an atomic D1 assertion, NOT completion', () =
     expect(built.sql).toContain('newer.tentativa_numero>att.tentativa_numero');
     expect(built.sql).toContain('qc.empresa_id=qt.empresa_id');
     expect(built.sql).toContain('qc.lms_integrada=1');
+    expect(built.sql).toContain('(?=0 OR COALESCE(c.qualificacao_tipo_id,0)=?)');
     expect(built.sql).not.toMatch(/(?:UPDATE|DELETE|INSERT)\s+(?:INTO|lms_)/);
   });
   it('declares an unqualified course only with zero qualification identifiers', () => {
@@ -38,7 +39,7 @@ describe('Native terminal guard is an atomic D1 assertion, NOT completion', () =
       ...anchor, gerarQualificacaoAoConcluir: false, qualificacaoTipoId:null,
       qualificacaoCategoriaId:null, scorePct:null,
     });
-    expect(built.bindings.slice(-6)).toEqual([8,6,0,0,0,0]);
+    expect(built.bindings.slice(-7)).toEqual([8,6,0,0,0,0,0]);
     expect(built.sql).toContain('att.score_pct IS ?');
   });
   it('denies poisoned IDs, digests, count and score snapshots before D1', () => {

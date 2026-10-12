@@ -40,7 +40,7 @@ class NativeAtomicTerminalGuardTests(unittest.TestCase):
         self.db.commit()
         self.sql=sql_from_source()
         self.params=[900,self.matricula,6,10,69,self.ciclo,self.binding,1,HASH,
-                     self.attempt,1,HASH,80,1,1,0,0,0,0]
+                     self.attempt,1,HASH,80,1,1,0,0,0,0,0]
 
     def tearDown(self):
         self.db.close()
@@ -74,7 +74,7 @@ class NativeAtomicTerminalGuardTests(unittest.TestCase):
               policy,score_pct,assessment_satisfied
             ) VALUES(?,1,'[]',?,'FORMATIVE',NULL,1)""",(binding,HASH)).lastrowid
             args=[900,matricula,6,10,69,ciclo,binding,1,HASH,
-                  attempt,1,HASH,None,1,1,0,0,0,0]
+                  attempt,1,HASH,None,1,1,0,0,0,0,0]
             self.assertEqual(db.execute(sql_from_source(),args).fetchone()[0],'null')
             args[12]=100
             with self.assertRaisesRegex(sqlite3.OperationalError,'malformed JSON'):
@@ -115,10 +115,16 @@ class NativeAtomicTerminalGuardTests(unittest.TestCase):
                 self.denied()
                 self.params[index]=original
 
+    def test_nonqualifying_course_ignores_unused_type_fk(self):
+        self.db.execute("UPDATE lms_cursos SET qualificacao_tipo_id=44 WHERE id=10")
+        self.assertEqual(self.permitted(),'null')
+        self.assertEqual(self.db.execute('SELECT status FROM lms_matriculas WHERE id=?',
+                                        (self.matricula,)).fetchone()[0],'EM_ANDAMENTO')
+
     def test_inactive_qualification_category_cannot_pass_terminal_assertion(self):
         self.db.execute("""UPDATE lms_cursos SET gerar_qualificacao_ao_concluir=1,
           qualificacao_tipo_id=44 WHERE id=10""")
-        self.params[-4:]=[1,44,1,45]
+        self.params[-5:]=[1,1,44,1,45]
         self.assertEqual(self.permitted(),'null')
         self.db.execute("UPDATE qualificacoes_categorias SET ativo=0 WHERE id=45")
         self.denied()

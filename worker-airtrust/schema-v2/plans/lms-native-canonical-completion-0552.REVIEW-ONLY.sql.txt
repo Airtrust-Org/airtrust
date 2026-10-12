@@ -80,7 +80,8 @@ BEGIN
     AND m.status='EM_ANDAMENTO' AND m.deleted_at IS NULL
     AND m.data_conclusao IS NULL AND cy.data_conclusao IS NULL
     AND c.gerar_qualificacao_ao_concluir=NEW.gerar_qualificacao
-    AND COALESCE(c.qualificacao_tipo_id,0)=COALESCE(NEW.qualificacao_tipo_id,0)
+    AND (NEW.gerar_qualificacao=0 OR
+         COALESCE(c.qualificacao_tipo_id,0)=COALESCE(NEW.qualificacao_tipo_id,0))
     AND (NEW.gerar_qualificacao=0 OR EXISTS(
       SELECT 1 FROM qualificacoes_tipos qt
       JOIN qualificacoes_categorias qc ON qc.id=qt.categoria_id

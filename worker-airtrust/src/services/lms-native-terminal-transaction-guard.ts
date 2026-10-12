@@ -60,7 +60,7 @@ const SQL=[
   'AND NOT EXISTS (SELECT 1 FROM lms_native_tentativas newer',
   'WHERE newer.vinculo_id=b.id AND newer.tentativa_numero>att.tentativa_numero)',
   'AND c.gerar_qualificacao_ao_concluir=?',
-  'AND COALESCE(c.qualificacao_tipo_id,0)=?',
+  'AND (?=0 OR COALESCE(c.qualificacao_tipo_id,0)=?)',
   'AND (?=0 OR EXISTS (',
   'SELECT 1 FROM qualificacoes_tipos qt',
   'JOIN qualificacoes_categorias qc ON qc.id=qt.categoria_id',
@@ -107,6 +107,7 @@ export function buildNativeTerminalTransactionGuard(
     anchor.latestAttemptId, anchor.latestAttemptNumber,
     anchor.answersHash, anchor.scorePct,
     anchor.eventCount, anchor.distinctLessonCount,
-    Number(qualification), typeId ?? 0, Number(qualification), categoryId ?? 0,
+    Number(qualification), Number(qualification), typeId ?? 0,
+    Number(qualification), categoryId ?? 0,
   ] };
 }

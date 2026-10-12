@@ -42,7 +42,7 @@ def intent(db,m,cy,b,att,nonce=NONCE,actor=900,employee=69,
      45 if qualification else None))
 
 def assert_guard(db,m,cy,b,att):
-    values=[900,m,6,10,69,cy,b,1,HASH,att,1,HASH,85,1,1,0,0,0,0]
+    values=[900,m,6,10,69,cy,b,1,HASH,att,1,HASH,85,1,1,0,0,0,0,0]
     assert db.execute(sql_from_source(),values).fetchone()[0]=='null'
 
 def complete(db,m,cy):
@@ -65,6 +65,24 @@ class NativeCompletionIntentReviewTests(unittest.TestCase):
                                         ).fetchone()[0],'CONCLUIDO')
             self.assertEqual(db.execute('SELECT status FROM lms_matricula_ciclos WHERE id=?',(cy,)
                                         ).fetchone()[0],'CONCLUIDO')
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM lms_native_completion_intents'
+                                        ).fetchone()[0],0)
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+        finally: db.close()
+
+    def test_disabled_qualification_ignores_unused_type_fk(self):
+        db,m,cy,b,att=setup()
+        try:
+            db.execute('UPDATE lms_cursos SET qualificacao_tipo_id=44 WHERE id=10')
+            db.commit()
+            with db:
+                db.execute('BEGIN IMMEDIATE')
+                assert_guard(db,m,cy,b,att)
+                intent(db,m,cy,b,att)
+                complete(db,m,cy)
+                db.execute('DELETE FROM lms_native_completion_intents WHERE nonce=?',(NONCE,))
+            self.assertEqual(db.execute('SELECT status FROM lms_matriculas WHERE id=?',
+                                        (m,)).fetchone()[0],'CONCLUIDO')
             self.assertEqual(db.execute('SELECT COUNT(*) FROM lms_native_completion_intents'
                                         ).fetchone()[0],0)
             self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
