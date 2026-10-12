@@ -171,8 +171,22 @@ def provision(db, *, nonce='f'*64, empresa=6, curso=10,
           SELECT empresa_id,curso_id,funcionario_id,'NAO_INICIADO'
             FROM lms_native_enrollment_intents WHERE nonce=?
         """, (nonce,))
+        # Find the newly inserted row by its immutable tenant/course/employee
+        # tuple instead of trusting connection-local last_insert_rowid() across
+        # sequential D1.batch statements or database triggers.
         db.execute("""UPDATE lms_native_enrollment_intents
-             SET matricula_id=last_insert_rowid() WHERE nonce=?""", (nonce,))
+          SET matricula_id=(
+            SELECT m.id FROM lms_matriculas m
+             WHERE m.empresa_id=lms_native_enrollment_intents.empresa_id
+               AND m.curso_id=lms_native_enrollment_intents.curso_id
+               AND m.funcionario_id=lms_native_enrollment_intents.funcionario_id
+               AND m.deleted_at IS NULL
+          ) WHERE nonce=?""", (nonce,))
+        assertion(db, """(SELECT COUNT(*) FROM lms_native_enrollment_intents i
+          JOIN lms_matriculas m ON m.id=i.matricula_id
+          AND m.empresa_id=i.empresa_id AND m.curso_id=i.curso_id
+          AND m.funcionario_id=i.funcionario_id
+          WHERE i.nonce=?)=1""", 'NATIVE_PROVISION_ENROLLMENT_NOT_PINNED', (nonce,))
         db.execute("""
           INSERT INTO lms_matricula_ciclos(
             matricula_id,empresa_id,curso_id,funcionario_id,status,ciclo_atual)
@@ -180,7 +194,20 @@ def provision(db, *, nonce='f'*64, empresa=6, curso=10,
           FROM lms_native_enrollment_intents WHERE nonce=?
         """, (nonce,))
         db.execute("""UPDATE lms_native_enrollment_intents
-             SET ciclo_id=last_insert_rowid() WHERE nonce=?""", (nonce,))
+          SET ciclo_id=(
+            SELECT cy.id FROM lms_matricula_ciclos cy
+             WHERE cy.empresa_id=lms_native_enrollment_intents.empresa_id
+               AND cy.curso_id=lms_native_enrollment_intents.curso_id
+               AND cy.funcionario_id=lms_native_enrollment_intents.funcionario_id
+               AND cy.matricula_id=lms_native_enrollment_intents.matricula_id
+               AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+          ) WHERE nonce=?""", (nonce,))
+        assertion(db, """(SELECT COUNT(*) FROM lms_native_enrollment_intents i
+          JOIN lms_matricula_ciclos cy ON cy.id=i.ciclo_id
+          AND cy.empresa_id=i.empresa_id AND cy.curso_id=i.curso_id
+          AND cy.funcionario_id=i.funcionario_id AND cy.matricula_id=i.matricula_id
+          AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+          WHERE i.nonce=?)=1""", 'NATIVE_PROVISION_CYCLE_NOT_PINNED', (nonce,))
         if fault == 'before_pin':
             raise RuntimeError('INJECTED_BEFORE_PIN')
         db.execute("""
@@ -298,6 +325,27 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
                     self.assertEqual(self._counts(db),(0,0,0,0))
                     self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
                 finally: db.close()
+
+    def test_unrelated_rowid_does_not_affect_enrollment_or_cycle_pin(self):
+        db=fixture()
+        try:
+            # In production the adapter and audit triggers may change the
+            # last inserted rowid; the contract must not derive identities
+            # from it, including across independently prepared statements.
+            db.execute("CREATE TABLE synthetic_audit(id INTEGER PRIMARY KEY, message TEXT)")
+            for i in range(1, 21):
+                db.execute("INSERT INTO synthetic_audit(id,message) VALUES(?,?)", (i, 'unrelated'))
+            db.commit()
+            receipt=provision(db)
+            self.assertEqual(db.execute("""
+                SELECT m.id,cy.id,b.id
+                FROM lms_matriculas m
+                JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id
+                JOIN lms_native_matricula_edicoes b
+                  ON b.matricula_id=m.id AND b.ciclo_id=cy.id
+            """).fetchone(), receipt)
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+        finally: db.close()
 
     def test_second_eligible_employee_can_enroll_with_distinct_pinned_cycle(self):
         db=fixture()
