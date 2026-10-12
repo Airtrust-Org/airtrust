@@ -66,14 +66,23 @@ def fixture():
           ('scorm','h5p','video','pdf','pptx')),
         ativo INTEGER NOT NULL DEFAULT 1, publicado INTEGER NOT NULL DEFAULT 1,
         scorm_launch_file TEXT, scorm_package_r2_prefix TEXT,
-        deleted_at TEXT);
+        gerar_qualificacao_ao_concluir INTEGER NOT NULL DEFAULT 0,
+        qualificacao_tipo_id INTEGER,deleted_at TEXT);
       CREATE TABLE lms_scorm_package_versions(
         id INTEGER PRIMARY KEY,curso_id INTEGER REFERENCES lms_cursos(id));
       CREATE TABLE funcionarios(
         id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,
         ativo INTEGER NOT NULL DEFAULT 1,status TEXT NOT NULL DEFAULT 'ATIVO',deleted_at TEXT);
       CREATE TABLE usuarios(
-        id INTEGER PRIMARY KEY, funcionario_id INTEGER, deleted_at TEXT);
+        id INTEGER PRIMARY KEY, funcionario_id INTEGER,
+        active INTEGER NOT NULL DEFAULT 1,deleted_at TEXT);
+      CREATE TABLE qualificacoes_categorias(
+        id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,
+        ativo INTEGER NOT NULL DEFAULT 1,deleted_at TEXT);
+      CREATE TABLE qualificacoes_tipos(
+        id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,
+        categoria_id INTEGER REFERENCES qualificacoes_categorias(id),
+        ativo INTEGER NOT NULL DEFAULT 1,deleted_at TEXT);
       CREATE TABLE lms_matriculas(
         id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER NOT NULL,
         curso_id INTEGER NOT NULL REFERENCES lms_cursos(id),
@@ -99,6 +108,8 @@ def fixture():
       VALUES(10,6,'scorm'),(11,6,'scorm'),(12,7,'scorm');
       INSERT INTO funcionarios(id,empresa_id) VALUES(69,6),(70,7),(71,6);
       INSERT INTO usuarios(id,funcionario_id) VALUES(900,69),(901,70),(902,71);
+      INSERT INTO qualificacoes_categorias(id,empresa_id) VALUES(45,6),(46,7);
+      INSERT INTO qualificacoes_tipos(id,empresa_id,categoria_id) VALUES(44,6,45);
     """)
     # 0550 stays byte-for-byte versioned. The 0551 review-only candidate
     # evolves its physical-type triggers without altering any real database.
