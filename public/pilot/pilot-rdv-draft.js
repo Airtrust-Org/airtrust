@@ -195,6 +195,17 @@ export function convertWeight(value, fromUnit, toUnit) {
   return null;
 }
 
+/** Peso opcional estimado: 180 lb por pessoa e 20 lb de bagagem por pessoa. */
+export function applyStandardPassengerBaggageWeight(fields) {
+  if (fields?.peso_padrao_ativo !== true) return false;
+  const pax = parseNumber(fields.pax);
+  if (!Number.isInteger(pax) || pax < 0) return false;
+  fields.peso_passageiros = String(pax * 180);
+  fields.peso_bagagem = String(pax * 20);
+  fields.unidade_peso = 'LB';
+  return true;
+}
+
 export function calcStageTotalWeight(fields) {
   const unit = String(fields?.unidade_peso || '').trim().toUpperCase();
   const emptyWeight = parseNumber(fields?.peso_vazio);

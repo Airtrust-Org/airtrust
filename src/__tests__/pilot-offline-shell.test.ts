@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
+import { applyStandardPassengerBaggageWeight } from '../../public/pilot/pilot-rdv-draft.js';
 import { describe, expect, it } from 'vitest';
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
@@ -25,6 +26,44 @@ const swManager = read('src/lib/sw-manager.tsx');
 const killSwitch = read('public/sw.js');
 const rootIndex = read('index.html');
 const controleVoosVooDetalhe = read('src/react-app/pages/controle-voos/ControleVoosVooDetalhe.tsx');
+
+describe('Peso padrão opcional por etapa', () => {
+  it('não modifica pesos existentes quando a opção está desmarcada', () => {
+    const fields = { pax: '7', peso_passageiros: '1150', peso_bagagem: '70', unidade_peso: 'LB' };
+    expect(applyStandardPassengerBaggageWeight(fields)).toBe(false);
+    expect(fields.peso_passageiros).toBe('1150');
+    expect(fields.peso_bagagem).toBe('70');
+  });
+
+  it('distribui 7 passageiros em 1260 lb de passageiros e 140 lb de bagagem', () => {
+    const fields = { pax: '7', peso_passageiros: '', peso_bagagem: '', unidade_peso: 'LB', peso_padrao_ativo: true };
+    expect(applyStandardPassengerBaggageWeight(fields)).toBe(true);
+    expect(fields.peso_passageiros).toBe('1260');
+    expect(fields.peso_bagagem).toBe('140');
+  });
+
+  it('recalcula o padrão para nova quantidade, sem substituir depois da desativação', () => {
+    const fields = { pax: '7', peso_passageiros: '', peso_bagagem: '', unidade_peso: 'LB', peso_padrao_ativo: true };
+    applyStandardPassengerBaggageWeight(fields);
+    fields.pax = '8';
+    applyStandardPassengerBaggageWeight(fields);
+    expect(fields.peso_passageiros).toBe('1440');
+    expect(fields.peso_bagagem).toBe('160');
+    fields.peso_padrao_ativo = false;
+    fields.peso_passageiros = '1420';
+    fields.peso_bagagem = '155';
+    expect(applyStandardPassengerBaggageWeight(fields)).toBe(false);
+    expect(fields.peso_passageiros).toBe('1420');
+    expect(fields.peso_bagagem).toBe('155');
+  });
+
+  it('não calcula com quantidade ausente ou negativa', () => {
+    const fields = { pax: '', peso_passageiros: '', peso_bagagem: '', unidade_peso: 'LB', peso_padrao_ativo: true };
+    expect(applyStandardPassengerBaggageWeight(fields)).toBe(false);
+    fields.pax = '-1';
+    expect(applyStandardPassengerBaggageWeight(fields)).toBe(false);
+  });
+});
 
 describe('Pilot Offline shell', () => {
   it('mantem os scripts estaticos do Pilot App sintaticamente validos como ESM moderno', () => {
@@ -117,7 +156,7 @@ describe('Pilot Offline shell', () => {
   it('oferece busca de justificativas legivel por causa raiz, codigo, categoria e descricao', () => {
     expect(pilotApp).toContain('function createJustificationPicker');
     expect(pilotApp).toContain('function formatJustificationName');
-    expect(pilotApp).toContain('Busque sempre a causa raiz do motivo do atraso.');
+    expect(pilotApp).toContain('Opcional. Caso registre um motivo, escolha a causa operacional real do desvio.');
     expect(pilotApp).toContain('Busque por AA62, meteorologia, manutenção, pax...');
     expect(pilotApp).toContain('option.category');
     expect(pilotApp).toContain('option.description');
@@ -487,8 +526,12 @@ describe('Pilot Offline shell', () => {
     expect(pilotRdvDraft).toContain('fuelings: []');
     expect(pilotApp).toContain('Excluir nota do rascunho');
     expect(pilotApp).toContain('activeRdvDraft.fuelings.splice(index, 1)');
-    expect(pilotApp).toContain('const estimateLb = pax * 200;');
-    expect(pilotApp).toContain('fields.auto_passenger_weight_lb = null;');
+    expect(pilotApp).toContain("standardWeightCheck.type = 'checkbox'");
+    expect(pilotApp).toContain("standardWeightCheck.checked = fields.peso_padrao_ativo === true");
+    expect(pilotApp).toContain('fields.peso_padrao_ativo = false;');
+    expect(pilotApp).toContain('applyStandardPassengerBaggageWeight(fields)');
+    expect(pilotIndex).toContain('.pilot-standard-weight-toggle');
+    expect(pilotSw).toContain('airtrust-pilot-shell-v34');
     expect(pilotApp).not.toContain("['Hora', 'hora', 'time'");
     expect(pilotApp).not.toContain("['Nota do combustível', 'nota'");
     expect(pilotSync).not.toContain('nota: optionalText(fueling?.nota)');

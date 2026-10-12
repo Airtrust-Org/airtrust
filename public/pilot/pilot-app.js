@@ -8,6 +8,7 @@ import { PILOT_OFFLINE_APP_VERSION } from '/pilot/pilot-lease-trust.js';
 import {
   applySafeStageAggregates,
   applyStageContinuity,
+  applyStandardPassengerBaggageWeight,
   assertPackageIdentity,
   buildCommonFlightFields,
   assertVerifiedLeaseAllowsDraft,
@@ -4424,27 +4425,10 @@ function refreshStageDerivedTimes(stageDraft) {
   fields.peso_total = totalWeight === null ? '' : String(totalWeight);
 }
 
-function applyStandardPassengerWeight(fields) {
-  const pax = parseNumber(fields?.pax);
-  if (!Number.isInteger(pax) || pax < 0) return;
-  const passenger = parseNumber(fields.peso_passageiros);
-  const baggage = parseNumber(fields.peso_bagagem);
-  const previousEstimate = parseNumber(fields.auto_passenger_weight_lb);
-  const empty = passenger === null && baggage === null;
-  const stillAutomatic = previousEstimate !== null &&
-    passenger === previousEstimate && (baggage === 0 || baggage === null);
-  if (!empty && !stillAutomatic) return;
-  const estimateLb = pax * 200;
-  fields.peso_passageiros = String(estimateLb);
-  fields.peso_bagagem = '0';
-  fields.auto_passenger_weight_lb = estimateLb;
-  fields.unidade_peso = 'LB';
-}
-
 function refreshAllStageDerivedTimes() {
   applyStageContinuity(activeStageDrafts);
   for (const stageDraft of activeStageDrafts) {
-    applyStandardPassengerWeight(stageDraft.fields || {});
+    applyStandardPassengerBaggageWeight(stageDraft.fields || {});
     refreshStageDerivedTimes(stageDraft);
   }
 }
@@ -4556,6 +4540,28 @@ function renderStageFields() {
   }
   card.append(quick);
 
+  // Opção por etapa, desmarcada por padrão; nunca sobrescrever peso real sem opt-in.
+  const standardWeightOption = document.createElement('label');
+  standardWeightOption.className = 'pilot-standard-weight-toggle';
+  const standardWeightCheck = document.createElement('input');
+  standardWeightCheck.type = 'checkbox';
+  standardWeightCheck.checked = fields.peso_padrao_ativo === true;
+  standardWeightCheck.disabled = operationalSyncInFlight;
+  const standardWeightCaption = document.createElement('span');
+  standardWeightCaption.textContent = 'Utilizar peso padrão (180 lb passageiro + 20 lb bagagem por pessoa)';
+  standardWeightOption.append(standardWeightCheck, standardWeightCaption);
+  standardWeightCheck.addEventListener('change', () => {
+    fields.peso_padrao_ativo = standardWeightCheck.checked;
+    if (standardWeightCheck.checked) applyStandardPassengerBaggageWeight(fields);
+    // Desmarcar preserva valores; editar pesos também desmarca automaticamente.
+    refreshAllStageDerivedTimes();
+    activeRdvDraft.form = applySafeStageAggregates(activeRdvDraft.form, activeStageDrafts);
+    scheduleOperationalSave();
+    renderStageFields();
+    refreshDraftValidationPresentation();
+  });
+  card.append(standardWeightOption);
+
   refreshAllStageDerivedTimes();
   const grid = document.createElement('div');
   grid.className = 'editor-grid';
@@ -4610,15 +4616,15 @@ function renderStageFields() {
         note: readOnly
           ? 'Calculado automaticamente e exibido em lb e kg.'
           : key === 'peso_passageiros'
-             ? 'Estimativa de 200 lb/passageiro, incluindo bagagem. Confira e ajuste se necessário.'
+             ? 'Peso padrão ativado: 180 lb por passageiro. Editar desmarca o padrão.'
              : key === 'peso_bagagem'
-               ? 'A bagagem já está incluída na estimativa de 200 lb/passageiro; evite dupla contagem.'
+               ? 'Peso padrão ativado: 20 lb de bagagem por passageiro. Editar desmarca o padrão.'
                : 'Digite em lb ou kg; a outra unidade é calculada automaticamente.',
         onChangeLb: readOnly
           ? null
           : (value) => {
               fields[key] = value;
-              if (key === 'peso_passageiros' || key === 'peso_bagagem') fields.auto_passenger_weight_lb = null;
+              if (key === 'peso_passageiros' || key === 'peso_bagagem') fields.peso_padrao_ativo = false;
               if (key === 'payload') fields.unidade_payload = 'LB';
               else fields.unidade_peso = 'LB';
               refreshAllStageDerivedTimes();
@@ -4656,7 +4662,7 @@ function renderStageFields() {
               if (index === 0 && value && String(fields.starts ?? '').trim() === '') fields.starts = '1';
             }
             if (key === 'starts') stageDraft.starts_auto_derived = false;
-            if (key === 'pax') applyStandardPassengerWeight(fields);
+            if (key === 'pax') applyStandardPassengerBaggageWeight(fields);
             if (key === 'combustivel_inicio' && index > 0) {
               const previousFields = activeStageDrafts[index - 1]?.fields || {};
               previousFields.combustivel_fim = value;
