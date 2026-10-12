@@ -39,7 +39,7 @@ export function selectNativeLessonTemplate(index: number, unit: NativeLearnerCou
   ), 0);
   if (!media.length) return 'editorial-dashboard';
   if (unit.kind === 'assessment' && unit.questionIds.length > 2) return 'editorial-dashboard';
-  const selected = TEMPLATE_VARIANTS[index % TEMPLATE_VARIANTS.length];
+  const selected = unit.presentationTemplate ?? TEMPLATE_VARIANTS[index % TEMPLATE_VARIANTS.length];
   if (selected === 'double-crop' && media[0].type === 'video') return 'media-right';
   if (textWeight > 850 && ['wide-top', 'wide-bottom', 'image-overlay', 'banner-list'].includes(selected)) {
     return 'media-right';
