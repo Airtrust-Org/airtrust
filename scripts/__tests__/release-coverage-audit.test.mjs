@@ -87,6 +87,7 @@ test('change surfaces do not confuse migrations with published runtime code', as
     'worker-airtrust/src/routes/lms.ts', 'src/react-app/App.tsx',
   ]), ['PAGES', 'WORKER']);
   assert.deepEqual(classifyChangeSurfaces(['worker-airtrust/src/__tests__/lms.test.ts']), ['CI_OPS']);
+  assert.deepEqual(classifyChangeSurfaces(['worker-airtrust/src/__tests__/fixtures.ts']), ['CI_OPS']);
   assert.deepEqual(classifyChangeSurfaces([]), ['UNKNOWN']);
   assert.deepEqual(classifyChangeSurfaces([{}]), ['UNKNOWN']);
 });
