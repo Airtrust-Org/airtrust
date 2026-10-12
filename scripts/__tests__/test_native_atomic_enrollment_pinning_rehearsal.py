@@ -78,6 +78,8 @@ def fixture():
         id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER NOT NULL,
         curso_id INTEGER NOT NULL REFERENCES lms_cursos(id),
         funcionario_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'NAO_INICIADO',
+        progresso_pct REAL NOT NULL DEFAULT 0, data_conclusao TEXT,
+        qualificacao_historico_id INTEGER,
         deleted_at TEXT, UNIQUE(empresa_id, curso_id, funcionario_id));
       CREATE TABLE lms_matricula_ciclos(
         id INTEGER PRIMARY KEY AUTOINCREMENT, matricula_id INTEGER NOT NULL
@@ -90,6 +92,8 @@ def fixture():
         origem TEXT NOT NULL DEFAULT 'LMS'
           CHECK(origem IN ('LMS','MANUAL','AUTO_RENOVACAO','IMPORTADO_EDAPP')),
         numero_ciclo INTEGER NOT NULL DEFAULT 1,
+        progresso_pct REAL NOT NULL DEFAULT 0, data_conclusao TEXT,
+        qualificacao_historico_id INTEGER,
         deleted_at TEXT, UNIQUE(matricula_id, ciclo_atual));
       INSERT INTO lms_cursos(id,empresa_id,tipo_conteudo)
       VALUES(10,6,'scorm'),(11,6,'scorm'),(12,7,'scorm');
@@ -336,6 +340,41 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
                         provision(db,**params)
                     self.assertEqual(self._counts(db),(0,0,0,0))
                 finally: db.close()
+
+    def test_native_completion_cannot_be_forged_by_legacy_status_or_progress_writers(self):
+        # Completion is not enabled yet. A 100% marker must never create a
+        # regulated qualification or certificate without canonical proof.
+        db=fixture()
+        try:
+            matricula,ciclo,_=provision(db)
+            for tbl,row in (('lms_matriculas',matricula),('lms_matricula_ciclos',ciclo)):
+                for field,value in (('status','CONCLUIDO'),('progresso_pct',100),
+                                    ('data_conclusao','2026-10-12'),
+                                    ('qualificacao_historico_id',555)):
+                    with self.subTest(table=tbl,field=field):
+                        with self.assertRaisesRegex(sqlite3.IntegrityError,
+                                                     'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'):
+                            db.execute(f'UPDATE {tbl} SET {field}=? WHERE id=?',(value,row))
+            # No false-positive for a marked course still actually in progress.
+            db.execute("UPDATE lms_matriculas SET status='EM_ANDAMENTO' WHERE id=?",(matricula,))
+            db.execute("UPDATE lms_matricula_ciclos SET status='EM_ANDAMENTO' WHERE id=?",(ciclo,))
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+            self.assertEqual(db.execute('SELECT status FROM lms_matriculas WHERE id=?',
+                                        (matricula,)).fetchone()[0],'EM_ANDAMENTO')
+        finally:
+            db.close()
+
+    def test_unmarked_scorm_can_still_be_completed_by_legacy_flow(self):
+        db=fixture()
+        try:
+            db.execute("""INSERT INTO lms_matriculas(
+              empresa_id,curso_id,funcionario_id,status,progresso_pct,data_conclusao
+            ) VALUES(6,11,71,'CONCLUIDO',100,'2026-10-12')""")
+            self.assertEqual(db.execute(
+                "SELECT status,progresso_pct FROM lms_matriculas WHERE curso_id=11"
+            ).fetchone(),('CONCLUIDO',100))
+        finally:
+            db.close()
 
     def test_candidate_accepts_evidence_only_for_pinned_active_native_cycle(self):
         db=fixture()

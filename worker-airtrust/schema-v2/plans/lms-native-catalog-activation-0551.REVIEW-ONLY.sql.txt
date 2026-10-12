@@ -133,6 +133,57 @@ WHEN EXISTS (
 )
 BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_CYCLE_IDENTITY_IMMUTABLE'); END;
 
+
+-- Until canonical Native completion (evidence + history + certificate) is
+-- governed, legacy writers must never stamp a Native-marked cycle as
+-- completed or silently attach qualification history. Ordinary START /
+-- IN_PROGRESS transitions remain possible through the Native worker.
+CREATE TRIGGER trg_native_catalog_no_ungoverned_matricula_completion_insert
+BEFORE INSERT ON lms_matriculas
+WHEN EXISTS (
+  SELECT 1 FROM lms_native_catalog_activation a
+  WHERE a.empresa_id=NEW.empresa_id AND a.curso_id=NEW.curso_id
+) AND (
+  NEW.status='CONCLUIDO' OR COALESCE(NEW.progresso_pct,0)>=100
+  OR NEW.data_conclusao IS NOT NULL OR NEW.qualificacao_historico_id IS NOT NULL
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'); END;
+
+CREATE TRIGGER trg_native_catalog_no_ungoverned_matricula_completion_update
+BEFORE UPDATE OF status,progresso_pct,data_conclusao,qualificacao_historico_id
+ON lms_matriculas
+WHEN EXISTS (
+  SELECT 1 FROM lms_native_catalog_activation a
+  WHERE a.empresa_id=NEW.empresa_id AND a.curso_id=NEW.curso_id
+) AND (
+  NEW.status='CONCLUIDO' OR COALESCE(NEW.progresso_pct,0)>=100
+  OR NEW.data_conclusao IS NOT NULL OR NEW.qualificacao_historico_id IS NOT NULL
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'); END;
+
+CREATE TRIGGER trg_native_catalog_no_ungoverned_cycle_completion_insert
+BEFORE INSERT ON lms_matricula_ciclos
+WHEN EXISTS (
+  SELECT 1 FROM lms_native_catalog_activation a
+  WHERE a.empresa_id=NEW.empresa_id AND a.curso_id=NEW.curso_id
+) AND (
+  NEW.status='CONCLUIDO' OR COALESCE(NEW.progresso_pct,0)>=100
+  OR NEW.data_conclusao IS NOT NULL OR NEW.qualificacao_historico_id IS NOT NULL
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'); END;
+
+CREATE TRIGGER trg_native_catalog_no_ungoverned_cycle_completion_update
+BEFORE UPDATE OF status,progresso_pct,data_conclusao,qualificacao_historico_id
+ON lms_matricula_ciclos
+WHEN EXISTS (
+  SELECT 1 FROM lms_native_catalog_activation a
+  WHERE a.empresa_id=NEW.empresa_id AND a.curso_id=NEW.curso_id
+) AND (
+  NEW.status='CONCLUIDO' OR COALESCE(NEW.progresso_pct,0)>=100
+  OR NEW.data_conclusao IS NOT NULL OR NEW.qualificacao_historico_id IS NOT NULL
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'); END;
+
 -- The 0550 triggers assert physical 'native', which staging D1 CHECK rejects.
 -- Replace only the four known course-identity predicates (tenant-correlated).
 -- All owner, cycle, employee, edition, hash, status and R2 constraints are retained.
