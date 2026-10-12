@@ -6,6 +6,9 @@
  * Call only after auth() and tenant resolution. Never trust a client-supplied
  * funcionario_id or a display percent to grant access or completion.
  */
+import type { Env } from '../types';
+import { isNativeForLegacyLmsPath } from './lms-native-catalog-legacy-guard';
+
 export type NativeAdmission = {
   matriculaId: number;
   cursoId: number;
@@ -26,6 +29,7 @@ export async function resolveNativeEnrollmentAdmission(params: {
   empresaId: number;
   matriculaId: number;
   actorUserId: number;
+  env?: Env;
 }): Promise<NativeAdmission> {
   const { db, empresaId, matriculaId, actorUserId } = params;
   if (![empresaId, matriculaId, actorUserId].every((value) => Number.isSafeInteger(value) && value > 0)) {
@@ -48,7 +52,11 @@ export async function resolveNativeEnrollmentAdmission(params: {
   if (!enrollment || enrollment.empresa_id !== empresaId || enrollment.id !== matriculaId) {
     throw new NativeAdmissionError(404, 'NATIVE_ENROLLMENT_NOT_FOUND');
   }
-  if (enrollment.tipo_conteudo !== 'native') {
+  // Exact staging marker lookup is fail-closed when explicitly enabled.
+  // Existing physical Native courses remain recognized without any flag.
+  if (!(params.env
+    ? await isNativeForLegacyLmsPath(params.env, empresaId, enrollment.curso_id, enrollment.tipo_conteudo)
+    : enrollment.tipo_conteudo === 'native')) {
     throw new NativeAdmissionError(404, 'NATIVE_COURSE_NOT_AVAILABLE');
   }
 

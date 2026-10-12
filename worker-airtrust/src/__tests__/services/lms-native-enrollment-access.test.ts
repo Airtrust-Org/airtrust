@@ -75,6 +75,40 @@ describe('Native V1 read-only enrollment admission / integration contract', () =
     await expect(request(db)).rejects.toMatchObject({ code: 'NATIVE_COURSE_NOT_AVAILABLE', status: 404 });
   });
 
+
+  it('admits a staged SCORM-physical Native course only with a verified activation marker', async () => {
+    const row = { id: 99, curso_id: 8, funcionario_id: 18, empresa_id: 6,
+      status: 'EM_ANDAMENTO', tipo_conteudo: 'scorm', ativo: 1, publicado: 1 };
+    const queries: Array<{ sql: string; bindings: unknown[] }> = [];
+    const db = {
+      prepare(sql: string) { return { bind(...bindings: unknown[]) {
+        queries.push({ sql, bindings });
+        return { async first() {
+          if (sql.includes('FROM lms_matriculas')) return row;
+          if (sql.includes('FROM lms_native_catalog_activation')) return { curso_id: 8 };
+          return { funcionario_id: 18 };
+        } };
+      } }; },
+    } as unknown as D1Database;
+    const env = { DB: db, ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6' } as import('../../types').Env;
+    await expect(request(db, { env })).resolves.toMatchObject({
+      cursoId: 8, empresaId: 6, mode: 'LEARN',
+    });
+    const marker = queries.find((q) => q.sql.includes('FROM lms_native_catalog_activation'));
+    expect(marker?.bindings).toEqual([6, 8]);
+    expect(queries.find((q) => q.sql.includes('FROM usuarios'))?.bindings).toEqual([101]);
+  });
+
+  it('rejects physical SCORM despite staging admission preview when no marker exists', async () => {
+    const { db } = createHarness({ tipo_conteudo: 'scorm' });
+    const env = { DB: db, ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '' } as import('../../types').Env;
+    await expect(request(db, { env })).rejects.toMatchObject({
+      code: 'NATIVE_COURSE_NOT_AVAILABLE', status: 404,
+    });
+  });
+
   it('requires published, active course', async () => {
     for (const override of [{ publicado: 0 }, { ativo: 0 }]) {
       const { db } = createHarness(override);

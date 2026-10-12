@@ -127,7 +127,7 @@ async function execute(c: Context<{ Bindings: Env }>,
 
   try {
     const verified = await loadNativePrivateCourse({
-      db: c.env.DB, bucket: c.env.BUCKET,
+      env: c.env, db: c.env.DB, bucket: c.env.BUCKET,
       empresaId, matriculaId: Number(matriculaRaw), actorUserId,
     });
     if (verified.mode !== 'LEARN') {

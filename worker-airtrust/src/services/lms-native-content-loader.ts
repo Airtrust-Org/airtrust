@@ -12,6 +12,8 @@ import {
   type NativeLearnerCourse,
   type NativeCourseArtifact,
 } from '../lib/lms/lms-native-course-contract';
+import type { Env } from '../types';
+import { nativeCourseIdentityPredicate } from './lms-native-catalog-legacy-guard';
 import {
   resolveNativeEnrollmentAdmission,
   type NativeAdmission,
@@ -70,12 +72,14 @@ export async function loadNativePrivateCourse(params: {
   empresaId: number;
   matriculaId: number;
   actorUserId: number;
+  env?: Env;
 }): Promise<NativePrivateCourse> {
   const admission = await resolveNativeEnrollmentAdmission({
     db: params.db,
     empresaId: params.empresaId,
     matriculaId: params.matriculaId,
     actorUserId: params.actorUserId,
+    env: params.env,
   });
 
   // The enrollment/cycle/edition pin is the sole source of package selection.
@@ -91,7 +95,7 @@ export async function loadNativePrivateCourse(params: {
     'JOIN usuarios u ON u.funcionario_id=m.funcionario_id',
     'AND u.id=? AND u.deleted_at IS NULL',
     'JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id',
-    "AND c.tipo_conteudo='native' AND c.ativo=1 AND c.publicado=1",
+    'AND ' + nativeCourseIdentityPredicate(params.env, admission.empresaId) + ' AND c.ativo=1 AND c.publicado=1',
     'AND c.deleted_at IS NULL',
     'JOIN lms_matricula_ciclos cycle ON cycle.id=b.ciclo_id',
     'AND cycle.matricula_id=b.matricula_id AND cycle.empresa_id=b.empresa_id',
@@ -163,6 +167,7 @@ export async function loadNativePublishedCourse(params: {
   empresaId: number;
   matriculaId: number;
   actorUserId: number;
+  env?: Env;
 }): Promise<NativePublishedCourse> {
   const verified = await loadNativePrivateCourse(params);
   return {

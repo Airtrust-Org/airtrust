@@ -18,6 +18,18 @@ export function canReadNativeCatalogActivation(env: Env, empresaId: number): boo
     exactTenantAllowed(env.NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS, empresaId);
 }
 
+/**
+ * Binds any Native course selection to the effective type when the staging
+ * activation table is enabled. No activation SQL is referenced in production
+ * or until the exact tenant is allowlisted.
+ */
+export function nativeCourseIdentityPredicate(env: Env | undefined, empresaId: number): string {
+  if (!env || !canReadNativeCatalogActivation(env, empresaId)) return "c.tipo_conteudo='native'";
+  return "(c.tipo_conteudo='native' OR (c.tipo_conteudo='scorm' AND EXISTS (" +
+    "SELECT 1 FROM lms_native_catalog_activation a " +
+    "WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id)))";
+}
+
 export async function isNativeForLegacyLmsPath(
   env: Env, empresaId: number, cursoId: number, tipoConteudo: string | null | undefined,
 ): Promise<boolean> {

@@ -38,6 +38,7 @@ app.get('/matriculas/:matriculaId/admissao', async (c) => {
   try {
     const admission = await resolveNativeEnrollmentAdmission({
       db: c.env.DB,
+      env: c.env,
       empresaId,
       matriculaId: Number(rawId),
       actorUserId: actorUserId as number,
@@ -89,6 +90,7 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
   try {
     const published = await loadNativePublishedCourse({
       db: c.env.DB,
+      env: c.env,
       bucket: c.env.BUCKET,
       empresaId,
       matriculaId: Number(rawId),
@@ -142,7 +144,7 @@ app.get('/matriculas/:matriculaId/sessao', async (c) => {
   }
   try {
     const edition = await loadNativePrivateCourse({
-      db: c.env.DB, bucket: c.env.BUCKET,
+      env: c.env, db: c.env.DB, bucket: c.env.BUCKET,
       empresaId, matriculaId: Number(rawId), actorUserId,
     });
     const { summary } = await readNativeLearnerSession({
