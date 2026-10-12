@@ -4,6 +4,7 @@
  * GET  /api/lms/scorm/state/:matriculaId   — retorna suspend_data + cmi_json para retomar curso
  * POST /api/lms/xapi/statements            — recebe statement xAPI, salva e pode disparar qualificação
  */
+import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-guard';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -174,10 +175,10 @@ app.get('/scorm/state/:matriculaId', async (c) => {
   // Verificar que a matrícula pertence à empresa (multi-tenancy)
   const matricula = await db
     .prepare(
-      'SELECT m.id, m.status, m.funcionario_id, c.tipo_conteudo FROM lms_matriculas m JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL AND c.deleted_at IS NULL',
+      'SELECT m.id, m.status, m.funcionario_id, c.id AS curso_id, c.tipo_conteudo FROM lms_matriculas m JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL AND c.deleted_at IS NULL',
     )
     .bind(matriculaId, empresaId)
-    .first<{ id: number; status: string; funcionario_id: number; tipo_conteudo: string }>();
+    .first<{ id: number; status: string; funcionario_id: number; curso_id: number; tipo_conteudo: string }>();
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
   if (!canManage) {
     if (!callerFuncionarioId || matricula.funcionario_id !== callerFuncionarioId) {
@@ -187,7 +188,7 @@ app.get('/scorm/state/:matriculaId', async (c) => {
 
   // A Native edition must never receive SCORM suspend_data from an
   // obsolete player session, including read-only resume by a manager.
-  if (String(matricula.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo)) {
     throw new ApiError('Curso nativo exige sessão do player próprio.', 409);
   }
 
@@ -275,7 +276,7 @@ app.post('/xapi/statements', async (c) => {
   }
   // A non-terminal xAPI statement is still a write. It must not modify the
   // private Native enrollment ledger or indirectly alter its LMS status.
-  if (String(matricula.tipo_conteudo ?? '').trim().toLowerCase() === 'native') {
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo)) {
     throw new ApiError('Curso nativo exige eventos e avaliações do player próprio.', 409);
   }
 

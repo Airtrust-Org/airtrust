@@ -32,7 +32,8 @@ describe('effective Native catalog identity — fail-closed staging-only read ba
     const { env, prepare, bind } = mock('6,12');
     expect(await isNativeForLegacyLmsPath(env, 6, 72, 'scorm')).toBe(true);
     expect(prepare).toHaveBeenCalledWith(expect.stringContaining('FROM lms_native_catalog_activation'));
-    expect(bind).toHaveBeenCalledExactlyOnceWith(6, 72);
+    expect(bind).toHaveBeenCalledTimes(1);
+    expect(bind).toHaveBeenCalledWith(6, 72);
   });
   it('keeps an unactivated SCORM course allowed in the same staging tenant', async () => {
     const { env } = mock('6', null);

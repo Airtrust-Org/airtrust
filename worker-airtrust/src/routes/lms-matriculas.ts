@@ -6,6 +6,7 @@
  * - Endpoint de commit SCORM (runtime state)
  * - Geração automática de qualificação ao concluir
  */
+import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-guard';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -1388,7 +1389,9 @@ app.post('/scorm/commit', async (c) => {
       throw new ApiError('Acesso negado', 403);
     }
   }
-  if (matricula.tipo_conteudo?.trim().toLowerCase() === 'native') throw new ApiError('Curso nativo exige checkpoints do player próprio.', 409);
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo)) {
+    throw new ApiError('Curso nativo exige checkpoints do player próprio.', 409);
+  }
   // ─── Guard: prevent CONCLUIDO downgrade via SCORM commit ─────────────────
   // Completed enrollments allow only idempotent non-downgrading SCORM commits.
   const matriculaWasConcluido = matricula.status === 'CONCLUIDO';

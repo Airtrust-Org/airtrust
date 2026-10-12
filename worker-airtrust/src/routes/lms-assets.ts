@@ -23,6 +23,7 @@ import type { Env, JwtPayload } from '../types';
 import { buildLmsContentSecurityPolicy } from '../lib/lms/security-headers';
 import { LMS_ASSET_TOKEN_COOKIE } from '../lib/lms/lms-asset-session';
 import { assertScormAssetEligibility, isPrivilegedRole } from '../lib/lms/lms-scorm-asset-eligibility';
+import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-guard';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -550,6 +551,7 @@ app.post('/assets/session', auth(), async (c) => {
 
     if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
     assertScormAssetEligibility(matricula.tipo_conteudo, 'Curso nativo exige os assets do player próprio.');
+    if (await isNativeForLegacyLmsPath(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo)) throw new ApiError('Curso nativo exige os assets do player próprio.', 409);
 
     const canManage = isPrivilegedRole(accessPayload.role);
     const callerFuncionarioId = Number(accessPayload.funcionario_id ?? 0);
@@ -569,7 +571,7 @@ app.post('/assets/session', auth(), async (c) => {
     if (!isPreviewAllowedRole(accessPayload.role)) {
       throw new ApiError('Acesso negado', 403);
     }
-    await ensureCourseAssetAccess(c.env.DB, accessPayload, empresaId, requestedCursoId);
+    await ensureCourseAssetAccess(c.env.DB, accessPayload, empresaId, requestedCursoId, c.env);
     cursoId = requestedCursoId;
   } else {
     throw new ApiError('Informe matricula_id ou curso_id com preview=true', 400);
@@ -633,7 +635,7 @@ app.get('/pptx/viewer/:cursoId', async (c) => {
     throw new ApiError('Token de visualização não pode emitir outro token de visualização', 403);
   }
 
-  await ensureCourseAssetAccess(db, payload, empresaId, cursoId);
+  await ensureCourseAssetAccess(db, payload, empresaId, cursoId, c.env);
 
   const secret = c.env.JWT_SECRET;
   if (!secret) {
@@ -678,6 +680,7 @@ async function ensureCourseAssetAccess(
   payload: JwtPayload,
   empresaId: number,
   cursoId: number,
+  env: Env,
 ) {
   const tokenEmpresaId = Number(payload.empresa_id ?? 0);
   if (!tokenEmpresaId || tokenEmpresaId !== empresaId) {
@@ -699,6 +702,7 @@ async function ensureCourseAssetAccess(
     throw new ApiError('Curso não encontrado', 404);
   }
   assertScormAssetEligibility(curso.tipo_conteudo, 'Curso nativo exige os assets do player próprio.');
+  if (await isNativeForLegacyLmsPath(env, empresaId, cursoId, curso.tipo_conteudo)) throw new ApiError('Curso nativo exige os assets do player próprio.', 409);
 
   if (canManage) {
     return curso;
@@ -828,7 +832,7 @@ app.get('/scorm/assets/:empresa_id/:curso_id/*', async (c) => {
   const cursoId = c.req.param('curso_id');
   assertCourseAssetToken(payload, Number(cursoId));
   const cacheBuster = new URL(c.req.url).searchParams.get('airtrust_scorm')?.trim() || null;
-  const cursoAccess = await ensureCourseAssetAccess(c.env.DB, payload, Number(empresaId), Number(cursoId));
+  const cursoAccess = await ensureCourseAssetAccess(c.env.DB, payload, Number(empresaId), Number(cursoId), c.env);
   const wildcard = extractAssetPathFromRequest(
     new URL(c.req.url).pathname,
     `/api/lms/scorm/assets/${empresaId}/${cursoId}`,
@@ -899,7 +903,7 @@ app.get('/scorm/assets-by-curso/:cursoId/*', async (c) => {
     .first<{ id: number; empresa_id: number; scorm_package_r2_prefix: string | null }>();
   if (!curso) return c.text('Not found', 404);
   assertCourseAssetToken(payload, curso.id);
-  await ensureCourseAssetAccess(db, payload, curso.empresa_id, curso.id);
+  await ensureCourseAssetAccess(db, payload, curso.empresa_id, curso.id, c.env);
 
   const { object: foundObject, resolvedKey } = await resolveScormObject(
     c.env.BUCKET,
@@ -1071,6 +1075,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     }
   }
   assertScormAssetEligibility(matricula.tipo_conteudo, 'Curso nativo exige o player próprio.');
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo)) throw new ApiError('Curso nativo exige o player próprio.', 409);
   if (!matricula.scorm_launch_file)
     throw new ApiError('Este curso não tem conteúdo SCORM configurado', 400);
 
@@ -1187,6 +1192,7 @@ app.get('/scorm/preview/:curso_id', async (c) => {
 
   if (!curso) throw new ApiError('Curso não encontrado', 404);
   assertScormAssetEligibility(curso.tipo_conteudo, 'Curso nativo não pode usar a prévia SCORM.');
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, curso.id, curso.tipo_conteudo)) throw new ApiError('Curso nativo não pode usar a prévia SCORM.', 409);
   assertCourseAssetToken(payload, curso.id, { preview: true });
   if (!curso.scorm_launch_file)
     throw new ApiError('Este curso não tem conteúdo SCORM configurado', 400);
@@ -2657,7 +2663,7 @@ app.get('/pdf/asset/:cursoId', async (c) => {
     throw new ApiError('Token de visualização não é válido para PDF', 403);
   }
 
-  await ensureCourseAssetAccess(db, payload, empresaId, cursoId);
+  await ensureCourseAssetAccess(db, payload, empresaId, cursoId, c.env);
 
   const curso = await db
     .prepare(
@@ -2694,7 +2700,7 @@ app.get('/pptx/asset/:cursoId', async (c) => {
 
   assertPptxViewerAssetToken(payload, cursoId);
 
-  await ensureCourseAssetAccess(db, payload, empresaId, cursoId);
+  await ensureCourseAssetAccess(db, payload, empresaId, cursoId, c.env);
 
   const curso = await db
     .prepare(
