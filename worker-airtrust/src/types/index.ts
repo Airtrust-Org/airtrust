@@ -50,6 +50,7 @@ export interface Env {
   NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS?: string;
   NATIVE_LEARNER_ENROLLMENT_CREATE_ENABLED_TENANTS?: string;
   NATIVE_COMPLETION_PREFLIGHT_ENABLED_TENANTS?: string;
+  NATIVE_COMPLETION_WRITE_ENABLED_TENANTS?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';

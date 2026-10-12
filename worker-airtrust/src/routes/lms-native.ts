@@ -15,6 +15,7 @@ import { loadNativeVerifiedAsset } from '../services/lms-native-asset-loader';
 import nativeWriteRoutes, { canWriteNative } from './lms-native-write';
 import nativeEnrollmentRoutes from './lms-native-enrollment';
 import nativeCompletionPreflightRoutes from './lms-native-completion-preflight';
+import nativeCompletionRoutes from './lms-native-completion';
 import {
   NativeAdmissionError,
   resolveNativeEnrollmentAdmission,
@@ -262,5 +263,7 @@ app.route('/', nativeWriteRoutes);
 app.route('/', nativeEnrollmentRoutes);
 // Separate read-only completion diagnostics, not a terminal write endpoint.
 app.route('/', nativeCompletionPreflightRoutes);
+// Fifth allowlist, transaction-bound canonical terminal. OFF by default.
+app.route('/', nativeCompletionRoutes);
 
 export default app;
