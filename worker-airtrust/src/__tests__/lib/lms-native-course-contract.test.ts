@@ -76,6 +76,20 @@ describe('AirTrust Native V1: fail-closed authoring contract', () => {
     }
   });
 
+  it('accepts only eight visual layouts and projects them without answer keys', () => {
+    const input = clone();
+    (input.units[0] as unknown as Record<string, unknown>).presentationTemplate = 'media-left';
+    const full = validateNativeCourseArtifact(input);
+    const learner = toNativeLearnerCourse(full);
+    expect(learner.units[0].presentationTemplate).toBe('media-left');
+    expect(JSON.stringify(learner)).not.toContain('correctOptionId');
+    for (const invalid of ['<script>', 'unknown-template', false, 4, null]) {
+      const candidate = clone();
+      (candidate.units[0] as unknown as Record<string, unknown>).presentationTemplate = invalid;
+      expectError(candidate, 'NATIVE_INVALID_PRESENTATION_TEMPLATE');
+    }
+  });
+
   it('removes the entire answer key and grading feedback from learner payload', () => {
     const full = validateNativeCourseArtifact(valid());
     const learner = toNativeLearnerCourse(full);
