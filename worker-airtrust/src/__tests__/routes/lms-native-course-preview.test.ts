@@ -47,6 +47,9 @@ function fetchRoute(config: {
   anonymous?: boolean;
   assetId?: string;
   range?: string;
+  completion?: string;
+  catalog?: string;
+  write?: string;
 } = {}) {
   const headers: Record<string, string> = config.anonymous ? {} : {
     'x-test-user': String(config.user ?? 900),
@@ -60,6 +63,9 @@ function fetchRoute(config: {
   ), {
     ENVIRONMENT: config.environment ?? 'staging',
     NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS: config.allowlist ?? '6',
+    NATIVE_LEARNER_WRITE_ENABLED_TENANTS: config.write ?? '6',
+    NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: config.catalog ?? '6',
+    NATIVE_COMPLETION_WRITE_ENABLED_TENANTS: config.completion ?? '',
     DB: {} as D1Database, BUCKET: {} as R2Bucket,
   } as unknown as Env);
 }
@@ -126,6 +132,27 @@ describe('Native V1 staging-only content preview route', () => {
     expect(mocks.load).toHaveBeenCalledWith(expect.objectContaining({
       actorUserId: 900, empresaId: 6, matriculaId: 101,
     }));
+  });
+
+  it('only advertises completion with all independent tenant gates, and never in production', async () => {
+    for (const args of [
+      {completion:'6',catalog:'',write:'6'},
+      {completion:'6',catalog:'6',write:''},
+      {completion:'60',catalog:'6',write:'6'},
+      {completion:'*',catalog:'6',write:'6'},
+      {completion:'6',environment:'production'},
+    ]) {
+      const r = await fetchRoute(args);
+      expect((await r.json() as {data:{completion_supported:boolean}}).data.completion_supported).toBe(false);
+    }
+    const enabled=await fetchRoute({completion:'6',catalog:'6',write:'6'});
+    expect((await enabled.json() as {data:{completion_supported:boolean}}).data.completion_supported).toBe(true);
+    mocks.load.mockResolvedValueOnce({
+      course:{schema:'AIRTRUST_NATIVE_COURSE_V1',questions:[]},
+      editionHash:'a'.repeat(64),cicloId:800,mode:'REVIEW',
+    });
+    const review=await fetchRoute({completion:'6',catalog:'6',write:'6'});
+    expect((await review.json() as {data:{completion_supported:boolean}}).data.completion_supported).toBe(false);
   });
 
   it('does not expose private error cause if native publication fails', async () => {

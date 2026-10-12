@@ -40,6 +40,7 @@ function testApp() {
 function send(config: {
   environment?: string; allowlist?: string; matricula?: string;
   user?: number; tenant?: number; anonymous?: boolean;
+  catalog?: string; write?: string; completion?: string;
 } = {}) {
   const headers: Record<string, string> = {};
   if (!config.anonymous) {
@@ -52,6 +53,9 @@ function send(config: {
   ), {
     ENVIRONMENT: config.environment ?? 'staging',
     NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS: config.allowlist ?? '6',
+    NATIVE_LEARNER_WRITE_ENABLED_TENANTS: config.write ?? '6',
+    NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: config.catalog ?? '6',
+    NATIVE_COMPLETION_WRITE_ENABLED_TENANTS: config.completion ?? '',
     DB: {} as D1Database, BUCKET: {} as R2Bucket,
   } as unknown as Env);
 }
@@ -140,6 +144,25 @@ describe('Native resume snapshot endpoint — no grade secrets or completion', (
     const json = await response.json() as { data: { mode: string; completion_supported: boolean } };
     expect(json.data.mode).toBe('REVIEW');
     expect(json.data.completion_supported).toBe(false);
+  });
+
+  it('advertises completion only when all fifth-gate requirements hold and learning remains active', async () => {
+    for (const args of [{ completion:'' },{completion:'60'},{completion:'*'},
+      { completion:'6',catalog:'' },{completion:'6',write:''}]) {
+      const response=await send(args);
+      expect((await response.json() as {data:{completion_supported:boolean}})
+        .data.completion_supported).toBe(false);
+    }
+    const enabled=await send({completion:'6',catalog:'6',write:'6'});
+    expect((await enabled.json() as {data:{completion_supported:boolean}})
+      .data.completion_supported).toBe(true);
+    mock.readSession.mockResolvedValueOnce({summary:{
+      editionHash:digest,cicloId:11,mode:'REVIEW',nextSequence:2,seenLessonIds:['opening'],
+      lastVisitedUnitId:'opening',totalLessons:3,latestAttempt:null,
+    },readiness:{readyForCanonicalCompletion:false,reason:'NOT_ACTIVE'}});
+    const review=await send({completion:'6',catalog:'6',write:'6'});
+    expect((await review.json() as {data:{completion_supported:boolean}})
+      .data.completion_supported).toBe(false);
   });
 
   it('hides private content and event corruption errors', async () => {
