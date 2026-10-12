@@ -484,7 +484,11 @@ describe('Pilot Offline shell', () => {
     expect(pilotSync).toContain('empresa_abastecimento_codigo');
     expect(pilotSync).toContain('client_local_id: optionalText(fueling?.local_id) || crypto.randomUUID()');
     expect(pilotSync).toContain('data_hora: time ? fromInputDateTime(time, flightDate) : new Date().toISOString()');
-    expect(pilotRdvDraft).toContain('hora: toInputTime(now)');
+    expect(pilotRdvDraft).toContain('fuelings: []');
+    expect(pilotApp).toContain('Excluir nota do rascunho');
+    expect(pilotApp).toContain('activeRdvDraft.fuelings.splice(index, 1)');
+    expect(pilotApp).toContain('const estimateLb = pax * 200;');
+    expect(pilotApp).toContain('fields.auto_passenger_weight_lb = null;');
     expect(pilotApp).not.toContain("['Hora', 'hora', 'time'");
     expect(pilotApp).not.toContain("['Nota do combustível', 'nota'");
     expect(pilotSync).not.toContain('nota: optionalText(fueling?.nota)');
@@ -492,8 +496,10 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('refreshAllStageDerivedTimes()');
     expect(pilotRdvDraft).toContain('applyStageContinuity');
     expect(pilotApp).toContain('monotonic_sequence: timingSequence');
-    expect(pilotApp).toContain("['Partidas', 'starts', 'number', 'numeric', true");
-    expect(pilotApp).toContain("fields.starts = String(fields.horario_motor_ligado || '').trim() ? '1' : ''");
+    expect(pilotApp).toContain("['Partidas', 'starts', 'number', 'numeric', false");
+    expect(pilotApp).not.toContain("fields.starts = String(fields.horario_motor_ligado || '').trim() ? '1' : ''");
+    expect(pilotApp).toContain("if (key === 'starts') stageDraft.starts_auto_derived = false;");
+    expect(pilotRdvDraft).toContain("currentDraft?.starts_auto_derived === true");
     expect(pilotRdvDraft).toContain('Ciclos não são derivados de pousos');
     expect(pilotRdvDraft).not.toContain('next.ciclos =');
   });
@@ -515,6 +521,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("['Tempo total', activeRdvDraft.form.tempo_total_hhmm");
     expect(pilotApp).toContain('realizedTotalMinutes(activeStageDrafts)');
     expect(pilotApp).toContain('Tempo total realizado');
+    expect(pilotApp).toContain('Justificativa opcional: você pode concluir o voo');
     expect(pilotApp).toContain('Nome de guerra: ');
     expect(pilotApp).toContain('ANAC: ');
     expect(pilotApp).toContain('Aguardando FRMS');

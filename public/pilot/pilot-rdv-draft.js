@@ -391,14 +391,7 @@ export function buildDraftSnapshot(packageData, previousSequence = 0) {
       form: buildRdvFormFromPackage(packageData),
       common: buildCommonFlightFields(packageData),
       flight_update: {},
-      fuelings: [{
-        local_id: crypto.randomUUID(),
-        hora: toInputTime(now),
-        etapa_numero: Number(buildStageDraftsFromPackage(packageData)[0]?.numero_etapa || 1),
-        empresa_abastecimento_codigo: '',
-        numero_nota: '',
-        litros_abastecidos: '',
-      }],
+      fuelings: [],
       justifications: (Array.isArray(packageData?.justificativas) ? packageData.justificativas : []).map((item) => ({
         local_id: crypto.randomUUID(),
         justificativa_codigo: String(item?.codigo || ''),
@@ -587,7 +580,10 @@ export function applyStageContinuity(stageDrafts) {
     // Uma nova partida só existe quando houve corte ao fim da etapa anterior.
     // Se o motor permaneceu ligado entre duas pernas, a etapa seguinte não
     // acrescenta uma partida ao total do voo.
-    current.starts = previousCut ? 1 : 0;
+    if (String(current.starts ?? '').trim() === '' || currentDraft?.starts_auto_derived === true) {
+      current.starts = previousCut ? '1' : '0';
+      if (canTrackDerived) currentDraft.starts_auto_derived = true;
+    }
 
     // Continuidade operacional obrigatória entre pernas: o combustível final
     // de uma perna é sempre o combustível inicial da perna seguinte.

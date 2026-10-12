@@ -81,6 +81,8 @@ export async function assertPlanningDeviationJustified(
     .first<{ total: number }>();
   const assignedMinutes = Number(sumRow?.total || 0);
 
+  // A justificativa do desvio e opcional; motivos preenchidos continuam consistentes.
+  if (assignedMinutes === 0) return;
   if (assignedMinutes !== requiredMinutes) {
     throw new ApiError(
       `Justificativas do desvio devem somar exatamente ${requiredMinutes} minuto(s); informado: ${assignedMinutes}.`,
