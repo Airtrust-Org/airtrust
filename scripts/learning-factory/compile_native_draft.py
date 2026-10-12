@@ -198,7 +198,15 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
         kind = slide.get('kind')
         if kind not in SUPPORTED_KINDS:
             raise NativeCompileError('UNSUPPORTED_SLIDE_KIND')
+        # Preserve visible source headings; losing these silently would
+        # remove the module/section context from the Native learner view.
         blocks = []
+        module = slide.get('module')
+        if module is not None:
+            blocks.append({'type': 'heading', 'text': ensure_text(module, 'SLIDE_MODULE', 200)})
+        eyebrow = slide.get('eyebrow')
+        if eyebrow is not None:
+            blocks.append({'type': 'paragraph', 'text': ensure_text(eyebrow, 'SLIDE_EYEBROW', 200)})
         lead = slide.get('lead')
         if lead is not None:
             blocks.append({'type': 'paragraph', 'text': ensure_text(lead, 'SLIDE_LEAD')})
@@ -266,8 +274,8 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
         if source_refs:
             unit['sourceRefs'] = source_refs
         units.append(unit)
-        accounted = {'id','title','kind','lead','body','media','visualAlt','sourceRefs',
-                     'question','options','questions'}
+        accounted = {'id','title','kind','module','eyebrow','lead','body','media',
+                     'visualAlt','sourceRefs','question','options','questions'}
         source_fields_unmapped.update(k for k in slide if k not in accounted and k not in converted)
     if len(set(unit['id'] for unit in units)) != len(units):
         raise NativeCompileError('DUPLICATE_SLIDE_ID')
