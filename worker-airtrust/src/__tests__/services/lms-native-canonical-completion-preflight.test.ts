@@ -30,7 +30,10 @@ function make(row: unknown = accepted) {
     },
   }));
   const env = { DB: { prepare } as unknown as D1Database,
-    BUCKET: {} as R2Bucket, ENVIRONMENT: 'staging' } as Env;
+    BUCKET: {} as R2Bucket, ENVIRONMENT: 'staging',
+    NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS: '6',
+    NATIVE_LEARNER_WRITE_ENABLED_TENANTS: '6',
+    NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6' } as Env;
   const call = (overrides: Record<string, unknown> = {}) =>
     preflightNativeCanonicalCompletion({
       env, empresaId: 6, matriculaId: 101, actorUserId: 900, ...overrides,
@@ -86,6 +89,7 @@ describe('Native canonical completion: read-only preflight, never certificate au
     for (const change of [
       { curso_id: 32 }, { ciclo_id: 1002 },
       { artifact_sha256: 'b'.repeat(64) }, { funcionario_id: 0 },
+      { status: 'CONCLUIDO' },
     ]) {
       const f=make({ ...accepted, ...change });
       await expect(f.call()).resolves.toEqual({
@@ -113,6 +117,17 @@ describe('Native canonical completion: read-only preflight, never certificate au
         existingHistoricoId: null,
       },
     });
+  });
+  it('never touches D1 or R2 if production or exact tenant Native staging gate is closed', async () => {
+    const f=make();
+    f.env.ENVIRONMENT = 'production';
+    await expect(f.call()).rejects.toThrow('NATIVE_COMPLETION_PREFLIGHT_NOT_ENABLED');
+    expect(mocks.loadPrivate).not.toHaveBeenCalled();
+    expect(f.prepare).not.toHaveBeenCalled();
+    f.env.ENVIRONMENT = 'staging';
+    f.env.NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS = '60';
+    await expect(f.call()).rejects.toThrow('NATIVE_COMPLETION_PREFLIGHT_NOT_ENABLED');
+    expect(mocks.loadPrivate).not.toHaveBeenCalled();
   });
   it('refuses invalid identities without D1 or R2 access', async () => {
     const f=make();

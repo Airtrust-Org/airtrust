@@ -8,6 +8,7 @@
  * 0551 review-only candidate blocks ungoverned Native completion.
  */
 import type { Env } from '../types';
+import { canProvisionNative } from './lms-native-enrollment-provisioner';
 import type { NativeReadinessVerdict } from '../lib/lms/lms-native-evidence-domain';
 import { loadNativePrivateCourse } from './lms-native-content-loader';
 import { readNativeCanonicalReadiness } from './lms-native-readiness-repository';
@@ -58,6 +59,9 @@ export async function preflightNativeCanonicalCompletion(params: {
     id => Number.isSafeInteger(id) && id > 0,
   )) throw new Error('NATIVE_COMPLETION_INVALID_CONTEXT');
 
+  if (!canProvisionNative(env, empresaId)) {
+    throw new Error('NATIVE_COMPLETION_PREFLIGHT_NOT_ENABLED');
+  }
   const verified = await loadNativePrivateCourse({
     env, db: env.DB, bucket: env.BUCKET,
     empresaId, matriculaId, actorUserId,
@@ -86,6 +90,7 @@ export async function preflightNativeCanonicalCompletion(params: {
     'FROM lms_matriculas m',
     'JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id',
     'AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL',
+    "AND c.tipo_conteudo='scorm'",
     'JOIN lms_native_catalog_activation a ON a.curso_id=c.id AND a.empresa_id=c.empresa_id',
     'JOIN usuarios u ON u.id=? AND u.funcionario_id=m.funcionario_id',
     'AND u.deleted_at IS NULL',
@@ -109,7 +114,7 @@ export async function preflightNativeCanonicalCompletion(params: {
   ).first<CourseRow>();
   if (!row || row.id !== matriculaId || row.curso_id !== verified.cursoId ||
       row.ciclo_id !== verified.cicloId ||
-      row.artifact_sha256 !== verified.editionHash ||
+      row.artifact_sha256 !== verified.editionHash || row.status !== 'EM_ANDAMENTO' ||
       !Number.isSafeInteger(row.funcionario_id) || row.funcionario_id <= 0) {
     return { ready: false, reason: 'COURSE_OR_CYCLE_CHANGED' };
   }

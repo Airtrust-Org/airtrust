@@ -5,7 +5,8 @@
 -- Do not enable staging tenant flags until D1 batch, audits and rollback are validated.
 -- SQL rehearsal only on synthetic SQLite with PRAGMA foreign_keys=ON.
 SELECT json(CASE WHEN
-  (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN
+  (SELECT foreign_keys FROM pragma_foreign_keys)=1
+  AND (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN
     ('lms_native_edicoes','lms_native_matricula_edicoes',
      'lms_native_eventos','lms_native_tentativas'))=4
   AND (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN

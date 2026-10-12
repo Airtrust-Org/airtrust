@@ -259,6 +259,16 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
         finally:
             db.close()
 
+    def test_candidate_requires_foreign_key_enforcement_before_any_ddl(self):
+        db=fixture()
+        try:
+            db.execute('PRAGMA foreign_keys=OFF')
+            before=db.execute('SELECT COUNT(*) FROM sqlite_master').fetchone()[0]
+            with self.assertRaisesRegex(sqlite3.OperationalError, 'malformed JSON'):
+                db.executescript(CANDIDATE.read_text(encoding='utf8'))
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM sqlite_master').fetchone()[0],before)
+        finally: db.close()
+
     def test_candidate_reapply_refused_before_existing_schema_mutation(self):
         db=fixture()
         try:
