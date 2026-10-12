@@ -248,6 +248,7 @@ export interface CvFrmsCrewDispatchAssessment {
   fadiga_acumulada: FrmsDispatchFadigaNivel;
   reasons: FrmsDispatchGateReasonCode[];
   primary_reason: FrmsDispatchGateReasonCode | null;
+  recommended_action: string;
   natureza_dado: string | null;
 }
 
