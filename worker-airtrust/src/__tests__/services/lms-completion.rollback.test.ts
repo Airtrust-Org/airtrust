@@ -314,7 +314,7 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
     const existingId = (
       querySql(dbPath, 'SELECT id FROM qualificacoes_historico;')[0] as Record<string, unknown>
     ).id as number;
-    const retryPre = { ...preNoAnterior, existingHistoricoId: existingId };
+    const retryPre = { ...preNoAnterior, existingHistoricoId: existingId, existingHistoricoStatus: 'CONCLUIDA' };
     const retryStatements = buildCompletionBatchStatements(
       baseParams({ matriculaId: 5, existingHistoricoId: existingId }),
       retryPre,
@@ -329,6 +329,66 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
     )[0] as Record<string, unknown>;
     expect(matricula5AposRetry.status).toBe('CONCLUIDO');
     expect(matricula5AposRetry.qualificacao_historico_id).toBe(existingId);
+  });
+
+  it.each(['CANCELADA', 'RENOVADA', 'PLANEJADA', null])(
+    'bloqueia reuso se o histórico mudar depois do preflight (%s)', (newStatus) => {
+      seedMatricula(7);
+      execSql(dbPath, `
+        INSERT INTO qualificacoes_historico
+          (id, empresa_id, funcionario_id, qualificacao_codigo, data_conclusao, status)
+        VALUES (777, 6, 77, 'QUAL-X', '2026-07-30', 'CONCLUIDA');`);
+      const pre = {
+        ...preNoAnterior, existingHistoricoId: 777,
+        existingHistoricoStatus: 'CONCLUIDA',
+      };
+      const batch = buildCompletionBatchStatements(
+        baseParams({ matriculaId: 7, existingHistoricoId: 777 }), pre);
+      const sqlStatus = newStatus === null ? 'NULL' : `'${newStatus}'`;
+      execSql(dbPath, `UPDATE qualificacoes_historico
+                        SET status = ${sqlStatus} WHERE id = 777;`);
+      const outcome = runSqliteBatch(dbPath, batch);
+      expect(outcome.committed).toBe(false);
+      expect(outcome.stderr).toContain('malformed JSON');
+      expect((querySql(dbPath,
+        'SELECT status FROM lms_matriculas WHERE id = 7;')[0] as Record<string, unknown>).status)
+        .toBe('EM_ANDAMENTO');
+      expect(querySql(dbPath, 'SELECT * FROM lms_matricula_ciclos;')).toHaveLength(0);
+      expect(querySql(dbPath, 'SELECT * FROM audit_logs;')).toHaveLength(0);
+    },
+  );
+
+  it('permite realizar PLANEJADA estável e não confirma contra outro tenant', () => {
+    seedMatricula(8);
+    execSql(dbPath, `
+      INSERT INTO qualificacoes_historico
+        (id, empresa_id, funcionario_id, qualificacao_codigo, data_conclusao, status)
+      VALUES (778, 6, 77, 'QUAL-X', '2026-07-30', 'PLANEJADA');`);
+    const pre = {
+      ...preNoAnterior, existingHistoricoId: 778,
+      existingHistoricoStatus: 'PLANEJADA',
+    };
+    const batch = buildCompletionBatchStatements(
+      baseParams({ matriculaId: 8, existingHistoricoId: 778 }), pre);
+    expect(runSqliteBatch(dbPath, batch).committed).toBe(true);
+    expect((querySql(dbPath,
+      'SELECT status FROM qualificacoes_historico WHERE id = 778;')[0] as Record<string, unknown>).status)
+      .toBe('CONCLUIDA');
+
+    // A second completion using an existing row from a different tenant
+    // must abort before creating any cycle or success audit.
+    seedMatricula(9);
+    const alienPre = {
+      ...preNoAnterior, existingHistoricoId: 778,
+      existingHistoricoStatus: 'CONCLUIDA',
+    };
+    execSql(dbPath, "UPDATE qualificacoes_historico SET empresa_id = 7 WHERE id = 778;");
+    const alien = buildCompletionBatchStatements(
+      baseParams({ matriculaId: 9, existingHistoricoId: 778 }), alienPre);
+    expect(runSqliteBatch(dbPath, alien).committed).toBe(false);
+    expect((querySql(dbPath,
+      'SELECT status FROM lms_matriculas WHERE id = 9;')[0] as Record<string, unknown>).status)
+      .toBe('EM_ANDAMENTO');
   });
 
   it('cinco retries idempotentes do mesmo batch (histórico já existente) nunca duplicam nem regridem', () => {
@@ -350,6 +410,7 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
       const retryPre = {
         ...preNoAnterior,
         existingHistoricoId: existingId,
+        existingHistoricoStatus: 'CONCLUIDA',
         currentCycleId: (cicloAtual?.id as number | undefined) ?? null,
       };
       const retry = buildCompletionBatchStatements(
