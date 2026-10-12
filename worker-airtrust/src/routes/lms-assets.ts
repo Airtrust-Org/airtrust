@@ -15,6 +15,7 @@ import {
   buildScormNativeResumeOwnershipScript,
   buildScormProgressParsersScript,
   buildScormSessionCloseRuntimeScript,
+  buildScormQueuedCommitScript,
 } from '../services/lms-scorm-wrapper-runtime';
 import { generateJWT, verifyJWT } from '../utils/security';
 import { getEmpresaIdOptional } from './escalas-shared';
@@ -1980,14 +1981,7 @@ ${buildScormNativeResumeOwnershipScript()}
     return status === 408 || status === 425 || status === 429 || status >= 500;
   }
 
-  function queueLatestCommit(data, eventType) {
-    // A regular autosave/close must never replace the student's queued final request.
-    if (queuedCommit && queuedCommit.eventType === 'SCORM_USER_FINALIZE' &&
-        eventType !== 'SCORM_USER_FINALIZE') return;
-    if (!queuedCommit || isFinalCommitEvent(eventType) || !isFinalCommitEvent(queuedCommit.eventType)) {
-      queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
-    }
-  }
+${buildScormQueuedCommitScript()}
 
   function flushQueuedCommit() {
     if (commitInFlight || !queuedCommit) return;
@@ -2026,7 +2020,7 @@ ${buildScormNativeResumeOwnershipScript()}
     }, data);
     // The wrapper never receives an access bearer. The browser sends only the
     // short-lived, HttpOnly, enrollment-scoped LMS capability cookie.
-    var needsKeepalive = eventType === 'SCORM_BEFORE_UNLOAD_COMMIT' || eventType === 'SCORM_VISIBILITY_COMMIT';
+    var needsKeepalive = isFinalCommitEvent(eventType); // Preserve completion if the learner exits immediately.
     var requestPromise = fetch(COMMIT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

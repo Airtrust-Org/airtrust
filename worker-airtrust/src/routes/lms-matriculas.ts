@@ -17,11 +17,13 @@ import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lm
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import {
   ensureMatriculaCycle,
+  hasActiveMatriculaCycle,
   resetMatriculaForNewCycle,
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
 import {
   buildMatriculaCompletionDiagnostic,
+  buildScormCompletionDiagnostic,
   extractScormLocationFromCmiJson,
   mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
@@ -47,11 +49,14 @@ import {
   buildAppliedScormState,
   buildProgressRecoveryReference,
   buildProgressRecoverySnapshot,
+  buildRecoveryDryRunDifferences,
   evaluateProgressRecovery,
   extractLessonLocationValue,
+  normalizeStatusToken,
   safeJsonParseObject,
   summarizeProgressRecoverySnapshot,
   type ProgressRecoveryEnrollment,
+  type ProgressRecoveryEvaluation,
   type ProgressRecoveryStateSnapshot,
 } from '../services/lms-progress-recovery-domain';
 import {
@@ -2958,7 +2963,9 @@ app.patch('/:id/progresso', async (c) => {
   const { progresso_pct, ultimo_slide, ultima_pagina } = parsed.data;
 
   // Verificar que a matrícula pertence à empresa e ao funcionário autenticado
-  const isAdmin = hasRole(c, 'admin', 'manager');
+  const userId = getCallerUserId(c);
+  const userRole = hasRole(c, 'admin') ? 'ADMIN' : hasRole(c, 'manager') ? 'MANAGER' : '';
+  const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
 
   const existing = await db
     .prepare(
@@ -2971,11 +2978,13 @@ app.patch('/:id/progresso', async (c) => {
 
   if (!existing) throw new ApiError('Matrícula não encontrada', 404);
 
-  // Mesmo vínculo utilizado no detalhe e no commit SCORM; o legado
-  // funcionarios.usuario_id não é necessariamente preenchido.
+  // Não-admins: validar que é o próprio aluno
   if (!isAdmin) {
-    const callerFuncionarioId = await resolveCallerFuncionarioId(c, db);
-    if (!callerFuncionarioId || callerFuncionarioId !== existing.funcionario_id) {
+    const funcionarioRow = await db
+      .prepare(`SELECT id FROM funcionarios WHERE usuario_id = ? AND empresa_id = ? LIMIT 1`)
+      .bind(userId, empresaId)
+      .first<{ id: number }>();
+    if (!funcionarioRow || funcionarioRow.id !== existing.funcionario_id) {
       throw new ApiError('Sem permissão para atualizar esta matrícula', 403);
     }
   }

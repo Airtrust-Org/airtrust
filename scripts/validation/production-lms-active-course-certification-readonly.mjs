@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
-import { evaluateScormFunctionalCertification } from './lms-scorm-functional-certification-gate.mjs';
+import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
 import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
 import {
   assert,
@@ -1755,13 +1755,15 @@ async function certifyScormCourse(browser, token, listed) {
   const functional = evaluateScormFunctionalCertification({
     manifest, suspend, complete, reopen, phasePass: basePhasePass,
   });
+  const classification = classifyScormProbeResult({ verdict: functional, complete });
 
   return {
     course_id: id,
     titulo: String(listed.titulo || detail.titulo || ''),
     tipo_conteudo: 'scorm',
-    status: functional.pass ? 'PASS' : 'FAIL',
+    status: classification.status,
     reason: functional.reason,
+    certification_evidence: classification.evidence,
     package_sha256: pkg?.sha256 ?? null,
     legacy_unversioned: legacyUnversioned,
     stored_gate: pkg ? {
@@ -1859,6 +1861,7 @@ async function main() {
     course_count: results.length,
     pass_count: results.filter((r) => r.status === 'PASS').length,
     fail_count: results.filter((r) => r.status === 'FAIL').length,
+    inconclusive_count: results.filter((r) => r.status === 'INCONCLUSIVE').length,
     scorm_count: results.filter((r) => r.tipo_conteudo === 'scorm').length,
     pptx_count: results.filter((r) => r.tipo_conteudo === 'pptx').length,
     writes: 'none (authentication/company-selection/asset-session POSTs only; no LMS progress/enrollment/certificate/course mutations)',
@@ -1866,8 +1869,9 @@ async function main() {
   };
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, course_count: report.course_count })}\n`);
-  if (report.fail_count > 0) process.exitCode = 2;
+  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, inconclusive_count: report.inconclusive_count, course_count: report.course_count })}\n`);
+  // Both explicit failures and inconclusive runs block certification/release.
+  if (report.fail_count + report.inconclusive_count > 0) process.exitCode = 2;
 }
 
 main().catch((error) => {

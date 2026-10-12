@@ -318,10 +318,15 @@ export function buildScormSessionCloseRuntimeScript(): string {
       return false;
     }
     if (typeof serialized !== 'string' || serialized.length > MAX_RELAYED_DIAGNOSTICS_CHARS) return false;
+    var diagnostics = JSON.parse(serialized);
+    // The message type is the package's V1 contract marker. Some published
+    // SCORM packages carry that marker only on the envelope, while the LMS
+    // parser expects it on the payload as well.
+    if (diagnostics.version == null) diagnostics.version = 1;
     postToParent({
       type: 'lms:completion-diagnostics',
       matriculaId: MATRICULA_ID,
-      diagnostics: JSON.parse(serialized),
+      diagnostics: diagnostics,
     });
     return true;
   }`;
@@ -357,4 +362,30 @@ export function buildScormNativeResumeOwnershipScript(): string {
   }
 
 `;
+}
+
+/**
+ * Final event queue priority lives in the wrapper IIFE. Preserve the exact
+ * Finish/finalization payload when unload autosaves race with an in-flight commit.
+ * This is runtime JavaScript, not TypeScript executed on the Worker.
+ */
+export function buildScormQueuedCommitScript(): string {
+  return `
+  function queuedCommitPriority(eventType) {
+    switch (String(eventType || 'SCORM_COMMIT').toUpperCase()) {
+      case 'SCORM_USER_FINALIZE': return 5;
+      case 'SCORM_FINISH': return 4;
+      case 'SCORM_COMPLETION_CANDIDATE': return 3;
+      case 'SCORM_BEFORE_UNLOAD_COMMIT':
+      case 'SCORM_VISIBILITY_COMMIT': return 2;
+      default: return 1;
+    }
+  }
+
+  function queueLatestCommit(data, eventType) {
+    if (!queuedCommit ||
+        queuedCommitPriority(eventType) >= queuedCommitPriority(queuedCommit.eventType)) {
+      queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
+    }
+  }`;
 }

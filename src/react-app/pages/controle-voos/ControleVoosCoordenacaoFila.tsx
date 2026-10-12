@@ -154,7 +154,7 @@ export default function ControleVoosCoordenacaoFila() {
                         RDV
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
-                        Prefixo
+                        Aeronave / modelo
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Rota operacional
@@ -187,7 +187,8 @@ export default function ControleVoosCoordenacaoFila() {
                           {item.numero}
                         </td>
                         <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
-                          {item.prefixo}
+                          <span className="block font-semibold">{item.prefixo}</span>
+                          <span className="block text-xs text-slate-500">{item.modelo_aeronave || 'Modelo não informado'}</span>
                         </td>
                         <td className="px-4 py-3 text-xs font-medium text-slate-700 dark:text-slate-300">
                           {flightOperationalRouteLabel(item, [])}

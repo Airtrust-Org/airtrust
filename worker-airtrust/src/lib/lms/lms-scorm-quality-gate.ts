@@ -40,6 +40,8 @@ export type ScormRuntimeConformance = {
   trace: Array<{ method: string; key?: string; value?: string }>;
   errors: string[];
   runnerVersion: string;
+  failureStage?: string;
+  failureCategory?: string;
   functionalCompletionVerified?: boolean;
   functionalCompletionReason?: string | null;
   expectedSuccessStatus?: string | null;

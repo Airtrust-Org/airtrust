@@ -31,3 +31,21 @@ export function evaluateScormFunctionalCertification({ manifest, suspend, comple
 
   return { pass, reason };
 }
+
+/**
+ * A bounded browser preview that has not reached the terminal SCORM state is
+ * not evidence of a defective package. It remains uncertified and blocks
+ * release until a complete functional journey proves completion.
+ */
+export function classifyScormProbeResult({ verdict, complete }) {
+  if (verdict?.pass === true) return { status: 'PASS', evidence: 'PREVIEW_LIFECYCLE_PASSED' };
+  const runtimeError =
+    (complete?.asset_failures?.length ?? 0) > 0 ||
+    (complete?.page_errors?.length ?? 0) > 0 ||
+    complete?.calls_after_finish === true ||
+    (complete?.last_error != null && complete.last_error !== '0');
+  if (verdict?.reason === 'COMPLETION_NOT_REACHED' && !runtimeError) {
+    return { status: 'INCONCLUSIVE', evidence: 'BROWSER_PROBE_DID_NOT_REACH_COMPLETION' };
+  }
+  return { status: 'FAIL', evidence: 'EXPLICIT_CERTIFICATION_GATE_FAILED' };
+}

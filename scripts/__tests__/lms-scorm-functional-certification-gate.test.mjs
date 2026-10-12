@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { evaluateScormFunctionalCertification } from '../validation/lms-scorm-functional-certification-gate.mjs';
+import { evaluateScormFunctionalCertification, classifyScormProbeResult } from '../validation/lms-scorm-functional-certification-gate.mjs';
 
 const manifest = { masteryScore: 70, requiredInteractions: 8 };
 const phasePass = (phase) => phase.protocol_ok === true;
@@ -44,5 +44,43 @@ describe('P0 read-only LMS functional certification verdict', () => {
       complete: { protocol_ok: true, completion_reached: true, score_raw: null },
       reopen: { protocol_ok: true, completion_reached: true, score_raw: null },
     }), { pass: true, reason: null });
+  });
+});
+
+describe('read-only certification classification distinguishes incomplete probe from proven failure', () => {
+  const safePhase = () => ({
+    initialized: true, commit_observed: true, finish_observed: true,
+    calls_after_finish: false, last_error: '0', asset_failures: [], page_errors: [],
+    completion_reached: false,
+  });
+  it('never treats a bounded preview ending before completion as a certified course or package defect', () => {
+    assert.deepEqual(classifyScormProbeResult({
+      verdict: { pass: false, reason: 'COMPLETION_NOT_REACHED' },
+      complete: safePhase(),
+    }), { status: 'INCONCLUSIVE', evidence: 'BROWSER_PROBE_DID_NOT_REACH_COMPLETION' });
+  });
+  it('keeps explicitly broken assets and runtime protocol failures as FAIL', () => {
+    for (const broken of [
+      { ...safePhase(), asset_failures: [{ status: 404 }] },
+      { ...safePhase(), page_errors: ['Unhandled exception'] },
+      { ...safePhase(), calls_after_finish: true },
+      { ...safePhase(), last_error: '301' },
+    ]) {
+      assert.equal(classifyScormProbeResult({
+        verdict: { pass: false, reason: 'COMPLETION_NOT_REACHED' },
+        complete: broken,
+      }).status, 'FAIL');
+    }
+  });
+  it('does not hide explicit score/mastery or downgrade failures as inconclusive', () => {
+    for (const reason of ['MASTERY_SCORE_NOT_REACHED', 'CERTIFYING_SCORE_MISSING', 'STATUS_DOWNGRADE_AFTER_REOPEN']) {
+      assert.equal(classifyScormProbeResult({
+        verdict: { pass: false, reason }, complete: safePhase(),
+      }).status, 'FAIL');
+    }
+  });
+  it('returns PASS only after the complete certification verdict passes', () => {
+    assert.deepEqual(classifyScormProbeResult({ verdict: { pass: true, reason: null }, complete: safePhase() }),
+      { status: 'PASS', evidence: 'PREVIEW_LIFECYCLE_PASSED' });
   });
 });

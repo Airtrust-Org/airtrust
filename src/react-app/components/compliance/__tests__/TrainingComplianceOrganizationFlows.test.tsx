@@ -255,7 +255,7 @@ describe('Training enrollment reconciliation', () => {
       if (url.includes('/reconciliacao') && (!init?.method || init.method === 'GET')) {
         return ok(reconciliationData);
       }
-      if (url === '/api/lms/matriculas/lote') return ok({ criadas: 2, ignoradas: 0, erros: 0 });
+      if (url === '/api/compliance-treinamentos/reconciliacao/matricular-pendentes') return ok({ matriculadas: 2, restantes_estimadas: 0 });
       if (url === '/api/lms/matriculas/convites/lote')
         return ok({ enviados: 2, sem_email: 0, falhas: 0, nao_encontradas: 0 });
       if (url.includes('/reconciliacao/') && url.endsWith('/decisao')) return ok({ id: 1 });
@@ -266,26 +266,21 @@ describe('Training enrollment reconciliation', () => {
     renderWithClient(<TrainingEnrollmentReconciliation setorId={3} funcaoId={9} />);
     await screen.findAllByText('CRM EAD');
     expect(screen.getByText(/6 matrícula\(s\) alinhada\(s\)/)).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Curso EAD para CRM Periódico' })).toHaveClass(
-      'text-xs',
-      'leading-5',
-      'text-slate-700',
-    );
+    expect(screen.getAllByText('CRM EAD').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /Matricular gaps \(sem e-mail\)/ }));
     await waitFor(() =>
       expect(fetchWithAuthMock).toHaveBeenCalledWith(
-        '/api/lms/matriculas/lote',
+        '/api/compliance-treinamentos/reconciliacao/matricular-pendentes',
         expect.objectContaining({ method: 'POST' }),
       ),
     );
     const enrollmentCall = fetchWithAuthMock.mock.calls.find(
-      ([url]) => url === '/api/lms/matriculas/lote',
+      ([url]) => url === '/api/compliance-treinamentos/reconciliacao/matricular-pendentes',
     );
     expect(JSON.parse(String((enrollmentCall?.[1] as RequestInit)?.body))).toMatchObject({
-      funcionario_ids: [1, 2],
-      curso_id: 77,
-      enviar_convite_email: false,
+      aplicar: true,
+      qualificacao_tipo_id: 100,
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Convites/ }));
@@ -341,4 +336,74 @@ describe('Training enrollment reconciliation', () => {
 
     expect(toastMock.success).toHaveBeenCalled();
   });
+  it('concilia requisitos pendentes com ciclos LMS somente apos confirmacao', async () => {
+    let calls = 0;
+    fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/compliance-treinamentos/reconciliacao/matricular-pendentes') {
+        const { aplicar } = JSON.parse(String(init?.body));
+        if (!aplicar) return ok({
+          modo: 'PREVIEW', pendentes: 3, matriculadas: 0, sem_curso_unico: 0,
+        });
+        calls++;
+        return ok({
+          modo: 'APLICACAO', pendentes: calls === 1 ? 3 : 1,
+          matriculadas: calls === 1 ? 2 : 1,
+          restantes_estimadas: calls === 1 ? 1 : 0, sem_curso_unico: 0,
+        });
+      }
+      if (url.includes('/reconciliacao') && (!init?.method || init.method === 'GET'))
+        return ok(reconciliationData);
+      throw new Error(`unexpected url ${url}`);
+    });
+    renderWithClient(<TrainingEnrollmentReconciliation setorId={3} funcaoId={9} />);
+    await screen.findAllByText('CRM EAD');
+    fireEvent.click(screen.getByRole('button', { name: /Analisar matrículas pendentes/ }));
+    await screen.findByText(/3 novo\(s\) ciclo\(s\) necessário/);
+    expect(calls).toBe(0);
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar matrículas pendentes/ }));
+    await waitFor(() => expect(calls).toBe(2));
+    expect(toastMock.success).toHaveBeenCalledWith(
+      expect.stringContaining('3 ciclo(s) LMS criado(s)'),
+    );
+  });
+
+  it('exige preview e confirmação explícita antes de cancelar matrícula sem requisito', async () => {
+    const data = structuredClone(reconciliationData);
+    data.matriculas_revisao[0].matricula_status = 'NAO_INICIADO';
+    data.matriculas_revisao[0].qualificacao_tipo_codigo = 'NR-26';
+    fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/compliance-treinamentos/reconciliacao/limpeza') {
+        const body = JSON.parse(String(init?.body));
+        expect(body.matricula_ids).toEqual([501]);
+        return ok({
+          elegiveis: [{ matricula_id: 501, status: 'NAO_INICIADO' }],
+          bloqueadas: [],
+          canceladas: body.aplicar ? 1 : 0,
+        });
+      }
+      if (url.includes('/reconciliacao') && (!init?.method || init.method === 'GET'))
+        return ok(data);
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    renderWithClient(<TrainingEnrollmentReconciliation setorId={3} funcaoId={9} />);
+    await screen.findAllByText('CRM EAD');
+    fireEvent.click(screen.getByRole('button', { name: /Revisar/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Analisar limpeza/ }));
+    await screen.findByText(/1 elegível\(is\) para cancelamento lógico/);
+    const writesBefore = fetchWithAuthMock.mock.calls.filter(([url, init]) =>
+      url === '/api/compliance-treinamentos/reconciliacao/limpeza' &&
+      JSON.parse(String((init as RequestInit).body)).aplicar === true,
+    );
+    expect(writesBefore).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar cancelamento/ }));
+    await waitFor(() =>
+      expect(fetchWithAuthMock.mock.calls.filter(([url, init]) =>
+        url === '/api/compliance-treinamentos/reconciliacao/limpeza' &&
+        JSON.parse(String((init as RequestInit).body)).aplicar === true,
+      )).toHaveLength(1),
+    );
+    expect(toastMock.success).toHaveBeenCalled();
+  });
+
 });

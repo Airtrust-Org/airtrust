@@ -36,6 +36,7 @@ serve different RBAC/fixture purposes.
 |---|---|---|
 | `STAGING_SMOKE_EMAIL` | Must equal the canonical login `qa-agent@staging.airtrust.invalid` for compatibility with existing workflows | GitHub Environment `staging` |
 | `STAGING_SMOKE_PASSWORD` | Password for the canonical general staging QA identity | GitHub Environment `staging` |
+| `qa-lms-e2e@staging.airtrust.invalid` | Isolated LMS learner account; reuses `STAGING_SMOKE_PASSWORD` | GitHub Environment `staging` |
 | `QA_EXAMINER_ADMIN_EMAIL` | Synthetic examiner-training QA tenant administrator | GitHub Environment `staging` |
 | `QA_EXAMINER_ADMIN_PASSWORD` | Password for the synthetic examiner-training QA administrator | GitHub Environment `staging` |
 
@@ -143,6 +144,18 @@ central credentials are missing, it fails with
 the next agent cannot know.
 
 ## 7. Interactive testing
+
+### LMS catalog audit learner
+
+The LMS browser audit uses `qa-lms-e2e@staging.airtrust.invalid`, provisioned by
+`.github/workflows/provision-staging-standard-identity.yml` into the dedicated
+`qa_lms_catalog_audit_smoke` synthetic tenant with profile `ALUNO` and tenant
+role `student`, linked to synthetic employee matricula `QA-LMS-E2E` and name
+of war `AUDITOR LMS`. It reuses the existing centrally stored
+`STAGING_SMOKE_PASSWORD`; no new secret is required. The readiness workflow
+checks the effective learner role and tenant-scoped catalog access without
+printing course titles or credentials. This tenant is not a copy of Costa do
+Sol production and cannot be used to claim production course equivalence.
 
 GitHub intentionally does not reveal Environment secret values to agents. This
 is a security property, not a staging defect. Therefore the portable way for

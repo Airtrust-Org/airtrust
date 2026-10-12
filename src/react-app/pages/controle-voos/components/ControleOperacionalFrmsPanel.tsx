@@ -96,7 +96,7 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
             </span>
           )}
         </td>
-        <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{voo.prefixo}</td>
+        <td className="px-3 py-2 text-slate-600 dark:text-slate-400"><span className="block font-semibold">{voo.prefixo}</span><span className="block text-xs">{voo.modelo_aeronave || 'Modelo não informado'}</span></td>
         <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
           {CHECKIN_LABELS[membro.checkin_status] ?? membro.checkin_status}
         </td>
@@ -270,7 +270,7 @@ export default function ControleOperacionalFrmsPanel() {
                         colSpan={6}
                         className="px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400"
                       >
-                        {voo.prefixo} — {voo.horario_previsto_partida}
+                        {voo.prefixo}{voo.modelo_aeronave ? ` · ${voo.modelo_aeronave}` : ''} — {voo.horario_previsto_partida}
                         {voo.frms_primary_reason && (
                           <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">
                             {REASON_LABELS[voo.frms_primary_reason]}

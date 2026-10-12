@@ -772,10 +772,13 @@ rdvWorkflow.get(
         r.id, r.voo_id, r.numero, r.data_voo, r.status, r.workflow_status, r.versao,
         r.responsavel_preenchimento_id, r.enviado_em, r.devolvido_em, r.aprovado_coordenacao_em,
         r.finalizado_workflow_em, r.reaberto_em, r.motivo_devolucao,
-        v.prefixo, v.aeronave_id, v.data_programacao, v.origem_id, v.destino_id,
+        v.prefixo, v.aeronave_id, a.modelo AS modelo_aeronave,
+        v.data_programacao, v.origem_id, v.destino_id,
         v.status AS flight_status, v.horario_real_partida, v.horario_real_chegada
       FROM cv_rdv_operacional r
       INNER JOIN cv_voos v ON v.id = r.voo_id AND v.empresa_id = r.empresa_id
+      LEFT JOIN aeronaves a ON a.id = v.aeronave_id
+        AND a.empresa_id = v.empresa_id AND a.deleted_at IS NULL
       WHERE ${filters.join(' AND ')}
       ORDER BY r.data_voo DESC, r.id DESC
       LIMIT 100

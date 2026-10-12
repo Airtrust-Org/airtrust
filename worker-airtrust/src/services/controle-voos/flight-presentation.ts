@@ -13,6 +13,7 @@ export type FlightPresentation = {
   rdv_workflow_status: string | null;
   rdv_enviado_em: string | null;
   planejamento_status: 'previo' | 'confirmado';
+  pendencias_planejamento: string[];
   peso_passageiros_planejado: number | null;
   peso_bagagem_planejado: number | null;
   peso_carga_planejado: number | null;
@@ -57,6 +58,7 @@ const emptyPresentation = (): FlightPresentation => ({
   rdv_workflow_status: null,
   rdv_enviado_em: null,
   planejamento_status: 'previo',
+  pendencias_planejamento: [],
   peso_passageiros_planejado: null,
   peso_bagagem_planejado: null,
   peso_carga_planejado: null,
@@ -75,6 +77,23 @@ function buildRouteCodes(stages: StageRow[]): string[] {
     if (destination && route[route.length - 1] !== destination) route.push(destination);
   }
   return route;
+}
+
+// Pure projection: use the same tenant-scoped stage snapshot already loaded for
+// flight presentation. A warning is not a flight safety clearance decision.
+function planningPendencies(stages: StageRow[]): string[] {
+  if (!stages.length) return ['Etapas e rota ainda não informadas'];
+  const pendencias: string[] = [];
+  if (stages.some((stage) => !normalizeCode(stage.origem_icao) || !normalizeCode(stage.destino_icao))) {
+    pendencias.push('Completar origem e destino das etapas');
+  }
+  const first = stages[0];
+  // Zero is an explicitly supplied mass; a missing column in an older schema
+  // is also a pending value, never a silently accepted zero.
+  if (first.peso_passageiros == null) pendencias.push('Informar peso de passageiros');
+  if (first.peso_bagagem == null) pendencias.push('Informar peso de bagagem');
+  if (first.payload == null) pendencias.push('Informar peso de carga');
+  return pendencias;
 }
 
 function parseRoutePointIds(metadataJson: string | null): number[] | null {
@@ -249,8 +268,10 @@ export async function getFlightPresentationMap(
 
   for (const id of ids) {
     const presentation = output.get(id) || emptyPresentation();
-    const codes = buildRouteCodes(stagesByFlight.get(id) || []);
+    const flightStages = stagesByFlight.get(id) || [];
+    const codes = buildRouteCodes(flightStages);
     presentation.rota_codigos = codes;
+    presentation.pendencias_planejamento = planningPendencies(flightStages);
     presentation.planejamento_status = planningConfirmed.get(id) ? 'confirmado' : 'previo';
     const plannedStage = (stagesByFlight.get(id) || [])[0];
     if (plannedStage) {

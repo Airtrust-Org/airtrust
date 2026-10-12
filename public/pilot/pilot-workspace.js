@@ -263,14 +263,14 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
     if (!document) {
       card.append(
         el('span', { text: 'Ainda não recebido pela Coordenação.' }),
-        el('span', { className: 'pilot-workspace-state attention', text: 'Não bloqueia o voo' }),
+        el('span', { className: 'pilot-workspace-state attention', text: 'Não impede abrir o voo no aplicativo' }),
       );
     } else {
       card.append(
         el('span', { text: text(document.file_name) }),
         el('span', {
           className: 'pilot-workspace-state ' + (availableOffline ? 'ok' : 'attention'),
-          text: availableOffline ? 'Disponível offline neste tablet' : 'Não disponível offline neste tablet — não bloqueia o voo',
+          text: availableOffline ? 'Disponível offline neste tablet' : 'Não disponível offline neste tablet — não impede abrir o voo',
         }),
       );
       if (typeof actions.openFlightDocument === 'function') {

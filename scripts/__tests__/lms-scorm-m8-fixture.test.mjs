@@ -10,14 +10,26 @@ test('staging acceptance ZIP has an actual authored M8 assessment, not automatic
   const deck = JSON.parse(read('course_data.js').replace(/^window.COURSE_DATA = /, '').replace(/;$/, ''));
   assert.equal(model.schema, 'AIRTRUST_TRAINING_MODEL_M8');
   assert.deepEqual(model.slides.map(x => x.id), ['qa-slide-1']);
+  assert.equal(model.assessment.masteryScore, 70);
+  assert.deepEqual(model.assessment.questions, [{
+    id: 'qa-interaction-1',
+    correct: 1,
+    a: ['Ignorar', 'Confirmar após verificar'],
+  }]);
   assert.equal(deck.slides[0].questions[0].answer, 1);
   assert.ok(files['media/qa-visual.svg']);
+  assert.ok(files['scorm.js']);
+  assert.match(read('scorm.js'), /window\.AirTrustSCORM/);
   assert.match(read('app.js'), /LMSInitialize/);
   assert.match(read('app.js'), /window\.parent && window\.parent\.API/);
   assert.match(read('app.js'), /LMSCommit/);
   assert.match(read('app.js'), /LMSFinish/);
   assert.match(read('app.js'), /addEventListener\('click'/);
+  assert.match(read('app.js'), /submit\.disabled = false/);
   assert.match(read('app.js'), /state\.assess\[1\]\.passed = true/);
   assert.match(read('app.js'), /state\.done = \[0\]/);
-  assert.match(read('app.js'), /cmi\.core\.lesson_status', 'passed'/);
+  assert.match(read('app.js'), /cmi\.suspend_data/);
+  assert.match(read('app.js'), /complete\.addEventListener\('click'/);
+  assert.match(read('app.js'), /modelState\.passed = true/);
+  assert.match(read('app.js'), /modelState\.assessmentPassed \? 'passed' : 'failed'/);
 });

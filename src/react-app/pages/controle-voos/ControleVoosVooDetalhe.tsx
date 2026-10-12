@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Clock, FileText, Shield, CheckCircle, XCircle, Upload, MessageCircle, Pencil } from 'lucide-react';
+import { Clock, FileText, CheckCircle, XCircle, Upload, MessageCircle, Pencil } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { apiClient } from '@/react-app/services/apiClient';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
@@ -12,6 +12,9 @@ import ControleVoosStatusBadge from './components/ControleVoosStatusBadge';
 import EdbShadowReadinessCard from './components/EdbShadowReadinessCard';
 import ControleVoosTripulacaoCard from './components/ControleVoosTripulacaoCard';
 import ControleVoosEditarVooDialog from './components/ControleVoosEditarVooDialog';
+import ControleVoosEdicaoRapida from './components/ControleVoosEdicaoRapida';
+import ControleVoosFadigaCard from './components/ControleVoosFadigaCard';
+import ControleVoosQualificacoesCard from './components/ControleVoosQualificacoesCard';
 import ControleVoosStatusActions from './components/ControleVoosStatusActions';
 import ControleVoosPlanoVooCard from './components/ControleVoosPlanoVooCard';
 import {
@@ -114,6 +117,7 @@ export default function ControleVoosVooDetalhe() {
   const [sharingWhatsapp, setSharingWhatsapp] = useState(false);
   const [sharingFlightLog, setSharingFlightLog] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [quickEditOpen, setQuickEditOpen] = useState(false);
   const [confirmingPlan, setConfirmingPlan] = useState(false);
   const [showDeleteFlight, setShowDeleteFlight] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
@@ -178,9 +182,20 @@ export default function ControleVoosVooDetalhe() {
     if (!id || sendingWhatsapp) return;
     setSendingWhatsapp(true);
     try {
-      const response = await apiClient.post<{ sent: number; failed: number }>(`/controle-voos/voos/${id}/whatsapp`, {});
-      if (!response.success) throw new Error(response.error || 'Falha ao enviar WhatsApp');
-      toast.success(`Programação enviada por WhatsApp para ${response.data?.sent ?? 0} tripulante(s).`);
+      const response = await apiClient.post<{
+        success: boolean;
+        data?: { sent: number; failed: number };
+        error?: string;
+      }>(`/controle-voos/voos/${id}/whatsapp`, {});
+      // HTTP client preserves the backend envelope; POST must retain the
+      // centralized CSRF and authentication headers.
+      if (!response.success || response.data?.success !== true) {
+        throw new Error(response.data?.error || response.error || 'Falha ao enviar WhatsApp');
+      }
+      const sent = response.data.data?.sent ?? 0;
+      const failed = response.data.data?.failed ?? 0;
+      if (failed > 0) toast.warning(`Enviado para ${sent} tripulante(s); falhou para ${failed}.`);
+      else toast.success(`Programação enviada por WhatsApp para ${sent} tripulante(s).`);
     } catch (sendError) {
       toast.error(sendError instanceof Error ? sendError.message : 'Falha ao enviar WhatsApp');
     } finally {
@@ -193,7 +208,7 @@ export default function ControleVoosVooDetalhe() {
     const shareWindow = window.open('', '_blank');
     setSharingWhatsapp(true);
     try {
-      const response = await apiClient.get<{message: string}>(`/controle-voos/voos/${id}/whatsapp-share?tipo=programacao`);
+      const response = await apiClient<{message: string}>(`/controle-voos/voos/${id}/whatsapp-share?tipo=programacao`);
       if (!response.success || !response.data?.message) throw new Error(response.error || 'Não foi possível preparar a mensagem.');
       const url = `https://wa.me/?text=${encodeURIComponent(response.data.message)}`;
       if (shareWindow) shareWindow.location.href = url;
@@ -211,7 +226,7 @@ export default function ControleVoosVooDetalhe() {
     const shareWindow = window.open('', '_blank');
     setSharingFlightLog(true);
     try {
-      const response = await apiClient.get<{ message: string }>(
+      const response = await apiClient<{ message: string }>(
         `/controle-voos/voos/${id}/whatsapp-share?tipo=flight_log`,
       );
       if (!response.success || !response.data?.message) {
@@ -234,7 +249,12 @@ export default function ControleVoosVooDetalhe() {
     try {
       const result = await apiClient.post(`/controle-voos/voos/${voo.id}/confirmar-planejamento`, { versao: voo.versao });
       if (!result.success) throw new Error(result.error || 'Falha ao confirmar planejamento.');
-      toast.success('Planejamento confirmado. O Pilot App identificará a nova versão ao conectar.');
+      const data = result.data as { pendencias_planejamento?: string[] } | undefined;
+      if (data?.pendencias_planejamento?.length) {
+        toast.warning('Planejamento confirmado com pendências. A Coordenação poderá corrigir os dados depois.');
+      } else {
+        toast.success('Planejamento confirmado. O Pilot App identificará a nova versão ao conectar.');
+      }
       await refetchVoo();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível confirmar planejamento.');
@@ -338,18 +358,30 @@ export default function ControleVoosVooDetalhe() {
             </div>
           </ControleVoosPageHeader>
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-6">
+          <div className="grid items-start gap-5 xl:grid-cols-5">
+            <div className="min-w-0 space-y-5 xl:col-span-3">
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-                <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Dados gerais</h2>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Dados gerais</h2>
+                  {canCoordinate && <button type="button" onClick={() => setQuickEditOpen((open) => !open)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-cyan-300 px-2.5 py-1.5 text-xs font-medium text-cyan-800 hover:bg-cyan-50">
+                    <Pencil className="h-3.5 w-3.5" /> {quickEditOpen ? "Fechar edição" : "Editar dados aqui"}
+                  </button>}
+                </div>
+                {quickEditOpen && canCoordinate && <ControleVoosEdicaoRapida voo={voo}
+                  onCancel={() => setQuickEditOpen(false)} onSaved={() => {
+                    setQuickEditOpen(false);
+                    toast.success("Dados gerais atualizados.");
+                    void refetchVoo();
+                  }} />}
                 <dl className="grid gap-3 sm:grid-cols-2 text-sm">
                   <div>
                     <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Prefixo</dt>
                     <dd className="text-slate-800 dark:text-slate-200 font-medium">{voo.prefixo}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Aeronave (ID)</dt>
-                    <dd className="text-slate-800 dark:text-slate-200">{voo.aeronave_id ?? '—'}</dd>
+                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Modelo da aeronave</dt>
+                    <dd className="text-slate-800 dark:text-slate-200">{voo.modelo_aeronave || 'Modelo não informado'}</dd>
                   </div>
                   <div>
                     <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Origem</dt>
@@ -367,13 +399,15 @@ export default function ControleVoosVooDetalhe() {
                     <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Tipo de voo (ID)</dt>
                     <dd className="text-slate-800 dark:text-slate-200">{voo.tipo_voo_id}</dd>
                   </div>
-                  <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Horário previsto (saída)</dt>
-                    <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatDateTime(voo.horario_previsto_partida)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Chegada prevista</dt>
-                    <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatDateTime(voo.horario_previsto_chegada)}</dd>
+                  <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+                    <div>
+                      <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Partida prevista</dt>
+                      <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatDateTime(voo.horario_previsto_partida)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-medium text-slate-400 dark:text-slate-500">Chegada prevista</dt>
+                      <dd className="text-slate-800 dark:text-slate-200 font-mono">{formatDateTime(voo.horario_previsto_chegada)}</dd>
+                    </div>
                   </div>
                   {voo.horario_real_partida && (
                     <>
@@ -409,31 +443,6 @@ export default function ControleVoosVooDetalhe() {
                 aeronaveId={voo.aeronave_id}
                 rdvVersion={rdv?.versao}
               />
-            </div>
-
-            <div className="space-y-6">
-              <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-                <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-blue-500" /> Verificações (demonstrativo)
-                </h2>
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">Qualificações</span>
-                    <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">CMA / ASO</span>
-                    <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">FRMS</span>
-                    <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>
-                  </div>
-                  <p className="text-xs text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-2 mt-2">
-                    Verificações automáticas não disponíveis no N1 — implementação futura.
-                  </p>
-                </div>
-              </div>
 
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -587,6 +596,16 @@ export default function ControleVoosVooDetalhe() {
 
               <EdbShadowReadinessCard flightId={voo.id} />
 
+              {Boolean(voo.pendencias_planejamento?.length) && (
+                <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100" aria-label="Pendências de planejamento">
+                  <h2 className="text-sm font-semibold">Planejamento com pendências para regularizar</h2>
+                  <p className="mt-1 text-xs">Estas informações podem ser corrigidas pela Coordenação após confirmar ou liberar o voo. Verifique os requisitos do fechamento e do XML antes da finalização.</p>
+                  <ul className="mt-2 list-disc pl-5 text-sm">
+                    {voo.pendencias_planejamento?.map((pendencia) => <li key={pendencia}>{pendencia}</li>)}
+                  </ul>
+                </section>
+              )}
+
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Ações</h2>
                 <div className="space-y-2">
@@ -622,7 +641,6 @@ export default function ControleVoosVooDetalhe() {
                       <MessageCircle className="h-4 w-4" /> {sharingFlightLog ? 'Preparando…' : 'Compartilhar Flight Log no WhatsApp'}
                     </button>
                   )}
-                  <a href="#tripulacao" className="block w-full rounded-lg bg-cyan-700 px-4 py-2 text-center text-sm font-medium text-white">Alterar Tripulação</a>
                   {canCoordinate ? (
                     <ControleVoosStatusActions voo={voo} onChanged={() => void refetchVoo()} />
                   ) : null}
@@ -638,6 +656,13 @@ export default function ControleVoosVooDetalhe() {
                   ) : null}
                 </div>
               </div>
+            </div>
+
+            <div className="min-w-0 space-y-5 xl:col-span-2">
+              <ControleVoosFadigaCard vooId={voo.id} versao={voo.versao} />
+
+              <ControleVoosQualificacoesCard vooId={voo.id} versao={voo.versao} />
+
             </div>
           </div>
         </ControleVoosPageShell>

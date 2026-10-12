@@ -1,0 +1,135 @@
+name: Production LMS99 Governed Administrative Reconciliation
+# Administrative attestation is distinct from SCORM runtime certification.
+# Performs canonical API PATCH with tenant, RBAC, integrity and qualification
+# gates intact; never direct SQL or mass edits by percentage alone.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        required: true
+        type: choice
+        default: dry-run
+        options: [dry-run, apply]
+      expected_main_sha:
+        required: true
+        type: string
+      expected_production_sha:
+        required: true
+        type: string
+      confirmation:
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        required: false
+        type: string
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-lms99-governed-admin-reconciliation
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    name: Audit or apply tenant-6 administrator-verified completions
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+      TARGET_COMPANY_ID: '6'
+      LMS99_MODE: ${{ inputs.mode }}
+      LMS99_CONFIRMATION: ${{ inputs.confirmation }}
+      PROD_API_BASE_URL: https://api.airtrust.online
+      PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL }}
+      PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Require explicit immutable authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$EXPECTED_MAIN_SHA" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          if [[ "$LMS99_MODE" == dry-run ]]; then
+            [[ "$LMS99_CONFIRMATION" == AIRTRUST_LMS99_DRY_RUN ]] || exit 1
+          elif [[ "$LMS99_MODE" == apply ]]; then
+            [[ "$LMS99_CONFIRMATION" == AIRTRUST_LMS99_APPLY ]] || exit 1
+          else
+            exit 1
+          fi
+      - name: Verify canonical eight release gates of reviewed main
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Verify deterministic cohort selection and syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/production/lms99-admin-reconciliation.mjs
+          node --test scripts/__tests__/lms99-admin-reconciliation.test.mjs
+      - name: Verify successful identical-SHA reviewed dry-run
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN_ID: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$DRY_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo DRY_RUN_REQUIRED >&2; exit 1; }
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$DRY_RUN_ID")"
+          [[ "$(jq -r .name <<< "$run")" == "Production LMS99 Governed Administrative Reconciliation" ]] || exit 1
+          [[ "$(jq -r .event <<< "$run")" == workflow_dispatch ]] || exit 1
+          [[ "$(jq -r .head_sha <<< "$run")" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$(jq -r .conclusion <<< "$run")" == success ]] || exit 1
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$DRY_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "lms99-governed-dry-run-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
+          jq -e --arg main "$GITHUB_SHA" --arg prod "$EXPECTED_PRODUCTION_SHA" '
+            .schema_version==1 and .repo_sha==$main and .production_sha==$prod and
+            .mode=="dry-run" and .tenant==6 and .writes==0 and
+            .personal_data==false and (.candidates>0 and .candidates<=100) and
+            (.candidate_hash|test("^[a-f0-9]{64}$"))
+          ' "$RUNNER_TEMP/reviewed/result.json" >/dev/null
+          echo "REVIEWED_COHORT_HASH=$(jq -r .candidate_hash "$RUNNER_TEMP/reviewed/result.json")" >> "$GITHUB_ENV"
+      - name: Check D1 recovery window before any API mutation
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || exit 1
+          npm ci --ignore-scripts >/dev/null
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$RUNNER_TEMP/d1-recovery.txt"
+          test -s "$RUNNER_TEMP/d1-recovery.txt"
+          rm -f "$RUNNER_TEMP/d1-recovery.txt"
+      - name: Run read-only cohort or canonical administrative API reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/production/lms99-admin-reconciliation.mjs > "$RUNNER_TEMP/result.json"
+          test -s "$RUNNER_TEMP/result.json"
+          jq -e --arg mode "$LMS99_MODE" '.mode==$mode and .tenant==6 and .personal_data==false' "$RUNNER_TEMP/result.json" >/dev/null
+          jq '{mode,repo_sha,production_sha,candidates,candidate_hash,by_course,excluded,writes,results,scorm_cmi_changed,completion_date_rule,historical_training_date_not_fabricated}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload sanitized non-personal evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lms99-governed-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          retention-days: 30
+          if-no-files-found: warn

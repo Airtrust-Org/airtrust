@@ -19,7 +19,6 @@ import {
 import {
   assertCursoWriteScope,
   buildCourseSetorScope,
-  hasOwnLmsCourseEnrollment,
   getCourseSetorSchema,
 } from './lms-cursos-setor-scope';
 import { getEmpresaIdSafe } from './escalas-shared';
@@ -1344,6 +1343,32 @@ async function attachUploadedContentToCurso(
   return upload;
 }
 
+/**
+ * A learner with an existing enrollment can view that course even when its
+ * publication sector differs from the learner's own sector. This does not
+ * grant catalog-wide access, affect managers, or allow enrollment changes.
+ */
+export async function hasOwnEnrolledCourseReadAccess(
+  db: D1Database,
+  empresaId: number,
+  cursoId: number,
+  access: EmployeeSectorAccess,
+): Promise<boolean> {
+  if (access.mode !== 'self' || !Number.isSafeInteger(cursoId) || cursoId <= 0) return false;
+
+  const ownEnrollment = await db.prepare(
+    `SELECT 1 AS allowed
+       FROM lms_matriculas
+      WHERE empresa_id = ? AND curso_id = ? AND funcionario_id = ?
+        AND deleted_at IS NULL
+        AND status IN ('NAO_INICIADO', 'EM_ANDAMENTO', 'CONCLUIDO', 'REPROVADO')
+      LIMIT 1`,
+  ).bind(empresaId, cursoId, access.funcionarioId).first<{ allowed: number }>();
+
+  return ownEnrollment?.allowed === 1;
+}
+
+
 // ── Listar cursos ────────────────────────────────────────────────────────────
 
 app.get('/', async (c) => {
@@ -1461,10 +1486,11 @@ app.get('/', async (c) => {
          ORDER BY s.nome ASC)`
     : 'NULL';
 
-  const total = await db
+  // A contagem e a página consultam o mesmo snapshot lógico sem escrita.
+  // Preparar ambas antes de executar evita serializar duas leituras D1 independentes.
+  const totalStatement = db
     .prepare(`SELECT COUNT(*) as n FROM lms_cursos c ${where}`)
-    .bind(...binds)
-    .first<{ n: number }>();
+    .bind(...binds);
 
   const formatoJoin = courseSetorSchema.hasLmsCursosFormato
     ? `LEFT JOIN qualificacoes_formatos qf
@@ -1476,7 +1502,7 @@ app.get('/', async (c) => {
     ? 'qf.codigo AS formato_codigo, qf.nome AS formato_nome,'
     : '';
 
-  const rows = await db
+  const rowsStatement = db
     .prepare(
       `
       SELECT c.*,
@@ -1501,8 +1527,12 @@ app.get('/', async (c) => {
       LIMIT ? OFFSET ?
     `,
     )
-    .bind(...matriculaScope.bindings, ...matriculaScope.bindings, ...binds, limit, offset)
-    .all<Record<string, unknown>>();
+    .bind(...matriculaScope.bindings, ...matriculaScope.bindings, ...binds, limit, offset);
+
+  const [total, rows] = await Promise.all([
+    totalStatement.first<{ n: number }>(),
+    rowsStatement.all<Record<string, unknown>>(),
+  ]);
 
   const data = (rows.results ?? []).map((row) => {
     const setoresJson = row.setores_json as string | null;
@@ -1822,27 +1852,22 @@ app.get('/:id{[0-9]+}', async (c) => {
 
   if (!curso) throw new ApiError('Curso não encontrado', 404);
 
-  // Uma matrícula válida do próprio funcionário permite consultar o curso no
-  // player. Não amplia a visão dos gestores sobre cursos de outros setores.
+  // ── Sector scope check for restricted users ─────────────────────────
   if (access.mode !== 'all') {
-    const ownEnrollment = access.mode === 'self' &&
-      await hasOwnLmsCourseEnrollment(db, empresaId, cursoId, access.funcionarioId);
-    if (!ownEnrollment) {
-      const courseSectorScope = buildCourseSetorScope(access, 'c', courseSetorSchema);
-      const inScope = await db
-        .prepare(
-          `SELECT 1 as ok FROM lms_cursos c
-           WHERE c.id = ? AND c.empresa_id = ? AND c.deleted_at IS NULL
-           ${courseSectorScope.clause}`,
-        )
-        .bind(cursoId, empresaId, ...courseSectorScope.bindings)
-        .first();
-      if (!inScope) {
-        return c.json(
-          { success: false, error: 'Acesso negado: curso fora do seu escopo de setor' },
-          403,
-        );
-      }
+    const courseSectorScope = buildCourseSetorScope(access, 'c', courseSetorSchema);
+    const inScope = await db
+      .prepare(
+        `SELECT 1 as ok FROM lms_cursos c
+         WHERE c.id = ? AND c.empresa_id = ? AND c.deleted_at IS NULL
+         ${courseSectorScope.clause}`,
+      )
+      .bind(cursoId, empresaId, ...courseSectorScope.bindings)
+      .first();
+    if (!inScope && !(await hasOwnEnrolledCourseReadAccess(db, empresaId, cursoId, access))) {
+      return c.json(
+        { success: false, error: 'Acesso negado: curso fora do seu escopo de setor' },
+        403,
+      );
     }
   }
 
