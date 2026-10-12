@@ -62,6 +62,7 @@ import {
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
 import { uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
+import { createNativeEnrollment } from './lmsNativeEnrollment';
 import { getLmsPlayerRoute } from './lmsPlayerRoute';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
@@ -1854,6 +1855,13 @@ export default function LmsCatalogo() {
       return;
     }
     try {
+      if (curso.tipo_conteudo === 'native') {
+        const matriculaId = await createNativeEnrollment(curso.id);
+        void qc.invalidateQueries({ queryKey: lmsKeys.minhasMatriculas() });
+        void qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
+        navPlayer(curso, matriculaId);
+        return;
+      }
       const created = await matricular.mutateAsync({
         funcionario_id: funcionarioId,
         curso_id: curso.id,
