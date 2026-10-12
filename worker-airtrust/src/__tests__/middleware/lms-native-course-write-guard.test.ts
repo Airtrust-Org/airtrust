@@ -17,8 +17,8 @@ function setup(kind: 'native' | 'scorm', activated: boolean, flag = '6') {
     c.set('empresaId' as never, 6 as never);
     await next();
   });
-  app.use('/99', guardLegacyCourseMutation);
-  app.use('/99/*', guardLegacyCourseMutation);
+  app.use('/:id{[0-9]+}', guardLegacyCourseMutation);
+  app.use('/:id{[0-9]+}/*', guardLegacyCourseMutation);
   app.post('/99/upload/init', (c) => c.json({ reached: true }));
   app.post('/99/scorm-package-versions/12/activate', (c) => c.json({ reached: true }));
   app.put('/99', (c) => c.json({ reached: true }));
