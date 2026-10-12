@@ -58,6 +58,30 @@ class NativeAtomicTerminalGuardTests(unittest.TestCase):
                                         (self.matricula,)).fetchone()[0],'EM_ANDAMENTO')
         self.assertEqual(self.db.execute('PRAGMA foreign_key_check').fetchall(),[])
 
+    def test_formative_null_score_can_be_anchored_without_inventing_percent(self):
+        db=fixture()
+        try:
+            matricula,ciclo,binding=provision(db,nonce='c'*64)
+            db.execute("UPDATE lms_matriculas SET status='EM_ANDAMENTO' WHERE id=?",
+                       (matricula,))
+            db.execute("UPDATE lms_matricula_ciclos SET status='EM_ANDAMENTO' WHERE id=?",
+                       (ciclo,))
+            db.execute("""INSERT INTO lms_native_eventos(
+              vinculo_id,event_id,sequencia,unidade_id,payload_sha256
+            ) VALUES(?,'lesson-formative',1,'lesson-1',?)""",(binding,HASH))
+            attempt=db.execute("""INSERT INTO lms_native_tentativas(
+              vinculo_id,tentativa_numero,answers_json,answers_sha256,
+              policy,score_pct,assessment_satisfied
+            ) VALUES(?,1,'[]',?,'FORMATIVE',NULL,1)""",(binding,HASH)).lastrowid
+            args=[900,matricula,6,10,69,ciclo,binding,1,HASH,
+                  attempt,1,HASH,None,1,1,0,0,0,0]
+            self.assertEqual(db.execute(sql_from_source(),args).fetchone()[0],'null')
+            args[12]=100
+            with self.assertRaisesRegex(sqlite3.OperationalError,'malformed JSON'):
+                db.execute(sql_from_source(),args)
+        finally:
+            db.close()
+
     def test_revocation_or_tenant_change_invalidates_old_readiness(self):
         self.db.execute('UPDATE usuarios SET active=0 WHERE id=900')
         self.denied()
