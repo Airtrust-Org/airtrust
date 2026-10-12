@@ -115,12 +115,44 @@ describe('Native terminal HTTP entry: fifth gate and server-issued proof only',(
       progressoPct:100,
     }));
   });
+  it('does not fabricate a qualification or certificate for a formative-only course',async()=>{
+    mocks.prepare.mockResolvedValueOnce({ready:true,canonical:{
+      ...snapshot,gerarQualificacaoAoConcluir:false,
+      qualificacaoTipoId:null,qualificacaoCategoriaId:null,
+      qualificacaoCodigo:null,qualificacaoNome:null,
+      qualificacaoCategoria:null,qualificacaoCategoriaCodigo:null,
+      validade:null,vencimentoFimMes:null,
+      evidenceSnapshot:{...snapshot.evidenceSnapshot,scorePct:null},
+    },terminalAnchor:{...anchor,gerarQualificacaoAoConcluir:false,
+      qualificacaoTipoId:null,qualificacaoCategoriaId:null,scorePct:null}});
+    mocks.complete.mockResolvedValueOnce({matriculaId:101,
+      outcome:'qualification_not_required',qualificacaoHistoricoId:null});
+    const r=await call();
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({success:true,data:{
+      matricula_id:101,status:'CONCLUIDO',
+      qualification_outcome:'qualification_not_required',
+      certificate_state:'NOT_APPLICABLE',
+    }});
+    expect(mocks.complete).toHaveBeenCalledWith(expect.objectContaining({
+      gerarQualificacaoAoConcluir:false,qualificacaoTipoId:null,
+      scoreFinal:null,vencimentoFimMes:null,
+    }));
+  });
   it('returns no success when readiness/qualification is not proven',async()=>{
     mocks.prepare.mockResolvedValueOnce({ready:false,reason:'ASSESSMENT_NOT_SATISFIED'});
     const r=await call();
     expect(r.status).toBe(409);
     expect(await r.json()).toMatchObject({code:'NATIVE_COMPLETION_NOT_READY'});
     expect(mocks.complete).not.toHaveBeenCalled();
+  });
+  it('maps a guarded canonical batch rejection to conflict, never success',async()=>{
+    const {LmsCompletionRejectedError}=await import('../../services/lms-completion');
+    mocks.complete.mockRejectedValueOnce(new LmsCompletionRejectedError());
+    const r=await call();
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({success:false,
+      code:'NATIVE_COMPLETION_TRANSACTION_REJECTED'});
   });
   it('never reports 200 on a terminal batch rejection or runtime failure',async()=>{
     mocks.complete.mockRejectedValueOnce(new Error('D1 complete failed'));
