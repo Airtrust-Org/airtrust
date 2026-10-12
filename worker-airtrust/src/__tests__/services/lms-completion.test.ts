@@ -280,6 +280,30 @@ describe('completeLmsMatricula', () => {
     );
   });
 
+  it('exceção na emissão do certificado não transforma batch canônico confirmado em falha', async () => {
+    let lookupCount = 0;
+    const db = makeFakeDb({
+      historicoLookup: () => ++lookupCount === 1 ? null : { id: 903, status: 'CONCLUIDA' },
+    });
+    ensureCertificateForQualificationMock.mockRejectedValueOnce(new Error('certificate provider down'));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await completeLmsMatricula(baseParams(db) as never);
+      expect(result).toMatchObject({
+        outcome: 'qualification_created',
+        qualificacaoHistoricoId: 903,
+        matriculaId: 1,
+      });
+      expect(db.batch).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith(expect.stringContaining(
+        '"event":"LMS_EAD_CERTIFICATE_SERVICE_THROWN"',
+      ));
+      expect(log.mock.calls.flat().join('')).not.toContain('certificate provider down');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('não gera certificado automaticamente para outra categoria LMS integrada', async () => {
     let lookupCount = 0;
     const db = makeFakeDb({
