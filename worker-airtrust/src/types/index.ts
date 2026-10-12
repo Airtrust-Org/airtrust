@@ -46,6 +46,8 @@ export interface Env {
   // Defaults OFF. An allowlisted tenant also requires Preview, Schema V2 and R2 pin.
   // Do not activate without governed staging authorization and E2E validation.
   NATIVE_LEARNER_WRITE_ENABLED_TENANTS?: string;
+  /** OFF until governed catalog side-table exists; staged legacy-path read barrier only. */
+  NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
