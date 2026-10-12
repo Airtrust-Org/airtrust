@@ -130,6 +130,36 @@ describe('AirTrust native server-side grading', () => {
     expect(badExam).toMatchObject({ scorePct: 0, assessmentSatisfied: false });
   });
 
+  it('blocks global 80% approval when a mandatory module is failed', () => {
+    const base = course();
+    const questions = Array.from({ length: 10 }, (_, i) => ({
+      ...base.questions[0], id: `q${i + 1}`,
+    }));
+    const units = [
+      base.units[0],
+      { ...base.units[1], id: 'module-1', questionIds: questions.slice(0, 8).map((q) => q.id) },
+      { ...base.units[1], id: 'module-2', questionIds: questions.slice(8).map((q) => q.id) },
+    ];
+    const gated = validateNativeCourseArtifact({
+      ...base, policy: { mode: 'SCORED', masteryScore: 80, moduleGate: true },
+      units, questions,
+    });
+    const answers = questions.map((q, i) => ({ questionId: q.id, optionId: i < 8 ? 'a' : 'b' }));
+    expect(evaluateNativeAssessment(gated, answers)).toMatchObject({
+      scorePct: 80, assessmentSatisfied: false,
+    });
+    const ordinary = validateNativeCourseArtifact({
+      ...gated, policy: { mode: 'SCORED', masteryScore: 80 },
+    });
+    expect(evaluateNativeAssessment(ordinary, answers)).toMatchObject({
+      scorePct: 80, assessmentSatisfied: true,
+    });
+    expect(evaluateNativeAssessment(gated,
+      questions.map((q) => ({ questionId: q.id, optionId: 'a' })))).toMatchObject({
+      scorePct: 100, assessmentSatisfied: true,
+    });
+  });
+
   it('does not modify private answer keys when scoring', () => {
     const input = course();
     evaluateNativeAssessment(input, good);

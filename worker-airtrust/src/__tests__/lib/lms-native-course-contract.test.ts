@@ -65,6 +65,17 @@ describe('AirTrust Native V1: fail-closed authoring contract', () => {
     expect(artifact.policy).toEqual({ mode: 'SCORED', masteryScore: 80 });
   });
 
+  it('accepts source-authored per-module mastery without leaking answer keys', () => {
+    const input = { ...valid(), policy: { mode: 'SCORED', masteryScore: 80, moduleGate: true } };
+    const course = validateNativeCourseArtifact(input);
+    expect(course.policy).toEqual(input.policy);
+    expect(toNativeLearnerCourse(course).policy).toEqual(input.policy);
+    for (const invalid of [false, 'true', 1]) {
+      expectError({ ...valid(), policy: { mode: 'SCORED', masteryScore: 80, moduleGate: invalid } },
+        'NATIVE_INVALID_MODULE_GATE');
+    }
+  });
+
   it('removes the entire answer key and grading feedback from learner payload', () => {
     const full = validateNativeCourseArtifact(valid());
     const learner = toNativeLearnerCourse(full);

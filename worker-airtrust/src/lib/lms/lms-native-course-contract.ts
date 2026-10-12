@@ -46,7 +46,7 @@ export type NativeCourseArtifact = {
   packageVersion: string;
   title: string;
   locale: 'pt-BR';
-  policy: { mode: 'FORMATIVE' } | { mode: 'SCORED'; masteryScore: number };
+  policy: { mode: 'FORMATIVE' } | { mode: 'SCORED'; masteryScore: number; moduleGate?: true };
   assets: NativeAsset[];
   units: NativeUnit[];
   questions: NativeQuestion[];
@@ -150,7 +150,12 @@ export function validateNativeCourseArtifact(input: unknown): NativeCourseArtifa
 
   const policy = record(raw.policy, 'NATIVE_INVALID_POLICY');
   if (policy.mode === 'SCORED') {
-    keys(policy, ['mode', 'masteryScore']);
+    keys(policy, ['mode', 'masteryScore'], ['moduleGate']);
+    // Per-module mandatory assessment comes only from an explicit source
+    // policy. A false or forged value is rejected rather than ignored.
+    if (policy.moduleGate !== undefined && policy.moduleGate !== true) {
+      fail('NATIVE_INVALID_MODULE_GATE');
+    }
     if (!Number.isInteger(policy.masteryScore) ||
         (policy.masteryScore as number) < 1 || (policy.masteryScore as number) > 100) {
       fail('NATIVE_INVALID_MASTERY');
@@ -259,7 +264,8 @@ export function toNativeLearnerCourse(input: NativeCourseArtifact): NativeLearne
     locale: source.locale,
     policy: source.policy.mode === 'FORMATIVE'
       ? { mode: 'FORMATIVE' }
-      : { mode: 'SCORED', masteryScore: source.policy.masteryScore },
+      : { mode: 'SCORED', masteryScore: source.policy.masteryScore,
+          ...(source.policy.moduleGate ? { moduleGate: true as const } : {}) },
     assets: source.assets.map((asset) => ({ ...asset })),
     units: source.units.map((unit) => ({
       ...unit,

@@ -291,12 +291,31 @@ def compile_candidate(draft: dict, location: Path) -> tuple[dict, dict]:
             'label': ensure_text(item.get('label'), 'SOURCE_LABEL', 600),
             'detail': ensure_text(item.get('detail'), 'SOURCE_DETAIL', 4000),
         })
+    legacy_manifest = draft.get('legacyCompletionManifest')
+    if not isinstance(legacy_manifest, dict):
+        legacy_manifest = {}
+    assessment_meta = legacy_manifest.get('assessment')
+    if not isinstance(assessment_meta, dict):
+        assessment_meta = {}
+    completion_meta = legacy_manifest.get('completion')
+    if not isinstance(completion_meta, dict):
+        completion_meta = {}
+    module_gate = (assessment_meta.get('moduleGate') is True or
+                   completion_meta.get('moduleGate') == 'module-assessment')
+    if module_gate and assessment_meta.get('moduleAssessments') is not None:
+        expected_modules = [unit['id'] for unit in units if unit['kind'] == 'assessment']
+        specified = assessment_meta['moduleAssessments']
+        if not isinstance(specified, list) or specified != expected_modules:
+            raise NativeCompileError('MODULE_GATE_ASSESSMENTS_MISMATCH')
+    native_policy = {'mode': 'SCORED', 'masteryScore': policy_score}
+    if module_gate:
+        native_policy['moduleGate'] = True
     native = {
         'schema': 'AIRTRUST_NATIVE_COURSE_V1',
         'courseId': course_id,
         'packageVersion': 'pending-candidate-digest',
         'title': title, 'locale': 'pt-BR',
-        'policy': {'mode': 'SCORED', 'masteryScore': policy_score},
+        'policy': native_policy,
         'assets': assets, 'units': units, 'questions': questions,
         'references': references,
     }

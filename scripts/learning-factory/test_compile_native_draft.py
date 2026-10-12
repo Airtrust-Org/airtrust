@@ -131,6 +131,23 @@ class CompileNativeDraftTests(unittest.TestCase):
                                 for field in report['richContentFieldsConverted']))
             self.assertFalse(report['publishable'])
 
+    def test_preserves_explicit_per_module_scorm_mastery(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            meta = draft['legacyCompletionManifest']
+            meta['assessment'] = {'moduleGate': True, 'moduleAssessments': ['exam']}
+            candidate, report = compile_candidate(draft, location)
+            self.assertEqual(candidate['policy']['moduleGate'], True)
+            self.assertEqual(candidate['policy']['masteryScore'], 80)
+            self.assertFalse(report['publishable'])
+            meta['assessment']['moduleAssessments'] = ['missing']
+            with self.assertRaisesRegex(NativeCompileError, 'MODULE_GATE_ASSESSMENTS_MISMATCH'):
+                compile_candidate(draft, location)
+            meta['assessment'] = {}
+            meta['completion'] = {'moduleGate': 'module-assessment'}
+            candidate, _ = compile_candidate(draft, location)
+            self.assertTrue(candidate['policy']['moduleGate'])
+
     def test_preserves_authored_module_and_eyebrow_without_moving_answers(self):
         with tempfile.TemporaryDirectory() as d:
             draft, location = self.prepare(Path(d))
