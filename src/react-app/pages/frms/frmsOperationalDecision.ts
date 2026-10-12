@@ -1,4 +1,5 @@
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
+import { formatFrmsReason } from './frmsPresentation';
 
 export type FrmsDecisionBucket = 'BLOQUEIO' | 'DECISAO' | 'CONFIRMAR' | 'NORMAL';
 export type FrmsDataConfidence = 'ALTA' | 'MEDIA' | 'BAIXA';
@@ -44,7 +45,7 @@ export function hasIncompleteOperationalData(item: FrmsOperationalSnapshotItem):
     item.fatorizacao_status === 'AUSENTE' ||
     item.jornada_data_source === 'AUSENTE' ||
     item.jornada_data_source === 'INCONSISTENTE' ||
-    (item.escalado && item.checkin_status !== 'RECEBIDO') ||
+    (item.checkin_status !== 'RECEBIDO' && requiresOperationalDecision(item)) ||
     item.alertas.includes('DADO_INCONSISTENTE') ||
     item.alertas.includes('JORNADA_SEM_FATORIZACAO') ||
     item.alertas.includes('ESCALADO_SEM_JORNADA_FRMS')
@@ -186,7 +187,8 @@ export function resolveFrmsCoordinationGuidance(
     fortnightNeedsReview
       ? `Fadiga acumulada ${fortnight.status_quinzena === 'CRITICO' ? 'crítica' : 'em atenção'}${factors.length ? `: ${factors.join('; ')}.` : '.'}`
       : null;
-  const primaryReason = item.motivos_principais?.find(Boolean)?.trim();
+  const primaryReasonRaw = item.motivos_principais?.find(Boolean)?.trim();
+  const primaryReason = primaryReasonRaw ? formatFrmsReason(primaryReasonRaw) : null;
 
   // Safety-first: always show critical and missing check-in independently.
   if (isCritical) {
