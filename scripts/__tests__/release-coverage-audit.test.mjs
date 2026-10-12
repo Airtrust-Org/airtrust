@@ -97,3 +97,67 @@ test('workflow offers historical only by explicit manual choice', () => {
   assert.match(yaml, /type: choice\s+required: false\s+default: recent/);
   assert.match(yaml, /RELEASE_AUDIT_SCOPE:/);
 });
+
+
+test('historical batch demands explicit immutable anchor and safe offset', async () => {
+  const { historicalBatchInput } = await import('../ops/release-coverage-audit.mjs');
+  const stamp = '2026-10-11T20:00:00Z';
+  assert.deepEqual(historicalBatchInput(stamp, '80'), {
+    anchorUtc: stamp, anchorMs: Date.parse(stamp), offset: 80,
+  });
+  assert.throws(() => historicalBatchInput('', '0'), /ANCHOR_REQUIRED/);
+  assert.throws(() => historicalBatchInput('2026-10-11', '0'), /ANCHOR_REQUIRED/);
+  assert.throws(() => historicalBatchInput('2026-02-30T10:00:00Z', '0'), /ANCHOR_INVALID/);
+  assert.throws(() => historicalBatchInput(stamp, '-1'), /OFFSET_INVALID/);
+  assert.throws(() => historicalBatchInput(stamp, '1.3'), /OFFSET_INVALID/);
+  assert.throws(() => historicalBatchInput(stamp, '2501'), /OFFSET_OUT_OF_RANGE/);
+});
+
+test('historical batches resume without skipping rows and never accept partial inventories', async () => {
+  const { historicalBatchInput, selectHistoricalBatch } = await import('../ops/release-coverage-audit.mjs');
+  const anchor = '2026-10-11T20:00:00Z';
+  const input = historicalBatchInput(anchor, '0');
+  const prs = Array.from({ length: 161 }, (_, i) => ({
+    number: 1000 - i, mergedAt: new Date(Date.parse(anchor) - (i + 1) * 1000).toISOString(),
+  }));
+  // A later merge appears in a subsequent run: it is excluded by the fixed anchor.
+  const newer = { number: 1001, mergedAt: new Date(Date.parse(anchor) + 1000).toISOString() };
+  const scan = { prs: [newer, ...prs], truncated: false, pagesScanned: 3 };
+  const first = selectHistoricalBatch(scan, input);
+  assert.equal(first.prs.length, 80);
+  assert.equal(first.nextOffset, 80);
+  assert.equal(first.matchesFound, 161);
+  const second = selectHistoricalBatch(scan, historicalBatchInput(anchor, '80'));
+  assert.equal(second.nextOffset, 160);
+  const third = selectHistoricalBatch(scan, historicalBatchInput(anchor, '160'));
+  assert.equal(third.prs.length, 1);
+  assert.equal(third.nextOffset, null);
+  assert.equal(third.truncated, false);
+  assert.deepEqual(
+    [...first.prs, ...second.prs, ...third.prs].map((x) => x.number),
+    prs.map((x) => x.number),
+  );
+  assert.throws(
+    () => selectHistoricalBatch({ ...scan, truncated: true }, input),
+    /HISTORICAL_INVENTORY_TRUNCATED/,
+  );
+  assert.throws(
+    () => selectHistoricalBatch(scan, historicalBatchInput(anchor, '999')),
+    /HISTORICAL_BATCH_OFFSET_OUT_OF_RANGE/,
+  );
+});
+
+test('batch rate budget fails closed before GitHub comparison fanout', async () => {
+  const { checkGithubRateBudget } = await import('../ops/release-coverage-audit.mjs');
+  assert.deepEqual(checkGithubRateBudget(520, 80), { remaining: 520, required: 520, reserve: 120 });
+  assert.throws(() => checkGithubRateBudget(519, 80), /GITHUB_CORE_RATE_BUDGET_INSUFFICIENT/);
+  assert.throws(() => checkGithubRateBudget(undefined, 1), /GITHUB_CORE_RATE_BUDGET_INSUFFICIENT/);
+});
+
+test('manual batches have fixed UTC anchor and artifact retention without changing daily behavior', () => {
+  const yaml = readFileSync('.github/workflows/release-coverage-audit.yml', 'utf8');
+  assert.match(yaml, /historical-batch/);
+  assert.match(yaml, /RELEASE_AUDIT_ANCHOR_UTC/);
+  assert.match(yaml, /RELEASE_AUDIT_BATCH_OFFSET/);
+  assert.match(yaml, /release-coverage-batch-\$\{\{ github\.run_id \}\}/);
+});
