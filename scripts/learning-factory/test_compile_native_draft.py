@@ -131,6 +131,22 @@ class CompileNativeDraftTests(unittest.TestCase):
                                 for field in report['richContentFieldsConverted']))
             self.assertFalse(report['publishable'])
 
+    def test_preserves_gate_label_when_source_has_no_detail(self):
+        # Real SCORM authoring includes label-only gate items; they remain
+        # visible, without fake pedagogical explanations or dropped content.
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            draft['course']['slides'][0]['gateItems'] = [
+                ['Consultar procedimento vigente', ''],
+                ['Bloqueio de segurança', 'Interromper'],
+            ]
+            candidate, report = compile_candidate(draft, location)
+            bullets = [item for block in candidate['units'][0]['blocks']
+                       if block['type'] == 'bullets' for item in block['items']]
+            self.assertIn('Consultar procedimento vigente', bullets)
+            self.assertIn('Bloqueio de segurança: Interromper', bullets)
+            self.assertEqual(report['publishable'], False)
+
     def test_rejects_malformed_authored_rich_content_instead_of_dropping_it(self):
         with tempfile.TemporaryDirectory() as d:
             draft, location = self.prepare(Path(d))
