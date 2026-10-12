@@ -122,7 +122,9 @@ class NativeAtomicTerminalGuardTests(unittest.TestCase):
         self.assertEqual(self.permitted(),'null')
         self.db.execute("UPDATE qualificacoes_categorias SET ativo=0 WHERE id=45")
         self.denied()
-        self.db.execute("UPDATE qualificacoes_categorias SET ativo=1 WHERE id=45")
+        self.db.execute("UPDATE qualificacoes_categorias SET ativo=1,lms_integrada=0 WHERE id=45")
+        self.denied()
+        self.db.execute("UPDATE qualificacoes_categorias SET lms_integrada=1 WHERE id=45")
         self.db.execute("UPDATE qualificacoes_tipos SET empresa_id=7 WHERE id=44")
         self.denied()
 
