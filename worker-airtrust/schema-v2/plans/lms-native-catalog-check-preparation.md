@@ -167,3 +167,13 @@ A ativação da tabela/flag continua **proibida**: este é um primeiro recorte d
 O primeiro desenho da tabela de ativação protegia apenas o ato de ativação e os campos SCORM do curso. Foi detectado um risco adicional: processos internos, jobs de matrícula automática ou versionamento SCORM poderiam escrever **depois** da ativação, ignorando as rotas HTTP. A prova offline agora inclui triggers restritivos `BEFORE INSERT` e `BEFORE UPDATE OF curso_id` para `lms_matriculas` e `lms_scorm_package_versions`, impedindo matrícula/reatribuição e pacote SCORM em curso ativado. Os testes usam FKs habilitadas e preservam o conteúdo original dos cursos/matrículas legados.
 
 **Limitação intencional:** esses triggers ainda bloqueiam **qualquer** nova matrícula Native. Sua substituição por regras SQL governadas que aceitem somente vinculação atômica a edição/ciclo Native, nunca um fluxo SCORM legado, continua sendo pré-condição antes de uma migration aplicável. Nenhum desses triggers é aplicado ao D1. O desenho permanece `migrationPrepared=false`, `approvalForActivation=false`. Esta é uma defesa de laboratório, não a solução final de matrícula Native.
+
+### SQL do 0550 confrontado com D1 real — ensaio de compatibilidade (11/10/2026)
+
+A verificação `scripts/__tests__/test_native_catalog_marker_0550_compatibility.py` exercita **os quatro triggers de `0550_lms_native_v1_evidence.sql`** sobre fixture SQLite em memória com o mesmo CHECK de formatos legado do staging e `PRAGMA foreign_keys=ON`:
+
+- O SQL versionado atual **recusa corretamente** a primeira edição Native quando o curso possui marca de ativação mas está fisicamente como `scorm`; o CHECK também impede atualizar a coluna para `native`.
+- Uma cópia **temporária, exclusivamente em memória**, dos quatro predicados com verificação adicional da tabela de ativação permitiu edição publicada, vínculo com ciclo, evento e tentativa para o curso marcado **da mesma empresa**, recusando outros cursos e empresa diferente; `foreign_key_check` e `integrity_check` passaram.
+- A prova **não constitui migration**, não altera SQL 0550, hashes, manifest, staging, bancos ou objetos R2, **nem resolve** o fluxo transacional de criar uma nova matrícula e fixá-la a uma edição (a variante de triggers de ativação offline ainda bloqueia essa criação).
+
+O teste agora entra no gate rápido `build-content-gates` para impedir que se declare falsamente o Schema 0550 pronto para a arquitetura aditiva. O próximo passo continua sendo **novo contrato governado de Schema V2** que una ativação, vinculação e gatilhos de evidências, seguido de preflight D1 e autorização staging antes de apply. Não usar a substituição de strings do teste para executar SQL remoto.
