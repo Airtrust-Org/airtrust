@@ -6,14 +6,13 @@ never left committed; legacy enrollment is denied without such an intent.
 Not a Schema V2 migration, remote apply, or production-ready enrollment API.
 """
 import re
-import runpy
 import sqlite3
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0550_lms_native_v1_evidence.sql'
-ACTIVATION_RUNNER = ROOT / 'scripts/schema-v2/rehearse-native-catalog-activation-table.py'
+CANDIDATE = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0551.REVIEW-ONLY.sql'
 OLD_NATIVE = "c.tipo_conteudo='native'"
 EFFECTIVE_NATIVE = """(c.tipo_conteudo='native' OR (
   c.tipo_conteudo='scorm' AND EXISTS (
@@ -97,23 +96,18 @@ def fixture():
       INSERT INTO funcionarios(id,empresa_id) VALUES(69,6),(70,7),(71,6);
       INSERT INTO usuarios(id,funcionario_id) VALUES(900,69),(901,70),(902,71);
     """)
-    # Reuse the actual candidate activation DDL, omitting ONLY its pilot
-    # blanket enrollment-insert ban. The replacement gate below requires
-    # a transaction-scoped edition+tenant+actor intent instead.
-    activation = runpy.run_path(str(ACTIVATION_RUNNER))['ACTIVATION_DDL']
-    old_gate = 'CREATE TRIGGER trg_native_catalog_no_legacy_enrollment_insert'
-    next_gate = 'CREATE TRIGGER trg_native_catalog_no_legacy_enrollment_retarget'
-    if activation.count(old_gate) != 1 or activation.count(next_gate) != 1:
-        raise AssertionError('NATIVE_ACTIVATION_CANDIDATE_GATE_DRIFT')
-    first, last = activation.index(old_gate), activation.index(next_gate)
-    db.executescript(activation[:first] + activation[last:])
-    db.execute('INSERT INTO lms_native_catalog_activation(curso_id,empresa_id) VALUES(10,6)')
-    db.commit()
+    # 0550 stays byte-for-byte versioned. The 0551 review-only candidate
+    # evolves its physical-type triggers without altering any real database.
     ddl = CHANGE.read_text(encoding='utf8')
     if ddl.count(OLD_NATIVE) != 4:
         raise AssertionError('NATIVE_0550_PREDICATE_CONTRACT_DRIFT')
-    db.executescript(ddl.replace(OLD_NATIVE, EFFECTIVE_NATIVE))
-    db.executescript(ENROLLMENT_GATE)
+    db.executescript(ddl)
+    candidate = CANDIDATE.read_text(encoding='utf8')
+    if candidate.count("DROP TRIGGER lms_native_") != 4:
+        raise AssertionError('NATIVE_0551_CANDIDATE_TRIGGER_DRIFT')
+    db.executescript(candidate)
+    db.execute('INSERT INTO lms_native_catalog_activation(curso_id,empresa_id) VALUES(10,6)')
+    db.commit()
     db.execute("""INSERT INTO lms_native_edicoes(
       empresa_id,curso_id,artifact_sha256,package_version,r2_prefix
     ) VALUES(6,10,?,?,?)""", (HASH, 'n-'+'a'*32, f'lms/native/6/10/{HASH}/'))
@@ -261,6 +255,33 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
         finally:
             db.close()
 
+    def test_candidate_reapply_refused_before_existing_schema_mutation(self):
+        db=fixture()
+        try:
+            before = db.execute(
+                "SELECT sql FROM sqlite_master WHERE name='lms_native_event_scope_sequence'"
+            ).fetchone()[0]
+            with self.assertRaises(sqlite3.OperationalError):
+                db.executescript(CANDIDATE.read_text(encoding='utf8'))
+            self.assertEqual(db.execute(
+                "SELECT sql FROM sqlite_master WHERE name='lms_native_event_scope_sequence'"
+            ).fetchone()[0], before)
+        finally:
+            db.close()
+
+    def test_legacy_cannot_inject_extra_native_cycle_or_change_current_cycle(self):
+        db=fixture()
+        try:
+            matricula, ciclo, _ = provision(db)
+            with self.assertRaisesRegex(sqlite3.IntegrityError, 'NATIVE_CATALOG_CYCLE_INTENT_REQUIRED'):
+                db.execute("""INSERT INTO lms_matricula_ciclos (
+                    matricula_id,empresa_id,curso_id,funcionario_id,numero_ciclo,status
+                  ) VALUES(?,?,10,69,2,'NAO_INICIADO')""",(matricula,6))
+            with self.assertRaisesRegex(sqlite3.IntegrityError, 'NATIVE_CATALOG_CYCLE_IDENTITY_IMMUTABLE'):
+                db.execute('UPDATE lms_matricula_ciclos SET ciclo_atual=0 WHERE id=?',(ciclo,))
+        finally:
+            db.close()
+
     def test_foreign_keys_off_never_starts_provisioning(self):
         db=fixture()
         try:
@@ -296,7 +317,7 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
             db.execute("""INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id)
               VALUES(6,11,71)""")
             db.commit()
-            with self.assertRaisesRegex(sqlite3.IntegrityError,'NATIVE_CATALOG_ENROLLMENT_REQUIRES_NATIVE_PIN'):
+            with self.assertRaisesRegex(sqlite3.IntegrityError,'NATIVE_CATALOG_ENROLLMENT_(IDENTITY_IMMUTABLE|REQUIRES_NATIVE_PIN)'):
                 db.execute('UPDATE lms_matriculas SET curso_id=10 WHERE curso_id=11')
             with self.assertRaisesRegex(sqlite3.IntegrityError,'NATIVE_CATALOG_SCORM_VERSION_DENIED'):
                 db.execute('INSERT INTO lms_scorm_package_versions(curso_id) VALUES(10)')
