@@ -98,6 +98,17 @@ describe('frmsOperationalDecision', () => {
     expect(guidance.action).toContain('Não liberar');
   });
 
+  it('não apresenta normalidade se a atividade exige check-in e recebeu NAO_APLICAVEL', () => {
+    const input = item({
+      escalado: false,
+      operacao_requer_decisao: true,
+      checkin_status: 'NAO_APLICAVEL',
+    });
+    expect(classifyOperationalItem(input)).toBe('CONFIRMAR');
+    expect(resolveFrmsCoordinationGuidance(input, '2026-08-27').checkinLabel)
+      .toBe('Não confirmado');
+  });
+
   it('não confunde check-in não aplicável sem missão com pendência pré-voo', () => {
     const input = item({
       escalado: false, operacao_requer_decisao: false,
