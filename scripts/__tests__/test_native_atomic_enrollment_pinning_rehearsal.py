@@ -70,6 +70,9 @@ def fixture():
         deleted_at TEXT);
       CREATE TABLE lms_scorm_package_versions(
         id INTEGER PRIMARY KEY,curso_id INTEGER REFERENCES lms_cursos(id));
+      CREATE TABLE funcionarios(
+        id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,
+        ativo INTEGER NOT NULL DEFAULT 1,deleted_at TEXT);
       CREATE TABLE usuarios(
         id INTEGER PRIMARY KEY, funcionario_id INTEGER, deleted_at TEXT);
       CREATE TABLE lms_matriculas(
@@ -91,7 +94,8 @@ def fixture():
         deleted_at TEXT, UNIQUE(matricula_id, ciclo_atual));
       INSERT INTO lms_cursos(id,empresa_id,tipo_conteudo)
       VALUES(10,6,'scorm'),(11,6,'scorm'),(12,7,'scorm');
-      INSERT INTO usuarios(id,funcionario_id) VALUES(900,69),(901,70);
+      INSERT INTO funcionarios(id,empresa_id) VALUES(69,6),(70,7),(71,6);
+      INSERT INTO usuarios(id,funcionario_id) VALUES(900,69),(901,70),(902,71);
     """)
     # Reuse the actual candidate activation DDL, omitting ONLY its pilot
     # blanket enrollment-insert ban. The replacement gate below requires
@@ -147,6 +151,9 @@ def provision(db, *, nonce='f'*64, empresa=6, curso=10,
             ON ed.curso_id=c.id AND ed.empresa_id=c.empresa_id
           JOIN usuarios u ON u.id=? AND u.funcionario_id=?
             AND u.deleted_at IS NULL
+          JOIN funcionarios f ON f.id=u.funcionario_id
+            AND f.empresa_id=c.empresa_id AND f.deleted_at IS NULL
+            AND f.ativo=1
           WHERE c.id=? AND c.empresa_id=? AND c.ativo=1
             AND c.publicado=1 AND c.deleted_at IS NULL
             AND ed.id=? AND ed.status='PUBLISHED'
@@ -259,7 +266,7 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
         db=fixture()
         try:
             db.execute("""INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id)
-              VALUES(6,11,70)""")
+              VALUES(6,11,71)""")
             db.commit()
             with self.assertRaisesRegex(sqlite3.IntegrityError,'NATIVE_CATALOG_ENROLLMENT_REQUIRES_NATIVE_PIN'):
                 db.execute('UPDATE lms_matriculas SET curso_id=10 WHERE curso_id=11')
@@ -271,7 +278,8 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
 
     def test_rejected_scope_and_edition_never_create_partial_enrollment(self):
         for params in ({'empresa':7},{'curso':11},{'actor':901},
-                       {'funcionario':70},{'edition':77}):
+                       {'funcionario':70},{'actor':901,'funcionario':70},
+                       {'edition':77}):
             with self.subTest(params=params):
                 db=fixture()
                 try:
@@ -290,6 +298,17 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
                     self.assertEqual(self._counts(db),(0,0,0,0))
                     self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
                 finally: db.close()
+
+    def test_second_eligible_employee_can_enroll_with_distinct_pinned_cycle(self):
+        db=fixture()
+        try:
+            first=provision(db)
+            second=provision(db,nonce='e'*64,funcionario=71,actor=902)
+            self.assertNotEqual(first[:2],second[:2])
+            self.assertEqual(self._counts(db),(0,2,2,2))
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+        finally:
+            db.close()
 
     def test_native_enrollment_is_not_idempotently_rematriculated(self):
         db=fixture()
@@ -313,7 +332,7 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
         db=fixture()
         try:
             db.execute("""INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id)
-              VALUES(6,11,70)""")
+              VALUES(6,11,71)""")
             self.assertEqual(db.execute('SELECT COUNT(*) FROM lms_matriculas').fetchone()[0],1)
         finally: db.close()
 
