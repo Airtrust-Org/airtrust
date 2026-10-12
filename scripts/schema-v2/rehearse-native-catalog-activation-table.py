@@ -51,6 +51,24 @@ WHEN EXISTS (SELECT 1 FROM lms_native_catalog_activation marker WHERE marker.cur
     OR NEW.scorm_launch_file IS NOT OLD.scorm_launch_file
     OR NEW.scorm_package_r2_prefix IS NOT OLD.scorm_package_r2_prefix)
 BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COURSE_FORMAT_LOCKED'); END;
+-- This offline pilot is deliberately enrollment-frozen until a governed,
+-- atomic Native enrollment + edition-pin contract supersedes these triggers.
+CREATE TRIGGER trg_native_catalog_no_legacy_enrollment_insert
+BEFORE INSERT ON lms_matriculas
+WHEN EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.curso_id=NEW.curso_id)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_ENROLLMENT_REQUIRES_NATIVE_PIN'); END;
+CREATE TRIGGER trg_native_catalog_no_legacy_enrollment_retarget
+BEFORE UPDATE OF curso_id ON lms_matriculas
+WHEN EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.curso_id=NEW.curso_id)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_ENROLLMENT_REQUIRES_NATIVE_PIN'); END;
+CREATE TRIGGER trg_native_catalog_no_scorm_version_insert
+BEFORE INSERT ON lms_scorm_package_versions
+WHEN EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.curso_id=NEW.curso_id)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_SCORM_VERSION_DENIED'); END;
+CREATE TRIGGER trg_native_catalog_no_scorm_version_retarget
+BEFORE UPDATE OF curso_id ON lms_scorm_package_versions
+WHEN EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.curso_id=NEW.curso_id)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_SCORM_VERSION_DENIED'); END;
 """
 
 def fixture(snapshot: list, sha: str) -> tuple[sqlite3.Connection, list, str]:
@@ -111,6 +129,21 @@ def rehearse_marker_table(snapshot: list, expected_sha: str) -> dict:
         db.execute("UPDATE lms_cursos SET scorm_launch_file=NULL WHERE id=2")
         db.execute("INSERT INTO lms_native_catalog_activation(curso_id,empresa_id)"
                    " VALUES(2,6)")
+        # D1 integrity gates close even if an old background job bypasses
+        # an HTTP route. Neither legacy enrollment nor SCORM versioning may
+        # mutate this new course during the pre-Native-pinning pilot.
+        ensure_refused(db,
+            "INSERT INTO lms_matriculas(id,curso_id) VALUES(?,?)",
+            (102,2),'NATIVE_CATALOG_ENROLLMENT_REQUIRES_NATIVE_PIN')
+        ensure_refused(db,
+            "UPDATE lms_matriculas SET curso_id=? WHERE id=?",
+            (2,101),'NATIVE_CATALOG_ENROLLMENT_REQUIRES_NATIVE_PIN')
+        ensure_refused(db,
+            "INSERT INTO lms_scorm_package_versions(id,curso_id) VALUES(?,?)",
+            (302,2),'NATIVE_CATALOG_SCORM_VERSION_DENIED')
+        ensure_refused(db,
+            "UPDATE lms_scorm_package_versions SET curso_id=? WHERE id=?",
+            (2,301),'NATIVE_CATALOG_SCORM_VERSION_DENIED')
         # A scoped effective-type projection can distinguish the NEW Native
         # course while preserving the physical legacy CHECK and its records.
         marker = db.execute("""
@@ -156,6 +189,7 @@ def rehearse_marker_table(snapshot: list, expected_sha: str) -> dict:
             'originalDependentObjectsPreserved': len(original_objects),
             'nativeEffectiveIdentityOnNewCourse': True,
             'preexistingScormEnrollmentPreserved': True,
+            'newLegacyEnrollmentAndScormVersionsDenied': True,
             'preexistingScormCourseIsNotNative': True,
             'legacyRoutesStillRequireNativeExclusion': True,
             'migrationPrepared': False, 'remoteMutationPerformed': False,

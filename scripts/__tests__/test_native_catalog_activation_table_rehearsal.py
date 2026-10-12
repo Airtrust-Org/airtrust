@@ -45,6 +45,7 @@ class NativeActivationTableRehearsalTests(unittest.TestCase):
         self.assertEqual(out['originalDependentObjectsPreserved'],11)
         self.assertTrue(out['nativeEffectiveIdentityOnNewCourse'])
         self.assertTrue(out['preexistingScormCourseIsNotNative'])
+        self.assertTrue(out['newLegacyEnrollmentAndScormVersionsDenied'])
         self.assertTrue(out['legacyRoutesStillRequireNativeExclusion'])
         self.assertFalse(out['migrationPrepared'])
         self.assertFalse(out['remoteMutationPerformed'])
