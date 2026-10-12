@@ -141,7 +141,8 @@ describe('Native staging guarded checkpoint + private assessment HTTP APIs', () 
       state: 'STARTED', ciclo_id: 11, edition_sha256: sha, completion_supported: false,
     } });
     expect(mock.start).toHaveBeenCalledWith({
-      db: expect.anything(), actorUserId: 900, empresaId: 6,
+      db: expect.anything(), env: expect.objectContaining({ ENVIRONMENT: 'staging' }),
+      actorUserId: 900, empresaId: 6,
       matriculaId: 101, cursoId: 31, cicloId: 11, editionHash: sha,
     });
     expect(mock.checkpoint).not.toHaveBeenCalled();
