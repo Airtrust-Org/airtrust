@@ -134,7 +134,8 @@ class CompileNativeDraftTests(unittest.TestCase):
     def test_preserves_explicit_per_module_scorm_mastery(self):
         with tempfile.TemporaryDirectory() as d:
             draft, location = self.prepare(Path(d))
-            meta = draft['legacyCompletionManifest']
+            meta = {'assessment': {}, 'completion': {}}
+            draft['legacyCompletionManifest'] = meta
             meta['assessment'] = {'moduleGate': True, 'moduleAssessments': ['exam']}
             candidate, report = compile_candidate(draft, location)
             self.assertEqual(candidate['policy']['moduleGate'], True)

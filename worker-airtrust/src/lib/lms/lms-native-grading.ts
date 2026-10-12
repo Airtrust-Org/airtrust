@@ -81,6 +81,7 @@ export function evaluateNativeAssessment(
   }
   const certifying = course.questions.filter((q) => exams.has(q.id));
   const correct = certifying.filter((q) => answerMap.get(q.id) === q.correctOptionId).length;
+  const masteryScore = course.policy.masteryScore;
   const scorePct = Math.round((100 * correct) / certifying.length);
   // SCORM moduleGate means a global pass cannot compensate for failure in
   // any compulsory module assessment. Scenarios remain an independent gate.
@@ -89,7 +90,7 @@ export function evaluateNativeAssessment(
       const passed = unit.questionIds.filter((id) =>
         answerMap.get(id) === questions.get(id)?.correctOptionId
       ).length;
-      return passed * 100 >= course.policy.masteryScore * unit.questionIds.length;
+      return passed * 100 >= masteryScore * unit.questionIds.length;
     });
   return {
     mode: 'SCORED',
