@@ -54,7 +54,7 @@ describe('Native terminal preparation only, no canonical writes',()=>{
     if (!result.ready) return;
     expect(result.atomicGuard.sql).toMatch(/^SELECT json\(CASE WHEN/);
     expect(result.atomicGuard.bindings).toEqual([
-      900,101,6,31,51,1001,202,7,sha,88,2,answerSha,85,8,6,1,44,1,45,
+      900,101,6,31,51,1001,202,7,sha,88,2,answerSha,85,8,6,1,1,44,1,45,
     ]);
     expect(h.query.bindings).toEqual([900,101,6,51,31,1001,sha,2]);
     expect(h.query.sql).toContain('u.active=1');
@@ -63,6 +63,19 @@ describe('Native terminal preparation only, no canonical writes',()=>{
     expect(h.query.sql).toContain('ed.status=\'PUBLISHED\'');
     expect(h.query.sql).not.toMatch(/(?:UPDATE|DELETE|INSERT)\s+(?:INTO|lms_)/);
     expect(h.prepare).toHaveBeenCalledTimes(1);
+  });
+  it('keeps a formative completion free of qualification metadata',async()=>{
+    mocks.preflight.mockResolvedValueOnce({...goodProof,canonical:{
+      ...goodProof.canonical,gerarQualificacaoAoConcluir:false,
+      qualificacaoTipoId:null,qualificacaoCategoriaId:null,
+    }});
+    const result=await harness().call();
+    expect(result.ready).toBe(true);
+    if(!result.ready)return;
+    expect(result.terminalAnchor.gerarQualificacaoAoConcluir).toBe(false);
+    expect(result.terminalAnchor.qualificacaoTipoId).toBeNull();
+    expect(result.terminalAnchor.qualificacaoCategoriaId).toBeNull();
+    expect(result.atomicGuard.bindings.slice(-5)).toEqual([0,0,0,0,0]);
   });
   it('never queries evidence if persisted readiness or qualification is denied',async()=>{
     mocks.preflight.mockResolvedValueOnce({
