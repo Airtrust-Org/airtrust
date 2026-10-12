@@ -63,7 +63,7 @@ class NativeActivationTableRehearsalTests(unittest.TestCase):
 
     def test_required_source_columns_are_mandatory(self):
         data,_=synthetic()
-        ddl=data[0]['results'][0]
+        ddl=next(row for row in data[0]['results'] if row['name']=='lms_cursos')
         ddl['sql']=ddl['sql'].replace('scorm_launch_file TEXT, ','')
         data[0]['results'].sort(key=lambda row:(row['type'],row['name']))
         new_sha=digest(json.dumps([[r['type'],r['name'],r['sql']]
