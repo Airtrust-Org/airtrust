@@ -33,6 +33,7 @@ const SCOPE = [
   'JOIN usuarios u ON u.id=? AND u.deleted_at IS NULL',
   'JOIN funcionarios f ON f.id=u.funcionario_id',
   'AND f.empresa_id=c.empresa_id AND f.deleted_at IS NULL AND f.ativo=1',
+  "AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'",
   'WHERE c.id=? AND c.empresa_id=?',
   "AND c.tipo_conteudo='scorm' AND c.ativo=1 AND c.publicado=1",
   'AND c.deleted_at IS NULL AND ed.id=? AND ed.status=\'PUBLISHED\'',

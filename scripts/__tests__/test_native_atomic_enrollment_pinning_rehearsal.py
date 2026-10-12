@@ -72,7 +72,7 @@ def fixture():
         id INTEGER PRIMARY KEY,curso_id INTEGER REFERENCES lms_cursos(id));
       CREATE TABLE funcionarios(
         id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,
-        ativo INTEGER NOT NULL DEFAULT 1,deleted_at TEXT);
+        ativo INTEGER NOT NULL DEFAULT 1,status TEXT NOT NULL DEFAULT 'ATIVO',deleted_at TEXT);
       CREATE TABLE usuarios(
         id INTEGER PRIMARY KEY, funcionario_id INTEGER, deleted_at TEXT);
       CREATE TABLE lms_matriculas(
@@ -154,6 +154,7 @@ def provision(db, *, nonce='f'*64, empresa=6, curso=10,
           JOIN funcionarios f ON f.id=u.funcionario_id
             AND f.empresa_id=c.empresa_id AND f.deleted_at IS NULL
             AND f.ativo=1
+            AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
           WHERE c.id=? AND c.empresa_id=? AND c.ativo=1
             AND c.publicado=1 AND c.deleted_at IS NULL
             AND ed.id=? AND ed.status='PUBLISHED'
@@ -314,6 +315,19 @@ class NativeAtomicEnrollmentRehearsal(unittest.TestCase):
                         provision(db,**params)
                     self.assertEqual(self._counts(db),(0,0,0,0))
                 finally: db.close()
+
+    def test_employee_inactive_status_rejected_without_any_enrollment_write(self):
+        for field, value in (('status','INATIVO'), ('ativo',0), ('deleted_at','2026-10-12')):
+            with self.subTest(field=field):
+                db=fixture()
+                try:
+                    db.execute(f'UPDATE funcionarios SET {field}=? WHERE id=69',(value,))
+                    db.commit()
+                    with self.assertRaises(sqlite3.OperationalError):
+                        provision(db)
+                    self.assertEqual(self._counts(db),(0,0,0,0))
+                finally:
+                    db.close()
 
     def test_injected_failure_at_each_stage_rolls_back_all_writes(self):
         for stage in ('before_enrollment','before_pin','before_intent_cleanup'):
