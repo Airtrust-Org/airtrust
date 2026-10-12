@@ -76,7 +76,9 @@ describe('Native integration admission endpoint — read only and tenant scoped'
       data: { matricula_id: 51, curso_id: 7, mode: 'LEARN', native_package: 'NOT_YET_ENABLED' },
     });
     expect(bindings[0]).toEqual([51, 6]);
-    expect(bindings[1]).toEqual([100]);
+    expect(bindings[1]).toEqual([51, 6, 100]);
+    expect(statements[1]).toContain('u.active=1');
+    expect(statements[1]).toContain('f.empresa_id=m.empresa_id');
     expect(statements.every((sql) => sql.trimStart().toUpperCase().startsWith('SELECT'))).toBe(true);
   });
 
