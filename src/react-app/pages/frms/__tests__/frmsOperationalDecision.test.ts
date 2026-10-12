@@ -90,6 +90,13 @@ describe('frmsOperationalDecision', () => {
     expect(guidance.action).toContain('Não recomendar liberação');
   });
 
+  it('snapshot crítico nunca mostra ação normal mesmo se a decisão detalhada for NORMAL', () => {
+    const input = item({ snapshot_status: 'CRITICO', estado_operacional: 'NORMAL' });
+    expect(classifyOperationalItem(input)).toBe('BLOQUEIO');
+    const guidance = resolveFrmsCoordinationGuidance(input, '2026-08-27');
+    expect(guidance.action).toContain('Não recomendar liberação');
+  });
+
   it('check-in pendente aparece na fila e impede recomendação de liberar o voo no dia', () => {
     const input = item({ checkin_status: 'PENDENTE', estado_operacional: 'NORMAL' });
     const guidance = resolveFrmsCoordinationGuidance(input, '2026-08-27');
