@@ -30,14 +30,16 @@ def setup():
     return db,m,cy,b,att
 
 def intent(db,m,cy,b,att,nonce=NONCE,actor=900,employee=69,
-           tenant=6,answer_sha=HASH,score=85):
+           tenant=6,answer_sha=HASH,score=85,qualification=False):
     db.execute("""INSERT INTO lms_native_completion_intents(
       nonce,empresa_id,curso_id,matricula_id,ciclo_id,funcionario_id,
       actor_user_id,edicao_id,vinculo_id,tentativa_id,tentativa_numero,
       answers_sha256,score_pct,event_count,distinct_lesson_count,
       gerar_qualificacao,qualificacao_tipo_id,qualificacao_categoria_id
     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-    (nonce,tenant,10,m,cy,employee,actor,1,b,att,1,answer_sha,score,1,1,0,None,None))
+    (nonce,tenant,10,m,cy,employee,actor,1,b,att,1,answer_sha,score,1,1,
+     1 if qualification else 0,44 if qualification else None,
+     45 if qualification else None))
 
 def assert_guard(db,m,cy,b,att):
     values=[900,m,6,10,69,cy,b,1,HASH,att,1,HASH,85,1,1,0,0,0,0]
@@ -142,6 +144,28 @@ class NativeCompletionIntentReviewTests(unittest.TestCase):
             with self.assertRaisesRegex(sqlite3.IntegrityError,
                                         'NATIVE_TERMINAL_INTENT_SCOPE_DENIED'):
                 intent(db,m,cy,b,att)
+        finally: db.close()
+
+    def test_qualification_category_must_remain_integrated_inside_intent(self):
+        db,m,cy,b,att=setup()
+        try:
+            db.execute("""UPDATE lms_cursos
+              SET gerar_qualificacao_ao_concluir=1,qualificacao_tipo_id=44
+              WHERE id=10""")
+            db.execute("UPDATE qualificacoes_categorias SET lms_integrada=0 WHERE id=45")
+            with self.assertRaisesRegex(sqlite3.IntegrityError,
+                                        'NATIVE_TERMINAL_INTENT_SCOPE_DENIED'):
+                intent(db,m,cy,b,att,qualification=True)
+            db.rollback()
+            # A fresh, valid transaction proves the integrated path still
+            # works; no Native enrollment is concluded by this test.
+            db.execute("UPDATE lms_cursos SET gerar_qualificacao_ao_concluir=1,qualificacao_tipo_id=44 WHERE id=10")
+            db.execute("BEGIN") if not db.in_transaction else None
+            intent(db,m,cy,b,att,qualification=True)
+            db.execute('DELETE FROM lms_native_completion_intents WHERE nonce=?',(NONCE,))
+            db.commit()
+            self.assertEqual(db.execute('SELECT status FROM lms_matriculas WHERE id=?',
+                                        (m,)).fetchone()[0],'EM_ANDAMENTO')
         finally: db.close()
 
     def test_second_apply_aborts_without_altering_existing_terminal_guards(self):
