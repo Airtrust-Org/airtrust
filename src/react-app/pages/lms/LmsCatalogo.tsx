@@ -64,7 +64,6 @@ import {
 import { uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
 import { createNativeEnrollment } from './lmsNativeEnrollment';
 import { getLmsPlayerRoute } from './lmsPlayerRoute';
-import { shouldShowLmsEnrollmentDeadline } from './lmsEnrollmentDeadline';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -86,6 +85,7 @@ import {
   getAdminCoursePreviewPath,
   supportsAdminCoursePreview as supportsContentPreview,
 } from './lmsAdminPreview';
+import { shouldShowLmsEnrollmentDeadline } from './lmsEnrollmentDeadline';
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
