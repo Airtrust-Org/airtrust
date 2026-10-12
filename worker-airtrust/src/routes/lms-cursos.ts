@@ -11,7 +11,6 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', auth(), installLmsSchemaSnapshot);
 // Before upload/CRUD dispatch: a staging-marked Native course is not an old LMS course.
-app.use('/:id{[0-9]+}', guardLegacyCourseMutation);
 app.use('/:id{[0-9]+}/*', guardLegacyCourseMutation);
 app.route('/', hardenedUploadRoutes);
 app.route('/', canonicalLmsCursosRoutes);
