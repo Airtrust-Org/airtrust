@@ -139,6 +139,42 @@ describe('Native terminal HTTP entry: fifth gate and server-issued proof only',(
       scoreFinal:null,vencimentoFimMes:null,
     }));
   });
+  it('does not claim completion for wrong enrollment, missing history or failed outcome',async()=>{
+    for(const receipt of [
+      {matriculaId:999,outcome:'qualification_created',qualificacaoHistoricoId:333},
+      {matriculaId:101,outcome:'qualification_created',qualificacaoHistoricoId:null},
+      {matriculaId:101,outcome:'qualification_reused',qualificacaoHistoricoId:0},
+      {matriculaId:101,outcome:'qualification_failed',qualificacaoHistoricoId:333},
+      {matriculaId:101,outcome:'qualification_not_required',qualificacaoHistoricoId:null},
+    ]){
+      mocks.complete.mockResolvedValueOnce(receipt);
+      const r=await call();
+      expect(r.status).toBe(503);
+      expect(await r.json()).toEqual({
+        success:false,code:'NATIVE_COMPLETION_RECEIPT_UNCONFIRMED',
+      });
+    }
+    expect(mocks.complete).toHaveBeenCalledTimes(5);
+  });
+  it('does not claim a formative-only completion when a qualification was returned',async()=>{
+    mocks.prepare.mockResolvedValue({ready:true,canonical:{
+      ...snapshot,gerarQualificacaoAoConcluir:false,
+    },terminalAnchor:{
+      ...anchor,gerarQualificacaoAoConcluir:false,
+    }});
+    for(const receipt of [
+      {matriculaId:101,outcome:'qualification_created',qualificacaoHistoricoId:333},
+      {matriculaId:101,outcome:'qualification_not_required',qualificacaoHistoricoId:333},
+      {matriculaId:999,outcome:'qualification_not_required',qualificacaoHistoricoId:null},
+    ]){
+      mocks.complete.mockResolvedValueOnce(receipt);
+      const r=await call();
+      expect(r.status).toBe(503);
+      expect(await r.json()).toEqual({
+        success:false,code:'NATIVE_COMPLETION_RECEIPT_UNCONFIRMED',
+      });
+    }
+  });
   it('returns no success when readiness/qualification is not proven',async()=>{
     mocks.prepare.mockResolvedValueOnce({ready:false,reason:'ASSESSMENT_NOT_SATISFIED'});
     const r=await call();
