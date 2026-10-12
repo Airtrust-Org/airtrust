@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Env } from '../../types';
 
 const mocked = vi.hoisted(() => ({ load: vi.fn() }));
 vi.mock('../../services/lms-native-content-loader', async (original) => {
@@ -58,6 +59,23 @@ describe('Native V1 byte-verified media transport (staging preview)', () => {
     expect(f.paths).toEqual(['lms/native/6/31/'+'a'.repeat(64)+'/media/hero.webp']);
     expect(mocked.load).toHaveBeenCalledWith(expect.objectContaining({
       empresaId: 6, actorUserId: 900, matriculaId: 101,
+    }));
+  });
+
+  it('passes the authenticated staging activation context to the edition loader', async () => {
+    const f = prepareDb();
+    const env = {
+      ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6',
+      DB: f.db,
+      BUCKET: f.bucket,
+    } as Env;
+    await loadNativeVerifiedAsset({ ...args(f.db, f.bucket), env });
+    expect(mocked.load).toHaveBeenCalledWith(expect.objectContaining({
+      env,
+      empresaId: 6,
+      matriculaId: 101,
+      actorUserId: 900,
     }));
   });
 
