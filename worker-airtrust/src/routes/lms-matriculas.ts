@@ -781,14 +781,14 @@ app.post('/', async (c) => {
 
   // Verificar se curso existe e está publicado/ativo
   const cursoQuery = canManage
-    ? 'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL'
-    : 'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND publicado = 1 AND deleted_at IS NULL';
+    ? 'SELECT id, titulo, tipo_conteudo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL'
+    : 'SELECT id, titulo, tipo_conteudo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND publicado = 1 AND deleted_at IS NULL';
   const curso = await db
     .prepare(cursoQuery)
     .bind(curso_id, empresaId)
-    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null }>();
+    .first<{ id: number; titulo: string; tipo_conteudo: string | null; qualificacao_tipo_id: number | null }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
-
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, curso_id, curso.tipo_conteudo)) throw new ApiError('Matrícula Native exige o fluxo próprio.', 409, 'NATIVE_LEGACY_ENROLLMENT_BLOCKED');
   const funcionario = await db
     .prepare(
       `SELECT id, nome
@@ -1026,12 +1026,12 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
 
   const curso = await db
     .prepare(
-      'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL',
+      'SELECT id, titulo, tipo_conteudo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL',
     )
     .bind(curso_id, empresaId)
-    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null }>();
+    .first<{ id: number; titulo: string; tipo_conteudo: string | null; qualificacao_tipo_id: number | null }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
-
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, curso_id, curso.tipo_conteudo)) throw new ApiError('Matrícula Native exige o fluxo próprio.', 409, 'NATIVE_LEGACY_ENROLLMENT_BLOCKED');
   const loteAccess = await getEmployeeSectorAccess(c, empresaId);
   if (loteAccess.mode === 'restricted') {
     if (loteAccess.setorIds.length === 0) {
