@@ -14,7 +14,12 @@ function isMaintenanceLabel(value: string): boolean {
 }
 
 function isFlightLabel(value: string): boolean {
-  return /(^|\s|[-/])(PILOTO|COPILOTO|COMANDANTE)(\s|$|[-/])/.test(value);
+  return /(^|\s|[-/])(PILOTO|COPILOTO|COMANDANTE|OPERADOR AEROTATICO|TRIPULANTE AEROTATICO|TRIPULANTE OPERACIONAL|TRIPULANTE DE RESGATE AEREO|OPERADOR DE GUINCHO|MEDICO DE BORDO)(\s|$|[-/])/.test(value);
+}
+
+/** Bombeiro militar é posto/cargo genérico; só a função aeronáutica explícita resolve flight. */
+function isGenericFirefighterCargo(value: string): boolean {
+  return /^(BOMBEIRO MILITAR|MILITAR DO CORPO DE BOMBEIROS|OFICIAL BOMBEIRO MILITAR)$/.test(value);
 }
 
 /**
@@ -33,6 +38,11 @@ export function resolveFrmsWorkforceProfile(
 
   if (isMaintenanceLabel(source)) return 'maintenance';
   if (isFlightLabel(source)) return 'flight';
+
+  // Corporações militares costumam registrar posto genérico no cargo e a função
+  // aeronáutica real em funcao. Não transferir essa exceção para cargos civis.
+  if (normalizedCargo && isGenericFirefighterCargo(normalizedCargo) &&
+      isFlightLabel(normalizeWorkforceLabel(funcao))) return 'flight';
   return 'other';
 }
 
