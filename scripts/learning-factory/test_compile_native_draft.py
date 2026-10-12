@@ -131,6 +131,39 @@ class CompileNativeDraftTests(unittest.TestCase):
                                 for field in report['richContentFieldsConverted']))
             self.assertFalse(report['publishable'])
 
+    def test_preserves_authored_module_and_eyebrow_without_moving_answers(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            base, _ = compile_candidate(draft, location)
+            original = draft['course']['slides'][0]
+            original['module'] = 'Módulo A — Prevenção'
+            original['eyebrow'] = 'Antes de começar'
+            converted, report = compile_candidate(draft, location)
+            first = converted['units'][0]['blocks']
+            self.assertEqual(first[0], {'type': 'heading', 'text': 'Módulo A — Prevenção'})
+            self.assertEqual(first[1], {'type': 'paragraph', 'text': 'Antes de começar'})
+            self.assertEqual(first[2:], base['units'][0]['blocks'])
+            self.assertEqual(converted['questions'], base['questions'])
+            self.assertEqual(converted['assets'], base['assets'])
+            self.assertNotEqual(converted['packageVersion'], base['packageVersion'])
+            self.assertNotIn('module', report['unmappedLayoutFields'])
+            self.assertNotIn('eyebrow', report['unmappedLayoutFields'])
+            self.assertFalse(report['publishable'])
+
+    def test_invalid_authored_context_must_fail_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            slide = draft['course']['slides'][0]
+            for name, value in [
+                ('module', ''), ('module', 17), ('module', 'm' * 201),
+                ('eyebrow', ' '), ('eyebrow', []), ('eyebrow', 'e' * 201),
+            ]:
+                with self.subTest(name=name, value=str(value)[:30]):
+                    slide[name] = value
+                    with self.assertRaises(NativeCompileError):
+                        compile_candidate(draft, location)
+                    slide.pop(name)
+
     def test_preserves_gate_label_when_source_has_no_detail(self):
         # Real SCORM authoring includes label-only gate items; they remain
         # visible, without fake pedagogical explanations or dropped content.
