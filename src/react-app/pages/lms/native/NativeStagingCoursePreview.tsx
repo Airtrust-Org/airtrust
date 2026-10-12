@@ -46,7 +46,7 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
   const [course, setCourse] = useState<NativeLearnerCourse | null>(null);
   const [resume, setResume] = useState<NativeResume | null>(null);
   const [status, setStatus] = useState<'LOADING' | 'READY' | 'UNAVAILABLE'>('LOADING');
-  const [writeScope, setWriteScope] = useState<{ cycleId: number; editionHash: string; enabled: boolean } | null>(null);
+  const [writeScope, setWriteScope] = useState<{ cycleId: number; editionHash: string; enabled: boolean; completionSupported: boolean } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -67,7 +67,7 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
       const payload = await response.json() as PreviewResponse;
       if (payload.success !== true || !payload.data ||
           payload.data.matricula_id !== matriculaId ||
-          payload.data.completion_supported !== false ||
+          typeof payload.data.completion_supported !== 'boolean' ||
           !/^[a-f0-9]{64}$/.test(payload.data.edition_sha256) ||
           payload.data.course?.schema !== 'AIRTRUST_NATIVE_COURSE_V1' ||
           !Array.isArray(payload.data.course.units) ||
@@ -90,7 +90,7 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
           state.edition_sha256 !== payload.data.edition_sha256 ||
           state.ciclo_id !== payload.data.ciclo_id ||
           state.mode !== payload.data.mode ||
-          state.completion_supported !== false ||
+          state.completion_supported !== payload.data.completion_supported ||
           !Number.isSafeInteger(state.next_sequence) || state.next_sequence < 1 ||
           !Array.isArray(state.seen_lesson_ids) ||
           state.seen_lesson_ids.some((id) => typeof id !== 'string') ||
@@ -119,6 +119,7 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
           cycleId: payload.data.ciclo_id,
           editionHash: payload.data.edition_sha256,
           enabled: payload.data.evidence_write_enabled === true && payload.data.mode === 'LEARN',
+          completionSupported: payload.data.completion_supported === true,
         });
         setStatus('READY');
       }
@@ -168,6 +169,7 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
       cycleId={writeScope.cycleId}
       editionHash={writeScope.editionHash}
       initialSession={resume}
+      completionSupported={writeScope.completionSupported}
       fetchAuthorizedAsset={fetchAsset}
     />;
   }

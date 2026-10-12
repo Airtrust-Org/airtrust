@@ -25,6 +25,7 @@ type Props = {
   editionHash: string;
   course: NativeLearnerCourse;
   initialSession: NativePilotSession;
+  completionSupported?: boolean;
   fetchAuthorizedAsset: (asset: NativeAsset, signal: AbortSignal) => Promise<Blob>;
 };
 
@@ -36,12 +37,14 @@ function newEventId(): string {
 }
 
 export default function NativeStagingLearnerControls({
-  matriculaId, cycleId, editionHash, course, initialSession, fetchAuthorizedAsset,
+  matriculaId, cycleId, editionHash, course, initialSession,
+  completionSupported = false, fetchAuthorizedAsset,
 }: Props) {
   const [session, setSession] = useState(initialSession);
   const [started, setStarted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);
+  const [completed, setCompleted] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const inFlight = useRef(false);
 
@@ -56,7 +59,7 @@ export default function NativeStagingLearnerControls({
     if (body.success !== true || !data ||
         data.matricula_id !== matriculaId || data.ciclo_id !== cycleId ||
         data.edition_sha256 !== editionHash || data.mode !== 'LEARN' ||
-        data.completion_supported !== false ||
+        data.completion_supported !== completionSupported ||
         !Number.isSafeInteger(data.next_sequence) ||
         (data.next_sequence as number) < 1 || (data.next_sequence as number) > 10001 ||
         !Array.isArray(data.seen_lesson_ids) ||
@@ -163,21 +166,67 @@ export default function NativeStagingLearnerControls({
         updated.latestAttempt.assessment_satisfied !== receipt.assessment_satisfied ||
         updated.latestAttempt.score_pct !== receipt.score_pct) throw new Error('NATIVE_ATTEMPT_UNCONFIRMED');
     setMessage(updated.latestAttempt.assessment_satisfied
-      ? 'Avaliação registrada e critérios de avaliação atendidos. Certificação ainda indisponível.'
+      ? completionSupported
+        ? 'Avaliação registrada e critérios atendidos. A conclusão ainda precisa ser confirmada pelo servidor.'
+        : 'Avaliação registrada e critérios de avaliação atendidos. Certificação ainda indisponível.'
       : 'Avaliação registrada; critérios de aprovação ainda não atendidos. Nenhum certificado emitido.');
+  });
+
+  const readyToComplete = completionSupported && started && !busy &&
+    !locked && !completed && session.latestAttempt?.assessment_satisfied === true &&
+    lessonIds.size > 0 && session.seenLessonIds.length === lessonIds.size &&
+    session.seenLessonIds.every((id) => lessonIds.has(id));
+
+  const finish = () => void mutate(async () => {
+    // Refresh durable evidence immediately before requesting canonical
+    // completion. Client readiness never authorizes the server-side write.
+    const current = await refreshSession();
+    if (current.latestAttempt?.assessment_satisfied !== true ||
+        lessonIds.size === 0 || current.seenLessonIds.length !== lessonIds.size ||
+        current.seenLessonIds.some((id) => !lessonIds.has(id))) {
+      throw new Error('NATIVE_COMPLETION_NOT_READY');
+    }
+    const response = await fetchWithAuth(`${base}/concluir`, {
+      method: 'POST', cache: 'no-store',
+    });
+    if (!response.ok) throw new Error('NATIVE_CANONICAL_COMPLETION_REJECTED');
+    const result = await response.json() as {
+      success?: boolean;
+      data?: { matricula_id: number; status: string;
+        qualification_outcome: string; certificate_state: string };
+    };
+    if (result.success !== true || result.data?.matricula_id !== matriculaId ||
+        result.data.status !== 'CONCLUIDO' ||
+        !['qualification_created', 'qualification_reused', 'qualification_not_required']
+          .includes(result.data.qualification_outcome) ||
+        !['REQUIRES_VERIFICATION', 'NOT_APPLICABLE']
+          .includes(result.data.certificate_state)) {
+      throw new Error('NATIVE_COMPLETION_INVALID_RECEIPT');
+    }
+    setCompleted(true);
+    setLocked(true);
+    setMessage(result.data.certificate_state === 'REQUIRES_VERIFICATION'
+      ? 'Treinamento concluído pelo servidor. A disponibilidade do certificado deve ser confirmada no histórico.'
+      : 'Treinamento concluído pelo servidor. Este curso não exige certificado.');
   });
 
   return (
     <section aria-label="Piloto Native com evidências" className="space-y-4">
       <div className="mx-auto max-w-5xl space-y-2 px-4 pt-4">
-        <p className="text-sm font-semibold">Piloto exclusivo de staging. Registros não emitem certificados.</p>
+        <p className="text-sm font-semibold">Piloto exclusivo de staging. A conclusão e a emissão de certificados dependem de confirmação do servidor.</p>
         {!started && !locked && (
           <button type="button" onClick={start} disabled={busy}
             className="rounded border px-4 py-2 disabled:opacity-50">
             Iniciar ou retomar registro do treinamento
           </button>
         )}
-        {message && <p role={locked ? 'alert' : 'status'}>{message}</p>}
+        {readyToComplete && (
+          <button type="button" onClick={finish} disabled={busy}
+            className="rounded border px-4 py-2 disabled:opacity-50">
+            Finalizar treinamento
+          </button>
+        )}
+        {message && <p role={locked && !completed ? 'alert' : 'status'}>{message}</p>}
       </div>
       <NativeCoursePreview
         course={course}
@@ -185,8 +234,8 @@ export default function NativeStagingLearnerControls({
         fetchAuthorizedAsset={fetchAuthorizedAsset}
         initialUnitId={initialSession.lastVisitedUnitId}
         serverSeenLessonIds={session.seenLessonIds}
-        onRecordLessonVisit={started && !locked ? visit : undefined}
-        onSubmitAssessment={started && !locked ? submit : undefined}
+        onRecordLessonVisit={started && !locked && !completed ? visit : undefined}
+        onSubmitAssessment={started && !locked && !completed ? submit : undefined}
         evidenceBusy={busy}
       />
     </section>
