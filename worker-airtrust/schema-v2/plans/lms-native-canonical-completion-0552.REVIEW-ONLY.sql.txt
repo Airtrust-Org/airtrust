@@ -1,0 +1,138 @@
+-- NON-DEPLOYABLE CONCEPT: Native terminal completion intent after 0550+0551.
+-- This is .sql.txt under plans, not a versioned Schema V2 change.
+-- Not authorized for D1 staging or production. No remote writes.
+-- The actual Worker must first verify the private answer key, ledger,
+-- category/qualification mapping and a snapshot guard in the SAME D1.batch.
+SELECT json(CASE WHEN
+ (SELECT foreign_keys FROM pragma_foreign_keys)=1
+ AND (SELECT COUNT(*) FROM sqlite_master WHERE type='table'
+      AND name IN ('lms_native_enrollment_intents','lms_native_uncommittable_intent_guard',
+                   'lms_native_matricula_edicoes','lms_native_eventos','lms_native_tentativas'))=5
+ AND (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'
+      AND name IN ('trg_native_catalog_no_ungoverned_matricula_completion_update',
+                   'trg_native_catalog_no_ungoverned_cycle_completion_update'))=2
+ AND (SELECT COUNT(*) FROM sqlite_master WHERE name='lms_native_completion_intents')=0
+THEN 'null' ELSE 'NATIVE_0552_REVIEW_PREFLIGHT_DENIED' END);
+
+-- A matching one-transaction intent is required by both terminal UPDATE
+-- triggers below. The deferred FK to an unfillable sentinel enforces
+-- removal BEFORE COMMIT, including when a canonical history was inserted.
+CREATE TABLE lms_native_completion_intents(
+ nonce TEXT PRIMARY KEY CHECK(length(nonce)=64 AND nonce NOT GLOB '*[^a-f0-9]*'),
+ empresa_id INTEGER NOT NULL,
+ curso_id INTEGER NOT NULL,
+ matricula_id INTEGER NOT NULL,
+ ciclo_id INTEGER NOT NULL,
+ funcionario_id INTEGER NOT NULL,
+ actor_user_id INTEGER NOT NULL,
+ edicao_id INTEGER NOT NULL,
+ vinculo_id INTEGER NOT NULL,
+ tentativa_id INTEGER NOT NULL,
+ tentativa_numero INTEGER NOT NULL,
+ answers_sha256 TEXT NOT NULL CHECK(length(answers_sha256)=64),
+ score_pct REAL,
+ event_count INTEGER NOT NULL CHECK(event_count>0),
+ distinct_lesson_count INTEGER NOT NULL CHECK(distinct_lesson_count>0),
+ gerar_qualificacao INTEGER NOT NULL CHECK(gerar_qualificacao IN (0,1)),
+ qualificacao_tipo_id INTEGER,
+ qualificacao_categoria_id INTEGER,
+ uncommittable INTEGER NOT NULL DEFAULT 1
+   REFERENCES lms_native_uncommittable_intent_guard(id)
+   DEFERRABLE INITIALLY DEFERRED,
+ CHECK(
+   (gerar_qualificacao=0 AND qualificacao_tipo_id IS NULL AND qualificacao_categoria_id IS NULL)
+   OR (gerar_qualificacao=1 AND qualificacao_tipo_id>0 AND qualificacao_categoria_id>0)
+ )
+);
+
+CREATE TRIGGER trg_native_terminal_intent_insert_scope
+BEFORE INSERT ON lms_native_completion_intents
+BEGIN
+ SELECT RAISE(ABORT,'NATIVE_TERMINAL_INTENT_SCOPE_DENIED') WHERE NOT EXISTS(
+  SELECT 1
+  FROM lms_matriculas m
+  JOIN lms_matricula_ciclos cy ON cy.id=NEW.ciclo_id
+    AND cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+    AND cy.curso_id=m.curso_id AND cy.funcionario_id=m.funcionario_id
+    AND cy.ciclo_atual=1 AND cy.status='EM_ANDAMENTO' AND cy.deleted_at IS NULL
+  JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+    AND c.tipo_conteudo='scorm' AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL
+  JOIN lms_native_catalog_activation a ON a.curso_id=c.id AND a.empresa_id=c.empresa_id
+  JOIN usuarios u ON u.id=NEW.actor_user_id AND u.funcionario_id=m.funcionario_id
+    AND u.active=1 AND u.deleted_at IS NULL
+  JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
+    AND f.ativo=1 AND f.deleted_at IS NULL
+    AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
+  JOIN lms_native_matricula_edicoes b ON b.id=NEW.vinculo_id
+    AND b.matricula_id=m.id AND b.ciclo_id=cy.id
+    AND b.empresa_id=m.empresa_id AND b.curso_id=m.curso_id
+  JOIN lms_native_edicoes ed ON ed.id=NEW.edicao_id
+    AND ed.id=b.edicao_id AND ed.curso_id=b.curso_id
+    AND ed.empresa_id=b.empresa_id AND ed.status='PUBLISHED'
+  JOIN lms_native_tentativas att ON att.id=NEW.tentativa_id
+    AND att.vinculo_id=b.id AND att.tentativa_numero=NEW.tentativa_numero
+    AND att.answers_sha256=NEW.answers_sha256
+    AND att.score_pct IS NEW.score_pct AND att.assessment_satisfied=1
+  WHERE m.id=NEW.matricula_id AND m.empresa_id=NEW.empresa_id
+    AND m.curso_id=NEW.curso_id AND m.funcionario_id=NEW.funcionario_id
+    AND m.status='EM_ANDAMENTO' AND m.deleted_at IS NULL
+    AND m.data_conclusao IS NULL AND cy.data_conclusao IS NULL
+    AND c.gerar_qualificacao_ao_concluir=NEW.gerar_qualificacao
+    AND COALESCE(c.qualificacao_tipo_id,0)=COALESCE(NEW.qualificacao_tipo_id,0)
+    AND (NEW.gerar_qualificacao=0 OR EXISTS(
+      SELECT 1 FROM qualificacoes_tipos qt
+      JOIN qualificacoes_categorias qc ON qc.id=qt.categoria_id
+        AND qc.empresa_id=qt.empresa_id AND qc.ativo=1 AND qc.deleted_at IS NULL
+      WHERE qt.id=NEW.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id
+        AND qt.ativo=1 AND qt.deleted_at IS NULL
+        AND qc.id=NEW.qualificacao_categoria_id
+    ))
+    AND (SELECT COUNT(*) FROM lms_native_eventos ev WHERE ev.vinculo_id=b.id)=NEW.event_count
+    AND (SELECT COUNT(DISTINCT ev.unidade_id) FROM lms_native_eventos ev
+         WHERE ev.vinculo_id=b.id)=NEW.distinct_lesson_count
+    AND NOT EXISTS(SELECT 1 FROM lms_native_tentativas newer
+                   WHERE newer.vinculo_id=b.id
+                   AND newer.tentativa_numero>NEW.tentativa_numero)
+ );
+END;
+
+CREATE TRIGGER trg_native_terminal_intent_no_update
+BEFORE UPDATE ON lms_native_completion_intents
+BEGIN SELECT RAISE(ABORT,'NATIVE_TERMINAL_INTENT_IMMUTABLE'); END;
+
+-- INSERT of terminal enrollment/cycle remains forbidden by 0551. Only
+-- authenticated, version-pinned existing rows may transition to CONCLUIDO.
+DROP TRIGGER trg_native_catalog_no_ungoverned_matricula_completion_update;
+CREATE TRIGGER trg_native_catalog_no_ungoverned_matricula_completion_update
+BEFORE UPDATE OF status,progresso_pct,data_conclusao,qualificacao_historico_id
+ON lms_matriculas
+WHEN EXISTS(SELECT 1 FROM lms_native_catalog_activation a
+  WHERE a.curso_id=NEW.curso_id AND a.empresa_id=NEW.empresa_id)
+AND (NEW.status='CONCLUIDO' OR COALESCE(NEW.progresso_pct,0)>=100
+  OR NEW.data_conclusao IS NOT NULL OR NEW.qualificacao_historico_id IS NOT NULL)
+AND NOT EXISTS(
+ SELECT 1 FROM lms_native_completion_intents i
+ WHERE i.matricula_id=NEW.id AND i.empresa_id=NEW.empresa_id
+  AND i.curso_id=NEW.curso_id AND i.funcionario_id=NEW.funcionario_id
+  AND i.ciclo_id=(SELECT cy.id FROM lms_matricula_ciclos cy
+   WHERE cy.matricula_id=NEW.id AND cy.empresa_id=NEW.empresa_id
+     AND cy.curso_id=NEW.curso_id AND cy.ciclo_atual=1
+     AND cy.deleted_at IS NULL ORDER BY cy.id DESC LIMIT 1)
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'); END;
+
+DROP TRIGGER trg_native_catalog_no_ungoverned_cycle_completion_update;
+CREATE TRIGGER trg_native_catalog_no_ungoverned_cycle_completion_update
+BEFORE UPDATE OF status,progresso_pct,data_conclusao,qualificacao_historico_id
+ON lms_matricula_ciclos
+WHEN EXISTS(SELECT 1 FROM lms_native_catalog_activation a
+  WHERE a.curso_id=NEW.curso_id AND a.empresa_id=NEW.empresa_id)
+AND (NEW.status='CONCLUIDO' OR COALESCE(NEW.progresso_pct,0)>=100
+  OR NEW.data_conclusao IS NOT NULL OR NEW.qualificacao_historico_id IS NOT NULL)
+AND NOT EXISTS(
+ SELECT 1 FROM lms_native_completion_intents i
+ WHERE i.ciclo_id=NEW.id AND i.matricula_id=NEW.matricula_id
+  AND i.empresa_id=NEW.empresa_id AND i.curso_id=NEW.curso_id
+  AND i.funcionario_id=NEW.funcionario_id
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'); END;
