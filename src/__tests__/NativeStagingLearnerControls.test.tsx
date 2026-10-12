@@ -172,6 +172,14 @@ describe('Native staging learner — evidence-only interaction', () => {
     );
   });
 
+  it.each([{attempt_number:501,score_pct:null,assessment_satisfied:true},{attempt_number:1,score_pct:-1,assessment_satisfied:true},{attempt_number:1,score_pct:101,assessment_satisfied:true}])('rejects malformed resumed attempt %j', async (attempt) => {
+    api.fetchWithAuth.mockResolvedValueOnce(respond({success:true,data:{ciclo_id:9,edition_sha256:editionHash,completion_supported:false,state:'STARTED'}})).mockResolvedValueOnce(respond({success:true,data:{...scope,next_sequence:2,seen_lesson_ids:['intro'],last_visited_unit_id:'intro',latest_attempt:attempt}}));
+    render(<NativeStagingLearnerControls matriculaId={101} cycleId={9} editionHash={editionHash} course={course} initialSession={initialSession} fetchAuthorizedAsset={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button',{name:/Iniciar ou retomar/}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Atualize a página');
+    expect(api.fetchWithAuth).toHaveBeenCalledTimes(2);
+  });
+
   it('locks subsequent writes if start receipt conflicts with pinned edition', async () => {
     api.fetchWithAuth.mockResolvedValue(respond({
       success: true, data: { ciclo_id: 9, edition_sha256: 'f'.repeat(64),

@@ -74,11 +74,14 @@ export default function NativeStagingLearnerControls({
     if (latest != null && (
       typeof latest !== 'object' || Array.isArray(latest) ||
       !Number.isSafeInteger((latest as Record<string, unknown>).attempt_number) ||
-      ((latest as Record<string, number>).attempt_number < 1) ||
+      ((latest as Record<string, number>).attempt_number < 1 ||
+        (latest as Record<string, number>).attempt_number > 500) ||
       typeof (latest as Record<string, unknown>).assessment_satisfied !== 'boolean' ||
       ((latest as Record<string, unknown>).score_pct !== null &&
         (typeof (latest as Record<string, unknown>).score_pct !== 'number' ||
-         !Number.isFinite((latest as Record<string, number>).score_pct)))
+         !Number.isFinite((latest as Record<string, number>).score_pct) ||
+         (latest as Record<string, number>).score_pct < 0 ||
+         (latest as Record<string, number>).score_pct > 100)))
     )) throw new Error('NATIVE_SESSION_INVALID_ATTEMPT');
     const next: NativePilotSession = {
       nextSequence: data.next_sequence as number,
