@@ -178,7 +178,7 @@ export default function NativeCoursePreview({
             A<span className="text-[#f28b49]">.</span>
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#e65300]">AirTrust Learning</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#e65300]">PLATAFORMA DE TREINAMENTO</p>
             <h1 className="truncate text-sm font-extrabold text-[#10243d] sm:text-base">{course.title}</h1>
           </div>
         </div>
@@ -349,7 +349,7 @@ export default function NativeCoursePreview({
       <p className="border-t border-[#edf2f6] bg-[#f7fafc] px-5 py-2 text-center text-[11px] leading-snug text-[#60788b] md:hidden">
         {onRecordLessonVisit || onSubmitAssessment
           ? 'Piloto de staging — sem conclusão ou certificados.'
-          : 'Prévia técnica — respostas e navegação não são gravadas e não concluem treinamentos.'}
+          : 'Acesso demonstrativo — sem registro de conclusão ou certificado.'}
       </p>
     </section>
   );
