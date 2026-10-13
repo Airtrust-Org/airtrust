@@ -4852,8 +4852,10 @@ function canRemoveOperationalStage(index) {
   const fields = stage.fields || {};
   const hasRealizedData = ['horario_motor_ligado', 'horario_decolagem', 'horario_pouso', 'horario_motor_desligado', 'tempo_decolagem_pouso', 'tempo_total']
     .some((field) => String(fields[field] || '').trim() !== '');
+  const hasOperationalCounters = ['pousos_diurnos', 'pousos_noturnos', 'starts']
+    .some((field) => Number(fields[field] || 0) > 0);
   const hasFueling = (activeRdvDraft?.fuelings || []).some((fueling) => Number(fueling.etapa_numero) === Number(fields.numero_etapa));
-  return !hasRealizedData && !hasFueling;
+  return !hasRealizedData && !hasOperationalCounters && !hasFueling;
 }
 
 async function removeOperationalStage(index) {
