@@ -293,10 +293,10 @@ export default function FrmsRelatorios() {
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-4">
           <button
-            onClick={() => navigate('/frms?vista=analise')}
+            onClick={() => navigate('/frms')}
             className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
           >
-            <ArrowLeft className="h-4 w-4" /> Análise & Evidências
+            <ArrowLeft className="h-4 w-4" /> Voltar à Operação
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold text-gray-900">Relatórios FRMS</h1>
