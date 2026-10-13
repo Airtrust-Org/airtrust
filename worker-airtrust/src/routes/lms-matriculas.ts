@@ -14,6 +14,7 @@ import { hasRole, requirePermission, requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
+import { describeLmsQualificationFailure } from '../services/lms-qualification-failure-domain';
 import { resolveLmsCompletionScorePct } from '../services/lms-completion-evidence';
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import {
@@ -75,24 +76,6 @@ import {
 import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '../repositories/lms-matricula-queries';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
-
-// Never ask the learner to keep retrying when the qualifying-course mapping
-// needs administrative repair. This only classifies known internal error codes:
-// provider exceptions, SQL text and personal information stay server-side.
-function describeLmsQualificationFailure(error: LmsCompletionRejectedError) {
-  const configurationCodes = new Set([
-    'LMS_QUALIFICATION_MAPPING_INVALID',
-    'LMS_QUALIFICATION_CATEGORY_NOT_INTEGRATED',
-    'LMS_QUALIFICATION_STATUS_INCOMPATIBLE',
-  ]);
-  const requiresAdministrator = configurationCodes.has(error.code);
-  return {
-    reasonCode: requiresAdministrator ? error.code : 'LMS_QUALIFICATION_COMPLETION_FAILED',
-    message: requiresAdministrator
-      ? 'O curso foi realizado, mas a configuração da qualificação precisa ser corrigida pela Gerência de Treinamento. Seu progresso foi preservado.'
-      : 'Não foi possível confirmar a qualificação exigida por este curso. A matrícula não foi concluída — tente novamente.',
-  };
-}
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
