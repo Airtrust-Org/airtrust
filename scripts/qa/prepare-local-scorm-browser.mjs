@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// source_reference: scripts/seed-lms-pdf-demo.sh and lms-scorm-m8-fixture.mjs.
+// operational_decision: mutate synthetic local Worker/D1/R2 QA fixtures only.
+// dry_run_required: local D1 reset and no remote Cloudflare credentials.
+// rollback_plan_required: discard the disposable local Miniflare QA state.
 // Disposable local-only D1/R2 setup. Never contact remote Cloudflare.
 import fs from 'node:fs';
 import path from 'node:path';
