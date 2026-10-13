@@ -371,6 +371,14 @@ async function guardScormCommit(
   if (!row) return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
   const ownershipError = await enforceOwnership(c, row);
   if (ownershipError) return ownershipError;
+  // A cancelled enrollment cannot accept even passive terminal reports.
+  // Separating persistence from approval is never a permission to resurrect it.
+  if (String(row.status).toUpperCase() === 'CANCELADO') {
+    return decisionRejection(c, matriculaId, {
+      accepted: false, code: 'ENROLLMENT_INACTIVE',
+      scorePct: null, masteryScore: row.scorm_mastery_score, failurePrecedence: false,
+    });
+  }
   const edition = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
     activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
