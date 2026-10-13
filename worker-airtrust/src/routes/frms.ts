@@ -1774,6 +1774,10 @@ frmsRoutes.get(
   '/ultimo-mes',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso às jornadas negado.',
+    }, 403);
     const row = await c.env.DB.prepare(
       `SELECT strftime('%Y-%m', j.data) as mes
        FROM frms_jornada j
@@ -1782,11 +1786,11 @@ frmsRoutes.get(
          AND f.deleted_at IS NULL
          AND COALESCE(f.ativo, 1) = 1
          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-         AND (? IS NULL OR f.empresa_id = ?)
+         AND f.empresa_id = ?
        ORDER BY j.data DESC
        LIMIT 1`,
     )
-      .bind(empresaId ?? null, empresaId ?? null)
+      .bind(empresaId)
       .first<{ mes: string }>();
 
     const mesAtual = new Date().toISOString().slice(0, 7);
