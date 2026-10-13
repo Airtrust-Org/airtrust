@@ -1,6 +1,6 @@
 import {defineConfig,devices} from '@playwright/test';
 export default defineConfig({
-  testDir:'./e2e/ci',
+  testDir:'.',
   testMatch:/lms-scorm-enrollment-browser\.spec\.ts$/,
   forbidOnly:Boolean(process.env.CI),timeout:120000,retries:0,workers:1,fullyParallel:false,
   reporter:[['list']],
