@@ -91,6 +91,26 @@ describe('ControleOperacionalFrmsPanel', () => {
     expect(screen.getByText('Ausente')).toBeInTheDocument();
   });
 
+  it('não apresenta NAO_APLICAVEL ou INDISPONIVEL como check-in liberado', async () => {
+    const response = painel();
+    const crew = response.voos[0].tripulacao[0];
+    response.voos[0].tripulacao = [
+      { ...crew, funcionario_id: 1003, checkin_status: 'NAO_APLICAVEL' },
+      { ...crew, funcionario_id: 1004, checkin_status: 'INDISPONIVEL' },
+    ];
+    getMock.mockImplementation(async (url: string) => {
+      if (url.includes('/operacional')) return apiOk(response);
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    renderWithClient(<ControleOperacionalFrmsPanel />);
+
+    expect(await screen.findByText('Não confirmado')).toBeInTheDocument();
+    expect(screen.getByText('Indisponível')).toBeInTheDocument();
+    expect(screen.queryByText('N/A')).not.toBeInTheDocument();
+    expect(screen.getAllByText('NÃO LIBERADO').length).toBeGreaterThan(0);
+  });
+
   it('expande a linha do tripulante e mostra o motivo sanitizado (sem dado sensivel)', async () => {
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/operacional')) return apiOk(painel());

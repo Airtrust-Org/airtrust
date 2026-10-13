@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, XCircle } from 'lucide-react';
 import { cn } from '@/react-app/lib/utils';
 import ControleVoosStatCards from './ControleVoosStatCards';
+import { frmsBrazilOperationalTodayIso } from '@/react-app/pages/frms/frmsOperationalDate';
 import {
   useFrmsOperacionalPainel,
   type CvFrmsCrewDispatchAssessment,
@@ -56,8 +57,8 @@ const CHECKIN_LABELS: Record<string, string> = {
   RECEBIDO: 'Recebido',
   PENDENTE: 'Pendente',
   AUSENTE: 'Ausente',
-  NAO_APLICAVEL: 'N/A',
-  INDISPONIVEL: '—',
+  NAO_APLICAVEL: 'Não confirmado',
+  INDISPONIVEL: 'Indisponível',
 };
 
 function fadigaClass(nivel: string): string {
@@ -159,7 +160,7 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
 }
 
 export default function ControleOperacionalFrmsPanel() {
-  const [data, setData] = useState(() => new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(() => frmsBrazilOperationalTodayIso());
   const { data: painel, isLoading, error } = useFrmsOperacionalPainel(data);
 
   const resumo = painel?.resumo;
