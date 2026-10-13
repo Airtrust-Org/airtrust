@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   validateSource, approximation, buildSeedSql, buildRollbackSql, TENANT_ID,
-  TENANT_CODE, DB_ID, DB_NAME, CONFIRM,
+  TENANT_CODE, DB_ID, DB_NAME, CONFIRM, chooseGovernedRevision,
 } from '../staging/seed-frms-ux-30d.mjs';
 const SHA='a'.repeat(40);
 const days=Array.from({length:30},(_,i)=>({
@@ -50,6 +50,18 @@ test('creates only fictional crew under reserved staging tenant with governed pr
   assert.equal(approximation('1-4'),2);
   assert.throws(()=>approximation('3'),/BAND_INVALID/);
 });
+test('governed revision is global, effective for entire 30d window and unambiguous',()=>{
+  const rev={id:'frms-revision-global-qa',empresa_id:null,profile_code:'HELICOPTER_OFFSHORE',
+    status:'ACTIVE',revision_number:2,effective_from:'2026-09-01',effective_to:null};
+  assert.equal(chooseGovernedRevision([rev],169),rev.id);
+  assert.match(buildSeedSql(days,rev.id),/frms-revision-global-qa/);
+  assert.throws(()=>chooseGovernedRevision([rev],67),/REVISION_INCOMPLETE/);
+  assert.throws(()=>chooseGovernedRevision([{...rev,empresa_id:999006}],169),/REVISION_30D_MISSING/);
+  assert.throws(()=>chooseGovernedRevision([{...rev,effective_from:'2026-10-01'}],169),/REVISION_30D_MISSING/);
+  assert.throws(()=>chooseGovernedRevision([{...rev,effective_to:'2026-10-12'}],169),/REVISION_30D_MISSING/);
+  assert.throws(()=>chooseGovernedRevision([rev,{...rev,id:'competing-rev'}],169),/REVISION_AMBIGUOUS/);
+  assert.equal(chooseGovernedRevision([{...rev,status:'SUPERSEDED'}],169),rev.id);
+});
 test('rollback is limited to fixture identifiers and does not mutate other tenants',()=>{
   const sql=buildRollbackSql();
   assert.match(sql,/empresa_id=999013/);
@@ -68,6 +80,8 @@ test('workflow requires reviewed main, artifact provenance, staging environment 
   assert.match(wf,/D1_RECOVERY_BOOKMARK_MISSING/);
   assert.match(wf,/STAGING_DATABASE_UUID_MISMATCH/);
   assert.match(wf,/D1_MIGRATION_API_TOKEN/);
+  assert.match(wf,/mode == 'inspect'/);
+  assert.match(wf,/--inspect/);
   assert.match(wf,/STAGING_QA_POSTCONDITIONS_FAILED/);
   assert.doesNotMatch(wf,/secrets\.CLOUDFLARE_API_TOKEN\b/);
 });
