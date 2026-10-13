@@ -64,6 +64,19 @@ describe('FrmsRelatorios', () => {
     expect(screen.getByRole('button', { name: 'CSV' })).toBeEnabled();
   });
 
+  it('não apresenta campos ausentes como zero ou nível verde no consolidado', () => {
+    useApiMock.mockReturnValue({
+      data: {
+        success: true, data: [{ tripulante_id: 1, nome: 'QA Sem Dados', nivel_max: null, repouso_suficiente: null }],
+        meta: { policy_version: 'QA', revision_id: 'rev', source: 'fixture', limitations: [] },
+      }, loading: false, error: null, refetch: refetchMock,
+    });
+    render(<FrmsRelatorios />);
+    fireEvent.click(screen.getByRole('button', { name: /Resumo de consumo de limites/i }));
+    expect(screen.getAllByText('Não avaliado').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/nível ou repouso desconhecido/i)).toBeInTheDocument();
+  });
+
   it('não habilita exportação quando a resposta não traz metadados de governança', () => {
     useApiMock.mockReturnValue({
       data: [{ tripulante_id: 1, nome: 'Tripulante Teste', dias_avaliados: 1 }],
