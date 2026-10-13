@@ -8,8 +8,7 @@ const run=browser=>({
   source:'LOCAL_DISPOSABLE_D1_R2_ONLY',browser,packageSha256:sha,
   enrollmentIsolation:'SAME_TENANT_ONLY',certificateDocument:'INCONCLUSIVE',
   crossTenantAccess:'PASS',cycleIsolation:'PASS',
-  cases:[...LOCAL_CASES.map(name=>({name,status:'PASS'})),
-    {name:'TENANT_CYCLE_ISOLATION',status:'PASS'}],
+  cases:LOCAL_CASES.map(name=>({name,status:'PASS'})),
 });
 test('local verdict stays UNCERTIFIED even after all proved steps pass',()=>{
  const report=summarizeLocalEvidence(zip,[run('CHROMIUM'),run('WEBKIT')]);
