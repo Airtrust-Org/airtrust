@@ -325,21 +325,21 @@ describe('FrmsDashboard simplificado', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(state({
       data: [
         item({ funcionario_id: 10, tripulante_id: 10, nome: 'Max Monteiro', checkin_status: 'RECEBIDO' }),
-        item({ funcionario_id: 11, tripulante_id: 11, nome: 'Bia Monteiro', checkin_status: 'PENDENTE',
+        item({ funcionario_id: 11, tripulante_id: 11, nome: 'Bia Monteiro', nome_guerra: 'Bia', checkin_status: 'PENDENTE',
           estado_operacional: 'NAO_AVALIADO', fatorizacao_status: 'AUSENTE' }),
       ],
     }));
     renderDashboard('/frms?data=2026-08-27');
-    expect(screen.getByText('Bia Monteiro')).toBeInTheDocument();
-    expect(screen.getByText('Max Monteiro')).toBeInTheDocument();
+    expect(screen.getByText('Bia')).toBeInTheDocument();
+    expect(screen.getByText('Max')).toBeInTheDocument();
     const filter = screen.getByRole('button', { name: /Check-ins a receber/i });
     expect(filter).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(filter);
     expect(filter).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('Bia Monteiro')).toBeInTheDocument();
-    expect(screen.queryByText('Max Monteiro')).not.toBeInTheDocument();
+    expect(screen.getByText('Bia')).toBeInTheDocument();
+    expect(screen.queryByText('Max')).not.toBeInTheDocument();
     fireEvent.click(filter);
-    expect(screen.getByText('Max Monteiro')).toBeInTheDocument();
+    expect(screen.getByText('Max')).toBeInTheDocument();
   });
 
   it('mantém check-in e ação principal visíveis e os quatro sinais técnicos no detalhe', () => {
