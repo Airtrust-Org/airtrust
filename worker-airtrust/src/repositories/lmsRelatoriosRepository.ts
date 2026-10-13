@@ -591,6 +591,7 @@ export async function getScormConclusaoInconsistenteRows(
         row.diagnostic_code !== 'SCORM_NONE' &&
         (row.diagnostic_status === 'candidate' ||
           row.diagnostic_code === 'SCORM_STATUS_INCONSISTENT' ||
+          row.diagnostic_code === 'SCORM_PROGRESS_EVIDENCE_MISSING' ||
           row.diagnostic_code === 'SCORM_FINAL_COMMIT_MISSING'),
     );
 
