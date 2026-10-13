@@ -126,8 +126,85 @@ cleanup() { rm -f "$COOKIE_JAR" "$BODY_FILE"; }
 trap cleanup EXIT
 curl -fsS -c "$COOKIE_JAR" -X POST "$API_BASE/lms/assets/session"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "{\"matricula_id\":$MATRICULA_ID}" >/dev/null
 
+echo "[smoke:lms:scorm] Recording an unsuccessful attempt before the learner retries"
+FAILED_CMI='{"cmi.core.lesson_location":"2/3","cmi.core.lesson_status":"failed","cmi.core.score.raw":"30","cmi.core.score.max":"100","airtrust.total_slides":3,"airtrust.viewed_slides":[1,2]}'
+FAILED_HTTP="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR" \
+  -X POST "$API_BASE/lms/matriculas/scorm/commit" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "$(node -e '
+    process.stdout.write(JSON.stringify({
+      matricula_id: Number(process.argv[1]),
+      lesson_status: "failed", completion_status: "incomplete", success_status: "failed",
+      score_raw: 30, score_max: 100, score_min: 0,
+      cmi_json: process.argv[2], commit_event: "SCORM_COMMIT"
+    }));
+  ' "$MATRICULA_ID" "$FAILED_CMI")")"
+[[ "$FAILED_HTTP" == "200" ]] || { echo "Failed attempt was not recorded: HTTP $FAILED_HTTP" >&2; exit 1; }
+FAILED_DB_ROW="$(sql "SELECT status || '|' || COALESCE(data_conclusao,'') || '|' ||
+  COALESCE(CAST(qualificacao_historico_id AS TEXT), '')
+  FROM lms_matriculas WHERE id=$MATRICULA_ID AND empresa_id=$EMPRESA_ID;")"
+case "$FAILED_DB_ROW" in
+  'REPROVADO|'????-??-??'|') ;;
+  *) echo "Failed attempt must record its date without minting a qualification" >&2; exit 1 ;;
+esac
+
+echo "[smoke:lms:scorm] Proving that apparent 100%/passed without individual slide coverage cannot complete"
+# All writes below are restricted to the disposable LOCAL D1 prepared by the
+# parent smoke. A passive SCO report can arrive before learner finalization.
+# Its status/score should persist, but never mint a qualification by itself.
+UNCERTIFIED_CMI='{"cmi.core.lesson_location":"3/3","cmi.core.lesson_status":"passed","cmi.core.score.raw":"90","cmi.core.score.max":"100"}'
+UNCERTIFIED_COMMIT_HTTP="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR" \
+  -X POST "$API_BASE/lms/matriculas/scorm/commit" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "$(node -e '
+    process.stdout.write(JSON.stringify({
+      matricula_id: Number(process.argv[1]),
+      lesson_status: "passed", completion_status: "completed", success_status: "passed",
+      score_raw: 90, score_min: 0, score_max: 100,
+      cmi_json: process.argv[2],
+      commit_event: "SCORM_COMMIT"
+    }));
+  ' "$MATRICULA_ID" "$UNCERTIFIED_CMI")")"
+[[ "$UNCERTIFIED_COMMIT_HTTP" == "200" ]] || {
+  echo "Passive terminal SCORM evidence was not persisted: HTTP $UNCERTIFIED_COMMIT_HTTP" >&2
+  exit 1
+}
+
+# Attempting learner finalization with only a last-position marker must
+# be rejected even though the stored package status already says PASSED.
+UNCERTIFIED_FINALIZE_HTTP="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR" \
+  -X POST "$API_BASE/lms/matriculas/$MATRICULA_ID/finalizar" \
+  -H "Authorization: Bearer $TOKEN")"
+[[ "$UNCERTIFIED_FINALIZE_HTTP" == "409" ]] || {
+  echo "Finalization without slide evidence did not fail closed: HTTP $UNCERTIFIED_FINALIZE_HTTP" >&2
+  exit 1
+}
+
+UNCERTIFIED_DB_STATUS="$(sql "SELECT status || '|' ||
+  COALESCE(CAST(qualificacao_historico_id AS TEXT), '') || '|' ||
+  COALESCE(data_conclusao, '')
+  FROM lms_matriculas WHERE id=$MATRICULA_ID AND empresa_id=$EMPRESA_ID;")"
+# A failed attempt may transition between nonterminal states when new
+# evidence is persisted. Neither a passive "passed" report nor a rejected
+# finalization may mark the enrollment completed or link a qualification.
+UNCERTIFIED_STATUS="${UNCERTIFIED_DB_STATUS%%|*}"
+UNCERTIFIED_REST="${UNCERTIFIED_DB_STATUS#*|}"
+UNCERTIFIED_HISTORY="${UNCERTIFIED_REST%%|*}"
+[[ "$UNCERTIFIED_STATUS" != "CONCLUIDO" && -z "$UNCERTIFIED_HISTORY" ]] || {
+  echo "Passive SCORM evidence incorrectly completed enrollment or created a qualification" >&2
+  exit 1
+}
+
+# Now continue with an explicit authenticated SCORM_USER_FINALIZE and
+# complete per-slide evidence. No reset or re-enrollment is allowed:
+# the same persisted cycle must recover from the failed attempt, retaining the
+# audit trail without generating duplicate qualifications.
+
 echo "[smoke:lms:scorm] Committing terminal passed/completed state"
-FINAL_CMI='{"cmi.core.lesson_location":"3/3","cmi.core.lesson_status":"passed","cmi.core.score.raw":"90","cmi.core.score.max":"100","airtrust.total_slides":3,"airtrust.viewed_slides":[1,2,3]}'
+# This final autosave supplies only the LAST slide. The 1/3 and 2/3 evidence
+# was actually observed in earlier authenticated commits and must be recovered
+# from persisted CMI, never inferred from the 3/3 marker.
+FINAL_CMI='{"cmi.core.lesson_location":"3/3","cmi.core.lesson_status":"passed","cmi.core.score.raw":"90","cmi.core.score.max":"100","airtrust.total_slides":3,"airtrust.viewed_slides":[3]}'
 HTTP_CODE="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR"   -X POST "$API_BASE/lms/matriculas/scorm/commit"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "$(node -e '
     const id=Number(process.argv[1]);
     const cmi=process.argv[2];
@@ -192,6 +269,16 @@ IFS='|' read -r LESSON_STATUS COMPLETION_STATUS SUCCESS_STATUS SCORE_RAW <<< "$S
 [[ "$COMPLETION_STATUS" == "completed" ]] || { echo "Stored completion_status is $COMPLETION_STATUS" >&2; exit 1; }
 [[ "$SUCCESS_STATUS" == "passed" ]] || { echo "Stored success_status is $SUCCESS_STATUS" >&2; exit 1; }
 [[ "$SCORE_RAW" == "90" || "$SCORE_RAW" == "90.0" ]] || { echo "Stored score_raw is $SCORE_RAW" >&2; exit 1; }
+
+# Verify that authenticated partial autosaves were joined as observed facts.
+# This query is against the disposable local D1 only.
+COVERAGE_JSON="$(sql "SELECT json_extract(cmi_json, '$.\"airtrust.viewed_slides\"')
+  FROM lms_progresso_scorm
+  WHERE matricula_id=$MATRICULA_ID AND empresa_id=$EMPRESA_ID;")"
+[[ "$COVERAGE_JSON" == '[1,2,3]' ]] || {
+  echo "Persisted CMI did not preserve distinct slide observations across saves" >&2
+  exit 1
+}
 
 echo "[smoke:lms:scorm] Replaying incomplete commit to prove completed enrollment cannot downgrade"
 curl -fsS -b "$COOKIE_JAR" -X POST "$API_BASE/lms/matriculas/scorm/commit"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "{\"matricula_id\":$MATRICULA_ID,\"lesson_status\":\"incomplete\",\"cmi_json\":\"{\\\"cmi.core.lesson_location\\\":\\\"1/3\\\"}\"}" >/dev/null
