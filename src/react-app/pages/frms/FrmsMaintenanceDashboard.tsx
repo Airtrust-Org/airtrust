@@ -89,6 +89,7 @@ function maintenanceScopeLabel(source: string | undefined): string {
 
 export default function FrmsMaintenanceDashboard() {
   const [date, setDate] = useState(localTodayIso());
+  const [bucketFilter, setBucketFilter] = useState<MaintenanceDecisionBucket | 'TODOS'>('TODOS');
   const access = useFrmsOperationalAccess();
   const canManage = access.data?.can_manage_maintenance === true;
   const canOpenOwnMaintenanceCheckin = access.data?.frms_profile === 'maintenance';
@@ -115,6 +116,17 @@ export default function FrmsMaintenanceDashboard() {
       ),
     [items],
   );
+
+  const visibleItems = useMemo(() => items
+    .map((item) => ({ item, bucket: classifyMaintenanceItem(item) }))
+    .filter(({ bucket }) => bucketFilter === 'TODOS' || bucket === bucketFilter)
+    .sort((a, b) => {
+      const priority: Record<MaintenanceDecisionBucket, number> = {
+        CRITICAL: 0, ATTENTION: 1, PENDING: 2, NORMAL: 3,
+      };
+      return priority[a.bucket] - priority[b.bucket] ||
+        a.item.funcionario_nome.localeCompare(b.item.funcionario_nome, 'pt-BR');
+    }), [items, bucketFilter]);
 
   if (access.isLoading) {
     return (
@@ -200,7 +212,7 @@ export default function FrmsMaintenanceDashboard() {
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Resumo de manutenção">
           <MetricCard label="Revisão imediata" value={counts.CRITICAL} helper="sinal crítico de fadiga ou prontidão" />
           <MetricCard label="Atenção" value={counts.ATTENTION} helper="requer avaliação e mitigação" />
-          <MetricCard label="Pendentes" value={counts.PENDING} helper="check-in ou PVT ainda não registrado" />
+          <MetricCard label="Sem dados para avaliação" value={counts.PENDING} helper="check-in ou PVT pendente; não significa condição normal" />
           <MetricCard label="Sem pendência" value={counts.NORMAL} helper="monitoramento normal" />
         </section>
 
@@ -214,9 +226,27 @@ export default function FrmsMaintenanceDashboard() {
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
             <div>
               <h2 className="font-bold text-slate-950 dark:text-white">Equipe de manutenção</h2>
-              <p className="text-xs text-slate-500">A prioridade considera fadiga diária e prontidão objetiva.</p>
+              <p className="text-xs text-slate-500">A prioridade considera fadiga diária e prontidão objetiva. Não há turno ou próxima tarefa individual nesta fonte: confirme com a programação da manutenção.</p>
             </div>
             <span className="text-xs font-semibold text-slate-500">{items.length} profissional(is)</span>
+          </div>
+
+          <div className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800" aria-label="Filtrar equipe por necessidade">
+            {([
+              { key: 'TODOS', label: 'Toda a equipe', value: items.length },
+              { key: 'CRITICAL', label: 'Revisão imediata', value: counts.CRITICAL },
+              { key: 'ATTENTION', label: 'Atenção', value: counts.ATTENTION },
+              { key: 'PENDING', label: 'Sem dados para avaliação', value: counts.PENDING },
+              { key: 'NORMAL', label: 'Sem pendência', value: counts.NORMAL },
+            ] as const).map((option) => (
+              <button key={option.key} type="button" aria-pressed={bucketFilter === option.key}
+                onClick={() => setBucketFilter(bucketFilter === option.key ? 'TODOS' : option.key)}
+                className={bucketFilter === option.key
+                  ? 'rounded-lg border border-primary bg-blue-50 px-3 py-2 text-xs font-bold text-blue-950 dark:bg-blue-950/40 dark:text-blue-100'
+                  : 'rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200'}>
+                {option.label}: {option.value}
+              </button>
+            ))}
           </div>
 
           {team.isLoading ? (
@@ -231,6 +261,8 @@ export default function FrmsMaintenanceDashboard() {
               <h3 className="mt-3 font-bold text-slate-900 dark:text-white">Nenhum Mecânico ou Inspetor no escopo</h3>
               <p className="mt-1 text-sm text-slate-500">Não há profissional de manutenção ativo no escopo autorizado.</p>
             </div>
+          ) : visibleItems.length === 0 ? (
+            <p className="p-6 text-sm text-slate-600 dark:text-slate-300">Nenhum profissional neste filtro. Selecione “Toda a equipe” para conferir as demais situações.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] text-sm">
@@ -246,19 +278,7 @@ export default function FrmsMaintenanceDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
-                  {items
-                    .map((item) => ({ item, bucket: classifyMaintenanceItem(item) }))
-                    .sort((a, b) => {
-                      const priority: Record<MaintenanceDecisionBucket, number> = {
-                        CRITICAL: 0,
-                        ATTENTION: 1,
-                        PENDING: 2,
-                        NORMAL: 3,
-                      };
-                      const delta = priority[a.bucket] - priority[b.bucket];
-                      if (delta !== 0) return delta;
-                      return a.item.funcionario_nome.localeCompare(b.item.funcionario_nome, 'pt-BR');
-                    })
+                  {visibleItems
                     .map(({ item, bucket }) => (
                       <tr key={item.funcionario_id} className="align-top hover:bg-slate-50/70 dark:hover:bg-slate-900/40">
                         <td className="px-4 py-3">
@@ -276,9 +296,15 @@ export default function FrmsMaintenanceDashboard() {
                             <p className="mt-0.5 text-xs text-slate-500">{item.baseline_sessions ?? 0} sessão(ões) de baseline</p>
                           ) : null}
                         </td>
-                        <td className="px-4 py-3"><DecisionBadge bucket={bucket} /></td>
+                        <td className="px-4 py-3">
+                          <DecisionBadge bucket={bucket} />
+                          {bucket === 'PENDING' ? (
+                            <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">Dados insuficientes para concluir sobre prontidão.</p>
+                          ) : null}
+                        </td>
                         <td className="max-w-sm px-4 py-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
                           {maintenanceActionText(bucket)}
+                          <p className="mt-1 text-slate-500">Atividade/turno: não disponível neste painel; confirmar com a programação antes de priorizar.</p>
                         </td>
                       </tr>
                     ))}
