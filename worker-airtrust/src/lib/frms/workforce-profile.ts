@@ -62,6 +62,13 @@ export function resolveFrmsWorkforceProfile(
   return 'other';
 }
 
+/** Avoid governance reads for unrelated employees and preserve existing offshore access paths. */
+export function needsFirefighterAviationProfile(cargo: unknown, funcao?: unknown): boolean {
+  const normalizedCargo = normalizeWorkforceLabel(cargo);
+  return isGenericFirefighterCargo(normalizedCargo)
+    || isFirefighterAviationLabel(normalizedCargo || normalizeWorkforceLabel(funcao));
+}
+
 export function isMaintenanceCargo(cargo: unknown, funcao?: unknown): boolean {
   return resolveFrmsWorkforceProfile(cargo, funcao) === 'maintenance';
 }
