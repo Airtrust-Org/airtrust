@@ -47,6 +47,7 @@ describe('FRMS recovery activity validation', () => {
     expect(validateRecoveryActivityInput({
       reference_date: '2026-09-24',
       activity_type: 'ADMIN_TRAINING',
+      notes: 'Treinamento',
       duty_start_time: '08:00',
       duty_end_time: '08:00',
     })).toMatch(/não podem ser iguais/i);
@@ -54,6 +55,7 @@ describe('FRMS recovery activity validation', () => {
     expect(validateRecoveryActivityInput({
       reference_date: '2026-09-24',
       activity_type: 'ADMIN_TRAINING',
+      notes: 'Treinamento',
       duty_start_time: '08:00',
       duty_end_time: '17:00',
     })).toBeNull();
