@@ -1,3 +1,7 @@
+// source_reference: AirTrust FRMS staging QA synthetic fixture, user-authorized 2026-10-13; repo main canonical.
+// operational_decision: staging-only tenant 999016; generate 14 fictitious crew, seven checkins, two journeys, one case. Never write production.
+// dry_run_required: --preflight validates target and baseline without writes; --apply requires workflow confirmation and backed-up staging D1.
+// rollback_plan_required: --rollback soft-disables only the QA tenant and its own marked synthetic records; D1 Time Travel recovery bookmark captured beforehand.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
