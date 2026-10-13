@@ -87,11 +87,17 @@ describe('FrmsAlertasPainel', () => {
     ]);
     renderPage();
     expect(screen.getAllByText(/2 casos desta pessoa nesta página/i)).toHaveLength(2);
-    expect(screen.getByText(/total informado pelo servidor cobre todos os casos/i)).toBeInTheDocument();
+    expect(screen.getByText(/O total filtrado do servidor também abrange todas as páginas/i)).toBeInTheDocument();
     const groupButton = screen.getByRole('button', { name: 'Agrupar por pessoa nesta página' });
     fireEvent.click(groupButton);
     expect(screen.getByRole('button', { name: 'Agrupado por pessoa nesta página' })).toHaveAttribute('aria-pressed', 'true');
     expect(mutateMock).not.toHaveBeenCalled();
+  });
+
+  it('mostra recorrência agregada entre páginas sem extrapolar o filtro atual', () => {
+    mockCases([caseRow({ id: 'a', recorrencias_no_filtro: 5 })], 5);
+    renderPage();
+    expect(screen.getByText(/5 casos desta pessoa nos filtros atuais, incluindo outras páginas/i)).toBeInTheDocument();
   });
 
   it('usa a mesma linguagem operacional da fila sem alterar os níveis persistidos', () => {
