@@ -1983,13 +1983,6 @@ ${buildScormNativeResumeOwnershipScript()}
 
 ${buildScormQueuedCommitScript()}
 
-  function flushQueuedCommit() {
-    if (commitInFlight || !queuedCommit) return;
-    var next = queuedCommit;
-    queuedCommit = null;
-    commit(next.data, 0, next.eventType);
-  }
-
   function commit(data, attempt, eventType) {
     if (PREVIEW_MODE || REVIEW_MODE || !COMMIT_URL || MATRICULA_ID == null) {
       diag(' COMMIT_SKIPPED preview=' + PREVIEW_MODE + ' review=' + REVIEW_MODE + ' url=' + (COMMIT_URL || 'null') + ' mid=' + MATRICULA_ID);
@@ -1998,9 +1991,9 @@ ${buildScormQueuedCommitScript()}
 
     var currentAttempt = attempt || 0;
     if (currentAttempt === 0 && commitInFlight) {
-      queueLatestCommit(data, eventType);
+      var queuedResult = queueLatestCommit(data, eventType);
       diag(' COMMIT_QUEUED event=' + (eventType || '?'));
-      return Promise.resolve(null);
+      return queuedResult;
     }
     if (currentAttempt === 0) commitInFlight = true;
 
@@ -2396,6 +2389,10 @@ ${buildScormSessionCloseRuntimeScript()}
       return;
     }
     if (event.data.type === 'lms:session-close') {
+      // Source identity is mandatory; an optional enrollment ID allows newer
+      // parents to scope close commands without breaking deployed older Pages.
+      if (event.source !== window.parent ||
+          (event.data.matriculaId != null && event.data.matriculaId !== MATRICULA_ID)) return;
       performGovernedSessionClose(typeof event.data.reason === 'string' ? event.data.reason : null);
       return;
     }
@@ -2433,7 +2430,9 @@ ${buildScormSessionCloseRuntimeScript()}
     },
     LMSFinish: function() {
       probeFrameProgress(); diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
-      commit(buildPayload(), 0, 'SCORM_FINISH');
+      // A governed parent close already persisted SCORM_FINISH before invoking
+      // the SCORM API termination. Do not start another save after its ACK.
+      if (!sessionCloseHandled) commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
     },
@@ -2510,7 +2509,7 @@ ${buildScormSessionCloseRuntimeScript()}
     },
     Terminate: function() {
       diag(' LMSFinish_CALLED_2004 loc=' + (getScormLocation() || 'null'));
-      commit(buildPayload(), 0, 'SCORM_FINISH');
+      if (!sessionCloseHandled) commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
     },

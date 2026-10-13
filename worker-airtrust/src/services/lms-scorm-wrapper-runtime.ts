@@ -249,7 +249,8 @@ export function buildScormSessionCloseRuntimeScript(): string {
           }
         }
       } catch (_terminateError) { /* termination best-effort */ }
-      setStatus('Sessão encerrada', false);
+      setStatus(status === 'closed' ? 'Sessão encerrada' :
+        'Sessão encerrada sem confirmação da última gravação', status !== 'closed', status !== 'closed');
       postToParent({
         type: 'lms:session-close:ack',
         matriculaId: MATRICULA_ID,
@@ -263,11 +264,11 @@ export function buildScormSessionCloseRuntimeScript(): string {
 
     try {
       Promise.resolve(commit(buildPayload(), 0, 'SCORM_FINISH')).then(
-        function() { finish('closed'); },
-        function() { finish('closed'); }
+        function(response) { finish(response && response.ok ? 'closed' : 'save-unconfirmed'); },
+        function() { finish('save-unconfirmed'); }
       );
     } catch (_commitError) {
-      finish('closed');
+      finish('save-unconfirmed');
     }
   }
 
@@ -382,10 +383,40 @@ export function buildScormQueuedCommitScript(): string {
     }
   }
 
+  // A queued commit is NOT persisted yet. Its Promise must settle only
+  // after the queued HTTP write finishes; otherwise session-close can ACK
+  // and unload the iframe before SCORM_FINISH / USER_FINALIZE reaches D1.
   function queueLatestCommit(data, eventType) {
-    if (!queuedCommit ||
-        queuedCommitPriority(eventType) >= queuedCommitPriority(queuedCommit.eventType)) {
-      queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
-    }
+    return new Promise(function(resolve) {
+      if (!queuedCommit) {
+        queuedCommit = {
+          data: data, eventType: eventType || 'SCORM_COMMIT',
+          waiters: [resolve],
+        };
+        return;
+      }
+      queuedCommit.waiters.push(resolve);
+      // Preserve the most important terminal event, but every caller awaits
+      // that single eventual write (including lower-priority close requests).
+      if (queuedCommitPriority(eventType) >= queuedCommitPriority(queuedCommit.eventType)) {
+        queuedCommit.data = data;
+        queuedCommit.eventType = eventType || 'SCORM_COMMIT';
+      }
+    });
+  }
+
+  function flushQueuedCommit() {
+    if (commitInFlight || !queuedCommit) return;
+    var next = queuedCommit;
+    queuedCommit = null;
+    // A queued final event must be persisted before any waiter receives ACK.
+    Promise.resolve(commit(next.data, 0, next.eventType)).then(
+      function(response) {
+        next.waiters.forEach(function(resolve) { resolve(response); });
+      },
+      function() {
+        next.waiters.forEach(function(resolve) { resolve(null); });
+      }
+    );
   }`;
 }

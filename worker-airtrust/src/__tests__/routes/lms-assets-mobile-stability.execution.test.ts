@@ -780,3 +780,132 @@ describe('Runtime string (produção) — bare lesson_location + contador confi�
     expect(parsed).toEqual({ current: 26, total: 47, pct: 55 });
   });
 });
+
+
+describe('SCORM final write — in-flight autosave must never acknowledge a queued close', () => {
+  beforeEach(() => {
+    setupDom();
+    g.localStorage?.clear();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  function deferred<T>() {
+    let resolve: (value: T) => void = () => {};
+    const promise = new Promise<T>((done) => { resolve = done; });
+    return { promise, resolve };
+  }
+
+  const persisted = {
+    ok: true, status: 200,
+    clone() { return { json: async () => ({ success: true, data: { progresso_pct: 80 } }) }; },
+  };
+  function launch(matriculaId: number) {
+    const html = buildLaunchPage({
+      matriculaId,
+      titulo: 'Curso SCORM - fechamento concorrente',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/3/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: '',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_location': '3/3',
+        'cmi.core.lesson_status': 'passed',
+        'cmi.core.score.raw': '90',
+        'cmi.core.score.max': '100',
+        'airtrust.total_slides': 3,
+        'airtrust.viewed_slides': [1, 2, 3],
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSInitialize();
+    return api;
+  }
+
+  it('espera o HTTP do SCORM_FINISH enfileirado antes de enviar ACK de saída', async () => {
+    const autosave = deferred<{ ok: boolean; status: number; clone(): { json(): Promise<unknown> } }>();
+    const finish = deferred<{ ok: boolean; status: number; clone(): { json(): Promise<unknown> } }>();
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => autosave.promise)
+      .mockImplementationOnce(() => finish.promise);
+    vi.stubGlobal('fetch', fetchMock);
+    const priorParent = g.window.parent;
+    const messages: Array<{type?: string; status?: string}> = [];
+    g.window.parent = { postMessage: (message: {type?: string; status?: string}) => messages.push(message) };
+    try {
+      const api = launch(99011);
+      api.LMSCommit(); // Keep the first network slot occupied.
+      g.window.dispatchEvent(new g.MessageEvent('message', {
+        origin: '', source: g.window.parent,
+        data: { type: 'lms:session-close', reason: 'user-exit', matriculaId: 99011 },
+      }));
+      await Promise.resolve();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(messages.filter(m => m.type === 'lms:session-close:ack')).toHaveLength(0);
+
+      autosave.resolve(persisted);
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      const [, finalRequest] = fetchMock.mock.calls[1] as [string, {body: string; keepalive: boolean}];
+      expect(JSON.parse(finalRequest.body)).toMatchObject({
+        matricula_id: 99011, commit_event: 'SCORM_FINISH', completion_candidate: null,
+      });
+      expect(finalRequest.keepalive).toBe(true);
+      expect(messages.filter(m => m.type === 'lms:session-close:ack')).toHaveLength(0);
+
+      finish.resolve(persisted);
+      await vi.waitFor(() => expect(messages.some(m =>
+        m.type === 'lms:session-close:ack' && m.status === 'closed')).toBe(true));
+      // The termination API must not schedule an extra post-ACK write.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      g.window.parent = priorParent;
+    }
+  });
+
+  it('prioriza SCORM_USER_FINALIZE sobre close/unload e não confirma gravação HTTP falha', async () => {
+    const autosave = deferred<{ ok: boolean; status: number; clone(): { json(): Promise<unknown> } }>();
+    const finalWrite = deferred<{ ok: boolean; status: number; clone(): { json(): Promise<unknown> } }>();
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => autosave.promise)
+      .mockImplementationOnce(() => finalWrite.promise);
+    vi.stubGlobal('fetch', fetchMock);
+    const priorParent = g.window.parent;
+    const messages: Array<{type?: string; status?: string}> = [];
+    g.window.parent = { postMessage: (message: {type?: string; status?: string}) => messages.push(message) };
+    try {
+      const api = launch(99012);
+      api.LMSCommit();
+      g.window.dispatchEvent(new g.MessageEvent('message', {
+        origin: '', source: g.window.parent,
+        data: { type: 'lms:request-completion', matriculaId: 99012 },
+      }));
+      // Closing is lower priority than a pending explicit completion.
+      g.window.dispatchEvent(new g.MessageEvent('message', {
+        origin: '', source: g.window.parent,
+        data: { type: 'lms:session-close', reason: 'user-exit', matriculaId: 99012 },
+      }));
+      autosave.resolve(persisted);
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      const [, request] = fetchMock.mock.calls[1] as [string, {body: string}];
+      expect(JSON.parse(request.body)).toMatchObject({
+        matricula_id: 99012, commit_event: 'SCORM_USER_FINALIZE', completion_candidate: true,
+      });
+      expect(messages.some(m => m.type === 'lms:session-close:ack')).toBe(false);
+
+      // Explicit backend rejection must remain unconfirmed — no fake finish.
+      finalWrite.resolve({
+        ...persisted,
+        ok: false,
+        status: 409,
+        clone() { return { json: async () => ({success: false, code: 'SCORM_REQUIREMENTS_PENDING'}) }; },
+      });
+      await vi.waitFor(() => expect(messages.some(m =>
+        m.type === 'lms:session-close:ack' && m.status === 'save-unconfirmed')).toBe(true));
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      g.window.parent = priorParent;
+    }
+  });
+});
