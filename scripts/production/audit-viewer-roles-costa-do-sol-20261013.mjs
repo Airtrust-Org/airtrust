@@ -53,6 +53,16 @@ const SQL = Object.freeze({
     COALESCE(SUM(existing_student),0) AS existing_student,
     COALESCE(SUM(existing_viewer),0) AS existing_viewer
   FROM viewers`,
+  coordinator: `SELECT LOWER(TRIM(ue.role)) AS role, COUNT(*) AS total
+    FROM usuarios_empresas ue JOIN usuarios u ON u.id=ue.usuario_id
+    WHERE ue.empresa_id=6 AND u.deleted_at IS NULL
+      AND (
+        LOWER(TRIM(COALESCE(u.nome,''))) LIKE '%coordena%'
+        OR EXISTS (SELECT 1 FROM usuarios_empresas_perfis p
+          WHERE p.usuario_id=ue.usuario_id AND p.empresa_id=ue.empresa_id
+            AND UPPER(TRIM(p.perfil))='COORDENACAO_VOO' AND p.ativo=1)
+      )
+    GROUP BY LOWER(TRIM(ue.role)) ORDER BY role`,
   profiles: `SELECT UPPER(TRIM(COALESCE(u.perfil,''))) AS perfil, COUNT(*) AS total
     FROM usuarios_empresas ue JOIN usuarios u ON u.id=ue.usuario_id
     WHERE ue.empresa_id=6 AND u.deleted_at IS NULL
@@ -88,5 +98,6 @@ const summary = {
   roles: readOnlyQuery(SQL.roles),
   viewers: readOnlyQuery(SQL.viewers)[0] || null,
   viewer_legacy_profile_distribution: readOnlyQuery(SQL.profiles),
+  coordinator_roles: readOnlyQuery(SQL.coordinator),
 };
 process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
