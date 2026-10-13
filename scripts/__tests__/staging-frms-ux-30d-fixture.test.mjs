@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   validateSource, approximation, buildSeedSql, buildRollbackSql, TENANT_ID,
-  TENANT_CODE, DB_ID, DB_NAME, CONFIRM, QA_REVISION_ID, buildTenantScopedBaselineSql,
+  TENANT_CODE, DB_ID, DB_NAME, CONFIRM, QA_REVISION_ID, buildTenantScopedBaselineSql, extractFixtureInsertColumns,
 } from '../staging/seed-frms-ux-30d.mjs';
 const SHA='a'.repeat(40);
 const days=Array.from({length:30},(_,i)=>({
@@ -64,6 +64,16 @@ test('QA baseline is tenant-scoped, exact 128 reviewed keys, and never global',(
   assert.throws(()=>buildSeedSql(days,'frms-legacy-global-v2'),/QA_TENANT_SCOPED_REVISION_REQUIRED/);
   assert.throws(()=>buildTenantScopedBaselineSql('DELETE FROM frms_config_parameters'),/BASELINE_SOURCE_STATEMENTS_CHANGED/);
   assert.throws(()=>buildTenantScopedBaselineSql("INSERT INTO frms_config_revisions (id) VALUES ('x'); INSERT INTO frms_config_parameters (id) VALUES ('y');"), /BASELINE_SOURCE_STATEMENTS_CHANGED/);
+});
+test('all QA seed table columns are discoverable for read-only live staging preflight',()=>{
+  const byTable=extractFixtureInsertColumns(buildSeedSql(days));
+  assert.equal(byTable.size,11);
+  assert.ok(byTable.get('frms_config_revisions').includes('empresa_id'));
+  assert.ok(byTable.get('frms_config_parameters').includes('parameter_key'));
+  assert.ok(byTable.get('frms_jornada').includes('hora_termino'));
+  assert.ok(byTable.get('frms_fadiga_checkin').includes('config_revision_id'));
+  assert.throws(()=>extractFixtureInsertColumns('INSERT INTO usuarios (id) VALUES (1)'), /QA_UNEXPECTED_TABLE_INSERT/);
+  assert.throws(()=>extractFixtureInsertColumns('INSERT INTO empresas (id) VALUES (1)'), /QA_INSERT_TABLE_CONTRACT_CHANGED/);
 });
 test('rollback is limited to fixture identifiers and does not mutate other tenants',()=>{
   const sql=buildRollbackSql();
