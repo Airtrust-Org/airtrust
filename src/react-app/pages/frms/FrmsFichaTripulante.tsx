@@ -1,3 +1,4 @@
+import { formatFrmsCheckinTime } from './frmsCheckinTime';
 /**
  * FRMS — Ficha Individual do Tripulante (/frms/tripulante/:id)
  *
@@ -755,7 +756,7 @@ export default function FrmsFichaTripulante() {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-800">Resultado e rastreabilidade</p>
               <div className="mt-2 space-y-1 text-xs text-slate-700">
                 <p>Efetividade: <strong>{todayFortnightSnapshotItem?.effectiveness_pct == null ? 'indisponível' : `${Number(todayFortnightSnapshotItem.effectiveness_pct).toFixed(1)}%`}</strong></p>
-                <p>Check-in: <strong>{formatCheckinStatus(todayFortnightSnapshotItem?.checkin_status)}{todayFortnightSnapshotItem?.checkin_horario ? ` às ${todayFortnightSnapshotItem.checkin_horario.slice(0, 5)}` : ''}</strong></p>
+                <p>Check-in: <strong>{formatCheckinStatus(todayFortnightSnapshotItem?.checkin_status)}{todayFortnightSnapshotItem?.checkin_horario ? ` às ${formatFrmsCheckinTime(todayFortnightSnapshotItem.checkin_submitted_at) ?? 'horário local não confirmado'}` : ''}</strong></p>
                 <p>Fonte sono/despertar: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.sleep_data_source)} / {formatSnapshotSource(todayFortnightSnapshotItem?.wake_data_source)}</strong></p>
                 <p>Fonte jornada: <strong>{formatSnapshotSource(todayFortnightSnapshotItem?.jornada_data_source)}</strong></p>
                 <p>Fonte dos dados de voo: <strong>{todayFortnightSnapshotItem?.operational_data_source === 'CONTROLE_VOOS'
