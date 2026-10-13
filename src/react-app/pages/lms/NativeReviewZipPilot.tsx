@@ -5,10 +5,11 @@
  * The signed private review ZIP never leaves the browser. Its private
  * answer keys are stripped before handing the learner projection to the player.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { unzip, type Unzipped } from 'fflate';
 import NativeCoursePreview from './native/NativeCoursePreview';
+import { useLmsCursos } from '@/react-app/hooks/useLms';
 import {
   toNativeLearnerCourse,
   validateNativeCourseArtifact,
@@ -110,28 +111,17 @@ export async function privateNativeReviewMedia(
 
 export default function NativeReviewZipPilot() {
   const [library, setLibrary] = useState<ReviewLibrary | null>(null);
+  const [format, setFormat] = useState<'scorm' | 'native'>('scorm');
+  const { data: existingCourses, isLoading: scormLoading, isError: scormError } = useLmsCursos(
+    { limit: 250 }, { enabled: format === 'scorm' && isNativeReviewStagingHost(window.location.hostname) },
+  );
+  const scormCourses = existingCourses?.data.filter((course) =>
+    course.tipo_conteudo === 'scorm' && Boolean(course.scorm_package_r2_prefix) && course.ativo === 1
+  ) ?? [];
   const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const closePlayerRef = useRef<HTMLButtonElement>(null);
   const current = library?.courses.find((course) => course.folder === active) ?? null;
-  // Keep the entire training slide in the viewport, rather than below the
-  // nine-course catalogue. Escape and the close control return to the library.
-  useEffect(() => {
-    if (!active) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    closePlayerRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setActive(null);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [active]);
-
   const getAsset = useCallback((asset: NativeAsset, signal: AbortSignal) => {
     if (!library || !current) return Promise.reject(new Error('NATIVE_REVIEW_NO_COURSE'));
     return privateNativeReviewMedia(library, current.folder, asset, signal);
@@ -162,10 +152,10 @@ export default function NativeReviewZipPilot() {
         <header className="mb-5 flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-widest text-[#e65300]">AirTrust Staging • Homologação</p>
-            <h1 className="text-2xl font-extrabold">Cursos Native — revisão funcional</h1>
+            <h1 className="text-2xl font-extrabold">Player de cursos — homologação SCORM e Native</h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
-              Player Native real, com unidades, mídias e alternativas do pacote privado de nove cursos.
-              Importação local no navegador, sem upload ao servidor. Esta revisão não registra
+              Abra os SCORM originais já armazenados no catálogo de staging ou compare com os
+              nove cursos convertidos para Native. A prévia administrativa não registra
               matrícula, desempenho, aprovação ou certificado.
             </p>
           </div>
@@ -173,10 +163,50 @@ export default function NativeReviewZipPilot() {
             Voltar ao catálogo
           </Link>
         </header>
+        <nav aria-label="Formato do curso para homologação" className="mb-5 flex flex-wrap gap-3">
+          <button type="button" aria-pressed={format === 'scorm'} onClick={() => { setFormat('scorm'); setActive(null); }}
+            className={'rounded-xl border px-5 py-3 text-sm font-bold ' + (format === 'scorm'
+              ? 'border-[#e65300] bg-[#fff2e9] text-[#9c490f]' : 'border-slate-300 bg-white text-[#123b5e]')}>
+            SCORM original — player legado
+          </button>
+          <button type="button" aria-pressed={format === 'native'} onClick={() => setFormat('native')}
+            className={'rounded-xl border px-5 py-3 text-sm font-bold ' + (format === 'native'
+              ? 'border-[#e65300] bg-[#fff2e9] text-[#9c490f]' : 'border-slate-300 bg-white text-[#123b5e]')}>
+            Native — nove cursos convertidos
+          </button>
+        </nav>
+        {format === 'scorm' && (
+          <section aria-label="Cursos SCORM existentes no staging" className="mb-5 rounded-xl border border-[#cddce6] bg-white p-5">
+            <h2 className="text-lg font-extrabold">Cursos SCORM no catálogo atual</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Estes cursos usam o player SCORM original e seus arquivos privados autenticados.
+              É a referência visual para revisar a conversão Native, sem alteração do conteúdo.
+            </p>
+            {scormLoading && <p role="status" className="mt-3 text-sm">Carregando cursos SCORM...</p>}
+            {scormError && <p role="alert" className="mt-3 text-sm text-red-700">
+              Não foi possível consultar os cursos com a sessão atual. Confira a empresa ativa e as permissões.
+            </p>}
+            {!scormLoading && !scormError && scormCourses.length === 0 && <p className="mt-3 text-sm text-slate-600">
+              Nenhum pacote SCORM acessível no contexto atual. Selecione a empresa que contém os cursos.
+            </p>}
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {scormCourses.map((curso) => (
+                <Link key={curso.id} to={`/lms/player/preview/${curso.id}`}
+                  state={{ from: '/lms/native/revisao' }}
+                  className="rounded-xl border border-[#d8e3ec] bg-[#f8fafc] p-4 text-left hover:border-[#e65300] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e65300]">
+                  <span className="text-xs font-extrabold uppercase text-[#123b5e]">SCORM {curso.scorm_versao || ''} · Original</span>
+                  <h3 className="mt-2 text-base font-extrabold text-[#10243d]">{curso.titulo}</h3>
+                  <span className="mt-2 inline-block text-sm font-semibold text-[#ce5000]">Abrir no player SCORM →</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+        {format === 'native' && <>
         <section className="mb-5 rounded-xl border border-[#cddce6] bg-white p-5">
-          <label htmlFor="native-private-zip" className="block text-base font-bold">Pacote privado de revisão dos nove cursos</label>
+          <label htmlFor="native-private-zip" className="block text-base font-bold">Pacote Native privado dos nove cursos convertidos</label>
           <p className="mt-1 text-sm text-slate-600">
-            Selecione o arquivo ZIP de homologação. Ele é verificado pelo SHA-256 e permanece
+            O Native ainda depende deste ZIP privado enquanto a integração D1/R2 governada não estiver pronta. Ele é verificado pelo SHA-256 e permanece
             apenas na memória desta aba. Nenhum gabarito é exibido no player.
           </p>
           <input id="native-private-zip" type="file" accept=".zip,application/zip"
@@ -200,24 +230,9 @@ export default function NativeReviewZipPilot() {
             </button>
           ))}
         </section>}
-        {current && (
-          <div role="dialog" aria-modal="true" aria-label={'Revisão Native: ' + current.learner.title}
-            className="fixed inset-0 z-[70] flex min-h-0 flex-col gap-2 bg-[#edf3f7] p-2 sm:p-3">
-            <div className="flex min-h-9 shrink-0 items-center justify-between gap-3 px-1">
-              <p className="min-w-0 truncate text-sm font-semibold text-[#123b5e]">
-                Homologação 16:9 — {current.learner.title}
-              </p>
-              <button type="button" ref={closePlayerRef} onClick={() => setActive(null)}
-                className="shrink-0 rounded-lg border border-[#bccedb] bg-white px-4 py-1.5 text-sm font-bold text-[#123b5e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e65300]">
-                Fechar player
-              </button>
-            </div>
-            <div className="min-h-0 flex-1">
-              <NativeCoursePreview key={current.learner.courseId} fullscreen
-                course={current.learner} resolveAssetHref={() => null} fetchAuthorizedAsset={getAsset}/>
-            </div>
-          </div>
-        )}
+        {current && <NativeCoursePreview key={current.learner.courseId}
+          course={current.learner} resolveAssetHref={() => null} fetchAuthorizedAsset={getAsset}/>}
+        </>}
       </div>
     </main>
   );
