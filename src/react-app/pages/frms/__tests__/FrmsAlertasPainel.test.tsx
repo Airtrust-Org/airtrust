@@ -171,4 +171,72 @@ describe('FrmsAlertasPainel', () => {
     expect(screen.getByText(/Registro: Jornada corrigida após validação com a escala/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Registrar tratamento' })).not.toBeInTheDocument();
   });
+  it('destaca prazo vencido e separa casos sem medida dos tratamentos em andamento', () => {
+    mockCases([
+      caseRow({ id: 'sem-plano', tripulante_id: '11', nome_tripulante: 'Sem plano', nivel: 'VIOLACAO', notas_resolucao: null }),
+      caseRow({
+        id: 'vencido', tripulante_id: '12', nome_tripulante: 'Prazo expirado', nivel: 'ATENCAO',
+        notas_resolucao: JSON.stringify({
+          schema: 'FRMS_CASE_TREATMENT_V1', responsavel: 'Coordenação', prazo: '2000-01-01',
+          acao_mitigacao: 'Reprogramar a atividade', justificativa: 'Aguardar recuperação',
+        }),
+      }),
+      caseRow({
+        id: 'andamento', tripulante_id: '13', nome_tripulante: 'Dentro do prazo', nivel: 'CRITICO',
+        notas_resolucao: JSON.stringify({
+          schema: 'FRMS_CASE_TREATMENT_V1', responsavel: 'Coordenação', prazo: '2099-01-01',
+          acao_mitigacao: 'Ajustar a escala operacional', justificativa: 'Reavaliar repouso',
+        }),
+      }),
+    ]);
+    renderPage();
+    const artigos = screen.getAllByRole('article');
+    expect(artigos[0]).toHaveTextContent('Prazo expirado');
+    expect(artigos[0]).toHaveTextContent('Prazo vencido — caso ainda aberto');
+    expect(artigos[1]).toHaveTextContent('Sem plano');
+    expect(artigos[1]).toHaveTextContent('Próxima ação: registrar responsável');
+    expect(artigos[2]).toHaveTextContent('Dentro do prazo');
+    expect(screen.getByRole('button', { name: /Prazo vencido.*1/i })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('filtra casos pela etapa e alterna o filtro por cartão', () => {
+    mockCases([
+      caseRow({ id: 'pendente', nome_tripulante: 'Sem plano' }),
+      caseRow({
+        id: 'tratado', nome_tripulante: 'Com plano',
+        notas_resolucao: JSON.stringify({
+          schema: 'FRMS_CASE_TREATMENT_V1', responsavel: 'Coordenação', prazo: '2000-01-01',
+          acao_mitigacao: 'Ajustar a escala operacional', justificativa: 'Reavaliar repouso',
+        }),
+      }),
+    ]);
+    renderPage();
+    const card = screen.getByRole('button', { name: /Prazo vencido.*1/i });
+    fireEvent.click(card);
+    expect(card).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByRole('article')).toHaveLength(1);
+    expect(screen.getByText('Com plano')).toBeInTheDocument();
+    fireEvent.click(card);
+    expect(screen.getAllByRole('article')).toHaveLength(2);
+  });
+
+  it('mostra total restrito à página e permite navegar além dos primeiros 100 casos', () => {
+    mockCases(Array.from({ length: 100 }, (_, index) => caseRow({ id: `caso-${index}` })));
+    renderPage();
+    expect(screen.getByText(/até 100 casos por página/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pode haver mais registros/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Próxima página' }));
+    expect(screen.getByText(/Página 2/i)).toBeInTheDocument();
+    expect(useFrmsAlertasMock).toHaveBeenCalledWith(expect.objectContaining({ page: '2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Anterior' }));
+    expect(useFrmsAlertasMock).toHaveBeenCalledWith(expect.objectContaining({ page: '1' }));
+  });
+
+  it('não confunde um registro desconhecido com tratamento ou conclusão', () => {
+    mockCases([caseRow({ notas_resolucao: '{"schema":"OUTRO_CONTRATO"}' })]);
+    renderPage();
+    expect(screen.getByText('Sem medida registrada')).toBeInTheDocument();
+    expect(screen.queryByText('Tratamento em andamento — caso ainda aberto')).not.toBeInTheDocument();
+  });
+
 });
