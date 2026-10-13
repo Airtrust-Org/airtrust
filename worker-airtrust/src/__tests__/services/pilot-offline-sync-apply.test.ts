@@ -367,6 +367,87 @@ describe('Pilot offline snapshot apply orchestration', () => {
     expect(source).toContain("'MANUAL'");
   });
 
+  it('soft-deletes the trailing planned leg only with exact versioned tombstone in the same batch', async () => {
+    const database = db();
+    getOfflineSyncReceipt
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ result_status: 'accepted', canonical_entity_id: '90', received_at: '2026-09-09T19:31:00.000Z' });
+    getRdvOrThrow.mockResolvedValue({ ...rdv, versao: 4 });
+    database.batch.mockResolvedValue([{ meta: { changes: 1 } }]);
+    listEtapas.mockResolvedValue([
+      { id: 10, numero_etapa: 1, updated_at: '2026-09-09T09:02:00Z' },
+      { id: 11, numero_etapa: 2, updated_at: '2026-09-09T09:03:00Z',
+        horario_motor_ligado: null, horario_decolagem: null, horario_pouso: null, horario_motor_desligado: null },
+    ]);
+    const oneRealLeg = command();
+    oneRealLeg.payload.removed_stages = [
+      { source_stage_id: 11, source_stage_updated_at: '2026-09-09T09:03:00Z', numero_etapa: 2 },
+    ];
+    const result = await applyPilotOfflineSnapshotCommand({
+      db: database, empresaId: 7, userId: 70, funcionarioId: 77, flight, command: oneRealLeg,
+    });
+    expect(result.status).toBe('accepted');
+    const sql = database.prepare.mock.calls.map((call: any[]) => String(call[0]));
+    expect(sql.some((statement: string) => statement.includes('UPDATE cv_voo_etapas') &&
+      statement.includes("SET deleted_at = datetime('now')") &&
+      statement.includes('NOT EXISTS') && statement.includes('etapa_id = ?'))).toBe(true);
+    expect(recordOfflineSyncConflict).not.toHaveBeenCalled();
+  });
+
+  it('refuses to cancel a stage with any recorded flight timing', async () => {
+    const database = db();
+    getOfflineSyncReceipt.mockResolvedValue(null);
+    listEtapas.mockResolvedValue([
+      { id: 10, numero_etapa: 1, updated_at: '2026-09-09T09:02:00Z' },
+      { id: 11, numero_etapa: 2, updated_at: '2026-09-09T09:03:00Z', horario_decolagem: '10:00' },
+    ]);
+    const attempted = command();
+    attempted.payload.removed_stages = [
+      { source_stage_id: 11, source_stage_updated_at: '2026-09-09T09:03:00Z', numero_etapa: 2 },
+    ];
+    const result = await applyPilotOfflineSnapshotCommand({
+      db: database, empresaId: 7, userId: 70, funcionarioId: 77, flight, command: attempted,
+    });
+    expect(result.error_code).toBe('CONTROLE_VOOS_PILOT_SYNC_STAGE_DELETE_CONFLICT');
+    expect(database.batch).not.toHaveBeenCalled();
+  });
+
+  it('rejects removed leg overlapping a retained source stage', async () => {
+    const database = db();
+    getOfflineSyncReceipt.mockResolvedValue(null);
+    const attempted = command();
+    attempted.payload.removed_stages = [
+      { source_stage_id: 10, source_stage_updated_at: '2026-09-09T09:02:00Z', numero_etapa: 1 },
+    ];
+    await expect(applyPilotOfflineSnapshotCommand({
+      db: database, empresaId: 7, userId: 70, funcionarioId: 77, flight, command: attempted,
+    })).rejects.toMatchObject({ code: 'CONTROLE_VOOS_PILOT_SYNC_REMOVED_STAGES_INVALID' });
+    expect(database.batch).not.toHaveBeenCalled();
+  });
+
+  it('refuses to delete an earlier leg while keeping a later leg', async () => {
+    const database = db();
+    getOfflineSyncReceipt.mockResolvedValue(null);
+    listEtapas.mockResolvedValue([
+      { id: 10, numero_etapa: 1, updated_at: '2026-09-09T09:02:00Z' },
+      { id: 11, numero_etapa: 2, updated_at: '2026-09-09T09:03:00Z' },
+    ]);
+    const attempted = command();
+    attempted.payload.stages[0] = {
+      source_stage_id: 11, source_stage_updated_at: '2026-09-09T09:03:00Z',
+      fields: { numero_etapa: 2, origem_icao: '9PCP', destino_icao: 'SBME' },
+    };
+    attempted.payload.removed_stages = [
+      { source_stage_id: 10, source_stage_updated_at: '2026-09-09T09:02:00Z', numero_etapa: 1 },
+    ];
+    normalizeEtapaInput.mockImplementation((fields: any) => ({ ...fields }));
+    const result = await applyPilotOfflineSnapshotCommand({
+      db: database, empresaId: 7, userId: 70, funcionarioId: 77, flight, command: attempted,
+    });
+    expect(result.error_code).toBe('CONTROLE_VOOS_PILOT_SYNC_STAGE_DELETE_CONFLICT');
+    expect(database.batch).not.toHaveBeenCalled();
+  });
+
   it('resolves fueling companies inside the authenticated tenant before persisting supplier names', () => {
     const source = readFileSync(
       join(__dirname, '../../services/controle-voos/pilot-offline-sync-apply.ts'),
