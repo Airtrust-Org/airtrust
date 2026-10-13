@@ -557,6 +557,29 @@ function buildStageStatements(input: {
   });
 }
 
+function buildRemovedStageStatements(input: {
+  db: D1Database; empresaId: number; userId: number; flight: FlightRow;
+  newVersion: number; removedStages: RemovedStagePayload[];
+}): D1PreparedStatement[] {
+  return input.removedStages.map((stage) => input.db.prepare(`
+    UPDATE cv_voo_etapas
+       SET deleted_at = datetime('now'), updated_at = datetime('now'), updated_by = ?
+     WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
+       AND updated_at = ? AND numero_etapa = ?
+       AND horario_motor_ligado IS NULL AND horario_decolagem IS NULL
+       AND horario_pouso IS NULL AND horario_motor_desligado IS NULL
+       AND EXISTS (SELECT 1 FROM cv_rdv_operacional WHERE voo_id = ? AND empresa_id = ?
+                   AND deleted_at IS NULL AND versao = ?)
+       AND NOT EXISTS (SELECT 1 FROM cv_voo_abastecimentos
+                       WHERE empresa_id = ? AND voo_id = ? AND etapa_id = ? AND deleted_at IS NULL)
+  `).bind(
+    input.userId, stage.source_stage_id, input.flight.id, input.empresaId,
+    stage.source_stage_updated_at, stage.numero_etapa,
+    input.flight.id, input.empresaId, input.newVersion,
+    input.empresaId, input.flight.id, stage.source_stage_id,
+  ));
+}
+
 function buildStageRevisionCasSql(
   stages: PreparedStage[],
   removedStages: RemovedStagePayload[],
@@ -1076,6 +1099,36 @@ async function currentStateConflict(input: {
   }
 
   const serverById = new Map<number, EtapaRow>(serverStages.map((stage) => [stage.id, stage]));
+  if (input.snapshot.removed_stages.length) {
+    const maxKeptNumber = Math.max(0, ...input.stages.map((stage) => Number(stage.input.numero_etapa)));
+    for (const removed of input.snapshot.removed_stages) {
+      const current = serverById.get(removed.source_stage_id);
+      const hasRealizedData = current && [
+        current.horario_motor_ligado, current.horario_decolagem,
+        current.horario_pouso, current.horario_motor_desligado,
+        current.tempo_decolagem_pouso, current.tempo_total,
+      ].some((value) => value != null && String(value).trim() !== '');
+      if (!current || Number(current.numero_etapa) !== removed.numero_etapa ||
+          current.updated_at !== removed.source_stage_updated_at ||
+          removed.numero_etapa <= maxKeptNumber || hasRealizedData) {
+        return recordOfflineSyncConflict(input.db, {
+          empresaId: input.empresaId, command: input.command, funcionarioId: input.funcionarioId,
+          code: 'CONTROLE_VOOS_PILOT_SYNC_STAGE_DELETE_CONFLICT',
+          detail: conflictDetail({ type: 'stage_delete', id: removed.source_stage_id }),
+        });
+      }
+      const fueling = await input.db.prepare(
+        'SELECT COUNT(*) AS total FROM cv_voo_abastecimentos WHERE empresa_id = ? AND voo_id = ? AND etapa_id = ? AND deleted_at IS NULL',
+      ).bind(input.empresaId, input.flight.id, removed.source_stage_id).first<{ total: number }>();
+      if (Number(fueling?.total || 0) > 0) {
+        return recordOfflineSyncConflict(input.db, {
+          empresaId: input.empresaId, command: input.command, funcionarioId: input.funcionarioId,
+          code: 'CONTROLE_VOOS_PILOT_SYNC_STAGE_FUELING_CONFLICT',
+          detail: conflictDetail({ type: 'stage_fueling', id: removed.source_stage_id }),
+        });
+      }
+    }
+  }
   for (const stage of sourceStages) {
     const current = serverById.get(stage.sourceStageId as number);
     if (current && Number(current.numero_etapa) !== Number(stage.input.numero_etapa)) {
@@ -1206,16 +1259,21 @@ export async function applyPilotOfflineSnapshotCommand(input: {
         existingRdv,
         rdv: { ...existingRdv, ...rdvInput },
         stages,
+        removedStages: snapshot.removed_stages,
       })
     : buildNewRdvInsert({
         ...input,
         rdv: rdvInput,
         stages,
+        removedStages: snapshot.removed_stages,
       });
   const stageStatements = buildStageStatements({
     ...input,
     newVersion,
     stages,
+  });
+  const removedStageStatements = buildRemovedStageStatements({
+    ...input, newVersion, removedStages: snapshot.removed_stages,
   });
   const fuelingStatements = buildFuelingStatements({
     ...input,
@@ -1276,6 +1334,7 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     results = await input.db.batch([
       rdvStatement,
       ...stageStatements,
+      ...removedStageStatements,
       ...fuelingStatements,
       ...justificationStatements,
       ...(flightMetadataStatement ? [flightMetadataStatement] : []),
