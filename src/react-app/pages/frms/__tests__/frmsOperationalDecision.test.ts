@@ -224,9 +224,10 @@ describe('frmsOperationalDecision', () => {
       jornada_data_source: 'AUSENTE',
       fatorizacao_status: 'AUSENTE',
       effectiveness_pct: null,
-      checkin_status: 'NAO_APLICAVEL',
-      estado_operacional: 'NORMAL',
-      alertas: [],
+      checkin_status: 'PENDENTE',
+      estado_operacional: 'NAO_AVALIADO',
+      snapshot_status: 'ATENCAO',
+      alertas: ['CHECKIN_PENDENTE'],
       fortnight_indicator: {
         periodo_inicio: '2026-08-16',
         periodo_fim: '2026-08-30',
@@ -269,7 +270,38 @@ describe('frmsOperationalDecision', () => {
     });
 
     expect(isOperationallyRelevant(rosterOnly)).toBe(true);
-    expect(classifyOperationalItem(rosterOnly)).toBe('NORMAL');
+    expect(classifyOperationalItem(rosterOnly)).toBe('CONFIRMAR');
+    const guidance = resolveFrmsCoordinationGuidance(rosterOnly, '2026-08-27');
+    expect(guidance.requiresCheckin).toBe(true);
+    expect(guidance.checkinLabel).toBe('Pendente');
+    expect(guidance.action).toContain('mesmo sem voo programado');
+    expect(operationalConfidence(rosterOnly)).toBe('BAIXA');
+    // Snapshot antigo NAO_APLICAVEL não pode esconder a obrigação já resolvida da quinzena.
+    const legacy = { ...rosterOnly, checkin_status: 'NAO_APLICAVEL' as const, alertas: [] };
+    expect(resolveFrmsCoordinationGuidance(legacy, '2026-08-27').checkinLabel).toBe('Pendente');
+    expect(classifyOperationalItem(legacy)).toBe('CONFIRMAR');
+  });
+
+  it('nao omite check-in pendente de roster comprovado quando faltam datas do indicador', () => {
+    const semAncora = item({
+      na_quinzena_ativa: true,
+      operacao_requer_decisao: false,
+      escalado: false,
+      teve_jornada: false,
+      hora_apresentacao: null,
+      checkin_status: 'PENDENTE',
+      snapshot_status: 'ATENCAO',
+      estado_operacional: 'NAO_AVALIADO',
+      alertas: ['CHECKIN_PENDENTE'],
+      fortnight_indicator: {
+        periodo_inicio: null,
+        periodo_fim: null,
+        status_quinzena: 'INCOMPLETO',
+      } as FrmsOperationalSnapshotItem['fortnight_indicator'],
+    });
+    expect(isOperationallyRelevant(semAncora)).toBe(true);
+    expect(classifyOperationalItem(semAncora)).toBe('CONFIRMAR');
+    expect(resolveFrmsCoordinationGuidance(semAncora, '2026-08-27').checkinLabel).toBe('Pendente');
   });
 
   it('não coloca na fila check-in isolado quando a quinzena não foi resolvida', () => {

@@ -66,9 +66,30 @@ describe('active fortnight daily roster', () => {
     expect(item).toBeTruthy();
     expect(item?.nome_guerra).toBe('ONZE');
     expect(item?.escalado).toBe(false);
+    expect(item?.na_quinzena_ativa).toBe(true);
+    expect(item?.fortnight_indicator).toBeNull();
     expect(item?.teve_jornada).toBe(false);
     expect(item?.jornada_data_source).toBe('AUSENTE');
     expect(item?.operacao_requer_decisao).toBe(false);
+    expect(item?.checkin_status).toBe('PENDENTE');
+    expect(item?.alertas).toContain('CHECKIN_PENDENTE');
+    expect(item?.snapshot_status).toBe('ATENCAO');
+    expect(item?.estado_operacional).toBe('NAO_AVALIADO');
+    expect(result.summary.checkins_pendentes).toBe(1);
+  });
+
+  it('nao inventa check-in obrigatorio fora da quinzena sem atividade real', () => {
+    const input = createBaseInput();
+    input.rows.jornadas.push({
+      data_operacional: '2026-09-28', funcionario_id: 10,
+      hora_apresentacao: null, hora_termino: null,
+      horas_voo_minutos: 0, duracao_jornada_minutos: 0,
+      origem: 'MANUAL', has_operational_data: 0, is_manual_empty: 1,
+    });
+    const result = buildFrmsOperationalSnapshot(input);
+    const item = getByKey(result.items, '2026-09-28', 10);
+    expect(item?.checkin_status).toBe('NAO_APLICAVEL');
+    expect(item?.alertas).not.toContain('CHECKIN_PENDENTE');
     expect(item?.estado_operacional).toBe('NORMAL');
   });
 });
@@ -252,7 +273,10 @@ describe('active fortnight roster in listFrmsOperationalSnapshot', () => {
     expect(item?.teve_jornada).toBe(false);
     expect(item?.jornada_data_source).toBe('AUSENTE');
     expect(item?.operacao_requer_decisao).toBe(false);
-    expect(item?.estado_operacional).toBe('NORMAL');
+    expect(item?.checkin_status).toBe('PENDENTE');
+    expect(item?.alertas).toContain('CHECKIN_PENDENTE');
+    expect(item?.estado_operacional).toBe('NAO_AVALIADO');
+    expect(result.summary.checkins_pendentes).toBe(1);
   });
 
   it('aceita alocação vigente como pertencimento explícito à quinzena', async () => {
