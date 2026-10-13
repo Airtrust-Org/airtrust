@@ -3759,6 +3759,39 @@ function createEditorField({
   });
   if (onBlur) input.addEventListener('blur', () => onBlur(input.value, input));
   wrapper.append(title, input);
+  if (type === 'textarea' && !readOnly && typeof onInput === 'function') {
+    // Phrases are opt-in; never invent an occurrence or overwrite the pilot's record.
+    // No text is sent to external grammar/AI services.
+    const templates = [
+      ['Retorno antecipado', 'Retorno à base antes de concluir a rota planejada. Motivo: '],
+      ['Interrupção da operação', 'Operação interrompida. Motivo: '],
+      ['Divergência operacional', 'Divergência em relação ao planejamento: '],
+      ['Informação complementar', 'Informação complementar: '],
+    ];
+    const select = document.createElement('select');
+    select.setAttribute('aria-label', 'Inserir observação predefinida em ' + label);
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = 'Inserir texto predefinido (opcional)';
+    select.append(empty);
+    for (const [name, value] of templates) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = name;
+      select.append(option);
+    }
+    select.disabled = operationalSyncInFlight;
+    select.addEventListener('change', () => {
+      if (!select.value) return;
+      input.value = String(input.value || '').trim()
+        ? String(input.value).trimEnd() + '\n' + select.value
+        : select.value;
+      onInput(input.value, input);
+      select.value = '';
+      input.focus();
+    });
+    wrapper.append(select);
+  }
   if (note) {
     const noteEl = document.createElement('span');
     noteEl.className = 'field-note';
