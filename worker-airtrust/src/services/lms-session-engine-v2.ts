@@ -115,7 +115,8 @@ function questionsComplete(required: number | null, answered: number | null): bo
   // An unreported question count is not enough for a course whose immutable
   // manifest declares a required count. Zero required means no questions.
   if (required == null) return true;
-  return Number.isSafeInteger(required) && required >= 0 &&
+  if (required === 0) return true;
+  return Number.isSafeInteger(required) && required > 0 &&
     Number.isSafeInteger(answered) && answered != null &&
     answered >= required;
 }
@@ -160,6 +161,15 @@ export function evaluateTrainingSessionV2(e: TrainingSessionV2): TrainingDecisio
   if (e.assessmentPassed === false ||
       e.scormTerminalStatus === 'failed') {
     return result('BLOCKED', 'ASSESSMENT_FAILED');
+  }
+  // Strict tracked, scored AirTrust lessons require the authored quiz count.
+  // A generic 100% score may have been set BEFORE the final module quiz.
+  // Approved external SCORM_CONFORMANT packages use the quality-gated authored
+  // terminal status instead of proprietary question counters.
+  if (e.assessmentPolicy === 'SCORED' && e.evidenceProfile === 'STRICT_TRACKED' &&
+      (!Number.isSafeInteger(e.requiredQuestions) || e.requiredQuestions == null ||
+        e.requiredQuestions < 1)) {
+    return result('CONTINUE', 'ASSESSMENT_PENDING');
   }
   if (!questionsComplete(e.requiredQuestions, e.answeredQuestions)) {
     return result('CONTINUE', 'ASSESSMENT_PENDING');
