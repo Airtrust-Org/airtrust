@@ -299,7 +299,7 @@ export default function FrmsAlertasPainel() {
             <button
               key={card.key}
               type="button"
-              onClick={() => { setStatus('ativos'); setEtapa(etapa === card.key ? 'todos' : card.key); setPagina(1); }}
+              onClick={() => { setStatus('ativos'); setEtapa(etapa === card.key ? 'todos' : card.key); }}
               aria-pressed={etapa === card.key}
               className={`rounded-xl border p-4 text-left transition-shadow hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${card.style} ${etapa === card.key ? 'ring-2 ring-primary' : ''}`}
             >
