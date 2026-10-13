@@ -134,6 +134,29 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   const reEnrolled=await reEnroll.json().catch(()=>null);
   expect(reEnroll.ok(), 'LOCAL_REMATRICULATE_HTTP_'+reEnroll.status()+'_CODE_'+String(reEnrolled?.code||'none')).toBe(true);
   expect(Number(reEnrolled.data.matricula_id)).toBe(id);
+  const renewedCycle=new DatabaseSync(fixture.dbFile,{readOnly:true});
+  let activeCycleId:number;
+  let archivedCycleId:number;
+  try {
+    const rows=renewedCycle.prepare(
+      'SELECT id,ciclo_atual FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL ORDER BY id',
+    ).all(id,fixture.companyId) as Array<{id:number;ciclo_atual:number}>;
+    expect(rows).toHaveLength(2);
+    archivedCycleId=rows[0].id;
+    activeCycleId=rows[1].id;
+  } finally {renewedCycle.close();}
+  expect(archivedCycleId).not.toBe(activeCycleId);
+  // Stale SCO from the previous cycle may still be unloading. Even with a
+  // current asset cookie its explicit old-cycle identifier must fail closed.
+  const staleCommit=await page.request.post(api+'/lms/matriculas/scorm/commit',{
+    headers,data:{
+      matricula_id:id,ciclo_id:archivedCycleId,commit_event:'SCORM_COMMIT',
+      lesson_status:'passed',score_raw:100,
+      suspend_data:JSON.stringify({passed:true,c:['qa-slide-1']}),
+    },
+  });
+  expect(staleCommit.status()).toBe(409);
+
   const fresh=stored();
   expect(fresh.m.status).toBe('NAO_INICIADO');
   expect(fresh.m.progresso_pct).toBe(0);

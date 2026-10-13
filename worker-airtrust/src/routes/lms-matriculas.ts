@@ -215,6 +215,9 @@ const MatriculaLoteSchema = z.object({
 
 const ScormCommitSchema = z.object({
   matricula_id: z.number().int().positive(),
+  // Current wrapper is cycle-bound; legacy integrations without a cycle ID
+  // continue through the pre-existing guarded path until upgraded.
+  ciclo_id: z.number().int().positive().optional(),
   // SCORM 1.2
   lesson_status: z.string().optional().nullable(),
   // SCORM 2004
@@ -1352,6 +1355,22 @@ app.post('/scorm/commit', async (c) => {
   if (!canManage) {
     if (!callerFuncionarioId || matricula.funcionario_id !== callerFuncionarioId) {
       throw new ApiError('Acesso negado', 403);
+    }
+  }
+
+  // The enrollment row is reused on an audited rematriculation. Delayed
+  // fetch/keepalive from a previous open iframe MUST NOT restore its saved
+  // answer or terminal status into the new cycle, even if the cookie has been
+  // renewed by a different tab.
+  if (d.ciclo_id !== undefined) {
+    const activeCycle = await db.prepare(
+      `SELECT id FROM lms_matricula_ciclos
+         WHERE matricula_id = ? AND empresa_id = ?
+           AND ciclo_atual = 1 AND deleted_at IS NULL
+         LIMIT 1`,
+    ).bind(d.matricula_id, empresaId).first<{ id: number }>();
+    if (!activeCycle || activeCycle.id !== d.ciclo_id) {
+      throw new ApiError('LMS_SCORM_CYCLE_MISMATCH: sessão de curso pertencente a outro ciclo. Reabra o treinamento.', 409);
     }
   }
 
