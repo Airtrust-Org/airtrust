@@ -561,8 +561,11 @@ function resolveDecisaoFromStatus(
   status: FrmsFortnightStatus,
   natureza: FrmsFortnightNaturezaDado,
 ): FrmsFortnightDecisaoCodigo {
+  // Um dia futuro é projeção, mesmo quando não há pendências vencidas;
+  // nunca apresentá-lo como situação consolidada.
+  if (natureza === 'PROJECAO') return 'ALERTA';
   if (status === 'OK') return 'INFORMA';
-  if (natureza === 'PROJECAO' || natureza === 'CHECKIN_SUBJETIVO') return 'ALERTA';
+  if (natureza === 'CHECKIN_SUBJETIVO') return 'ALERTA';
   if (status === 'CRITICO') return 'EXIGE_OVERRIDE';
   return 'ALERTA';
 }
