@@ -8,7 +8,7 @@ import {
   type LmsCompletionDecision,
   type LmsCompletionSource,
 } from '../services/lms-completion-evidence';
-import { extractScormLocationFromCmiJson } from '../services/lms-progress-guardrails';
+import { extractScormLocationFromCmiJson, mergeMonotonicNumber, mergeScormRuntimeState } from '../services/lms-progress-guardrails';
 import { evaluateScormClosureReadiness } from '../services/lms-matricula-runtime-domain';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 
@@ -405,8 +405,20 @@ async function guardScormCommit(
   // status commits used to strand learners at 99% with no persisted evidence.
   if (incoming.commit_event !== 'SCORM_USER_FINALIZE') return null;
 
-  const cmiJson = typeof incoming.cmi_json === 'string'
-    ? incoming.cmi_json : row.cmi_json;
+  // Evaluate exactly the CMI that the canonical commit route will persist:
+  // previously observed slide coverage and the new authenticated autosave are
+  // merged for THIS enrollment after ownership, edition and asset-session
+  // checks. A final [3] delta cannot erase valid saved [1,2], and a bare
+  // 3/3 marker still cannot invent visits.
+  const cmiJson = mergeScormRuntimeState({
+    currentCmiJson: row.cmi_json,
+    incomingCmiJson: typeof incoming.cmi_json === 'string' ? incoming.cmi_json : null,
+    currentSuspendData: row.suspend_data,
+    incomingSuspendData: typeof incoming.suspend_data === 'string' ? incoming.suspend_data : null,
+  }).cmiJson;
+  const mergedScore = (key: 'score_raw' | 'score_min' | 'score_max' | 'score_scaled') =>
+    mergeMonotonicNumber(row[key],
+      typeof incoming[key] === 'number' ? incoming[key] as number : null);
   const closure = evaluateScormClosureReadiness({
     mode: 'commit',
     commit: {
@@ -424,10 +436,10 @@ async function guardScormCommit(
     policy: row.scorm_assessment_policy,
     masteryScore: row.scorm_mastery_score,
     scorePct: scorePctFromValues(
-      incoming.score_raw ?? row.score_raw,
-      incoming.score_max ?? row.score_max,
-      incoming.score_scaled ?? row.score_scaled,
-      incoming.score_min ?? row.score_min,
+      mergedScore('score_raw'),
+      mergedScore('score_max'),
+      mergedScore('score_scaled'),
+      mergedScore('score_min'),
     ),
   });
   if (!closure.eligible_for_server_verification) {

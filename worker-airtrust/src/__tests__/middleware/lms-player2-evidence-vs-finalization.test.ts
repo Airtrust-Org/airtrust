@@ -32,12 +32,15 @@ const courseEvidence = {
   total_time: null, suspend_data: null, cmi_json: null, xapi_count: 0,
 };
 
-async function submitCommit(payload: Record<string, unknown>) {
+async function submitCommit(
+  payload: Record<string, unknown>,
+  savedEvidence: Record<string, unknown> = {},
+) {
   let saved = false;
   const db = {
     prepare: vi.fn((sql: string) => {
       if (!sql.includes('FROM lms_matriculas m')) throw new Error('Unexpected SQL');
-      return { bind: () => ({ first: async () => courseEvidence }) };
+      return { bind: () => ({ first: async () => ({ ...courseEvidence, ...savedEvidence }) }) };
     }),
   };
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -98,6 +101,57 @@ describe('Player 2.0 structural split: evidence persistence versus approval', ()
     });
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code: 'ASSET_SESSION_INVALID' });
+    expect(saved).toBe(false);
+  });
+
+  it('reconciles authenticated saved slides [1,2] with final [3] before the middleware verdict', async () => {
+    const previous = JSON.stringify({
+      'cmi.core.lesson_location': '2/3',
+      'airtrust.total_slides': 3,
+      'airtrust.viewed_slides': [1, 2],
+    });
+    const { response, saved } = await submitCommit({
+      lesson_status: 'passed', completion_status: 'completed', success_status: 'passed',
+      score_raw: 90, score_min: 0, score_max: 100,
+      commit_event: 'SCORM_USER_FINALIZE', completion_candidate: true,
+      cmi_json: JSON.stringify({
+        'cmi.core.lesson_location': '3/3',
+        'airtrust.total_slides': 3, 'airtrust.viewed_slides': [3],
+      }),
+    }, { cmi_json: previous, score_raw: 30, score_max: 100 });
+    expect(response.status).toBe(200);
+    expect(saved).toBe(true);
+  });
+
+  it('does not fabricate historical slide visits for an isolated last-slide commit', async () => {
+    const { response, saved } = await submitCommit({
+      lesson_status: 'passed', completion_status: 'completed', success_status: 'passed',
+      score_raw: 90, score_max: 100,
+      commit_event: 'SCORM_USER_FINALIZE', completion_candidate: true,
+      cmi_json: JSON.stringify({
+        'cmi.core.lesson_location': '3/3',
+        'airtrust.total_slides': 3, 'airtrust.viewed_slides': [3],
+      }),
+    });
+    expect(response.status).toBe(409);
+    expect(saved).toBe(false);
+    expect(await response.json()).toMatchObject({ code: 'PROGRESS_EVIDENCE_MISSING' });
+  });
+
+  it('never merges stored coverage into a changed slide-count/edition marker', async () => {
+    const { response, saved } = await submitCommit({
+      lesson_status: 'passed', completion_status: 'completed', success_status: 'passed',
+      score_raw: 90, score_max: 100,
+      commit_event: 'SCORM_USER_FINALIZE', completion_candidate: true,
+      cmi_json: JSON.stringify({
+        'cmi.core.lesson_location': '4/4',
+        'airtrust.total_slides': 4, 'airtrust.viewed_slides': [4],
+      }),
+    }, { cmi_json: JSON.stringify({
+      'cmi.core.lesson_location': '3/3',
+      'airtrust.total_slides': 3, 'airtrust.viewed_slides': [1, 2, 3],
+    }) });
+    expect(response.status).toBe(409);
     expect(saved).toBe(false);
   });
 
