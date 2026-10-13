@@ -45,6 +45,25 @@ describe('FrmsRelatorios', () => {
     expect(refetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('explica conclusões, providências e limitações usando apenas os registros da consulta', () => {
+    useApiMock.mockReturnValue({
+      data: {
+        success: true,
+        data: [
+          { tripulante_id: 1, nome: 'QA Um', dias_avaliados: 10, dias_violacao: 1, dias_nao_avaliados: 0 },
+          { tripulante_id: 2, nome: 'QA Dois', dias_avaliados: 9, dias_violacao: 0, dias_nao_avaliados: 1 },
+        ],
+        meta: { policy_version: 'QA', revision_id: 'rev', source: 'fixture', limitations: ['Dados sintéticos'] },
+      },
+      loading: false, error: null, refetch: refetchMock,
+    });
+    render(<FrmsRelatorios />);
+    expect(screen.getByRole('region', { name: /Conclusões e próximas ações/i })).toBeInTheDocument();
+    expect(screen.getByText(/1 profissional\(is\) com dias de violação/i)).toBeInTheDocument();
+    expect(screen.getByText(/Limitações da fonte: Dados sintéticos/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'CSV' })).toBeEnabled();
+  });
+
   it('não habilita exportação quando a resposta não traz metadados de governança', () => {
     useApiMock.mockReturnValue({
       data: [{ tripulante_id: 1, nome: 'Tripulante Teste', dias_avaliados: 1 }],
