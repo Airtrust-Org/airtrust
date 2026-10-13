@@ -50,7 +50,7 @@ const FADIGA_LABELS: Record<string, string> = {
   NORMAL: 'Normal',
   ATENCAO: 'Atenção',
   CRITICO: 'Crítico',
-  INDISPONIVEL: 'Não avaliada',
+  INDISPONIVEL: 'Sem conclusão',
 };
 
 const CHECKIN_LABELS: Record<string, string> = {
@@ -262,7 +262,7 @@ export default function ControleOperacionalFrmsPanel() {
                     Check-in diário (obrigatório)
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
-                    Fadiga diária
+                    Avaliação FRMS diária
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
                     Fadiga acumulada
