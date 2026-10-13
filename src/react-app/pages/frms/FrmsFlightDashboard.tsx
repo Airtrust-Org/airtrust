@@ -29,6 +29,7 @@ import {
   type FrmsDecisionBucket,
 } from './frmsOperationalDecision';
 import { formatFrmsReason, formatSnapshotSource } from './frmsPresentation';
+import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
 
 const BUCKET_STYLE: Record<
   FrmsDecisionBucket,
@@ -62,12 +63,6 @@ const BUCKET_STYLE: Record<
     dot: 'bg-emerald-500',
   },
 };
-
-function localTodayIso(): string {
-  const now = new Date();
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 10);
-}
 
 function isOperationalDate(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
@@ -442,8 +437,8 @@ export default function FrmsFlightDashboard() {
   const requestedDate = searchParams.get('data');
   const requestedFuncionarioId = searchParams.get('funcionario_id');
   const legacyControlRoute = searchParams.get('origem') === 'controle-operacional-legado';
-  const date = isOperationalDate(requestedDate) ? requestedDate : localTodayIso();
-  const todayIso = localTodayIso();
+  const date = isOperationalDate(requestedDate) ? requestedDate : frmsBrazilOperationalTodayIso();
+  const todayIso = frmsBrazilOperationalTodayIso();
   const [selected, setSelected] = useState<FrmsOperationalSnapshotItem | null>(null);
   const [onlyPendingCheckin, setOnlyPendingCheckin] = useState(false);
 
@@ -662,7 +657,7 @@ export default function FrmsFlightDashboard() {
                       <p className="truncate text-xs text-slate-500">{[item.funcao, item.base, item.aeronave].filter(Boolean).join(' · ') || 'Função/base não informadas'}</p>
                     </div>
                     <div className="min-w-0">
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Check-in diário</p>
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Check-in diário</p>
                       <span className={`inline-flex rounded-md px-2 py-1 text-xs font-bold ${guidance.checkinComplete
                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
                         : guidance.requiresCheckin
@@ -672,12 +667,12 @@ export default function FrmsFlightDashboard() {
                       </span>
                     </div>
                     <div className="min-w-0">
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Por quê?</p>
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Por quê?</p>
                       <p className="text-sm text-slate-700 dark:text-slate-200">{guidance.reason}</p>
                       <p className="mt-1 text-xs text-slate-500">{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'} · Confiança {confidence.toLowerCase()}</p>
                     </div>
                     <div className="min-w-0">
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">O que fazer?</p>
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">O que fazer?</p>
                       <p className="text-sm font-semibold text-slate-900 dark:text-white">{guidance.action}</p>
                     </div>
                     <ChevronRight className="hidden h-4 w-4 text-slate-400 lg:block" />
