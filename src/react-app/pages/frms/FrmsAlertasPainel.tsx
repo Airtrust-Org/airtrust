@@ -348,7 +348,7 @@ export default function FrmsAlertasPainel() {
             Etapa
             <select
               value={etapa}
-              onChange={(event) => setEtapa(event.target.value as EtapaCaso)}
+              onChange={(event) => { const next = event.target.value as EtapaCaso; setEtapa(next); if (next !== 'todos') setStatus('ativos'); }}
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
             >
               <option value="todos">Todas nesta página</option>
