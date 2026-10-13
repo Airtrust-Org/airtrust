@@ -1596,8 +1596,7 @@ app.post('/scorm/commit', async (c) => {
     dataConclusao = new Date().toISOString().slice(0, 10);
   }
 
-  // GUARD: conclusão já existente não repete qualificação/certificado. Em nova
-  // conclusão, certificado é manual salvo a exceção EAD do serviço canônico.
+  // Evita reemitir qualificação e certificado.
   const isNewCompletion =
     novoStatus === 'CONCLUIDO' && statusAnterior !== 'CONCLUIDO' && Boolean(dataConclusao);
 
@@ -1642,9 +1641,7 @@ app.post('/scorm/commit', async (c) => {
       }
     } catch (e) {
       if (!(e instanceof LmsCompletionRejectedError)) throw e;
-      // Qualificação exigida e não garantida: o batch inteiro reverteu — a
-      // matrícula permanece no status pré-conclusão, sem qualquer efeito
-      // parcial. Retry idempotente no próximo commit.
+      // Rollback atômico preserva a matrícula para nova tentativa idempotente.
       qualificationFailed = true;
       qualificationFailure = describeLmsQualificationFailure(e);
       statusFinal = statusSemConclusao;
