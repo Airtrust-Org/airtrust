@@ -27,8 +27,14 @@ frmsCaseRoutes.put(
     const denied = await assertAlertaEmpresa(c, id);
     if (denied) return denied;
 
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({ success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED' }, 403);
     const userId = String(c.get('userId') || 'system');
-    await marcarAlertaVisualizado(c.env.DB, id, userId);
+    const recorded = await marcarAlertaVisualizado(c.env.DB, id, userId, empresaId);
+    if (!recorded) return c.json({
+      success: false, code: 'FRMS_CASE_NOT_FOUND_IN_TENANT',
+      error: 'Caso indisponível no escopo da empresa.',
+    }, 409);
     return c.json({ success: true });
   }),
 );
