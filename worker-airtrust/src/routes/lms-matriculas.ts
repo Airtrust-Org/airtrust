@@ -14,6 +14,7 @@ import { hasRole, requirePermission, requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
+import { resolveLmsCompletionScorePct } from '../services/lms-completion-evidence';
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import {
   ensureMatriculaCycle,
@@ -742,11 +743,12 @@ app.get('/:id', async (c) => {
           ),
           policy: matricula.scorm_assessment_policy as 'SCORED' | 'FORMATIVE' | null,
           masteryScore: matricula.scorm_mastery_score as number | null,
-          scorePct: resolveScormScorePct({
+          scorePct: resolveLmsCompletionScorePct({
             scoreRaw: (progressoScorm?.score_raw as number | null) ?? null,
+            scoreMin: (progressoScorm?.score_min as number | null) ?? null,
             scoreMax: (progressoScorm?.score_max as number | null) ?? null,
             scoreScaled: (progressoScorm?.score_scaled as number | null) ?? null,
-          }),
+        }),
         })
       : null;
   const editionMismatch = await detectLmsEditionMismatch({
@@ -1471,8 +1473,9 @@ app.post('/scorm/commit', async (c) => {
     scormAtual?.score_scaled ?? null,
     d.score_scaled ?? null,
   );
-  const effectiveScorePct = resolveScormScorePct({
+  const effectiveScorePct = resolveLmsCompletionScorePct({
     scoreRaw: effectiveScoreRaw,
+    scoreMin: mergeMonotonicNumber(scormAtual?.score_min ?? null, d.score_min ?? null),
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
