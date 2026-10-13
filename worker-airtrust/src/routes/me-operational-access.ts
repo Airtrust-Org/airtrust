@@ -19,6 +19,7 @@ import {
   resolveEmployeeSectorAccess,
 } from '../services/employee-sector-access';
 import { resolveFrmsWorkforceProfile } from '../lib/frms/workforce-profile';
+import { FRMS_FIREFIGHTER_AVIATION_PROFILE } from '../lib/frms/parameter-governance';
 import { assessMaintenanceFatigue } from '../lib/frms/maintenance-fatigue';
 import {
   SESSION_ROLE_COOKIE,
@@ -295,12 +296,27 @@ router.get('/', async (c) => {
   const userRole = (c.get as (key: string) => unknown)('userRole');
 
   const access = await resolveOperationalAccess({ db, empresaId, userId, userRole });
-  const [employee, maintenanceScope, checkinOverride] = await Promise.all([
+  const referenceDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  const [employee, maintenanceScope, checkinOverride, profileAssignments] = await Promise.all([
     resolveOwnFrmsEmployee(db, empresaId, userId, funcionarioId),
     resolveMaintenanceManagerScope(c, access),
     getUserPermissionOverride(c, 'frms.checkin'),
+    db.prepare(`SELECT profile_code FROM frms_profile_assignments
+       WHERE empresa_id = ? AND status = 'ACTIVE' AND effective_from <= ?
+       AND (effective_to IS NULL OR effective_to >= ?)`)
+      .bind(empresaId, referenceDate, referenceDate)
+      .all<{ profile_code: string }>(),
   ]);
-  const frmsProfile = resolveFrmsWorkforceProfile(employee?.cargo, employee?.funcao);
+  // Duplicate/missing assignment is NEVER permission to use another tenant's
+  // specialised workforce mapping. Regular offshore/maintenance remains intact.
+  const tenantFrmsProfile = profileAssignments.results?.length === 1
+    ? profileAssignments.results[0].profile_code : null;
+  const frmsProfile = resolveFrmsWorkforceProfile(
+    employee?.cargo, employee?.funcao,
+    tenantFrmsProfile === FRMS_FIREFIGHTER_AVIATION_PROFILE ? tenantFrmsProfile : null,
+  );
 
   return c.json({
     success: true,
