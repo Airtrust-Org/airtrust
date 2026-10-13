@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canReconcilePersistedScormCompletion,
+  canRetryScormCompletionRegistration,
   resolveLmsDisplayProgress,
   shouldVerifyCanonicalProgress,
 } from '../LmsPlayer';
@@ -56,6 +57,33 @@ describe('server-verified SCORM completion recovery', () => {
     expect(canReconcilePersistedScormCompletion({ ...base, reviewMode: true })).toBe(false);
     expect(canReconcilePersistedScormCompletion({ ...base, matriculaStatus: 'CONCLUIDO' })).toBe(false);
   });
+  it('does not attempt canonical completion when the SCORM final quiz is incomplete', () => {
+    expect(canReconcilePersistedScormCompletion({
+      ...base,
+      requirementsVerified: false,
+    })).toBe(false);
+    expect(canReconcilePersistedScormCompletion({
+      ...base,
+      requirementsVerified: true,
+    })).toBe(true);
+  });
+
+  it('does not offer a pointless registration retry on missing evidence or pedagogical failure', () => {
+    for (const code of [
+      'PROGRESS_EVIDENCE_MISSING',
+      'SCORM_PROGRESS_EVIDENCE_MISSING',
+      'SCORM_REQUIREMENTS_PENDING',
+      'SCORE_BELOW_MASTERY',
+      'LMS_NEW_EDITION_REQUIRED',
+      'LMS_QUALIFICATION_COMPLETION_FAILED',
+    ]) {
+      expect(canRetryScormCompletionRegistration(code, true)).toBe(false);
+    }
+    expect(canRetryScormCompletionRegistration('SCORM_FINALIZATION_FAILED', false)).toBe(false);
+    expect(canRetryScormCompletionRegistration('SCORM_FINALIZATION_FAILED', true)).toBe(true);
+    expect(canRetryScormCompletionRegistration('SCORM_FINAL_COMMIT_MISSING', true)).toBe(true);
+  });
+
   it('rejects a score-only or final-location-only candidate', () => {
     expect(canReconcilePersistedScormCompletion({
       ...base, diagnostic: { ...diagnostic, explicit_completion: false },
