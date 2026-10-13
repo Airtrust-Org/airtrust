@@ -184,12 +184,16 @@ UNCERTIFIED_DB_STATUS="$(sql "SELECT status || '|' ||
   COALESCE(CAST(qualificacao_historico_id AS TEXT), '') || '|' ||
   COALESCE(data_conclusao, '')
   FROM lms_matriculas WHERE id=$MATRICULA_ID AND empresa_id=$EMPRESA_ID;")"
-# A prior REPROVADO has a completion date for that *attempt*, but cannot
-# be interpreted as a completed enrollment after a passive pass at 99%.
-case "$UNCERTIFIED_DB_STATUS" in
-  'REPROVADO|'????-??-??'|') ;;
-  *) echo "Insufficient evidence changed failed attempt into a completed enrollment" >&2; exit 1 ;;
-esac
+# A failed attempt may transition between nonterminal states when new
+# evidence is persisted. Neither a passive "passed" report nor a rejected
+# finalization may mark the enrollment completed or link a qualification.
+UNCERTIFIED_STATUS="${UNCERTIFIED_DB_STATUS%%|*}"
+UNCERTIFIED_REST="${UNCERTIFIED_DB_STATUS#*|}"
+UNCERTIFIED_HISTORY="${UNCERTIFIED_REST%%|*}"
+[[ "$UNCERTIFIED_STATUS" != "CONCLUIDO" && -z "$UNCERTIFIED_HISTORY" ]] || {
+  echo "Passive SCORM evidence incorrectly completed enrollment or created a qualification" >&2
+  exit 1
+}
 
 # Now continue with an explicit authenticated SCORM_USER_FINALIZE and
 # complete per-slide evidence. No reset or re-enrollment is allowed:
