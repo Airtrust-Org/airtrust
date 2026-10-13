@@ -382,10 +382,25 @@ export function buildScormQueuedCommitScript(): string {
     }
   }
 
+  // A queued commit is NOT persisted yet. Its Promise must settle only
+  // after the queued HTTP write finishes; otherwise session-close can ACK
+  // and unload the iframe before SCORM_FINISH / USER_FINALIZE reaches D1.
   function queueLatestCommit(data, eventType) {
-    if (!queuedCommit ||
-        queuedCommitPriority(eventType) >= queuedCommitPriority(queuedCommit.eventType)) {
-      queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
-    }
+    return new Promise(function(resolve) {
+      if (!queuedCommit) {
+        queuedCommit = {
+          data: data, eventType: eventType || 'SCORM_COMMIT',
+          waiters: [resolve],
+        };
+        return;
+      }
+      queuedCommit.waiters.push(resolve);
+      // Preserve the most important terminal event, but every caller awaits
+      // that single eventual write (including lower-priority close requests).
+      if (queuedCommitPriority(eventType) >= queuedCommitPriority(queuedCommit.eventType)) {
+        queuedCommit.data = data;
+        queuedCommit.eventType = eventType || 'SCORM_COMMIT';
+      }
+    });
   }`;
 }
