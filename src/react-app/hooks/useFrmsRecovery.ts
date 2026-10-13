@@ -178,9 +178,23 @@ export async function submitPendingFrmsRecoveryActivity(
   assessmentDate: string,
 ): Promise<RecoveryActivityResult | null> {
   const referenceDate = previousOperationalDate(assessmentDate);
+  // Confirm the previous-day operational source with the backend immediately before
+  // final check-in submission. A failed/unavailable source never silently skips
+  // the mandatory activity response.
+  const context = await getRecovery<RecoveryContextData>(
+    `/frms/readiness/recovery/context?date=${encodeURIComponent(referenceDate)}`,
+  );
+  if (!context?.schema_ready) {
+    throw new Error('Não foi possível validar a atividade de ontem. Tente novamente antes de concluir o check-in.');
+  }
+  if (context.flight?.detected || context.activity) {
+    pendingRecoveryActivities.delete(referenceDate);
+    return null;
+  }
   const pending = pendingRecoveryActivities.get(referenceDate);
-  if (!pending?.required) return null;
-  if (!pending.input) throw new Error(RECOVERY_ACTIVITY_REQUIRED_MESSAGE);
+  if (!pending?.required || !pending.input) {
+    throw new Error(RECOVERY_ACTIVITY_REQUIRED_MESSAGE);
+  }
   const validationError = validateRecoveryActivityInput(pending.input);
   if (validationError) throw new Error(validationError);
 
