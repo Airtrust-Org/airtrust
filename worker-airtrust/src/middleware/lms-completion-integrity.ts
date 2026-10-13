@@ -436,7 +436,9 @@ async function guardScormCommit(
       : closure.code === 'SCORM_USER_CONFIRMATION_REQUIRED' ||
         closure.code === 'SCORM_ALREADY_COMPLETED'
         ? 'COMPLETION_EVIDENCE_INSUFFICIENT'
-        : closure.code;
+        : closure.code === 'SCORM_READY_FOR_SERVER_VERIFICATION'
+          ? 'COMPLETION_EVIDENCE_INSUFFICIENT'
+          : closure.code;
     return decisionRejection(c, matriculaId, {
       accepted: false, code,
       scorePct: null, masteryScore: row.scorm_mastery_score, failurePrecedence: code === 'EXPLICIT_FAILURE',
@@ -544,6 +546,8 @@ async function guardManualFinalize(
         ? 'MASTERY_SCORE_MISSING'
         : closure.code === 'SCORM_USER_CONFIRMATION_REQUIRED' ||
           closure.code === 'SCORM_ALREADY_COMPLETED'
+          ? 'COMPLETION_EVIDENCE_INSUFFICIENT'
+          : closure.code === 'SCORM_READY_FOR_SERVER_VERIFICATION'
           ? 'COMPLETION_EVIDENCE_INSUFFICIENT'
           : closure.code;
       return decisionRejection(c, matriculaId, {
