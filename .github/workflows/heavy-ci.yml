@@ -271,3 +271,73 @@ jobs:
               --project=webkit-ipad \
               e2e/ci/pilot-offline-persistence.spec.ts \
               e2e/ci/lms-scorm-browser-protocol.spec.ts
+
+
+  lms-scorm-browser-e2e:
+    name: lms-scorm-browser-e2e
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/playwright:v1.58.2-noble
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact SHA
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - name: Install disposable SQLite and Node tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sqlite3
+          npm ci
+          npm --prefix worker-airtrust ci
+      - name: Bootstrap only the local synthetic LMS database
+        shell: bash
+        run: bash scripts/setup-local-lms-smoke-db.sh --reset
+      - name: Verify protected SCORM learner lifecycle using Chromium and WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORKER_PID=0
+          cleanup() {
+            if [[ "$WORKER_PID" -gt 0 ]]; then kill "$WORKER_PID" 2>/dev/null || true; fi
+            rm -rf worker-airtrust/.wrangler/scorm-browser-qa
+          }
+          trap cleanup EXIT
+          npm run dev:worker:local -- --ip 127.0.0.1 > /tmp/worker-scorm-browser.log 2>&1 &
+          WORKER_PID=$!
+          ready=0
+          for i in $(seq 1 35); do
+            if curl --fail --silent --connect-timeout 2 --max-time 4 \
+              http://127.0.0.1:8787/api/health > /dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$WORKER_PID" 2>/dev/null; then
+              tail -n 100 /tmp/worker-scorm-browser.log >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "$ready" != 1 ]]; then
+            tail -n 100 /tmp/worker-scorm-browser.log >&2
+            exit 1
+          fi
+          node scripts/qa/prepare-local-scorm-browser.mjs
+          CI=true timeout --signal=TERM 8m npx playwright test \
+            --config=e2e/ci/lms-scorm-enrollment-browser.config.ts
