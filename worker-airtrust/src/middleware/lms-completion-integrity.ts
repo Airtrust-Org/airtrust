@@ -4,6 +4,7 @@ import type { Env, Variables } from '../types';
 import { assetSessionMatchesEnrollment, readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 import {
   evaluateLmsCompletionEvidence,
+  resolveLmsCompletionScorePct,
   type LmsCompletionDecision,
   type LmsCompletionSource,
 } from '../services/lms-completion-evidence';
@@ -153,21 +154,10 @@ async function readEnrollmentEvidence(
     .first<EnrollmentEvidenceRow>();
 }
 
-function scorePctFromValues(raw: unknown, max: unknown, scaled: unknown): number | null {
-  if (typeof scaled === 'number' && Number.isFinite(scaled) && scaled >= 0 && scaled <= 1) {
-    return scaled * 100;
-  }
-  if (
-    typeof raw === 'number' &&
-    Number.isFinite(raw) &&
-    typeof max === 'number' &&
-    Number.isFinite(max) &&
-    max > 0
-  ) {
-    return Math.max(0, Math.min(100, (raw / max) * 100));
-  }
-  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 100) return raw;
-  return null;
+function scorePctFromValues(raw: unknown, max: unknown, scaled: unknown, min?: unknown): number | null {
+  return resolveLmsCompletionScorePct({
+    scoreRaw: raw, scoreMin: min, scoreMax: max, scoreScaled: scaled,
+  });
 }
 
 function progressFromCmiJson(value: unknown): number | null {
@@ -196,8 +186,9 @@ function resolveProgressPct(row: EnrollmentEvidenceRow, incoming: JsonRecord): n
     incoming.score_raw,
     incoming.score_max,
     incoming.score_scaled,
+    incoming.score_min,
   );
-  const storedScore = scorePctFromValues(row.score_raw, row.score_max, row.score_scaled);
+  const storedScore = scorePctFromValues(row.score_raw, row.score_max, row.score_scaled, row.score_min);
   return Math.max(
     existing,
     incomingLocation ?? 0,
@@ -428,6 +419,7 @@ async function guardScormCommit(
       incoming.score_raw ?? row.score_raw,
       incoming.score_max ?? row.score_max,
       incoming.score_scaled ?? row.score_scaled,
+      incoming.score_min ?? row.score_min,
     ),
   });
   if (!closure.eligible_for_server_verification) {
@@ -539,7 +531,7 @@ async function guardManualFinalize(
       location: extractScormLocationFromCmiJson(row.cmi_json),
       policy: row.scorm_assessment_policy,
       masteryScore: row.scorm_mastery_score,
-      scorePct: scorePctFromValues(row.score_raw, row.score_max, row.score_scaled),
+      scorePct: scorePctFromValues(row.score_raw, row.score_max, row.score_scaled, row.score_min),
     });
     if (!closure.eligible_for_server_verification) {
       const code = closure.code === 'SCORM_ASSESSMENT_POLICY_INVALID'
