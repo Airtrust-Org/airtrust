@@ -1,0 +1,8 @@
+{
+  "changeId": "usuarios-costa-do-sol-viewer-aluno-0550",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0550_usuarios_costa_do_sol_viewer_aluno.sql",
+  "fileHash": "d0dd7eaad32285b5917cd4e21c0f6e6506b6ba5e3f6a09c849c934f045f1eb92",
+  "planPath": "worker-airtrust/schema-v2/plans/usuarios-costa-do-sol-viewer-aluno-0550.md",
+  "planHash": "16d5e5aeb553f85812c5a67e61a64478b1b807f01dd11a29309d82a48fc9ebce"
+}
