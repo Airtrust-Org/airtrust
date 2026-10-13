@@ -100,7 +100,15 @@ export async function assertTripulanteEmpresa(
   tripulanteId: string,
 ): Promise<Response | null> {
   const empresaId = getEmpresaIdSafe(c);
-  if (!empresaId) return null;
+  if (!empresaId) {
+    // FRMS is multi-tenant and safety-critical. A missing tenant is never
+    // authorization to read or mutate a person, journey or case by raw ID.
+    return c.json({
+      success: false,
+      error: 'Contexto de empresa ausente. Acesso ao FRMS negado.',
+      code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+    }, 403);
+  }
 
   const row = await c.env.DB.prepare(
     `SELECT id
@@ -134,7 +142,15 @@ export async function assertJornadaEmpresa(
   jornadaId: string,
 ): Promise<Response | null> {
   const empresaId = getEmpresaIdSafe(c);
-  if (!empresaId) return null;
+  if (!empresaId) {
+    // FRMS is multi-tenant and safety-critical. A missing tenant is never
+    // authorization to read or mutate a person, journey or case by raw ID.
+    return c.json({
+      success: false,
+      error: 'Contexto de empresa ausente. Acesso ao FRMS negado.',
+      code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+    }, 403);
+  }
 
   const row = await c.env.DB.prepare(
     `SELECT j.id
@@ -170,7 +186,15 @@ export async function assertAlertaEmpresa(
   alertaId: string,
 ): Promise<Response | null> {
   const empresaId = getEmpresaIdSafe(c);
-  if (!empresaId) return null;
+  if (!empresaId) {
+    // FRMS is multi-tenant and safety-critical. A missing tenant is never
+    // authorization to read or mutate a person, journey or case by raw ID.
+    return c.json({
+      success: false,
+      error: 'Contexto de empresa ausente. Acesso ao FRMS negado.',
+      code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+    }, 403);
+  }
 
   const row = await c.env.DB.prepare(
     `SELECT a.id

@@ -84,6 +84,25 @@ function parseResolutionRecord(value: string | null): (FrmsCaseResolutionForm & 
   }
 }
 
+function parseTreatmentRecord(value: string | null): (FrmsCaseResolutionForm & { schema?: string }) | null {
+  if (!value || !value.trim().startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<FrmsCaseResolutionForm> & { schema?: string };
+    if (parsed.schema !== 'FRMS_CASE_TREATMENT_V1') return null;
+    return {
+      responsavel: String(parsed.responsavel || ''),
+      prazo: String(parsed.prazo || ''),
+      acao_mitigacao: String(parsed.acao_mitigacao || ''),
+      justificativa: String(parsed.justificativa || ''),
+      evidencia_referencia: String(parsed.evidencia_referencia || ''),
+      avaliacao_eficacia: '',
+      schema: parsed.schema,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function FrmsAlertasPainel() {
   const [searchParams] = useSearchParams();
   const nivelParam = searchParams.get('nivel') || '';
@@ -137,7 +156,7 @@ export default function FrmsAlertasPainel() {
 
   const openResolution = useCallback((item: FrmsAlertaRow) => {
     setResolveTarget(item);
-    setResolutionForm(EMPTY_RESOLUTION_FORM);
+    setResolutionForm(parseTreatmentRecord(item.notas_resolucao) ?? EMPTY_RESOLUTION_FORM);
   }, []);
 
   const closeResolution = useCallback(() => {
@@ -163,24 +182,28 @@ export default function FrmsAlertasPainel() {
       evidencia_referencia: resolutionForm.evidencia_referencia.trim() || null,
       avaliacao_eficacia: resolutionForm.avaliacao_eficacia.trim(),
     };
-    const completo =
-      payload.responsavel.length >= 2 &&
+    const closing = Boolean(parseTreatmentRecord(resolveTarget.notas_resolucao));
+    const treatmentComplete = payload.responsavel.length >= 2 &&
       /^\d{4}-\d{2}-\d{2}$/.test(payload.prazo) &&
-      payload.acao_mitigacao.length >= 10 &&
-      payload.justificativa.length >= 10 &&
-      payload.avaliacao_eficacia.length >= 10;
-    if (!completo) {
-      toast.error('Preencha responsável, prazo, mitigação, justificativa e avaliação de eficácia.');
+      payload.acao_mitigacao.length >= 10 && payload.justificativa.length >= 10;
+    if (!treatmentComplete || (closing && payload.avaliacao_eficacia.length < 10)) {
+      toast.error(closing
+        ? 'Registre como a eficácia da medida foi verificada antes de encerrar.'
+        : 'Informe responsável, prazo, medida e justificativa antes de registrar.');
       return;
     }
-
     setResolving(true);
     try {
-      await mutate(`/api/frms/alertas/${resolveTarget.id}/resolver`, {
+      await mutate(`/api/frms/alertas/${resolveTarget.id}/${closing ? 'resolver' : 'tratamento'}`, {
         method: 'PUT',
-        body: JSON.stringify(payload),
+        body: JSON.stringify(closing ? { avaliacao_eficacia: payload.avaliacao_eficacia } : {
+          responsavel: payload.responsavel, prazo: payload.prazo,
+          acao_mitigacao: payload.acao_mitigacao, justificativa: payload.justificativa,
+          evidencia_referencia: payload.evidencia_referencia,
+        }),
       });
-      toast.success('Caso resolvido com trilha de mitigação e eficácia.');
+      toast.success(closing ? 'Caso encerrado com eficácia documentada.' :
+        'Tratamento registrado. O caso permanece aberto até verificação de eficácia.');
       setResolveTarget(null);
       setResolutionForm(EMPTY_RESOLUTION_FORM);
       await refetch();
@@ -190,6 +213,8 @@ export default function FrmsAlertasPainel() {
       setResolving(false);
     }
   }, [mutate, refetch, resolutionForm, resolveTarget]);
+
+  const isFinalResolution = Boolean(resolveTarget && parseTreatmentRecord(resolveTarget.notas_resolucao));
 
   return (
     <AppLayout>
@@ -298,6 +323,7 @@ export default function FrmsAlertasPainel() {
                 const levelClass = NIVEL_STYLE[item.nivel] || NIVEL_STYLE.AVISO;
                 const resolutionDate = resolvedAt(item.resolvido_em);
                 const resolutionRecord = parseResolutionRecord(item.notas_resolucao);
+                const pendingTreatment = !item.resolvido ? parseTreatmentRecord(item.notas_resolucao) : null;
                 return (
                   <article key={item.id} className="p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
@@ -311,6 +337,14 @@ export default function FrmsAlertasPainel() {
                         <h2 className="mt-2 font-bold text-slate-950 dark:text-white">{name}</h2>
                         <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{item.mensagem}</p>
                         <p className="mt-2 text-xs text-slate-500">Tipo: {item.tipo_limite || 'não informado'}</p>
+                        {pendingTreatment ? (
+                          <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900" aria-label="Tratamento em andamento">
+                            <p className="font-bold">Tratamento em andamento — caso ainda aberto</p>
+                            <p className="mt-1">Responsável: {pendingTreatment.responsavel} · Prazo: {pendingTreatment.prazo}</p>
+                            <p className="mt-1">Medida: {pendingTreatment.acao_mitigacao}</p>
+                            <p className="mt-1 font-semibold">Verificar eficácia antes de encerrar.</p>
+                          </div>
+                        ) : null}
                         {item.resolvido ? (
                           <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                             <p className="font-semibold text-slate-700 dark:text-slate-200">
@@ -358,10 +392,10 @@ export default function FrmsAlertasPainel() {
                           <button
                             type="button"
                             onClick={() => openResolution(item)}
-                            title="Registrar responsável, prazo, mitigação, evidência e avaliação de eficácia antes de resolver"
+                            title={pendingTreatment ? "Verificar eficácia antes de encerrar" : "Registrar medida sem encerrar o caso"}
                             className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
                           >
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Registrar tratamento
+                            <CheckCircle2 className="h-3.5 w-3.5" /> {pendingTreatment ? "Verificar eficácia e encerrar" : "Registrar tratamento"}
                           </button>
                         ) : null}
                       </div>
@@ -376,12 +410,12 @@ export default function FrmsAlertasPainel() {
 
       {resolveTarget ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-labelledby="resolve-case-title">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">Confirmar resolução</p>
                 <h2 id="resolve-case-title" className="mt-1 text-lg font-bold text-slate-950 dark:text-white">
-                  Registrar decisão antes de fechar o caso
+                  {isFinalResolution ? 'Verificar eficácia e encerrar o caso' : 'Registrar medida sem encerrar o caso'}
                 </h2>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                   {resolveTarget.nome_tripulante || `Tripulante #${resolveTarget.tripulante_id}`} · {nivelLabel(resolveTarget.nivel)}
@@ -398,6 +432,7 @@ export default function FrmsAlertasPainel() {
                 <input
                   autoFocus
                   value={resolutionForm.responsavel}
+                   readOnly={isFinalResolution}
                   onChange={(event) => updateResolutionField('responsavel', event.target.value)}
                   maxLength={120}
                   placeholder="Nome, função ou equipe responsável"
@@ -409,6 +444,7 @@ export default function FrmsAlertasPainel() {
                 <input
                   type="date"
                   value={resolutionForm.prazo}
+                   readOnly={isFinalResolution}
                   onChange={(event) => updateResolutionField('prazo', event.target.value)}
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 />
@@ -416,9 +452,10 @@ export default function FrmsAlertasPainel() {
             </div>
 
             <label className="mt-4 block text-sm font-semibold text-slate-800 dark:text-slate-200">
-              Mitigação aplicada
+              Medida de mitigação
               <textarea
                 value={resolutionForm.acao_mitigacao}
+                   readOnly={isFinalResolution}
                 onChange={(event) => updateResolutionField('acao_mitigacao', event.target.value)}
                 rows={3}
                 maxLength={1000}
@@ -431,6 +468,7 @@ export default function FrmsAlertasPainel() {
               Justificativa da decisão
               <textarea
                 value={resolutionForm.justificativa}
+                   readOnly={isFinalResolution}
                 onChange={(event) => updateResolutionField('justificativa', event.target.value)}
                 rows={3}
                 maxLength={1000}
@@ -442,6 +480,7 @@ export default function FrmsAlertasPainel() {
               Evidência ou referência
               <input
                 value={resolutionForm.evidencia_referencia}
+                   readOnly={isFinalResolution}
                 onChange={(event) => updateResolutionField('evidencia_referencia', event.target.value)}
                 maxLength={500}
                 placeholder="Opcional: ocorrência, FRAT, documento, protocolo ou outra referência."
@@ -449,6 +488,7 @@ export default function FrmsAlertasPainel() {
               />
             </label>
 
+            {isFinalResolution ? (
             <label className="mt-4 block text-sm font-semibold text-slate-800 dark:text-slate-200">
               Avaliação de eficácia
               <textarea
@@ -460,8 +500,9 @@ export default function FrmsAlertasPainel() {
                 className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </label>
+            ) : null}
             <p className="mt-2 text-xs text-slate-500">
-              “Visto” registra ciência. O encerramento exige mitigação e avaliação de eficácia, preservadas na trilha de auditoria.
+              “Visto” registra ciência. A medida fica aberta até a verificação documentada da eficácia; o encerramento não é automático.
             </p>
 
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -477,11 +518,11 @@ export default function FrmsAlertasPainel() {
                   !/^\d{4}-\d{2}-\d{2}$/.test(resolutionForm.prazo) ||
                   resolutionForm.acao_mitigacao.trim().length < 10 ||
                   resolutionForm.justificativa.trim().length < 10 ||
-                  resolutionForm.avaliacao_eficacia.trim().length < 10
+                  (isFinalResolution && resolutionForm.avaliacao_eficacia.trim().length < 10)
                 }
                 className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900"
               >
-                {resolving ? 'Resolvendo…' : 'Confirmar e resolver'}
+                {resolving ? 'Registrando…' : isFinalResolution ? 'Confirmar e resolver' : 'Registrar sem encerrar'}
               </button>
             </div>
           </div>

@@ -46,8 +46,6 @@ import {
   buscarAcumuloTripulante,
   buscarAcumuloFrota,
   buscarAlertas,
-  marcarAlertaVisualizado,
-  marcarAlertaResolvido,
   salvarEscala,
   buscarEscalas,
   deletarEscala,
@@ -101,13 +99,13 @@ import {
   type FrmsExplanationViewOrigin,
   type FrmsTraceWindowWorst,
 } from '../lib/frms/day-explanation-domain';
-import { buildFrmsCaseResolutionNotes } from '../lib/frms/case-resolution';
 import { buildFrmsEffectivenessComparison, buildFrmsSimulationComparison, COMPLETE_FRMS_CHECKIN_EXISTS_SQL, maskFrmsTimelineRows } from '../lib/frms/effectiveness-read-policy';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
 import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../services/employee-sector-access';
 import fadigaAcumulada from './frms-fadiga-acumulada';
 import firaRoutes from './frms-fira';
 import frmsRelatoriosConfig from './frms-relatorios-config';
+import frmsCaseRoutes from './frms-cases';
 import {
   type FrmsAppContext,
   safe,
@@ -116,7 +114,6 @@ import {
   auditFrms,
   assertTripulanteEmpresa,
   assertJornadaEmpresa,
-  assertAlertaEmpresa,
   resolveFuncionarioId,
 } from './frms-shared';
 const frmsRoutes = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
@@ -3046,45 +3043,6 @@ frmsRoutes.post(
   }),
 );
 
-/**
- * PUT /api/frms/alertas/:id/visualizar
- */
-frmsRoutes.put(
-  '/alertas/:id/visualizar',
-  safe(async (c) => {
-    const id = c.req.param('id') ?? '';
-    const denied = await assertAlertaEmpresa(c, id);
-    if (denied) return denied;
-
-    const userId = String(c.get('userId') || 'system');
-    await marcarAlertaVisualizado(c.env.DB, id, userId);
-    return c.json({ success: true });
-  }),
-);
-
-/**
- * PUT /api/frms/alertas/:id/resolver
- */
-frmsRoutes.put(
-  '/alertas/:id/resolver',
-  safe(async (c) => {
-    const id = c.req.param('id') ?? '';
-    const denied = await assertAlertaEmpresa(c, id);
-    if (denied) return denied;
-
-    const userId = String(c.get('userId') || 'system');
-    const notasResolucao = buildFrmsCaseResolutionNotes(
-      await c.req.json().catch(() => null),
-      userId,
-    );
-    if (!notasResolucao) {
-      return c.json({ success: false, error: 'A resolução exige responsável, prazo, mitigação, justificativa e avaliação de eficácia.', code: 'FRMS_CASE_RESOLUTION_INCOMPLETE' }, 400);
-    }
-    await marcarAlertaResolvido(c.env.DB, id, userId, notasResolucao);
-    return c.json({ success: true });
-  }),
-);
-
 // ════════════════════════════════════════════════════════
 // ESCALAS QUINZENAIS
 // ════════════════════════════════════════════════════════
@@ -3374,6 +3332,7 @@ frmsRoutes.post(
 );
 
 // --- Relatórios, Configurações e Notificações ---
+frmsRoutes.route('/', frmsCaseRoutes);
 frmsRoutes.route('/', frmsRelatoriosConfig);
 
 // --- FIRA importação + Heatmap/Timeline ---
