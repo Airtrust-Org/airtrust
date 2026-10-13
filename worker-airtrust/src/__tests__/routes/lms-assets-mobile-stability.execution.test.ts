@@ -909,3 +909,79 @@ describe('SCORM final write — in-flight autosave must never acknowledge a queu
     }
   });
 });
+
+
+describe('SCORM structural fix — trustworthy visit tracking across resumed high-water marks', () => {
+  beforeEach(() => {
+    setupDom();
+    g.localStorage?.clear();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  function openWithStoredFinalLocation(enrollmentId: number) {
+    const html = buildLaunchPage({
+      matriculaId: enrollmentId,
+      titulo: 'SCORM com navegação após retomar',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/57/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: '',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_location': '3/3',
+        'cmi.location': '3/3',
+        'airtrust.total_slides': 3,
+        'airtrust.viewed_slides': [3],
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const frame = g.document.getElementById('scorm-frame');
+    const doc = frame.contentWindow.document;
+    return {
+      frame, doc,
+      api: g.window.API as Record<string, (...args: unknown[]) => unknown>,
+    };
+  }
+
+  it('salva visitas reais 1/3 e 2/3 sem rebaixar o marcador SCORM já em 3/3', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const { frame, doc, api } = openWithStoredFinalLocation(99157);
+    doc.body.innerHTML = '<div id="counterText">1/3</div>';
+    frame.dispatchEvent(new g.Event('load'));
+    expect(api.LMSGetValue('cmi.core.lesson_location')).toBe('3/3');
+
+    const persistedStates = () => fetchMock.mock.calls
+      .filter(([, options]) => JSON.parse(options.body).matricula_id === 99157)
+      .map(([, options]) => JSON.parse(JSON.parse(options.body).cmi_json));
+    api.LMSCommit();
+    await vi.waitFor(() => expect(persistedStates().some(state =>
+      JSON.stringify(state['airtrust.viewed_slides']) === '[1,3]')).toBe(true));
+
+    doc.getElementById('counterText').textContent = '2/3';
+    doc.dispatchEvent(new g.Event('click', { bubbles: true }));
+    await vi.waitFor(() => {
+      api.LMSCommit();
+      expect(persistedStates().some(state =>
+        JSON.stringify(state['airtrust.viewed_slides']) === '[1,2,3]')).toBe(true);
+    }, { timeout: 2500, interval: 130 });
+
+    expect(api.LMSGetValue('cmi.core.lesson_location')).toBe('3/3');
+  });
+
+  it('ignora números de formulários no corpo e contador de questões com denominador incompatível', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const { frame, doc, api } = openWithStoredFinalLocation(99158);
+    doc.body.innerHTML = '<p>FORM-MNT-005/123, operadores 121/135</p><div id="counterText">1/10</div>';
+    frame.dispatchEvent(new g.Event('load'));
+    api.LMSCommit();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls.find(([, options]) =>
+      JSON.parse(options.body).matricula_id === 99158)![1].body);
+    const state = JSON.parse(body.cmi_json);
+    expect(state['airtrust.viewed_slides']).toEqual([3]);
+    expect(state['cmi.core.lesson_location']).toBe('3/3');
+  });
+});
