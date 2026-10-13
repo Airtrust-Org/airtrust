@@ -4,13 +4,9 @@
 -- dry_run_required: true
 -- rollback_plan_required: worker-airtrust/schema-v2/plans/usuarios-costa-do-sol-viewer-aluno-0550.md
 
-CREATE TEMP TABLE _viewer_aluno_0550_candidates (
-  usuario_id INTEGER PRIMARY KEY,
-  empresa_id INTEGER NOT NULL CHECK(empresa_id=6)
-);
-
-INSERT INTO _viewer_aluno_0550_candidates (usuario_id, empresa_id)
-SELECT ue.usuario_id, ue.empresa_id
+-- D1 remote import rejects TEMP table DDL. SELECT guard fails before any DML.
+SELECT CASE WHEN
+  (SELECT COUNT(*) FROM (SELECT ue.usuario_id
 FROM usuarios_empresas ue
 JOIN usuarios u ON u.id=ue.usuario_id
 WHERE ue.empresa_id=6
@@ -22,26 +18,32 @@ WHERE ue.empresa_id=6
     SELECT 1 FROM usuarios_empresas_perfis p
     WHERE p.usuario_id=ue.usuario_id AND p.empresa_id=ue.empresa_id
       AND p.ativo=1 AND UPPER(TRIM(p.perfil)) IN
-      ('COORDENACAO_VOO','ADMIN','ADMINISTRADOR','GESTOR','MANAGER','INSTRUTOR','INSTRUCTOR','ALUNO','STUDENT'))
+      ('COORDENACAO_VOO','ADMIN','ADMINISTRADOR','GESTOR','MANAGER','INSTRUTOR','INSTRUCTOR'))
   AND NOT EXISTS (
     SELECT 1 FROM usuarios_empresas other
     WHERE other.usuario_id=ue.usuario_id AND other.empresa_id<>ue.empresa_id
-  );
-
-CREATE TEMP TABLE _viewer_aluno_0550_guard (
-  ok INTEGER NOT NULL CHECK(ok=1)
-);
-
--- Um erro no inventário causa CHECK failure antes de qualquer atualização.
-INSERT INTO _viewer_aluno_0550_guard (ok)
-SELECT CASE WHEN
-  (SELECT COUNT(*) FROM _viewer_aluno_0550_candidates)=26
+  )))=26
   AND (SELECT COUNT(*) FROM usuarios_empresas ue JOIN usuarios u ON u.id=ue.usuario_id
        WHERE ue.empresa_id=6 AND u.deleted_at IS NULL
          AND LOWER(TRIM(ue.role)) IN ('viewer','visualizador'))=26
   AND (SELECT COUNT(*) FROM usuarios_empresas_perfis p
-       JOIN _viewer_aluno_0550_candidates c
-         ON c.usuario_id=p.usuario_id AND c.empresa_id=p.empresa_id
+       JOIN (SELECT ue.usuario_id
+FROM usuarios_empresas ue
+JOIN usuarios u ON u.id=ue.usuario_id
+WHERE ue.empresa_id=6
+  AND u.deleted_at IS NULL
+  AND UPPER(TRIM(u.perfil))='ALUNO'
+  AND LOWER(TRIM(ue.role)) IN ('viewer','visualizador')
+  AND LOWER(TRIM(COALESCE(u.nome,''))) NOT LIKE '%coordena%'
+  AND NOT EXISTS (
+    SELECT 1 FROM usuarios_empresas_perfis p
+    WHERE p.usuario_id=ue.usuario_id AND p.empresa_id=ue.empresa_id
+      AND p.ativo=1 AND UPPER(TRIM(p.perfil)) IN
+      ('COORDENACAO_VOO','ADMIN','ADMINISTRADOR','GESTOR','MANAGER','INSTRUTOR','INSTRUCTOR'))
+  AND NOT EXISTS (
+    SELECT 1 FROM usuarios_empresas other
+    WHERE other.usuario_id=ue.usuario_id AND other.empresa_id<>ue.empresa_id
+  )) c ON c.usuario_id=p.usuario_id
        WHERE p.ativo=1 AND UPPER(TRIM(p.perfil)) IN ('VIEWER','VISUALIZADOR'))=26
   AND (SELECT COUNT(*) FROM usuarios_empresas ue JOIN usuarios u ON u.id=ue.usuario_id
        WHERE ue.empresa_id=6 AND u.deleted_at IS NULL
@@ -57,32 +59,91 @@ SELECT CASE WHEN
               OR EXISTS (SELECT 1 FROM usuarios_empresas_perfis p
                 WHERE p.usuario_id=ue.usuario_id AND p.empresa_id=ue.empresa_id
                   AND p.ativo=1 AND UPPER(TRIM(p.perfil))='COORDENACAO_VOO')))=1
-THEN 1 ELSE 0 END;
+  AND (SELECT COUNT(*) FROM usuarios_empresas_perfis p
+       JOIN usuarios_empresas ue ON ue.usuario_id=p.usuario_id AND ue.empresa_id=p.empresa_id
+       WHERE p.empresa_id=6 AND p.ativo=1
+         AND LOWER(TRIM(ue.role)) IN ('viewer','visualizador')
+         AND UPPER(TRIM(p.perfil)) IN ('ALUNO','STUDENT'))=0
+THEN 1 ELSE json_extract('INVALID_SCHEMA_0550_GUARD', '$.deny') END AS guard_0550;
 
--- Atualizar somente vínculos de alunos revisados; trigger 0514 cria perfil
--- explícito student caso a linha ainda não exista.
-UPDATE usuarios_empresas
-SET role='student'
-WHERE empresa_id=6
-  AND usuario_id IN (SELECT usuario_id FROM _viewer_aluno_0550_candidates)
-  AND LOWER(TRIM(role)) IN ('viewer','visualizador');
-
--- Revogar o alias de leitura obsoleto apenas para os 26 mesmos vínculos.
-UPDATE usuarios_empresas_perfis
-SET ativo=0, updated_at=datetime('now')
-WHERE empresa_id=6 AND ativo=1
-  AND UPPER(TRIM(perfil)) IN ('VIEWER','VISUALIZADOR')
-  AND usuario_id IN (SELECT usuario_id FROM _viewer_aluno_0550_candidates);
-
--- Reativar student quando houver perfil explícito preexistente inativo.
+-- Candidates remain viewer until the final membership update.
 INSERT OR IGNORE INTO usuarios_empresas_perfis
-  (usuario_id, empresa_id, perfil, ativo, created_at, updated_at)
-SELECT usuario_id, empresa_id, 'student', 1, datetime('now'), datetime('now')
-FROM _viewer_aluno_0550_candidates;
-UPDATE usuarios_empresas_perfis
-SET ativo=1, updated_at=datetime('now')
-WHERE empresa_id=6 AND UPPER(TRIM(perfil))='STUDENT'
-  AND usuario_id IN (SELECT usuario_id FROM _viewer_aluno_0550_candidates);
+ (usuario_id,empresa_id,perfil,ativo,created_at,updated_at)
+SELECT usuario_id,6,'student',1,datetime('now'),datetime('now') FROM (SELECT ue.usuario_id
+FROM usuarios_empresas ue
+JOIN usuarios u ON u.id=ue.usuario_id
+WHERE ue.empresa_id=6
+  AND u.deleted_at IS NULL
+  AND UPPER(TRIM(u.perfil))='ALUNO'
+  AND LOWER(TRIM(ue.role)) IN ('viewer','visualizador')
+  AND LOWER(TRIM(COALESCE(u.nome,''))) NOT LIKE '%coordena%'
+  AND NOT EXISTS (
+    SELECT 1 FROM usuarios_empresas_perfis p
+    WHERE p.usuario_id=ue.usuario_id AND p.empresa_id=ue.empresa_id
+      AND p.ativo=1 AND UPPER(TRIM(p.perfil)) IN
+      ('COORDENACAO_VOO','ADMIN','ADMINISTRADOR','GESTOR','MANAGER','INSTRUTOR','INSTRUCTOR'))
+  AND NOT EXISTS (
+    SELECT 1 FROM usuarios_empresas other
+    WHERE other.usuario_id=ue.usuario_id AND other.empresa_id<>ue.empresa_id
+  ));
+UPDATE usuarios_empresas_perfis SET ativo=1,updated_at=datetime('now')
+ WHERE empresa_id=6 AND UPPER(TRIM(perfil))='STUDENT'
+ AND usuario_id IN (SELECT ue.usuario_id
+FROM usuarios_empresas ue
+JOIN usuarios u ON u.id=ue.usuario_id
+WHERE ue.empresa_id=6
+  AND u.deleted_at IS NULL
+  AND UPPER(TRIM(u.perfil))='ALUNO'
+  AND LOWER(TRIM(ue.role)) IN ('viewer','visualizador')
+  AND LOWER(TRIM(COALESCE(u.nome,''))) NOT LIKE '%coordena%'
+  AND NOT EXISTS (
+    SELECT 1 FROM usuarios_empresas_perfis p
+    WHERE p.usuario_id=ue.usuario_id AND p.empresa_id=ue.empresa_id
+      AND p.ativo=1 AND UPPER(TRIM(p.perfil)) IN
+      ('COORDENACAO_VOO','ADMIN','ADMINISTRADOR','GESTOR','MANAGER','INSTRUTOR','INSTRUCTOR'))
+  AND NOT EXISTS (
+    SELECT 1 FROM usuarios_empresas other
+    WHERE other.usuario_id=ue.usuario_id AND other.empresa_id<>ue.empresa_id
+  ));
+UPDATE usuarios_empresas_perfis SET ativo=0,updated_at=datetime('now')
+ WHERE empresa_id=6 AND ativo=1
+ AND UPPER(TRIM(perfil)) IN ('VIEWER','VISUALIZADOR')
+ AND usuario_id IN (SELECT ue.usuario_id
+FROM usuarios_empresas ue
+JOIN usuarios u ON u.id=ue.usuario_id
+WHERE ue.empresa_id=6
+  AND u.deleted_at IS NULL
+  AND UPPER(TRIM(u.perfil))='ALUNO'
+  AND LOWER(TRIM(ue.role)) IN ('viewer','visualizador')
+  AND LOWER(TRIM(COALESCE(u.nome,''))) NOT LIKE '%coordena%'
+  AND NOT EXISTS (
+    SELECT 1 FROM usuarios_empresas_perfis p
+    WHERE p.usuario_id=ue.usuario_id AND p.empresa_id=ue.empresa_id
+      AND p.ativo=1 AND UPPER(TRIM(p.perfil)) IN
+      ('COORDENACAO_VOO','ADMIN','ADMINISTRADOR','GESTOR','MANAGER','INSTRUTOR','INSTRUCTOR'))
+  AND NOT EXISTS (
+    SELECT 1 FROM usuarios_empresas other
+    WHERE other.usuario_id=ue.usuario_id AND other.empresa_id<>ue.empresa_id
+  ));
+UPDATE usuarios_empresas SET role='student'
+ WHERE empresa_id=6 AND LOWER(TRIM(role)) IN ('viewer','visualizador')
+ AND usuario_id IN (SELECT ue.usuario_id
+FROM usuarios_empresas ue
+JOIN usuarios u ON u.id=ue.usuario_id
+WHERE ue.empresa_id=6
+  AND u.deleted_at IS NULL
+  AND UPPER(TRIM(u.perfil))='ALUNO'
+  AND LOWER(TRIM(ue.role)) IN ('viewer','visualizador')
+  AND LOWER(TRIM(COALESCE(u.nome,''))) NOT LIKE '%coordena%'
+  AND NOT EXISTS (
+    SELECT 1 FROM usuarios_empresas_perfis p
+    WHERE p.usuario_id=ue.usuario_id AND p.empresa_id=ue.empresa_id
+      AND p.ativo=1 AND UPPER(TRIM(p.perfil)) IN
+      ('COORDENACAO_VOO','ADMIN','ADMINISTRADOR','GESTOR','MANAGER','INSTRUTOR','INSTRUCTOR'))
+  AND NOT EXISTS (
+    SELECT 1 FROM usuarios_empresas other
+    WHERE other.usuario_id=ue.usuario_id AND other.empresa_id<>ue.empresa_id
+  ));
 
 -- A única conta de Coordenação permanece com perfil técnico COORDENACAO_VOO.
 -- O vínculo compatível passa de USER para VIEWER, sem atribuir capabilities
@@ -99,6 +160,3 @@ WHERE empresa_id=6 AND LOWER(TRIM(role))='user'
         WHERE p.usuario_id=u.id AND p.empresa_id=6
           AND p.ativo=1 AND UPPER(TRIM(p.perfil))='COORDENACAO_VOO')
   );
-
-DROP TABLE _viewer_aluno_0550_guard;
-DROP TABLE _viewer_aluno_0550_candidates;

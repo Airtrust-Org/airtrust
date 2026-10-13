@@ -67,7 +67,7 @@ def should_abort(viewers, coordinators, privileged):
     db=seed(viewers=viewers,coordinators=coordinators,privileged=privileged)
     try:
         db.executescript(SQL)
-    except sqlite3.IntegrityError:
+    except (sqlite3.IntegrityError, sqlite3.OperationalError):
         pass
     else:
         raise AssertionError(f"Guard should abort: viewers={viewers}, coordinators={coordinators}, privileged={privileged}")
