@@ -1,6 +1,6 @@
 import { ApiError } from '../../middleware/error-handler';
 import { extractAndValidateLmsPackage, extractScormStaticGateMetadata } from './lms-package-validator';
-import { validateScormPackageQuality, type ScormQualityGateResult } from './lms-scorm-quality-gate';
+import { canActivateCertifiedScormPackage, validateScormPackageQuality, type ScormQualityGateResult } from './lms-scorm-quality-gate';
 import { applyRuntimeConformance } from './lms-scorm-quality-gate';
 import { runScormBrowserConformance } from './lms-scorm-browser-run';
 import {
@@ -194,9 +194,8 @@ export async function activateScormPackageVersion(params: { db: D1Database; empr
   const quality = parseStoredScormValidation<ScormQualityGateResult>(candidate.validation_result_json);
   // Legacy validation JSON can contain publishable=true from a protocol-only
   // browser run. Never promote it without a complete SHA-bound functional gate.
-  if (candidate.status !== 'VALIDATED' || !quality?.publishable ||
-      quality.functionalCertification?.status !== 'CERTIFIED' ||
-      quality.functionalCertification.packageSha256 !== candidate.package_sha256) {
+  if (candidate.status !== 'VALIDATED' ||
+      !canActivateCertifiedScormPackage(quality, candidate.package_sha256)) {
     throw new ApiError('Pacote não pode ser ativado: todos os gates obrigatórios devem passar', 409);
   }
   const originalFilename = readScormUploadFilename(quality);

@@ -430,3 +430,19 @@ export function applyRuntimeConformance(
       staticResult.diagnostics.status === 'PASS' && verdict === 'PASS',
   };
 }
+
+/** The activation gate checks stored attestations again, including legacy JSON
+ * written when protocol conformance alone could set publishable=true. */
+export function canActivateCertifiedScormPackage(
+  quality: ScormQualityGateResult | null | undefined,
+  expectedSha256: string,
+): boolean {
+  return Boolean(expectedSha256 && quality?.publishable === true &&
+    quality.structural?.status === 'PASS' &&
+    quality.completionManifest?.status === 'PASS' &&
+    quality.diagnostics?.status === 'PASS' &&
+    quality.conformance?.status === 'PASS' &&
+    quality.functionalCertification?.status === 'CERTIFIED' &&
+    quality.functionalCertification.packageSha256 === expectedSha256 &&
+    quality.functionalCertification.missing.length === 0);
+}

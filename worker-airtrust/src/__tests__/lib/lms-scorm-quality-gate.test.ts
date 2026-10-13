@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyRuntimeConformance, validateScormPackageQuality } from '../../lib/lms/lms-scorm-quality-gate';
+import { applyRuntimeConformance, canActivateCertifiedScormPackage, validateScormPackageQuality } from '../../lib/lms/lms-scorm-quality-gate';
 import type { ValidatedLmsPackage } from '../../lib/lms/lms-package-validator';
 import {
   REQUIRED_SCORM_FUNCTIONAL_CASES, SCORM_FUNCTIONAL_HARNESS,
@@ -80,8 +80,18 @@ describe('SCORM package quality gate', () => {
     const webkit = makeRun('WEBKIT');
     expect(applyRuntimeConformance(staticResult, passed, 'sha-a', [chromium])
       .functionalCertification.missing).toContain('WEBKIT:RUN_REQUIRED_UNIQUE');
-    expect(applyRuntimeConformance(staticResult, passed, 'sha-a', [chromium, webkit])
-      .publishable).toBe(true);
+    const fullyCertified = applyRuntimeConformance(staticResult, passed, 'sha-a', [chromium, webkit]);
+    expect(fullyCertified.publishable).toBe(true);
+    expect(canActivateCertifiedScormPackage(fullyCertified, 'sha-a')).toBe(true);
+    expect(canActivateCertifiedScormPackage(fullyCertified, 'sha-b')).toBe(false);
+    // Old stored JSON may still contain publishable=true with no functional gate.
+    const legacyResult = { ...fullyCertified, functionalCertification: undefined };
+    expect(canActivateCertifiedScormPackage(
+      legacyResult as unknown as typeof fullyCertified, 'sha-a',
+    )).toBe(false);
+    expect(canActivateCertifiedScormPackage({
+      ...fullyCertified, conformance: { ...fullyCertified.conformance, status: 'FAIL' },
+    }, 'sha-a')).toBe(false);
     expect(applyRuntimeConformance(staticResult, passed, 'sha-b', [chromium, webkit])
       .publishable).toBe(false);
     expect(applyRuntimeConformance(staticResult, passed, 'sha-a', [chromium, chromium, webkit])

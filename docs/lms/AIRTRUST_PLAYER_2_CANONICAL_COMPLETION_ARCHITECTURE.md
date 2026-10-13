@@ -48,3 +48,27 @@ Modelar e governar via Schema V2 o par `attempt_id`/`enrollment_cycle_id`, pacot
 ## Critério de encerramento
 
 Não declarar correção completa por 8/8 CI, 100% de navegação, `SCORM_COMPLETION_ACCEPTED` ou deploy saudável. Encerramento depende de prova real de curso **SCORM** e **Native** e da persistência canônica e certificado, com rollback e observabilidade. Staging oficial antes de qualquer produção; produção somente para SHA, componentes e escopo exatos autorizados.
+
+## Gate de certificação funcional (etapa de segurança, 2026-10-13)
+
+A execução de navegador que observa `LMSInitialize`, `LMSCommit`, `LMSFinish`,
+`completionReached` e nota é **conformidade do protocolo/execução parcial**,
+não certificação ponta a ponta. Novas ativações precisam de um contrato separado
+`functionalCertification` para **o SHA exato do ZIP**, com as oito etapas
+`FIRST_ACCESS`, `SUSPEND_RESUME`, `ASSESSMENT_INSUFFICIENT`,
+`ASSESSMENT_APPROVED`, `EXPLICIT_FINALIZATION`, `REOPEN_COMPLETED`,
+`NO_STATUS_DOWNGRADE` e `TENANT_CYCLE_ISOLATION`, todas em Chromium e WebKit.
+
+O verificador fail-closed `evaluateScormFunctionalCertification` valida
+integridade do conjunto de resultados e SHA, **não a origem** dos resultados.
+Somente o harness isolado da plataforma pode fornecer atestações; conteúdo ZIP,
+metadados e payload do aluno jamais podem produzi-las. O runner atual ainda não
+executa esse contrato completo e passa lista vazia: **nenhuma nova versão é
+certificada ou ativável por esse caminho até integração e prova do harness**.
+O status anterior `publishable=true` sem atestação não serve para ativação.
+Isso não modifica pacotes ativos, histórico, matrículas ou certificados.
+
+**Ainda pendente:** implementar harness real, executar os cenários por SHA,
+registrar evidência independente, testar qualificação/certificado e validar em
+staging antes de qualquer promoção; preservar bloqueio da liberação em massa
+conforme issue #1325.
