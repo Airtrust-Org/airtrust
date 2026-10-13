@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// source_reference: scripts/setup-local-lms-smoke-db.sh and migration 0305.
+// operational_decision: create only synthetic identities in disposable local D1.
+// dry_run_required: the workflow resets local D1 state before running.
+// rollback_plan_required: discard the isolated local QA state after the run.
 /**
  * Local-only test identity setup: use normal bcrypt/JWT login with the
  * disposable local D1, never ENABLE_DEV_AUTH_BYPASS.
