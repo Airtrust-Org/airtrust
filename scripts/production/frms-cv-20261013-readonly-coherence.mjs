@@ -12,7 +12,7 @@ const DEV_DB_ID = 'a72fb05b-0912-4ad9-9686-e7948c8b09eb';
 
 const queries = Object.freeze({
   tenant: [
-    'SELECT id FROM empresas WHERE id = ? AND ativo = 1 AND deleted_at IS NULL',
+    'SELECT id, nome, codigo FROM empresas WHERE id = ? AND ativo = 1 AND deleted_at IS NULL',
   ].join(' '),
   allocation: [
     'SELECT DISTINCT CAST(ea.funcionario_id AS INTEGER) AS funcionario_id',
@@ -193,6 +193,8 @@ export async function auditProductionReadOnly() {
   const results = {};
   results.tenant = await queryD1(queries.tenant, [TENANT_ID]);
   if (results.tenant.length !== 1) throw new Error('TENANT_SCOPE_NOT_ACTIVE');
+  const companyEvidence = String(results.tenant[0].nome || '') + ' ' + String(results.tenant[0].codigo || '');
+  if (!/costa\s*(?:do\s*)?sol|\bcds\b/i.test(companyEvidence)) throw new Error('TENANT_NAME_NOT_CONFIRMED');
   results.allocation = await queryD1(queries.allocation, [TENANT_ID, AUDIT_DATE, AUDIT_DATE]);
   results.base = await queryD1(queries.base, [TENANT_ID, AUDIT_DATE, AUDIT_DATE]);
   results.checkins = await queryD1(queries.checkins, [TENANT_ID, AUDIT_DATE]);
