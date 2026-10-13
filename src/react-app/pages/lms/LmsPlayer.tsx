@@ -119,10 +119,24 @@ const SCORM_UNRESOLVED_MESSAGE =
 
 // Only enables an authenticated attempt at the existing server-side qualification
 // and completion gate; this predicate never marks a course as passed.
+/** Never send /finalizar while a course-authored mandatory quiz is unfinished. */
+export function canRetryScormCompletionRegistration(code: string | null | undefined, assessmentReady: boolean): boolean {
+  if (!assessmentReady) return false;
+  return !new Set([
+    'PROGRESS_EVIDENCE_MISSING', 'SCORM_PROGRESS_EVIDENCE_MISSING',
+    'SCORM_REQUIREMENTS_PENDING', 'CONTENT_EVIDENCE_REQUIRED',
+    'COMPLETION_EVIDENCE_INSUFFICIENT', 'SCORE_MISSING',
+    'MASTERY_SCORE_MISSING', 'SCORE_BELOW_MASTERY',
+    'LMS_NEW_EDITION_REQUIRED', 'LMS_QUALIFICATION_COMPLETION_FAILED',
+    'SCORM_SESSION_NOT_READY',
+  ]).has(code || '');
+}
+
 export function canReconcilePersistedScormCompletion(params: {
   reviewMode: boolean;
   isScormContent: boolean;
   matriculaStatus: string | null | undefined;
+  requirementsVerified?: boolean;
   diagnostic: {
     status?: string | null;
     explicit_completion?: boolean | null;
@@ -134,6 +148,7 @@ export function canReconcilePersistedScormCompletion(params: {
   const { diagnostic } = params;
   if (
     params.reviewMode || !params.isScormContent ||
+    params.requirementsVerified === false ||
     params.matriculaStatus === 'CONCLUIDO' ||
     diagnostic?.status !== 'accepted' ||
     diagnostic.explicit_completion !== true ||
@@ -266,6 +281,18 @@ export default function LmsPlayer() {
     reviewMode: effectiveReviewMode,
     isScormContent,
     matriculaStatus: matricula?.status,
+    // The package may report "passed" on the last slide before its 10 final
+    // questions were answered. Its signed-in-page diagnostic takes precedence
+    // for pending quiz work; the backend still validates persisted evidence.
+    requirementsVerified: !granularDiagnostic || (
+      granularDiagnostic.slides.missing.length === 0 &&
+      granularDiagnostic.assessment.unanswered.length === 0 &&
+      granularDiagnostic.assessment.incomplete.length === 0 &&
+      (!granularDiagnostic.assessment.required || granularDiagnostic.assessment.completed) &&
+      granularDiagnostic.assessment.passed !== false &&
+      granularDiagnostic.moduleResults.every((module) =>
+        !module.assessment.required || module.assessment.completed)
+    ),
     diagnostic: completionDiagnostic,
   });
   const canFinalize =
@@ -314,8 +341,13 @@ export default function LmsPlayer() {
   // an unsolicited confirmation dialog on the last slide: its job is to
   // reconcile the server result automatically, or offer one explicit retry
   // only if reconciliation fails.
+  const assessmentReadyToRetry = !granularDiagnostic || Boolean(
+    diagnosticSlidesDone && diagnosticAssessmentDone &&
+    granularDiagnostic.assessment.passed !== false
+  );
   const showScormRegistrationRetry =
-    isScormContent && !effectiveReviewMode && completionState === 'error';
+    isScormContent && !effectiveReviewMode && completionState === 'error' &&
+    canRetryScormCompletionRegistration(completionErrorInfo?.code, assessmentReadyToRetry);
 
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
@@ -635,6 +667,7 @@ export default function LmsPlayer() {
     if (!shouldReconcilePassedScorm || !Number.isSafeInteger(id) || id <= 0 || isFinalizing) return;
     setIsFinalizing(true);
     showCompletionToast('saving', 'Confirmando a conclusão no AirTrust...');
+    let finalizationErrorCode: string | null = null;
     try {
       // Existing authenticated endpoint enforces SCORM/tenant/qualification gates.
       const response = await fetchWithAuth(`/api/lms/matriculas/${id}/finalizar`, {
@@ -647,9 +680,12 @@ export default function LmsPlayer() {
       };
       if (!response.ok || result.success !== true || result.data?.novo_status !== 'CONCLUIDO') {
         const code = sanitizeDiagnosticCode(result.code);
-        throw new Error(code
-          ? `O AirTrust ainda não confirmou a conclusão (código: ${code}).`
-          : 'O AirTrust ainda não conseguiu concluir esta matrícula.');
+        finalizationErrorCode = code;
+        throw new Error(code === 'PROGRESS_EVIDENCE_MISSING'
+          ? 'O pacote chegou ao último slide, mas o AirTrust não recebeu o registro de todas as telas obrigatórias. A conclusão não foi perdida: ela ainda não foi comprovada. Complete as etapas pendentes ou peça à Gerência de Treinamento a revisão das evidências.'
+          : code
+            ? `O AirTrust ainda não confirmou a conclusão (código: ${code}).`
+            : 'O AirTrust ainda não conseguiu concluir esta matrícula.');
       }
       const { data: latest } = await refetchMatricula();
       if (latest?.status !== 'CONCLUIDO') {
@@ -664,7 +700,7 @@ export default function LmsPlayer() {
       showCompletionToast('error', message);
       setCompletionState('error');
       setCompletionMessage(message);
-      setCompletionErrorInfo({ code: 'SCORM_FINALIZATION_FAILED', reason: null, message });
+      setCompletionErrorInfo({ code: finalizationErrorCode || 'SCORM_FINALIZATION_FAILED', reason: null, message });
     } finally {
       setIsFinalizing(false);
     }
