@@ -87,15 +87,12 @@ describe('FrmsAlertasPainel', () => {
     expect(screen.queryByText('CRÍTICO')).not.toBeInTheDocument();
   });
 
-  it('exige governança completa antes de resolver um caso', async () => {
+  it('registra medida e mantém caso aberto até avaliação de eficácia', async () => {
     renderPage();
-
     fireEvent.click(screen.getByRole('button', { name: 'Registrar tratamento' }));
-
-    const confirmButton = screen.getByRole('button', { name: 'Confirmar e resolver' });
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(confirmButton).toBeDisabled();
-    expect(mutateMock).not.toHaveBeenCalled();
+    const confirm = screen.getByRole('button', { name: 'Registrar sem encerrar' });
+    expect(confirm).toBeDisabled();
+    expect(screen.queryByLabelText('Avaliação de eficácia')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Responsável pelo tratamento'), {
       target: { value: 'Coordenação de Operações' },
@@ -103,37 +100,61 @@ describe('FrmsAlertasPainel', () => {
     fireEvent.change(screen.getByLabelText('Prazo'), {
       target: { value: '2026-09-30' },
     });
-    fireEvent.change(screen.getByLabelText('Mitigação aplicada'), {
-      target: { value: 'Tripulante substituído e jornada reconfirmada pela coordenação.' },
+    fireEvent.change(screen.getByLabelText('Medida de mitigação'), {
+      target: { value: 'Reprogramar tripulante e confirmar intervalo de repouso.' },
     });
     fireEvent.change(screen.getByLabelText('Justificativa da decisão'), {
-      target: { value: 'A jornada foi replanejada e os limites foram novamente verificados.' },
+      target: { value: 'A operação ainda depende da mitigação e revisão da escala.' },
     });
-    fireEvent.change(screen.getByLabelText('Evidência ou referência'), {
-      target: { value: 'FRAT-2026-091' },
-    });
-    fireEvent.change(screen.getByLabelText('Avaliação de eficácia'), {
-      target: { value: 'A nova tripulação operou dentro dos limites e sem novo alerta.' },
-    });
-    expect(confirmButton).toBeEnabled();
-
-    fireEvent.click(confirmButton);
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
 
     await waitFor(() => {
-      expect(mutateMock).toHaveBeenCalledWith('/api/frms/alertas/case-1/resolver', {
+      expect(mutateMock).toHaveBeenCalledWith('/api/frms/alertas/case-1/tratamento', {
         method: 'PUT',
         body: JSON.stringify({
-          responsavel: 'Coordenação de Operações',
-          prazo: '2026-09-30',
-          acao_mitigacao: 'Tripulante substituído e jornada reconfirmada pela coordenação.',
-          justificativa: 'A jornada foi replanejada e os limites foram novamente verificados.',
-          evidencia_referencia: 'FRAT-2026-091',
-          avaliacao_eficacia: 'A nova tripulação operou dentro dos limites e sem novo alerta.',
+          responsavel: 'Coordenação de Operações', prazo: '2026-09-30',
+          acao_mitigacao: 'Reprogramar tripulante e confirmar intervalo de repouso.',
+          justificativa: 'A operação ainda depende da mitigação e revisão da escala.',
+          evidencia_referencia: null,
         }),
       });
     });
     expect(refetchMock).toHaveBeenCalled();
   });
+
+  it('exige registro prévio de tratamento e eficácia para encerrar', async () => {
+    mockCases([caseRow({
+      notas_resolucao: JSON.stringify({
+        schema: 'FRMS_CASE_TREATMENT_V1',
+        responsavel: 'Coordenação de Operações',
+        prazo: '2026-09-30',
+        acao_mitigacao: 'Reprogramar tripulante e confirmar intervalo de repouso.',
+        justificativa: 'A operação depende de nova avaliação do risco.',
+        evidencia_referencia: 'FRAT-2026-091',
+      }),
+    })]);
+    renderPage();
+    expect(screen.getByText(/Tratamento em andamento — caso ainda aberto/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar eficácia e encerrar' }));
+    const confirm = screen.getByRole('button', { name: 'Confirmar e resolver' });
+    expect(confirm).toBeDisabled();
+    expect(screen.getByLabelText('Responsável pelo tratamento')).toHaveAttribute('readonly');
+    fireEvent.change(screen.getByLabelText('Avaliação de eficácia'), {
+      target: { value: 'Escala revisada e risco recalculado, sem pendências remanescentes.' },
+    });
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+    await waitFor(() => {
+      expect(mutateMock).toHaveBeenCalledWith('/api/frms/alertas/case-1/resolver', {
+        method: 'PUT',
+        body: JSON.stringify({
+          avaliacao_eficacia: 'Escala revisada e risco recalculado, sem pendências remanescentes.',
+        }),
+      });
+    });
+  });
+
   it('mostra a trilha de auditoria de casos já resolvidos', () => {
     mockCases([
       caseRow({
