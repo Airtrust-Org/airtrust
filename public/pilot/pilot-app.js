@@ -203,7 +203,7 @@ function showActiveFlightUpdateAlert(revision) {
     flightUpdateMessage.textContent =
       (revision?.planejamento_status === 'confirmado'
         ? 'A Coordenação confirmou o planejamento deste voo. Atualize para receber os dados consolidados antes da partida.'
-        : 'A Coordenação alterou este voo depois da preparação offline. Atualize para receber a nova rota, os MTAs, outros documentos ou dados de voo antes de concluir o lançamento.');
+        : 'O voo possui uma versão mais recente no servidor. Atualize para receber rota, documentos ou dados revisados antes do envio, preservando o rascunho local.');
   }
   flightUpdateAlert?.classList.remove('hidden');
   if (refreshFlightUpdateButton) refreshFlightUpdateButton.disabled = !navigator.onLine;
@@ -1901,7 +1901,7 @@ async function refreshCoordinationControls() {
   const rdv = state.rdv;
   if (activeFlightUpdateAvailable) {
     setCoordinationMessage(
-      'A Coordenação alterou este voo. Atualize o voo antes de sincronizar, finalizar ou enviar.',
+      'O pacote local está desatualizado em relação ao servidor. Atualize o voo antes de sincronizar, finalizar ou enviar.',
       'error',
     );
     return;
@@ -3741,6 +3741,14 @@ function createEditorField({
     input.inputMode = inputMode;
   }
   input.value = value ?? '';
+  if (type === 'textarea') {
+    // O teclado do iPad pode sugerir correções em português sem internet
+    // e sem enviar observações operacionais para um serviço externo.
+    input.lang = 'pt-BR';
+    input.spellcheck = true;
+    input.setAttribute('autocorrect', 'on');
+    input.setAttribute('autocapitalize', 'sentences');
+  }
   input.readOnly = readOnly || operationalSyncInFlight;
   input.addEventListener('input', () => {
     if (isDurationField) {
