@@ -201,7 +201,10 @@ UNCERTIFIED_HISTORY="${UNCERTIFIED_REST%%|*}"
 # audit trail without generating duplicate qualifications.
 
 echo "[smoke:lms:scorm] Committing terminal passed/completed state"
-FINAL_CMI='{"cmi.core.lesson_location":"3/3","cmi.core.lesson_status":"passed","cmi.core.score.raw":"90","cmi.core.score.max":"100","airtrust.total_slides":3,"airtrust.viewed_slides":[1,2,3]}'
+# This final autosave supplies only the LAST slide. The 1/3 and 2/3 evidence
+# was actually observed in earlier authenticated commits and must be recovered
+# from persisted CMI, never inferred from the 3/3 marker.
+FINAL_CMI='{"cmi.core.lesson_location":"3/3","cmi.core.lesson_status":"passed","cmi.core.score.raw":"90","cmi.core.score.max":"100","airtrust.total_slides":3,"airtrust.viewed_slides":[3]}'
 HTTP_CODE="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR"   -X POST "$API_BASE/lms/matriculas/scorm/commit"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "$(node -e '
     const id=Number(process.argv[1]);
     const cmi=process.argv[2];
@@ -266,6 +269,16 @@ IFS='|' read -r LESSON_STATUS COMPLETION_STATUS SUCCESS_STATUS SCORE_RAW <<< "$S
 [[ "$COMPLETION_STATUS" == "completed" ]] || { echo "Stored completion_status is $COMPLETION_STATUS" >&2; exit 1; }
 [[ "$SUCCESS_STATUS" == "passed" ]] || { echo "Stored success_status is $SUCCESS_STATUS" >&2; exit 1; }
 [[ "$SCORE_RAW" == "90" || "$SCORE_RAW" == "90.0" ]] || { echo "Stored score_raw is $SCORE_RAW" >&2; exit 1; }
+
+# Verify that authenticated partial autosaves were joined as observed facts.
+# This query is against the disposable local D1 only.
+COVERAGE_JSON="$(sql "SELECT json_extract(cmi_json, '$.\"airtrust.viewed_slides\"')
+  FROM lms_progresso_scorm
+  WHERE matricula_id=$MATRICULA_ID AND empresa_id=$EMPRESA_ID;")"
+[[ "$COVERAGE_JSON" == '[1,2,3]' ]] || {
+  echo "Persisted CMI did not preserve distinct slide observations across saves" >&2
+  exit 1
+}
 
 echo "[smoke:lms:scorm] Replaying incomplete commit to prove completed enrollment cannot downgrade"
 curl -fsS -b "$COOKIE_JAR" -X POST "$API_BASE/lms/matriculas/scorm/commit"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "{\"matricula_id\":$MATRICULA_ID,\"lesson_status\":\"incomplete\",\"cmi_json\":\"{\\\"cmi.core.lesson_location\\\":\\\"1/3\\\"}\"}" >/dev/null
