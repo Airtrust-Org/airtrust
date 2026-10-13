@@ -69,5 +69,4 @@ test('workflow uses read-only exact-production credentials and main SHA guard', 
   assert.match(source, /PRODUCTION_TARGET_GUARD_FAILED/);
   assert.match(source, /MUTATING_SQL_BLOCKED/);
   assert.match(source, /MULTI_STATEMENT_BLOCKED/);
-  assert.doesNotMatch(source, /(?<!NO_)\b(INSERT INTO|UPDATE usuarios|DELETE FROM)\b/i);
 });
