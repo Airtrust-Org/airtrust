@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 
 export const LOCAL_CASES=['FIRST_ACCESS','SUSPEND_RESUME',
   'ASSESSMENT_INSUFFICIENT','ASSESSMENT_APPROVED','EXPLICIT_FINALIZATION',
-  'REOPEN_COMPLETED','NO_STATUS_DOWNGRADE'];
+  'REOPEN_COMPLETED','NO_STATUS_DOWNGRADE','TENANT_CYCLE_ISOLATION'];
 
 export function summarizeLocalEvidence(zipBytes,runs){
   const sha=createHash('sha256').update(zipBytes).digest('hex');
@@ -19,6 +19,7 @@ export function summarizeLocalEvidence(zipBytes,runs){
     if(row.source!=='LOCAL_DISPOSABLE_D1_R2_ONLY'||
        row.packageSha256!==sha)throw Error('ZIP_PROVENANCE_MISMATCH:'+browser);
     if(row.crossTenantAccess!=='PASS')throw Error('TENANT_PROBE_MISSING:'+browser);
+    if(row.cycleIsolation!=='PASS')throw Error('CYCLE_PROOF_MISSING:'+browser);
     if(row.enrollmentIsolation!=='SAME_TENANT_ONLY'||
        row.certificateDocument!=='INCONCLUSIVE')throw Error('SCOPE_INVALID:'+browser);
     const cases=row.cases;
@@ -28,13 +29,12 @@ export function summarizeLocalEvidence(zipBytes,runs){
       if(cases.find(c=>c?.name===name)?.status!=='PASS')
         throw Error('NOT_PROVEN:'+browser+':'+name);
     }
-    if(cases.find(c=>c?.name==='TENANT_CYCLE_ISOLATION')?.status!=='INCONCLUSIVE')
-      throw Error('CROSS_TENANT_UNPROVEN:'+browser);
+
   }
   return {schemaVersion:1,source:'LOCAL_DISPOSABLE_ZIP_ONLY',
     packageSha256:sha,status:'UNCERTIFIED',activationAuthorized:false,
-    checkedBrowsers:['CHROMIUM','WEBKIT'],passedChecks:14,
-    missing:['REAL_STAGING_CANDIDATE','CYCLE_ISOLATION',
+    checkedBrowsers:['CHROMIUM','WEBKIT'],passedChecks:16,
+    missing:['REAL_STAGING_CANDIDATE',
       'CERTIFICATE_DOCUMENT','TRUSTED_HARNESS_PROVENANCE']};
 }
 

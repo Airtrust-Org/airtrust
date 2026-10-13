@@ -14,6 +14,7 @@ type Fixture={
   origin:string;companyId:number;courseId:number;dbFile:string;
   packageSha256:string;zipPath:string;fixtureKind:'LOCAL_DISPOSABLE_ZIP';
   enrollments:Record<string,number>;
+  employeeIds:Record<string,number>;
   foreignTenant:{empresaId:number;courseId:number;matriculaId:number};
 };
 test('SCORM wrong answer, resume, pass, explicit completion and qualification',async({page},testInfo)=>{
@@ -160,6 +161,49 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
     finally {db.close();}
   })();
   expect(foreignAfter).toEqual(foreignBefore);
+  // Exercise the real administrative lifecycle to prove a second enrollment
+  // cycle never resumes its predecessor's passed SCO or qualification pointer.
+  const deleteResult=await page.request.delete(api+'/lms/matriculas/'+id,{headers});
+  expect(deleteResult.status()).toBe(200);
+  const reEnroll=await page.request.post(api+'/lms/matriculas',{
+    headers,data:{
+      curso_id:fixture.courseId,
+      funcionario_id:fixture.employeeIds[testInfo.project.name],
+      observacoes:'Local-only renewal cycle regression',
+    },
+  });
+  expect(reEnroll.ok()).toBe(true);
+  const reEnrolled=await reEnroll.json();
+  expect(Number(reEnrolled.data.id)).toBe(id);
+  const fresh=stored();
+  expect(fresh.m.status).toBe('NAO_INICIADO');
+  expect(fresh.m.progresso_pct).toBe(0);
+  expect(fresh.m.qualificacao_historico_id).toBeNull();
+  expect(fresh.scorm?.cmi_json ?? null).toBeNull();
+  expect(fresh.scorm?.score_raw ?? null).toBeNull();
+  expect(fresh.history.n).toBe(1); // prior historical proof is not deleted
+
+  const dbCycles=new DatabaseSync(fixture.dbFile,{readOnly:true});
+  let cycles: Array<{numero_ciclo:number;ciclo_atual:number;qualificacao_historico_id:number|null}>;
+  try{
+    cycles=dbCycles.prepare(
+      'SELECT numero_ciclo,ciclo_atual,qualificacao_historico_id FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL ORDER BY numero_ciclo',
+    ).all(id,fixture.companyId) as typeof cycles;
+  }finally{dbCycles.close();}
+  expect(cycles).toHaveLength(2);
+  expect(cycles[0].ciclo_atual).toBe(0);
+  expect(cycles[1].numero_ciclo).toBe(cycles[0].numero_ciclo+1);
+  expect(cycles[1].ciclo_atual).toBe(1);
+  expect(cycles[1].qualificacao_historico_id).toBeNull();
+
+  sco=await open();
+  await expect(sco.locator('#submitAssessment')).toBeDisabled();
+  await expect(sco.locator('#completeCourse')).toBeHidden();
+  expect((await enrollment()).status).not.toBe('CONCLUIDO');
+  expect(stored().m.qualificacao_historico_id).toBeNull();
+  expect(stored().history.n).toBe(1);
+  expect(otherEnrollmentSnapshot()).toEqual(otherBefore);
+
 
   // Local diagnostics only: this must not be imported as trusted certification.
   const browser=testInfo.project.name==='chromium'?'CHROMIUM':'WEBKIT';
@@ -168,9 +212,9 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
     'NO_STATUS_DOWNGRADE'];
   const evidence={source:'LOCAL_DISPOSABLE_D1_R2_ONLY',browser,
     packageSha256:localZipDigest,enrollmentIsolation:'SAME_TENANT_ONLY',
-    certificateDocument:'INCONCLUSIVE',crossTenantAccess:'PASS',
+    certificateDocument:'INCONCLUSIVE',crossTenantAccess:'PASS',cycleIsolation:'PASS',
     cases:[...proven.map(name=>({name,status:'PASS'})),
-      {name:'TENANT_CYCLE_ISOLATION',status:'INCONCLUSIVE'}]};
+      {name:'TENANT_CYCLE_ISOLATION',status:'PASS'}]};
   writeFileSync(join('worker-airtrust/.wrangler/scorm-browser-qa',
     'evidence-'+browser.toLowerCase()+'.json'),
     JSON.stringify(evidence,null,2)+'\n',{mode:0o600});
