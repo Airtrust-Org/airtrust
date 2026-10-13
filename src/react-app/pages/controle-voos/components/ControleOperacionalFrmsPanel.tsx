@@ -50,7 +50,7 @@ const FADIGA_LABELS: Record<string, string> = {
   NORMAL: 'Normal',
   ATENCAO: 'Atenção',
   CRITICO: 'Crítico',
-  INDISPONIVEL: '—',
+  INDISPONIVEL: 'Não avaliada',
 };
 
 const CHECKIN_LABELS: Record<string, string> = {
