@@ -76,6 +76,24 @@ import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '.
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 
+// Never ask the learner to keep retrying when the qualifying-course mapping
+// needs administrative repair. This only classifies known internal error codes:
+// provider exceptions, SQL text and personal information stay server-side.
+function describeLmsQualificationFailure(error: LmsCompletionRejectedError) {
+  const configurationCodes = new Set([
+    'LMS_QUALIFICATION_MAPPING_INVALID',
+    'LMS_QUALIFICATION_CATEGORY_NOT_INTEGRATED',
+    'LMS_QUALIFICATION_STATUS_INCOMPATIBLE',
+  ]);
+  const requiresAdministrator = configurationCodes.has(error.code);
+  return {
+    reasonCode: requiresAdministrator ? error.code : 'LMS_QUALIFICATION_COMPLETION_FAILED',
+    message: requiresAdministrator
+      ? 'O curso foi realizado, mas a configuração da qualificação precisa ser corrigida pela Gerência de Treinamento. Seu progresso foi preservado.'
+      : 'Não foi possível confirmar a qualificação exigida por este curso. A matrícula não foi concluída — tente novamente.',
+  };
+}
+
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 app.route('/convites', lmsMatriculasConvitesRoutes);
@@ -1602,6 +1620,7 @@ app.post('/scorm/commit', async (c) => {
 
   let qualificacaoGerada: Record<string, unknown> | null = null;
   let qualificationFailed = false;
+  let qualificationFailure: ReturnType<typeof describeLmsQualificationFailure> | null = null;
   let statusFinal = novoStatus;
   let dataConclusaoFinal = dataConclusao;
 
@@ -1644,6 +1663,7 @@ app.post('/scorm/commit', async (c) => {
       // matrícula permanece no status pré-conclusão, sem qualquer efeito
       // parcial. Retry idempotente no próximo commit.
       qualificationFailed = true;
+      qualificationFailure = describeLmsQualificationFailure(e);
       statusFinal = statusSemConclusao;
       dataConclusaoFinal = null;
       createLogger(c, 'LmsMatriculas.scorm').error('lms_scorm_completion_rejected', toError(e), {
@@ -1783,10 +1803,11 @@ app.post('/scorm/commit', async (c) => {
     return c.json(
       {
         success: false,
-        error:
+        error: qualificationFailure?.message ??
           'Não foi possível confirmar a qualificação exigida por este curso. A matrícula não foi concluída — tente novamente.',
         code: 'LMS_QUALIFICATION_COMPLETION_FAILED',
         data: {
+          qualification_failure_code: qualificationFailure?.reasonCode ?? 'LMS_QUALIFICATION_COMPLETION_FAILED',
           matricula_id: d.matricula_id,
           novo_status: novoStatus,
           progresso_bruto: effectiveProgress.progresso_bruto,
@@ -2024,13 +2045,14 @@ app.post('/:id/finalizar', async (c) => {
       },
     });
 
+    const failure = describeLmsQualificationFailure(error);
     return c.json(
       {
         success: false,
-        error:
-          'Não foi possível confirmar a qualificação exigida por este curso. A matrícula não foi concluída — tente novamente.',
+        error: failure.message,
         code: 'LMS_QUALIFICATION_COMPLETION_FAILED',
         data: {
+          qualification_failure_code: failure.reasonCode,
           matricula_id: matriculaId,
           novo_status: matricula.status,
           progresso_pct: matricula.progresso_pct,

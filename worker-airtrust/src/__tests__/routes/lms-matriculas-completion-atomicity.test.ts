@@ -207,6 +207,32 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
     );
   });
 
+  it('SCORM commit: category configuration failure keeps enrollment pending and gives actionable code', async () => {
+    completeLmsMatriculaMock.mockRejectedValue(new LmsCompletionRejectedError(
+      'Internal category validation rejected',
+      'LMS_QUALIFICATION_CATEGORY_NOT_INTEGRATED',
+    ));
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', { first: () => MATRICULA_EM_ANDAMENTO_BASE }],
+      ['FROM lms_progresso_scorm', { first: () => null }],
+      ['INSERT INTO lms_progresso_scorm', { run: () => ({ meta: { changes: 1 } }) }],
+      ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
+    ]);
+    const response = await app.fetch(makeCommit({
+      matricula_id: 1, lesson_status: 'passed', completion_status: 'completed',
+      success_status: 'passed', score_raw: 90, score_max: 100,
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    const body = await response.json() as {
+      code: string; error: string;
+      data: { novo_status: string; qualification_failure_code: string };
+    };
+    expect(body.code).toBe('LMS_QUALIFICATION_COMPLETION_FAILED');
+    expect(body.data.qualification_failure_code).toBe('LMS_QUALIFICATION_CATEGORY_NOT_INTEGRATED');
+    expect(body.error).toMatch(/Gerência de Treinamento/);
+    expect(body.data.novo_status).not.toBe('CONCLUIDO');
+  });
+
   it('SCORM commit: outcome qualification_created propaga para a resposta com progresso 100 efetivo', async () => {
     completeLmsMatriculaMock.mockResolvedValue({
       outcome: 'qualification_created',
@@ -416,6 +442,26 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
     expect(logAuditMock).toHaveBeenCalledWith(db, expect.objectContaining({
       action: 'LMS_ADMINISTRATIVE_COMPLETION_OVERRIDE_ACCEPTED',
     }));
+  });
+
+  it('SCORM /finalizar: invalid qualification type gives administrative reason instead of generic retry', async () => {
+    completeLmsMatriculaMock.mockRejectedValue(new LmsCompletionRejectedError(
+      'Internal missing qualification type', 'LMS_QUALIFICATION_MAPPING_INVALID',
+    ));
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', { first: () => ({
+        ...MATRICULA_EM_ANDAMENTO_BASE, tipo_conteudo: 'scorm',
+      }) }],
+      ['FROM lms_progresso_scorm', { first: () => finalizingScorm() }],
+    ]);
+    const response = await app.fetch(makeFinalizar(1), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    const body = await response.json() as {
+      error: string; data: { qualification_failure_code: string; novo_status: string };
+    };
+    expect(body.data.qualification_failure_code).toBe('LMS_QUALIFICATION_MAPPING_INVALID');
+    expect(body.error).toMatch(/Gerência de Treinamento/);
+    expect(body.data.novo_status).not.toBe('CONCLUIDO');
   });
 
   it('PATCH /:id/status CONCLUIDO: LmsCompletionRejectedError vira 409 explícito, nunca 200', async () => {
