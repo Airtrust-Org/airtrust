@@ -254,6 +254,7 @@ export default function LmsPlayer() {
     String(user?.role ?? '').trim().toLowerCase(),
   );
   const completionDiagnostic = matricula?.completion_diagnostic ?? null;
+  const closureReadiness = matricula?.closure_readiness ?? null;
   const hasCompletionDate = Boolean(matricula?.data_conclusao);
   const isCompletedState = completed || matricula?.status === 'CONCLUIDO' || hasCompletionDate;
   const displayProgress = resolveLmsDisplayProgress({
@@ -267,7 +268,7 @@ export default function LmsPlayer() {
     isScormContent,
     matriculaStatus: matricula?.status,
     diagnostic: completionDiagnostic,
-  });
+  }) && closureReadiness?.eligible_for_server_verification !== false;
   const canFinalize =
     !isCompletedState &&
     matricula?.status !== 'CONCLUIDO' &&
@@ -1280,8 +1281,26 @@ export default function LmsPlayer() {
                   {formatMinutes(curso?.carga_horaria_minutos ?? matricula.carga_horaria_minutos)}
                 </p>
                 {matricula.score_final != null ? <p>Nota: {matricula.score_final}%</p> : null}
-                {completionDiagnostic?.code && completionDiagnostic.code !== 'SCORM_NONE' ? (
-                  <p>Diagnóstico: {completionDiagnostic.code}</p>
+                {isScormContent && closureReadiness ? (
+                  <p role="status">
+                    Fechamento: {closureReadiness.code === 'SCORM_ALREADY_COMPLETED'
+                      ? 'confirmado pelo AirTrust'
+                      : closureReadiness.eligible_for_server_verification
+                        ? 'evidências prontas para confirmação no servidor'
+                        : ({
+                            PROGRESS_EVIDENCE_MISSING: 'faltam evidências das telas efetivamente realizadas',
+                            SCORE_MISSING: 'avaliação sem nota registrada',
+                            SCORE_BELOW_MASTERY: 'nota abaixo do mínimo exigido',
+                            MASTERY_SCORE_MISSING: 'curso sem nota mínima válida configurada',
+                            COMPLETION_EVIDENCE_INSUFFICIENT: 'o conteúdo ainda não informou conclusão válida',
+                            EXPLICIT_FAILURE: 'avaliação não aprovada',
+                            SCORM_ASSESSMENT_POLICY_INVALID: 'política de avaliação inválida',
+                          } as Record<string, string>)[closureReadiness.code] ??
+                          'evidências pendentes de confirmação'}
+                    {' '}({closureReadiness.code})
+                  </p>
+                ) : completionDiagnostic?.code && completionDiagnostic.code !== 'SCORM_NONE' ? (
+                  <p>Diagnóstico de progresso: {completionDiagnostic.code}</p>
                 ) : null}
               </div>
             </section>
