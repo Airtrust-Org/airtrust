@@ -673,6 +673,19 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("['Noturno (duração)', 'tempo_noturno', 'duration'");
   });
 
+  it('preserva exclusão da etapa planejada não realizada na outbox e após reinício', () => {
+    expect(pilotRdvDraft).toContain('removed_stages: []');
+    expect(pilotRdvDraft).toContain('removed_stage_draft_ids: []');
+    expect(pilotSync).toContain('removed_stages: (Array.isArray(rdvDraft.removed_stages)');
+    expect(pilotSync).toContain('source_stage_updated_at: String(stage.source_stage_updated_at)');
+    expect(pilotApp).toContain('function canRemoveOperationalStage(index)');
+    expect(pilotApp).toContain('index !== activeStageDrafts.length - 1');
+    expect(pilotApp).toContain('activeRdvDraft.removed_stages = [');
+    expect(pilotApp).toContain('activeRdvDraft.removed_stage_draft_ids = [');
+    expect(pilotApp).toContain('!removedDraftIds.has(record.id)');
+    expect(pilotApp).toContain('Enviar ou revise essa exclusão'.replace('Enviar', 'Envie'));
+  });
+
   it('expõe tempos derivados, unidades e erro real da transmissão bloqueada', () => {
     expect(pilotApp).toContain("['Tempo de voo', 'tempo_decolagem_pouso'");
     expect(pilotApp).toContain("['Tempo total', 'tempo_total'");
