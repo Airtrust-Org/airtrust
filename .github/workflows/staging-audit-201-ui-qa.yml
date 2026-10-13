@@ -127,6 +127,26 @@ jobs:
       - name: Traverse audit surface exhaustively read-only
         run: npx playwright test e2e/staging-audit-201.spec.ts e2e/staging-audit-201-tab-links.spec.ts --project=chromium
 
+      - name: Revalidate same immutable Worker and Pages after browser traversal
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const expected = process.env.EXPECTED_SHA.toLowerCase();
+          const worker = await fetch(process.env.STAGING_API_BASE_URL + '/api/version', { headers: { 'Cache-Control': 'no-cache' } });
+          if (!worker.ok) throw new Error('POST_AUDIT_WORKER_VERSION_UNAVAILABLE');
+          const workerBody = await worker.json();
+          const actual = String(workerBody?.sourceSha ?? workerBody?.data?.sourceSha ?? '').toLowerCase();
+          if (actual !== expected) throw new Error('POST_AUDIT_WORKER_SHA_CHANGED');
+          const pages = await fetch(process.env.STAGING_FRONTEND_BASE_URL + '/?sha=' + expected.slice(0, 7), { headers: { 'Cache-Control': 'no-cache' } });
+          if (!pages.ok || !(await pages.text()).toLowerCase().includes(expected.slice(0, 7))) {
+            throw new Error('POST_AUDIT_FRONTEND_SHA_CHANGED');
+          }
+          console.log('POST_AUDIT_STAGING_RELEASE_SHA_STILL_MATCHES');
+          NODE
+
       - name: Publish sanitized audit summary
         if: success()
         shell: bash
