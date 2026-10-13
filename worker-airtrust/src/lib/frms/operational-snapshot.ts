@@ -717,15 +717,16 @@ export function buildFrmsOperationalSnapshot(
     activityMap.set(key, current);
   }
 
+  const rosterKeys = new Set(
+    (input.rows.roster ?? []).map((row) => `${row.data_operacional}::${asNumber(row.funcionario_id)}`),
+  );
   const keys = new Set<string>([
     ...escalaMap.keys(),
     ...jornadaMap.keys(),
     ...checkinMap.keys(),
     ...effectivenessMap.keys(),
     ...activityMap.keys(),
-    ...(input.rows.roster ?? []).map(
-      (row) => `${row.data_operacional}::${asNumber(row.funcionario_id)}`,
-    ),
+    ...rosterKeys,
   ]);
 
   const items: FrmsOperationalSnapshotItem[] = [];
@@ -743,6 +744,7 @@ export function buildFrmsOperationalSnapshot(
     if (!funcionario) continue;
 
     const escalado = Boolean(escala);
+    const pertenceQuinzenaAtiva = rosterKeys.has(key);
     const teveJornada =
       Boolean(jornada) &&
       asNumber(jornada?.has_operational_data) === 1 &&
@@ -784,7 +786,7 @@ export function buildFrmsOperationalSnapshot(
 
     const checkinStatus: FrmsOperationalSnapshotItem['checkin_status'] = checkin
       ? 'RECEBIDO'
-      : escalado || teveAtividadeFrms
+      : pertenceQuinzenaAtiva || escalado || teveAtividadeFrms
         ? 'PENDENTE'
         : 'NAO_APLICAVEL';
 
@@ -834,7 +836,7 @@ export function buildFrmsOperationalSnapshot(
 
     const alertas: FrmsOperationalSnapshotAlertCode[] = [];
 
-    if ((escalado || teveAtividadeFrms) && !checkin) {
+    if ((pertenceQuinzenaAtiva || escalado || teveAtividadeFrms) && !checkin) {
       alertas.push('CHECKIN_PENDENTE');
     }
 
