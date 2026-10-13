@@ -684,6 +684,27 @@ describe('GET /api/controle-voos/operacional', () => {
     expect(body.data.resumo.tripulantes_checkin_pendente).toBeGreaterThanOrEqual(1);
   });
 
+  it('conta tripulantes pendentes distintos mesmo se alocados em varios voos', async () => {
+    const db = createSqliteD1();
+    // O mesmo PIC no primeiro e no segundo voo representa uma pessoa no card.
+    runSql(
+      db.databasePath,
+      `INSERT INTO cv_voo_tripulantes (empresa_id, voo_id, funcionario_id, funcao, created_by, updated_by)
+       VALUES (1, 602, 1001, 'PIC', 10, 10);`,
+    );
+    mockSnapshot([
+      baseSnapshotItem({ funcionario_id: 1001, checkin_status: 'PENDENTE' }),
+      baseSnapshotItem({ funcionario_id: 1002, nome: 'Copiloto Ficticio A', checkin_status: 'RECEBIDO' }),
+    ]);
+    const response = await request(db, '/api/controle-voos/operacional?data=2026-06-14');
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: { resumo: { tripulantes_checkin_pendente: number }; voos: Array<{ voo_id: number }> };
+    };
+    expect(body.data.voos).toHaveLength(2);
+    expect(body.data.resumo.tripulantes_checkin_pendente).toBe(1);
+  });
+
   it('conta como não confirmado também check-in indisponível por falta de snapshot', async () => {
     const db = createSqliteD1();
     mockSnapshot([]);

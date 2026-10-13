@@ -91,6 +91,27 @@ describe('ControleOperacionalFrmsPanel', () => {
     expect(screen.getByText('Ausente')).toBeInTheDocument();
   });
 
+  it('mostra horario UTC em Brasilia e nunca o ISO bruto da programacao', async () => {
+    getMock.mockImplementation(async (url: string) => {
+      if (url.includes('/operacional')) return apiOk(painel());
+      throw new Error(`unexpected url ${url}`);
+    });
+    renderWithClient(<ControleOperacionalFrmsPanel />);
+    await waitFor(() => expect(screen.getByText(/07:00.*Brasília/)).toBeInTheDocument());
+    expect(document.body.textContent).not.toContain('2026-08-24T10:00:00Z');
+  });
+
+  it('nao presume o fuso de programacao quando o timestamp nao o informa', async () => {
+    const response = painel();
+    response.voos[0].horario_previsto_partida = '2026-08-24T10:00:00';
+    getMock.mockImplementation(async (url: string) => {
+      if (url.includes('/operacional')) return apiOk(response);
+      throw new Error(`unexpected url ${url}`);
+    });
+    renderWithClient(<ControleOperacionalFrmsPanel />);
+    await waitFor(() => expect(screen.getByText(/fuso não informado/)).toBeInTheDocument());
+  });
+
   it('não apresenta NAO_APLICAVEL ou INDISPONIVEL como check-in liberado', async () => {
     const response = painel();
     const crew = response.voos[0].tripulacao[0];
