@@ -25,11 +25,21 @@ import {
   isOutsideFortnightOperationalExtension,
   operationalConfidence,
   resolveFrmsCoordinationGuidance,
+  resolveFrmsActionLane,
   resolveOperationalDataMoment,
+  type FrmsActionLane,
   type FrmsDecisionBucket,
 } from './frmsOperationalDecision';
 import { formatFrmsReason, formatSnapshotSource } from './frmsPresentation';
 import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
+
+const ACTION_LANES: { key: FrmsActionLane; title: string; explanation: string }[] = [
+  { key: 'REVISAO', title: 'Revisão operacional', explanation: 'Sinais de atenção ou risco: avaliar antes da decisão.' },
+  { key: 'CHECKIN', title: 'Check-in do dia', explanation: 'Avaliação diária ainda não confirmada; conferir antes da atividade.' },
+  { key: 'EVIDENCIA', title: 'Confirmar evidência', explanation: 'Dados passados, estimados ou divergentes precisam de conferência.' },
+  { key: 'AGUARDAR', title: 'Aguardar a operação', explanation: 'Atividade futura ou encerramento ainda esperado; não é atraso.' },
+  { key: 'SEM_ACAO', title: 'Sem ação agora', explanation: 'Nenhuma pendência apontada; não equivale a autorização de voo.' },
+];
 
 const BUCKET_STYLE: Record<
   FrmsDecisionBucket,
@@ -135,28 +145,6 @@ function dataMomentCopy(moment: ReturnType<typeof resolveOperationalDataMoment>)
   }
 }
 
-function MetricCard({
-  label,
-  value,
-  helper,
-  loading,
-}: {
-  label: string;
-  value: number;
-  helper: string;
-  loading: boolean;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <div className="mt-2 text-3xl font-bold tabular-nums text-slate-950 dark:text-white">
-        {loading ? '—' : value}
-      </div>
-      <p className="mt-1 text-xs text-slate-500">{loading ? 'Carregando situação…' : helper}</p>
-    </div>
-  );
-}
-
 function DecisionBadge({ bucket }: { bucket: FrmsDecisionBucket }) {
   const style = BUCKET_STYLE[bucket];
   return (
@@ -189,6 +177,7 @@ function DetailDrawer({
   const reasons = (item.motivos_principais?.filter(Boolean) || []).map(formatFrmsReason);
   const gaps = confidenceGaps(item, todayIso);
   const decisionIsLimited = confidence === 'BAIXA';
+  const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
   const date = item.data_operacional;
   const sourceFacts = [
     {
@@ -234,6 +223,27 @@ function DetailDrawer({
         </div>
 
         <div className="space-y-5 p-5">
+          <section aria-label="Síntese para decisão" className={decisionIsLimited
+              ? 'rounded-xl border-2 border-amber-400 bg-amber-50 p-4 text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100'
+              : bucket === 'BLOQUEIO' || bucket === 'DECISAO'
+                ? 'rounded-xl border-2 border-red-300 bg-red-50 p-4 text-red-950 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100'
+                : 'rounded-xl border-2 border-slate-300 bg-slate-50 p-4 text-slate-950 dark:border-slate-700 dark:bg-slate-900 dark:text-white'}>
+            <h3 className="text-xs font-bold uppercase tracking-wide">O que é possível concluir agora?</h3>
+            <p className="mt-2 text-lg font-bold">
+              {decisionIsLimited
+                ? 'Decisão não confirmável com os dados disponíveis'
+                : bucket === 'BLOQUEIO' || bucket === 'DECISAO'
+                  ? 'Revisão operacional necessária'
+                  : bucket === 'CONFIRMAR' ? 'Aguardando confirmação de dados' : 'Sem pendência FRMS identificada'}
+            </p>
+            <p className="mt-2 text-sm">{guidance.reason}</p>
+            <p className="mt-3 text-sm"><strong>Próxima providência:</strong> {guidance.action}</p>
+            {gaps.length > 0 ? <p className="mt-2 text-xs"><strong>Dados a conferir:</strong> {gaps.join(' · ')}.</p> : null}
+            {decisionIsLimited ? (
+              <p className="mt-2 text-xs font-bold">Indicadores favoráveis abaixo são apenas sinais parciais: não comprovam aptidão nem autorizam liberação.</p>
+            ) : null}
+            <p className="mt-2 text-xs">Responsável e prazo devem ser definidos pela Coordenação; não foram atribuídos automaticamente.</p>
+          </section>
           {outsideFortnightExtension ? (
             <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
               <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">
@@ -256,7 +266,7 @@ function DetailDrawer({
           ) : null}
 
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Status operacional do dia</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Indicadores de apoio — não substituem a decisão humana</h3>
             <FrmsSignalGrid item={item} className="mt-3" />
           </section>
 
@@ -287,7 +297,7 @@ function DetailDrawer({
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Ação operacional</h3>
             <p className="mt-2 text-base font-semibold text-slate-950 dark:text-white">
-              {resolveFrmsCoordinationGuidance(item, todayIso).action}
+              {guidance.action}
             </p>
             {dayIsOpen && decisionIsLimited ? (
               <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
@@ -441,6 +451,7 @@ export default function FrmsFlightDashboard() {
   const todayIso = frmsBrazilOperationalTodayIso();
   const [selected, setSelected] = useState<FrmsOperationalSnapshotItem | null>(null);
   const [onlyPendingCheckin, setOnlyPendingCheckin] = useState(false);
+  const [actionFilter, setActionFilter] = useState<FrmsActionLane | 'TODOS'>('TODOS');
 
   useEffect(() => {
     if (requestedDate === date) return;
@@ -458,13 +469,15 @@ export default function FrmsFlightDashboard() {
   const queue = useMemo(() => {
     return snapshot.data
       .filter(isOperationallyRelevant)
-      .map((item) => ({ item, bucket: classifyOperationalItem(item) }))
+      .map((item) => ({ item, bucket: classifyOperationalItem(item), lane: resolveFrmsActionLane(item, todayIso) }))
       .sort((a, b) => {
+        const laneRank = ACTION_LANES.findIndex((entry) => entry.key === a.lane) - ACTION_LANES.findIndex((entry) => entry.key === b.lane);
+        if (laneRank !== 0) return laneRank;
         const priority = bucketPriority(a.bucket) - bucketPriority(b.bucket);
         if (priority !== 0) return priority;
         return String(a.item.hora_apresentacao || '99:99').localeCompare(String(b.item.hora_apresentacao || '99:99'));
       });
-  }, [snapshot.data]);
+  }, [snapshot.data, todayIso]);
 
   useEffect(() => {
     if (!requestedFuncionarioId || selected || snapshot.data.length === 0) return;
@@ -476,13 +489,11 @@ export default function FrmsFlightDashboard() {
     if (match) setSelected(match);
   }, [requestedFuncionarioId, selected, snapshot.data]);
 
-  const visibleQueue = useMemo(
-    () => onlyPendingCheckin
-      ? queue.filter(({ item }) => resolveFrmsCoordinationGuidance(item, todayIso).requiresCheckin &&
-          item.checkin_status !== 'RECEBIDO')
-      : queue,
-    [queue, onlyPendingCheckin, todayIso],
-  );
+  const visibleQueue = useMemo(() => queue.filter(({ item, lane }) =>
+    onlyPendingCheckin
+      ? resolveFrmsCoordinationGuidance(item, todayIso).requiresCheckin && item.checkin_status !== 'RECEBIDO'
+      : actionFilter === 'TODOS' || lane === actionFilter,
+  ), [queue, onlyPendingCheckin, actionFilter, todayIso]);
   const checkinPendingCount = queue.filter(({ item }) =>
     resolveFrmsCoordinationGuidance(item, todayIso).requiresCheckin &&
     item.checkin_status !== 'RECEBIDO').length;
@@ -498,6 +509,13 @@ export default function FrmsFlightDashboard() {
       ),
     [queue],
   );
+
+  const laneCounts = queue.reduce((acc, entry) => {
+    acc[entry.lane] += 1;
+    return acc;
+  }, { REVISAO: 0, CHECKIN: 0, EVIDENCIA: 0, AGUARDAR: 0, SEM_ACAO: 0 } as Record<FrmsActionLane, number>);
+  const usesSigvoos = queue.some(({ item }) => item.operational_data_source === 'SIGVOOS' ||
+    item.operational_data_source === 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS');
 
   const firstLoad = snapshot.loading && snapshot.data.length === 0 && !snapshot.lastUpdatedAt;
   const snapshotUnavailable = Boolean(snapshot.error && snapshot.data.length === 0);
@@ -557,7 +575,8 @@ export default function FrmsFlightDashboard() {
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-900/60">
           <span>Fonte: snapshot operacional único</span>
-          <span>Atualizado às {formatUpdated(snapshot.lastUpdatedAt)}</span>
+          <span>Snapshot atualizado às {formatUpdated(snapshot.lastUpdatedAt)} (horário do navegador)</span>
+          {usesSigvoos ? <span className="font-semibold text-amber-800 dark:text-amber-200">Atualização individual do SIGVOOS não informada neste painel; confirmar na origem se necessário.</span> : null}
           {snapshot.meta?.scope === 'self' ? <span>Escopo: meus dados</span> : <span>Escopo: equipe autorizada</span>}
           {snapshot.error ? (
             <span className="font-semibold text-amber-700 dark:text-amber-300">
@@ -568,32 +587,41 @@ export default function FrmsFlightDashboard() {
           ) : null}
         </div>
 
-        <section className="grid gap-3 sm:grid-cols-4" aria-label="Resumo operacional">
-          <button type="button" aria-pressed={onlyPendingCheckin}
-            onClick={() => setOnlyPendingCheckin(current => !current)}
-            className={`rounded-xl border p-4 text-left transition-colors ${onlyPendingCheckin
-              ? 'border-red-500 bg-red-50'
-              : 'border-slate-200 bg-white hover:bg-red-50'}`}>
-            <span className="block text-xs font-semibold text-slate-600">Check-ins a receber</span>
-            <span className="mt-1 block text-2xl font-bold text-red-800">{firstLoad || snapshotUnavailable ? '—' : checkinPendingCount}</span>
-            <span className="text-xs text-slate-600">{onlyPendingCheckin ? 'Mostrando apenas pendentes · clique para limpar' : 'Clique para filtrar a fila'}</span>
-          </button>
-          <MetricCard label="Prioritários" value={counts.BLOQUEIO} helper="risco crítico ou acumulado crítico a revisar antes da liberação" loading={firstLoad || snapshotUnavailable} />
-          <MetricCard label="Avaliar" value={counts.DECISAO} helper="situações que merecem análise ou ação da coordenação" loading={firstLoad || snapshotUnavailable} />
-          <MetricCard label="Verificar" value={counts.CONFIRMAR} helper="informações pendentes, estimadas ou que precisam ser confirmadas" loading={firstLoad || snapshotUnavailable} />
+        <section className="space-y-3" aria-label="Resumo operacional">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-bold text-slate-950 dark:text-white">O que precisa acontecer agora?</h2>
+            <button type="button" onClick={() => { setOnlyPendingCheckin(false); setActionFilter('TODOS'); }}
+              className="text-xs font-semibold text-primary underline-offset-2 hover:underline">Mostrar todas as situações</button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {ACTION_LANES.map((lane) => (
+              <button key={lane.key} type="button" aria-pressed={!onlyPendingCheckin && actionFilter === lane.key}
+                onClick={() => { setOnlyPendingCheckin(false); setActionFilter(current => current === lane.key ? 'TODOS' : lane.key); }}
+                className={!onlyPendingCheckin && actionFilter === lane.key
+                    ? 'rounded-xl border border-primary bg-blue-50 p-4 text-left ring-1 ring-primary dark:bg-blue-950/40'
+                    : 'rounded-xl border border-slate-200 bg-white p-4 text-left hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950'}>
+                <span className="block text-sm font-bold text-slate-900 dark:text-white">{lane.title}</span>
+                <span className="mt-1 block text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{firstLoad || snapshotUnavailable ? '—' : laneCounts[lane.key]}</span>
+                <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300">{lane.explanation}</span>
+              </button>
+            ))}
+            <button type="button" aria-pressed={onlyPendingCheckin}
+              onClick={() => { setOnlyPendingCheckin(current => !current); setActionFilter('TODOS'); }}
+              className={onlyPendingCheckin
+                ? 'rounded-xl border border-red-500 bg-red-50 p-4 text-left ring-1 ring-red-500'
+                : 'rounded-xl border border-slate-200 bg-white p-4 text-left hover:bg-red-50'}>
+              <span className="block text-sm font-bold text-slate-900">Check-ins a receber</span>
+              <span className="mt-1 block text-2xl font-bold tabular-nums text-red-800">{firstLoad || snapshotUnavailable ? '—' : checkinPendingCount}</span>
+              <span className="mt-1 block text-xs text-slate-600">Filtro independente: apenas avaliações diárias não recebidas.</span>
+            </button>
+          </div>
+          <p className="text-xs text-slate-500">
+            {snapshotUnavailable ? 'Situação operacional indisponível — não interpretar como zero pendências.' :
+              'Classificação de risco preservada: ' + counts.BLOQUEIO + ' prioritários · ' + counts.DECISAO +
+              ' avaliar · ' + counts.CONFIRMAR + ' verificar · ' + counts.NORMAL +
+              ' sem pendência. Os grupos acima organizam o próximo passo, não alteram a decisão FRMS.'}
+          </p>
         </section>
-        <p className="text-sm text-slate-500">
-          {snapshotUnavailable ? (
-            <span className="font-semibold text-amber-700 dark:text-amber-300">
-              Situação operacional indisponível — não interpretar como zero pendências.
-            </span>
-          ) : (
-            <>
-              <span className="font-semibold text-slate-700 dark:text-slate-200">{firstLoad ? '—' : counts.NORMAL}</span>{' '}
-              pessoa(s) sem pendência no recorte atual.
-            </>
-          )}
-        </p>
 
         {snapshot.unauthorized ? (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
@@ -635,12 +663,12 @@ export default function FrmsFlightDashboard() {
           ) : visibleQueue.length === 0 ? (
             <div className="p-10 text-center">
               <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-500" />
-              <h3 className="mt-3 font-bold text-slate-900 dark:text-white">{onlyPendingCheckin ? 'Nenhum check-in pendente neste recorte' : 'Nenhuma pendência operacional no recorte'}</h3>
-              <p className="mt-1 text-sm text-slate-500">{onlyPendingCheckin ? 'Este filtro não encontrou pendências. Desative-o para ver a fila completa.' : 'Não há pessoas escaladas, com jornada ou alerta que exijam atenção neste dia.'}</p>
+              <h3 className="mt-3 font-bold text-slate-900 dark:text-white">{onlyPendingCheckin ? 'Nenhum check-in pendente neste recorte' : actionFilter !== 'TODOS' ? 'Nenhuma pessoa neste grupo' : 'Nenhuma pendência operacional no recorte'}</h3>
+              <p className="mt-1 text-sm text-slate-500">{onlyPendingCheckin || actionFilter !== 'TODOS' ? 'O filtro atual não encontrou registros. Mostre todas as situações para conferir o recorte completo.' : 'Não há pessoas escaladas, com jornada ou alerta que exijam atenção neste dia.'}</p>
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
-              {visibleQueue.map(({ item, bucket }) => {
+              {visibleQueue.map(({ item, bucket, lane }) => {
                 const confidence = operationalConfidence(item);
                 const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
 
@@ -651,7 +679,7 @@ export default function FrmsFlightDashboard() {
                     onClick={() => setSelected(item)}
                     className="grid w-full gap-3 px-4 py-4 text-left transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-900/60 dark:focus:bg-slate-900/60 lg:grid-cols-[105px_minmax(140px,0.9fr)_130px_minmax(230px,1.2fr)_minmax(280px,1.4fr)_24px] lg:items-start"
                   >
-                    <div><DecisionBadge bucket={bucket} /></div>
+                    <div><DecisionBadge bucket={bucket} /><p className="mt-1 text-xs text-slate-500">{ACTION_LANES.find((entry) => entry.key === lane)?.title}</p></div>
                     <div className="min-w-0">
                       <p className="truncate font-bold text-slate-950 dark:text-white">{displayName(item)}</p>
                       <p className="truncate text-xs text-slate-500">{[item.funcao, item.base, item.aeronave].filter(Boolean).join(' · ') || 'Função/base não informadas'}</p>
