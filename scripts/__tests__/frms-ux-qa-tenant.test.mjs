@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import {
   assertTarget, assertOperation, buildApplySql, buildRollbackSql,
-  preflightQueries, DB_NAME, DB_ID, TENANT_ID, TENANT_CODE, CONFIRM,
+  preflightQueries, buildScopedRevisionSql, SCOPED_REVISION, DB_NAME, DB_ID, TENANT_ID, TENANT_CODE, CONFIRM,
 } from '../staging/frms-ux-qa-tenant.mjs';
 
 test('fail closed on any non-staging target or missing write confirmation',()=>{
@@ -35,17 +35,26 @@ test('fixture: exactly 14 crew, seven received checkins, and standalone tenant',
   assert.doesNotMatch(sql,/\bempresa_id\s*=\s*6\b/);
   assert.throws(()=>buildApplySql('plaintext'),/HASH_REQUIRED/);
 });
-test('preflight requires exclusive unused tenant and governed baseline',()=>{
+test('preflight requires exclusive unused tenant and a local reviewed scoped baseline',()=>{
   const q=preflightQueries();
   for(const sql of Object.values(q)) assert.match(sql,/^SELECT COUNT\(\*\) AS total FROM /);
   assert.match(q.tenantId,new RegExp(String(TENANT_ID)));
-  assert.match(q.governedParameters,/frms-helicopter-offshore-baseline-v1/);
+  assert.match(q.scopedRevision,/qa-frms-ux-helicopter-baseline-v1/);
+  assert.match(q.regulatoryProfile,/999016/);
+  const revision=buildScopedRevisionSql();
+  assert.match(revision,/INSERT INTO frms_config_revisions/);
+  assert.match(revision,/INSERT INTO frms_config_parameters/);
+  assert.match(revision,/qa-frms-ux-helicopter-baseline-v1/);
+  assert.match(revision,/'qa-frms-ux-helicopter-baseline-v1', 999016, 'HELICOPTER_OFFSHORE'/);
+  assert.doesNotMatch(revision,/'frms-helicopter-offshore-baseline-v1', NULL/);
+  assert.equal((revision.match(new RegExp("'"+SCOPED_REVISION+"-[A-Z0-9_]+',",'g'))||[]).length,128);
 });
 test('compensation is limited to one synthetic tenant, and does not drop tables',()=>{
   const sql=buildRollbackSql();
   assert.match(sql,/WHERE id=999016 AND codigo=/);
   assert.match(sql,/qa-frms-ux-checkin-/);
   assert.match(sql,/RETIRED/);
+  assert.match(sql,/frms_config_revisions SET status='RETIRED'/);
   assert.doesNotMatch(sql,/DROP TABLE|TRUNCATE|DELETE FROM /);
 });
 test('governed workflow requires gated SHA, backup, recovery and staging environment',()=>{
