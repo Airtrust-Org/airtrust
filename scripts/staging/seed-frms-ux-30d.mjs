@@ -19,7 +19,7 @@ export const CONFIRM = 'AIRTRUST_STAGING_FRMS_UX_30D';
 export const FROM = '2026-09-14';
 export const TO = '2026-10-13';
 const PREFIX = 'QA-FRMS-UX-';
-const REVIS = 'frms-helicopter-offshore-baseline-v1';
+const DRY_RUN_REVISION = 'QA_DRY_RUN_UNRESOLVED_REVISION';
 const SAFE_BANDS = new Set(['0','1-4','5-9','10-19','20-49','50+']);
 const quote = (x) => "'" + String(x).replaceAll("'", "''") + "'";
 const pad = (n) => String(n).padStart(2,'0');
@@ -50,8 +50,9 @@ export function approximation(band) {
   return result;
 }
 
-export function buildSeedSql(days) {
+export function buildSeedSql(days, governedRevisionId = DRY_RUN_REVISION) {
   if (!Array.isArray(days) || days.length !== 30) throw new Error('DAYS_REQUIRED');
+  if (!/^[a-zA-Z0-9:_-]{6,150}$/.test(governedRevisionId)) throw new Error('GOVERNED_REVISION_ID_INVALID');
   const dataRows=days.map((d)=>"("+quote(d.day)+","+Math.min(14,approximation(d.jornadas))+","+
     Math.min(14,approximation(d.checkins))+")").join(',\n');
   const fields=['empresas','setores','funcionarios','frms_regulatory_profiles','frms_profile_assignments',
@@ -100,7 +101,7 @@ export function buildSeedSql(days) {
     "CASE WHEN CAST(substr(f.matricula,-2) AS INTEGER)%7=0 THEN 1 ELSE 0 END,"+
     "CASE WHEN CAST(substr(f.matricula,-2) AS INTEGER)%7=0 THEN 'critical' WHEN CAST(substr(f.matricula,-2) AS INTEGER)%5=0 THEN 'high' ELSE 'normal' END,"+
     "CASE WHEN CAST(substr(f.matricula,-2) AS INTEGER)%7=0 THEN 1 ELSE 0 END,"+
-    "'QA_SYNTHETIC','HELICOPTER_OFFSHORE',"+quote(PROFILE_ID)+","+quote(REVIS)+",'LEGACY_MODEL_V2',datetime('now'),datetime('now'),NULL "+
+    "'QA_SYNTHETIC','HELICOPTER_OFFSHORE',"+quote(PROFILE_ID)+","+quote(governedRevisionId)+",'LEGACY_MODEL_V2',datetime('now'),datetime('now'),NULL "+
     "FROM source_days d JOIN funcionarios f ON f.empresa_id="+TENANT_ID+
     " AND f.matricula LIKE 'QA-FRMS-UX-%' AND f.deleted_at IS NULL "+
     "WHERE CAST(substr(f.matricula,-2) AS INTEGER) <= d.c_count"));
@@ -142,14 +143,51 @@ function query(db,sql){
 function assertTarget(){
   if(process.env.STAGING_D1_NAME!==DB_NAME||process.env.STAGING_D1_ID!==DB_ID)throw new Error('STAGING_D1_TARGET_REJECTED');
 }
+export function chooseGovernedRevision(revisions, parameterCount) {
+  if (!Array.isArray(revisions) || revisions.length === 0) throw new Error('FRMS_GLOBAL_REVISION_30D_MISSING');
+  const ranked = revisions.filter((row) =>
+    row.empresa_id === null && row.profile_code === 'HELICOPTER_OFFSHORE' &&
+    ['ACTIVE','SUPERSEDED'].includes(row.status) &&
+    row.effective_from <= FROM && (row.effective_to == null || row.effective_to >= TO) &&
+    Number.isInteger(Number(row.revision_number))
+  ).sort((a,b)=> Number(b.revision_number)-Number(a.revision_number) ||
+    String(b.effective_from).localeCompare(String(a.effective_from)));
+  if (!ranked.length) throw new Error('FRMS_GLOBAL_REVISION_30D_MISSING');
+  const tied=ranked.filter(row=>Number(row.revision_number)===Number(ranked[0].revision_number) &&
+    row.effective_from===ranked[0].effective_from);
+  if (tied.length!==1) throw new Error('FRMS_GLOBAL_REVISION_AMBIGUOUS');
+  if (!/^[a-zA-Z0-9:_-]{6,150}$/.test(String(ranked[0].id))) throw new Error('FRMS_REVISION_ID_INVALID');
+  if (!Number.isInteger(parameterCount)||parameterCount<128) throw new Error('FRMS_GLOBAL_REVISION_INCOMPLETE');
+  return ranked[0].id;
+}
+
+function inspectGovernedRevision() {
+  const revisions=query(DB_NAME,
+    "SELECT id,empresa_id,profile_code,status,revision_number,effective_from,effective_to "+
+    "FROM frms_config_revisions WHERE profile_code='HELICOPTER_OFFSHORE' "+
+    "AND empresa_id IS NULL AND status IN ('ACTIVE','SUPERSEDED') "+
+    "AND effective_from<="+quote(FROM)+" AND (effective_to IS NULL OR effective_to>="+quote(TO)+") "+
+    "ORDER BY revision_number DESC,effective_from DESC");
+  if (!revisions.length) {
+    console.log('STAGING_FRMS_GLOBAL_REVISION_30D_MISSING; no D1 write allowed');
+    throw new Error('FRMS_GLOBAL_REVISION_30D_MISSING');
+  }
+  const preferred=revisions[0];
+  const counts=query(DB_NAME,
+    "SELECT COUNT(DISTINCT parameter_key) AS n FROM frms_config_parameters "+
+    "WHERE revision_id="+quote(preferred.id)+" AND numeric_value IS NOT NULL");
+  const total=Number(counts[0]?.n);
+  const revisionId=chooseGovernedRevision(revisions,total);
+  console.log('STAGING_FRMS_GLOBAL_REVISION_READY id='+revisionId+
+    ' parameters='+total+' scope=global window='+FROM+'..'+TO);
+  return revisionId;
+}
+
 function assertEmptyTenant(){
   const rows=query(DB_NAME,"SELECT id,codigo FROM empresas WHERE id="+TENANT_ID+" OR codigo="+quote(TENANT_CODE));
   if(rows.length!==0)throw new Error('QA_TENANT_NOT_EMPTY_OR_ALREADY_APPLIED');
   const crew=query(DB_NAME,"SELECT COUNT(*) AS n FROM funcionarios WHERE matricula LIKE 'QA-FRMS-UX-%'");
   if(Number(crew[0]?.n)!==0)throw new Error('QA_EMPLOYEE_CODE_COLLISION');
-  const revision=query(DB_NAME,"SELECT id,profile_code,status FROM frms_config_revisions WHERE id="+quote(REVIS));
-  if(revision.length!==1||revision[0].profile_code!=='HELICOPTER_OFFSHORE'||revision[0].status!=='ACTIVE')
-    throw new Error('HELICOPTER_PROFILE_REVISION_NOT_READY');
 }
 
 function runSql(db,sql){
@@ -163,23 +201,37 @@ function runSql(db,sql){
 }
 async function main(){
   const args=new Set(process.argv.slice(2));
-  const apply=args.has('--apply');const rollback=args.has('--rollback');
-  if(apply&&rollback)throw new Error('AMBIGUOUS_MODE');
+  const apply=args.has('--apply'),rollback=args.has('--rollback'),inspect=args.has('--inspect');
+  if([...args].some(arg=>!['--apply','--rollback','--inspect'].includes(arg))||
+     Number(apply)+Number(rollback)+Number(inspect)>1)throw new Error('AMBIGUOUS_MODE');
+  if(inspect){
+    assertTarget();
+    if(process.env.GITHUB_ACTIONS!=='true')throw new Error('OFFICIAL_STAGING_WORKFLOW_ONLY');
+    inspectGovernedRevision();
+    return;
+  }
   const expectedSha=String(process.env.SOURCE_AGGREGATE_SHA||'');
   const dataPath=String(process.env.SANITIZED_AGGREGATE_PATH||'');
   const data=rollback?null:validateSource(JSON.parse(readFileSync(dataPath,'utf8')),expectedSha);
-  const sql=rollback?buildRollbackSql():buildSeedSql(data);
-  console.log('QA_FRMS_UX_SQL_READY mode='+(rollback?'rollback':apply?'apply':'dry-run')+
-    ' tenant='+TENANT_ID+' syntheticPeople=14 days=30 statements='+sql.split('\n').filter(x=>x.endsWith(';')).length);
-  if(!apply&&!rollback)return;
+  if(!apply&&!rollback){
+    const sql=buildSeedSql(data);
+    console.log('QA_FRMS_UX_SQL_READY mode=dry-run tenant='+TENANT_ID+' syntheticPeople=14 days=30 statements='+sql.split('\n').filter(x=>x.endsWith(';')).length);
+    return;
+  }
   if(process.env.CONFIRM_STAGING_FRMS_UX!==CONFIRM)throw new Error('STAGING_QA_CONFIRMATION_REQUIRED');
   if(process.env.GITHUB_ACTIONS!=='true')throw new Error('OFFICIAL_STAGING_WORKFLOW_ONLY');
   assertTarget();
-  if(!rollback)assertEmptyTenant();
-  else{
+  let revisionId=null;
+  if(!rollback){
+    assertEmptyTenant();
+    revisionId=inspectGovernedRevision();
+  }else{
     const rows=query(DB_NAME,"SELECT id,codigo FROM empresas WHERE id="+TENANT_ID);
     if(rows.length!==1||rows[0].codigo!==TENANT_CODE)throw new Error('ROLLBACK_TENANT_NOT_EXACT');
   }
+  const sql=rollback?buildRollbackSql():buildSeedSql(data,revisionId);
+  console.log('QA_FRMS_UX_SQL_READY mode='+(rollback?'rollback':'apply')+' tenant='+TENANT_ID+
+    ' syntheticPeople=14 days=30 statements='+sql.split('\n').filter(x=>x.endsWith(';')).length);
   runSql(DB_NAME,sql);
   console.log('QA_FRMS_UX_WRITE_COMPLETED synthetic_only=true tenant='+TENANT_ID);
 }
