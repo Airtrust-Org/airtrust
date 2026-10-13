@@ -1,20 +1,5 @@
-const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v35';
+const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v34';
 const PILOT_SCOPE_PATH = '/pilot/';
-const PILOT_NETWORK_TIMEOUT_MS = 4_000;
-
-// A radio may report an available connection while 5G requests stall.
-// Keep the local shell usable after a bounded network attempt.
-async function fetchPilotShellResource(request, options) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), PILOT_NETWORK_TIMEOUT_MS);
-  try {
-    const response = await fetch(request, { ...options, signal: controller.signal });
-    if (!response.ok) throw new Error('Pilot App: recurso de rede indisponivel.');
-    return response;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 const PRECACHE_URLS = [
   '/pilot/',
   '/pilot/pilot-bootstrap.js',
@@ -87,7 +72,7 @@ self.addEventListener('fetch', (event) => {
         try {
           // Online navigation is network-first so a reopened Pilot App receives
           // the current shell immediately. Offline fallback remains canonical /pilot/.
-          const response = await fetchPilotShellResource(PILOT_SCOPE_PATH, { cache: 'no-store', redirect: 'error' });
+          const response = await fetch(PILOT_SCOPE_PATH, { cache: 'no-store', redirect: 'error' });
           if (response.ok) {
             const cache = await caches.open(PILOT_CACHE_VERSION);
             await cache.put(PILOT_SCOPE_PATH, response.clone());
@@ -111,7 +96,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     (async () => {
       try {
-        const response = await fetchPilotShellResource(request, { cache: 'no-store' });
+        const response = await fetch(request, { cache: 'no-store' });
         if (response.ok) {
           const cache = await caches.open(PILOT_CACHE_VERSION);
           await cache.put(url.pathname, response.clone());
