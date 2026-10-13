@@ -434,7 +434,7 @@ describe('Pilot offline snapshot apply orchestration', () => {
     expect(preparedSql.some((sql: string) => sql.includes('UPDATE cv_voos') && sql.includes('numero_voo') && sql.includes('numero_db'))).toBe(true);
   });
 
-  it('orders the atomic D1 batch as RDV CAS, stages, fuelings, optional flight metadata, event, receipt', () => {
+  it('anchors the atomic idempotency receipt to the RDV CAS before optional no-op writes', () => {
     const source = readFileSync(
       join(
         __dirname,
@@ -446,11 +446,15 @@ describe('Pilot offline snapshot apply orchestration', () => {
     const batchEnd = source.indexOf(']);', batchStart);
     const batchBlock = source.slice(batchStart, batchEnd);
     expect(batchStart).toBeGreaterThan(-1);
-    expect(batchBlock.indexOf('rdvStatement')).toBeLessThan(batchBlock.indexOf('...stageStatements'));
+    expect(batchBlock.indexOf('rdvStatement')).toBeLessThan(batchBlock.indexOf('receiptStatement'));
+    expect(batchBlock.indexOf('receiptStatement')).toBeLessThan(batchBlock.indexOf('...stageStatements'));
     expect(batchBlock.indexOf('...stageStatements')).toBeLessThan(batchBlock.indexOf('...fuelingStatements'));
     expect(batchBlock.indexOf('...fuelingStatements')).toBeLessThan(batchBlock.indexOf('flightMetadataStatement'));
     expect(batchBlock.indexOf('flightMetadataStatement')).toBeLessThan(batchBlock.indexOf('eventStatement'));
-    expect(batchBlock.indexOf('eventStatement')).toBeLessThan(batchBlock.indexOf('receiptStatement'));
+    expect(batchBlock.indexOf('...stageStatements')).toBeLessThan(batchBlock.indexOf('eventStatement'));
+    const eventSql = source.slice(source.indexOf('function buildOfflineSyncEvent'), source.indexOf('async function currentStateConflict'));
+    expect(eventSql).not.toContain('(SELECT changes()) > 0');
+    expect(eventSql).toContain('AND versao = ?');
     expect(source).toContain('AND ${stageCas.sql}');
     expect(source).not.toContain('last-write-wins');
   });
