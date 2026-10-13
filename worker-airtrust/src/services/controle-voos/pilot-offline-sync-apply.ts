@@ -566,8 +566,12 @@ function buildRemovedStageStatements(input: {
        SET deleted_at = datetime('now'), updated_at = datetime('now'), updated_by = ?
      WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
        AND updated_at = ? AND numero_etapa = ?
-       AND horario_motor_ligado IS NULL AND horario_decolagem IS NULL
-       AND horario_pouso IS NULL AND horario_motor_desligado IS NULL
+       AND COALESCE(TRIM(horario_motor_ligado), '') = ''
+       AND COALESCE(TRIM(horario_decolagem), '') = ''
+       AND COALESCE(TRIM(horario_pouso), '') = ''
+       AND COALESCE(TRIM(horario_motor_desligado), '') = ''
+       AND COALESCE(TRIM(tempo_decolagem_pouso), '') = ''
+       AND COALESCE(TRIM(tempo_total), '') = ''
        AND EXISTS (SELECT 1 FROM cv_rdv_operacional WHERE voo_id = ? AND empresa_id = ?
                    AND deleted_at IS NULL AND versao = ?)
        AND NOT EXISTS (SELECT 1 FROM cv_voo_abastecimentos
@@ -611,6 +615,26 @@ function buildStageRevisionCasSql(
       stage.updatedAt,
       stage.number,
     );
+  }
+  // Guard linked fuelings and realized times in the RDV CAS itself, not
+  // only in the subsequent soft delete. This prevents a partial logical
+  // success if related records change between preflight and transaction.
+  for (const stage of removedStages) {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM cv_voo_etapas
+       WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
+         AND COALESCE(TRIM(horario_motor_ligado), '') = ''
+         AND COALESCE(TRIM(horario_decolagem), '') = ''
+         AND COALESCE(TRIM(horario_pouso), '') = ''
+         AND COALESCE(TRIM(horario_motor_desligado), '') = ''
+         AND COALESCE(TRIM(tempo_decolagem_pouso), '') = ''
+         AND COALESCE(TRIM(tempo_total), '') = ''
+    )`);
+    clauses.push(`NOT EXISTS (
+      SELECT 1 FROM cv_voo_abastecimentos
+       WHERE empresa_id = ? AND voo_id = ? AND etapa_id = ? AND deleted_at IS NULL
+    )`);
+    binds.push(stage.source_stage_id);
   }
   return { sql: clauses.join(' AND '), binds };
 }
@@ -712,6 +736,10 @@ function buildExistingRdvUpdate(input: {
         stage.source_stage_id, input.flight.id, input.empresaId,
         stage.source_stage_updated_at, stage.numero_etapa,
       ]),
+      ...input.removedStages.flatMap((stage) => [
+        stage.source_stage_id, input.flight.id, input.empresaId,
+        input.empresaId, input.flight.id, stage.source_stage_id,
+      ]),
     );
 }
 
@@ -782,6 +810,10 @@ function buildNewRdvInsert(input: {
       ...input.removedStages.flatMap((stage) => [
         stage.source_stage_id, input.flight.id, input.empresaId,
         stage.source_stage_updated_at, stage.numero_etapa,
+      ]),
+      ...input.removedStages.flatMap((stage) => [
+        stage.source_stage_id, input.flight.id, input.empresaId,
+        input.empresaId, input.flight.id, stage.source_stage_id,
       ]),
     );
 }
