@@ -176,6 +176,22 @@ describe('RecoveryActivityCard', () => {
     );
   });
 
+  it('shows the confirmed training/administrative type and real hours on the following day', () => {
+    contextValue = {
+      data: baseContext({ activity: {
+        activity_type: 'ADMIN_TRAINING',
+        notes: 'Trabalho administrativo',
+        duty_start_time: '07:30',
+        duty_end_time: '16:00',
+      } }),
+      isLoading: false,
+      isError: false,
+    };
+    render(<RecoveryActivityCard today="2026-06-05" />);
+    expect(screen.getByText(/Atividade: Trabalho administrativo/i)).toBeInTheDocument();
+    expect(screen.getByText(/Horário informado: 07:30 às 16:00/i)).toBeInTheDocument();
+  });
+
   it('shows the recorded classification without implying an automatic effectiveness bonus', () => {
     contextValue = {
       data: baseContext({ activity: { activity_type: 'OFF_DUTY' } }),
