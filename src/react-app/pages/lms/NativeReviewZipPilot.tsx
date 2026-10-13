@@ -109,15 +109,23 @@ export async function privateNativeReviewMedia(
   return new Blob([Uint8Array.from(bytes) as BlobPart], { type: asset.mime });
 }
 
+/** Read-only staging chooser: never reinterpret a Native candidate as a SCORM package. */
+export function isReviewableLegacyScorm(course: {
+  tipo_conteudo: string;
+  scorm_package_r2_prefix?: string | null;
+  ativo?: number | null;
+}): boolean {
+  return course.tipo_conteudo === 'scorm' &&
+    Boolean(course.scorm_package_r2_prefix) && course.ativo === 1;
+}
+
 export default function NativeReviewZipPilot() {
   const [library, setLibrary] = useState<ReviewLibrary | null>(null);
   const [format, setFormat] = useState<'scorm' | 'native'>('scorm');
   const { data: existingCourses, isLoading: scormLoading, isError: scormError } = useLmsCursos(
     { limit: 250 }, { enabled: format === 'scorm' && isNativeReviewStagingHost(window.location.hostname) },
   );
-  const scormCourses = existingCourses?.data.filter((course) =>
-    course.tipo_conteudo === 'scorm' && Boolean(course.scorm_package_r2_prefix) && course.ativo === 1
-  ) ?? [];
+  const scormCourses = existingCourses?.data.filter(isReviewableLegacyScorm) ?? [];
   const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
