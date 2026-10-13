@@ -341,6 +341,39 @@ function isRegressiveScormLocation(
   return true;
 }
 
+/**
+ * Resume/SCORM autosave may send a delta CMI snapshot without the old slide
+ * array. Only union slide IDs *actually reported* by the package for the same
+ * declared total. Never infer visited pages from location (3/3 is not proof
+ * of 1/3 or 2/3), and never carry coverage between different slide totals.
+ * Enrollment, tenant and edition checks are enforced by the calling route.
+ */
+function preserveObservedScormSlides(
+  previous: Record<string, unknown> | null,
+  incoming: Record<string, unknown> | null,
+  merged: Record<string, unknown> | null,
+): void {
+  if (!previous || !incoming || !merged) return;
+  const total = Number(previous['airtrust.total_slides']);
+  const oldSlides = previous['airtrust.viewed_slides'];
+  if (!Number.isSafeInteger(total) || total < 1 || total > 1000 || !Array.isArray(oldSlides)) return;
+  const valid = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= total;
+  if (!oldSlides.every(valid) || new Set(oldSlides).size !== oldSlides.length) return;
+
+  const declaredTotal = incoming['airtrust.total_slides'];
+  if (declaredTotal != null && Number(declaredTotal) !== total) return;
+  const marker = parseScormLocationMarker(readScormLocationValue(incoming));
+  if (marker?.total != null && marker.total !== total) return;
+
+  const recentSlides = incoming['airtrust.viewed_slides'];
+  if (recentSlides != null && (!Array.isArray(recentSlides) ||
+      !recentSlides.every(valid) || new Set(recentSlides).size !== recentSlides.length)) return;
+  const combined = [...new Set([...oldSlides, ...(recentSlides ?? [])])].sort((x, y) => x - y);
+  merged['airtrust.total_slides'] = total;
+  merged['airtrust.viewed_slides'] = combined;
+}
+
 export function mergeScormRuntimeState(params: {
   currentCmiJson?: Nullable<string>;
   incomingCmiJson?: Nullable<string>;
@@ -402,6 +435,9 @@ export function mergeScormRuntimeState(params: {
     return incomingSuspendData ?? currentSuspendData ?? null;
   })();
 
+  if (!blockedTerminalRegression) {
+    preserveObservedScormSlides(currentCmi, incomingCmi, mergedCmi);
+  }
   if (mergedCmi && mergedLocationValue) {
     writeScormLocationValue(mergedCmi, mergedLocationValue);
   }

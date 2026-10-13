@@ -79,6 +79,21 @@ describe('FrmsAlertasPainel', () => {
     mockCases([caseRow()]);
   });
 
+  it('agrupa os casos apenas na página atual sem inferir recorrência global', () => {
+    mockCases([
+      caseRow({ id: 'a', tripulante_id: '30', nome_tripulante: 'Ana', data_fato: '2026-08-26' }),
+      caseRow({ id: 'b', tripulante_id: '30', nome_tripulante: 'Ana', data_fato: '2026-08-27' }),
+      caseRow({ id: 'c', tripulante_id: '31', nome_tripulante: 'Bia', data_fato: '2026-08-25' }),
+    ]);
+    renderPage();
+    expect(screen.getAllByText(/2 casos desta pessoa nesta página/i)).toHaveLength(2);
+    expect(screen.getByText(/não informa o total geral/i)).toBeInTheDocument();
+    const groupButton = screen.getByRole('button', { name: 'Agrupar por pessoa nesta página' });
+    fireEvent.click(groupButton);
+    expect(screen.getByRole('button', { name: 'Agrupado por pessoa nesta página' })).toHaveAttribute('aria-pressed', 'true');
+    expect(mutateMock).not.toHaveBeenCalled();
+  });
+
   it('usa a mesma linguagem operacional da fila sem alterar os níveis persistidos', () => {
     renderPage();
 

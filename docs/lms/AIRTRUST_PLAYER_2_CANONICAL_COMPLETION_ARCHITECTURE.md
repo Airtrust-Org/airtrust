@@ -48,3 +48,50 @@ Modelar e governar via Schema V2 o par `attempt_id`/`enrollment_cycle_id`, pacot
 ## Critério de encerramento
 
 Não declarar correção completa por 8/8 CI, 100% de navegação, `SCORM_COMPLETION_ACCEPTED` ou deploy saudável. Encerramento depende de prova real de curso **SCORM** e **Native** e da persistência canônica e certificado, com rollback e observabilidade. Staging oficial antes de qualquer produção; produção somente para SHA, componentes e escopo exatos autorizados.
+
+## Gate de certificação funcional (etapa de segurança, 2026-10-13)
+
+A execução de navegador que observa `LMSInitialize`, `LMSCommit`, `LMSFinish`,
+`completionReached` e nota é **conformidade do protocolo/execução parcial**,
+não certificação ponta a ponta. Novas ativações precisam de um contrato separado
+`functionalCertification` para **o SHA exato do ZIP**, com as oito etapas
+`FIRST_ACCESS`, `SUSPEND_RESUME`, `ASSESSMENT_INSUFFICIENT`,
+`ASSESSMENT_APPROVED`, `EXPLICIT_FINALIZATION`, `REOPEN_COMPLETED`,
+`NO_STATUS_DOWNGRADE` e `TENANT_CYCLE_ISOLATION`, todas em Chromium e WebKit para cursos com avaliação obrigatória; cursos formativos sem avaliação pontuada não exigem os dois cenários de avaliação, mas preservam todas as demais provas.
+
+O verificador fail-closed `evaluateScormFunctionalCertification` valida
+integridade do conjunto de resultados e SHA, **não a origem** dos resultados.
+Somente o harness isolado da plataforma pode fornecer atestações; conteúdo ZIP,
+metadados e payload do aluno jamais podem produzi-las. O runner atual ainda não
+executa esse contrato completo e passa lista vazia: **nenhuma nova versão é
+certificada ou ativável por esse caminho até integração e prova do harness**.
+O status anterior `publishable=true` sem atestação não serve para ativação.
+Isso não modifica pacotes ativos, histórico, matrículas ou certificados.
+
+**Ainda pendente:** implementar harness real, executar os cenários por SHA,
+registrar evidência independente, testar qualificação/certificado e validar em
+staging antes de qualquer promoção; preservar bloqueio da liberação em massa
+conforme issue #1325.
+
+## Fechamento canônico — rotas convergentes (13/10/2026)
+
+O endpoint de confirmação autenticada `POST /lms/matriculas/:id/finalizar` e o
+encerramento administrativo `PATCH /lms/matriculas/:id/status` passam a
+consultar **o mesmo** `buildPersistedScormClosureReadiness` usado pelo
+Player 2.0 e pelo guard de integridade. `passed`, `completed`, posição final
+ou percentual alto isolados nunca provam cobertura distinta de telas,
+avaliação aprovada ou elegibilidade para criar qualificação.
+
+O sistema retorna `closure_readiness.code` e `missing` com motivos objetivos
+na recusa HTTP 409; nenhum `completeLmsMatricula` é chamado nesse caso.
+Isso é defesa em profundidade, pois o middleware já verifica a mesma
+prontidão antes da rota. A exceção **administrativa explicitamente
+autorizada, motivada e auditada** permanece separada do fluxo de conclusão
+do aluno e não constitui certificação pedagógica do pacote SCORM.
+
+**Teste de regressão:** cobertura ausente, nota abaixo do domínio/score
+normalizado, estado terminal ausente, formação sem prova pontuada, percurso
+completo elegível e exceção administrativa auditada. A emissão continua
+restrita ao serviço de conclusão transacional. Estes testes não são
+certificação de navegador dos cursos ativos nem comprovam a correção de
+matrículas específicas em 99%.

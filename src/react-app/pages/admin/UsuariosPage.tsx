@@ -59,6 +59,13 @@ import {
 } from '@/react-app/config/api';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { httpClient } from '@/react-app/services/http-client';
+import {
+  PERFIS_USUARIOS as PERFIS,
+  normalizePerfilUsuario as normalizePerfil,
+  perfilUsuarioBadge as perfilBadge,
+  perfilUsuarioLabel as perfilLabel,
+  perfisUsuariosSelecionaveis,
+} from './perfis-usuarios';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -120,18 +127,6 @@ const resetSenhaSchema = z
   });
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
-
-const PERFIS = [
-  { value: 'ADMINISTRADOR', label: 'Administrador Geral', color: 'bg-red-100 text-red-800' },
-  { value: 'ADMIN', label: 'Administrador Geral', color: 'bg-red-100 text-red-800' }, // alias legado
-  { value: 'GESTOR', label: 'Administrador da Empresa', color: 'bg-blue-100 text-blue-700' },
-  { value: 'COORDENACAO_VOO', label: 'Coordenação de Voo', color: 'bg-cyan-100 text-cyan-800' },
-  { value: 'MANAGER', label: 'Administrador da Empresa', color: 'bg-blue-100 text-blue-700' },
-  { value: 'INSTRUTOR', label: 'Instrutor', color: 'bg-green-100 text-green-800' },
-  { value: 'ALUNO', label: 'Aluno', color: 'bg-gray-100 text-gray-600' },
-  { value: 'USUARIO', label: 'Aluno', color: 'bg-gray-100 text-gray-600' },
-  { value: 'VIEWER', label: 'Aluno', color: 'bg-gray-100 text-gray-600' },
-];
 
 const PERMISSOES_DISPONIVEIS = [
   {
@@ -285,13 +280,6 @@ function savePerfisScoped(
   writeScopedPerfis({ empresaId, userId }, perfis);
 }
 
-function normalizePerfil(perfil: string | null | undefined): string {
-  const normalized = (perfil || '').trim().toUpperCase();
-  if (normalized === 'MANAGER') return 'GESTOR';
-  if (normalized === 'VIEWER') return 'ALUNO';
-  return normalized;
-}
-
 function roleHasPerm(
   perfil: string | null | undefined,
   perm: string,
@@ -309,20 +297,6 @@ function roleHasPerm(
   const defaults = ROLE_DEFAULTS[normalizedPerfil];
   if (defaults === null) return true;
   return defaults?.includes(perm) ?? false;
-}
-
-function perfilBadge(perfil: string | null | undefined) {
-  const normalizedPerfil = normalizePerfil(perfil);
-  if (!normalizedPerfil) return 'bg-gray-100 text-gray-500';
-  const p = PERFIS.find((x) => x.value === normalizedPerfil);
-  return p ? p.color : 'bg-gray-100 text-gray-700';
-}
-
-function perfilLabel(perfil: string | null | undefined) {
-  const normalizedPerfil = normalizePerfil(perfil);
-  if (!normalizedPerfil) return 'Sem perfil';
-  const p = PERFIS.find((x) => x.value === normalizedPerfil);
-  return p ? p.label : normalizedPerfil;
 }
 
 // ─── Helpers API ──────────────────────────────────────────────────────────────
@@ -929,9 +903,7 @@ function ModalCriarUsuario({
   const [tentouEnviar, setTentouEnviar] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const perfisSelecionaveis = isAdmin
-    ? PERFIS
-    : PERFIS.filter((p) => !['ADMINISTRADOR', 'ADMIN', 'GESTOR', 'MANAGER'].includes(p.value));
+  const perfisSelecionaveis = perfisUsuariosSelecionaveis(isAdmin);
 
   // Auto-preencher email e nome do funcionário selecionado
   const handleFuncionarioChange = (id: string) => {
@@ -1129,6 +1101,7 @@ function ModalEditarUsuario({
 }) {
   const [nome, setNome] = useState(usuario.nome);
   const [perfil, setPerfil] = useState(normalizePerfil(usuario.perfil) || 'ALUNO');
+  const [perfilAlterado, setPerfilAlterado] = useState(false);
   const [funcionarioId, setFuncionarioId] = useState<number | null>(usuario.funcionario_id);
   const [setorIds, setSetorIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
@@ -1150,9 +1123,15 @@ function ModalEditarUsuario({
         ]
       : funcionarios;
 
-  const perfisSelecionaveis = isAdmin
-    ? PERFIS
-    : PERFIS.filter((p) => !['ADMINISTRADOR', 'ADMIN', 'GESTOR', 'MANAGER'].includes(p.value));
+  // Preserve um perfil legado não selecionável até que o administrador escolha outro.
+  // O simples ato de editar o nome não migra o papel do usuário no banco.
+  const perfisPermitidos = perfisUsuariosSelecionaveis(isAdmin);
+  const perfisSelecionaveis = perfisPermitidos.some((p) => p.value === perfil)
+    ? perfisPermitidos
+    : [
+        { value: perfil, label: perfilLabel(usuario.perfil), color: 'bg-gray-100 text-gray-700' },
+        ...perfisPermitidos,
+      ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1162,7 +1141,7 @@ function ModalEditarUsuario({
         method: 'PUT',
         body: JSON.stringify({
           nome,
-          perfil,
+          ...(perfilAlterado ? { perfil } : {}),
           funcionario_id: funcionarioId,
           ...(perfil === 'GESTOR' && setorIds.length > 0 ? { setor_ids: setorIds } : {}),
         }),
@@ -1223,7 +1202,10 @@ function ModalEditarUsuario({
             </label>
             <select
               value={perfil}
-              onChange={(e) => setPerfil(e.target.value)}
+              onChange={(e) => {
+                setPerfil(e.target.value);
+                setPerfilAlterado(true);
+              }}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 bg-white"
             >
               {perfisSelecionaveis.map((p) => (

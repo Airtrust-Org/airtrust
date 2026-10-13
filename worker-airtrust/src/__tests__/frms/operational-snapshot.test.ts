@@ -94,6 +94,25 @@ describe('active fortnight daily roster', () => {
   });
 });
 
+describe('check-in timestamp coherence', () => {
+  it('preserva hora bruta e expõe instante UTC confiável para fuso local', () => {
+    const input = createBaseInput();
+    input.rows.checkins = [{
+      data_operacional: '2026-10-13', funcionario_id: 10,
+      hora_checkin: '12:34',
+      submitted_at: '2026-10-13 12:34:00',
+      hora_apresentacao: '09:00',
+      kss_score: 3, horas_sono: 8, qualidade_sono: 4,
+      wake_time: '07:00', score_fadiga: 15, nivel_fadiga: 'NORMAL',
+      status_operacional: 'APTO', computed_risk_level: 'LOW',
+    }];
+    const result = buildFrmsOperationalSnapshot(input);
+    const tripulante = getByKey(result.items, '2026-10-13', 10);
+    expect(tripulante?.checkin_horario).toBe('12:34');
+    expect(tripulante?.checkin_submitted_at).toBe('2026-10-13 12:34:00');
+  });
+});
+
 describe('effectiveness threshold governance', () => {
   it('usa EFFECTIV_VERMELHO_MAX da revisão efetiva em vez de limiar fixo', () => {
     const input = createBaseInput();

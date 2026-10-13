@@ -256,8 +256,10 @@ export default function LmsPlayer() {
   );
   const completionDiagnostic = matricula?.completion_diagnostic ?? null;
   const closureReadiness = matricula?.closure_readiness ?? null;
-  const hasCompletionDate = Boolean(matricula?.data_conclusao);
-  const isCompletedState = completed || matricula?.status === 'CONCLUIDO' || hasCompletionDate;
+  // REPROVADO also has data_conclusao (the attempt ended). Only the
+  // canonical enrollment status or a server-confirmed local success closes
+  // the player and suppresses the retry/registration controls.
+  const isCompletedState = completed || matricula?.status === 'CONCLUIDO';
   const displayProgress = resolveLmsDisplayProgress({
     completed,
     matriculaStatus: matricula?.status,

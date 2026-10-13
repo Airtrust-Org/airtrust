@@ -134,6 +134,7 @@ export default function FrmsAlertasPainel() {
   );
   const [status, setStatus] = useState<'ativos' | 'resolvidos' | 'todos'>('ativos');
   const [etapa, setEtapa] = useState<EtapaCaso>('todos');
+  const [agruparPorPessoa, setAgruparPorPessoa] = useState(false);
   const [pagina, setPagina] = useState(1);
   const hoje = frmsBrazilOperationalTodayIso();
   const [resolveTarget, setResolveTarget] = useState<FrmsAlertaRow | null>(null);
@@ -170,6 +171,11 @@ export default function FrmsAlertasPainel() {
     vencidos: cases.filter((item) => situacaoCaso(item, hoje) === 'VENCIDO').length,
   }), [cases, hoje]);
 
+  const recorrenciasNaPagina = useMemo(() => cases.reduce((acc, item) => {
+    if (item.tripulante_id) acc.set(String(item.tripulante_id), (acc.get(String(item.tripulante_id)) ?? 0) + 1);
+    return acc;
+  }, new Map<string, number>()), [cases]);
+
   const fila = useMemo(() => cases
     .filter((item) => {
       const situacao = situacaoCaso(item, hoje);
@@ -179,12 +185,17 @@ export default function FrmsAlertasPainel() {
       return true;
     })
     .sort((a, b) => {
+      if (agruparPorPessoa) {
+        const byName = (a.nome_tripulante || String(a.tripulante_id)).localeCompare(b.nome_tripulante || String(b.tripulante_id), 'pt-BR');
+        if (byName !== 0) return byName;
+        return String(b.data_fato || b.created_at).localeCompare(String(a.data_fato || a.created_at));
+      }
       const situacaoA = situacaoCaso(a, hoje);
       const situacaoB = situacaoCaso(b, hoje);
       return ORDEM_SITUACAO[situacaoA] - ORDEM_SITUACAO[situacaoB] ||
         (ORDEM_NIVEL[a.nivel] ?? 4) - (ORDEM_NIVEL[b.nivel] ?? 4) ||
         String(a.data_fato || a.created_at).localeCompare(String(b.data_fato || b.created_at));
-    }), [cases, etapa, hoje]);
+    }), [cases, etapa, hoje, agruparPorPessoa]);
 
 
   const markViewed = useCallback(
@@ -310,7 +321,7 @@ export default function FrmsAlertasPainel() {
           ))}
         </section>
         <p className="text-xs text-slate-500">
-          Resumo por página, não por toda a empresa. A lista prioriza prazos vencidos e medidas ainda não registradas; a gravidade do alerta continua visível.
+          Resumo apenas dos casos carregados nesta página, não do total da empresa. A API desta consulta não informa o total geral. A ordenação padrão prioriza casos vencidos, pendentes e gravidade; o agrupamento é apenas visual.
         </p>
 
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
@@ -357,6 +368,14 @@ export default function FrmsAlertasPainel() {
               <option value="vencidos">Prazo vencido</option>
             </select>
           </label>
+
+          <button type="button" aria-pressed={agruparPorPessoa}
+            onClick={() => setAgruparPorPessoa((current) => !current)}
+            className={agruparPorPessoa
+              ? 'rounded-lg border border-primary bg-blue-50 px-3 py-2 text-xs font-bold text-blue-900'
+              : 'rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50'}>
+            {agruparPorPessoa ? 'Agrupado por pessoa nesta página' : 'Agrupar por pessoa nesta página'}
+          </button>
 
           {tripulanteParam ? (
             <Link to="/frms/alertas" className="text-xs font-semibold text-primary hover:underline">
@@ -406,6 +425,11 @@ export default function FrmsAlertasPainel() {
                           {item.visualizado ? <span className="text-xs text-slate-400">visualizado</span> : null}
                         </div>
                         <h2 className="mt-2 font-bold text-slate-950 dark:text-white">{name}</h2>
+                        {(recorrenciasNaPagina.get(String(item.tripulante_id)) ?? 0) > 1 ? (
+                          <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-200">
+                            {recorrenciasNaPagina.get(String(item.tripulante_id))} casos desta pessoa nesta página. Consulte o histórico para verificar recorrência em outras datas.
+                          </p>
+                        ) : null}
                         <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{item.mensagem}</p>
                         <p className="mt-2 text-xs text-slate-500">Tipo: {item.tipo_limite || 'não informado'}</p>
                         {situacao === 'SEM_TRATAMENTO' ? (
