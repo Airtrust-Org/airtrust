@@ -5,7 +5,7 @@
  * The signed private review ZIP never leaves the browser. Its private
  * answer keys are stripped before handing the learner projection to the player.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { unzip, type Unzipped } from 'fflate';
 import NativeCoursePreview from './native/NativeCoursePreview';
@@ -113,7 +113,25 @@ export default function NativeReviewZipPilot() {
   const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const closePlayerRef = useRef<HTMLButtonElement>(null);
   const current = library?.courses.find((course) => course.folder === active) ?? null;
+  // Keep the entire training slide in the viewport, rather than below the
+  // nine-course catalogue. Escape and the close control return to the library.
+  useEffect(() => {
+    if (!active) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closePlayerRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActive(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [active]);
+
   const getAsset = useCallback((asset: NativeAsset, signal: AbortSignal) => {
     if (!library || !current) return Promise.reject(new Error('NATIVE_REVIEW_NO_COURSE'));
     return privateNativeReviewMedia(library, current.folder, asset, signal);
@@ -182,8 +200,24 @@ export default function NativeReviewZipPilot() {
             </button>
           ))}
         </section>}
-        {current && <NativeCoursePreview key={current.learner.courseId}
-          course={current.learner} resolveAssetHref={() => null} fetchAuthorizedAsset={getAsset}/>}
+        {current && (
+          <div role="dialog" aria-modal="true" aria-label={'Revisão Native: ' + current.learner.title}
+            className="fixed inset-0 z-[70] flex min-h-0 flex-col gap-2 bg-[#edf3f7] p-2 sm:p-3">
+            <div className="flex min-h-9 shrink-0 items-center justify-between gap-3 px-1">
+              <p className="min-w-0 truncate text-sm font-semibold text-[#123b5e]">
+                Homologação 16:9 — {current.learner.title}
+              </p>
+              <button type="button" ref={closePlayerRef} onClick={() => setActive(null)}
+                className="shrink-0 rounded-lg border border-[#bccedb] bg-white px-4 py-1.5 text-sm font-bold text-[#123b5e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e65300]">
+                Fechar player
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <NativeCoursePreview key={current.learner.courseId} fullscreen
+                course={current.learner} resolveAssetHref={() => null} fetchAuthorizedAsset={getAsset}/>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
