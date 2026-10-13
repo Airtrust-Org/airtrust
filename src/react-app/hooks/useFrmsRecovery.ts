@@ -85,6 +85,9 @@ export function recoveryActivityRequiresDutyWindow(type: RecoveryActivityType): 
 }
 
 export function validateRecoveryActivityInput(input: RecoveryActivityInput): string | null {
+  if (input.activity_type === 'ADMIN_TRAINING' && !input.notes?.trim()) {
+    return 'Informe se ontem foi treinamento ou trabalho administrativo.';
+  }
   if (recoveryActivityRequiresDutyWindow(input.activity_type)) {
     if (!input.duty_start_time || !input.duty_end_time) {
       return RECOVERY_ACTIVITY_WINDOW_REQUIRED_MESSAGE;
