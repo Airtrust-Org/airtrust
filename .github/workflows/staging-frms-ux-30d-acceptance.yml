@@ -79,8 +79,6 @@ jobs:
         run: |
           set -euo pipefail
           [[ -n "$STAGING_SMOKE_EMAIL" && -n "$STAGING_SMOKE_PASSWORD" ]] || { echo STAGING_QA_CREDENTIAL_PAIR_MISSING; exit 1; }
-          echo "::add-mask::$STAGING_SMOKE_EMAIL"
-          echo "::add-mask::$STAGING_SMOKE_PASSWORD"
       - run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
