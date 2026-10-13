@@ -855,10 +855,21 @@ export async function completeLmsMatricula(
     canonicalParams,buildCompletionBatchStatements(canonicalParams, pre),
   );
 
+  let insertedHistoricoId: number | null = null;
   try {
-    await db.batch(
+    const batchResults = await db.batch(
       statements.map((statement) => db.prepare(statement.sql).bind(...statement.args)),
     );
+    const insertIndex = statements.findIndex(statement =>
+      statement.sql.includes('INSERT INTO qualificacoes_historico ('),
+    );
+    const insertMeta = insertIndex >= 0 ? batchResults[insertIndex]?.meta : null;
+    const rowId = insertMeta?.last_row_id;
+    // A stale last_row_id is not evidence that this statement inserted a row.
+    if (!wasReuse && insertMeta?.changes === 1 && typeof rowId === 'number' &&
+        Number.isSafeInteger(rowId) && rowId > 0) {
+      insertedHistoricoId = rowId;
+    }
   } catch (error) {
     if (isConcurrentQualificationUniqueConstraint(error)) {
       const retryPre = await readPreBatchState(db, canonicalParams, qualificacaoCodigo);
@@ -915,6 +926,16 @@ export async function completeLmsMatricula(
       'LMS_QUALIFICATION_COMPLETION_FAILED',
       error,
     );
+  }
+
+  const committedHistoricoId = wasReuse ? pre.existingHistoricoId : insertedHistoricoId;
+  if (committedHistoricoId !== null) {
+    await ensureEadCertificateAfterCompletion(canonicalParams, category, committedHistoricoId);
+    return {
+      outcome: wasReuse ? 'qualification_reused' : 'qualification_created',
+      qualificacaoHistoricoId: committedHistoricoId,
+      matriculaId: params.matriculaId,
+    };
   }
 
   const historico = await db

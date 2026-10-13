@@ -45,6 +45,7 @@ function makeFakeDb(options: {
         return { results: [] };
       },
       bind: () => ({
+        __sql: sql,
         first: async () => {
           if (sql.includes('FROM qualificacoes_tipos')) {
             return {
@@ -170,6 +171,29 @@ describe('completeLmsMatricula', () => {
     expect(batchCalls[0].length).toBeGreaterThan(4);
   });
 
+  it('Native obtém recibo do INSERT mesmo após guard e intent no batch', async () => {
+    let reads = 0;
+    const db = makeFakeDb({
+      historicoLookup: () => {
+        if (++reads > 1) throw new Error('post-commit read must not run');
+        return null;
+      },
+      batchImpl: async statements => statements.map(statement => ({
+        meta: { changes: 1, last_row_id:
+          String((statement as { __sql?: string }).__sql ?? '')
+            .includes('INSERT INTO qualificacoes_historico (') ? 905 : 0 },
+      })),
+    });
+    const result = await completeLmsMatricula(baseParams(db, {
+      env: nativeEnv(), cursoId: 31, scoreFinal: 85, progressoPct: 100,
+      action: 'LMS_NATIVE_CANONICAL_CONCLUIDA',
+      nativeTerminalAnchor: nativeAnchor(true),
+    }) as never);
+    expect(result.qualificacaoHistoricoId).toBe(905);
+    expect(reads).toBe(1);
+    expect(db.batch).toHaveBeenCalledTimes(1);
+  });
+
   it('Native refuses the wrong actor, score, course, progress, action or missing staging flags before batch',async()=>{
     const db=makeFakeDb({});
     const base={
@@ -225,6 +249,79 @@ describe('completeLmsMatricula', () => {
 
     expect(result.outcome).toBe('qualification_reused');
     expect(result.qualificacaoHistoricoId).toBe(777);
+  });
+
+  it('novo histórico usa recibo D1 do INSERT sem leitura pós-commit', async () => {
+    let reads = 0;
+    const db = makeFakeDb({
+      historicoLookup: () => {
+        if (++reads > 1) throw new Error('post-commit read must not run');
+        return null;
+      },
+      batchImpl: async statements => statements.map(statement => ({
+        meta: { changes: 1, last_row_id:
+          String((statement as { __sql?: string }).__sql ?? '')
+            .includes('INSERT INTO qualificacoes_historico (') ? 904 : 0 },
+      })),
+    });
+    const result = await completeLmsMatricula(baseParams(db) as never);
+    expect(result).toMatchObject({
+      outcome: 'qualification_created', qualificacaoHistoricoId: 904,
+    });
+    expect(reads).toBe(1);
+    expect(db.batch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([0, 2, undefined])(
+    'ignora last_row_id residual quando INSERT changes=%s', async changes => {
+      let reads = 0;
+      const db = makeFakeDb({
+        historicoLookup: () => ++reads === 1 ? null : { id: 912 },
+        batchImpl: async statements => statements.map(statement => ({
+          meta: {
+            changes,
+            last_row_id: String((statement as { __sql?: string }).__sql ?? '')
+              .includes('INSERT INTO qualificacoes_historico (') ? 999 : 0,
+          },
+        })),
+      });
+      const result = await completeLmsMatricula(baseParams(db) as never);
+      expect(result.qualificacaoHistoricoId).toBe(912);
+      expect(reads).toBe(2);
+      expect(ensureCertificateForQualificationMock).toHaveBeenCalledWith(
+        expect.anything(), 912, 6, { actorUserId: 42 },
+      );
+    },
+  );
+
+  it('não emite certificado para recibo residual sem histórico verificável', async () => {
+    const db = makeFakeDb({
+      historicoLookup: () => null,
+      batchImpl: async statements => statements.map(statement => ({
+        meta: {
+          changes: 0,
+          last_row_id: String((statement as { __sql?: string }).__sql ?? '')
+            .includes('INSERT INTO qualificacoes_historico (') ? 999 : 0,
+        },
+      })),
+    });
+    await expect(completeLmsMatricula(baseParams(db) as never)).rejects.toMatchObject({
+      code: 'LMS_QUALIFICATION_COMPLETION_FAILED',
+    });
+    expect(ensureCertificateForQualificationMock).not.toHaveBeenCalled();
+  });
+
+  it('reuso confirmado não depende de consulta após o commit', async () => {
+    let reads = 0;
+    const db = makeFakeDb({ historicoLookup: () => {
+      if (++reads > 1) throw new Error('post-commit read must not run');
+      return { id: 777, status: 'CONCLUIDA' };
+    }});
+    const result = await completeLmsMatricula(
+      baseParams(db, { existingHistoricoId: 777 }) as never,
+    );
+    expect(result.qualificacaoHistoricoId).toBe(777);
+    expect(reads).toBe(1);
   });
 
   it.each(['CANCELADA', 'RENOVADA', null])(
