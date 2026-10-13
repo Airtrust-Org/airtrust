@@ -93,6 +93,15 @@ describe('FRMS final check-in guards on yesterday flight or activity', () => {
     expect(getPendingFrmsRecoveryActivity(YESTERDAY)).toBeUndefined();
   });
 
+  it('does not demand recovery schema when a real flight is already confirmed', async () => {
+    getMock.mockResolvedValue(loaded(serverContext({
+      schema_ready: false,
+      flight: { ...serverContext().flight, detected: true, source: 'CONTROLE_VOOS' },
+    })));
+    await expect(submitPendingFrmsRecoveryActivity(TODAY)).resolves.toBeNull();
+    expect(postMock).not.toHaveBeenCalled();
+  });
+
   it('accepts an already recorded previous-day activity without requesting it again', async () => {
     getMock.mockResolvedValue(loaded(serverContext({
       activity: { id: 'existing', activity_type: 'OFF_DUTY' },
