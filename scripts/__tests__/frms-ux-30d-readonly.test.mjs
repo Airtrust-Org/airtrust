@@ -1,3 +1,7 @@
+// source_reference: audited FRMS UX 30-day readonly-source safety test (2026-10-13).
+// operational_decision: exercise rejection of DML as *test strings*; never execute SQL.
+// dry_run_required: not applicable; test is pure and has no database connection.
+// rollback_plan_required: not applicable; no persistence or writes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
