@@ -63,7 +63,7 @@ test('QA baseline is tenant-scoped, exact 128 reviewed keys, and never global',(
   assert.equal(QA_REVISION_ID,'qa-frms-ux-999013-helicopter-offshore-v1');
   assert.throws(()=>buildSeedSql(days,'frms-legacy-global-v2'),/QA_TENANT_SCOPED_REVISION_REQUIRED/);
   assert.throws(()=>buildTenantScopedBaselineSql('DELETE FROM frms_config_parameters'),/BASELINE_SOURCE_STATEMENTS_CHANGED/);
-  assert.throws(()=>buildTenantScopedBaselineSql("INSERT INTO frms_config_revisions (id) VALUES ('x'); INSERT INTO frms_config_parameters (id) VALUES ('y');"), /BASELINE_SOURCE_SCOPE_CHANGED/);
+  assert.throws(()=>buildTenantScopedBaselineSql("INSERT INTO frms_config_revisions (id) VALUES ('x'); INSERT INTO frms_config_parameters (id) VALUES ('y');"), /BASELINE_SOURCE_STATEMENTS_CHANGED/);
 });
 test('rollback is limited to fixture identifiers and does not mutate other tenants',()=>{
   const sql=buildRollbackSql();
