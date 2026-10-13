@@ -180,6 +180,55 @@ describe('PPSP: aceitação canônica versus matrícula em aberto', () => {
   });
 });
 
+describe('SCORM 99% systemic failure: stale pass vs unfinished authored final quiz', () => {
+  const answeredZeroOfTen = baseGranular({
+    slides: { totalRequired: 42, completedRequired: 42, missing: [] },
+    assessment: {
+      required: true, completed: false, scoreRaw: null, masteryScore: 80,
+      passed: null,
+      unanswered: Array.from({ length: 10 }, (_, index) => ({
+        id: `q${index + 1}`, index: index + 1, title: null,
+      })),
+      incomplete: [],
+    },
+  });
+
+  it('exibe as dez questões sem resposta mesmo quando SCORM armazenado reporta accepted/nota100', () => {
+    const result = resolveCompletionExplanation({
+      canonical: {
+        status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED',
+        explicit_completion: true, can_finalize: false,
+        explicit_failure: false, score_pct: 100, mastery_score: 80,
+      },
+      granular: answeredZeroOfTen,
+    });
+    expect(result.canComplete).toBe(false);
+    expect(result.registrationPending).not.toBe(true);
+    expect(result.category).toBe('ASSESSMENT');
+    expect(result.items).toHaveLength(10);
+    expect(result.summary).toMatch(/10 questões pendentes/);
+  });
+
+  it('nunca torna o quiz incompleto concluível por um sinal can_finalize inconsistente', () => {
+    const result = resolveCompletionExplanation({
+      canonical: { status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED', can_finalize: true },
+      granular: answeredZeroOfTen,
+    });
+    expect(result.canComplete).toBe(false);
+    expect(result.category).toBe('ASSESSMENT');
+  });
+
+  it('orienta suporte quando a evidência das telas está ausente sem pendência granular específica', () => {
+    const result = resolveCompletionExplanation({
+      canonical: { status: 'none', code: 'SCORM_PROGRESS_EVIDENCE_MISSING', can_finalize: false },
+      granular: null,
+    });
+    expect(result.category).toBe('ADMIN');
+    expect(result.adminItems[0].label).toMatch(/evidência persistida/);
+    expect(result.canComplete).toBe(false);
+  });
+});
+
 describe('resolveCompletionExplanation', () => {
   it('returns exactly 3 items for 3 missing slides (test 1)', () => {
     const result = resolveCompletionExplanation({
