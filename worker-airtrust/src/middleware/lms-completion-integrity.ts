@@ -390,6 +390,15 @@ async function guardScormCommit(
     'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
     { matricula_id: matriculaId, edition_mismatch: edition });
   const assetSessionValid = await hasValidAssetSession(c, row);
+  // Passive terminal claims still require the same short-lived, tenant-bound
+  // asset capability as explicit finalization. Separating evidence collection
+  // from completion must never open an unauthenticated status-injection path.
+  if (!assetSessionValid) {
+    return decisionRejection(c, matriculaId, {
+      accepted: false, code: 'ASSET_SESSION_INVALID',
+      scorePct: null, masteryScore: row.scorm_mastery_score, failurePrecedence: false,
+    });
+  }
   // Player 2.0 separation of concerns: passive SCORM status/score reports
   // must be *stored* as evidence, not prematurely evaluated as a learner's
   // request to mint a qualification. Only the explicit USER_FINALIZE event
