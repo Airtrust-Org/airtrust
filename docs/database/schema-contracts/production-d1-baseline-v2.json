@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-11",
-    "last_reconciled_against": "0549 FDM Tripulação model consolidation queued; production remote apply pending",
-    "schema_v2_digest": "fd92c0a15f734f449fb9326c50108706210bdeee555d3af1c951c8ca447392a6",
+    "last_reconciled_at": "2026-10-13",
+    "last_reconciled_against": "0551 restoration of coordination role USER, pending governed remote apply",
+    "schema_v2_digest": "2239c39a0c992f101f84acf2e1aa4eaf19d42f1f2575147b3b8e5ef6f5718ac4",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1528,6 +1528,30 @@
       "reviewed_manifest": "fdm-tripulacao-model-consolidation-0549.json",
       "evidence": "worker-airtrust/schema-v2/plans/fdm-tripulacao-model-consolidation-0549.md",
       "note": "Data-only consolidation: preserves published course 71, its nine completed and two open enrolments, nine historical completions and two function requirements while retiring FDM-TRIPULACAO. Governed production application requires the exact reviewed manifest, D1 recovery point and postconditions."
+    },
+    {
+      "change_file": "0550_usuarios_costa_do_sol_viewer_aluno.sql",
+      "change_id": "usuarios-costa-do-sol-viewer-aluno-0550",
+      "sha256": "6b01667b60ee8893ce7ed65064644dd9caa7df7100e930415caf66ee5feecf64",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 user-profile authority reconciliation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "usuarios-costa-do-sol-viewer-aluno-0550.json",
+      "evidence": "worker-airtrust/schema-v2/plans/usuarios-costa-do-sol-viewer-aluno-0550.md",
+      "note": "Read-only production audit 2026-10-13: 26 student users have VIEWER default/explicit roles; separate single coordination identity retains COORDENACAO_VOO. Reviewed SQL updates only tenant 6 with guards, and awaits governed Schema V2 apply with recovery point and exact authorization. No production D1 write claimed. D1 TEMP transport removed after SQLITE_AUTH. New authorized apply pending."
+    },
+    {
+      "change_file": "0551_coordenacao_role_user_restore.sql",
+      "change_id": "coordenacao-role-user-restore-0551",
+      "sha256": "8a77552a043d5ed08625c938790f583de13d0cbf2ad4040dea1970556c95489f",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 coordination-only restoration of USER profile",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "coordenacao-role-user-restore-0551.json",
+      "evidence": "worker-airtrust/schema-v2/plans/coordenacao-role-user-restore-0551.md",
+      "note": "Data-only compensation to restore the sole coordination account to USER while preserving all 26 students converted by 0550. D1 write requires separate governed authorization."
     }
   ]
 }

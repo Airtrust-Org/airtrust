@@ -28,8 +28,8 @@ const PRIMARY_OPTIONS: Array<{ value: RecoveryActivityType; label: string; descr
   },
   {
     value: 'ADMIN_TRAINING',
-    label: 'Administrativo / treinamento',
-    description: 'Houve trabalho sem atividade de voo.',
+    label: 'Treinamento ou trabalho administrativo',
+    description: 'Informe qual atividade realizou e os horários de início e fim.'
   },
 ];
 
@@ -71,8 +71,8 @@ const LABELS = Object.fromEntries(OPTIONS.map((option) => [option.value, option.
 
 function defaultSegments(): RecoveryActivitySegmentInput[] {
   return [
-    { activity_type: 'ADMIN_TRAINING', start_time: '08:00', end_time: '12:00' },
-    { activity_type: 'OFF_DUTY', start_time: '12:00', end_time: '20:00' },
+    { activity_type: 'ADMIN_TRAINING', start_time: '', end_time: '' },
+    { activity_type: 'OFF_DUTY', start_time: '', end_time: '' },
   ];
 }
 
@@ -87,6 +87,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
   const [dutyStart, setDutyStart] = useState('');
   const [dutyEnd, setDutyEnd] = useState('');
   const [notes, setNotes] = useState('');
+  const [adminActivityKind, setAdminActivityKind] = useState('');
   const [segments, setSegments] = useState<RecoveryActivitySegmentInput[]>(defaultSegments());
 
   const needsStandbyDetail =
@@ -122,13 +123,23 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
         !['OFF_DUTY', 'MIXED', 'FLIGHT_NOT_IN_SOURCE', 'UNKNOWN'].includes(nextType)
           ? dutyEnd || undefined
           : undefined,
-      notes: notes.trim() || undefined,
+      notes: nextType === 'ADMIN_TRAINING' ? adminActivityKind || undefined : notes.trim() || undefined,
       segments: nextType === 'MIXED' ? segments : undefined,
     };
     stagePendingFrmsRecoveryActivity(referenceDate, input, true);
   };
 
-  if (isLoading || isError || !context?.schema_ready) return null;
+  if (isLoading) {
+    return <p role="status" className="rounded-xl border border-slate-200 p-3 text-sm text-slate-600">
+      Verificando no Controle de Voos e SIGVOOS a atividade do dia anterior...
+    </p>;
+  }
+  if (isError || !context?.schema_ready) {
+    return <section role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+      Não foi possível verificar a atividade de ontem. O check-in não pode ser concluído
+      sem confirmar se houve voo ou informar os horários da atividade sem voo. Tente novamente.
+    </section>;
+  }
   if (context.flight.detected) {
     clearPendingFrmsRecoveryActivity(referenceDate);
     return null;
@@ -145,6 +156,18 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
             <p className="mt-1 text-sm text-emerald-800">
               {LABELS[existingType] || existingType || 'Classificação registrada'}
             </p>
+            {existingType === 'ADMIN_TRAINING' && typeof context.activity.notes === 'string' &&
+              context.activity.notes.trim() ? (
+                <p className="mt-1 text-sm font-semibold text-emerald-900">
+                  Atividade: {context.activity.notes}
+                </p>
+              ) : null}
+            {typeof context.activity.duty_start_time === 'string' &&
+              typeof context.activity.duty_end_time === 'string' ? (
+                <p className="mt-1 text-sm text-emerald-800">
+                  Horário informado: {context.activity.duty_start_time} às {context.activity.duty_end_time}
+                </p>
+              ) : null}
             <p className="mt-1 text-xs text-emerald-700">
               Esta informação entra como evidência de carga/recuperação. Folga não cria bônus automático; standby e atividade de trabalho seguem critérios próprios de duração, sono e disponibilidade.
             </p>
@@ -299,6 +322,31 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
         </div>
       )}
 
+      {activityType === 'ADMIN_TRAINING' && (
+        <label className="mt-4 block text-sm font-medium text-slate-700">
+          Qual atividade realizou ontem?
+          <select
+            value={adminActivityKind}
+            onChange={(event) => {
+              const value = event.target.value;
+              setAdminActivityKind(value);
+              stagePendingFrmsRecoveryActivity(referenceDate, {
+                reference_date: referenceDate,
+                activity_type: 'ADMIN_TRAINING',
+                duty_start_time: dutyStart || undefined,
+                duty_end_time: dutyEnd || undefined,
+                notes: value || undefined,
+              }, true);
+            }}
+            className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+          >
+            <option value="">Selecione a atividade</option>
+            <option value="Treinamento">Treinamento</option>
+            <option value="Trabalho administrativo">Trabalho administrativo</option>
+          </select>
+        </label>
+      )}
+
       {needsDutyWindow && (
         <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
           <p className="mb-3 text-xs text-slate-600">
@@ -329,7 +377,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                         : undefined,
                     duty_start_time: event.target.value || undefined,
                     duty_end_time: dutyEnd || undefined,
-                    notes: notes.trim() || undefined,
+                    notes: activityType === 'ADMIN_TRAINING' ? adminActivityKind || undefined : notes.trim() || undefined,
                   },
                   true,
                 );
@@ -361,7 +409,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
                         : undefined,
                     duty_start_time: dutyStart || undefined,
                     duty_end_time: event.target.value || undefined,
-                    notes: notes.trim() || undefined,
+                    notes: activityType === 'ADMIN_TRAINING' ? adminActivityKind || undefined : notes.trim() || undefined,
                   },
                   true,
                 );

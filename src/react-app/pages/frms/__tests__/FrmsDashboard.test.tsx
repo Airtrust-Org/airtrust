@@ -159,6 +159,65 @@ function renderDashboard(initialEntry = '/frms') {
 }
 
 describe('FrmsDashboard simplificado', () => {
+  it('mostra o início declarado no check-in sem fabricar término para dia sem voo', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({ data: [item({
+      hora_apresentacao: '07:15',
+      hora_termino: null,
+      horas_voo_minutos: 0,
+      duracao_jornada_minutos: 0,
+      teve_jornada: false,
+      jornada_data_source: 'AUSENTE',
+      snapshot_status: 'INCOMPLETO',
+      estado_operacional: 'NAO_AVALIADO',
+      fatorizacao_status: 'AUSENTE',
+      checkin_status: 'RECEBIDO',
+    })] }));
+    renderDashboard();
+    fireEvent.click(screen.getByRole('button', { name: /Max/i }));
+    const drawer = within(screen.getByRole('dialog'));
+    expect(drawer.getByText('07:15 → —')).toBeInTheDocument();
+    expect(drawer.getByText(/Início informado no check-in/)).toBeInTheDocument();
+    expect(drawer.getByText(/Sem voo e sem corte de motor registrado, não existe horário de encerramento automático/)).toBeInTheDocument();
+  });
+
+  it('coloca conclusão não confirmável antes de sinais numéricos favoráveis', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({ data: [item({
+      snapshot_status: 'ATENCAO', estado_operacional: 'ATENCAO',
+      escala_source: 'AUSENTE', jornada_data_source: 'AUSENTE',
+      effectiveness_pct: 85.6, effectiveness_source: 'PROJETADA_APRESENTACAO',
+      teve_jornada: false, fatorizacao_status: 'PROJETADA',
+    })] }));
+    renderDashboard();
+    fireEvent.click(screen.getByRole('button', { name: /Max/i }));
+    const drawer = within(screen.getByRole('dialog'));
+    const summary = drawer.getByLabelText('Síntese para decisão');
+    const indicators = drawer.getByLabelText('Status operacional do dia');
+    expect(summary).toHaveTextContent('Decisão não confirmável com os dados disponíveis');
+    expect(summary).toHaveTextContent('não comprovam aptidão');
+    expect(summary.compareDocumentPosition(indicators) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('separa jornada do dia em aberto do histórico a confirmar na fila', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-27T12:00:00Z'));
+    try {
+      useFrmsOperationalSnapshotMock.mockReturnValue(state({ data: [
+        item({ funcionario_id: 10, tripulante_id: 10, nome: 'Lia', nome_guerra: 'Lia',
+          teve_jornada: false, jornada_data_source: 'AUSENTE', fatorizacao_status: 'AUSENTE',
+          estado_operacional: 'NAO_AVALIADO', snapshot_status: 'INCOMPLETO' }),
+        item({ funcionario_id: 11, tripulante_id: 11, nome: 'Max', nome_guerra: 'Max' }),
+      ] }));
+      renderDashboard('/frms?data=2026-08-27');
+      fireEvent.click(within(screen.getByLabelText('Resumo operacional')).getByRole('button', { name: /Aguardar a operação/i }));
+      expect(screen.getByText('Lia')).toBeInTheDocument();
+      expect(screen.queryByText('Max')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Mostrar todas as situações' }));
+      expect(screen.getByText('Max')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   beforeEach(() => {
     useFrmsOperationalSnapshotMock.mockReset();
     useFrmsOperationalSnapshotMock.mockReturnValue(state());
@@ -308,15 +367,15 @@ describe('FrmsDashboard simplificado', () => {
     expect(drawer.getByText(/Um check-in isolado é armazenado, mas não coloca o tripulante nesta fila/i)).toBeInTheDocument();
   });
 
-  it('rebaixa sem pendência e mantém o resumo superior só com métricas de ação', () => {
+  it('expõe filas por providência, preservando a classificação de risco original', () => {
     renderDashboard();
 
     const summary = within(screen.getByLabelText('Resumo operacional'));
-    expect(summary.getByText('Prioritários')).toBeInTheDocument();
-    expect(summary.getByText('Avaliar')).toBeInTheDocument();
-    expect(summary.getByText('Verificar')).toBeInTheDocument();
-    expect(summary.queryByText('Sem pendência')).not.toBeInTheDocument();
-    expect(screen.getByText(/pessoa\(s\) sem pendência no recorte atual/i)).toBeInTheDocument();
+    expect(summary.getByRole('button', { name: /Revisão operacional/i })).toBeInTheDocument();
+    expect(summary.getByRole('button', { name: /Confirmar evidência/i })).toBeInTheDocument();
+    expect(summary.getByRole('button', { name: /Aguardar a operação/i })).toBeInTheDocument();
+    expect(summary.getByRole('button', { name: /Sem ação agora/i })).toBeInTheDocument();
+    expect(summary.getByText(/Classificação de risco preservada/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Como interpretar' })).toHaveAttribute('href', '/frms/conceitos');
     expect(screen.getByText(/O check-in diário, o motivo e a providência aparecem aqui/i)).toBeInTheDocument();
   });
@@ -439,7 +498,7 @@ describe('FrmsDashboard simplificado', () => {
     fireEvent.click(screen.getByRole('button', { name: /Max/i }));
     const drawer = within(screen.getByRole('dialog'));
     expect(drawer.getByText('Horário declarado')).toBeInTheDocument();
-    expect(drawer.getByText(/Informado no check-in; a escala e a jornada ainda precisam ser confirmadas/i)).toBeInTheDocument();
+    expect(drawer.getByText(/Início informado no check-in/)).toBeInTheDocument();
   });
 
   it('explica que a jornada do dia em curso fecha após a operação e mantém o acumulado separado', () => {
@@ -486,7 +545,7 @@ describe('FrmsDashboard simplificado', () => {
       const drawer = within(screen.getByRole('dialog'));
       expect(drawer.getByText('Dia em acompanhamento')).toBeInTheDocument();
       expect(drawer.getByText('Acumulado já registrado no período')).toBeInTheDocument();
-      expect(drawer.getByText(/jornada aguardando encerramento/i)).toBeInTheDocument();
+      expect(drawer.getAllByText(/jornada aguardando encerramento/i).length).toBeGreaterThan(0);
       expect(drawer.getByText(/ainda não entra nesses totais/i)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();

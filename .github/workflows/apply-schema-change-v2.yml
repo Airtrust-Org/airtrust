@@ -632,6 +632,22 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0549-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight restore coordination role USER 0551
+        if: ${{ inputs.change_id == 'coordenacao-role-user-restore-0551' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0551-production-preflight.sh --target=airtrust-db
+
+      - name: Preflight Costa do Sol viewer/aluno roles 0550
+        if: ${{ inputs.change_id == 'usuarios-costa-do-sol-viewer-aluno-0550' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0550-production-preflight.sh --target=airtrust-db
+
       - name: Preflight Training Compliance canonical category-safe PDF 0546
         if: ${{ inputs.change_id == 'training-compliance-canonical-category-repair-0546' }}
         shell: bash
@@ -764,6 +780,22 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0549-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate restore coordination role USER 0551
+        if: ${{ inputs.change_id == 'coordenacao-role-user-restore-0551' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0551-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate Costa do Sol viewer/aluno roles 0550
+        if: ${{ inputs.change_id == 'usuarios-costa-do-sol-viewer-aluno-0550' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0550-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate Training Compliance canonical category-safe PDF 0546
         if: ${{ inputs.change_id == 'training-compliance-canonical-category-repair-0546' }}
