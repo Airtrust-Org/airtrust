@@ -243,12 +243,12 @@ export default function FrmsRelatorios() {
       for (const row of data) {
         csvContent += [
           row.nome || row.tripulante_id,
-          row.dias_avaliados ?? 0,
-          row.dias_conformes ?? 0,
-          row.dias_violacao ?? 0,
-          row.dias_nao_avaliados ?? 0,
-          row.dias_mitigacao ?? 0,
-          row.dias_atencao ?? 0,
+          row.dias_avaliados ?? '',
+          row.dias_conformes ?? '',
+          row.dias_violacao ?? '',
+          row.dias_nao_avaliados ?? '',
+          row.dias_mitigacao ?? '',
+          row.dias_atencao ?? '',
           Array.isArray(row.fontes_normativas) ? row.fontes_normativas.join(' | ') : '',
         ].map(csvCell).join(',') + '\n';
       }
@@ -472,20 +472,20 @@ function ComplianceTable({ data }: { data: FrmsReportRow[] }) {
           {data.map((r, i) => (
             <tr key={i} className="hover:bg-gray-50/50" title={Array.isArray(r.fontes_normativas) ? r.fontes_normativas.join('\n') : undefined}>
               <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}</td>
-              <td className="px-4 py-2.5 text-center text-gray-600">{r.dias_avaliados ?? 0}</td>
-              <td className="px-4 py-2.5 text-center font-semibold text-emerald-700">{r.dias_conformes ?? 0}</td>
+              <td className="px-4 py-2.5 text-center text-gray-600">{r.dias_avaliados ?? '—'}</td>
+              <td className="px-4 py-2.5 text-center font-semibold text-emerald-700">{r.dias_conformes ?? '—'}</td>
               <td className="px-4 py-2.5 text-center">
                 <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.dias_violacao ?? 0) > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {r.dias_violacao ?? 0}
+                  {r.dias_violacao ?? '—'}
                 </span>
               </td>
               <td className="px-4 py-2.5 text-center">
                 <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.dias_nao_avaliados ?? 0) > 0 ? 'bg-slate-200 text-slate-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {r.dias_nao_avaliados ?? 0}
+                  {r.dias_nao_avaliados ?? '—'}
                 </span>
               </td>
-              <td className="px-4 py-2.5 text-center text-orange-700">{r.dias_mitigacao ?? 0}</td>
-              <td className="px-4 py-2.5 text-center text-amber-700">{r.dias_atencao ?? 0}</td>
+              <td className="px-4 py-2.5 text-center text-orange-700">{r.dias_mitigacao ?? '—'}</td>
+              <td className="px-4 py-2.5 text-center text-amber-700">{r.dias_atencao ?? '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -521,7 +521,9 @@ function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
                   ? 'bg-amber-100 text-amber-800'
                   : r.nivel_max === 'AVISO'
                     ? 'bg-yellow-100 text-yellow-800'
-                    : 'bg-green-100 text-green-800';
+                    : r.nivel_max === 'OK'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-slate-100 text-slate-600';
           return (
             <tr key={i} className="hover:bg-gray-50/50">
               <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}</td>
