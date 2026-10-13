@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   validateSource, approximation, buildSeedSql, buildRollbackSql, TENANT_ID,
-  TENANT_CODE, DB_ID, DB_NAME, CONFIRM, chooseGovernedRevision,
+  TENANT_CODE, DB_ID, DB_NAME, CONFIRM, QA_REVISION_ID, buildTenantScopedBaselineSql,
 } from '../staging/seed-frms-ux-30d.mjs';
 const SHA='a'.repeat(40);
 const days=Array.from({length:30},(_,i)=>({
@@ -50,23 +50,28 @@ test('creates only fictional crew under reserved staging tenant with governed pr
   assert.equal(approximation('1-4'),2);
   assert.throws(()=>approximation('3'),/BAND_INVALID/);
 });
-test('governed revision is global, effective for entire 30d window and unambiguous',()=>{
-  const rev={id:'frms-revision-global-qa',empresa_id:null,profile_code:'HELICOPTER_OFFSHORE',
-    status:'ACTIVE',revision_number:2,effective_from:'2026-09-01',effective_to:null};
-  assert.equal(chooseGovernedRevision([rev],169),rev.id);
-  assert.match(buildSeedSql(days,rev.id),/frms-revision-global-qa/);
-  assert.throws(()=>chooseGovernedRevision([rev],67),/REVISION_INCOMPLETE/);
-  assert.throws(()=>chooseGovernedRevision([{...rev,empresa_id:999006}],169),/REVISION_30D_MISSING/);
-  assert.throws(()=>chooseGovernedRevision([{...rev,effective_from:'2026-10-01'}],169),/REVISION_30D_MISSING/);
-  assert.throws(()=>chooseGovernedRevision([{...rev,effective_to:'2026-10-12'}],169),/REVISION_30D_MISSING/);
-  assert.throws(()=>chooseGovernedRevision([rev,{...rev,id:'competing-rev'}],169),/REVISION_AMBIGUOUS/);
-  assert.equal(chooseGovernedRevision([{...rev,status:'SUPERSEDED'}],169),rev.id);
+test('QA baseline is tenant-scoped, exact 128 reviewed keys, and never global',()=>{
+  const source=buildTenantScopedBaselineSql();
+  assert.equal(source.length,2);
+  assert.match(source[0],/INSERT INTO frms_config_revisions/);
+  assert.match(source[0],/999013, 'HELICOPTER_OFFSHORE'/);
+  assert.doesNotMatch(source[0],/frms-helicopter-offshore-baseline-v1', NULL, 'HELICOPTER_OFFSHORE'/);
+  const ids=[...source[1].matchAll(/'qa-frms-ux-999013-helicopter-offshore-v1-([A-Z][A-Z0-9_]*)'/g)].map(x=>x[1]);
+  assert.equal(new Set(ids).size,128);
+  const sql=buildSeedSql(days);
+  assert.match(sql,/qa-frms-ux-999013-helicopter-offshore-v1/);
+  assert.equal(QA_REVISION_ID,'qa-frms-ux-999013-helicopter-offshore-v1');
+  assert.throws(()=>buildSeedSql(days,'frms-legacy-global-v2'),/QA_TENANT_SCOPED_REVISION_REQUIRED/);
+  assert.throws(()=>buildTenantScopedBaselineSql('DELETE FROM frms_config_parameters'),/BASELINE_SOURCE_STATEMENTS_CHANGED/);
+  assert.throws(()=>buildTenantScopedBaselineSql("INSERT INTO frms_config_revisions (id) VALUES ('x'); INSERT INTO frms_config_parameters (id) VALUES ('y');"), /BASELINE_SOURCE_SCOPE_CHANGED/);
 });
 test('rollback is limited to fixture identifiers and does not mutate other tenants',()=>{
   const sql=buildRollbackSql();
   assert.match(sql,/empresa_id=999013/);
   assert.match(sql,/QA-FRMS-UX/);
   assert.match(sql,/qa_frms_ux_30d/);
+  assert.match(sql,/DELETE FROM frms_config_parameters WHERE revision_id/);
+  assert.match(sql,/DELETE FROM frms_config_revisions WHERE id/);
   assert.doesNotMatch(sql,/\bempresa_id\s*=\s*6\b/);
 });
 test('workflow requires reviewed main, artifact provenance, staging environment and backup before writes',()=>{
