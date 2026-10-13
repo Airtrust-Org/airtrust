@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BOMBEIROS_DEMO_COMPANY, BOMBEIROS_FRMS_SCENARIOS,
-  bombeirosDemoCrewCanBeReleased, bombeirosDemoSummary,
+  bombeirosDemoCrewCanBeReleased, bombeirosDemoSummary, mayPreviewBombeirosFrmsDemo,
 } from '../bombeirosFrmsDemoData';
 
 describe('prévia sintética Bombeiros isolada', () => {
@@ -17,6 +17,14 @@ describe('prévia sintética Bombeiros isolada', () => {
     expect(BOMBEIROS_FRMS_SCENARIOS.every(s => s.id.startsWith('QA-BOM-'))).toBe(true);
     expect(BOMBEIROS_FRMS_SCENARIOS.every(s => s.nome.startsWith('QA '))).toBe(true);
     expect(JSON.stringify(BOMBEIROS_FRMS_SCENARIOS).toLowerCase()).not.toContain('costa do sol');
+  });
+
+  it('não mostra bombeiros no contexto Costa do Sol ou em produção', () => {
+    expect(mayPreviewBombeirosFrmsDemo(true, 'costadosol', 'staging.airtrust.pages.dev')).toBe(false);
+    expect(mayPreviewBombeirosFrmsDemo(true, 'airtrust', 'airtrust.online')).toBe(false);
+    expect(mayPreviewBombeirosFrmsDemo(true, 'airtrust', 'staging.airtrust.pages.dev.evil.com')).toBe(false);
+    expect(mayPreviewBombeirosFrmsDemo(false, 'airtrust', 'staging.airtrust.pages.dev')).toBe(false);
+    expect(mayPreviewBombeirosFrmsDemo(true, 'airtrust', 'staging.airtrust.pages.dev')).toBe(true);
   });
 
   it('mantém check-in ausente e risco acumulado críticos visíveis nos dados', () => {
