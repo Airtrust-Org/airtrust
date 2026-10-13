@@ -1373,8 +1373,10 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     results = await input.db.batch([
       rdvStatement,
       receiptStatement,
-      ...stageStatements,
+      // Free the unique active stage number before inserting its replacement.
+      // The RDV CAS above already validated all removed stages and fuelings.
       ...removedStageStatements,
+      ...stageStatements,
       ...fuelingStatements,
       ...justificationStatements,
       ...(flightMetadataStatement ? [flightMetadataStatement] : []),
