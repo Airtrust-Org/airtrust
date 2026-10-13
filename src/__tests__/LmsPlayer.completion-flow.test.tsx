@@ -125,6 +125,7 @@ async function dispatchPlayerMessage(data: Record<string, unknown>) {
 
 describe('LmsPlayer completion flow', () => {
   beforeEach(() => {
+    Object.assign(matriculaMock, { status: 'EM_ANDAMENTO', data_conclusao: null });
     matriculaMock.scorm_progresso.cmi_json = JSON.stringify({ 'cmi.location': '22/30' });
     (matriculaMock as typeof matriculaMock & { completion_diagnostic: Record<string, unknown> | null }).completion_diagnostic = null;
     fetchWithAuthMock.mockReset();
@@ -136,6 +137,23 @@ describe('LmsPlayer completion flow', () => {
     toastErrorMock.mockReset();
     toastDismissMock.mockReset();
     vi.restoreAllMocks();
+  });
+
+  it('REPROVADO with data_conclusao is an ended attempt, not a completed enrollment', () => {
+    Object.assign(matriculaMock, {
+      status: 'REPROVADO',
+      data_conclusao: '2026-10-13',
+      progresso_pct: 99,
+    });
+    matriculaMock.scorm_progresso.cmi_json = JSON.stringify({
+      'cmi.core.lesson_location': '3/3',
+      'airtrust.total_slides': 3,
+      'airtrust.viewed_slides': [1, 2, 3],
+    });
+    renderPlayer();
+    const register = screen.getByRole('button', { name: 'Registrar no AirTrust' });
+    expect(register).toBeEnabled();
+    expect(screen.queryByRole('heading', { name: 'Curso concluído' })).not.toBeInTheDocument();
   });
 
   it('keeps Concluir curso disabled while slides are missing, even at the final marker', async () => {
