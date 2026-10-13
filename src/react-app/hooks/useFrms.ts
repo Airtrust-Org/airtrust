@@ -290,6 +290,24 @@ export function useFrmsAlertas(filtros?: Record<string, string>) {
   });
 }
 
+/** Filtered global count is provided by the backend. Do not confuse it with the current page. */
+export interface FrmsAlertasPage {
+  success: boolean;
+  data: FrmsAlertaRow[];
+  total: number;
+}
+
+export function useFrmsAlertasPage(filtros?: Record<string, string>) {
+  const params = filtros ? '?' + new URLSearchParams(filtros).toString() : '';
+  return useApi<FrmsAlertasPage>(`/api/frms/alertas${params}`, {
+    requireAuth: false,
+    dedupeInitial: false,
+    bypassGetCache: true,
+    preserveEnvelope: true,
+    staleTime: 1 * 60 * 1000,
+  });
+}
+
 // ─── Effectiveness timeline (endpoint /api/frms/tripulante/:id/jornadas?dias=N) ──
 
 export interface FrmsEffectivenessJornadaRow {
