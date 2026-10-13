@@ -31,6 +31,7 @@ type ApiEnvelope = {
       status?: string;
       tests?: Array<{ name?: string; status?: string; detail?: string }>;
     };
+    functionalCertification?: { status?: string; missing?: string[] };
     runtime?: {
       status?: string;
       functionalCompletionVerified?: boolean;
@@ -104,7 +105,7 @@ async function submitCourse(page: Page) {
     .click();
 }
 
-test('LMS SCORM staging: real success, rejection, timeout and visible progress', async ({ page }) => {
+test('LMS SCORM staging: protocol pass stays uncertified, static reject and timeout stay blocked', async ({ page }) => {
   test.setTimeout(150_000);
 
   const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
@@ -171,23 +172,27 @@ test('LMS SCORM staging: real success, rejection, timeout and visible progress',
     finished: conformanceVerdict?.runtime?.finishObserved ?? false,
     completion_reached: conformanceVerdict?.runtime?.completionReached ?? false,
   };
-  // Do not print URLs, learner identities, tokens, SCORM CMI or uploaded content.
-  expect(conformanceVerdict?.publishable, 
-    `SCORM_STAGING_CONFORMANCE_NOT_PUBLISHABLE:${JSON.stringify(safeDiagnostic)}`,
-  ).toBe(true);
-  await expect(page.getByText('Ativando nova versão...', { exact: true })).toBeVisible({
-    timeout: 30_000,
+  // Protocol/interactive driver PASS does not cover two browsers, resume,
+  // rejected assessment, tenant/cycle isolation or persisted qualifications.
+  // The currently active version must remain unchanged. This QA is not a
+  // full functional certification and must never report the ZIP as activated.
+  expect(conformanceVerdict?.conformance?.status,
+    `SCORM_PROTOCOL_FAILURE:${JSON.stringify(safeDiagnostic)}`,
+  ).toBe('PASS');
+  expect(conformanceVerdict?.publishable).toBe(false);
+  expect(conformanceVerdict?.functionalCertification?.status).toBe('UNCERTIFIED');
+  await expect(page.getByText(/aguarda certificação funcional completa/i)).toBeVisible({
+    timeout: 20_000,
   });
-  await expect(page.getByText('85%', { exact: true })).toBeVisible();
-
-  await expect(page.getByText('Curso atualizado.', { exact: true })).toBeVisible({ timeout: 20_000 });
   expect(successUpload?.success).toBe(true);
   expect(successUpload?.data?.status).toBe('VALIDATED');
   expect(successConformance?.success).toBe(true);
-  expect(successConformance?.data?.publishable).toBe(true);
   expect(successConformance?.data?.runtime?.status).toBe('PASS');
-  expect(successActivate?.success).toBe(true);
-  expect(successActivate?.data?.status).toBe('ACTIVE');
+  expect(successActivate).toBeNull();
+  expect(mutations.some((entry) =>
+    entry.url.includes(`/cursos/${state.courses.success.id}/scorm-package-versions/`) &&
+    entry.url.includes('/activate'),
+  )).toBe(false);
 
   await page.unroute(`**/api/lms/cursos/${state.courses.success.id}/scorm-upload**`);
   await page.unroute(
@@ -282,9 +287,11 @@ test('LMS SCORM staging: real success, rejection, timeout and visible progress',
     live_frontend_provenance: 'PASS',
     success: {
       real_zip_upload: true,
-      visible_progress: [25, 65, 85],
+      visible_progress: [25, 65],
       runtime_conformance: 'PASS',
-      activated: true,
+      functional_certification: 'UNCERTIFIED',
+      activated: false,
+      previous_package_preserved: true,
     },
     rejection: {
       real_zip_upload: true,
