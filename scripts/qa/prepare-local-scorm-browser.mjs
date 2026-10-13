@@ -56,6 +56,22 @@ async function main(){
   const prefix='local-browser-qa/scorm/'+companyId+'/'+courseId+'/';
   db.prepare("UPDATE lms_cursos SET titulo='SCORM Browser QA', tipo_conteudo='scorm', scorm_versao='1.2', scorm_mastery_score=70, scorm_package_r2_prefix=?, scorm_launch_file='index.html', gerar_qualificacao_ao_concluir=1, ativo=1, publicado=1 WHERE id=? AND empresa_id=?").run(prefix,courseId,companyId);
   const secondEmployee=Number(db.prepare("INSERT INTO funcionarios (nome, empresa_id, ativo, is_examinador, matricula) VALUES ('QA SCORM WEBKIT SINTETICO', ?, 1, 0, '99051')").run(companyId).lastInsertRowid);
+  // Disposable foreign tenant: never share the authenticated operator's company.
+  // The API must not resolve this enrollment even for a manager in tenant 6.
+  const foreignCompany=Number(db.prepare(
+    "INSERT INTO empresas (nome, razao_social, codigo, email, ativo, created_at, updated_at) VALUES ('QA TENANT ISOLATION', 'QA TENANT ISOLATION', 'qa-lms-foreign', 'qa-foreign@example.invalid', 1, datetime('now'), datetime('now'))",
+  ).run().lastInsertRowid);
+  const foreignEmployee=Number(db.prepare(
+    "INSERT INTO funcionarios (empresa_id, nome, matricula, ativo, status) VALUES (?, 'QA CROSS TENANT', 'QA-CROSS-001', 1, 'ATIVO')",
+  ).run(foreignCompany).lastInsertRowid);
+  const foreignCourse=Number(db.prepare(
+    "INSERT INTO lms_cursos (empresa_id,titulo,tipo_conteudo,ativo,publicado,scorm_package_r2_prefix,scorm_launch_file,scorm_versao) VALUES (?,'QA FOREIGN SCORM','scorm',1,1,?,'index.html','1.2')",
+  ).run(foreignCompany,'lms/scorm/'+foreignCompany+'/1/foreign/').lastInsertRowid);
+  const foreignEnrollment=Number(db.prepare(
+    "INSERT INTO lms_matriculas (empresa_id,curso_id,funcionario_id,status) VALUES (?,?,?,'NAO_INICIADO')",
+  ).run(foreignCompany,foreignCourse,foreignEmployee).lastInsertRowid);
+  assert([foreignCompany,foreignCourse,foreignEmployee,foreignEnrollment].every(Number.isSafeInteger),
+    'CROSS_TENANT_FIXTURE_INVALID');
   db.close();
 
   const login=await fetch(api+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -96,6 +112,7 @@ async function main(){
     packageSha256,zipPath,fixtureKind:'LOCAL_DISPOSABLE_ZIP',
     enrollments:{chromium:firstId,'webkit-ipad':secondId},
     employeeIds:{chromium:firstEmployee,'webkit-ipad':secondEmployee},
+    foreignTenant:{empresaId:foreignCompany,courseId:foreignCourse,matriculaId:foreignEnrollment},
   },null,2)+'\n',{mode:0o600});
   console.log('LOCAL_SCORM_BROWSER_FIXTURE_READY=2');
 }

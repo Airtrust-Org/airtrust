@@ -7,6 +7,7 @@ const sha=createHash('sha256').update(zip).digest('hex');
 const run=browser=>({
   source:'LOCAL_DISPOSABLE_D1_R2_ONLY',browser,packageSha256:sha,
   enrollmentIsolation:'SAME_TENANT_ONLY',certificateDocument:'INCONCLUSIVE',
+  crossTenantAccess:'PASS',
   cases:[...LOCAL_CASES.map(name=>({name,status:'PASS'})),
     {name:'TENANT_CYCLE_ISOLATION',status:'INCONCLUSIVE'}],
 });
@@ -34,4 +35,9 @@ test('rejects fabricated or missing browser assertions',()=>{
  assert.throws(()=>summarizeLocalEvidence(zip,[a,run('WEBKIT')]),/CASE_SET/);
  const b=run('WEBKIT');b.cases[0].status='INCONCLUSIVE';
  assert.throws(()=>summarizeLocalEvidence(zip,[run('CHROMIUM'),b]),/NOT_PROVEN/);
+});
+
+test('rejects missing backend tenant isolation proof',()=>{
+ const a=run('CHROMIUM');delete a.crossTenantAccess;
+ assert.throws(()=>summarizeLocalEvidence(zip,[a,run('WEBKIT')]),/TENANT_PROBE_MISSING/);
 });

@@ -14,6 +14,7 @@ type Fixture={
   origin:string;companyId:number;courseId:number;dbFile:string;
   packageSha256:string;zipPath:string;fixtureKind:'LOCAL_DISPOSABLE_ZIP';
   enrollments:Record<string,number>;
+  foreignTenant:{empresaId:number;courseId:number;matriculaId:number};
 };
 test('SCORM wrong answer, resume, pass, explicit completion and qualification',async({page},testInfo)=>{
   test.setTimeout(120000);
@@ -31,6 +32,25 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   const token=(await login.json()).data.accessToken as string;
   expect(token.length).toBeGreaterThan(20);
   const headers={Authorization:'Bearer '+token};
+
+  // Exercise backend tenant isolation, not merely a direct SQL predicate.
+  // The session is authenticated as company 6 and must not receive a token
+  // for the independent synthetic company.
+  const foreign=fixture.foreignTenant;
+  expect(foreign.empresaId).not.toBe(fixture.companyId);
+  expect(foreign.matriculaId).not.toBe(id);
+  const deniedSession=await page.request.post(api+'/lms/assets/session',{
+    headers,data:{matricula_id:foreign.matriculaId},
+  });
+  expect(deniedSession.status()).toBe(404);
+  const deniedEnrollment=await page.request.get(
+    api+'/lms/matriculas/'+foreign.matriculaId,{headers});
+  expect(deniedEnrollment.status()).toBe(404);
+  const deniedCourse=await page.request.get(api+'/lms/cursos/'+foreign.courseId,{headers});
+  expect([403,404]).toContain(deniedCourse.status());
+  const deniedLaunch=await page.request.get(
+    api+'/lms/scorm/launch/'+foreign.matriculaId,{headers});
+  expect([401,403,404]).toContain(deniedLaunch.status());
 
   async function enrollment(){
     const res=await page.request.get(api+'/lms/matriculas/'+id,{headers});
@@ -68,6 +88,13 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
     } finally { db.close(); }
   }
   const otherBefore=otherEnrollmentSnapshot();
+  const foreignBefore=(()=>{
+    const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
+    try {return db.prepare(
+      'SELECT status, progresso_pct, qualificacao_historico_id FROM lms_matriculas WHERE id=? AND empresa_id=?',
+    ).get(foreign.matriculaId,foreign.empresaId);}
+    finally {db.close();}
+  })();
 
   let sco=await open();
   await expect(sco.locator('#submitAssessment')).toBeDisabled();
@@ -125,6 +152,14 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   expect(replayed.history.n).toBe(1);
   // A sibling enrollment is never mutated by this learner's pass/fail/reopen.
   expect(otherEnrollmentSnapshot()).toEqual(otherBefore);
+  const foreignAfter=(()=>{
+    const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
+    try {return db.prepare(
+      'SELECT status, progresso_pct, qualificacao_historico_id FROM lms_matriculas WHERE id=? AND empresa_id=?',
+    ).get(foreign.matriculaId,foreign.empresaId);}
+    finally {db.close();}
+  })();
+  expect(foreignAfter).toEqual(foreignBefore);
 
   // Local diagnostics only: this must not be imported as trusted certification.
   const browser=testInfo.project.name==='chromium'?'CHROMIUM':'WEBKIT';
@@ -133,7 +168,7 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
     'NO_STATUS_DOWNGRADE'];
   const evidence={source:'LOCAL_DISPOSABLE_D1_R2_ONLY',browser,
     packageSha256:localZipDigest,enrollmentIsolation:'SAME_TENANT_ONLY',
-    certificateDocument:'INCONCLUSIVE',
+    certificateDocument:'INCONCLUSIVE',crossTenantAccess:'PASS',
     cases:[...proven.map(name=>({name,status:'PASS'})),
       {name:'TENANT_CYCLE_ISOLATION',status:'INCONCLUSIVE'}]};
   writeFileSync(join('worker-airtrust/.wrangler/scorm-browser-qa',

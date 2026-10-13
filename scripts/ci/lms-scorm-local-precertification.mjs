@@ -18,6 +18,7 @@ export function summarizeLocalEvidence(zipBytes,runs){
     const row=rows[0];
     if(row.source!=='LOCAL_DISPOSABLE_D1_R2_ONLY'||
        row.packageSha256!==sha)throw Error('ZIP_PROVENANCE_MISMATCH:'+browser);
+    if(row.crossTenantAccess!=='PASS')throw Error('TENANT_PROBE_MISSING:'+browser);
     if(row.enrollmentIsolation!=='SAME_TENANT_ONLY'||
        row.certificateDocument!=='INCONCLUSIVE')throw Error('SCOPE_INVALID:'+browser);
     const cases=row.cases;
@@ -33,7 +34,7 @@ export function summarizeLocalEvidence(zipBytes,runs){
   return {schemaVersion:1,source:'LOCAL_DISPOSABLE_ZIP_ONLY',
     packageSha256:sha,status:'UNCERTIFIED',activationAuthorized:false,
     checkedBrowsers:['CHROMIUM','WEBKIT'],passedChecks:14,
-    missing:['REAL_STAGING_CANDIDATE','TENANT_CYCLE_ISOLATION',
+    missing:['REAL_STAGING_CANDIDATE','CYCLE_ISOLATION',
       'CERTIFICATE_DOCUMENT','TRUSTED_HARNESS_PROVENANCE']};
 }
 
