@@ -159,6 +159,27 @@ function renderDashboard(initialEntry = '/frms') {
 }
 
 describe('FrmsDashboard simplificado', () => {
+  it('mostra o início declarado no check-in sem fabricar término para dia sem voo', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({ data: [item({
+      hora_apresentacao: '07:15',
+      hora_termino: null,
+      horas_voo_minutos: 0,
+      duracao_jornada_minutos: 0,
+      teve_jornada: false,
+      jornada_data_source: 'AUSENTE',
+      snapshot_status: 'INCOMPLETO',
+      estado_operacional: 'NAO_AVALIADO',
+      fatorizacao_status: 'AUSENTE',
+      checkin_status: 'RECEBIDO',
+    })] }));
+    renderDashboard();
+    fireEvent.click(screen.getByRole('button', { name: /Max/i }));
+    const drawer = within(screen.getByRole('dialog'));
+    expect(drawer.getByText('07:15 → —')).toBeInTheDocument();
+    expect(drawer.getByText(/Início informado no check-in/)).toBeInTheDocument();
+    expect(drawer.getByText(/Sem voo e sem corte de motor registrado, não existe horário de encerramento automático/)).toBeInTheDocument();
+  });
+
   it('coloca conclusão não confirmável antes de sinais numéricos favoráveis', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(state({ data: [item({
       snapshot_status: 'ATENCAO', estado_operacional: 'ATENCAO',
@@ -477,7 +498,7 @@ describe('FrmsDashboard simplificado', () => {
     fireEvent.click(screen.getByRole('button', { name: /Max/i }));
     const drawer = within(screen.getByRole('dialog'));
     expect(drawer.getByText('Horário declarado')).toBeInTheDocument();
-    expect(drawer.getByText(/Informado no check-in; a escala e a jornada ainda precisam ser confirmadas/i)).toBeInTheDocument();
+    expect(drawer.getByText(/Início informado no check-in/)).toBeInTheDocument();
   });
 
   it('explica que a jornada do dia em curso fecha após a operação e mantém o acumulado separado', () => {
