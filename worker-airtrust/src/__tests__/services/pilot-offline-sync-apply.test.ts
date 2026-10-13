@@ -528,7 +528,8 @@ describe('Pilot offline snapshot apply orchestration', () => {
     const batchBlock = source.slice(batchStart, batchEnd);
     expect(batchStart).toBeGreaterThan(-1);
     expect(batchBlock.indexOf('rdvStatement')).toBeLessThan(batchBlock.indexOf('receiptStatement'));
-    expect(batchBlock.indexOf('receiptStatement')).toBeLessThan(batchBlock.indexOf('...stageStatements'));
+    expect(batchBlock.indexOf('receiptStatement')).toBeLessThan(batchBlock.indexOf('...removedStageStatements'));
+    expect(batchBlock.indexOf('...removedStageStatements')).toBeLessThan(batchBlock.indexOf('...stageStatements'));
     expect(batchBlock.indexOf('...stageStatements')).toBeLessThan(batchBlock.indexOf('...fuelingStatements'));
     expect(batchBlock.indexOf('...fuelingStatements')).toBeLessThan(batchBlock.indexOf('flightMetadataStatement'));
     expect(batchBlock.indexOf('flightMetadataStatement')).toBeLessThan(batchBlock.indexOf('eventStatement'));
