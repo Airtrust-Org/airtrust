@@ -280,6 +280,27 @@ export function resolveFrmsCoordinationGuidance(
   };
 }
 
+export type FrmsActionLane = 'REVISAO' | 'CHECKIN' | 'EVIDENCIA' | 'AGUARDAR' | 'SEM_ACAO';
+
+/** Presentation-only next-step groups. Canonical fatigue status is untouched. */
+export function resolveFrmsActionLane(
+  item: FrmsOperationalSnapshotItem,
+  todayIso: string,
+): FrmsActionLane {
+  const bucket = classifyOperationalItem(item);
+  if (bucket === 'BLOQUEIO' || bucket === 'DECISAO') return 'REVISAO';
+  const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
+  const moment = resolveOperationalDataMoment(item, todayIso);
+  if (bucket === 'CONFIRMAR' && guidance.requiresCheckin &&
+      !guidance.checkinComplete && item.data_operacional === todayIso) return 'CHECKIN';
+  if (bucket === 'CONFIRMAR' &&
+      ((moment === 'DIA_EM_ABERTO' && guidance.checkinComplete) || moment === 'PROGRAMADO')) {
+    return 'AGUARDAR';
+  }
+  if (bucket === 'CONFIRMAR') return 'EVIDENCIA';
+  return 'SEM_ACAO';
+}
+
 export function bucketPriority(bucket: FrmsDecisionBucket): number {
   if (bucket === 'BLOQUEIO') return 0;
   if (bucket === 'DECISAO') return 1;
