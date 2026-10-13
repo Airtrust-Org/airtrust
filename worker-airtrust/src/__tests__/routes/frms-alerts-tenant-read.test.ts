@@ -51,7 +51,7 @@ async function request(path: string, tenant: number, db: D1Database) {
 }
 
 describe('FRMS alert list and count tenant gating', () => {
-  it.each(['/alertas', '/alertas/count', '/ultimo-mes'])('fails closed without empresa context on %s', async path => {
+  it.each(['/alertas', '/alertas/count', '/ultimo-mes', '/score-atual/42'])('fails closed without empresa context on %s', async path => {
     const fake = dbSpy();
     const res = await request(path, 0, fake.db);
     expect(res.status).toBe(403);
