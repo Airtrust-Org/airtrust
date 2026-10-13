@@ -39,8 +39,8 @@ jobs:
           [[ "$CONFIRMATION" == "AIRTRUST_FRMS_UX_30D_READONLY" ]] || exit 1
           echo "FIXED_SCOPE_READONLY_OK"
 
-  source:
-    name: Read 30-Day Deidentified Aggregate Only
+  d1-readonly-source:
+    name: Production D1 Read 30-Day Deidentified Aggregate Only
     needs: guard
     runs-on: ubuntu-latest
     environment: production
