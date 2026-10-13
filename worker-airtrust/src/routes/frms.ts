@@ -2795,6 +2795,10 @@ frmsRoutes.get(
   '/alertas',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso aos alertas negado.',
+    }, 403);
     const filtro = {
       tripulante_id: c.req.query('tripulante_id') ?? undefined,
       nivel: (c.req.query('nivel') as (typeof NIVEIS_ALERTA)[number]) ?? undefined,
@@ -2824,6 +2828,10 @@ frmsRoutes.get(
   '/alertas/count',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso ao contador negado.',
+    }, 403);
     const row = await c.env.DB.prepare(
       `SELECT COUNT(*) as count
          FROM frms_alerta a
@@ -2834,9 +2842,9 @@ frmsRoutes.get(
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-          AND (? IS NULL OR f.empresa_id = ?)`,
+          AND f.empresa_id = ?`,
     )
-      .bind(empresaId ?? null, empresaId ?? null)
+      .bind(empresaId)
       .first<{ count: number }>();
     return c.json({ success: true, data: { count: row?.count ?? 0 } });
   }),
