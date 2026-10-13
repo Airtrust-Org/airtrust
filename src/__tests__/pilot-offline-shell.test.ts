@@ -614,7 +614,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('Resumo automático do voo');
     expect(pilotIndex).toContain('expandable-panel');
     expect(pilotApp).toContain('Excluir esta etapa');
-    expect(pilotApp).toContain("label: 'Relatório de voo'");
+    expect(pilotApp).toContain("label: 'Relatório de voo (editável)'");
     expect(pilotApp).toContain("['Tempo de voo', activeRdvDraft.form.tempo_voo_total_hhmm");
     expect(pilotApp).toContain("['Tempo total', activeRdvDraft.form.tempo_total_hhmm");
     expect(pilotApp).toContain('realizedTotalMinutes(activeStageDrafts)');
