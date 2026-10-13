@@ -19,6 +19,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
 import { SettingsSectionIntro } from './components/SettingsSectionIntro';
 import { BombeirosFrmsDemo } from './BombeirosFrmsDemo';
+import { mayPreviewBombeirosFrmsDemo } from './bombeirosFrmsDemoData';
 
 interface Empresa {
   id: number;
@@ -79,12 +80,11 @@ export function GestaoEmpresas() {
   // Only the AirTrust platform context can preview the isolated synthetic tenant.
   // A Costa do Sol session must NEVER expose Bombeiros in its operational menu.
   const activeCompany = sessionEmpresas.find(e => e.id === empresaAtualId);
-  const canPreviewBombeiros = isSuperAdmin
-    && activeCompany?.codigo === 'airtrust'
-    && typeof window !== 'undefined'
-    && (window.location.hostname === 'staging.airtrust.pages.dev'
-      || window.location.hostname === 'localhost'
-      || window.location.hostname === '127.0.0.1');
+  const canPreviewBombeiros = mayPreviewBombeirosFrmsDemo(
+    isSuperAdmin,
+    activeCompany?.codigo,
+    typeof window !== 'undefined' ? window.location.hostname : '',
+  );
 
 
   const fetchEmpresas = async () => {
