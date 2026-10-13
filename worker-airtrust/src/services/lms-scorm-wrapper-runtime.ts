@@ -249,7 +249,8 @@ export function buildScormSessionCloseRuntimeScript(): string {
           }
         }
       } catch (_terminateError) { /* termination best-effort */ }
-      setStatus('Sessão encerrada', false);
+      setStatus(status === 'closed' ? 'Sessão encerrada' :
+        'Sessão encerrada sem confirmação da última gravação', status !== 'closed', status !== 'closed');
       postToParent({
         type: 'lms:session-close:ack',
         matriculaId: MATRICULA_ID,
@@ -263,11 +264,11 @@ export function buildScormSessionCloseRuntimeScript(): string {
 
     try {
       Promise.resolve(commit(buildPayload(), 0, 'SCORM_FINISH')).then(
-        function() { finish('closed'); },
-        function() { finish('closed'); }
+        function(response) { finish(response && response.ok ? 'closed' : 'save-unconfirmed'); },
+        function() { finish('save-unconfirmed'); }
       );
     } catch (_commitError) {
-      finish('closed');
+      finish('save-unconfirmed');
     }
   }
 
