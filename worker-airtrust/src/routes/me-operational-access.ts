@@ -20,6 +20,7 @@ import {
 } from '../services/employee-sector-access';
 import { needsFirefighterAviationProfile, resolveFrmsWorkforceProfile } from '../lib/frms/workforce-profile';
 import { FRMS_FIREFIGHTER_AVIATION_PROFILE } from '../lib/frms/parameter-governance';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { assessMaintenanceFatigue } from '../lib/frms/maintenance-fatigue';
 import {
   SESSION_ROLE_COOKIE,
@@ -304,9 +305,7 @@ router.get('/', async (c) => {
 
   let tenantFrmsProfile: string | null = null;
   if (needsFirefighterAviationProfile(employee?.cargo, employee?.funcao)) {
-    const referenceDate = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
-    }).format(new Date());
+    const referenceDate = getTodayIsoSaoPaulo();
     const assignments = await db.prepare(`SELECT profile_code FROM frms_profile_assignments
        WHERE empresa_id = ? AND status = 'ACTIVE' AND effective_from <= ?
        AND (effective_to IS NULL OR effective_to >= ?)`)
