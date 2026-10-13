@@ -101,22 +101,40 @@ export async function marcarAlertaVisualizado(
   db: D1Database,
   id: string,
   userId: string,
-): Promise<void> {
+  empresaId: number,
+): Promise<boolean> {
+  // The read guard at the route is not a substitute for ownership checked
+  // again atomically by D1 at the write. Fail closed across tenants.
+  const anterior = await db.prepare(`
+    SELECT a.* FROM frms_alerta a
+    JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
+    WHERE a.id = ? AND a.deleted_at IS NULL AND f.empresa_id = ?
+      AND f.deleted_at IS NULL AND COALESCE(f.ativo, 1) = 1
+      AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+    LIMIT 1
+  `).bind(id, empresaId).first();
+  if (!anterior) return false;
+
   const timestamp = now();
-  const anterior = await db
-    .prepare('SELECT * FROM frms_alerta WHERE id = ? AND deleted_at IS NULL')
-    .bind(id)
-    .first();
-  await db
-    .prepare(
-      'UPDATE frms_alerta SET visualizado = 1, visualizado_em = ?, visualizado_por = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
-    )
-    .bind(timestamp, userId, timestamp, id)
-    .run();
+  const updated = await db.prepare(`
+    UPDATE frms_alerta
+    SET visualizado = 1, visualizado_em = ?, visualizado_por = ?, updated_at = ?
+    WHERE id = ? AND deleted_at IS NULL
+      AND EXISTS (
+        SELECT 1 FROM funcionarios f
+        WHERE f.id = CAST(frms_alerta.tripulante_id AS INTEGER)
+          AND f.empresa_id = ? AND f.deleted_at IS NULL
+          AND COALESCE(f.ativo, 1) = 1
+          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+      )
+  `).bind(timestamp, userId, timestamp, id, empresaId).run();
+  if ((updated.meta?.changes ?? 0) !== 1) return false;
+
   await logAuditoria(db, 'frms_alerta', id, 'VISUALIZADO', anterior, {
     visualizado_por: userId,
     visualizado_em: timestamp,
   });
+  return true;
 }
 
 async function currentOpenCase(

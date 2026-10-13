@@ -926,6 +926,10 @@ frmsRoutes.get(
   safe(async (c) => {
     const funcionarioId = c.req.param('funcionarioid') ?? '';
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso ao score negado.',
+    }, 403);
 
     if (empresaId) {
       const func = await c.env.DB.prepare(
@@ -1774,6 +1778,10 @@ frmsRoutes.get(
   '/ultimo-mes',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso às jornadas negado.',
+    }, 403);
     const row = await c.env.DB.prepare(
       `SELECT strftime('%Y-%m', j.data) as mes
        FROM frms_jornada j
@@ -1782,11 +1790,11 @@ frmsRoutes.get(
          AND f.deleted_at IS NULL
          AND COALESCE(f.ativo, 1) = 1
          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-         AND (? IS NULL OR f.empresa_id = ?)
+         AND f.empresa_id = ?
        ORDER BY j.data DESC
        LIMIT 1`,
     )
-      .bind(empresaId ?? null, empresaId ?? null)
+      .bind(empresaId)
       .first<{ mes: string }>();
 
     const mesAtual = new Date().toISOString().slice(0, 7);
@@ -2795,6 +2803,10 @@ frmsRoutes.get(
   '/alertas',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso aos alertas negado.',
+    }, 403);
     const filtro = {
       tripulante_id: c.req.query('tripulante_id') ?? undefined,
       nivel: (c.req.query('nivel') as (typeof NIVEIS_ALERTA)[number]) ?? undefined,
@@ -2824,6 +2836,10 @@ frmsRoutes.get(
   '/alertas/count',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso ao contador negado.',
+    }, 403);
     const row = await c.env.DB.prepare(
       `SELECT COUNT(*) as count
          FROM frms_alerta a
@@ -2834,9 +2850,9 @@ frmsRoutes.get(
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-          AND (? IS NULL OR f.empresa_id = ?)`,
+          AND f.empresa_id = ?`,
     )
-      .bind(empresaId ?? null, empresaId ?? null)
+      .bind(empresaId)
       .first<{ count: number }>();
     return c.json({ success: true, data: { count: row?.count ?? 0 } });
   }),
