@@ -263,9 +263,11 @@ jobs:
               --config=playwright.ci.config.ts \
               --project=chromium \
               e2e/ci/login-public-smoke.spec.ts \
-              e2e/ci/pilot-offline-persistence.spec.ts
+              e2e/ci/pilot-offline-persistence.spec.ts \
+              e2e/ci/lms-scorm-browser-protocol.spec.ts
           CI=true VITE_API_URL=http://127.0.0.1:8787 \
             timeout --signal=TERM 15m npx playwright test \
               --config=playwright.ci.config.ts \
               --project=webkit-ipad \
-              e2e/ci/pilot-offline-persistence.spec.ts
+              e2e/ci/pilot-offline-persistence.spec.ts \
+              e2e/ci/lms-scorm-browser-protocol.spec.ts
