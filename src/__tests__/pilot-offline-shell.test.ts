@@ -284,7 +284,9 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v34'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v35'");
+    expect(pilotSw).toContain('PILOT_NETWORK_TIMEOUT_MS = 4_000');
+    expect(pilotSw).toContain('controller.abort()');
     expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -293,11 +295,11 @@ describe('Pilot Offline shell', () => {
     expect(pilotSw).toContain("'/pilot/pilot-lease.js'");
     expect(pilotSw).toContain("'/pilot/pilot-lease-trust.js'");
     expect(pilotSw).toContain('url.pathname.startsWith(PILOT_SCOPE_PATH)');
-    expect(pilotSw).toContain("fetch(PILOT_SCOPE_PATH, { cache: 'no-store', redirect: 'error' })");
+    expect(pilotSw).toContain("fetchPilotShellResource(PILOT_SCOPE_PATH, { cache: 'no-store', redirect: 'error' })");
     expect(pilotSw).toContain('const cached = await caches.match(PILOT_SCOPE_PATH)');
     expect(pilotSw).toContain('if (cached) return cached');
     expect(pilotSw).toContain("if (url.pathname.startsWith('/api/')) return;");
-    expect(pilotSw).toContain("fetch(request, { cache: 'no-store' })");
+    expect(pilotSw).toContain("fetchPilotShellResource(request, { cache: 'no-store' })");
   });
 
   it('recupera shell antigo sem deixar a tela presa em Verificando conexao', () => {
@@ -586,7 +588,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('fields.peso_padrao_ativo = false;');
     expect(pilotApp).toContain('applyStandardPassengerBaggageWeight(fields)');
     expect(pilotIndex).toContain('.pilot-standard-weight-toggle');
-    expect(pilotSw).toContain('airtrust-pilot-shell-v34');
+    expect(pilotSw).toContain('airtrust-pilot-shell-v35');
     expect(pilotApp).not.toContain("['Hora', 'hora', 'time'");
     expect(pilotApp).not.toContain("['Nota do combustível', 'nota'");
     expect(pilotSync).not.toContain('nota: optionalText(fueling?.nota)');
@@ -671,6 +673,15 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("input.inputMode = 'numeric'");
     expect(pilotApp).toContain("['IFR (duração)', 'tempo_ifr', 'duration'");
     expect(pilotApp).toContain("['Noturno (duração)', 'tempo_noturno', 'duration'");
+  });
+
+  it('habilita revisão nativa pt-BR sem atribuir atualização do servidor automaticamente à Coordenação', () => {
+    expect(pilotApp).toContain("if (type === 'textarea') {");
+    expect(pilotApp).toContain("input.lang = 'pt-BR'");
+    expect(pilotApp).toContain('input.spellcheck = true');
+    expect(pilotApp).toContain("input.setAttribute('autocorrect', 'on')");
+    expect(pilotApp).toContain('O pacote local está desatualizado em relação ao servidor');
+    expect(pilotApp).not.toContain('A Coordenação alterou este voo. Atualize o voo antes de sincronizar');
   });
 
   it('expõe tempos derivados, unidades e erro real da transmissão bloqueada', () => {
