@@ -1097,8 +1097,8 @@ describe('lms matriculas progress integrity', () => {
         novo_status: 'EM_ANDAMENTO',
         qualificacao_gerada: null,
         completion_diagnostic: {
-          status: 'accepted',
-          code: 'SCORM_COMPLETION_ACCEPTED',
+          status: 'none',
+          code: 'SCORM_PROGRESS_EVIDENCE_MISSING',
           can_finalize: false,
           reached_final_location: true,
           final_commit_observed: true,
@@ -1337,8 +1337,10 @@ describe('lms matriculas progress integrity', () => {
         matricula_id: 401,
         novo_status: 'EM_ANDAMENTO',
         completion_diagnostic: {
-          status: 'candidate',
+          status: 'none',
+          code: 'SCORM_PROGRESS_EVIDENCE_MISSING',
           explicit_completion: false,
+          can_finalize: false,
         },
       },
     });
