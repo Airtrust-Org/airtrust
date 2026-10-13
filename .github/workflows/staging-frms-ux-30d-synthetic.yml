@@ -166,14 +166,15 @@ jobs:
         run: |
           set -euo pipefail
           cd worker-airtrust
-          npx wrangler d1 execute airtrust-db-staging-baseline-20260701 --remote --json --command "SELECT (SELECT COUNT(*) FROM empresas WHERE id=999013 AND codigo='qa_frms_ux_30d' AND ativo=1 AND deleted_at IS NULL) AS tenant, (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=999013 AND matricula LIKE 'QA-FRMS-UX-%' AND deleted_at IS NULL) AS crew, (SELECT COUNT(*) FROM frms_profile_assignments WHERE empresa_id=999013 AND status='ACTIVE') AS assignment" > "$RUNNER_TEMP/frms-qa-post.json"
+          npx wrangler d1 execute airtrust-db-staging-baseline-20260701 --remote --json --command "SELECT (SELECT COUNT(*) FROM empresas WHERE id=999013 AND codigo='qa_frms_ux_30d' AND ativo=1 AND deleted_at IS NULL) AS tenant, (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=999013 AND matricula LIKE 'QA-FRMS-UX-%' AND deleted_at IS NULL) AS crew, (SELECT COUNT(*) FROM frms_profile_assignments WHERE empresa_id=999013 AND status='ACTIVE') AS assignment, (SELECT COUNT(*) FROM frms_config_revisions WHERE empresa_id=999013 AND id='qa-frms-ux-999013-helicopter-offshore-v1' AND profile_code='HELICOPTER_OFFSHORE' AND status='ACTIVE') AS revision, (SELECT COUNT(*) FROM frms_config_parameters WHERE revision_id='qa-frms-ux-999013-helicopter-offshore-v1') AS params" > "$RUNNER_TEMP/frms-qa-post.json"
           export POST="$RUNNER_TEMP/frms-qa-post.json"
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const parsed=JSON.parse(fs.readFileSync(process.env.POST,'utf8'));
           const row=(Array.isArray(parsed)?parsed[0]?.results:parsed.results)?.[0];
           const want=process.env.MODE==='apply';
-          if (!row || Number(row.tenant)!==(want?1:0) || Number(row.crew)!==(want?14:0) || Number(row.assignment)!==(want?1:0)) {
+          if (!row || Number(row.tenant)!==(want?1:0) || Number(row.crew)!==(want?14:0) || Number(row.assignment)!==(want?1:0) ||
+            Number(row.revision)!==(want?1:0) || Number(row.params)!==(want?128:0)) {
             throw new Error('STAGING_QA_POSTCONDITIONS_FAILED');
           }
           console.log('STAGING_FRMS_UX_QA_POSTCONDITIONS_PASS');
