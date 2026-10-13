@@ -10,7 +10,7 @@
  * --rollback (soft-disable only this fixture).
  */
 import { createRequire } from 'node:module';
-import { createHash } from 'node:crypto';
+// QA is not a regulatory approval: no synthetic document hash may be asserted.
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -115,7 +115,7 @@ export function buildApplySql(hash) {
     TENANT_ID+", "+e(TENANT_CODE)+", 'QA FRMS UX Sintetico', 'QA FRMS UX Sintetico', 1, 'basic', 30, 256, datetime('now'), datetime('now'), NULL);");
   sql.push("INSERT INTO setores (codigo, nome, descricao, responsavel, ativo, empresa_id, created_at, updated_at, deleted_at) VALUES ('QA-FRMS-UX-SETOR', 'Operacao FRMS QA', 'Dados sintéticos exclusivos', 'QA AirTrust', 1, "+TENANT_ID+", datetime('now'), datetime('now'), NULL);");
   sql.push(buildScopedRevisionSql());
-  sql.push("INSERT INTO frms_regulatory_profiles (id, empresa_id, profile_code, service_category, approval_reference, policy_version, effective_from, effective_to, limits_json, source_document_hash, active, created_at, updated_at, deleted_at) VALUES ('qa-frms-ux-reg-20261013', "+TENANT_ID+", 'HELICOPTER_OFFSHORE', 'QA_SYNTHETIC_ONLY', 'QA_ONLY_NOT_REGULATORY_APPROVAL', 'LEGACY_MODEL_V2', '2026-09-01', NULL, NULL, "+e(createHash('sha256').update('AirTrust synthetic FRMS UX QA; no regulatory approval').digest('hex'))+", 1, datetime('now'), datetime('now'), NULL);");
+  sql.push("INSERT INTO frms_regulatory_profiles (id, empresa_id, profile_code, service_category, approval_reference, policy_version, effective_from, effective_to, limits_json, source_document_hash, active, created_at, updated_at, deleted_at) VALUES ('qa-frms-ux-reg-20261013', "+TENANT_ID+", 'HELICOPTER_OFFSHORE', 'QA_SYNTHETIC_ONLY', 'QA_ONLY_NOT_REGULATORY_APPROVAL', 'LEGACY_MODEL_V2', '2026-09-01', NULL, NULL, NULL, 1, datetime('now'), datetime('now'), NULL);");
   sql.push("INSERT INTO frms_profile_assignments (id, empresa_id, regulatory_profile_id, profile_code, status, effective_from, effective_to, reason, source, created_at) VALUES ('qa-frms-ux-assignment-20261013', "+TENANT_ID+", 'qa-frms-ux-reg-20261013', 'HELICOPTER_OFFSHORE', 'ACTIVE', '2026-09-01', NULL, 'Synthetic staging FRMS UX review only', 'QA_GOVERNED', datetime('now'));");
   sql.push("INSERT INTO escalas_quinzenas (empresa_id, ano, mes, numero, data_inicio, data_fim, observacoes) VALUES ("+TENANT_ID+", 2026, 10, 1, '2026-10-01', '2026-10-15', "+e(FIXTURE_TAG)+");");
   for (const n of numbers) {
