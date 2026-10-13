@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { useApi } from '@/react-app/hooks/useApi';
+import { deriveFrmsReportInsights } from './frmsReportInsights';
 
 function toDateKeyLocal(date: Date): string {
   const year = date.getFullYear();
@@ -155,6 +156,7 @@ export default function FrmsRelatorios() {
   const reportMeta = rawData && !Array.isArray(rawData) ? rawData.meta ?? null : null;
   const invalidResponse = rawData != null && !Array.isArray(rawData) && !Array.isArray(rawData.data);
   const reportError = error || (invalidResponse ? 'Resposta inválida recebida do serviço de relatórios.' : null);
+  const insights = data && data.length > 0 ? deriveFrmsReportInsights(tipo, data) : [];
 
   const reportPeriodLabel =
     tipo === 'compliance'
@@ -259,7 +261,7 @@ export default function FrmsRelatorios() {
           row.pct_mes ?? '',
           row.pct_365d ?? '',
           row.nivel_max ?? '',
-          row.repouso_suficiente ? 'Sim' : 'Não',
+          row.repouso_suficiente == null ? '' : row.repouso_suficiente ? 'Sim' : 'Não',
         ].map(csvCell).join(',') + '\n';
       }
     } else {
@@ -394,6 +396,28 @@ export default function FrmsRelatorios() {
         </div>
 
         <div id="frms-report-content" className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          {!reportError && !loading && data && data.length > 0 ? (
+            <section aria-label="Conclusões e próximas ações do relatório" className="border-b border-slate-200 bg-slate-50 p-5">
+              <h2 className="text-base font-bold text-slate-900">O que os dados indicam e o que verificar</h2>
+              <p className="mt-1 text-xs text-slate-600">
+                Síntese interpretativa de {data.length} registro(s) retornado(s). Não comprova aptidão nem liberação operacional.
+              </p>
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {insights.map((insight) => (
+                  <article key={insight.key} className="rounded-lg border border-slate-200 bg-white p-4">
+                    <p className="text-sm font-bold text-slate-900">{insight.title}</p>
+                    <p className="mt-2 text-sm text-slate-700">{insight.explanation}</p>
+                    <p className="mt-2 text-sm text-slate-800"><strong>Próxima ação:</strong> {insight.action}</p>
+                  </article>
+                ))}
+              </div>
+              {reportMeta?.limitations?.length ? (
+                <p className="mt-3 text-xs text-amber-800">Limitações da fonte: {reportMeta.limitations.join(' · ')}</p>
+              ) : (
+                <p className="mt-3 text-xs text-slate-600">Limitações da fonte não informadas nesta resposta: confirme escopo e atualização antes de decidir.</p>
+              )}
+            </section>
+          ) : null}
           {reportError ? (
             <div className="flex flex-col items-center gap-3 p-10 text-center">
               <AlertTriangle className="h-8 w-8 text-amber-500" />
@@ -501,19 +525,21 @@ function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
           return (
             <tr key={i} className="hover:bg-gray-50/50">
               <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}</td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_7d?.toFixed(1) ?? '—'}%</td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_mes?.toFixed(1) ?? '—'}%</td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_365d?.toFixed(1) ?? '—'}%</td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_7d == null ? '—' : `${r.pct_7d.toFixed(1)}%`}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_mes == null ? '—' : `${r.pct_mes.toFixed(1)}%`}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_365d == null ? '—' : `${r.pct_365d.toFixed(1)}%`}</td>
               <td className="px-4 py-2.5 text-center">
                 <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${nivelColor}`}>
-                  {r.nivel_max || 'OK'}
+                  {r.nivel_max || 'Não avaliado'}
                 </span>
               </td>
               <td className="px-4 py-2.5 text-center">
-                {r.repouso_suficiente ? (
-                  <span className="text-xs font-bold text-emerald-500">✓</span>
+                {r.repouso_suficiente == null ? (
+                  <span className="text-xs font-bold text-slate-500">Não avaliado</span>
+                ) : r.repouso_suficiente ? (
+                  <span className="text-xs font-bold text-emerald-600">Sim</span>
                 ) : (
-                  <span className="text-xs font-bold text-red-500">✗</span>
+                  <span className="text-xs font-bold text-red-600">Insuficiente</span>
                 )}
               </td>
             </tr>
