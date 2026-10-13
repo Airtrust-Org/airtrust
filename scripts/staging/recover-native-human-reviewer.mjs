@@ -16,13 +16,31 @@ export function selectExistingReviewer(rows, email) {
   const matches = rows.filter(row => String(row.email || '').trim().toLowerCase() === email);
   if (matches.length !== 1) throw Error('REVIEWER_EXISTING_ACCOUNT_NOT_UNIQUE');
   const u = matches[0];
-  if (!Number.isSafeInteger(Number(u.id)) || Number(u.id) <= 0 ||
-      String(u.nome) !== 'Revisor de treinamentos' ||
-      String(u.perfil).toUpperCase() !== 'ALUNO' ||
-      String(u.role).toLowerCase() !== 'student') {
-    throw Error('REVIEWER_EXISTING_ACCOUNT_ROLE_MISMATCH');
+  // Name and legacy/global role are NOT reliable tenant identity checks.
+  // The catalog blends roles and the invited email may preexist on staging.
+  if (!Number.isSafeInteger(Number(u.id)) || Number(u.id) <= 0) {
+    throw Error('REVIEWER_EXISTING_ACCOUNT_INVALID_ID');
   }
   return Number(u.id);
+}
+
+export function assertReviewerTenantAccess(data, targetId, tenantId) {
+  const user = data?.usuario;
+  const accesses = data?.acessos;
+  if (Number(user?.id) !== targetId || !Array.isArray(accesses)) {
+    throw Error('REVIEWER_TENANT_ACCESS_INVALID');
+  }
+  const selected = accesses.filter(a => Number(a.empresa_id) === tenantId);
+  if (accesses.length !== 1 || selected.length !== 1) {
+    throw Error('REVIEWER_ISOLATED_TENANT_ACCESS_REQUIRED');
+  }
+  const access = selected[0];
+  const profiles = Array.isArray(access.perfis) ? access.perfis : [];
+  if (String(access.role).toLowerCase() !== 'student' ||
+      (profiles.length > 0 && !profiles.every(p => String(p).toUpperCase() === 'ALUNO'))) {
+    throw Error('REVIEWER_TENANT_ROLE_MISMATCH');
+  }
+  return true;
 }
 
 export function assertBrevoConfigured(metadata) {
@@ -86,6 +104,20 @@ export async function recoverReviewer(env, resend, request = fetchJson,
     throw Error('REVIEWER_ACCOUNT_READ_DENIED');
   }
   const userId = selectExistingReviewer(list.json?.data, cfg.email);
+  const accesses = await request(base + '/api/empresas/usuarios/' + userId + '/acessos', {
+    headers: authorized(),
+  });
+  if (accesses.status !== 200 || accesses.json?.success !== true) {
+    throw Error('REVIEWER_TENANT_ACCESS_READ_DENIED');
+  }
+  assertReviewerTenantAccess(accesses.json.data, userId, tenantId);
+  const matched = list.json.data.find(user => Number(user.id) === userId);
+  // Read-only diagnostic remains possible even when a preexisting user has
+  // a broader legacy/global profile. No credential mutation in that case.
+  if (String(matched?.perfil).toUpperCase() !== 'ALUNO') {
+    if (resend) throw Error('REVIEWER_GLOBAL_PROFILE_REVIEW_REQUIRED');
+    return 'REVIEWER_TENANT_STUDENT_GLOBAL_PROFILE_REVIEW_REQUIRED';
+  }
   if (!resend) return 'REVIEWER_EXISTING_ACCOUNT_VERIFIED';
   // Must confirm Brevo is bound BEFORE any token regeneration or D1 mutation.
   await checkBrevo(env);
