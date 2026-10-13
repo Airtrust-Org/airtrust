@@ -173,6 +173,7 @@ async function main(){
     ' tenant='+TENANT_ID+' syntheticPeople=14 days=30 statements='+sql.split('\n').filter(x=>x.endsWith(';')).length);
   if(!apply&&!rollback)return;
   if(process.env.CONFIRM_STAGING_FRMS_UX!==CONFIRM)throw new Error('STAGING_QA_CONFIRMATION_REQUIRED');
+  if(process.env.GITHUB_ACTIONS!=='true')throw new Error('OFFICIAL_STAGING_WORKFLOW_ONLY');
   assertTarget();
   if(!rollback)assertEmptyTenant();
   else{
