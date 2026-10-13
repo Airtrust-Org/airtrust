@@ -7,7 +7,7 @@ import {
   type LmsCompletionDecision,
   type LmsCompletionSource,
 } from '../services/lms-completion-evidence';
-import { extractScormLocationFromCmiJson, hasCompleteScormSlideCoverage, isTrustedScorm12Finish, scormStatusIndicatesCompletion } from '../services/lms-progress-guardrails';
+import { extractScormLocationFromCmiJson } from '../services/lms-progress-guardrails';
 import { evaluateScormClosureReadiness } from '../services/lms-matricula-runtime-domain';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 
@@ -259,31 +259,6 @@ function contentEvidenceValidated(row: EnrollmentEvidenceRow, source: LmsComplet
     return type === 'scorm';
   }
   return false;
-}
-
-function hasTerminalFormativeScormStatus(row: EnrollmentEvidenceRow, incoming: JsonRecord): boolean {
-  // Formative completion requires a real SCORM terminal signal. Client-side
-  // completion_candidate, slide count and generic PATCH progress do not count.
-  return [incoming.lesson_status, incoming.completion_status,
-    row.lesson_status, row.completion_status]
-    .some((value) => ['complete', 'completed', 'passed'].includes(normalizeStatus(value))) ||
-    isTrustedScorm12Finish({
-      lesson_status: incoming.lesson_status as string | null,
-      commit_event: incoming.commit_event as string | null,
-      completion_candidate: incoming.completion_candidate === true,
-      completion_observed_at: incoming.completion_observed_at as string | null,
-      cmi_json: incoming.cmi_json as string | null,
-    });
-}
-
-function formativeTerminalMissing(): LmsCompletionDecision {
-  return {
-    accepted: false,
-    code: 'COMPLETION_EVIDENCE_INSUFFICIENT',
-    scorePct: null,
-    masteryScore: null,
-    failurePrecedence: false,
-  };
 }
 
 function packageBound(row: EnrollmentEvidenceRow): boolean {
