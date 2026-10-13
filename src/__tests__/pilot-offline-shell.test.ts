@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
-import { applyStandardPassengerBaggageWeight } from '../../public/pilot/pilot-rdv-draft.js';
+import { applyStageContinuity, applyStandardPassengerBaggageWeight } from '../../public/pilot/pilot-rdv-draft.js';
 import { describe, expect, it } from 'vitest';
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
@@ -62,6 +62,31 @@ describe('Peso padrão opcional por etapa', () => {
     expect(applyStandardPassengerBaggageWeight(fields)).toBe(false);
     fields.pax = '-1';
     expect(applyStandardPassengerBaggageWeight(fields)).toBe(false);
+  });
+});
+
+describe('Partidas entre etapas', () => {
+  it('mostra zero sem novo acionamento e recalcula quando o motor é cortado', () => {
+    const stages = [
+      { fields: { destino_icao: '9PGB', horario_pouso: '10:00', horario_motor_desligado: '', starts: '1' } },
+      { fields: { origem_icao: '', horario_motor_ligado: '', starts: '' } },
+    ];
+    applyStageContinuity(stages);
+    expect(stages[1].fields.starts).toBe('0');
+    expect(stages[1].fields.horario_motor_ligado).toBe('10:00');
+    expect(stages[1].fields.origem_icao).toBe('9PGB');
+    stages[0].fields.horario_motor_desligado = '10:05';
+    applyStageContinuity(stages);
+    expect(stages[1].fields.starts).toBe('1');
+  });
+
+  it('não substitui uma contagem informada manualmente pelo piloto', () => {
+    const stages = [
+      { fields: { destino_icao: '9PGB', horario_pouso: '10:00', horario_motor_desligado: '', starts: '1' } },
+      { fields: { origem_icao: '', horario_motor_ligado: '', starts: '2' }, starts_auto_derived: false },
+    ];
+    applyStageContinuity(stages);
+    expect(stages[1].fields.starts).toBe('2');
   });
 });
 
@@ -206,7 +231,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('separa sincronizacao de dados do envio e oferece um fluxo unico para a Coordenacao', () => {
-    expect(pilotIndex).toContain('Sincronizar dados com o AirTrust');
+    expect(pilotIndex).toContain('Enviar informações do voo');
     expect(pilotIndex).toContain('Concluir e enviar à Coordenação');
     expect(pilotIndex).toContain('id="complete-send-rdv"');
     expect(pilotApp).toContain('async function completeAndSendCanonicalRdv');
@@ -214,6 +239,36 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("sendCanonicalRdvToCoordination({ skipConfirm: true })");
     expect(pilotApp).toContain('1/3 — Sincronizando os dados do voo');
     expect(pilotApp).toContain('3/3 — Enviando à Coordenação');
+  });
+
+  it('não avança para concluir sem confirmação da transmissão do lançamento atual', () => {
+    const sendFlow = pilotApp.slice(
+      pilotApp.indexOf('async function completeAndSendCanonicalRdv'),
+      pilotApp.indexOf('async function queueCurrentDraftForSync'),
+    );
+    expect(sendFlow).toContain('const syncConfirmed = await queueCurrentDraftForSync()');
+    expect(sendFlow).toContain('if (!syncConfirmed)');
+    expect(sendFlow).toContain('Etapa 1/3 não concluída: o servidor não confirmou o recebimento');
+    expect(sendFlow.indexOf('if (!syncConfirmed)')).toBeLessThan(sendFlow.indexOf('await prepareFlightPackage(flightId'));
+    expect(sendFlow).toContain("if (failure) setCoordinationMessage(failure");
+    const syncFlow = pilotApp.slice(pilotApp.indexOf('async function queueCurrentDraftForSync'));
+    expect(syncFlow).toContain('await listOutboxForFlight(flightId)');
+    expect(syncFlow).toContain('await latestAcceptedSyncReceiptForFlight(flightId)');
+    expect(syncFlow).toContain('acceptedSequence < persistedSequence');
+    expect(pilotIndex).toContain('id="sync-rdv-now"');
+    expect(pilotApp).toContain('syncRdvButton.textContent = operationalSyncInFlight');
+  });
+
+  it('permite consultar outras etapas durante o envio e identifica o relatório editável', () => {
+    const stageTabs = pilotApp.slice(
+      pilotApp.indexOf('function renderStageFields()'),
+      pilotApp.indexOf('const stageDraft = activeStageDrafts[index]'),
+    );
+    expect(stageTabs).toContain("button.addEventListener('click'");
+    expect(stageTabs).not.toContain('button.disabled = operationalSyncInFlight');
+    expect(pilotApp).toContain("label: 'Relatório de voo (editável)'");
+    expect(pilotApp).toContain('common.numero_db = value; scheduleOperationalSave()');
+    expect(pilotApp).toContain('Calculado automaticamente: 0 significa que não houve novo acionamento');
   });
 
   it('mostra uma tela dedicada depois que a Coordenacao confirma o recebimento', () => {
@@ -410,7 +465,7 @@ describe('Pilot Offline shell', () => {
 
   it('separa persistencia local de transmissao e exige receipt antes de remover a outbox', () => {
     expect(pilotIndex).toContain('id="sync-rdv-now"');
-    expect(pilotIndex).toContain('Sincronizar dados com o AirTrust');
+    expect(pilotIndex).toContain('Enviar informações do voo');
     expect(pilotApp).toContain("await vault.putJson(\n        'outbox'");
     expect(pilotApp).toMatch(/await vault\.getJson\(\s*'sync_receipts'/);
     const persistResultIndex = pilotApp.indexOf('async function persistFinalSyncResult');
