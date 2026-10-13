@@ -113,7 +113,7 @@ function situacaoCaso(item: FrmsAlertaRow, hoje: string): SituacaoCaso {
   if (item.resolvido) return 'RESOLVIDO';
   const tratamento = parseTreatmentRecord(item.notas_resolucao);
   if (!tratamento) return 'SEM_TRATAMENTO';
-  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(tratamento.prazo) && tratamento.prazo < hoje) return 'VENCIDO';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(tratamento.prazo) && tratamento.prazo < hoje) return 'VENCIDO';
   return 'EM_TRATAMENTO';
 }
 
