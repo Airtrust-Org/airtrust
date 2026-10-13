@@ -156,6 +156,18 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
             <p className="mt-1 text-sm text-emerald-800">
               {LABELS[existingType] || existingType || 'Classificação registrada'}
             </p>
+            {existingType === 'ADMIN_TRAINING' && typeof context.activity.notes === 'string' &&
+              context.activity.notes.trim() ? (
+                <p className="mt-1 text-sm font-semibold text-emerald-900">
+                  Atividade: {context.activity.notes}
+                </p>
+              ) : null}
+            {typeof context.activity.duty_start_time === 'string' &&
+              typeof context.activity.duty_end_time === 'string' ? (
+                <p className="mt-1 text-sm text-emerald-800">
+                  Horário informado: {context.activity.duty_start_time} às {context.activity.duty_end_time}
+                </p>
+              ) : null}
             <p className="mt-1 text-xs text-emerald-700">
               Esta informação entra como evidência de carga/recuperação. Folga não cria bônus automático; standby e atividade de trabalho seguem critérios próprios de duração, sono e disponibilidade.
             </p>
