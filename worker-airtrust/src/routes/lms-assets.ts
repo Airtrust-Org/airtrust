@@ -1904,6 +1904,8 @@ ${buildScormNativeResumeOwnershipScript()}
       );
 
       if (!probeDecision.persist) {
+        // Track observed visits without rewriting the authoritative location.
+        recordTrustedFrameVisit(doc, existingParsed);
         diag(' PROBE_LOCATION_KEPT reason=' + probeDecision.reason + ' loc=' + (existingLocation || 'null'));
         if (existingParsed) {
           var canonicalProbeKey = String(existingLocation) + '|' + String(parsed.total);
