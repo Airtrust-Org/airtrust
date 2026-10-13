@@ -30,4 +30,3 @@ export const ScormCommitSchema = z.object({
   completion_candidate: z.boolean().optional().nullable(),
   completion_observed_at: z.string().optional().nullable(),
 });
-
