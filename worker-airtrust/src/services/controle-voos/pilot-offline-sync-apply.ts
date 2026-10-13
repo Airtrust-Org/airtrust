@@ -35,6 +35,12 @@ type SnapshotStagePayload = {
   fields: Record<string, unknown>;
 };
 
+type RemovedStagePayload = {
+  source_stage_id: number;
+  source_stage_updated_at: string;
+  numero_etapa: number;
+};
+
 type SnapshotFuelingPayload = {
   client_local_id: string;
   data_hora: string;
@@ -59,6 +65,7 @@ type SnapshotPayload = {
   fuelings: SnapshotFuelingPayload[];
   justifications: SnapshotJustificationPayload[];
   stages: SnapshotStagePayload[];
+  removed_stages: RemovedStagePayload[];
 };
 
 type PreparedStage = {
@@ -267,6 +274,27 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     };
   });
 
+  const removedRaw = raw.removed_stages ?? [];
+  if (!Array.isArray(removedRaw) || removedRaw.length > 31) {
+    throw new ApiError('Etapas removidas invalidas', 400, 'CONTROLE_VOOS_PILOT_SYNC_REMOVED_STAGES_INVALID');
+  }
+  const remainingIds = new Set(stages.map((stage) => stage.source_stage_id).filter((id) => id !== null));
+  const removedIds = new Set<number>();
+  const removedStages = removedRaw.map((entry): RemovedStagePayload => {
+    if (!isPlainObject(entry)) {
+      throw new ApiError('Etapa removida invalida', 400, 'CONTROLE_VOOS_PILOT_SYNC_REMOVED_STAGES_INVALID');
+    }
+    const id = parseNullablePositiveInteger(entry.source_stage_id, 'source_stage_id');
+    const number = Number(entry.numero_etapa);
+    const updatedAt = String(entry.source_stage_updated_at || '').trim();
+    if (id === null || !Number.isInteger(number) || number < 1 || !updatedAt ||
+        remainingIds.has(id) || removedIds.has(id)) {
+      throw new ApiError('Etapa removida duplicada ou sem versao', 400, 'CONTROLE_VOOS_PILOT_SYNC_REMOVED_STAGES_INVALID');
+    }
+    removedIds.add(id);
+    return { source_stage_id: id, source_stage_updated_at: updatedAt, numero_etapa: number };
+  });
+
   const stageNumbers = new Set(
     stages.map((stage) => Number((stage.fields || {}).numero_etapa)).filter((value) => Number.isInteger(value) && value > 0),
   );
@@ -284,6 +312,7 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     fuelings,
     justifications,
     stages,
+    removed_stages: removedStages,
   };
 }
 
@@ -528,16 +557,55 @@ function buildStageStatements(input: {
   });
 }
 
+function buildRemovedStageStatements(input: {
+  db: D1Database; empresaId: number; userId: number; flight: FlightRow;
+  newVersion: number; removedStages: RemovedStagePayload[];
+}): D1PreparedStatement[] {
+  return input.removedStages.map((stage) => input.db.prepare(`
+    UPDATE cv_voo_etapas
+       SET deleted_at = datetime('now'), updated_at = datetime('now'), updated_by = ?
+     WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
+       AND updated_at = ? AND numero_etapa = ?
+       AND COALESCE(TRIM(horario_motor_ligado), '') = ''
+       AND COALESCE(TRIM(horario_decolagem), '') = ''
+       AND COALESCE(TRIM(horario_pouso), '') = ''
+       AND COALESCE(TRIM(horario_motor_desligado), '') = ''
+       AND COALESCE(TRIM(tempo_decolagem_pouso), '') = ''
+       AND COALESCE(TRIM(tempo_total), '') = ''
+       AND COALESCE(pousos_diurnos, 0) = 0
+       AND COALESCE(pousos_noturnos, 0) = 0
+       AND COALESCE(starts, 0) = 0
+       AND EXISTS (SELECT 1 FROM cv_rdv_operacional WHERE voo_id = ? AND empresa_id = ?
+                   AND deleted_at IS NULL AND versao = ?)
+       AND NOT EXISTS (SELECT 1 FROM cv_voo_abastecimentos
+                       WHERE empresa_id = ? AND voo_id = ? AND etapa_id = ? AND deleted_at IS NULL)
+  `).bind(
+    input.userId, stage.source_stage_id, input.flight.id, input.empresaId,
+    stage.source_stage_updated_at, stage.numero_etapa,
+    input.flight.id, input.empresaId, input.newVersion,
+    input.empresaId, input.flight.id, stage.source_stage_id,
+  ));
+}
+
 function buildStageRevisionCasSql(
   stages: PreparedStage[],
+  removedStages: RemovedStagePayload[],
 ): { sql: string; binds: unknown[] } {
   const sourceStages = stages.filter((stage) => stage.sourceStageId !== null);
+  const checkedStages = [
+    ...sourceStages.map((stage) => ({
+      id: stage.sourceStageId, updatedAt: stage.sourceStageUpdatedAt, number: stage.input.numero_etapa,
+    })),
+    ...removedStages.map((stage) => ({
+      id: stage.source_stage_id, updatedAt: stage.source_stage_updated_at, number: stage.numero_etapa,
+    })),
+  ];
   const clauses = [
     `(SELECT COUNT(*) FROM cv_voo_etapas WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL) = ?`,
   ];
   const binds: unknown[] = [];
   // voo_id / empresa_id are prepended by the caller because they are aggregate-specific.
-  for (const stage of sourceStages) {
+  for (const stage of checkedStages) {
     clauses.push(
       `EXISTS (
         SELECT 1 FROM cv_voo_etapas
@@ -546,10 +614,33 @@ function buildStageRevisionCasSql(
       )`,
     );
     binds.push(
-      stage.sourceStageId,
-      stage.sourceStageUpdatedAt,
-      stage.input.numero_etapa,
+      stage.id,
+      stage.updatedAt,
+      stage.number,
     );
+  }
+  // Guard linked fuelings and realized times in the RDV CAS itself, not
+  // only in the subsequent soft delete. This prevents a partial logical
+  // success if related records change between preflight and transaction.
+  for (const stage of removedStages) {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM cv_voo_etapas
+       WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
+         AND COALESCE(TRIM(horario_motor_ligado), '') = ''
+         AND COALESCE(TRIM(horario_decolagem), '') = ''
+         AND COALESCE(TRIM(horario_pouso), '') = ''
+         AND COALESCE(TRIM(horario_motor_desligado), '') = ''
+         AND COALESCE(TRIM(tempo_decolagem_pouso), '') = ''
+         AND COALESCE(TRIM(tempo_total), '') = ''
+         AND COALESCE(pousos_diurnos, 0) = 0
+         AND COALESCE(pousos_noturnos, 0) = 0
+         AND COALESCE(starts, 0) = 0
+    )`);
+    clauses.push(`NOT EXISTS (
+      SELECT 1 FROM cv_voo_abastecimentos
+       WHERE empresa_id = ? AND voo_id = ? AND etapa_id = ? AND deleted_at IS NULL
+    )`);
+    binds.push(stage.source_stage_id);
   }
   return { sql: clauses.join(' AND '), binds };
 }
@@ -584,9 +675,10 @@ function buildExistingRdvUpdate(input: {
   existingRdv: RdvRow;
   rdv: RdvInput;
   stages: PreparedStage[];
+  removedStages: RemovedStagePayload[];
 }): D1PreparedStatement {
-  const stageCas = buildStageRevisionCasSql(input.stages);
-  const sourceStageCount = input.stages.filter((stage) => stage.sourceStageId !== null).length;
+  const stageCas = buildStageRevisionCasSql(input.stages, input.removedStages);
+  const sourceStageCount = input.stages.filter((stage) => stage.sourceStageId !== null).length + input.removedStages.length;
 
   return input.db
     .prepare(
@@ -646,6 +738,14 @@ function buildExistingRdvUpdate(input: {
           stage.sourceStageUpdatedAt,
           stage.input.numero_etapa,
         ]),
+      ...input.removedStages.flatMap((stage) => [
+        stage.source_stage_id, input.flight.id, input.empresaId,
+        stage.source_stage_updated_at, stage.numero_etapa,
+      ]),
+      ...input.removedStages.flatMap((stage) => [
+        stage.source_stage_id, input.flight.id, input.empresaId,
+        input.empresaId, input.flight.id, stage.source_stage_id,
+      ]),
     );
 }
 
@@ -657,9 +757,10 @@ function buildNewRdvInsert(input: {
   command: PilotOfflineSyncCommand;
   rdv: RdvInput;
   stages: PreparedStage[];
+  removedStages: RemovedStagePayload[];
 }): D1PreparedStatement {
-  const stageCas = buildStageRevisionCasSql(input.stages);
-  const sourceStageCount = input.stages.filter((stage) => stage.sourceStageId !== null).length;
+  const stageCas = buildStageRevisionCasSql(input.stages, input.removedStages);
+  const sourceStageCount = input.stages.filter((stage) => stage.sourceStageId !== null).length + input.removedStages.length;
 
   return input.db
     .prepare(
@@ -712,6 +813,14 @@ function buildNewRdvInsert(input: {
           stage.sourceStageUpdatedAt,
           stage.input.numero_etapa,
         ]),
+      ...input.removedStages.flatMap((stage) => [
+        stage.source_stage_id, input.flight.id, input.empresaId,
+        stage.source_stage_updated_at, stage.numero_etapa,
+      ]),
+      ...input.removedStages.flatMap((stage) => [
+        stage.source_stage_id, input.flight.id, input.empresaId,
+        input.empresaId, input.flight.id, stage.source_stage_id,
+      ]),
     );
 }
 
@@ -1003,9 +1112,10 @@ async function currentStateConflict(input: {
   const serverStages = await listEtapas(input.db, input.empresaId, input.flight.id);
   const sourceStages = input.stages.filter((stage) => stage.sourceStageId !== null);
   const serverIds = serverStages.map((stage) => stage.id).sort((a, b) => a - b);
-  const sourceIds = sourceStages
-    .map((stage) => stage.sourceStageId as number)
-    .sort((a, b) => a - b);
+  const sourceIds = [
+    ...sourceStages.map((stage) => stage.sourceStageId as number),
+    ...input.snapshot.removed_stages.map((stage) => stage.source_stage_id),
+  ].sort((a, b) => a - b);
 
   if (
     serverIds.length !== sourceIds.length ||
@@ -1026,6 +1136,38 @@ async function currentStateConflict(input: {
   }
 
   const serverById = new Map<number, EtapaRow>(serverStages.map((stage) => [stage.id, stage]));
+  if (input.snapshot.removed_stages.length) {
+    const maxKeptNumber = Math.max(0, ...input.stages.map((stage) => Number(stage.input.numero_etapa)));
+    for (const removed of input.snapshot.removed_stages) {
+      const current = serverById.get(removed.source_stage_id);
+      const hasRealizedData = current && [
+        current.horario_motor_ligado, current.horario_decolagem,
+        current.horario_pouso, current.horario_motor_desligado,
+        current.tempo_decolagem_pouso, current.tempo_total,
+      ].some((value) => value != null && String(value).trim() !== '');
+      const hasOperationalCounters = current && [current.pousos_diurnos, current.pousos_noturnos, current.starts]
+        .some((value) => Number(value || 0) > 0);
+      if (!current || Number(current.numero_etapa) !== removed.numero_etapa ||
+          current.updated_at !== removed.source_stage_updated_at ||
+          removed.numero_etapa <= maxKeptNumber || hasRealizedData || hasOperationalCounters) {
+        return recordOfflineSyncConflict(input.db, {
+          empresaId: input.empresaId, command: input.command, funcionarioId: input.funcionarioId,
+          code: 'CONTROLE_VOOS_PILOT_SYNC_STAGE_DELETE_CONFLICT',
+          detail: conflictDetail({ type: 'stage_delete', entity: 'cv_voo_etapas', current: { id: removed.source_stage_id } }),
+        });
+      }
+      const fueling = await input.db.prepare(
+        'SELECT COUNT(*) AS total FROM cv_voo_abastecimentos WHERE empresa_id = ? AND voo_id = ? AND etapa_id = ? AND deleted_at IS NULL',
+      ).bind(input.empresaId, input.flight.id, removed.source_stage_id).first<{ total: number }>();
+      if (Number(fueling?.total || 0) > 0) {
+        return recordOfflineSyncConflict(input.db, {
+          empresaId: input.empresaId, command: input.command, funcionarioId: input.funcionarioId,
+          code: 'CONTROLE_VOOS_PILOT_SYNC_STAGE_FUELING_CONFLICT',
+          detail: conflictDetail({ type: 'stage_fueling', entity: 'cv_voo_abastecimentos', current: { stage_id: removed.source_stage_id } }),
+        });
+      }
+    }
+  }
   for (const stage of sourceStages) {
     const current = serverById.get(stage.sourceStageId as number);
     if (current && Number(current.numero_etapa) !== Number(stage.input.numero_etapa)) {
@@ -1156,16 +1298,21 @@ export async function applyPilotOfflineSnapshotCommand(input: {
         existingRdv,
         rdv: { ...existingRdv, ...rdvInput },
         stages,
+        removedStages: snapshot.removed_stages,
       })
     : buildNewRdvInsert({
         ...input,
         rdv: rdvInput,
         stages,
+        removedStages: snapshot.removed_stages,
       });
   const stageStatements = buildStageStatements({
     ...input,
     newVersion,
     stages,
+  });
+  const removedStageStatements = buildRemovedStageStatements({
+    ...input, newVersion, removedStages: snapshot.removed_stages,
   });
   const fuelingStatements = buildFuelingStatements({
     ...input,
@@ -1223,13 +1370,12 @@ export async function applyPilotOfflineSnapshotCommand(input: {
 
   let results;
   try {
-    // The idempotency receipt must observe the RDV CAS immediately: SQLite
-      // changes() refers only to the preceding statement. Optional
-      // justification/event writes can legitimately change zero rows.
-      // D1.batch rolls the entire transaction back if a later write fails.
-      results = await input.db.batch([
+    results = await input.db.batch([
       rdvStatement,
       receiptStatement,
+      // Free the unique active stage number before inserting its replacement.
+      // The RDV CAS above already validated all removed stages and fuelings.
+      ...removedStageStatements,
       ...stageStatements,
       ...fuelingStatements,
       ...justificationStatements,
