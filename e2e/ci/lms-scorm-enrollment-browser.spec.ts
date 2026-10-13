@@ -1,7 +1,7 @@
 /**
  * Authenticated Worker/D1/R2 SCORM learner closure in disposable LOCAL fixtures.
  * Proves browser actions reach the actual backend, unlike API-only SCO probes.
- * This is NOT an attestation for arbitrary uploaded ZIPs or real tenants.
+ * This is NOT an attestation for arbitrary uploaded ZIPs or real tenants.\n * It checks genuine CMI suspend/resume and sibling enrollment isolation,\n * NOT cross-tenant/cycle isolation or certificate issuance.
  */
 import {expect,test} from '@playwright/test';
 import {readFileSync} from 'node:fs';
@@ -48,8 +48,31 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
     return sco;
   }
 
+  const otherId=Object.values(fixture.enrollments).find(candidate=>candidate!==id);
+  expect(otherId).toBeGreaterThan(0);
+  function otherEnrollmentSnapshot(){
+    const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
+    try {
+      return {
+        enrollment:db.prepare('SELECT status, progresso_pct, qualificacao_historico_id FROM lms_matriculas WHERE id=? AND empresa_id=?').get(otherId,fixture.companyId),
+        history:db.prepare('SELECT COUNT(*) AS n FROM qualificacoes_historico WHERE lms_matricula_id=? AND empresa_id=? AND deleted_at IS NULL').get(otherId,fixture.companyId),
+      };
+    } finally { db.close(); }
+  }
+  const otherBefore=otherEnrollmentSnapshot();
+
   let sco=await open();
   await expect(sco.locator('#submitAssessment')).toBeDisabled();
+  expect(stored().history.n).toBe(0);
+  // Distinct from reopening: the learner must leave an unfinished answer in
+  // actual persisted suspend_data and recover the enabled assessment control.
+  await sco.locator('button[data-answer="1"]').click();
+  await expect.poll(()=>stored().scorm?.cmi_json?.includes('qa-interaction-1'),{timeout:25000}).toBe(true);
+  sco=await open();
+  await expect(sco.locator('#submitAssessment')).toBeEnabled();
+  expect(stored().m.status).not.toBe('CONCLUIDO');
+
+  // A wrong answer still fails and does not create qualification/history.
   await sco.locator('button[data-answer="0"]').click();
   await sco.locator('#submitAssessment').click();
   await expect.poll(()=>stored().scorm?.lesson_status,{timeout:25000}).toBe('failed');
@@ -82,4 +105,16 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   expect(reopened.m.status).toBe('CONCLUIDO');
   expect(reopened.m.qualificacao_historico_id).toBe(final.m.qualificacao_historico_id);
   expect(reopened.history.n).toBe(1);
+  // Replaying an explicit request must not issue duplicate qualification.
+  await page.evaluate(matId=>{
+    const iframe=document.getElementById('outer') as HTMLIFrameElement;
+    iframe.contentWindow!.postMessage({type:'lms:request-completion',matriculaId:matId},location.origin);
+  },id);
+  await page.waitForTimeout(1000);
+  const replayed=stored();
+  expect(replayed.m.status).toBe('CONCLUIDO');
+  expect(replayed.m.qualificacao_historico_id).toBe(final.m.qualificacao_historico_id);
+  expect(replayed.history.n).toBe(1);
+  // A sibling enrollment is never mutated by this learner's pass/fail/reopen.
+  expect(otherEnrollmentSnapshot()).toEqual(otherBefore);
 });
