@@ -39,6 +39,7 @@ describe('gestão de usuários — padronização de perfis', () => {
     expect(gestorValues).not.toContain('GESTOR');
     expect(gestorValues).not.toContain('COORDENACAO_VOO');
     expect(gestorValues).toContain('ALUNO');
+    expect(gestorValues).not.toContain('USUARIO'); // viewer reservado à Coordenação
     expect(perfisUsuariosSelecionaveis(true).map((p) => p.value)).toContain('COORDENACAO_VOO');
   });
 });
