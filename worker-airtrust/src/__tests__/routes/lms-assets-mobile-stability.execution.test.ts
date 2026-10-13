@@ -839,7 +839,7 @@ describe('SCORM final write — in-flight autosave must never acknowledge a queu
       api.LMSCommit(); // Keep the first network slot occupied.
       g.window.dispatchEvent(new g.MessageEvent('message', {
         origin: '', source: g.window.parent,
-        data: { type: 'lms:session-close', reason: 'user-exit' },
+        data: { type: 'lms:session-close', reason: 'user-exit', matriculaId: 99011 },
       }));
       await Promise.resolve();
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -881,10 +881,10 @@ describe('SCORM final write — in-flight autosave must never acknowledge a queu
         origin: '', source: g.window.parent,
         data: { type: 'lms:request-completion', matriculaId: 99012 },
       }));
-      g.window.dispatchEvent(new g.Event('beforeunload'));
+      // Closing is lower priority than a pending explicit completion.
       g.window.dispatchEvent(new g.MessageEvent('message', {
         origin: '', source: g.window.parent,
-        data: { type: 'lms:session-close', reason: 'user-exit' },
+        data: { type: 'lms:session-close', reason: 'user-exit', matriculaId: 99012 },
       }));
       autosave.resolve(persisted);
       await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
