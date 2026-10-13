@@ -29,6 +29,17 @@ export const BOMBEIROS_DEMO_COMPANY = Object.freeze({
   natureza: 'DEMONSTRACAO_SEM_PERSISTENCIA',
 });
 
+/** Only platform-admin workspace at the exact staging origin may open the preview. */
+export function mayPreviewBombeirosFrmsDemo(
+  isAdmin: boolean,
+  currentEmpresaCodigo: string | null | undefined,
+  hostname: string,
+): boolean {
+  return isAdmin
+    && currentEmpresaCodigo === 'airtrust'
+    && ['staging.airtrust.pages.dev', 'localhost', '127.0.0.1'].includes(hostname);
+}
+
 export const BOMBEIROS_FRMS_SCENARIOS: readonly BombeirosFrmsScenario[] = [
   {
     id: 'QA-BOM-001', nome: 'QA Ana Resgate', funcao: 'Piloto em comando',
