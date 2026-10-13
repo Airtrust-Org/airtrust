@@ -28,6 +28,9 @@ test('fixture: exactly 14 crew, seven received checkins, and standalone tenant',
   assert.equal((sql.match(/INSERT INTO frms_fadiga_checkin /g)||[]).length,7);
   assert.match(sql,/INSERT INTO escalas_quinzenas /);
   assert.match(sql,/INSERT INTO frms_profile_assignments /);
+  // A fictional QA reference must never pass regulatoryProfileIsReady() via a forged SHA256.
+  assert.match(sql,/QA_ONLY_NOT_REGULATORY_APPROVAL', 'LEGACY_MODEL_V2', '2026-09-01', NULL, NULL, NULL, 1/);
+  assert.doesNotMatch(sql,/AirTrust synthetic FRMS UX QA; no regulatory approval/);
   assert.match(sql,/HELICOPTER_OFFSHORE/);
   assert.match(sql,new RegExp(String(TENANT_ID)));
   assert.match(sql,new RegExp(TENANT_CODE));
