@@ -1114,7 +1114,7 @@ async function currentStateConflict(input: {
         return recordOfflineSyncConflict(input.db, {
           empresaId: input.empresaId, command: input.command, funcionarioId: input.funcionarioId,
           code: 'CONTROLE_VOOS_PILOT_SYNC_STAGE_DELETE_CONFLICT',
-          detail: conflictDetail({ type: 'stage_delete', id: removed.source_stage_id }),
+          detail: conflictDetail({ type: 'stage_delete', entity: 'cv_voo_etapas', current: { id: removed.source_stage_id } }),
         });
       }
       const fueling = await input.db.prepare(
@@ -1124,7 +1124,7 @@ async function currentStateConflict(input: {
         return recordOfflineSyncConflict(input.db, {
           empresaId: input.empresaId, command: input.command, funcionarioId: input.funcionarioId,
           code: 'CONTROLE_VOOS_PILOT_SYNC_STAGE_FUELING_CONFLICT',
-          detail: conflictDetail({ type: 'stage_fueling', id: removed.source_stage_id }),
+          detail: conflictDetail({ type: 'stage_fueling', entity: 'cv_voo_abastecimentos', current: { stage_id: removed.source_stage_id } }),
         });
       }
     }
