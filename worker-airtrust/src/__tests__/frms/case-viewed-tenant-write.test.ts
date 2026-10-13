@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const auditSpy = vi.fn(async () => undefined);
+const auditSpy = vi.fn(async (..._args: unknown[]) => undefined);
 vi.mock('../../lib/frms/db-service-shared', () => ({
   now: () => '2026-10-12 22:00:00',
   logAuditoria: (...args: unknown[]) => auditSpy(...args),
