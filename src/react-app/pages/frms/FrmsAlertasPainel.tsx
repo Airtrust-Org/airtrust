@@ -4,7 +4,7 @@ import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, Eye, RefreshCw, X } 
 import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
 import { EmptyState } from '@/react-app/components/UI/EmptyState';
-import { useFrmsAlertas, useFrmsMutation, type FrmsAlertaRow } from '@/react-app/hooks/useFrms';
+import { useFrmsAlertasPage, useFrmsMutation, type FrmsAlertaRow } from '@/react-app/hooks/useFrms';
 import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
 import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
 
@@ -159,8 +159,11 @@ export default function FrmsAlertasPainel() {
     return next;
   }, [nivel, status, tripulanteParam, pagina]);
 
-  const { data, loading, error, refetch } = useFrmsAlertas(filtros);
-  const cases: FrmsAlertaRow[] = Array.isArray(data) ? data : [];
+  const { data, loading, error, refetch } = useFrmsAlertasPage(filtros);
+  const cases: FrmsAlertaRow[] = Array.isArray(data?.data) ? data.data : [];
+  const filteredTotal = typeof data?.total === 'number' && Number.isFinite(data.total) && data.total >= 0
+    ? data.total : null;
+  const hasNextPage = filteredTotal === null ? cases.length === 100 : pagina * 100 < filteredTotal;
 
   // The API currently returns only the requested page. These figures and the
   // queue ordering are explicitly page-scoped; never claim global overdue totals.
@@ -300,7 +303,7 @@ export default function FrmsAlertasPainel() {
           <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Casos nesta página</p>
             <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950 dark:text-white">{loading && !data ? '—' : counts.total}</p>
-            <p className="mt-1 text-xs text-slate-500">Até 100 casos por página, conforme os filtros.</p>
+            <p className="mt-1 text-xs text-slate-500">Até 100 casos por página. Total do filtro: {filteredTotal ?? "não informado"}.</p>
           </div>
           {([
             { key: 'sem_tratamento', label: 'Sem medida registrada', value: counts.semTratamento, style: 'border-orange-200 bg-orange-50 text-orange-900 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-200' },
@@ -321,7 +324,7 @@ export default function FrmsAlertasPainel() {
           ))}
         </section>
         <p className="text-xs text-slate-500">
-          Resumo apenas dos casos carregados nesta página, não do total da empresa. A API desta consulta não informa o total geral. A ordenação padrão prioriza casos vencidos, pendentes e gravidade; o agrupamento é apenas visual.
+          Os cartões de situação consideram somente esta página. A recorrência indicada em cada caso considera todos os registros correspondentes aos filtros atuais, incluindo outras páginas, quando informada pela API. O total filtrado do servidor também abrange todas as páginas. A ordenação prioriza casos vencidos, pendentes e gravidade.
         </p>
 
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
@@ -425,7 +428,11 @@ export default function FrmsAlertasPainel() {
                           {item.visualizado ? <span className="text-xs text-slate-400">visualizado</span> : null}
                         </div>
                         <h2 className="mt-2 font-bold text-slate-950 dark:text-white">{name}</h2>
-                        {(recorrenciasNaPagina.get(String(item.tripulante_id)) ?? 0) > 1 ? (
+                        {typeof item.recorrencias_no_filtro === 'number' && item.recorrencias_no_filtro > 1 ? (
+                          <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-200">
+                            {item.recorrencias_no_filtro} casos desta pessoa nos filtros atuais, incluindo outras páginas. Consulte o histórico completo antes de concluir recorrência geral.
+                          </p>
+                        ) : (recorrenciasNaPagina.get(String(item.tripulante_id)) ?? 0) > 1 ? (
                           <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-200">
                             {recorrenciasNaPagina.get(String(item.tripulante_id))} casos desta pessoa nesta página. Consulte o histórico para verificar recorrência em outras datas.
                           </p>
@@ -510,11 +517,11 @@ export default function FrmsAlertasPainel() {
       </div>
 
         <nav className="flex flex-wrap items-center justify-between gap-3 text-sm" aria-label="Paginação de casos">
-          <p className="text-slate-500">Página {pagina} · {cases.length} caso(s) carregado(s). {cases.length === 100 ? 'Pode haver mais registros.' : 'Fim dos registros nesta consulta.'}</p>
+          <p className="text-slate-500">Página {pagina} · {cases.length} caso(s) carregado(s). {hasNextPage ? 'Há mais registros.' : 'Fim dos registros nesta consulta.'}</p>
           <div className="flex gap-2">
             <button type="button" disabled={pagina === 1 || loading} onClick={() => setPagina((p) => Math.max(1, p - 1))}
               className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Anterior</button>
-            <button type="button" disabled={loading || cases.length < 100} onClick={() => { setPagina((p) => p + 1); setEtapa('todos'); }}
+            <button type="button" disabled={loading || !hasNextPage} onClick={() => { setPagina((p) => p + 1); setEtapa('todos'); }}
               className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Próxima página</button>
           </div>
         </nav>
