@@ -115,7 +115,56 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   expect(stored().m.status).not.toBe('CONCLUIDO');
   expect(stored().history.n).toBe(0);
 
-  // Same enrollment, without an administrative reset.
+  // A failed/unqualified first cycle is canceled, then explicitly rematriculated.
+  // A completed/qualified cycle must NEVER be silently reset or reactivated.
+  const deleteResult=await page.request.delete(api+'/lms/matriculas/'+id,{headers});
+  expect(deleteResult.status()).toBe(200);
+  // Normal POST must reject canceled enrollment; the separate, audited
+  // rematriculation endpoint is the only authorized lifecycle transition.
+  const normalReEnroll=await page.request.post(api+'/lms/matriculas',{
+    headers,data:{curso_id:fixture.courseId,
+      funcionario_id:fixture.employeeIds[testInfo.project.name],
+      enviar_convite_email:false},
+  });
+  expect(normalReEnroll.status()).toBe(409);
+  expect((await normalReEnroll.json()).code).toBe('LMS_REMATRICULATION_REQUIRED');
+  const reEnroll=await page.request.post(api+'/lms/matriculas/'+id+'/rematricular',{
+    headers,data:{reason:'QA sintético: verificar isolamento do novo ciclo de aprendizagem'},
+  });
+  const reEnrolled=await reEnroll.json().catch(()=>null);
+  expect(reEnroll.ok(), 'LOCAL_REMATRICULATE_HTTP_'+reEnroll.status()+'_CODE_'+String(reEnrolled?.code||'none')).toBe(true);
+  expect(Number(reEnrolled.data.matricula_id)).toBe(id);
+  const fresh=stored();
+  expect(fresh.m.status).toBe('NAO_INICIADO');
+  expect(fresh.m.progresso_pct).toBe(0);
+  expect(fresh.m.qualificacao_historico_id).toBeNull();
+  expect(fresh.scorm?.cmi_json ?? null).toBeNull();
+  expect(fresh.scorm?.score_raw ?? null).toBeNull();
+  expect(fresh.history.n).toBe(0); // rejected cycle minted no qualification
+
+  const dbCycles=new DatabaseSync(fixture.dbFile,{readOnly:true});
+  let cycles: Array<{numero_ciclo:number;ciclo_atual:number;qualificacao_historico_id:number|null}>;
+  try{
+    cycles=dbCycles.prepare(
+      'SELECT numero_ciclo,ciclo_atual,qualificacao_historico_id FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL ORDER BY numero_ciclo',
+    ).all(id,fixture.companyId) as typeof cycles;
+  }finally{dbCycles.close();}
+  expect(cycles).toHaveLength(2);
+  expect(cycles[0].ciclo_atual).toBe(0);
+  expect(cycles[1].numero_ciclo).toBe(cycles[0].numero_ciclo+1);
+  expect(cycles[1].ciclo_atual).toBe(1);
+  expect(cycles[1].qualificacao_historico_id).toBeNull();
+
+  sco=await open();
+  await expect(sco.locator('#submitAssessment')).toBeDisabled();
+  await expect(sco.locator('#completeCourse')).toBeHidden();
+  expect((await enrollment()).status).not.toBe('CONCLUIDO');
+  expect(stored().m.qualificacao_historico_id).toBeNull();
+  expect(stored().history.n).toBe(0);
+  expect(otherEnrollmentSnapshot()).toEqual(otherBefore);
+
+
+  // The learner now passes in the new authorized, isolated cycle.
   sco=await open();
   await sco.locator('button[data-answer="1"]').click();
   await sco.locator('#submitAssessment').click();
@@ -161,50 +210,6 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
     finally {db.close();}
   })();
   expect(foreignAfter).toEqual(foreignBefore);
-  // Exercise the real administrative lifecycle to prove a second enrollment
-  // cycle never resumes its predecessor's passed SCO or qualification pointer.
-  const deleteResult=await page.request.delete(api+'/lms/matriculas/'+id,{headers});
-  expect(deleteResult.status()).toBe(200);
-  const reEnroll=await page.request.post(api+'/lms/matriculas',{
-    headers,data:{
-      curso_id:fixture.courseId,
-      funcionario_id:fixture.employeeIds[testInfo.project.name],
-      observacoes:'Local-only renewal cycle regression',
-    },
-  });
-  const reEnrolled=await reEnroll.json().catch(()=>null);
-  expect(reEnroll.ok(), 'LOCAL_REENROLL_HTTP_'+reEnroll.status()+'_CODE_'+String(reEnrolled?.code||'none')+'_ERROR_'+String(reEnrolled?.error||'').slice(0,100)).toBe(true);
-  expect(Number(reEnrolled.data.id)).toBe(id);
-  const fresh=stored();
-  expect(fresh.m.status).toBe('NAO_INICIADO');
-  expect(fresh.m.progresso_pct).toBe(0);
-  expect(fresh.m.qualificacao_historico_id).toBeNull();
-  expect(fresh.scorm?.cmi_json ?? null).toBeNull();
-  expect(fresh.scorm?.score_raw ?? null).toBeNull();
-  expect(fresh.history.n).toBe(1); // prior historical proof is not deleted
-
-  const dbCycles=new DatabaseSync(fixture.dbFile,{readOnly:true});
-  let cycles: Array<{numero_ciclo:number;ciclo_atual:number;qualificacao_historico_id:number|null}>;
-  try{
-    cycles=dbCycles.prepare(
-      'SELECT numero_ciclo,ciclo_atual,qualificacao_historico_id FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL ORDER BY numero_ciclo',
-    ).all(id,fixture.companyId) as typeof cycles;
-  }finally{dbCycles.close();}
-  expect(cycles).toHaveLength(2);
-  expect(cycles[0].ciclo_atual).toBe(0);
-  expect(cycles[1].numero_ciclo).toBe(cycles[0].numero_ciclo+1);
-  expect(cycles[1].ciclo_atual).toBe(1);
-  expect(cycles[1].qualificacao_historico_id).toBeNull();
-
-  sco=await open();
-  await expect(sco.locator('#submitAssessment')).toBeDisabled();
-  await expect(sco.locator('#completeCourse')).toBeHidden();
-  expect((await enrollment()).status).not.toBe('CONCLUIDO');
-  expect(stored().m.qualificacao_historico_id).toBeNull();
-  expect(stored().history.n).toBe(1);
-  expect(otherEnrollmentSnapshot()).toEqual(otherBefore);
-
-
   // Local diagnostics only: this must not be imported as trusted certification.
   const browser=testInfo.project.name==='chromium'?'CHROMIUM':'WEBKIT';
   const proven=['FIRST_ACCESS','SUSPEND_RESUME','ASSESSMENT_INSUFFICIENT',
