@@ -72,6 +72,8 @@ export interface FrmsOperationalSnapshotItem {
   aeronave: string | null;
 
   escalado: boolean;
+  /** Evidência de escala vigente na quinzena, independentemente de fatorização disponível. */
+  na_quinzena_ativa?: boolean;
   /** Há atividade/declaração operacional no dia; presença na quinzena não basta. */
   operacao_requer_decisao?: boolean;
   escala_source: 'SIGVOOS' | 'MANUAL' | 'EVD' | 'AUSENTE';
@@ -913,6 +915,7 @@ export function buildFrmsOperationalSnapshot(
         normalizeText(funcionario?.aeronave),
 
       escalado,
+      na_quinzena_ativa: pertenceQuinzenaAtiva,
       operacao_requer_decisao: operacaoRequerDecisao,
       escala_source: escalado
         ? 'EVD'
