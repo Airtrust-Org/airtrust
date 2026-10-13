@@ -25,7 +25,6 @@ import {
 import {
   buildMatriculaCompletionDiagnostic,
   buildScormCompletionDiagnostic,
-  extractScormLocationFromCmiJson,
   mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
@@ -62,7 +61,7 @@ import {
 } from '../services/lms-progress-recovery-domain';
 import {
   canFinalizeScormEnrollment,
-  evaluateScormClosureReadiness,
+  buildPersistedScormClosureReadiness,
   clampPct,
   extractProgressPctFromCmiJson,
   formatScormLocationTelemetry,
@@ -724,33 +723,9 @@ app.get('/:id', async (c) => {
                 },
         })
       : null;
-  // Player 2.0: terminal readiness is calculated by the same server contract
-  // used for SCORM_USER_FINALIZE and /finalizar, not by the visually inferred
-  // score, last-screen badge or the legacy SCORM status-only diagnostic.
-  const scormClosureReadiness =
-    tipoConteudo === 'scorm'
-      ? evaluateScormClosureReadiness({
-          mode: 'reconcile',
-          commit: {
-            lesson_status: (progressoScorm?.lesson_status as string | null) ?? null,
-            completion_status: (progressoScorm?.completion_status as string | null) ?? null,
-            success_status: (progressoScorm?.success_status as string | null) ?? null,
-          },
-          wasCompleted: matricula.status === 'CONCLUIDO',
-          cmiJson: (progressoScorm?.cmi_json as string | null) ?? null,
-          location: extractScormLocationFromCmiJson(
-            (progressoScorm?.cmi_json as string | null) ?? null,
-          ),
-          policy: matricula.scorm_assessment_policy as 'SCORED' | 'FORMATIVE' | null,
-          masteryScore: matricula.scorm_mastery_score as number | null,
-          scorePct: resolveLmsCompletionScorePct({
-            scoreRaw: (progressoScorm?.score_raw as number | null) ?? null,
-            scoreMin: (progressoScorm?.score_min as number | null) ?? null,
-            scoreMax: (progressoScorm?.score_max as number | null) ?? null,
-            scoreScaled: (progressoScorm?.score_scaled as number | null) ?? null,
-        }),
-        })
-      : null;
+  const scormClosureReadiness = tipoConteudo === 'scorm'
+    ? buildPersistedScormClosureReadiness(matricula, progressoScorm)
+    : null;
   const editionMismatch = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo, activePrefix: matricula.scorm_package_r2_prefix, empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data, db, enrollmentStartedAt: matricula.data_inicio });
   const effectiveProgress = resolveLmsEffectiveProgress({
