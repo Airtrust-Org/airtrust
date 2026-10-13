@@ -266,7 +266,7 @@ describe('Pilot offline snapshot apply orchestration', () => {
     const block = source.slice(start, end);
 
     expect(block).toContain('stages: PreparedStage[]');
-    expect(block).toContain('const stageCas = buildStageRevisionCasSql(input.stages)');
+    expect(block).toContain('const stageCas = buildStageRevisionCasSql(input.stages, input.removedStages)');
     expect(block).toContain('AND ${stageCas.sql}');
     expect(block).not.toContain(
       'SELECT 1 FROM cv_voo_etapas\n            WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL',
