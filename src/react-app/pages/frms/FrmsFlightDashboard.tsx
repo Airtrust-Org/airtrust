@@ -326,7 +326,7 @@ function DetailDrawer({
               </p>
               {jornadaDeclaradaNoCheckin ? (
                 <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
-                  Informado no check-in; a escala e a jornada ainda precisam ser confirmadas.
+                  Início informado no check-in. Sem voo e sem corte de motor registrado, não existe horário de encerramento automático: a atividade efetivamente realizada precisa ser confirmada. Se houver voo, o término será 30 minutos após o último corte registrado.
                 </p>
               ) : null}
             </div>
