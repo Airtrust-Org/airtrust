@@ -14,7 +14,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requireRole, requirePermission } from '../middleware/rbac';
 import { rateLimiter, tenantAwareKeyExtractor } from '../middleware/rate-limit';
 import { tenantMiddleware } from '../middleware/tenant';
 import { localMaintenanceMutationNotFound } from '../middleware/local-maintenance';
@@ -3052,6 +3052,7 @@ frmsRoutes.post(
  */
 frmsRoutes.put(
   '/alertas/:id/visualizar',
+  requirePermission('frms', 'editar', 'admin', 'manager'),
   safe(async (c) => {
     const id = c.req.param('id') ?? '';
     const denied = await assertAlertaEmpresa(c, id);
@@ -3069,6 +3070,7 @@ frmsRoutes.put(
  */
 frmsRoutes.put(
   '/alertas/:id/tratamento',
+  requirePermission('frms', 'editar', 'admin', 'manager'),
   safe(async (c) => {
     const id = c.req.param('id') ?? '';
     const denied = await assertAlertaEmpresa(c, id);
@@ -3102,6 +3104,7 @@ frmsRoutes.put(
  */
 frmsRoutes.put(
   '/alertas/:id/resolver',
+  requirePermission('frms', 'editar', 'admin', 'manager'),
   safe(async (c) => {
     const id = c.req.param('id') ?? '';
     const denied = await assertAlertaEmpresa(c, id);
