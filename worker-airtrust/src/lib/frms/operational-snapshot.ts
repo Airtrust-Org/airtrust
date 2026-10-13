@@ -72,6 +72,8 @@ export interface FrmsOperationalSnapshotItem {
   aeronave: string | null;
 
   escalado: boolean;
+  /** Evidência de escala vigente na quinzena, independentemente de fatorização disponível. */
+  na_quinzena_ativa?: boolean;
   /** Há atividade/declaração operacional no dia; presença na quinzena não basta. */
   operacao_requer_decisao?: boolean;
   escala_source: 'SIGVOOS' | 'MANUAL' | 'EVD' | 'AUSENTE';
@@ -717,15 +719,16 @@ export function buildFrmsOperationalSnapshot(
     activityMap.set(key, current);
   }
 
+  const rosterKeys = new Set(
+    (input.rows.roster ?? []).map((row) => `${row.data_operacional}::${asNumber(row.funcionario_id)}`),
+  );
   const keys = new Set<string>([
     ...escalaMap.keys(),
     ...jornadaMap.keys(),
     ...checkinMap.keys(),
     ...effectivenessMap.keys(),
     ...activityMap.keys(),
-    ...(input.rows.roster ?? []).map(
-      (row) => `${row.data_operacional}::${asNumber(row.funcionario_id)}`,
-    ),
+    ...rosterKeys,
   ]);
 
   const items: FrmsOperationalSnapshotItem[] = [];
@@ -743,6 +746,7 @@ export function buildFrmsOperationalSnapshot(
     if (!funcionario) continue;
 
     const escalado = Boolean(escala);
+    const pertenceQuinzenaAtiva = rosterKeys.has(key);
     const teveJornada =
       Boolean(jornada) &&
       asNumber(jornada?.has_operational_data) === 1 &&
@@ -784,7 +788,7 @@ export function buildFrmsOperationalSnapshot(
 
     const checkinStatus: FrmsOperationalSnapshotItem['checkin_status'] = checkin
       ? 'RECEBIDO'
-      : escalado || teveAtividadeFrms
+      : pertenceQuinzenaAtiva || escalado || teveAtividadeFrms
         ? 'PENDENTE'
         : 'NAO_APLICAVEL';
 
@@ -834,7 +838,7 @@ export function buildFrmsOperationalSnapshot(
 
     const alertas: FrmsOperationalSnapshotAlertCode[] = [];
 
-    if ((escalado || teveAtividadeFrms) && !checkin) {
+    if ((pertenceQuinzenaAtiva || escalado || teveAtividadeFrms) && !checkin) {
       alertas.push('CHECKIN_PENDENTE');
     }
 
@@ -911,6 +915,7 @@ export function buildFrmsOperationalSnapshot(
         normalizeText(funcionario?.aeronave),
 
       escalado,
+      na_quinzena_ativa: pertenceQuinzenaAtiva,
       operacao_requer_decisao: operacaoRequerDecisao,
       escala_source: escalado
         ? 'EVD'
