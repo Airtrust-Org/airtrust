@@ -159,7 +159,7 @@ jobs:
       - name: Install sanctioned Chromium
         run: npx playwright install --with-deps chromium
       - name: Verify real staging snapshot and synthetic check-in filter
-        run: npx playwright test e2e/staging-frms-ux-qa-tenant.spec.ts --project=chromium
+        run: npx playwright test e2e/staging-frms-ux-qa-tenant.spec.ts --project=chromium --no-deps
       - name: Upload exclusively synthetic screenshots and traces
         if: always()
         uses: actions/upload-artifact@v7
