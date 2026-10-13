@@ -3488,9 +3488,11 @@ async function completeAndSendCanonicalRdv() {
     if (!canContinueWithoutNewSync) {
       const syncConfirmed = await queueCurrentDraftForSync();
       if (!syncConfirmed) {
+        const syncDetail = String(rdvSyncStatus?.textContent || '').trim();
         throw new Error(
           'Etapa 1/3 não concluída: o servidor não confirmou o recebimento. ' +
-            'O voo permanece salvo no tablet. Confira “Enviar informações do voo” e tente novamente.',
+            'O voo permanece salvo no tablet.' +
+            (syncDetail ? ' Motivo: ' + syncDetail : ' Use “Enviar informações do voo” para tentar novamente.'),
         );
       }
       const refreshed = await prepareFlightPackage(flightId, { allowDuringFlight: true });
@@ -3689,10 +3691,15 @@ async function queueCurrentDraftForSync() {
     const acceptedSequence = Number(receipt?.value?.command_identity?.local_sequence || 0);
     const persistedSequence = Number(persisted?.value?.local_sequence || 0);
     if (unresolved.length > 0 || !receipt || acceptedSequence < persistedSequence) {
+      const blocked = unresolved.find((record) => record.value?.status === 'blocked');
+      const error = blocked?.value?.last_error || unresolved.at(-1)?.value?.last_error || {};
+      const detail = String(error.message || '').trim();
+      const code = String(error.code || '').trim();
       setRdvSyncMessage(
-        'O servidor ainda não confirmou este lançamento. Os dados seguem salvos no tablet. ' +
-          'Confira a mensagem de transmissão e use “Enviar informações do voo” para tentar novamente.',
-        'attention',
+        'O servidor ainda não confirmou este lançamento. Os dados seguem salvos no tablet.' +
+          (detail ? ' Motivo: ' + detail + (code ? ' [' + code + ']' : '') + '.' : '') +
+          ' Use “Enviar informações do voo” para tentar novamente.',
+        blocked ? 'error' : 'attention',
       );
       return false;
     }
