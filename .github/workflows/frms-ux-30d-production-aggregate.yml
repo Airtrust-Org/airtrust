@@ -1,0 +1,82 @@
+name: FRMS UX 30d Production Aggregate (Read Only)
+
+# One-time bounded source-statistics snapshot for staging synthetic UX QA.
+# No individual record leaves the production environment. No staging write.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_FRMS_UX_30D_READONLY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frms-ux-30d-production-aggregate-readonly
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Verify Production Read-Only Scope
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify main, SHA and fixed confirmation
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || exit 1
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$CONFIRMATION" == "AIRTRUST_FRMS_UX_30D_READONLY" ]] || exit 1
+          echo "FIXED_SCOPE_READONLY_OK"
+
+  source:
+    name: Read 30-Day Deidentified Aggregate Only
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Test privacy and SQL contracts
+        run: node --test scripts/__tests__/frms-ux-30d-readonly.test.mjs
+      - name: Query production and write only safe aggregate bands
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          PRODUCTION_D1_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+          CONFIRM_READONLY: ${{ inputs.confirmation }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          AUDIT_REPORT_PATH: ${{ runner.temp }}/frms-ux-30d-aggregates.json
+        run: |
+          set -euo pipefail
+          node scripts/production/frms-ux-30d-readonly.mjs
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const r = JSON.parse(fs.readFileSync(process.env.AUDIT_REPORT_PATH, 'utf8'));
+          if (r.days?.length !== 30 || r.writes !== 0 || r.suppressedSmallCells !== true) {
+            throw new Error('INVALID_SANITIZED_REPORT');
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            '## FRMS UX aggregate provenance\n\n- Window: 14/09–13/10/2026\n- 30 daily aggregate band records\n- Personal identifiers: none\n- Individual fatigue details: none\n- Writes: 0\n');
+          NODE
+      - name: Upload sanitized bands only
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frms-ux-30d-deidentified-aggregates
+          path: ${{ runner.temp }}/frms-ux-30d-aggregates.json
+          if-no-files-found: ignore
+          retention-days: 7
