@@ -30,5 +30,8 @@ describe('Schema V2 0551 — restore coordination USER only',()=>{
    const workflow=read('.github/workflows/apply-schema-change-v2.yml');
    expect(workflow).toContain('validate-0551-production-preflight.sh');
    expect(workflow).toContain('validate-0551-production-postconditions.sh');
+   const postconditions=read('scripts/schema-v2/validate-0551-production-postconditions.sh');
+   expect(postconditions).toContain('SELECT COUNT(DISTINCT ue.usuario_id) count FROM usuarios_empresas_perfis p');
+   expect(postconditions).not.toContain('0550_CHECK_FAILED');
  });
 });
