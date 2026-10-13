@@ -2,13 +2,14 @@
 
 import { existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
 // CANONICAL_ROOT is the expected deployment path for this repository.
-// Update this value if the repository is moved to a different location.
-const canonicalRoot = process.env.AIRTRUST_CANONICAL_ROOT || '/Users/filipedaumas/SAAS/Airtrust';
+// Override with AIRTRUST_CANONICAL_ROOT when using a nonstandard location.
+const canonicalRoot = process.env.AIRTRUST_CANONICAL_ROOT || path.join(homedir(), 'SAAS', 'Airtrust');
 const currentPath = realpathSync(process.cwd());
 
 function runGit(args, { allowFailure = false } = {}) {
