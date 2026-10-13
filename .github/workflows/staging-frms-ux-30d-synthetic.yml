@@ -31,7 +31,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: staging-d1-frms-ux-synthetic
+  group: airtrust-staging-mutations-and-scorm-qa
   cancel-in-progress: false
 
 jobs:

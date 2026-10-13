@@ -99,6 +99,14 @@ test('workflow requires reviewed main, artifact provenance, staging environment 
   assert.match(wf,/SOURCE_RUN/);
   assert.match(wf,/actions\/download-artifact@v7/);
   assert.match(wf,/environment: staging/);
+  // The same D1 is used by staging releases, schema changes, and SCORM QA.
+  // Independent concurrency groups would allow races despite valid per-job guards.
+  const sharedLock=/group: airtrust-staging-mutations-and-scorm-qa/;
+  assert.match(wf,sharedLock);
+  for(const file of ['deploy-staging.yml','staging-d1-schema-change.yml','staging-lms-scorm-qa.yml']){
+    const other=readFileSync(new URL('../../.github/workflows/'+file,import.meta.url),'utf8');
+    assert.match(other,sharedLock);
+  }
   assert.match(wf,/d1 time-travel info/);
   assert.match(wf,/D1_RECOVERY_BOOKMARK_MISSING/);
   assert.match(wf,/STAGING_DATABASE_UUID_MISMATCH/);
