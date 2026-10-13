@@ -675,6 +675,15 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("['Noturno (duração)', 'tempo_noturno', 'duration'");
   });
 
+  it('habilita revisão nativa pt-BR sem atribuir atualização do servidor automaticamente à Coordenação', () => {
+    expect(pilotApp).toContain("if (type === 'textarea') {");
+    expect(pilotApp).toContain("input.lang = 'pt-BR'");
+    expect(pilotApp).toContain('input.spellcheck = true');
+    expect(pilotApp).toContain("input.setAttribute('autocorrect', 'on')");
+    expect(pilotApp).toContain('O pacote local está desatualizado em relação ao servidor');
+    expect(pilotApp).not.toContain('A Coordenação alterou este voo. Atualize o voo antes de sincronizar');
+  });
+
   it('expõe tempos derivados, unidades e erro real da transmissão bloqueada', () => {
     expect(pilotApp).toContain("['Tempo de voo', 'tempo_decolagem_pouso'");
     expect(pilotApp).toContain("['Tempo total', 'tempo_total'");
