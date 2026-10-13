@@ -315,7 +315,7 @@ export function hasUnfinishedGranularRequirements(granular: LmsGranularDiagnosti
     granular.assessment.unanswered.length > 0 ||
     granular.assessment.incomplete.length > 0 ||
     (granular.assessment.required && !granular.assessment.completed) ||
-    granular.moduleResults.some(module =>
+    (granular.moduleResults ?? []).some(module =>
       module.assessment.required && !module.assessment.completed);
 }
 
