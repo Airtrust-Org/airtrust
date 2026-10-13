@@ -1,0 +1,151 @@
+name: Staging FRMS UX 30d Synthetic Tenant
+
+# Fixed staging D1 only; no production writes or real personal-data replication.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: Reviewed current main SHA
+        required: true
+        type: string
+      aggregate_run_id:
+        description: Successful read-only 30-day aggregate workflow run
+        required: true
+        type: string
+      source_aggregate_sha:
+        description: Exact aggregate source SHA
+        required: true
+        type: string
+      mode:
+        description: apply or rollback
+        required: true
+        type: choice
+        options: [apply, rollback]
+      confirmation:
+        description: Type AIRTRUST_STAGING_FRMS_UX_30D
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: staging-d1-frms-ux-synthetic
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Verify QA staging write scope
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure main SHA, source, explicit confirmation, and artifact provenance
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+          SOURCE_SHA: ${{ inputs.source_aggregate_sha }}
+          SOURCE_RUN: ${{ inputs.aggregate_run_id }}
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo MAIN_ONLY; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$SOURCE_RUN" =~ ^[0-9]{8,14}$ ]] || exit 1
+          [[ "$CONFIRMATION" == "AIRTRUST_STAGING_FRMS_UX_30D" ]] || exit 1
+          [[ "$MODE" == "apply" || "$MODE" == "rollback" ]] || exit 1
+          LIVE_MAIN=$(gh api repos/Airtrust-Org/airtrust/branches/main --jq .commit.sha)
+          [[ "$LIVE_MAIN" == "$EXPECTED_SHA" ]] || { echo MAIN_CHANGED; exit 1; }
+          if [[ "$MODE" == apply ]]; then
+            data=$(gh api "repos/Airtrust-Org/airtrust/actions/runs/$SOURCE_RUN" --jq '[.conclusion,.event,.head_sha,.path] | @tsv')
+            IFS=$'\t' read -r conclusion event sha path <<< "$data"
+            [[ "$conclusion" == success && "$event" == workflow_dispatch && "$sha" == "$SOURCE_SHA" ]] || exit 1
+            [[ "$path" == *"frms-ux-30d-production-aggregate.yml" ]] || exit 1
+          fi
+          echo QA_FRMS_UX_GUARD_PASS
+
+  d1-qa-staging:
+    name: Staging D1 backup and synthetic QA fixture
+    needs: guard
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install Worker tooling
+        run: npm --prefix worker-airtrust ci
+      - name: Download reviewed sanitized aggregate
+        if: ${{ inputs.mode == 'apply' }}
+        uses: actions/download-artifact@v7
+        with:
+          name: frms-ux-30d-deidentified-aggregates
+          run-id: ${{ inputs.aggregate_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: _frms_aggregate
+      - name: Test fixture scope
+        run: node --test scripts/__tests__/staging-frms-ux-30d-fixture.test.mjs
+      - name: Dry-run without staging writes
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          SANITIZED_AGGREGATE_PATH: ${{ github.workspace }}/_frms_aggregate/frms-ux-30d-aggregates.json
+          SOURCE_AGGREGATE_SHA: ${{ inputs.source_aggregate_sha }}
+        run: node scripts/staging/seed-frms-ux-30d.mjs
+      - name: Create and verify official staging D1 backup before mutation
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          cd worker-airtrust
+          npx wrangler d1 backup create airtrust-db-staging-baseline-20260701 --remote
+          npx wrangler d1 backup list airtrust-db-staging-baseline-20260701 --remote
+          echo STAGING_BACKUP_VERIFIED_BEFORE_WRITE >> "$GITHUB_STEP_SUMMARY"
+      - name: Apply or rollback only reserved QA tenant after backup
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+          STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+          SANITIZED_AGGREGATE_PATH: ${{ github.workspace }}/_frms_aggregate/frms-ux-30d-aggregates.json
+          SOURCE_AGGREGATE_SHA: ${{ inputs.source_aggregate_sha }}
+          CONFIRM_STAGING_FRMS_UX: ${{ inputs.confirmation }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$MODE" == rollback ]]; then
+            node scripts/staging/seed-frms-ux-30d.mjs --rollback
+          else
+            node scripts/staging/seed-frms-ux-30d.mjs --apply
+          fi
+      - name: Check tenant, crew and governed FRMS assignment
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          cd worker-airtrust
+          npx wrangler d1 execute airtrust-db-staging-baseline-20260701 --remote --json --command "SELECT (SELECT COUNT(*) FROM empresas WHERE id=999013 AND codigo='qa_frms_ux_30d' AND ativo=1 AND deleted_at IS NULL) AS tenant, (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=999013 AND matricula LIKE 'QA-FRMS-UX-%' AND deleted_at IS NULL) AS crew, (SELECT COUNT(*) FROM frms_profile_assignments WHERE empresa_id=999013 AND status='ACTIVE') AS assignment" > "$RUNNER_TEMP/frms-qa-post.json"
+          export POST="$RUNNER_TEMP/frms-qa-post.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const parsed=JSON.parse(fs.readFileSync(process.env.POST,'utf8'));
+          const row=(Array.isArray(parsed)?parsed[0]?.results:parsed.results)?.[0];
+          const want=process.env.MODE==='apply';
+          if (!row || Number(row.tenant)!==(want?1:0) || Number(row.crew)!==(want?14:0) || Number(row.assignment)!==(want?1:0)) {
+            throw new Error('STAGING_QA_POSTCONDITIONS_FAILED');
+          }
+          console.log('STAGING_FRMS_UX_QA_POSTCONDITIONS_PASS');
+          NODE
