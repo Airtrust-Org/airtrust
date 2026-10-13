@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FRMS_OFFSHORE_PROFILE,
+  FRMS_FIREFIGHTER_AVIATION_PROFILE,
   FrmsParameterResolutionError,
   buildResolvedParameterSet,
   nextRecalcStatus,
@@ -62,6 +63,24 @@ describe('FRMS parameter governance V2', () => {
     const prepare = () => ({ bind: () => ({ all: async () => ({ results: [] }), first: async () => null, run: async () => ({}) }) });
     await expect(resolveFrmsRegulatoryProfileEvidence({ prepare } as never, { empresaId: 6, referenceAt: '2026-09-27' }))
       .rejects.toMatchObject({ code: 'FRMS_CONTEXT_UNAVAILABLE' });
+  });
+
+  it('isolates firefighter aviation from offshore revisions without importing offshore limits', () => {
+    const offshore = revision({ id: 'offshore-tenant', empresa_id: 1, profile_code: FRMS_OFFSHORE_PROFILE });
+    const firefighter = revision({
+      id: 'firefighter-tenant', empresa_id: 2,
+      profile_code: FRMS_FIREFIGHTER_AVIATION_PROFILE,
+      source_type: 'UNVERIFIED_OPERATIONAL_POLICY',
+    });
+    expect(resolveEffectiveRevision(
+      [offshore, firefighter], 2, FRMS_FIREFIGHTER_AVIATION_PROFILE, '2026-10-12',
+    ).id).toBe('firefighter-tenant');
+    expect(() => resolveEffectiveRevision(
+      [offshore], 2, FRMS_FIREFIGHTER_AVIATION_PROFILE, '2026-10-12',
+    )).toThrow(FrmsParameterResolutionError);
+    expect(() => resolveEffectiveRevision(
+      [firefighter], 1, FRMS_OFFSHORE_PROFILE, '2026-10-12',
+    )).toThrow(FrmsParameterResolutionError);
   });
 
   it('does not fall back from HELICOPTER_OFFSHORE to a generic/fixed-wing profile', () => {

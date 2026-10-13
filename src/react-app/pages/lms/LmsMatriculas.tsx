@@ -43,6 +43,7 @@ import {
   isLmsEnrollmentAlertable,
   LmsEnrollmentAlertModal,
 } from './LmsEnrollmentAlertModal';
+import { shouldShowLmsEnrollmentDeadline } from './lmsEnrollmentDeadline';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -85,7 +86,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
 
   if (diffDays < 0) {
     return {
-      label: `Vencido há ${Math.abs(diffDays)}d`,
+      label: `Prazo da matrícula vencido há ${Math.abs(diffDays)}d`,
       className: 'bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200',
       pulseClassName: '',
       icon: <AlertCircle className="h-3 w-3" />,
@@ -94,7 +95,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
 
   if (diffDays <= 7) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-200',
       pulseClassName: 'animate-pulse',
       icon: <Clock className="h-3 w-3" />,
@@ -103,7 +104,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
 
   if (diffDays <= 30) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200',
       pulseClassName: '',
       icon: <Clock className="h-3 w-3" />,
@@ -111,7 +112,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
   }
 
   return {
-    label: `Vence em ${diffDays}d`,
+    label: `Prazo da matrícula: ${diffDays}d restantes`,
     className: 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200',
     pulseClassName: '',
     icon: <Calendar className="h-3 w-3" />,
@@ -173,7 +174,8 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-function DeadlineBadge({ dataExpiracao }: { dataExpiracao: string | null | undefined }) {
+function DeadlineBadge({ status, dataExpiracao }: { status: MatriculaStatus; dataExpiracao: string | null | undefined }) {
+  if (!shouldShowLmsEnrollmentDeadline(status, dataExpiracao)) return null;
   const meta = getDeadlineMeta(dataExpiracao);
 
   if (!meta) return null;
@@ -923,7 +925,7 @@ export default function LmsMatriculas() {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <StatusBadge status={m.status} />
-                            <DeadlineBadge dataExpiracao={m.data_expiracao} />
+                            <DeadlineBadge status={m.status} dataExpiracao={m.data_expiracao} />
                           </div>
                         </td>
                         <td className="hidden px-4 py-3 md:table-cell">
@@ -951,14 +953,14 @@ export default function LmsMatriculas() {
                             <div className="space-y-1">
                               <span
                                 className={`block text-xs ${
-                                  new Date(m.data_expiracao) < new Date()
+                                  shouldShowLmsEnrollmentDeadline(m.status, m.data_expiracao) && new Date(m.data_expiracao) < new Date()
                                     ? 'font-medium text-red-600'
                                     : 'text-slate-500'
                                 }`}
                               >
                                 {formatDate(m.data_expiracao)}
                               </span>
-                              <DeadlineBadge dataExpiracao={m.data_expiracao} />
+                              <DeadlineBadge status={m.status} dataExpiracao={m.data_expiracao} />
                             </div>
                           ) : (
                             <span className="text-xs text-slate-300 dark:text-slate-600">—</span>

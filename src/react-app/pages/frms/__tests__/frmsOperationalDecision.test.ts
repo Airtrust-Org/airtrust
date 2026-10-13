@@ -4,6 +4,7 @@ import {
   classifyOperationalItem,
   isOperationallyRelevant,
   operationalConfidence,
+  resolveFrmsCoordinationGuidance,
   resolveOperationalDataMoment,
   trustedEffectiveness,
 } from '../frmsOperationalDecision';
@@ -74,6 +75,63 @@ describe('frmsOperationalDecision', () => {
         }),
       ),
     ).toBe('CONFIRMAR');
+  });
+
+  it('fadiga acumulada crítica continua prioritária mesmo com decisão diária normal', () => {
+    const input = item({ fortnight_indicator: {
+      periodo_inicio: '2026-08-16', periodo_fim: '2026-08-30',
+      status_quinzena: 'CRITICO', agravantes_aplicados: [
+        { codigo: 'REST', descricao: 'Repouso recente reduzido', impacto_score: 10 },
+      ],
+    } as FrmsOperationalSnapshotItem['fortnight_indicator'] });
+    expect(classifyOperationalItem(input)).toBe('BLOQUEIO');
+    const guidance = resolveFrmsCoordinationGuidance(input, '2026-08-27');
+    expect(guidance.reason).toContain('Repouso recente reduzido');
+    expect(guidance.action).toContain('Não recomendar liberação');
+  });
+
+  it('snapshot crítico nunca mostra ação normal mesmo se a decisão detalhada for NORMAL', () => {
+    const input = item({ snapshot_status: 'CRITICO', estado_operacional: 'NORMAL' });
+    expect(classifyOperationalItem(input)).toBe('BLOQUEIO');
+    const guidance = resolveFrmsCoordinationGuidance(input, '2026-08-27');
+    expect(guidance.action).toContain('Não recomendar liberação');
+  });
+
+  it('check-in pendente aparece na fila e impede recomendação de liberar o voo no dia', () => {
+    const input = item({ checkin_status: 'PENDENTE', estado_operacional: 'NORMAL' });
+    const guidance = resolveFrmsCoordinationGuidance(input, '2026-08-27');
+    expect(guidance.checkinComplete).toBe(false);
+    expect(guidance.checkinLabel).toBe('Pendente');
+    expect(guidance.action).toContain('Não liberar');
+  });
+
+  it('não apresenta normalidade se a atividade exige check-in e recebeu NAO_APLICAVEL', () => {
+    const input = item({
+      escalado: false,
+      operacao_requer_decisao: true,
+      checkin_status: 'NAO_APLICAVEL',
+    });
+    expect(classifyOperationalItem(input)).toBe('CONFIRMAR');
+    expect(resolveFrmsCoordinationGuidance(input, '2026-08-27').checkinLabel)
+      .toBe('Não confirmado');
+  });
+
+  it('não confunde check-in não aplicável sem missão com pendência pré-voo', () => {
+    const input = item({
+      escalado: false, operacao_requer_decisao: false,
+      teve_jornada: false, hora_apresentacao: null,
+      checkin_status: 'NAO_APLICAVEL',
+    });
+    const guidance = resolveFrmsCoordinationGuidance(input, '2026-08-27');
+    expect(guidance.requiresCheckin).toBe(false);
+    expect(guidance.checkinLabel).toBe('Não exigido');
+  });
+
+  it('não exige check-in antecipado para continuar planejando voo futuro', () => {
+    const guidance = resolveFrmsCoordinationGuidance(
+      item({ data_operacional: '2026-08-28', checkin_status: 'AUSENTE' }), '2026-08-27',
+    );
+    expect(guidance.action).toContain('planejamento pode continuar');
   });
 
   it('prioriza violação crítica como bloqueio', () => {

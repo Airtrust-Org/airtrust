@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, XCircle } from 'lucide-react';
 import { cn } from '@/react-app/lib/utils';
 import ControleVoosStatCards from './ControleVoosStatCards';
+import { frmsBrazilOperationalTodayIso } from '@/react-app/pages/frms/frmsOperationalDate';
 import {
   useFrmsOperacionalPainel,
   type CvFrmsCrewDispatchAssessment,
@@ -34,7 +35,7 @@ const REASON_LABELS: Record<FrmsDispatchGateReasonCode, string> = {
 };
 
 const SITUACAO_LABELS: Record<FrmsDispatchReadinessStatus, string> = {
-  LIBERAVEL: 'LIBERADO',
+  LIBERAVEL: 'LIBERÁVEL',
   ATENCAO_COORDENACAO: 'ATENÇÃO',
   NAO_LIBERADO: 'NÃO LIBERADO',
 };
@@ -56,8 +57,8 @@ const CHECKIN_LABELS: Record<string, string> = {
   RECEBIDO: 'Recebido',
   PENDENTE: 'Pendente',
   AUSENTE: 'Ausente',
-  NAO_APLICAVEL: 'N/A',
-  INDISPONIVEL: '—',
+  NAO_APLICAVEL: 'Não confirmado',
+  INDISPONIVEL: 'Indisponível',
 };
 
 function fadigaClass(nivel: string): string {
@@ -97,8 +98,17 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
           )}
         </td>
         <td className="px-3 py-2 text-slate-600 dark:text-slate-400"><span className="block font-semibold">{voo.prefixo}</span><span className="block text-xs">{voo.modelo_aeronave || 'Modelo não informado'}</span></td>
-        <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-          {CHECKIN_LABELS[membro.checkin_status] ?? membro.checkin_status}
+        <td className="px-3 py-2">
+          <span
+            className={cn(
+              'inline-flex rounded-md px-2 py-1 text-xs font-bold',
+              membro.checkin_status === 'RECEBIDO'
+                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
+            )}
+          >
+            {CHECKIN_LABELS[membro.checkin_status] ?? membro.checkin_status}
+          </span>
         </td>
         <td className={cn('px-3 py-2', fadigaClass(membro.fadiga_diaria))}>
           {FADIGA_LABELS[membro.fadiga_diaria] ?? membro.fadiga_diaria}
@@ -116,10 +126,13 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
             {SITUACAO_LABELS[membro.frms_status]}
           </span>
         </td>
+        <td className="max-w-sm px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200">
+          {membro.recommended_action || 'Consultar decisão FRMS.'}
+        </td>
       </tr>
       {expanded && (
         <tr className="bg-slate-50 dark:bg-slate-800/40">
-          <td colSpan={7} className="px-6 py-3 text-xs text-slate-600 dark:text-slate-300">
+          <td colSpan={8} className="px-6 py-3 text-xs text-slate-600 dark:text-slate-300">
             {membro.reasons.length === 0 ? (
               <span className="text-slate-400 dark:text-slate-500">
                 Sem pendências — dados normais recebidos.
@@ -147,7 +160,7 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
 }
 
 export default function ControleOperacionalFrmsPanel() {
-  const [data, setData] = useState(() => new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(() => frmsBrazilOperationalTodayIso());
   const { data: painel, isLoading, error } = useFrmsOperacionalPainel(data);
 
   const resumo = painel?.resumo;
@@ -161,8 +174,8 @@ export default function ControleOperacionalFrmsPanel() {
             Controle operacional — este tripulante e este voo podem ser liberados agora?
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Check-in diário pendente no dia da operação bloqueia a liberação. Ausência de check-in
-            futuro nunca bloqueia o planejamento.
+            O check-in diário de todos os tripulantes é obrigatório antes da liberação operacional.
+            Um voo futuro pode ser planejado, mas não liberado sem os check-ins recebidos para sua data.
           </p>
         </div>
         <label className="space-y-1 text-xs">
@@ -246,7 +259,7 @@ export default function ControleOperacionalFrmsPanel() {
                     Voo
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
-                    Check-in
+                    Check-in diário (obrigatório)
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
                     Fadiga diária
@@ -255,7 +268,10 @@ export default function ControleOperacionalFrmsPanel() {
                     Fadiga acumulada
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
-                    Situação
+                    Situação FRMS
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
+                    Providência recomendada
                   </th>
                 </tr>
               </thead>
@@ -267,7 +283,7 @@ export default function ControleOperacionalFrmsPanel() {
                         <VooStatusIcon status={voo.frms_status} />
                       </td>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400"
                       >
                         {voo.prefixo}{voo.modelo_aeronave ? ` · ${voo.modelo_aeronave}` : ''} — {voo.horario_previsto_partida}
@@ -280,7 +296,7 @@ export default function ControleOperacionalFrmsPanel() {
                     </tr>
                     {voo.tripulacao.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-2 text-xs text-slate-400 dark:text-slate-500">
+                        <td colSpan={8} className="px-6 py-2 text-xs text-slate-400 dark:text-slate-500">
                           Sem tripulação cadastrada para este voo.
                         </td>
                       </tr>

@@ -17,17 +17,19 @@ import {
   type FrmsOperationalSnapshotItem,
 } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
-import { FrmsSignalChips, FrmsSignalGrid } from './components/FrmsOperationalSignals';
+import { FrmsSignalGrid } from './components/FrmsOperationalSignals';
 import {
   bucketPriority,
   classifyOperationalItem,
   isOperationallyRelevant,
   isOutsideFortnightOperationalExtension,
   operationalConfidence,
+  resolveFrmsCoordinationGuidance,
   resolveOperationalDataMoment,
   type FrmsDecisionBucket,
 } from './frmsOperationalDecision';
 import { formatFrmsReason, formatSnapshotSource } from './frmsPresentation';
+import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
 
 const BUCKET_STYLE: Record<
   FrmsDecisionBucket,
@@ -61,12 +63,6 @@ const BUCKET_STYLE: Record<
     dot: 'bg-emerald-500',
   },
 };
-
-function localTodayIso(): string {
-  const now = new Date();
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 10);
-}
 
 function isOperationalDate(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
@@ -291,12 +287,7 @@ function DetailDrawer({
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Ação operacional</h3>
             <p className="mt-2 text-base font-semibold text-slate-950 dark:text-white">
-              {outsideFortnightExtension
-                ? 'Confirmar se a atividade é uma extensão autorizada da quinzena; se não for, corrigir a escala ou a jornada de origem.'
-                : dayIsOpen && bucket === 'CONFIRMAR'
-                  ? 'Confirmar escala e condição pré-missão; fechar a jornada após a atividade.'
-                  : item.acao_recomendada_texto ||
-                  (bucket === 'NORMAL' ? 'Nenhuma ação imediata.' : 'Revisar o caso antes da decisão operacional.')}
+              {resolveFrmsCoordinationGuidance(item, todayIso).action}
             </p>
             {dayIsOpen && decisionIsLimited ? (
               <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
@@ -446,9 +437,10 @@ export default function FrmsFlightDashboard() {
   const requestedDate = searchParams.get('data');
   const requestedFuncionarioId = searchParams.get('funcionario_id');
   const legacyControlRoute = searchParams.get('origem') === 'controle-operacional-legado';
-  const date = isOperationalDate(requestedDate) ? requestedDate : localTodayIso();
-  const todayIso = localTodayIso();
+  const date = isOperationalDate(requestedDate) ? requestedDate : frmsBrazilOperationalTodayIso();
+  const todayIso = frmsBrazilOperationalTodayIso();
   const [selected, setSelected] = useState<FrmsOperationalSnapshotItem | null>(null);
+  const [onlyPendingCheckin, setOnlyPendingCheckin] = useState(false);
 
   useEffect(() => {
     if (requestedDate === date) return;
@@ -483,6 +475,17 @@ export default function FrmsFlightDashboard() {
     );
     if (match) setSelected(match);
   }, [requestedFuncionarioId, selected, snapshot.data]);
+
+  const visibleQueue = useMemo(
+    () => onlyPendingCheckin
+      ? queue.filter(({ item }) => resolveFrmsCoordinationGuidance(item, todayIso).requiresCheckin &&
+          item.checkin_status !== 'RECEBIDO')
+      : queue,
+    [queue, onlyPendingCheckin, todayIso],
+  );
+  const checkinPendingCount = queue.filter(({ item }) =>
+    resolveFrmsCoordinationGuidance(item, todayIso).requiresCheckin &&
+    item.checkin_status !== 'RECEBIDO').length;
 
   const counts = useMemo(
     () =>
@@ -565,8 +568,17 @@ export default function FrmsFlightDashboard() {
           ) : null}
         </div>
 
-        <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo operacional">
-          <MetricCard label="Atenção" value={counts.BLOQUEIO} helper="situações que requerem atenção antes da decisão operacional" loading={firstLoad || snapshotUnavailable} />
+        <section className="grid gap-3 sm:grid-cols-4" aria-label="Resumo operacional">
+          <button type="button" aria-pressed={onlyPendingCheckin}
+            onClick={() => setOnlyPendingCheckin(current => !current)}
+            className={`rounded-xl border p-4 text-left transition-colors ${onlyPendingCheckin
+              ? 'border-red-500 bg-red-50'
+              : 'border-slate-200 bg-white hover:bg-red-50'}`}>
+            <span className="block text-xs font-semibold text-slate-600">Check-ins a receber</span>
+            <span className="mt-1 block text-2xl font-bold text-red-800">{firstLoad || snapshotUnavailable ? '—' : checkinPendingCount}</span>
+            <span className="text-xs text-slate-600">{onlyPendingCheckin ? 'Mostrando apenas pendentes · clique para limpar' : 'Clique para filtrar a fila'}</span>
+          </button>
+          <MetricCard label="Prioritários" value={counts.BLOQUEIO} helper="risco crítico ou acumulado crítico a revisar antes da liberação" loading={firstLoad || snapshotUnavailable} />
           <MetricCard label="Avaliar" value={counts.DECISAO} helper="situações que merecem análise ou ação da coordenação" loading={firstLoad || snapshotUnavailable} />
           <MetricCard label="Verificar" value={counts.CONFIRMAR} helper="informações pendentes, estimadas ou que precisam ser confirmadas" loading={firstLoad || snapshotUnavailable} />
         </section>
@@ -594,7 +606,7 @@ export default function FrmsFlightDashboard() {
             <div>
               <h2 className="font-bold text-slate-950 dark:text-white">Fila de decisão</h2>
               <p className="text-xs text-slate-500">
-                Ordenada por gravidade e horário de apresentação. Abra o registro para ver motivo, dados de origem e ação esperada.
+                O check-in diário, o motivo e a providência aparecem aqui. Abra a pessoa para ver cálculos, tendências, fontes e histórico.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -604,7 +616,7 @@ export default function FrmsFlightDashboard() {
               >
                 Como interpretar
               </Link>
-              {!firstLoad ? <span className="text-xs font-semibold text-slate-500">{queue.length} pessoa(s)</span> : null}
+              {!firstLoad ? <span className="text-xs font-semibold text-slate-500">{visibleQueue.length} de {queue.length} pessoa(s)</span> : null}
             </div>
           </div>
 
@@ -620,52 +632,48 @@ export default function FrmsFlightDashboard() {
               <h3 className="mt-3 font-bold text-slate-900 dark:text-white">Situação FRMS indisponível</h3>
               <p className="mt-1 text-sm text-slate-500">{snapshot.error}</p>
             </div>
-          ) : queue.length === 0 ? (
+          ) : visibleQueue.length === 0 ? (
             <div className="p-10 text-center">
               <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-500" />
-              <h3 className="mt-3 font-bold text-slate-900 dark:text-white">Nenhuma pendência operacional no recorte</h3>
-              <p className="mt-1 text-sm text-slate-500">Não há pessoas escaladas, com jornada ou alerta que exijam atenção neste dia.</p>
+              <h3 className="mt-3 font-bold text-slate-900 dark:text-white">{onlyPendingCheckin ? 'Nenhum check-in pendente neste recorte' : 'Nenhuma pendência operacional no recorte'}</h3>
+              <p className="mt-1 text-sm text-slate-500">{onlyPendingCheckin ? 'Este filtro não encontrou pendências. Desative-o para ver a fila completa.' : 'Não há pessoas escaladas, com jornada ou alerta que exijam atenção neste dia.'}</p>
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
-              {queue.map(({ item, bucket }) => {
+              {visibleQueue.map(({ item, bucket }) => {
                 const confidence = operationalConfidence(item);
-                const dataMoment = resolveOperationalDataMoment(item, todayIso);
-                const outsideFortnightExtension = isOutsideFortnightOperationalExtension(item);
-                const isOpenDayConfirmation = dataMoment === 'DIA_EM_ABERTO' && bucket === 'CONFIRMAR';
-                const reason = outsideFortnightExtension
-                  ? 'Atividade fora da quinzena ativa — confirmar se é extensão operacional.'
-                  : isOpenDayConfirmation
-                    ? 'Dia em acompanhamento — jornada real será confirmada após a operação.'
-                    : item.motivos_principais?.[0] ? formatFrmsReason(item.motivos_principais[0]) :
-                      (bucket === 'NORMAL' ? 'Sem pendência operacional identificada.' : 'Revisão operacional necessária.');
-                const actionText = outsideFortnightExtension
-                  ? 'Confirmar extensão com a coordenação ou corrigir a escala/jornada de origem.'
-                  : isOpenDayConfirmation
-                    ? 'Confirmar escala e check-in antes da missão; fechar jornada após a atividade.'
-                    : item.acao_recomendada_texto || 'Abrir o registro para avaliar.';
+                const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
 
                 return (
                   <button
                     key={`${item.tripulante_id}-${item.data_operacional}`}
                     type="button"
                     onClick={() => setSelected(item)}
-                    className="grid w-full gap-3 px-4 py-4 text-left transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-900/60 dark:focus:bg-slate-900/60 lg:grid-cols-[130px_minmax(150px,0.9fr)_minmax(260px,1.4fr)_minmax(220px,1.3fr)_160px_24px] lg:items-center"
+                    className="grid w-full gap-3 px-4 py-4 text-left transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-900/60 dark:focus:bg-slate-900/60 lg:grid-cols-[105px_minmax(140px,0.9fr)_130px_minmax(230px,1.2fr)_minmax(280px,1.4fr)_24px] lg:items-start"
                   >
                     <div><DecisionBadge bucket={bucket} /></div>
                     <div className="min-w-0">
                       <p className="truncate font-bold text-slate-950 dark:text-white">{displayName(item)}</p>
                       <p className="truncate text-xs text-slate-500">{[item.funcao, item.base, item.aeronave].filter(Boolean).join(' · ') || 'Função/base não informadas'}</p>
                     </div>
-                    <FrmsSignalChips item={item} decisionBucket={bucket} />
                     <div className="min-w-0">
-                      <p className="line-clamp-2 text-sm font-medium text-slate-700 dark:text-slate-200">{reason}</p>
-                      <p className="mt-1 text-xs text-slate-500">{actionText}</p>
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Check-in diário</p>
+                      <span className={`inline-flex rounded-md px-2 py-1 text-xs font-bold ${guidance.checkinComplete
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                        : guidance.requiresCheckin
+                          ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
+                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                        {guidance.checkinLabel}
+                      </span>
                     </div>
-                    <div className="text-xs text-slate-500">
-                      <div>{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</div>
-                      <div className="mt-1">Confiança {confidence.toLowerCase()}</div>
-                      <div className="mt-1">Fonte: {operationalSourceLabel(item.operational_data_source)}</div>
+                    <div className="min-w-0">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Por quê?</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-200">{guidance.reason}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'} · Confiança {confidence.toLowerCase()}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">O que fazer?</p>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white">{guidance.action}</p>
                     </div>
                     <ChevronRight className="hidden h-4 w-4 text-slate-400 lg:block" />
                   </button>

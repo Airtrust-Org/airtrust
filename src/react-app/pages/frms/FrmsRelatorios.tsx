@@ -52,6 +52,7 @@ interface FrmsReportRow {
 
 interface FrmsReportMeta {
   generated_at: string;
+  policy_reference_date?: string;
   tenant_id: number;
   period: string;
   source: string;
@@ -170,7 +171,8 @@ export default function FrmsRelatorios() {
     const metadataHtml = reportMeta
       ? [
           ['Tenant', reportMeta.tenant_id],
-          ['Versão da política', reportMeta.policy_version],
+          ['Versão na data de emissão', reportMeta.policy_version],
+           ['Data de referência da política', reportMeta.policy_reference_date ?? 'não informada'],
           ['Revisão', reportMeta.revision_id],
           ['Perfil', reportMeta.profile_code],
           ['Fonte', reportMeta.source],
@@ -224,7 +226,8 @@ export default function FrmsRelatorios() {
       ['Período', reportMeta?.period ?? reportPeriodLabel],
       ['Gerado em', reportMeta?.generated_at ?? new Date().toISOString()],
       ['Tenant', reportMeta?.tenant_id ?? 'não informado'],
-      ['Versão da política', reportMeta?.policy_version ?? 'não informada'],
+      ['Versão na data de emissão', reportMeta?.policy_version ?? 'não informada'],
+      ['Data de referência da política', reportMeta?.policy_reference_date ?? 'não informada'],
       ['Revisão', reportMeta?.revision_id ?? 'não informada'],
       ['Perfil', reportMeta?.profile_code ?? 'não informado'],
       ['Fonte', reportMeta?.source ?? 'não informada'],
@@ -385,7 +388,7 @@ export default function FrmsRelatorios() {
           <span>{reportPeriodLabel}</span>
           {reportMeta ? (
             <span>
-              Política {reportMeta.policy_version} · revisão {reportMeta.revision_id} · fonte {reportMeta.source}
+              Política vigente em {reportMeta.policy_reference_date ?? 'data não informada'}: {reportMeta.policy_version} · revisão {reportMeta.revision_id} · fonte {reportMeta.source}
             </span>
           ) : null}
         </div>

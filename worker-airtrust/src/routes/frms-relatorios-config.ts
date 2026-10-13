@@ -17,6 +17,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { resolveFrmsRegulatoryProfileEvidence } from '../lib/frms/parameter-governance';
 import { requireRole } from '../middleware/rbac';
 import {
@@ -62,7 +63,14 @@ const GOVERNED_SOURCE_TYPES = [
 ] as const;
 
 function isoDateToday(): string {
-  return new Date().toISOString().slice(0, 10);
+  // A data operacional do FRMS da Costa do Sol é a de Brasília,
+  // inclusive no intervalo em que UTC já virou o dia.
+  return getTodayIsoSaoPaulo();
+}
+
+function reportMonth(value: string | undefined): string | null {
+  const month = value ?? isoDateToday().slice(0, 7);
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : null;
 }
 
 function frmsConfigurationUnavailable(c: FrmsAppContext, error: unknown) {
@@ -85,9 +93,11 @@ async function buildFrmsReportMeta(
   period: string,
   source: string,
 ) {
-  const effective = await loadEffectiveFrmsConfiguration(db, empresaId, isoDateToday());
+  const referenceAt = isoDateToday();
+  const effective = await loadEffectiveFrmsConfiguration(db, empresaId, referenceAt);
   return {
     generated_at: new Date().toISOString(),
+    policy_reference_date: referenceAt,
     tenant_id: empresaId,
     period,
     source,
@@ -102,6 +112,7 @@ async function buildFrmsReportMeta(
     limitations: [
       'Relatório de suporte ao FRMS; não constitui diagnóstico médico nem decisão automática de aptidão.',
       'Resultados dependem da completude, atualidade e proveniência dos dados operacionais disponíveis.',
+      'Versão da política identificada na data de emissão; não comprova, isoladamente, qual revisão estava vigente em cada dia histórico.',
     ],
   };
 }
@@ -133,7 +144,8 @@ frmsRelatoriosConfig.get(
     if (denied) return denied;
 
     const empresaId = getEmpresaIdSafe(c);
-    const mes = c.req.query('mes') || new Date().toISOString().slice(0, 7);
+    const mes = reportMonth(c.req.query('mes'));
+    if (!mes) return c.json({ success: false, code: 'FRMS_INVALID_REPORT_MONTH', error: 'Período deve estar em AAAA-MM.' }, 400);
     const result = await relatorioIndividual(c.env.DB, tripulanteId, mes, empresaId);
     return c.json({ success: true, data: result });
   }),
@@ -148,7 +160,8 @@ frmsRelatoriosConfig.get(
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
     if (!empresaId) return c.json({ success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' }, 403);
-    const mes = c.req.query('mes') || new Date().toISOString().slice(0, 7);
+    const mes = reportMonth(c.req.query('mes'));
+    if (!mes) return c.json({ success: false, code: 'FRMS_INVALID_REPORT_MONTH', error: 'Período deve estar em AAAA-MM.' }, 400);
     let meta;
     try {
       meta = await buildFrmsReportMeta(c.env.DB, empresaId, mes, 'FRMS_COMPLIANCE');

@@ -107,9 +107,9 @@ async function ensureEadCertificateAfterCompletion(
     return;
   }
 
-  // The canonical D1.batch already committed. A secondary certificate
-  // service exception must not turn an actually completed enrollment into
-  // an HTTP failure (and an impossible retry on CONCLUIDO status).
+  // The canonical D1.batch has already committed. Certificate issuance is a
+  // separate service: an exception here cannot roll the completed enrollment
+  // back and must not make the HTTP caller retry an already committed course.
   let result: Awaited<ReturnType<typeof ensureCertificateForQualification>>;
   try {
     result = await ensureCertificateForQualification(
@@ -119,8 +119,8 @@ async function ensureEadCertificateAfterCompletion(
       { actorUserId: params.actorUserId },
     );
   } catch {
-    // Avoid logging an arbitrary provider exception, which may contain
-    // credentials or private details. Certificate state remains unverified.
+    // Never log arbitrary provider error details (they may contain secrets).
+    // A separate reconciliation must verify the certificate's actual state.
     console.error(JSON.stringify({
       event: 'LMS_EAD_CERTIFICATE_SERVICE_THROWN',
       empresa_id: params.empresaId,

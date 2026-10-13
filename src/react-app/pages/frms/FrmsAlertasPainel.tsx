@@ -6,6 +6,7 @@ import AppLayout from '@/react-app/components/AppLayout';
 import { EmptyState } from '@/react-app/components/UI/EmptyState';
 import { useFrmsAlertas, useFrmsMutation, type FrmsAlertaRow } from '@/react-app/hooks/useFrms';
 import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
+import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
 
 const NIVEIS = ['AVISO', 'ATENCAO', 'CRITICO', 'VIOLACAO'] as const;
 
@@ -84,6 +85,46 @@ function parseResolutionRecord(value: string | null): (FrmsCaseResolutionForm & 
   }
 }
 
+function parseTreatmentRecord(value: string | null): (FrmsCaseResolutionForm & { schema?: string }) | null {
+  if (!value || !value.trim().startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<FrmsCaseResolutionForm> & { schema?: string };
+    if (parsed.schema !== 'FRMS_CASE_TREATMENT_V1') return null;
+    return {
+      responsavel: String(parsed.responsavel || ''),
+      prazo: String(parsed.prazo || ''),
+      acao_mitigacao: String(parsed.acao_mitigacao || ''),
+      justificativa: String(parsed.justificativa || ''),
+      evidencia_referencia: String(parsed.evidencia_referencia || ''),
+      avaliacao_eficacia: '',
+      schema: parsed.schema,
+    };
+  } catch {
+    return null;
+  }
+}
+
+type EtapaCaso = 'todos' | 'sem_tratamento' | 'em_tratamento' | 'vencidos';
+
+type SituacaoCaso = 'RESOLVIDO' | 'SEM_TRATAMENTO' | 'EM_TRATAMENTO' | 'VENCIDO';
+
+/** Purely presentational: never changes FRMS risk, authorization or persisted state. */
+function situacaoCaso(item: FrmsAlertaRow, hoje: string): SituacaoCaso {
+  if (item.resolvido) return 'RESOLVIDO';
+  const tratamento = parseTreatmentRecord(item.notas_resolucao);
+  if (!tratamento) return 'SEM_TRATAMENTO';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(tratamento.prazo) && tratamento.prazo < hoje) return 'VENCIDO';
+  return 'EM_TRATAMENTO';
+}
+
+const ORDEM_SITUACAO: Record<SituacaoCaso, number> = {
+  VENCIDO: 0,
+  SEM_TRATAMENTO: 1,
+  EM_TRATAMENTO: 2,
+  RESOLVIDO: 3,
+};
+const ORDEM_NIVEL: Record<string, number> = { VIOLACAO: 0, CRITICO: 1, ATENCAO: 2, AVISO: 3 };
+
 export default function FrmsAlertasPainel() {
   const [searchParams] = useSearchParams();
   const nivelParam = searchParams.get('nivel') || '';
@@ -92,6 +133,9 @@ export default function FrmsAlertasPainel() {
     NIVEIS.includes(nivelParam as (typeof NIVEIS)[number]) ? nivelParam : '',
   );
   const [status, setStatus] = useState<'ativos' | 'resolvidos' | 'todos'>('ativos');
+  const [etapa, setEtapa] = useState<EtapaCaso>('todos');
+  const [pagina, setPagina] = useState(1);
+  const hoje = frmsBrazilOperationalTodayIso();
   const [resolveTarget, setResolveTarget] = useState<FrmsAlertaRow | null>(null);
   const [resolutionForm, setResolutionForm] = useState<FrmsCaseResolutionForm>(EMPTY_RESOLUTION_FORM);
   const [resolving, setResolving] = useState(false);
@@ -101,27 +145,47 @@ export default function FrmsAlertasPainel() {
     if (NIVEIS.includes(nivelParam as (typeof NIVEIS)[number])) setNivel(nivelParam);
   }, [nivelParam]);
 
+  useEffect(() => {
+    setPagina(1);
+  }, [tripulanteParam]);
+
   const filtros = useMemo(() => {
-    const next: Record<string, string> = { limit: '100', page: '1' };
+    const next: Record<string, string> = { limit: '100', page: String(pagina) };
     if (nivel) next.nivel = nivel;
     if (status === 'ativos') next.resolvido = 'false';
     if (status === 'resolvidos') next.resolvido = 'true';
     if (tripulanteParam) next.tripulante_id = tripulanteParam;
     return next;
-  }, [nivel, status, tripulanteParam]);
+  }, [nivel, status, tripulanteParam, pagina]);
 
   const { data, loading, error, refetch } = useFrmsAlertas(filtros);
   const cases: FrmsAlertaRow[] = Array.isArray(data) ? data : [];
 
-  const counts = useMemo(
-    () => ({
-      total: cases.length,
-      bloqueio: cases.filter((item) => item.nivel === 'VIOLACAO').length,
-      decidir: cases.filter((item) => item.nivel === 'CRITICO').length,
-      confirmar: cases.filter((item) => item.nivel === 'ATENCAO').length,
-    }),
-    [cases],
-  );
+  // The API currently returns only the requested page. These figures and the
+  // queue ordering are explicitly page-scoped; never claim global overdue totals.
+  const counts = useMemo(() => ({
+    total: cases.length,
+    semTratamento: cases.filter((item) => situacaoCaso(item, hoje) === 'SEM_TRATAMENTO').length,
+    emTratamento: cases.filter((item) => ['EM_TRATAMENTO', 'VENCIDO'].includes(situacaoCaso(item, hoje))).length,
+    vencidos: cases.filter((item) => situacaoCaso(item, hoje) === 'VENCIDO').length,
+  }), [cases, hoje]);
+
+  const fila = useMemo(() => cases
+    .filter((item) => {
+      const situacao = situacaoCaso(item, hoje);
+      if (etapa === 'sem_tratamento') return situacao === 'SEM_TRATAMENTO';
+      if (etapa === 'em_tratamento') return situacao === 'EM_TRATAMENTO' || situacao === 'VENCIDO';
+      if (etapa === 'vencidos') return situacao === 'VENCIDO';
+      return true;
+    })
+    .sort((a, b) => {
+      const situacaoA = situacaoCaso(a, hoje);
+      const situacaoB = situacaoCaso(b, hoje);
+      return ORDEM_SITUACAO[situacaoA] - ORDEM_SITUACAO[situacaoB] ||
+        (ORDEM_NIVEL[a.nivel] ?? 4) - (ORDEM_NIVEL[b.nivel] ?? 4) ||
+        String(a.data_fato || a.created_at).localeCompare(String(b.data_fato || b.created_at));
+    }), [cases, etapa, hoje]);
+
 
   const markViewed = useCallback(
     async (id: string) => {
@@ -137,7 +201,7 @@ export default function FrmsAlertasPainel() {
 
   const openResolution = useCallback((item: FrmsAlertaRow) => {
     setResolveTarget(item);
-    setResolutionForm(EMPTY_RESOLUTION_FORM);
+    setResolutionForm(parseTreatmentRecord(item.notas_resolucao) ?? EMPTY_RESOLUTION_FORM);
   }, []);
 
   const closeResolution = useCallback(() => {
@@ -163,24 +227,28 @@ export default function FrmsAlertasPainel() {
       evidencia_referencia: resolutionForm.evidencia_referencia.trim() || null,
       avaliacao_eficacia: resolutionForm.avaliacao_eficacia.trim(),
     };
-    const completo =
-      payload.responsavel.length >= 2 &&
+    const closing = Boolean(parseTreatmentRecord(resolveTarget.notas_resolucao));
+    const treatmentComplete = payload.responsavel.length >= 2 &&
       /^\d{4}-\d{2}-\d{2}$/.test(payload.prazo) &&
-      payload.acao_mitigacao.length >= 10 &&
-      payload.justificativa.length >= 10 &&
-      payload.avaliacao_eficacia.length >= 10;
-    if (!completo) {
-      toast.error('Preencha responsável, prazo, mitigação, justificativa e avaliação de eficácia.');
+      payload.acao_mitigacao.length >= 10 && payload.justificativa.length >= 10;
+    if (!treatmentComplete || (closing && payload.avaliacao_eficacia.length < 10)) {
+      toast.error(closing
+        ? 'Registre como a eficácia da medida foi verificada antes de encerrar.'
+        : 'Informe responsável, prazo, medida e justificativa antes de registrar.');
       return;
     }
-
     setResolving(true);
     try {
-      await mutate(`/api/frms/alertas/${resolveTarget.id}/resolver`, {
+      await mutate(`/api/frms/alertas/${resolveTarget.id}/${closing ? 'resolver' : 'tratamento'}`, {
         method: 'PUT',
-        body: JSON.stringify(payload),
+        body: JSON.stringify(closing ? { avaliacao_eficacia: payload.avaliacao_eficacia } : {
+          responsavel: payload.responsavel, prazo: payload.prazo,
+          acao_mitigacao: payload.acao_mitigacao, justificativa: payload.justificativa,
+          evidencia_referencia: payload.evidencia_referencia,
+        }),
       });
-      toast.success('Caso resolvido com trilha de mitigação e eficácia.');
+      toast.success(closing ? 'Caso encerrado com eficácia documentada.' :
+        'Tratamento registrado. O caso permanece aberto até verificação de eficácia.');
       setResolveTarget(null);
       setResolutionForm(EMPTY_RESOLUTION_FORM);
       await refetch();
@@ -190,6 +258,8 @@ export default function FrmsAlertasPainel() {
       setResolving(false);
     }
   }, [mutate, refetch, resolutionForm, resolveTarget]);
+
+  const isFinalResolution = Boolean(resolveTarget && parseTreatmentRecord(resolveTarget.notas_resolucao));
 
   return (
     <AppLayout>
@@ -215,31 +285,40 @@ export default function FrmsAlertasPainel() {
           </button>
         </header>
 
-        <section className="grid gap-3 sm:grid-cols-4" aria-label="Resumo de casos">
+        <section className="grid gap-3 sm:grid-cols-4" aria-label="Resumo de ações nesta página">
           <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">No filtro</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Casos nesta página</p>
             <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950 dark:text-white">{loading && !data ? '—' : counts.total}</p>
+            <p className="mt-1 text-xs text-slate-500">Até 100 casos por página, conforme os filtros.</p>
           </div>
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/30">
-            <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Atenção</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums text-red-800 dark:text-red-200">{loading && !data ? '—' : counts.bloqueio}</p>
-          </div>
-          <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 dark:border-orange-900/60 dark:bg-orange-950/30">
-            <p className="text-xs font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">Avaliar</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums text-orange-800 dark:text-orange-200">{loading && !data ? '—' : counts.decidir}</p>
-          </div>
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Verificar</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums text-amber-800 dark:text-amber-200">{loading && !data ? '—' : counts.confirmar}</p>
-          </div>
+          {([
+            { key: 'sem_tratamento', label: 'Sem medida registrada', value: counts.semTratamento, style: 'border-orange-200 bg-orange-50 text-orange-900 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-200' },
+            { key: 'em_tratamento', label: 'Em tratamento', value: counts.emTratamento, style: 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-200' },
+            { key: 'vencidos', label: 'Prazo vencido', value: counts.vencidos, style: 'border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200' },
+          ] as const).map((card) => (
+            <button
+              key={card.key}
+              type="button"
+              onClick={() => { setStatus('ativos'); setEtapa(etapa === card.key ? 'todos' : card.key); }}
+              aria-pressed={etapa === card.key}
+              className={`rounded-xl border p-4 text-left transition-shadow hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${card.style} ${etapa === card.key ? 'ring-2 ring-primary' : ''}`}
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide">{card.label}</p>
+              <p className="mt-2 text-3xl font-bold tabular-nums">{loading && !data ? '—' : card.value}</p>
+              <p className="mt-1 text-xs">Filtrar casos desta página</p>
+            </button>
+          ))}
         </section>
+        <p className="text-xs text-slate-500">
+          Resumo por página, não por toda a empresa. A lista prioriza prazos vencidos e medidas ainda não registradas; a gravidade do alerta continua visível.
+        </p>
 
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
           <label className="relative">
             <span className="sr-only">Filtrar por prioridade</span>
             <select
               value={nivel}
-              onChange={(event) => setNivel(event.target.value)}
+              onChange={(event) => { setNivel(event.target.value); setPagina(1); }}
               className="appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-9 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
             >
               <option value="">Todas as prioridades</option>
@@ -253,7 +332,7 @@ export default function FrmsAlertasPainel() {
               <button
                 key={item}
                 type="button"
-                onClick={() => setStatus(item)}
+                onClick={() => { setStatus(item); setEtapa('todos'); setPagina(1); }}
                 className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
                   status === item
                     ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
@@ -264,6 +343,20 @@ export default function FrmsAlertasPainel() {
               </button>
             ))}
           </div>
+
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+            Etapa
+            <select
+              value={etapa}
+              onChange={(event) => { const next = event.target.value as EtapaCaso; setEtapa(next); if (next !== 'todos') setStatus('ativos'); }}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+            >
+              <option value="todos">Todas nesta página</option>
+              <option value="sem_tratamento">Sem tratamento</option>
+              <option value="em_tratamento">Aguardando eficácia</option>
+              <option value="vencidos">Prazo vencido</option>
+            </select>
+          </label>
 
           {tripulanteParam ? (
             <Link to="/frms/alertas" className="text-xs font-semibold text-primary hover:underline">
@@ -283,21 +376,23 @@ export default function FrmsAlertasPainel() {
             <div className="space-y-3 p-4" aria-label="Carregando casos">
               {[0, 1, 2].map((item) => <div key={item} className="h-24 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-900" />)}
             </div>
-          ) : cases.length === 0 ? (
+          ) : fila.length === 0 ? (
             <div className="py-12">
               <EmptyState
                 icon={<BellOff size={44} className="text-slate-300" />}
                 title="Nenhum caso neste filtro"
-                description="Não há pendências FRMS correspondentes aos filtros selecionados."
+                description="Não há casos nesta página com os filtros selecionados. Revise a etapa ou navegue entre as páginas."
               />
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
-              {cases.map((item) => {
+              {fila.map((item) => {
                 const name = item.nome_tripulante || `Tripulante #${item.tripulante_id}`;
                 const levelClass = NIVEL_STYLE[item.nivel] || NIVEL_STYLE.AVISO;
                 const resolutionDate = resolvedAt(item.resolvido_em);
                 const resolutionRecord = parseResolutionRecord(item.notas_resolucao);
+                const pendingTreatment = !item.resolvido ? parseTreatmentRecord(item.notas_resolucao) : null;
+                const situacao = situacaoCaso(item, hoje);
                 return (
                   <article key={item.id} className="p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
@@ -306,11 +401,27 @@ export default function FrmsAlertasPainel() {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${levelClass}`}>{nivelLabel(item.nivel)}</span>
                           <span className="text-xs text-slate-500">{factDate(item)}</span>
+                          {situacao === 'VENCIDO' ? <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-bold text-red-800">Prazo vencido</span> : null}
+                          {situacao === 'SEM_TRATAMENTO' ? <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-bold text-orange-800">Sem medida registrada</span> : null}
                           {item.visualizado ? <span className="text-xs text-slate-400">visualizado</span> : null}
                         </div>
                         <h2 className="mt-2 font-bold text-slate-950 dark:text-white">{name}</h2>
                         <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{item.mensagem}</p>
                         <p className="mt-2 text-xs text-slate-500">Tipo: {item.tipo_limite || 'não informado'}</p>
+                        {situacao === 'SEM_TRATAMENTO' ? (
+                          <p className="mt-2 text-xs font-semibold text-orange-800 dark:text-orange-300">
+                            Próxima ação: registrar responsável, prazo, medida e justificativa. Marcar como visto não encerra o caso.
+                          </p>
+                        ) : null}
+                        {pendingTreatment ? (
+                          <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900" aria-label="Tratamento em andamento">
+                            <p className="font-bold">{situacao === 'VENCIDO' ? 'Prazo vencido — caso ainda aberto' : 'Tratamento em andamento — caso ainda aberto'}</p>
+                            <p className="mt-1">Responsável: {pendingTreatment.responsavel} · Prazo: {pendingTreatment.prazo}</p>
+                            {situacao === 'VENCIDO' ? <p className="mt-1 font-bold text-red-800">Prazo ultrapassado: verificar providências e eficácia antes de concluir.</p> : null}
+                            <p className="mt-1">Medida: {pendingTreatment.acao_mitigacao}</p>
+                            <p className="mt-1 font-semibold">Verificar eficácia antes de encerrar.</p>
+                          </div>
+                        ) : null}
                         {item.resolvido ? (
                           <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                             <p className="font-semibold text-slate-700 dark:text-slate-200">
@@ -358,10 +469,10 @@ export default function FrmsAlertasPainel() {
                           <button
                             type="button"
                             onClick={() => openResolution(item)}
-                            title="Registrar responsável, prazo, mitigação, evidência e avaliação de eficácia antes de resolver"
+                            title={pendingTreatment ? "Verificar eficácia antes de encerrar" : "Registrar medida sem encerrar o caso"}
                             className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
                           >
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Registrar tratamento
+                            <CheckCircle2 className="h-3.5 w-3.5" /> {pendingTreatment ? "Verificar eficácia e encerrar" : "Registrar tratamento"}
                           </button>
                         ) : null}
                       </div>
@@ -374,14 +485,24 @@ export default function FrmsAlertasPainel() {
         </section>
       </div>
 
+        <nav className="flex flex-wrap items-center justify-between gap-3 text-sm" aria-label="Paginação de casos">
+          <p className="text-slate-500">Página {pagina} · {cases.length} caso(s) carregado(s). {cases.length === 100 ? 'Pode haver mais registros.' : 'Fim dos registros nesta consulta.'}</p>
+          <div className="flex gap-2">
+            <button type="button" disabled={pagina === 1 || loading} onClick={() => setPagina((p) => Math.max(1, p - 1))}
+              className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Anterior</button>
+            <button type="button" disabled={loading || cases.length < 100} onClick={() => { setPagina((p) => p + 1); setEtapa('todos'); }}
+              className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Próxima página</button>
+          </div>
+        </nav>
+
       {resolveTarget ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-labelledby="resolve-case-title">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">Confirmar resolução</p>
                 <h2 id="resolve-case-title" className="mt-1 text-lg font-bold text-slate-950 dark:text-white">
-                  Registrar decisão antes de fechar o caso
+                  {isFinalResolution ? 'Verificar eficácia e encerrar o caso' : 'Registrar medida sem encerrar o caso'}
                 </h2>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                   {resolveTarget.nome_tripulante || `Tripulante #${resolveTarget.tripulante_id}`} · {nivelLabel(resolveTarget.nivel)}
@@ -398,6 +519,7 @@ export default function FrmsAlertasPainel() {
                 <input
                   autoFocus
                   value={resolutionForm.responsavel}
+                   readOnly={isFinalResolution}
                   onChange={(event) => updateResolutionField('responsavel', event.target.value)}
                   maxLength={120}
                   placeholder="Nome, função ou equipe responsável"
@@ -409,6 +531,7 @@ export default function FrmsAlertasPainel() {
                 <input
                   type="date"
                   value={resolutionForm.prazo}
+                   readOnly={isFinalResolution}
                   onChange={(event) => updateResolutionField('prazo', event.target.value)}
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 />
@@ -416,9 +539,10 @@ export default function FrmsAlertasPainel() {
             </div>
 
             <label className="mt-4 block text-sm font-semibold text-slate-800 dark:text-slate-200">
-              Mitigação aplicada
+              Medida de mitigação
               <textarea
                 value={resolutionForm.acao_mitigacao}
+                   readOnly={isFinalResolution}
                 onChange={(event) => updateResolutionField('acao_mitigacao', event.target.value)}
                 rows={3}
                 maxLength={1000}
@@ -431,6 +555,7 @@ export default function FrmsAlertasPainel() {
               Justificativa da decisão
               <textarea
                 value={resolutionForm.justificativa}
+                   readOnly={isFinalResolution}
                 onChange={(event) => updateResolutionField('justificativa', event.target.value)}
                 rows={3}
                 maxLength={1000}
@@ -442,6 +567,7 @@ export default function FrmsAlertasPainel() {
               Evidência ou referência
               <input
                 value={resolutionForm.evidencia_referencia}
+                   readOnly={isFinalResolution}
                 onChange={(event) => updateResolutionField('evidencia_referencia', event.target.value)}
                 maxLength={500}
                 placeholder="Opcional: ocorrência, FRAT, documento, protocolo ou outra referência."
@@ -449,6 +575,7 @@ export default function FrmsAlertasPainel() {
               />
             </label>
 
+            {isFinalResolution ? (
             <label className="mt-4 block text-sm font-semibold text-slate-800 dark:text-slate-200">
               Avaliação de eficácia
               <textarea
@@ -460,8 +587,9 @@ export default function FrmsAlertasPainel() {
                 className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </label>
+            ) : null}
             <p className="mt-2 text-xs text-slate-500">
-              “Visto” registra ciência. O encerramento exige mitigação e avaliação de eficácia, preservadas na trilha de auditoria.
+              “Visto” registra ciência. A medida fica aberta até a verificação documentada da eficácia; o encerramento não é automático.
             </p>
 
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -477,11 +605,11 @@ export default function FrmsAlertasPainel() {
                   !/^\d{4}-\d{2}-\d{2}$/.test(resolutionForm.prazo) ||
                   resolutionForm.acao_mitigacao.trim().length < 10 ||
                   resolutionForm.justificativa.trim().length < 10 ||
-                  resolutionForm.avaliacao_eficacia.trim().length < 10
+                  (isFinalResolution && resolutionForm.avaliacao_eficacia.trim().length < 10)
                 }
                 className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900"
               >
-                {resolving ? 'Resolvendo…' : 'Confirmar e resolver'}
+                {resolving ? 'Registrando…' : isFinalResolution ? 'Confirmar e resolver' : 'Registrar sem encerrar'}
               </button>
             </div>
           </div>

@@ -10,7 +10,7 @@ import type { CvFrmsOperacionalPainel } from '@/react-app/hooks/useControleVoos'
 // Controle Operacional FRMS / Gate de Despacho V1 — painel compacto da
 // Coordenacao. Reusa exatamente a resposta ja sanitizada do backend
 // (`GET /controle-voos/operacional`), entao o teste de frontend cobre
-// apenas apresentacao: estados LIBERADO/ATENCAO/NAO_LIBERADO, contadores e
+// apenas apresentação: estados LIBERÁVEL/ATENÇÃO/NÃO LIBERADO, contadores e
 // que nenhum dado sensivel (KSS/sono) aparece renderizado.
 
 vi.mock('@/react-app/services/apiClient', () => ({
@@ -91,6 +91,26 @@ describe('ControleOperacionalFrmsPanel', () => {
     expect(screen.getByText('Ausente')).toBeInTheDocument();
   });
 
+  it('não apresenta NAO_APLICAVEL ou INDISPONIVEL como check-in liberado', async () => {
+    const response = painel();
+    const crew = response.voos[0].tripulacao[0];
+    response.voos[0].tripulacao = [
+      { ...crew, funcionario_id: 1003, checkin_status: 'NAO_APLICAVEL' },
+      { ...crew, funcionario_id: 1004, checkin_status: 'INDISPONIVEL' },
+    ];
+    getMock.mockImplementation(async (url: string) => {
+      if (url.includes('/operacional')) return apiOk(response);
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    renderWithClient(<ControleOperacionalFrmsPanel />);
+
+    expect(await screen.findByText('Não confirmado')).toBeInTheDocument();
+    expect(screen.getByText('Indisponível')).toBeInTheDocument();
+    expect(screen.queryByText('N/A')).not.toBeInTheDocument();
+    expect(screen.getAllByText('NÃO LIBERADO').length).toBeGreaterThan(0);
+  });
+
   it('expande a linha do tripulante e mostra o motivo sanitizado (sem dado sensivel)', async () => {
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/operacional')) return apiOk(painel());
@@ -109,7 +129,7 @@ describe('ControleOperacionalFrmsPanel', () => {
     expect(document.body.textContent).not.toMatch(/kss|qualidade_sono|horas_sono|medica|alcool/i);
   });
 
-  it('mostra estado LIBERADO quando toda a tripulacao esta liberavel', async () => {
+  it('distingue LIBERÁVEL de voo efetivamente LIBERADO com check-in recebido', async () => {
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/operacional')) {
         return apiOk(
@@ -155,7 +175,9 @@ describe('ControleOperacionalFrmsPanel', () => {
     renderWithClient(<ControleOperacionalFrmsPanel />);
 
     await waitFor(() => expect(screen.getAllByText('ATX-1002', { exact: false }).length).toBeGreaterThan(0));
-    expect(screen.getByText('LIBERADO')).toBeInTheDocument();
+    expect(screen.getAllByText('LIBERÁVEL').length).toBeGreaterThan(0);
+    expect(screen.queryByText('LIBERADO')).not.toBeInTheDocument();
+    expect(screen.getByText('Recebido')).toBeInTheDocument();
   });
 
   it('mostra estado vazio quando nao ha voos programados na data', async () => {

@@ -63,6 +63,22 @@ const REASON_PRIORITY: DispatchGateReasonCode[] = [
   'DADO_ESTIMADO',
 ];
 
+/** Ações de coordenação baseadas na causa canônica, sem expor respostas sensíveis. */
+const RECOMMENDED_ACTIONS: Readonly<Record<DispatchGateReasonCode, string>> = {
+  TRIPULACAO_AUSENTE: 'Cadastrar e confirmar a tripulação antes da liberação operacional.',
+  CHECKIN_DIARIO_PENDENTE: 'Solicitar e confirmar o check-in de fadiga diária de cada tripulante antes de liberar o voo.',
+  CHECKIN_INCONSISTENTE: 'Conferir a inconsistência do FRMS e registrar a revisão antes da liberação.',
+  DECISAO_FRMS_CRITICA: 'Não liberar o voo; encaminhar a restrição à gestão operacional responsável.',
+  DECISAO_FRMS_MITIGACAO_NECESSARIA: 'Manter a liberação pendente; avaliar repouso, redução de demanda ou substituição e registrar a mitigação.',
+  DECISAO_FRMS_NAO_AVALIADO: 'Completar as informações obrigatórias de fadiga antes da decisão de liberação.',
+  FADIGA_ACUMULADA_CRITICA: 'Revisar o histórico de jornadas e repouso; avaliar recuperação ou substituição antes da liberação.',
+  SNAPSHOT_FRMS_AUSENTE: 'Regularizar a avaliação FRMS da tripulação antes da liberação.',
+  SNAPSHOT_FRMS_INCONSISTENTE: 'Confirmar os dados inconsistentes do FRMS antes da liberação.',
+  DECISAO_FRMS_ATENCAO: 'Revisar a condição pré-missão e registrar a providência da coordenação.',
+  FADIGA_ACUMULADA_ATENCAO: 'Revisar a sequência de jornadas e períodos de recuperação antes da missão.',
+  DADO_ESTIMADO: 'Confirmar na fonte os dados estimados antes da decisão operacional.',
+};
+
 export const DISPATCH_GATE_HARD_BLOCK_REASONS: ReadonlySet<DispatchGateReasonCode> = new Set([
   'TRIPULACAO_AUSENTE',
   'CHECKIN_DIARIO_PENDENTE',
@@ -94,6 +110,7 @@ export interface CrewDispatchAssessment extends DispatchGateCrewMember {
   fadiga_acumulada: DispatchFadigaNivel;
   reasons: DispatchGateReasonCode[];
   primary_reason: DispatchGateReasonCode | null;
+  recommended_action: string;
   natureza_dado: string | null;
 }
 
@@ -160,7 +177,9 @@ export function deriveCrewDispatchAssessment(
   if (!item) {
     reasons.add('SNAPSHOT_FRMS_AUSENTE');
   } else {
-    if (item.checkin_status === 'PENDENTE' || item.checkin_status === 'AUSENTE') {
+    // Toda tripulação designada para um voo exige check-in RECEBIDO na data operacional.
+    // NAO_APLICAVEL e estados desconhecidos não equivalem a avaliação preenchida.
+    if (item.checkin_status !== 'RECEBIDO') {
       reasons.add('CHECKIN_DIARIO_PENDENTE');
     }
     if (item.alertas.includes('DADO_INCONSISTENTE') || item.jornada_data_source === 'INCONSISTENTE') {
@@ -207,6 +226,7 @@ export function deriveCrewDispatchAssessment(
     fadiga_acumulada: mapQuinzenaToFadigaNivel(item?.fortnight_indicator?.status_quinzena),
     reasons: reasonList,
     primary_reason: pickPrimaryReason(reasonList),
+    recommended_action: RECOMMENDED_ACTIONS[pickPrimaryReason(reasonList)!] ?? 'Sem pendência FRMS identificada; seguir verificações operacionais usuais.',
     natureza_dado: item?.natureza_dado ?? null,
   };
 }

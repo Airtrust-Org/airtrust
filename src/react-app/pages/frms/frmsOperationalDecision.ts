@@ -1,4 +1,5 @@
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
+import { formatFrmsReason } from './frmsPresentation';
 
 export type FrmsDecisionBucket = 'BLOQUEIO' | 'DECISAO' | 'CONFIRMAR' | 'NORMAL';
 export type FrmsDataConfidence = 'ALTA' | 'MEDIA' | 'BAIXA';
@@ -44,7 +45,7 @@ export function hasIncompleteOperationalData(item: FrmsOperationalSnapshotItem):
     item.fatorizacao_status === 'AUSENTE' ||
     item.jornada_data_source === 'AUSENTE' ||
     item.jornada_data_source === 'INCONSISTENTE' ||
-    (item.escalado && item.checkin_status !== 'RECEBIDO') ||
+    (item.checkin_status !== 'RECEBIDO' && requiresOperationalDecision(item)) ||
     item.alertas.includes('DADO_INCONSISTENTE') ||
     item.alertas.includes('JORNADA_SEM_FATORIZACAO') ||
     item.alertas.includes('ESCALADO_SEM_JORNADA_FRMS')
@@ -69,7 +70,8 @@ export function isOutsideFortnightOperationalExtension(item: FrmsOperationalSnap
 }
 
 export function classifyOperationalItem(item: FrmsOperationalSnapshotItem): FrmsDecisionBucket {
-  if (item.estado_operacional === 'CRITICO_VIOLACAO' || item.snapshot_status === 'CRITICO') {
+  if (item.estado_operacional === 'CRITICO_VIOLACAO' || item.snapshot_status === 'CRITICO' ||
+    item.fortnight_indicator?.status_quinzena === 'CRITICO') {
     return 'BLOQUEIO';
   }
 
@@ -77,6 +79,7 @@ export function classifyOperationalItem(item: FrmsOperationalSnapshotItem): Frms
     item.estado_operacional === 'MITIGACAO_NECESSARIA' ||
     item.estado_operacional === 'ATENCAO' ||
     item.snapshot_status === 'ATENCAO' ||
+    item.fortnight_indicator?.status_quinzena === 'ATENCAO' ||
     item.alertas.includes('CHECKIN_CRITICO') ||
     item.alertas.includes('EFETIVIDADE_BAIXA') ||
     item.alertas.includes('KSS_ALTO') ||
@@ -145,6 +148,114 @@ export function isOperationallyRelevant(item: FrmsOperationalSnapshotItem): bool
     item.alertas.length > 0 ||
     item.estado_operacional === 'CRITICO_VIOLACAO'
   );
+}
+
+export interface FrmsCoordinationGuidance {
+  requiresCheckin: boolean;
+  checkinComplete: boolean;
+  checkinLabel: string;
+  reason: string;
+  action: string;
+}
+
+/** Short coordination copy; never derives a new fatigue threshold or authorizes a flight. */
+export function resolveFrmsCoordinationGuidance(
+  item: FrmsOperationalSnapshotItem,
+  todayIso: string,
+): FrmsCoordinationGuidance {
+  const requiresCheckin = Boolean(
+    item.escalado || item.operacao_requer_decisao || item.teve_jornada ||
+    item.teve_atividade_frms || item.hora_apresentacao,
+  );
+  const checkinComplete = item.checkin_status === 'RECEBIDO';
+  const checkinLabel = checkinComplete ? 'Recebido'
+    : !requiresCheckin && item.checkin_status === 'NAO_APLICAVEL' ? 'Não exigido'
+      : item.checkin_status === 'PENDENTE' ? 'Pendente'
+        : item.checkin_status === 'NAO_APLICAVEL' ? 'Não confirmado'
+          : 'Não realizado';
+  const base = { requiresCheckin, checkinComplete, checkinLabel };
+  const fortnight = item.fortnight_indicator;
+  const isCritical = item.estado_operacional === 'CRITICO_VIOLACAO' ||
+    item.snapshot_status === 'CRITICO' ||
+    fortnight?.status_quinzena === 'CRITICO';
+  const serious = item.estado_operacional === 'MITIGACAO_NECESSARIA';
+  const fortnightNeedsReview = fortnight?.status_quinzena === 'ATENCAO';
+  const factors = (fortnight?.agravantes_aplicados || [])
+    .map((factor) => factor.descricao?.trim())
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 2);
+  const fortnightReason = fortnight?.status_quinzena === 'CRITICO' ||
+    fortnightNeedsReview
+      ? `Fadiga acumulada ${fortnight.status_quinzena === 'CRITICO' ? 'crítica' : 'em atenção'}${factors.length ? `: ${factors.join('; ')}.` : '.'}`
+      : null;
+  const primaryReasonRaw = item.motivos_principais?.find(Boolean)?.trim();
+  const primaryReason = primaryReasonRaw ? formatFrmsReason(primaryReasonRaw) : null;
+
+  // Safety-first: always show critical and missing check-in independently.
+  if (isCritical) {
+    return {
+      ...base,
+      reason: fortnight?.status_quinzena === 'CRITICO' ? fortnightReason! :
+        primaryReason || 'Restrição operacional crítica identificada.',
+      action: 'Não recomendar liberação. Encaminhar à gestão operacional para revisão, recuperação ou substituição e registrar a decisão.',
+    };
+  }
+  if (serious) {
+    return {
+      ...base,
+      reason: primaryReason || 'Medidas de mitigação necessárias antes da atividade.',
+      action: 'Manter a decisão pendente. Avaliar repouso, redução da demanda ou substituição; registrar a mitigação.',
+    };
+  }
+  if (requiresCheckin && !checkinComplete) {
+    return {
+      ...base,
+      reason: 'Check-in de fadiga diária não confirmado para a atividade.',
+      action: item.data_operacional > todayIso
+        ? 'Solicitar o check-in na data da operação; o planejamento pode continuar, mas a liberação depende da confirmação.'
+        : 'Não liberar o voo sem check-in recebido de toda a tripulação. Solicitar a avaliação diária.',
+    };
+  }
+  if (fortnightNeedsReview) {
+    return {
+      ...base,
+      reason: fortnightReason!,
+      action: 'Revisar sequência de jornadas e recuperação; avaliar ajustes da próxima missão e registrar a providência.',
+    };
+  }
+  if (isOutsideFortnightOperationalExtension(item)) {
+    return {
+      ...base,
+      reason: 'Atividade sem vínculo confirmado com a quinzena operacional.',
+      action: 'Confirmar extensão autorizada ou corrigir a escala e a jornada de origem.',
+    };
+  }
+  if (hasIncompleteOperationalData(item)) {
+    const dayOpen = resolveOperationalDataMoment(item, todayIso) === 'DIA_EM_ABERTO';
+    return {
+      ...base,
+      reason: dayOpen && checkinComplete
+        ? 'Jornada em andamento; encerramento ainda não disponível.'
+        : primaryReason || 'Dados obrigatórios não confirmados.',
+      action: dayOpen && checkinComplete
+        ? 'Confirmar condição pré-missão; conferir o encerramento da jornada após a operação.'
+        : 'Confirmar os dados de origem antes da decisão operacional; não presumir condição normal.',
+    };
+  }
+  if (item.estado_operacional === 'ATENCAO' || item.snapshot_status === 'ATENCAO') {
+    return {
+      ...base,
+      reason: primaryReason || 'Indicador de fadiga requer atenção.',
+      action: item.acao_recomendada_texto || 'Revisar a condição antes da próxima missão e registrar a providência.',
+    };
+  }
+  return {
+    ...base,
+    reason: 'Sem pendência FRMS identificada com os dados disponíveis.',
+    action: requiresCheckin
+      ? 'Confirmar os demais requisitos operacionais do voo antes da liberação.'
+      : 'Sem ação imediata; acompanhar a próxima atividade programada.',
+  };
 }
 
 export function bucketPriority(bucket: FrmsDecisionBucket): number {

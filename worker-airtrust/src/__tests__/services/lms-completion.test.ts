@@ -280,13 +280,18 @@ describe('completeLmsMatricula', () => {
     );
   });
 
-  it('exceção na emissão do certificado não transforma batch canônico confirmado em falha', async () => {
+  it('não desfaz conclusão gravada quando a emissão secundária do certificado lança exceção', async () => {
     let lookupCount = 0;
     const db = makeFakeDb({
-      historicoLookup: () => ++lookupCount === 1 ? null : { id: 903, status: 'CONCLUIDA' },
+      historicoLookup: () => {
+        lookupCount += 1;
+        return lookupCount === 1 ? null : { id: 903 };
+      },
     });
-    ensureCertificateForQualificationMock.mockRejectedValueOnce(new Error('certificate provider down'));
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    ensureCertificateForQualificationMock.mockRejectedValue(
+      new Error('secret-from-external-certificate-service'),
+    );
     try {
       const result = await completeLmsMatricula(baseParams(db) as never);
       expect(result).toMatchObject({
@@ -294,11 +299,41 @@ describe('completeLmsMatricula', () => {
         qualificacaoHistoricoId: 903,
         matriculaId: 1,
       });
-      expect(db.batch).toHaveBeenCalledTimes(1);
-      expect(log).toHaveBeenCalledWith(expect.stringContaining(
-        '"event":"LMS_EAD_CERTIFICATE_SERVICE_THROWN"',
-      ));
-      expect(log.mock.calls.flat().join('')).not.toContain('certificate provider down');
+      expect((db as unknown as { __batchCalls: unknown[][] }).__batchCalls).toHaveLength(1);
+      expect(ensureCertificateForQualificationMock).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('LMS_EAD_CERTIFICATE_SERVICE_THROWN'));
+      expect(log.mock.calls.flat().join(' ')).not.toContain('secret-from-external-certificate-service');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('preserva sucesso de conciliação concorrente mesmo se a emissão do certificado falhar', async () => {
+    let attempt = 0;
+    let lookupCount = 0;
+    const db = makeFakeDb({
+      historicoLookup: () => {
+        lookupCount += 1;
+        return lookupCount === 1 ? null : { id: 999, status: 'CONCLUIDA' };
+      },
+      batchImpl: async () => {
+        attempt += 1;
+        if (attempt === 1) {
+          throw new Error(
+            'D1_ERROR: UNIQUE constraint failed: qualificacoes_historico.funcionario_id, qualificacoes_historico.qualificacao_codigo, qualificacoes_historico.data_conclusao',
+          );
+        }
+        return [];
+      },
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    ensureCertificateForQualificationMock.mockRejectedValue(new Error('certificate service timeout'));
+    try {
+      const result = await completeLmsMatricula(baseParams(db) as never);
+      expect(result.outcome).toBe('qualification_reused');
+      expect(result.qualificacaoHistoricoId).toBe(999);
+      expect(attempt).toBe(2);
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('LMS_EAD_CERTIFICATE_SERVICE_THROWN'));
     } finally {
       log.mockRestore();
     }

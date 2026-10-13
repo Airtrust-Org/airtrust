@@ -244,6 +244,7 @@ const LmsCursoDetalhe = lazyWithRetry(
 const LmsAdminCursos = lazyWithRetry(() => import('./pages/lms/LmsAdminCursos'), 'LmsAdminCursos');
 const LmsPlayer = lazyWithRetry(() => import('./pages/lms/LmsPlayer'), 'LmsPlayer');
 const LmsNativePlayer = lazyWithRetry(() => import('./pages/lms/LmsNativePlayer'), 'LmsNativePlayer');
+const NativeReviewZipPilot = lazyWithRetry(() => import('./pages/lms/NativeReviewZipPilot'), 'NativeReviewZipPilot');
 const LmsPreviewPlayer = lazyWithRetry(
   () => import('./pages/lms/LmsPreviewPlayer'),
   'LmsPreviewPlayer',
@@ -1115,6 +1116,14 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <LmsCatalogo />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/lms/native/revisao"
+                      element={
+                        <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
+                          <NativeReviewZipPilot />
                         </ProtectedRoute>
                       }
                     />

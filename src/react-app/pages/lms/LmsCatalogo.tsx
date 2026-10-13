@@ -45,7 +45,6 @@ import {
   lmsKeys,
   type LmsCurso,
   type LmsMatricula,
-  type MatriculaStatus,
   type TipoConteudo,
   useLmsCurso,
   useCreateCurso,
@@ -385,7 +384,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays < 0) {
     return {
-      label: `Vencido há ${Math.abs(diffDays)}d`,
+      label: `Prazo da matrícula vencido há ${Math.abs(diffDays)}d`,
       className: 'border-rose-200 bg-rose-50 text-rose-700',
       pulseClassName: '',
       icon: <AlertCircle className="h-3 w-3" />,
@@ -394,7 +393,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays <= 7) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'border-orange-200 bg-orange-50 text-orange-700',
       pulseClassName: 'animate-pulse',
       icon: <Clock className="h-3 w-3" />,
@@ -403,7 +402,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays <= 30) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'border-amber-200 bg-amber-50 text-amber-700',
       pulseClassName: '',
       icon: <Clock className="h-3 w-3" />,
@@ -411,7 +410,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
   }
 
   return {
-    label: `Vence em ${diffDays}d`,
+    label: `Prazo da matrícula: ${diffDays}d restantes`,
     className: 'border-slate-200 bg-slate-50 text-slate-600',
     pulseClassName: '',
     icon: <Clock className="h-3 w-3" />,
@@ -2016,6 +2015,12 @@ export default function LmsCatalogo() {
 
   const managementActions = (
     <>
+      {window.location.hostname === 'staging.airtrust.pages.dev' && (
+        <Link to="/lms/native/revisao"
+          className="inline-flex min-h-10 items-center rounded-lg border border-[#dfb58a] bg-[#fff4e8] px-3 text-sm font-bold text-[#9c490f] hover:bg-[#ffe3c8]">
+          Homologar Native (9 cursos)
+        </Link>
+      )}
       <Button
         variant="secondary"
         onClick={() =>
