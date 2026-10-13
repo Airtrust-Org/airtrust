@@ -100,6 +100,8 @@ export interface FrmsOperationalSnapshotItem {
   aeronave: string | null;
 
   escalado: boolean;
+  /** Escala vigente confirmou presenca na quinzena, ainda que faltasse fatorizacao. */
+  na_quinzena_ativa?: boolean;
   /** Indica se existe operação ou declaração de atividade que exige decisão no dia. */
   operacao_requer_decisao?: boolean;
   escala_source: 'SIGVOOS' | 'MANUAL' | 'EVD' | 'AUSENTE';
