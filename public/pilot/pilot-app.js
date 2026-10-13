@@ -4840,14 +4840,24 @@ function renderStageFields() {
   );
 
   card.append(grid);
-  if (canRemoveOperationalStage(index)) {
+  if (activeStageDrafts.length > 1) {
+    const canRemove = canRemoveOperationalStage(index);
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
     removeButton.className = 'secondary stage-delete';
-    removeButton.textContent = 'Excluir esta etapa';
-    removeButton.disabled = operationalSyncInFlight;
+    removeButton.textContent = stageDraft.source_stage_id == null
+      ? 'Excluir etapa do rascunho' : 'Cancelar etapa não realizada';
+    removeButton.disabled = !canRemove;
     removeButton.addEventListener('click', () => void removeOperationalStage(index));
     card.append(removeButton);
+    if (!canRemove && !operationalSyncInFlight) {
+      const explanation = document.createElement('span');
+      explanation.className = 'field-note';
+      explanation.textContent = stageDraft.source_stage_id != null && index !== activeStageDrafts.length - 1
+        ? 'Só é possível cancelar a última etapa planejada.'
+        : 'Esta etapa possui horários, pousos, acionamentos ou abastecimento. Preserve o registro e informe a ocorrência à Coordenação.';
+      card.append(explanation);
+    }
   }
   rdvStageFields.append(card);
 }
