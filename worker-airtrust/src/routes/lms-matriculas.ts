@@ -14,6 +14,7 @@ import { hasRole, requirePermission, requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
+import { resolveLmsCompletionScorePct } from '../services/lms-completion-evidence';
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import {
   ensureMatriculaCycle,
@@ -61,6 +62,7 @@ import {
 } from '../services/lms-progress-recovery-domain';
 import {
   canFinalizeScormEnrollment,
+  buildPersistedScormClosureReadiness,
   clampPct,
   extractProgressPctFromCmiJson,
   formatScormLocationTelemetry,
@@ -71,6 +73,7 @@ import {
   resolveScormScorePct,
   summarizeScormTextPayload,
 } from '../services/lms-matricula-runtime-domain';
+import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '../repositories/lms-matricula-queries';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 
@@ -182,47 +185,6 @@ async function createLmsInAppNotification(
       createdAt,
     )
     .run();
-}
-
-async function findLatestMatriculaForFuncionario(
-  db: D1Database,
-  params: { cursoId: number; funcionarioId: number; empresaId: number },
-) {
-  return db
-    .prepare(
-      `SELECT id, status, deleted_at
-         FROM lms_matriculas
-        WHERE curso_id = ?
-          AND funcionario_id = ?
-          AND empresa_id = ?
-        ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END, id DESC
-        LIMIT 1`,
-    )
-    .bind(params.cursoId, params.funcionarioId, params.empresaId)
-    .first<{ id: number; status: string; deleted_at: string | null }>();
-}
-
-async function readMatriculaForCourseList(
-  db: D1Database,
-  params: { matriculaId: number; empresaId: number },
-) {
-  return db
-    .prepare(
-      `SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula
-         FROM lms_matriculas m
-         LEFT JOIN funcionarios f
-           ON f.id = m.funcionario_id
-          AND f.empresa_id = m.empresa_id
-          AND f.deleted_at IS NULL
-          AND COALESCE(f.ativo, 1) = 1
-          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-        WHERE m.id = ?
-          AND m.empresa_id = ?
-          AND m.deleted_at IS NULL
-        LIMIT 1`,
-    )
-    .bind(params.matriculaId, params.empresaId)
-    .first<Record<string, unknown>>();
 }
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
@@ -605,7 +567,7 @@ app.get('/:id', async (c) => {
     .prepare(
       `
       SELECT m.*, c.titulo, c.tipo_conteudo, c.scorm_versao, c.scorm_launch_file, c.scorm_package_r2_prefix,
-          c.scorm_mastery_score, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
+          c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
           qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
           qt.validade AS qualificacao_validade, qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes, h.id AS h5p_conteudo_id,
         f.nome AS funcionario_nome
@@ -722,6 +684,9 @@ app.get('/:id', async (c) => {
                 },
         })
       : null;
+  const scormClosureReadiness = tipoConteudo === 'scorm'
+    ? buildPersistedScormClosureReadiness(matricula, progressoScorm)
+    : null;
   const editionMismatch = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo, activePrefix: matricula.scorm_package_r2_prefix, empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data, db, enrollmentStartedAt: matricula.data_inicio });
   const effectiveProgress = resolveLmsEffectiveProgress({
@@ -738,7 +703,9 @@ app.get('/:id', async (c) => {
       completion_reason_code: effectiveProgress.completion_reason_code,
       scorm_progresso: progressoScorm,
       xapi_summary: xapiSummary,
-      completion_diagnostic: completionDiagnostic, edition_mismatch: editionMismatch,
+      completion_diagnostic: completionDiagnostic,
+      closure_readiness: scormClosureReadiness,
+      edition_mismatch: editionMismatch,
     },
   });
 });
@@ -1442,8 +1409,9 @@ app.post('/scorm/commit', async (c) => {
     scormAtual?.score_scaled ?? null,
     d.score_scaled ?? null,
   );
-  const effectiveScorePct = resolveScormScorePct({
+  const effectiveScorePct = resolveLmsCompletionScorePct({
     scoreRaw: effectiveScoreRaw,
+    scoreMin: mergeMonotonicNumber(scormAtual?.score_min ?? null, d.score_min ?? null),
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
