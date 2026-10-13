@@ -1791,6 +1791,7 @@ app.post('/scorm/commit', async (c) => {
     });
   } else if (
     completionDiagnostic.code === 'SCORM_FINAL_COMMIT_MISSING' ||
+    completionDiagnostic.code === 'SCORM_PROGRESS_EVIDENCE_MISSING' ||
     completionDiagnostic.code === 'SCORM_STATUS_INCONSISTENT'
   ) {
     await logLmsMatriculaAudit(db, c, {
