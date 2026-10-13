@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveFrmsWorkforceProfile } from '../../lib/frms/workforce-profile';
+import { needsFirefighterAviationProfile, resolveFrmsWorkforceProfile } from '../../lib/frms/workforce-profile';
 
 describe('resolveFrmsWorkforceProfile', () => {
   it.each([
@@ -21,6 +21,14 @@ describe('resolveFrmsWorkforceProfile', () => {
     ['Analista', 'other'],
   ] as const)('classifica cargo %s como %s', (cargo, expected) => {
     expect(resolveFrmsWorkforceProfile(cargo)).toBe(expected);
+  });
+
+  it('consulta a atribuição regulatória somente para candidatos aeronáuticos de bombeiros', () => {
+    expect(needsFirefighterAviationProfile('Piloto', 'PIC')).toBe(false);
+    expect(needsFirefighterAviationProfile('Mecânico', 'Manutenção')).toBe(false);
+    expect(needsFirefighterAviationProfile('Operador Aerotático')).toBe(true);
+    expect(needsFirefighterAviationProfile('Bombeiro Militar', 'Piloto')).toBe(true);
+    expect(needsFirefighterAviationProfile('Analista', 'Operador Aerotático')).toBe(false);
   });
 
   it('usa funcao somente quando cargo está vazio', () => {
