@@ -572,6 +572,9 @@ function buildRemovedStageStatements(input: {
        AND COALESCE(TRIM(horario_motor_desligado), '') = ''
        AND COALESCE(TRIM(tempo_decolagem_pouso), '') = ''
        AND COALESCE(TRIM(tempo_total), '') = ''
+       AND COALESCE(pousos_diurnos, 0) = 0
+       AND COALESCE(pousos_noturnos, 0) = 0
+       AND COALESCE(starts, 0) = 0
        AND EXISTS (SELECT 1 FROM cv_rdv_operacional WHERE voo_id = ? AND empresa_id = ?
                    AND deleted_at IS NULL AND versao = ?)
        AND NOT EXISTS (SELECT 1 FROM cv_voo_abastecimentos
@@ -629,6 +632,9 @@ function buildStageRevisionCasSql(
          AND COALESCE(TRIM(horario_motor_desligado), '') = ''
          AND COALESCE(TRIM(tempo_decolagem_pouso), '') = ''
          AND COALESCE(TRIM(tempo_total), '') = ''
+         AND COALESCE(pousos_diurnos, 0) = 0
+         AND COALESCE(pousos_noturnos, 0) = 0
+         AND COALESCE(starts, 0) = 0
     )`);
     clauses.push(`NOT EXISTS (
       SELECT 1 FROM cv_voo_abastecimentos
@@ -1139,9 +1145,11 @@ async function currentStateConflict(input: {
         current.horario_pouso, current.horario_motor_desligado,
         current.tempo_decolagem_pouso, current.tempo_total,
       ].some((value) => value != null && String(value).trim() !== '');
+      const hasOperationalCounters = current && [current.pousos_diurnos, current.pousos_noturnos, current.starts]
+        .some((value) => Number(value || 0) > 0);
       if (!current || Number(current.numero_etapa) !== removed.numero_etapa ||
           current.updated_at !== removed.source_stage_updated_at ||
-          removed.numero_etapa <= maxKeptNumber || hasRealizedData) {
+          removed.numero_etapa <= maxKeptNumber || hasRealizedData || hasOperationalCounters) {
         return recordOfflineSyncConflict(input.db, {
           empresaId: input.empresaId, command: input.command, funcionarioId: input.funcionarioId,
           code: 'CONTROLE_VOOS_PILOT_SYNC_STAGE_DELETE_CONFLICT',
