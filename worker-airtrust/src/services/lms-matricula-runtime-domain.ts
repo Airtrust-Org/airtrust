@@ -189,7 +189,10 @@ export function evaluateScormClosureReadiness(params: {
   masteryScore: number | null;
   scorePct: number | null;
 }): ScormClosureReadiness {
-  const { commit, wasCompleted, cmiJson, location, policy, masteryScore, scorePct } = params;
+  const { commit, wasCompleted, cmiJson, location, masteryScore, scorePct } = params;
+  // Legacy rows without an explicit policy remain SCORED, never FORMATIVE.
+  // This is the same fail-closed default as evaluateLmsCompletionEvidence.
+  const policy = params.policy ?? 'SCORED';
   const lastStep = Boolean(location?.total && location.current >= location.total);
   const everySlide = hasCompleteScormSlideCoverage(cmiJson);
   const failed = isScormFailed(commit);
