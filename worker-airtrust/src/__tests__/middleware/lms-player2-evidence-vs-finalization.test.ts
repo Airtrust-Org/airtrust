@@ -34,7 +34,7 @@ const courseEvidence = {
 
 async function submitCommit(
   payload: Record<string, unknown>,
-  savedEvidence: Partial<typeof courseEvidence> = {},
+  savedEvidence: Record<string, unknown> = {},
 ) {
   let saved = false;
   const db = {
