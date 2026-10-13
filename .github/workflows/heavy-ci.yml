@@ -350,3 +350,13 @@ jobs:
           node scripts/qa/prepare-local-scorm-browser.mjs
           CI=true timeout --signal=TERM 8m npx playwright test \
             --config=e2e/ci/lms-scorm-enrollment-browser.config.ts
+          node --test scripts/__tests__/lms-scorm-local-precertification.test.mjs
+          node scripts/ci/lms-scorm-local-precertification.mjs
+      - name: Upload sanitized SCORM local precertification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lms-scorm-local-precertification-${{ github.run_id }}
+          path: qa-state/lms-scorm-local-precertification.json
+          if-no-files-found: ignore
+          retention-days: 30
