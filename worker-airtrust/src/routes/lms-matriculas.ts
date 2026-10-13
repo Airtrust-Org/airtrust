@@ -76,6 +76,7 @@ import {
 import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '../repositories/lms-matricula-queries';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
+import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -1358,21 +1359,7 @@ app.post('/scorm/commit', async (c) => {
     }
   }
 
-  // The enrollment row is reused on an audited rematriculation. Delayed
-  // fetch/keepalive from a previous open iframe MUST NOT restore its saved
-  // answer or terminal status into the new cycle, even if the cookie has been
-  // renewed by a different tab.
-  if (d.ciclo_id !== undefined) {
-    const activeCycle = await db.prepare(
-      `SELECT id FROM lms_matricula_ciclos
-         WHERE matricula_id = ? AND empresa_id = ?
-           AND ciclo_atual = 1 AND deleted_at IS NULL
-         LIMIT 1`,
-    ).bind(d.matricula_id, empresaId).first<{ id: number }>();
-    if (!activeCycle || activeCycle.id !== d.ciclo_id) {
-      throw new ApiError('LMS_SCORM_CYCLE_MISMATCH: sessão de curso pertencente a outro ciclo. Reabra o treinamento.', 409);
-    }
-  }
+  await assertScormCommitCycle(db, empresaId, d.matricula_id, d.ciclo_id);
 
   // ─── Guard: prevent CONCLUIDO downgrade via SCORM commit ─────────────────
   // Completed enrollments must never be downgraded to incomplete/failed/not attempted.
