@@ -55,6 +55,8 @@ export function hasIncompleteOperationalData(item: FrmsOperationalSnapshotItem):
 }
 
 export function hasResolvedFortnightMembership(item: FrmsOperationalSnapshotItem): boolean {
+  // O roster da escala comprova o vínculo mesmo quando não foi possível fatorizar o período.
+  if (item.na_quinzena_ativa === true) return true;
   const indicator = item.fortnight_indicator;
   if (!indicator?.periodo_inicio || !indicator.periodo_fim) return false;
   return (
