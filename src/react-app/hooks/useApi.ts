@@ -38,6 +38,8 @@ interface UseApiOptions {
   method?: string;
   staleTime?: number;
   refetchInterval?: number;
+  /** Keep success/data/total for callers that need backend pagination. */
+  preserveEnvelope?: boolean;
 }
 
 const inMemoryGetCache = new LruTtlCache<string, unknown>(100, 5 * 60 * 1000);
@@ -47,7 +49,7 @@ export function clearApiCacheByPattern(urlFragment: string): void {
   inMemoryGetCache.deleteMatching((key) => key.includes(urlFragment));
 }
 
-function unwrapResponsePayload<T>(result: unknown): T {
+function unwrapResponsePayload<T>(result: unknown, preserveEnvelope = false): T {
   if (result && typeof result === 'object' && !Array.isArray(result)) {
     const envelope = result as {
       success?: boolean;
@@ -65,7 +67,7 @@ function unwrapResponsePayload<T>(result: unknown): T {
         envelope.pagination !== undefined ||
         envelope.stats !== undefined ||
         envelope.meta !== undefined;
-      return (hasExtended ? result : envelope.data) as T;
+      return (hasExtended || preserveEnvelope ? result : envelope.data) as T;
     }
   }
   return result as T;
@@ -83,6 +85,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
     staleTime = 0,
     refetchInterval,
     method: optionsMethod,
+    preserveEnvelope = false,
   } = options;
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
@@ -185,7 +188,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
           );
         }
 
-        const nextData = unwrapResponsePayload<T>(result);
+        const nextData = unwrapResponsePayload<T>(result, preserveEnvelope);
         setData(nextData);
         if (method === 'GET' && staleTime > 0) {
           inMemoryGetCache.set(cacheKey, nextData, staleTime);
@@ -220,6 +223,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
       empresaAtualId,
       logout,
       optionsMethod,
+      preserveEnvelope,
       requireAuth,
       retry,
       retryDelay,
