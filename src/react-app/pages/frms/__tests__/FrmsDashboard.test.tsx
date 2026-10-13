@@ -187,7 +187,7 @@ describe('FrmsDashboard simplificado', () => {
         item({ funcionario_id: 11, tripulante_id: 11, nome: 'Max', nome_guerra: 'Max' }),
       ] }));
       renderDashboard('/frms?data=2026-08-27');
-      fireEvent.click(screen.getByRole('button', { name: /Aguardar a operação/i }));
+      fireEvent.click(within(screen.getByLabelText('Resumo operacional')).getByRole('button', { name: /Aguardar a operação/i }));
       expect(screen.getByRole('button', { name: /Lia/i })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Max/i })).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Mostrar todas as situações' }));
