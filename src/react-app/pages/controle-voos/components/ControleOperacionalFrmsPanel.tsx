@@ -61,6 +61,25 @@ const CHECKIN_LABELS: Record<string, string> = {
   INDISPONIVEL: 'Indisponível',
 };
 
+/**
+ * O backend transmite instante ISO com UTC/offset. Na fila operacional
+ * mostramos a hora de Brasília, nunca o valor ISO cru. Se o fuso não vier,
+ * não presumimos conversão para evitar horário operacional incorreto.
+ */
+function formatDepartureTime(value: string | null | undefined): string {
+  if (!value) return 'Horário não informado';
+  const raw = value.trim();
+  if (!/(?:Z|[+-]\\d{2}:\\d{2})$/i.test(raw)) return `${raw} (fuso não informado)`;
+  const parsed = new Date(raw);
+  if (!Number.isFinite(parsed.getTime())) return 'Horário inválido — conferir programação';
+  const local = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit', month: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(parsed);
+  return `${local} (Brasília)`;
+}
+
 function fadigaClass(nivel: string): string {
   if (nivel === 'CRITICO') return 'text-red-600 dark:text-red-400 font-semibold';
   if (nivel === 'ATENCAO') return 'text-amber-600 dark:text-amber-400 font-semibold';
@@ -286,7 +305,7 @@ export default function ControleOperacionalFrmsPanel() {
                         colSpan={7}
                         className="px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400"
                       >
-                        {voo.prefixo}{voo.modelo_aeronave ? ` · ${voo.modelo_aeronave}` : ''} — {voo.horario_previsto_partida}
+                        {voo.prefixo}{voo.modelo_aeronave ? ` · ${voo.modelo_aeronave}` : ''} — {formatDepartureTime(voo.horario_previsto_partida)}
                         {voo.frms_primary_reason && (
                           <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">
                             {REASON_LABELS[voo.frms_primary_reason]}
