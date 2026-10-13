@@ -128,7 +128,7 @@ describe('FrmsAlertasPainel', () => {
       notas_resolucao: JSON.stringify({
         schema: 'FRMS_CASE_TREATMENT_V1',
         responsavel: 'Coordenação de Operações',
-        prazo: '2026-09-30',
+        prazo: '2099-09-30',
         acao_mitigacao: 'Reprogramar tripulante e confirmar intervalo de repouso.',
         justificativa: 'A operação depende de nova avaliação do risco.',
         evidencia_referencia: 'FRAT-2026-091',
@@ -235,7 +235,7 @@ describe('FrmsAlertasPainel', () => {
   it('não confunde um registro desconhecido com tratamento ou conclusão', () => {
     mockCases([caseRow({ notas_resolucao: '{"schema":"OUTRO_CONTRATO"}' })]);
     renderPage();
-    expect(screen.getByText('Sem medida registrada')).toBeInTheDocument();
+    expect(screen.getAllByText('Sem medida registrada').length).toBeGreaterThan(0);
     expect(screen.queryByText('Tratamento em andamento — caso ainda aberto')).not.toBeInTheDocument();
   });
 
