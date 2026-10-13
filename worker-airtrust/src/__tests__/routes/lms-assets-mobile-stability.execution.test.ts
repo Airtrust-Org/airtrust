@@ -825,8 +825,8 @@ describe('SCORM final write — in-flight autosave must never acknowledge a queu
   }
 
   it('espera o HTTP do SCORM_FINISH enfileirado antes de enviar ACK de saída', async () => {
-    const autosave = deferred<typeof persisted>();
-    const finish = deferred<typeof persisted>();
+    const autosave = deferred<{ ok: boolean; status: number; clone(): { json(): Promise<unknown> } }>();
+    const finish = deferred<{ ok: boolean; status: number; clone(): { json(): Promise<unknown> } }>();
     const fetchMock = vi.fn()
       .mockImplementationOnce(() => autosave.promise)
       .mockImplementationOnce(() => finish.promise);
@@ -865,8 +865,8 @@ describe('SCORM final write — in-flight autosave must never acknowledge a queu
   });
 
   it('prioriza SCORM_USER_FINALIZE sobre close/unload e não confirma gravação HTTP falha', async () => {
-    const autosave = deferred<typeof persisted>();
-    const finalWrite = deferred<typeof persisted>();
+    const autosave = deferred<{ ok: boolean; status: number; clone(): { json(): Promise<unknown> } }>();
+    const finalWrite = deferred<{ ok: boolean; status: number; clone(): { json(): Promise<unknown> } }>();
     const fetchMock = vi.fn()
       .mockImplementationOnce(() => autosave.promise)
       .mockImplementationOnce(() => finalWrite.promise);
