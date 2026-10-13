@@ -445,6 +445,7 @@ export default function FrmsFlightDashboard() {
   const date = isOperationalDate(requestedDate) ? requestedDate : localTodayIso();
   const todayIso = localTodayIso();
   const [selected, setSelected] = useState<FrmsOperationalSnapshotItem | null>(null);
+  const [onlyPendingCheckin, setOnlyPendingCheckin] = useState(false);
 
   useEffect(() => {
     if (requestedDate === date) return;
@@ -479,6 +480,17 @@ export default function FrmsFlightDashboard() {
     );
     if (match) setSelected(match);
   }, [requestedFuncionarioId, selected, snapshot.data]);
+
+  const visibleQueue = useMemo(
+    () => onlyPendingCheckin
+      ? queue.filter(({ item }) => resolveFrmsCoordinationGuidance(item, todayIso).requiresCheckin &&
+          item.checkin_status !== 'RECEBIDO')
+      : queue,
+    [queue, onlyPendingCheckin, todayIso],
+  );
+  const checkinPendingCount = queue.filter(({ item }) =>
+    resolveFrmsCoordinationGuidance(item, todayIso).requiresCheckin &&
+    item.checkin_status !== 'RECEBIDO').length;
 
   const counts = useMemo(
     () =>
@@ -561,7 +573,16 @@ export default function FrmsFlightDashboard() {
           ) : null}
         </div>
 
-        <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo operacional">
+        <section className="grid gap-3 sm:grid-cols-4" aria-label="Resumo operacional">
+          <button type="button" aria-pressed={onlyPendingCheckin}
+            onClick={() => setOnlyPendingCheckin(current => !current)}
+            className={`rounded-xl border p-4 text-left transition-colors ${onlyPendingCheckin
+              ? 'border-red-500 bg-red-50'
+              : 'border-slate-200 bg-white hover:bg-red-50'}`}>
+            <span className="block text-xs font-semibold text-slate-600">Check-ins a receber</span>
+            <span className="mt-1 block text-2xl font-bold text-red-800">{firstLoad || snapshotUnavailable ? '—' : checkinPendingCount}</span>
+            <span className="text-xs text-slate-600">{onlyPendingCheckin ? 'Mostrando apenas pendentes · clique para limpar' : 'Clique para filtrar a fila'}</span>
+          </button>
           <MetricCard label="Prioritários" value={counts.BLOQUEIO} helper="risco crítico ou acumulado crítico a revisar antes da liberação" loading={firstLoad || snapshotUnavailable} />
           <MetricCard label="Avaliar" value={counts.DECISAO} helper="situações que merecem análise ou ação da coordenação" loading={firstLoad || snapshotUnavailable} />
           <MetricCard label="Verificar" value={counts.CONFIRMAR} helper="informações pendentes, estimadas ou que precisam ser confirmadas" loading={firstLoad || snapshotUnavailable} />
@@ -600,7 +621,7 @@ export default function FrmsFlightDashboard() {
               >
                 Como interpretar
               </Link>
-              {!firstLoad ? <span className="text-xs font-semibold text-slate-500">{queue.length} pessoa(s)</span> : null}
+              {!firstLoad ? <span className="text-xs font-semibold text-slate-500">{visibleQueue.length} de {queue.length} pessoa(s)</span> : null}
             </div>
           </div>
 
@@ -616,15 +637,15 @@ export default function FrmsFlightDashboard() {
               <h3 className="mt-3 font-bold text-slate-900 dark:text-white">Situação FRMS indisponível</h3>
               <p className="mt-1 text-sm text-slate-500">{snapshot.error}</p>
             </div>
-          ) : queue.length === 0 ? (
+          ) : visibleQueue.length === 0 ? (
             <div className="p-10 text-center">
               <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-500" />
-              <h3 className="mt-3 font-bold text-slate-900 dark:text-white">Nenhuma pendência operacional no recorte</h3>
-              <p className="mt-1 text-sm text-slate-500">Não há pessoas escaladas, com jornada ou alerta que exijam atenção neste dia.</p>
+              <h3 className="mt-3 font-bold text-slate-900 dark:text-white">{onlyPendingCheckin ? 'Nenhum check-in pendente neste recorte' : 'Nenhuma pendência operacional no recorte'}</h3>
+              <p className="mt-1 text-sm text-slate-500">{onlyPendingCheckin ? 'Este filtro não encontrou pendências. Desative-o para ver a fila completa.' : 'Não há pessoas escaladas, com jornada ou alerta que exijam atenção neste dia.'}</p>
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
-              {queue.map(({ item, bucket }) => {
+              {visibleQueue.map(({ item, bucket }) => {
                 const confidence = operationalConfidence(item);
                 const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
 
