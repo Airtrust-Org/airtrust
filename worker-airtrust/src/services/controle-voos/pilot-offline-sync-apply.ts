@@ -978,8 +978,7 @@ function buildOfflineSyncEvent(input: {
         SELECT ?, ?, 'rdv', ?, ?,
           'Snapshot RDV sincronizado pelo Pilot App offline', NULL, ?, ?, ?, ?,
           datetime('now'), datetime('now')
-        WHERE (SELECT changes()) > 0
-          AND EXISTS (
+        WHERE EXISTS (
             SELECT 1 FROM cv_rdv_operacional
             WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
               AND status <> 'cancelado' AND versao = ?
@@ -1365,13 +1364,13 @@ export async function applyPilotOfflineSnapshotCommand(input: {
   try {
     results = await input.db.batch([
       rdvStatement,
+      receiptStatement,
       ...stageStatements,
       ...removedStageStatements,
       ...fuelingStatements,
       ...justificationStatements,
       ...(flightMetadataStatement ? [flightMetadataStatement] : []),
       eventStatement,
-      receiptStatement,
     ]);
   } catch (error) {
     const racedReceipt = await getOfflineSyncReceipt(
