@@ -10,7 +10,6 @@ export const PERFIS_USUARIOS = [
   { value: 'COORDENACAO_VOO', label: 'Coordenação de Voo', color: 'bg-cyan-100 text-cyan-800' },
   { value: 'INSTRUTOR', label: 'Instrutor', color: 'bg-green-100 text-green-800' },
   { value: 'ALUNO', label: 'Aluno', color: 'bg-gray-100 text-gray-600' },
-  { value: 'USUARIO', label: 'Usuário', color: 'bg-gray-100 text-gray-600' },
 ] as const;
 
 export function normalizePerfilUsuario(perfil: string | null | undefined): string {
@@ -37,6 +36,7 @@ export function perfilUsuarioLabel(perfil: string | null | undefined): string {
   if (!normalized) return 'Sem perfil';
   const found = PERFIS_USUARIOS.find((p) => p.value === normalized);
   if (found) return found.label;
+  if (normalized === 'USUARIO') return 'Usuário'; // legado: exibido, mas não atribuível em novos cadastros
   if (normalized === 'VIEWER') return 'Visualizador';
   if (normalized === 'EDITOR') return 'Editor';
   return normalized; // Perfis desconhecidos não são promovidos nem mascarados como Aluno.
