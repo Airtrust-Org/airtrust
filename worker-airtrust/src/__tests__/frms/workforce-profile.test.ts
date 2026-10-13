@@ -11,11 +11,11 @@ describe('resolveFrmsWorkforceProfile', () => {
     ['Piloto', 'flight'],
     ['Copiloto', 'flight'],
     ['Comandante', 'flight'],
-    ['Operador Aerotático', 'flight'],
-    ['Tripulante Operacional', 'flight'],
-    ['Tripulante Aerotático', 'flight'],
-    ['Operador de Guincho', 'flight'],
-    ['Médico de Bordo', 'flight'],
+    ['Operador Aerotático', 'other'],
+    ['Tripulante Operacional', 'other'],
+    ['Tripulante Aerotático', 'other'],
+    ['Operador de Guincho', 'other'],
+    ['Médico de Bordo', 'other'],
     ['Resgatista', 'other'],
     ['Bombeiro Militar', 'other'],
     ['Analista', 'other'],
@@ -28,11 +28,21 @@ describe('resolveFrmsWorkforceProfile', () => {
     expect(resolveFrmsWorkforceProfile(null, 'Piloto')).toBe('flight');
   });
 
-  it('permite função aérea explícita quando o cargo militar é genérico', () => {
-    expect(resolveFrmsWorkforceProfile('Bombeiro Militar', 'Piloto')).toBe('flight');
-    expect(resolveFrmsWorkforceProfile('Oficial Bombeiro Militar', 'Operador Aerotático')).toBe('flight');
-    expect(resolveFrmsWorkforceProfile('Bombeiro Militar', 'Combate terrestre')).toBe('other');
-    expect(resolveFrmsWorkforceProfile('Analista', 'Operador Aerotático')).toBe('other');
+  it('isola funções bombeiros e mantém classificação offshore inalterada', () => {
+    const firefighter = 'FIREFIGHTER_AVIATION';
+    const offshore = 'HELICOPTER_OFFSHORE';
+    for (const role of ['Operador Aerotático', 'Tripulante Operacional', 'Tripulante Aerotático',
+      'Operador de Guincho', 'Médico de Bordo']) {
+      expect(resolveFrmsWorkforceProfile(role)).toBe('other');
+      expect(resolveFrmsWorkforceProfile(role, null, offshore)).toBe('other');
+      expect(resolveFrmsWorkforceProfile(role, null, firefighter)).toBe('flight');
+    }
+    expect(resolveFrmsWorkforceProfile('Bombeiro Militar', 'Piloto')).toBe('other');
+    expect(resolveFrmsWorkforceProfile('Bombeiro Militar', 'Piloto', offshore)).toBe('other');
+    expect(resolveFrmsWorkforceProfile('Bombeiro Militar', 'Piloto', firefighter)).toBe('flight');
+    expect(resolveFrmsWorkforceProfile('Oficial Bombeiro Militar', 'Operador Aerotático', firefighter)).toBe('flight');
+    expect(resolveFrmsWorkforceProfile('Bombeiro Militar', 'Combate terrestre', firefighter)).toBe('other');
+    expect(resolveFrmsWorkforceProfile('Analista', 'Operador Aerotático', firefighter)).toBe('other');
   });
 
   it('mantém cargo explícito como autoridade sobre funcao legada', () => {
