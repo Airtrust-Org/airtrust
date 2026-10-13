@@ -1,4 +1,5 @@
-import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish } from './lms-progress-guardrails';
+import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish, extractScormLocationFromCmiJson } from './lms-progress-guardrails';
+import { resolveLmsCompletionScorePct } from './lms-completion-evidence';
 
 export type ScormCommitLike = {
   lesson_status?: string | null;
@@ -241,6 +242,35 @@ export function evaluateScormClosureReadiness(params: {
     terminal_status_verified: terminal,
     assessment_verified: scorePassed,
   };
+}
+
+/** Read model adapter: the enrollment and commit guards share the same verdict.
+ * Never infer a completed enrollment from a package's progress or score.
+ */
+export function buildPersistedScormClosureReadiness(
+  matricula: Record<string, unknown>,
+  scorm: Record<string, unknown> | null,
+): ScormClosureReadiness {
+  const cmiJson = typeof scorm?.cmi_json === 'string' ? scorm.cmi_json : null;
+  return evaluateScormClosureReadiness({
+    mode: 'reconcile',
+    commit: {
+      lesson_status: (scorm?.lesson_status as string | null) ?? null,
+      completion_status: (scorm?.completion_status as string | null) ?? null,
+      success_status: (scorm?.success_status as string | null) ?? null,
+    },
+    wasCompleted: matricula.status === 'CONCLUIDO',
+    cmiJson,
+    location: extractScormLocationFromCmiJson(cmiJson),
+    policy: matricula.scorm_assessment_policy as 'SCORED' | 'FORMATIVE' | null,
+    masteryScore: matricula.scorm_mastery_score as number | null,
+    scorePct: resolveLmsCompletionScorePct({
+      scoreRaw: scorm?.score_raw ?? null,
+      scoreMin: scorm?.score_min ?? null,
+      scoreMax: scorm?.score_max ?? null,
+      scoreScaled: scorm?.score_scaled ?? null,
+    }),
+  });
 }
 
 /** Legacy boolean guard delegates to the same Player 2.0 terminal checklist. */
