@@ -97,6 +97,17 @@ export function buildApplySql(hash) {
     sql.push("INSERT INTO frms_fadiga_checkin (id, empresa_id, funcionario_id, data_checkin, hora_checkin, kss_score, horas_sono, qualidade_sono, sintomas_json, score_fadiga, nivel_fadiga, status_operacional, apto, computed_risk_level, report_source, submitted_at, created_at, updated_at, deleted_at) SELECT "+
       e('qa-frms-ux-checkin-'+suffix)+", "+TENANT_ID+", f.id, "+e(DATE)+", '10:00', "+kss+", 8, 4, NULL, "+risk+", "+e(level)+", "+e(n===7?'AVALIAR':'APTO')+", "+(n===7?0:1)+", "+e(n===7?'attention':'normal')+", 'QA_SYNTHETIC', '2026-10-13 10:00:00', datetime('now'), datetime('now'), NULL FROM funcionarios f WHERE f.empresa_id="+TENANT_ID+" AND f.matricula="+e('QA-FRMS-UX-'+suffix)+";");
   }
+  // Synthetic completed journeys and one synthetic case, attached only through
+  // employee keys belonging to this QA tenant. Never derive these from production.
+  for (const [suffix, day, duty, flight] of [
+    ['01','2026-10-11',540,310],
+    ['07','2026-10-12',630,390],
+  ]) {
+    const journeyId='qa-frms-ux-journey-'+day+'-'+suffix;
+    sql.push("INSERT INTO frms_jornada (id, tripulante_id, data, status, hora_apresentacao, hora_termino, duracao_jornada_minutos, horas_voo_minutos, registrado_por, origem, observacao, empresa_id, created_at, updated_at, deleted_at) SELECT "+
+      e(journeyId)+", f.id, "+e(day)+", 'ES', '07:00:00', '17:00:00', "+duty+", "+flight+", "+e(FIXTURE_TAG)+", 'MANUAL', 'QA SYNTHETIC JOURNEY', "+TENANT_ID+", datetime('now'), datetime('now'), NULL FROM funcionarios f WHERE f.empresa_id="+TENANT_ID+" AND f.matricula="+e('QA-FRMS-UX-'+suffix)+";");
+  }
+  sql.push("INSERT INTO frms_alerta (id, tripulante_id, jornada_id, tipo_limite, nivel, percentual_atingido, valor_atual_min, valor_limite_min, mensagem, created_at, updated_at, deleted_at) SELECT 'qa-frms-ux-alert-07', f.id, 'qa-frms-ux-journey-2026-10-12-07', 'FDP_DIARIO', 'ATENCAO', 92.3, 600, 650, 'QA SYNTHETIC CASE - review fatigue evidence', datetime('now'), datetime('now'), NULL FROM funcionarios f WHERE f.empresa_id="+TENANT_ID+" AND f.matricula='QA-FRMS-UX-07';");
   sql.push("INSERT INTO usuarios (email, password_hash, nome, perfil, funcionario_id, deleted_at, created_at, updated_at, active) VALUES ("+
     e(EMAIL)+", "+e(hash)+", 'QA Coordenacao FRMS', 'ADMINISTRADOR', NULL, NULL, datetime('now'), datetime('now'), 1);");
   sql.push("INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary, created_at) SELECT u.id, "+TENANT_ID+", 'admin', 1, datetime('now') FROM usuarios u WHERE u.email = "+e(EMAIL)+";");
@@ -106,6 +117,8 @@ export function buildRollbackSql() {
   return [
     "UPDATE usuarios SET active=0, deleted_at=COALESCE(deleted_at,datetime('now')) WHERE email="+escapeSql(EMAIL)+" AND id IN (SELECT usuario_id FROM usuarios_empresas WHERE empresa_id="+TENANT_ID+");",
     "UPDATE frms_fadiga_checkin SET deleted_at=COALESCE(deleted_at,datetime('now')) WHERE empresa_id="+TENANT_ID+" AND id LIKE 'qa-frms-ux-checkin-%';",
+    "UPDATE frms_alerta SET deleted_at=COALESCE(deleted_at,datetime('now')) WHERE id='qa-frms-ux-alert-07' AND tripulante_id IN (SELECT id FROM funcionarios WHERE empresa_id="+TENANT_ID+" AND matricula='QA-FRMS-UX-07');",
+    "UPDATE frms_jornada SET deleted_at=COALESCE(deleted_at,datetime('now')) WHERE empresa_id="+TENANT_ID+" AND registrado_por="+escapeSql(FIXTURE_TAG)+" AND id LIKE 'qa-frms-ux-journey-%';",
     "UPDATE funcionarios SET ativo=0, status='INATIVO', deleted_at=COALESCE(deleted_at,datetime('now')) WHERE empresa_id="+TENANT_ID+" AND matricula LIKE 'QA-FRMS-UX-%';",
     "UPDATE escalas_quinzenas SET deleted_at=COALESCE(deleted_at,datetime('now')) WHERE empresa_id="+TENANT_ID+" AND observacoes="+escapeSql(FIXTURE_TAG)+";",
     "UPDATE frms_profile_assignments SET status='RETIRED' WHERE id='qa-frms-ux-assignment-20261013' AND empresa_id="+TENANT_ID+";",
@@ -126,11 +139,13 @@ function verify() {
     crew:readCount("SELECT COUNT(*) AS total FROM funcionarios WHERE empresa_id="+TENANT_ID+" AND matricula LIKE 'QA-FRMS-UX-%' AND ativo=1 AND deleted_at IS NULL"),
     received:readCount("SELECT COUNT(*) AS total FROM frms_fadiga_checkin WHERE empresa_id="+TENANT_ID+" AND data_checkin='"+DATE+"' AND deleted_at IS NULL"),
     assignment:readCount("SELECT COUNT(*) AS total FROM frms_profile_assignments WHERE empresa_id="+TENANT_ID+" AND status='ACTIVE' AND effective_from <= '"+DATE+"' AND (effective_to IS NULL OR effective_to >= '"+DATE+"')"),
+    journeys:readCount("SELECT COUNT(*) AS total FROM frms_jornada WHERE empresa_id="+TENANT_ID+" AND registrado_por="+escapeSql(FIXTURE_TAG)+" AND deleted_at IS NULL"),
+    cases:readCount("SELECT COUNT(*) AS total FROM frms_alerta WHERE id='qa-frms-ux-alert-07' AND deleted_at IS NULL AND tripulante_id IN (SELECT id FROM funcionarios WHERE empresa_id="+TENANT_ID+")"),
     memberships:readCount("SELECT COUNT(*) AS total FROM usuarios_empresas WHERE empresa_id="+TENANT_ID+" AND role='admin'"),
     fortnight:readCount("SELECT COUNT(*) AS total FROM escalas_quinzenas WHERE empresa_id="+TENANT_ID+" AND data_inicio <= '"+DATE+"' AND data_fim >= '"+DATE+"' AND numero=1 AND deleted_at IS NULL"),
   };
-  if(checks.tenant!==1||checks.crew!==14||checks.received!==7||checks.assignment!==1||checks.memberships!==1||checks.fortnight!==1) throw new Error('FRMS_UX_POSTCONDITIONS_FAILED');
-  console.log('FRMS_UX_QA_VERIFY_PASS crew=14 received=7 pending=7 effectiveAssignments=1 no_real_data=true');
+  if(checks.tenant!==1||checks.crew!==14||checks.received!==7||checks.assignment!==1||checks.journeys!==2||checks.cases!==1||checks.memberships!==1||checks.fortnight!==1) throw new Error('FRMS_UX_POSTCONDITIONS_FAILED');
+  console.log('FRMS_UX_QA_VERIFY_PASS crew=14 received=7 pending=7 journeys=2 cases=1 effectiveAssignments=1 no_real_data=true');
 }
 function main() {
   assertTarget(process.env.STAGING_D1_NAME,process.env.STAGING_D1_ID,process.env.ENVIRONMENT);
