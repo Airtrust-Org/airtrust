@@ -51,12 +51,22 @@ async function request(path: string, tenant: number, db: D1Database) {
 }
 
 describe('FRMS alert list and count tenant gating', () => {
-  it.each(['/alertas', '/alertas/count'])('fails closed without empresa context on %s', async path => {
+  it.each(['/alertas', '/alertas/count', '/ultimo-mes'])('fails closed without empresa context on %s', async path => {
     const fake = dbSpy();
     const res = await request(path, 0, fake.db);
     expect(res.status).toBe(403);
     expect((await res.json()) as object).toMatchObject({ code: 'FRMS_TENANT_CONTEXT_REQUIRED' });
     expect(fake.prepare).not.toHaveBeenCalled();
+  });
+
+  it('uses mandatory tenant binding for the most recent month', async () => {
+    const fake = dbSpy();
+    const res = await request('/ultimo-mes', 27, fake.db);
+    expect(res.status).toBe(200);
+    expect(fake.statements).toHaveLength(1);
+    expect(fake.statements[0].sql).toContain('f.empresa_id = ?');
+    expect(fake.statements[0].sql).not.toContain('? IS NULL OR');
+    expect(fake.statements[0].params).toEqual([27]);
   });
 
   it('uses mandatory tenant binding for the counter', async () => {
