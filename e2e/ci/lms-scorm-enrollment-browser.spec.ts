@@ -172,8 +172,8 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
       observacoes:'Local-only renewal cycle regression',
     },
   });
-  expect(reEnroll.ok()).toBe(true);
-  const reEnrolled=await reEnroll.json();
+  const reEnrolled=await reEnroll.json().catch(()=>null);
+  expect(reEnroll.ok(), 'LOCAL_REENROLL_HTTP_'+reEnroll.status()+'_CODE_'+String(reEnrolled?.code||'none')+'_ERROR_'+String(reEnrolled?.error||'').slice(0,100)).toBe(true);
   expect(Number(reEnrolled.data.id)).toBe(id);
   const fresh=stored();
   expect(fresh.m.status).toBe('NAO_INICIADO');
