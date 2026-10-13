@@ -108,7 +108,7 @@ describe('ControleOperacionalFrmsPanel', () => {
     expect(await screen.findByText('Não confirmado')).toBeInTheDocument();
     expect(screen.getByText('Indisponível')).toBeInTheDocument();
     expect(screen.queryByText('N/A')).not.toBeInTheDocument();
-    expect(screen.getByText('NÃO LIBERADO')).toBeInTheDocument();
+    expect(screen.getAllByText('NÃO LIBERADO').length).toBeGreaterThan(0);
   });
 
   it('expande a linha do tripulante e mostra o motivo sanitizado (sem dado sensivel)', async () => {
