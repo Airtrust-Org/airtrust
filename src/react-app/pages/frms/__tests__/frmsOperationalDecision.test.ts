@@ -5,6 +5,7 @@ import {
   isOperationallyRelevant,
   operationalConfidence,
   resolveFrmsCoordinationGuidance,
+  resolveFrmsActionLane,
   resolveOperationalDataMoment,
   trustedEffectiveness,
 } from '../frmsOperationalDecision';
@@ -54,6 +55,31 @@ function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperati
 }
 
 describe('frmsOperationalDecision', () => {
+  it('distingue espera do dia em aberto de dados retrospectivos sem reduzir o risco', () => {
+    const incomplete = item({
+      teve_jornada: false, teve_atividade_frms: false, jornada_data_source: 'AUSENTE',
+      fatorizacao_status: 'AUSENTE', snapshot_status: 'INCOMPLETO',
+      estado_operacional: 'NAO_AVALIADO',
+    });
+    expect(classifyOperationalItem(incomplete)).toBe('CONFIRMAR');
+    expect(resolveFrmsActionLane(incomplete, '2026-08-27')).toBe('AGUARDAR');
+    expect(resolveFrmsActionLane(incomplete, '2026-08-28')).toBe('EVIDENCIA');
+    expect(resolveFrmsActionLane(item({ snapshot_status: 'CRITICO' }), '2026-08-27')).toBe('REVISAO');
+    expect(resolveFrmsActionLane(item({ checkin_status: 'PENDENTE' }), '2026-08-27')).toBe('CHECKIN');
+    expect(resolveFrmsActionLane(item(), '2026-08-27')).toBe('SEM_ACAO');
+  });
+
+  it('mantém sinal de atenção acima da espera e não cobra check-in futuro antecipado', () => {
+    expect(resolveFrmsActionLane(item({
+      data_operacional: '2026-08-28', checkin_status: 'PENDENTE',
+      teve_jornada: false, jornada_data_source: 'AUSENTE',
+    }), '2026-08-27')).toBe('AGUARDAR');
+    expect(resolveFrmsActionLane(item({
+      data_operacional: '2026-08-27', checkin_status: 'RECEBIDO',
+      snapshot_status: 'ATENCAO', jornada_data_source: 'AUSENTE', teve_jornada: false,
+    }), '2026-08-27')).toBe('REVISAO');
+  });
+
   it('nunca classifica snapshot incompleto como normal', () => {
     expect(
       classifyOperationalItem(
