@@ -2406,6 +2406,10 @@ ${buildScormSessionCloseRuntimeScript()}
       return;
     }
     if (event.data.type === 'lms:session-close') {
+      // Source identity is mandatory; an optional enrollment ID allows newer
+      // parents to scope close commands without breaking deployed older Pages.
+      if (event.source !== window.parent ||
+          (event.data.matriculaId != null && event.data.matriculaId !== MATRICULA_ID)) return;
       performGovernedSessionClose(typeof event.data.reason === 'string' ? event.data.reason : null);
       return;
     }
