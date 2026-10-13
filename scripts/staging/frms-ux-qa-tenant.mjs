@@ -1,0 +1,155 @@
+#!/usr/bin/env node
+/**
+ * FRMS UX QA: isolated, synthetic-only tenant on the exact staging D1.
+ * No production data, credentials, real identities or historical import.
+ * Modes: --preflight (read-only), --apply (governed workflow), --verify,
+ * --rollback (soft-disable only this fixture).
+ */
+import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+const require = createRequire(new URL('../../worker-airtrust/package.json', import.meta.url));
+const bcrypt = require('bcryptjs');
+export const DB_NAME = 'airtrust-db-staging-baseline-20260701';
+export const DB_ID = 'bf9963f4-eb12-439b-a830-20bbf577ac22';
+export const BLOCKED_PRODUCTION_ID = '7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae';
+export const TENANT_ID = 999016;
+export const TENANT_CODE = 'qa_frms_ux_20261013';
+export const EMAIL = 'qa-frms-ux@staging.airtrust.invalid';
+export const CONFIRM = 'AIRTRUST_STAGING_FRMS_UX_QA';
+const FIXTURE_TAG = 'QA_FRMS_UX_20261013';
+const DATE = '2026-10-13';
+const numbers = Array.from({ length: 14 }, (_, i) => i + 1);
+export const escapeSql = value => "'" + String(value).replaceAll("'", "''") + "'";
+
+export function assertTarget(name, id, environment) {
+  if (name !== DB_NAME || id !== DB_ID || environment !== 'staging' ||
+      id === BLOCKED_PRODUCTION_ID || /prod/i.test(name)) {
+    throw new Error('STAGING_FRMS_UX_TARGET_DENIED');
+  }
+}
+export function assertOperation(argv, confirmation) {
+  const actions = ['--preflight', '--apply', '--verify', '--rollback'];
+  const selected = actions.filter(x => argv.includes(x));
+  if (selected.length !== 1 || argv.some(x => !actions.includes(x))) throw new Error('ONE_EXPLICIT_OPERATION_REQUIRED');
+  if (['--apply', '--rollback'].includes(selected[0]) && confirmation !== CONFIRM) {
+    throw new Error('STAGING_FRMS_UX_CONFIRMATION_REQUIRED');
+  }
+  return selected[0];
+}
+function wrangler(args) {
+  const r = spawnSync('npx', ['--no-install', 'wrangler', 'd1', 'execute', DB_NAME, '--remote', '--json', ...args], {
+    cwd: join(process.cwd(), 'worker-airtrust'), encoding: 'utf8', env: process.env,
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  if (r.status !== 0) throw new Error('D1_STAGING_COMMAND_FAILED_' + r.status);
+  return r.stdout;
+}
+function readCount(sql) {
+  if (!/^SELECT COUNT\(\*\) AS total FROM [a-z_]+(?:\s|\n)/i.test(sql)) throw new Error('UNSAFE_PREFLIGHT_SQL');
+  const output = wrangler(['--command', sql]);
+  const begin = output.indexOf('['), end = output.lastIndexOf(']');
+  const parsed = JSON.parse(output.slice(begin, end + 1));
+  const total = Number(parsed[0]?.results?.[0]?.total);
+  if (!Number.isSafeInteger(total)) throw new Error('INVALID_D1_PREFLIGHT_COUNT');
+  return total;
+}
+export function preflightQueries() {
+  return Object.freeze({
+    tenantId: "SELECT COUNT(*) AS total FROM empresas WHERE id = " + TENANT_ID,
+    tenantCode: "SELECT COUNT(*) AS total FROM empresas WHERE codigo = " + escapeSql(TENANT_CODE),
+    email: "SELECT COUNT(*) AS total FROM usuarios WHERE lower(email) = " + escapeSql(EMAIL),
+    governedBaseline: "SELECT COUNT(*) AS total FROM frms_config_revisions WHERE id = 'frms-helicopter-offshore-baseline-v1' AND empresa_id IS NULL AND profile_code = 'HELICOPTER_OFFSHORE' AND status = 'ACTIVE'",
+    governedParameters: "SELECT COUNT(*) AS total FROM frms_config_parameters WHERE revision_id = 'frms-helicopter-offshore-baseline-v1' AND numeric_value IS NOT NULL",
+  });
+}
+function preflight() {
+  const queries = preflightQueries();
+  const counts = Object.fromEntries(Object.entries(queries).map(([k, sql]) => [k, readCount(sql)]));
+  if (counts.tenantId || counts.tenantCode || counts.email) throw new Error('SYNTHETIC_QA_TARGET_ALREADY_EXISTS');
+  if (counts.governedBaseline !== 1 || counts.governedParameters < 128) throw new Error('GOVERNED_FRMS_BASELINE_NOT_READY');
+  console.log('FRMS_UX_QA_PREFLIGHT_PASS tenant_unused=true baseline_ready=true');
+}
+export function buildApplySql(hash) {
+  if (!/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(String(hash))) throw new Error('HASH_REQUIRED');
+  const e = escapeSql;
+  const sql = [];
+  sql.push("INSERT INTO empresas (id, codigo, nome, razao_social, ativo, plano, max_funcionarios, max_storage_mb, created_at, updated_at, deleted_at) VALUES ("+
+    TENANT_ID+", "+e(TENANT_CODE)+", 'QA FRMS UX Sintetico', 'QA FRMS UX Sintetico', 1, 'basic', 30, 256, datetime('now'), datetime('now'), NULL);");
+  sql.push("INSERT INTO setores (codigo, nome, descricao, responsavel, ativo, empresa_id, created_at, updated_at, deleted_at) VALUES ('QA-FRMS-UX-SETOR', 'Operacao FRMS QA', 'Dados sintéticos exclusivos', 'QA AirTrust', 1, "+TENANT_ID+", datetime('now'), datetime('now'), NULL);");
+  sql.push("INSERT INTO frms_regulatory_profiles (id, empresa_id, profile_code, service_category, approval_reference, policy_version, effective_from, effective_to, limits_json, source_document_hash, active, created_at, updated_at, deleted_at) VALUES ('qa-frms-ux-reg-20261013', "+TENANT_ID+", 'HELICOPTER_OFFSHORE', 'QA_SYNTHETIC_ONLY', 'QA_ONLY_NOT_REGULATORY_APPROVAL', 'LEGACY_MODEL_V2', '2026-09-01', NULL, NULL, "+e(createHash('sha256').update('AirTrust synthetic FRMS UX QA; no regulatory approval').digest('hex'))+", 1, datetime('now'), datetime('now'), NULL);");
+  sql.push("INSERT INTO frms_profile_assignments (id, empresa_id, regulatory_profile_id, profile_code, status, effective_from, effective_to, reason, source, created_at) VALUES ('qa-frms-ux-assignment-20261013', "+TENANT_ID+", 'qa-frms-ux-reg-20261013', 'HELICOPTER_OFFSHORE', 'ACTIVE', '2026-09-01', NULL, 'Synthetic staging FRMS UX review only', 'QA_GOVERNED', datetime('now'));");
+  sql.push("INSERT INTO escalas_quinzenas (empresa_id, ano, mes, numero, data_inicio, data_fim, observacoes) VALUES ("+TENANT_ID+", 2026, 10, 1, '2026-10-01', '2026-10-15', "+e(FIXTURE_TAG)+");");
+  for (const n of numbers) {
+    const suffix=String(n).padStart(2, '0');
+    sql.push("INSERT INTO funcionarios (nome, guerra, matricula, cargo, funcao, setor, setor_id, quinzena, status, is_instrutor, is_examinador, ativo, empresa_id, created_at, updated_at, deleted_at) SELECT "+
+      e('QA FRMS Pessoa '+suffix)+", "+e('QA '+suffix)+", "+e('QA-FRMS-UX-'+suffix)+", 'PILOTO', 'PILOTO', 'Operacao FRMS QA', s.id, 'primeira', 'ATIVO', 0, 0, 1, "+TENANT_ID+", datetime('now'), datetime('now'), NULL FROM setores s WHERE s.empresa_id = "+TENANT_ID+" AND s.codigo = 'QA-FRMS-UX-SETOR';");
+  }
+  // Exactly seven synthetic received check-ins; seven crew in the active fortnight remain pending,
+  // independently of flight activity. No protected health fields, symptoms or real data.
+  for (const n of numbers.slice(0, 7)) {
+    const suffix=String(n).padStart(2, '0');
+    const kss=n===7?7:3, risk=n===7?45:16, level=n===7?'ATENCAO':'NORMAL';
+    sql.push("INSERT INTO frms_fadiga_checkin (id, empresa_id, funcionario_id, data_checkin, hora_checkin, kss_score, horas_sono, qualidade_sono, sintomas_json, score_fadiga, nivel_fadiga, status_operacional, apto, computed_risk_level, report_source, submitted_at, created_at, updated_at, deleted_at) SELECT "+
+      e('qa-frms-ux-checkin-'+suffix)+", "+TENANT_ID+", f.id, "+e(DATE)+", '10:00', "+kss+", 8, 4, NULL, "+risk+", "+e(level)+", "+e(n===7?'AVALIAR':'APTO')+", "+(n===7?0:1)+", "+e(n===7?'attention':'normal')+", 'QA_SYNTHETIC', '2026-10-13 10:00:00', datetime('now'), datetime('now'), NULL FROM funcionarios f WHERE f.empresa_id="+TENANT_ID+" AND f.matricula="+e('QA-FRMS-UX-'+suffix)+";");
+  }
+  sql.push("INSERT INTO usuarios (email, password_hash, nome, perfil, funcionario_id, deleted_at, created_at, updated_at, active) VALUES ("+
+    e(EMAIL)+", "+e(hash)+", 'QA Coordenacao FRMS', 'ADMINISTRADOR', NULL, NULL, datetime('now'), datetime('now'), 1);");
+  sql.push("INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary, created_at) SELECT u.id, "+TENANT_ID+", 'admin', 1, datetime('now') FROM usuarios u WHERE u.email = "+e(EMAIL)+";");
+  return sql.join('\n')+'\n';
+}
+export function buildRollbackSql() {
+  return [
+    "UPDATE usuarios SET active=0, deleted_at=COALESCE(deleted_at,datetime('now')) WHERE email="+escapeSql(EMAIL)+" AND id IN (SELECT usuario_id FROM usuarios_empresas WHERE empresa_id="+TENANT_ID+");",
+    "UPDATE frms_fadiga_checkin SET deleted_at=COALESCE(deleted_at,datetime('now')) WHERE empresa_id="+TENANT_ID+" AND id LIKE 'qa-frms-ux-checkin-%';",
+    "UPDATE funcionarios SET ativo=0, status='INATIVO', deleted_at=COALESCE(deleted_at,datetime('now')) WHERE empresa_id="+TENANT_ID+" AND matricula LIKE 'QA-FRMS-UX-%';",
+    "UPDATE escalas_quinzenas SET deleted_at=COALESCE(deleted_at,datetime('now')) WHERE empresa_id="+TENANT_ID+" AND observacoes="+escapeSql(FIXTURE_TAG)+";",
+    "UPDATE frms_profile_assignments SET status='RETIRED' WHERE id='qa-frms-ux-assignment-20261013' AND empresa_id="+TENANT_ID+";",
+    "UPDATE frms_regulatory_profiles SET active=0, deleted_at=COALESCE(deleted_at,datetime('now')) WHERE id='qa-frms-ux-reg-20261013' AND empresa_id="+TENANT_ID+";",
+    "UPDATE setores SET ativo=0, deleted_at=COALESCE(deleted_at,datetime('now')) WHERE empresa_id="+TENANT_ID+" AND codigo='QA-FRMS-UX-SETOR';",
+    "UPDATE empresas SET ativo=0, deleted_at=COALESCE(deleted_at,datetime('now')) WHERE id="+TENANT_ID+" AND codigo="+escapeSql(TENANT_CODE)+";",
+  ].join('\n')+'\n';
+}
+function runFile(sql) {
+  const folder = mkdtempSync(join(tmpdir(),'airtrust-frms-ux-'));
+  const file = join(folder,'fixture.sql');
+  try { writeFileSync(file,sql,{encoding:'utf8',mode:0o600}); wrangler(['--file',file]); }
+  finally { rmSync(folder,{recursive:true,force:true}); }
+}
+function verify() {
+  const checks={
+    tenant:readCount("SELECT COUNT(*) AS total FROM empresas WHERE id = "+TENANT_ID+" AND codigo = "+escapeSql(TENANT_CODE)+" AND ativo=1 AND deleted_at IS NULL"),
+    crew:readCount("SELECT COUNT(*) AS total FROM funcionarios WHERE empresa_id="+TENANT_ID+" AND matricula LIKE 'QA-FRMS-UX-%' AND ativo=1 AND deleted_at IS NULL"),
+    received:readCount("SELECT COUNT(*) AS total FROM frms_fadiga_checkin WHERE empresa_id="+TENANT_ID+" AND data_checkin='"+DATE+"' AND deleted_at IS NULL"),
+    assignment:readCount("SELECT COUNT(*) AS total FROM frms_profile_assignments WHERE empresa_id="+TENANT_ID+" AND status='ACTIVE' AND effective_from <= '"+DATE+"' AND (effective_to IS NULL OR effective_to >= '"+DATE+"')"),
+    memberships:readCount("SELECT COUNT(*) AS total FROM usuarios_empresas WHERE empresa_id="+TENANT_ID+" AND role='admin'"),
+    fortnight:readCount("SELECT COUNT(*) AS total FROM escalas_quinzenas WHERE empresa_id="+TENANT_ID+" AND data_inicio <= '"+DATE+"' AND data_fim >= '"+DATE+"' AND numero=1 AND deleted_at IS NULL"),
+  };
+  if(checks.tenant!==1||checks.crew!==14||checks.received!==7||checks.assignment!==1||checks.memberships!==1||checks.fortnight!==1) throw new Error('FRMS_UX_POSTCONDITIONS_FAILED');
+  console.log('FRMS_UX_QA_VERIFY_PASS crew=14 received=7 pending=7 effectiveAssignments=1 no_real_data=true');
+}
+function main() {
+  assertTarget(process.env.STAGING_D1_NAME,process.env.STAGING_D1_ID,process.env.ENVIRONMENT);
+  const operation=assertOperation(process.argv.slice(2),process.env.CONFIRM_STAGING_FRMS_UX);
+  if(operation==='--preflight'){preflight();return;}
+  if(operation==='--verify'){verify();return;}
+  if(operation==='--apply'){
+    preflight();
+    const password=process.env.QA_FRMS_PASSWORD;
+    if(!password||password.length<12)throw new Error('QA_FRMS_PASSWORD_MISSING');
+    const hash=bcrypt.hashSync(password,12);
+    runFile(buildApplySql(hash));verify();return;
+  }
+  if(operation==='--rollback'){
+    // Scope guard: never touch a tenant not positively marked as our synthetic fixture.
+    if(readCount(preflightQueries().tenantCode)!==1 ||
+       readCount("SELECT COUNT(*) AS total FROM empresas WHERE id="+TENANT_ID+" AND codigo="+escapeSql(TENANT_CODE))!==1) throw new Error('QA_TENANT_NOT_OWNED');
+    runFile(buildRollbackSql());
+    console.log('FRMS_UX_QA_ROLLBACK_PASS tenant_disabled=true');
+  }
+}
+if(process.argv[1]?.endsWith('frms-ux-qa-tenant.mjs'))main();
