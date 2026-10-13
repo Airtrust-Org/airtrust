@@ -40,9 +40,7 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   async function open(){
     const sess=await page.request.post(api+'/lms/assets/session',{data:{matricula_id:id},headers});
     expect(sess.ok()).toBe(true);
-    await page.route('http://127.0.0.1:3000/qa-scorm-parent',route=>
-      route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><html><body></body></html>'}));
-    await page.goto('http://127.0.0.1:3000/qa-scorm-parent');
+    await page.goto(api+'/health');
     await page.setContent('<iframe id="outer" title="SCORM real" src="'+api+'/lms/scorm/launch/'+id+'" style="height:90vh;width:100vw"></iframe>');
     const outer=page.frameLocator('#outer');
     const sco=outer.frameLocator('#scorm-frame');
@@ -70,7 +68,7 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   // React's explicit, user-confirmed finalization message (never synthetic CMI).
   await page.evaluate(matId=>{
     const iframe=document.getElementById('outer') as HTMLIFrameElement;
-    iframe.contentWindow!.postMessage({type:'lms:request-completion',matriculaId:matId},'http://127.0.0.1:8787');
+    iframe.contentWindow!.postMessage({type:'lms:request-completion',matriculaId:matId},location.origin);
   },id);
   await expect.poll(()=>enrollment(),{timeout:35000}).toMatchObject({status:'CONCLUIDO'});
   const final=stored();
