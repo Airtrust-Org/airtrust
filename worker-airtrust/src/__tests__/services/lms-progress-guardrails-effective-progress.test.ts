@@ -120,6 +120,8 @@ describe('buildScormCompletionDiagnostic — SCORM 1.2 Finish confiável', () =>
       'cmi.core.lesson_status': 'incomplete',
       'cmi.core.lesson_location': '405/405',
       'cmi.core.score.raw': '96',
+      'airtrust.total_slides': 405,
+      'airtrust.viewed_slides': Array.from({ length: 405 }, (_, index) => index + 1),
     }),
     suspendData: 'checkpoint-final-aw139',
     sessionTime: '0000:10:00.00',
@@ -140,6 +142,69 @@ describe('buildScormCompletionDiagnostic — SCORM 1.2 Finish confiável', () =>
       reached_final_location: true,
       final_commit_observed: true,
       reasons: expect.arrayContaining(['trusted-scorm-1.2-finish']),
+    });
+  });
+
+  it('não anuncia SCORM_COMPLETION_ACCEPTED quando só o último marcador chegou ao servidor', () => {
+    const incompleteEvidence = JSON.stringify({
+      'cmi.core.lesson_location': '42/42',
+      'cmi.core.lesson_status': 'passed',
+      'airtrust.total_slides': 42,
+      'airtrust.viewed_slides': [1, 2, 3, 42],
+    });
+    expect(buildScormCompletionDiagnostic({
+      ...finalSnapshot,
+      lessonStatus: 'passed',
+      scoreRaw: 100,
+      progressoPct: 100,
+      cmiJson: incompleteEvidence,
+      commitEvent: 'SCORM_USER_FINALIZE',
+    })).toMatchObject({
+      status: 'none',
+      code: 'SCORM_PROGRESS_EVIDENCE_MISSING',
+      can_finalize: false,
+      explicit_completion: true,
+      reached_final_location: true,
+      reasons: expect.arrayContaining(['distinct-slide-evidence-missing']),
+    });
+  });
+
+  it('aceita uma conclusão explícita apenas com todas as telas realmente persistidas', () => {
+    expect(buildScormCompletionDiagnostic({
+      ...finalSnapshot,
+      lessonStatus: 'passed',
+      scoreRaw: 96,
+      commitEvent: 'SCORM_USER_FINALIZE',
+    })).toMatchObject({
+      status: 'accepted',
+      code: 'SCORM_COMPLETION_ACCEPTED',
+      explicit_completion: true,
+    });
+  });
+
+  it('mastery acima da nota impede o diagnóstico de conclusão aceita', () => {
+    expect(buildScormCompletionDiagnostic({
+      ...finalSnapshot,
+      lessonStatus: 'passed',
+      scoreRaw: 60,
+      masteryScore: 80,
+    })).toMatchObject({
+      status: 'none',
+      code: 'SCORM_STATUS_INCONSISTENT',
+      can_finalize: false,
+    });
+  });
+
+  it('falha explícita prevalece sobre um status contraditório de aprovação', () => {
+    expect(buildScormCompletionDiagnostic({
+      ...finalSnapshot,
+      lessonStatus: 'passed',
+      successStatus: 'failed',
+      commitEvent: 'SCORM_USER_FINALIZE',
+    })).toMatchObject({
+      status: 'rejected',
+      code: 'SCORM_COMPLETION_REJECTED',
+      explicit_failure: true,
     });
   });
 
