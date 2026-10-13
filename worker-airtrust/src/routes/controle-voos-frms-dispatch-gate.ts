@@ -123,13 +123,15 @@ controleVoosDispatchGate.get(
 
     const resumo = {
       voos_nao_liberados: items.filter((item) => item.frms_status === 'NAO_LIBERADO').length,
-      tripulantes_checkin_pendente: items.reduce(
-        (acc, item) =>
-          acc +
-          item.tripulacao.filter((membro) => membro.checkin_status !== 'RECEBIDO')
-            .length,
-        0,
-      ),
+      // Um tripulante pode aparecer em vários voos da data; o card conta
+      // pessoas distintas, não ocorrências de tripulação por voo.
+      tripulantes_checkin_pendente: new Set(
+        items.flatMap((item) =>
+          item.tripulacao
+            .filter((membro) => membro.checkin_status !== 'RECEBIDO')
+            .map((membro) => membro.funcionario_id),
+        ),
+      ).size,
       voos_requerem_revisao: items.filter((item) => item.frms_status === 'ATENCAO_COORDENACAO')
         .length,
       voos_liberaveis: items.filter((item) => item.frms_status === 'LIBERAVEL').length,
