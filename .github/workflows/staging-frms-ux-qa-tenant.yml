@@ -130,12 +130,14 @@ jobs:
       - name: Record sanitized scope
         if: success()
         run: |
-          echo '## Isolated staging FRMS QA' >> "$GITHUB_STEP_SUMMARY"
-          echo '- D1 staging only, synthetic tenant 999016 (qa_frms_ux_20261013)' >> "$GITHUB_STEP_SUMMARY"
-          echo '- data: fictitious; no production export or individual copy' >> "$GITHUB_STEP_SUMMARY"
-          echo '- backup and recovery point: checked before mutation' >> "$GITHUB_STEP_SUMMARY"
-          echo '- operation: ${{ inputs.operation }}' >> "$GITHUB_STEP_SUMMARY"
-          echo '- schema migrations and production writes: none' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo '## Isolated staging FRMS QA'
+            echo '- D1 staging only, synthetic tenant 999016 (qa_frms_ux_20261013)'
+            echo '- data: fictitious; no production export or individual copy'
+            echo '- backup and recovery point: checked before mutation'
+            echo '- operation: ${{ inputs.operation }}'
+            echo '- schema migrations and production writes: none'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   browser-acceptance:
     name: Authenticated synthetic FRMS coordination acceptance
