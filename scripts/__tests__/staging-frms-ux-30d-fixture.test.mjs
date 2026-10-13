@@ -64,8 +64,9 @@ test('workflow requires reviewed main, artifact provenance, staging environment 
   assert.match(wf,/SOURCE_RUN/);
   assert.match(wf,/actions\/download-artifact@v7/);
   assert.match(wf,/environment: staging/);
-  assert.match(wf,/d1 backup create/);
-  assert.match(wf,/d1 backup list/);
+  assert.match(wf,/d1 time-travel info/);
+  assert.match(wf,/D1_RECOVERY_BOOKMARK_MISSING/);
+  assert.match(wf,/STAGING_DATABASE_UUID_MISMATCH/);
   assert.match(wf,/D1_MIGRATION_API_TOKEN/);
   assert.match(wf,/STAGING_QA_POSTCONDITIONS_FAILED/);
   assert.doesNotMatch(wf,/secrets\.CLOUDFLARE_API_TOKEN\b/);
