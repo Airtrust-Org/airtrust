@@ -188,10 +188,10 @@ describe('FrmsDashboard simplificado', () => {
       ] }));
       renderDashboard('/frms?data=2026-08-27');
       fireEvent.click(within(screen.getByLabelText('Resumo operacional')).getByRole('button', { name: /Aguardar a operação/i }));
-      expect(screen.getByRole('button', { name: /Lia/i })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /Max/i })).not.toBeInTheDocument();
+      expect(screen.getByText('Lia')).toBeInTheDocument();
+      expect(screen.queryByText('Max')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Mostrar todas as situações' }));
-      expect(screen.getByRole('button', { name: /Max/i })).toBeInTheDocument();
+      expect(screen.getByText('Max')).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
