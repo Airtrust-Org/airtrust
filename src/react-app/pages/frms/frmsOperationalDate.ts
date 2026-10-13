@@ -1,3 +1,12 @@
+/** Operational day at the flight base: independent of UTC and viewer's timezone. */
+export function frmsBrazilOperationalTodayIso(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now);
+  const date = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${date.year}-${date.month}-${date.day}`;
+}
+
 export function localTodayIso(now = new Date()): string {
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
