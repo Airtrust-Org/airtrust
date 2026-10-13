@@ -8,6 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { strToU8, zipSync, unzipSync } from 'fflate';
 import { DatabaseSync } from 'node:sqlite';
 import { buildInteractiveM8QaFiles } from '../staging/lms-scorm-m8-fixture.mjs';
 
@@ -69,7 +71,16 @@ async function main(){
   assert(Number.isSafeInteger(secondId)&&secondId>0&&secondId!==firstId,'LOCAL_SECOND_ENROLLMENT_INVALID');
 
   fs.mkdirSync(fixtureRoot,{recursive:true});
-  const files=buildInteractiveM8QaFiles('qa-'+courseId,'local-browser-qa-v1');
+  // SHA is calculated on the exact ZIP from which R2 browser assets are extracted.
+  const id='qa-'+courseId, version='local-browser-qa-v1';
+  const content=buildInteractiveM8QaFiles(id,version);
+  const xml='<manifest xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2" xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2" identifier="LOCAL-QA"><organizations default="ORG"><organization identifier="ORG"><title>QA</title><item identifier="I" identifierref="R"><title>QA</title></item></organization></organizations><resources><resource identifier="R" type="webcontent" adlcp:scormtype="sco" href="index.html"><file href="index.html"/></resource></resources></manifest>';
+  const completion={schemaVersion:1,diagnosticsVersion:'AIRTRUST_COMPLETION_DIAGNOSTICS_V1',scormVersion:'1.2',courseId:id,packageVersion:version,content:{requiredSlides:['qa-slide-1']},assessment:{requiredInteractions:['qa-interaction-1'],masteryScore:70,successStatus:'passed',failureStatus:'failed'},completion:{strategy:'AIRTRUST_COMPLETION_CONTRACT_V1'},diagnostics:{currentSlide:true,slides:true,assessment:true,packageStatus:true,updatedAt:true}};
+  const zipBytes=zipSync({...content,'imsmanifest.xml':strToU8(xml),'airtrust-completion-manifest.json':strToU8(JSON.stringify(completion))},{level:6});
+  const zipPath=path.join(fixtureRoot,'candidate.zip');
+  fs.writeFileSync(zipPath,zipBytes,{mode:0o600});
+  const packageSha256=createHash('sha256').update(zipBytes).digest('hex');
+  const files=unzipSync(new Uint8Array(fs.readFileSync(zipPath)));
   for(const [filename,bytes] of Object.entries(files)){
     const file=path.resolve(fixtureRoot,filename);
     assert(file.startsWith(fixtureRoot+path.sep),'QA_FILE_PATH_INVALID');
@@ -82,6 +93,7 @@ async function main(){
   }
   fs.writeFileSync(path.join(fixtureRoot,'fixture.json'),JSON.stringify({
     origin:'http://127.0.0.1:8787',companyId,courseId,dbFile,
+    packageSha256,zipPath,fixtureKind:'LOCAL_DISPOSABLE_ZIP',
     enrollments:{chromium:firstId,'webkit-ipad':secondId},
     employeeIds:{chromium:firstEmployee,'webkit-ipad':secondEmployee},
   },null,2)+'\n',{mode:0o600});
