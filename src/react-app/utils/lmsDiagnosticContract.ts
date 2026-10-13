@@ -305,6 +305,20 @@ export interface CanonicalCompletionDiagnosticLike {
   score_pct?: number | null;
 }
 
+/** A score or SCORM "passed" does not erase unfinished authored activities. */
+export function hasUnfinishedGranularRequirements(granular: LmsGranularDiagnostic | null | undefined): boolean {
+  if (!granular) return false;
+  const slides = granular.slides;
+  return slides.missing.length > 0 ||
+    (slides.totalRequired != null && slides.totalRequired > 0 &&
+      slides.completedRequired !== slides.totalRequired) ||
+    granular.assessment.unanswered.length > 0 ||
+    granular.assessment.incomplete.length > 0 ||
+    (granular.assessment.required && !granular.assessment.completed) ||
+    granular.moduleResults.some(module =>
+      module.assessment.required && !module.assessment.completed);
+}
+
 function adminItem(label: string): LmsPendingItem {
   return { category: 'ADMIN', label, ref: null, adminActionable: true };
 }
@@ -341,8 +355,9 @@ export function resolveCompletionExplanation(params: {
   const canonical = params?.canonical ?? null;
   const granular = params?.granular ?? null;
   const diagnosticsAvailable = granular !== null;
+  const authoredRequirementsPending = hasUnfinishedGranularRequirements(granular);
 
-  const canComplete = canonical?.can_finalize === true;
+  const canComplete = canonical?.can_finalize === true && !authoredRequirementsPending;
   if (canComplete) {
     return {
       canComplete: true,
@@ -357,6 +372,11 @@ export function resolveCompletionExplanation(params: {
   const adminItems: LmsPendingItem[] = [];
 
   // --- Prioridade 1: ADMIN (configuração do curso/pacote) -------------------
+  if (canonical?.code === 'SCORM_PROGRESS_EVIDENCE_MISSING' && !authoredRequirementsPending) {
+    adminItems.push(adminItem(
+      'O AirTrust não recebeu evidência persistida de todas as telas. Se você já concluiu as atividades, a Gerência de Treinamento deve verificar a sincronização do pacote, sem exigir nova aprovação sem evidências.',
+    ));
+  }
   if (canonical?.code === 'SCORM_STATUS_INCONSISTENT') {
     adminItems.push(
       adminItem(
@@ -388,7 +408,7 @@ export function resolveCompletionExplanation(params: {
   const confirmedScoreConsistent =
     canonical?.score_pct == null || canonical?.mastery_score == null ||
     canonical.score_pct >= canonical.mastery_score;
-  if (canonical?.status === 'accepted' &&
+  if (canonical?.status === 'accepted' && !authoredRequirementsPending &&
       canonical.explicit_failure !== true && confirmedScoreConsistent) {
     return {
       canComplete: false,
@@ -442,9 +462,10 @@ export function resolveCompletionExplanation(params: {
     ? []
     : (granular?.moduleResults ?? []).filter(moduleAssessmentFailed);
     
-  const incompleteModules = canonicalNonFailure
-    ? []
-    : (granular?.moduleResults ?? []).filter((r) => r.assessment.required && !r.assessment.completed);
+  // Incomplete mandatory modules are factual content requirements even if a
+  // stale overall SCORM score says passed; never suppress them with that score.
+  const incompleteModules = (granular?.moduleResults ?? [])
+    .filter((r) => r.assessment.required && !r.assessment.completed);
 
   const pendingModules = [...failedModules, ...incompleteModules];
 
@@ -530,6 +551,17 @@ export function resolveCompletionExplanation(params: {
     };
   }
 
+  if (granular?.assessment.required && !granular.assessment.completed) {
+    return {
+      canComplete: false,
+      category: 'ASSESSMENT',
+      summary: 'A avaliação obrigatória ainda não foi finalizada.',
+      items: [],
+      adminItems,
+      diagnosticsAvailable,
+    };
+  }
+
   // --- Prioridade 4: slides pendentes --------------------------------------
   const missingSlides = granular?.slides?.missing ?? [];
   if (missingSlides.length > 0) {
@@ -546,6 +578,18 @@ export function resolveCompletionExplanation(params: {
         ref,
         adminActionable: false,
       })),
+      adminItems,
+      diagnosticsAvailable,
+    };
+  }
+
+  if (granular?.slides.totalRequired != null && granular.slides.totalRequired > 0 &&
+      granular.slides.completedRequired !== granular.slides.totalRequired) {
+    return {
+      canComplete: false,
+      category: 'CONTENT',
+      summary: 'Ainda há conteúdos obrigatórios sem confirmação de conclusão.',
+      items: [],
       adminItems,
       diagnosticsAvailable,
     };
