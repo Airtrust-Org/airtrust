@@ -69,6 +69,20 @@ describe('AirTrust Session Engine V2 — immutable evidence contract', () => {
     expect(decide({ answeredQuestions: 2, scorePercent: 100 }).code).toBe('ASSESSMENT_PENDING');
   });
 
+  it('never accepts a strict tracked SCORED package lacking a declared quiz requirement', () => {
+    expect(decide({ requiredQuestions: null, answeredQuestions: null, scorePercent: 100 }).code)
+      .toBe('ASSESSMENT_PENDING');
+  });
+
+  it('an approved standard SCORM package can use terminal result without proprietary quiz counters', () => {
+    expect(decide({
+      evidenceProfile: 'SCORM_CONFORMANT', approvedScormConformance: true,
+      requiredSlides: null, persistedVisitedSlides: null,
+      requiredQuestions: null, answeredQuestions: null,
+      scormTerminalStatus: 'passed', scorePercent: 90,
+    })).toMatchObject({ state: 'READY_TO_FINALIZE' });
+  });
+
   it('score below approved mastery is not a passing completion', () => {
     expect(decide({ scorePercent: 70 }).code).toBe('SCORE_BELOW_MASTERY');
   });
