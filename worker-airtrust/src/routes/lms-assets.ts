@@ -1983,23 +1983,6 @@ ${buildScormNativeResumeOwnershipScript()}
 
 ${buildScormQueuedCommitScript()}
 
-  function flushQueuedCommit() {
-    if (commitInFlight || !queuedCommit) return;
-    var next = queuedCommit;
-    queuedCommit = null;
-    // Settle *all* callers only after the queued write finishes, never when
-    // it is merely placed in memory. A later higher-priority terminal event
-    // can supersede an autosave without losing the close ACK's awaited result.
-    Promise.resolve(commit(next.data, 0, next.eventType)).then(
-      function(response) {
-        next.waiters.forEach(function(resolve) { resolve(response); });
-      },
-      function() {
-        next.waiters.forEach(function(resolve) { resolve(null); });
-      }
-    );
-  }
-
   function commit(data, attempt, eventType) {
     if (PREVIEW_MODE || REVIEW_MODE || !COMMIT_URL || MATRICULA_ID == null) {
       diag(' COMMIT_SKIPPED preview=' + PREVIEW_MODE + ' review=' + REVIEW_MODE + ' url=' + (COMMIT_URL || 'null') + ' mid=' + MATRICULA_ID);
