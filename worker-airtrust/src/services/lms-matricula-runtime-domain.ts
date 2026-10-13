@@ -1,4 +1,5 @@
-import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish } from './lms-progress-guardrails';
+import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish, extractScormLocationFromCmiJson } from './lms-progress-guardrails';
+import { resolveLmsCompletionScorePct } from './lms-completion-evidence';
 
 export type ScormCommitLike = {
   lesson_status?: string | null;
@@ -146,8 +147,133 @@ export function isScormSuccess(
   return false;
 }
 
-/** User confirmation is necessary, never sufficient: require terminal location,
- * every distinct slide, an explicit assessment policy and course success. */
+/**
+ * Player 2.0 — one source of truth for the terminal SCORM evidence checklist.
+ *
+ * An observed SCORM status or the final slide counter is NOT a completed
+ * enrollment. This function only answers whether persisted or just-submitted
+ * evidence is eligible for the *separate* tenant/session/edition/qualification
+ * transaction. Native and future standards adapters must supply their own
+ * verified evidence, never bypass this checklist with a 100% badge.
+ */
+export type ScormClosureCode =
+  | 'SCORM_ALREADY_COMPLETED'
+  | 'SCORM_USER_CONFIRMATION_REQUIRED'
+  | 'PROGRESS_EVIDENCE_MISSING'
+  | 'COMPLETION_EVIDENCE_INSUFFICIENT'
+  | 'EXPLICIT_FAILURE'
+  | 'MASTERY_SCORE_MISSING'
+  | 'SCORE_MISSING'
+  | 'SCORE_BELOW_MASTERY'
+  | 'SCORM_ASSESSMENT_POLICY_INVALID'
+  | 'SCORM_READY_FOR_SERVER_VERIFICATION';
+
+export interface ScormClosureReadiness {
+  contract_version: 1;
+  eligible_for_server_verification: boolean;
+  code: ScormClosureCode;
+  missing: string[];
+  /** Informational, not proof of completion or certificate issuance. */
+  last_step_reached: boolean;
+  every_slide_verified: boolean;
+  terminal_status_verified: boolean;
+  assessment_verified: boolean;
+}
+
+export function evaluateScormClosureReadiness(params: {
+  mode: 'commit' | 'reconcile';
+  commit: ScormCommitLike;
+  wasCompleted: boolean;
+  cmiJson: string | null;
+  location: { current: number; total: number | null } | null;
+  policy: 'SCORED' | 'FORMATIVE' | null | undefined;
+  masteryScore: number | null;
+  scorePct: number | null;
+}): ScormClosureReadiness {
+  const { commit, wasCompleted, cmiJson, location, masteryScore, scorePct } = params;
+  // Legacy rows without an explicit policy remain SCORED, never FORMATIVE.
+  // This is the same fail-closed default as evaluateLmsCompletionEvidence.
+  const policy = params.policy ?? 'SCORED';
+  const lastStep = Boolean(location?.total && location.current >= location.total);
+  const everySlide = hasCompleteScormSlideCoverage(cmiJson);
+  const failed = isScormFailed(commit);
+  const scoreRequired = policy === 'SCORED';
+  const validMastery = masteryScore != null && Number.isFinite(masteryScore) &&
+    masteryScore > 0 && masteryScore <= 100;
+  const validScore = scorePct != null && Number.isFinite(scorePct) &&
+    scorePct >= 0 && scorePct <= 100;
+  const scorePassed = scoreRequired
+    ? validMastery && validScore && scorePct >= masteryScore
+    : policy === 'FORMATIVE';
+  const terminal = !failed && isScormSuccess(commit, {
+    masteryScore: scoreRequired ? masteryScore : null,
+    effectiveScorePct: scorePct,
+  });
+  const userConfirmed = params.mode !== 'commit' || commit.commit_event === 'SCORM_USER_FINALIZE';
+
+  const missing = [
+    ...(!userConfirmed ? ['user_confirmation'] : []),
+    ...(!lastStep ? ['terminal_location'] : []),
+    ...(!everySlide ? ['distinct_slide_coverage'] : []),
+    ...(!terminal ? ['terminal_scorm_status'] : []),
+    ...(scoreRequired && !validMastery ? ['course_mastery_policy'] : []),
+    ...(scoreRequired && !validScore ? ['assessment_score'] : []),
+    ...(scoreRequired && validMastery && validScore && !scorePassed ? ['assessment_pass'] : []),
+  ];
+
+  let code: ScormClosureCode = 'SCORM_READY_FOR_SERVER_VERIFICATION';
+  if (wasCompleted) code = 'SCORM_ALREADY_COMPLETED';
+  else if (failed) code = 'EXPLICIT_FAILURE';
+  else if (!userConfirmed) code = 'SCORM_USER_CONFIRMATION_REQUIRED';
+  else if (!everySlide || !lastStep) code = 'PROGRESS_EVIDENCE_MISSING';
+  else if (policy !== 'SCORED' && policy !== 'FORMATIVE') code = 'SCORM_ASSESSMENT_POLICY_INVALID';
+  else if (scoreRequired && !validMastery) code = 'MASTERY_SCORE_MISSING';
+  else if (scoreRequired && !validScore) code = 'SCORE_MISSING';
+  else if (scoreRequired && !scorePassed) code = 'SCORE_BELOW_MASTERY';
+  else if (!terminal) code = 'COMPLETION_EVIDENCE_INSUFFICIENT';
+
+  return {
+    contract_version: 1,
+    eligible_for_server_verification: code === 'SCORM_READY_FOR_SERVER_VERIFICATION',
+    code,
+    missing,
+    last_step_reached: lastStep,
+    every_slide_verified: everySlide,
+    terminal_status_verified: terminal,
+    assessment_verified: scorePassed,
+  };
+}
+
+/** Read model adapter: the enrollment and commit guards share the same verdict.
+ * Never infer a completed enrollment from a package's progress or score.
+ */
+export function buildPersistedScormClosureReadiness(
+  matricula: Record<string, unknown>,
+  scorm: Record<string, unknown> | null,
+): ScormClosureReadiness {
+  const cmiJson = typeof scorm?.cmi_json === 'string' ? scorm.cmi_json : null;
+  return evaluateScormClosureReadiness({
+    mode: 'reconcile',
+    commit: {
+      lesson_status: (scorm?.lesson_status as string | null) ?? null,
+      completion_status: (scorm?.completion_status as string | null) ?? null,
+      success_status: (scorm?.success_status as string | null) ?? null,
+    },
+    wasCompleted: matricula.status === 'CONCLUIDO',
+    cmiJson,
+    location: extractScormLocationFromCmiJson(cmiJson),
+    policy: matricula.scorm_assessment_policy as 'SCORED' | 'FORMATIVE' | null,
+    masteryScore: matricula.scorm_mastery_score as number | null,
+    scorePct: resolveLmsCompletionScorePct({
+      scoreRaw: scorm?.score_raw ?? null,
+      scoreMin: scorm?.score_min ?? null,
+      scoreMax: scorm?.score_max ?? null,
+      scoreScaled: scorm?.score_scaled ?? null,
+    }),
+  });
+}
+
+/** Legacy boolean guard delegates to the same Player 2.0 terminal checklist. */
 export function canFinalizeScormEnrollment(params: {
   commit: ScormCommitLike;
   wasCompleted: boolean;
@@ -157,14 +283,8 @@ export function canFinalizeScormEnrollment(params: {
   masteryScore: number | null;
   scorePct: number | null;
 }): boolean {
-  const { commit, wasCompleted, cmiJson, location, policy, masteryScore, scorePct } = params;
-  if (wasCompleted || commit.commit_event !== 'SCORM_USER_FINALIZE' ||
-      !hasCompleteScormSlideCoverage(cmiJson) || !location?.total ||
-      location.current < location.total) return false;
-  if (policy === 'FORMATIVE') return isScormSuccess(commit, { effectiveScorePct: scorePct });
-  return policy === 'SCORED' && masteryScore != null && masteryScore > 0 &&
-    scorePct != null && scorePct >= masteryScore &&
-    isScormSuccess(commit, { masteryScore, effectiveScorePct: scorePct });
+  return evaluateScormClosureReadiness({ ...params, mode: 'commit' })
+    .eligible_for_server_verification;
 }
 
 /** Verifica se o status indica falha */

@@ -84,7 +84,8 @@ function parseProgressPct(value: unknown): number | null {
   return parsed.value;
 }
 
-function resolveScorePct(input: LmsCompletionEvidenceInput): ParsedNumber {
+function resolveScorePct(input: Pick<LmsCompletionEvidenceInput,
+  'scoreScaled' | 'scoreRaw' | 'scoreMin' | 'scoreMax'>): ParsedNumber {
   const scaled = parseStrictNumber(input.scoreScaled);
   if (scaled.kind === 'invalid') return scaled;
   if (scaled.kind === 'valid') {
@@ -110,6 +111,15 @@ function resolveScorePct(input: LmsCompletionEvidenceInput): ParsedNumber {
 
   if (raw.value < 0 || raw.value > 100) return { kind: 'invalid', value: null };
   return raw;
+}
+
+/** Single strict score normalizer shared with Player 2.0 readiness.
+ * The percentage is normalized over [score.min, score.max] and treats
+ * zero as a real score. Null means absent or invalid — never a pass. */
+export function resolveLmsCompletionScorePct(input: Pick<LmsCompletionEvidenceInput,
+  'scoreScaled' | 'scoreRaw' | 'scoreMin' | 'scoreMax'>): number | null {
+  const result = resolveScorePct(input);
+  return result.kind === 'valid' ? result.value : null;
 }
 
 function reject(
