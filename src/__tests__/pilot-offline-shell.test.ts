@@ -690,6 +690,9 @@ describe('Pilot Offline shell', () => {
     expect(pilotSync).toContain('removed_stages: (Array.isArray(rdvDraft.removed_stages)');
     expect(pilotSync).toContain('source_stage_updated_at: String(stage.source_stage_updated_at)');
     expect(pilotApp).toContain('function canRemoveOperationalStage(index)');
+    expect(pilotApp).toContain('Cancelar etapa não realizada');
+    expect(pilotApp).toContain('Só é possível cancelar a última etapa planejada.');
+    expect(pilotApp).toContain('Preserve o registro e informe a ocorrência à Coordenação.');
     expect(pilotApp).toContain('index !== activeStageDrafts.length - 1');
     expect(pilotApp).toContain('activeRdvDraft.removed_stages = [');
     expect(pilotApp).toContain('activeRdvDraft.removed_stage_draft_ids = [');
