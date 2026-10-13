@@ -17,7 +17,7 @@ export interface RecoveryFlightSummary {
   sectorCount: number;
   landingCount: number;
   canonicalFlightMinutes: number;
-  source: 'SIGVOOS' | 'NONE_FOUND';
+  source: 'CONTROLE_VOOS' | 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS' | 'SIGVOOS' | 'NONE_FOUND';
 }
 
 export interface RecoveryContextData {
