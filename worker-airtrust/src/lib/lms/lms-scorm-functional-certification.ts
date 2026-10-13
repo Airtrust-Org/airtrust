@@ -31,6 +31,9 @@ export type ScormFunctionalCertification = {
   status: 'CERTIFIED' | 'UNCERTIFIED';
   packageSha256: string;
   missing: string[];
+  requiresAssessment: boolean;
+  /** Sanitized independent browser verdicts; never store answers or learner identities. */
+  runs: ScormFunctionalBrowserRun[];
 };
 
 /** Fail closed on missing/duplicate runs, incomplete cases, SHA drift or failures.
@@ -42,6 +45,9 @@ export function evaluateScormFunctionalCertification(
   policy: { requiresAssessment: boolean } = { requiresAssessment: true },
 ): ScormFunctionalCertification {
   const missing: string[] = [];
+  if (!Array.isArray(trustedRuns) || trustedRuns.length !== 2) {
+    missing.push('BROWSER_RUN_COUNT_INVALID');
+  }
   // Formative courses may have no scored assessment. The declared and
   // validated course policy determines whether these two tests apply.
   const requiredCases = REQUIRED_SCORM_FUNCTIONAL_CASES.filter(name =>
@@ -49,7 +55,7 @@ export function evaluateScormFunctionalCertification(
     (name !== 'ASSESSMENT_INSUFFICIENT' && name !== 'ASSESSMENT_APPROVED'));
 
   for (const browser of ['CHROMIUM', 'WEBKIT'] as const) {
-    const runs = trustedRuns.filter(run => run.browser === browser);
+    const runs = Array.isArray(trustedRuns) ? trustedRuns.filter(run => run?.browser === browser) : [];
     if (runs.length !== 1) {
       missing.push(`${browser}:RUN_REQUIRED_UNIQUE`);
       continue;
@@ -60,8 +66,20 @@ export function evaluateScormFunctionalCertification(
       missing.push(`${browser}:PACKAGE_SHA_OR_HARNESS_INVALID`);
       continue;
     }
+    if (!Array.isArray(run.cases) || run.cases.some((test: ScormFunctionalBrowserRun['cases'][number]) =>
+      !test || !REQUIRED_SCORM_FUNCTIONAL_CASES.includes(test.name) ||
+      !['PASS', 'FAIL', 'INCONCLUSIVE'].includes(test.status))) {
+      missing.push(`${browser}:INVALID_CASE_SET`);
+      continue;
+    }
+    if (run.cases.length !== new Set(run.cases.map((test: ScormFunctionalBrowserRun['cases'][number]) => test.name)).size) {
+      missing.push(`${browser}:DUPLICATE_CASE`);
+    }
+    if (run.cases.some((test: ScormFunctionalBrowserRun['cases'][number]) => !requiredCases.includes(test.name) && test.status !== 'PASS')) {
+      missing.push(`${browser}:OPTIONAL_CASE_FAILED`);
+    }
     for (const name of requiredCases) {
-      const checks = run.cases.filter(test => test.name === name);
+      const checks = run.cases.filter((test: ScormFunctionalBrowserRun['cases'][number]) => test.name === name);
       if (checks.length !== 1 || checks[0].status !== 'PASS') {
         missing.push(`${browser}:${name}`);
       }
@@ -71,5 +89,12 @@ export function evaluateScormFunctionalCertification(
     status: missing.length === 0 ? 'CERTIFIED' : 'UNCERTIFIED',
     packageSha256: expectedSha256,
     missing,
+    requiresAssessment: policy.requiresAssessment,
+    runs: Array.isArray(trustedRuns) ? trustedRuns.filter(Boolean).map(run => ({
+      harness: run.harness, browser: run.browser, packageSha256: run.packageSha256,
+      cases: Array.isArray(run.cases) ? run.cases.filter(Boolean).map((item: ScormFunctionalBrowserRun['cases'][number]) => ({
+        name: item.name, status: item.status,
+      })) : [],
+    })) : [],
   };
 }

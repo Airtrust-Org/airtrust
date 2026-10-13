@@ -440,7 +440,23 @@ export function canActivateCertifiedScormPackage(
   quality: ScormQualityGateResult | null | undefined,
   expectedSha256: string,
 ): boolean {
-  return Boolean(expectedSha256 && quality?.publishable === true &&
+  const certificate = quality?.functionalCertification;
+  // A stored CERTIFIED summary without underlying browser cases is not proof.
+  // Re-evaluate the case ledger independently when activating a version.
+  if (!certificate || !Array.isArray(certificate.runs) ||
+      !Array.isArray(certificate.missing) ||
+      !certificate.runs.every(run => run && typeof run === 'object') ||
+      typeof certificate.requiresAssessment !== 'boolean') return false;
+  const replay = evaluateScormFunctionalCertification(expectedSha256, certificate.runs, {
+    requiresAssessment: certificate.requiresAssessment,
+  });
+  const storedRuntime = (quality as ScormQualityGateResult & { runtime?: ScormRuntimeConformance })?.runtime;
+  if (storedRuntime && (storedRuntime.candidateSha256 !== expectedSha256 ||
+      certificate.requiresAssessment !== (storedRuntime.requiresAssessmentEvidence !== false))) return false;
+  return Boolean(replay.status === 'CERTIFIED' &&
+    certificate.status === 'CERTIFIED' &&
+    certificate.missing.length === 0 &&
+    expectedSha256 && quality?.publishable === true &&
     quality.structural?.status === 'PASS' &&
     quality.completionManifest?.status === 'PASS' &&
     quality.diagnostics?.status === 'PASS' &&

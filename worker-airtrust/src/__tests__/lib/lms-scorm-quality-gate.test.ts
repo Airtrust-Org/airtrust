@@ -84,6 +84,33 @@ describe('SCORM package quality gate', () => {
     expect(fullyCertified.publishable).toBe(true);
     expect(canActivateCertifiedScormPackage(fullyCertified, 'sha-a')).toBe(true);
     expect(canActivateCertifiedScormPackage(fullyCertified, 'sha-b')).toBe(false);
+    // A CERTIFIED summary is not sufficient if the stored browser ledger
+    // is absent or has been altered.
+    expect(canActivateCertifiedScormPackage({
+      ...fullyCertified, functionalCertification: {
+        ...fullyCertified.functionalCertification, runs: [],
+      },
+    }, 'sha-a')).toBe(false);
+    expect(canActivateCertifiedScormPackage({
+      ...fullyCertified, functionalCertification: {
+        ...fullyCertified.functionalCertification,
+        runs: [chromium, { ...webkit, cases: webkit.cases.map(item =>
+          item.name === 'SUSPEND_RESUME' ? { ...item, status: 'FAIL' as const } : item) }],
+      },
+    }, 'sha-a')).toBe(false);
+    expect(canActivateCertifiedScormPackage({
+      ...fullyCertified, functionalCertification: {
+        ...fullyCertified.functionalCertification,
+        runs: [chromium, { ...webkit, packageSha256: 'another-zip' }],
+      },
+    }, 'sha-a')).toBe(false);
+    const mismatchedPolicy = {
+      ...fullyCertified, functionalCertification: {
+        ...fullyCertified.functionalCertification, requiresAssessment: false,
+      },
+      runtime: { ...passed, requiresAssessmentEvidence: true },
+    };
+    expect(canActivateCertifiedScormPackage(mismatchedPolicy, 'sha-a')).toBe(false);
     // Old stored JSON may still contain publishable=true with no functional gate.
     const legacyResult = { ...fullyCertified, functionalCertification: undefined };
     expect(canActivateCertifiedScormPackage(
