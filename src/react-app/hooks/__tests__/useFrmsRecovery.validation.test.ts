@@ -34,6 +34,15 @@ describe('FRMS recovery activity validation', () => {
     })).toBeNull();
   });
 
+  it('requires identifying training or administrative activity', () => {
+    expect(validateRecoveryActivityInput({
+      reference_date: '2026-09-24',
+      activity_type: 'ADMIN_TRAINING',
+      duty_start_time: '08:00',
+      duty_end_time: '17:00',
+    })).toMatch(/treinamento ou trabalho administrativo/i);
+  });
+
   it('exige janela real para treinamento e rejeita duração ambígua', () => {
     expect(validateRecoveryActivityInput({
       reference_date: '2026-09-24',
