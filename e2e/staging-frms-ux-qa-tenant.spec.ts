@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 
+// Independent synthetic identity; never inherit the global QA setup's storage state.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 const QA_EMAIL = 'qa-frms-ux@staging.airtrust.invalid';
 const PASSWORD = String(process.env.E2E_PASSWORD ?? '');
 
