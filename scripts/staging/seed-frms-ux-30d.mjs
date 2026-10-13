@@ -190,7 +190,10 @@ export function extractFixtureInsertColumns(sql) {
     if(!permitted.has(table))throw new Error('QA_UNEXPECTED_TABLE_INSERT');
     const cols=match[2].split(',').map(x=>x.trim().toLowerCase());
     if(cols.some(x=>!/^[a-z][a-z0-9_]*$/.test(x)))throw new Error('QA_INVALID_INSERT_COLUMN');
-    if(fields.has(table))throw new Error('QA_DUPLICATE_INSERT_TABLE');
+    if(fields.has(table)){
+      if(fields.get(table).join(',')!==cols.join(','))throw new Error('QA_INCONSISTENT_INSERT_COLUMNS');
+      continue; // Multiple individual crew/case rows use the same reviewed column contract.
+    }
     fields.set(table,cols);
   }
   if(fields.size!==permitted.size || [...permitted].some(table=>!fields.has(table)))
