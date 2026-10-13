@@ -1982,6 +1982,9 @@ function setServerSyncStatus(message) {
 }
 
 function updateSyncButtonState() {
+  syncRdvButton.textContent = operationalSyncInFlight
+    ? 'Enviando informações do voo…'
+    : 'Enviar informações do voo';
   syncRdvButton.disabled =
     !navigator.onLine ||
     !vault?.isUnlocked() ||
@@ -3473,10 +3476,34 @@ async function completeAndSendCanonicalRdv() {
   try {
     setCoordinationMessage('1/3 — Sincronizando os dados do voo…', 'attention');
     await flushOperationalSave();
-    await queueCurrentDraftForSync();
-    await prepareFlightPackage(flightId, { allowDuringFlight: true });
-
     let state = await getCoordinationState();
+    const latestAcceptedSequence = Number(state.latestSync?.value?.command_identity?.local_sequence || 0);
+    const latestLocalSequence = Number(activeRdvDraft?.local_sequence || operationalLocalSequence || 0);
+    const canContinueWithoutNewSync =
+      latestAcceptedSequence >= latestLocalSequence &&
+      (state.canFinalize ||
+        state.rdv?.status === 'preenchimento_finalizado' ||
+        state.rdv?.workflow_status === 'enviado');
+
+    if (!canContinueWithoutNewSync) {
+      const syncConfirmed = await queueCurrentDraftForSync();
+      if (!syncConfirmed) {
+        const syncDetail = String(rdvSyncStatus?.textContent || '').trim();
+        throw new Error(
+          'Etapa 1/3 não concluída: o servidor não confirmou o recebimento. ' +
+            'O voo permanece salvo no tablet.' +
+            (syncDetail ? ' Motivo: ' + syncDetail : ' Use “Enviar informações do voo” para tentar novamente.'),
+        );
+      }
+      const refreshed = await prepareFlightPackage(flightId, { allowDuringFlight: true });
+      if (!refreshed) {
+        throw new Error(
+          'O servidor recebeu o lançamento, mas não foi possível atualizar o status. ' +
+            'Use “Atualizar status” antes de concluir.',
+        );
+      }
+      state = await getCoordinationState();
+    }
     if (state.rdv?.workflow_status === 'enviado') {
       const snapshot = buildHandoffSuccessSnapshot(state.rdv);
       await exitOfflineFlightMode();
@@ -3511,27 +3538,30 @@ async function completeAndSendCanonicalRdv() {
     const sent = await sendCanonicalRdvToCoordination({ skipConfirm: true });
     if (!sent) throw new Error('O servidor não confirmou o recebimento pela Coordenação.');
   } catch (error) {
-    setCoordinationMessage(
-      error instanceof Error ? error.message : 'Não foi possível concluir o envio do voo.',
-      'error',
-    );
+    const detail = error instanceof Error ? error.message : 'Não foi possível concluir o envio do voo.';
+    setCoordinationMessage(detail, 'error');
+    return;
   } finally {
+    const failure = coordinationStatus?.classList.contains('error')
+      ? coordinationStatus.textContent
+      : null;
     completeSendInFlight = false;
     if (!handoffSuccessCard || handoffSuccessCard.classList.contains('hidden')) {
       await refreshCoordinationControls().catch(() => undefined);
+      if (failure) setCoordinationMessage(failure, 'error');
     }
   }
 }
 
 async function queueCurrentDraftForSync() {
-  if (operationalSyncInFlight) return;
+  if (operationalSyncInFlight) return false;
   if (activePackageData()?.contract?.sync_supported !== true) {
     setRdvSyncMessage(
       'Sincronização ainda não foi habilitada para este pacote de voo.',
       'attention',
     );
     updateSyncButtonState();
-    return;
+    return false;
   }
 
   operationalSyncInFlight = true;
@@ -3647,14 +3677,41 @@ async function queueCurrentDraftForSync() {
     operationalSyncInFlight = false;
     updateSyncButtonState();
     if (activeRdvDraft) renderOperationalEditor({ preserveScroll: true });
-    return;
+    return false;
   }
 
   operationalSyncInFlight = false;
   updateSyncButtonState();
-  await drainPilotOutbox({
-    onlyFlightId: activePackageData()?.voo?.id ?? null,
-  });
+  const flightId = Number(activePackageData()?.voo?.id || 0);
+  try {
+    await drainPilotOutbox({ onlyFlightId: flightId });
+    const unresolved = await listOutboxForFlight(flightId);
+    const receipt = await latestAcceptedSyncReceiptForFlight(flightId);
+    const persisted = await vault.getJson('rdv_drafts', rdvDraftRecordId(flightId));
+    const acceptedSequence = Number(receipt?.value?.command_identity?.local_sequence || 0);
+    const persistedSequence = Number(persisted?.value?.local_sequence || 0);
+    if (unresolved.length > 0 || !receipt || acceptedSequence < persistedSequence) {
+      const blocked = unresolved.find((record) => record.value?.status === 'blocked');
+      const error = blocked?.value?.last_error || unresolved.at(-1)?.value?.last_error || {};
+      const detail = String(error.message || '').trim();
+      const code = String(error.code || '').trim();
+      setRdvSyncMessage(
+        'O servidor ainda não confirmou este lançamento. Os dados seguem salvos no tablet.' +
+          (detail ? ' Motivo: ' + detail + (code ? ' [' + code + ']' : '') + '.' : '') +
+          ' Use “Enviar informações do voo” para tentar novamente.',
+        blocked ? 'error' : 'attention',
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    setRdvSyncMessage(
+      'Não foi possível confirmar a transmissão. O lançamento continua salvo no tablet: ' +
+        (error instanceof Error ? error.message : 'erro desconhecido'),
+      'error',
+    );
+    return false;
+  }
 }
 
 function createEditorField({
@@ -4222,10 +4279,10 @@ function renderRdvFormFields() {
       onBlur: coordFlightNumber ? null : () => void flushOperationalSave(),
     }),
     createEditorField({
-      label: 'Relatório de voo',
+      label: 'Relatório de voo (editável)',
       value: common.numero_db || '',
       type: 'text',
-      note: 'Número do DB / relatório de voo informado pelo piloto.',
+      note: 'Pode corrigir ou completar este número até concluir o voo; as mudanças ficam salvas no tablet.',
       onInput: (value) => { common.numero_db = value; scheduleOperationalSave(); },
       onBlur: () => void flushOperationalSave(),
     }),
@@ -4493,7 +4550,7 @@ function renderStageFields() {
         ? String(fields.origem_icao).trim() + ' → ' + String(fields.destino_icao).trim()
         : 'Etapa ' + String(fields.numero_etapa || index + 1);
     button.textContent = routeLabel;
-    button.disabled = operationalSyncInFlight;
+    // Navegação não é edição: o piloto pode consultar outras etapas mesmo enquanto envia.
     button.addEventListener('click', () => {
       activeStageTabIndex = index;
       renderStageFields();
@@ -4581,7 +4638,10 @@ function renderStageFields() {
     ['Tempo total', 'tempo_total', 'text', null, true, false, 'Calculado: partida → corte; sem corte, partida → pouso'],
     ['IFR (duração)', 'tempo_ifr', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
     ['Noturno (duração)', 'tempo_noturno', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
-    ['Partidas', 'starts', 'number', 'numeric', false, false, 'Informe 0 quando não houver novo acionamento dos motores nesta etapa'],
+    ['Partidas', 'starts', 'number', 'numeric', false, false,
+      index > 0 && stageDraft.starts_auto_derived === true
+        ? 'Calculado automaticamente: 0 significa que não houve novo acionamento dos motores após a etapa anterior. Pode corrigir se necessário.'
+        : 'Quantidade de acionamentos dos motores nesta etapa; 0 quando não houve novo acionamento.'],
     ['Passageiros', 'pax', 'number', 'numeric', false, false, 'Quantidade de passageiros'],
     ['Peso dos passageiros', 'peso_passageiros', 'number', 'decimal', false, false, null],
     ['Peso da bagagem', 'peso_bagagem', 'number', 'decimal', false, false, null],
