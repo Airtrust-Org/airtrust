@@ -199,6 +199,27 @@ export function buildScormProgressParsersScript(): string {
     if (fromHeader) return fromHeader;
     var text = (doc && doc.body && doc.body.innerText) ? doc.body.innerText : '';
     return parseProgressFromText(text);
+  }
+
+  // Structural SCORM interoperability: monotonic lesson_location is a
+  // high-water mark and MUST NOT prevent tracking real visits to earlier slides
+  // after resume. Use only the package's dedicated counter; arbitrary body
+  // fractions (document IDs, question x/y) are NOT valid visit evidence.
+  function recordTrustedFrameVisit(doc, canonicalLocation) {
+    var observed = parseProgressFromHeader(doc);
+    if (!observed || !Number.isInteger(observed.current) ||
+        observed.current < 1 || observed.total < 2 || observed.total > 1000 ||
+        (canonicalLocation && canonicalLocation.total != null &&
+         canonicalLocation.total !== observed.total)) return false;
+    var before = Array.isArray(cmi['airtrust.viewed_slides'])
+      ? cmi['airtrust.viewed_slides'].length : 0;
+    updateMaxVisitedFromLocation(String(observed.current) + '/' + String(observed.total));
+    var after = cmi['airtrust.viewed_slides'].length;
+    if (after <= before) return false;
+    writeLocalResumeBackup('trusted-frame-visit');
+    emitProgress({ location: getScormLocation() });
+    if (autosaveReady && !PREVIEW_MODE && !REVIEW_MODE) scheduleCommit(800);
+    return true;
   }`;
 }
 
