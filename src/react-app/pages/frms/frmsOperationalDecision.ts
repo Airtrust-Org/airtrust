@@ -38,7 +38,9 @@ export function resolveOperationalDataMoment(
 }
 
 export function hasIncompleteOperationalData(item: FrmsOperationalSnapshotItem): boolean {
-  if (!requiresOperationalDecision(item)) return false;
+  if (!requiresOperationalDecision(item)) {
+    return hasResolvedFortnightMembership(item) && item.checkin_status !== 'RECEBIDO';
+  }
   return (
     item.snapshot_status === 'INCOMPLETO' ||
     item.estado_operacional === 'NAO_AVALIADO' ||
@@ -73,6 +75,18 @@ export function classifyOperationalItem(item: FrmsOperationalSnapshotItem): Frms
   if (item.estado_operacional === 'CRITICO_VIOLACAO' || item.snapshot_status === 'CRITICO' ||
     item.fortnight_indicator?.status_quinzena === 'CRITICO') {
     return 'BLOQUEIO';
+  }
+
+  // Ausencia exclusiva de check-in na quinzena e pendencia de confirmacao,
+  // nao um risco de fadiga ja medido nem uma jornada inexistente.
+  if (
+    hasResolvedFortnightMembership(item) &&
+    !requiresOperationalDecision(item) &&
+    item.checkin_status !== 'RECEBIDO' &&
+    item.alertas.every((alerta) => alerta === 'CHECKIN_PENDENTE') &&
+    item.fortnight_indicator?.status_quinzena !== 'ATENCAO'
+  ) {
+    return 'CONFIRMAR';
   }
 
   if (
@@ -163,14 +177,16 @@ export function resolveFrmsCoordinationGuidance(
   item: FrmsOperationalSnapshotItem,
   todayIso: string,
 ): FrmsCoordinationGuidance {
-  const requiresCheckin = Boolean(
+  const pertenceQuinzenaAtiva = hasResolvedFortnightMembership(item);
+  const requiresCheckin = pertenceQuinzenaAtiva || Boolean(
     item.escalado || item.operacao_requer_decisao || item.teve_jornada ||
     item.teve_atividade_frms || item.hora_apresentacao,
   );
   const checkinComplete = item.checkin_status === 'RECEBIDO';
   const checkinLabel = checkinComplete ? 'Recebido'
     : !requiresCheckin && item.checkin_status === 'NAO_APLICAVEL' ? 'Não exigido'
-      : item.checkin_status === 'PENDENTE' ? 'Pendente'
+      : item.checkin_status === 'PENDENTE' ||
+          (pertenceQuinzenaAtiva && item.checkin_status === 'NAO_APLICAVEL') ? 'Pendente'
         : item.checkin_status === 'NAO_APLICAVEL' ? 'Não confirmado'
           : 'Não realizado';
   const base = { requiresCheckin, checkinComplete, checkinLabel };
@@ -210,10 +226,14 @@ export function resolveFrmsCoordinationGuidance(
   if (requiresCheckin && !checkinComplete) {
     return {
       ...base,
-      reason: 'Check-in de fadiga diária não confirmado para a atividade.',
+      reason: pertenceQuinzenaAtiva && !requiresOperationalDecision(item)
+        ? `Check-in diário obrigatório da quinzena ainda não recebido.${fortnightReason ? ` ${fortnightReason}` : ''}`
+        : 'Check-in de fadiga diária não confirmado para a atividade.',
       action: item.data_operacional > todayIso
         ? 'Solicitar o check-in na data da operação; o planejamento pode continuar, mas a liberação depende da confirmação.'
-        : 'Não liberar o voo sem check-in recebido de toda a tripulação. Solicitar a avaliação diária.',
+        : pertenceQuinzenaAtiva && !requiresOperationalDecision(item)
+          ? 'Solicitar o check-in diário, mesmo sem voo programado. A atividade do dia será informada no próximo check-in.'
+          : 'Não liberar o voo sem check-in recebido de toda a tripulação. Solicitar a avaliação diária.',
     };
   }
   if (fortnightNeedsReview) {
