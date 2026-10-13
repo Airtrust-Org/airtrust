@@ -192,7 +192,11 @@ export async function activateScormPackageVersion(params: { db: D1Database; empr
   ).bind(params.packageId, params.empresaId, params.cursoId).first<PackageRow>();
   if (!candidate) throw new ApiError('Versão candidata não encontrada', 404);
   const quality = parseStoredScormValidation<ScormQualityGateResult>(candidate.validation_result_json);
-  if (candidate.status !== 'VALIDATED' || !quality?.publishable) {
+  // Legacy validation JSON can contain publishable=true from a protocol-only
+  // browser run. Never promote it without a complete SHA-bound functional gate.
+  if (candidate.status !== 'VALIDATED' || !quality?.publishable ||
+      quality.functionalCertification?.status !== 'CERTIFIED' ||
+      quality.functionalCertification.packageSha256 !== candidate.package_sha256) {
     throw new ApiError('Pacote não pode ser ativado: todos os gates obrigatórios devem passar', 409);
   }
   const originalFilename = readScormUploadFilename(quality);
