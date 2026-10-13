@@ -126,6 +126,28 @@ cleanup() { rm -f "$COOKIE_JAR" "$BODY_FILE"; }
 trap cleanup EXIT
 curl -fsS -c "$COOKIE_JAR" -X POST "$API_BASE/lms/assets/session"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "{\"matricula_id\":$MATRICULA_ID}" >/dev/null
 
+echo "[smoke:lms:scorm] Recording an unsuccessful attempt before the learner retries"
+FAILED_CMI='{"cmi.core.lesson_location":"2/3","cmi.core.lesson_status":"failed","cmi.core.score.raw":"30","cmi.core.score.max":"100","airtrust.total_slides":3,"airtrust.viewed_slides":[1,2]}'
+FAILED_HTTP="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR" \
+  -X POST "$API_BASE/lms/matriculas/scorm/commit" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "$(node -e '
+    process.stdout.write(JSON.stringify({
+      matricula_id: Number(process.argv[1]),
+      lesson_status: "failed", completion_status: "incomplete", success_status: "failed",
+      score_raw: 30, score_max: 100, score_min: 0,
+      cmi_json: process.argv[2], commit_event: "SCORM_COMMIT"
+    }));
+  ' "$MATRICULA_ID" "$FAILED_CMI")")"
+[[ "$FAILED_HTTP" == "200" ]] || { echo "Failed attempt was not recorded: HTTP $FAILED_HTTP" >&2; exit 1; }
+FAILED_DB_ROW="$(sql "SELECT status || '|' || COALESCE(data_conclusao,'') || '|' ||
+  COALESCE(CAST(qualificacao_historico_id AS TEXT), '')
+  FROM lms_matriculas WHERE id=$MATRICULA_ID AND empresa_id=$EMPRESA_ID;")"
+case "$FAILED_DB_ROW" in
+  'REPROVADO|'????-??-??'|') ;;
+  *) echo "Failed attempt must record its date without minting a qualification" >&2; exit 1 ;;
+esac
+
 echo "[smoke:lms:scorm] Proving that apparent 100%/passed without individual slide coverage cannot complete"
 # All writes below are restricted to the disposable LOCAL D1 prepared by the
 # parent smoke. A passive SCO report can arrive before learner finalization.
@@ -162,14 +184,17 @@ UNCERTIFIED_DB_STATUS="$(sql "SELECT status || '|' ||
   COALESCE(CAST(qualificacao_historico_id AS TEXT), '') || '|' ||
   COALESCE(data_conclusao, '')
   FROM lms_matriculas WHERE id=$MATRICULA_ID AND empresa_id=$EMPRESA_ID;")"
+# A prior REPROVADO has a completion date for that *attempt*, but cannot
+# be interpreted as a completed enrollment after a passive pass at 99%.
 case "$UNCERTIFIED_DB_STATUS" in
-  'NAO_INICIADO||'|'EM_ANDAMENTO||') ;;
-  *) echo "Insufficient SCORM evidence incorrectly completed enrollment/qualification" >&2; exit 1 ;;
+  'REPROVADO|'????-??-??'|') ;;
+  *) echo "Insufficient evidence changed failed attempt into a completed enrollment" >&2; exit 1 ;;
 esac
 
 # Now continue with an explicit authenticated SCORM_USER_FINALIZE and
 # complete per-slide evidence. No reset or re-enrollment is allowed:
-# the same persisted cycle must recover from the failed attempt.
+# the same persisted cycle must recover from the failed attempt, retaining the
+# audit trail without generating duplicate qualifications.
 
 echo "[smoke:lms:scorm] Committing terminal passed/completed state"
 FINAL_CMI='{"cmi.core.lesson_location":"3/3","cmi.core.lesson_status":"passed","cmi.core.score.raw":"90","cmi.core.score.max":"100","airtrust.total_slides":3,"airtrust.viewed_slides":[1,2,3]}'

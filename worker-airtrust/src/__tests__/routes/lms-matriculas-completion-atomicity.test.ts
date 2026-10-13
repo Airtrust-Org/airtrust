@@ -358,6 +358,28 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
     expect(json.data?.novo_status).toBe('CONCLUIDO');
   });
 
+  it('SCORM retry: REPROVADO and a prior attempt date do not block canonical completion after passing', async () => {
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created', matriculaId: 1, qualificacaoHistoricoId: 789,
+    });
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', { first: () => ({
+        ...MATRICULA_EM_ANDAMENTO_BASE, tipo_conteudo: 'scorm',
+        status: 'REPROVADO', progresso_pct: 99, data_conclusao: '2026-10-12',
+      }) }],
+      ['FROM lms_progresso_scorm', { first: () => finalizingScorm() }],
+    ]);
+    const response = await app.fetch(makeFinalizar(1), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledWith(expect.objectContaining({
+      matriculaId: 1, progressoPct: 100,
+      existingHistoricoId: null,
+    }));
+    const json = await response.json() as { data: { novo_status: string } };
+    expect(json.data.novo_status).toBe('CONCLUIDO');
+  });
+
   it('SCORM finalize: formative course requires actual coverage and terminal status but no invented score', async () => {
     completeLmsMatriculaMock.mockResolvedValue({
       outcome: 'qualification_created', matriculaId: 1, qualificacaoHistoricoId: 888,
