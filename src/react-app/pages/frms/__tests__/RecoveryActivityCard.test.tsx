@@ -49,14 +49,18 @@ describe('RecoveryActivityCard', () => {
     contextValue = { data: baseContext(), isLoading: false, isError: false };
   });
 
-  it('does not render while loading, on error, or before the schema is ready', () => {
+  it('surfaces loading and source failure instead of silently skipping previous-day activity', () => {
     contextValue = { data: undefined, isLoading: true, isError: false };
     const { container, rerender } = render(<RecoveryActivityCard today="2026-06-05" />);
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByRole('status')).toHaveTextContent(/verificando no controle de voos/i);
 
     contextValue = { data: baseContext({ schema_ready: false }), isLoading: false, isError: false };
     rerender(<RecoveryActivityCard today="2026-06-05" />);
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByRole('alert')).toHaveTextContent(/não pode ser concluído/i);
+    contextValue = { data: undefined, isLoading: false, isError: true };
+    rerender(<RecoveryActivityCard today="2026-06-05" />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/não foi possível verificar/i);
+    expect(container).not.toBeEmptyDOMElement();
   });
 
   it('renders nothing when an operational source already has a flight for the previous day', () => {
@@ -79,7 +83,7 @@ describe('RecoveryActivityCard', () => {
     expect(screen.getByText('Folga / descanso')).toBeInTheDocument();
     expect(screen.getByText('Standby em hotel ou residência')).toBeInTheDocument();
     expect(screen.getByText('Standby na base / aeroporto')).toBeInTheDocument();
-    expect(screen.getByText('Administrativo / treinamento')).toBeInTheDocument();
+    expect(screen.getByText('Treinamento ou trabalho administrativo')).toBeInTheDocument();
     expect(screen.getByText('Outras situações')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Outras situações'));
     expect(screen.getByText('Mais de uma situação')).toBeInTheDocument();
@@ -129,6 +133,32 @@ describe('RecoveryActivityCard', () => {
         true,
       ),
     );
+  });
+
+  it('asks whether the person was in training or administrative work and requires real start/end', () => {
+    render(<RecoveryActivityCard today="2026-06-05" />);
+    fireEvent.click(screen.getByText('Treinamento ou trabalho administrativo'));
+    const activity = screen.getByLabelText('Qual atividade realizou ontem?');
+    fireEvent.change(activity, { target: { value: 'Treinamento' } });
+    fireEvent.change(screen.getByLabelText('Início aproximado'), { target: { value: '08:30' } });
+    fireEvent.change(screen.getByLabelText('Fim aproximado'), { target: { value: '16:45' } });
+    expect(stagePendingMock).toHaveBeenCalledWith('2026-06-04',
+      expect.objectContaining({
+        activity_type: 'ADMIN_TRAINING',
+        notes: 'Treinamento',
+        duty_start_time: '08:30',
+        duty_end_time: '16:45',
+      }), true);
+  });
+
+  it('does not invent clock times in a mixed activity', () => {
+    render(<RecoveryActivityCard today="2026-06-05" />);
+    fireEvent.click(screen.getByText('Outras situações'));
+    fireEvent.click(screen.getByText('Mais de uma situação'));
+    expect(screen.getByLabelText('Início do período 1')).toHaveValue('');
+    expect(screen.getByLabelText('Fim do período 1')).toHaveValue('');
+    expect(screen.getByLabelText('Início do período 2')).toHaveValue('');
+    expect(screen.getByLabelText('Fim do período 2')).toHaveValue('');
   });
 
   it('keeps a source discrepancy pending without persisting it before the final submit', async () => {
