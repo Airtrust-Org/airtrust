@@ -122,6 +122,8 @@ export interface FrmsOperationalSnapshotItem {
 
   checkin_status: 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
   checkin_horario: string | null;
+  /** Instante UTC de envio; hora_checkin legada permanece para compatibilidade. */
+  checkin_submitted_at?: string | null;
   kss_score: number | null;
   horas_sono: number | null;
   qualidade_sono: number | null;

@@ -1,3 +1,4 @@
+import { formatFrmsCheckinTime } from './frmsCheckinTime';
 /**
  * FRMS — Sinais operacionais compartilhados
  *
@@ -75,10 +76,11 @@ export function resolveDailyFatigueSignal(
 ): FrmsOperationalSignal {
   const base = { key: 'daily-fatigue' as const, label: 'Check-in diário' };
 
-  const horario = item.checkin_horario?.trim();
+  const horario = formatFrmsCheckinTime(item.checkin_submitted_at);
   const kss = item.kss_score;
   const detailParts: string[] = [];
   if (horario) detailParts.push(`Check-in às ${horario}`);
+  else if (item.checkin_horario) detailParts.push('Horário local do check-in não confirmado');
   if (kss != null && Number.isFinite(kss)) detailParts.push(`KSS ${kss}`);
   const detail = detailParts.length > 0 ? detailParts.join(' · ') : undefined;
 
