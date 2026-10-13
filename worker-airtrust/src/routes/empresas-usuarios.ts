@@ -256,7 +256,7 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
 
   const {
     email,
-    role = 'viewer',
+    role = 'student',
     perfis,
     nome,
     empresaIds,
@@ -278,7 +278,7 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
 
   const normalizedPerfis = Array.isArray(perfis) && perfis.length > 0
     ? perfis.map(normalizeEmpresaUserRole)
-    : [normalizeEmpresaUserRole(role || 'viewer')];
+    : [normalizeEmpresaUserRole(role || 'student')];
   const normalizedRole = pickHighestRole(...normalizedPerfis);
   const targetEmpresaIds = Array.from(
     new Set(
@@ -665,7 +665,7 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
         .map((item) => {
           const perfis = Array.isArray(item.perfis) && item.perfis.length > 0
             ? item.perfis.map(p => normalizeEmpresaUserRole(p))
-            : [normalizeEmpresaUserRole(item.role || 'viewer')];
+            : [normalizeEmpresaUserRole(item.role || 'student')];
           return {
             empresaId: Number(item.empresaId),
             role: pickHighestRole(...perfis),
@@ -799,7 +799,7 @@ app.post('/:id/usuarios', requireTenantRole('admin'), async (c) => {
   }
 
   const body = await c.req.json();
-  const { usuario_id, role = 'viewer', perfis, setor_ids: setorIdsForAdd } = body;
+  const { usuario_id, role = 'student', perfis, setor_ids: setorIdsForAdd } = body;
   const normalizedPerfis = Array.isArray(perfis) && perfis.length > 0
     ? perfis.map(p => normalizeEmpresaUserRole(p))
     : [normalizeEmpresaUserRole(role)];
