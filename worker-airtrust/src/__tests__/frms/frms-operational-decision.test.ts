@@ -86,6 +86,18 @@ describe('frms-operational-decision', () => {
       expect(result.acao_recomendada_texto).toBe('Sem atividade operacional prevista para a data.');
     });
 
+    it('sem voo programado, check-in obrigatório pendente não vira NORMAL', () => {
+      const result = deriveFrmsOperationalDecision({
+        ...DEFAULT_INPUT,
+        operacao_requer_decisao: false,
+        snapshot_status: 'ATENCAO',
+        alertas: ['CHECKIN_PENDENTE'],
+      });
+      expect(result.estado_operacional).toBe('NAO_AVALIADO');
+      expect(result.acao_recomendada_texto).toContain('mesmo sem voo programado');
+      expect(result.motivos_principais).toContain('Check-in diário obrigatório pendente na quinzena ativa');
+    });
+
     it('dados complementares ausentes NÃO geram NAO_AVALIADO global', () => {
       const result = deriveFrmsOperationalDecision({
         ...DEFAULT_INPUT,
