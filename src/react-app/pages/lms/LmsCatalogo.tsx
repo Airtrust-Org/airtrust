@@ -2026,6 +2026,12 @@ export default function LmsCatalogo() {
 
   const managementActions = (
     <>
+      {window.location.hostname === 'staging.airtrust.pages.dev' && (
+        <Link to="/lms/native/revisao"
+          className="inline-flex min-h-10 items-center rounded-lg border border-[#dfb58a] bg-[#fff4e8] px-3 text-sm font-bold text-[#9c490f] hover:bg-[#ffe3c8]">
+          Homologar Native (9 cursos)
+        </Link>
+      )}
       <Button
         variant="secondary"
         onClick={() =>
