@@ -104,7 +104,7 @@ jobs:
           node - "$RUNNER_TEMP/qa-recovery.json" <<'NODE'
           const fs=require('fs');
           const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
-          if(!r || typeof r!=='object' || r.error)process.exit(1);
+          if(!r || typeof r!=='object' || r.error || !/bookmark/i.test(JSON.stringify(r)))throw new Error('TIME_TRAVEL_BOOKMARK_NOT_CONFIRMED');
           console.log('STAGING_D1_RECOVERY_BOOKMARK_VERIFIED');
           NODE
           echo "RECOVERY_TIMESTAMP_UTC=$point" >> "$GITHUB_STEP_SUMMARY"
