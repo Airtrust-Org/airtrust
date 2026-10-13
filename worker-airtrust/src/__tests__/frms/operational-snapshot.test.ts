@@ -66,6 +66,8 @@ describe('active fortnight daily roster', () => {
     expect(item).toBeTruthy();
     expect(item?.nome_guerra).toBe('ONZE');
     expect(item?.escalado).toBe(false);
+    expect(item?.na_quinzena_ativa).toBe(true);
+    expect(item?.fortnight_indicator).toBeNull();
     expect(item?.teve_jornada).toBe(false);
     expect(item?.jornada_data_source).toBe('AUSENTE');
     expect(item?.operacao_requer_decisao).toBe(false);
