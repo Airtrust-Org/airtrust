@@ -35,6 +35,12 @@ type SnapshotStagePayload = {
   fields: Record<string, unknown>;
 };
 
+type RemovedStagePayload = {
+  source_stage_id: number;
+  source_stage_updated_at: string;
+  numero_etapa: number;
+};
+
 type SnapshotFuelingPayload = {
   client_local_id: string;
   data_hora: string;
@@ -59,6 +65,7 @@ type SnapshotPayload = {
   fuelings: SnapshotFuelingPayload[];
   justifications: SnapshotJustificationPayload[];
   stages: SnapshotStagePayload[];
+  removed_stages: RemovedStagePayload[];
 };
 
 type PreparedStage = {
@@ -267,6 +274,27 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     };
   });
 
+  const removedRaw = raw.removed_stages ?? [];
+  if (!Array.isArray(removedRaw) || removedRaw.length > 31) {
+    throw new ApiError('Etapas removidas invalidas', 400, 'CONTROLE_VOOS_PILOT_SYNC_REMOVED_STAGES_INVALID');
+  }
+  const remainingIds = new Set(stages.map((stage) => stage.source_stage_id).filter((id) => id !== null));
+  const removedIds = new Set<number>();
+  const removedStages = removedRaw.map((entry): RemovedStagePayload => {
+    if (!isPlainObject(entry)) {
+      throw new ApiError('Etapa removida invalida', 400, 'CONTROLE_VOOS_PILOT_SYNC_REMOVED_STAGES_INVALID');
+    }
+    const id = parseNullablePositiveInteger(entry.source_stage_id, 'source_stage_id');
+    const number = Number(entry.numero_etapa);
+    const updatedAt = String(entry.source_stage_updated_at || '').trim();
+    if (id === null || !Number.isInteger(number) || number < 1 || !updatedAt ||
+        remainingIds.has(id) || removedIds.has(id)) {
+      throw new ApiError('Etapa removida duplicada ou sem versao', 400, 'CONTROLE_VOOS_PILOT_SYNC_REMOVED_STAGES_INVALID');
+    }
+    removedIds.add(id);
+    return { source_stage_id: id, source_stage_updated_at: updatedAt, numero_etapa: number };
+  });
+
   const stageNumbers = new Set(
     stages.map((stage) => Number((stage.fields || {}).numero_etapa)).filter((value) => Number.isInteger(value) && value > 0),
   );
@@ -284,6 +312,7 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     fuelings,
     justifications,
     stages,
+    removed_stages: removedStages,
   };
 }
 
@@ -530,14 +559,23 @@ function buildStageStatements(input: {
 
 function buildStageRevisionCasSql(
   stages: PreparedStage[],
+  removedStages: RemovedStagePayload[],
 ): { sql: string; binds: unknown[] } {
   const sourceStages = stages.filter((stage) => stage.sourceStageId !== null);
+  const checkedStages = [
+    ...sourceStages.map((stage) => ({
+      id: stage.sourceStageId, updatedAt: stage.sourceStageUpdatedAt, number: stage.input.numero_etapa,
+    })),
+    ...removedStages.map((stage) => ({
+      id: stage.source_stage_id, updatedAt: stage.source_stage_updated_at, number: stage.numero_etapa,
+    })),
+  ];
   const clauses = [
     `(SELECT COUNT(*) FROM cv_voo_etapas WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL) = ?`,
   ];
   const binds: unknown[] = [];
   // voo_id / empresa_id are prepended by the caller because they are aggregate-specific.
-  for (const stage of sourceStages) {
+  for (const stage of checkedStages) {
     clauses.push(
       `EXISTS (
         SELECT 1 FROM cv_voo_etapas
@@ -546,9 +584,9 @@ function buildStageRevisionCasSql(
       )`,
     );
     binds.push(
-      stage.sourceStageId,
-      stage.sourceStageUpdatedAt,
-      stage.input.numero_etapa,
+      stage.id,
+      stage.updatedAt,
+      stage.number,
     );
   }
   return { sql: clauses.join(' AND '), binds };
@@ -584,9 +622,10 @@ function buildExistingRdvUpdate(input: {
   existingRdv: RdvRow;
   rdv: RdvInput;
   stages: PreparedStage[];
+  removedStages: RemovedStagePayload[];
 }): D1PreparedStatement {
-  const stageCas = buildStageRevisionCasSql(input.stages);
-  const sourceStageCount = input.stages.filter((stage) => stage.sourceStageId !== null).length;
+  const stageCas = buildStageRevisionCasSql(input.stages, input.removedStages);
+  const sourceStageCount = input.stages.filter((stage) => stage.sourceStageId !== null).length + input.removedStages.length;
 
   return input.db
     .prepare(
@@ -646,6 +685,10 @@ function buildExistingRdvUpdate(input: {
           stage.sourceStageUpdatedAt,
           stage.input.numero_etapa,
         ]),
+      ...input.removedStages.flatMap((stage) => [
+        stage.source_stage_id, input.flight.id, input.empresaId,
+        stage.source_stage_updated_at, stage.numero_etapa,
+      ]),
     );
 }
 
@@ -657,9 +700,10 @@ function buildNewRdvInsert(input: {
   command: PilotOfflineSyncCommand;
   rdv: RdvInput;
   stages: PreparedStage[];
+  removedStages: RemovedStagePayload[];
 }): D1PreparedStatement {
-  const stageCas = buildStageRevisionCasSql(input.stages);
-  const sourceStageCount = input.stages.filter((stage) => stage.sourceStageId !== null).length;
+  const stageCas = buildStageRevisionCasSql(input.stages, input.removedStages);
+  const sourceStageCount = input.stages.filter((stage) => stage.sourceStageId !== null).length + input.removedStages.length;
 
   return input.db
     .prepare(
@@ -712,6 +756,10 @@ function buildNewRdvInsert(input: {
           stage.sourceStageUpdatedAt,
           stage.input.numero_etapa,
         ]),
+      ...input.removedStages.flatMap((stage) => [
+        stage.source_stage_id, input.flight.id, input.empresaId,
+        stage.source_stage_updated_at, stage.numero_etapa,
+      ]),
     );
 }
 
@@ -1004,9 +1052,10 @@ async function currentStateConflict(input: {
   const serverStages = await listEtapas(input.db, input.empresaId, input.flight.id);
   const sourceStages = input.stages.filter((stage) => stage.sourceStageId !== null);
   const serverIds = serverStages.map((stage) => stage.id).sort((a, b) => a - b);
-  const sourceIds = sourceStages
-    .map((stage) => stage.sourceStageId as number)
-    .sort((a, b) => a - b);
+  const sourceIds = [
+    ...sourceStages.map((stage) => stage.sourceStageId as number),
+    ...input.snapshot.removed_stages.map((stage) => stage.source_stage_id),
+  ].sort((a, b) => a - b);
 
   if (
     serverIds.length !== sourceIds.length ||
