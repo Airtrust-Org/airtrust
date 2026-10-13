@@ -403,5 +403,20 @@ export function buildScormQueuedCommitScript(): string {
         queuedCommit.eventType = eventType || 'SCORM_COMMIT';
       }
     });
+  }
+
+  function flushQueuedCommit() {
+    if (commitInFlight || !queuedCommit) return;
+    var next = queuedCommit;
+    queuedCommit = null;
+    // A queued final event must be persisted before any waiter receives ACK.
+    Promise.resolve(commit(next.data, 0, next.eventType)).then(
+      function(response) {
+        next.waiters.forEach(function(resolve) { resolve(response); });
+      },
+      function() {
+        next.waiters.forEach(function(resolve) { resolve(null); });
+      }
+    );
   }`;
 }
