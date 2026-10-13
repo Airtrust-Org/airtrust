@@ -1987,7 +1987,17 @@ ${buildScormQueuedCommitScript()}
     if (commitInFlight || !queuedCommit) return;
     var next = queuedCommit;
     queuedCommit = null;
-    commit(next.data, 0, next.eventType);
+    // Settle *all* callers only after the queued write finishes, never when
+    // it is merely placed in memory. A later higher-priority terminal event
+    // can supersede an autosave without losing the close ACK's awaited result.
+    Promise.resolve(commit(next.data, 0, next.eventType)).then(
+      function(response) {
+        next.waiters.forEach(function(resolve) { resolve(response); });
+      },
+      function() {
+        next.waiters.forEach(function(resolve) { resolve(null); });
+      }
+    );
   }
 
   function commit(data, attempt, eventType) {
@@ -1998,9 +2008,9 @@ ${buildScormQueuedCommitScript()}
 
     var currentAttempt = attempt || 0;
     if (currentAttempt === 0 && commitInFlight) {
-      queueLatestCommit(data, eventType);
+      var queuedResult = queueLatestCommit(data, eventType);
       diag(' COMMIT_QUEUED event=' + (eventType || '?'));
-      return Promise.resolve(null);
+      return queuedResult;
     }
     if (currentAttempt === 0) commitInFlight = true;
 
@@ -2433,7 +2443,9 @@ ${buildScormSessionCloseRuntimeScript()}
     },
     LMSFinish: function() {
       probeFrameProgress(); diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
-      commit(buildPayload(), 0, 'SCORM_FINISH');
+      // A governed parent close already persisted SCORM_FINISH before invoking
+      // the SCORM API termination. Do not start another save after its ACK.
+      if (!sessionCloseHandled) commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
     },
@@ -2510,7 +2522,7 @@ ${buildScormSessionCloseRuntimeScript()}
     },
     Terminate: function() {
       diag(' LMSFinish_CALLED_2004 loc=' + (getScormLocation() || 'null'));
-      commit(buildPayload(), 0, 'SCORM_FINISH');
+      if (!sessionCloseHandled) commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
     },
