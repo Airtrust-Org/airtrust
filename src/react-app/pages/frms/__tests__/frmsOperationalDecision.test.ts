@@ -282,6 +282,28 @@ describe('frmsOperationalDecision', () => {
     expect(classifyOperationalItem(legacy)).toBe('CONFIRMAR');
   });
 
+  it('nao omite check-in pendente de roster comprovado quando faltam datas do indicador', () => {
+    const semAncora = item({
+      na_quinzena_ativa: true,
+      operacao_requer_decisao: false,
+      escalado: false,
+      teve_jornada: false,
+      hora_apresentacao: null,
+      checkin_status: 'PENDENTE',
+      snapshot_status: 'ATENCAO',
+      estado_operacional: 'NAO_AVALIADO',
+      alertas: ['CHECKIN_PENDENTE'],
+      fortnight_indicator: {
+        periodo_inicio: null,
+        periodo_fim: null,
+        status_quinzena: 'INCOMPLETO',
+      } as FrmsOperationalSnapshotItem['fortnight_indicator'],
+    });
+    expect(isOperationallyRelevant(semAncora)).toBe(true);
+    expect(classifyOperationalItem(semAncora)).toBe('CONFIRMAR');
+    expect(resolveFrmsCoordinationGuidance(semAncora, '2026-08-27').checkinLabel).toBe('Pendente');
+  });
+
   it('não coloca na fila check-in isolado quando a quinzena não foi resolvida', () => {
     const checkinOnly = item({
       escalado: false,
