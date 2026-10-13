@@ -7,7 +7,8 @@ import {
   type LmsCompletionDecision,
   type LmsCompletionSource,
 } from '../services/lms-completion-evidence';
-import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish, scormStatusIndicatesCompletion } from '../services/lms-progress-guardrails';
+import { extractScormLocationFromCmiJson, hasCompleteScormSlideCoverage, isTrustedScorm12Finish, scormStatusIndicatesCompletion } from '../services/lms-progress-guardrails';
+import { evaluateScormClosureReadiness } from '../services/lms-matricula-runtime-domain';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
@@ -414,18 +415,48 @@ async function guardScormCommit(
     'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
     { matricula_id: matriculaId, edition_mismatch: edition });
   const assetSessionValid = await hasValidAssetSession(c, row);
-  if (incoming.commit_event === 'SCORM_USER_FINALIZE' &&
-      !hasCompleteScormSlideCoverage(
-        typeof incoming.cmi_json === 'string' ? incoming.cmi_json : null
-      )) {
+  // Player 2.0 separation of concerns: passive SCORM status/score reports
+  // must be *stored* as evidence, not prematurely evaluated as a learner's
+  // request to mint a qualification. Only the explicit USER_FINALIZE event
+  // may request the canonical closing transaction below. Rejected intermediate
+  // status commits used to strand learners at 99% with no persisted evidence.
+  if (incoming.commit_event !== 'SCORM_USER_FINALIZE') return null;
+
+  const cmiJson = typeof incoming.cmi_json === 'string'
+    ? incoming.cmi_json : row.cmi_json;
+  const closure = evaluateScormClosureReadiness({
+    mode: 'commit',
+    commit: {
+      lesson_status: (incoming.lesson_status ?? row.lesson_status) as string | null,
+      completion_status: (incoming.completion_status ?? row.completion_status) as string | null,
+      success_status: (incoming.success_status ?? row.success_status) as string | null,
+      commit_event: 'SCORM_USER_FINALIZE',
+      completion_candidate: incoming.completion_candidate === true,
+      completion_observed_at: incoming.completion_observed_at as string | null,
+      cmi_json: cmiJson,
+    },
+    wasCompleted: row.status === 'CONCLUIDO',
+    cmiJson,
+    location: extractScormLocationFromCmiJson(cmiJson),
+    policy: row.scorm_assessment_policy,
+    masteryScore: row.scorm_mastery_score,
+    scorePct: scorePctFromValues(
+      incoming.score_raw ?? row.score_raw,
+      incoming.score_max ?? row.score_max,
+      incoming.score_scaled ?? row.score_scaled,
+    ),
+  });
+  if (!closure.eligible_for_server_verification) {
+    const code = closure.code === 'SCORM_ASSESSMENT_POLICY_INVALID'
+      ? 'MASTERY_SCORE_MISSING'
+      : closure.code === 'SCORM_USER_CONFIRMATION_REQUIRED' ||
+        closure.code === 'SCORM_ALREADY_COMPLETED'
+        ? 'COMPLETION_EVIDENCE_INSUFFICIENT'
+        : closure.code;
     return decisionRejection(c, matriculaId, {
-      accepted: false, code: 'PROGRESS_EVIDENCE_MISSING',
-      scorePct: null, masteryScore: null, failurePrecedence: false,
+      accepted: false, code,
+      scorePct: null, masteryScore: row.scorm_mastery_score, failurePrecedence: code === 'EXPLICIT_FAILURE',
     });
-  }
-  if (row.scorm_assessment_policy === 'FORMATIVE' &&
-      !failureSignal && !hasTerminalFormativeScormStatus(row, incoming)) {
-    return decisionRejection(c, matriculaId, formativeTerminalMissing());
   }
   const decision = buildDecision(row, 'scorm', incoming, assetSessionValid, {
     explicitCompletion:
@@ -507,33 +538,39 @@ async function guardManualFinalize(
     'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
     { matricula_id: matriculaId, edition_mismatch: edition });
   const assetSessionValid = await hasValidAssetSession(c, row);
-  if (row.scorm_assessment_policy === 'FORMATIVE' &&
-      row.tipo_conteudo === 'scorm' && !hasTerminalFormativeScormStatus(row, {})) {
-    return decisionRejection(c, matriculaId, formativeTerminalMissing());
+  const isScorm = normalizeStatus(row.tipo_conteudo) === 'scorm';
+  if (isScorm) {
+    const closure = evaluateScormClosureReadiness({
+      mode: 'reconcile',
+      commit: {
+        lesson_status: row.lesson_status,
+        completion_status: row.completion_status,
+        success_status: row.success_status,
+        cmi_json: row.cmi_json,
+      },
+      wasCompleted: false,
+      cmiJson: row.cmi_json,
+      location: extractScormLocationFromCmiJson(row.cmi_json),
+      policy: row.scorm_assessment_policy,
+      masteryScore: row.scorm_mastery_score,
+      scorePct: scorePctFromValues(row.score_raw, row.score_max, row.score_scaled),
+    });
+    if (!closure.eligible_for_server_verification) {
+      const code = closure.code === 'SCORM_ASSESSMENT_POLICY_INVALID'
+        ? 'MASTERY_SCORE_MISSING'
+        : closure.code === 'SCORM_USER_CONFIRMATION_REQUIRED' ||
+          closure.code === 'SCORM_ALREADY_COMPLETED'
+          ? 'COMPLETION_EVIDENCE_INSUFFICIENT'
+          : closure.code;
+      return decisionRejection(c, matriculaId, {
+        accepted: false, code,
+        scorePct: null, masteryScore: row.scorm_mastery_score, failurePrecedence: code === 'EXPLICIT_FAILURE',
+      });
+    }
   }
   const storedCompletion =
     ['completed', 'complete'].includes(normalizeStatus(row.completion_status)) ||
     Number(row.progresso_pct ?? 0) >= 100;
-  const isScorm = normalizeStatus(row.tipo_conteudo) === 'scorm';
-  if (isScorm) {
-    // A user-confirmed /finalizar call may reconcile an ALREADY persisted SCORM
-    // pass, but must not turn a progress percentage or final slide alone into
-    // a qualification. Every slide must have been recorded by this enrollment.
-    const terminal = scormStatusIndicatesCompletion({
-      lessonStatus: row.lesson_status,
-      completionStatus: row.completion_status,
-      successStatus: row.success_status,
-    });
-    if (!terminal || !hasCompleteScormSlideCoverage(row.cmi_json)) {
-      return decisionRejection(c, matriculaId, {
-        accepted: false,
-        code: terminal ? 'PROGRESS_EVIDENCE_MISSING' : 'COMPLETION_EVIDENCE_INSUFFICIENT',
-        scorePct: null,
-        masteryScore: row.scorm_mastery_score,
-        failurePrecedence: false,
-      });
-    }
-  }
   // Only persisted, complete SCORM runtime evidence is evaluated as SCORM.
   // Other manual finalizations remain in the non-SCORM, fail-closed policy.
   const decision = buildDecision(row, isScorm ? 'scorm' : 'manual', {}, assetSessionValid, {
