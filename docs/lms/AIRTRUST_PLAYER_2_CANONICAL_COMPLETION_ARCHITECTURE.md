@@ -57,7 +57,7 @@ não certificação ponta a ponta. Novas ativações precisam de um contrato sep
 `functionalCertification` para **o SHA exato do ZIP**, com as oito etapas
 `FIRST_ACCESS`, `SUSPEND_RESUME`, `ASSESSMENT_INSUFFICIENT`,
 `ASSESSMENT_APPROVED`, `EXPLICIT_FINALIZATION`, `REOPEN_COMPLETED`,
-`NO_STATUS_DOWNGRADE` e `TENANT_CYCLE_ISOLATION`, todas em Chromium e WebKit.
+`NO_STATUS_DOWNGRADE` e `TENANT_CYCLE_ISOLATION`, todas em Chromium e WebKit para cursos com avaliação obrigatória; cursos formativos sem avaliação pontuada não exigem os dois cenários de avaliação, mas preservam todas as demais provas.
 
 O verificador fail-closed `evaluateScormFunctionalCertification` valida
 integridade do conjunto de resultados e SHA, **não a origem** dos resultados.

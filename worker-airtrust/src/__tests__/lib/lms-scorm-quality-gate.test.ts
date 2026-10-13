@@ -102,5 +102,19 @@ describe('SCORM package quality gate', () => {
     };
     expect(applyRuntimeConformance(staticResult, passed, 'sha-a', [chromium, missingResume])
       .publishable).toBe(false);
+    const formative = {
+      ...passed, requiresAssessmentEvidence: false,
+      lessonStatus: 'completed', expectedSuccessStatus: 'completed',
+      scoreRaw: null, masteryScore: null,
+    };
+    const withoutScoredAssessment = [chromium, webkit].map(run => ({
+      ...run, cases: run.cases.filter(test =>
+        test.name !== 'ASSESSMENT_INSUFFICIENT' &&
+        test.name !== 'ASSESSMENT_APPROVED'),
+    }));
+    expect(applyRuntimeConformance(staticResult, formative, 'sha-a', withoutScoredAssessment)
+      .publishable).toBe(true);
+    expect(applyRuntimeConformance(staticResult, passed, 'sha-a', withoutScoredAssessment)
+      .publishable).toBe(false);
   });
 });

@@ -39,8 +39,15 @@ export type ScormFunctionalCertification = {
 export function evaluateScormFunctionalCertification(
   expectedSha256: string,
   trustedRuns: readonly ScormFunctionalBrowserRun[],
+  policy: { requiresAssessment: boolean } = { requiresAssessment: true },
 ): ScormFunctionalCertification {
   const missing: string[] = [];
+  // Formative courses may have no scored assessment. The declared and
+  // validated course policy determines whether these two tests apply.
+  const requiredCases = REQUIRED_SCORM_FUNCTIONAL_CASES.filter(name =>
+    policy.requiresAssessment ||
+    (name !== 'ASSESSMENT_INSUFFICIENT' && name !== 'ASSESSMENT_APPROVED'));
+
   for (const browser of ['CHROMIUM', 'WEBKIT'] as const) {
     const runs = trustedRuns.filter(run => run.browser === browser);
     if (runs.length !== 1) {
@@ -53,7 +60,7 @@ export function evaluateScormFunctionalCertification(
       missing.push(`${browser}:PACKAGE_SHA_OR_HARNESS_INVALID`);
       continue;
     }
-    for (const name of REQUIRED_SCORM_FUNCTIONAL_CASES) {
+    for (const name of requiredCases) {
       const checks = run.cases.filter(test => test.name === name);
       if (checks.length !== 1 || checks[0].status !== 'PASS') {
         missing.push(`${browser}:${name}`);

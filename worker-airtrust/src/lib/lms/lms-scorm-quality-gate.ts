@@ -418,7 +418,10 @@ export function applyRuntimeConformance(
     name: 'CANDIDATE_SHA256', status: 'ERROR',
     detail: 'Resultado pertence a SHA diferente',
   });
-  const functionalCertification = evaluateScormFunctionalCertification(expectedSha256, trustedFunctionalRuns);
+  const functionalCertification = evaluateScormFunctionalCertification(
+    expectedSha256, trustedFunctionalRuns,
+    { requiresAssessment: runtime.requiresAssessmentEvidence !== false },
+  );
   return {
     ...staticResult,
     conformance,
