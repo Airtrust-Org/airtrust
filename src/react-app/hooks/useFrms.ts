@@ -154,6 +154,8 @@ export interface FrmsAlertaRow {
   valor_limite_min: number;
   mensagem: string;
   nome_tripulante?: string;
+  /** Total desta pessoa nos filtros ativos da API, inclusive outras páginas. */
+  recorrencias_no_filtro?: number;
   visualizado: number;
   visualizado_em: string | null;
   visualizado_por: string | null;
