@@ -926,6 +926,10 @@ frmsRoutes.get(
   safe(async (c) => {
     const funcionarioId = c.req.param('funcionarioid') ?? '';
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso ao score negado.',
+    }, 403);
 
     if (empresaId) {
       const func = await c.env.DB.prepare(
