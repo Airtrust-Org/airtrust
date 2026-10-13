@@ -73,7 +73,7 @@ function formatPercent(value: number): string {
 function effectivenessBandTone(nivel: string | null): FrmsSignalTone {
   const normalized = nivel?.trim().toLocaleLowerCase('pt-BR') ?? '';
   if (['vermelho', 'critico', 'crítico', 'baixa'].includes(normalized)) return 'critical';
-  if (['amarelo', 'atencao', 'atenção', 'degradada'].includes(normalized)) return 'warning';
+  if (['amarelo', 'atencao', 'atenção', 'transicao', 'transição', 'degradada'].includes(normalized)) return 'warning';
   if (['verde', 'normal', 'alta', 'baixo'].includes(normalized)) return 'ok';
   return 'unknown';
 }

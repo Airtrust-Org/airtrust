@@ -196,6 +196,15 @@ describe('resolveEffectivenessSignal', () => {
     expect(s.detail).toContain('Faixa de efetividade informada pelo motor: ATENCAO');
   });
 
+  it('trata os rótulos canônicos amarelo e transição como faixa de atenção', () => {
+    for (const nivel of ['amarelo', 'transição']) {
+      const s = resolveEffectivenessSignal(
+        item({ effectiveness_pct: 70, nivel_fadiga_calculado: nivel, alertas: [] }),
+      );
+      expect(s.tone).toBe('warning');
+    }
+  });
+
   it('preserva a faixa crítica do motor mesmo sem alerta de snapshot', () => {
     const s = resolveEffectivenessSignal(
       item({ effectiveness_pct: 64, nivel_fadiga_calculado: 'VERMELHO', alertas: [] }),
