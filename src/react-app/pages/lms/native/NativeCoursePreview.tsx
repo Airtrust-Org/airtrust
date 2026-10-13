@@ -217,7 +217,7 @@ export default function NativeCoursePreview({
     }
     if (block.type === 'bullets') {
       return (
-        <ul key={index} className={'grid gap-2 ' + (block.items.length >= 4 ? 'lg:grid-cols-2' : '')}>
+        <ul key={index} className={'grid gap-2 ' + (block.items.length >= 4 && block.items.every((item) => item.length <= 65) ? 'lg:grid-cols-2' : '')}>
           {block.items.map((item, i) => (
             <li key={i} className="flex break-inside-avoid items-start gap-2 rounded-lg border border-[#dce6ed] bg-[#f6f9fc] px-3 py-2 text-base leading-snug text-[#203c56]">
               <Check className="mt-1 h-4 w-4 shrink-0 text-[#e65300]" aria-hidden="true" />
