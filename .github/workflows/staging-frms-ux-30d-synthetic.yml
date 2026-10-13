@@ -97,7 +97,7 @@ jobs:
           SANITIZED_AGGREGATE_PATH: ${{ github.workspace }}/_frms_aggregate/frms-ux-30d-aggregates.json
           SOURCE_AGGREGATE_SHA: ${{ inputs.source_aggregate_sha }}
         run: node scripts/staging/seed-frms-ux-30d.mjs
-      - name: Create and verify official staging D1 backup before mutation
+      - name: Verify exact D1 and record Cloudflare Time Travel recovery bookmark
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
@@ -107,9 +107,24 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           cd worker-airtrust
-          npx wrangler d1 backup create airtrust-db-staging-baseline-20260701 --remote
-          npx wrangler d1 backup list airtrust-db-staging-baseline-20260701 --remote
-          echo STAGING_BACKUP_VERIFIED_BEFORE_WRITE >> "$GITHUB_STEP_SUMMARY"
+          npx wrangler d1 info airtrust-db-staging-baseline-20260701 --json > "$RUNNER_TEMP/staging-d1-info.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const data=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/staging-d1-info.json','utf8'));
+          const dbId=String(data.uuid ?? data.database_id ?? data.id ?? data.result?.uuid ?? '');
+          if(dbId!=='bf9963f4-eb12-439b-a830-20bbf577ac22')throw new Error('STAGING_DATABASE_UUID_MISMATCH');
+          console.log('STAGING_D1_TARGET_VERIFIED');
+          NODE
+          npx wrangler d1 time-travel info airtrust-db-staging-baseline-20260701 --json > "$RUNNER_TEMP/frms-ux-recovery.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const r=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/frms-ux-recovery.json','utf8'));
+          const mark=String(r.bookmark ?? r.result?.bookmark ?? '');
+          if(!mark || mark.length < 8)throw new Error('D1_RECOVERY_BOOKMARK_MISSING');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            'STAGING_D1_RECOVERY_BOOKMARK='+mark+'\n');
+          console.log('STAGING_D1_RECOVERY_BOOKMARK_VERIFIED');
+          NODE
       - name: Apply or rollback only reserved QA tenant after backup
         shell: bash
         env:
