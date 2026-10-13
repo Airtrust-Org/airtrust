@@ -1,20 +1,28 @@
 /**
  * Authenticated Worker/D1/R2 SCORM learner closure in disposable LOCAL fixtures.
  * Proves browser actions reach the actual backend, unlike API-only SCO probes.
- * This is NOT an attestation for arbitrary uploaded ZIPs or real tenants.\n * It checks genuine CMI suspend/resume and sibling enrollment isolation,\n * NOT cross-tenant/cycle isolation or certificate issuance.
+ * This test is local SHA-bound evidence, not a production ZIP certification.
+ * Cross-tenant/cycle isolation and certificate issuance remain unproven.
  */
 import {expect,test} from '@playwright/test';
-import {readFileSync} from 'node:fs';
+import {readFileSync,writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 
 type Fixture={
   origin:string;companyId:number;courseId:number;dbFile:string;
+  packageSha256:string;zipPath:string;fixtureKind:'LOCAL_DISPOSABLE_ZIP';
   enrollments:Record<string,number>;
 };
 test('SCORM wrong answer, resume, pass, explicit completion and qualification',async({page},testInfo)=>{
   test.setTimeout(120000);
   const fixture=JSON.parse(readFileSync('worker-airtrust/.wrangler/scorm-browser-qa/fixture.json','utf8')) as Fixture;
   expect(fixture.origin).toBe('http://127.0.0.1:8787');
+  expect(fixture.fixtureKind).toBe('LOCAL_DISPOSABLE_ZIP');
+  const localZipDigest=createHash('sha256').update(readFileSync(fixture.zipPath)).digest('hex');
+  expect(localZipDigest).toMatch(/^[0-9a-f]{64}$/);
+  expect(localZipDigest).toBe(fixture.packageSha256);
   const id=fixture.enrollments[testInfo.project.name];
   expect(id).toBeGreaterThan(0);
   const api=fixture.origin+'/api';
@@ -117,4 +125,18 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   expect(replayed.history.n).toBe(1);
   // A sibling enrollment is never mutated by this learner's pass/fail/reopen.
   expect(otherEnrollmentSnapshot()).toEqual(otherBefore);
+
+  // Local diagnostics only: this must not be imported as trusted certification.
+  const browser=testInfo.project.name==='chromium'?'CHROMIUM':'WEBKIT';
+  const proven=['FIRST_ACCESS','SUSPEND_RESUME','ASSESSMENT_INSUFFICIENT',
+    'ASSESSMENT_APPROVED','EXPLICIT_FINALIZATION','REOPEN_COMPLETED',
+    'NO_STATUS_DOWNGRADE'];
+  const evidence={source:'LOCAL_DISPOSABLE_D1_R2_ONLY',browser,
+    packageSha256:localZipDigest,enrollmentIsolation:'SAME_TENANT_ONLY',
+    certificateDocument:'INCONCLUSIVE',
+    cases:[...proven.map(name=>({name,status:'PASS'})),
+      {name:'TENANT_CYCLE_ISOLATION',status:'INCONCLUSIVE'}]};
+  writeFileSync(join('worker-airtrust/.wrangler/scorm-browser-qa',
+    'evidence-'+browser.toLowerCase()+'.json'),
+    JSON.stringify(evidence,null,2)+'\n',{mode:0o600});
 });
