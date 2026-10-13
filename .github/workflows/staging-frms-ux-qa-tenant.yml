@@ -1,0 +1,138 @@
+name: Staging FRMS UX Synthetic Tenant (Governed)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_FRMS_UX_QA'
+        required: true
+        type: string
+      operation:
+        description: 'Provision or rollback the dedicated synthetic QA fixture'
+        required: true
+        type: choice
+        options: [apply, rollback]
+      release_sha:
+        description: 'Exact HEAD of main with eight passing gates'
+        required: true
+        type: string
+concurrency:
+  group: staging-frms-ux-qa-tenant-d1
+  cancel-in-progress: false
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+env:
+  NODE_VERSION: '24'
+  ENVIRONMENT: staging
+  STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+  STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+  CONFIRM_STAGING_FRMS_UX: AIRTRUST_STAGING_FRMS_UX_QA
+jobs:
+  provision:
+    name: Governed staging D1 synthetic fixture
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 45
+    steps:
+      - name: Require staging-only confirmation, main SHA and explicit mode
+        shell: bash
+        env:
+          RELEASE_SHA: \${{ inputs.release_sha }}
+          CONFIRMATION: \${{ inputs.confirmation }}
+          OPERATION: \${{ inputs.operation }}
+          EVENT_SHA: \${{ github.sha }}
+          EVENT_REF: \${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_REF" == refs/heads/main ]] || { echo MAIN_ONLY >&2; exit 1; }
+          [[ "$CONFIRMATION" == AIRTRUST_STAGING_FRMS_UX_QA ]] || { echo CONFIRMATION_REJECTED >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ && "\${RELEASE_SHA,,}" == "\${EVENT_SHA,,}" ]] || { echo RELEASE_SHA_NOT_CURRENT_MAIN >&2; exit 1; }
+          [[ "$OPERATION" == apply || "$OPERATION" == rollback ]] || exit 1
+          [[ "$STAGING_D1_ID" == bf9963f4-eb12-439b-a830-20bbf577ac22 ]] || exit 1
+          [[ "$STAGING_D1_NAME" == airtrust-db-staging-baseline-20260701 ]] || exit 1
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: \${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Enforce eight required gates on exact SHA
+        env:
+          RELEASE_SHA: \${{ inputs.release_sha }}
+          GITHUB_TOKEN: \${{ github.token }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Install pinned dependencies
+        run: npm ci && npm --prefix worker-airtrust ci
+      - name: Run fixture target, idempotency and compensation tests
+        run: node --test scripts/__tests__/frms-ux-qa-tenant.test.mjs
+      - name: Check credentials only in staging environment
+        shell: bash
+        env:
+          BACKUP_TOKEN: \${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          WRITE_TOKEN: \${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          ACCOUNT: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          QA_PASSWORD: \${{ secrets.STAGING_SMOKE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ -n "$BACKUP_TOKEN" && -n "$WRITE_TOKEN" && -n "$ACCOUNT" ]] || { echo STAGING_D1_CREDS_MISSING >&2; exit 1; }
+          if [[ "\${{ inputs.operation }}" == apply ]]; then
+            [[ -n "$QA_PASSWORD" ]] || { echo STAGING_QA_PASSWORD_MISSING >&2; exit 1; }
+          fi
+      - name: Preflight unclaimed tenant and governed global baseline
+        if: inputs.operation == 'apply'
+        env:
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/staging/frms-ux-qa-tenant.mjs --preflight
+      - name: Backup entire staging D1 and verify checksum before mutation
+        env:
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CONFIRM_STAGING_BACKUP: AIRTRUST_STAGING_BACKUP
+          STAGING_BACKUP_DIR: \${{ runner.temp }}/frms-ux-qa-d1-backup
+        run: bash scripts/staging/backup-d1-staging.sh --apply
+      - name: Capture restorable Cloudflare D1 Time Travel recovery bookmark
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          point="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          ( cd worker-airtrust && npx wrangler d1 time-travel info "$STAGING_D1_NAME" --timestamp="$point" --json > "$RUNNER_TEMP/qa-recovery.json" )
+          test -s "$RUNNER_TEMP/qa-recovery.json"
+          node - "$RUNNER_TEMP/qa-recovery.json" <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!r || typeof r!=='object' || r.error)process.exit(1);
+          console.log('STAGING_D1_RECOVERY_BOOKMARK_VERIFIED');
+          NODE
+          echo "RECOVERY_TIMESTAMP_UTC=$point" >> "$GITHUB_STEP_SUMMARY"
+      - name: Create synthetic-only tenant, profile, roster and check-ins
+        if: inputs.operation == 'apply'
+        env:
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          QA_FRMS_PASSWORD: \${{ secrets.STAGING_SMOKE_PASSWORD }}
+        run: node scripts/staging/frms-ux-qa-tenant.mjs --apply
+      - name: Compensate by disabling only the owned QA fixture
+        if: inputs.operation == 'rollback'
+        env:
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/staging/frms-ux-qa-tenant.mjs --rollback
+      - name: Verify exact 14 synthetic crew, seven received check-ins, one governed profile
+        if: inputs.operation == 'apply'
+        env:
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/staging/frms-ux-qa-tenant.mjs --verify
+      - name: Record sanitized scope
+        if: success()
+        run: |
+          echo '## Isolated staging FRMS QA' >> "$GITHUB_STEP_SUMMARY"
+          echo '- D1 staging only, synthetic tenant 999016 (qa_frms_ux_20261013)' >> "$GITHUB_STEP_SUMMARY"
+          echo '- data: fictitious; no production export or individual copy' >> "$GITHUB_STEP_SUMMARY"
+          echo '- backup and recovery point: checked before mutation' >> "$GITHUB_STEP_SUMMARY"
+          echo '- operation: \${{ inputs.operation }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '- schema migrations and production writes: none' >> "$GITHUB_STEP_SUMMARY"
