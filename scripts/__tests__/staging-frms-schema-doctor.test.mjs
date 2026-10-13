@@ -167,3 +167,18 @@ test('script emits a machine-readable verdict and fails closed', () => {
   assert.match(s, /FRMS_SCHEMA_DOCTOR_FAIL/);
   assert.match(s, /process\.exitCode = 1/);
 });
+
+test('QA tenant diagnostic reports only staging-scoped counts and governed profile states', () => {
+  const source = read(SCRIPT);
+  assert.match(source, /FRMS_QA_TENANTS/);
+  assert.match(source, /tenantLabel: tenant\.label/);
+  assert.match(source, /effectiveAssignmentCount/);
+  assert.match(source, /revisionState/);
+  assert.match(source, /countScopedRows/);
+  assert.match(source, /BETWEEN '\$\{FRMS_QA_WINDOW_FROM\}'/);
+  assert.match(source, /profile_code = a\.profile_code/);
+  assert.match(source, /p\.empresa_id = \$\{empresaId\}/);
+  assert.match(source, /COUNT\(DISTINCT parameter_key\)/);
+  assert.match(source, /result\.requiredKeysFound === requiredKeys\.length/);
+  assert.doesNotMatch(source, /SELECT\s+\*\s+FROM\s+(?:funcionarios|usuarios|frms_fadiga_checkin)/);
+});
