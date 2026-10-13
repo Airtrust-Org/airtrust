@@ -268,7 +268,7 @@ export default function LmsPlayer() {
     isScormContent,
     matriculaStatus: matricula?.status,
     diagnostic: completionDiagnostic,
-  }) && closureReadiness?.eligible_for_server_verification === true;
+  }) && closureReadiness?.eligible_for_server_verification !== false;
   const canFinalize =
     !isCompletedState &&
     matricula?.status !== 'CONCLUIDO' &&
