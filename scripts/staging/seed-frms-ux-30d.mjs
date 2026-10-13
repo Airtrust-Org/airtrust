@@ -178,6 +178,53 @@ function query(db,sql){
 function assertTarget(){
   if(process.env.STAGING_D1_NAME!==DB_NAME||process.env.STAGING_D1_ID!==DB_ID)throw new Error('STAGING_D1_TARGET_REJECTED');
 }
+export function extractFixtureInsertColumns(sql) {
+  const permitted=new Set([
+    'empresas','setores','funcionarios','frms_config_revisions','frms_config_parameters',
+    'frms_regulatory_profiles','frms_profile_assignments','frms_escala_quinzenal',
+    'frms_jornada','frms_fadiga_checkin','frms_alerta'
+  ]);
+  const fields=new Map();
+  for(const match of sql.matchAll(/\bINSERT\s+INTO\s+([a-z][a-z0-9_]*)\s*\(([^)]+)\)/gi)){
+    const table=match[1].toLowerCase();
+    if(!permitted.has(table))throw new Error('QA_UNEXPECTED_TABLE_INSERT');
+    const cols=match[2].split(',').map(x=>x.trim().toLowerCase());
+    if(cols.some(x=>!/^[a-z][a-z0-9_]*$/.test(x)))throw new Error('QA_INVALID_INSERT_COLUMN');
+    if(fields.has(table))throw new Error('QA_DUPLICATE_INSERT_TABLE');
+    fields.set(table,cols);
+  }
+  if(fields.size!==permitted.size || [...permitted].some(table=>!fields.has(table)))
+    throw new Error('QA_INSERT_TABLE_CONTRACT_CHANGED');
+  return fields;
+}
+
+function inspectFixtureSchema() {
+  // Use only SELECTs and table-valued PRAGMAs. Missing columns are detected
+  // before the first staging D1 write, not halfway through a multi-table seed.
+  const dryDays=Array.from({length:30},(_,i)=>({
+    day:new Date(Date.parse(FROM+'T00:00:00Z')+i*86400000).toISOString().slice(0,10),
+    jornadas:'0',checkins:'0',casos:'0',voos:'0'
+  }));
+  const expected=extractFixtureInsertColumns(buildSeedSql(dryDays));
+  const sql=[...expected.keys()].map(table=>
+    "SELECT "+quote(table)+" AS table_name, name AS column_name FROM pragma_table_info("+quote(table)+")"
+  ).join(' UNION ALL ');
+  const columns=query(DB_NAME,sql);
+  const found=new Map();
+  for(const row of columns){
+    const table=String(row.table_name),column=String(row.column_name).toLowerCase();
+    if(!found.has(table))found.set(table,new Set());
+    found.get(table).add(column);
+  }
+  for(const [table,required] of expected){
+    const available=found.get(table);
+    if(!available || required.some(column=>!available.has(column))){
+      throw new Error('STAGING_FRMS_QA_SCHEMA_COLUMNS_MISSING:'+table);
+    }
+  }
+  console.log('STAGING_FRMS_QA_TABLE_COLUMNS_READY tables='+expected.size);
+}
+
 function inspectQaScopedBaseline() {
   // This is a QA-local revision only. Absence of the production/global
   // revision must not block a synthetic tenant or modify other tenants.
@@ -187,6 +234,7 @@ function inspectQaScopedBaseline() {
     "SELECT name FROM sqlite_master WHERE type='table' AND name IN "+
     "('frms_config_revisions','frms_config_parameters','frms_profile_assignments','frms_regulatory_profiles')");
   if(schema.length!==4)throw new Error('FRMS_GOVERNANCE_TABLES_NOT_READY');
+  inspectFixtureSchema();
   const collisions=query(DB_NAME,
     "SELECT id FROM frms_config_revisions WHERE id="+quote(QA_REVISION_ID)+
     " OR (empresa_id="+TENANT_ID+" AND profile_code='HELICOPTER_OFFSHORE')");
