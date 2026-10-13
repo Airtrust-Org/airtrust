@@ -30,7 +30,6 @@ import {
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
   preferScormValue,
-  requiresExplicitScormCompletion,
   resolveLmsEffectiveProgress,
   shouldPreferIncomingScormState,
 } from '../services/lms-progress-guardrails';
@@ -1831,7 +1830,7 @@ app.post('/:id/finalizar', async (c) => {
     .prepare(
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct,
               m.qualificacao_historico_id,
-              c.id AS curso_id, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score,
+              c.id AS curso_id, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score, c.scorm_assessment_policy,
               c.titulo AS curso_titulo,
               qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1854,6 +1853,7 @@ app.post('/:id/finalizar', async (c) => {
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       scorm_mastery_score: number | null;
+      scorm_assessment_policy: 'SCORED' | 'FORMATIVE' | null;
       curso_titulo: string;
       qualificacao_codigo: string | null;
       qualificacao_nome: string | null;
@@ -1865,7 +1865,7 @@ app.post('/:id/finalizar', async (c) => {
   const scormAtual = await db
     .prepare(
       `SELECT lesson_status, completion_status, success_status,
-              score_raw, score_max, score_scaled,
+              score_raw, score_max, score_min, score_scaled,
               session_time, total_time, suspend_data, cmi_json
          FROM lms_progresso_scorm
         WHERE matricula_id = ?
@@ -1878,6 +1878,7 @@ app.post('/:id/finalizar', async (c) => {
       success_status: string | null;
       score_raw: number | null;
       score_max: number | null;
+      score_min: number | null;
       score_scaled: number | null;
       session_time: string | null;
       total_time: string | null;
@@ -1911,21 +1912,31 @@ app.post('/:id/finalizar', async (c) => {
     });
   }
 
-  if (requiresExplicitScormCompletion(matricula.tipo_conteudo, completionDiagnostic)) {
+  // Defense in depth: the route and middleware MUST use the same server
+  // readiness verdict. A SCORM 'passed' bit, high score or 99/100% progress
+  // alone is insufficient to mint a qualification through this endpoint.
+  // No new schema or existing enrollment is mutated by a rejected verdict.
+  const scormClosure = String(matricula.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm'
+    ? buildPersistedScormClosureReadiness({
+      status: matricula.status,
+      scorm_assessment_policy: matricula.scorm_assessment_policy,
+      scorm_mastery_score: matricula.scorm_mastery_score,
+    }, scormAtual)
+    : null;
+  if (scormClosure && !scormClosure.eligible_for_server_verification) {
     await logLmsMatriculaAudit(db, c, {
       action: 'SCORM_COMPLETION_REJECTED',
       matriculaId,
       newValues: {
         origem: 'manual-finalize-endpoint',
-        completion_diagnostic: completionDiagnostic,
+        closure_code: scormClosure.code,
+        missing_requirements: scormClosure.missing,
       },
     });
-
     return c.json(
       {
         success: false,
-        error:
-          'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis. Cursos SCORM exigem status final explicito passed/completed.',
+        error: 'Conclusão SCORM ainda não elegível: consulte os requisitos pendentes.',
         code: 'SCORM_COMPLETION_REJECTED',
         data: {
           matricula_id: matriculaId,
@@ -1933,6 +1944,7 @@ app.post('/:id/finalizar', async (c) => {
           progresso_pct: matricula.progresso_pct,
           qualificacao_gerada: null,
           completion_diagnostic: completionDiagnostic,
+          closure_readiness: scormClosure,
         },
       },
       409,
@@ -2103,7 +2115,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
     .prepare(
       `SELECT m.id, m.status, m.progresso_pct, m.funcionario_id, m.qualificacao_historico_id,
               c.id AS curso_id, c.titulo AS curso_titulo, c.qualificacao_tipo_id,
-              c.tipo_conteudo, c.scorm_mastery_score, c.gerar_qualificacao_ao_concluir,
+              c.tipo_conteudo, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
               qt.nome AS qualificacao_nome, qt.codigo AS qualificacao_codigo,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
               qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
@@ -2124,6 +2136,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       qualificacao_tipo_id: number | null;
       tipo_conteudo: string | null;
       scorm_mastery_score: number | null;
+      scorm_assessment_policy: 'SCORED' | 'FORMATIVE' | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_nome: string | null;
       qualificacao_codigo: string | null;
@@ -2161,7 +2174,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       const scormAtual = await db
         .prepare(
           `SELECT lesson_status, completion_status, success_status,
-                  score_raw, score_max, score_scaled,
+                  score_raw, score_max, score_min, score_scaled,
                   session_time, total_time, suspend_data, cmi_json
              FROM lms_progresso_scorm
             WHERE matricula_id = ? AND empresa_id = ?`,
@@ -2173,6 +2186,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
           success_status: string | null;
           score_raw: number | null;
           score_max: number | null;
+          score_min: number | null;
           score_scaled: number | null;
           session_time: string | null;
           total_time: string | null;
@@ -2187,7 +2201,15 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         scorm: scormAtual,
       });
 
-      if (requiresExplicitScormCompletion(existing.tipo_conteudo, completionDiagnostic)) {
+      const scormClosure = buildPersistedScormClosureReadiness({
+        status: existing.status,
+        scorm_assessment_policy: existing.scorm_assessment_policy,
+        scorm_mastery_score: existing.scorm_mastery_score,
+      }, scormAtual);
+      // The only exception is a separately governed administrative override:
+      // real SCORM completion still uses the exact same closure verdict as
+      // commit and learner finalization. Overrides are never SCORM PASS.
+      if (!scormClosure.eligible_for_server_verification) {
         const administrativeReason = typeof observacoes === 'string' ? observacoes.trim() : '',
           governedAdministrativeCompletion =
             hasRole(c, 'admin') && administrativeReason.length >= 10;
@@ -2198,6 +2220,8 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
             newValues: {
               origem: 'admin-patch-status-endpoint',
               completion_diagnostic: completionDiagnostic,
+              closure_code: scormClosure.code,
+              missing_requirements: scormClosure.missing,
             },
           });
           return c.json(
@@ -2206,7 +2230,10 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
               error:
                 'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis. Cursos SCORM exigem status final explicito passed/completed ou conclusao administrativa governada.',
               code: 'SCORM_COMPLETION_REJECTED',
-              data: { completion_diagnostic: completionDiagnostic },
+              data: {
+                completion_diagnostic: completionDiagnostic,
+                closure_readiness: scormClosure,
+              },
             },
             409,
           );
@@ -2218,6 +2245,8 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
             origem: 'admin-patch-status-endpoint',
             administrative_reason: administrativeReason,
             completion_diagnostic: completionDiagnostic,
+            closure_code: scormClosure.code,
+            administrative_override: true,
           },
         });
       }

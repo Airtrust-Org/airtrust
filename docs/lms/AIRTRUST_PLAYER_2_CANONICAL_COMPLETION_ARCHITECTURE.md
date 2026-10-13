@@ -72,3 +72,26 @@ Isso não modifica pacotes ativos, histórico, matrículas ou certificados.
 registrar evidência independente, testar qualificação/certificado e validar em
 staging antes de qualquer promoção; preservar bloqueio da liberação em massa
 conforme issue #1325.
+
+## Fechamento canônico — rotas convergentes (13/10/2026)
+
+O endpoint de confirmação autenticada `POST /lms/matriculas/:id/finalizar` e o
+encerramento administrativo `PATCH /lms/matriculas/:id/status` passam a
+consultar **o mesmo** `buildPersistedScormClosureReadiness` usado pelo
+Player 2.0 e pelo guard de integridade. `passed`, `completed`, posição final
+ou percentual alto isolados nunca provam cobertura distinta de telas,
+avaliação aprovada ou elegibilidade para criar qualificação.
+
+O sistema retorna `closure_readiness.code` e `missing` com motivos objetivos
+na recusa HTTP 409; nenhum `completeLmsMatricula` é chamado nesse caso.
+Isso é defesa em profundidade, pois o middleware já verifica a mesma
+prontidão antes da rota. A exceção **administrativa explicitamente
+autorizada, motivada e auditada** permanece separada do fluxo de conclusão
+do aluno e não constitui certificação pedagógica do pacote SCORM.
+
+**Teste de regressão:** cobertura ausente, nota abaixo do domínio/score
+normalizado, estado terminal ausente, formação sem prova pontuada, percurso
+completo elegível e exceção administrativa auditada. A emissão continua
+restrita ao serviço de conclusão transacional. Estes testes não são
+certificação de navegador dos cursos ativos nem comprovam a correção de
+matrículas específicas em 99%.

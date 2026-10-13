@@ -250,6 +250,107 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
     expect(json.data.qualificacao_gerada.qualificacao_historico_id).toBe(777);
   });
 
+  const completeScormCmi = JSON.stringify({
+    'cmi.core.lesson_location': '3/3',
+    'airtrust.total_slides': 3,
+    'airtrust.viewed_slides': [1, 2, 3],
+  });
+  const finalizingScorm = (overrides: Record<string, unknown> = {}) => ({
+    lesson_status: 'passed',
+    completion_status: 'completed',
+    success_status: 'passed',
+    score_raw: 95, score_min: 0, score_max: 100, score_scaled: null,
+    cmi_json: completeScormCmi,
+    ...overrides,
+  });
+
+  it('SCORM finalize: passed/95 without distinct-slide evidence returns 409 and does not issue a qualification', async () => {
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', { first: () => ({ ...MATRICULA_EM_ANDAMENTO_BASE, tipo_conteudo: 'scorm' }) }],
+      ['FROM lms_progresso_scorm', { first: () => finalizingScorm({
+        cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '3/3' }),
+      }) }],
+    ]);
+    const response = await app.fetch(makeFinalizar(1), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    const json = await response.json() as { code: string; data: { closure_readiness: { code: string; missing: string[] } } };
+    expect(json.code).toBe('SCORM_COMPLETION_REJECTED');
+    expect(json.data.closure_readiness.code).toBe('PROGRESS_EVIDENCE_MISSING');
+    expect(json.data.closure_readiness.missing).toContain('distinct_slide_coverage');
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+  });
+
+  it('SCORM finalize: full coverage with failed score or nonterminal package stays blocked', async () => {
+    for (const row of [
+      finalizingScorm({ score_raw: 65 }),
+      finalizingScorm({ lesson_status: 'incomplete', completion_status: 'incomplete', success_status: null }),
+    ]) {
+      completeLmsMatriculaMock.mockClear();
+      const { app, db } = makeTestEnv([
+        ['FROM lms_matriculas m', { first: () => ({ ...MATRICULA_EM_ANDAMENTO_BASE, tipo_conteudo: 'scorm' }) }],
+        ['FROM lms_progresso_scorm', { first: () => row }],
+      ]);
+      const response = await app.fetch(makeFinalizar(1), { DB: db } as Env, {} as ExecutionContext);
+      expect(response.status).toBe(409);
+      expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it('SCORM finalize: score 90 within range 60–100 is 75%, not a passing 90%', async () => {
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', { first: () => ({
+        ...MATRICULA_EM_ANDAMENTO_BASE,
+        tipo_conteudo: 'scorm', scorm_mastery_score: 80,
+      }) }],
+      ['FROM lms_progresso_scorm', { first: () => finalizingScorm({
+        score_raw: 90, score_min: 60, score_max: 100,
+      }) }],
+    ]);
+    const response = await app.fetch(makeFinalizar(1), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    const json = await response.json() as { data: { closure_readiness: { code: string } } };
+    expect(json.data.closure_readiness.code).toBe('SCORE_BELOW_MASTERY');
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+  });
+
+  it('SCORM finalize: full server-verified coverage + valid score delegates once to canonical completion', async () => {
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created', matriculaId: 1, qualificacaoHistoricoId: 777,
+    });
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', { first: () => ({ ...MATRICULA_EM_ANDAMENTO_BASE, tipo_conteudo: 'scorm' }) }],
+      ['FROM lms_progresso_scorm', { first: () => finalizingScorm() }],
+    ]);
+    const response = await app.fetch(makeFinalizar(1), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledWith(expect.objectContaining({
+      empresaId: 1, matriculaId: 1, gerarQualificacaoAoConcluir: true,
+      qualificacaoTipoId: 55,
+    }));
+    const json = await response.json() as { data?: { novo_status?: string } };
+    expect(json.data?.novo_status).toBe('CONCLUIDO');
+  });
+
+  it('SCORM finalize: formative course requires actual coverage and terminal status but no invented score', async () => {
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created', matriculaId: 1, qualificacaoHistoricoId: 888,
+    });
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', { first: () => ({
+        ...MATRICULA_EM_ANDAMENTO_BASE, tipo_conteudo: 'scorm',
+        scorm_assessment_policy: 'FORMATIVE', scorm_mastery_score: null,
+      }) }],
+      ['FROM lms_progresso_scorm', { first: () => finalizingScorm({
+        lesson_status: 'completed', completion_status: 'completed', success_status: null,
+        score_raw: null, score_max: null,
+      }) }],
+    ]);
+    const response = await app.fetch(makeFinalizar(1), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
+  });
+
   it('POST /:id/finalizar: LmsCompletionRejectedError vira 409 explícito, nunca 200', async () => {
     completeLmsMatriculaMock.mockRejectedValue(new LmsCompletionRejectedError('rejeitado'));
 
@@ -265,6 +366,56 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
     expect(json.success).toBe(false);
     expect(json.code).toBe('LMS_QUALIFICATION_COMPLETION_FAILED');
     expect(json.data.novo_status).not.toBe('CONCLUIDO');
+  });
+
+  it('PATCH status SCORM: ordinary admin path cannot bypass coverage using passed/95', async () => {
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', { first: () => ({
+        ...MATRICULA_EM_ANDAMENTO_BASE, curso_id: 10, tipo_conteudo: 'scorm',
+      }) }],
+      ['FROM lms_progresso_scorm', { first: () => finalizingScorm({
+        cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '3/3' }),
+      }) }],
+    ]);
+    const response = await app.fetch(
+      makePatchStatus(1, { status: 'CONCLUIDO' }),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    const json = await response.json() as { data: { closure_readiness: { code: string; missing: string[] } } };
+    expect(json.data.closure_readiness.code).toBe('PROGRESS_EVIDENCE_MISSING');
+    expect(json.data.closure_readiness.missing).toContain('distinct_slide_coverage');
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+  });
+
+  it('PATCH status SCORM: explicit admin override remains separately audited, never treated as learner PASS', async () => {
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created', qualificacaoHistoricoId: 777, matriculaId: 1,
+    });
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', { first: () => ({
+        ...MATRICULA_EM_ANDAMENTO_BASE, curso_id: 10, tipo_conteudo: 'scorm',
+      }) }],
+      ['FROM lms_progresso_scorm', { first: () => finalizingScorm({
+        cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '3/3' }),
+      }) }],
+      ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
+      ['SELECT * FROM lms_matriculas WHERE id', { first: () => ({
+        ...MATRICULA_EM_ANDAMENTO_BASE, status: 'CONCLUIDO', progresso_pct: 100,
+      }) }],
+    ]);
+    const response = await app.fetch(
+      makePatchStatus(1, {
+        status: 'CONCLUIDO',
+        observacoes: 'Conciliação formal autorizada após análise documental.',
+      }),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
+    expect(logAuditMock).toHaveBeenCalledWith(db, expect.objectContaining({
+      action: 'LMS_ADMINISTRATIVE_COMPLETION_OVERRIDE_ACCEPTED',
+    }));
   });
 
   it('PATCH /:id/status CONCLUIDO: LmsCompletionRejectedError vira 409 explícito, nunca 200', async () => {
