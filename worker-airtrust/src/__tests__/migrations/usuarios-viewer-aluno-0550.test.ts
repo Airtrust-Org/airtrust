@@ -22,8 +22,10 @@ describe('Schema V2 0550 — viewer para aluno com Coordenação preservada', ()
   });
 
   it('mantém transação fail-closed, tenant 6 e a autoridade COORDENACAO_VOO', () => {
-    expect(sql).toContain('CREATE TEMP TABLE _viewer_aluno_0550_guard');
-    expect(sql).toContain('CHECK(ok=1)');
+    expect(sql).toContain('SELECT CASE WHEN');
+    expect(sql).toContain("json_extract('INVALID_SCHEMA_0550_GUARD'");
+    expect(sql).not.toContain('CREATE TEMP TABLE');
+    expect(sql).not.toContain('DROP TABLE');
     expect(sql).toContain('COORDENACAO_VOO');
     expect(sql).toContain("SET role='student'");
     expect(sql).toContain("SET role='viewer'");
