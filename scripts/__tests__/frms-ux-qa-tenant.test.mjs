@@ -24,7 +24,7 @@ test('fixture: exactly 14 crew, seven received checkins, and standalone tenant',
   assert.equal((sql.match(/INSERT INTO frms_fadiga_checkin /g)||[]).length,7);
   assert.match(sql,/INSERT INTO escalas_quinzenas /);
   assert.match(sql,/INSERT INTO frms_profile_assignments /);
-  assert.match(sql,/frms-helicopter-offshore/gi);
+  assert.match(sql,/HELICOPTER_OFFSHORE/);
   assert.match(sql,new RegExp(String(TENANT_ID)));
   assert.match(sql,new RegExp(TENANT_CODE));
   assert.doesNotMatch(sql,/Costa do Sol|@gmail|cpf|telefone|oxandrolona/i);
