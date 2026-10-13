@@ -94,6 +94,8 @@ export interface FrmsOperationalSnapshotItem {
 
   checkin_status: 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
   checkin_horario: string | null;
+  /** Instante UTC de envio, para exibição no fuso operacional. */
+  checkin_submitted_at?: string | null;
   kss_score: number | null;
   horas_sono: number | null;
   qualidade_sono: number | null;
@@ -219,6 +221,7 @@ interface CheckinSnapshotRow {
   data_operacional: string;
   funcionario_id: number;
   hora_checkin: string | null;
+  submitted_at?: string | null;
   hora_apresentacao?: string | null;
   kss_score: number | null;
   horas_sono: number | null;
@@ -941,6 +944,7 @@ export function buildFrmsOperationalSnapshot(
 
       checkin_status: checkinStatus,
       checkin_horario: normalizeText(checkin?.hora_checkin),
+      checkin_submitted_at: normalizeText(checkin?.submitted_at),
       kss_score: kss,
       horas_sono: horasSono,
       qualidade_sono: checkin ? asNumber(checkin.qualidade_sono, 0) : null,
@@ -1150,6 +1154,7 @@ async function loadOperationalSnapshotRows(
            ch.data_checkin AS data_operacional,
            CAST(ch.funcionario_id AS INTEGER) AS funcionario_id,
            ch.hora_checkin,
+           ch.submitted_at,
            ch.jornada_inicio_prevista AS hora_apresentacao,
            ch.kss_score,
            ch.horas_sono,
