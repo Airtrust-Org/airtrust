@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { resolveLmsCompletionScorePct } from '../../services/lms-completion-evidence';
 import {
   evaluateScormClosureReadiness,
   canFinalizeScormEnrollment,
@@ -128,4 +129,33 @@ describe('Player 2.0: one SCORM completion readiness contract', () => {
     expect(evaluateScormClosureReadiness({ ...base(), cmiJson })
       .eligible_for_server_verification).toBe(false);
   });
+  it('one score normalizer prevents raw 90/min 60/max 100 from being misread as a passing 90%', () => {
+    const normalized = resolveLmsCompletionScorePct({
+      scoreRaw: 90, scoreMin: 60, scoreMax: 100, scoreScaled: null,
+    });
+    expect(normalized).toBe(75);
+    const verdict = evaluateScormClosureReadiness({ ...base(), scorePct: normalized });
+    expect(verdict.code).toBe('SCORE_BELOW_MASTERY');
+    expect(verdict.eligible_for_server_verification).toBe(false);
+  });
+
+  it('preserves score zero and never interprets malformed score ranges as success', () => {
+    expect(resolveLmsCompletionScorePct({
+      scoreRaw: 0, scoreMin: 0, scoreMax: 100, scoreScaled: null,
+    })).toBe(0);
+    expect(resolveLmsCompletionScorePct({
+      scoreRaw: 95, scoreMin: 100, scoreMax: 100, scoreScaled: null,
+    })).toBeNull();
+    expect(resolveLmsCompletionScorePct({
+      scoreRaw: null, scoreMin: null, scoreMax: null, scoreScaled: null,
+    })).toBeNull();
+  });
+
+  it('legacy course with unset policy defaults to SCORED and still checks mastery', () => {
+    expect(evaluateScormClosureReadiness({ ...base(), policy: null })
+      .eligible_for_server_verification).toBe(true);
+    expect(evaluateScormClosureReadiness({ ...base(), policy: null, scorePct: null }).code)
+      .toBe('SCORE_MISSING');
+  });
+
 });
