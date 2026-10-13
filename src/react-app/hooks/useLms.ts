@@ -150,6 +150,7 @@ export interface LmsCompletionDiagnostic {
     | 'SCORM_COMPLETION_REJECTED'
     | 'SCORM_FINAL_COMMIT_MISSING'
     | 'SCORM_STATUS_INCONSISTENT'
+    | 'SCORM_PROGRESS_EVIDENCE_MISSING'
     | 'SCORM_NONE';
   reasons: string[];
   can_finalize: boolean;
@@ -1383,6 +1384,7 @@ export interface LmsScormConclusaoInconsistente {
     | 'SCORM_COMPLETION_REJECTED'
     | 'SCORM_FINAL_COMMIT_MISSING'
     | 'SCORM_STATUS_INCONSISTENT'
+    | 'SCORM_PROGRESS_EVIDENCE_MISSING'
     | 'SCORM_NONE';
   can_finalize: boolean;
   last_commit_at: string | null;
