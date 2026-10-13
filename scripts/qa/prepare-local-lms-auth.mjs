@@ -19,6 +19,11 @@ const bcrypt=req('bcryptjs');
 const hash=bcrypt.hashSync('Admin@123',10);
 const db=new DatabaseSync(path.join(state,files[0]));
 try{
+  // The lean local LMS snapshot omits the user-specific RBAC overrides
+  // table introduced in the historical 0305 migration. The *real auth*
+  // route queries it even when no overrides exist. Mirror that exact
+  // additive table only in disposable local QA; never infer a GRANT.
+  db.exec("CREATE TABLE IF NOT EXISTS usuario_permissoes (id INTEGER PRIMARY KEY AUTOINCREMENT, usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, permissao TEXT NOT NULL, tipo TEXT NOT NULL DEFAULT 'GRANT' CHECK(tipo IN ('GRANT','DENY')), created_by INTEGER REFERENCES usuarios(id), created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(usuario_id,permissao)); CREATE INDEX IF NOT EXISTS idx_usuario_permissoes_usuario ON usuario_permissoes(usuario_id)");
   db.prepare("INSERT OR IGNORE INTO usuarios (email,password_hash,nome,perfil,active,created_at,updated_at) VALUES ('admin@airtrust.com',?,'QA Local','ADMIN',1,datetime('now'),datetime('now'))").run(hash);
   const result=db.prepare("UPDATE usuarios SET password_hash=?,active=1,perfil='ADMIN' WHERE email='admin@airtrust.com' AND deleted_at IS NULL").run(hash);
   if(Number(result.changes)!==1)throw Error('LOCAL_ADMIN_NOT_UNIQUE');
