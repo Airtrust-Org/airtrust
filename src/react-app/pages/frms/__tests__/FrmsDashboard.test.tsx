@@ -498,7 +498,7 @@ describe('FrmsDashboard simplificado', () => {
     fireEvent.click(screen.getByRole('button', { name: /Max/i }));
     const drawer = within(screen.getByRole('dialog'));
     expect(drawer.getByText('Horário declarado')).toBeInTheDocument();
-    expect(drawer.getByText(/Informado no check-in; a escala e a jornada ainda precisam ser confirmadas/i)).toBeInTheDocument();
+    expect(drawer.getByText(/Início informado no check-in/)).toBeInTheDocument();
   });
 
   it('explica que a jornada do dia em curso fecha após a operação e mantém o acumulado separado', () => {
