@@ -25,6 +25,7 @@ import {
 import {
   buildMatriculaCompletionDiagnostic,
   buildScormCompletionDiagnostic,
+  extractScormLocationFromCmiJson,
   mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
