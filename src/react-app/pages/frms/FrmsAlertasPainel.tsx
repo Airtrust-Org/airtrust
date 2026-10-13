@@ -324,7 +324,7 @@ export default function FrmsAlertasPainel() {
           ))}
         </section>
         <p className="text-xs text-slate-500">
-          Cartões de situação e recorrência consideram somente esta página. O total informado pelo servidor cobre todos os casos correspondentes aos filtros de prioridade, status e pessoa, não apenas esta página. A ordenação padrão prioriza casos vencidos, pendentes e gravidade; o agrupamento é visual.
+          Os cartões de situação consideram somente esta página. A recorrência indicada em cada caso considera todos os registros correspondentes aos filtros atuais, incluindo outras páginas, quando informada pela API. O total filtrado do servidor também abrange todas as páginas. A ordenação prioriza casos vencidos, pendentes e gravidade.
         </p>
 
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
@@ -428,7 +428,11 @@ export default function FrmsAlertasPainel() {
                           {item.visualizado ? <span className="text-xs text-slate-400">visualizado</span> : null}
                         </div>
                         <h2 className="mt-2 font-bold text-slate-950 dark:text-white">{name}</h2>
-                        {(recorrenciasNaPagina.get(String(item.tripulante_id)) ?? 0) > 1 ? (
+                        {typeof item.recorrencias_no_filtro === 'number' && item.recorrencias_no_filtro > 1 ? (
+                          <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-200">
+                            {item.recorrencias_no_filtro} casos desta pessoa nos filtros atuais, incluindo outras páginas. Consulte o histórico completo antes de concluir recorrência geral.
+                          </p>
+                        ) : (recorrenciasNaPagina.get(String(item.tripulante_id)) ?? 0) > 1 ? (
                           <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-200">
                             {recorrenciasNaPagina.get(String(item.tripulante_id))} casos desta pessoa nesta página. Consulte o histórico para verificar recorrência em outras datas.
                           </p>
