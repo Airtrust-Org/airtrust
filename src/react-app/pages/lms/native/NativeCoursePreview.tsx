@@ -159,7 +159,7 @@ export default function NativeCoursePreview({
     (overlay ? ' relative z-10 rounded-xl bg-white/95 p-4 shadow-xl lg:my-4 lg:ml-5 lg:w-[56%] lg:max-h-[calc(100%-32px)] lg:p-5' : '') +
     (template === 'banner-list' && !isActivity ? ' lg:pr-1' : '');
   const imageClass = 'min-h-0 min-w-0 overflow-hidden ' +
-    (vertical ? 'h-[min(22vh,160px)] shrink-0' : 'h-[min(30vh,220px)] lg:h-[min(46vh,320px)] lg:self-start') +
+    (vertical ? 'h-[min(22vh,160px)] shrink-0' : 'h-[min(30vh,220px)] lg:h-[min(34vh,250px)] lg:self-start') +
     (reversed ? ' lg:order-1' : ' lg:order-2') +
     (overlay ? ' lg:absolute lg:inset-0 lg:h-full' : '');
 
@@ -217,7 +217,7 @@ export default function NativeCoursePreview({
     }
     if (block.type === 'bullets') {
       return (
-        <ul key={index} className={'grid gap-2 ' + (block.items.length >= 4 && block.items.every((item) => item.length <= 65) ? 'lg:grid-cols-2' : '')}>
+        <ul key={index} className="grid gap-2">
           {block.items.map((item, i) => (
             <li key={i} className="flex break-inside-avoid items-start gap-2 rounded-lg border border-[#dce6ed] bg-[#f6f9fc] px-3 py-2 text-base leading-snug text-[#203c56]">
               <Check className="mt-1 h-4 w-4 shrink-0 text-[#e65300]" aria-hidden="true" />
