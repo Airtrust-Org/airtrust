@@ -9,6 +9,7 @@ export type ScormCompletionDiagnosticCode =
   | 'SCORM_COMPLETION_REJECTED'
   | 'SCORM_FINAL_COMMIT_MISSING'
   | 'SCORM_STATUS_INCONSISTENT'
+  | 'SCORM_PROGRESS_EVIDENCE_MISSING'
   | 'SCORM_NONE';
 
 export type ScormCompletionDiagnosticStatus = 'none' | 'accepted' | 'candidate' | 'rejected';
@@ -499,6 +500,10 @@ export function buildScormCompletionDiagnostic(params: {
     lessonStatus: params.lessonStatus,
     successStatus: params.successStatus,
   });
+  // The canonical /finalizar gate requires a server-persisted record of every
+  // distinct slide, not just final location/100%/passed. Keep the GET diagnostic
+  // aligned so the player never advertises ACCEPTED then receives 409.
+  const distinctSlideEvidence = hasCompleteScormSlideCoverage(params.cmiJson);
   const reachedFinalLocation =
     locationMarker != null && locationMarker.total != null && locationMarker.total > 0
       ? locationMarker.current >= locationMarker.total
@@ -559,8 +564,34 @@ export function buildScormCompletionDiagnostic(params: {
   if (finalCommitObserved) reasons.push('final-commit-observed');
   if (trustedScorm12Finish) reasons.push('trusted-scorm-1.2-finish');
   if (hasRuntimeEvidence) reasons.push('runtime-evidence-present');
+  if (reachedFinalLocation && !distinctSlideEvidence) reasons.push('distinct-slide-evidence-missing');
+  if (!masteryMet) reasons.push('mastery-not-met');
 
-  if (explicitCompletion || trustedScorm12Finish) {
+  // A terminal SCORM status from a package is not a canonical qualification
+  // decision. Missing slide coverage/maturity is a blocker, not ACCEPTED.
+  // Do not promote a candidate or offer a retryable finalization from 100% alone.
+  if (!explicitFailure && (explicitCompletion || candidate) &&
+      (!distinctSlideEvidence || !masteryMet)) {
+    return {
+      status: 'none',
+      code: distinctSlideEvidence ? 'SCORM_STATUS_INCONSISTENT' : 'SCORM_PROGRESS_EVIDENCE_MISSING',
+      reasons,
+      can_finalize: false,
+      explicit_completion: explicitCompletion,
+      explicit_failure: false,
+      mastery_score: hasMasteryScore ? Number(masteryScore) : null,
+      score_pct: scorePct,
+      progresso_pct: progressSignal,
+      inferred_progress_pct: inferredProgressPct,
+      location,
+      reached_final_location: reachedFinalLocation,
+      final_commit_observed: finalCommitObserved,
+      has_runtime_evidence: hasRuntimeEvidence,
+      commit_event: normalizeCommitEvent(commitEvent),
+    };
+  }
+
+  if (!explicitFailure && (explicitCompletion || trustedScorm12Finish)) {
     return {
       status: 'accepted',
       code: 'SCORM_COMPLETION_ACCEPTED',
