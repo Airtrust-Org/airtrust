@@ -25,6 +25,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/useLms';
 import { formatMinutes } from './lmsUi';
+import { describeScormClosureMissing } from './lmsScormClosureReasons';
 import {
   parseGranularDiagnostic,
   type LmsGranularDiagnostic,
@@ -1282,7 +1283,8 @@ export default function LmsPlayer() {
                 </p>
                 {matricula.score_final != null ? <p>Nota: {matricula.score_final}%</p> : null}
                 {isScormContent && closureReadiness ? (
-                  <p role="status">
+                  <>
+                    <p role="status">
                     Fechamento: {closureReadiness.code === 'SCORM_ALREADY_COMPLETED'
                       ? 'confirmado pelo AirTrust'
                       : closureReadiness.eligible_for_server_verification
@@ -1298,7 +1300,15 @@ export default function LmsPlayer() {
                           } as Record<string, string>)[closureReadiness.code] ??
                           'evidências pendentes de confirmação'}
                     {' '}({closureReadiness.code})
-                  </p>
+                    </p>
+                    {!isCompletedState && Array.isArray(closureReadiness.missing) &&
+                      closureReadiness.missing.length > 0 ? (
+                      <p className="text-xs text-amber-200/90">
+                        Pendências no último registro do servidor: {' '}
+                        {describeScormClosureMissing(closureReadiness.missing).join('; ')}.
+                      </p>
+                    ) : null}
+                  </>
                 ) : completionDiagnostic?.code && completionDiagnostic.code !== 'SCORM_NONE' ? (
                   <p>Diagnóstico de progresso: {completionDiagnostic.code}</p>
                 ) : null}
