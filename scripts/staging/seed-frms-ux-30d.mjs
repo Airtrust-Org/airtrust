@@ -168,7 +168,8 @@ export function buildRollbackSql(){
 }
 
 function query(db,sql){
-  if(!/^SELECT\s/i.test(sql)||sql.includes(';')) throw new Error('READONLY_PREFLIGHT_REJECTED');
+  if(!(/^(?:SELECT\s|PRAGMA table_info\([a-z][a-z0-9_]*\)$)/i.test(sql))||sql.includes(';'))
+    throw new Error('READONLY_PREFLIGHT_REJECTED');
   const x=spawnSync('npx',['wrangler','d1','execute',db,'--remote','--json','--command',sql],
     {cwd:join(process.cwd(),'worker-airtrust'),encoding:'utf8'});
   if(x.status!==0)throw new Error('STAGING_D1_PREFLIGHT_FAILED');
@@ -209,19 +210,13 @@ function inspectFixtureSchema() {
     jornadas:'0',checkins:'0',casos:'0',voos:'0'
   }));
   const expected=extractFixtureInsertColumns(buildSeedSql(dryDays));
-  const sql=[...expected.keys()].map(table=>
-    "SELECT "+quote(table)+" AS table_name, name AS column_name FROM pragma_table_info("+quote(table)+")"
-  ).join(' UNION ALL ');
-  const columns=query(DB_NAME,sql);
-  const found=new Map();
-  for(const row of columns){
-    const table=String(row.table_name),column=String(row.column_name).toLowerCase();
-    if(!found.has(table))found.set(table,new Set());
-    found.get(table).add(column);
-  }
+  // Matches the proven staging FRMS schema-doctor: PRAGMA table_info()
+  // individually, not a UNION of table-valued PRAGMAs that D1 rejected.
   for(const [table,required] of expected){
-    const available=found.get(table);
-    if(!available || required.some(column=>!available.has(column))){
+    if(!/^[a-z][a-z0-9_]*$/.test(table))throw new Error('QA_UNSAFE_TABLE_IDENTIFIER');
+    const rows=query(DB_NAME,"PRAGMA table_info("+table+")");
+    const available=new Set(rows.map(row=>String(row.name).toLowerCase()));
+    if(!available.size || required.some(column=>!available.has(column))){
       throw new Error('STAGING_FRMS_QA_SCHEMA_COLUMNS_MISSING:'+table);
     }
   }
@@ -233,10 +228,6 @@ function inspectQaScopedBaseline() {
   // revision must not block a synthetic tenant or modify other tenants.
   const sourceStatements=buildTenantScopedBaselineSql();
   if(sourceStatements.length!==2)throw new Error('QA_BASELINE_NOT_REVIEWED');
-  const schema=query(DB_NAME,
-    "SELECT name FROM sqlite_master WHERE type='table' AND name IN "+
-    "('frms_config_revisions','frms_config_parameters','frms_profile_assignments','frms_regulatory_profiles')");
-  if(schema.length!==4)throw new Error('FRMS_GOVERNANCE_TABLES_NOT_READY');
   inspectFixtureSchema();
   const collisions=query(DB_NAME,
     "SELECT id FROM frms_config_revisions WHERE id="+quote(QA_REVISION_ID)+

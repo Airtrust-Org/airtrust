@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+const qaSource=readFileSync(new URL('../staging/seed-frms-ux-30d.mjs',import.meta.url),'utf8');
 import {
   validateSource, approximation, buildSeedSql, buildRollbackSql, TENANT_ID,
   TENANT_CODE, DB_ID, DB_NAME, CONFIRM, QA_REVISION_ID, buildTenantScopedBaselineSql, extractFixtureInsertColumns,
@@ -75,6 +76,13 @@ test('all QA seed table columns are discoverable for read-only live staging pref
   assert.throws(()=>extractFixtureInsertColumns('INSERT INTO usuarios (id) VALUES (1)'), /QA_UNEXPECTED_TABLE_INSERT/);
   assert.throws(()=>extractFixtureInsertColumns('INSERT INTO empresas (id) VALUES (1)'), /QA_INSERT_TABLE_CONTRACT_CHANGED/);
 });
+test('uses canonical read-only PRAGMA inspection instead of remote UNION table-valued PRAGMAs',()=>{
+  assert.match(qaSource,/PRAGMA table_info\(/);
+  assert.doesNotMatch(qaSource,/FROM pragma_table_info\(/);
+  assert.match(qaSource,/STAGING_FRMS_QA_SCHEMA_COLUMNS_MISSING/);
+  assert.match(qaSource,/READONLY_PREFLIGHT_REJECTED/);
+});
+
 test('rollback is limited to fixture identifiers and does not mutate other tenants',()=>{
   const sql=buildRollbackSql();
   assert.match(sql,/empresa_id=999013/);
