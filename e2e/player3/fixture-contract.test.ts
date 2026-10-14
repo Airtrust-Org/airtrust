@@ -46,47 +46,47 @@ function fixture():QaProfile {
 describe('Front D QA contract — no network, no real students',()=>{
   it('admits exact-tenant, isolated content and six independent synthetic enrollments',()=>{
     const input=fixture();
-    expect(validateQaProfile(input,'chromium',staging,apiOrigin,'6001').fixture).toBe(input.projects.chromium);
-    expect(validateQaProfile(input,'webkit',staging,apiOrigin,'6001').fixture).toBe(input.projects.webkit);
+    expect(validateQaProfile(input,'chromium',staging,apiOrigin,'6001',contentOrigin).fixture).toBe(input.projects.chromium);
+    expect(validateQaProfile(input,'webkit',staging,apiOrigin,'6001',contentOrigin).fixture).toBe(input.projects.webkit);
   });
   it('never permits production as a base URL, even when expressly allowlisted',()=>{
     const p=fixture();p.baseUrl='https://airtrust.online';
-    expect(()=>validateQaProfile(p,'chromium',p.baseUrl,apiOrigin,'6001')).toThrow('PRODUCTION_FORBIDDEN');
+    expect(()=>validateQaProfile(p,'chromium',p.baseUrl,apiOrigin,'6001',contentOrigin)).toThrow('PRODUCTION_FORBIDDEN');
   });
   it('requires HTTPS and explicit staging hostname and exact allowlist',()=>{
     const p=fixture();p.baseUrl='http://qa-lms.airtrust.example';
-    expect(()=>validateQaProfile(p,'chromium',p.baseUrl,apiOrigin,'6001')).toThrow('HTTPS_STAGING_ORIGIN');
+    expect(()=>validateQaProfile(p,'chromium',p.baseUrl,apiOrigin,'6001',contentOrigin)).toThrow('HTTPS_STAGING_ORIGIN');
     p.baseUrl='https://app.airtrust.example';
-    expect(()=>validateQaProfile(p,'chromium',p.baseUrl,apiOrigin,'6001')).toThrow('EXPLICIT_STAGING_HOST_REQUIRED');
+    expect(()=>validateQaProfile(p,'chromium',p.baseUrl,apiOrigin,'6001',contentOrigin)).toThrow('EXPLICIT_STAGING_HOST_REQUIRED');
     p.baseUrl=staging;
-    expect(()=>validateQaProfile(p,'chromium','https://other-qa.example',apiOrigin,'6001')).toThrow('STAGING_ORIGIN_ALLOWLIST');
+    expect(()=>validateQaProfile(p,'chromium','https://other-qa.example',apiOrigin,'6001',contentOrigin)).toThrow('STAGING_ORIGIN_ALLOWLIST');
   });
   it('requires exact tenant allowlisting separate from private profile',()=>{
     const p=fixture();
-    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,''))
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'',contentOrigin))
       .toThrow('SYNTHETIC_TENANT_ALLOWLIST');
-    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6'))
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6',contentOrigin))
       .toThrow('SYNTHETIC_TENANT_ALLOWLIST');
-    expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001').profile.empresaId)
+    expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin).profile.empresaId)
       .toBe(6001);
   });
   it('requires an exact, separately approved staging Worker and a 40-digit source SHA',()=>{
     const p=fixture();p.apiBaseUrl='https://api.airtrust.online';
-    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001'))
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin))
       .toThrow('HTTPS_STAGING_API_ORIGIN');
     p.apiBaseUrl=apiOrigin;
-    expect(()=>validateQaProfile(p,'chromium',staging,'https://qa-wrong.example','6001'))
+    expect(()=>validateQaProfile(p,'chromium',staging,'https://qa-wrong.example','6001',contentOrigin))
       .toThrow('STAGING_API_ORIGIN_ALLOWLIST');
     p.expectedSourceSha='invalid';
-    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001'))
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin))
       .toThrow('PINNED_WORKER_SOURCE_SHA');
   });
   it('refuses nonsegregated HTML5 origin and missing second browser fixture',()=>{
     const p=fixture();p.contentOrigin=staging;
-    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001')).toThrow('ISOLATED_HTML5_CONTENT_ORIGIN');
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin)).toThrow('ISOLATED_HTML5_CONTENT_ORIGIN');
     p.contentOrigin=contentOrigin;
     delete p.projects.webkit;
-    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001')).toThrow('BOTH_INDEPENDENT_BROWSER_PROJECTS');
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin)).toThrow('BOTH_INDEPENDENT_BROWSER_PROJECTS');
   });
   it('keeps eight authored exam stages distinct from reviewed lesson receipts',()=>{
     const p=fixture();
@@ -94,10 +94,10 @@ describe('Front D QA contract — no network, no real students',()=>{
     expect(d.units).toHaveLength(42);
     expect(d.units.filter(u=>u.kind==='assessment')).toHaveLength(8);
     expect(d.requiredLessonIds).toHaveLength(34);
-    expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001').fixture.doutrinamento.units)
+    expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin).fixture.doutrinamento.units)
       .toHaveLength(42);
     d.units[0].lessonId=d.units[8].lessonId;
-    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001'))
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin))
       .toThrow('REVIEWED_CANONICAL_LESSON_CROSSWALK');
   });
   it('accepts 42 UI screens and 42 lesson receipts when each exam also records content',()=>{
@@ -105,32 +105,32 @@ describe('Front D QA contract — no network, no real students',()=>{
     const d=p.projects.chromium.doutrinamento;
     d.units.forEach(u=>{u.lessonId=u.id;});
     d.requiredLessonIds=d.units.map(u=>u.id);
-    expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001')
+    expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin)
       .fixture.doutrinamento.requiredLessonIds).toHaveLength(42);
   });
   it('rejects lessons not present on any reviewed author screen',()=>{
     const p=fixture();
     p.projects.chromium.doutrinamento.requiredLessonIds.push('invented-lesson');
-    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001'))
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin))
       .toThrow('REVIEWED_CANONICAL_LESSON_CROSSWALK');
   });
   it('requires all 42 authored units, exactly eight official module assessments and actual practice',()=>{
     const p=fixture();p.projects.chromium.doutrinamento.units.pop();
-    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001')).toThrow('DOU_RC81_42_UNITS');
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin)).toThrow('DOU_RC81_42_UNITS');
     const p2=fixture();
     p2.projects.chromium.doutrinamento.units[0].official=undefined;
-    expect(()=>validateQaProfile(p2,'chromium',staging,apiOrigin,'6001')).toThrow('DOU_RC81_EIGHT_MODULAR_ASSESSMENTS');
+    expect(()=>validateQaProfile(p2,'chromium',staging,apiOrigin,'6001',contentOrigin)).toThrow('DOU_RC81_EIGHT_MODULAR_ASSESSMENTS');
     const p3=fixture();
     p3.projects.chromium.doutrinamento.units[8].practice=undefined;
-    expect(()=>validateQaProfile(p3,'chromium',staging,apiOrigin,'6001')).toThrow('FORMATIVE_GATE_REQUIRED');
+    expect(()=>validateQaProfile(p3,'chromium',staging,apiOrigin,'6001',contentOrigin)).toThrow('FORMATIVE_GATE_REQUIRED');
   });
   it('rejects mismatched or duplicate enrollment identities across Chromium and WebKit',()=>{
     const p=fixture();
     p.projects.webkit.external.enrollmentId=p.projects.chromium.external.enrollmentId;
-    expect(()=>validateQaProfile(p,'webkit',staging,apiOrigin,'6001')).toThrow('DEDICATED_PER_BROWSER_ENROLLMENTS');
+    expect(()=>validateQaProfile(p,'webkit',staging,apiOrigin,'6001',contentOrigin)).toThrow('DEDICATED_PER_BROWSER_ENROLLMENTS');
     const p2=fixture();
     p2.projects.chromium.resume80.editionSha256='wrong';
-    expect(()=>validateQaProfile(p2,'chromium',staging,apiOrigin,'6001')).toThrow('SYNTHETIC_ENROLLMENT_IDENTITIES');
+    expect(()=>validateQaProfile(p2,'chromium',staging,apiOrigin,'6001',contentOrigin)).toThrow('SYNTHETIC_ENROLLMENT_IDENTITIES');
   });
   it('rejects forged credential-in-URL, traversal, protocol-relative and cross-origin requests',()=>{
     expect(()=>qaPath(staging,'https://other-qa.example/a')).toThrow('RELATIVE_API_OR_LAUNCH_PATH');
@@ -142,11 +142,19 @@ describe('Front D QA contract — no network, no real students',()=>{
   it('blocks staging fixtures from silently pointing authored media to production',()=>{
     const p=fixture();
     p.contentOrigin='https://cdn.airtrust.online';
-    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001'))
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin))
       .toThrow('ISOLATED_HTML5_CONTENT_ORIGIN');
     p.contentOrigin='https://qa-content.airtrust.example';
-    expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001').profile.contentOrigin)
+    expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin).profile.contentOrigin)
       .toBe('https://qa-content.airtrust.example');
+  });
+  it('rejects an independently unapproved content host despite an HTTPS QA-looking name',()=>{
+    const p=fixture();
+    p.contentOrigin='https://qa-unapproved-assets.example';
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin))
+      .toThrow('ISOLATED_CONTENT_ORIGIN_ALLOWLIST');
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',''))
+      .toThrow('ISOLATED_CONTENT_ORIGIN_ALLOWLIST');
   });
   it('rejects token-bearing or fragment URLs while permitting benign query filters',()=>{
     expect(()=>qaPath(staging,'/qa/start?access_token=something'))
@@ -160,11 +168,11 @@ describe('Front D QA contract — no network, no real students',()=>{
   });
   it('preserves historical 80% range and disallows suspicious answer fixtures',()=>{
     const p=fixture();p.projects.chromium.resume80.minPreviousPct=100;
-    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001')).toThrow('SOURCE_80_PERCENT_BASELINE');
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin)).toThrow('SOURCE_80_PERCENT_BASELINE');
     const p2=fixture();
     const quiz=p2.projects.chromium.doutrinamento.units[0].official!.questions[0];
     quiz.wrong=quiz.correct;
-    expect(()=>validateQaProfile(p2,'chromium',staging,apiOrigin,'6001')).toThrow('AUTHOR_UNIT_AND_EXAM_MAP');
+    expect(()=>validateQaProfile(p2,'chromium',staging,apiOrigin,'6001',contentOrigin)).toThrow('AUTHOR_UNIT_AND_EXAM_MAP');
   });
 });
 
