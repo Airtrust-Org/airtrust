@@ -62,16 +62,33 @@ export default function Player3Html5Host({
     [contentUrl,contentOrigin,editionSha256],
   );
   const examContext = pendingAssessment?.context;
+  // A freshly allocated server projection must not reset the transport's
+  // ambiguous-POST lock. Keep one submitter per actual enrollment/cycle/
+  // edition/stage for the lifetime of this host, including modal dismissal.
+  const submittersRef = useRef(new Map<string, {
+    policy: string;
+    submit: ReturnType<typeof makePlayer3VerifiedStageSubmitter>;
+  }>());
   const verifiedSubmit = useMemo(() => {
     if (!safe || reviewOnly || !examContext ||
         examContext.editionSha256 !== editionSha256) return null;
-    // Lazily bind on first official submission: a read-only presentation
-    // must not require a working API transport just to render. Reuse the
-    // same instance after that to preserve its ambiguous-write lock.
-    let submitter: ReturnType<typeof makePlayer3VerifiedStageSubmitter> | null = null;
+    const scope = [examContext.empresaId,examContext.matriculaId,
+      examContext.cicloId,examContext.editionSha256,examContext.stageId].join(':');
+    const policy = JSON.stringify(examContext.questions.map(q =>
+      [q.id,q.options.map(o => o.id)]));
+    // Lazily bind only on official submission. A renderer refresh, new
+    // callback or navigation cannot grant a second ambiguous attempt.
     return (answers: readonly P3ExamAnswer[]) => {
-      submitter ??= makePlayer3VerifiedStageSubmitter(examContext);
-      return submitter(answers);
+      const existing = submittersRef.current.get(scope);
+      if (existing) {
+        if (existing.policy !== policy) {
+          return Promise.reject(new Error('PLAYER3_ATTEMPT_POLICY_CHANGED'));
+        }
+        return existing.submit(answers);
+      }
+      const submit = makePlayer3VerifiedStageSubmitter(examContext);
+      submittersRef.current.set(scope,{policy,submit});
+      return submit(answers);
     };
   }, [safe,reviewOnly,examContext,editionSha256]);
   useEffect(() => {

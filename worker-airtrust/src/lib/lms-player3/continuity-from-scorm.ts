@@ -78,9 +78,17 @@ export function proposeLegacyScormResume(input: {
       evidence.active_unit_id && evidence.classification !== 'REVIEW_REQUIRED') {
     const mapped = destination.units_by_source_id[evidence.active_unit_id];
     if (mapped && destination.target_unit_ids.includes(mapped) &&
-        // All source units must have reviewed destinations.
+        // Front A's REVIEW-ONLY crosswalk is not a certified mapping.
+        // Require the full, independently approved source-unit set for this
+        // exact original edition. A partial or empty certified list must not
+        // upgrade a SCORM bookmark into an eligible navigation credit.
+        destination.certified_source_unit_ids.length ===
+          sourceEdition.ordered_source_unit_ids.length &&
+        new Set(destination.certified_source_unit_ids).size ===
+          sourceEdition.ordered_source_unit_ids.length &&
         sourceEdition.ordered_source_unit_ids.every(
-          id => destination.units_by_source_id[id] &&
+          id => destination.certified_source_unit_ids.includes(id) &&
+            destination.units_by_source_id[id] &&
             destination.target_unit_ids.includes(destination.units_by_source_id[id]),
         ) &&
         new Set(sourceEdition.ordered_source_unit_ids.map(
