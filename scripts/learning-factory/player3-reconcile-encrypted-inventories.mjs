@@ -86,6 +86,7 @@ const changedEvidence=(a,b)=>[
   'ultimo_slide','ultima_pagina','scorm_suspend_data_PRIVATE',
   'scorm_cmi_json_PRIVATE','xapi_statement_count','xapi_last_event_at',
   'scorm_lesson_status','scorm_completion_status','scorm_success_status',
+  'ciclos_historicos_json_PRIVATE',
 ].some(k=>a[k]!==b[k]);
 
 /**
