@@ -69,7 +69,7 @@ function qaEnrollment(x: QaEnrollment, appOrigin: string, apiOrigin: string): bo
 }
 export function validateQaProfile(raw: unknown, projectName: string,
   approvedStagingOrigin: string, approvedApiOrigin: string,
-  approvedSyntheticTenantId: string): {
+  approvedSyntheticTenantId: string, approvedContentOrigin: string): {
     profile: QaProfile; fixture: QaProjectFixture;
   } {
   const data = raw as QaProfile;
@@ -110,6 +110,8 @@ export function validateQaProfile(raw: unknown, projectName: string,
     !['airtrust.online','www.airtrust.online','api.airtrust.online'].includes(assetOrigin.hostname) &&
     assetOrigin.origin !== origin.origin && assetOrigin.origin !== api.origin,
     'ISOLATED_HTML5_CONTENT_ORIGIN');
+  requireQa(approvedContentOrigin===assetOrigin.origin,
+    'ISOLATED_CONTENT_ORIGIN_ALLOWLIST');
   requireQa(data.projects && data.projects.chromium && data.projects.webkit,
     'BOTH_INDEPENDENT_BROWSER_PROJECTS');
   // Every browser gets its own writeable enrollments and repeatable timeline.
