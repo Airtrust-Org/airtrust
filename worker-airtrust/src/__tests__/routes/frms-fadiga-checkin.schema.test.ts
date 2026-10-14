@@ -125,9 +125,11 @@ describe('frms-fadiga-checkin schema', () => {
       expect(valid.data.horas_sono_24h).toBe(5);
       expect(valid.data.oportunidade_sono_horas_24h).toBe(8);
     }
+    // Sleep may include a nap outside the applicable regulatory rest opportunity.
+    // The two measures are separate; do not invent a cross-field constraint.
     expect(CheckinCreateSchema.safeParse({
       ...base, horas_sono_24h: 8, oportunidade_sono_horas_24h: 5,
-    }).success).toBe(false);
+    }).success).toBe(true);
   });
 
   it('não inventa oportunidade de sono para clientes legados', () => {
