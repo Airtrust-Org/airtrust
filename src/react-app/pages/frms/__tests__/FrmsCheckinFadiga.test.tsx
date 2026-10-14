@@ -945,6 +945,35 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.queryByText(/^INAPTO$/)).not.toBeInTheDocument();
   });
 
+  it('não converte campos ausentes no histórico em zero medido ou nível normal', () => {
+    useFadigaHistoricoMock.mockReturnValue({
+      data: {
+        data: [{
+          id: 'chk-missing',
+          data_checkin: '2026-05-28',
+          kss_score: null,
+          horas_sono: null,
+          score_fadiga: null,
+          nivel_fadiga: null,
+          status_operacional: null,
+        }],
+      },
+      isLoading: false,
+    });
+
+    render(<FrmsCheckinFadiga />);
+    fireEvent.click(screen.getByRole('button', { name: 'Histórico' }));
+
+    const row = screen.getByRole('row', { name: /2026-05-28/ });
+    const cells = within(row).getAllByRole('cell');
+    expect(cells[1]).toHaveTextContent('—'); // KSS não informado
+    expect(cells[2]).toHaveTextContent('—'); // Sono não informado
+    expect(cells[3]).toHaveTextContent('—'); // Score não calculado
+    expect(cells[4]).toHaveTextContent('Não avaliado');
+    expect(row).not.toHaveTextContent('0.0');
+    expect(row).not.toHaveTextContent('VERDE');
+  });
+
   it('mantem disclaimer de triagem operacional no check-in', () => {
     render(<FrmsCheckinFadiga />);
     expect(screen.getByText(/Ferramenta de triagem operacional/i)).toBeInTheDocument();
