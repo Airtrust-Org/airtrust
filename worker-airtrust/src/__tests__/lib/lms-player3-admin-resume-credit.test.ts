@@ -34,6 +34,7 @@ const persistedSuspendData=JSON.stringify({
 });
 const review={
   actor_user_id:89,approver_user_id:90,
+  training_manager_authorized:true,second_reviewer_authorized:true,
   approved_at:'2026-10-14T14:00:00Z',
   source_snapshot_sha256:'c'.repeat(64),
   expected_matricula_updated_at:enrollment.matricula_updated_at as string,
@@ -60,6 +61,12 @@ describe('Player 3 governed administrative resume intent',()=>{
     expect(()=>create({review:{...review,approver_user_id:89}}))
       .toThrow('REVIEW_CONTEXT_INVALID');
     expect(()=>create({review:{...review,justification:'ok'}}))
+      .toThrow('REVIEW_CONTEXT_INVALID');
+  });
+  it('rejects an approval that has not passed server RBAC review',()=>{
+    expect(()=>create({review:{...review,training_manager_authorized:false}}))
+      .toThrow('REVIEW_CONTEXT_INVALID');
+    expect(()=>create({review:{...review,second_reviewer_authorized:false}}))
       .toThrow('REVIEW_CONTEXT_INVALID');
   });
   it('blocks stale snapshot watermarks and renewed cycles',()=>{
