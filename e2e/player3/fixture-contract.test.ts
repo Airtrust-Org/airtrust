@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {
   qaPath,validateQaProfile,validateQaModuleSession,validateQaJointReadiness,
-  validateQaCertificatePdf,assertQaReadOnlyNonDisclosure,
+  validateQaCertificatePdf,assertQaReadOnlyNonDisclosure,validateQaTerminalReceipt,
   type QaModuleSession,type QaProfile,type QaProjectFixture,
 } from './fixture-contract';
 
@@ -395,5 +395,48 @@ describe('Front D — protected read-only projections disclose no grading materi
       .toThrow('WORKER_READONLY_DATA_BOUNDED');
     expect(()=>assertQaReadOnlyNonDisclosure({stageId:'mod1',passed:true,attempts:1}))
       .not.toThrow();
+  });
+});
+
+describe('Front D — Front B terminal API is never evidence of a finished PDF',()=>{
+  const acknowledged=()=>({
+    success:true,data:{
+      matricula_id:1001,status:'CONCLUIDO',
+      qualification_outcome:'qualification_created',
+      certificate_state:'REQUIRES_VERIFICATION',
+    },
+  });
+  it('accepts an exact enrolled, committed qualification receipt only as advisory',()=>{
+    expect(validateQaTerminalReceipt(acknowledged(),1001).data.certificate_state)
+      .toBe('REQUIRES_VERIFICATION');
+    expect(validateQaTerminalReceipt({
+      ...acknowledged(),data:{...acknowledged().data,
+        qualification_outcome:'qualification_reused'},
+    },1001).data.qualification_outcome).toBe('qualification_reused');
+  });
+  it('rejects wrong enrollment, noncommitted status or a failed terminal response',()=>{
+    for(const r of [
+      {...acknowledged(),success:false},
+      {...acknowledged(),data:{...acknowledged().data,matricula_id:1002}},
+      {...acknowledged(),data:{...acknowledged().data,status:'EM_ANDAMENTO'}},
+    ]){
+      expect(()=>validateQaTerminalReceipt(r,1001))
+        .toThrow('TERMINAL_RECEIPT_COMMITTED_ENROLLMENT');
+    }
+  });
+  it('refuses invented or premature certificate success',()=>{
+    for(const r of [
+      {...acknowledged(),data:{...acknowledged().data,certificate_state:'ISSUED'}},
+      {...acknowledged(),data:{...acknowledged().data,qualification_outcome:'not-required'}},
+      {...acknowledged(),data:{...acknowledged().data,certificate_state:null}},
+    ]){
+      expect(()=>validateQaTerminalReceipt(r,1001))
+        .toThrow('TERMINAL_CERTIFICATE_REQUIRES_REAL_VERIFICATION');
+    }
+  });
+  it('refuses an API receipt leaking answer keys or private attempt hashes',()=>{
+    expect(()=>validateQaTerminalReceipt({
+      ...acknowledged(),private:{answers_sha256:'a'.repeat(64)},
+    },1001)).toThrow('WORKER_READONLY_PRIVATE_MATERIAL_LEAK');
   });
 });
