@@ -1,7 +1,8 @@
 import type { OperationalVigilanceResult } from './OperationalVigilanceTest';
 
 export interface FadigaCheckinDraft {
-  version: 1;
+  version: 2;
+  horasSonoPersonalizadas?: number | null;
   sonoOpcao: string | null;
   repousoHoras?: number | null;
   presentationTime: string;
@@ -31,9 +32,20 @@ export function loadFadigaCheckinDraft(key: string): FadigaCheckinDraft | null {
   try {
     const raw = window.sessionStorage.getItem(key);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<FadigaCheckinDraft> | null;
-    if (!parsed || parsed.version !== 1) return null;
-    return parsed as FadigaCheckinDraft;
+    const parsed = JSON.parse(raw) as Record<string, unknown> | null;
+    if (!parsed || (parsed.version !== 1 && parsed.version !== 2)) return null;
+    if (parsed.version === 1) {
+      // Old h4/h8 options were ranges ("4 ou menos", "8 ou mais").
+      // Never reinterpret a stored range as an exact physiological measurement.
+      return {
+        ...parsed,
+        version: 2,
+        sonoOpcao: parsed.sonoOpcao === 'h4' || parsed.sonoOpcao === 'h8'
+          ? null : parsed.sonoOpcao,
+        horasSonoPersonalizadas: null,
+      } as unknown as FadigaCheckinDraft;
+    }
+    return parsed as unknown as FadigaCheckinDraft;
   } catch {
     return null;
   }
