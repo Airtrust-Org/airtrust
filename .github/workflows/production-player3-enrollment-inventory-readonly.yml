@@ -109,6 +109,7 @@ jobs:
           console.log('- Courses covered: '+s.courses);
           console.log('- Source conflicts requiring review: '+s.conflicts);
           console.log('- With SCORM resume state: '+s.with_scorm_resume_state);
+          console.log('- With xAPI/H5P event history: '+s.with_xapi_events);
           console.log('- Encrypted snapshot SHA256: '+s.snapshot_sha256);
           console.log('- D1/R2 mutations: 0');
           NODE
