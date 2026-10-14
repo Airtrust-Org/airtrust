@@ -234,3 +234,54 @@ A Frente B prosseguiu autonomamente enquanto A (conteúdo), C (continuidade) e D
 **Gate fundamental NÃO cumprido:** a migration `0554` do catálogo e `0555` do intent canônico são **apenas REVIEW-ONLY**, não aplicadas. O contrato de `0555` existente exige tentativa V1 e **não cobre ainda intents modulares Player3**. Sem uma migration governada de **intenção terminal Player3**, homologação R2/HTML5 da A, snapshot de matrículas T0/T1 da C e E2E da D (histórico + certificado efetivamente consultável), **não habilitar o terminal nem prometer conclusão**. Os certificados EAD são um serviço pós-commit no writer canônico; testar falha/reconciliação, não declarar emissão a partir de status `CONCLUIDO` apenas. Nenhum deploy, D1/R2 write, tenant alterado.
 
 **Próxima ação:** definir e versionar o contrato de intent **transacional, consumido no mesmo batch** para Player3 integrado à governança futura do catálogo (sem contornar triggers); testar atomicidade em SQLite e, após integração A/C/D, aprovar Schema V2 e staging real. Não fabricar notas, equivalências ou evidências de conclusão.
+
+## 2026-10-14 — Frente B: terminal Player3 e revisão transacional 0554/0555
+
+**Objetivo preservado:** resolver estruturalmente a conclusão em 99% do LMS,
+sem creditar evidência falsa, mudar SCORM externo nem certificar aluno antes da
+transação canônica real. Execução na **PR #1389 DRAFT**, sem merge/deploy ou
+mutation D1/R2 remota. Consultar SHA HEAD atual da PR antes de continuar.
+
+**O que mudou:**
+
+1. A SQL de catálogo `0554` REVIEW-ONLY inclui agora substituição exata do
+   trigger `lms_player3_attempt_insert` do Schema 0553: permite `scorm` só
+   quando `lms_native_catalog_activation` autoriza precisamente tenant/curso.
+   Conteúdo SCORM de fornecedor sem ativação continua fora do motor Player3.
+2. O `withNativeAtomicGuard` canônico agora inclui, em **um D1.batch**,
+   `Player3 guard -> INSERT intent -> updates de matrícula/ciclo/
+   histórico/qualificação/auditoria -> DELETE intent`, sem criar uma prova
+   global Native V1 artificial. Um nonce aleatório é usado para consumo único.
+3. O plano `0555` REVIEW-ONLY tem tabela, trigger de insert/escopo, recibos
+   modulares e ligação nos dois guards de matrícula/ciclo. A FK diferida de
+   sentinela impossível exige remoção do intent antes de COMMIT. IDs de
+   lições/etapas duplicados, tenant errado, hash incorreto, ciclo vencido,
+   ausência de visita ou de tentativa aprovada devem rejeitar a conclusão.
+4. Nova rota autenticada `POST /api/lms/native/matriculas/:matriculaId/etapas/
+   concluir`, sem payload, só para **staging opt-in adicional** por tenant
+   `PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS`. Preserva os outros gates
+   de conteúdo, write, módulo e ativação, sem wildcard e sem production.
+   Preparador de comprovantes e qualificação é server-only. Resposta final
+   distingue matrícula CONCLUIDO de certificado `REQUIRES_VERIFICATION`.
+5. Criados os testes SQLite de catálogo/intent e HTTP da rota, acoplados à
+   CI oficial; os demais módulos SCORM permanecem com os guards anteriores.
+
+**Validação local reproduzida nesta continuação:** 36 testes SQLite dos
+planos de catálogo+intent e staleness de Schema V2 PASS; novo ensaio de
+intent + suites associadas (18/18) PASS; 56 testes Worker writer/rollback/
+preparadores PASS; 53 testes Worker HTTP/qualificação/preparadores PASS,
+Worker `tsc --noEmit` PASS. Resultados oficiais da CI do último SHA:
+**consultar novamente antes de promover**. Testes usam SQLite sintético,
+nunca substituem staging/D1 real nem certificado existente.
+
+**Bloqueios preservados:** Schema 0552/0553 ainda não aplicado via Schema V2;
+0554/0555 não estão governados como changes executáveis; faltam pacote HTML5
+original preservado e de-keyed + política e banco SHA-pinned da A, T0/T1 real
+criptografado/autorizado da C (issue #1467), E2E de staging e verificação de
+PDF/qualificação/replay/certificado da D, gates oficiais e merge apropriado.
+A rota terminal permanece default OFF. **Nenhum aluno foi concluído.**
+
+**Próxima unidade de trabalho:** validar delta atual entre A/B/C/D, fechar
+Schema V2 0554/0555 com replay/integridade/recovery revisados sem tocar remote,
+certificar o roteiro HTML5 e preparar staging autorizado. Não transformar
+`REQUIRES_VERIFICATION` em `CERTIFICATE_CREATED` sem consulta verdadeira.
