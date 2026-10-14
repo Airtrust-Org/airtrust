@@ -85,7 +85,7 @@ export function gradePlayer3ApprovedStage(
     stages.set(stage.stageId,stage);
   }
   const exactStage=stages.get(submission.stageId);
-  if(!exactStage)fail('UNKNOWN_STAGE');
+  if(!exactStage){throw new Player3GradeError('UNKNOWN_STAGE');}
   const questions=new Map<string,Player3PrivateQuestion>();
   for(const q of bank.questions){
     if(!q || !validId(q.id)||!validId(q.stageId)||
