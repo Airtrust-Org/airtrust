@@ -2,36 +2,36 @@
  * Front D preflight is pure, fail-closed, and never reads credentials or
  * touches a remote environment. It validates TEST-ONLY staging identities.
  */
-export type QaChoice = Readonly<{ question: string; wrong: string; correct: string }>;
-export type QaUnit = Readonly<{
+export type QaChoice = { question: string; wrong: string; correct: string };
+export type QaUnit = {
   id: string; visualCue: string;
   practice?: QaChoice;
-  official?: Readonly<{ stageId: string; questions: readonly QaChoice[] }>;
-}>;
-export type QaEnrollment = Readonly<{
+  official?: { stageId: string; questions: QaChoice[] };
+};
+export type QaEnrollment = {
   launchPath: string; snapshotPath: string; editionSha256: string;
   enrollmentId: number; cycleId: number;
-}>;
-export type QaDoutrinamento = QaEnrollment & Readonly<{
-  units: readonly QaUnit[]; qualificationPath: string; certificatePath: string;
-}>;
-export type QaResume80 = QaEnrollment & Readonly<{
-  expectedResumeUnitId: string; creditedNavigationIds: readonly string[];
+};
+export type QaDoutrinamento = QaEnrollment & {
+  units: QaUnit[]; qualificationPath: string; certificatePath: string;
+};
+export type QaResume80 = QaEnrollment & {
+  expectedResumeUnitId: string; creditedNavigationIds: string[];
   minPreviousPct: number;
-}>;
-export type QaExternal = QaEnrollment & Readonly<{
-  frameSelectors: readonly string[];
+};
+export type QaExternal = QaEnrollment & {
+  frameSelectors: string[];
   visualLastPageButton: string; wrongAnswerButton: string;
   correctAnswerButton: string; submitButton: string; finishButton: string;
   scormSnapshotPath: string;
-}>;
-export type QaProjectFixture = Readonly<{
+};
+export type QaProjectFixture = {
   doutrinamento: QaDoutrinamento; resume80: QaResume80; external: QaExternal;
-}>;
-export type QaProfile = Readonly<{
+};
+export type QaProfile = {
   baseUrl: string; contentOrigin: string; empresaId: number;
   courseTitle: string; projects: Record<string, QaProjectFixture>;
-}>;
+};
 const hex = /^[a-f0-9]{64}$/;
 const id = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 const originPattern = /^https:\/\//;
