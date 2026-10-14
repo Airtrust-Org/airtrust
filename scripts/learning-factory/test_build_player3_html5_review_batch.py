@@ -1,12 +1,14 @@
 """Player3 batch converter: synthetic test fixtures, no real copyrighted courses."""
 import io
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from zipfile import ZipFile
 
-from build_player3_html5_review_batch import batch_review
+from build_player3_html5_review_batch import batch_review, KNOWN_SOURCES_BY_SHA
 from convert_preserved_html5 import UnsafePackage
 from test_prepare_player3_learner_review import original, model
 
@@ -36,6 +38,35 @@ class Player3BatchReviewTests(unittest.TestCase):
             self.assertNotIn('PRIVATE_KEY_SENTINEL_123',
                              json.dumps(summary, ensure_ascii=False))
             self.assertTrue((private/'batch-private-review.json').is_file())
+
+
+    def test_22_renamed_uploaded_archives_are_matched_by_content_digest(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            batches = []
+            digests = {}
+            for batch_name, prefix, count in (
+                ('SMS(6).zip', 'sms', 9),
+                ('Segurança Operacional(3).zip', 'operacional', 13),
+            ):
+                editions = {}
+                for i in range(count):
+                    m = model()
+                    m['courseId'] = f'{prefix}-{i}'
+                    editions[f'{prefix}/course-{i}.zip'] = original(m)
+                path = root/batch_name
+                path.write_bytes(bundle(editions))
+                digests[hashlib.sha256(path.read_bytes()).hexdigest()] = (prefix, count)
+                batches.append(path)
+            # Synthetic digest table verifies the filename-independent contract;
+            # production digests remain permanently pinned in the implementation.
+            with patch.dict(KNOWN_SOURCES_BY_SHA, digests, clear=True):
+                result = batch_review(batches, root/'private', root/'learner')
+            self.assertEqual(result['editions'], 22)
+            self.assertFalse(result['allCoursesPublishable'])
+            self.assertEqual(len(list((root/'learner').glob('edition-*/*.zip'))), 22)
+            self.assertEqual(len(list((root/'private').glob(
+                'edition-*/*server-only-bank.json'))), 22)
 
     def test_preflight_failure_does_not_write_any_artifact(self):
         with tempfile.TemporaryDirectory() as folder:
