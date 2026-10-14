@@ -4,7 +4,8 @@
 -- NUNCA subir dados, CMI, suspend_data, gabaritos ou relatórios individuais ao GitHub.
 -- Não garante snapshot transacional entre páginas; repetir na janela de
 -- corte e comparar por matrícula/ciclo/updated_at/last_commit_at.
--- Capturar TODOS os tenants autorizados à migração, não só empresa 6.
+-- Escopo de menor privilégio: Costa do Sol (empresa_id=6). Demais empresas
+-- exigem extração separada, revisão de escopo e autorização própria.
 SELECT
   datetime('now') AS extraction_utc,
   m.empresa_id,
@@ -56,6 +57,7 @@ LEFT JOIN lms_matricula_ciclos AS cy
 LEFT JOIN lms_progresso_scorm AS s
   ON s.matricula_id = m.id
   AND s.empresa_id = m.empresa_id
-WHERE m.deleted_at IS NULL
+WHERE m.empresa_id = 6
+  AND m.deleted_at IS NULL
   AND m.status IN ('EM_ANDAMENTO','NAO_INICIADO')
 ORDER BY m.empresa_id, m.id, cy.id;
