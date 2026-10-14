@@ -12,7 +12,7 @@ from test_player3_v33_review import Player3V33ReviewTests
 
 from test_player3_legacy_review import Player3LegacyBridgeTests
 
-from test_player3_unified_review_batch import Player3UnifiedBatchTests
+from test_player3_unified_review_batch import Player3UnifiedBatchTests, Player3UnifiedBatchWriteTests
 
 from test_player3_residuos_review import Player3ResiduosReviewTests
 
