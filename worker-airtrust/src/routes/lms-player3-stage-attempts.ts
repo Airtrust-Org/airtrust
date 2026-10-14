@@ -121,7 +121,7 @@ app.get('/matriculas/:matriculaId/etapas/lancamento',async c=>{
          policyStage.requiredQuestionIds.length>100){
         throw Error('PLAYER3_AUTHORED_STAGE_POLICY_INVALID');
       }
-      const questions=policyStage.requiredQuestionIds.map(id=>{
+      const questions=policyStage.requiredQuestionIds.map((id:string)=>{
         const source=course.artifact.questions.find(q=>q.id===id);
         const hidden=bank.questions.find(q=>q.id===id&&q.stageId===pending.stageId);
         if(!source||!hidden||!Array.isArray(source.options)||
