@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, Clock3, Database, ShieldAlert } from 'lucide-react';
 import type { FrmsOperationalSnapshotItem, FrmsFortnightModifier } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import {
-  classifyOperationalItem, operationalConfidence, resolveFrmsCoordinationGuidance,
+  operationalConfidence, resolveFrmsCoordinationGuidance,
   resolveOperationalDataMoment, type FrmsDecisionBucket,
 } from '../frmsOperationalDecision';
 
