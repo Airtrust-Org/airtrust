@@ -18,6 +18,24 @@ export type LegacyEnrollment = Readonly<{
   /** Serialized values are preserved ONLY in a separately secured private vault. */
   scorm_suspend_data_sha256: string | null;
   scorm_cmi_json_sha256: string | null;
+  /**
+   * Additional fields in Front C's readonly T0/T1 inventory.
+   * Optional for historic tests/consumers; a change in ANY populated field
+   * requires protected review even when the displayed percentage is equal.
+   * Catalog-current package metadata NEVER authenticates a learner's edition.
+   */
+  tipo_conteudo?: string | null;
+  catalog_current_scorm_sha256?: string | null;
+  catalog_current_scorm_version?: string | null;
+  matricula_score_final?: number | null;
+  matricula_tentativas?: number | null;
+  ciclo_score_final?: number | null;
+  ciclo_tentativas?: number | null;
+  matricula_data_inicio?: string | null;
+  matricula_data_conclusao?: string | null;
+  xapi_statement_count?: number | null;
+  xapi_last_event_at?: string | null;
+  ciclos_historicos_sha256?: string | null;
   /** Server-signed metadata from a private, versioned extraction; optional. */
   verified_completed_source_units?: readonly string[];
 }>;
@@ -161,6 +179,7 @@ export function buildContinuityPlans(
 export type ContinuityDelta = Readonly<{
   previous_count:number; current_count:number; new_enrollments:number;
   advanced:number; unchanged:number; missing:number; changed_cycles:number;
+  changed_statuses:number; changed_editions:number; changed_evidence:number;
   regressed:number; stale_snapshot_rows:number; cutover_requires_reconciliation:boolean;
 }>;
 export function compareContinuityInventories(
@@ -177,7 +196,12 @@ export function compareContinuityInventories(
     return mapped;
   };
   const old=makeMap(previous),next=makeMap(current);
-  let fresh=0,advanced=0,unchanged=0,missing=0,changedCycles=0,regressed=0,stale=0;
+  let fresh=0,advanced=0,unchanged=0,missing=0,changedCycles=0;
+  let changedStatuses=0,changedEditions=0,changedEvidence=0,regressed=0,stale=0;
+  // The main Front C reconciler remains the authority for individual T0/T1
+  // encrypted decisions. This summary is only a defensive B-side gate.
+  const fieldsChanged=(a:LegacyEnrollment,b:LegacyEnrollment,fields:readonly (keyof LegacyEnrollment)[])=>
+    fields.some(field=>a[field]!==b[field]);
   for(const [id,before] of old){
     const after=next.get(id);
     if(!after){missing++;continue;}
@@ -186,23 +210,52 @@ export function compareContinuityInventories(
       after.ciclo_id!==before.ciclo_id||
       after.ciclo_numero!==before.ciclo_numero){changedCycles++;continue;}
     if(!percentage(after.matricula_progresso_pct) || !percentage(before.matricula_progresso_pct)) {stale++;continue;}
+    if(after.ciclo_atual!==before.ciclo_atual ||
+       after.ciclo_status!==after.matricula_status ||
+       before.ciclo_status!==before.matricula_status ||
+       (after.ciclo_progresso_pct!=null &&
+        after.ciclo_progresso_pct!==after.matricula_progresso_pct)){
+      changedCycles++;continue;
+    }
+    if(after.matricula_status!==before.matricula_status ||
+       after.ciclo_status!==before.ciclo_status){changedStatuses++;continue;}
+    if(fieldsChanged(before,after,[
+      'tipo_conteudo','curso_version_tag','scorm_versao',
+      'catalog_current_scorm_sha256','catalog_current_scorm_version',
+    ])){changedEditions++;continue;}
     if(after.matricula_progresso_pct<before.matricula_progresso_pct){regressed++;continue;}
     if(before.matricula_updated_at && after.matricula_updated_at &&
       after.matricula_updated_at<before.matricula_updated_at){stale++;continue;}
-    if(before.scorm_last_commit_at && after.scorm_last_commit_at &&
-      after.scorm_last_commit_at<before.scorm_last_commit_at){stale++;continue;}
-    if(after.matricula_progresso_pct>before.matricula_progresso_pct||
-      after.matricula_updated_at!==before.matricula_updated_at||
-      after.scorm_last_commit_at!==before.scorm_last_commit_at||
-      after.scorm_cmi_json_sha256!==before.scorm_cmi_json_sha256||
-      after.scorm_suspend_data_sha256!==before.scorm_suspend_data_sha256){advanced++;continue;}
+    if(before.scorm_last_commit_at &&
+       (!after.scorm_last_commit_at ||
+        after.scorm_last_commit_at<before.scorm_last_commit_at)){stale++;continue;}
+    if(before.ciclo_updated_at &&
+       (!after.ciclo_updated_at ||
+        after.ciclo_updated_at<before.ciclo_updated_at)){stale++;continue;}
+    if(after.matricula_progresso_pct>before.matricula_progresso_pct){
+      advanced++;continue;
+    }
+    if(fieldsChanged(before,after,[
+      'matricula_updated_at','ciclo_updated_at','scorm_last_commit_at',
+      'matricula_score_final','matricula_tentativas',
+      'matricula_data_inicio','matricula_data_conclusao',
+      'ciclo_score_final','ciclo_tentativas',
+      'scorm_id','scorm_score_raw','ultimo_slide','ultima_pagina',
+      'scorm_suspend_data_sha256','scorm_cmi_json_sha256',
+      'scorm_lesson_status','scorm_completion_status','scorm_success_status',
+      'xapi_statement_count','xapi_last_event_at','ciclos_historicos_sha256',
+    ])){changedEvidence++;continue;}
     unchanged++;
   }
   for(const id of next.keys())if(!old.has(id))fresh++;
   return {
     previous_count:previous.length,current_count:current.length,
     new_enrollments:fresh,advanced,unchanged,missing,
-    changed_cycles:changedCycles,regressed,stale_snapshot_rows:stale,
-    cutover_requires_reconciliation:fresh+advanced+missing+changedCycles+regressed+stale>0,
+    changed_cycles:changedCycles,changed_statuses:changedStatuses,
+    changed_editions:changedEditions,changed_evidence:changedEvidence,
+    regressed,stale_snapshot_rows:stale,
+    cutover_requires_reconciliation:
+      fresh+advanced+missing+changedCycles+changedStatuses+
+      changedEditions+changedEvidence+regressed+stale>0,
   };
 }
