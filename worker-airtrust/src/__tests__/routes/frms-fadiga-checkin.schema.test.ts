@@ -108,4 +108,33 @@ describe('frms-fadiga-checkin schema', () => {
 
     expect(parsed.success).toBe(false);
   });
+
+  it('não confunde oportunidade de sono com sono efetivo', () => {
+    const base = {
+      wake_time: '05:30',
+      hora_apresentacao: '06:30',
+      horas_sono_24h: 5,
+      oportunidade_sono_horas_24h: 8,
+      qualidade_sono: 2,
+      kss_score: 6,
+      fit_for_duty: true,
+    };
+    const valid = CheckinCreateSchema.safeParse(base);
+    expect(valid.success).toBe(true);
+    if (valid.success) {
+      expect(valid.data.horas_sono_24h).toBe(5);
+      expect(valid.data.oportunidade_sono_horas_24h).toBe(8);
+    }
+    expect(CheckinCreateSchema.safeParse({
+      ...base, horas_sono_24h: 8, oportunidade_sono_horas_24h: 5,
+    }).success).toBe(false);
+  });
+
+  it('não inventa oportunidade de sono para clientes legados', () => {
+    const result = CheckinCreateSchema.safeParse({
+      wake_time: '05:30', horas_sono_24h: 7, kss_score: 3, fit_for_duty: true,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.oportunidade_sono_horas_24h).toBeUndefined();
+  });
 });
