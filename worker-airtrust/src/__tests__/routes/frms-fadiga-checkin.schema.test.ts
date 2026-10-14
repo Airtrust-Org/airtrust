@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { CheckinCreateSchema } from '../../routes/frms-fadiga-checkin.schema';
 
@@ -140,8 +141,9 @@ describe('frms-fadiga-checkin schema', () => {
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.oportunidade_sono_horas_24h).toBeUndefined();
   });
-  it('executa o UPDATE real no SQLite e apaga oportunidade obsoleta sem alterar sono efetivo', async () => {
-    const { DatabaseSync } = await import('node:sqlite');
+  it('executa o UPDATE real no SQLite e apaga oportunidade obsoleta sem alterar sono efetivo', () => {
+    // Vitest 2 (Vite) cannot resolve node:sqlite via dynamic import; native Node require bypasses bundling.
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
     const source = readFileSync('src/routes/frms-fadiga-checkin-legacy.ts', 'utf8');
     const sql = source.match(/`UPDATE frms_fadiga_checkin\\s+SET[\\s\\S]*?WHERE id = \\?`/)?.[0].slice(1, -1);
     expect(sql).toBeTruthy();
