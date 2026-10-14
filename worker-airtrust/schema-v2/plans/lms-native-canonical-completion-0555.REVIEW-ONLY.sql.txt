@@ -176,10 +176,13 @@ BEGIN
    AND (SELECT COUNT(DISTINCT e.unidade_id) FROM lms_native_eventos e
      WHERE e.vinculo_id=b.id)=NEW.distinct_lesson_count
    AND json_array_length(NEW.required_lesson_ids_json)=NEW.distinct_lesson_count
+   AND (SELECT COUNT(DISTINCT value) FROM json_each(NEW.required_lesson_ids_json))=NEW.distinct_lesson_count
    AND NOT EXISTS(SELECT 1 FROM json_each(NEW.required_lesson_ids_json) lesson
      WHERE NOT EXISTS(SELECT 1 FROM lms_native_eventos e
       WHERE e.vinculo_id=b.id AND e.unidade_id=lesson.value))
    AND json_array_length(NEW.official_stage_receipts_json)=NEW.official_stage_count
+   AND (SELECT COUNT(DISTINCT json_extract(value,'$.stageId'))
+        FROM json_each(NEW.official_stage_receipts_json))=NEW.official_stage_count
    AND NOT EXISTS(SELECT 1 FROM json_each(NEW.official_stage_receipts_json) stage
      WHERE NOT EXISTS(SELECT 1 FROM lms_player3_tentativas_modulares t
       WHERE t.vinculo_id=b.id AND t.politica_id=p.id AND t.passed=1
