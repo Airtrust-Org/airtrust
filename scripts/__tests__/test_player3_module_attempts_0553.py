@@ -113,6 +113,61 @@ class Player3SchemaV2Tests(unittest.TestCase):
         output=self.db.execute(statement,(self.binding,)).fetchall()
         self.assertEqual([(r[1],r[2],r[7]) for r in output],
                          [('mod1',1,1),('mod1',2,0),('mod2',1,1)])
+    def test_exact_transaction_guard_against_real_sqlite_ledger(self):
+        # Execute the same SQL array exported by the TypeScript guard, not a
+        # hand-written approximation of its clauses. No cloud D1 writes.
+        import ast, json, re
+        source=(ROOT/'worker-airtrust/src/services/lms-player3-terminal-transaction-guard.ts').read_text()
+        block=source.split('const SQL=[',1)[1].split("].join(' ');",1)[0]
+        parts=re.findall(r'^\s*(?:\x27[^\x27]*\x27|"[^"]*")(?=,?\s*$)',block,re.MULTILINE)
+        sql=' '.join(ast.literal_eval(part.strip()) for part in parts)
+        self.assertIn('lms_player3_tentativas_modulares',sql)
+        self.assertEqual(sql.count('?'),23)
+        self.db.executescript("""
+            ALTER TABLE lms_cursos ADD COLUMN gerar_qualificacao_ao_concluir INTEGER DEFAULT 0;
+            ALTER TABLE lms_cursos ADD COLUMN qualificacao_tipo_id INTEGER;
+            CREATE TABLE usuarios(id INTEGER PRIMARY KEY,funcionario_id INTEGER,active INTEGER,deleted_at TEXT);
+            CREATE TABLE funcionarios(id INTEGER PRIMARY KEY,empresa_id INTEGER,ativo INTEGER,status TEXT,deleted_at TEXT);
+            CREATE TABLE qualificacoes_tipos(id INTEGER PRIMARY KEY,empresa_id INTEGER,ativo INTEGER,deleted_at TEXT,categoria_id INTEGER);
+            CREATE TABLE qualificacoes_categorias(id INTEGER PRIMARY KEY,empresa_id INTEGER,ativo INTEGER,deleted_at TEXT,lms_integrada INTEGER);
+            INSERT INTO usuarios VALUES (99,69,1,NULL);
+            INSERT INTO funcionarios VALUES (69,6,1,'ATIVO',NULL);
+        """)
+        for n,unit in enumerate(['intro','end'],1):
+            self.db.execute("""INSERT INTO lms_native_eventos
+               (vinculo_id,event_id,sequencia,unidade_id,payload_sha256)
+               VALUES (?,?,?,?,?)""",(self.binding,'visit-'+str(n),n,unit,HASH))
+        ids=[]
+        for num,stage in enumerate(['mod1','mod2'],1):
+            ids.append(attempt(self.db,self.binding,self.policy,stage,1,'event'+str(num),100,1).lastrowid)
+        receipts=[
+            {'stageId':stage,'attemptId':aid,'attemptNumber':1,'answersHash':HASH,'scorePct':100}
+            for stage,aid in zip(['mod1','mod2'],ids)
+        ]
+        args=[
+            99,100,6,10,69,1000,self.binding,self.ed,HASH,self.policy,
+            'b'*64,'d'*64,'c'*64,
+            0,0,0,0,0,
+            2,2,json.dumps(['intro','end']),
+            json.dumps(receipts),2,
+        ]
+        self.assertIsNone(self.db.execute(sql,args).fetchone()[0])
+        bads=[
+          (9,'x'*64),  # other edition digest
+          (10,'z'*64), # altered private source SHA
+          (19,3),     # missed/late content event
+          (20,json.dumps(['intro','missing'])),
+          (21,json.dumps([{**receipts[0],'answersHash':'e'*64},receipts[1]])),
+          (22,1),     # hidden second stage
+        ]
+        for slot,bad in bads:
+            with self.subTest(slot=slot),self.assertRaises(sqlite3.OperationalError):
+                mutated=list(args);mutated[slot]=bad
+                self.db.execute(sql,mutated).fetchone()
+        self.db.execute("UPDATE lms_matricula_ciclos SET ciclo_atual=0 WHERE id=1000")
+        with self.assertRaises(sqlite3.OperationalError):
+            self.db.execute(sql,args).fetchone()
+
     def test_immutable_attempt_ledger(self):
         attempt(self.db,self.binding,self.policy)
         with self.assertRaises(sqlite3.IntegrityError):
