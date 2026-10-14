@@ -96,8 +96,8 @@ jobs:
     timeout-minutes: 20
     env:
       BASE_URL: https://staging.airtrust.pages.dev
-      STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
-      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      FRMS_QA_EMAIL: ${{ secrets.FRMS_QA_EMAIL }}
+      FRMS_QA_PASSWORD: ${{ secrets.FRMS_QA_PASSWORD }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -108,7 +108,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ -n "$STAGING_SMOKE_EMAIL" && -n "$STAGING_SMOKE_PASSWORD" ]] || { echo STAGING_QA_CREDENTIAL_PAIR_MISSING; exit 1; }
+          [[ -n "$FRMS_QA_EMAIL" && -n "$FRMS_QA_PASSWORD" ]] || { echo FRMS_PLATFORM_QA_CREDENTIAL_PAIR_MISSING; exit 1; }
       - run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
