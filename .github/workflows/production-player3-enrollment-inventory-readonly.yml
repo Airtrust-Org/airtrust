@@ -1,0 +1,121 @@
+name: Player 3 Enrollment Inventory Readonly (Encrypted)
+
+# Protected, main-only read of every active LMS enrollment. This workflow
+# never writes D1/R2 or publishes individual student/course data to logs.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: 'SHA exato da main revisada'
+        required: true
+        type: string
+      confirmation:
+        description: 'Digite AIRTRUST_PLAYER3_READONLY_INVENTORY'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: player3-enrollment-inventory-readonly
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - name: Confirm immutable source and readonly contract
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo INVALID_SHA >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo SHA_MISMATCH >&2; exit 1; }
+          [[ "$CONFIRMATION" == "AIRTRUST_PLAYER3_READONLY_INVENTORY" ]] || { echo INVALID_CONFIRMATION >&2; exit 1; }
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const sql=readFileSync('scripts/learning-factory/player3-active-enrollments-readonly.sql','utf8');
+          const body=sql.split('\n').filter(line=>!line.trimStart().startsWith('--')).join('\n').trim();
+          if(!/^SELECT\b/i.test(body) || !body.endsWith(';') ||
+             body.slice(0,-1).includes(';') ||
+             /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|ATTACH|DETACH|VACUUM|PRAGMA|TRIGGER)\b/i.test(body)){
+            throw new Error('PLAYER3_SQL_REVIEW_FAILED');
+          }
+          console.log('PLAYER3_FIXED_READONLY_SQL=PASS');
+          NODE
+
+      - name: Require eight approved gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Install locked D1 client
+        run: npm --prefix worker-airtrust ci
+
+      - name: Extract and immediately encrypt private enrollment inventory
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AIRTRUST_PLAYER3_SNAPSHOT_KEY_B64: ${{ secrets.AIRTRUST_PLAYER3_SNAPSHOT_KEY_B64 }}
+          AIRTRUST_PLAYER3_SNAPSHOT_KEY_ID: 'player3-cutover-2026'
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$AIRTRUST_PLAYER3_SNAPSHOT_KEY_B64" ]] || {
+            echo PLAYER3_REQUIRED_READONLY_SECRETS_MISSING >&2; exit 1;
+          }
+          # No plaintext snapshot written to disk or printed in any CI log.
+          (
+            cd worker-airtrust
+            npx --no-install wrangler d1 execute airtrust-db \
+              --env production --remote --json \
+              --file ../scripts/learning-factory/player3-active-enrollments-readonly.sql
+          ) | node scripts/learning-factory/player3-seal-active-inventory.mjs \
+            --out "$RUNNER_TEMP/player3-inventory.enc.json" \
+            > "$RUNNER_TEMP/player3-summary.json"
+          test -s "$RUNNER_TEMP/player3-inventory.enc.json"
+          test -s "$RUNNER_TEMP/player3-summary.json"
+
+      - name: Aggregate summary only (no PII)
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          import {readFileSync} from 'node:fs';
+          const s=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/player3-summary.json','utf8'));
+          console.log('## Player 3 — encrypted readonly enrollment inventory');
+          console.log('- Source SHA: '+process.env.GITHUB_SHA);
+          console.log('- Total current enrollments: '+s.enrollments);
+          console.log('- In progress: '+s.active);
+          console.log('- Not started: '+s.unstarted);
+          console.log('- Tenants covered: '+s.tenants);
+          console.log('- Courses covered: '+s.courses);
+          console.log('- Source conflicts requiring review: '+s.conflicts);
+          console.log('- With SCORM resume state: '+s.with_scorm_resume_state);
+          console.log('- Encrypted snapshot SHA256: '+s.snapshot_sha256);
+          console.log('- D1/R2 mutations: 0');
+          NODE
+
+      - name: Store encrypted inventory only
+        uses: actions/upload-artifact@v7
+        with:
+          name: player3-encrypted-enrollments-${{ github.sha }}
+          path: ${{ runner.temp }}/player3-inventory.enc.json
+          retention-days: 7
+          if-no-files-found: error
