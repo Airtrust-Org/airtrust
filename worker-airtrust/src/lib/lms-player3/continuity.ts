@@ -151,3 +151,57 @@ export function buildContinuityPlans(
     return planContinuity(row,target.get(row.empresa_id+':'+row.curso_id)??null);
   });
 }
+
+/**
+ * Compare successive READ-ONLY inventories. Counts only: callers must keep
+ * per-student evidence encrypted. Any drift demands a new review before cutover.
+ * Enrollments absent from the active query may have completed/cancelled; they
+ * are NOT eligible for a blind restore.
+ */
+export type ContinuityDelta = Readonly<{
+  previous_count:number; current_count:number; new_enrollments:number;
+  advanced:number; unchanged:number; missing:number; changed_cycles:number;
+  regressed:number; stale_snapshot_rows:number; cutover_requires_reconciliation:boolean;
+}>;
+export function compareContinuityInventories(
+  previous:readonly LegacyEnrollment[], current:readonly LegacyEnrollment[],
+):ContinuityDelta {
+  const makeMap=(rows:readonly LegacyEnrollment[])=>{
+    const mapped=new Map<string,LegacyEnrollment>();
+    for(const row of rows){
+      if(!positive(row.empresa_id)||!positive(row.matricula_id)) reject('INVALID_SNAPSHOT_ID');
+      const k=row.empresa_id+':'+row.matricula_id;
+      if(mapped.has(k))reject('DUPLICATE_SNAPSHOT_ID');
+      mapped.set(k,row);
+    }
+    return mapped;
+  };
+  const old=makeMap(previous),next=makeMap(current);
+  let fresh=0,advanced=0,unchanged=0,missing=0,changedCycles=0,regressed=0,stale=0;
+  for(const [id,before] of old){
+    const after=next.get(id);
+    if(!after){missing++;continue;}
+    if(after.curso_id!==before.curso_id||
+      after.funcionario_id!==before.funcionario_id||
+      after.ciclo_id!==before.ciclo_id||
+      after.ciclo_numero!==before.ciclo_numero){changedCycles++;continue;}
+    if(after.matricula_progresso_pct<before.matricula_progresso_pct){regressed++;continue;}
+    if(before.matricula_updated_at && after.matricula_updated_at &&
+      after.matricula_updated_at<before.matricula_updated_at){stale++;continue;}
+    if(before.scorm_last_commit_at && after.scorm_last_commit_at &&
+      after.scorm_last_commit_at<before.scorm_last_commit_at){stale++;continue;}
+    if(after.matricula_progresso_pct>before.matricula_progresso_pct||
+      after.matricula_updated_at!==before.matricula_updated_at||
+      after.scorm_last_commit_at!==before.scorm_last_commit_at||
+      after.scorm_cmi_json_sha256!==before.scorm_cmi_json_sha256||
+      after.scorm_suspend_data_sha256!==before.scorm_suspend_data_sha256){advanced++;continue;}
+    unchanged++;
+  }
+  for(const id of next.keys())if(!old.has(id))fresh++;
+  return {
+    previous_count:previous.length,current_count:current.length,
+    new_enrollments:fresh,advanced,unchanged,missing,
+    changed_cycles:changedCycles,regressed,stale_snapshot_rows:stale,
+    cutover_requires_reconciliation:fresh+advanced+missing+changedCycles+regressed+stale>0,
+  };
+}
