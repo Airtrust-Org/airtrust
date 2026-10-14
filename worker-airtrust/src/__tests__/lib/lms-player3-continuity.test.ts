@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {
-  planContinuity,buildContinuityPlans,ContinuityError,
+  planContinuity,buildContinuityPlans,compareContinuityInventories,ContinuityError,
   type LegacyEnrollment,type DestinationEdition,
 } from '../../lib/lms-player3/continuity';
 const SHA='a'.repeat(64);
@@ -79,6 +79,35 @@ describe('Player 3 individual enrollment continuity',()=>{
       ciclo_progresso_pct:0,ultimo_slide:0,ultima_pagina:0,scorm_id:null},dest))
       .toMatchObject({disposition:'NO_PROGRESS',source_progress_pct:0});
   });
+  it('detects students continuing lessons between T0 and cutover',()=>{
+    const newer={...legacy,matricula_progresso_pct:85,ciclo_progresso_pct:85,
+      matricula_updated_at:'2026-10-15 13:00:00',
+      scorm_last_commit_at:'2026-10-15 12:59:00'};
+    expect(compareContinuityInventories([legacy],[newer])).toMatchObject({
+      advanced:1,regressed:0,missing:0,cutover_requires_reconciliation:true,
+    });
+  });
+  it('does not mistake a completed/removed active enrollment for a restart',()=>{
+    expect(compareContinuityInventories([legacy],[])).toMatchObject({
+      missing:1,cutover_requires_reconciliation:true,
+    });
+    expect(compareContinuityInventories([],[legacy])).toMatchObject({
+      new_enrollments:1,cutover_requires_reconciliation:true,
+    });
+  });
+  it('blocks stale, wrong-cycle and regressed snapshots',()=>{
+    expect(compareContinuityInventories([legacy],[{...legacy,ciclo_id:777}]).changed_cycles).toBe(1);
+    expect(compareContinuityInventories([legacy],[{...legacy,
+      matricula_progresso_pct:75,ciclo_progresso_pct:75}]).regressed).toBe(1);
+    expect(compareContinuityInventories([legacy],[{...legacy,
+      matricula_updated_at:'2026-10-13 13:00:00'}]).stale_snapshot_rows).toBe(1);
+  });
+  it('allows identical snapshots without triggering unnecessary migration',()=>{
+    expect(compareContinuityInventories([legacy],[legacy])).toMatchObject({
+      unchanged:1,advanced:0,cutover_requires_reconciliation:false,
+    });
+  });
+
   it('fails closed on invalid identifiers or malformed evidence',()=>{
     expect(()=>planContinuity({...legacy,matricula_id:0},dest)).toThrow(ContinuityError);
     expect(()=>planContinuity({...legacy,scorm_cmi_json_sha256:'bad'},dest)).toThrow(ContinuityError);
