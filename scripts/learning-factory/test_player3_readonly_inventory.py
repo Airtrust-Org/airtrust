@@ -20,6 +20,7 @@ class InventorySqlTests(unittest.TestCase):
         CREATE TABLE lms_matricula_ciclos(id INTEGER,empresa_id INTEGER,matricula_id INTEGER,
           numero_ciclo INTEGER,status TEXT,progresso_pct INTEGER,score_final INTEGER,
           tentativas INTEGER,ciclo_atual INTEGER,updated_at TEXT,deleted_at TEXT);
+        CREATE TABLE lms_xapi_statements(id INTEGER,empresa_id INTEGER,matricula_id INTEGER,created_at TEXT);
         CREATE TABLE lms_progresso_scorm(id INTEGER,empresa_id INTEGER,matricula_id INTEGER,
           lesson_status TEXT,completion_status TEXT,success_status TEXT,score_raw INTEGER,
           last_commit_at TEXT,suspend_data TEXT,cmi_json TEXT);
@@ -31,6 +32,7 @@ class InventorySqlTests(unittest.TestCase):
         INSERT INTO lms_matricula_ciclos VALUES
           (1002,6,911,1,'EM_ANDAMENTO',80,0,0,1,'2026-10-14',NULL),
           (1003,7,912,1,'NAO_INICIADO',0,NULL,0,1,'2026-10-14',NULL);
+        INSERT INTO lms_xapi_statements VALUES (9,7,912,'2026-10-14');
         INSERT INTO lms_progresso_scorm VALUES
           (800,6,911,'incomplete',NULL,NULL,NULL,'2026-10-14','private_resume','private_cmi');
         """)
@@ -51,6 +53,8 @@ class InventorySqlTests(unittest.TestCase):
         self.assertEqual(rows[0]['ciclo_progresso_pct'],80)
         self.assertEqual(rows[0]['scorm_suspend_data_PRIVATE'],'private_resume')
         self.assertEqual(rows[1]['ciclo_id'],1003)
+        self.assertEqual(rows[1]['xapi_statement_count'],1)
+        self.assertEqual(rows[0]['xapi_statement_count'],0)
         self.assertNotIn('nome',rows[0].keys())
 
 if __name__ == '__main__':
