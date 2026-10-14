@@ -34,7 +34,8 @@ function load(projectName: string) {
   return validateQaProfile(raw, projectName,
     process.env.PLAYER3_QA_STAGING_ORIGIN ?? '',
     process.env.PLAYER3_QA_API_ORIGIN ?? '',
-    process.env.PLAYER3_QA_SYNTHETIC_TENANT_ID ?? '');
+    process.env.PLAYER3_QA_SYNTHETIC_TENANT_ID ?? '',
+    process.env.PLAYER3_QA_CONTENT_ORIGIN ?? '');
 }
 async function openLearner(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const state = process.env.PLAYER3_QA_STORAGE_STATE;
