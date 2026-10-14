@@ -16,6 +16,13 @@ import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lm
 const app=new Hono<{Bindings:Env}>();
 const ID=/^[1-9][0-9]{0,15}$/;
 export function canCompleteNative(env:Env,tenant:number):boolean{
+  // During the Player3 module pilot, the legacy Native single-attempt
+  // terminal cannot certify an edition governed by independent stage proofs.
+  // Until the Player3 canonical terminal verifies every required module,
+  // keep these two completion authorities mutually exclusive (fail-closed).
+  const modular=env.PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS;
+  if(modular && (modular.includes('*') ||
+    modular.split(',').some(raw=>raw.trim()===String(tenant))))return false;
   const allowlist=env.NATIVE_COMPLETION_WRITE_ENABLED_TENANTS;
   return canProvisionNative(env,tenant) && !!allowlist && !allowlist.includes('*') &&
     allowlist.split(',').some(p=>p.trim()===String(tenant));
