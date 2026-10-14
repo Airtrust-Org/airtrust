@@ -172,11 +172,9 @@ def compile_rc81_review(original_zip: bytes, parent_origin: str,
     """
     import io
     from zipfile import ZipFile
-    from convert_preserved_html5 import UnsafePackage
-    from prepare_player3_learner_review import compile_review, fixed_zip, sha
-
-    if sha(original_zip) != SOURCE_ZIP_SHA256:
+    if hashlib.sha256(original_zip).hexdigest() != SOURCE_ZIP_SHA256:
         raise RC81Unsupported('RC81_SOURCE_ZIP_MISMATCH')
+    from prepare_player3_learner_review import compile_review, fixed_zip, sha
     archive, meta, projection, bank, receipt = compile_review(
         original_zip, 'Doutrinamento_Seguranca_Qualidade_RC8_1_CORRIGIDO.zip')
     if (meta.get('stage_count') != 8 or meta.get('question_count') != 80 or
