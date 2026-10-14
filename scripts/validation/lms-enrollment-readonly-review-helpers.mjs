@@ -67,6 +67,58 @@ export function hasMeaningfulScormLocation(value) {
   return !/^0(?:\/\d+)?$/.test(location);
 }
 
+
+/** Read-only, sanitized server closure diagnostics; never infer eligibility from raw progress. */
+export function summarizeClosureReadiness(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const code = typeof input.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(input.code)
+    ? input.code : null;
+  const missing = Array.isArray(input.missing)
+    ? [...new Set(input.missing.filter((value) =>
+      typeof value === 'string' && /^[a-z0-9_]{1,64}$/.test(value)))].slice(0, 32)
+    : [];
+  const raw = input.slide_coverage;
+  const total = Number(raw?.total);
+  const recorded = Number(raw?.recorded);
+  const numbers = raw?.missing_numbers;
+  const validCoverage = Number.isInteger(total) && total > 0 && total <= 2000
+    && Number.isInteger(recorded) && recorded >= 0 && recorded <= total
+    && Array.isArray(numbers) && numbers.length <= total
+    && numbers.every((number) => Number.isInteger(number) && number >= 1 && number <= total);
+  const slideCoverage = validCoverage ? {
+    total,
+    recorded,
+    missing_numbers: [...new Set(numbers)].sort((a, b) => a - b),
+  } : null;
+  return {
+    code,
+    eligible_for_server_verification: input.eligible_for_server_verification === true,
+    missing,
+    slide_coverage: slideCoverage,
+  };
+}
+
+/** Initial launch and persisted-resume inspection are distinct, read-only contracts. */
+export function evaluateReadOnlyReviewState({
+  mode, expectedProgress, actualProgress, expectedCycle, cycle,
+  serverResumeLocationPresent, serverSuspendDataPresent, launchLocation, launchSuspendData,
+}) {
+  if (!['initial', 'resumed'].includes(mode) ||
+      actualProgress !== expectedProgress ||
+      (expectedCycle !== 0 && cycle.numero_ciclo !== expectedCycle) ||
+      cycle.preview_mode !== false) return false;
+  const launchLocationPresent = hasMeaningfulScormLocation(launchLocation);
+  const launchSuspendPresent = String(launchSuspendData || '').length > 0;
+  if (mode === 'resumed') {
+    return (serverResumeLocationPresent || serverSuspendDataPresent) &&
+      launchLocationPresent === serverResumeLocationPresent &&
+      launchSuspendPresent === serverSuspendDataPresent;
+  }
+  return cycle.review_mode === false &&
+    !serverResumeLocationPresent && !serverSuspendDataPresent &&
+    !launchLocationPresent && !launchSuspendPresent;
+}
+
 export function parseLaunchCycle(html) {
   const text = String(html || '');
   const readNumber = (name) => {
