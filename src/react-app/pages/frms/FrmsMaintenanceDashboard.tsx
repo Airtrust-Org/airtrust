@@ -12,6 +12,7 @@ import { shouldExposeFrmsPerson } from './frmsProductionVisibility';
 import {
   classifyMaintenanceItem,
   maintenanceActionText,
+  formatMaintenanceEvidenceTime,
   readinessLabel,
   type MaintenanceDecisionBucket,
 } from './frmsMaintenanceDecision';
@@ -28,7 +29,7 @@ const BUCKET_STYLE: Record<MaintenanceDecisionBucket, { label: string; className
     dot: 'bg-orange-500',
   },
   PENDING: {
-    label: 'Pendente',
+    label: 'Evidência insuficiente',
     className: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200',
     dot: 'bg-amber-400',
   },
@@ -212,7 +213,7 @@ export default function FrmsMaintenanceDashboard() {
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Resumo de manutenção">
           <MetricCard label="Revisão imediata" value={counts.CRITICAL} helper="sinal crítico de fadiga ou prontidão" />
           <MetricCard label="Atenção" value={counts.ATTENTION} helper="requer avaliação e mitigação" />
-          <MetricCard label="Sem dados para avaliação" value={counts.PENDING} helper="check-in ou PVT pendente; não significa condição normal" />
+          <MetricCard label="Evidência insuficiente" value={counts.PENDING} helper="check-in, PVT ou baseline individual não confirmado; não significa condição normal" />
           <MetricCard label="Sem pendência" value={counts.NORMAL} helper="monitoramento normal" />
         </section>
 
@@ -236,7 +237,7 @@ export default function FrmsMaintenanceDashboard() {
               { key: 'TODOS', label: 'Toda a equipe', value: items.length },
               { key: 'CRITICAL', label: 'Revisão imediata', value: counts.CRITICAL },
               { key: 'ATTENTION', label: 'Atenção', value: counts.ATTENTION },
-              { key: 'PENDING', label: 'Sem dados para avaliação', value: counts.PENDING },
+              { key: 'PENDING', label: 'Evidência insuficiente', value: counts.PENDING },
               { key: 'NORMAL', label: 'Sem pendência', value: counts.NORMAL },
             ] as const).map((option) => (
               <button key={option.key} type="button" aria-pressed={bucketFilter === option.key}
@@ -285,13 +286,25 @@ export default function FrmsMaintenanceDashboard() {
                           <p className="font-semibold text-slate-950 dark:text-white">{item.funcionario_nome}</p>
                           <p className="mt-0.5 text-xs text-slate-500">{cargoLabel(item)} · {item.setor_nome || 'Manutenção'}</p>
                         </td>
-                        <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{checkinLabel(item)}</td>
+                        <td className="px-4 py-3 text-slate-700 dark:text-slate-200">
+                          {checkinLabel(item)}
+                          <p className="mt-1 text-xs text-slate-500">
+                            {item.checkin_id
+                              ? (formatMaintenanceEvidenceTime(item.checkin_submitted_at) ?? 'Data/hora de envio não informada')
+                              : `Sem check-in registrado para ${date.split('-').reverse().join('/')}`}
+                          </p>
+                        </td>
                         <td className="px-4 py-3 text-slate-700 dark:text-slate-200">
                           {item.horas_sono == null ? '—' : `${Number(item.horas_sono).toFixed(1)} h`}
                         </td>
                         <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{item.kss_score ?? '—'}</td>
                         <td className="px-4 py-3">
                           <span className="font-medium text-slate-800 dark:text-slate-100">{readinessLabel(item.readiness_classification)}</span>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {item.readiness_id
+                              ? (formatMaintenanceEvidenceTime(item.readiness_created_at) ?? 'Data/hora do teste não informada')
+                              : `Sem PVT/Readiness registrado para ${date.split('-').reverse().join('/')}`}
+                          </p>
                           {item.readiness_id && item.baseline_ready !== 1 ? (
                             <p className="mt-0.5 text-xs text-slate-500">{item.baseline_sessions ?? 0} sessão(ões) de baseline</p>
                           ) : null}
@@ -299,12 +312,13 @@ export default function FrmsMaintenanceDashboard() {
                         <td className="px-4 py-3">
                           <DecisionBadge bucket={bucket} />
                           {bucket === 'PENDING' ? (
-                            <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">Dados insuficientes para concluir sobre prontidão.</p>
+                            <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">Dados ou baseline insuficientes para concluir sobre prontidão.</p>
                           ) : null}
                         </td>
                         <td className="max-w-sm px-4 py-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                          {maintenanceActionText(bucket)}
-                          <p className="mt-1 text-slate-500">Atividade/turno: não disponível neste painel; confirmar com a programação antes de priorizar.</p>
+                          {maintenanceActionText(bucket, item)}
+                          <p className="mt-1 text-slate-500">Responsável pela verificação: gestão de Manutenção do setor; confirmar o encarregado do turno.</p>
+                           <p className="mt-1 text-slate-500">Atividade/turno: fonte indisponível; confirmar com a programação antes de priorizar. A data/hora de recebimento não determina aptidão.</p>
                         </td>
                       </tr>
                     ))}

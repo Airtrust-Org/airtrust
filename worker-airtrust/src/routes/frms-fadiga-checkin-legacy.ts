@@ -39,6 +39,7 @@ type NormalizedCheckinInput = {
   horaDormiu: string | null;
   horaAcordou: string;
   horasSono24h: number;
+  oportunidadeSonoHoras24h: number | null;
   horasSono48h: number | null;
   qualidadeSono: number | null;
   kssScore: number;
@@ -253,6 +254,7 @@ function normalizeCheckinInput(
     horaDormiu,
     horaAcordou,
     horasSono24h,
+    oportunidadeSonoHoras24h: input.oportunidade_sono_horas_24h ?? null,
     horasSono48h:
       typeof input.horas_sono_48h === 'number' ? clamp(input.horas_sono_48h, 0, 48) : null,
     qualidadeSono:
@@ -1043,6 +1045,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
            SET hora_checkin = ?,
                kss_score = ?,
                horas_sono = ?,
+               oportunidade_sono_horas_24h = ?,
                qualidade_sono = ?,
                sintomas_json = ?,
                observacoes = ?,
@@ -1077,6 +1080,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           horaCheckin,
           input.kssScore,
           input.horasSono24h,
+          input.oportunidadeSonoHoras24h,
           input.qualidadeSono ?? 3,
           sintomasJson,
           input.observacoes,
@@ -1113,7 +1117,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       const insertResult = await c.env.DB.prepare(
         `INSERT OR IGNORE INTO frms_fadiga_checkin (
              id, empresa_id, funcionario_id, data_checkin, hora_checkin,
-             kss_score, horas_sono, qualidade_sono,
+             kss_score, horas_sono, oportunidade_sono_horas_24h, qualidade_sono,
              sintomas_json, observacoes,
              score_fadiga, nivel_fadiga, status_operacional, recomendacao,
              apto, requires_frat_review, frat_sugerido_nivel, associado_frat_avaliacao_id,
@@ -1123,7 +1127,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
              fit_for_duty, computed_risk_level, requires_operational_review, report_source,
              regulatory_profile_id, profile_code, config_revision_id, model_version, submitted_at,
              origem_registro, created_by, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
         .bind(
           checkinId,
@@ -1133,6 +1137,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           horaCheckin,
           input.kssScore,
           input.horasSono24h,
+          input.oportunidadeSonoHoras24h,
           input.qualidadeSono ?? 3,
           sintomasJson,
           input.observacoes,
@@ -1212,6 +1217,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           score_fadiga: scoreBase.score_fadiga,
           nivel_fadiga: finalNivel,
           status_operacional: finalStatusOperacional,
+          oportunidade_sono_horas_24h: input.oportunidadeSonoHoras24h,
           computed_risk_level: dailyRiskLevel,
           requires_operational_review: requiresOperationalReview,
           hora_apresentacao: input.jornadaInicioPrevista,
@@ -1326,6 +1332,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           hora_checkin: horaCheckin,
           kss_score: input.kssScore,
           horas_sono: input.horasSono24h,
+          oportunidade_sono_horas_24h: input.oportunidadeSonoHoras24h,
           horas_sono_48h: input.horasSono48h,
           wake_time: wakeTime,
           qualidade_sono: input.qualidadeSono ?? 3,

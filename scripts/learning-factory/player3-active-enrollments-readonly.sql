@@ -30,9 +30,33 @@ SELECT
   cy.tentativas AS ciclo_tentativas,
   cy.ciclo_atual,
   cy.updated_at AS ciclo_updated_at,
+  -- All non-deleted cycles for this same enrollment AND tenant, encrypted only.
+  -- Never collapse an earlier qualification/completion into the current cycle.
+  (SELECT COALESCE(json_group_array(json_object(
+      'id', h.id, 'empresa_id', h.empresa_id, 'matricula_id', h.matricula_id,
+      'numero_ciclo', h.numero_ciclo,
+      'ciclo_atual', h.ciclo_atual, 'status', h.status,
+      'progresso_pct', h.progresso_pct, 'score_final', h.score_final,
+      'tentativas', h.tentativas, 'updated_at', h.updated_at,
+      'data_inicio', h.data_inicio, 'data_conclusao', h.data_conclusao,
+      'qualificacao_historico_id', h.qualificacao_historico_id
+    )), '[]')
+    FROM lms_matricula_ciclos AS h
+    WHERE h.matricula_id = m.id AND h.empresa_id = m.empresa_id
+      AND h.deleted_at IS NULL) AS ciclos_historicos_json_PRIVATE,
   c.tipo_conteudo,
   c.scorm_versao,
   c.version_tag AS curso_version_tag,
+  -- Registry metadata is the catalog's CURRENT active version, NOT proof
+  -- that a particular historic cycle ran this exact package hash.
+  (SELECT pv.package_sha256 FROM lms_scorm_package_versions AS pv
+    WHERE pv.empresa_id=m.empresa_id AND pv.curso_id=m.curso_id
+      AND pv.status='ACTIVE' ORDER BY pv.activated_at DESC, pv.id DESC LIMIT 1)
+    AS catalog_current_scorm_sha256,
+  (SELECT pv.package_version FROM lms_scorm_package_versions AS pv
+    WHERE pv.empresa_id=m.empresa_id AND pv.curso_id=m.curso_id
+      AND pv.status='ACTIVE' ORDER BY pv.activated_at DESC, pv.id DESC LIMIT 1)
+    AS catalog_current_scorm_version,
   s.id AS scorm_id,
   s.lesson_status AS scorm_lesson_status,
   s.completion_status AS scorm_completion_status,
@@ -48,7 +72,7 @@ SELECT
      WHERE x.matricula_id = m.id AND x.empresa_id = m.empresa_id)
     AS xapi_last_event_at
 FROM lms_matriculas AS m
-JOIN lms_cursos AS c
+LEFT JOIN lms_cursos AS c
   ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
 LEFT JOIN lms_matricula_ciclos AS cy
   ON cy.matricula_id = m.id
