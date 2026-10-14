@@ -298,6 +298,57 @@ export function validateQaAuthoredStageAttempt(
   return row;
 }
 
+/** Lesson evidence from the real browser, never a grade or completion hint.
+ * The Worker accepts exactly eventId, sequence and the Native lesson ID.
+ */
+export type QaAuthoredLessonCheckpoint={
+  eventId:string;sequence:number;unitId:string;
+};
+export function validateQaAuthoredLessonCheckpoint(
+  raw:unknown,expectedUnitId:string,expectedSequence:number,
+  seenIds:ReadonlySet<string>,
+):QaAuthoredLessonCheckpoint{
+  const e=raw as QaAuthoredLessonCheckpoint;
+  requireQa(!!e&&typeof e==='object'&&!Array.isArray(e)&&
+    Object.keys(e).sort().join(',')==='eventId,sequence,unitId'&&
+    e.unitId===expectedUnitId && id.test(e.unitId)&&
+    Number.isSafeInteger(expectedSequence)&&expectedSequence>=1&&
+    expectedSequence<=10000&&e.sequence===expectedSequence,
+    'RC81_LESSON_CHECKPOINT_CANONICAL_ID_SEQUENCE');
+  requireQa(typeof e.eventId==='string'&&
+    /^v-[a-f0-9]{32}$/.test(e.eventId) &&
+    !seenIds.has(e.eventId),
+    'RC81_LESSON_CHECKPOINT_EVENT_UNIQUE');
+  return e;
+}
+export type QaNativeLessonSession={
+  matricula_id:number;ciclo_id:number;edition_sha256:string;
+  mode:'LEARN'|'REVIEW';next_sequence:number;
+  seen_lesson_ids:string[];total_lessons:number;
+  last_visited_unit_id:string|null;
+};
+export function validateQaNativeLessonSession(
+  raw:unknown,enrollment:QaEnrollment,lessonIds:readonly string[],
+):QaNativeLessonSession{
+  assertQaReadOnlyNonDisclosure(raw);
+  const s=raw as QaNativeLessonSession;
+  requireQa(!!s&&s.matricula_id===enrollment.enrollmentId&&
+    s.ciclo_id===enrollment.cycleId&&
+    s.edition_sha256===enrollment.editionSha256&&
+    s.mode==='LEARN'&&Number.isSafeInteger(s.next_sequence)&&
+    s.next_sequence>0&&s.next_sequence<=10001&&
+    s.total_lessons===lessonIds.length&&
+    lessonIds.length===new Set(lessonIds).size&&
+    Array.isArray(s.seen_lesson_ids)&&
+    s.seen_lesson_ids.every(i=>lessonIds.includes(i))&&
+    s.seen_lesson_ids.length===new Set(s.seen_lesson_ids).size&&
+    s.next_sequence>s.seen_lesson_ids.length&&
+    (s.last_visited_unit_id===null||
+      s.seen_lesson_ids.includes(s.last_visited_unit_id)),
+    'RC81_NATIVE_LESSON_LEDGER_SCOPE');
+  return s;
+}
+
 /**
  * Front B's combined *read-only* content/module readiness projection.
  * The double camel/snake completion fields are returned by the actual route.
