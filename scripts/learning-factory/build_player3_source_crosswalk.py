@@ -32,7 +32,7 @@ def _read_model(archive: ZipFile, entries: dict) -> tuple[dict, str]:
             continue
         text = archive.read(name).decode('utf-8-sig').strip()
         import re
-        matched = re.match(r'^window\\.(?:COURSE_DATA|AIRTRUST_COURSE_MODEL)\\s*=\\s*', text)
+        matched = re.match(r'^window\.(?:COURSE_DATA|AIRTRUST_COURSE_MODEL)\s*=\s*', text)
         if matched:
             model = json.loads(text[matched.end():].strip().rstrip(';').strip())
             if isinstance(model, dict) and isinstance(model.get('slides'), list):
