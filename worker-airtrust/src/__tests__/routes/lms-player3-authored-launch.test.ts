@@ -6,6 +6,8 @@ import {canWritePlayer3Stage,loadApprovedPlayer3StageContext}
   from '../../services/lms-player3-module-attempt-writer';
 import {readPlayer3ModuleSession}
   from '../../services/lms-player3-module-progress-reader';
+import {readNativeLearnerSession}
+  from '../../services/lms-native-readiness-repository';
 
 vi.mock('../../routes/escalas-shared',()=>({getEmpresaIdSafe:()=>6}));
 vi.mock('../../services/lms-player3-module-attempt-writer',()=>({
@@ -17,14 +19,19 @@ vi.mock('../../services/lms-player3-module-attempt-writer',()=>({
 vi.mock('../../services/lms-player3-module-progress-reader',()=>({
   readPlayer3ModuleSession:vi.fn(),
 }));
+vi.mock('../../services/lms-native-readiness-repository',()=>({
+  readNativeLearnerSession:vi.fn(),
+}));
 const allow=vi.mocked(canWritePlayer3Stage);
 const load=vi.mocked(loadApprovedPlayer3StageContext);
 const progress=vi.mocked(readPlayer3ModuleSession);
+const native=vi.mocked(readNativeLearnerSession);
 const sha=(s:string)=>s.repeat(64);
 const content={
   schema:'AIRTRUST_PLAYER3_AUTHORED_LAUNCH_V1',
   sourceSha256:sha('b'),contentSha256:sha('c'),
   sourceStageCrosswalkSha256:sha('d'),
+  orderedUnitIdsSha256:'',
   answersStripped:true,legacyScormDisabled:true,
   reviewedImmutableRelease:true,
 };
@@ -32,6 +39,8 @@ const approved={
   course:{
     cursoId:57,editionHash:sha('a'),cicloId:333,mode:'LEARN',
     artifact:{
+      units:[{id:'unit21',kind:'lesson'},{id:'unit22',kind:'lesson'},
+        {id:'module1',kind:'assessment'}],
       questions:[{id:'q1',prompt:'Pergunta autenticada',
         options:[{id:'x',text:'Alternativa X'},{id:'y',text:'Alternativa Y'}],
         correctOptionId:'x',feedbackCorrect:'SECRET DO WORKER'}],
@@ -64,8 +73,18 @@ const url='http://localhost/matriculas/911/etapas/lancamento';
 const request=(bindings:Env=env)=>app.request(url,{method:'GET'},bindings);
 
 describe('Player3 authenticated authored stage launch GET',()=>{
-  beforeEach(()=>{
+  beforeEach(async()=>{
     vi.clearAllMocks();
+    const ids=approved.course.artifact.units.map(x=>x.id);
+    const digest=await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(JSON.stringify(ids)));
+    content.orderedUnitIdsSha256=[...new Uint8Array(digest)]
+      .map(x=>x.toString(16).padStart(2,'0')).join('');
+    native.mockResolvedValue({summary:{
+      editionHash:sha('a'),cicloId:333,mode:'LEARN',
+      nextSequence:2,seenLessonIds:['unit21'],
+      lastVisitedUnitId:'unit21',totalLessons:2,latestAttempt:null,
+    }} as never);
     allow.mockReturnValue(true);
     load.mockResolvedValue(approved as never);
     progress.mockResolvedValue(session as never);
@@ -88,6 +107,8 @@ describe('Player3 authenticated authored stage launch GET',()=>{
       edition_sha256:sha('a'),
       content_url:'https://isolated.example/player3/6/57/'+sha('a')+'/'+sha('c')+'/index.html',
       assessment_presentation:'authored-html5',
+      resume_next_unit_id:'unit22',last_visited_unit_id:'unit21',
+      checkpoint_unit_ids:['unit21','unit22'],
       official_stages_passed:false,completion_supported:false,
       pending_assessment:{stage_id:'module1',questions:[
         {id:'q1',prompt:'Pergunta autenticada',options:[
