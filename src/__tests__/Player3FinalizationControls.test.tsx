@@ -46,7 +46,7 @@ describe('Player3 terminal: advisory readiness is not a certificate',()=>{
     render(<Player3FinalizationControls scope={scope}/>);
     click();
     expect(await screen.findByRole('status')).toHaveTextContent(
-      /Certificado pendente de verificação/);
+      /certificado ainda pendente de verificação/i);
     expect(request).toHaveBeenCalledTimes(4);
     expect(request.mock.calls.map(x=>x[0])).toEqual([
       '/api/lms/native/matriculas/911/etapas/certificado',
@@ -88,7 +88,7 @@ describe('Player3 terminal: advisory readiness is not a certificate',()=>{
       const {unmount}=render(<Player3FinalizationControls scope={scope}/>);
       click();
       expect(await screen.findByRole('status')).toHaveTextContent(
-        /Consultar a situação/);
+        /Consulte a situação/);
       expect(screen.getByTestId('player3-request-finalization')).toBeDisabled();
       expect(request).toHaveBeenCalledTimes(4);
       unmount();
@@ -102,7 +102,7 @@ describe('Player3 terminal: advisory readiness is not a certificate',()=>{
     render(<Player3FinalizationControls scope={scope}/>);
     click();
     expect(await screen.findByRole('status')).toHaveTextContent(
-      /Consultar a situação/);
+      /Consulte a situação/);
     click();
     expect(request).toHaveBeenCalledTimes(4);
     expect(request.mock.calls.filter(x=>x[1]?.method==='POST')).toHaveLength(1);
@@ -141,7 +141,7 @@ describe('Player3 terminal: advisory readiness is not a certificate',()=>{
       })));
     render(<Player3FinalizationControls scope={scope}/>);
     click();
-    expect(await screen.findByRole('status')).toHaveTextContent(/Consultar a situação/);
+    expect(await screen.findByRole('status')).toHaveTextContent(/Consulte a situação/);
     fireEvent.click(screen.getByTestId('player3-recheck-completion'));
     expect(await screen.findByRole('status')).toHaveTextContent(/arquivo do certificado foi localizado/);
     expect(request.mock.calls.filter(x=>x[1]?.method==='POST')).toHaveLength(1);
@@ -159,7 +159,7 @@ describe('Player3 terminal: advisory readiness is not a certificate',()=>{
       request.mockReset().mockResolvedValueOnce(ok(forged));
       const {unmount}=render(<Player3FinalizationControls scope={scope}/>);
       click();
-      expect(await screen.findByRole('status')).toHaveTextContent(/Consultar a situação/);
+      expect(await screen.findByRole('status')).toHaveTextContent(/Consulte a situação/);
       expect(request.mock.calls.filter(x=>x[1]?.method==='POST')).toHaveLength(0);
       unmount();
     }
