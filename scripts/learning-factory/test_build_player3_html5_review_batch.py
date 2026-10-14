@@ -80,7 +80,7 @@ class Player3BatchReviewTests(unittest.TestCase):
             root = Path(folder)
             spoof = root/'SMS(5).zip'
             spoof.write_bytes(bundle({'one.zip': original()}))
-            with self.assertRaisesRegex(UnsafePackage, 'REQUIRE_BOTH_ORIGINAL_ARCHIVES'):
+            with self.assertRaisesRegex(UnsafePackage, 'ORIGINAL_ARCHIVE_SHA_MISMATCH'):
                 batch_review([spoof], root/'private', root/'learner')
             self.assertFalse((root/'private').exists())
 
