@@ -6,6 +6,7 @@
  * content URL, Worker assessment endpoints and governed schema are available.
  */
 import { useEffect, useMemo, useState } from 'react';
+import Player3AssessmentModal, {type P3ExamProps} from './Player3AssessmentModal';
 
 export type Player3Html5HostProps = {
   title: string;
@@ -15,6 +16,9 @@ export type Player3Html5HostProps = {
   contentOrigin: string;
   /** Explicitly marks this as a review, never certified completion. */
   reviewOnly?: boolean;
+  /** An independently authenticated server session decides when the exam is due.
+   * Never derive this prop from untrusted iframe navigation/postMessage. */
+  pendingAssessment?: P3ExamProps | null;
 };
 
 const DIGEST = /^[a-f0-9]{64}$/;
@@ -42,7 +46,7 @@ function validContentUrl(raw: string, expectedOrigin: string): boolean {
  * exam attempt and canonical completion for tenant/enrollment/cycle/edition.
  */
 export default function Player3Html5Host({
-  title, contentUrl, editionSha256, contentOrigin, reviewOnly = true,
+  title, contentUrl, editionSha256, contentOrigin, reviewOnly = true, pendingAssessment,
 }: Player3Html5HostProps) {
   const [lastHint, setLastHint] = useState<string | null>(null);
   const safe = useMemo(() =>
@@ -93,6 +97,8 @@ export default function Player3Html5Host({
         {lastHint ? 'Unidade exibida: ' + lastHint + '. ' : ''}
         A navegação no conteúdo não confirma aprovação, matrícula ou certificado.
       </footer>
+      {!reviewOnly && pendingAssessment &&
+        <Player3AssessmentModal {...pendingAssessment} />}
     </section>
   );
 }
