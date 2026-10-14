@@ -11,9 +11,9 @@ from build_player3_html5_review_batch import KNOWN_SOURCES_BY_SHA
 from convert_preserved_html5 import UnsafePackage
 
 class Player3UnifiedBatchTests(unittest.TestCase):
-    def test_source_coverage_explicit_not_22_published(self):
-        self.assertEqual(len(ADAPTED),19)
-        self.assertEqual(len(VENDOR_UNSUPPORTED),3)
+    def test_source_coverage_22_review_only_and_none_published(self):
+        self.assertEqual(len(ADAPTED),22)
+        self.assertEqual(len(VENDOR_UNSUPPORTED),0)
         self.assertFalse(ADAPTED & VENDOR_UNSUPPORTED)
         self.assertEqual(len(KNOWN_SOURCES_BY_SHA),2)
         for sha in ADAPTED | VENDOR_UNSUPPORTED:
@@ -27,8 +27,7 @@ class Player3UnifiedBatchTests(unittest.TestCase):
         self.assertEqual(a,review_binding_sha256(digest))
         self.assertNotEqual(a,review_binding_sha256('0'*64))
 
-    def test_unadapted_supplier_and_unknown_zip_fail_closed(self):
-        supplier=next(iter(VENDOR_UNSUPPORTED))
+    def test_unknown_zip_fails_closed(self):
         # Authoritative digest is verified from actual source bytes;
         # arbitrary data cannot spoof a known supplier key.
         for raw in (b'not-a-zip',b'edited archive'):

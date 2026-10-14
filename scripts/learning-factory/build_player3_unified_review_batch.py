@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Player3 one-shot SOURCE-PINNED factory for 19 adapted HTML5 editions.
+"""Player3 one-shot SHA-pinned PRIVATE REVIEW factory for 22 HTML5 editions.
 
-The three independently authored supplier runtimes remain BLOCKED, not
-silently bundled as functioning courses. Outputs are OFFLINE REVIEW ONLY and
-must never be offered to students, committed, deployed or published to R2.
+These are nonpublishable learning candidates, NOT approved Player3 editions.
+No real evaluation, content evidence, enrollment or certificate is persisted.
 """
 from __future__ import annotations
 import argparse
@@ -19,17 +18,15 @@ from build_player3_rc81_bridge_review import SOURCE_ZIP_SHA256, compile_rc81_rev
 from build_player3_standard_journey_review import SOURCES as STANDARD, compile_standard_review
 from build_player3_v3_review import SOURCES as V33, FORMATIVE_ZIPS, compile_v33_review
 from build_player3_legacy_review import SOURCES as LEGACY, compile_legacy_review
+from build_player3_sgso_review import SOURCES as SGSO, compile_sgso_review
+from build_player3_residuos_review import SOURCE_ZIP as RESIDUOS, compile_residuos_review
 from convert_preserved_html5 import UnsafePackage
 from extract_player3_private_assessments import _safe_output_pair, _write_exclusive, extract
 from prepare_player3_learner_review import compile_review
 
-VENDOR_UNSUPPORTED = frozenset({
-    '301f3dc1285461896620e6ccd29b6aef2b5a23c980859a73244415dbb8b68837',  # SGSO M10.4
-    'f35ae32e01d99bd2fa78bbd1144758fba048c7bb36c8249fd1a731729e338d64',  # SGSO M10.7
-    '1d18d4a2c023780a8e6e008552597b235d258d3fc3be7fc8f4557f80cbde2d85',  # Resíduos
-})
-ADAPTED=frozenset([SOURCE_ZIP_SHA256,*STANDARD,*V33,*LEGACY])
-if len(ADAPTED)!=19 or len(VENDOR_UNSUPPORTED)!=3 or ADAPTED & VENDOR_UNSUPPORTED:
+VENDOR_UNSUPPORTED = frozenset()  # Formerly blocked sources now have pinned adapters.
+ADAPTED=frozenset([SOURCE_ZIP_SHA256,*STANDARD,*V33,*LEGACY,*SGSO,RESIDUOS])
+if len(ADAPTED)!=22 or len(SGSO)!=2 or RESIDUOS not in ADAPTED:
     raise RuntimeError('PLAYER3_BROKEN_SOURCE_REGISTRY')
 
 
@@ -44,8 +41,6 @@ def review_binding_sha256(original_sha256:str)->str:
 
 def compile_safe_review(raw: bytes, name: str, origin: str):
     digest=hashlib.sha256(raw).hexdigest()
-    if digest in VENDOR_UNSUPPORTED:
-        raise UnsafePackage('PLAYER3_SUPPLIER_RUNTIME_NEEDS_OWN_ADAPTER')
     if digest not in ADAPTED:
         raise UnsafePackage('PLAYER3_UNRECOGNIZED_SOURCE_SHA')
     binding=review_binding_sha256(digest)
@@ -55,6 +50,10 @@ def compile_safe_review(raw: bytes, name: str, origin: str):
         edition,meta,public,bank,receipt=compile_standard_review(raw,name,origin,binding)
     elif digest in V33:
         edition,meta,public,bank,receipt=compile_v33_review(raw,name,origin,binding)
+    elif digest in SGSO:
+        edition,meta,public,bank,receipt=compile_sgso_review(raw,origin,binding)
+    elif digest == RESIDUOS:
+        edition,meta,public,bank,receipt=compile_residuos_review(raw,origin,binding)
     else:
         edition,meta,public,bank,receipt=compile_legacy_review(raw,name,origin,binding)
     # No lineage is approved before the content and authoritative server policy
@@ -81,29 +80,20 @@ def unified_review(batches:list[Path], private_output:Path, learner_output:Path,
     # Preflight the ENTIRE batch before touching output paths. Keep private keys
     # only in memory, then in chmod 0600 private directory outside repo/Drive.
     verified=[]
-    blocked=[]
     seen=set()
     for outer,name,raw in candidates(batches):
         digest=hashlib.sha256(raw).hexdigest()
         if digest in seen:raise UnsafePackage('PLAYER3_DUPLICATE_EDITION')
         seen.add(digest)
-        if digest in VENDOR_UNSUPPORTED:
-            # Structural metadata only, no learner artifact for custom engines.
-            meta,_,_=extract(raw,name)
-            blocked.append({'originalPackage':name,'source_sha256':digest,
-                            'stageCount':meta['stage_count'],
-                            'reason':'SUPPLIER_RUNTIME_NOT_PORTED',
-                            'publishable':False})
-            continue
         edition,meta,public,bank,receipt,binding=compile_safe_review(raw,name,parent_origin)
         verified.append((outer,name,digest,edition,meta,public,bank,receipt,binding))
-    if seen!=ADAPTED | VENDOR_UNSUPPORTED or len(verified)!=19 or len(blocked)!=3:
+    if seen!=ADAPTED or len(verified)!=22:
         raise UnsafePackage('PLAYER3_22_SOURCE_COVERAGE_MISMATCH')
-    summary={'schema':'AIRTRUST_PLAYER3_19_FAMILY_REVIEW_BATCH_V1',
+    summary={'schema':'AIRTRUST_PLAYER3_22_FAMILY_REVIEW_BATCH_V1',
        'status':'REVIEW_ONLY_NEVER_DEPLOY','totalOriginals':22,
-       'adaptedReviewEditions':len(verified),'supplierRuntimeBlocked':len(blocked),
+       'adaptedReviewEditions':len(verified),'supplierRuntimeBlocked':0,
        'approvedForStudents':0,'remoteWrites':False,'allCoursesPublishable':False,
-       'blocked':blocked,'courses':[]}
+       'blocked':[],'courses':[]}
     created=[]
     try:
         private.mkdir(mode=0o700)
@@ -127,7 +117,7 @@ def unified_review(batches:list[Path], private_output:Path, learner_output:Path,
                 'stageCount':meta['stage_count'],'questionCount':meta['question_count'],
                 'formativePolicyReviewRequired':digest in FORMATIVE_ZIPS,
                 'stageContractApproved':False,'publishable':False})
-        _write_exclusive(private/'19-course-private-summary.json',summary)
+        _write_exclusive(private/'22-course-private-summary.json',summary)
     except BaseException:
         for p in reversed(created):shutil.rmtree(p,ignore_errors=True)
         raise
@@ -143,5 +133,5 @@ def main():
     a=parser.parse_args();os.umask(0o077)
     summary=unified_review(a.original_batches,a.private_output,a.learner_review_output,a.parent_origin)
     print(json.dumps({'status':summary['status'], 'totalOriginals':22,
-        'adaptedReviewEditions':19,'supplierRuntimeBlocked':3,'approvedForStudents':0},ensure_ascii=False))
+        'adaptedReviewEditions':22,'supplierRuntimeBlocked':0,'approvedForStudents':0},ensure_ascii=False))
 if __name__=='__main__':main()
