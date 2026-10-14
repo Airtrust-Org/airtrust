@@ -172,6 +172,25 @@ export function validateQaProfile(raw: unknown, projectName: string,
 }
 
 /**
+ * Read-only Player3 projections must never expose learner answer selections,
+ * grading keys, answer hashes, or private instructor explanations. The caller
+ * receives real Worker JSON; unknown nested properties are scanned, not
+ * silently dropped by a TypeScript type assertion.
+ */
+export function assertQaReadOnlyNonDisclosure(raw: unknown): void {
+  let serialized: string | undefined;
+  try { serialized=JSON.stringify(raw); } catch {
+    requireQa(false,'WORKER_READONLY_DATA_INVALID');
+  }
+  requireQa(typeof serialized==='string' && serialized.length>0 &&
+    serialized.length<=128*1024,'WORKER_READONLY_DATA_BOUNDED');
+  const privateKey=/"(?:answers|answers_json|answersJson|answers_sha256|answersSha256|correctOptionId|correct_option_id|correctAnswers|answerKey|serverPrivateBank|privateBank|feedbackCorrect|feedbackIncorrect|gabarito|solution|questionId|optionId)"\\s*:/i;
+  requireQa(!privateKey.test(serialized!) &&
+    !/player3-server-private-bank\\.json/i.test(serialized!),
+    'WORKER_READONLY_PRIVATE_MATERIAL_LEAK');
+}
+
+/**
  * Read-only, backend-regraded module session from Front B's exact endpoint.
  * Never infer certification or progress from this advisory/session projection.
  */
@@ -186,6 +205,7 @@ export type QaModuleSession = {
 };
 export function validateQaModuleSession(raw: unknown, edition: string,
   cycle: number, requiredStages: readonly string[]): QaModuleSession {
+  assertQaReadOnlyNonDisclosure(raw);
   const s=raw as QaModuleSession;
   requireQa(!!s && s.editionSha256===edition && s.cycleId===cycle,
     'MODULE_SESSION_PINNED_EDITION_CYCLE');
@@ -239,6 +259,7 @@ const readinessReasons=new Set([
 ]);
 export function validateQaJointReadiness(raw: unknown, enrollment: QaEnrollment,
   requiredLessons: number, requiredStages: number): QaJointReadiness {
+  assertQaReadOnlyNonDisclosure(raw);
   const r=raw as QaJointReadiness;
   requireQa(!!r && r.matricula_id===enrollment.enrollmentId &&
     r.editionSha256===enrollment.editionSha256 &&
