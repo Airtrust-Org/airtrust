@@ -163,7 +163,7 @@ jobs:
           set -euo pipefail
           umask 077
           output="$RUNNER_TEMP/staging-reviewed-schema-v2.sql"
-          node scripts/schema-v2/build-reviewed-schema-apply.mjs \
+          node ../scripts/schema-v2/build-reviewed-schema-apply.mjs \
             "worker-airtrust/schema-v2/$CHANGE_ID.json" "$output" "$CHANGE_ID" "$RELEASE_SHA"
           test -s "$output"
           echo "combined_sql=$output" >> "$GITHUB_OUTPUT"
