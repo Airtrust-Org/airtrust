@@ -48,6 +48,24 @@ class Player3BatchReviewTests(unittest.TestCase):
             self.assertFalse(private.exists())
             self.assertFalse(learner.exists())
 
+
+    def test_appledouble_metadata_is_skipped_but_traversal_is_blocked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            first = root / 'safe.zip'
+            first.write_bytes(bundle({'course.zip': original(),
+                                      '__MACOSX/._course.zip': b'ignored'}))
+            result = batch_review([first], root/'private', root/'learner')
+            self.assertEqual(result['editions'], 1)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            unsafe = root / 'unsafe.zip'
+            unsafe.write_bytes(bundle({'course.zip': original(),
+                                       '__MACOSX/../../escape.zip': b'unsafe'}))
+            with self.assertRaisesRegex(UnsafePackage, 'UNSAFE_APPLEDOUBLE'):
+                batch_review([unsafe], root/'private', root/'learner')
+            self.assertFalse((root/'learner').exists())
+
     def test_rejects_duplicate_source_edition(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
