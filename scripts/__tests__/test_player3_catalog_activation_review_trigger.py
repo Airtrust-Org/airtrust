@@ -35,7 +35,7 @@ def database() -> sqlite3.Connection:
       CREATE TABLE lms_player3_politicas(id INTEGER PRIMARY KEY,edicao_id INTEGER,
         empresa_id INTEGER,curso_id INTEGER,estado TEXT);
       CREATE TABLE lms_matriculas(id INTEGER PRIMARY KEY,empresa_id INTEGER,
-        curso_id INTEGER,status TEXT,deleted_at TEXT);
+        curso_id INTEGER,funcionario_id INTEGER,status TEXT,deleted_at TEXT);
       CREATE TABLE lms_matricula_ciclos(id INTEGER PRIMARY KEY,matricula_id INTEGER,
         empresa_id INTEGER,curso_id INTEGER,funcionario_id INTEGER,
         ciclo_atual INTEGER,status TEXT,deleted_at TEXT);
@@ -53,7 +53,7 @@ def database() -> sqlite3.Connection:
                    (course, tenant, course))
         db.execute("INSERT INTO lms_player3_politicas VALUES(?,?,?,?,'APPROVED')",
                    (course, course, tenant, course))
-        db.execute("INSERT INTO lms_matriculas VALUES(?,?,?,'EM_ANDAMENTO',NULL)",
+        db.execute("INSERT INTO lms_matriculas VALUES(?,?,?,77,'EM_ANDAMENTO',NULL)",
                    (course, tenant, course))
         db.execute("INSERT INTO lms_matricula_ciclos VALUES(?,?,?,?,77,1,'EM_ANDAMENTO',NULL)",
                    (course, course, tenant, course))
