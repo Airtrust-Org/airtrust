@@ -305,12 +305,12 @@ function HistoricoTab({ collective }: { collective: boolean }) {
                         )}
                       </td>
                     )}
-                    <td className="py-2 text-slate-700">{r.kss_score}</td>
-                    <td className="py-2 text-slate-700">{Number(r.horas_sono ?? 0).toFixed(1)}</td>
+                    <td className="py-2 text-slate-700">{r.kss_score == null ? '—' : r.kss_score}</td>
+                    <td className="py-2 text-slate-700">{r.horas_sono == null ? '—' : Number(r.horas_sono).toFixed(1)}</td>
                     <td className="py-2 font-semibold text-slate-800">
-                      {Math.round(Number(r.score_fadiga ?? 0))}
+                      {r.score_fadiga == null ? '—' : Math.round(Number(r.score_fadiga))}
                     </td>
-                    <td className="py-2">{badgeNivel(r.nivel_fadiga)}</td>
+                    <td className="py-2">{r.nivel_fadiga ? badgeNivel(r.nivel_fadiga) : 'Não avaliado'}</td>
                     <td className="py-2 text-slate-600">
                       {statusOperacionalLabel(r.status_operacional)}
                     </td>
