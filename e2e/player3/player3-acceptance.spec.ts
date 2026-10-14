@@ -6,36 +6,12 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  qaPath as pathOn, requireQa as demand, validateQaProfile,
+  type QaChoice as Choice, type QaEnrollment as Enrollment,
+  type QaProfile as Profile,
+} from './fixture-contract';
 
-type Choice = { question: string; wrong: string; correct: string };
-type Unit = {
-  id: string; visualCue: string;
-  practice?: Choice;
-  official?: { stageId: string; questions: Choice[] };
-};
-type Enrollment = {
-  launchPath: string; snapshotPath: string; editionSha256: string; enrollmentId: number;
-  cycleId: number;
-};
-type Doutrinamento = Enrollment & {
-  units: Unit[]; qualificationPath: string; certificatePath: string;
-};
-type Resume80 = Enrollment & {
-  expectedResumeUnitId: string; creditedNavigationIds: string[]; minPreviousPct: number;
-};
-type External = Enrollment & {
-  frameSelectors: string[];
-  visualLastPageButton: string; wrongAnswerButton: string;
-  correctAnswerButton: string; submitButton: string;
-  finishButton: string; scormSnapshotPath: string;
-};
-type ProjectFixture = {
-  doutrinamento: Doutrinamento; resume80: Resume80; external: External;
-};
-type Profile = {
-  baseUrl: string; contentOrigin: string; empresaId: number;
-  courseTitle: string; projects: Record<string, ProjectFixture>;
-};
 type Snapshot = {
   empresa_id: number; matricula_id: number; ciclo_id: number;
   edition_sha256: string; status: string; progresso_pct: number;
@@ -43,63 +19,15 @@ type Snapshot = {
   attempts: { stage_id: string; attempt_number: number; passed: boolean; score_pct: number }[];
   qualificacao_historico_id: number | null; certificate_id: number | null;
 };
-const digest = /^[a-f0-9]{64}$/;
 const allowedStatuses = new Set(['EM_ANDAMENTO', 'NAO_INICIADO', 'CONCLUIDO']);
-function demand(ok: unknown, code: string): asserts ok {
-  if (!ok) throw new Error('PLAYER3_CONTRACT_MISSING:' + code);
-}
-function pathOn(origin: string, path: string): string {
-  demand(typeof path === 'string' && path.startsWith('/') && !path.startsWith('//'),
-    'RELATIVE_API_OR_LAUNCH_PATH');
-  const url = new URL(path, origin);
-  demand(url.origin === origin && !url.username && !url.password, 'CROSS_ORIGIN_PATH');
-  return url.href;
-}
-function load(projectName: string): { profile: Profile; fixture: ProjectFixture } {
+function load(projectName: string) {
   demand(process.env.PLAYER3_QA_ALLOW_WRITES === 'SYNTHETIC_STAGING_ONLY',
     'STAGING_SYNTHETIC_WRITE_APPROVAL');
   const file = process.env.PLAYER3_QA_PROFILE_FILE;
-  demand(file && file.length > 0, 'PRIVATE_QA_PROFILE');
-  const data = JSON.parse(readFileSync(resolve(file), 'utf8')) as Profile;
-  const origin = new URL(data.baseUrl).origin;
-  demand(origin === data.baseUrl.replace(/\/$/, '') && origin.startsWith('https://'),
-    'HTTPS_STAGING_ORIGIN');
-  demand(!['airtrust.online', 'www.airtrust.online'].includes(new URL(origin).hostname),
-    'PRODUCTION_FORBIDDEN');
-  demand(/staging|stage|qa/i.test(new URL(origin).hostname),
-    'EXPLICIT_STAGING_HOST_REQUIRED');
-  demand(process.env.PLAYER3_QA_STAGING_ORIGIN === origin,
-    'STAGING_ORIGIN_ALLOWLIST');
-  demand(Number.isSafeInteger(data.empresaId) && data.empresaId > 0, 'TENANT_ID');
-  demand(typeof data.contentOrigin === 'string' &&
-    new URL(data.contentOrigin).origin === data.contentOrigin &&
-    data.contentOrigin.startsWith('https://') && data.contentOrigin !== origin,
-    'ISOLATED_HTML5_CONTENT_ORIGIN');
-  const fixture = data.projects?.[projectName];
-  demand(fixture, 'PROJECT_FIXTURE_' + projectName);
-  const ids = [fixture.doutrinamento, fixture.resume80, fixture.external];
-  demand(ids.every(x => Number.isSafeInteger(x.enrollmentId) && x.enrollmentId > 0 &&
-    Number.isSafeInteger(x.cycleId) && x.cycleId > 0 &&
-    digest.test(x.editionSha256)), 'SYNTHETIC_ENROLLMENT_IDENTITIES');
-  demand(new Set(ids.map(x => x.enrollmentId)).size === 3, 'DEDICATED_ENROLLMENTS');
-  for (const x of ids) {
-    pathOn(origin, x.launchPath); pathOn(origin, x.snapshotPath);
-  }
-  const d = fixture.doutrinamento;
-  demand(d.units.length === 42 && new Set(d.units.map(u => u.id)).size === 42,
-    'DOU_RC81_42_UNITS');
-  demand(d.units.every(u => u.id && u.visualCue &&
-    (!u.official || (u.official.stageId && u.official.questions.length > 0))), 'AUTHOR_UNIT_AND_EXAM_MAP');
-  demand(d.units.some(u => u.practice) && d.units.some(u => u.official),
-    'FORMATIVE_AND_OFFICIAL_GATES');
-  demand(fixture.resume80.minPreviousPct >= 80 &&
-    fixture.resume80.minPreviousPct < 100, 'SOURCE_80_PERCENT_BASELINE');
-  demand(fixture.resume80.creditedNavigationIds.length > 0, 'REVIEWED_CREDIT_IDS');
-  demand(fixture.external.frameSelectors.length > 0, 'SCORM_EXTERNAL_FRAMES');
-  pathOn(origin, d.qualificationPath);
-  pathOn(origin, d.certificatePath);
-  pathOn(origin, fixture.external.scormSnapshotPath);
-  return { profile: data, fixture };
+  demand(file, 'PRIVATE_QA_PROFILE');
+  const raw: unknown = JSON.parse(readFileSync(resolve(file), 'utf8'));
+  return validateQaProfile(raw, projectName,
+    process.env.PLAYER3_QA_STAGING_ORIGIN ?? '');
 }
 async function openLearner(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const state = process.env.PLAYER3_QA_STORAGE_STATE;
