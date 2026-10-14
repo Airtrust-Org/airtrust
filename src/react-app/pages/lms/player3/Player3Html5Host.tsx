@@ -63,6 +63,9 @@ export default function Player3Html5Host({
   const [frameLoaded,setFrameLoaded]=useState(false);
   const [navigationError,setNavigationError]=useState(false);
   const navigationEnabled=useRef(false);
+  // The resume ACK displays a page; only leaving that page may commit its
+  // lesson checkpoint. This distinction keeps a new session empty at load.
+  const displayedUnit=useRef<string|null>(null);
   const navigationFailed=useRef(false);
   const navigationQueue=useRef<Promise<unknown>>(Promise.resolve());
   const navigationRecorder=useRef<{identity:string;policy:string;
@@ -145,18 +148,18 @@ export default function Player3Html5Host({
           Array.isArray(event.data)) return;
       const msg = event.data as Record<string,unknown>;
       if (msg.type === 'AIRTRUST_PLAYER3_RESUME_ACK_V1') {
-        if (!reviewOnly && navigation && validNavigationScope(navigation) &&
+        if (!reviewOnly && !navigationEnabled.current && navigation &&
+            validNavigationScope(navigation) &&
             navigation.editionSha256 === editionSha256 &&
             msg.editionSha256 === editionSha256 &&
             msg.unitId === navigation.nextUnitId &&
             Object.keys(msg).sort().join(',') ===
               'editionSha256,type,unitId') {
           navigationEnabled.current=true;
+          displayedUnit.current=msg.unitId as string;
           setLastHint(msg.unitId as string);
-          // The page is now displayed at the Worker-approved location. A
-          // checkpoint is navigation evidence only and is committed/re-read
-          // separately; the ACK itself cannot certify anything.
-          recordUnit(msg.unitId as string);
+          // ACK is ONLY a positioning receipt. Do not create a new lesson
+          // event on first paint or on a browser reload (D fresh-ledger gate).
         }
         return;
       }
@@ -164,7 +167,24 @@ export default function Player3Html5Host({
         if (msg.editionSha256 === editionSha256 &&
             typeof msg.unitId === 'string' &&
             /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(msg.unitId)) {
+          if(navigationEnabled.current && displayedUnit.current &&
+             displayedUnit.current!==msg.unitId){
+            // Store the source lesson the learner is LEAVING, not the next
+            // source page just displayed. Assessment/scenario IDs are never
+            // treated as lesson evidence, even if they appear in a hint.
+            recordUnit(displayedUnit.current);
+            displayedUnit.current=msg.unitId;
+          }
           setLastHint(msg.unitId);
+        }
+        return;
+      }
+      if (msg.type === 'AIRTRUST_PLAYER3_CONTENT_END_HINT_V1') {
+        if(navigationEnabled.current && msg.editionSha256===editionSha256 &&
+           typeof msg.unitId==='string' && msg.unitId===displayedUnit.current &&
+           Object.keys(msg).sort().join(',')==='editionSha256,type,unitId'){
+          // Source-authored end is not terminal approval; it may only
+          // checkpoint a final lesson, if the Worker says it is a lesson.
           recordUnit(msg.unitId);
         }
         return;
@@ -252,7 +272,11 @@ export default function Player3Html5Host({
       </header>
       <iframe
         ref={frameRef}
-        onLoad={()=>{navigationEnabled.current=false;setFrameLoaded(true);}}
+        onLoad={()=>{
+          navigationEnabled.current=false;
+          displayedUnit.current=null;
+          setFrameLoaded(true);
+        }}
         title={'Conteúdo original — ' + title}
         src={contentUrl}
         sandbox="allow-scripts allow-forms allow-same-origin"
