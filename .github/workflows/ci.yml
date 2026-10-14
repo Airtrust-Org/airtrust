@@ -118,6 +118,10 @@ jobs:
         run: python3 -m unittest scripts/__tests__/test_scorm_golden_core_lock.py -v
       - name: verify SCORM to Native V1 private conversion is fail-closed
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/learning-factory -p 'test_*native*.py' -v
+      - name: verify Player 3 original assessment extraction keeps answer keys private
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/learning-factory -p 'test_extract_player3_private_assessments.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/learning-factory -p 'test_build_player3_source_crosswalk.py' -v
       - name: validate Native V1 Schema V2 evidence safely in SQLite
         run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/__tests__/test_lms_native_v1_evidence_0552.py -v
       - name: rehearse Native catalog alternatives strictly offline (no migration)
