@@ -100,6 +100,25 @@ describe('Front D QA contract — no network, no real students',()=>{
     expect(()=>qaPath(staging,'/qa/../other')).toThrow('UNSAFE_RELATIVE_PATH');
     expect(qaPath(staging,'/qa/snapshot/1001')).toBe(staging+'/qa/snapshot/1001');
   });
+  it('blocks staging fixtures from silently pointing authored media to production',()=>{
+    const p=fixture();
+    p.contentOrigin='https://cdn.airtrust.online';
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin))
+      .toThrow('ISOLATED_HTML5_CONTENT_ORIGIN');
+    p.contentOrigin='https://qa-content.airtrust.example';
+    expect(validateQaProfile(p,'chromium',staging,apiOrigin).profile.contentOrigin)
+      .toBe('https://qa-content.airtrust.example');
+  });
+  it('rejects token-bearing or fragment URLs while permitting benign query filters',()=>{
+    expect(()=>qaPath(staging,'/qa/start?access_token=something'))
+      .toThrow('NO_CREDENTIALS_IN_URL');
+    expect(()=>qaPath(staging,'/qa/start?jwt=something'))
+      .toThrow('NO_CREDENTIALS_IN_URL');
+    expect(()=>qaPath(staging,'/qa/start#unsafe'))
+      .toThrow('NO_CREDENTIALS_IN_URL');
+    expect(qaPath(staging,'/qa/start?enrollment=123'))
+      .toBe(staging+'/qa/start?enrollment=123');
+  });
   it('preserves historical 80% range and disallows suspicious answer fixtures',()=>{
     const p=fixture();p.projects.chromium.resume80.minPreviousPct=100;
     expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin)).toThrow('SOURCE_80_PERCENT_BASELINE');
