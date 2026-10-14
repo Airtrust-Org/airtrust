@@ -8,7 +8,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   qaPath as pathOn, requireQa as demand, validateQaProfile,
-  validateQaModuleSession, type QaModuleSession,
+  validateQaModuleSession,validateQaJointReadiness,
+  type QaModuleSession,type QaJointReadiness,
   type QaDoutrinamento,
   type QaChoice as Choice, type QaEnrollment as Enrollment,
   type QaProfile as Profile,
@@ -91,6 +92,15 @@ async function moduleSession(context: BrowserContext, profile: Profile,
     course.units.flatMap(unit=>unit.official?[unit.official.stageId]:[]));
 }
 
+/** Backend-grade checked content + official module readiness; advisory, not certification. */
+async function jointReadiness(context: BrowserContext, profile: Profile,
+  course: QaDoutrinamento): Promise<QaJointReadiness> {
+  const path='/api/lms/native/matriculas/'+course.enrollmentId+'/etapas/prontidao';
+  const result=await apiData<unknown>(context,profile.apiBaseUrl,path);
+  return validateQaJointReadiness(result,course,course.units.length,
+    course.units.filter(unit=>!!unit.official).length);
+}
+
 async function evidence(page: Page, testInfo: { attach(name: string, options: {body: Buffer; contentType: string}): Promise<void> },
   label: string) {
   if (process.env.PLAYER3_QA_CAPTURE_ALLOWED === 'SYNTHETIC_ONLY') {
@@ -156,6 +166,9 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
     demand(!originalStages.allOfficialStagesPassed &&
       originalStages.stages.every(stage=>stage.attempts===0 && !stage.passed),
       'FRESH_MODULAR_ENROLLMENT_NOT_ALREADY_GRADED');
+    const initialReadiness=await jointReadiness(context,profile,d);
+    expect(initialReadiness.readyForAtomicTerminalPreflight).toBe(false);
+    expect(initialReadiness.completion_supported).toBe(false);
     let failureTested = false;
     for (const [index, unit] of d.units.entries()) {
       await test.step('PLAYER3-UNIT-' + String(index+1).padStart(2, '0') + ':' + unit.id, async () => {
@@ -195,6 +208,9 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
             expect(stageFailed?.attempts).toBe(stageBefore.attempts+1);
             expect(stageFailed?.passed).toBe(false);
             expect(stageFailed?.nextAttemptNumber).toBe(stageBefore.attempts+2);
+            const notReady=await jointReadiness(context,profile,d);
+            expect(notReady.readyForAtomicTerminalPreflight).toBe(false);
+            expect(notReady.completion_supported).toBe(false);
             failureTested = true;
           }
           await pick(modal, unit.official.questions, 'correct');
@@ -247,6 +263,8 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         expect(after.attempts).toEqual(before.attempts);
         expect((await moduleSession(context,profile,d)).allOfficialStagesPassed)
           .toBe(false);
+        const resumedReadiness=await jointReadiness(context,profile,d);
+        expect(resumedReadiness.readyForAtomicTerminalPreflight).toBe(false);
       }
     }
     const stagesDone=await moduleSession(context,profile,d);
@@ -254,6 +272,19 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       stagesDone.stages.every(stage=>stage.passed && stage.attempts>0),
       'EIGHT_OFFICIAL_STAGES_PASSED_WITHOUT_PREMATURE_CERTIFICATION');
     demand(failureTested, 'OFFICIAL_FAILURE_RETRY_NOT_EXERCISED');
+    await test.step('PLAYER3-JOINT-READINESS / no certificate from 42/42 and 8/8',async()=>{
+      const ready=await jointReadiness(context,profile,d);
+      expect(ready).toMatchObject({
+        totalRequiredLessons:42, verifiedLessons:42,
+        officialStageCount:8,officialStagesPassed:8,
+        reason:'READY_FOR_TERMINAL_PREFLIGHT',
+        readyForAtomicTerminalPreflight:true,
+        completionSupported:false,completion_supported:false,
+      });
+      const stillOpen=await snapshot(context,profile,d);
+      expect(stillOpen.status).not.toBe('CONCLUIDO');
+      expect(stillOpen.certificate_id).toBeNull();
+    });
     await test.step('PLAYER3-FINALIZATION / backend authoritative, never slide counter', async () => {
       await checkStagingProvenance(context, profile);
       const pre = await snapshot(context, profile, d);
