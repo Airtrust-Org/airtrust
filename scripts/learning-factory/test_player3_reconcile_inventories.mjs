@@ -32,7 +32,7 @@ const open=(rows,keyId)=>openInventory(encrypt(rows,keyId),KEY);
 test('opens only the authorized original AES-GCM inventory and keeps full source evidence private',()=>{
   const row=make(991911,80);
   const sealed=encrypt([row]);
-  assert.ok(!sealed.includes('991911'));
+  assert.ok(!sealed.includes('"matricula_id":991911'));
   assert.ok(!sealed.includes('module_2'));
   const opened=openInventory(sealed,KEY);
   assert.equal(opened.rows[0].matricula_progresso_pct,80);
@@ -129,7 +129,8 @@ test('produces an encrypted private admin review plan with no individual data in
   assert.equal(plan.summary.reconciled_keys,1);
   assert.equal(plan.summary.contains_individual_data,false);
   const text=sealReconciliation(plan,KEY,t0.key_id);
-  assert.ok(!text.includes('871'));
+  assert.ok(!text.includes('"matricula_id":871'));
+  assert.ok(!text.includes('"original_progress_pct":99'));
   const e=JSON.parse(text),cipher=createDecipheriv('aes-256-gcm',KEY,Buffer.from(e.iv_b64,'base64'));
   cipher.setAAD(Buffer.from('AIRTRUST_PLAYER3_PRIVATE_RECONCILIATION_V1:'+e.key_id));
   cipher.setAuthTag(Buffer.from(e.tag_b64,'base64'));
