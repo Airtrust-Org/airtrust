@@ -2,7 +2,7 @@ import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {Hono} from 'hono';
 import type {Env} from '../../types';
 
-const mock=vi.hoisted(()=>({commit:vi.fn()}));
+const mock=vi.hoisted(()=>({commit:vi.fn(),read:vi.fn(),joint:vi.fn()}));
 vi.mock('../../middleware/auth',()=>({
   auth:()=>async(c:{
     req:{header(name:string):string|undefined};
@@ -18,6 +18,12 @@ vi.mock('../../services/lms-player3-module-attempt-writer',async original=>{
   const actual=await original<typeof import('../../services/lms-player3-module-attempt-writer')>();
   return {...actual,commitPlayer3StageAttempt:mock.commit};
 });
+vi.mock('../../services/lms-player3-module-progress-reader',()=>({
+  readPlayer3ModuleSession:mock.read,
+}));
+vi.mock('../../services/lms-player3-joint-preflight',()=>({
+  readPlayer3JointPreflight:mock.joint,
+}));
 import nativeRoutes from '../../routes/lms-native';
 
 function request(opts:{
@@ -114,5 +120,105 @@ describe('Player3 modular stage endpoint, independent and fail-closed',()=>{
     expect((await request({contentType:'text/plain'})).status).toBe(400);
     expect((await request({rawBody:' '.repeat(140000)})).status).toBe(400);
     expect(mock.commit).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('Player3 module state after reconnect',()=>{
+  const get=(opts:{anonymous?:boolean;enabled?:string;tenant?:number}={})=>{
+    const app=new Hono<{Bindings:Env}>();
+    app.route('/api/lms/native',nativeRoutes);
+    const headers:Record<string,string>={};
+    if(!opts.anonymous){
+      headers['x-test-tenant']=String(opts.tenant??6);
+      headers['x-test-user']='44';
+    }
+    return app.fetch(new Request(
+      'http://localhost/api/lms/native/matriculas/911/etapas/sessao',
+      {method:'GET',headers}),{
+        ENVIRONMENT:'staging',
+        NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS:'6',
+        NATIVE_LEARNER_WRITE_ENABLED_TENANTS:'6',
+        PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:opts.enabled??'6',
+        DB:{} as D1Database,BUCKET:{} as R2Bucket,
+      } as unknown as Env);
+  };
+  beforeEach(()=>{
+    vi.resetAllMocks();
+    mock.read.mockResolvedValue({
+      editionSha256:'a'.repeat(64),cycleId:1000,
+      allOfficialStagesPassed:true,completionSupported:false,
+      stages:[{stageId:'mod1',attempts:2,lastScorePct:50,
+        passed:true,nextAttemptNumber:3}],
+    });
+  });
+  it('denies a missing stage flag or unauthenticated resume',async()=>{
+    expect((await get({enabled:''})).status).toBe(404);
+    expect((await get({anonymous:true})).status).toBe(401);
+    expect(mock.read).not.toHaveBeenCalled();
+  });
+  it('returns version-bound module receipts without options, keys or certificate',async()=>{
+    const response=await get();
+    expect(response.status).toBe(200);
+    const payload=await response.json() as Record<string,unknown>;
+    expect(JSON.stringify(payload)).toContain('allOfficialStagesPassed');
+    expect(JSON.stringify(payload)).toContain('nextAttemptNumber');
+    expect(JSON.stringify(payload)).not.toContain('correctOptionId');
+    expect(JSON.stringify(payload)).not.toContain('certificate');
+    expect(mock.read).toHaveBeenCalledWith(expect.objectContaining({
+      empresaId:6,matriculaId:911,actorUserId:44,
+    }));
+  });
+});
+
+
+describe('Player3 protected combined readiness (read-only)',()=>{
+  const call=(opts:{enabled?:string;anonymous?:boolean}={})=>{
+    const app=new Hono<{Bindings:Env}>();
+    app.route('/api/lms/native',nativeRoutes);
+    const headers:Record<string,string>={};
+    if(!opts.anonymous){
+      headers['x-test-user']='44';headers['x-test-tenant']='6';
+    }
+    return app.fetch(new Request(
+      'http://localhost/api/lms/native/matriculas/911/etapas/prontidao',
+      {method:'GET',headers}),{
+      ENVIRONMENT:'staging',
+      NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS:'6',
+      NATIVE_LEARNER_WRITE_ENABLED_TENANTS:'6',
+      PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:opts.enabled??'6',
+      DB:{} as D1Database,BUCKET:{} as R2Bucket,
+    } as unknown as Env);
+  };
+  beforeEach(()=>{
+    vi.resetAllMocks();
+    mock.joint.mockResolvedValue({
+      reason:'READY_FOR_TERMINAL_PREFLIGHT',
+      readyForAtomicTerminalPreflight:true,
+      editionSha256:'a'.repeat(64),cycleId:1000,
+      totalRequiredLessons:42,verifiedLessons:42,
+      officialStageCount:8,officialStagesPassed:8,
+      completionSupported:false,
+    });
+  });
+  it('requires authentication and all three exact tenant opt-ins',async()=>{
+    expect((await call({anonymous:true})).status).toBe(401);
+    expect((await call({enabled:''})).status).toBe(404);
+    expect((await call({enabled:'*'})).status).toBe(404);
+    expect(mock.joint).not.toHaveBeenCalled();
+  });
+  it('reports joint preflight but explicitly never claims course completion',async()=>{
+    const response=await call();
+    expect(response.status).toBe(200);
+    const payload=await response.json() as {data:Record<string,unknown>};
+    expect(payload.data).toMatchObject({
+      readyForAtomicTerminalPreflight:true,completion_supported:false,
+      totalRequiredLessons:42,officialStagesPassed:8,
+    });
+    expect(payload.data).not.toHaveProperty('certificate');
+    expect(payload.data).not.toHaveProperty('status');
+    expect(mock.joint).toHaveBeenCalledWith(expect.objectContaining({
+      empresaId:6,matriculaId:911,actorUserId:44,
+    }));
   });
 });

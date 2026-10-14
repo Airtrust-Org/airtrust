@@ -25,7 +25,7 @@ vi.mock('../../services/lms-completion',()=>({
 }));
 import nativeRoutes from '../../routes/lms-native';
 function call(opts:{stage?:string;tenant?:number;actor?:number;flag?:string;
-  marker?:string;preview?:string;write?:string;id?:string;
+  marker?:string;preview?:string;write?:string;player3?:string;id?:string;
   body?:string;anonymous?:boolean}={}){
   const app=new Hono<{Bindings:Env}>();
   app.route('/api/lms/native',nativeRoutes);
@@ -41,6 +41,7 @@ function call(opts:{stage?:string;tenant?:number;actor?:number;flag?:string;
       NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS:opts.preview??'6',
       NATIVE_LEARNER_WRITE_ENABLED_TENANTS:opts.write??'6',
       NATIVE_COMPLETION_WRITE_ENABLED_TENANTS:opts.flag??'6',
+      PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:opts.player3,
       DB:{} as D1Database,BUCKET:{} as R2Bucket,
     } as Env);
 }
@@ -83,6 +84,20 @@ describe('Native terminal HTTP entry: fifth gate and server-issued proof only',(
     }
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.complete).not.toHaveBeenCalled();
+  });
+  it('keeps legacy terminal mutually exclusive with Player3 modular receipts',async()=>{
+    for(const player3 of ['6','*','60,6']){
+      const response=await call({player3});
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        code:'NATIVE_COMPLETION_NOT_ENABLED',
+      });
+    }
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.complete).not.toHaveBeenCalled();
+    // Another tenant's module pilot does not accidentally disable this
+    // tenant's existing Native V1 terminal route.
+    expect((await call({player3:'7'})).status).toBe(200);
   });
   it('never allows a browser-provided employee, grade, status or edition',async()=>{
     expect((await call({anonymous:true})).status).toBe(401);
