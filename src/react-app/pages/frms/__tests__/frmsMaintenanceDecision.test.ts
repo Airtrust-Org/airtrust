@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FrmsMaintenanceTeamItem } from '@/react-app/hooks/useFrmsOperationalAccess';
-import { classifyMaintenanceItem, readinessLabel } from '../frmsMaintenanceDecision';
+import { classifyMaintenanceItem, readinessLabel, maintenanceActionText, formatMaintenanceEvidenceTime } from '../frmsMaintenanceDecision';
 
 function item(overrides: Partial<FrmsMaintenanceTeamItem> = {}): FrmsMaintenanceTeamItem {
   return {
@@ -12,6 +12,7 @@ function item(overrides: Partial<FrmsMaintenanceTeamItem> = {}): FrmsMaintenance
     setor_nome: 'Manutenção',
     checkin_id: 'checkin-1',
     hora_checkin: '06:00',
+    checkin_submitted_at: '2026-08-29T09:00:00.000Z',
     horas_sono: 7.5,
     qualidade_sono: 4,
     kss_score: 3,
@@ -55,5 +56,19 @@ describe('classifyMaintenanceItem', () => {
       ),
     ).toBe('NORMAL');
     expect(readinessLabel('baseline_building')).toBe('Baseline em formação');
+  });
+});
+
+describe('evidência operacional de manutenção', () => {
+  it('diferencia check-in e PVT/Readiness ausentes sem inferir condição normal', () => {
+    expect(maintenanceActionText('PENDING', item({ readiness_id: null }))).toContain('solicitar PVT/Readiness');
+    expect(maintenanceActionText('PENDING', item({ checkin_id: null }))).toContain('solicitar check-in');
+    expect(maintenanceActionText('PENDING', item({ readiness_id: null, checkin_id: null }))).toContain('check-in e PVT');
+  });
+  it('mostra evidência com timezone explícito em Brasília, sem converter horário legado sem fuso', () => {
+    expect(formatMaintenanceEvidenceTime('2026-08-29T09:00:00.000Z')).toContain('29/08/2026, 06:00 (Brasília)');
+    expect(formatMaintenanceEvidenceTime('2026-08-29 06:03:00')).toBe('29/08/2026, 06:03 (fuso não informado)');
+    expect(formatMaintenanceEvidenceTime(null)).toBeNull();
+    expect(formatMaintenanceEvidenceTime('indefinido')).toBeNull();
   });
 });
