@@ -152,8 +152,8 @@ jobs:
           console.log('STAGING_TARGET_AND_MANIFEST_SCOPE=PASS');
           NODE
 
-      - name: Install reviewed worker CLI
-        run: npm --prefix release/worker-airtrust ci
+      - name: Install trusted main Worker CLI without executing PR dependencies
+        run: npm --prefix worker-airtrust ci
 
       - name: Build verified SQL and Schema V2 ledger bundle
         id: bundle
@@ -178,7 +178,7 @@ jobs:
           [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] ||
             { echo 'STAGING_MIGRATION_CREDENTIALS_MISSING' >&2; exit 1; }
           query_count() {
-            (cd release/worker-airtrust && npx wrangler d1 execute "$STAGING_DB_NAME" \
+            (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 execute "$STAGING_DB_NAME" \
               --env staging --remote --json --command="$1") |
               node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{
                 const rows=JSON.parse(s);const entry=Array.isArray(rows)?rows[0]:rows;
@@ -206,7 +206,7 @@ jobs:
           set -euo pipefail
           umask 077
           timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          (cd release/worker-airtrust && npx wrangler d1 time-travel info "$STAGING_DB_NAME" \
+          (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 time-travel info "$STAGING_DB_NAME" \
             --timestamp="$timestamp" --json) > "$RUNNER_TEMP/staging-d1-recovery.json"
           node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs';
@@ -225,7 +225,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s "$COMBINED_SQL"
-          (cd release/worker-airtrust && npx wrangler d1 execute "$STAGING_DB_NAME" \
+          (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 execute "$STAGING_DB_NAME" \
             --env staging --remote --file="$COMBINED_SQL") > "$RUNNER_TEMP/staging-schema-apply.out"
           echo 'STAGING_SCHEMA_V2_APPLY_RETURNED_SUCCESS=true'
 
@@ -237,7 +237,7 @@ jobs:
         run: |
           set -euo pipefail
           query_count() {
-            (cd release/worker-airtrust && npx wrangler d1 execute "$STAGING_DB_NAME" \
+            (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 execute "$STAGING_DB_NAME" \
               --env staging --remote --json --command="$1") |
               node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{
                 const rows=JSON.parse(s);const entry=Array.isArray(rows)?rows[0]:rows;
