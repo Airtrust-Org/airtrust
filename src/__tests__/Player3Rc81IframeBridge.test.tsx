@@ -71,10 +71,17 @@ describe('Player3 RC8.1 preserved HTML5 bridge to Worker immutable grade',()=>{
       stageId:'mod-1',requestId:hint().requestId,
       stage_passed:true,score_pct:80,persisted:true,
     },props.contentOrigin);
-    expect(props.pendingAssessment.onVerifiedStagePassed).not.toHaveBeenCalled();
-    // An iframe replay with the same request ID must not create a second attempt.
+    // A verified passing receipt must refresh the next Worker-pinned stage;
+    // this is not a client/iframe-provided grade or a second attempt.
+    expect(props.pendingAssessment.onVerifiedStagePassed).toHaveBeenCalledTimes(1);
+    expect(props.pendingAssessment.onVerifiedStagePassed).toHaveBeenCalledWith(
+      expect.objectContaining({stage_passed:true,persisted:true,
+        stage_id:'mod-1',edition_sha256:edition}),
+    );
+    // Replayed iframe hints must not register a new attempt or stage refresh.
     send(hint());
     expect(request).toHaveBeenCalledTimes(3);
+    expect(props.pendingAssessment.onVerifiedStagePassed).toHaveBeenCalledTimes(1);
   });
   it('never accepts forged same-origin sibling, wrong origin, wrong stage or forged grade',()=>{
     renderHost();
