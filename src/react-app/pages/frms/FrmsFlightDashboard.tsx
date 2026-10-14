@@ -736,7 +736,7 @@ export default function FrmsFlightDashboard() {
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
-              {visibleQueue.map(({ item, bucket, lane }) => {
+              {visibleQueue.map(({ item, bucket }) => {
                 const confidence = operationalConfidence(item);
                 const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
 
