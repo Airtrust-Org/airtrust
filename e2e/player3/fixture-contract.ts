@@ -329,3 +329,38 @@ export function validateQaTerminalReceipt(raw: unknown, enrollmentId: number): Q
   assertQaReadOnlyNonDisclosure(raw);
   return r;
 }
+
+/**
+ * Front B GET /matriculas/:id/etapas/certificado confirms only the canonical
+ * historical document link and the first five R2 bytes. It is NOT itself a
+ * valid PDF or access proof; the E2E downloads the authenticated stream.
+ */
+export type QaCertificateArchiveStatus={
+  matricula_id:number;
+  ciclo_id:number|null;
+  matricula_status:string;
+  historico_id:number|null;
+  certificate_state:string;
+  documento_id:number|null;
+  stream_path:string|null;
+  stream_verified:boolean;
+};
+export function validateQaCertificateArchiveStatus(raw:unknown,
+  enrolled:QaEnrollment, historyId:number, documentId:number,
+  configuredStreamPath:string):QaCertificateArchiveStatus {
+  assertQaReadOnlyNonDisclosure(raw);
+  const r=raw as QaCertificateArchiveStatus;
+  requireQa(!!r && r.matricula_id===enrolled.enrollmentId &&
+    r.ciclo_id===enrolled.cycleId && r.matricula_status==='CONCLUIDO' &&
+    Number.isSafeInteger(historyId) && historyId>0 &&
+    Number.isSafeInteger(documentId) && documentId>0 &&
+    r.historico_id===historyId && r.documento_id===documentId,
+    'CERTIFICATE_ARCHIVE_CANONICAL_LINK');
+  // A R2 HEAD or five-byte prefix cannot claim full document verification.
+  requireQa(r.certificate_state==='PDF_HEADER_VERIFIED' &&
+    r.stream_verified===false &&
+    r.stream_path==='/api/pasta-virtual/stream/'+documentId &&
+    configuredStreamPath===r.stream_path,
+    'CERTIFICATE_ARCHIVE_AUTHENTICATED_STREAM');
+  return r;
+}
