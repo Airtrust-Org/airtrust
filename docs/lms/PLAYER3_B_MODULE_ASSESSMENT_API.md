@@ -83,3 +83,33 @@ qualificação e certificado verificável, sob ciclo e edição imutáveis.
    autorização específica de SHA/escopo e fluxo oficial de release.
 
 Nenhuma matrícula foi atualizada, migrada ou concluída nesta etapa.
+
+
+## Prontidão conjunta — contrato 2026-10-14
+
+**GET /api/lms/native/matriculas/{matriculaId}/etapas/prontidao**:
+rota autenticada e só em staging com os mesmos três gates exatos. Consulta
+Worker-private a edição, o ciclo, as unidades de conteúdo registradas e as
+aprovações modulares verificadas, sempre da mesma matrícula/ciclo/edição.
+Retorna metadados `totalRequiredLessons`, `verifiedLessons`,
+`officialStageCount`, `officialStagesPassed`,
+`readyForAtomicTerminalPreflight`, `reason`, `editionSha256`,
+`cycleId` e **`completion_supported=false`**. Nunca devolve gabarito.
+
+Esta resposta não significa matrícula concluída. A guarda SQL
+`lms-player3-terminal-transaction-guard.ts` já existe e foi testada contra
+SQLite 0552/0553, mas ainda não foi conectada ao writer transacional de
+qualificação/certificado. A segurança do conteúdo HTML5 e a comprovação
+visual devem ser concluídas antes de habilitar o fechamento.
+
+**Para Frente A:** o mapeamento entre HTML5 autoral e evidência de conteúdo
+deve produzir identificadores estáveis de unidades, vinculados à edição,
+para que a API reconheça todas as unidades obrigatórias. Não utilizar o
+contador DOM como fonte de verdade. Não enviar nota/certificado no POST.
+
+**Para Frente D:** validar este GET com conteúdo completo vs faltante,
+todas as provas vs uma pendente, edição/ciclo divergentes, aluno sem
+autorização, reabertura/reconexão e prova seguida de perda de sinal.
+O resultado `readyForAtomicTerminalPreflight=true` NÃO autoriza tratar o
+aluno como CONCLUIDO. Exigir posteriormente a transação final e o
+certificado realmente recuperável. Não testar em produção.
