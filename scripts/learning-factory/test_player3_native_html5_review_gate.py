@@ -11,3 +11,5 @@ from test_standard_journey_bridge_review import StandardJourneyBridgeTests
 from test_player3_v33_review import Player3V33ReviewTests
 
 from test_player3_legacy_review import Player3LegacyBridgeTests
+
+from test_player3_unified_review_batch import Player3UnifiedBatchTests
