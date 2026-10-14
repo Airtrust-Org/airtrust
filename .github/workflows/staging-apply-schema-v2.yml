@@ -250,6 +250,6 @@ jobs:
           read -r file_hash plan_hash <<< "$metadata"
           [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID' AND baseline_id='$BASELINE_ID' AND file_hash='$file_hash' AND plan_hash='$plan_hash' AND github_sha='$RELEASE_SHA'")" == '1' ]] ||
             { echo 'SCHEMA_V2_EXACT_LEDGER_POSTCONDITION_FAILED' >&2; exit 1; }
-          [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('frms_fadiga_checkin') WHERE name='oportunidade_sono_horas_24h' AND type='REAL' AND notnull=0")" == '1' ]] ||
+          [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('frms_fadiga_checkin') WHERE name='oportunidade_sono_horas_24h' AND type='REAL' AND \"notnull\"=0")" == '1' ]] ||
             { echo 'FRMS_SLEEP_OPPORTUNITY_COLUMN_POSTCONDITION_FAILED' >&2; exit 1; }
           echo "SCHEMA_V2_STAGING_APPLIED_AND_VERIFIED=$CHANGE_ID" >> "$GITHUB_STEP_SUMMARY"
