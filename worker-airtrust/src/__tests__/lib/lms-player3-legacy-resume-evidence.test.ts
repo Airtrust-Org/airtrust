@@ -41,6 +41,41 @@ describe('Player3 resume evidence from original authoring formats',()=>{
     expect(resume({v:3,p:source.expected_package_version,a:4,d:[99]}))
       .toMatchObject({classification:'REVIEW_REQUIRED',reason:'INVALID_VISITED_SET'});
   });
+  it('recovers Residuos V4 completed slide IDs while ignoring scenario answers',()=>{
+    const r=resume({v:4,p:source.expected_package_version,a:4,
+      c:['dsq_intro','dsq_01','dsq_02'],d:{dsq_03:1},
+      g:{},q:{quiz:{passed:true}}});
+    expect(r).toMatchObject({classification:'VISITED_UNITS',
+      active_unit_id:'dsq_04',visited_unit_ids:ids.slice(0,3),
+      grants_assessment_pass:false,grants_completion:false});
+  });
+  it('requires a verified source-package hash before interpreting A10 bitmaps',()=>{
+    const raw=JSON.stringify({s:'A10',c:4,v:'D',q:[[1,0,100,1]],d:1});
+    expect(extractPersistedScormResume({...source,persisted_suspend_data:raw}))
+      .toMatchObject({classification:'REVIEW_REQUIRED',reason:'UNVERIFIED_A10_EDITION'});
+    const result=extractPersistedScormResume({...source,persisted_suspend_data:raw,
+      source_archive_sha256:'c'.repeat(64),
+      verified_published_archive_sha256:'c'.repeat(64)});
+    expect(result).toMatchObject({
+      classification:'VISITED_UNITS',
+      active_unit_id:'dsq_04',
+      visited_unit_ids:['dsq_intro','dsq_01'],
+      reason:'A10_VERIFIED_SOURCE_EDITION',
+      grants_assessment_pass:false,grants_completion:false});
+  });
+  it('rejects A10 bits outside the original course and edition mismatch',()=>{
+    const sourceHash='d'.repeat(64);
+    const base={...source,source_archive_sha256:sourceHash,
+      verified_published_archive_sha256:sourceHash};
+    expect(extractPersistedScormResume({...base,
+      persisted_suspend_data:JSON.stringify({s:'A10',c:3,v:'_'})}))
+      .toMatchObject({classification:'REVIEW_REQUIRED',reason:'INVALID_A10_BITMAP'});
+    expect(extractPersistedScormResume({...base,
+      verified_published_archive_sha256:'e'.repeat(64),
+      persisted_suspend_data:JSON.stringify({s:'A10',c:3,v:'D'})}))
+      .toMatchObject({classification:'REVIEW_REQUIRED',reason:'UNVERIFIED_A10_EDITION'});
+  });
+
   it('rejects corrupt bookmarks and malformed JSON',()=>{
     expect(resume({v:3,p:source.expected_package_version,a:999,d:[]}))
       .toMatchObject({classification:'REVIEW_REQUIRED',reason:'INVALID_BOOKMARK'});
