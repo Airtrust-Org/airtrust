@@ -230,9 +230,7 @@ export function isFadigaCheckinSubmitReady(input: {
   return (
     input.sonoOpcao !== null &&
     (input.repousoHoras == null ||
-      (Number.isFinite(input.repousoHoras) && input.repousoHoras >= 0 &&
-       input.repousoHoras <= 24 &&
-       input.repousoHoras >= SONO_OPCOES.find((o) => o.key === input.sonoOpcao)!.horas)) &&
+      (Number.isFinite(input.repousoHoras) && input.repousoHoras >= 0 && input.repousoHoras <= 24)) &&
     presentationTimeValid &&
     wakeTimeValid &&
     input.qualidadeSono !== null &&
@@ -630,10 +628,6 @@ export default function FrmsFlightCheckinFadiga() {
 
   const missingItems: string[] = [];
   if (sonoOpcao === null) missingItems.push('Sono efetivamente obtido');
-  if (sonoOpcao !== null && repousoHoras !== null &&
-    repousoHoras <
-    SONO_OPCOES.find((o) => o.key === sonoOpcao)!.horas
-  ) missingItems.push('Oportunidade de sono menor que sono informado');
   if (!presentationTimeValid) {
     if (!presentationTimeHasValue) missingItems.push('Hora de apresentação');
     else missingItems.push('Horário inválido - corrija a hora de apresentação');
