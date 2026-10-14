@@ -337,6 +337,7 @@ async function loadRecoveryEvidence(
   checkinId: string | null;
   readinessAssessmentId: string | null;
   sleepHours24h: number | null;
+  opportunityHours24h: number | null;
   kssScore: number | null;
   readinessClassification: 'baseline_building' | 'preserved' | 'attention' | 'operational_review' | null;
 }> {
@@ -344,13 +345,13 @@ async function loadRecoveryEvidence(
   const [checkin, readiness] = await Promise.all([
     db
       .prepare(
-        `SELECT id, horas_sono, kss_score
+        `SELECT id, horas_sono, oportunidade_sono_horas_24h, kss_score
            FROM frms_fadiga_checkin
           WHERE empresa_id = ? AND funcionario_id = ? AND data_checkin = ? AND deleted_at IS NULL
           LIMIT 1`,
       )
       .bind(empresaId, funcionarioId, assessmentDate)
-      .first<{ id: string; horas_sono: number; kss_score: number }>(),
+      .first<{ id: string; horas_sono: number; oportunidade_sono_horas_24h: number | null; kss_score: number }>(),
     db
       .prepare(
         `SELECT id, classification
@@ -372,6 +373,7 @@ async function loadRecoveryEvidence(
     checkinId: checkin?.id ?? null,
     readinessAssessmentId: readiness?.id ?? null,
     sleepHours24h: checkin?.horas_sono == null ? null : Number(checkin.horas_sono),
+    opportunityHours24h: checkin?.oportunidade_sono_horas_24h == null ? null : Number(checkin.oportunidade_sono_horas_24h),
     kssScore: checkin?.kss_score == null ? null : Number(checkin.kss_score),
     readinessClassification: validReadiness,
   };
@@ -426,7 +428,8 @@ async function upsertRecoveryAssessment(params: {
   const credit = v2Policy ? computeRecoveryCredit({
     activityType: params.activityType === 'OFF_DUTY' || params.activityType === 'STANDBY_HOME_HOTEL' || params.activityType === 'STANDBY_ONSITE'
       ? params.activityType : 'OTHER',
-    absoluteRestHours: evidence.sleepHours24h,
+    // Do not award recovery credit by interpreting reported sleep as opportunity.
+    absoluteRestHours: evidence.opportunityHours24h,
     noWorkHours,
     immediateCalloutRequired: params.immediateCalloutRequired,
   }, v2Policy) : { creditPoints: 0, basePoints: 0, restFactor: 0, calloutMultiplier: 1, eligible: false };
@@ -480,7 +483,7 @@ async function upsertRecoveryAssessment(params: {
       sleepTargetHours,
       evidence.kssScore,
       evidence.readinessClassification,
-      evidence.sleepHours24h,
+      evidence.opportunityHours24h,
       noWorkHours,
       credit.creditPoints,
       credit.basePoints,
@@ -504,7 +507,7 @@ async function upsertRecoveryAssessment(params: {
     sleep_target_hours: sleepTargetHours,
     kss_score: evidence.kssScore,
     readiness_classification: evidence.readinessClassification,
-    absolute_rest_hours: evidence.sleepHours24h,
+    absolute_rest_hours: evidence.opportunityHours24h,
     no_work_hours: noWorkHours,
     recovery_credit_points: credit.creditPoints,
     recovery_credit_base_points: credit.basePoints,
