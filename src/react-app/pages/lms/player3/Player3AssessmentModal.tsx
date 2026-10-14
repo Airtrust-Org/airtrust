@@ -41,7 +41,7 @@ function validCourse(c:P3ExamContext) {
         q.options.length<2||q.options.length>12)return false;
       seen.add(q.id);
       const options=new Set<string>();
-      return q.options.every(o=>{
+      return q.options.every((o: P3LearnerQuestion['options'][number])=>{
         if(!o||!id.test(o.id)||options.has(o.id)||!o.text?.trim())return false;
         options.add(o.id);return true;
       });
