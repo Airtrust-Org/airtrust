@@ -132,6 +132,12 @@ describe('Player 3 — official assessment transport and regraded Worker receipt
       vi.fn(),'/api')).toThrow('UNAPPROVED_CONTEXT');
     expect(()=>makePlayer3VerifiedStageSubmitter(context,
       vi.fn(),'https://bad.example/?token=fake')).toThrow('UNAPPROVED_CONTEXT');
+    // A valid-looking HTTPS staging host is still forbidden if it is not
+    // the API origin configured by AirTrust. No JWT can be sent there.
+    const malicious=vi.fn();
+    expect(()=>makePlayer3VerifiedStageSubmitter(context,
+      malicious,'https://staging-evil.example/api')).toThrow('UNAPPROVED_CONTEXT');
+    expect(malicious).not.toHaveBeenCalled();
     const x=transport([json(session({stages:[stage({stageId:'other'})]}))]);
     await expect(x.submit(answers)).rejects.toThrow('STAGE_MISSING_FROM_POLICY');
   });
