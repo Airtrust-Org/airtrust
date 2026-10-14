@@ -268,7 +268,7 @@ export function validateQaAuthoredStageAttempt(
       typeof answer==='object' && !Array.isArray(answer) &&
       Object.keys(answer).sort().join(',')==='optionId,questionId' &&
       typeof answer.questionId==='string' && id.test(answer.questionId) &&
-      typeof answer.optionId==='string' && /^o(?:[0-9]|1[01])$/.test(answer.optionId)) &&
+      typeof answer.optionId==='string' && /^o[0-9]$/.test(answer.optionId)) &&
     new Set(row.answers.map(answer=>answer.questionId)).size===expectedQuestionCount,
     'RC81_PUBLIC_CHOICES_ONLY_NO_CLIENT_GRADE');
   return row;
