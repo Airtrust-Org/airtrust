@@ -7,7 +7,7 @@ O RBAC 117 distingue repouso, oportunidade de sono e sono efetivamente obtido; a
 - `horas_sono` é **sono efetivo autodeclarado** para score diário, efetividade e sinais fisiológicos.
 - `oportunidade_sono_horas_24h` é **oportunidade de sono (repouso absoluto)** autodeclarada, separada, nullable, em horas/24h.
 - Linhas históricas permanecem `NULL`: nunca copiar `horas_sono` para o campo novo nem inventar que repouso = sono.
-- Novos clientes informam ambos separadamente; valor de oportunidade inferior ao sono informado é rejeitado pela validação. Clientes históricos continuam aceitos no esquema, mas sem crédito presumido para oportunidade ausente.
+- O formulário diário continua com **as mesmas respostas obrigatórias**: a oportunidade de sono é facultativa e recolhida, sem acrescentar etapa ao check-in. Quando informada, é persistida em campo próprio e não pode ser inferior ao sono informado. Clientes históricos e registros sem oportunidade permanecem válidos, porém sem crédito presumido de repouso absoluto.
 - `frms_recovery_assessment.absolute_rest_hours` recebe somente a oportunidade declarada; `sleep_hours_24h` continua recebendo o sono efetivo. PVT diário permanece obrigatório.
 - Dados de jornada, pousos, temperatura, IMC e limites legais mantêm suas fontes e revisões; esta migration **não** altera políticas, coeficientes, thresholds nem registros existentes.
 
