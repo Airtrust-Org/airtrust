@@ -29,7 +29,8 @@ export type QaProjectFixture = {
   doutrinamento: QaDoutrinamento; resume80: QaResume80; external: QaExternal;
 };
 export type QaProfile = {
-  baseUrl: string; contentOrigin: string; empresaId: number;
+  baseUrl: string; apiBaseUrl: string; contentOrigin: string;
+  expectedSourceSha: string; empresaId: number;
   courseTitle: string; projects: Record<string, QaProjectFixture>;
 };
 const hex = /^[a-f0-9]{64}$/;
@@ -54,15 +55,17 @@ function qaChoice(x: QaChoice): boolean {
     s => typeof s === 'string' && s.trim().length > 0 &&
       s.length <= 400) && x.wrong !== x.correct;
 }
-function qaEnrollment(x: QaEnrollment, origin: string): boolean {
+function qaEnrollment(x: QaEnrollment, appOrigin: string, apiOrigin: string): boolean {
   if (!x || !Number.isSafeInteger(x.enrollmentId) || x.enrollmentId <= 0 ||
     !Number.isSafeInteger(x.cycleId) || x.cycleId <= 0 || !hex.test(x.editionSha256)) return false;
-  qaPath(origin, x.launchPath);
-  qaPath(origin, x.snapshotPath);
+  qaPath(appOrigin, x.launchPath);
+  qaPath(apiOrigin, x.snapshotPath);
   return true;
 }
 export function validateQaProfile(raw: unknown, projectName: string,
-  approvedStagingOrigin: string): {profile: QaProfile; fixture: QaProjectFixture} {
+  approvedStagingOrigin: string, approvedApiOrigin: string): {
+    profile: QaProfile; fixture: QaProjectFixture;
+  } {
   const data = raw as QaProfile;
   requireQa(!!data && typeof data.baseUrl === 'string', 'PRIVATE_QA_PROFILE');
   let origin: URL;
@@ -76,6 +79,16 @@ export function validateQaProfile(raw: unknown, projectName: string,
     'PRODUCTION_FORBIDDEN');
   requireQa(/staging|stage|qa/.test(host), 'EXPLICIT_STAGING_HOST_REQUIRED');
   requireQa(approvedStagingOrigin === origin.origin, 'STAGING_ORIGIN_ALLOWLIST');
+  let api: URL;
+  try { api = new URL(data.apiBaseUrl); }
+  catch { throw Error('PLAYER3_CONTRACT_MISSING:HTTPS_STAGING_API_ORIGIN'); }
+  requireQa(data.apiBaseUrl === api.origin && api.protocol === 'https:' &&
+    /staging|stage|qa/.test(api.hostname) &&
+    !['airtrust.online','www.airtrust.online','api.airtrust.online'].includes(api.hostname) &&
+    api.origin !== origin.origin, 'HTTPS_STAGING_API_ORIGIN');
+  requireQa(approvedApiOrigin === api.origin, 'STAGING_API_ORIGIN_ALLOWLIST');
+  requireQa(/^[a-f0-9]{40}$/.test(data.expectedSourceSha),
+    'PINNED_WORKER_SOURCE_SHA');
   requireQa(Number.isSafeInteger(data.empresaId) && data.empresaId > 0, 'TENANT_ID');
   requireQa(typeof data.courseTitle === 'string' && data.courseTitle.trim().length > 0,
     'ORIGINAL_COURSE_TITLE');
@@ -83,7 +96,7 @@ export function validateQaProfile(raw: unknown, projectName: string,
   try { assetOrigin = new URL(data.contentOrigin); }
   catch { throw Error('PLAYER3_CONTRACT_MISSING:ISOLATED_HTML5_CONTENT_ORIGIN'); }
   requireQa(assetOrigin.protocol === 'https:' &&
-    data.contentOrigin === assetOrigin.origin && assetOrigin.origin !== origin.origin,
+    data.contentOrigin === assetOrigin.origin && assetOrigin.origin !== origin.origin && assetOrigin.origin !== api.origin,
     'ISOLATED_HTML5_CONTENT_ORIGIN');
   requireQa(data.projects && data.projects.chromium && data.projects.webkit,
     'BOTH_INDEPENDENT_BROWSER_PROJECTS');
@@ -94,7 +107,7 @@ export function validateQaProfile(raw: unknown, projectName: string,
     requireQa(!!f && !!f.doutrinamento && !!f.resume80 && !!f.external,
       'PROJECT_FIXTURE_' + name);
     for (const x of [f.doutrinamento,f.resume80,f.external]) {
-      requireQa(qaEnrollment(x,origin.origin), 'SYNTHETIC_ENROLLMENT_IDENTITIES');
+      requireQa(qaEnrollment(x,origin.origin,api.origin), 'SYNTHETIC_ENROLLMENT_IDENTITIES');
       enrollmentIds.push(x.enrollmentId);
     }
     const d = f.doutrinamento;
@@ -111,8 +124,8 @@ export function validateQaProfile(raw: unknown, projectName: string,
     requireQa(official.length === 8 && new Set(official).size === 8,
       'DOU_RC81_EIGHT_MODULAR_ASSESSMENTS');
     requireQa(d.units.some(u => u.practice), 'FORMATIVE_GATE_REQUIRED');
-    qaPath(origin.origin, d.qualificationPath);
-    qaPath(origin.origin, d.certificatePath);
+    qaPath(api.origin, d.qualificationPath);
+    qaPath(api.origin, d.certificatePath);
     const r = f.resume80;
     requireQa(Number.isInteger(r.minPreviousPct) && r.minPreviousPct >= 80 &&
       r.minPreviousPct < 100, 'SOURCE_80_PERCENT_BASELINE');
@@ -126,7 +139,7 @@ export function validateQaProfile(raw: unknown, projectName: string,
       [e.visualLastPageButton,e.wrongAnswerButton,e.correctAnswerButton,
         e.submitButton,e.finishButton].every(s => typeof s === 'string' && s.trim().length > 0),
       'SCORM_EXTERNAL_CONTROLS');
-    qaPath(origin.origin, e.scormSnapshotPath);
+    qaPath(api.origin, e.scormSnapshotPath);
   }
   requireQa(new Set(enrollmentIds).size === 6, 'DEDICATED_PER_BROWSER_ENROLLMENTS');
   requireQa(!!data.projects[projectName], 'PROJECT_FIXTURE_' + projectName);
