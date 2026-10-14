@@ -100,7 +100,7 @@ export function createAdminResumeCreditIntent(params:{
     original_progress_pct:suggested.continuity.source_progress_pct,
     original_edition_sha256:sourceEdition.source_edition_sha256,
     new_edition_sha256:destination.edition_sha256,
-    resume_unit_id:suggested.proposed_resume_unit_id,
+    resume_unit_id:review.approved_resume_unit_id,
     source_snapshot_sha256:review.source_snapshot_sha256,
     source_updated_at:review.expected_matricula_updated_at,
     source_scorm_commit_at:enrollment.scorm_last_commit_at,
