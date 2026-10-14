@@ -102,6 +102,56 @@ describe('Player 3 individual enrollment continuity',()=>{
     expect(compareContinuityInventories([legacy],[{...legacy,
       matricula_updated_at:'2026-10-13 13:00:00'}]).stale_snapshot_rows).toBe(1);
   });
+  it('requires review for Front C grade/attempt/SCORM differences even at the same 99%',()=>{
+    const old={...legacy,matricula_progresso_pct:99,ciclo_progresso_pct:99,
+      matricula_score_final:80,matricula_tentativas:1,
+      ciclo_score_final:80,ciclo_tentativas:1,
+      tipo_conteudo:'scorm',
+      catalog_current_scorm_sha256:'b'.repeat(64),
+      scorm_score_raw:80,scorm_success_status:'unknown',
+      ciclos_historicos_sha256:'c'.repeat(64),
+    };
+    for(const change of [
+      {matricula_score_final:85},{matricula_tentativas:2},
+      {ciclo_score_final:90},{ciclo_tentativas:2},
+      {scorm_score_raw:95},{scorm_success_status:'passed'},
+      {matricula_data_conclusao:'2026-10-15'},
+      {ciclos_historicos_sha256:'d'.repeat(64)},
+    ]){
+      expect(compareContinuityInventories([old],[{...old,...change}]))
+        .toMatchObject({unchanged:0,changed_evidence:1,
+          cutover_requires_reconciliation:true});
+    }
+  });
+  it('rejects changed catalog edition or effective format independently of progress',()=>{
+    const old={...legacy,tipo_conteudo:'scorm',curso_version_tag:'RC8',
+      catalog_current_scorm_sha256:'b'.repeat(64),
+      catalog_current_scorm_version:'scorm-rc8'};
+    for(const change of [
+      {tipo_conteudo:'native'},
+      {curso_version_tag:'RC9'},
+      {catalog_current_scorm_sha256:'d'.repeat(64)},
+      {catalog_current_scorm_version:'scorm-rc9'},
+    ]){
+      expect(compareContinuityInventories([old],[{...old,...change}]))
+        .toMatchObject({unchanged:0,changed_editions:1,
+          cutover_requires_reconciliation:true});
+    }
+  });
+  it('classifies unchanged-percent status and stale cycle as non-eligible',()=>{
+    expect(compareContinuityInventories([legacy],[{...legacy,
+      matricula_status:'CONCLUIDO',ciclo_status:'CONCLUIDO'}]))
+      .toMatchObject({unchanged:0,changed_statuses:1,
+        cutover_requires_reconciliation:true});
+    expect(compareContinuityInventories([legacy],[{...legacy,
+      ciclo_updated_at:'2026-10-13 13:00:00'}]))
+      .toMatchObject({unchanged:0,stale_snapshot_rows:1,
+        cutover_requires_reconciliation:true});
+    expect(compareContinuityInventories([legacy],[{...legacy,
+      ciclo_status:'CONCLUIDO'}]))
+      .toMatchObject({unchanged:0,changed_cycles:1,
+        cutover_requires_reconciliation:true});
+  });
   it('allows identical snapshots without triggering unnecessary migration',()=>{
     expect(compareContinuityInventories([legacy],[legacy])).toMatchObject({
       unchanged:1,advanced:0,cutover_requires_reconciliation:false,
