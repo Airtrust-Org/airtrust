@@ -71,17 +71,18 @@ export default function FrmsDayExplanationPanel({
   date,
   source = 'desconhecida',
 }: Props) {
-  const { data, loading, error } = useFrmsDayExplanation(tripulanteId, date, { source });
+  const { data, loading, error, refetch } = useFrmsDayExplanation(tripulanteId, date, { source });
 
   if (!tripulanteId || !date) return null;
 
   if (loading) {
     return (
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-        <div className="space-y-3 animate-pulse" aria-label="Carregando explicação operacional">
+        <div className="space-y-3 animate-pulse" aria-label="Carregando explicação operacional" aria-live="polite" aria-busy="true">
           <div className="h-5 w-52 rounded bg-slate-200 dark:bg-slate-800" />
           <div className="h-20 rounded-lg bg-slate-100 dark:bg-slate-900" />
           <div className="h-28 rounded-lg bg-slate-100 dark:bg-slate-900" />
+          <p className="text-xs text-slate-500">Buscando a explicação deste dia. Se a consulta exceder 15 segundos, você poderá tentar novamente.</p>
         </div>
       </section>
     );
@@ -92,7 +93,17 @@ export default function FrmsDayExplanationPanel({
       <section className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
         <div className="flex gap-2">
           <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
-          <span>Não foi possível carregar a explicação deste dia. Não use ausência de explicação como sinal de normalidade.</span>
+          <div>
+            <p>{error || 'Não foi possível carregar a explicação deste dia.'}</p>
+            <p className="mt-1">Não use ausência de explicação como sinal de normalidade.</p>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="mt-3 rounded-md border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/40"
+            >
+              Tentar novamente
+            </button>
+          </div>
         </div>
       </section>
     );
