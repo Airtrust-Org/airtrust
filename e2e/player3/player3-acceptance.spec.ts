@@ -12,6 +12,8 @@ import {
   validateQaModuleSession,validateQaJointReadiness,validateQaCertificatePdf,
   validateQaTerminalReceipt,validateQaCertificateArchiveStatus,
   validateQaAuthoredStageAttempt,
+  validateQaAuthoredLessonCheckpoint,validateQaNativeLessonSession,
+  type QaNativeLessonSession,
   type QaCertificateArchiveStatus,
   type QaModuleSession,type QaJointReadiness,
   type QaDoutrinamento,
@@ -112,6 +114,15 @@ async function jointReadiness(context: BrowserContext, profile: Profile,
     course.units.filter(unit=>!!unit.official).length);
 }
 
+/** Authenticated Native lesson ledger; chapter navigation alone has no authority. */
+async function nativeLessonSession(
+  context:BrowserContext,profile:Profile,course:QaDoutrinamento,
+):Promise<QaNativeLessonSession>{
+  const p='/api/lms/native/matriculas/'+course.enrollmentId+'/sessao';
+  const raw=await apiData<unknown>(context,profile.apiBaseUrl,p);
+  return validateQaNativeLessonSession(raw,course,course.requiredLessonIds);
+}
+
 async function evidence(page: Page, testInfo: { attach(name: string, options: {body: Buffer; contentType: string}): Promise<void> },
   label: string) {
   if (process.env.PLAYER3_QA_CAPTURE_ALLOWED === 'SYNTHETIC_ONLY') {
@@ -152,6 +163,18 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
   const d = fixture.doutrinamento;
   let { context, page } = await openLearner(browser);
   const contentAssetProblems: string[] = [];
+  // Observe ONLY browser-originated authenticated lesson writes. The QA
+  // bearer client itself never POSTs a checkpoint, score or completion.
+  const seenCheckpointRequests:unknown[]=[];
+  const checkpointUrl=pathOn(profile.apiBaseUrl,
+    '/api/lms/native/matriculas/'+d.enrollmentId+'/checkpoints');
+  const watchCheckpoints=(target:Page)=>target.on('request',request=>{
+    if(request.url()===checkpointUrl && request.method()==='POST'){
+      try{seenCheckpointRequests.push(JSON.parse(request.postData()??'null'));}
+      catch{seenCheckpointRequests.push(null);}
+    }
+  });
+  watchCheckpoints(page);
   auditContentAssets(page, profile.contentOrigin, contentAssetProblems);
   try {
     await checkStagingProvenance(context, profile);
@@ -174,6 +197,10 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       'FRESH_MODULAR_ENROLLMENT_NOT_ALREADY_GRADED');
     const initialReadiness=await jointReadiness(context,profile,d);
     expect(initialReadiness.readyForAtomicTerminalPreflight).toBe(false);
+    const initialLessonLedger=await nativeLessonSession(context,profile,d);
+    demand(initialLessonLedger.seen_lesson_ids.length===0 &&
+      initialLessonLedger.next_sequence===1,
+      'QA_FRESH_LESSON_LEDGER_NOT_CLEAN');
     expect(initialReadiness.completion_supported).toBe(false);
     const offlineUnitIndex=d.units.findIndex((unit,index)=>
       index>0 && index<d.units.length-1 && !!unit.lessonId && !unit.official);
@@ -323,6 +350,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         // Entire browser session context is closed; no in-memory LMS state survives.
         await context.close();
         ({ context, page } = await openLearner(browser));
+        watchCheckpoints(page);
         auditContentAssets(page, profile.contentOrigin, contentAssetProblems);
         await page.goto(pathOn(profile.baseUrl, d.launchPath));
         await expectAuthoredRc81Unit(page,d.units[21],21,d.units.length);
@@ -336,6 +364,27 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
           resumedReadiness.totalRequiredLessons);
         expect(resumedReadiness.readyForAtomicTerminalPreflight).toBe(false);
       }
+    }
+    const nativeDone=await nativeLessonSession(context,profile,d);
+    demand(nativeDone.seen_lesson_ids.length===d.requiredLessonIds.length &&
+      nativeDone.next_sequence===1+d.requiredLessonIds.length &&
+      d.requiredLessonIds.every(unitId=>
+        nativeDone.seen_lesson_ids.includes(unitId)),
+      'AUTHOR_LESSON_CHECKPOINTS_NOT_COMMITTED');
+    demand(seenCheckpointRequests.length===d.requiredLessonIds.length,
+      'AUTHOR_LESSON_CHECKPOINT_WIRE_COUNT');
+    const checkpointEvents=new Set<string>();
+    const lessonsObserved=new Set<string>();
+    for(const [i,raw] of seenCheckpointRequests.entries()){
+      const row=raw as {unitId?:string};
+      demand(row && typeof row.unitId==='string' &&
+        d.requiredLessonIds.includes(row.unitId) &&
+        !lessonsObserved.has(row.unitId),
+        'AUTHOR_LESSON_CHECKPOINT_REVIEWED_CROSSWALK');
+      const verified=validateQaAuthoredLessonCheckpoint(
+        raw,row.unitId,i+1,checkpointEvents);
+      checkpointEvents.add(verified.eventId);
+      lessonsObserved.add(verified.unitId);
     }
     const stagesDone=await moduleSession(context,profile,d);
     demand(stagesDone.allOfficialStagesPassed &&
