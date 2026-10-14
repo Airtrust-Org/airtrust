@@ -220,3 +220,45 @@ aprovadores humanos); a etapa da C está integrada como código, mas
 sem aceite operacional. Para homologar: casos 0%, 20%, 50%, 80% e 99%,
 versões distintas, WebKit/Chromium, SCORM externo, nota, qualificação e
 certificado realmente consultável em staging após Schema V2 governado.
+
+
+## Observabilidade de certificado pós-conclusão — 14/10/2026
+
+Para eliminar a ambiguidade entre `CONCLUIDO` (matrícula/ciclo D1) e
+**PDF realmente arquivado** (documento vinculado + R2), a PR #1389 inclui
+o endpoint de leitura **GET**
+`/api/lms/native/matriculas/:matriculaId/etapas/certificado`.
+
+- Mesmo conjunto de **seis controles de staging** exigidos pelo terminal
+  Player 3; por padrão desligado, sem acesso em production.
+- `auth()` do router e
+  `resolveNativeEnrollmentAdmission` exigem usuário ativo, funcionário
+  proprietário, empresa exata e matrícula vigente, sem privilégios cruzados.
+- Releitura SQL associa a matrícula e ciclo concluídos à qualificação
+  `CONCLUIDA`, ao documento não excluído do próprio funcionário e à chave
+  de R2 no prefixo exato
+  `certificados/empresa-{empresaId}/funcionario-{funcionarioId}/historico-{historicoId}/`.
+- A leitura R2 (somente os cinco primeiros bytes) prova `%PDF-` e existência
+  mínima do objeto. A chave R2 não é retornada. Não há geração, reparo,
+  `D1.batch`, upload, alteração de matrícula ou certificado.
+- Resposta `success:true,data` com `matricula_id`, `ciclo_id`,
+  `matricula_status`, `historico_id`, `certificate_state`,
+  `documento_id`, `stream_path` e `stream_verified:false`.
+  Estados incluem `ENROLLMENT_NOT_COMPLETED`, `NOT_APPLICABLE`,
+  `HISTORY_NOT_LINKED`, `HISTORY_INVALID`,
+  `CERTIFICATE_NOT_ARCHIVED`, `CERTIFICATE_OBJECT_MISSING`,
+  `CERTIFICATE_PDF_INVALID` e `PDF_HEADER_VERIFIED`.
+
+`PDF_HEADER_VERIFIED` **não significa PDF lido integralmente, licença,
+renderização válida ou stream acessível**. O teste independente da D
+deve chamar a rota real, exigir o estado esperado e executar
+`GET /api/pasta-virtual/stream/:documentoId` **com a mesma sessão de aluno**,
+inspecionando corpo integral `%PDF-`, estrutura/EOF e resposta HTTP 200.
+Não aceitar `certificate_state:REQUIRES_VERIFICATION` do POST como prova.
+O status `CERTIFICATE_NOT_ARCHIVED` após conclusão é falha recuperável
+operacional do serviço de certificado, **não** autorização para repetir
+a transação terminal ou inventar a emissão.
+
+QA local: 44/44 testes focados do serviço de certificado, rota HTTP
+e writer de conclusão + Worker TypeScript (verificar execução final).
+Nenhum certificado foi emitido no staging/produção nesta entrega.
