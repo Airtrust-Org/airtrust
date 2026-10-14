@@ -439,7 +439,7 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(payload.readiness).toBeDefined();
   });
 
-  it('bloqueia envio quando a oportunidade de sono é inferior ao sono declarado', () => {
+  it('não bloqueia check-in por comparação indevida entre oportunidade e sono em 24h', () => {
     render(<FrmsCheckinFadiga />);
     fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '5' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
@@ -450,8 +450,8 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
     fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
-    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diário' })).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent(/Oportunidade de sono menor que sono informado/);
+    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diário' })).toBeEnabled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('renderiza as cinco opções de sono definidas para o check-in', () => {
