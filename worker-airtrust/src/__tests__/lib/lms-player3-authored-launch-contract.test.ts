@@ -10,6 +10,7 @@ const good={
     schema:'AIRTRUST_PLAYER3_AUTHORED_LAUNCH_V1',
     sourceSha256:sha('b'),contentSha256:sha('c'),
     sourceStageCrosswalkSha256:sha('d'),
+    orderedUnitIdsSha256:sha('e'),
     answersStripped:true,legacyScormDisabled:true,
     reviewedImmutableRelease:true,
   },
@@ -42,6 +43,7 @@ describe('Player3 authored launch policy (OFF by default)',()=>{
       {...v,sourceSha256:sha('9')},
       {...v,contentSha256:'bad'},
       {...v,sourceStageCrosswalkSha256:null},
+      {...v,orderedUnitIdsSha256:null},
       {...v,url:'https://attacker.example'},
       null,
     ]){
