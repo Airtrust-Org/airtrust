@@ -759,11 +759,39 @@ function withNativeAtomicGuard(
       );
     }
     const gate=buildPlayer3TerminalTransactionGuard(p,env);
-    // A mandatory first statement, in the SAME D1.batch, protects the
-    // learner/cycle/edition/every lesson/official-stage receipt. Actual
-    // activation requires governed schema and recovery; no HTTP entry point
-    // passes this anchor and the Player3 flag defaults OFF.
-    return [{sql:gate.sql,args:[...gate.bindings]},...statements];
+    // The assertion, terminal intent, canonical mutations and intent deletion
+    // form ONE D1.batch. The review-only 0555 plan defines a deferred FK to an
+    // unfillable sentinel: forgetting the DELETE aborts the whole commit.
+    // This code is not reachable from HTTP until the governed schema/endpoint
+    // and audited staging rollout have been completed.
+    const nonce=Array.from(crypto.getRandomValues(new Uint8Array(32)),
+      byte=>byte.toString(16).padStart(2,'0')).join('');
+    const intent={
+      sql:`INSERT INTO lms_player3_completion_intents (
+        nonce,empresa_id,curso_id,matricula_id,ciclo_id,funcionario_id,
+        actor_user_id,vinculo_id,edicao_id,politica_id,edition_sha256,
+        source_sha256,bank_sha256,policy_sha256,required_lesson_ids_json,
+        official_stage_receipts_json,event_count,distinct_lesson_count,
+        official_stage_count,gerar_qualificacao,qualificacao_tipo_id,
+        qualificacao_categoria_id
+      ) VALUES (${Array.from({length:22},()=>'?').join(',')})`,
+      args:[
+        nonce,p.empresaId,p.cursoId,p.matriculaId,p.cicloId,p.funcionarioId,
+        p.actorUserId,p.bindingId,p.edicaoId,p.politicaId,p.editionHash,
+        p.sourceHash,p.bankHash,p.policyHash,JSON.stringify(p.requiredLessonIds),
+        JSON.stringify(p.officialStages.map(s=>({
+          stageId:s.stageId,attemptId:s.attemptId,
+          attemptNumber:s.attemptNumber,answersHash:s.answersHash,
+          scorePct:s.scorePct,
+        }))),p.recordedEventCount,p.requiredLessonIds.length,
+        p.officialStages.length,Number(p.gerarQualificacaoAoConcluir),
+        p.qualificacaoTipoId,p.qualificacaoCategoriaId,
+      ],
+    };
+    return [
+      {sql:gate.sql,args:[...gate.bindings]},intent,...statements,
+      {sql:'DELETE FROM lms_player3_completion_intents WHERE nonce=?',args:[nonce]},
+    ];
   }
   if (!a) return statements;
   if (!params.env || !canProvisionNative(params.env,params.empresaId) ||
