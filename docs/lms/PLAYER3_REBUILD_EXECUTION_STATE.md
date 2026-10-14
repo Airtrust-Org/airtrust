@@ -53,3 +53,21 @@ Recriar o player de execução e o motor de aprendizagem do zero, preservando os
 OBJETIVO=Player3 real sem 99%; CASO=Doutrinamento matrícula 911, 42/42 e 100 mas 99%; MAIN=verificar ao vivo; PR=#1389 DRAFT; HEAD=consultar PR; ARQUIVOS=engine+host+factory+testes; EXECUTADO=22 candidatos fiéis e domínio independente; TESTES=11+4+3 PASS, Worker TSC PASS; BLOQUEIO=servir HTML5 segregado + schema/persistência+certificação real+smoke visual+CI; PRÓXIMO=desenvolver camada segura e ponta-a-ponta, não corrigir SCORM legado; NÃO_AUTORIZADO=bypass, fabricação de progresso, D1/R2 write improvisado, produção sem SHA/especificidade.
 
 **Este documento prevalece sobre anotações temporárias conflitantes da PR que ainda recomendem renderizador genérico Native.**
+
+## Nova exigência incorporada — continuidade de todos os alunos (2026-10-14)
+
+**Solicitação:** antes do cutover, mapear TODAS as matrículas em andamento de TODAS as empresas, preservar progresso individual existente (ex.: 80%), posição e provas comprovadas, sem forçar alunos a começar do zero. Repetir o levantamento até a janela de corte para incluir novos avanços.
+
+**Implementado na PR #1389 (não publicado, nenhum write remoto):**
+
+- `scripts/learning-factory/player3-active-enrollments-readonly.sql`: SELECT fixo de matrículas `EM_ANDAMENTO` e `NAO_INICIADO` multi-tenant, JOIN curso/ciclo/SCORM; coleta % de matrícula e ciclo, versão, slide, bookmark, CMI e timestamps; identificar divergências. Resultado é PRIVADO.
+- `scripts/learning-factory/player3-seal-active-inventory.mjs`: lê resultado D1 via stdin, cifra todos os registros e estados SCORM em AES-256-GCM autenticado e gera apenas contagens gerais sem IDs/nome no log; arquivo local 0600, não sobrescreve.
+- `.github/workflows/production-player3-enrollment-inventory-readonly.yml`: execução preparada, governada, **somente workflow_dispatch na main e somente SELECT**, com SHA exato, confirmação, oito gates, proteção ambiente production, token D1 readonly, chave privada de snapshot, artefato apenas cifrado com retenção provisória de 30 dias.
+- `worker-airtrust/src/lib/lms-player3/continuity.ts`: regra individual de crosswalk do andamento, separa `EXACT_RESTORE` / `UNIT_CROSSWALK` / `ADMIN_EQUIVALENCE_REVIEW` / `NO_PROGRESS` / `SOURCE_CONFLICT`. Preserva porcentagem anterior sem fabricar nota, evento ou conclusão. `compareContinuityInventories` detecta avanço novo, matrícula nova/removida, troca de ciclo, regressão e instantâneo obsoleto.
+- `docs/lms/PLAYER3_CONTINUIDADE_MATRICULAS.md`: contrato T0, delta, janela de corte, crédito administrativo de retomada, auditoria, segurança, recovery e reconciliação.
+
+**Evidência local do HEAD de 14:08:** 25 testes core Worker (11 engine + 14 continuidade) PASS; Worker `tsc --noEmit` PASS; quatro testes AES-GCM PASS; dois testes SQLite do SELECT multi-tenant PASS; YAML do workflow válido. Nada disso equivale a consultar D1 de produção.
+
+**Bloqueio real:** ainda **não existe contagem de alunos verificada em produção nem backup real da matrícula**. A PR permanece DRAFT e o workflow não está integrado na main, não pode ser disparado para dados reais. Requer token `CLOUDFLARE_D1_READONLY_API_TOKEN` e segredo `AIRTRUST_PLAYER3_SNAPSHOT_KEY_B64` no ambiente protegido, configuração a verificar; jamais imprimir, commitar ou solicitar essas credenciais em chat. Até o fluxo ser governado e rodar, não afirmar que mapeou todos os alunos.
+
+**Próxima ação desta frente:** validar CI aplicável e estado de PR/main, integrar de forma isolada o fluxo de captura seguro quando autorizável pelo contrato (não mergear #1389 prematuramente), executar inventário T0 e conservar cópia cifrada em cofre corporativo além do prazo temporário do artefato; depois construir o serviço governado de equivalência por módulo/ciclo com auditoria e validar em staging. Antes de produção/cutover executar T1 final, confirmar delta e nunca sobrepor progressos novos. Continua pendente a integração Player3 aos assets HTML5 privados, módulos e certificação real.
