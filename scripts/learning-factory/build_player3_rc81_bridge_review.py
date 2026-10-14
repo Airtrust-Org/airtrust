@@ -187,6 +187,13 @@ def compile_rc81_review(original_zip: bytes, parent_origin: str,
     adapted = adapt_rc81_app(app, sha(original_zip), parent_origin,
                              edition_sha256, projection['stages'])
     files['app.js'] = adapted
+    # The original SCORM shim calls LMSInitialize at load. A Player3 source
+    # must never start, commit or finish a legacy SCORM session.
+    files['scorm_api.js'] = (
+        b"window.Scorm=Object.freeze({init:()=>'false',get:()=>'',"
+        b"set:()=>'false',commit:()=>'false',finish:()=>'false',"
+        b"isInitialized:()=>false,isFinished:()=>false});\n"
+    )
     receipt.update({
         'status': 'REVIEW_ONLY_NOT_PUBLISHABLE',
         'byteIdenticalNonModelFiles': False,
@@ -194,6 +201,7 @@ def compile_rc81_review(original_zip: bytes, parent_origin: str,
         'adapter': 'AIRTRUST_PLAYER3_RC81_BRIDGE_REVIEW_V1',
         'adapterOriginalAppSha256': sha(app),
         'adapterRuntimeSha256': sha(adapted),
+        'legacyScormApiDisabled': True,
         'adapterHostBridgeImplemented': False,
         'adapterServerReceiptRequired': True,
         'adapterBrowserQaRequired': True,
