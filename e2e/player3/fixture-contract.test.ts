@@ -2,6 +2,7 @@ import {describe,expect,it} from 'vitest';
 import {
   qaPath,validateQaProfile,validateQaModuleSession,validateQaJointReadiness,
   validateQaCertificatePdf,validateQaCertificateArchiveStatus,
+  validateQaAuthoredStageAttempt,
   assertQaReadOnlyNonDisclosure,validateQaTerminalReceipt,
   type QaModuleSession,type QaProfile,type QaProjectFixture,
 } from './fixture-contract';
@@ -487,5 +488,51 @@ describe('Front D — B authenticated post-commit certificate archive reader',()
       debug:{correctOptionId:'private'}},enrolled(),9091,9092,
       '/api/pasta-virtual/stream/9092'))
       .toThrow('WORKER_READONLY_PRIVATE_MATERIAL_LEAK');
+  });
+});
+
+describe('Front D — real RC8.1 browser POST replay and grading boundary',()=>{
+  const row=(n=1,eventId='p3-'+'a'.repeat(32))=>({
+    eventId,attemptNumber:n,
+    answers:Array.from({length:10},(_,i)=>({
+      questionId:'q-'+(i+1),optionId:'o'+(i%4),
+    })),
+  });
+  it('accepts fail→retake with distinct event IDs and consecutive attempt numbers',()=>{
+    const first=validateQaAuthoredStageAttempt(row(),1,new Set());
+    const seen=new Set([first.eventId]);
+    const second=validateQaAuthoredStageAttempt(
+      row(2,'p3-'+'b'.repeat(32)),2,seen);
+    expect(second.attemptNumber).toBe(2);
+  });
+  it('rejects repeated eventId, wrong attempt counter and nonrandom IDs',()=>{
+    expect(()=>validateQaAuthoredStageAttempt(row(),1,new Set([row().eventId])))
+      .toThrow('RC81_ATTEMPT_EVENT_ID_UNIQUE');
+    expect(()=>validateQaAuthoredStageAttempt(row(1),2,new Set()))
+      .toThrow('RC81_OFFICIAL_ATTEMPT_NUMBER_AND_BODY');
+    expect(()=>validateQaAuthoredStageAttempt(
+      row(1,'event-1'),1,new Set())).toThrow('RC81_ATTEMPT_EVENT_ID_UNIQUE');
+  });
+  it('rejects client-forged score, tenant, pass, certificate or scope',()=>{
+    for(const extra of [
+      {score_pct:100},{stage_passed:true},{empresa_id:6},
+      {certificate_id:55},{matriculaId:99},{cycleId:800},
+    ]) {
+      expect(()=>validateQaAuthoredStageAttempt({...row(),...extra},1,new Set()))
+        .toThrow('RC81_OFFICIAL_ATTEMPT_NUMBER_AND_BODY');
+    }
+  });
+  it('rejects duplicate question IDs, missing questions and private graded choices',()=>{
+    for(const bad of [
+      {...row(),answers:row().answers.slice(0,9)},
+      {...row(),answers:[...row().answers.slice(0,9),row().answers[0]]},
+      {...row(),answers:row().answers.map((x,i)=>
+        i===0?{...x,correct:true}:x)},
+      {...row(),answers:row().answers.map((x,i)=>
+        i===0?{...x,optionId:'private-key'}:x)},
+    ]) {
+      expect(()=>validateQaAuthoredStageAttempt(bad,1,new Set()))
+        .toThrow('RC81_PUBLIC_CHOICES_ONLY_NO_CLIENT_GRADE');
+    }
   });
 });
