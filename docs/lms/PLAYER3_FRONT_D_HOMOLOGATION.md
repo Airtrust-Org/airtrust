@@ -335,3 +335,26 @@ na PR D #1465. A B #1389 pode continuar o mount autenticado do Host,
 a obtenção do contexto/URL e a governança de Schema V2 sem aguardar
 o E2E. A D permanece draft até rodar realmente os seis testes e
 inspecionar a fidelidade autoral e certificados.
+
+## 14/10/2026 — Prova de unicidade de tentativas no E2E RC8.1
+
+O driver da Frente D agora verifica, no tráfego HTTP **gerado pela interface
+do aluno**, que as oito avaliações autorais produzam oito aprovações
+persistidas e uma reprovação real adicional. Em todas as nove submissões
+o corpo é estritamente `{answers,attemptNumber,eventId}`: cada
+`eventId` segue o formato aleatório do transportador autenticado B,
+é exclusivo entre os nove POSTs e cada `attemptNumber` corresponde à
+contagem oficial da etapa recuperada por GET no Worker. Resposta com
+nota, estado concluído, matrícula/tenant, gabarito, alternativas privadas,
+IDs de questão duplicados ou evento reaproveitado falha imediatamente.
+
+A função `validateQaAuthoredStageAttempt`, o teste de contrato e a
+aceitação Playwright foram integrados à PR D #1465. Evidência em worktree
+limpo no SHA `9eac074ce078eb107397df8a50f4449c4bd55f69`:
+**50/50 Vitest PASS, ESLint PASS, TypeScript focado PASS** e
+seis jornadas Chromium/WebKit enumeradas.
+
+Esses resultados são estritamente de **código e contrato**; não houve
+login em staging, matrícula sintética, publicação de HTML5/R2, execução
+positiva do curso original ou certificado emitido. A D não bloqueia
+o trabalho de autenticação, montagem de Host, assets e esquema da B.
