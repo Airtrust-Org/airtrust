@@ -16,6 +16,8 @@ const make=(id,pct,extra={})=>({
   ciclo_atual:1,ciclo_progresso_pct:pct,
   ciclo_updated_at:'2026-10-14 13:00:00',
   curso_version_tag:EDITION,scorm_versao:'1.2',
+  tipo_conteudo:'scorm',catalog_current_scorm_sha256:'test-sha-active',
+  catalog_current_scorm_version:'RC8.1',
   ultimo_slide:9,ultima_pagina:9,
   scorm_last_commit_at:'2026-10-14 12:59:00',
   scorm_suspend_data_PRIVATE:'{"a":"module_2"}',
@@ -84,6 +86,16 @@ test('blocks cycle drift, status drift, source version drift and stale timestamp
     .decisions[0].disposition,'STALE_T1_REVIEW');
   assert.equal(reconcileRows([a],[{...a,ciclo_progresso_pct:17}])
     .decisions[0].disposition,'SOURCE_CONFLICT_REVIEW');
+});
+test('missing course and active catalog-package changes are human-review exceptions',()=>{
+  const a=make(839,80);
+  const missing={...a,tipo_conteudo:null,curso_version_tag:null};
+  assert.equal(reconcileRows([a],[missing]).decisions[0].disposition,
+    'MISSING_CATALOG_COURSE_REVIEW');
+  const changed={...a,catalog_current_scorm_sha256:'test-sha-new'};
+  assert.equal(reconcileRows([a],[changed]).decisions[0].disposition,
+    'SOURCE_EDITION_CHANGED_REVIEW');
+  assert.equal(reconcileRows([a],[changed]).decisions[0].catalog_package_is_cycle_verified,false);
 });
 test('does not infer completion from a missing active enrollment',()=>{
   const result=reconcileRows([make(841,80)],[]);
