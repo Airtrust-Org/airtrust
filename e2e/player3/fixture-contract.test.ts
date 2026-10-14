@@ -530,6 +530,8 @@ describe('Front D — real RC8.1 browser POST replay and grading boundary',()=>{
         i===0?{...x,correct:true}:x)},
       {...row(),answers:row().answers.map((x,i)=>
         i===0?{...x,optionId:'private-key'}:x)},
+      {...row(),answers:row().answers.map((x,i)=>
+        i===0?{...x,optionId:'o10'}:x)},
     ]) {
       expect(()=>validateQaAuthoredStageAttempt(bad,1,new Set()))
         .toThrow('RC81_PUBLIC_CHOICES_ONLY_NO_CLIENT_GRADE');
