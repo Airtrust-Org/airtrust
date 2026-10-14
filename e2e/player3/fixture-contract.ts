@@ -13,6 +13,8 @@ export type QaEnrollment = {
   enrollmentId: number; cycleId: number;
 };
 export type QaDoutrinamento = QaEnrollment & {
+  /** Reviewed immutable source and delivery, not a client-supplied iframe URL. */
+  courseId:number; sourceZipSha256:string; contentSha256:string;
   units: QaUnit[]; requiredLessonIds: string[];
   qualificationPath: string; certificatePath: string;
 };
@@ -38,6 +40,25 @@ export type QaProfile = {
 const hex = /^[a-f0-9]{64}$/;
 const id = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 const originPattern = /^https:\/\//;
+/** The original Doutrinamento RC8.1 archive, not a reconstructed substitute. */
+export const RC81_SOURCE_SHA256 =
+  'a0a9e955368a8e7f4dd3072b7bd98eb8e5d7cab47d31cbd9335f4282dbba18a2';
+
+/** Front B authored-launch-contract.ts renders exactly this immutable path. */
+export function validateQaAuthoredContentUrl(
+  raw:string, origin:string, tenantId:number, course:QaDoutrinamento,
+):string {
+  requireQa(Number.isSafeInteger(tenantId)&&tenantId>0 &&
+    Number.isSafeInteger(course.courseId)&&course.courseId>0 &&
+    course.sourceZipSha256===RC81_SOURCE_SHA256 && hex.test(course.contentSha256),
+    'RC81_SOURCE_AND_IMMUTABLE_RELEASE');
+  const expected=origin+'/player3/'+tenantId+'/'+course.courseId+'/'+
+    course.editionSha256+'/'+course.contentSha256+'/index.html';
+  requireQa(typeof raw==='string'&&raw===expected,
+    'RC81_AUTHORED_LAUNCH_SOURCE_BOUND_PATH');
+  return expected;
+}
+
 
 export function requireQa(ok: unknown, code: string): asserts ok {
   if (!ok) throw new Error('PLAYER3_CONTRACT_MISSING:' + code);
@@ -125,6 +146,9 @@ export function validateQaProfile(raw: unknown, projectName: string,
       enrollmentIds.push(x.enrollmentId);
     }
     const d = f.doutrinamento;
+    requireQa(Number.isSafeInteger(d.courseId)&&d.courseId>0 &&
+      d.sourceZipSha256===RC81_SOURCE_SHA256 && hex.test(d.contentSha256),
+      'RC81_SOURCE_AND_IMMUTABLE_RELEASE');
     requireQa(Array.isArray(d.units) && d.units.length === 42 &&
       new Set(d.units.map(u => u?.id)).size === 42, 'DOU_RC81_42_UNITS');
     requireQa(d.units.every(u => !!u && id.test(u.id) &&
