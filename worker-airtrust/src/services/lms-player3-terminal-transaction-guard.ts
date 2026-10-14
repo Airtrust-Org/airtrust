@@ -9,6 +9,9 @@
  *
  * Schema V2 0552/0553 + catalog activation are prerequisites (not applied).
  */
+import type {Env} from '../types';
+import {nativeScopedSql} from './lms-native-catalog-legacy-guard';
+
 export type Player3TerminalStageReceipt=Readonly<{
   stageId:string;
   attemptId:number;
@@ -103,7 +106,7 @@ const SQL=[
 ].join(' ');
 
 export function buildPlayer3TerminalTransactionGuard(
-  anchor:Player3TerminalAnchor,
+  anchor:Player3TerminalAnchor,env?:Env,
 ):Readonly<{sql:string;bindings:readonly (number|string)[]}>{
   const ids=[
     anchor.empresaId,anchor.matriculaId,anchor.cursoId,anchor.cicloId,
@@ -140,7 +143,10 @@ export function buildPlayer3TerminalTransactionGuard(
     scorePct:s.scorePct,
   }));
   return {
-    sql:SQL,
+    // Physical Native and the staged, explicitly activated SCORM catalog
+    // share the SAME tenant-scoped evidence contract; external SCORM is never
+    // treated as Native without a governed activation row.
+    sql:nativeScopedSql(SQL,env,anchor.empresaId),
     bindings:[
       anchor.actorUserId,anchor.matriculaId,anchor.empresaId,
       anchor.cursoId,anchor.funcionarioId,anchor.cicloId,
