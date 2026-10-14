@@ -126,7 +126,7 @@ function fortnightSummary(item: FrmsOperationalSnapshotItem): { status: string; 
   const hasSource = indicator != null &&
     ['REAL', 'DERIVADO', 'ESTIMADO'].includes(indicator.fonte_periodo) &&
     indicator.freshness_dado !== 'AUSENTE';
-  const completeEvidence = hasSource && indicator.freshness_dado === 'COMPLETO';
+  const completeEvidence = hasSource && indicator.freshness_dado === 'COMPLETO' && indicator.fonte_periodo !== 'ESTIMADO';
   const status = !period || !indicator ? 'Período não confirmado'
     : indicator.status_quinzena === 'CRITICO' ? 'Atenção crítica'
       : indicator.status_quinzena === 'ATENCAO' ? 'Exige atenção'
