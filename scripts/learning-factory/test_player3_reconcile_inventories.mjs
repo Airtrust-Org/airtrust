@@ -98,6 +98,23 @@ test('detects a new SCORM bookmark even if the percentage is unchanged',()=>{
   const b={...a,scorm_suspend_data_PRIVATE:'{"a":"module_3"}'};
   assert.equal(reconcileRows([a],[b]).decisions[0].disposition,'EVIDENCE_UPDATED_REVIEW');
 });
+test('preserves historic cycles for authorized tenant and detects same-percent history changes',()=>{
+  const a=make(855,80,{ciclos_historicos_json_PRIVATE:JSON.stringify([
+    {id:900,empresa_id:6,matricula_id:855,numero_ciclo:1,
+      ciclo_atual:0,status:'CONCLUIDO',progresso_pct:100},
+    {id:901,empresa_id:6,matricula_id:855,numero_ciclo:2,
+      ciclo_atual:1,status:'EM_ANDAMENTO',progresso_pct:80},
+  ])});
+  assert.equal(open([a]).rows[0].ciclos_historicos_json_PRIVATE,
+    a.ciclos_historicos_json_PRIVATE);
+  const b={...a,ciclos_historicos_json_PRIVATE:a.ciclos_historicos_json_PRIVATE
+    .replace('"progresso_pct":100','"progresso_pct":99')};
+  assert.equal(reconcileRows([a],[b]).decisions[0].disposition,
+    'EVIDENCE_UPDATED_REVIEW');
+  const outsider={...a,ciclos_historicos_json_PRIVATE:a.ciclos_historicos_json_PRIVATE
+    .replace('"empresa_id":6','"empresa_id":7')};
+  assert.throws(()=>encrypt([outsider]),/CROSS_TENANT_OR_ENROLLMENT_CYCLE_HISTORY/);
+});
 test('retry is idempotent for the same evidence without relying on ciphertext randomness',()=>{
   const a=[make(861,80)];
   const b=[make(861,99)];
