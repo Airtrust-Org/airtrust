@@ -15,3 +15,5 @@ from test_player3_legacy_review import Player3LegacyBridgeTests
 from test_player3_unified_review_batch import Player3UnifiedBatchTests
 
 from test_player3_residuos_review import Player3ResiduosReviewTests
+
+from test_player3_sgso_review import Player3SGSOReviewTests
