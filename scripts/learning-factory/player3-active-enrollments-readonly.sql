@@ -30,6 +30,19 @@ SELECT
   cy.tentativas AS ciclo_tentativas,
   cy.ciclo_atual,
   cy.updated_at AS ciclo_updated_at,
+  -- All non-deleted cycles for this same enrollment AND tenant, encrypted only.
+  -- Never collapse an earlier qualification/completion into the current cycle.
+  (SELECT COALESCE(json_group_array(json_object(
+      'id', h.id, 'numero_ciclo', h.numero_ciclo,
+      'ciclo_atual', h.ciclo_atual, 'status', h.status,
+      'progresso_pct', h.progresso_pct, 'score_final', h.score_final,
+      'tentativas', h.tentativas, 'updated_at', h.updated_at,
+      'data_inicio', h.data_inicio, 'data_conclusao', h.data_conclusao,
+      'qualificacao_historico_id', h.qualificacao_historico_id
+    )), '[]')
+    FROM lms_matricula_ciclos AS h
+    WHERE h.matricula_id = m.id AND h.empresa_id = m.empresa_id
+      AND h.deleted_at IS NULL) AS ciclos_historicos_json_PRIVATE,
   c.tipo_conteudo,
   c.scorm_versao,
   c.version_tag AS curso_version_tag,
