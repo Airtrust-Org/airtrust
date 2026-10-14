@@ -55,11 +55,16 @@ async function apiData<T>(context: BrowserContext, origin: string, path: string)
 /** A new deployment while this test runs is a blocker, not a flaky failure. */
 async function checkStagingProvenance(context: BrowserContext, profile: Profile) {
   const release = await apiData<{
-    environment:string; sourceSha:string|null;
+    environment:string; sourceSha:string|null; sourceTree:string|null;
+    workerBundleSha256:string|null; releaseManifestSha256:string|null;
   }>(context, profile.apiBaseUrl, '/api/version');
   demand(release.environment === 'staging' &&
     release.sourceSha === profile.expectedSourceSha,
     'STAGING_WORKER_RELEASE_SHA_MISMATCH');
+  demand(/^[a-f0-9]{40}$/.test(release.sourceTree ?? '') &&
+    /^[a-f0-9]{64}$/.test(release.workerBundleSha256 ?? '') &&
+    /^[a-f0-9]{64}$/.test(release.releaseManifestSha256 ?? ''),
+    'STAGING_WORKER_BUNDLE_MANIFEST_PROVENANCE_MISSING');
 }
 
 async function snapshot(
