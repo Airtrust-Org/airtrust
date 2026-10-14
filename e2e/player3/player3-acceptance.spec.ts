@@ -8,6 +8,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   qaPath as pathOn, requireQa as demand, validateQaProfile,
+  validateQaModuleSession, type QaModuleSession,
+  type QaDoutrinamento,
   type QaChoice as Choice, type QaEnrollment as Enrollment,
   type QaProfile as Profile,
 } from './fixture-contract';
@@ -79,6 +81,15 @@ async function snapshot(
     s.progresso_pct >= 0 && s.progresso_pct <= 100, 'DURABLE_LEDGER_FIELDS');
   return s;
 }
+/** Reconciled stage state persisted and re-graded by Worker, never by React. */
+async function moduleSession(context: BrowserContext, profile: Profile,
+  course: QaDoutrinamento): Promise<QaModuleSession> {
+  const path='/api/lms/native/matriculas/'+course.enrollmentId+'/etapas/sessao';
+  const result=await apiData<unknown>(context,profile.apiBaseUrl,path);
+  return validateQaModuleSession(result,course.editionSha256,course.cycleId,
+    course.units.flatMap(unit=>unit.official?[unit.official.stageId]:[]));
+}
+
 async function evidence(page: Page, testInfo: { attach(name: string, options: {body: Buffer; contentType: string}): Promise<void> },
   label: string) {
   if (process.env.PLAYER3_QA_CAPTURE_ALLOWED === 'SYNTHETIC_ONLY') {
@@ -140,6 +151,10 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
     });
     const original = await snapshot(context, profile, d);
     demand(original.status !== 'CONCLUIDO', 'FRESH_ENROLLMENT_NOT_ALREADY_COMPLETED');
+    const originalStages=await moduleSession(context,profile,d);
+    demand(!originalStages.allOfficialStagesPassed &&
+      originalStages.stages.every(stage=>stage.attempts===0 && !stage.passed),
+      'FRESH_MODULAR_ENROLLMENT_NOT_ALREADY_GRADED');
     let failureTested = false;
     for (const [index, unit] of d.units.entries()) {
       await test.step('PLAYER3-UNIT-' + String(index+1).padStart(2, '0') + ':' + unit.id, async () => {
@@ -162,6 +177,9 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
           await expect(modal).toBeVisible();
           if (!failureTested) {
             const before = await snapshot(context, profile, d);
+            const beforeStages=await moduleSession(context,profile,d);
+            const stageBefore=beforeStages.stages.find(s=>s.stageId===unit.official!.stageId);
+            demand(stageBefore,'REQUIRED_STAGE_NOT_REGISTERED');
             await pick(modal, unit.official.questions, 'wrong');
             await modal.getByRole('button', { name: 'Enviar avaliação ao AirTrust' }).click();
             await expect(modal.getByRole('status')).toContainText(/Revise o conteúdo/);
@@ -171,6 +189,11 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
             expect(failed.status).not.toBe('CONCLUIDO');
             expect(failed.certificate_id).toBeNull();
             expect(failed.attempts.at(-1)?.passed).toBe(false);
+            const stageFailed=(await moduleSession(context,profile,d)).stages
+              .find(s=>s.stageId===unit.official!.stageId);
+            expect(stageFailed?.attempts).toBe(stageBefore.attempts+1);
+            expect(stageFailed?.passed).toBe(false);
+            expect(stageFailed?.nextAttemptNumber).toBe(stageBefore.attempts+2);
             failureTested = true;
           }
           await pick(modal, unit.official.questions, 'correct');
@@ -179,6 +202,9 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
           await expect.poll(async () =>
             (await snapshot(context, profile, d)).attempts.some(a =>
               a.stage_id === unit.official!.stageId && a.passed)).toBe(true);
+          await expect.poll(async () =>
+            (await moduleSession(context,profile,d)).stages.find(s=>
+              s.stageId===unit.official!.stageId)?.passed).toBe(true);
           await modal.getByRole('button', { name: 'Prosseguir para o próximo módulo' }).click();
         }
         let alreadyPersisted = false;
@@ -218,8 +244,15 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         const after = await snapshot(context, profile, d);
         expect(after.completed_unit_ids).toEqual(before.completed_unit_ids);
         expect(after.attempts).toEqual(before.attempts);
+        expect((await moduleSession(context,profile,d)).allOfficialStagesPassed)
+          .toBe(false);
       }
     }
+    const stagesDone=await moduleSession(context,profile,d);
+    demand(stagesDone.allOfficialStagesPassed &&
+      stagesDone.stages.every(stage=>stage.passed && stage.attempts>0) &&
+      stagesDone.completionSupported===false,
+      'EIGHT_OFFICIAL_STAGES_PASSED_WITHOUT_PREMATURE_CERTIFICATION');
     demand(failureTested, 'OFFICIAL_FAILURE_RETRY_NOT_EXERCISED');
     await test.step('PLAYER3-FINALIZATION / backend authoritative, never slide counter', async () => {
       await checkStagingProvenance(context, profile);
@@ -262,6 +295,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         certificate_id:enrolled.certificate_id,
       });
       expect(reopened.attempts).toEqual(enrolled.attempts);
+      expect((await moduleSession(context,profile,d)).stages).toEqual(stagesDone.stages);
       const again = await apiData<typeof history>(context, profile.apiBaseUrl, d.qualificationPath);
       expect(again.linked_records).toBe(1);
       expect(contentAssetProblems, 'HTML5 CSS/JS/fonts/images/video request failures')
@@ -318,7 +352,7 @@ test('External SCORM 1.2: actual adapter, no fake completion from visual slides,
     await sco.getByRole('button',{name:e.wrongAnswerButton}).click();
     await sco.getByRole('button',{name:e.submitButton}).click();
     await expect.poll(async ()=>
-      (await apiData<{lesson_status:string}>(context,profile.baseUrl,e.scormSnapshotPath)).lesson_status
+      (await apiData<{lesson_status:string}>(context,profile.apiBaseUrl,e.scormSnapshotPath)).lesson_status
     ).toBe('failed');
     expect((await snapshot(context,profile,e)).status).not.toBe('CONCLUIDO');
     await context.close();
@@ -331,7 +365,7 @@ test('External SCORM 1.2: actual adapter, no fake completion from visual slides,
     await sco.getByRole('button',{name:e.submitButton}).click();
     await sco.getByRole('button',{name:e.finishButton}).click();
     await expect.poll(async ()=>
-      (await apiData<{lesson_status:string}>(context,profile.baseUrl,e.scormSnapshotPath)).lesson_status
+      (await apiData<{lesson_status:string}>(context,profile.apiBaseUrl,e.scormSnapshotPath)).lesson_status
     ).toBe('passed');
     // The package's LMSFinish alone is not certification; the learner must
     // explicitly confirm the wrapper-owned, server-validated closeout.
