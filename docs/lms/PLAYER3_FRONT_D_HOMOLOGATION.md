@@ -109,3 +109,37 @@ recusa origem de assets que não seja explicitamente HTTPS staging/QA.
 
 ### Limite de homologação confirmado
 Mesmo com 17 testes de contrato, 23 testes locais relevantes da B e seis E2E descobertos, **não houve execução dos 6 E2E contra staging real**. As matrículas RC8.1 e SCORM externos sintéticos, o manifesto de 42 unidades, o terminal canônico Player3, o histórico e a certidão PDF precisam de integração oficial. Não converter o status DRAFT em aprovação antes dessas evidências.
+
+## Prontidão conjunta — atualização 2026-10-14
+
+A B incluiu (em draft) a rota autenticada
+`GET /api/lms/native/matriculas/{matriculaId}/etapas/prontidao`.
+A D passou a consumi-la diretamente no E2E (sem simular seus resultados).
+O preflight puro verifica tenant/matrícula, hash da edição e ciclo fixados, 42
+lições requeridas, oito etapas oficiais, contagens válidas, motivo e coerência
+do booleano `readyForAtomicTerminalPreflight`. O JSON retorna ambos
+`completionSupported:false` e `completion_supported:false`, que devem
+continuar falsos mesmo com 42/42 e 8/8.
+
+Matriz explicitamente coberta por preflight independente: edição/ciclo/matrícula
+divergentes; 41/42; 7/8; certificado alegado indevidamente; lição/etapa
+a mais ou ausente; razão contraditória. No E2E real, o GET é consultado
+na abertura, após reprovação, após reabertura do navegador e imediatamente
+antes do pedido de finalização. No último estado exige 42/42, 8/8, `READY_FOR_TERMINAL_PREFLIGHT`
+e matrícula **ainda não concluída**, até que o fechamento canônico gere
+histórico/certificado verificáveis em transação.
+
+**Diferença de escopo:** essa API prova um cruzamento lógico das evidências
+registradas; não demonstra a fidelidade visual do HTML5, a origem real de cada
+interação, a existência de certificados ou um cutover em staging. Os testes
+automatizados de contrato rodam offline, sem credenciais ou dados de clientes.
+
+### Condições para relatório final à coordenação
+
+O aceite final exige, com referências verificáveis: PRs/SHAs integrados,
+oito gates oficiais verdes no **mesmo** SHA candidato, staging Worker/Pages e
+Schema V2 publicados via fluxo autorizado, assets autorais e política aprovados,
+seis jornadas reais Chromium/WebKit aprovadas, retomada dos 80%, compatibilidade
+externa SCORM 1.2, conclusão canônica/histórico/qualificação únicos e PDF
+inspecionado. O relatório ao coordenador deve distinguir QA/integração/staging
+de eventual produção, cuja autorização é separada e específica por SHA.
