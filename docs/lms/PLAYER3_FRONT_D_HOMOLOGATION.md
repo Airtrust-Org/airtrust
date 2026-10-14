@@ -100,7 +100,7 @@ recusa origem de assets que não seja explicitamente HTTPS staging/QA.
 
 ## Evidência independente disponível
 
-- Preflight puro: **17/17 Vitest PASS** (inclui módulo autenticado, origem privada e allowlist de tenant); ESLint e TypeScript focados PASS.
+- Preflight puro: **24/24 Vitest PASS** (inclui módulo autenticado, origem privada e allowlist de tenant); ESLint e TypeScript focados PASS.
 - Playwright da D: 3 jornadas × Chromium/WebKit = **6 testes descobertos**, não executados em staging.
 - Suíte SCORM protocolo Factory/M8 já existente: **2/2 PASS** em Chromium/WebKit (não é SCO externo nem certificado RC8.1).
 - GitHub Actions no HEAD inicial D `78a52ba52aca2b5180af535e6fa71a4db7066bb7`: oito gates PASS; cada commit posterior tem que ter sua própria evidência CI.
@@ -143,3 +143,28 @@ seis jornadas reais Chromium/WebKit aprovadas, retomada dos 80%, compatibilidade
 externa SCORM 1.2, conclusão canônica/histórico/qualificação únicos e PDF
 inspecionado. O relatório ao coordenador deve distinguir QA/integração/staging
 de eventual produção, cuja autorização é separada e específica por SHA.
+
+### Última execução independente de testes focados — 14/10/2026
+
+- Frente D: `c3a72fa36e21ac86213f34612ff6650617c5782d`:
+  **24/24 Vitest PASS**, ESLint PASS, TypeScript PASS;
+  Playwright descobriu 6 testes (3 casos × Chromium/WebKit),
+  ainda **não executados contra staging**.
+- Segurança: sem `PLAYER3_QA_ALLOW_WRITES`, o Playwright interrompeu
+  antes da navegação com
+  `PLAYER3_CONTRACT_MISSING:STAGING_SYNTHETIC_WRITE_APPROVAL`.
+  Falha **esperada e correta**; não equivale a E2E positivo.
+- Frente B: `765bef2c96ce864fcaf893a4281dc273a84b5f04`:
+  **41/41 testes focados PASS**, seis arquivos
+  (prontidão conjunta, middleware de rota, módulo, progresso, guarda de terminal,
+  conclusão Native). Executados independentemente em worktree limpo.
+  Não constitui staging nem transação de certificado.
+- Frente A: `95abaf023eeb82de6cc15cef06612b1f44ddfbc0`:
+  **35 testes Python OK, um SKIP** por falta do arquivo RC8.1 original privado.
+  A geração review-only foi testada; prova com pacote autoral real
+  não foi executada. Manter qualquer pacote com resposta embutida
+  fora do ambiente aluno até revisão de segurança.
+
+Toda mudança posterior de SHA exige nova verificação dos checks aplicáveis.
+Os oito gates da D deste SHA devem ser confirmados no GitHub Actions antes
+de afirmar conclusão de CI; sucesso local não substitui Actions.
