@@ -52,6 +52,24 @@ class CrosswalkTests(unittest.TestCase):
         self.assertEqual(result['scenario_source_ids'],['slide_1'])
         early=inspect_original_zip(course(('lesson','assessment','lesson')),'course.zip')
         self.assertEqual(early['policy_candidate'],'REVIEW_REQUIRED')
+    def test_sgso_authoring_model_without_spaces_is_supported(self):
+        slides=[
+            {'id':'sgso_1','kind':'content','module':'M1'},
+            {'id':'sgso_2','kind':'quiz','module':'M1','questions':[
+                {'correctOptionId':'PRIVATE KEY','prompt':'DO NOT EXPORT'}]},
+        ]
+        original=archive({
+            'index.html':'<main>SGSO original</main>',
+            'imsmanifest.xml':'<manifest/>',
+            'course-model.js':'window.AIRTRUST_COURSE_MODEL='+json.dumps({
+                'courseId':'sgso','version':'M10.7','passingScore':70,
+                'navigationGate':'module-assessment','slides':slides})+';',
+        })
+        result=inspect_original_zip(original,'sgso.zip')
+        self.assertEqual(result['model_source'],'course-model.js')
+        self.assertEqual(result['policy_candidate'],'MODULE_CERTIFIED_CANDIDATE')
+        self.assertNotIn('PRIVATE KEY',json.dumps(result))
+
     def test_no_invented_final_exam_for_ambiguous_multi_assessments(self):
         result=inspect_original_zip(course(('assessment','lesson','assessment')),'course.zip')
         self.assertEqual(result['policy_candidate'],'REVIEW_REQUIRED')
