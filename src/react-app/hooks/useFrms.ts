@@ -502,6 +502,7 @@ export function useFrmsDayExplanation(
     requireAuth: false,
     bypassGetCache: true,
     staleTime: 60 * 1000,
+    timeoutMs: 15 * 1000,
   });
 }
 
