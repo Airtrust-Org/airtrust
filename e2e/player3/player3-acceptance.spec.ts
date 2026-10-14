@@ -13,9 +13,14 @@ import {
   type QaCertificateArchiveStatus,
   type QaModuleSession,type QaJointReadiness,
   type QaDoutrinamento,
-  type QaChoice as Choice, type QaEnrollment as Enrollment,
+  type QaEnrollment as Enrollment,
   type QaProfile as Profile,
 } from './fixture-contract';
+import {
+  authoredRc81Frame, expectAuthoredRc81Unit,
+  answerAuthoredRc81Assessment, expectAuthoredRc81Verdict,
+  authoredRc81Retake, satisfyAuthoredRc81Practice,
+} from './rc81-authored-driver';
 
 type Snapshot = {
   empresa_id: number; matricula_id: number; ciclo_id: number;
@@ -139,12 +144,7 @@ function auditContentAssets(page: Page, contentOrigin: string, problems: string[
   });
 }
 
-async function pick(dialog: ReturnType<Page['getByRole']>, choices: Choice[], variant: 'wrong'|'correct') {
-  for (const q of choices) {
-    // Question and option labels are private, reviewed QA fixture data; not in Git.
-    await dialog.getByRole('radio', { name: q[variant], exact: true }).check();
-  }
-}
+
 test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable completion, qualification and PDF', async ({ browser }, testInfo) => {
   const { profile, fixture } = load(testInfo.project.name);
   const d = fixture.doutrinamento;
@@ -155,7 +155,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
     await checkStagingProvenance(context, profile);
     await test.step('PLAYER3-LAUNCH / original HTML5 on a separate origin', async () => {
       await page.goto(pathOn(profile.baseUrl, d.launchPath));
-      await expect(page.getByTestId('player3-root')).toBeVisible();
+      await expect(page.locator('section[aria-label^="Player 3 —"]')).toBeVisible();
       const frame = page.locator('iframe[title^="Conteúdo original"]');
       await expect(frame).toHaveCount(1);
       const src = await frame.getAttribute('src');
@@ -179,81 +179,101 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
     let failureTested = false;
     for (const [index, unit] of d.units.entries()) {
       await test.step('PLAYER3-UNIT-' + String(index+1).padStart(2, '0') + ':' + unit.id, async () => {
-        await expect(page.getByTestId('player3-active-unit-id')).toHaveText(unit.id);
-        const iframe = page.frameLocator('iframe[title^="Conteúdo original"]');
-        await expect(iframe.getByText(unit.visualCue, {exact:false}).first()).toBeVisible();
-        // Opt-in evidence for human side-by-side parity review of all authored units.
+        await expectAuthoredRc81Unit(page,unit,index,d.units.length);
+        const frame=authoredRc81Frame(page);
+        // Every screenshot is of the original authored iframe, not a modal
+        // substitute or content reconstructed from a JSON slide array.
         await evidence(page, testInfo, 'dou-original-'+String(index+1).padStart(2,'0'));
-        if (unit.practice) {
-          const practice = page.getByTestId('player3-practice');
-          await practice.getByRole('radio', { name: unit.practice.wrong, exact: true }).check();
-          await practice.getByRole('button', { name: 'Responder fixação' }).click();
-          await expect(practice.getByRole('status')).toBeVisible();
-          await practice.getByRole('radio', { name: unit.practice.correct, exact: true }).check();
-          await practice.getByRole('button', { name: 'Responder fixação' }).click();
-          await expect(practice.getByRole('status')).toContainText(/corret|acert|aprov/i);
-        }
-        if (unit.official) {
-          const modal = page.getByRole('dialog', { name: /Avaliação AirTrust/ });
-          await expect(modal).toBeVisible();
-          if (!failureTested) {
-            const before = await snapshot(context, profile, d);
+        await satisfyAuthoredRc81Practice(page,unit);
+        if(unit.official) {
+          const stage=unit.official;
+          const attemptUrl=pathOn(profile.apiBaseUrl,
+            '/api/lms/native/matriculas/'+d.enrollmentId+'/etapas/'+
+            encodeURIComponent(stage.stageId)+'/tentativas');
+          if(!failureTested) {
+            const before=await snapshot(context,profile,d);
             const beforeStages=await moduleSession(context,profile,d);
-            const stageBefore=beforeStages.stages.find(s=>s.stageId===unit.official!.stageId);
+            const stageBefore=beforeStages.stages.find(s=>s.stageId===stage.stageId);
             demand(stageBefore,'REQUIRED_STAGE_NOT_REGISTERED');
-            await pick(modal, unit.official.questions, 'wrong');
-            await modal.getByRole('button', { name: 'Enviar avaliação ao AirTrust' }).click();
-            await expect(modal.getByRole('status')).toContainText(/Revise o conteúdo/);
-            await expect.poll(async () =>
-              (await snapshot(context, profile, d)).attempts.length).toBeGreaterThan(before.attempts.length);
-            const failed = await snapshot(context, profile, d);
+            const failedResponse=page.waitForResponse(response=>
+              response.url()===attemptUrl &&
+              response.request().method()==='POST',{timeout:45000});
+            await answerAuthoredRc81Assessment(page,unit,stage.questions,'wrong');
+            const failedPost=await failedResponse;
+            expect([200,201]).toContain(failedPost.status());
+            const failedPayload=JSON.parse(failedPost.request().postData() ?? 'null');
+            expect(Object.keys(failedPayload).sort()).toEqual([
+              'answers','attemptNumber','eventId',
+            ]);
+            expect(failedPayload.answers).toHaveLength(10);
+            await expectAuthoredRc81Verdict(page,'failed');
+            await expect.poll(async ()=>
+              (await snapshot(context,profile,d)).attempts.length)
+              .toBeGreaterThan(before.attempts.length);
+            const failed=await snapshot(context,profile,d);
             expect(failed.status).not.toBe('CONCLUIDO');
             expect(failed.certificate_id).toBeNull();
             expect(failed.attempts.at(-1)?.passed).toBe(false);
             const stageFailed=(await moduleSession(context,profile,d)).stages
-              .find(s=>s.stageId===unit.official!.stageId);
+              .find(s=>s.stageId===stage.stageId);
             expect(stageFailed?.attempts).toBe(stageBefore.attempts+1);
             expect(stageFailed?.passed).toBe(false);
             expect(stageFailed?.nextAttemptNumber).toBe(stageBefore.attempts+2);
             const notReady=await jointReadiness(context,profile,d);
             expect(notReady.readyForAtomicTerminalPreflight).toBe(false);
             expect(notReady.completion_supported).toBe(false);
-            failureTested = true;
+            await authoredRc81Retake(page);
+            failureTested=true;
           }
-          await pick(modal, unit.official.questions, 'correct');
-          await modal.getByRole('button', { name: 'Enviar avaliação ao AirTrust' }).click();
-          await expect(modal.getByRole('status')).toContainText(/aprovada pelo AirTrust/);
-          await expect.poll(async () =>
-            (await snapshot(context, profile, d)).attempts.some(a =>
-              a.stage_id === unit.official!.stageId && a.passed)).toBe(true);
-          await expect.poll(async () =>
+          const passResponse=page.waitForResponse(response=>
+            response.url()===attemptUrl &&
+            response.request().method()==='POST',{timeout:45000});
+          await answerAuthoredRc81Assessment(page,unit,stage.questions,'correct');
+          const passPost=await passResponse;
+          expect([200,201]).toContain(passPost.status());
+          const passPayload=JSON.parse(passPost.request().postData() ?? 'null');
+          expect(Object.keys(passPayload).sort()).toEqual([
+            'answers','attemptNumber','eventId',
+          ]);
+          expect(passPayload.answers).toHaveLength(10);
+          await expectAuthoredRc81Verdict(page,'passed');
+          await expect.poll(async ()=>
+            (await snapshot(context,profile,d)).attempts.some(a=>
+              a.stage_id===stage.stageId && a.passed)).toBe(true);
+          await expect.poll(async ()=>
             (await moduleSession(context,profile,d)).stages.find(s=>
-              s.stageId===unit.official!.stageId)?.passed).toBe(true);
-          await modal.getByRole('button', { name: 'Prosseguir para o próximo módulo' }).click();
+              s.stageId===stage.stageId)?.passed).toBe(true);
         }
         let alreadyPersisted = false;
-        if (index === offlineUnitIndex) {
-          const before = await snapshot(context, profile, d);
+        if(index===offlineUnitIndex) {
+          const before=await snapshot(context,profile,d);
           await context.setOffline(true);
-          try {
-            await page.getByTestId('player3-next-unit').click();
-            await expect(page.getByTestId('player3-offline-pending')).toBeVisible();
-            // The API test client is independent of browser offline networking.
-            const during = await snapshot(context, profile, d);
+          try{
+            await frame.locator('#next').click();
+            // Navigation may occur in HTML5 memory while D1 is unavailable.
+            await expect(frame.locator('#count')).toHaveText(`${index+2}/42`);
+            const during=await snapshot(context,profile,d);
             expect(during.completed_unit_ids).toEqual(before.completed_unit_ids);
             expect(during.attempts).toEqual(before.attempts);
-          } finally {
-            await context.setOffline(false);
-          }
+          }finally{await context.setOffline(false);}
           await page.reload();
-          const resumed = await snapshot(context, profile, d);
+          const resumed=await snapshot(context,profile,d);
           expect(resumed.attempts).toEqual(before.attempts);
-          // The authored screen ID is NOT necessarily the Worker lesson ID.
-          alreadyPersisted = resumed.completed_unit_ids.includes(unit.lessonId!);
-          await expect(page.getByTestId('player3-active-unit-id')).toHaveText(
-            alreadyPersisted ? d.units[index + 1].id : unit.id);
+          alreadyPersisted=resumed.completed_unit_ids.includes(unit.lessonId!);
+          await expectAuthoredRc81Unit(page,
+            alreadyPersisted?d.units[index+1]:unit,
+            alreadyPersisted?index+1:index,d.units.length);
         }
-        if (!alreadyPersisted) await page.getByTestId('player3-next-unit').click();
+        if(!alreadyPersisted){
+          await frame.locator('#next').click();
+        }
+        if(index===d.units.length-1){
+          // RC8.1's last author button is a content-end hint, not a terminal.
+          await expect(frame.locator('#count')).toHaveText('42/42');
+          expect((await snapshot(context,profile,d)).status).not.toBe('CONCLUIDO');
+        }else{
+          await expectAuthoredRc81Unit(page,d.units[index+1],index+1,d.units.length);
+        }
         if(unit.lessonId){
           await expect.poll(async () =>
             (await snapshot(context, profile, d)).completed_unit_ids
@@ -273,7 +293,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         ({ context, page } = await openLearner(browser));
         auditContentAssets(page, profile.contentOrigin, contentAssetProblems);
         await page.goto(pathOn(profile.baseUrl, d.launchPath));
-        await expect(page.getByTestId('player3-active-unit-id')).toHaveText(d.units[21].id);
+        await expectAuthoredRc81Unit(page,d.units[21],21,d.units.length);
         const after = await snapshot(context, profile, d);
         expect(after.completed_unit_ids).toEqual(before.completed_unit_ids);
         expect(after.attempts).toEqual(before.attempts);
