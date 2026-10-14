@@ -150,8 +150,8 @@ describe('frms-fadiga-checkin schema', () => {
 
     // Executa exatamente o UPDATE do handler, não uma cópia simplificada do SQL.
     const setBody = sql!.split(/\s+SET\s+/)[1].split(/\s+WHERE id = \?/)[0];
-    const columns = [...setBody.matchAll(/(?:^|,)\s*([a-z_]+)\s*=/g)].map((match) => match[1]);
-    const placeholders = [...setBody.matchAll(/([a-z_]+)\s*=\s*\?/g)].map((match) => match[1]);
+    const columns = [...setBody.matchAll(/(?:^|,)\s*([a-z0-9_]+)\s*=/g)].map((match) => match[1]);
+    const placeholders = [...setBody.matchAll(/([a-z0-9_]+)\s*=\s*\?/g)].map((match) => match[1]);
     expect(columns).toContain('oportunidade_sono_horas_24h');
     expect(placeholders).toContain('oportunidade_sono_horas_24h');
 
