@@ -69,7 +69,7 @@ jobs:
 
       - name: Validate protected inventory and T0/T1 code (synthetic only)
         run: |
-          python3 -m unittest scripts/learning-factory/test_player3_readonly_inventory.py
+          python3 scripts/learning-factory/test_player3_readonly_inventory.py
           node --test scripts/learning-factory/test_player3_inventory.mjs scripts/learning-factory/test_player3_reconcile_inventories.mjs
 
       - name: Install locked D1 client
