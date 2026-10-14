@@ -157,7 +157,7 @@ export type QaModuleStage = {
 };
 export type QaModuleSession = {
   editionSha256: string; cycleId: number;
-  allOfficialStagesPassed: boolean; completionSupported: false;
+  allOfficialStagesPassed: boolean; completionSupported: boolean;
   stages: QaModuleStage[];
 };
 export function validateQaModuleSession(raw: unknown, edition: string,
@@ -189,6 +189,6 @@ export function validateQaModuleSession(raw: unknown, edition: string,
     'MODULE_SESSION_POLICY_STAGE_MISMATCH');
   requireQa(typeof s.allOfficialStagesPassed==='boolean' &&
     s.allOfficialStagesPassed===s.stages.every(stage=>stage.passed) &&
-    s.completionSupported===false, 'MODULE_SESSION_NO_PREMATURE_COMPLETION');
+    typeof s.completionSupported==='boolean', 'MODULE_SESSION_NO_PREMATURE_COMPLETION');
   return s;
 }
