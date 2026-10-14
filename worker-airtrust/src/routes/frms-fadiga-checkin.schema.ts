@@ -97,14 +97,6 @@ export const CheckinCreateSchema = z
     path: ['horas_sono_24h'],
   })
   .refine((data) => {
-    // Existing clients may omit opportunity; never synthesize it from sleep.
-    return data.oportunidade_sono_horas_24h == null || data.horas_sono_24h == null ||
-      data.oportunidade_sono_horas_24h >= data.horas_sono_24h;
-  }, {
-    message: 'Oportunidade de sono não pode ser menor que o sono efetivamente informado',
-    path: ['oportunidade_sono_horas_24h'],
-  })
-  .refine((data) => {
     const hasFitForDuty = typeof data.fit_for_duty === 'boolean';
     const hasApto = typeof data.apto === 'number';
     return hasFitForDuty || hasApto;
