@@ -50,6 +50,8 @@ jobs:
       PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
       REVIEWED_CHANGE_ID: frms-sleep-opportunity-0552
       BASELINE_ID: production-d1-baseline-v2-20260714
+      REVIEWED_SQL_HASH: c29e5b38d6e1da17b55312b3a1ff470266ebcf3cd7e178eecd4d0664cec7dd31
+      REVIEWED_PLAN_HASH: 8e4eefde2853f3a1adaa9ffac08fba364e277f99728c911a9ea9939cd0fb1b45
       RELEASE_SHA: ${{ inputs.release_sha }}
       CHANGE_ID: ${{ inputs.change_id }}
     steps:
@@ -142,6 +144,8 @@ jobs:
             process.env.CHANGE_ID + '.json', 'utf8'));
           if (manifest.changeId !== process.env.REVIEWED_CHANGE_ID ||
               manifest.baselineId !== process.env.BASELINE_ID ||
+              manifest.fileHash !== process.env.REVIEWED_SQL_HASH ||
+              manifest.planHash !== process.env.REVIEWED_PLAN_HASH ||
               manifest.filePath !== 'worker-airtrust/schema-v2/changes/0552_frms_sleep_opportunity.sql') {
             throw new Error('REVIEWED_MANIFEST_SCOPE_MISMATCH');
           }
