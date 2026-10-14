@@ -7,6 +7,7 @@ on:
       expected_candidate_id: {description: 'Expected active SCORM candidate UUID, or auto to resolve the enrollment-pinned candidate', required: false, default: 'auto', type: string}
       expected_cycle_number: {description: 'Expected current training cycle (0 disables the expectation)', required: false, default: '0', type: string}
       expected_progress_pct: {description: 'Expected stored progress percentage', required: false, default: '0', type: string}
+      expected_review_mode: {description: 'initial (untouched) or resumed (persisted SCORM state); does not certify completion', required: false, default: 'initial', type: choice, options: [initial, resumed]}
       confirmation: {description: 'Type AIRTRUST_PRODUCTION_SCORM_REVIEW_READONLY', required: true, type: string}
 permissions: {contents: read, checks: read, statuses: read}
 concurrency: {group: production-lms-scorm-review-readonly, cancel-in-progress: false}
@@ -54,6 +55,7 @@ jobs:
           EXPECTED_CANDIDATE_ID: "${{ inputs.expected_candidate_id || 'auto' }}"
           EXPECTED_CYCLE_NUMBER: "${{ inputs.expected_cycle_number || '0' }}"
           EXPECTED_PROGRESS_PCT: "${{ inputs.expected_progress_pct || '0' }}"
+          EXPECTED_REVIEW_MODE: "${{ inputs.expected_review_mode || 'initial' }}"
           EXPECTED_TENANT_ID: '6'
           REPORT_PATH: qa-state/production-lms-scorm-review-readonly.json
         run: node scripts/validation/production-lms-scorm-review-readonly.mjs
@@ -78,6 +80,10 @@ jobs:
           console.log('- enrollment: `' + report.enrollment.matricula_id + '`');
           console.log('- course: `' + report.enrollment.curso_id + '` | type: `' + report.enrollment.content_type + '`');
           console.log('- state: `' + report.enrollment.enrollment_status + '` | progress: `' + report.enrollment.progress_pct + '%`');
+          console.log('- inspection: `' + report.expected.review_mode + '` (PASS means read-only launch, not training completion)');
+          console.log('- server closure code: `' + (report.closure_readiness?.code || 'not available') + '`');
+          console.log('- missing evidence: `' + (report.closure_readiness?.missing?.join(', ') || 'not available') + '`');
+          console.log('- missing slides: `' + (report.closure_readiness?.slide_coverage?.missing_numbers?.join(', ') || 'not available') + '`');
           console.log('- launched cycle: `' + report.launch.numero_ciclo + '` | id present: `' + report.launch.cycle_id_present + '`');
           console.log('- active package matches enrollment: `' + report.package.candidate_matches_enrollment + '`');
           console.log('- launch SCORM location present: `' + report.launch.initial_lesson_location_present + '`');

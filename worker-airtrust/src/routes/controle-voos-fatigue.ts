@@ -21,6 +21,8 @@ export type FlightFatigueSummary = {
   acao_recomendada: string | null;
   alertas: string[];
   dados_disponiveis: boolean;
+  /** Motivo operacional (sem respostas sensiveis) quando o check-in ja foi recebido. */
+  motivo_pendencia_operacional: string | null;
 };
 
 /** Return only the operational decision fields. Never expose private answers (sleep, KSS, symptoms). */
@@ -40,6 +42,7 @@ export function projectFlightFatigue(
       score_fadiga: null, efetividade_pct: null,
       status_quinzena: null, tendencia: null, decisao: null,
       acao_recomendada: null, alertas: [], dados_disponiveis: false,
+      motivo_pendencia_operacional: null,
     };
     return {
       funcionario_id, nome, funcao,
@@ -54,6 +57,9 @@ export function projectFlightFatigue(
       acao_recomendada: item.acao_recomendada_texto || null,
       alertas: item.alertas,
       dados_disponiveis: true,
+      motivo_pendencia_operacional: item.checkin_status === 'RECEBIDO' && item.estado_operacional === 'NAO_AVALIADO'
+        ? item.motivos_principais[0] ?? 'Evidência adicional do FRMS ainda não concluída'
+        : null,
     };
   });
 }

@@ -12,6 +12,8 @@ import { auth, validateAccessTokenSecurityState } from '../middleware/auth';
 import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import {
   buildScormLocationHelpersScript,
+  buildScormVisitTrackingScript,
+  buildScormPayloadFingerprintScript,
   buildScormNativeResumeOwnershipScript,
   buildScormProgressParsersScript,
   buildScormSessionCloseRuntimeScript,
@@ -1506,14 +1508,7 @@ ${buildScormLocationHelpersScript()}
     return cmi['cmi.location'] || cmi['cmi.core.lesson_location'] || null;
   }
 
-  function fingerprintPayload(data) {
-    try {
-      var d = data || {};
-      return JSON.stringify([d.lesson_status, d.completion_status, d.success_status, d.score_raw, d.suspend_data, getScormLocation()]);
-    } catch (_error) {
-      return '';
-    }
-  }
+${buildScormPayloadFingerprintScript()}
 
   function parseLocationPair(location) {
     return parseScormLocationPair(location);
@@ -1717,23 +1712,7 @@ ${buildScormLocationHelpersScript()}
     return { value: nextText || currentText || '', blocked: false, reason: 'accepted-suspend-data' };
   }
 
-  function updateMaxVisitedFromLocation(location) {
-    var parsed = parseLocationPair(location);
-    if (!parsed || parsed.total <= 0 || parsed.total > 1000 ||
-        parsed.current < 1 || parsed.current > parsed.total) return;
-    if (parsed.current > maxVisitedSlide) maxVisitedSlide = parsed.current;
-    // Store exact visited positions, not just the maximum index. A direct jump
-    // to 45/45 cannot constitute proof that 1..44 were actually visited.
-    var previous = Array.isArray(cmi['airtrust.viewed_slides'])
-      ? cmi['airtrust.viewed_slides'] : [];
-    var seen = previous.filter(function(n) {
-      return Number.isInteger(n) && n >= 1 && n <= parsed.total;
-    });
-    if (seen.indexOf(parsed.current) < 0) seen.push(parsed.current);
-    seen.sort(function(a, b) { return a - b; });
-    cmi['airtrust.viewed_slides'] = seen;
-    cmi['airtrust.total_slides'] = parsed.total;
-  }
+${buildScormVisitTrackingScript()}
 
   function emitProgress(payload) {
     if (MATRICULA_ID == null) return;
@@ -1889,6 +1868,17 @@ ${buildScormNativeResumeOwnershipScript()}
       var existingLocation = getScormLocation();
       var previousLocation = existingLocation;
       var existingParsed = parseLocationMarker(existingLocation);
+      // Only the package-owned counter element can supplement explicit CMI
+      // when a resume bookmark is pinned at the highest slide. Never infer
+      // visits from body text, unrelated fractions or a changed slide total.
+      var header = parseProgressFromHeader(doc);
+      if (existingParsed && existingParsed.total != null && header &&
+          header.total === existingParsed.total && header.current >= 1 &&
+          header.current <= header.total &&
+          updateMaxVisitedFromLocation(String(header.current) + '/' + String(header.total))) {
+        scheduleCommit(800);
+        emitProgress({ location: existingLocation });
+      }
       var domLocationRaw = parsed.total > 0
         ? String(parsed.current) + '/' + String(parsed.total)
         : String(parsed.current);
@@ -2033,6 +2023,7 @@ ${buildScormQueuedCommitScript()}
           emitProgress({
             progresso_pct: Number(json.data.progresso_pct || 0),
             novo_status: json.data.novo_status || null,
+            server_saved: true,
           });
           if (json.data.novo_status === 'CONCLUIDO') {
             completed = true;
@@ -2445,6 +2436,10 @@ ${buildScormSessionCloseRuntimeScript()}
       var nextValue = value;
       var decision = 'accepted';
       var reason = 'passthrough';
+      // A backward navigation is a real visit even when its location would
+      // downgrade a stronger resume bookmark. Do not confuse the two.
+      var newVisit = element === 'cmi.core.lesson_location' || element === 'cmi.location'
+        ? updateMaxVisitedFromLocation(String(value || '')) : false;
 
       if (element === 'cmi.core.lesson_location') {
         var locationDecision = protectLocationValue(getScormLocation(), String(value || ''));
@@ -2466,7 +2461,6 @@ ${buildScormSessionCloseRuntimeScript()}
       if (element === 'cmi.core.lesson_location' || element === 'cmi.suspend_data') {
         if (element === 'cmi.core.lesson_location') {
           setScormLocation(String(nextValue || ''));
-          updateMaxVisitedFromLocation(cmi['cmi.location']);
           if (decision !== 'blocked' && parseScormLocationMarker(String(nextValue || ''))) {
             explicitLocationAuthored = true;
           }
@@ -2474,7 +2468,7 @@ ${buildScormSessionCloseRuntimeScript()}
         writeLocalResumeBackup('set-value');
         emitProgress({ location: getScormLocation() });
         diag(' LMSSetValue field=' + element + ' changed=' + (previousValue === nextValue ? '0' : '1') + ' loc=' + (getScormLocation() || 'null') + ' blocked=' + (decision === 'blocked' ? '1' : '0'));
-        if (previousValue !== nextValue) scheduleCommit(800);
+        if (previousValue !== nextValue || newVisit) scheduleCommit(800);
       }
       emitTelemetry(decision === 'blocked' ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_SET_VALUE', {
         field: element,
@@ -2522,6 +2516,10 @@ ${buildScormSessionCloseRuntimeScript()}
       var nextValue = value;
       var decision = 'accepted';
       var reason = 'passthrough';
+      // A backward navigation is a real visit even when its location would
+      // downgrade a stronger resume bookmark. Do not confuse the two.
+      var newVisit = element === 'cmi.core.lesson_location' || element === 'cmi.location'
+        ? updateMaxVisitedFromLocation(String(value || '')) : false;
 
       if (element === 'cmi.location') {
         var locationDecision = protectLocationValue(getScormLocation(), String(value || ''));
@@ -2543,14 +2541,13 @@ ${buildScormSessionCloseRuntimeScript()}
       if (element === 'cmi.location' || element === 'cmi.suspend_data') {
         if (element === 'cmi.location') {
           setScormLocation(String(nextValue || ''));
-          updateMaxVisitedFromLocation(cmi['cmi.location']);
           if (decision !== 'blocked' && parseScormLocationMarker(String(nextValue || ''))) {
             explicitLocationAuthored = true;
           }
         }
         writeLocalResumeBackup('set-value');
         emitProgress({ location: getScormLocation() });
-        if (previousValue !== nextValue) scheduleCommit(800);
+        if (previousValue !== nextValue || newVisit) scheduleCommit(800);
       }
       emitTelemetry(decision === 'blocked' ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_SET_VALUE', {
         field: element,
