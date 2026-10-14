@@ -1,6 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {
   qaPath,validateQaProfile,validateQaModuleSession,validateQaJointReadiness,
+  validateQaCertificatePdf,
   type QaModuleSession,type QaProfile,type QaProjectFixture,
 } from './fixture-contract';
 
@@ -314,5 +315,35 @@ describe('Front D — joined content and official-stage readiness (read-only)',(
       expect(()=>validateQaJointReadiness(r,enrollment(),42,8))
         .toThrow('JOINT_READINESS_NEVER_CERTIFIES');
     }
+  });
+});
+
+describe('Front D — authentic certificate PDF bytes, never a five-byte stub',()=>{
+  function pdf():Uint8Array {
+    const body='%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n'+
+      '2 0 obj\n<< /Type /Pages /Count 0 >>\nendobj\n'+
+      '3 0 obj\n<< /Length 900 >>\nstream\n'+'X'.repeat(900)+
+      '\nendstream\nendobj\nxref\n0 4\n0000000000 65535 f\n'+
+      'trailer\n<< /Root 1 0 R /Size 4 >>\nstartxref\n31\n%%EOF\n';
+    return new TextEncoder().encode(body);
+  }
+  it('accepts a complete bounded PDF-shaped response with the correct MIME',()=>{
+    expect(()=>validateQaCertificatePdf(pdf(),'application/pdf; charset=binary'))
+      .not.toThrow();
+  });
+  it('rejects a successful HTTP response containing only fake PDF magic bytes',()=>{
+    expect(()=>validateQaCertificatePdf(new TextEncoder().encode('%PDF-'),'application/pdf'))
+      .toThrow('CERTIFICATE_PDF_SIZE');
+  });
+  it('rejects HTML/JSON impersonating a PDF and truncated documents',()=>{
+    expect(()=>validateQaCertificatePdf(pdf(),'application/json'))
+      .toThrow('CERTIFICATE_PDF_CONTENT_TYPE');
+    const truncated=pdf().subarray(0,-10);
+    expect(()=>validateQaCertificatePdf(truncated,'application/pdf'))
+      .toThrow('CERTIFICATE_PDF_STRUCTURE');
+    const fake=new TextEncoder().encode('NOTPDF'+ 'X'.repeat(1100)+
+      'startxref\n1\n%%EOF\n');
+    expect(()=>validateQaCertificatePdf(fake,'application/pdf'))
+      .toThrow('CERTIFICATE_PDF_STRUCTURE');
   });
 });
