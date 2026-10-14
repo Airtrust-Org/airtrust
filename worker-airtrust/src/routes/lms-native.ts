@@ -14,6 +14,7 @@ import { readNativeLearnerSession, NativeEvidenceReadError } from '../services/l
 import { loadNativeVerifiedAsset } from '../services/lms-native-asset-loader';
 import nativeWriteRoutes, { canWriteNative } from './lms-native-write';
 import nativePracticeRoutes from './lms-native-practice';
+import player3StageAttemptRoutes from './lms-player3-stage-attempts';
 import nativeEnrollmentRoutes from './lms-native-enrollment';
 import nativeCompletionPreflightRoutes from './lms-native-completion-preflight';
 import nativeCompletionRoutes, { canCompleteNative } from './lms-native-completion';
@@ -263,6 +264,8 @@ app.get('/matriculas/:matriculaId/assets/:assetId', async (c) => {
 app.route('/', nativeWriteRoutes);
 // Formative module feedback does not mutate official attempts or completion.
 app.route('/', nativePracticeRoutes);
+// Player3 official stage attempts: independent OFF-by-default staging capability.
+app.route('/', player3StageAttemptRoutes);
 // Separate fourth tenant gate; this route never accepts client employee or edition IDs.
 app.route('/', nativeEnrollmentRoutes);
 // Separate read-only completion diagnostics, not a terminal write endpoint.
