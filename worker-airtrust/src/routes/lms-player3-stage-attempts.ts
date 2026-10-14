@@ -133,7 +133,7 @@ app.get('/matriculas/:matriculaId/etapas/lancamento',async c=>{
         return {id:source.id,prompt:source.prompt,
           options:source.options.map(o=>({id:o.id,text:o.text}))};
       });
-      if(new Set(questions.map(q=>q.id)).size!==questions.length){
+      if(new Set(questions.map((q:{id:string})=>q.id)).size!==questions.length){
         throw Error('PLAYER3_AUTHORED_DUPLICATE_QUESTION');
       }
       assessment={stage_id:pending.stageId,title:pending.stageId,questions};
