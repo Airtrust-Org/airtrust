@@ -235,7 +235,8 @@ describe('completeLmsMatricula', () => {
   });
 
   it.each([false,true])('Player3 guarded batch starts with exact content+modular SQL (qualification=%s)',async qual=>{
-    const db=makeFakeDb({});
+    let lookups=0;
+    const db=makeFakeDb({historicoLookup:()=>++lookups===1?null:{id:901}});
     await completeLmsMatricula(baseParams(db,{
       env:player3Env(),cursoId:31,gerarQualificacaoAoConcluir:qual,
       qualificacaoTipoId:qual?55:null,qualificacaoCategoriaId:qual?13:null,
