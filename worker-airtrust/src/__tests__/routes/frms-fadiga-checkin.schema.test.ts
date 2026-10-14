@@ -145,13 +145,13 @@ describe('frms-fadiga-checkin schema', () => {
     // Vitest 2 (Vite) cannot resolve node:sqlite via dynamic import; native Node require bypasses bundling.
     const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
     const source = readFileSync('src/routes/frms-fadiga-checkin-legacy.ts', 'utf8');
-    const sql = source.match(/`UPDATE frms_fadiga_checkin\\s+SET[\\s\\S]*?WHERE id = \\?`/)?.[0].slice(1, -1);
+    const sql = source.match(/`UPDATE frms_fadiga_checkin\s+SET[\s\S]*?WHERE id = \?`/)?.[0].slice(1, -1);
     expect(sql).toBeTruthy();
 
     // Executa exatamente o UPDATE do handler, não uma cópia simplificada do SQL.
-    const setBody = sql!.split(/\\s+SET\\s+/)[1].split(/\\s+WHERE id = \\?/)[0];
-    const columns = [...setBody.matchAll(/(?:^|,)\\s*([a-z_]+)\\s*=/g)].map((match) => match[1]);
-    const placeholders = [...setBody.matchAll(/([a-z_]+)\\s*=\\s*\\?/g)].map((match) => match[1]);
+    const setBody = sql!.split(/\s+SET\s+/)[1].split(/\s+WHERE id = \?/)[0];
+    const columns = [...setBody.matchAll(/(?:^|,)\s*([a-z_]+)\s*=/g)].map((match) => match[1]);
+    const placeholders = [...setBody.matchAll(/([a-z_]+)\s*=\s*\?/g)].map((match) => match[1]);
     expect(columns).toContain('oportunidade_sono_horas_24h');
     expect(placeholders).toContain('oportunidade_sono_horas_24h');
 
