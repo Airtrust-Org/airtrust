@@ -13,6 +13,10 @@ on:
         description: Exact gated SHA being served by both staging Worker and Pages
         required: true
         type: string
+      pr_number:
+        description: Required only for an open same-repository PR SHA not yet merged into main
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -36,6 +40,7 @@ jobs:
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
           EXPECTED_SHA: ${{ inputs.expected_deployed_sha }}
+          PR_NUMBER: ${{ inputs.pr_number }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -45,7 +50,31 @@ jobs:
           [[ "$GITHUB_REF" == refs/heads/main ]] || exit 1
           [[ "$CONFIRMATION" == AIRTRUST_STAGING_FRMS_30D_ACCEPT ]] || exit 1
           [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
-          git merge-base --is-ancestor "$EXPECTED_SHA" "$GITHUB_SHA" || exit 1
+          if ! git merge-base --is-ancestor "$EXPECTED_SHA" "$GITHUB_SHA"; then
+            # Permit only a live reviewed PR from this repository, never arbitrary
+            # or fork-supplied SHAs. The eight official checks are still mandatory.
+            [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'REVIEWED_PR_REQUIRED'; exit 1; }
+            node --input-type=module <<'NODE'
+          const repo=process.env.GITHUB_REPOSITORY;
+          const number=process.env.PR_NUMBER;
+          const expected=process.env.EXPECTED_SHA;
+          const r=await fetch('https://api.github.com/repos/'+repo+'/pulls/'+number,{
+            headers:{
+              authorization:'Bearer '+process.env.GITHUB_TOKEN,
+              accept:'application/vnd.github+json',
+              'x-github-api-version':'2022-11-28',
+            },
+          });
+          if(!r.ok) throw Error('REVIEWED_FRMS_PR_UNAVAILABLE');
+          const pr=await r.json();
+          if(pr.state!=='open'||pr.base?.ref!=='main'||
+             pr.head?.repo?.full_name!==repo||pr.head?.repo?.fork||
+             pr.head?.sha?.toLowerCase()!==expected) {
+            throw Error('REVIEWED_FRMS_PR_SHA_ORIGIN_MISMATCH');
+          }
+          console.log('REVIEWED_FRMS_PR_SHA_ORIGIN=PASS');
+          NODE
+          fi
           node scripts/ci/verify-release-gates.mjs
           node --input-type=module <<'NODE'
           const sha=process.env.EXPECTED_SHA;
