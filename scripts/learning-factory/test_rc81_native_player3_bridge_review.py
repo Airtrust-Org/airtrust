@@ -76,5 +76,110 @@ class Rc81BridgeTests(unittest.TestCase):
                 self.assertEqual(z.read('styles.css'), original.read('styles.css'))
 
 
+    def test_real_original_42_units_and_retake_browser_opt_in(self):
+        """Author HTML5 42/42 with SIMULATED server receipts; no real LMS writes.
+
+        Requires both private original + Chromium; intentionally skipped in CI
+        and NEVER represents staging approval, persisted D1, or certification.
+        """
+        raw_path = os.environ.get('AIRTRUST_PLAYER3_RC81_SOURCE_ZIP')
+        chromium_path = os.environ.get('AIRTRUST_PLAYER3_CHROMIUM_PATH')
+        if not raw_path or not chromium_path:
+            self.skipTest('Opt-in browser QA requires private RC8.1 ZIP and Chromium path')
+        from playwright.sync_api import sync_playwright
+        import re
+        from urllib.parse import unquote
+        raw = Path(raw_path).read_bytes()
+        import hashlib
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), SOURCE_ZIP_SHA256)
+        candidate, meta, projection, bank, receipt = compile_rc81_review(
+            raw, 'https://airtrust.online', 'b' * 64)
+        self.assertFalse(receipt['publishable'])
+        with ZipFile(io.BytesIO(candidate)) as z:
+            data = {n: z.read(n) for n in z.namelist() if not n.endswith('/')}
+        # Offline set_content is deliberate: no Cloudflare/network request and
+        # scripts render only in the disposable Chromium QA context.
+        html = data['index.html'].decode('utf8')
+        html = re.sub(r'<script[^>]*src="[^"]+"[^>]*></script>', '', html)
+        html = re.sub(r'<link[^>]*href="styles.css"[^>]*>', '', html)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(
+                executable_path=chromium_path, headless=True, args=['--no-sandbox'])
+            try:
+                page = browser.new_page(viewport={'width':1280,'height':800})
+                errors = []
+                page.on('pageerror', lambda error: errors.append(str(error)))
+                page.set_content(html, wait_until='domcontentloaded')
+                page.add_style_tag(content=data['styles.css'].decode('utf8'))
+                for name in ('course_data.js', 'course-model.js', 'scorm_api.js','app.js'):
+                    if name in data:
+                        page.add_script_tag(content=data[name].decode('utf8'))
+                page.evaluate("window.dispatchEvent(new Event('DOMContentLoaded'))")
+                self.assertEqual(page.locator('#count').inner_text(), '1/42')
+                self.assertFalse(page.evaluate('Boolean(window.__AIRTRUST_PLAYER_TEST__)'))
+                page.evaluate("""() => {
+                  window.__QA_RECEIPTS__=[];
+                  window.__QA_CONTENT_END__=null;
+                  let denyOnce=true;
+                  window.AIRTRUST_PLAYER3_RC81.submit=(stage,selections)=>{
+                    window.__QA_RECEIPTS__.push({stage,selections});
+                    if(denyOnce){denyOnce=false;return Promise.resolve({
+                      stage_passed:false,score_pct:10});}
+                    return Promise.resolve({stage_passed:true,score_pct:100});
+                  };
+                  window.AIRTRUST_PLAYER3_RC81.contentEnd=unit=>{
+                    window.__QA_CONTENT_END__=unit;
+                  };
+                }""")
+                approved = []
+                for step in range(150):
+                    counter = page.locator('#count').inner_text()
+                    if page.locator('.assessment-page').count():
+                        stage = page.locator('#viewport .screen').get_attribute('data-unit')
+                        if stage not in approved:
+                            for j in range(10):
+                                page.locator('[data-answer]').first.click(force=True)
+                                if j != 9:
+                                    page.locator('#qNext').click(force=True)
+                            page.locator('#next').click(force=True)
+                            if not approved:
+                                page.wait_for_function("""() =>
+                                    document.querySelector('#next').textContent.includes('Nova tentativa')""")
+                                self.assertEqual(counter, page.locator('#count').inner_text())
+                                page.locator('#next').click(force=True)
+                                for j in range(10):
+                                    page.locator('[data-answer]').first.click(force=True)
+                                    if j != 9:
+                                        page.locator('#qNext').click(force=True)
+                                page.locator('#next').click(force=True)
+                            page.wait_for_function("""() =>
+                                document.querySelector('#next').textContent.includes('Continuar') ||
+                                document.querySelector('#next').textContent.includes('Concluir curso')""")
+                            approved.append(stage)
+                    for button in page.locator('[data-gate]').all():
+                        button.click(force=True)
+                    if page.locator('[data-opt]').count():
+                        page.locator('[data-opt]').first.click(force=True)
+                    next_button = page.locator('#next')
+                    self.assertFalse(next_button.is_disabled(), f'Blocked at {counter}')
+                    if counter == '42/42':
+                        self.assertEqual(len(approved), 8)
+                        self.assertIn('Concluir curso', next_button.inner_text())
+                        next_button.click(force=True)
+                        self.assertEqual(page.locator('#count').inner_text(), '42/42')
+                        self.assertEqual(page.evaluate('window.__QA_CONTENT_END__'), approved[-1])
+                        self.assertFalse(page.evaluate('Boolean(window.courseCompleted)'))
+                        break
+                    next_button.click(force=True)
+                    self.assertNotEqual(counter, page.locator('#count').inner_text())
+                else:
+                    self.fail('RC81 journey did not reach unit 42 in 150 actions')
+                receipts = page.evaluate('window.__QA_RECEIPTS__')
+                self.assertEqual(len(receipts), 9)  # failed + 8 passed
+                self.assertEqual(len(receipts[0]['selections']), 10)
+                self.assertEqual(errors, [])
+            finally:
+                browser.close()
+
 if __name__ == '__main__':
     unittest.main()
