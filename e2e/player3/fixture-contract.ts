@@ -42,7 +42,7 @@ export function requireQa(ok: unknown, code: string): asserts ok {
 export function qaPath(origin: string, path: string): string {
   requireQa(typeof path === 'string' && path.startsWith('/') && !path.startsWith('//'),
     'RELATIVE_API_OR_LAUNCH_PATH');
-  requireQa(!path.includes('..') && !/[\\\u0000]/.test(path) &&
+  requireQa(!path.includes('..') && !path.includes('\\') && !path.includes(String.fromCharCode(0)) &&
     !/%(?:2e|2f|5c|00)/i.test(path), 'UNSAFE_RELATIVE_PATH');
   const url = new URL(path, origin);
   requireQa(url.origin === origin && !url.username && !url.password,
