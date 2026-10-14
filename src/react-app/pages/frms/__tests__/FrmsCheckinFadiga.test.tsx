@@ -155,7 +155,7 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(
       isFadigaCheckinSubmitReady({
         sonoOpcao: 'h8',
-        repousoOpcao: 'h8',
+        repousoHoras: 8,
         presentationTime: '06:30',
         wakeTime: '05:30',
         qualidadeSono: 4,
@@ -172,7 +172,7 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(
       isFadigaCheckinSubmitReady({
         sonoOpcao: 'h8',
-        repousoOpcao: 'h8',
+        repousoHoras: 8,
         presentationTime: '06:30',
         wakeTime: '05:30',
         qualidadeSono: 4,
@@ -187,7 +187,7 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(
       isFadigaCheckinSubmitReady({
         sonoOpcao: 'h8',
-        repousoOpcao: 'h8',
+        repousoHoras: 8,
         presentationTime: '06:30',
         wakeTime: '05:30',
         qualidadeSono: 4,
@@ -382,7 +382,7 @@ describe('FrmsCheckinFadiga UI', () => {
   });
 
   function preencherFormularioValido() {
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais de oportunidade' }));
+    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -421,7 +421,7 @@ describe('FrmsCheckinFadiga UI', () => {
 
   it('bloqueia envio quando a oportunidade de sono é inferior ao sono declarado', () => {
     render(<FrmsCheckinFadiga />);
-    fireEvent.click(screen.getByRole('radio', { name: '5 horas de oportunidade' }));
+    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '5' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -438,8 +438,7 @@ describe('FrmsCheckinFadiga UI', () => {
     render(<FrmsCheckinFadiga />);
 
     const sonoFieldset = screen.getByText('Sono efetivamente obtido nas últimas 24h').closest('fieldset');
-    const oportunidadeFieldset = screen.getByText('Oportunidade de sono (repouso absoluto) nas últimas 24h').closest('fieldset');
-    expect(within(oportunidadeFieldset as HTMLElement).getAllByRole('radio')).toHaveLength(5);
+    expect(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h')).toHaveAttribute('type', 'number');
     expect(sonoFieldset).toBeTruthy();
     expect(within(sonoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).value)).toEqual([
       'h4',
@@ -527,7 +526,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('envia payload minimo valido e compativel com null em meds/alcool', async () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais de oportunidade' }));
+    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -583,7 +582,7 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
     const submitButton = screen.getByRole('button', { name: 'Confirmar Check-in Diário' });
 
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais de oportunidade' }));
+    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     const casos = [
       ['4 horas ou menos', 4],
       ['5 horas', 5],
@@ -606,7 +605,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('preserva os valores internos de qualidade do sono e KSS no payload', async () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais de oportunidade' }));
+    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -693,7 +692,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('mantem observacao obrigatoria para resposta nao apto', () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais de oportunidade' }));
+    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '5 horas' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -753,7 +752,7 @@ describe('FrmsCheckinFadiga UI', () => {
 
     expect(screen.getByRole('status')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais de oportunidade' }));
+    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -818,7 +817,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('bloqueia envio quando horario e invalido e mostra mensagem clara', () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais de oportunidade' }));
+    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     const wakeInput = screen.getByLabelText('Hora em que acordou');
     fireEvent.change(wakeInput, { target: { value: '2400' } });
@@ -839,7 +838,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('submete 0630 como 06:30', async () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais de oportunidade' }));
+    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0700' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0630' } });
@@ -1076,7 +1075,7 @@ describe('FrmsCheckinFadiga UI', () => {
     window.sessionStorage.setItem(key, JSON.stringify({
       version: 1,
       sonoOpcao: 'h8',
-      repousoOpcao: 'h8',
+      repousoHoras: 8,
       presentationTime: '06:30',
       wakeTime: '05:30',
       qualidadeSono: 4,
@@ -1109,7 +1108,7 @@ describe('FrmsCheckinFadiga UI', () => {
     window.sessionStorage.setItem(key, JSON.stringify({
       version: 1,
       sonoOpcao: 'h7',
-      repousoOpcao: 'h8',
+      repousoHoras: 8,
       presentationTime: '07:00',
       wakeTime: '05:45',
       qualidadeSono: 3,
