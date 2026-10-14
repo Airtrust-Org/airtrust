@@ -23,7 +23,10 @@ export default function Player3AuthenticatedStagingEntry({
   const [refresh,setRefresh]=useState(0);
   useEffect(()=>{
     const controller=new AbortController();
-    setState({kind:'LOADING'});
+    // Do not unmount the authored iframe while delivering a persisted stage
+    // verdict: postMessage delivery is asynchronous. Keep its exact pinned
+    // frame mounted while refreshing the next Worker-authenticated projection.
+    setState(previous=>previous.kind==='READY'?previous:{kind:'LOADING'});
     if(!active||![matriculaId,empresaId,cursoId].every(positive)){
       setState({kind:'LEGACY_PREVIEW'});
       return ()=>controller.abort();
