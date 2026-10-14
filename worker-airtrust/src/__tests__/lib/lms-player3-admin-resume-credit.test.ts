@@ -152,6 +152,9 @@ describe('Player 3 governed administrative resume intent',()=>{
     expect(()=>create({reconciliation:{...reconciliation,
       decision:{...reconciliation.decision,current_reported_pct:99}}}))
       .toThrow('FRONT_C_RECONCILIATION_NOT_VERIFIED');
+    expect(()=>create({reconciliation:{...reconciliation,
+      decision:{...reconciliation.decision,historical_pct_to_preserve:100}}}))
+      .toThrow('FRONT_C_RECONCILIATION_NOT_VERIFIED');
   });
   it('does not treat progress at 100 as a reason to certify administratively',()=>{
     const advanced={...enrollment,matricula_progresso_pct:100,ciclo_progresso_pct:100};
