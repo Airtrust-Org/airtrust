@@ -878,7 +878,7 @@ export default function FrmsFlightCheckinFadiga() {
                       Tempo livre de obrigações, em local adequado para dormir. Não pressupõe ter dormido.
                     </p>
                     <div className="flex items-center gap-2">
-                      <input id="oportunidade-sono" type="number" min="0" max="24" step="0.5"
+                      <input id="oportunidade-sono" type="number" min="0" max="24" step="any"
                         inputMode="decimal" value={repousoHoras ?? ''}
                         onChange={(event) => setRepousoHoras(event.target.value === '' ? null : Number(event.target.value))}
                         className="w-28 min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-semibold" />
@@ -901,7 +901,9 @@ export default function FrmsFlightCheckinFadiga() {
                             key={op.key}
                             className={`relative flex min-h-11 w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                               selected
-                                ? selectedScaleClasses(op.severidade)
+                                ? op.key === 'outro'
+                                  ? 'border-blue-500 bg-blue-50 text-blue-900 ring-1 ring-blue-200'
+                                  : selectedScaleClasses(op.severidade)
                                 : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                             }`}
                           >
