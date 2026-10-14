@@ -58,6 +58,26 @@ export function openInventory(sealedText,key) {
     fail('DECRYPT_OR_AUTH_FAILED');
   }finally{plain?.fill(0);}
 }
+// SQLite json_group_array has no guaranteed ordering without an explicit
+// aggregate order. Canonicalize private history before diff/idempotency hashing.
+function canonicalRow(row){
+  const raw=row.ciclos_historicos_json_PRIVATE;
+  if(raw===undefined||raw===null)return row;
+  if(typeof raw!=='string')fail('CYCLE_HISTORY_INVALID');
+  let history;
+  try{history=JSON.parse(raw);}catch{fail('CYCLE_HISTORY_INVALID');}
+  if(!Array.isArray(history)||history.length>1000)fail('CYCLE_HISTORY_INVALID');
+  const ids=new Set();
+  for(const entry of history){
+    if(!entry || !Number.isSafeInteger(entry.id)||entry.id<=0 ||
+      entry.empresa_id!==row.empresa_id ||
+      entry.matricula_id!==row.matricula_id ||
+      ids.has(entry.id))fail('CYCLE_HISTORY_SCOPE_INVALID');
+    ids.add(entry.id);
+  }
+  return {...row,ciclos_historicos_json_PRIVATE:stable(
+    [...history].sort((a,b)=>a.id-b.id))};
+}
 const rowKey=(row)=>row.empresa_id+':'+row.matricula_id;
 function indexRows(rows){
   const map=new Map();
@@ -69,7 +89,7 @@ function indexRows(rows){
       !Number.isFinite(row.matricula_progresso_pct) ||
       row.matricula_progresso_pct<0 || row.matricula_progresso_pct>100)
       fail('PERCENT_INVALID');
-    map.set(k,row);
+    map.set(k,canonicalRow(row));
   }
   return map;
 }
