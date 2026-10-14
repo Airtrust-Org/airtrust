@@ -185,6 +185,7 @@ export function compareContinuityInventories(
       after.funcionario_id!==before.funcionario_id||
       after.ciclo_id!==before.ciclo_id||
       after.ciclo_numero!==before.ciclo_numero){changedCycles++;continue;}
+    if(!percentage(after.matricula_progresso_pct) || !percentage(before.matricula_progresso_pct)) {stale++;continue;}
     if(after.matricula_progresso_pct<before.matricula_progresso_pct){regressed++;continue;}
     if(before.matricula_updated_at && after.matricula_updated_at &&
       after.matricula_updated_at<before.matricula_updated_at){stale++;continue;}
