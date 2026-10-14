@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {
   qaPath,validateQaProfile,validateQaModuleSession,validateQaJointReadiness,
-  validateQaCertificatePdf,
+  validateQaCertificatePdf,assertQaReadOnlyNonDisclosure,
   type QaModuleSession,type QaProfile,type QaProjectFixture,
 } from './fixture-contract';
 
@@ -353,5 +353,47 @@ describe('Front D — authentic certificate PDF bytes, never a five-byte stub',(
       'startxref\n1\n%%EOF\n');
     expect(()=>validateQaCertificatePdf(fake,'application/pdf'))
       .toThrow('CERTIFICATE_PDF_STRUCTURE');
+  });
+});
+
+describe('Front D — protected read-only projections disclose no grading material',()=>{
+  it('blocks hidden answers in a regraded module session regardless of public aggregate',()=>{
+    const receipt=realModuleProjection();
+    expect(()=>validateQaModuleSession({...receipt,
+      unexpected:{private:{correctOptionId:'answer-1'}}},
+      edition,1101,eightStages))
+      .toThrow('WORKER_READONLY_PRIVATE_MATERIAL_LEAK');
+    expect(()=>validateQaModuleSession({...receipt,
+      unexpected:{attempts:[{questionId:'q1',optionId:'o1'}]}},
+      edition,1101,eightStages))
+      .toThrow('WORKER_READONLY_PRIVATE_MATERIAL_LEAK');
+  });
+  it('blocks private bank URLs or hashes in read-only readiness diagnostics',()=>{
+    const course=fixture().projects.chromium.doutrinamento;
+    const clean={
+      matricula_id:course.enrollmentId,editionSha256:course.editionSha256,
+      cycleId:course.cycleId,totalRequiredLessons:course.requiredLessonIds.length,
+      verifiedLessons:0,officialStageCount:8,officialStagesPassed:0,
+      reason:'CONTENT_NOT_FINISHED',readyForAtomicTerminalPreflight:false,
+      completionSupported:false,completion_supported:false,
+    };
+    expect(()=>validateQaJointReadiness({...clean,
+      extra:{answers_sha256:'f'.repeat(64)}},
+      course,course.requiredLessonIds.length,8))
+      .toThrow('WORKER_READONLY_PRIVATE_MATERIAL_LEAK');
+    expect(()=>validateQaJointReadiness({...clean,
+      extra:['player3-server-private-bank.json']},
+      course,course.requiredLessonIds.length,8))
+      .toThrow('WORKER_READONLY_PRIVATE_MATERIAL_LEAK');
+  });
+  it('rejects malformed or unbounded diagnostic bodies before grading claims',()=>{
+    const cyclic:Record<string,unknown>={};
+    cyclic.self=cyclic;
+    expect(()=>assertQaReadOnlyNonDisclosure(cyclic))
+      .toThrow('WORKER_READONLY_DATA_INVALID');
+    expect(()=>assertQaReadOnlyNonDisclosure({debug:'x'.repeat(130*1024)}))
+      .toThrow('WORKER_READONLY_DATA_BOUNDED');
+    expect(()=>assertQaReadOnlyNonDisclosure({stageId:'mod1',passed:true,attempts:1}))
+      .not.toThrow();
   });
 });
