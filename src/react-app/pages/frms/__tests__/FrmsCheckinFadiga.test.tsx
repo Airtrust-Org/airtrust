@@ -394,6 +394,22 @@ describe('FrmsCheckinFadiga UI', () => {
     });
   }
 
+  function enableUnclassifiedNoFlightContext() {
+    recoveryContextMock.mockReturnValue({
+      data: {
+        reference_date: '2026-06-04',
+        schema_ready: true,
+        flight: { detected: false, sectorCount: 0, landingCount: 0, canonicalFlightMinutes: 0, source: 'NONE_FOUND' },
+        requires_activity_classification: true,
+        activity: null,
+        assessment: null,
+        prompt_reason: 'NO_FLIGHT_FOUND_IN_OPERATIONAL_SOURCES',
+      },
+      isLoading: false,
+      isError: false,
+    });
+  }
+
   function preencherFormularioValido() {
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
@@ -449,6 +465,25 @@ describe('FrmsCheckinFadiga UI', () => {
     const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
     expect(payload.oportunidade_sono_horas_24h).toBeUndefined();
     expect(payload.readiness).toBeDefined();
+  });
+
+  it('solicita oportunidade de sono apenas quando o tripulante classifica o dia anterior como standby', () => {
+    enableUnclassifiedNoFlightContext();
+    render(<FrmsCheckinFadiga />);
+
+    const label = 'Oportunidade de sono (repouso absoluto) nas últimas 24h';
+    expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Standby em hotel ou residência/i }));
+    expect(screen.getByText('Oportunidade de sono no standby — opcional')).toBeInTheDocument();
+    expect(screen.getByLabelText(label)).toHaveAttribute('min', '0');
+
+    fireEvent.change(screen.getByLabelText(label), { target: { value: '7.5' } });
+    fireEvent.click(screen.getByRole('button', { name: /Folga \/ descanso/i }));
+    expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Standby em hotel ou residência/i }));
+    expect(screen.getByLabelText(label)).toHaveValue(null);
   });
 
   it('não bloqueia check-in com oportunidade menor que sono total somente no standby', () => {
