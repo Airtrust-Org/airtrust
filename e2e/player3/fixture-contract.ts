@@ -302,3 +302,30 @@ export function validateQaCertificatePdf(raw: Uint8Array, contentType: string): 
     /startxref\s+\d+\s+%%EOF\s*$/.test(trailer),
     'CERTIFICATE_PDF_STRUCTURE');
 }
+
+/**
+ * Live Front B POST /matriculas/:id/etapas/concluir receipt. This response
+ * acknowledges a committed D1 terminal, not a created/fetchable certificate.
+ * Independent snapshot, unique history and PDF checks remain mandatory.
+ */
+export type QaTerminalReceipt = {
+  success: true;
+  data: {
+    matricula_id: number;
+    status: 'CONCLUIDO';
+    qualification_outcome: 'qualification_created' | 'qualification_reused';
+    certificate_state: 'REQUIRES_VERIFICATION';
+  };
+};
+export function validateQaTerminalReceipt(raw: unknown, enrollmentId: number): QaTerminalReceipt {
+  const r=raw as QaTerminalReceipt;
+  requireQa(!!r && r.success===true && !!r.data &&
+    r.data.matricula_id===enrollmentId && r.data.status==='CONCLUIDO',
+    'TERMINAL_RECEIPT_COMMITTED_ENROLLMENT');
+  requireQa(['qualification_created','qualification_reused'].includes(
+    r.data.qualification_outcome) &&
+    r.data.certificate_state==='REQUIRES_VERIFICATION',
+    'TERMINAL_CERTIFICATE_REQUIRES_REAL_VERIFICATION');
+  assertQaReadOnlyNonDisclosure(raw);
+  return r;
+}
