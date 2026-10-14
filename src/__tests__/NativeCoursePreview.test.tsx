@@ -165,6 +165,38 @@ describe('NativeCoursePreview — display only', () => {
     expect(onSubmitAssessment).toHaveBeenCalledExactlyOnceWith([{questionId:'q1',optionId:'b'}]);
   });
 
+  it('preserves multi-module scored assessments without inventing a final exam', () => {
+    const onSubmitAssessment = vi.fn();
+    const modular: NativeLearnerCourse = {
+      ...course,
+      units: [
+        course.units[0],
+        { id:'module-quiz-1',title:'Avaliação módulo 1',kind:'assessment',blocks:[],
+          questionIds:['q1'] },
+        { id:'module-quiz-2',title:'Avaliação módulo 2',kind:'assessment',blocks:[],
+          questionIds:['q2'] },
+      ],
+      questions: [...course.questions, {
+        id:'q2',prompt:'Outro módulo',options:[
+          {id:'a',text:'Verificar condição'},{id:'b',text:'Ignorar desvio'},
+        ],
+      }],
+    };
+    render(<NativeCoursePreview course={modular}
+      resolveAssetHref={() => null} onSubmitAssessment={onSubmitAssessment} />);
+    fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
+    expect(screen.getByText('AVALIAÇÃO DO MÓDULO')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio',{name:'Verificar o EPI'}));
+    expect(screen.queryByRole('button',{name:'Enviar respostas para avaliação'})).toBeNull();
+    expect(screen.getByText(/gravação independente de cada avaliação/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
+    fireEvent.click(screen.getByRole('radio',{name:'Verificar condição'}));
+    fireEvent.click(screen.getByRole('button',{name:'Enviar respostas para avaliação'}));
+    expect(onSubmitAssessment).toHaveBeenCalledExactlyOnceWith([
+      {questionId:'q1',optionId:'b'},{questionId:'q2',optionId:'a'},
+    ]);
+  });
+
   it('shows no client grading or server writes at any step', () => {
     const resolve = vi.fn(() => null);
     render(<NativeCoursePreview course={course} resolveAssetHref={resolve} />);

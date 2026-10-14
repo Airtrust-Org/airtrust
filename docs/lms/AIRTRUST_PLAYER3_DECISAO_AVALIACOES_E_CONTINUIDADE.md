@@ -67,3 +67,16 @@ No HEAD `0f92441512eaf660da5636493eb7895112d721be` consultado em 2026-10-14:
 5. **Nada de produção sem autorização específica para SHA/artefatos/escopo** e gates oficiais. Nenhuma migration nem D1/R2 write remoto foi executado neste lote.
 
 **Estado compacto:** objetivo=P0 fechamento LMS com fidelidade HTML5; PR=#1389 draft; main=verificar ao vivo; head=verificar PR após commit; última implementação=fixação separada da prova; testes=25+43 Worker e 16 React PASS, tsc PASS, lint geral BLOCKED (scripts históricos); não integrado/não publicado; próxima=obter ZIP original via caminho cloud autorizado + ponte HTML5 fiel + staging E2E; não autorizado=bypass, promover código sem homologação, produção genérica.
+
+## Evidência nova sobre política de avaliações dos nove cursos — 2026-10-14
+
+O inventário **privado e estrutural** das candidatas de conversão (não do ZIP original) mostrou:
+
+- Doutrinamento Segurança/Qualidade: **42 unidades, 28 lições, 6 cenários e 8 grupos de avaliação de dez questões (86 questões ao todo)**. Política convertida: `SCORED, masteryScore=80, moduleGate=true`. Os oito grupos aparecem ao longo do curso; não foi identificado um grupo autônomo e inequívoco de prova final.
+- NR-20: 11 lições, quatro cenários, **quatro avaliações modulares** de dez questões, `masteryScore=80,moduleGate=true`.
+- SGSO: 32 lições, cinco decisões e **cinco avaliações modulares** de quatro questões, `masteryScore=70,moduleGate=true`.
+- Os outros seis candidatos apresentam apenas um grupo de avaliação no modelo convertido (com vários cenários), mas isso não demonstra fidelidade total ao HTML5 autoral.
+
+**Ajuste de arquitetura obrigatório:** suportar **dois regimes pedagógicos** no mesmo motor: (A) módulos com avaliações certificadoras próprias e `moduleGate` — **não inventar prova final**; (B) exercícios formativos por módulo + prova final separada, somente quando essa for a política versionada aprovada. O tipo `practice` não autoriza reclassificar avaliações já certificadoras. Cenários com decisão obrigatória permanecem gates quando a fonte exige.
+
+**Bloqueio adicional explícito:** o piloto atual persiste **uma tentativa consolidada**; a prévia pode exibir vários grupos modulares, mas as seleções anteriores não são persistidas até o envio final. Isso NÃO está homologado para módulos pontuados com queda/reabertura. Antes de publicar Doutrinamento/NR-20/SGSO, implementar persistência atômica por avaliação modular, com tentativas por módulo/edição/ciclo e totalização server-owned — governança Schema V2 e testes de replay, retomada e cenário/nota obrigatórios. A prévia foi ajustada para não chamar cada módulo de "prova final" nem oferecer envio impossível antes do último grupo. Sem alteração de conclusão real ou migrations.

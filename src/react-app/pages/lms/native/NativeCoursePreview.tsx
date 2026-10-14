@@ -143,8 +143,14 @@ export default function NativeCoursePreview({
   const practiceIds = new Set(course.units.filter((candidate) => candidate.kind === 'practice')
     .flatMap((candidate) => candidate.questionIds));
   const certifyingQuestions = course.questions.filter((q) => !practiceIds.has(q.id));
-  const canSubmitOfficialAttempt = unit.kind === 'assessment' ||
-    (unit.kind === 'scenario' && !course.units.some((candidate) => candidate.kind === 'assessment'));
+  const assessmentIndexes = course.units.flatMap((candidate, i) =>
+    candidate.kind === 'assessment' ? [i] : []);
+  // Module-scored courses have several assessment units but no invented
+  // standalone final exam. The current staging API accepts only the consolidated
+  // certifying attempt, so don't offer a premature impossible submission.
+  const canSubmitOfficialAttempt = (unit.kind === 'assessment' &&
+      unitIndex === assessmentIndexes[assessmentIndexes.length - 1]) ||
+    (unit.kind === 'scenario' && assessmentIndexes.length === 0);
   const template = selectNativeLessonTemplate(unitIndex, unit);
   const vertical = template === 'wide-top' || template === 'wide-bottom' || template === 'banner-list';
   const reversed = template === 'media-left' || template === 'editorial-dashboard';
@@ -169,7 +175,8 @@ export default function NativeCoursePreview({
 
   const unitLabel = unit.kind === 'lesson' ? 'CONTEÚDO DO TREINAMENTO'
     : unit.kind === 'practice' ? 'FIXAÇÃO DO MÓDULO'
-    : unit.kind === 'scenario' ? 'DECISÃO OPERACIONAL' : 'PROVA FINAL';
+    : unit.kind === 'scenario' ? 'DECISÃO OPERACIONAL'
+    : assessmentIndexes.length > 1 ? 'AVALIAÇÃO DO MÓDULO' : 'AVALIAÇÃO OFICIAL';
   const navigationProgress = ((unitIndex + 1) / course.units.length) * 100;
 
   function navigateTo(index: number) {
@@ -390,6 +397,13 @@ export default function NativeCoursePreview({
                   className="rounded-full bg-[#123b5e] px-5 py-3 text-sm font-bold text-white hover:bg-[#081b30] disabled:opacity-50">
                   {serverSeenLessonIds?.includes(unit.id) ? 'Visita registrada no servidor' : 'Registrar visita a esta aula'}
                 </button>
+              )}
+              {unit.kind === 'assessment' && !canSubmitOfficialAttempt && (
+                <p role="status" className="text-sm text-[#536b82]">
+                  Avaliação modular: prossiga para os próximos módulos. Esta prévia
+                  mantém as seleções somente na sessão do navegador; a gravação
+                  independente de cada avaliação no servidor ainda está pendente.
+                </p>
               )}
               {onSubmitAssessment && canSubmitOfficialAttempt && certifyingQuestions.length > 0 && (
                 <div className="rounded-2xl border border-[#e1e9ef] bg-[#f7fafc] p-4">
