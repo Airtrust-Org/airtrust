@@ -59,7 +59,7 @@ export async function preparePlayer3VerifiedPassProofs(input:{
     const result=await input.db.prepare(PROOFS)
       .bind(binding.vinculo_id,binding.politica_id).all<Row>();
     rows=result.results;
-  }catch{deny('PLAYER3_TERMINAL_PROOFS_READ_FAILED');}
+  }catch{throw new Player3StageWriteError('PLAYER3_TERMINAL_PROOFS_READ_FAILED');}
   if(!Array.isArray(rows)||rows.length!==required.size||rows.length>100){
     deny('PLAYER3_TERMINAL_OFFICIAL_PROOFS_MISSING');
   }
@@ -84,7 +84,7 @@ export async function preparePlayer3VerifiedPassProofs(input:{
       verdict=gradePlayer3ApprovedStage(bank,policy,{
         stageId:row.etapa_id,answers:answers as {questionId:string;optionId:string}[],
       });
-    }catch{deny('PLAYER3_TERMINAL_REGRADING_FAILED');}
+    }catch{throw new Player3StageWriteError('PLAYER3_TERMINAL_REGRADING_FAILED');}
     if(!verdict.stagePassed||row.score_pct!==verdict.scorePct){
       deny('PLAYER3_TERMINAL_REGRADING_FAILED');
     }
