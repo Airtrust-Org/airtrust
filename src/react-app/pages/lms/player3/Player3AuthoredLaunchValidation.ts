@@ -4,6 +4,8 @@ export type Launch=Readonly<{
   empresa_id:number;matricula_id:number;curso_id:number;ciclo_id:number;
   edition_sha256:string;content_url:string;content_origin:string;
   assessment_presentation:'authored-html5';
+  resume_next_unit_id:string;checkpoint_unit_ids:string[];
+  last_visited_unit_id:string|null;
   official_stages_passed:boolean;completion_supported:false;
   pending_assessment:null|Readonly<{
     stage_id:string;title:string;questions:readonly P3LearnerQuestion[];
@@ -20,6 +22,13 @@ export function validatePlayer3Launch(
      data.empresa_id!==scope.empresaId||data.curso_id!==scope.cursoId||
      !positive(data.ciclo_id)||!SHA.test(data.edition_sha256)||
      data.assessment_presentation!=='authored-html5'||
+     !ID.test(data.resume_next_unit_id)||
+     !Array.isArray(data.checkpoint_unit_ids)||
+     data.checkpoint_unit_ids.length<1||data.checkpoint_unit_ids.length>500||
+     data.checkpoint_unit_ids.some(id=>!ID.test(id))||
+     new Set(data.checkpoint_unit_ids).size!==data.checkpoint_unit_ids.length||
+     (data.last_visited_unit_id!==null&&
+       !data.checkpoint_unit_ids.includes(data.last_visited_unit_id))||
      data.completion_supported!==false||
      typeof data.official_stages_passed!=='boolean'||
      Boolean(data.pending_assessment)===data.official_stages_passed)return false;
