@@ -3,6 +3,7 @@ import { resolveLmsCompletionScorePct } from '../../services/lms-completion-evid
 import {
   evaluateScormClosureReadiness,
   canFinalizeScormEnrollment,
+  describeScormSlideCoverage,
   type ScormCommitLike,
 } from '../../services/lms-matricula-runtime-domain';
 
@@ -29,6 +30,24 @@ const base = (mode: 'commit' | 'reconcile' = 'commit') => ({
 });
 
 describe('Player 2.0: one SCORM completion readiness contract', () => {
+  it('reports recorded and missing slide numbers without turning a position badge into evidence', () => {
+    const input = JSON.stringify({
+      'cmi.core.lesson_location': '42/42', 'airtrust.total_slides': 42,
+      'airtrust.viewed_slides': [1, 3, 42],
+    });
+    const result = evaluateScormClosureReadiness({ ...base(), cmiJson: input });
+    expect(result.eligible_for_server_verification).toBe(false);
+    expect(result.slide_coverage).toMatchObject({ total: 42, recorded: 3 });
+    expect(result.slide_coverage?.missing_numbers).toContain(2);
+    expect(result.slide_coverage?.missing_numbers).not.toContain(42);
+    expect(describeScormSlideCoverage(JSON.stringify({
+      'airtrust.total_slides': 42, 'airtrust.viewed_slides': [1, 1],
+    }), { current: 42, total: 42 })).toBeNull();
+    expect(describeScormSlideCoverage('invalid', { current: 42, total: 42 })).toBeNull();
+    expect(describeScormSlideCoverage('{}', { current: 42, total: 42 }))
+      .toMatchObject({total:42,recorded:0,missing_numbers:Array.from({length:42},(_,i)=>i+1)});
+  });
+
   it('42/42 with 0/10 questions answered is not equivalent to training completion', () => {
     const pending = evaluateScormClosureReadiness({
       ...base(),

@@ -2007,6 +2007,7 @@ ${buildScormQueuedCommitScript()}
 
     var requestBody = Object.assign({
       matricula_id: MATRICULA_ID,
+      ciclo_id: CICLO_ID,
       commit_event: eventType || 'SCORM_COMMIT',
       completion_candidate: eventType === 'SCORM_USER_FINALIZE' ? true : null,
       completion_observed_at: eventType === 'SCORM_USER_FINALIZE' ? completionObservedAt : null,

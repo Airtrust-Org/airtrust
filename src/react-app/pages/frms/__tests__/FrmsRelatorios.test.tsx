@@ -90,4 +90,29 @@ describe('FrmsRelatorios', () => {
     expect(screen.getByRole('button', { name: 'CSV' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'PDF' })).toBeDisabled();
   });
+
+  it('prioriza gravidade no histórico e mostra a mensagem completa', () => {
+    useApiMock.mockReturnValue({
+      data: {
+        success: true,
+        data: [
+          { id: 1, nivel: 'AVISO', created_at: '2026-10-13T12:00:00Z', mensagem: 'Aviso longo que precisa ficar completamente visível.' },
+          { id: 2, nivel: 'CRITICO', created_at: '2026-10-13T11:00:00Z', mensagem: 'Alerta crítico.' },
+          { id: 3, nivel: 'VIOLACAO', created_at: '2026-10-13T10:00:00Z', mensagem: 'Violação.' },
+        ],
+        meta: { policy_version: 'QA', revision_id: 'rev', source: 'fixture', limitations: [] },
+      },
+      loading: false, error: null, refetch: refetchMock,
+    });
+    render(<FrmsRelatorios />);
+    fireEvent.click(screen.getByRole('button', { name: /Histórico de Alertas/ }));
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining('VIOLACAO'),
+      expect.stringContaining('CRITICO'),
+      expect.stringContaining('AVISO'),
+    ]);
+    expect(screen.getByText('Aviso longo que precisa ficar completamente visível.')).toBeInTheDocument();
+    expect(screen.getByText(/Ordenado por gravidade/)).toBeInTheDocument();
+  });
 });

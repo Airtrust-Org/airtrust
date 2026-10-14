@@ -178,6 +178,32 @@ export interface ScormClosureReadiness {
   every_slide_verified: boolean;
   terminal_status_verified: boolean;
   assessment_verified: boolean;
+  /** Server-observed page visits; informational, never completion proof. */
+  slide_coverage: { total: number; recorded: number; missing_numbers: number[] } | null;
+}
+
+/** Never infer coverage from the highest slide position. Malformed maps stay unverified. */
+export function describeScormSlideCoverage(cmiJson: string | null,
+  location: { current: number; total: number | null } | null,
+): ScormClosureReadiness['slide_coverage'] {
+  const total = location?.total;
+  if (total == null || !Number.isSafeInteger(total) || total < 1 || total > 1000) return null;
+  if (!cmiJson) return null;
+  try {
+    const cmi = JSON.parse(cmiJson) as Record<string, unknown>;
+    if (!cmi || typeof cmi !== 'object' || Array.isArray(cmi)) return null;
+    if (cmi['airtrust.total_slides'] != null && cmi['airtrust.total_slides'] !== total) return null;
+    const raw = cmi['airtrust.viewed_slides'];
+    if (raw != null && !Array.isArray(raw)) return null;
+    const slides = raw ?? [];
+    if (!Array.isArray(slides) || slides.some(n => !Number.isSafeInteger(n) || n < 1 || n > total) ||
+      new Set(slides).size !== slides.length) return null;
+    const seen = new Set<number>(slides);
+    return { total, recorded: seen.size,
+      missing_numbers: Array.from({ length: total }, (_, i) => i + 1).filter(n => !seen.has(n)) };
+  } catch {
+    return null;
+  }
 }
 
 export function evaluateScormClosureReadiness(params: {
@@ -241,6 +267,7 @@ export function evaluateScormClosureReadiness(params: {
     every_slide_verified: everySlide,
     terminal_status_verified: terminal,
     assessment_verified: scorePassed,
+    slide_coverage: describeScormSlideCoverage(cmiJson, location),
   };
 }
 
