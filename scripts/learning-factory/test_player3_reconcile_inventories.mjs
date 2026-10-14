@@ -132,6 +132,19 @@ test('preserves historic cycles for authorized tenant and detects same-percent h
     .replace('"empresa_id":6','"empresa_id":7')};
   assert.throws(()=>encrypt([outsider]),/CROSS_TENANT_OR_ENROLLMENT_CYCLE_HISTORY/);
 });
+test('historical cycle array ordering cannot create false advances or new decision keys',()=>{
+  const h=[
+    {id:905,empresa_id:6,matricula_id:856,numero_ciclo:2,progresso_pct:80},
+    {id:904,empresa_id:6,matricula_id:856,numero_ciclo:1,progresso_pct:100},
+  ];
+  const a=make(856,80,{ciclos_historicos_json_PRIVATE:JSON.stringify(h)});
+  const b={...a,ciclos_historicos_json_PRIVATE:JSON.stringify([...h].reverse())};
+  const regular=reconcileRows([a],[a]).decisions[0];
+  const reordered=reconcileRows([a],[b]).decisions[0];
+  assert.equal(reordered.disposition,'UNCHANGED_REVIEW');
+  assert.equal(regular.decision_key,reordered.decision_key);
+  assert.equal(regular.latest_row_sha256,reordered.latest_row_sha256);
+});
 test('retry is idempotent for the same evidence without relying on ciphertext randomness',()=>{
   const a=[make(861,80)];
   const b=[make(861,99)];
