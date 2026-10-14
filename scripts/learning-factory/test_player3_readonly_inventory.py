@@ -50,7 +50,7 @@ class InventorySqlTests(unittest.TestCase):
         self.assertEqual(rows[0]['matricula_progresso_pct'],80)
         self.assertEqual(rows[0]['ciclo_progresso_pct'],80)
         self.assertEqual(rows[0]['scorm_suspend_data_PRIVATE'],'private_resume')
-        self.assertIsNone(rows[1]['ciclo_id'])
+        self.assertEqual(rows[1]['ciclo_id'],1003)
         self.assertNotIn('nome',rows[0].keys())
 
 if __name__ == '__main__':
