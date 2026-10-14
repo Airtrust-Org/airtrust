@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import Player3Html5Host from '@/react-app/pages/lms/player3/Player3Html5Host';
 
@@ -36,6 +36,36 @@ describe('Player 3 fresh isolated HTML5 host', () => {
     render(<Player3Html5Host {...props}
       contentOrigin={same} contentUrl={same+'/untrusted/index.html'} />);
     expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('shows AirTrust official exam only on explicit server-pinned prop, not in preview',()=>{
+    const pendingAssessment={
+      context:{
+        empresaId:6,matriculaId:911,cicloId:800,
+        editionSha256:'a'.repeat(64),stageId:'mod-1',title:'Módulo 1',
+        questions:[{id:'q1',prompt:'O que fazer?',options:[
+          {id:'a',text:'Verificar segurança'},{id:'b',text:'Ignorar'},
+        ]}],
+      },
+      submitOfficialAttempt:vi.fn(),onVerifiedStagePassed:vi.fn(),onDismiss:vi.fn(),
+    };
+    const {rerender}=render(<Player3Html5Host {...props}
+      reviewOnly={true} pendingAssessment={pendingAssessment}/>);
+    expect(screen.queryByRole('dialog',{name:/Avaliação AirTrust/})).toBeNull();
+    rerender(<Player3Html5Host {...props}
+      reviewOnly={false} pendingAssessment={pendingAssessment}/>);
+    expect(screen.getByRole('dialog',{name:/Avaliação AirTrust/})).toBeInTheDocument();
+    expect(screen.getByTitle(/Conteúdo original/)).toHaveAttribute('src',props.contentUrl);
+    expect(screen.queryByText(/Treinamento concluído pelo servidor/)).toBeNull();
+  });
+
+  it('does not open an official exam when untrusted HTML5 posts a module completion',()=>{
+    render(<Player3Html5Host {...props} reviewOnly={false}/>);
+    window.dispatchEvent(new MessageEvent('message',{
+      origin:new URL(props.contentOrigin).origin,
+      data:{type:'AIRTRUST_SCORM_MODULE_COMPLETED',passed:true,score:100},
+    }));
+    expect(screen.queryByRole('dialog',{name:/Avaliação AirTrust/})).toBeNull();
   });
 
   it('ignores a client claim of completed/passed status', () => {
