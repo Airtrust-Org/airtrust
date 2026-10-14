@@ -123,20 +123,23 @@ function fortnightSummary(item: FrmsOperationalSnapshotItem): { status: string; 
   const period = indicator?.periodo_inicio && indicator?.periodo_fim
     ? `${indicator.periodo_inicio.slice(8, 10)}/${indicator.periodo_inicio.slice(5, 7)} a ${indicator.periodo_fim.slice(8, 10)}/${indicator.periodo_fim.slice(5, 7)}`
     : null;
-  const hasSource = indicator?.fonte_periodo != null &&
-    indicator.fonte_periodo !== 'AUSENTE' && indicator.freshness_dado !== 'AUSENTE';
+  const hasSource = indicator != null &&
+    ['REAL', 'DERIVADO', 'ESTIMADO'].includes(indicator.fonte_periodo) &&
+    indicator.freshness_dado !== 'AUSENTE';
+  const completeEvidence = hasSource && indicator.freshness_dado === 'COMPLETO';
   const status = !period || !indicator ? 'Período não confirmado'
-    : !hasSource ? 'Fonte do período não confirmada'
-      : indicator.status_quinzena === 'CRITICO' ? 'Atenção crítica'
+    : indicator.status_quinzena === 'CRITICO' ? 'Atenção crítica'
       : indicator.status_quinzena === 'ATENCAO' ? 'Exige atenção'
-        : indicator.status_quinzena === 'OK' ? 'Sem alerta no indicador'
-          : 'Avaliação incompleta';
+        : !hasSource ? 'Fonte do período não confirmada'
+          : !completeEvidence ? 'Avaliação parcial — confirmar dados'
+            : indicator.status_quinzena === 'OK' ? 'Sem alerta no indicador'
+              : 'Avaliação incompleta';
   const minutes = indicator?.atividade_frms_periodo_min ?? indicator?.duty_time_periodo_min;
   const activity = indicator && hasSource &&
     minutes != null && Number.isFinite(minutes) && minutes >= 0
-    ? `${formatMinutes(minutes)} de atividade registrada${indicator.status_quinzena === 'INCOMPLETO' ? ' (parcial)' : ''}`
+    ? `${formatMinutes(minutes)} de atividade registrada${(!completeEvidence || indicator.status_quinzena === 'INCOMPLETO') ? ' (parcial)' : ''}`
     : 'Atividade acumulada não confirmada';
-  const score = indicator && hasSource && indicator.status_quinzena !== 'INCOMPLETO' &&
+  const score = indicator && completeEvidence && indicator.status_quinzena !== 'INCOMPLETO' &&
     indicator.score_acumulado != null && Number.isFinite(indicator.score_acumulado)
     ? `Índice operacional acumulado: ${indicator.score_acumulado.toFixed(1).replace('.', ',')}/100${indicator.natureza_dado === 'PROJECAO' ? ' (projeção)' : ''}`
     : null;
@@ -547,7 +550,7 @@ export default function FrmsFlightDashboard() {
   const evaluatedFortnightCount = queue.filter(({ item }) => {
     const indicator = item.fortnight_indicator;
     return Boolean(indicator?.periodo_inicio && indicator.periodo_fim &&
-      indicator.fonte_periodo !== 'AUSENTE' && indicator.freshness_dado !== 'AUSENTE' &&
+      ['REAL', 'DERIVADO'].includes(indicator.fonte_periodo) && indicator.freshness_dado === 'COMPLETO' &&
       (indicator.status_quinzena === 'OK' || indicator.status_quinzena === 'ATENCAO' ||
         indicator.status_quinzena === 'CRITICO'));
   }).length;
