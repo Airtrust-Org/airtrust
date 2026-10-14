@@ -140,11 +140,48 @@ describe('frms-fadiga-checkin schema', () => {
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.oportunidade_sono_horas_24h).toBeUndefined();
   });
-  it('não preserva oportunidade de sono obsoleta quando o check-in é atualizado sem esse dado', () => {
-    // Regression guard for the UPDATE persistence contract: omission/null must clear
-    // an earlier standby opportunity, never silently award recovery credit again.
-    const routeSource = readFileSync('src/routes/frms-fadiga-checkin-legacy.ts', 'utf8');
-    expect(routeSource).toContain('oportunidade_sono_horas_24h = ?,');
-    expect(routeSource).not.toContain('oportunidade_sono_horas_24h = COALESCE(');
+  it('executa o UPDATE real no SQLite e apaga oportunidade obsoleta sem alterar sono efetivo', async () => {
+    const { DatabaseSync } = await import('node:sqlite');
+    const source = readFileSync('src/routes/frms-fadiga-checkin-legacy.ts', 'utf8');
+    const sql = source.match(/`UPDATE frms_fadiga_checkin\\s+SET[\\s\\S]*?WHERE id = \\?`/)?.[0].slice(1, -1);
+    expect(sql).toBeTruthy();
+
+    // Executa exatamente o UPDATE do handler, não uma cópia simplificada do SQL.
+    const setBody = sql!.split(/\\s+SET\\s+/)[1].split(/\\s+WHERE id = \\?/)[0];
+    const columns = [...setBody.matchAll(/(?:^|,)\\s*([a-z_]+)\\s*=/g)].map((match) => match[1]);
+    const placeholders = [...setBody.matchAll(/([a-z_]+)\\s*=\\s*\\?/g)].map((match) => match[1]);
+    expect(columns).toContain('oportunidade_sono_horas_24h');
+    expect(placeholders).toContain('oportunidade_sono_horas_24h');
+
+    const db = new DatabaseSync(':memory:');
+    try {
+      db.exec(`CREATE TABLE frms_fadiga_checkin (id TEXT PRIMARY KEY, ${columns.map((column) =>
+        `${column} ${column === 'oportunidade_sono_horas_24h' ? 'REAL' : 'TEXT'}`,
+      ).join(', ')})`);
+      db.prepare('INSERT INTO frms_fadiga_checkin (id, horas_sono, oportunidade_sono_horas_24h) VALUES (?, ?, ?)')
+        .run('checkin-qa', 5, 8);
+
+      const update = (opportunity: number | null) => db.prepare(sql!).run(
+        ...placeholders.map((column) => column === 'oportunidade_sono_horas_24h' ? opportunity
+          : column === 'horas_sono' ? 5
+            : column === 'kss_score' ? 6
+              : null),
+        'checkin-qa',
+      );
+      // Cliente remove oportunidade do standby; ausência tem semântica NULL.
+      update(null);
+      const afterOmission = db.prepare(
+        'SELECT horas_sono, oportunidade_sono_horas_24h FROM frms_fadiga_checkin WHERE id = ?',
+      ).get('checkin-qa') as { horas_sono: string | number; oportunidade_sono_horas_24h: number | null };
+      expect(afterOmission.oportunidade_sono_horas_24h).toBeNull();
+      expect(Number(afterOmission.horas_sono)).toBe(5);
+
+      update(6);
+      expect(db.prepare(
+        'SELECT oportunidade_sono_horas_24h FROM frms_fadiga_checkin WHERE id = ?',
+      ).get('checkin-qa')?.oportunidade_sono_horas_24h).toBe(6);
+    } finally {
+      db.close();
+    }
   });
 });
