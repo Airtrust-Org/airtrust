@@ -19,11 +19,14 @@ from convert_preserved_html5 import UnsafePackage, checked_files, MAX_FILES
 from extract_player3_private_assessments import _safe_output_pair, _write_exclusive
 from prepare_player3_learner_review import build, compile_review
 
-KNOWN_SOURCES = {
-    'SMS(5).zip': ('4ab977d88559c238bf0f1d6226f28959f241276aadd30d5e9183e7ab24dca55b', 9),
-    'Segurança Operacional(2).zip': (
-        'b1e274cd6b316ab25797b9062bfeff68b532469a96d3e26bbbe7a8063ad8ff7e', 13),
+# Source identity is the original *bytes*, not the download filename: browsers
+# may rename repeated uploads to SMS(6) / Segurança Operacional(3).
+KNOWN_SOURCES_BY_SHA = {
+    '4ab977d88559c238bf0f1d6226f28959f241276aadd30d5e9183e7ab24dca55b': ('SMS', 9),
+    'b1e274cd6b316ab25797b9062bfeff68b532469a96d3e26bbbe7a8063ad8ff7e': (
+        'SEGURANCA_OPERACIONAL', 13),
 }
+KNOWN_ORIGINAL_NAMES = {'SMS(5).zip', 'Segurança Operacional(2).zip'}
 
 def candidates(batches):
     seen = set()
@@ -31,8 +34,9 @@ def candidates(batches):
         if not path.is_file() or path.is_symlink() or path.stat().st_size > 220 * 1024 * 1024:
             raise UnsafePackage('PLAYER3_SOURCE_NOT_REGULAR_FILE')
         raw = path.read_bytes()
-        expected = KNOWN_SOURCES.get(path.name)
-        if expected and hashlib.sha256(raw).hexdigest() != expected[0]:
+        digest = hashlib.sha256(raw).hexdigest()
+        expected = KNOWN_SOURCES_BY_SHA.get(digest)
+        if path.name in KNOWN_ORIGINAL_NAMES and expected is None:
             raise UnsafePackage('PLAYER3_ORIGINAL_ARCHIVE_SHA_MISMATCH')
         with ZipFile(io.BytesIO(raw)) as outer:
             infos = outer.infolist()
@@ -72,8 +76,9 @@ def batch_review(batches: list[Path], private_output: Path, learner_output: Path
     private, learner = _safe_output_pair(private_output, learner_output)
     if not batches or len(batches) > 2:
         raise UnsafePackage('PLAYER3_INVALID_BATCH_COUNT')
-    if any(path.name in KNOWN_SOURCES for path in batches):
-        if {path.name for path in batches} != set(KNOWN_SOURCES):
+    digests = [hashlib.sha256(path.read_bytes()).hexdigest() for path in batches]
+    if len(batches) == 2 or any(h in KNOWN_SOURCES_BY_SHA for h in digests):
+        if set(digests) != set(KNOWN_SOURCES_BY_SHA):
             raise UnsafePackage('PLAYER3_REQUIRE_BOTH_ORIGINAL_ARCHIVES')
     # First pass: fail before writing any learner artifact if any source fails.
     verified = []
@@ -81,7 +86,7 @@ def batch_review(batches: list[Path], private_output: Path, learner_output: Path
         _, meta, _, _, receipt = compile_review(original, basename)
         verified.append((outer, basename, receipt['source_sha256'],
                          receipt['courseId'], meta['stage_count'], meta['question_count']))
-    if {p.name for p in batches} == set(KNOWN_SOURCES) and len(verified) != 22:
+    if set(digests) == set(KNOWN_SOURCES_BY_SHA) and len(verified) != 22:
         raise UnsafePackage('PLAYER3_22_SOURCE_MISMATCH')
     private.mkdir(mode=0o700)
     try:
