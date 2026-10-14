@@ -1,6 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createDecipheriv,randomBytes} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync,readFileSync,rmSync,statSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {sealInventory} from './player3-seal-active-inventory.mjs';
 import {
   openInventory,reconcileRows,reconcileInventories,sealReconciliation,
@@ -151,6 +156,29 @@ test('produces an encrypted private admin review plan with no individual data in
   assert.equal(clear.decisions[0].matricula_id,871);
   assert.equal(clear.decisions[0].requires_independent_admin_review,true);
   assert.equal(clear.intent,'ADMIN_REVIEW_ONLY_NO_WRITES_NO_CERTIFICATION');
+});
+test('private CLI reconciles encrypted T0/T1 end-to-end without overwrite or PII stdout',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'player3-c-fixture-'));
+  try {
+    const t0=join(dir,'t0.enc.json'),t1=join(dir,'t1.enc.json');
+    const out=join(dir,'review.enc.json');
+    writeFileSync(t0,encrypt([make(889,50)]),{mode:0o600});
+    writeFileSync(t1,encrypt([make(889,80)]),{mode:0o600});
+    const args=[fileURLToPath(new URL('./player3-reconcile-encrypted-inventories.mjs',import.meta.url)),
+      '--t0',t0,'--t1',t1,'--out',out];
+    const options={env:{...process.env,AIRTRUST_PLAYER3_SNAPSHOT_KEY_B64:KEY.toString('base64')},
+      stdio:['ignore','pipe','pipe']};
+    const stdout=execFileSync(process.execPath,args,options).toString('utf8');
+    const summary=JSON.parse(stdout);
+    assert.equal(summary.dispositions.PROGRESS_ADVANCED_REVIEW,1);
+    assert.equal(summary.mutations,0);
+    assert.ok(!stdout.includes('"matricula_id":889'));
+    const encrypted=readFileSync(out,'utf8');
+    assert.equal(JSON.parse(encrypted).schema,'AIRTRUST_PLAYER3_ENCRYPTED_RECONCILIATION_V1');
+    assert.equal(statSync(out).mode&0o777,0o600);
+    assert.throws(()=>execFileSync(process.execPath,args,options));
+    assert.equal(readFileSync(out,'utf8'),encrypted);
+  }finally{rmSync(dir,{recursive:true,force:true});}
 });
 test('rejects reversed T0/T1 time, changed key identity, and older SCORM commit',()=>{
   const t0=open([make(881,80)]),t1=open([make(881,99)]);
