@@ -37,6 +37,24 @@ export function normalizeD1Rows(input){
         typeof r.scorm_suspend_data_PRIVATE==='string','INVALID_BOOKMARK');
       assert(r.scorm_cmi_json_PRIVATE==null ||
         typeof r.scorm_cmi_json_PRIVATE==='string','INVALID_CMI');
+      // History stays private and must remain in the same tenant/enrollment.
+      if(r.ciclos_historicos_json_PRIVATE!==undefined &&
+         r.ciclos_historicos_json_PRIVATE!==null){
+        assert(typeof r.ciclos_historicos_json_PRIVATE==='string','INVALID_CYCLE_HISTORY');
+        let history;
+        try{history=JSON.parse(r.ciclos_historicos_json_PRIVATE);}catch{
+          assert(false,'INVALID_CYCLE_HISTORY_JSON');
+        }
+        assert(Array.isArray(history)&&history.length<=1000,'INVALID_CYCLE_HISTORY');
+        const ids=new Set();
+        for(const cycle of history){
+          assert(cycle && Number.isSafeInteger(cycle.id) && cycle.id>0 &&
+            cycle.empresa_id===r.empresa_id && cycle.matricula_id===r.matricula_id,
+            'CROSS_TENANT_OR_ENROLLMENT_CYCLE_HISTORY');
+          assert(!ids.has(cycle.id),'DUPLICATE_CYCLE_HISTORY');
+          ids.add(cycle.id);
+        }
+      }
       rows.push(r);
     }
   }
