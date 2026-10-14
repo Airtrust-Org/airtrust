@@ -27,6 +27,8 @@ export function normalizeD1Rows(input){
       for(const col of ['empresa_id','matricula_id','curso_id','funcionario_id']){
         assert(Number.isSafeInteger(r[col]) && r[col]>0,'INVALID_ID_'+col);
       }
+      // The read-only source SQL is pinned to this tenant. Fail closed if it drifts.
+      assert(r.empresa_id===6,'TENANT_SCOPE_MISMATCH');
       assert(r.empresa_id===AUTHORIZED_TENANT_ID,'CROSS_TENANT_EXTRACT_REJECTED');
       assert(['EM_ANDAMENTO','NAO_INICIADO'].includes(r.matricula_status),'INVALID_STATUS');
       assert(typeof r.matricula_progresso_pct==='number' &&
