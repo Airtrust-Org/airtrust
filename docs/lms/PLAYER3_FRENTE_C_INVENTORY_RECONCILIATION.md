@@ -45,6 +45,6 @@ Casos de mudança de ciclo, fonte ausente, conflito de catalogação, status ter
 
 ## Testes e garantia atual
 
-Testes sintéticos executados: `python3 scripts/learning-factory/test_player3_readonly_inventory.py` (2/2 PASS); `node --test scripts/learning-factory/test_player3_inventory.mjs scripts/learning-factory/test_player3_reconcile_inventories.mjs` (18/18 PASS). Cobrem 20/50/80/99%, delta T0/T1, historical cycles, cross-tenant, curso órfão, mudança de pacote, cripto/integridade, adulteração, repetibilidade e não certificação. A execução local **não** significa workflow aprovado, T0 coletado, migração feita ou prova real concluída.
+Testes sintéticos executados: `python3 scripts/learning-factory/test_player3_readonly_inventory.py` (2/2 PASS); `node --test scripts/learning-factory/test_player3_inventory.mjs scripts/learning-factory/test_player3_reconcile_inventories.mjs` (19/19 PASS). Cobrem 20/50/80/99%, delta T0/T1, histórico de ciclos, cross-tenant, curso órfão, mudança de pacote, criptografia/integridade, adulteração, idempotência, execução CLI com arquivos cifrados, restrição de escrita 0600 e não certificação. A execução local **não** significa workflow aprovado, T0 coletado, migração feita ou prova real concluída.
 
 **Próximo gate:** revisão e CI oficial desta PR; provisionamento e aprovação humana do environment, então T0 readonly pelo fluxo oficial. Integração de equivalência/cutover posterior exclusivamente com a Frente B na PR #1389, sem liberar produção sem autorização exata.
