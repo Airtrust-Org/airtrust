@@ -626,7 +626,7 @@ describe('FrmsDashboard simplificado', () => {
     expect(period.getByText(/Período: 16\/08 a 31\/08/)).toBeInTheDocument();
     expect(period.getByText(/1 em atenção/)).toBeInTheDocument();
     expect(screen.getByText('10,0 h de atividade registrada')).toBeInTheDocument();
-    expect(screen.getByText('Índice operacional acumulado: 55,0/100')).toBeInTheDocument();
+    expect(screen.getByText(/Índice operacional acumulado: 55,0\/100 \(projeção\)/)).toBeInTheDocument();
     expect(screen.getByText('Exige atenção')).toBeInTheDocument();
   });
 
