@@ -202,3 +202,50 @@ export function validateQaModuleSession(raw: unknown, edition: string,
     typeof s.completionSupported==='boolean', 'MODULE_SESSION_NO_PREMATURE_COMPLETION');
   return s;
 }
+
+/**
+ * Front B's combined *read-only* content/module readiness projection.
+ * The double camel/snake completion fields are returned by the actual route.
+ * Neither a ready verdict nor 42/42 and 8/8 certifies the student.
+ */
+export type QaJointReadiness = {
+  matricula_id: number; editionSha256: string; cycleId: number;
+  totalRequiredLessons: number; verifiedLessons: number;
+  officialStageCount: number; officialStagesPassed: number;
+  readyForAtomicTerminalPreflight: boolean;
+  reason: 'READY_FOR_TERMINAL_PREFLIGHT'|'EDITION_OR_CYCLE_MISMATCH'|
+    'INVALID_EVIDENCE'|'CONTENT_NOT_FINISHED'|'OFFICIAL_STAGES_NOT_PASSED'|
+    'REVIEW_READ_ONLY';
+  completionSupported: false; completion_supported: false;
+};
+const readinessReasons=new Set([
+  'READY_FOR_TERMINAL_PREFLIGHT','EDITION_OR_CYCLE_MISMATCH',
+  'INVALID_EVIDENCE','CONTENT_NOT_FINISHED',
+  'OFFICIAL_STAGES_NOT_PASSED','REVIEW_READ_ONLY',
+]);
+export function validateQaJointReadiness(raw: unknown, enrollment: QaEnrollment,
+  requiredLessons: number, requiredStages: number): QaJointReadiness {
+  const r=raw as QaJointReadiness;
+  requireQa(!!r && r.matricula_id===enrollment.enrollmentId &&
+    r.editionSha256===enrollment.editionSha256 &&
+    r.cycleId===enrollment.cycleId, 'JOINT_READINESS_PINNED_ENROLLMENT_EDITION_CYCLE');
+  requireQa([r.totalRequiredLessons,r.verifiedLessons,
+    r.officialStageCount,r.officialStagesPassed].every(n=>
+      Number.isSafeInteger(n) && n>=0) &&
+    r.totalRequiredLessons===requiredLessons &&
+    r.officialStageCount===requiredStages &&
+    r.verifiedLessons<=r.totalRequiredLessons &&
+    r.officialStagesPassed<=r.officialStageCount,
+    'JOINT_READINESS_CONTENT_STAGE_COUNTS');
+  requireQa(typeof r.readyForAtomicTerminalPreflight==='boolean' &&
+    readinessReasons.has(r.reason) &&
+    r.readyForAtomicTerminalPreflight===
+      (r.reason==='READY_FOR_TERMINAL_PREFLIGHT') &&
+    (!r.readyForAtomicTerminalPreflight ||
+      (r.verifiedLessons===r.totalRequiredLessons &&
+       r.officialStagesPassed===r.officialStageCount)),
+    'JOINT_READINESS_REASON_AND_EVIDENCE');
+  requireQa(r.completionSupported===false && r.completion_supported===false,
+    'JOINT_READINESS_NEVER_CERTIFIES');
+  return r;
+}
