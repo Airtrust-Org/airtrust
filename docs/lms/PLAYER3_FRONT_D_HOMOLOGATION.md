@@ -100,7 +100,7 @@ recusa origem de assets que não seja explicitamente HTTPS staging/QA.
 
 ## Evidência independente disponível
 
-- Preflight puro: **24/24 Vitest PASS** (inclui módulo autenticado, origem privada e allowlist de tenant); ESLint e TypeScript focados PASS.
+- Preflight puro: **27/27 Vitest PASS** (inclui módulo autenticado, origem privada e allowlist de tenant); ESLint e TypeScript focados PASS.
 - Playwright da D: 3 jornadas × Chromium/WebKit = **6 testes descobertos**, não executados em staging.
 - Suíte SCORM protocolo Factory/M8 já existente: **2/2 PASS** em Chromium/WebKit (não é SCO externo nem certificado RC8.1).
 - GitHub Actions no HEAD inicial D `78a52ba52aca2b5180af535e6fa71a4db7066bb7`: oito gates PASS; cada commit posterior tem que ter sua própria evidência CI.
@@ -147,7 +147,7 @@ de eventual produção, cuja autorização é separada e específica por SHA.
 ### Última execução independente de testes focados — 14/10/2026
 
 - Frente D: `c3a72fa36e21ac86213f34612ff6650617c5782d`:
-  **24/24 Vitest PASS**, ESLint PASS, TypeScript PASS;
+  **27/27 Vitest PASS**, ESLint PASS, TypeScript PASS;
   Playwright descobriu 6 testes (3 casos × Chromium/WebKit),
   ainda **não executados contra staging**.
 - Segurança: sem `PLAYER3_QA_ALLOW_WRITES`, o Playwright interrompeu
@@ -198,3 +198,8 @@ e confrontar o cenário histórico 42/42 com esses IDs. Somente então
 criar as matrículas QA e executar a E2E positiva. Não ajustar ratchet,
 fabricar eventos para produzir 42/42 ou usar indicador visual como
 autorização de fechamento.
+
+### Revalidação independente do crosswalk — 17h23 BRT, 14/10/2026
+- SHA D `25a6f7f52f7f60de698dd5a7e4ca2a45bf38cc6a`: **27/27 Vitest PASS**, ESLint PASS, TypeScript PASS, 6 Playwright descobertos em Chromium/WebKit; não são testes de staging concluídos.
+- O preflight aceita 42 telas com 34 lições e 8 provas ou 42 lições com oito provas embutidas, desde que o manifesto privado **declare explicitamente** os IDs canônicos e eles correspondam às telas autorais; a decisão real aguarda A/B. Sem essa evidência, o teste positivo **não deve iniciar**.
+- Não há alteração em D1/R2 nem em matrícula real; staging e terminal canônico continuam condicionantes.
