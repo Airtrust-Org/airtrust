@@ -210,12 +210,48 @@ def extract(original: bytes, basename: str) -> tuple[dict, dict, dict]:
         }
         return meta,learner,bank
 
-def build(batches: list[Path], output: Path)-> dict:
-    if output.exists() and any(output.iterdir()):
-        fail('DESTINATION_NOT_EMPTY')
-    output.mkdir(parents=True,mode=0o700,exist_ok=True)
-    os.chmod(output,0o700)
-    result=[]
+def _safe_output_pair(private_output: Path, learner_output: Path) -> tuple[Path, Path]:
+    """Never put answer keys under a learner/static/repo/Drive subtree."""
+    if not private_output.is_absolute() or not learner_output.is_absolute():
+        fail('OUTPUT_PATH_MUST_BE_ABSOLUTE')
+    private = private_output.resolve()
+    learner = learner_output.resolve()
+    repo_root = Path(__file__).resolve().parents[2]
+    for path in (private,learner):
+        if path in (repo_root, repo_root.parent) or path.is_relative_to(repo_root):
+            fail('REPO_OUTPUT_FORBIDDEN')
+        if any(part.lower() in ('cloudstorage','google drive','airtrust-drive-cloud')
+               for part in path.parts):
+            fail('SHARED_DRIVE_OUTPUT_FORBIDDEN')
+        if path.exists() or path.is_symlink():
+            fail('OUTPUT_ALREADY_EXISTS')
+        if not path.parent.is_dir():
+            fail('OUTPUT_PARENT_MISSING')
+    if private == learner or private.is_relative_to(learner) or learner.is_relative_to(private):
+        fail('OUTPUT_ROOTS_MUST_BE_SEPARATE')
+    return private,learner
+
+def _write_exclusive(path: Path, payload: dict) -> None:
+    import stat
+    fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+    try:
+        with os.fdopen(fd,'wb') as out:
+            out.write(serialize(payload))
+        if stat.S_IMODE(path.stat().st_mode)!=0o600:
+            fail('INSECURE_FILE_MODE')
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+
+def build(batches: list[Path], private_output: Path, learner_output: Path)-> dict:
+    """Validate ALL sources before making ANY output directory.
+
+    The original HTML5 package, including its embedded quiz logic, is never
+    repacked or marked approved. A separate de-keyed browser asset pipeline
+    remains a required pre-publication task.
+    """
+    private,learner_review=_safe_output_pair(private_output,learner_output)
+    entries=[]
     seen=set()
     for batch in batches:
         with ZipFile(batch) as outer:
@@ -228,49 +264,57 @@ def build(batches: list[Path], output: Path)-> dict:
                 if info.file_size<=0 or info.file_size>MAX_NESTED_ZIP:
                     fail('NESTED_ZIP_SIZE')
                 original=outer.read(info)
-                meta,learner,bank=extract(original,basename)
+                meta,projection,bank=extract(original,basename)
                 unique=(meta['courseId'],meta['original_source_sha256'])
                 if unique in seen:
                     fail('DUPLICATE_EDITION')
                 seen.add(unique)
-                key=meta['original_source_sha256'][:20]
-                for suffix,obj in [('review.json',meta),
-                                   ('learner-review.json',learner),
-                                   ('server-only-bank.json',bank)]:
-                    dest=output/(key+'-'+suffix)
-                    if dest.exists():
-                        fail('FILE_EXISTS')
-                    fd=os.open(dest,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
-                    try:
-                        with os.fdopen(fd,'wb') as stream:
-                            stream.write(serialize(obj))
-                    except:
-                        dest.unlink(missing_ok=True)
-                        raise
-                result.append({k:v for k,v in meta.items() if k!='original_basename'})
+                if len(seen)>100:
+                    fail('TOO_MANY_EDITIONS')
+                entries.append((meta,projection,bank))
+    if not entries:
+        fail('NO_SUPPORTED_SOURCE_ZIPS')
     report={
         'schema':'AIRTRUST_PLAYER3_PRIVATE_EXTRACTION_SUMMARY_V1',
-        'course_editions':len(result),
-        'stages':sum(c['stage_count'] for c in result),
-        'questions':sum(c['question_count'] for c in result),
+        'course_editions':len(entries),
+        'stages':sum(c['stage_count'] for c,_,__ in entries),
+        'questions':sum(c['question_count'] for c,_,__ in entries),
         'requires_review':sum(c['certificationModeCandidate']=='REVIEW_REQUIRED'
-                              or c['masteryScoreCandidate'] is None for c in result),
+                              or c['masteryScoreCandidate'] is None for c,_,__ in entries),
         'answer_keys_exported_to_git':False,
         'published_to_r2':False,
-        'details':result,
+        'details':[{k:v for k,v in meta.items() if k!='original_basename'}
+                   for meta,_,__ in entries],
     }
-    p=output/'private-review-summary.json'
-    fd=os.open(p,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
-    with os.fdopen(fd,'wb') as stream:
-        stream.write(serialize(report))
+    # Both destination directories are created by this call and never reused.
+    # On failure, delete only our own newly-created outputs.
+    import shutil
+    created=[]
+    try:
+        for root in (private,learner_review):
+            root.mkdir(mode=0o700)
+            created.append(root)
+        for meta,projection,bank in entries:
+            key=meta['original_source_sha256'][:20]
+            _write_exclusive(private/(key+'-server-only-bank.json'),bank)
+            _write_exclusive(private/(key+'-private-review.json'),meta)
+            _write_exclusive(learner_review/(key+'-learner-review.json'),projection)
+        _write_exclusive(private/'private-review-summary.json',report)
+    except BaseException:
+        for root in reversed(created):
+            shutil.rmtree(root)
+        raise
     return report
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('source_archives',nargs='+',type=Path)
-    parser.add_argument('--private-output',required=True,type=Path)
+    parser.add_argument('--private-output',required=True,type=Path,
+        help='Absolute private filesystem directory outside repo/Drive; created 0700')
+    parser.add_argument('--learner-review-output',required=True,type=Path,
+        help='Separate absolute directory for de-keyed learner questions, REVIEW ONLY')
     args=parser.parse_args()
-    report=build(args.source_archives,args.private_output)
+    report=build(args.source_archives,args.private_output,args.learner_review_output)
     print(json.dumps({
         'course_editions':report['course_editions'],
         'assessment_stages':report['stages'],
