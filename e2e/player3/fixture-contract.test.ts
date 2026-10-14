@@ -26,6 +26,7 @@ function project(offset:number):QaProjectFixture {
     external:{...enrollment(3),frameSelectors:['#outer','#scorm-frame'],
       visualLastPageButton:'Last page',wrongAnswerButton:'Incorrect',
       correctAnswerButton:'Correct',submitButton:'Submit',finishButton:'Finish',
+      learnerCompletionButton:'Confirmar conclusão',
       scormSnapshotPath:'/qa/scorm-state/'+offset},
   };
 }
