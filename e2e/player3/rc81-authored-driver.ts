@@ -82,19 +82,21 @@ export async function authoredRc81Retake(page:Page):Promise<void>{
 }
 
 export async function satisfyAuthoredRc81Practice(page:Page,unit:QaUnit):Promise<void>{
-  if(!unit.practice)return;
   const frame=authoredRc81Frame(page);
   // Authored formative gates and scenario prompts are visual interactions,
   // never an official grade or learner-completion receipt.
   const gates=frame.locator('[data-gate]');
   const gateCount=await gates.count();
-  requireQa(gateCount>0,'RC81_SOURCE_FORMATIVE_GATES');
   for(let i=0;i<gateCount;i++)await gates.nth(i).click();
   const options=frame.locator('[data-opt]');
   if(await options.count()>0) {
+    requireQa(!!unit.practice,'RC81_REVIEWED_SCENARIO_CHOICE_REQUIRED');
     const labels=await options.allTextContents();
-    const expected=unit.practice.correct;
-    const index=resolveAuthoredChoiceIndex(labels,expected);
+    const index=resolveAuthoredChoiceIndex(labels,unit.practice.correct);
     await options.nth(index).click();
+  }
+  if(unit.practice) {
+    requireQa(gateCount>0 || await options.count()>0,
+      'RC81_REVIEWED_FORMATIVE_ACTIVITY_NOT_FOUND');
   }
 }
