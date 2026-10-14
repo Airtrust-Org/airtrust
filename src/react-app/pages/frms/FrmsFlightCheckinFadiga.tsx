@@ -106,6 +106,15 @@ const SONO_OPCOES: {
   { key: 'h8', label: '8 horas ou mais', horas: 8, severidade: 'melhor' },
 ];
 
+// ANAC: opportunity to sleep/rest must not be silently treated as time asleep.
+const REPOUSO_OPCOES = SONO_OPCOES.map((op) => ({
+  ...op,
+  label: op.key === 'h4' ? 'Menos de 5 horas de oportunidade' : op.key === 'h8'
+    ? '8 horas ou mais de oportunidade' : op.label + ' de oportunidade',
+  // Conservative floor when the lowest interval has no known duration.
+  horas: op.key === 'h4' ? 0 : op.horas,
+}));
+
 const KSS_OPCOES = [
   { value: 1, hint: 'Extremamente alerta' },
   { value: 2, hint: 'Muito alerta' },
@@ -214,6 +223,7 @@ function selectedScaleClasses(severidade: EscalaSeveridade): string {
 
 export function isFadigaCheckinSubmitReady(input: {
   sonoOpcao: SonoOpcao | null;
+  repousoOpcao: SonoOpcao | null;
   presentationTime: string;
   wakeTime: string;
   qualidadeSono: number | null;
@@ -228,6 +238,9 @@ export function isFadigaCheckinSubmitReady(input: {
   const wakeTimeValid = isValidWakeTime(input.wakeTime);
   return (
     input.sonoOpcao !== null &&
+    input.repousoOpcao !== null &&
+    REPOUSO_OPCOES.find((o) => o.key === input.repousoOpcao)!.horas >=
+      SONO_OPCOES.find((o) => o.key === input.sonoOpcao)!.horas &&
     presentationTimeValid &&
     wakeTimeValid &&
     input.qualidadeSono !== null &&
@@ -522,6 +535,9 @@ export default function FrmsFlightCheckinFadiga() {
   const [sonoOpcao, setSonoOpcao] = useState<SonoOpcao | null>(
     (restoredDraft?.sonoOpcao as SonoOpcao | null) ?? null,
   );
+  const [repousoOpcao, setRepousoOpcao] = useState<SonoOpcao | null>(
+    (restoredDraft?.repousoOpcao as SonoOpcao | null) ?? null,
+  );
   const [presentationTime, setPresentationTime] = useState(restoredDraft?.presentationTime ?? '');
   const [presentationTimeTouched, setPresentationTimeTouched] = useState(false);
   const [wakeTime, setWakeTime] = useState(restoredDraft?.wakeTime ?? '');
@@ -554,6 +570,7 @@ export default function FrmsFlightCheckinFadiga() {
     saveFadigaCheckinDraft(draftKey, {
       version: 1,
       sonoOpcao,
+      repousoOpcao,
       presentationTime,
       wakeTime,
       qualidadeSono,
@@ -579,6 +596,7 @@ export default function FrmsFlightCheckinFadiga() {
     presentationTime,
     qualidadeSono,
     sonoOpcao,
+    repousoOpcao,
     vigilanceResult,
     vigilanceRunning,
     wakeTime,
@@ -596,6 +614,7 @@ export default function FrmsFlightCheckinFadiga() {
 
   const canSubmit = isFadigaCheckinSubmitReady({
     sonoOpcao,
+    repousoOpcao,
     presentationTime,
     wakeTime,
     qualidadeSono,
@@ -620,7 +639,12 @@ export default function FrmsFlightCheckinFadiga() {
     (wakeTimeTouched || submitAttempted) && wakeTimeHasValue && !wakeTimeValid;
 
   const missingItems: string[] = [];
-  if (sonoOpcao === null) missingItems.push('Repouso absoluto nas últimas 24h');
+  if (repousoOpcao === null) missingItems.push('Oportunidade de sono (repouso absoluto)');
+  if (sonoOpcao === null) missingItems.push('Sono efetivamente obtido');
+  if (sonoOpcao !== null && repousoOpcao !== null &&
+    REPOUSO_OPCOES.find((o) => o.key === repousoOpcao)!.horas <
+    SONO_OPCOES.find((o) => o.key === sonoOpcao)!.horas
+  ) missingItems.push('Oportunidade de sono menor que sono informado');
   if (!presentationTimeValid) {
     if (!presentationTimeHasValue) missingItems.push('Hora de apresentação');
     else missingItems.push('Horário inválido - corrija a hora de apresentação');
@@ -681,7 +705,9 @@ export default function FrmsFlightCheckinFadiga() {
         jornada_inicio_prevista: presentationTimeNormalized!,
         hora_acordou: wakeTimeNormalized!,
         wake_time: wakeTimeNormalized!,
+        // Separate observed self-report of sleep from opportunity for sleep/rest.
         horas_sono_24h: SONO_OPCOES.find((o) => o.key === sonoOpcao!)!.horas,
+        oportunidade_sono_horas_24h: REPOUSO_OPCOES.find((o) => o.key === repousoOpcao!)!.horas,
         qualidade_sono: qualidadeSono!,
         kss_score: kss,
         subjective_fatigue_level: subjectiveFatigueLevel,
@@ -822,11 +848,31 @@ export default function FrmsFlightCheckinFadiga() {
             <RecoveryActivityCard today={today} />
 
             <div className="space-y-3">
-              <FormCard label="Bloco 1 - Repouso absoluto" hint="Informe seu descanso mais recente.">
+              <FormCard label="Bloco 1 - Repouso e sono" hint="Oportunidade de sono é tempo disponível para descansar em ambiente adequado, mesmo sem adormecer. Sono efetivo é o tempo realmente dormido.">
                 <div className="space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
-                      Repouso absoluto nas últimas 24h
+                      Oportunidade de sono (repouso absoluto) nas últimas 24h
+                    </legend>
+                    <p className="mb-2 text-xs text-slate-600">
+                      Considere somente o tempo livre de obrigações, em local apropriado para dormir.
+                      Não é necessário ter conseguido dormir durante toda essa oportunidade.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                      {REPOUSO_OPCOES.map((op) => (
+                        <label key={op.key} className={`relative flex min-h-11 cursor-pointer items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold focus-within:ring-2 focus-within:ring-blue-500 ${repousoOpcao === op.key ? selectedScaleClasses(op.severidade) : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}`}>
+                          <input type="radio" name="oportunidade-sono-24h" value={op.key}
+                            checked={repousoOpcao === op.key} onChange={() => setRepousoOpcao(op.key)}
+                            className={HIDDEN_RADIO_INPUT_CLASS} />
+                          {op.label}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                <div className="space-y-4">
+                  <fieldset>
+                    <legend className="mb-2 text-sm font-medium text-slate-700">
+                      Sono efetivamente obtido nas últimas 24h
                     </legend>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
                       {SONO_OPCOES.map((op) => {
@@ -926,7 +972,7 @@ export default function FrmsFlightCheckinFadiga() {
 
                     <fieldset>
                       <legend className="mb-2 text-sm font-medium text-slate-700">
-                        Qualidade do repouso absoluto
+                        Qualidade do sono obtido
                       </legend>
                       <div className="space-y-2">
                         {QUALIDADE_SONO_OPCOES.map((op) => {
@@ -1017,7 +1063,7 @@ export default function FrmsFlightCheckinFadiga() {
 
               <FormCard
                 label="Bloco 3 - Atenção e tempo de reação"
-                hint="Teste breve objetivo para complementar repouso absoluto, KSS e sua autoavaliação. O resultado não determina aptidão isoladamente."
+                hint="PVT diário (60 segundos): avalia atenção e reação. Complementa KSS e sono; não determina aptidão isoladamente."
               >
                 {interruptedPvtRecovered ? (
                   <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">
