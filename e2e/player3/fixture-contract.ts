@@ -129,5 +129,6 @@ export function validateQaProfile(raw: unknown, projectName: string,
     qaPath(origin.origin, e.scormSnapshotPath);
   }
   requireQa(new Set(enrollmentIds).size === 6, 'DEDICATED_PER_BROWSER_ENROLLMENTS');
+  requireQa(!!data.projects[projectName], 'PROJECT_FIXTURE_' + projectName);
   return {profile:data,fixture:data.projects[projectName]};
 }
