@@ -168,3 +168,33 @@ de eventual produção, cuja autorização é separada e específica por SHA.
 Toda mudança posterior de SHA exige nova verificação dos checks aplicáveis.
 Os oito gates da D deste SHA devem ser confirmados no GitHub Actions antes
 de afirmar conclusão de CI; sucesso local não substitui Actions.
+
+## Crosswalk de unidades autorais × recibos Native (bloqueio explícito)
+
+A extração de A para o **RC8.1** informa `stage_count=8` para as
+**avaliações certificadoras**, com 80 questões no total. Esse número não
+informa sozinho o total de telas autorais nem equivale aos recibos
+`kind='lesson'` da B. O valor histórico 42/42 também não pode ser usado
+para afirmar que o banco precisa de 42 registros de lição.
+
+O contrato de D mantém a jornada de **42 unidades visuais** como hipótese de
+homologação a confirmar contra o original; as oito avaliações oficiais são
+diferenciadas desses eventos. O perfil privado agora exige
+`requiredLessonIds`, a lista **integral e única dos IDs de lição**
+aprovada no manifesto Native da B, e `lessonId` para cada tela que cria
+recibo de lição. É proibido mapear um ID de lição que não exista em unidade
+autoral revisada, repetir IDs ou deduzir notas oficiais de navegação.
+O diagnóstico real `etapas/prontidao` deve confirmar
+`totalRequiredLessons=requiredLessonIds.length`, com todas as lições
+registradas, e `officialStageCount=8`, com todas as provas válidas.
+O perfil sintético prova tanto 34 lições/8 provas entre 42 telas como
+42 lições com oito provas sobrepostas, **sem declarar qual corresponde
+ao original**.
+
+**Dependência A → B → D:** conferir o `slides[]` exato do ZIP RC8.1
+SHA-pinned; publicar em canal privado o crosswalk de IDs de tela e
+`kind='lesson'` do manifesto da edição aprovada (sem gabaritos);
+e confrontar o cenário histórico 42/42 com esses IDs. Somente então
+criar as matrículas QA e executar a E2E positiva. Não ajustar ratchet,
+fabricar eventos para produzir 42/42 ou usar indicador visual como
+autorização de fechamento.
