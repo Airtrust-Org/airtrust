@@ -340,3 +340,38 @@ imutáveis e HTML5 sem gabaritos; C #1467 precisa liberar T0/T1 real em cofre
 seguro; D #1465 valida 0/20/50/80/99, bookmark ausente, WebKit/Chromium,
 SCORM externo e matrícula→qualificação→certificado consultável. B #1389
 permanece DRAFT, sem cutover/staging/produção ou merge nesta rodada.
+
+## 2026-10-14 — Frente B: fechamento idempotente na interface após timeout
+
+**Problema reproduzido por contrato:** um terminal D1 pode ter sido COMMITADO
+e a resposta HTTP se perder por rede. Antes, a UI impedia um segundo POST,
+mas não reconciliava a matrícula nem oferecia verificação read-only sem reabrir
+o curso. Isso mantinha o aluno sem confirmação visível de conclusão.
+
+**Implementado em #1389:** `Player3FinalizationControls.tsx` agora
+consulta `GET /matriculas/:id/etapas/certificado` antes de qualquer novo
+terminal; se o mesmo ciclo já estiver `CONCLUIDO`, bloqueia nova gravação.
+Após POST 200, consulta de novo o arquivo/histórico (sem equiparar
+`PDF_HEADER_VERIFIED` a PDF integral acessível). Se resposta do POST for
+ambígua, somente **GET** autenticado pode reconciliar a matrícula;
+não existe segundo POST automático nem controle de repetição desbloqueado.
+O botão `Consultar situação da conclusão` sempre faz apenas leitura.
+Mudança de matrícula/ciclo/edição remonta o componente no Host, evitando
+estado herdado. O recibo canônico sem qualificação
+(`qualification_not_required` / `NOT_APPLICABLE`) também é aceito sem
+inventar certificado.
+
+**QA real executada:** 25/25 testes frontend PASS em
+`Player3FinalizationControls.test.tsx`,
+`Player3Html5Host.test.tsx`, `Player3AssessmentModal.test.tsx`;
+ESLint focado PASS em worktree isolado. Testes cobrem recepção perdida
+após commit, decisão já concluída, reconsulta tardia, forged document/ciclo,
+consulta sem repetição, alteração de ciclo e curso sem qualificação.
+
+**Governança preservada:** a branch permanece draft; nenhum D1/R2 remoto,
+migrations, seed, integração de alunos ou deploy ocorreu nesta etapa.
+A D #1465 deve executar a recuperação contra Worker/Pages staging real em
+Chromium/WebKit e confirmar PDF integral via stream autenticado. A #1464
+ainda requer conteúdo autoral aprovado e C #1467 mantém inventário real
+T0/T1 bloqueado. Numeração reservada: FRMS 0552, LMS 0553/0554;
+0555/0556 são REVIEW-ONLY. Não liberar produção sem SHA e escopo exatos.
