@@ -40,6 +40,21 @@ describe('Controle de Voos — leitura FRMS por tripulação', () => {
     expect(JSON.stringify(result)).not.toMatch(/horas_sono|kss_score|qualidade_sono|hora_acordar|999/);
   });
 
+  it('mantem check-in recebido e explica analise operacional inconclusiva sem respostas privadas', () => {
+    const snapshot = [{
+      funcionario_id: 10, checkin_status: 'RECEBIDO', estado_operacional: 'NAO_AVALIADO',
+      jornada_data_source: 'AUSENTE', fadiga_score: 0, effectiveness_pct: 85,
+      alertas: [], motivos_principais: ['Evidência de jornada ainda não concluída'],
+      fortnight_indicator: null, horas_sono: 7, kss_score: 2,
+    }] as unknown as FrmsOperationalSnapshotItem[];
+    const result = projectFlightFatigue(crew, snapshot);
+    expect(result[0]).toMatchObject({
+      checkin: 'RECEBIDO', estado: 'NAO_AVALIADO', efetividade_pct: 85,
+      motivo_pendencia_operacional: 'Evidência de jornada ainda não concluída',
+    });
+    expect(JSON.stringify(result)).not.toMatch(/horas_sono|kss_score|qualidade_sono/i);
+  });
+
   it('registra fadiga diária pendente mesmo se condição agregada parecer normal', () => {
     const snapshot = [{
       funcionario_id: 10, checkin_status: 'PENDENTE', estado_operacional: 'NORMAL',
