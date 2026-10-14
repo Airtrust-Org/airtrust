@@ -49,6 +49,9 @@ export function qaPath(origin: string, path: string): string {
   const url = new URL(path, origin);
   requireQa(url.origin === origin && !url.username && !url.password,
     'CROSS_ORIGIN_PATH');
+  requireQa(!url.hash && ![...url.searchParams.keys()].some(key=>
+    /(?:token|secret|auth|signature|signed|api[_-]?key|session|jwt)/i.test(key)),
+    'NO_CREDENTIALS_IN_URL');
   return url.href;
 }
 function qaChoice(x: QaChoice): boolean {
@@ -97,7 +100,10 @@ export function validateQaProfile(raw: unknown, projectName: string,
   try { assetOrigin = new URL(data.contentOrigin); }
   catch { throw Error('PLAYER3_CONTRACT_MISSING:ISOLATED_HTML5_CONTENT_ORIGIN'); }
   requireQa(assetOrigin.protocol === 'https:' &&
-    data.contentOrigin === assetOrigin.origin && assetOrigin.origin !== origin.origin && assetOrigin.origin !== api.origin,
+    data.contentOrigin === assetOrigin.origin &&
+    /staging|stage|qa/.test(assetOrigin.hostname) &&
+    !['airtrust.online','www.airtrust.online','api.airtrust.online'].includes(assetOrigin.hostname) &&
+    assetOrigin.origin !== origin.origin && assetOrigin.origin !== api.origin,
     'ISOLATED_HTML5_CONTENT_ORIGIN');
   requireQa(data.projects && data.projects.chromium && data.projects.webkit,
     'BOTH_INDEPENDENT_BROWSER_PROJECTS');
