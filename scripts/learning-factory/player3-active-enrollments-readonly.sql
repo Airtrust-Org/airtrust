@@ -38,7 +38,13 @@ SELECT
   s.score_raw AS scorm_score_raw,
   s.last_commit_at AS scorm_last_commit_at,
   s.suspend_data AS scorm_suspend_data_PRIVATE,
-  s.cmi_json AS scorm_cmi_json_PRIVATE
+  s.cmi_json AS scorm_cmi_json_PRIVATE,
+  (SELECT COUNT(*) FROM lms_xapi_statements AS x
+     WHERE x.matricula_id = m.id AND x.empresa_id = m.empresa_id)
+    AS xapi_statement_count,
+  (SELECT MAX(x.created_at) FROM lms_xapi_statements AS x
+     WHERE x.matricula_id = m.id AND x.empresa_id = m.empresa_id)
+    AS xapi_last_event_at
 FROM lms_matriculas AS m
 JOIN lms_cursos AS c
   ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
