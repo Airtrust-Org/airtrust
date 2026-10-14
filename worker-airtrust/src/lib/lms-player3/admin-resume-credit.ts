@@ -161,7 +161,12 @@ export function createAdminResumeCreditIntent(params:{
      d.scorm_last_commit_at!==enrollment.scorm_last_commit_at||
      typeof enrollment.matricula_progresso_pct!=='number'||
      d.current_reported_pct!==enrollment.matricula_progresso_pct||
+     typeof d.previous_reported_pct!=='number'||
+     !Number.isFinite(d.previous_reported_pct)||
+     d.previous_reported_pct<0||d.previous_reported_pct>100||
      !Number.isFinite(d.historical_pct_to_preserve)||
+     d.historical_pct_to_preserve!==Math.max(
+       d.previous_reported_pct,d.current_reported_pct as number)||
      d.historical_pct_to_preserve<enrollment.matricula_progresso_pct||
      d.historical_pct_to_preserve>100||
      d.catalog_package_is_cycle_verified!==false||
