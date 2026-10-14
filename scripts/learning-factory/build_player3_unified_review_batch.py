@@ -63,6 +63,52 @@ def compile_safe_review(raw: bytes, name: str, origin: str):
     return edition,meta,public,bank,receipt,binding
 
 
+def private_source_stage_map(source_sha: str, review_sha: str, binding_sha: str,
+                             receipt: dict) -> dict:
+    """Evidence candidate; only an authenticated future edition gets a target SHA.
+
+    Never interpret a review ZIP digest or synthetic iframe binding as an
+    approved Player3 target edition. The original stage IDs remain immutable.
+    """
+    import re
+    original = receipt.get('sourceStageCrosswalk')
+    if (not isinstance(original, list) or not 1 <= len(original) <= 500):
+        raise UnsafePackage('PLAYER3_SOURCE_STAGE_MAP_MISSING')
+    ids=set()
+    stages=[]
+    for index, row in enumerate(original):
+        if not isinstance(row, dict):
+            raise UnsafePackage('PLAYER3_SOURCE_STAGE_MAP_INVALID')
+        stage_id=row.get('stageId')
+        kind=row.get('originalKind')
+        typ=row.get('candidatePlayer3Type')
+        review=row.get('requiresPedagogicalApproval')
+        if (not isinstance(stage_id,str) or
+            not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,79}',stage_id) or
+            stage_id in ids or not isinstance(kind,str) or not 1 <= len(kind) <= 80 or
+            (typ is not None and typ not in ('content','practice','module_exam','final_exam')) or
+            type(review) is not bool):
+            raise UnsafePackage('PLAYER3_SOURCE_STAGE_MAP_INVALID')
+        ids.add(stage_id)
+        stages.append({'sourceOrder':index,'sourceUnitId':stage_id,
+                       'sourceKind':kind,'candidatePlayer3Type':typ,
+                       'requiresPedagogicalApproval':review})
+    canonical=json.dumps(stages,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode('utf8')
+    return {
+        'schema':'AIRTRUST_PLAYER3_PRIVATE_SOURCE_STAGE_CROSSWALK_REVIEW_V1',
+        'sourceEditionSha256':source_sha,
+        'reviewZipSha256':review_sha,
+        'reviewOnlyBindingSha256':binding_sha,
+        'targetEditionSha256':None,
+        'targetEditionApproved':False,
+        'lessonEvidencePersisted':False,
+        'sourceUnitIdsSha256':hashlib.sha256(canonical).hexdigest(),
+        'sourceUnitCount':len(stages),
+        'sourceLessonCandidateCount':sum(x['candidatePlayer3Type']=='content' for x in stages),
+        'sourceStages':stages,
+    }
+
+
 def unified_review(batches:list[Path], private_output:Path, learner_output:Path,
                    parent_origin:str):
     from build_player3_rc81_bridge_review import _host_origin
@@ -86,7 +132,9 @@ def unified_review(batches:list[Path], private_output:Path, learner_output:Path,
         if digest in seen:raise UnsafePackage('PLAYER3_DUPLICATE_EDITION')
         seen.add(digest)
         edition,meta,public,bank,receipt,binding=compile_safe_review(raw,name,parent_origin)
-        verified.append((outer,name,digest,edition,meta,public,bank,receipt,binding))
+        stage_map=private_source_stage_map(
+            digest,hashlib.sha256(edition).hexdigest(),binding,receipt)
+        verified.append((outer,name,digest,edition,meta,public,bank,receipt,binding,stage_map))
     if seen!=ADAPTED or len(verified)!=22:
         raise UnsafePackage('PLAYER3_22_SOURCE_COVERAGE_MISMATCH')
     summary={'schema':'AIRTRUST_PLAYER3_22_FAMILY_REVIEW_BATCH_V1',
@@ -100,12 +148,13 @@ def unified_review(batches:list[Path], private_output:Path, learner_output:Path,
         created.append(private)
         learner.mkdir(mode=0o700)
         created.append(learner)
-        for n,(outer,name,digest,edition,meta,public,bank,receipt,binding) in enumerate(verified,1):
+        for n,(outer,name,digest,edition,meta,public,bank,receipt,binding,stage_map) in enumerate(verified,1):
             vault=private/('edition-'+str(n));qadir=learner/('edition-'+str(n))
             vault.mkdir(mode=0o700)
             qadir.mkdir(mode=0o700)
             _write_exclusive(vault/'player3-server-only-bank.json',bank)
             _write_exclusive(vault/'player3-private-review-metadata.json',meta)
+            _write_exclusive(vault/'player3-source-stage-crosswalk-review.json',stage_map)
             _write_exclusive(qadir/'player3-learner-question-projection.json',public)
             path=qadir/'player3-HTML5-REVIEW-ONLY-NOT-DEPLOYABLE.zip'
             fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
@@ -114,6 +163,10 @@ def unified_review(batches:list[Path], private_output:Path, learner_output:Path,
                 'sourceArchive':outer,'originalPackage':name,'source_sha256':digest,
                 'reviewZipSha256':hashlib.sha256(edition).hexdigest(),
                 'reviewOnlyBindingSha256':binding,'adapter':receipt.get('adapter'),
+                'targetEditionSha256':None,'sourceUnitCount':stage_map['sourceUnitCount'],
+                'sourceLessonCandidateCount':stage_map['sourceLessonCandidateCount'],
+                'sourceUnitIdsSha256':stage_map['sourceUnitIdsSha256'],
+                'sourceStageMapApproved':False,
                 'stageCount':meta['stage_count'],'questionCount':meta['question_count'],
                 'formativePolicyReviewRequired':digest in FORMATIVE_ZIPS,
                 'stageContractApproved':False,'publishable':False})

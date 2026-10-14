@@ -11,7 +11,7 @@ from zipfile import ZipFile
 import build_player3_unified_review_batch as factory
 from build_player3_unified_review_batch import (
     ADAPTED,VENDOR_UNSUPPORTED,review_binding_sha256,compile_safe_review,
-    unified_review,
+    private_source_stage_map,unified_review,
 )
 from build_player3_html5_review_batch import KNOWN_SOURCES_BY_SHA
 from convert_preserved_html5 import UnsafePackage
@@ -95,7 +95,11 @@ class Player3UnifiedBatchWriteTests(unittest.TestCase):
         private={'PRIVATE_NEVER_SERVE_TO_BROWSER':True,
                  'questions':[{'id':'private-qa','correctOptionId':'o1'}]}
         receipt={'adapter':'SYNTHETIC_TEST_ONLY','publishable':False,
-                 'stageContractApproved':False}
+                 'stageContractApproved':False,
+                 'sourceStageCrosswalk':[{'stageId':'unit-1','originalKind':'lesson',
+                    'candidatePlayer3Type':'content','requiresPedagogicalApproval':False},
+                    {'stageId':'synthetic-stage','originalKind':'assessment',
+                    'candidatePlayer3Type':'final_exam','requiresPedagogicalApproval':False}]}
         return (out.getvalue(),meta,public,private,receipt,
                 factory.review_binding_sha256(digest))
 
@@ -127,12 +131,48 @@ class Player3UnifiedBatchWriteTests(unittest.TestCase):
             editions=list(learner.glob('edition-*/*.zip'))
             self.assertEqual(len(editions),22)
             self.assertEqual(len(list(private.glob('edition-*/player3-server-only-bank.json'))),22)
+            crosswalk_files=list(private.glob('edition-*/player3-source-stage-crosswalk-review.json'))
+            self.assertEqual(len(crosswalk_files),22)
+            self.assertFalse(list(learner.rglob('*crosswalk*')))
+            for file in crosswalk_files:
+                self.assertEqual(stat.S_IMODE(file.stat().st_mode),0o600)
+                crosswalk=json.loads(file.read_text())
+                self.assertEqual(crosswalk['targetEditionSha256'],None)
+                self.assertFalse(crosswalk['targetEditionApproved'])
+                self.assertFalse(crosswalk['lessonEvidencePersisted'])
+                self.assertEqual(crosswalk['sourceUnitCount'],2)
+                self.assertEqual(crosswalk['sourceLessonCandidateCount'],1)
+                self.assertEqual([row['sourceUnitId'] for row in crosswalk['sourceStages']],
+                                 ['unit-1','synthetic-stage'])
+                self.assertTrue(crosswalk['sourceUnitIdsSha256'])
+            for row in result['courses']:
+                self.assertIsNone(row['targetEditionSha256'])
+                self.assertFalse(row['sourceStageMapApproved'])
+                self.assertEqual(row['sourceUnitCount'],2)
             self.assertFalse(list(learner.rglob('*server-only-bank.json')))
             for path in editions:
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode),0o600)
                 with ZipFile(path) as archive:
                     contents=b''.join(archive.read(name) for name in archive.namelist())
                     self.assertNotIn(b'correctOptionId',contents)
+
+    def test_source_stage_crosswalk_refuses_duplicates_and_false_approval(self):
+        digest='a'*64
+        stage={'stageId':'u1','originalKind':'lesson','candidatePlayer3Type':'content',
+               'requiresPedagogicalApproval':False}
+        base={'sourceStageCrosswalk':[stage]}
+        valid=private_source_stage_map(digest,'b'*64,'c'*64,base)
+        self.assertEqual(valid['sourceStages'][0]['sourceUnitId'],'u1')
+        self.assertIsNone(valid['targetEditionSha256'])
+        for broken in (
+            {'sourceStageCrosswalk':[]},
+            {'sourceStageCrosswalk':[stage,stage]},
+            {'sourceStageCrosswalk':[dict(stage,stageId='../bad')]},
+            {'sourceStageCrosswalk':[dict(stage,requiresPedagogicalApproval=1)]},
+            {'sourceStageCrosswalk':[dict(stage,candidatePlayer3Type='certificate')]},
+        ):
+            with self.subTest(broken=broken), self.assertRaises(UnsafePackage):
+                private_source_stage_map(digest,'b'*64,'c'*64,broken)
 
     def test_compile_error_before_write_leaves_no_partial_artifacts(self):
         with tempfile.TemporaryDirectory() as folder:
