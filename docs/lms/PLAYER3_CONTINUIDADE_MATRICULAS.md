@@ -10,7 +10,7 @@ Manter a mesma matrícula, empresa, funcionário, curso e ciclo sempre que o con
 
 ## Que alunos entram no inventário
 
-Todos os tenants e cursos: `lms_matriculas` não excluídas com status `EM_ANDAMENTO` e `NAO_INICIADO`; incluir `NAO_INICIADO` porque pode haver progresso SCORM persistido, dados divergentes ou matrícula que será afetada no lançamento. Manter todos os registros históricos e ciclos anteriores intocados; não migrar apenas empresa_id=6. Se houver aluno com matrícula cancelada, duplicada, sem ciclo, status conflitante ou concluída com dados inconsistentes, inventariar em relatório de exceções separado **antes** de qualquer tratamento administrativo. Não tentar "normalizar" dados antigos por conta própria.
+**Primeira execução autorizável: somente Costa do Sol, `empresa_id=6`, abrangendo todos os alunos e cursos desse tenant.** `lms_matriculas` não excluídas com status `EM_ANDAMENTO` e `NAO_INICIADO`; incluir `NAO_INICIADO` porque pode haver progresso SCORM persistido, dados divergentes ou matrícula que será afetada no lançamento. Outros clientes/tenants jamais são incluídos automaticamente: precisam de escopo e autorização próprios, workflow revisado separado e segredo de cifragem segregado. Manter todos os registros históricos e ciclos anteriores intocados. Se houver aluno com matrícula cancelada, duplicada, sem ciclo, status conflitante ou concluída com dados inconsistentes, inventariar em relatório de exceções separado **antes** de qualquer tratamento administrativo. Não tentar "normalizar" dados antigos por conta própria.
 
 Capturar, por matrícula:
 
@@ -19,7 +19,7 @@ Capturar, por matrícula:
 - **Retomada**: `ultimo_slide`, `ultima_pagina`, `lms_progresso_scorm.lesson_status`, `completion_status`, `success_status`, `score_raw`, `last_commit_at`, `suspend_data` e `cmi_json` **em cofre criptografado**, nunca em GitHub/logs.
 - **Evidência granular quando existir**: IDs de unidades/questões autenticamente cursadas, resultados de provas modulares e tentativas, presos à versão/hash do pacote. Um contador 80% não prova quais unidades foram visitadas.
 
-A consulta fixa revisada é `scripts/learning-factory/player3-active-enrollments-readonly.sql`. Ela executa **SELECT-only** e não escreve no banco. O utilitário `player3-seal-active-inventory.mjs` recebe os dados apenas por stdin, valida identidades e criptografa todos os dados individualizados em AES-256-GCM (chave 256-bit protegida). Seus logs contêm somente totais sem identificação. A chave nunca entra no repositório e não deve ser registrada no chat.
+A consulta fixa revisada é `scripts/learning-factory/player3-active-enrollments-readonly.sql`. Ela executa **SELECT-only**, filtrada por `empresa_id=6`, e não escreve no banco. O utilitário `player3-seal-active-inventory.mjs` recebe os dados apenas por stdin, valida identidades e criptografa todos os dados individualizados em AES-256-GCM (chave 256-bit protegida). Seus logs contêm somente totais sem identificação. A chave nunca entra no repositório e não deve ser registrada no chat.
 
 ### Execução autorizada
 
@@ -68,3 +68,7 @@ Inspeção privada dos arquivos `app.js` que efetivamente geram `cmi.suspend_dat
 **QA:** 10 testes específicos dos formatos de estado e rejeição de falso "passed", mais 14 testes de continuidade e 11 do núcleo Player3 = 35 Worker PASS; typecheck Worker PASS. Essas são provas de lógica, **não** validação de conteúdos/matrículas reais de produção.
 
 **Aplicação futura:** cruzar com o manifesto/hash original privado e com a edição alvo; mapear `VISITED_UNITS` onde permitido, `BOOKMARK_ONLY` para equivalência administrativa auditada e `REVIEW_REQUIRED` para casos incompatíveis. Preservar 80% como histórico em todas as três categorias; não adiantar 80% das unidades por simples regra de três nem inferir aprovação de avaliações.
+
+## Restrição explícita de privacidade multi-tenant
+
+O objetivo de preservação vale para todas as empresas que um dia migrarem para Player3, **mas isso não concede acesso coletivo aos dados de todos os clientes**. O primeiro lote efetivo da Costa do Sol tem `WHERE m.empresa_id=6` no SQL, verificação de escopo no workflow e bloqueio independente no selador AES-256-GCM. Nenhum ID/CMI de outro tenant pode entrar no arquivo. Uma futura migração de outro cliente exige aprovação individual, edição auditada do contrato e segregação de chaves/artefatos. A contagem dos alunos na Costa do Sol continua **desconhecida** até o SELECT ser executado com autorização, gates e credenciais apropriados; não há snapshot real nesta PR.
