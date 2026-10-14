@@ -71,7 +71,7 @@ describe('Front D QA contract — no network, no real students',()=>{
     expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001'))
       .toThrow('HTTPS_STAGING_API_ORIGIN');
     p.apiBaseUrl=apiOrigin;
-    expect(()=>validateQaProfile(p,'chromium',staging,'https://qa-wrong.example'))
+    expect(()=>validateQaProfile(p,'chromium',staging,'https://qa-wrong.example','6001'))
       .toThrow('STAGING_API_ORIGIN_ALLOWLIST');
     p.expectedSourceSha='invalid';
     expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001'))
