@@ -116,6 +116,28 @@ def compile_review(original: bytes, name: str):
         for path, raw in files.items():
             if path not in models and raw != original_zip.read(path):
                 raise UnsafePackage('PLAYER3_VISUAL_BYTE_FIDELITY')
+    mode = meta['certificationModeCandidate']
+    proposed_stages = []
+    for idx, (stage_id, original_kind) in enumerate(stages):
+        if original_kind in ('assessment', 'quiz'):
+            proposed_type = ('module_exam' if mode == 'MODULE_CERTIFIED_CANDIDATE'
+                else 'final_exam' if mode == 'FINAL_CERTIFIED_CANDIDATE'
+                     and idx == len(stages) - 1 else None)
+        elif original_kind in ('lesson', 'content', 'cover', 'roadmap',
+                               'concept_map', 'matrix', 'rule_exception',
+                               'compare', 'process', 'bowtie'):
+            proposed_type = 'content'
+        elif original_kind == 'scenario':
+            proposed_type = None  # requires verified decision/practice policy
+        else:
+            proposed_type = None
+        proposed_stages.append({
+            'stageId': stage_id,
+            'originalKind': original_kind,
+            'candidatePlayer3Type': proposed_type,
+            'requiresPedagogicalApproval': (proposed_type is None
+                                            or original_kind == 'scenario'),
+        })
     receipt = {
         'schema': 'AIRTRUST_PLAYER3_HTML5_DEKEY_REVIEW_V1',
         'status': 'REVIEW_ONLY_NEVER_DEPLOY',
@@ -126,6 +148,9 @@ def compile_review(original: bytes, name: str):
         'questionCount': meta['question_count'],
         'modelFile': models[0],
         'modelFiles': models,
+        'proposedCertificationMode': mode,
+        'sourceStageCrosswalk': proposed_stages,
+        'stageContractApproved': False,
         'byteIdenticalNonModelFiles': True,
         'officialAnswerBankExcluded': True,
         'originalRuntimeAssessmentMustBeAdapted': True,
@@ -159,7 +184,7 @@ def build(original: bytes, basename: str, private_dir: Path, learner_dir: Path):
         for folder in reversed(created):
             shutil.rmtree(folder)
         raise
-    return receipt
+    return {**receipt, 'reviewZipSha256': sha(archive)}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
