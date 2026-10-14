@@ -1,7 +1,8 @@
 import {describe,expect,it} from 'vitest';
 import {
   qaPath,validateQaProfile,validateQaModuleSession,validateQaJointReadiness,
-  validateQaCertificatePdf,assertQaReadOnlyNonDisclosure,validateQaTerminalReceipt,
+  validateQaCertificatePdf,validateQaCertificateArchiveStatus,
+  assertQaReadOnlyNonDisclosure,validateQaTerminalReceipt,
   type QaModuleSession,type QaProfile,type QaProjectFixture,
 } from './fixture-contract';
 
@@ -438,5 +439,52 @@ describe('Front D — Front B terminal API is never evidence of a finished PDF',
     expect(()=>validateQaTerminalReceipt({
       ...acknowledged(),private:{answers_sha256:'a'.repeat(64)},
     },1001)).toThrow('WORKER_READONLY_PRIVATE_MATERIAL_LEAK');
+  });
+});
+
+describe('Front D — B authenticated post-commit certificate archive reader',()=>{
+  const enrolled=()=>fixture().projects.chromium.doutrinamento;
+  const doc=()=>({
+    matricula_id:enrolled().enrollmentId,
+    ciclo_id:enrolled().cycleId,matricula_status:'CONCLUIDO',
+    historico_id:9091,certificate_state:'PDF_HEADER_VERIFIED',
+    documento_id:9092,stream_path:'/api/pasta-virtual/stream/9092',
+    stream_verified:false,
+  });
+  it('accepts the exact canonical history and PDF stream path, not R2 direct URLs',()=>{
+    expect(validateQaCertificateArchiveStatus(doc(),enrolled(),9091,9092,
+      '/api/pasta-virtual/stream/9092').stream_verified).toBe(false);
+  });
+  it('rejects a different tenant-enrollment, cycle, history or document',()=>{
+    for(const bad of [
+      {matricula_id:9999},{ciclo_id:9999},{historico_id:9000},
+      {documento_id:9000},{matricula_status:'EM_ANDAMENTO'},
+    ]){
+      expect(()=>validateQaCertificateArchiveStatus({...doc(),...bad},
+        enrolled(),9091,9092,'/api/pasta-virtual/stream/9092'))
+        .toThrow('CERTIFICATE_ARCHIVE_CANONICAL_LINK');
+    }
+  });
+  it('refuses header-only records as certificates, external R2 links, fake stream verified',()=>{
+    for(const bad of [
+      {certificate_state:'CERTIFICATE_NOT_ARCHIVED'},
+      {certificate_state:'CERTIFICATE_PDF_INVALID'},
+      {stream_path:'https://r2-evil.example/pdf/9092'},
+      {stream_path:'/api/pasta-virtual/stream/9093'},
+      {stream_verified:true},
+    ]){
+      expect(()=>validateQaCertificateArchiveStatus({...doc(),...bad},
+        enrolled(),9091,9092,'/api/pasta-virtual/stream/9092'))
+        .toThrow('CERTIFICATE_ARCHIVE_AUTHENTICATED_STREAM');
+    }
+    expect(()=>validateQaCertificateArchiveStatus(doc(),enrolled(),9091,9092,
+      '/api/private-fabricated-certificate')).toThrow(
+        'CERTIFICATE_ARCHIVE_AUTHENTICATED_STREAM');
+  });
+  it('does not accept exposed private grading metadata inside archive reader',()=>{
+    expect(()=>validateQaCertificateArchiveStatus({...doc(),
+      debug:{correctOptionId:'private'}},enrolled(),9091,9092,
+      '/api/pasta-virtual/stream/9092'))
+      .toThrow('WORKER_READONLY_PRIVATE_MATERIAL_LEAK');
   });
 });
