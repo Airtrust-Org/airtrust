@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   qaPath as pathOn, requireQa as demand, validateQaProfile,
-  validateQaModuleSession,validateQaJointReadiness,
+  validateQaModuleSession,validateQaJointReadiness,validateQaCertificatePdf,
   type QaModuleSession,type QaJointReadiness,
   type QaDoutrinamento,
   type QaChoice as Choice, type QaEnrollment as Enrollment,
@@ -331,7 +331,8 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         headers:token ? {Authorization:'Bearer '+token}:{},
       });
       expect(pdf.ok()).toBe(true);
-      expect((await pdf.body()).subarray(0, 5).toString('ascii')).toBe('%PDF-');
+      const certificateBytes=await pdf.body();
+      validateQaCertificatePdf(certificateBytes,pdf.headers()['content-type'] ?? '');
       await context.close();
       ({context,page} = await openLearner(browser));
       auditContentAssets(page, profile.contentOrigin, contentAssetProblems);
@@ -346,6 +347,13 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       expect((await moduleSession(context,profile,d)).stages).toEqual(stagesDone.stages);
       const again = await apiData<typeof history>(context, profile.apiBaseUrl, d.qualificationPath);
       expect(again.linked_records).toBe(1);
+      expect(again.certificate_id).toBe(enrolled.certificate_id);
+      const againPdf = await context.request.get(pathOn(profile.apiBaseUrl,d.certificatePath), {
+        headers: token ? {Authorization:'Bearer '+token} : {},
+      });
+      expect(againPdf.ok()).toBe(true);
+      validateQaCertificatePdf(await againPdf.body(),
+        againPdf.headers()['content-type'] ?? '');
       expect(contentAssetProblems, 'HTML5 CSS/JS/fonts/images/video request failures')
         .toEqual([]);
     });
