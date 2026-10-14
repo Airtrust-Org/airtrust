@@ -8,6 +8,7 @@
 -- exigem extração separada, revisão de escopo e autorização própria.
 SELECT
   datetime('now') AS extraction_utc,
+  COUNT(*) OVER () AS inventory_total_expected,
   m.empresa_id,
   m.id AS matricula_id,
   m.curso_id,
