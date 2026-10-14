@@ -6,7 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Execution is explicitly opt-in (see docs/lms/PLAYER3_FRONT_D_HOMOLOGATION.md).
  */
 export default defineConfig({
-  testDir: './e2e/player3',
+  testDir: '.',
   testMatch: /player3-acceptance\.spec\.ts$/,
   fullyParallel: false,
   workers: 1,
