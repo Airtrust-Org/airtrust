@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Player3AssessmentModal, {type P3ExamProps, type P3ExamAnswer} from './Player3AssessmentModal';
 import {makePlayer3VerifiedStageSubmitter} from './submitVerifiedStageAttempt';
 import Player3FinalizationControls,{type Player3TerminalScope} from './Player3FinalizationControls';
+import {makePlayer3NavigationRecorder,validNavigationScope,type Player3NavigationScope} from './Player3NavigationTransport';
 
 export type Player3Html5HostProps = {
   title: string;
@@ -25,6 +26,8 @@ export type Player3Html5HostProps = {
   assessmentPresentation?: 'modal' | 'authored-html5';
   /** Bound by an authenticated server session, never an iframe hint. */
   terminalScope?: Player3TerminalScope | null;
+  /** Worker-pinned visual navigation only; never a completion authority. */
+  navigation?: Player3NavigationScope | null;
 };
 
 const DIGEST = /^[a-f0-9]{64}$/;
@@ -53,10 +56,17 @@ function validContentUrl(raw: string, expectedOrigin: string): boolean {
  */
 export default function Player3Html5Host({
   title, contentUrl, editionSha256, contentOrigin, reviewOnly = true, pendingAssessment,
-  terminalScope, assessmentPresentation = 'modal',
+  terminalScope, assessmentPresentation = 'modal', navigation,
 }: Player3Html5HostProps) {
   const [lastHint, setLastHint] = useState<string | null>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const [frameLoaded,setFrameLoaded]=useState(false);
+  const [navigationError,setNavigationError]=useState(false);
+  const navigationEnabled=useRef(false);
+  const navigationFailed=useRef(false);
+  const navigationQueue=useRef<Promise<unknown>>(Promise.resolve());
+  const navigationRecorder=useRef<{identity:string;policy:string;
+    record:(unitId:string)=>Promise<boolean>} | null>(null);
   const safe = useMemo(() =>
     DIGEST.test(editionSha256) && validContentUrl(contentUrl, contentOrigin),
     [contentUrl,contentOrigin,editionSha256],
@@ -98,6 +108,34 @@ export default function Player3Html5Host({
     let submitting = false;
     const handledRequests = new Set<string>();
     const origin = new URL(contentOrigin).origin;
+    const recordUnit = (unitId:string) => {
+      if(reviewOnly||navigationFailed.current||!navigationEnabled.current||
+         !navigation||!validNavigationScope(navigation)||
+         navigation.editionSha256!==editionSha256||
+         !navigation.checkpointUnitIds.includes(unitId))return;
+      const identity=[navigation.empresaId,navigation.matriculaId,
+        navigation.cicloId,navigation.editionSha256].join(':');
+      const policy=JSON.stringify(navigation.checkpointUnitIds);
+      if(navigationRecorder.current &&
+         (navigationRecorder.current.identity!==identity||
+          navigationRecorder.current.policy!==policy)){
+        navigationFailed.current=true;
+        setNavigationError(true);
+        return;
+      }
+      if(!navigationRecorder.current) {
+        navigationRecorder.current={identity,policy,
+          record:makePlayer3NavigationRecorder(navigation)};
+      }
+      const record=navigationRecorder.current.record;
+      navigationQueue.current=navigationQueue.current.then(async()=>{
+        if(navigationFailed.current)return;
+        await record(unitId);
+      }).catch(()=>{
+        navigationFailed.current=true;
+        setNavigationError(true);
+      });
+    };
     const receive = (event: MessageEvent<unknown>) => {
       // Origin alone is insufficient: only the exact frame being displayed
       // may request a server-graded attempt, never a sibling content iframe.
@@ -106,11 +144,28 @@ export default function Player3Html5Host({
           !event.data || typeof event.data !== 'object' ||
           Array.isArray(event.data)) return;
       const msg = event.data as Record<string,unknown>;
+      if (msg.type === 'AIRTRUST_PLAYER3_RESUME_ACK_V1') {
+        if (!reviewOnly && navigation && validNavigationScope(navigation) &&
+            navigation.editionSha256 === editionSha256 &&
+            msg.editionSha256 === editionSha256 &&
+            msg.unitId === navigation.nextUnitId &&
+            Object.keys(msg).sort().join(',') ===
+              'editionSha256,type,unitId') {
+          navigationEnabled.current=true;
+          setLastHint(msg.unitId as string);
+          // The page is now displayed at the Worker-approved location. A
+          // checkpoint is navigation evidence only and is committed/re-read
+          // separately; the ACK itself cannot certify anything.
+          recordUnit(msg.unitId as string);
+        }
+        return;
+      }
       if (msg.type === 'AIRTRUST_PLAYER3_NAV_HINT_V1') {
         if (msg.editionSha256 === editionSha256 &&
             typeof msg.unitId === 'string' &&
             /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(msg.unitId)) {
           setLastHint(msg.unitId);
+          recordUnit(msg.unitId);
         }
         return;
       }
@@ -167,7 +222,19 @@ export default function Player3Html5Host({
     window.addEventListener('message', receive);
     return () => { active = false; window.removeEventListener('message', receive); };
   }, [safe,contentOrigin,editionSha256,reviewOnly,
-      assessmentPresentation,examContext,verifiedSubmit,pendingAssessment]);
+      assessmentPresentation,examContext,verifiedSubmit,pendingAssessment,navigation]);
+
+  // Do not trust a localStorage/SCORM bookmark: only the launch projection
+  // from the authenticated Worker may move the original authored presentation.
+  useEffect(()=>{
+    if(!safe||reviewOnly||!frameLoaded||!navigation||
+       !validNavigationScope(navigation)||
+       navigation.editionSha256!==editionSha256)return;
+    frameRef.current?.contentWindow?.postMessage({
+      type:'AIRTRUST_PLAYER3_RESUME_CURSOR_V1',
+      editionSha256,nextUnitId:navigation.nextUnitId,
+    },new URL(contentOrigin).origin);
+  },[safe,reviewOnly,frameLoaded,navigation,editionSha256,contentOrigin]);
 
   if (!safe) return (
     <p role="alert">Conteúdo HTML5 indisponível: origem ou edição inválida.
@@ -185,6 +252,7 @@ export default function Player3Html5Host({
       </header>
       <iframe
         ref={frameRef}
+        onLoad={()=>{navigationEnabled.current=false;setFrameLoaded(true);}}
         title={'Conteúdo original — ' + title}
         src={contentUrl}
         sandbox="allow-scripts allow-forms allow-same-origin"
@@ -195,6 +263,7 @@ export default function Player3Html5Host({
         {lastHint ? 'Unidade exibida: ' + lastHint + '. ' : ''}
         A navegação no conteúdo não confirma aprovação, matrícula ou certificado.
       </footer>
+      {navigationError && <p role="alert">Posição não confirmada pelo servidor. Reabra o treinamento antes de continuar.</p>}
       {!reviewOnly && assessmentPresentation === 'modal' && pendingAssessment &&
         pendingAssessment.context.editionSha256 === editionSha256 && verifiedSubmit &&
         <Player3AssessmentModal {...pendingAssessment}
