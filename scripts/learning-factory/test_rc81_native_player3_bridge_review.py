@@ -5,6 +5,8 @@ source archive supplied privately, the same tests verify the real runtime.
 """
 import io
 import os
+import json
+import subprocess
 import unittest
 from pathlib import Path
 from zipfile import ZipFile
@@ -14,6 +16,7 @@ from build_player3_rc81_bridge_review import (
     SOURCE_ZIP_SHA256,
     _host_origin,
     _replace_line,
+    _rc81_verified_cursor_helper,
     adapt_rc81_app,
     compile_rc81_review,
 )
@@ -43,6 +46,42 @@ class Rc81BridgeTests(unittest.TestCase):
                            'function evaluate(){return 2}']):
             with self.assertRaisesRegex(RC81Unsupported, 'PATCH_FUNCTION_MISSING'):
                 _replace_line(source, 'evaluate', 'function evaluate(){}')
+
+    def test_authored_resume_is_visual_only_and_targets_next_unit(self):
+        """Source-structure simulation: index 21 is unit 22, never an exam pass."""
+        script = """
+          let active=0,view=3,mode='preview',courseCompleted=true,renderCount=0;
+          let lessonScore=0,completed=false;
+          const units=Array.from({length:42},(_,i)=>({id:'unit'+(i+1)}));
+          const goodId=x=>typeof x==='string'&&/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(x);
+          function slide(){return units[active]}
+          function render(){renderCount++}
+        """ + _rc81_verified_cursor_helper() + """
+          const good=applyVerifiedCursor('unit22');
+          const restored={active,view,mode,courseCompleted,renderCount,
+            lessonScore,completed,unit:slide().id};
+          const invalid=applyVerifiedCursor('unit100');
+          const afterward={active,renderCount};
+          units[30].id='unit22';
+          const duplicate=applyVerifiedCursor('unit22');
+          console.log(JSON.stringify({good,restored,invalid,afterward,duplicate,
+            active,renderCount,lessonScore,completed}));
+        """
+        run = subprocess.run(['node', '-e', script], capture_output=True,
+                             check=True, text=True, timeout=8)
+        result = json.loads(run.stdout)
+        self.assertTrue(result['good'])
+        self.assertEqual(result['restored']['active'], 21)
+        self.assertEqual(result['restored']['unit'], 'unit22')
+        self.assertEqual(result['restored']['view'], 0)
+        self.assertEqual(result['restored']['mode'], 'journey')
+        self.assertEqual(result['restored']['renderCount'], 1)
+        self.assertFalse(result['invalid'])
+        self.assertFalse(result['duplicate'])
+        self.assertEqual(result['active'], 21)
+        self.assertEqual(result['renderCount'], 1)
+        self.assertEqual(result['lessonScore'], 0)
+        self.assertFalse(result['completed'])
 
     def test_real_original_archive_opt_in_private_qa(self):
         raw_path = os.environ.get('AIRTRUST_PLAYER3_RC81_SOURCE_ZIP')
