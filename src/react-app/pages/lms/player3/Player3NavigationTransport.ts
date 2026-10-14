@@ -65,7 +65,9 @@ export function makePlayer3NavigationRecorder(
     if(!s.checkpointUnitIds.includes(unitId))return false;
     locked=true;
     const before=await session();
-    if(before.last_visited_unit_id===unitId){
+    // A revisited lesson is not a new unit-completion checkpoint. Ledger
+    // entries remain unique by lesson even after back/forward navigation.
+    if(before.seen_lesson_ids.includes(unitId)){
       locked=false;return true;
     }
     if(before.next_sequence>10000)throw Error('PLAYER3_NAV_LEDGER_FULL');
