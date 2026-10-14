@@ -75,10 +75,10 @@ async function sha256(buffer:ArrayBuffer):Promise<string>{
 async function getPrivate(bucket:R2Bucket,key:string,expected:string,limit:number):Promise<unknown>{
   if(!HASH.test(expected))deny('PRIVATE_HASH_NOT_PINNED');
   const object=await bucket.get(key);
-  if(!object||object.size<2||object.size>limit)deny('PRIVATE_ASSET_UNAVAILABLE');
+  if(!object||object.size<2||object.size>limit)throw new Player3StageWriteError('PRIVATE_ASSET_UNAVAILABLE');
   const data=await object.arrayBuffer();
   if(data.byteLength!==object.size||await sha256(data)!==expected)deny('PRIVATE_ASSET_HASH_MISMATCH');
-  try{return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(data));}
+  try{return JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(data));}
   catch{deny('PRIVATE_ASSET_INVALID_JSON');}
 }
 function allowed(raw:string|undefined,tenant:number):boolean{
@@ -110,10 +110,11 @@ export async function commitPlayer3StageAttempt(input:{
     actorUserId,empresaId,matriculaId,course.cicloId,course.cursoId,
     course.editionHash).first<Binding>();
   const prefix='lms/native/'+empresaId+'/'+course.cursoId+'/'+course.editionHash+'/';
-  if(!binding||!positive(binding.vinculo_id)||!positive(binding.politica_id)||
+  if(!binding)throw new Player3StageWriteError('STAGE_POLICY_NOT_APPROVED');
+  if(!positive(binding.vinculo_id)||!positive(binding.politica_id)||
     binding.r2_prefix!==prefix||
     ![binding.source_sha256,binding.policy_sha256,binding.bank_sha256].every(x=>HASH.test(x))){
-    deny('STAGE_POLICY_NOT_APPROVED');
+    throw new Player3StageWriteError('STAGE_POLICY_NOT_APPROVED');
   }
   const [policyRaw,bankRaw]=await Promise.all([
     getPrivate(bucket,prefix+'player3-approved-policy.json',binding.policy_sha256,1024*1024),
@@ -124,13 +125,13 @@ export async function commitPlayer3StageAttempt(input:{
   if(!policy||!bank||policy.source_sha256!==binding.source_sha256||
      bank.source_sha256!==binding.source_sha256||
      policy.editionSha256!==course.editionHash)deny('STAGE_EDITION_MISMATCH');
-  let grade;
+  let grade:ReturnType<typeof gradePlayer3ApprovedStage>;
   try{grade=gradePlayer3ApprovedStage(bank,policy,{stageId,answers:input.answers});}
-  catch{deny('STAGE_EVIDENCE_INVALID');}
+  catch{throw new Player3StageWriteError('STAGE_EVIDENCE_INVALID');}
   const normalized=JSON.stringify([...input.answers].sort((a,b)=>
     a.questionId<b.questionId?-1:a.questionId>b.questionId?1:0));
   if(new TextEncoder().encode(normalized).byteLength>131072)deny('STAGE_TOO_LARGE');
-  const digest=await sha256(new TextEncoder().encode(normalized).buffer);
+  const digest=await sha256(new TextEncoder().encode(normalized).buffer as ArrayBuffer);
   const matches=(s:Stored|null)=>!!s&&s.politica_id===binding.politica_id&&
     s.tentativa_numero===attemptNumber&&s.event_id===eventId&&
     s.answers_json===normalized&&s.answers_sha256===digest&&
@@ -156,5 +157,5 @@ export async function commitPlayer3StageAttempt(input:{
   }catch{/* Only an EXACT matching concurrent insert is accepted below. */}
   const persisted=await db.prepare(EXACT).bind(binding.vinculo_id,stageId,attemptNumber).first<Stored>();
   if(matches(persisted))return receipt('IDEMPOTENT_REPLAY');
-  deny('STAGE_ATOMIC_COMMIT_CONFLICT');
+  throw new Player3StageWriteError('STAGE_ATOMIC_COMMIT_CONFLICT');
 }
