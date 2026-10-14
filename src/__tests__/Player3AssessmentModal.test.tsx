@@ -98,6 +98,25 @@ describe('Player 3 — módulo avaliado na janela nativa sem refazer HTML5',()=>
     fireEvent.click(screen.getByRole('button',{name:'Enviar avaliação ao AirTrust'}));
     expect(submit).toHaveBeenCalledTimes(1);
   });
+  it('cannot carry answers or a passed receipt to another cycle or stage',async()=>{
+    const onVerifiedStagePassed=vi.fn();
+    const send=vi.fn(async()=>receipt);
+    const {rerender}=render(<Player3AssessmentModal context={context}
+      submitOfficialAttempt={send} onVerifiedStagePassed={onVerifiedStagePassed}
+      onDismiss={vi.fn()}/>);
+    selectAnswers();
+    fireEvent.click(screen.getByRole('button',{name:'Enviar avaliação ao AirTrust'}));
+    expect(await screen.findByRole('button',{name:'Prosseguir para o próximo módulo'}))
+      .toBeInTheDocument();
+    rerender(<Player3AssessmentModal context={{...context,cicloId:801,stageId:'modulo-2'}}
+      submitOfficialAttempt={send} onVerifiedStagePassed={onVerifiedStagePassed}
+      onDismiss={vi.fn()}/>);
+    expect(screen.queryByRole('button',{name:'Prosseguir para o próximo módulo'})).toBeNull();
+    expect(screen.getByRole('button',{name:'Enviar avaliação ao AirTrust'})).toBeDisabled();
+    expect(screen.getAllByRole('radio').every(r=>!(r as HTMLInputElement).checked)).toBe(true);
+    expect(onVerifiedStagePassed).not.toHaveBeenCalled();
+  });
+
   it('fails closed on invalid stage and unreviewed question IDs',()=>{
     const {rerender}=render(<Player3AssessmentModal
       context={{...context,editionSha256:'not-a-hash'}}
