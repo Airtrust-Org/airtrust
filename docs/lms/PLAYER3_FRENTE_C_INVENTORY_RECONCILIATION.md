@@ -1,6 +1,6 @@
 # Player 3 — Frente C: inventário e reconciliação de matrículas (sem writes)
 
-**Data:** 2026-10-14. **Escopo autorizado para primeira captura:** Costa do Sol, `empresa_id=6`. **Estado:** implementação proposta; nenhuma extração real realizada e nenhuma equivalência aplicada.
+**Data:** 2026-10-14. **Escopo autorizado para primeira captura:** Costa do Sol, `empresa_id=6`. **Estado:** código da Frente C integrado à `main` pela PR #1466 no SHA `66b41765aa417e86933ce9dc7dbcd46e8b5fff34`, com oito gates oficiais e SCORM browser E2E aprovados; **nenhuma extração real T0/T1 realizada e nenhuma equivalência aplicada**.
 
 ## Autoridades e limites
 
@@ -41,10 +41,10 @@ O reconciliador conserva `previous_reported_pct`, `current_reported_pct` e `hist
 
 Cada intenção tem `decision_key` determinística para a mesma evidência, identidade de empresa/matrícula/ciclo, status de análise, referências da fonte e do pacote de catálogo, e flags `may_apply_automatically=false`, `modifies_enrollment=false`, `grants_exam_pass=false`, `grants_completion=false`, `grants_qualification=false`, `grants_certificate=false`.
 
-Casos de mudança de ciclo, fonte ausente, conflito de catalogação, status terminal, porcentagem menor, timestamp obsoleto e mudança de edição vão sempre para revisão. Mudança do **pacote ativo no catálogo** não autentica a edição histórica de aluno. O crosswalk verdadeiro `source_edition_sha256 → target_edition_sha256` e unidade retomável dependem do mapeamento validado e do serviço de crédito auditado da PR #1389.
+Casos de mudança de ciclo, fonte ausente, conflito de catalogação, status terminal, porcentagem menor, timestamp obsoleto e mudança de edição vão sempre para revisão. **Mudanças de nota final, tentativas, score SCORM, vinculação SCORM, datas da matrícula e tipo de conteúdo precisam igualmente ser classificadas**, ainda que o percentual permaneça igual. Mudança do **pacote ativo no catálogo** não autentica a edição histórica de aluno. O crosswalk verdadeiro `source_edition_sha256 → target_edition_sha256` e unidade retomável dependem do mapeamento validado e do serviço de crédito auditado da PR #1389.
 
 ## Testes e garantia atual
 
-Testes sintéticos executados: `python3 scripts/learning-factory/test_player3_readonly_inventory.py` (2/2 PASS); `node --test scripts/learning-factory/test_player3_inventory.mjs scripts/learning-factory/test_player3_reconcile_inventories.mjs` (20/20 PASS). Cobrem 20/50/80/99%, delta T0/T1, histórico de ciclos, cross-tenant, curso órfão, mudança de pacote, criptografia/integridade, adulteração, idempotência, execução CLI com arquivos cifrados, restrição de escrita 0600, rejeição de log de JSON inválido com estado privado e não certificação. Sintaxe do workflow YAML validada. A execução local **não** significa workflow aprovado, T0 coletado, migração feita ou prova real concluída.
+Testes sintéticos executados: `python3 scripts/learning-factory/test_player3_readonly_inventory.py` (2/2 PASS); `node --test scripts/learning-factory/test_player3_inventory.mjs scripts/learning-factory/test_player3_reconcile_inventories.mjs` (22/22 PASS no ramo de robustez posterior à PR #1466; 24/24 testes focados no total). Cobrem 20/50/80/99%, delta T0/T1, histórico de ciclos, cross-tenant, curso órfão, mudança de pacote, criptografia/integridade, adulteração, idempotência, execução CLI com arquivos cifrados, restrição de escrita 0600, rejeição de log de JSON inválido com estado privado e não certificação. Sintaxe do workflow YAML validada. A execução local **não** significa workflow aprovado, T0 coletado, migração feita ou prova real concluída.
 
-**Próximo gate:** revisão e CI oficial desta PR; provisionamento e aprovação humana do environment, então T0 readonly pelo fluxo oficial. Integração de equivalência/cutover posterior exclusivamente com a Frente B na PR #1389, sem liberar produção sem autorização exata.
+**Próximo gate operacional:** [issue #1467](https://github.com/Airtrust-Org/airtrust/issues/1467) para provisionamento, cofre e aprovação humana do environment, seguida do T0 readonly pelo fluxo oficial. A correção posterior de detecção de nota/tentativas/edição só pode ser considerada integrada após passar CI, revisão e merge próprio. Integração de equivalência/cutover posterior exclusivamente com a Frente B na PR #1389, sem liberar produção sem autorização exata.
