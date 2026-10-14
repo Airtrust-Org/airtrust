@@ -237,6 +237,43 @@ export function validateQaModuleSession(raw: unknown, edition: string,
   return s;
 }
 
+
+/**
+ * Inspect the *browser-originated* RC8.1 attempt POST, not a synthetic Worker
+ * call. Identity and grading are derived by Worker authentication; the
+ * learner must send only answers plus an unpredictable replay guard.
+ */
+export type QaAuthoredStageAttempt={
+  eventId:string;
+  attemptNumber:number;
+  answers:{questionId:string;optionId:string}[];
+};
+export function validateQaAuthoredStageAttempt(
+  raw:unknown, expectedAttempt:number, seenEventIds:ReadonlySet<string>,
+  expectedQuestionCount=10,
+):QaAuthoredStageAttempt {
+  const row=raw as QaAuthoredStageAttempt;
+  requireQa(!!row && typeof row==='object' && !Array.isArray(row) &&
+    Object.keys(row).sort().join(',')==='answers,attemptNumber,eventId' &&
+    row.attemptNumber===expectedAttempt &&
+    Number.isSafeInteger(expectedAttempt) && expectedAttempt>0,
+    'RC81_OFFICIAL_ATTEMPT_NUMBER_AND_BODY');
+  requireQa(typeof row.eventId==='string' &&
+    /^p3-[a-f0-9]{32}$/.test(row.eventId) &&
+    !seenEventIds.has(row.eventId),
+    'RC81_ATTEMPT_EVENT_ID_UNIQUE');
+  requireQa(Array.isArray(row.answers) &&
+    row.answers.length===expectedQuestionCount &&
+    row.answers.every(answer=>!!answer &&
+      typeof answer==='object' && !Array.isArray(answer) &&
+      Object.keys(answer).sort().join(',')==='optionId,questionId' &&
+      typeof answer.questionId==='string' && id.test(answer.questionId) &&
+      typeof answer.optionId==='string' && /^o(?:[0-9]|1[01])$/.test(answer.optionId)) &&
+    new Set(row.answers.map(answer=>answer.questionId)).size===expectedQuestionCount,
+    'RC81_PUBLIC_CHOICES_ONLY_NO_CLIENT_GRADE');
+  return row;
+}
+
 /**
  * Front B's combined *read-only* content/module readiness projection.
  * The double camel/snake completion fields are returned by the actual route.
