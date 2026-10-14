@@ -121,7 +121,9 @@ export async function readPlayer3CertificateStatus(params:{
   // Never allow a generic or another-tenant key to be used in the check.
   const prefix=`certificados/empresa-${empresaId}/funcionario-${funcionarioId}/historico-${row.historico_id}/`;
   const key=row.documento_r2_key;
-  if(!key.startsWith(prefix)||!/^[-a-zA-Z0-9_.]+\\.pdf$/i.test(key.slice(prefix.length))){
+  const filename=key.slice(prefix.length);
+  if(!key.startsWith(prefix)||!filename.endsWith('.pdf')||
+     !/^[a-zA-Z0-9_.-]+$/.test(filename)){
     return output('CERTIFICATE_PDF_INVALID');
   }
   let object:R2ObjectBody|null;
