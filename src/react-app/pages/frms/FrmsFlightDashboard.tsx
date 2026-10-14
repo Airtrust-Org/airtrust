@@ -263,13 +263,14 @@ function DetailDrawer({
                   ? 'Revisão operacional necessária'
                   : bucket === 'CONFIRMAR' ? 'Aguardando confirmação de dados' : 'Sem pendência FRMS identificada'}
             </p>
-            <p className="mt-2 text-sm">{guidance.reason}</p>
-            <p className="mt-3 text-sm"><strong>Próxima providência:</strong> {guidance.action}</p>
-            {gaps.length > 0 ? <p className="mt-2 text-xs"><strong>Dados a conferir:</strong> {gaps.join(' · ')}.</p> : null}
-            {decisionIsLimited ? (
-              <p className="mt-2 text-xs font-bold">Indicadores favoráveis abaixo são apenas sinais parciais: não comprovam aptidão nem autorizam liberação.</p>
-            ) : null}
-            <p className="mt-2 text-xs">Responsável e prazo devem ser definidos pela Coordenação; não foram atribuídos automaticamente.</p>
+            <p className="mt-2 line-clamp-2 text-sm" title={guidance.reason}>{guidance.reason}</p>
+            <details className="mt-2 text-xs">
+              <summary className="cursor-pointer font-semibold">Entenda esta decisão</summary>
+              <p className="mt-2 text-sm"><strong>Próxima providência:</strong> {guidance.action}</p>
+              {gaps.length > 0 ? <p className="mt-2"><strong>Dados a conferir:</strong> {gaps.join(' · ')}.</p> : null}
+              {decisionIsLimited ? <p className="mt-2 font-bold">Indicadores favoráveis abaixo são apenas sinais parciais: não comprovam aptidão nem autorizam liberação.</p> : null}
+              <p className="mt-2">Responsável e prazo devem ser definidos pela Coordenação; não foram atribuídos automaticamente.</p>
+            </details>
           </section>
 
           <FrmsScoreExplanation item={item} />
@@ -288,12 +289,10 @@ function DetailDrawer({
           ) : null}
 
           {momentCopy ? (
-            <section className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-sm text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
-              <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">
-                <Clock3 className="h-4 w-4" /> {momentCopy.title}
-              </h3>
+            <details className="rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-sm text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+              <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">{momentCopy.title}</summary>
               <p className="mt-2 leading-relaxed">{momentCopy.text}</p>
-            </section>
+            </details>
           ) : null}
 
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
@@ -579,9 +578,7 @@ export default function FrmsFlightDashboard() {
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">FRMS</p>
             <h1 className="mt-1 text-2xl font-bold text-slate-950 dark:text-white">Operação</h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
-              Exceções que exigem decisão, confirmação ou bloqueio. O que está normal fica em segundo plano.
-            </p>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">Prioridades, evidências e ações por pessoa.</p>
           </div>
 
           <div className="flex flex-wrap items-end gap-2">
@@ -611,10 +608,10 @@ export default function FrmsFlightDashboard() {
         </header>
 
         {date === todayIso ? (
-          <div className="rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-sm text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
-            <span className="font-bold">Leitura do dia em curso.</span>{' '}
-            O check-in apoia a decisão antes da missão. A jornada realizada fecha depois da operação; em dia sem voo, a pessoa registra a atividade de hoje no próximo check-in. O acumulado usa somente atividade já registrada.
-          </div>
+          <details className="rounded-lg border border-sky-200 bg-sky-50/60 px-3 py-2 text-xs text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
+            <summary className="cursor-pointer font-semibold">Entenda os dados do dia</summary>
+            <p className="mt-2"><strong>Leitura do dia em curso.</strong> O check-in apoia a decisão antes da missão. A jornada realizada fecha depois da operação; em dia sem voo, a pessoa registra a atividade de hoje no próximo check-in. O acumulado usa somente atividade já registrada.</p>
+          </details>
         ) : null}
 
         {legacyControlRoute ? (
@@ -707,9 +704,10 @@ export default function FrmsFlightDashboard() {
                   ? `${queue.length - evaluatedFortnightCount} sem avaliação quinzenal completa.`
                   : 'Não há avaliações quinzenais incompletas neste recorte.'}
               </p>
-              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                A situação e a atividade acumulada registrada aparecem por pessoa abaixo. O indicador não substitui avaliação individual ou liberação operacional.
-              </p>
+              <details className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                <summary className="cursor-pointer">Como interpretar a quinzena</summary>
+                <p className="mt-1">A situação e a atividade acumulada registrada aparecem por pessoa abaixo. O indicador não substitui avaliação individual ou liberação operacional.</p>
+              </details>
             </>
           )}
         </section>
