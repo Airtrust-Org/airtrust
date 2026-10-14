@@ -10,7 +10,7 @@ from scripts.__tests__.test_native_atomic_enrollment_pinning_rehearsal import fi
 from scripts.__tests__.test_native_atomic_terminal_state_guard import sql_from_source
 
 ROOT=Path(__file__).resolve().parents[2]
-CANDIDATE=ROOT/'worker-airtrust/schema-v2/plans/lms-native-canonical-completion-0554.REVIEW-ONLY.sql.txt'
+CANDIDATE=ROOT/'worker-airtrust/schema-v2/plans/lms-native-canonical-completion-0555.REVIEW-ONLY.sql.txt'
 NONCE='d'*64
 
 def setup():

@@ -51,6 +51,8 @@ export interface Env {
   NATIVE_LEARNER_ENROLLMENT_CREATE_ENABLED_TENANTS?: string;
   NATIVE_COMPLETION_PREFLIGHT_ENABLED_TENANTS?: string;
   NATIVE_COMPLETION_WRITE_ENABLED_TENANTS?: string;
+  // Independent staging-only gate for module-scoped Player3 grading; default OFF.
+  PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
