@@ -62,6 +62,14 @@ class Player3Html5ReviewTests(unittest.TestCase):
         self.assertFalse(receipt['publishable'])
         self.assertTrue(receipt['browserVisualAndFunctionalQaRequired'])
         self.assertEqual(receipt['sourceVersion'], 'RC8.1')
+        self.assertFalse(receipt['stageContractApproved'])
+        self.assertEqual([u['stageId'] for u in receipt['sourceStageCrosswalk']],
+                         ['first', 'module-quiz', 'decision'])
+        self.assertEqual([u['candidatePlayer3Type']
+                          for u in receipt['sourceStageCrosswalk']],
+                         ['content', 'module_exam', None])
+        self.assertTrue(receipt['sourceStageCrosswalk'][2]['requiresPedagogicalApproval'])
+        self.assertNotIn('PRIVATE_KEY_SENTINEL_123', json.dumps(receipt))
         self.assertEqual(metadata['question_count'], 1)
         self.assertEqual(bank['questions'][0]['correctOptionId'], 'o1')
         self.assertEqual(learner['stages'][0]['questions'][0]['prompt'], 'Pergunta de teste')
@@ -156,6 +164,10 @@ class Player3Html5ReviewTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(learner.stat().st_mode), 0o700)
             self.assertEqual(len(list(private.glob('*server-only-bank.json'))), 1)
             self.assertEqual(len(list(learner.glob('*.zip'))), 1)
+            artifact = next(learner.glob('*.zip'))
+            import hashlib
+            self.assertEqual(receipt['reviewZipSha256'],
+                             hashlib.sha256(artifact.read_bytes()).hexdigest())
             self.assertFalse(list(learner.glob('*server-only-bank.json')))
             with self.assertRaises(UnsafePackage):
                 build(original(), 'RC8.1.zip', private, learner)
