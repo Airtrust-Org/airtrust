@@ -154,6 +154,8 @@ export interface FrmsAlertaRow {
   valor_limite_min: number;
   mensagem: string;
   nome_tripulante?: string;
+  /** Total desta pessoa nos filtros ativos da API, inclusive outras páginas. */
+  recorrencias_no_filtro?: number;
   visualizado: number;
   visualizado_em: string | null;
   visualizado_por: string | null;
@@ -287,6 +289,24 @@ export function useFrmsAlertas(filtros?: Record<string, string>) {
     dedupeInitial: false,
     bypassGetCache: true,
     staleTime: 1 * 60 * 1000, // 1 min
+  });
+}
+
+/** Filtered global count is provided by the backend. Do not confuse it with the current page. */
+export interface FrmsAlertasPage {
+  success: boolean;
+  data: FrmsAlertaRow[];
+  total: number;
+}
+
+export function useFrmsAlertasPage(filtros?: Record<string, string>) {
+  const params = filtros ? '?' + new URLSearchParams(filtros).toString() : '';
+  return useApi<FrmsAlertasPage>(`/api/frms/alertas${params}`, {
+    requireAuth: false,
+    dedupeInitial: false,
+    bypassGetCache: true,
+    preserveEnvelope: true,
+    staleTime: 1 * 60 * 1000,
   });
 }
 

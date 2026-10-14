@@ -403,6 +403,8 @@ export function buildDraftSnapshot(packageData, previousSequence = 0) {
       common: buildCommonFlightFields(packageData),
       flight_update: {},
       fuelings: [],
+      removed_stages: [],
+      removed_stage_draft_ids: [],
       justifications: (Array.isArray(packageData?.justificativas) ? packageData.justificativas : []).map((item) => ({
         local_id: crypto.randomUUID(),
         justificativa_codigo: String(item?.codigo || ''),

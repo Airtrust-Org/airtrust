@@ -220,6 +220,12 @@ export async function buildOfflineSyncCommand({
           minutos: parseInteger(item?.minutos),
           observacao: optionalText(item?.observacao),
         })),
+      removed_stages: (Array.isArray(rdvDraft.removed_stages) ? rdvDraft.removed_stages : [])
+        .map((stage) => ({
+          source_stage_id: Number(stage.source_stage_id),
+          source_stage_updated_at: String(stage.source_stage_updated_at),
+          numero_etapa: Number(stage.numero_etapa),
+        })),
       stages: stageDrafts
         .slice()
         .sort(

@@ -203,7 +203,7 @@ function showActiveFlightUpdateAlert(revision) {
     flightUpdateMessage.textContent =
       (revision?.planejamento_status === 'confirmado'
         ? 'A Coordenação confirmou o planejamento deste voo. Atualize para receber os dados consolidados antes da partida.'
-        : 'A Coordenação alterou este voo depois da preparação offline. Atualize para receber a nova rota, os MTAs, outros documentos ou dados de voo antes de concluir o lançamento.');
+        : 'O voo possui uma versão mais recente no servidor. Atualize para receber rota, documentos ou dados revisados antes do envio, preservando o rascunho local.');
   }
   flightUpdateAlert?.classList.remove('hidden');
   if (refreshFlightUpdateButton) refreshFlightUpdateButton.disabled = !navigator.onLine;
@@ -1901,7 +1901,7 @@ async function refreshCoordinationControls() {
   const rdv = state.rdv;
   if (activeFlightUpdateAvailable) {
     setCoordinationMessage(
-      'A Coordenação alterou este voo. Atualize o voo antes de sincronizar, finalizar ou enviar.',
+      'O pacote local está desatualizado em relação ao servidor. Atualize o voo antes de sincronizar, finalizar ou enviar.',
       'error',
     );
     return;
@@ -2369,8 +2369,9 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
         'O pacote do voo mudou desde o início deste rascunho. Resolução de conflito ainda não está habilitada.',
       );
     }
+    const removedDraftIds = new Set(Array.isArray(reconciledValue.removed_stage_draft_ids) ? reconciledValue.removed_stage_draft_ids : []);
     const matchingStages = stageRecords
-      .filter((record) => String(record.value?.source_package_id) === identity.packageId)
+      .filter((record) => String(record.value?.source_package_id) === identity.packageId && !removedDraftIds.has(record.id))
       .sort(
         (left, right) =>
           Number(left.value?.fields?.numero_etapa || 0) -
@@ -2386,6 +2387,8 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
       common: { ...buildCommonFlightFields(packageData), ...(reconciledValue.common || {}) },
       flight_update: reconciledValue.flight_update || {},
       fuelings: Array.isArray(reconciledValue.fuelings) ? reconciledValue.fuelings : [],
+      removed_stages: Array.isArray(reconciledValue.removed_stages) ? reconciledValue.removed_stages : [],
+      removed_stage_draft_ids: Array.isArray(reconciledValue.removed_stage_draft_ids) ? reconciledValue.removed_stage_draft_ids : [],
       justifications: Array.isArray(reconciledValue.justifications)
         ? reconciledValue.justifications
         : (Array.isArray(packageData?.justificativas) ? packageData.justificativas : []).map((item) => ({
@@ -2691,11 +2694,13 @@ async function readPersistedOperationalStateForSync() {
   const persistedRdv = await vault.getJson('rdv_drafts', rdvDraftRecordId(identity.flightId));
   if (!persistedRdv) throw new Error('Rascunho do voo não encontrado no tablet.');
 
+  const removedDraftIds = new Set(Array.isArray(persistedRdv.value?.removed_stage_draft_ids) ? persistedRdv.value.removed_stage_draft_ids : []);
   const persistedStages = (await vault.listJson('stage_drafts'))
     .filter(
       (record) =>
         Number(record.value?.flight_id) === identity.flightId &&
-        String(record.value?.source_package_id) === identity.packageId,
+        String(record.value?.source_package_id) === identity.packageId &&
+        !removedDraftIds.has(record.id),
     )
     .sort(
       (left, right) =>
@@ -3050,6 +3055,9 @@ async function rebaseOperationalDraftAfterCoordinationUpdate(previousPackage, fr
     throw new Error('O rascunho local já está baseado em outra versão do voo.');
   }
 
+  if (existingRdv.value?.removed_stage_draft_ids?.length) {
+    throw new Error('Há etapas removidas no rascunho offline. Envie ou revise essa exclusão antes de atualizar o planejamento.');
+  }
   const stageRecords = (await vault.listJson('stage_drafts')).filter(
     (record) => Number(record.value?.flight_id) === freshIdentity.flightId,
   );
@@ -3741,6 +3749,14 @@ function createEditorField({
     input.inputMode = inputMode;
   }
   input.value = value ?? '';
+  if (type === 'textarea') {
+    // O teclado do iPad pode sugerir correções em português sem internet
+    // e sem enviar observações operacionais para um serviço externo.
+    input.lang = 'pt-BR';
+    input.spellcheck = true;
+    input.setAttribute('autocorrect', 'on');
+    input.setAttribute('autocapitalize', 'sentences');
+  }
   input.readOnly = readOnly || operationalSyncInFlight;
   input.addEventListener('input', () => {
     if (isDurationField) {
@@ -3751,6 +3767,39 @@ function createEditorField({
   });
   if (onBlur) input.addEventListener('blur', () => onBlur(input.value, input));
   wrapper.append(title, input);
+  if (type === 'textarea' && !readOnly && typeof onInput === 'function') {
+    // Phrases are opt-in; never invent an occurrence or overwrite the pilot's record.
+    // No text is sent to external grammar/AI services.
+    const templates = [
+      ['Retorno antecipado', 'Retorno à base antes de concluir a rota planejada. Motivo: '],
+      ['Interrupção da operação', 'Operação interrompida. Motivo: '],
+      ['Divergência operacional', 'Divergência em relação ao planejamento: '],
+      ['Informação complementar', 'Informação complementar: '],
+    ];
+    const select = document.createElement('select');
+    select.setAttribute('aria-label', 'Inserir observação predefinida em ' + label);
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = 'Inserir texto predefinido (opcional)';
+    select.append(empty);
+    for (const [name, value] of templates) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = name;
+      select.append(option);
+    }
+    select.disabled = operationalSyncInFlight;
+    select.addEventListener('change', () => {
+      if (!select.value) return;
+      input.value = String(input.value || '').trim()
+        ? String(input.value).trimEnd() + '\n' + select.value
+        : select.value;
+      onInput(input.value, input);
+      select.value = '';
+      input.focus();
+    });
+    wrapper.append(select);
+  }
   if (note) {
     const noteEl = document.createElement('span');
     noteEl.className = 'field-note';
@@ -4791,26 +4840,61 @@ function renderStageFields() {
   );
 
   card.append(grid);
-  if (stageDraft.source_stage_id == null && activeStageDrafts.length > 1) {
+  if (activeStageDrafts.length > 1) {
+    const canRemove = canRemoveOperationalStage(index);
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
     removeButton.className = 'secondary stage-delete';
-    removeButton.textContent = 'Excluir esta etapa';
-    removeButton.disabled = operationalSyncInFlight;
+    removeButton.textContent = stageDraft.source_stage_id == null
+      ? 'Excluir etapa do rascunho' : 'Cancelar etapa não realizada';
+    removeButton.disabled = !canRemove;
     removeButton.addEventListener('click', () => void removeOperationalStage(index));
     card.append(removeButton);
+    if (!canRemove && !operationalSyncInFlight) {
+      const explanation = document.createElement('span');
+      explanation.className = 'field-note';
+      explanation.textContent = stageDraft.source_stage_id != null && index !== activeStageDrafts.length - 1
+        ? 'Só é possível cancelar a última etapa planejada.'
+        : 'Esta etapa possui horários, pousos, acionamentos ou abastecimento. Preserve o registro e informe a ocorrência à Coordenação.';
+      card.append(explanation);
+    }
   }
   rdvStageFields.append(card);
+}
+
+function canRemoveOperationalStage(index) {
+  const stage = activeStageDrafts[index];
+  if (!stage || activeStageDrafts.length <= 1 || operationalSyncInFlight) return false;
+  if (stage.source_stage_id == null) return true;
+  if (index !== activeStageDrafts.length - 1 || !stage.source_stage_updated_at) return false;
+  const fields = stage.fields || {};
+  const hasRealizedData = ['horario_motor_ligado', 'horario_decolagem', 'horario_pouso', 'horario_motor_desligado', 'tempo_decolagem_pouso', 'tempo_total']
+    .some((field) => String(fields[field] || '').trim() !== '');
+  const hasOperationalCounters = ['pousos_diurnos', 'pousos_noturnos', 'starts']
+    .some((field) => Number(fields[field] || 0) > 0);
+  const hasFueling = (activeRdvDraft?.fuelings || []).some((fueling) => Number(fueling.etapa_numero) === Number(fields.numero_etapa));
+  return !hasRealizedData && !hasOperationalCounters && !hasFueling;
 }
 
 async function removeOperationalStage(index) {
   if (!activeRdvDraft || operationalSyncInFlight) return;
   const removed = activeStageDrafts[index];
-  if (!removed || removed.source_stage_id != null || activeStageDrafts.length <= 1) return;
+  if (!removed || !canRemoveOperationalStage(index)) return;
+  if (removed.source_stage_id != null && !window.confirm('Cancelar esta etapa planejada não realizada? O cancelamento será enviado à Coordenação quando sincronizar.')) return;
   await flushOperationalSave();
   const removedNumber = Number(removed.fields?.numero_etapa || index + 1);
+  activeRdvDraft.removed_stage_draft_ids = [...new Set([...(activeRdvDraft.removed_stage_draft_ids || []), removed.entity_local_id])];
+  if (removed.source_stage_id != null) {
+    activeRdvDraft.removed_stages = [
+      ...(activeRdvDraft.removed_stages || []),
+      { source_stage_id: removed.source_stage_id,
+        source_stage_updated_at: removed.source_stage_updated_at,
+        numero_etapa: Number(removed.fields.numero_etapa) },
+    ];
+  }
+  // Manter registro original cifrado até recibo do servidor; a lista de
+  // tombstones no RDV é a fonte atômica para ignorá-lo após reiniciar.
   activeStageDrafts.splice(index, 1);
-  await vault.deleteJson('stage_drafts', removed.entity_local_id).catch(() => undefined);
 
   activeRdvDraft.fuelings = (activeRdvDraft.fuelings || [])
     .filter((fueling) => Number(fueling.etapa_numero) !== removedNumber)
