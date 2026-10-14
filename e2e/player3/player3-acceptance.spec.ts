@@ -11,7 +11,7 @@ type Choice = { question: string; wrong: string; correct: string };
 type Unit = {
   id: string; visualCue: string;
   practice?: Choice;
-  official?: { questions: Choice[] };
+  official?: { stageId: string; questions: Choice[] };
 };
 type Enrollment = {
   launchPath: string; snapshotPath: string; editionSha256: string; enrollmentId: number;
@@ -89,7 +89,7 @@ function load(projectName: string): { profile: Profile; fixture: ProjectFixture 
   demand(d.units.length === 42 && new Set(d.units.map(u => u.id)).size === 42,
     'DOU_RC81_42_UNITS');
   demand(d.units.every(u => u.id && u.visualCue &&
-    (!u.official || u.official.questions.length > 0)), 'AUTHOR_UNIT_AND_EXAM_MAP');
+    (!u.official || (u.official.stageId && u.official.questions.length > 0))), 'AUTHOR_UNIT_AND_EXAM_MAP');
   demand(d.units.some(u => u.practice) && d.units.some(u => u.official),
     'FORMATIVE_AND_OFFICIAL_GATES');
   demand(fixture.resume80.minPreviousPct >= 80 &&
@@ -200,25 +200,31 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
           await expect(modal.getByRole('status')).toContainText(/aprovada pelo AirTrust/);
           await expect.poll(async () =>
             (await snapshot(context, profile, d)).attempts.some(a =>
-              a.stage_id === unit.id && a.passed)).toBe(true);
+              a.stage_id === unit.official!.stageId && a.passed)).toBe(true);
           await modal.getByRole('button', { name: 'Prosseguir para o próximo módulo' }).click();
         }
+        let alreadyPersisted = false;
         if (index === 10) {
           const before = await snapshot(context, profile, d);
           await context.setOffline(true);
           try {
             await page.getByTestId('player3-next-unit').click();
             await expect(page.getByTestId('player3-offline-pending')).toBeVisible();
+            // The API test client is independent of browser offline networking.
+            const during = await snapshot(context, profile, d);
+            expect(during.completed_unit_ids).toEqual(before.completed_unit_ids);
+            expect(during.attempts).toEqual(before.attempts);
           } finally {
             await context.setOffline(false);
           }
-          const during = await snapshot(context, profile, d);
-          expect(during.completed_unit_ids).toEqual(before.completed_unit_ids);
-          expect(during.attempts).toEqual(before.attempts);
           await page.reload();
-          await expect(page.getByTestId('player3-active-unit-id')).toHaveText(unit.id);
+          const resumed = await snapshot(context, profile, d);
+          expect(resumed.attempts).toEqual(before.attempts);
+          alreadyPersisted = resumed.completed_unit_ids.includes(unit.id);
+          await expect(page.getByTestId('player3-active-unit-id')).toHaveText(
+            alreadyPersisted ? d.units[index + 1].id : unit.id);
         }
-        await page.getByTestId('player3-next-unit').click();
+        if (!alreadyPersisted) await page.getByTestId('player3-next-unit').click();
         await expect.poll(async () =>
           (await snapshot(context, profile, d)).completed_unit_ids.includes(unit.id)).toBe(true);
       });
