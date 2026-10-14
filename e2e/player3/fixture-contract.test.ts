@@ -1,6 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {
   qaPath,validateQaProfile,validateQaModuleSession,validateQaJointReadiness,
+  validateQaAuthoredContentUrl,RC81_SOURCE_SHA256,
   validateQaCertificatePdf,validateQaCertificateArchiveStatus,
   validateQaAuthoredStageAttempt,
   assertQaReadOnlyNonDisclosure,validateQaTerminalReceipt,
@@ -28,6 +29,8 @@ function project(offset:number):QaProjectFixture {
   }));
   return {
     doutrinamento:{...enrollment(1),units,
+      courseId:55,sourceZipSha256:RC81_SOURCE_SHA256,
+      contentSha256:'c'.repeat(64),
       requiredLessonIds:units.flatMap(u=>u.lessonId?[u.lessonId]:[]),
       qualificationPath:'/qa/qualification/'+offset,
       certificatePath:'/qa/certificate/'+offset},
@@ -90,6 +93,29 @@ describe('Front D QA contract — no network, no real students',()=>{
     p.contentOrigin=contentOrigin;
     delete p.projects.webkit;
     expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin)).toThrow('BOTH_INDEPENDENT_BROWSER_PROJECTS');
+  });
+  it('pins authored content to the RC8.1 original and the B immutable staging release path',()=>{
+    const d=fixture().projects.chromium.doutrinamento;
+    const target=contentOrigin+'/player3/6001/55/'+edition+'/'+
+      'c'.repeat(64)+'/index.html';
+    expect(validateQaAuthoredContentUrl(target,contentOrigin,6001,d)).toBe(target);
+    for(const wrong of [
+      target+'?token=secret',
+      contentOrigin+'/player3/6002/55/'+edition+'/'+'c'.repeat(64)+'/index.html',
+      contentOrigin+'/player3/6001/56/'+edition+'/'+'c'.repeat(64)+'/index.html',
+      contentOrigin+'/player3/6001/55/'+edition+'/'+'d'.repeat(64)+'/index.html',
+      'https://qa-unapproved-assets.example/player3/6001/55/'+edition+'/'+'c'.repeat(64)+'/index.html',
+      contentOrigin+'/unversioned/index.html',
+    ]){
+      expect(()=>validateQaAuthoredContentUrl(wrong,contentOrigin,6001,d))
+        .toThrow('RC81_AUTHORED_LAUNCH_SOURCE_BOUND_PATH');
+    }
+    expect(()=>validateQaAuthoredContentUrl(target,contentOrigin,6001,
+      {...d,sourceZipSha256:'0'.repeat(64)}))
+      .toThrow('RC81_SOURCE_AND_IMMUTABLE_RELEASE');
+    expect(()=>validateQaAuthoredContentUrl(target,contentOrigin,6001,
+      {...d,contentSha256:'INVALID'}))
+      .toThrow('RC81_SOURCE_AND_IMMUTABLE_RELEASE');
   });
   it('keeps eight authored exam stages distinct from reviewed lesson receipts',()=>{
     const p=fixture();
