@@ -267,8 +267,8 @@ test('Legacy 80%: resume navigation only, without invented examination, grade or
     expect(after.attempts).toEqual(before.attempts);
     expect(after.certificate_id).toBeNull();
     expect(after.status).not.toBe('CONCLUIDO');
-    // Client-visible % / historical SCORM bookmark must not become new official ledger evidence.
-    expect(after.completed_unit_ids).not.toEqual(expect.arrayContaining(r.creditedNavigationIds));
+    // Previously persisted official units may overlap navigation credits.
+    // Equivalence must NOT add new evidence; the before/after equality above is authoritative.
     await context.close();
     ({context,page}=await openLearner(browser));
     await page.goto(pathOn(profile.baseUrl,r.launchPath));
