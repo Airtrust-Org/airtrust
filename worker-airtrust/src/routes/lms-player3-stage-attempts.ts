@@ -53,7 +53,7 @@ async function readBoundedJson(c: {req:{raw:Request;header(name:string):string|u
   const bytes=new Uint8Array(total);
   let offset=0;
   for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
-  return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+  return JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(bytes));
 }
 
 app.post('/matriculas/:matriculaId/etapas/:stageId/tentativas',async c=>{
