@@ -42,7 +42,7 @@ export function normalizeD1Rows(input){
 }
 export function summarize(rows){
   const identities=new Set(),tenants=new Set(),courses=new Set();
-  let active=0,unstarted=0,conflicts=0,bookmarks=0;
+  let active=0,unstarted=0,conflicts=0,bookmarks=0,xapi=0;
   for(const row of rows){
     const id=row.empresa_id+':'+row.matricula_id;
     if(identities.has(id)) conflicts++;
@@ -56,10 +56,12 @@ export function summarize(rows){
       (row.ciclo_progresso_pct!=null &&
         Number(row.ciclo_progresso_pct)!==Number(row.matricula_progresso_pct))) conflicts++;
     if(row.scorm_suspend_data_PRIVATE||row.scorm_cmi_json_PRIVATE) bookmarks++;
+    if(Number.isSafeInteger(row.xapi_statement_count)&&row.xapi_statement_count>0)xapi++;
   }
   return {
     enrollments:rows.length,active,unstarted,tenants:tenants.size,
     courses:courses.size,conflicts,with_scorm_resume_state:bookmarks,
+    with_xapi_events:xapi,
     contains_individual_data:false,
   };
 }
