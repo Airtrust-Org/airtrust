@@ -113,6 +113,22 @@ class PrivateBankTest(unittest.TestCase):
                 self.assertEqual(stat.S_IMODE(p.stat().st_mode),0o600)
             with self.assertRaises(UnsafePackage):
                 build([batch],private,review)
+    def test_direct_original_zip_is_accepted_without_repackaging(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            original=root/'course.zip'
+            raw=scorm(course_data())
+            original.write_bytes(raw)
+            meta=build([original],root/'vault',root/'learner')
+            self.assertEqual(meta['course_editions'],1)
+            self.assertEqual(meta['questions'],1)
+            private_banks=list((root/'vault').glob('*server-only-bank.json'))
+            self.assertEqual(len(private_banks),1)
+            self.assertIn('correctOptionId',private_banks[0].read_text())
+            projections=list((root/'learner').glob('*learner-review.json'))
+            self.assertEqual(len(projections),1)
+            self.assertNotIn('correctOptionId',projections[0].read_text())
+
     def test_failure_must_not_leave_incomplete_outputs(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td)
