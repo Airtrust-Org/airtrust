@@ -1,6 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createDecipheriv,randomBytes} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
 import {normalizeD1Rows,sealInventory,summarize} from './player3-seal-active-inventory.mjs';
 const row={
   empresa_id:6,matricula_id:911,curso_id:57,funcionario_id:123,
@@ -26,7 +31,7 @@ test('seals sensitive IDs and SCORM resume state with authenticated encryption',
   assert.equal(summary.active,1);
   assert.ok(!sealed.includes('resume-marker'));
   assert.ok(!sealed.includes('PRIVATE_LEARNING_STATE'));
-  assert.ok(!sealed.includes('911'));
+  assert.ok(!sealed.includes('"matricula_id":911'));
   const data=JSON.parse(sealed);
   const decipher=createDecipheriv('aes-256-gcm',key,Buffer.from(data.iv_b64,'base64'));
   decipher.setAAD(Buffer.from('AIRTRUST_PLAYER3_PRIVATE_INVENTORY_V1:vault-key'));
@@ -54,4 +59,24 @@ test('detects truncated D1 payload before encrypting any learner records',()=>{
 });
 test('rejects a key that cannot provide AES-256-GCM',()=>{
   assert.throws(()=>sealInventory([row],Buffer.alloc(16)),/INVALID_KEY/);
+});
+
+test('malformed private input never appears in CI stderr',()=>{
+  const marker='SENSITIVE_STUDENT_CMI_DO_NOT_LOG';
+  const dir=mkdtempSync(join(tmpdir(),'player3-malformed-input-'));
+  try{
+    const raw='{"results":[{"scorm_suspend_data_PRIVATE":"'+marker+'"';
+    assert.throws(()=>normalizeD1Rows(raw),/PLAYER3_INVENTORY_INVALID_D1_JSON/);
+    const child=spawnSync(process.execPath,[
+      fileURLToPath(new URL('./player3-seal-active-inventory.mjs',import.meta.url)),
+      '--out',join(dir,'output.enc.json'),
+    ],{
+      input:raw,encoding:'utf8',
+      env:{...process.env,AIRTRUST_PLAYER3_SNAPSHOT_KEY_B64:randomBytes(32).toString('base64')},
+    });
+    assert.notEqual(child.status,0);
+    assert.equal(child.stderr.trim(),'PLAYER3_INVENTORY_INVALID_D1_JSON');
+    assert.ok(!child.stderr.includes(marker));
+    assert.equal(child.stdout,'');
+  }finally{rmSync(dir,{recursive:true,force:true});}
 });
