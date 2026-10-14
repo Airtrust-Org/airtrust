@@ -155,7 +155,6 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(
       isFadigaCheckinSubmitReady({
         sonoOpcao: 'h8',
-      repousoOpcao: 'h8',
         repousoOpcao: 'h8',
         presentationTime: '06:30',
         wakeTime: '05:30',
@@ -173,7 +172,6 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(
       isFadigaCheckinSubmitReady({
         sonoOpcao: 'h8',
-      repousoOpcao: 'h8',
         repousoOpcao: 'h8',
         presentationTime: '06:30',
         wakeTime: '05:30',
@@ -189,7 +187,6 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(
       isFadigaCheckinSubmitReady({
         sonoOpcao: 'h8',
-      repousoOpcao: 'h8',
         repousoOpcao: 'h8',
         presentationTime: '06:30',
         wakeTime: '05:30',
