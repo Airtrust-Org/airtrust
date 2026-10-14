@@ -258,3 +258,34 @@ de pacote original publicável, matrícula/identidade sintética aprovada,
 terminal canônico ativo e publicação governada. Oito gates oficiais
 precisam ser verificados na versão final do HEAD; CI de SHA anterior
 não implica CI aprovado neste SHA.
+
+## Integração da rota terminal certificadora — 14/10/2026
+
+A B criou na PR #1389 a rota autenticada
+`POST /api/lms/native/matriculas/{matriculaId}/etapas/concluir`
+(`worker-airtrust/src/routes/lms-player3-terminal-completion.ts`).
+Permanece **staging-only, OFF por padrão e sem Schema V2 aplicado**.
+A chamada não admite corpo de cliente: não aceita nota, respostas, identidade,
+edição, progresso ou declaração de conclusão. A B prepara o comprovante
+somente no Worker e insere a guarda+intent na transação D1 canônica.
+
+A D atualizou o E2E de Doutrinamento para exigir que o botão
+`player3-request-finalization` dispare **um POST real ao Worker**
+no endpoint exato, sem payload, receba HTTP 200 e o recibo:
+`success:true, data:{matricula_id,status:'CONCLUIDO',qualification_outcome,
+certificate_state:'REQUIRES_VERIFICATION'}`.
+Resposta de erro, curso errado, estado diferente, certificado alegadamente
+emitido sem confirmação ou payload com chaves/respostas privadas reprovam.
+Esta resposta **não é prova de PDF**: após o POST a D espera status
+durável, `certificate_id>0`, confirma histórico de qualificação sem
+duplicidade e recupera PDF completo duas vezes, incluindo após nova
+autenticação. Se o certificado for assíncrono, o polling do recibo durável
+é limitado a 45 segundos e falha de modo visível — sem fake completion.
+
+**Validação local no SHA `35e806ef4f7bb470f1c6e32de05bde1a63b65777`:**
+38/38 casos Vitest aprovados; ESLint/TypeScript PASS; seis jornadas
+Playwright localizadas corretamente. A rota não foi invocada em staging,
+pois seus gates/default OFF, schemas e ativos ainda não foram autorizados
+e preparados em ambiente QA real. Cabe à B testar especificamente 401/403,
+404 default-off, rejeição de corpo, ciclos/tenant concorrentes e rollback
+antes da implantação governada.
