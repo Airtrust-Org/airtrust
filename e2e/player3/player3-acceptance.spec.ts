@@ -333,7 +333,10 @@ test('External SCORM 1.2: actual adapter, no fake completion from visual slides,
     await expect.poll(async ()=>
       (await apiData<{lesson_status:string}>(context,profile.baseUrl,e.scormSnapshotPath)).lesson_status
     ).toBe('passed');
-    // Only a legitimate visible learner finish may request backend completion.
+    // The package's LMSFinish alone is not certification; the learner must
+    // explicitly confirm the wrapper-owned, server-validated closeout.
+    expect((await snapshot(context,profile,e)).status).not.toBe('CONCLUIDO');
+    await page.getByRole('button',{name:e.learnerCompletionButton,exact:true}).click();
     await expect.poll(async ()=>(await snapshot(context,profile,e)).status,
       {timeout:45_000}).toBe('CONCLUIDO');
     stored=await snapshot(context,profile,e);
