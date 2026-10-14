@@ -1,5 +1,8 @@
 import {describe,expect,it} from 'vitest';
-import {qaPath,validateQaProfile,type QaProfile,type QaProjectFixture} from './fixture-contract';
+import {
+  qaPath,validateQaProfile,validateQaModuleSession,
+  type QaModuleSession,type QaProfile,type QaProjectFixture,
+} from './fixture-contract';
 
 const staging='https://qa-lms.airtrust.example';
 const apiOrigin='https://qa-api.airtrust.example';
@@ -104,5 +107,78 @@ describe('Front D QA contract — no network, no real students',()=>{
     const quiz=p2.projects.chromium.doutrinamento.units[0].official!.questions[0];
     quiz.wrong=quiz.correct;
     expect(()=>validateQaProfile(p2,'chromium',staging,apiOrigin)).toThrow('AUTHOR_UNIT_AND_EXAM_MAP');
+  });
+});
+
+
+function realModuleProjection(): QaModuleSession {
+  return {
+    editionSha256:edition,cycleId:1101,
+    completionSupported:false,allOfficialStagesPassed:false,
+    stages:Array.from({length:8},(_,i)=>({
+      stageId:'mod-'+(i+1),attempts:0,lastScorePct:null,
+      passed:false,nextAttemptNumber:1,
+    })),
+  };
+}
+const eightStages=Array.from({length:8},(_,i)=>'mod-'+(i+1));
+describe('Front D — Worker authoritative stage session (read-only)',()=>{
+  it('accepts pristine, actual per-stage failure and recovered pass without fake completion',()=>{
+    const original=realModuleProjection();
+    expect(validateQaModuleSession(original,edition,1101,eightStages).stages)
+      .toHaveLength(8);
+    original.stages[0]={stageId:'mod-1',attempts:1,lastScorePct:25,
+      passed:false,nextAttemptNumber:2};
+    expect(validateQaModuleSession(original,edition,1101,eightStages)
+      .allOfficialStagesPassed).toBe(false);
+    original.stages[0]={stageId:'mod-1',attempts:2,lastScorePct:100,
+      passed:true,nextAttemptNumber:3};
+    expect(validateQaModuleSession(original,edition,1101,eightStages)
+      .stages[0].passed).toBe(true);
+    original.stages.forEach((s,i)=>{if(i>0)original.stages[i]={
+      ...s,attempts:1,lastScorePct:100,passed:true,nextAttemptNumber:2,
+    };});
+    original.allOfficialStagesPassed=true;
+    expect(validateQaModuleSession(original,edition,1101,eightStages)
+      .allOfficialStagesPassed).toBe(true);
+  });
+  it('rejects stale edition or cross-cycle stage receipts',()=>{
+    const s=realModuleProjection();
+    expect(()=>validateQaModuleSession(s,'c'.repeat(64),1101,eightStages))
+      .toThrow('MODULE_SESSION_PINNED_EDITION_CYCLE');
+    expect(()=>validateQaModuleSession(s,edition,9999,eightStages))
+      .toThrow('MODULE_SESSION_PINNED_EDITION_CYCLE');
+  });
+  it('rejects omitted, duplicate or invented stage IDs',()=>{
+    const s=realModuleProjection();s.stages.pop();
+    expect(()=>validateQaModuleSession(s,edition,1101,eightStages))
+      .toThrow('MODULE_SESSION_STAGE_COUNT');
+    const v=realModuleProjection();v.stages[1].stageId='mod-1';
+    expect(()=>validateQaModuleSession(v,edition,1101,eightStages))
+      .toThrow('MODULE_SESSION_STAGE_ID');
+    const x=realModuleProjection();x.stages[1].stageId='other';
+    expect(()=>validateQaModuleSession(x,edition,1101,eightStages))
+      .toThrow('MODULE_SESSION_POLICY_STAGE_MISMATCH');
+  });
+  it('rejects fabricated grade, pass without attempt or impossible replay sequencing',()=>{
+    const s=realModuleProjection();
+    s.stages[0].passed=true;
+    expect(()=>validateQaModuleSession(s,edition,1101,eightStages))
+      .toThrow('MODULE_SESSION_ATTEMPT_INTEGRITY');
+    s.stages[0].passed=false;s.stages[0].attempts=1;s.stages[0].lastScorePct=101;
+    expect(()=>validateQaModuleSession(s,edition,1101,eightStages))
+      .toThrow('MODULE_SESSION_ATTEMPT_INTEGRITY');
+    s.stages[0].lastScorePct=70;s.stages[0].nextAttemptNumber=1;
+    expect(()=>validateQaModuleSession(s,edition,1101,eightStages))
+      .toThrow('MODULE_SESSION_ATTEMPT_INTEGRITY');
+  });
+  it('requires Worker to say completionSupported=false even when all stages pass',()=>{
+    const s=realModuleProjection();
+    s.stages=s.stages.map(stage=>({...stage,attempts:1,lastScorePct:100,
+      passed:true,nextAttemptNumber:2}));
+    s.allOfficialStagesPassed=true;
+    s.completionSupported=true as false;
+    expect(()=>validateQaModuleSession(s,edition,1101,eightStages))
+      .toThrow('MODULE_SESSION_NO_PREMATURE_COMPLETION');
   });
 });
