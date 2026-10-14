@@ -15,6 +15,26 @@ import {resolve,isAbsolute} from 'node:path';
 const assert=(p,code)=>{if(!p) throw new Error('PLAYER3_INVENTORY_'+code);};
 // Exact authorized tenant. Separate tenant requires separate reviewed workflow.
 const AUTHORIZED_TENANT_ID=6;
+function validatePrivateCycleHistory(r){
+  // History stays private and must remain in the same tenant/enrollment.
+  if(r.ciclos_historicos_json_PRIVATE!==undefined &&
+     r.ciclos_historicos_json_PRIVATE!==null){
+    assert(typeof r.ciclos_historicos_json_PRIVATE==='string','INVALID_CYCLE_HISTORY');
+    let history;
+    try{history=JSON.parse(r.ciclos_historicos_json_PRIVATE);}catch{
+      assert(false,'INVALID_CYCLE_HISTORY_JSON');
+    }
+    assert(Array.isArray(history)&&history.length<=1000,'INVALID_CYCLE_HISTORY');
+    const ids=new Set();
+    for(const cycle of history){
+      assert(cycle && Number.isSafeInteger(cycle.id) && cycle.id>0 &&
+        cycle.empresa_id===r.empresa_id && cycle.matricula_id===r.matricula_id,
+        'CROSS_TENANT_OR_ENROLLMENT_CYCLE_HISTORY');
+      assert(!ids.has(cycle.id),'DUPLICATE_CYCLE_HISTORY');
+      ids.add(cycle.id);
+    }
+  }
+}
 export function normalizeD1Rows(input){
   const decoded=typeof input==='string'?JSON.parse(input):input;
   const blocks=Array.isArray(decoded)?decoded:[decoded];
@@ -37,24 +57,7 @@ export function normalizeD1Rows(input){
         typeof r.scorm_suspend_data_PRIVATE==='string','INVALID_BOOKMARK');
       assert(r.scorm_cmi_json_PRIVATE==null ||
         typeof r.scorm_cmi_json_PRIVATE==='string','INVALID_CMI');
-      // History stays private and must remain in the same tenant/enrollment.
-      if(r.ciclos_historicos_json_PRIVATE!==undefined &&
-         r.ciclos_historicos_json_PRIVATE!==null){
-        assert(typeof r.ciclos_historicos_json_PRIVATE==='string','INVALID_CYCLE_HISTORY');
-        let history;
-        try{history=JSON.parse(r.ciclos_historicos_json_PRIVATE);}catch{
-          assert(false,'INVALID_CYCLE_HISTORY_JSON');
-        }
-        assert(Array.isArray(history)&&history.length<=1000,'INVALID_CYCLE_HISTORY');
-        const ids=new Set();
-        for(const cycle of history){
-          assert(cycle && Number.isSafeInteger(cycle.id) && cycle.id>0 &&
-            cycle.empresa_id===r.empresa_id && cycle.matricula_id===r.matricula_id,
-            'CROSS_TENANT_OR_ENROLLMENT_CYCLE_HISTORY');
-          assert(!ids.has(cycle.id),'DUPLICATE_CYCLE_HISTORY');
-          ids.add(cycle.id);
-        }
-      }
+      validatePrivateCycleHistory(r);
       rows.push(r);
     }
   }
@@ -98,6 +101,7 @@ export function sealInventory(rows,key,keyId='player3-private'){
     'INCOMPLETE_EXPORT');
   assert(Buffer.isBuffer(key)&&key.length===32,'INVALID_KEY');
   assert(typeof keyId==='string'&&/^[a-z0-9][a-z0-9_-]{0,63}$/.test(keyId),'INVALID_KEY_ID');
+  rows.forEach(validatePrivateCycleHistory);
   const summary=summarize(rows);
   const envelope={schema:'AIRTRUST_PLAYER3_PRIVATE_INVENTORY_V1',
     extracted_utc:new Date().toISOString(),source_contract:'player3-active-enrollments-readonly.sql',
