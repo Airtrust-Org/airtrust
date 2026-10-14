@@ -65,7 +65,14 @@ export default function Player3Html5Host({
   const verifiedSubmit = useMemo(() => {
     if (!safe || reviewOnly || !examContext ||
         examContext.editionSha256 !== editionSha256) return null;
-    return makePlayer3VerifiedStageSubmitter(examContext);
+    // Lazily bind on first official submission: a read-only presentation
+    // must not require a working API transport just to render. Reuse the
+    // same instance after that to preserve its ambiguous-write lock.
+    let submitter: ReturnType<typeof makePlayer3VerifiedStageSubmitter> | null = null;
+    return (answers: readonly P3ExamAnswer[]) => {
+      submitter ??= makePlayer3VerifiedStageSubmitter(examContext);
+      return submitter(answers);
+    };
   }, [safe,reviewOnly,examContext,editionSha256]);
   useEffect(() => {
     setLastHint(null);
@@ -107,7 +114,9 @@ export default function Player3Html5Host({
           submitting || handledRequests.has(msg.requestId)) return;
       const answers = msg.answers as P3ExamAnswer[];
       if (!examContext.questions.every((q,i) =>
-        answers[i] && typeof answers[i].questionId === 'string' &&
+        answers[i] && Object.keys(answers[i]).sort().join(',') ===
+          'optionId,questionId' &&
+        typeof answers[i].questionId === 'string' &&
         answers[i].questionId === q.id &&
         typeof answers[i].optionId === 'string' &&
         q.options.some(o => o.id === answers[i].optionId))) return;
