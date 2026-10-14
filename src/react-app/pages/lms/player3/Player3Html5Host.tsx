@@ -60,7 +60,7 @@ export default function Player3Html5Host({
 }: Player3Html5HostProps) {
   const [lastHint, setLastHint] = useState<string | null>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const [frameLoaded,setFrameLoaded]=useState(false);
+  const [frameLoadVersion,setFrameLoadVersion]=useState(0);
   const [navigationError,setNavigationError]=useState(false);
   const navigationEnabled=useRef(false);
   // The resume ACK displays a page; only leaving that page may commit its
@@ -247,14 +247,14 @@ export default function Player3Html5Host({
   // Do not trust a localStorage/SCORM bookmark: only the launch projection
   // from the authenticated Worker may move the original authored presentation.
   useEffect(()=>{
-    if(!safe||reviewOnly||!frameLoaded||!navigation||
+    if(!safe||reviewOnly||frameLoadVersion===0||!navigation||
        !validNavigationScope(navigation)||
        navigation.editionSha256!==editionSha256)return;
     frameRef.current?.contentWindow?.postMessage({
       type:'AIRTRUST_PLAYER3_RESUME_CURSOR_V1',
       editionSha256,nextUnitId:navigation.nextUnitId,
     },new URL(contentOrigin).origin);
-  },[safe,reviewOnly,frameLoaded,navigation,editionSha256,contentOrigin]);
+  },[safe,reviewOnly,frameLoadVersion,navigation,editionSha256,contentOrigin]);
 
   if (!safe) return (
     <p role="alert">Conteúdo HTML5 indisponível: origem ou edição inválida.
@@ -275,7 +275,7 @@ export default function Player3Html5Host({
         onLoad={()=>{
           navigationEnabled.current=false;
           displayedUnit.current=null;
-          setFrameLoaded(true);
+          setFrameLoadVersion(n=>n+1);
         }}
         title={'Conteúdo original — ' + title}
         src={contentUrl}
