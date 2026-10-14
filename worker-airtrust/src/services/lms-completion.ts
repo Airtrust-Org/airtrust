@@ -6,6 +6,8 @@ import { ensureCertificateForQualification } from './ensure-certificate';
 import { hasApprovedScormCategoryLink } from './lms-scorm-category-compatibility';
 import { buildNativeTerminalTransactionGuard, type NativeTerminalAnchor } from './lms-native-terminal-transaction-guard';
 import { canProvisionNative } from './lms-native-enrollment-provisioner';
+import {canWritePlayer3Stage} from './lms-player3-module-attempt-writer';
+import {buildPlayer3TerminalTransactionGuard,type Player3TerminalAnchor} from './lms-player3-terminal-transaction-guard';
 
 export type LmsCompletionOutcome =
   | 'qualification_created'
@@ -62,6 +64,8 @@ export interface CompleteLmsMatriculaParams {
   userAgent?: string;
   /** Only a Worker-verified Native snapshot can enable this atomic assertion. */
   nativeTerminalAnchor?: NativeTerminalAnchor;
+  /** Only an internal, regraded Player3 terminal preparer can supply this. */
+  player3TerminalAnchor?: Player3TerminalAnchor;
 }
 
 type PreBatchState = {
@@ -728,6 +732,67 @@ function withNativeAtomicGuard(
   statements: { sql: string; args: unknown[] }[],
 ): { sql: string; args: unknown[] }[] {
   const a=params.nativeTerminalAnchor;
+  const p=params.player3TerminalAnchor;
+  if(a&&p){
+    throw new LmsCompletionRejectedError(
+      'Dois motores terminais incompatíveis para a mesma matrícula',
+      'PLAYER3_DUAL_TERMINAL_DENIED',
+    );
+  }
+  if(p){
+    const env=params.env;
+    if(!env || !canWritePlayer3Stage(env,params.empresaId) ||
+       p.empresaId!==params.empresaId ||
+       p.matriculaId!==params.matriculaId ||
+       p.cursoId!==params.cursoId ||
+       p.funcionarioId!==params.funcionarioId ||
+       p.actorUserId!==params.actorUserId ||
+       p.gerarQualificacaoAoConcluir!==params.gerarQualificacaoAoConcluir ||
+       p.qualificacaoTipoId!==params.qualificacaoTipoId ||
+       p.qualificacaoCategoriaId!==(params.qualificacaoCategoriaId??null) ||
+       params.scoreFinal!=null ||
+       (params.progressoPct??100)!==100 ||
+       params.action!=='LMS_PLAYER3_CANONICAL_CONCLUIDA'){
+      throw new LmsCompletionRejectedError(
+        'Comprovante Player3 inválido ou fluxo terminal não autorizado',
+        'PLAYER3_TERMINAL_ANCHOR_MISMATCH',
+      );
+    }
+    const gate=buildPlayer3TerminalTransactionGuard(p,env);
+    // The assertion, terminal intent, canonical mutations and intent deletion
+    // form ONE D1.batch. The review-only 0555 plan defines a deferred FK to an
+    // unfillable sentinel: forgetting the DELETE aborts the whole commit.
+    // This code is not reachable from HTTP until the governed schema/endpoint
+    // and audited staging rollout have been completed.
+    const nonce=Array.from(crypto.getRandomValues(new Uint8Array(32)),
+      byte=>byte.toString(16).padStart(2,'0')).join('');
+    const intent={
+      sql:`INSERT INTO lms_player3_completion_intents (
+        nonce,empresa_id,curso_id,matricula_id,ciclo_id,funcionario_id,
+        actor_user_id,vinculo_id,edicao_id,politica_id,edition_sha256,
+        source_sha256,bank_sha256,policy_sha256,required_lesson_ids_json,
+        official_stage_receipts_json,event_count,distinct_lesson_count,
+        official_stage_count,gerar_qualificacao,qualificacao_tipo_id,
+        qualificacao_categoria_id
+      ) VALUES (${Array.from({length:22},()=>'?').join(',')})`,
+      args:[
+        nonce,p.empresaId,p.cursoId,p.matriculaId,p.cicloId,p.funcionarioId,
+        p.actorUserId,p.bindingId,p.edicaoId,p.politicaId,p.editionHash,
+        p.sourceHash,p.bankHash,p.policyHash,JSON.stringify(p.requiredLessonIds),
+        JSON.stringify(p.officialStages.map(s=>({
+          stageId:s.stageId,attemptId:s.attemptId,
+          attemptNumber:s.attemptNumber,answersHash:s.answersHash,
+          scorePct:s.scorePct,
+        }))),p.recordedEventCount,p.requiredLessonIds.length,
+        p.officialStages.length,Number(p.gerarQualificacaoAoConcluir),
+        p.qualificacaoTipoId,p.qualificacaoCategoriaId,
+      ],
+    };
+    return [
+      {sql:gate.sql,args:[...gate.bindings]},intent,...statements,
+      {sql:'DELETE FROM lms_player3_completion_intents WHERE nonce=?',args:[nonce]},
+    ];
+  }
   if (!a) return statements;
   if (!params.env || !canProvisionNative(params.env,params.empresaId) ||
       a.empresaId !== params.empresaId || a.matriculaId !== params.matriculaId ||

@@ -12,6 +12,10 @@ SELECT json(CASE WHEN
   AND (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN
     ('lms_native_edicoes_tenant_insert','lms_native_vinculo_tenant_insert',
      'lms_native_event_scope_sequence','lms_native_attempt_scope'))=4
+  AND (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'
+      AND name='lms_player3_attempt_insert')=1
+  AND (SELECT COUNT(*) FROM sqlite_master WHERE type='table'
+      AND name IN ('lms_player3_politicas','lms_player3_tentativas_modulares'))=2
   AND (SELECT COUNT(*) FROM sqlite_master WHERE name IN
     ('lms_native_catalog_activation','lms_native_enrollment_intents',
      'lms_native_uncommittable_intent_guard'))=0
@@ -269,4 +273,41 @@ BEGIN
   );
   SELECT RAISE(ABORT,'NATIVE_ATTEMPT_SEQUENCE_CONFLICT') WHERE NEW.tentativa_numero !=
     (SELECT COALESCE(MAX(tentativa_numero),0)+1 FROM lms_native_tentativas WHERE vinculo_id=NEW.vinculo_id);
+END;
+
+-- The 0553 official modular writer also enforces the physical Native type.
+-- Without this exact replacement, a governed SCORM alias cannot persist any
+-- official module result and the Player3 terminal can never have proof.
+-- Preserve the 0553 employee, tenant, edition, cycle, policy, and sequence
+-- requirements; activate ONLY the same course-scoped catalog marker as above.
+-- A nonactivated / externally supplied SCORM must remain rejected.
+DROP TRIGGER lms_player3_attempt_insert;
+CREATE TRIGGER lms_player3_attempt_insert BEFORE INSERT ON lms_player3_tentativas_modulares
+BEGIN
+  SELECT RAISE(ABORT,'PLAYER3_STAGE_ACTIVE_SCOPE') WHERE NOT EXISTS (
+    SELECT 1 FROM lms_native_matricula_edicoes b
+    JOIN lms_player3_politicas p ON p.id=NEW.politica_id
+      AND p.edicao_id=b.edicao_id AND p.empresa_id=b.empresa_id
+      AND p.curso_id=b.curso_id AND p.estado='APPROVED'
+    JOIN lms_native_edicoes ed ON ed.id=b.edicao_id
+      AND ed.empresa_id=b.empresa_id AND ed.curso_id=b.curso_id
+      AND ed.status='PUBLISHED'
+    JOIN lms_matriculas m ON m.id=b.matricula_id AND m.empresa_id=b.empresa_id
+      AND m.curso_id=b.curso_id AND m.status='EM_ANDAMENTO'
+      AND m.deleted_at IS NULL
+    JOIN lms_matricula_ciclos cy ON cy.id=b.ciclo_id AND cy.matricula_id=m.id
+      AND cy.empresa_id=m.empresa_id AND cy.curso_id=m.curso_id
+      AND cy.funcionario_id=m.funcionario_id AND cy.ciclo_atual=1
+      AND cy.status='EM_ANDAMENTO' AND cy.deleted_at IS NULL
+    JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+      AND (c.tipo_conteudo='native' OR (c.tipo_conteudo='scorm' AND EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id))) AND c.ativo=1
+      AND c.publicado=1 AND c.deleted_at IS NULL
+    WHERE b.id=NEW.vinculo_id
+  );
+  SELECT RAISE(ABORT,'PLAYER3_STAGE_SEQUENCE_CONFLICT') WHERE
+    NEW.tentativa_numero != (
+      SELECT COALESCE(MAX(tentativa_numero),0)+1
+        FROM lms_player3_tentativas_modulares
+       WHERE vinculo_id=NEW.vinculo_id AND etapa_id=NEW.etapa_id
+    );
 END;

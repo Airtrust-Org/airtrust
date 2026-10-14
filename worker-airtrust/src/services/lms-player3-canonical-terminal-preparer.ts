@@ -173,7 +173,7 @@ export async function preparePlayer3CanonicalTerminal(input:{
     qualificacaoTipoId:qualification?metadata.qualificacao_tipo_id:null,
     qualificacaoCategoriaId:categoryId,
   };
-  const atomicGuard=buildPlayer3TerminalTransactionGuard(terminalAnchor);
+  const atomicGuard=buildPlayer3TerminalTransactionGuard(terminalAnchor,env);
   return{
     ready:true,completionSupported:false,atomicGuard,terminalAnchor,
     canonical:{

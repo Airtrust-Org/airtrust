@@ -126,6 +126,8 @@ jobs:
         run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/__tests__/test_lms_native_v1_evidence_0552.py -v
       - name: validate Player3 module-attempt Schema V2 0553 strictly offline
         run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/__tests__/test_player3_module_attempts_0553.py -v
+      - name: rehearse Player3 activated catalog trigger strictly offline
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.__tests__.test_player3_catalog_activation_review_trigger -v
       - name: rehearse Native catalog alternatives strictly offline (no migration)
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.__tests__.test_native_additive_marker_rehearsal scripts.__tests__.test_native_catalog_activation_table_rehearsal scripts.__tests__.test_native_catalog_marker_0552_compatibility scripts.__tests__.test_native_atomic_enrollment_pinning_rehearsal scripts.__tests__.test_native_active_learner_sql scripts.__tests__.test_native_staging_schema_snapshot scripts.__tests__.test_native_atomic_terminal_state_guard scripts.__tests__.test_native_completion_intent_rehearsal -v
       - name: validate 0438 legacy staging workflow guards
