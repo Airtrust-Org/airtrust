@@ -213,6 +213,73 @@ describe('completeLmsMatricula', () => {
     expect(db.batch).not.toHaveBeenCalled();
   });
 
+  const player3Anchor=(qualificacao:boolean)=>({
+    empresaId:6,matriculaId:1,cursoId:31,cicloId:1001,
+    funcionarioId:77,actorUserId:42,bindingId:13,edicaoId:7,
+    politicaId:25,editionHash:'a'.repeat(64),
+    sourceHash:'b'.repeat(64),bankHash:'c'.repeat(64),
+    policyHash:'d'.repeat(64),
+    requiredLessonIds:['welcome','lastLesson'],recordedEventCount:2,
+    officialStages:[
+      {stageId:'module1',attemptId:10,attemptNumber:1,
+        answersHash:'e'.repeat(64),scorePct:80},
+      {stageId:'module2',attemptId:11,attemptNumber:2,
+        answersHash:'f'.repeat(64),scorePct:100},
+    ],
+    gerarQualificacaoAoConcluir:qualificacao,
+    qualificacaoTipoId:qualificacao?55:null,
+    qualificacaoCategoriaId:qualificacao?13:null,
+  });
+  const player3Env=()=>({
+    ...nativeEnv(),PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:'6',
+  });
+
+  it.each([false,true])('Player3 guarded batch starts with exact content+modular SQL (qualification=%s)',async qual=>{
+    const db=makeFakeDb({});
+    await completeLmsMatricula(baseParams(db,{
+      env:player3Env(),cursoId:31,gerarQualificacaoAoConcluir:qual,
+      qualificacaoTipoId:qual?55:null,qualificacaoCategoriaId:qual?13:null,
+      scoreFinal:null,progressoPct:100,
+      action:'LMS_PLAYER3_CANONICAL_CONCLUIDA',
+      player3TerminalAnchor:player3Anchor(qual),
+    }) as never);
+    const calls=(db.prepare as ReturnType<typeof vi.fn>).mock.calls
+      .map((a:unknown[])=>String(a[0]));
+    const firstGuard=calls.findIndex(s=>s.startsWith('SELECT json(CASE WHEN')&&
+      s.includes('PLAYER3_TERMINAL_EVIDENCE_CHANGED'));
+    const firstMutation=calls.findIndex(s=>s.includes('UPDATE lms_matriculas'));
+    expect(firstGuard).toBeGreaterThanOrEqual(0);
+    expect(firstMutation).toBeGreaterThan(firstGuard);
+    expect(calls[firstGuard]).toContain('lms_player3_tentativas_modulares');
+    expect(db.batch).toHaveBeenCalledTimes(1);
+    const batches=(db as unknown as {__batchCalls:unknown[][]}).__batchCalls;
+    expect(batches).toHaveLength(1);
+    expect(batches[0].length).toBeGreaterThan(2);
+    expect(calls.find(s=>s.includes('INSERT INTO lms_native_completion_intents'))).toBeUndefined();
+  });
+  it('Player3 rejects mixed authorities, invalid scopes or missing staging flags before batch',async()=>{
+    const db=makeFakeDb({});
+    const base={
+      env:player3Env(),cursoId:31,gerarQualificacaoAoConcluir:false,
+      qualificacaoTipoId:null,qualificacaoCategoriaId:null,
+      scoreFinal:null,progressoPct:100,action:'LMS_PLAYER3_CANONICAL_CONCLUIDA',
+      player3TerminalAnchor:player3Anchor(false),
+    };
+    for(const patch of [
+      {actorUserId:43},{cursoId:32},{scoreFinal:99},
+      {progressoPct:99},{action:'LMS_MATRICULA_CONCLUIDA'},
+      {env:{...player3Env(),ENVIRONMENT:'production'}},
+      {env:{...player3Env(),PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:undefined}},
+    ]){
+      await expect(completeLmsMatricula(baseParams(db,{...base,...patch}) as never))
+        .rejects.toMatchObject({code:'PLAYER3_TERMINAL_ANCHOR_MISMATCH'});
+    }
+    await expect(completeLmsMatricula(baseParams(db,{
+      ...base,nativeTerminalAnchor:nativeAnchor(false),
+    }) as never)).rejects.toMatchObject({code:'PLAYER3_DUAL_TERMINAL_DENIED'});
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
   it('curso sem qualificação exigida: outcome qualification_not_required, um único batch', async () => {
     const db = makeFakeDb({});
     const result = await completeLmsMatricula(
