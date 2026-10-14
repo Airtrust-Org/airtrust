@@ -468,14 +468,19 @@ staging já OFF por padrão:
    contador visual/SCORM; após posicionar, retorna
    `AIRTRUST_PLAYER3_RESUME_ACK_V1`. A retomada não atribui nota,
    não executa conclusão e não altera o ledger por si só.
-4. Só após o ACK do frame correto e o contrato conferido no Worker,
-   uma visita a ID de lesson da allowlist aprovada pode executar
+4. O **ACK apenas posiciona a página**. A matrícula nova deve começar
+   com `seen_lesson_ids=[]` e `next_sequence=1`; reabertura não grava
+   checkpoint por si só. Somente quando a navegação sai de uma lição
+   identificada na allowlist aprovada — ou quando o conteúdo encerra
+   precisamente essa última lição — o Host executa
    `GET /matriculas/:id/sessao → POST /matriculas/:id/checkpoints
-   → GET /matriculas/:id/sessao`. O Worker revalida autenticação,
-   tenant, ciclo, hash de edição, sequência e existência da lesson;
-   tentativa/grade/certificado não fazem parte do payload. Se POST
-   ou a reconsulta ficarem ambíguos, o transporte bloqueia novos
-   envios e exige reabertura/reconciliação, sem retry automático.
+   → GET /matriculas/:id/sessao` para a **lição de origem**, não para a
+   próxima página. O Worker revalida identidade, tenant, ciclo, hash,
+   sequência e lesson; voltar a ID já persistido não duplica evidência.
+   Nenhuma leitura/ACK/visita por si concede nota, avaliação ou certificado.
+   Em erro ou POST de estado ambíguo, suspender writes até reabrir e
+   reconciliar, sem repetição automática. Ao recarregar o iframe, emitir
+   novamente somente o cursor autenticado.
 
 **QA focada sintética:** testes Python/Node simulam 42 páginas e a
 retomada 21→22 (inclusive IDs ausentes/duplicados); testes Vitest do
@@ -488,3 +493,19 @@ definitivo, edição-alvo, origem de conteúdo, 8 avaliações e a
 revisão pedagógica seguem aguardando aprovação. O gate real de seis
 jornadas Chromium/WebKit da D continua pendente. **Nenhum deploy,
 migrations, matrícula real ou produção ocorreu.**
+
+### 2026-10-14 — QA integrado e correção de checkpoint inicial
+
+Frente D #1465 está MERGED **na branch da B**, não em `main`, pelo
+commit `0bf4c7bee1f6d4d599eb421b9f7324f6e8751b2c`.
+O harness Playwright de seis cenários exige matrícula recém-aberta com
+**zero** checkpoints, registro único ao avançar de lição, reabertura
+21/42 → 22/42, tentativas de prova pelo Worker e PDF persistente.
+A revisão do Host/recorder na B corrigiu a gravação prematura durante
+`RESUME_ACK_V1` (antes o primeiro render criava um evento): grava agora
+somente na **saída da lição**; páginas/avaliações não homologadas não
+viram créditos. Teste de reabertura sem escrita, conteúdo encerrado,
+revisita sem duplicação, origem e iframe autorizados incluídos.
+Até validar os seis cenários reais em staging com RC8.1 reconstruído e
+aprovado, a classificação permanece **código de QA integrado, não
+homologação operacional**.
