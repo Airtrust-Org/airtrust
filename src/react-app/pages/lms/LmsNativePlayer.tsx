@@ -4,7 +4,7 @@
  */
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMatriculaDetalhe } from '@/react-app/hooks/useLms';
-import NativeStagingCoursePreview from './native/NativeStagingCoursePreview';
+import Player3AuthenticatedStagingEntry from './player3/Player3AuthenticatedStagingEntry';
 
 export default function LmsNativePlayer() {
   const { matriculaId } = useParams<{ matriculaId: string }>();
@@ -27,7 +27,13 @@ export default function LmsNativePlayer() {
           Voltar
         </button>
       </header>
-      <NativeStagingCoursePreview matriculaId={id} />
+      <Player3AuthenticatedStagingEntry
+        matriculaId={id}
+        empresaId={matricula.empresa_id}
+        cursoId={matricula.curso_id}
+        title={matricula.titulo ?? 'Treinamento'}
+        active={matricula.status === 'EM_ANDAMENTO'}
+      />
     </main>
   );
 }
