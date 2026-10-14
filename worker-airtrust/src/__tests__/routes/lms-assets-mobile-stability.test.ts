@@ -5,15 +5,16 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-assets.ts'), 'utf8');
 
 describe('SCORM mobile stability — autosave e resume', () => {
-  it('só agenda commit quando o valor de lesson_location/suspend_data realmente muda (SCORM 1.2)', () => {
+  it('agenda commit ao mudar valor ou registrar visita nova, sem downgrade (SCORM 1.2)', () => {
     expect(source).toContain("changed=' + (previousValue === nextValue ? '0' : '1')");
-    expect(source).toContain('if (previousValue !== nextValue) scheduleCommit(800);');
+    expect(source).toContain('if (previousValue !== nextValue || newVisit) scheduleCommit(800);');
+    expect(source).toContain("updateMaxVisitedFromLocation(String(value || ''))");
   });
 
-  it('só agenda commit quando o valor de location/suspend_data realmente muda (SCORM 2004)', () => {
+  it('agenda commit ao mudar valor ou registrar visita nova, sem downgrade (SCORM 2004)', () => {
     const scorm2004Block = source.slice(source.indexOf('var SCORM2004 = {'));
     expect(scorm2004Block).toMatch(
-      /emitProgress\(\{ location: getScormLocation\(\) \}\);\s*\n\s*if \(previousValue !== nextValue\) scheduleCommit\(800\);/,
+      /emitProgress\(\{ location: getScormLocation\(\) \}\);\s*\n\s*if \(previousValue !== nextValue \|\| newVisit\) scheduleCommit\(800\);/,
     );
   });
 
