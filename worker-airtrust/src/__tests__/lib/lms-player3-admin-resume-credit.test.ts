@@ -155,6 +155,6 @@ describe('Player 3 governed administrative resume intent',()=>{
   });
   it('does not treat progress at 100 as a reason to certify administratively',()=>{
     const advanced={...enrollment,matricula_progresso_pct:100,ciclo_progresso_pct:100};
-    expect(()=>create({enrollment:advanced})).toThrow('NOT_ELIGIBLE_FOR_BOOKMARK_CREDIT');
+    expect(()=>create({enrollment:advanced})).toThrow('FRONT_C_RECONCILIATION_NOT_VERIFIED');
   });
 });
