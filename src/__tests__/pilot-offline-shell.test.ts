@@ -91,6 +91,13 @@ describe('Partidas entre etapas', () => {
 });
 
 describe('Pilot Offline shell', () => {
+  it('abre visualização do anexo no gesto original e oferece link manual quando o navegador bloqueia janela', () => {
+    expect(pilotApp).toContain("window.open('about:blank', '_blank')");
+    expect(pilotApp).toContain('previewWindow.location.replace(url)');
+    expect(pilotApp).toContain("link.rel = 'noopener noreferrer'");
+    expect(pilotApp).toContain('await verifyCachedFlightDocument(state, document)');
+  });
+
   it('mantem os scripts estaticos do Pilot App sintaticamente validos como ESM moderno', () => {
     const assertParses = (source: string) => {
       const result = ts.transpileModule(source, {
