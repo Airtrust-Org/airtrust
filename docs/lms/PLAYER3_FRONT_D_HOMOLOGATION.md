@@ -60,6 +60,44 @@ Na PR #1389 (leitura do código em 2026-10-14), as rotas autenticadas já projet
 
 A D ainda precisa mapear rotas reais de leitura de tentativas, matrícula, histórico e PDF, adaptando exclusivamente o driver de QA. Se a B não disponibilizar leitura suficiente, usar inspeção read-only governada da fixture D1 staging, sem writes, sem autenticação contornada e sem `localStorage` como evidência oficial. **Estas rotas, embora implementadas no código DRAFT, ainda não foram homologadas em staging.**
 
+
+## Reconciliação modular real — API da Frente B
+
+Foi confirmado no código da PR #1389 o endpoint autenticado
+`GET /api/lms/native/matriculas/{matriculaId}/etapas/sessao`. Ele retorna
+`editionSha256`, `cycleId`, `allOfficialStagesPassed`,
+`completionSupported` e `stages[]` com
+`stageId, attempts, lastScorePct, passed, nextAttemptNumber`.
+
+O E2E da D lê **essa API real** antes da primeira unidade, após a primeira reprovação,
+após cada aprovação, depois de reabrir o browser e antes da finalização. Verifica
+oito IDs de etapa exatamente iguais aos do manifesto revisto, edição/ciclo fixos,
+contagem de tentativas, nota de 0–100 e numeração monotônica. O leitor recalcula
+o resultado com banco privado da B. `allOfficialStagesPassed=true` **não**
+é uma matrícula concluída: a D exige ainda snapshot persistido de matrícula,
+vínculo único no histórico e certificado PDF verificável. `completionSupported`
+é somente capacidade informativa e **não** é aceito como recibo.
+
+**Bloqueio de B identificado em 2026-10-14:** `canCompleteNative` desabilita
+expressamente a rota antiga de conclusão Native para tenants com
+`PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS`. Isso evita certificar via
+single-attempt, mas o novo terminal canônico Player3 só poderá homologar
+a RC8.1 quando reconciliar as oito provas e resultar no certificado verificável.
+Não desligar o gate modular como atalho. A D não altera esse writer.
+
+O SCORM 1.2 externo consulta o snapshot em `apiBaseUrl` do Worker, nunca
+no frontend Pages (endereços corrigidos), e só solicita conclusão pelo
+controle explícito do aluno depois de `lesson_status=passed`.
+
+A revisão local independente da B em HEAD `b41b8fc451086cbaf0b33c8ec2a9ec04a5942398`
+executou **23/23 testes PASS**: `lms-player3-stage-attempts.test.ts`,
+`lms-player3-module-progress-reader.test.ts` e
+`lms-native-completion.test.ts`. É teste isolado local, **não** prova
+de migration aplicada, staging, SCORM real ou certificado.
+
+A validação de perfil impede URLs com segredo/JWT em query ou fragmento e
+recusa origem de assets que não seja explicitamente HTTPS staging/QA.
+
 ## Evidência independente disponível
 
 - Preflight puro: **9/9 Vitest PASS**; ESLint e TypeScript focados PASS.
