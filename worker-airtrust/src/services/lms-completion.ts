@@ -6,6 +6,8 @@ import { ensureCertificateForQualification } from './ensure-certificate';
 import { hasApprovedScormCategoryLink } from './lms-scorm-category-compatibility';
 import { buildNativeTerminalTransactionGuard, type NativeTerminalAnchor } from './lms-native-terminal-transaction-guard';
 import { canProvisionNative } from './lms-native-enrollment-provisioner';
+import {canWritePlayer3Stage} from './lms-player3-module-attempt-writer';
+import {buildPlayer3TerminalTransactionGuard,type Player3TerminalAnchor} from './lms-player3-terminal-transaction-guard';
 
 export type LmsCompletionOutcome =
   | 'qualification_created'
@@ -62,6 +64,8 @@ export interface CompleteLmsMatriculaParams {
   userAgent?: string;
   /** Only a Worker-verified Native snapshot can enable this atomic assertion. */
   nativeTerminalAnchor?: NativeTerminalAnchor;
+  /** Only an internal, regraded Player3 terminal preparer can supply this. */
+  player3TerminalAnchor?: Player3TerminalAnchor;
 }
 
 type PreBatchState = {
@@ -728,6 +732,39 @@ function withNativeAtomicGuard(
   statements: { sql: string; args: unknown[] }[],
 ): { sql: string; args: unknown[] }[] {
   const a=params.nativeTerminalAnchor;
+  const p=params.player3TerminalAnchor;
+  if(a&&p){
+    throw new LmsCompletionRejectedError(
+      'Dois motores terminais incompatíveis para a mesma matrícula',
+      'PLAYER3_DUAL_TERMINAL_DENIED',
+    );
+  }
+  if(p){
+    const env=params.env;
+    if(!env || !canWritePlayer3Stage(env,params.empresaId) ||
+       p.empresaId!==params.empresaId ||
+       p.matriculaId!==params.matriculaId ||
+       p.cursoId!==params.cursoId ||
+       p.funcionarioId!==params.funcionarioId ||
+       p.actorUserId!==params.actorUserId ||
+       p.gerarQualificacaoAoConcluir!==params.gerarQualificacaoAoConcluir ||
+       p.qualificacaoTipoId!==params.qualificacaoTipoId ||
+       p.qualificacaoCategoriaId!==(params.qualificacaoCategoriaId??null) ||
+       params.scoreFinal!=null ||
+       (params.progressoPct??100)!==100 ||
+       params.action!=='LMS_PLAYER3_CANONICAL_CONCLUIDA'){
+      throw new LmsCompletionRejectedError(
+        'Comprovante Player3 inválido ou fluxo terminal não autorizado',
+        'PLAYER3_TERMINAL_ANCHOR_MISMATCH',
+      );
+    }
+    const gate=buildPlayer3TerminalTransactionGuard(p);
+    // A mandatory first statement, in the SAME D1.batch, protects the
+    // learner/cycle/edition/every lesson/official-stage receipt. Actual
+    // activation requires governed schema and recovery; no HTTP entry point
+    // passes this anchor and the Player3 flag defaults OFF.
+    return [{sql:gate.sql,args:[...gate.bindings]},...statements];
+  }
   if (!a) return statements;
   if (!params.env || !canProvisionNative(params.env,params.empresaId) ||
       a.empresaId !== params.empresaId || a.matriculaId !== params.matriculaId ||
