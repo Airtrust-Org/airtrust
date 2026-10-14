@@ -252,6 +252,12 @@ describe('completeLmsMatricula', () => {
     expect(firstGuard).toBeGreaterThanOrEqual(0);
     expect(firstMutation).toBeGreaterThan(firstGuard);
     expect(calls[firstGuard]).toContain('lms_player3_tentativas_modulares');
+    const insertIntent=calls.findIndex(s=>s.includes('INSERT INTO lms_player3_completion_intents'));
+    const consumeIntent=calls.findIndex(s=>s.includes('DELETE FROM lms_player3_completion_intents'));
+    expect(insertIntent).toBe(firstGuard+1);
+    expect(firstMutation).toBeGreaterThan(insertIntent);
+    expect(consumeIntent).toBeGreaterThan(firstMutation);
+    expect(calls[insertIntent]).toContain('official_stage_receipts_json');
     expect(db.batch).toHaveBeenCalledTimes(1);
     const batches=(db as unknown as {__batchCalls:unknown[][]}).__batchCalls;
     expect(batches).toHaveLength(1);
