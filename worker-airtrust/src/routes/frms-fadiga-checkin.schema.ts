@@ -62,6 +62,8 @@ export const CheckinCreateSchema = z
       .regex(/^\d{2}:\d{2}$/)
       .optional(),
     horas_sono_24h: z.number().min(0).max(24).optional(),
+    // ANAC RBAC 117: opportunity of sleep/rest is not measured sleep.
+    oportunidade_sono_horas_24h: z.number().min(0).max(24).optional(),
     horas_sono_48h: z.number().min(0).max(48).optional(),
     qualidade_sono: z.number().int().min(1).max(5).optional(),
     kss_score: z.number().int().min(1).max(9).optional(),
@@ -93,6 +95,14 @@ export const CheckinCreateSchema = z
   }, {
     message: 'Informe horas_sono_24h ou hora_dormiu + hora_acordou',
     path: ['horas_sono_24h'],
+  })
+  .refine((data) => {
+    // Existing clients may omit opportunity; never synthesize it from sleep.
+    return data.oportunidade_sono_horas_24h == null || data.horas_sono_24h == null ||
+      data.oportunidade_sono_horas_24h >= data.horas_sono_24h;
+  }, {
+    message: 'Oportunidade de sono não pode ser menor que o sono efetivamente informado',
+    path: ['oportunidade_sono_horas_24h'],
   })
   .refine((data) => {
     const hasFitForDuty = typeof data.fit_for_duty === 'boolean';
