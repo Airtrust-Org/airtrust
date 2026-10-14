@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   activeCandidateIdFromPrefix,
+  evaluateReadOnlyReviewState,
+  summarizeClosureReadiness,
   hasMeaningfulScormLocation,
   launchInitialCmi,
   parseLaunchCycle,
@@ -85,4 +87,38 @@ test('extracts active cycle identity and launch CMI without evaluating learner c
   });
   assert.deepEqual(launchInitialCmi(html), { 'cmi.core.lesson_location': '' });
   assert.equal(launchInitialCmi('<html></html>'), null);
+});
+
+test('read-only resumed state preserves existing SCORM progress without treating it as completion', () => {
+  const cycle = { numero_ciclo: 1, preview_mode: false, review_mode: false };
+  const args = {
+    expectedProgress: 100, actualProgress: 100, expectedCycle: 1, cycle,
+    serverResumeLocationPresent: true, serverSuspendDataPresent: true,
+    launchLocation: '42/42', launchSuspendData: 'existing-state',
+  };
+  assert.equal(evaluateReadOnlyReviewState({ ...args, mode: 'resumed' }), true);
+  assert.equal(evaluateReadOnlyReviewState({ ...args, mode: 'initial' }), false);
+  assert.equal(evaluateReadOnlyReviewState({ ...args, mode: 'resumed', launchSuspendData: '' }), false);
+  assert.equal(evaluateReadOnlyReviewState({ ...args, mode: 'resumed', expectedCycle: 2 }), false);
+  assert.equal(evaluateReadOnlyReviewState({ ...args, mode: 'resumed', actualProgress: 99 }), false);
+});
+
+test('server-sourced missing slides remain sanitized, never synthesize SCORM coverage', () => {
+  const sanitized = summarizeClosureReadiness({
+    code: 'PROGRESS_EVIDENCE_MISSING',
+    eligible_for_server_verification: false,
+    missing: ['distinct_slide_coverage', 'user_confirmation', 'pii:private'],
+    slide_coverage: { total: 42, recorded: 39, missing_numbers: [7, 2, 22] },
+    funcionario_nome: 'private',
+  });
+  assert.deepEqual(sanitized, {
+    code: 'PROGRESS_EVIDENCE_MISSING',
+    eligible_for_server_verification: false,
+    missing: ['distinct_slide_coverage', 'user_confirmation'],
+    slide_coverage: { total: 42, recorded: 39, missing_numbers: [2, 7, 22] },
+  });
+  assert.equal(summarizeClosureReadiness(null), null);
+  assert.equal(summarizeClosureReadiness({
+    slide_coverage: { total: 42, recorded: 42, missing_numbers: [99] },
+  }).slide_coverage, null);
 });
