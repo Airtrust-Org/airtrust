@@ -23,6 +23,7 @@ export type QaExternal = QaEnrollment & {
   frameSelectors: string[];
   visualLastPageButton: string; wrongAnswerButton: string;
   correctAnswerButton: string; submitButton: string; finishButton: string;
+  learnerCompletionButton: string;
   scormSnapshotPath: string;
 };
 export type QaProjectFixture = {
@@ -137,7 +138,7 @@ export function validateQaProfile(raw: unknown, projectName: string,
     requireQa(Array.isArray(e.frameSelectors) && e.frameSelectors.length > 0 &&
       e.frameSelectors.every(s => typeof s === 'string' && s.length > 0) &&
       [e.visualLastPageButton,e.wrongAnswerButton,e.correctAnswerButton,
-        e.submitButton,e.finishButton].every(s => typeof s === 'string' && s.trim().length > 0),
+        e.submitButton,e.finishButton,e.learnerCompletionButton].every(s => typeof s === 'string' && s.trim().length > 0),
       'SCORM_EXTERNAL_CONTROLS');
     qaPath(api.origin, e.scormSnapshotPath);
   }
