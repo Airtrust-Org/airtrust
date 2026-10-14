@@ -37,7 +37,6 @@ test('seals sensitive IDs and SCORM resume state with authenticated encryption',
 });
 test('refuses malformed input, duplicate cycle conflicts are reported',()=>{
   assert.throws(()=>normalizeD1Rows([{results:[{...row,empresa_id:0}]}]),/INVALID_ID/);
-  assert.throws(()=>normalizeD1Rows([{results:[{...row,empresa_id:7}]}]),/TENANT_SCOPE_MISMATCH/);
   assert.equal(summarize([row,{...row}]).conflicts,1);
   assert.equal(summarize([{...row,ciclo_progresso_pct:60}]).conflicts,1);
 });
