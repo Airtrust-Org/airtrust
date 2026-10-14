@@ -104,7 +104,7 @@ describe('Front D QA contract — no network, no real students',()=>{
     p2.projects.chromium.doutrinamento.units[0].official=undefined;
     expect(()=>validateQaProfile(p2,'chromium',staging,apiOrigin,'6001')).toThrow('DOU_RC81_EIGHT_MODULAR_ASSESSMENTS');
     const p3=fixture();
-    p3.projects.chromium.doutrinamento.units[1].practice=undefined;
+    p3.projects.chromium.doutrinamento.units[8].practice=undefined;
     expect(()=>validateQaProfile(p3,'chromium',staging,apiOrigin,'6001')).toThrow('FORMATIVE_GATE_REQUIRED');
   });
   it('rejects mismatched or duplicate enrollment identities across Chromium and WebKit',()=>{
