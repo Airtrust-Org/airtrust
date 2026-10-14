@@ -62,6 +62,7 @@ export default function Player3AuthenticatedStagingEntry({
     <p role="alert">Player 3 indisponível: lançamento ainda não autorizado.
       Nenhum progresso, nota ou certificado foi alterado.</p>
   );
+  if(state.kind!=='READY')return <p role="alert">Lançamento inválido.</p>;
   const launch=state.launch;
   const stage=launch.pending_assessment;
   return <Player3Html5Host
