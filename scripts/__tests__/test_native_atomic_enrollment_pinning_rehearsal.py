@@ -118,6 +118,11 @@ def fixture():
     if ddl.count(OLD_NATIVE) != 4:
         raise AssertionError('NATIVE_0552_PREDICATE_CONTRACT_DRIFT')
     db.executescript(ddl)
+    # Candidate 0554 now requires the actual 0553 modular policy/attempt
+    # tables and trigger; rehearse the exact versioned predecessor first.
+    stage_ddl = (ROOT / 'worker-airtrust/schema-v2/changes/'
+                 '0553_lms_player3_module_attempts.sql').read_text(encoding='utf8')
+    db.executescript(stage_ddl)
     candidate = CANDIDATE.read_text(encoding='utf8')
     if candidate.count("DROP TRIGGER lms_native_") != 4:
         raise AssertionError('NATIVE_0553_CANDIDATE_TRIGGER_DRIFT')
