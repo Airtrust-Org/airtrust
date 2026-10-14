@@ -657,6 +657,26 @@ describe('FrmsDashboard simplificado', () => {
     expect(screen.queryByText(/Índice operacional acumulado: 0,0\/100/i)).not.toBeInTheDocument();
   });
 
+  it('não trata período parcial ou estimado como avaliação plenamente confirmada', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({
+      data: [item({ fortnight_indicator: {
+        ...unresolvedFortnight(),
+        periodo_inicio: '2026-08-16',
+        periodo_fim: '2026-08-31',
+        fonte_periodo: 'ESTIMADO',
+        freshness_dado: 'PARCIAL',
+        status_quinzena: 'OK',
+        score_acumulado: 0,
+        atividade_frms_periodo_min: 240,
+      } })],
+    }));
+    renderDashboard('/frms?data=2026-08-27');
+    expect(screen.getByText('Avaliação parcial — confirmar dados')).toBeInTheDocument();
+    expect(screen.getByText('4,0 h de atividade registrada (parcial)')).toBeInTheDocument();
+    expect(screen.getByText(/Avaliação do período disponível para 0 de 1 pessoa/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Índice operacional acumulado: 0,0/)).not.toBeInTheDocument();
+  });
+
   it('mantém o último estado válido visível quando a atualização falha', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(state({ error: 'falha de rede' }));
 
