@@ -23,6 +23,7 @@ class InventorySqlTests(unittest.TestCase):
           tentativas INTEGER,ciclo_atual INTEGER,updated_at TEXT,deleted_at TEXT,
           data_inicio TEXT,data_conclusao TEXT,qualificacao_historico_id INTEGER);
         CREATE TABLE lms_xapi_statements(id INTEGER,empresa_id INTEGER,matricula_id INTEGER,created_at TEXT);
+        CREATE TABLE lms_scorm_package_versions(id TEXT,empresa_id INTEGER,curso_id INTEGER,status TEXT,package_sha256 TEXT,package_version TEXT,activated_at TEXT);
         CREATE TABLE lms_progresso_scorm(id INTEGER,empresa_id INTEGER,matricula_id INTEGER,
           lesson_status TEXT,completion_status TEXT,success_status TEXT,score_raw INTEGER,
           last_commit_at TEXT,suspend_data TEXT,cmi_json TEXT);
