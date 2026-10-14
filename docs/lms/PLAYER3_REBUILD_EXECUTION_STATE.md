@@ -375,3 +375,63 @@ Chromium/WebKit e confirmar PDF integral via stream autenticado. A #1464
 ainda requer conteúdo autoral aprovado e C #1467 mantém inventário real
 T0/T1 bloqueado. Numeração reservada: FRMS 0552, LMS 0553/0554;
 0555/0556 são REVIEW-ONLY. Não liberar produção sem SHA e escopo exatos.
+
+## 2026-10-14 — Frente B: rota autenticada para HTML5 original com gate de lançamento independente
+
+A rota existente `/lms/player/native/:matriculaId` agora consulta
+`GET /api/lms/native/matriculas/:matriculaId/etapas/lancamento` antes de
+montar `Player3Html5Host`. Não se alterou a rota do SCORM legado.
+O endpoint exige autenticação, tenant do próprio aluno, matrícula ativa,
+ciclo/edição publicados, política modular APPROVED, banco e JSON privados
+verificados em R2 por SHA com vínculo D1, além dos gates vigentes de staging.
+
+**Gate novo, OFF por padrão:** `PLAYER3_AUTHORED_LAUNCH_ENABLED_TENANTS`
+(CSV exato) e `PLAYER3_AUTHORED_CONTENT_ORIGIN` (origem HTTPS isolada).
+Ambos são adicionais aos gates `NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS`,
+`NATIVE_LEARNER_WRITE_ENABLED_TENANTS` e
+`PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS`. Nenhum ambiente foi configurado
+ou publicado nesta alteração. Com gate OFF (HTTP 404), o Native existente
+continua; com gate ON e contrato inválido (HTTP 409), bloqueia o HTML5,
+**sem cair para SCORM ou liberar writes**.
+
+O lançamento só pode ser construído de metadados incluídos na própria
+política aprovada e hash-pinned, no campo opcional `learnerContent`:
+
+```json
+{
+  "schema": "AIRTRUST_PLAYER3_AUTHORED_LAUNCH_V1",
+  "sourceSha256": "<sha256 verificado do ZIP original>",
+  "contentSha256": "<sha256 de entrega imutável comprovada>",
+  "sourceStageCrosswalkSha256": "<sha256 do crosswalk aprovado>",
+  "answersStripped": true,
+  "legacyScormDisabled": true,
+  "reviewedImmutableRelease": true
+}
+```
+
+Os três hashes devem ser reais e verificados independentemente; o schema
+recusa campos arbitrários ou marcadores ausentes. O servidor constrói o
+caminho, sem aceitar URL do navegador ou do documento:
+`https://ORIGEM-ISOLADA/player3/EMPRESA/CURSO/EDICAO_SHA/CONTEUDO_SHA/index.html`.
+O endereço, a existência dos bytes e a correspondência real do conteúdo
+publicado ao hash **ainda precisam ser atestados no staging** pela A/D;
+um hash escrito no caminho não autentica o arquivo remoto sozinho.
+Esta API não hospeda ZIP, não transforma REVIEW-ONLY em PUBLISHED,
+não gera publicações ou seeds, não altera qualificações e não faz
+deploy de nenhuma origem.
+
+O Worker também fornece apenas as perguntas e alternativas da **primeira
+etapa modular ainda pendente** se os IDs/opções corresponderem exatamente ao
+banco privado e à política. Nunca devolve alternativa correta, gabarito,
+feedback privado, JWT ao iframe, nota inventada ou confirmação SCORM.
+A liberação de etapa exige `GET sessão → POST tentativa → GET sessão`,
+e o iframe permanece montado enquanto a próxima projeção é recuperada.
+Depois das etapas aprovadas, o botão terminal continua submetido ao preflight
+e à transação canônica; não deriva certificado de navegação.
+
+**Provas locais iniciais:** 22 testes frontend e 11 Worker PASS
+em SHA `9880d393`, com ESLint afetado e Worker TypeScript PASS.
+Mudanças de tipagem posteriores devem ser revalidadas no SHA final.
+A PR #1389 continua DRAFT; staging, seis jornadas D, origem real A, T0/T1 C
+e PDF integral continuam pendentes. Sem migrations remotas, R2/D1 writes ou
+produção.
