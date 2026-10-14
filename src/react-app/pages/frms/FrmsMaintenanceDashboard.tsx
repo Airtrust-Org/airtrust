@@ -29,7 +29,7 @@ const BUCKET_STYLE: Record<MaintenanceDecisionBucket, { label: string; className
     dot: 'bg-orange-500',
   },
   PENDING: {
-    label: 'Pendente',
+    label: 'Evidência insuficiente',
     className: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200',
     dot: 'bg-amber-400',
   },
@@ -213,7 +213,7 @@ export default function FrmsMaintenanceDashboard() {
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Resumo de manutenção">
           <MetricCard label="Revisão imediata" value={counts.CRITICAL} helper="sinal crítico de fadiga ou prontidão" />
           <MetricCard label="Atenção" value={counts.ATTENTION} helper="requer avaliação e mitigação" />
-          <MetricCard label="Sem dados para avaliação" value={counts.PENDING} helper="check-in ou PVT pendente; não significa condição normal" />
+          <MetricCard label="Evidência insuficiente" value={counts.PENDING} helper="check-in, PVT ou baseline individual não confirmado; não significa condição normal" />
           <MetricCard label="Sem pendência" value={counts.NORMAL} helper="monitoramento normal" />
         </section>
 
@@ -237,7 +237,7 @@ export default function FrmsMaintenanceDashboard() {
               { key: 'TODOS', label: 'Toda a equipe', value: items.length },
               { key: 'CRITICAL', label: 'Revisão imediata', value: counts.CRITICAL },
               { key: 'ATTENTION', label: 'Atenção', value: counts.ATTENTION },
-              { key: 'PENDING', label: 'Sem dados para avaliação', value: counts.PENDING },
+              { key: 'PENDING', label: 'Evidência insuficiente', value: counts.PENDING },
               { key: 'NORMAL', label: 'Sem pendência', value: counts.NORMAL },
             ] as const).map((option) => (
               <button key={option.key} type="button" aria-pressed={bucketFilter === option.key}
@@ -312,7 +312,7 @@ export default function FrmsMaintenanceDashboard() {
                         <td className="px-4 py-3">
                           <DecisionBadge bucket={bucket} />
                           {bucket === 'PENDING' ? (
-                            <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">Dados insuficientes para concluir sobre prontidão.</p>
+                            <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">Dados ou baseline insuficientes para concluir sobre prontidão.</p>
                           ) : null}
                         </td>
                         <td className="max-w-sm px-4 py-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
