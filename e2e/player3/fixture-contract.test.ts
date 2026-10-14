@@ -172,12 +172,17 @@ describe('Front D — Worker authoritative stage session (read-only)',()=>{
     expect(()=>validateQaModuleSession(s,edition,1101,eightStages))
       .toThrow('MODULE_SESSION_ATTEMPT_INTEGRITY');
   });
-  it('requires Worker to say completionSupported=false even when all stages pass',()=>{
+  it('never confuses a capability hint with final course certification',()=>{
     const s=realModuleProjection();
     s.stages=s.stages.map(stage=>({...stage,attempts:1,lastScorePct:100,
       passed:true,nextAttemptNumber:2}));
     s.allOfficialStagesPassed=true;
-    s.completionSupported=true as false;
+    // Later Worker releases may advertise terminal availability, but the
+    // harness still requires a separate authenticated final status + PDF.
+    s.completionSupported=true;
+    expect(validateQaModuleSession(s,edition,1101,eightStages)
+      .completionSupported).toBe(true);
+    (s as unknown as {completionSupported:unknown}).completionSupported='true';
     expect(()=>validateQaModuleSession(s,edition,1101,eightStages))
       .toThrow('MODULE_SESSION_NO_PREMATURE_COMPLETION');
   });
