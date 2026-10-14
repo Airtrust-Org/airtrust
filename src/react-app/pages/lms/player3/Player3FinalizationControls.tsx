@@ -19,8 +19,8 @@ type Readiness=Readonly<{
 }>;
 type Terminal=Readonly<{
   matricula_id:number;status:'CONCLUIDO';
-  qualification_outcome:'qualification_created'|'qualification_reused';
-  certificate_state:'REQUIRES_VERIFICATION';
+  qualification_outcome:'qualification_created'|'qualification_reused'|'qualification_not_required';
+  certificate_state:'REQUIRES_VERIFICATION'|'NOT_APPLICABLE';
 }>;
 /**
  * Read-only D1 + R2 reconciliation. Even PDF_HEADER_VERIFIED checks just
@@ -162,12 +162,16 @@ export default function Player3FinalizationControls({
       if(response.status!==200)throw Error('PLAYER3_TERMINAL_UNCONFIRMED');
       const result=await response.json() as {success?:boolean;data?:Terminal};
       const receipt=result.data;
+      const validOutcome=receipt&&(
+        ((receipt.qualification_outcome==='qualification_created'||
+          receipt.qualification_outcome==='qualification_reused')&&
+          receipt.certificate_state==='REQUIRES_VERIFICATION')||
+        (receipt.qualification_outcome==='qualification_not_required'&&
+          receipt.certificate_state==='NOT_APPLICABLE')
+      );
       if(result.success!==true||!receipt||
          receipt.matricula_id!==scope.matriculaId||
-         receipt.status!=='CONCLUIDO'||
-         !['qualification_created','qualification_reused']
-           .includes(receipt.qualification_outcome)||
-         receipt.certificate_state!=='REQUIRES_VERIFICATION'){
+         receipt.status!=='CONCLUIDO'||!validOutcome){
         throw Error('PLAYER3_TERMINAL_RECEIPT_INVALID');
       }
       // The canonical receipt is committed, but the post-commit certificate
