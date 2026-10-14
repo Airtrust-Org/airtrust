@@ -758,7 +758,7 @@ function withNativeAtomicGuard(
         'PLAYER3_TERMINAL_ANCHOR_MISMATCH',
       );
     }
-    const gate=buildPlayer3TerminalTransactionGuard(p);
+    const gate=buildPlayer3TerminalTransactionGuard(p,env);
     // A mandatory first statement, in the SAME D1.batch, protects the
     // learner/cycle/edition/every lesson/official-stage receipt. Actual
     // activation requires governed schema and recovery; no HTTP entry point
