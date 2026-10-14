@@ -75,31 +75,14 @@ vi.mock('@/react-app/hooks/useOperationalReadiness', () => ({
 }));
 
 const recoverySubmitMock = vi.fn();
+const recoveryContextMock = vi.fn();
 vi.mock('@/react-app/hooks/useFrmsRecovery', async () => {
   const actual = await vi.importActual<typeof import('@/react-app/hooks/useFrmsRecovery')>(
     '@/react-app/hooks/useFrmsRecovery',
   );
   return {
     ...actual,
-    useFrmsRecoveryContext: () => ({
-      data: {
-        reference_date: '2026-06-04',
-        schema_ready: true,
-        flight: {
-          detected: true,
-          sectorCount: 2,
-          landingCount: 2,
-          canonicalFlightMinutes: 210,
-          source: 'SIGVOOS',
-        },
-        requires_activity_classification: false,
-        activity: null,
-        assessment: null,
-        prompt_reason: 'FLIGHT_DETECTED',
-      },
-      isLoading: false,
-      isError: false,
-    }),
+    useFrmsRecoveryContext: () => recoveryContextMock(),
     useSubmitFrmsRecoveryActivity: () => ({ mutateAsync: recoverySubmitMock, isPending: false }),
   };
 });
@@ -357,6 +340,20 @@ describe('FrmsCheckinFadiga UI', () => {
     useFadigaHistoricoMock.mockReset();
     useFadigaPainelMock.mockReset();
     usePermissionsMock.mockReset();
+    recoveryContextMock.mockReset();
+    recoveryContextMock.mockReturnValue({
+      data: {
+        reference_date: '2026-06-04',
+        schema_ready: true,
+        flight: { detected: true, sectorCount: 2, landingCount: 2, canonicalFlightMinutes: 210, source: 'SIGVOOS' },
+        requires_activity_classification: false,
+        activity: null,
+        assessment: null,
+        prompt_reason: 'FLIGHT_DETECTED',
+      },
+      isLoading: false,
+      isError: false,
+    });
     submitPending = false;
     window.sessionStorage.clear();
     mutateAsyncMock.mockResolvedValue({ data: { requires_frat_review: 0 } });
@@ -381,8 +378,23 @@ describe('FrmsCheckinFadiga UI', () => {
     usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, role: 'INSTRUTOR' });
   });
 
+  function enableStandbyContext() {
+    recoveryContextMock.mockReturnValue({
+      data: {
+        reference_date: '2026-06-04',
+        schema_ready: true,
+        flight: { detected: false, sectorCount: 0, landingCount: 0, canonicalFlightMinutes: 0, source: 'NONE_FOUND' },
+        requires_activity_classification: false,
+        activity: { activity_type: 'STANDBY_HOME_HOTEL' },
+        assessment: null,
+        prompt_reason: 'NO_FLIGHT_FOUND_IN_OPERATIONAL_SOURCES',
+      },
+      isLoading: false,
+      isError: false,
+    });
+  }
+
   function preencherFormularioValido() {
-    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -421,7 +433,7 @@ describe('FrmsCheckinFadiga UI', () => {
 
   it('não acrescenta resposta obrigatória de repouso ao check-in diário', async () => {
     render(<FrmsCheckinFadiga />);
-    expect(screen.getByText(/Informar oportunidade de sono \(repouso absoluto\) — opcional/)).toBeInTheDocument();
+    expect(screen.queryByText(/Oportunidade de sono no standby — opcional/)).not.toBeInTheDocument();
     expect(screen.getByRole('status')).not.toHaveTextContent(/Oportunidade de sono \(repouso absoluto\)/);
     // O preenchimento-padrão não informa oportunidade: PVT e sono efetivo continuam obrigatórios.
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
@@ -439,7 +451,8 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(payload.readiness).toBeDefined();
   });
 
-  it('não bloqueia check-in por comparação indevida entre oportunidade e sono em 24h', () => {
+  it('não bloqueia check-in com oportunidade menor que sono total somente no standby', () => {
+    enableStandbyContext();
     render(<FrmsCheckinFadiga />);
     fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '5' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
@@ -458,7 +471,7 @@ describe('FrmsCheckinFadiga UI', () => {
     render(<FrmsCheckinFadiga />);
 
     const sonoFieldset = screen.getByText('Sono efetivamente obtido nas últimas 24h').closest('fieldset');
-    expect(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h')).toHaveAttribute('type', 'number');
+    expect(screen.queryByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h')).not.toBeInTheDocument();
     expect(sonoFieldset).toBeTruthy();
     expect(within(sonoFieldset as HTMLElement).getAllByRole('radio').map((input) => (input as HTMLInputElement).value)).toEqual([
       'h4',
@@ -543,10 +556,11 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.queryByText(/nível subjetivo de fadiga/i)).not.toBeInTheDocument();
   });
 
-  it('envia payload minimo valido e compativel com null em meds/alcool', async () => {
+  it('envia payload de standby com oportunidade de sono e sem criar nova pergunta obrigatória', async () => {
+    enableStandbyContext();
     render(<FrmsCheckinFadiga />);
-
     fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
+
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -602,7 +616,6 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
     const submitButton = screen.getByRole('button', { name: 'Confirmar Check-in Diário' });
 
-    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     const casos = [
       ['4 horas ou menos', 4],
       ['5 horas', 5],
@@ -625,7 +638,6 @@ describe('FrmsCheckinFadiga UI', () => {
   it('preserva os valores internos de qualidade do sono e KSS no payload', async () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -712,7 +724,6 @@ describe('FrmsCheckinFadiga UI', () => {
   it('mantem observacao obrigatoria para resposta nao apto', () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '5 horas' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -773,7 +784,6 @@ describe('FrmsCheckinFadiga UI', () => {
 
     expect(screen.getByRole('status')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
@@ -838,7 +848,6 @@ describe('FrmsCheckinFadiga UI', () => {
   it('bloqueia envio quando horario e invalido e mostra mensagem clara', () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     const wakeInput = screen.getByLabelText('Hora em que acordou');
     fireEvent.change(wakeInput, { target: { value: '2400' } });
@@ -859,7 +868,6 @@ describe('FrmsCheckinFadiga UI', () => {
   it('submete 0630 como 06:30', async () => {
     render(<FrmsCheckinFadiga />);
 
-    fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0700' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0630' } });
