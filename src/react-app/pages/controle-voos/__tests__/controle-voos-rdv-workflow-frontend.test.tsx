@@ -203,7 +203,7 @@ describe('ControleVoosCoordenacaoFila', () => {
 
     await waitFor(() => expect(screen.getByText('RDV-RASCUNHO')).toBeInTheDocument());
     expect(screen.getByTestId('coordenacao-status-filter')).toHaveValue('');
-    expect(getMock).toHaveBeenCalledWith(expect.stringMatching(/\\/rdv\\/fila$/));
+    expect(getMock).toHaveBeenCalledWith(expect.stringMatching(new RegExp('/rdv/fila$')));
     expect(screen.getByText('Última atualização no servidor')).toBeInTheDocument();
     expect(screen.getByText('Ainda não enviado')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Visualizar' })).toHaveAttribute('href', '/controle-voos/rdv/602');
