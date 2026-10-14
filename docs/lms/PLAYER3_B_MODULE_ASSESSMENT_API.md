@@ -177,3 +177,46 @@ regressão SQLite foi incluído no `.github/workflows/ci.yml`. O fechamento
 operacional exige, além dos gates oficiais, origem HTML5 segura homologada,
 T0/T1 da Costa do Sol, migrations governadas, R2 privado SHA-pinned e prova
 visual em staging de matrícula/qualificação/certificado verificável.
+
+
+## Compatibilidade com Frente C — T0/T1 e retomada administrativa (14/10/2026)
+
+O reconciliador da Frente C entregue na `main` mantém todas as decisões
+individuais **somente dentro do arquivo cifrado**. A Frente B não reimplementa
+a comparação e não lê arquivos T0/T1 de produção no Worker de aluno.
+
+O planejador de continuidade da B classifica também alteração de nota final,
+tentativas, estados/resultados SCORM, tipo do conteúdo, versão/hash do pacote,
+datas, histórico e ciclo **mesmo quando o percentual permanece 99%**.
+O hash do pacote atualmente ativo no catálogo não prova que o aluno
+consumiu aquela edição. Qualquer mudança dessas classes impede
+`unchanged` e requer revisão protegida.
+
+A proposta interna de retomada `createAdminResumeCreditIntent` **não grava
+no D1 e não concede visitas, nota, conclusão ou certificado**. Ela passou a
+exigir o contrato privado `FrontCReconciledHandoff`:
+
+- Proveniência T0/T1 com SHA-256 dos arquivos cifrados e tenant autorizado 6.
+- `decision_key` e SHA da linha T1, mesmos IDs de tenant/matrícula/
+  funcionário/curso/ciclo e mesmos watermarks do registro.
+- Decisão elegível, revisão independente após T1, identificação
+  comprovada da edição **original** fora da versão ativa do catálogo,
+  crosswalk validado para o destino e ausência de qualquer sinal de
+  certificação automática.
+- Divergências de identidade, ciclo, fonte, etapa terminal ou consentimento
+  indevido para writes bloqueiam o planejamento; a C deve registrar a
+  exceção no arquivo privado para avaliação humana.
+
+O plano pode conter somente um **bookmark de navegação**; não altera
+`seenLessonIds`, ledger de tentativas, matrícula ou qualificação. A futura
+aplicação exigirá serviço Worker com RBAC real, prova de custódia do
+inventário cifrado, verificação de identidade/timestamps/edição após T1,
+atomicidade, idempotência e auditoria. A existência de uma estrutura JS
+na memória não é aprovação governada. Nenhuma execução T0/T1 real ou
+write administrativo ocorreu nesta entrega.
+
+**Bloqueador operacional:** issue #1467 (token D1 readonly, AES-256 em cofre,
+aprovadores humanos); a etapa da C está integrada como código, mas
+sem aceite operacional. Para homologar: casos 0%, 20%, 50%, 80% e 99%,
+versões distintas, WebKit/Chromium, SCORM externo, nota, qualificação e
+certificado realmente consultável em staging após Schema V2 governado.
