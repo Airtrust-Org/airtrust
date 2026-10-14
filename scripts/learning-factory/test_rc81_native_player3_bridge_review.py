@@ -61,6 +61,9 @@ class Rc81BridgeTests(unittest.TestCase):
         self.assertEqual(len(bank['questions']), 80)
         self.assertFalse(receipt['publishable'])
         self.assertFalse(receipt['adapterHostBridgeImplemented'])
+        self.assertFalse(receipt['byteIdenticalNonModelNonAdapterFiles'])
+        self.assertTrue(receipt['byteIdenticalNonModelNonAdapterOrScormShimFiles'])
+        self.assertEqual(receipt['intentionallyModifiedRuntimeFiles'], ['app.js', 'scorm_api.js'])
         with ZipFile(io.BytesIO(candidate)) as z:
             patched = z.read('app.js').decode('utf8')
             self.assertIn('AIRTRUST_PLAYER3_STAGE_SUBMIT_HINT_V1', patched)
@@ -72,8 +75,12 @@ class Rc81BridgeTests(unittest.TestCase):
             for forbidden in ('item.answer', 'qq.answer', 's.questions[i].answer', 'correctOptionId', 'scenarioCorrect'):
                 self.assertNotIn(forbidden, patched)
             with ZipFile(io.BytesIO(raw)) as original:
-                self.assertEqual(z.read('index.html'), original.read('index.html'))
-                self.assertEqual(z.read('styles.css'), original.read('styles.css'))
+                all_original = {n for n in original.namelist() if not n.endswith('/')}
+                intentional = {'course_data.js', 'course-model.js', 'app.js',
+                               'scorm_api.js', 'player3-review-manifest.json'}
+                for name in all_original - intentional:
+                    with self.subTest(unchanged=name):
+                        self.assertEqual(z.read(name), original.read(name))
 
 
     def test_real_original_42_units_and_retake_browser_opt_in(self):
