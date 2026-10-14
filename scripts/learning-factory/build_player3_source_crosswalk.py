@@ -31,8 +31,10 @@ def _read_model(archive: ZipFile, entries: dict) -> tuple[dict, str]:
         if not info or info.file_size > 10 * 1024 * 1024:
             continue
         text = archive.read(name).decode('utf-8-sig').strip()
-        if text.startswith(prefix):
-            model = json.loads(text[len(prefix):].strip().rstrip(';').strip())
+        import re
+        matched = re.match(r'^window\\.(?:COURSE_DATA|AIRTRUST_COURSE_MODEL)\\s*=\\s*', text)
+        if matched:
+            model = json.loads(text[matched.end():].strip().rstrip(';').strip())
             if isinstance(model, dict) and isinstance(model.get('slides'), list):
                 return model, name
     raise UnsafePackage('NO_VERIFIABLE_SLIDE_MODEL')
