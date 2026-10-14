@@ -27,9 +27,9 @@ from convert_preserved_html5 import checked_files, UnsafePackage, MAX_NESTED_ZIP
 
 ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
 COURSE = re.compile(r'^window\.(?:COURSE_DATA|AIRTRUST_COURSE_MODEL)\s*=\s*')
-LIMIT_QUESTIONS = 2000
-LIMIT_QUESTION_TEXT = 20000
-LIMIT_OPTIONS = 16
+LIMIT_QUESTIONS = 500
+LIMIT_QUESTION_TEXT = 4000
+LIMIT_OPTIONS = 10
 
 def fail(reason: str):
     raise UnsafePackage('PLAYER3_BANK_' + reason)
@@ -76,7 +76,7 @@ def extract_question(q: dict, stage: str, i: int) -> tuple[dict, dict]:
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > LIMIT_QUESTION_TEXT:
         fail('INVALID_PROMPT')
     if not isinstance(options, list) or not 2 <= len(options) <= LIMIT_OPTIONS or (
-        any(not isinstance(o, str) or not o.strip() or len(o)>LIMIT_QUESTION_TEXT
+        any(not isinstance(o, str) or not o.strip() or len(o)>2000
             for o in options)):
         fail('INVALID_OPTIONS')
     if not isinstance(correct, int) or isinstance(correct, bool) or (
@@ -157,6 +157,8 @@ def extract(original: bytes, basename: str) -> tuple[dict, dict, dict]:
                 public,private=extract_question(q,sid,i)
                 projection.append(public)
                 private_questions.append(private)
+            if len(projection)>100:
+                fail('STAGE_QUESTION_LIMIT')
             count+=len(projection)
             if count>LIMIT_QUESTIONS:
                 fail('OVERLOADED_BANK')
