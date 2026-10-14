@@ -68,6 +68,33 @@ async function evidence(page: Page, testInfo: { attach(name: string, options: {b
       contentType: 'image/png' });
   }
 }
+/**
+ * Preserve private HTML5 presentation fidelity: missing origin-owned CSS, fonts,
+ * video and images must fail acceptance rather than silently show blank slides.
+ * This observes responses only, never intercepts or modifies authored content.
+ */
+function auditContentAssets(page: Page, contentOrigin: string, problems: string[]) {
+  const watched = new Set(['script','stylesheet','image','media','font']);
+  page.on('requestfailed', req => {
+    try {
+      if (watched.has(req.resourceType()) &&
+        new URL(req.url()).origin === contentOrigin) {
+        problems.push('NETWORK_FAILURE:' + req.resourceType() + ':' +
+          new URL(req.url()).pathname + ':' + (req.failure()?.errorText ?? 'unknown'));
+      }
+    } catch { /* Non-HTTP browser-internal requests are not origin assets. */ }
+  });
+  page.on('response', response => {
+    try {
+      if (watched.has(response.request().resourceType()) &&
+        new URL(response.url()).origin === contentOrigin && response.status() >= 400) {
+        problems.push('ASSET_HTTP_' + response.status() + ':' +
+          new URL(response.url()).pathname);
+      }
+    } catch { /* Blob URLs do not represent fetches to the content origin. */ }
+  });
+}
+
 async function pick(dialog: ReturnType<Page['getByRole']>, choices: Choice[], variant: 'wrong'|'correct') {
   for (const q of choices) {
     // Question and option labels are private, reviewed QA fixture data; not in Git.
@@ -78,6 +105,8 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
   const { profile, fixture } = load(testInfo.project.name);
   const d = fixture.doutrinamento;
   let { context, page } = await openLearner(browser);
+  const contentAssetProblems: string[] = [];
+  auditContentAssets(page, profile.contentOrigin, contentAssetProblems);
   try {
     await test.step('PLAYER3-LAUNCH / original HTML5 on a separate origin', async () => {
       await page.goto(pathOn(profile.baseUrl, d.launchPath));
@@ -98,6 +127,8 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         await expect(page.getByTestId('player3-active-unit-id')).toHaveText(unit.id);
         const iframe = page.frameLocator('iframe[title^="Conteúdo original"]');
         await expect(iframe.getByText(unit.visualCue, {exact:false}).first()).toBeVisible();
+        // Opt-in evidence for human side-by-side parity review of all authored units.
+        await evidence(page, testInfo, 'dou-original-'+String(index+1).padStart(2,'0'));
         if (unit.practice) {
           const practice = page.getByTestId('player3-practice');
           await practice.getByRole('radio', { name: unit.practice.wrong, exact: true }).check();
@@ -162,6 +193,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         // Entire browser session context is closed; no in-memory LMS state survives.
         await context.close();
         ({ context, page } = await openLearner(browser));
+        auditContentAssets(page, profile.contentOrigin, contentAssetProblems);
         await page.goto(pathOn(profile.baseUrl, d.launchPath));
         await expect(page.getByTestId('player3-active-unit-id')).toHaveText(d.units[21].id);
         const after = await snapshot(context, profile, d);
@@ -201,6 +233,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       expect((await pdf.body()).subarray(0, 5).toString('ascii')).toBe('%PDF-');
       await context.close();
       ({context,page} = await openLearner(browser));
+      auditContentAssets(page, profile.contentOrigin, contentAssetProblems);
       await page.goto(pathOn(profile.baseUrl, d.launchPath));
       const reopened = await snapshot(context, profile, d);
       expect(reopened).toMatchObject({
@@ -211,6 +244,8 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       expect(reopened.attempts).toEqual(enrolled.attempts);
       const again = await apiData<typeof history>(context, profile.baseUrl, d.qualificationPath);
       expect(again.linked_records).toBe(1);
+      expect(contentAssetProblems, 'HTML5 CSS/JS/fonts/images/video request failures')
+        .toEqual([]);
     });
   } finally { await context.close(); }
 });
