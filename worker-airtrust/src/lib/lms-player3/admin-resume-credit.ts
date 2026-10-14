@@ -15,6 +15,9 @@ import type { LegacyEnrollment, DestinationEdition } from './continuity';
 export type ResumeCreditReview = Readonly<{
   actor_user_id:number;
   approver_user_id:number;
+  /** Asserted by independently checked backend RBAC, not by client JSON. */
+  training_manager_authorized:boolean;
+  second_reviewer_authorized:boolean;
   approved_at:string;
   source_snapshot_sha256:string;
   expected_matricula_updated_at:string;
@@ -63,7 +66,9 @@ export function createAdminResumeCreditIntent(params:{
   review:ResumeCreditReview;
 }):ResumeCreditIntent{
   const {enrollment,sourceEdition,destination,persistedSuspendData,review}=params;
-  if(!review || !validInt(review.actor_user_id) ||
+  if(!review || review.training_manager_authorized!==true ||
+      review.second_reviewer_authorized!==true ||
+      !validInt(review.actor_user_id) ||
       !validInt(review.approver_user_id) ||
       review.actor_user_id===review.approver_user_id ||
       !validInt(review.expected_ciclo_id) ||
