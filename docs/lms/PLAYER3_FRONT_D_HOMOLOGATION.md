@@ -358,3 +358,44 @@ Esses resultados são estritamente de **código e contrato**; não houve
 login em staging, matrícula sintética, publicação de HTML5/R2, execução
 positiva do curso original ou certificado emitido. A D não bloqueia
 o trabalho de autenticação, montagem de Host, assets e esquema da B.
+
+## 14/10/2026 — Bloqueio material de conclusão: checkpoints + reabertura RC8.1
+
+A inspeção cruzada dos arquivos **reais** B/A revelou duas falhas de
+integração, ainda não cobertas pelos gates locais. Em B,
+`Player3Html5Host` recebia `AIRTRUST_PLAYER3_NAV_HINT_V1` apenas
+para exibir o identificador de tela, e a entrada autenticada do Player 3
+não chamava `POST /matriculas/:id/iniciar` ou
+`POST /matriculas/:id/checkpoints`. O preflight oficial exige as lições
+presentes no ledger, portanto **42/42 visuais e 8/8 provas** não podem
+autorizar conclusão sem o ciclo de evidência realmente fechado.
+
+Na adaptação A RC8.1, `restore()` reinicializa
+`active=0;view=0` após recarregar, e a B não utiliza
+`last_visited_unit_id` do Worker para restaurar a posição. O
+caso de aceite D **fecha de verdade o BrowserContext na unidade 21 e
+abre outro**, exige exibição da unidade 22 e o mesmo estado durável;
+nenhum valor de `localStorage` ou contador SCORM é autoridade.
+
+**Incremento no SHA D `089dc68c52d38d2428282e76838f746ef700a27d`:**
+- o Playwright vigia cada `POST /checkpoints` efetivamente disparado
+  pelo **navegador**, sem fabricá-lo pelo cliente QA;
+- exige o corpo estrito `{eventId,sequence,unitId}`, idempotency
+  `v-` + 32 hex e sequência monotônica iniciada do ledger real;
+- `unitId` deve existir **uma única vez** no crosswalk de lições
+  aprovado do original, inclusive quando uma das oito telas de prova
+  também contém evento de lição;
+- `GET /sessao` autenticado revalida matrícula, ciclo, SHA da edição,
+  modo `LEARN`, total de lições, recibos únicos, sequência e bookmark;
+- modo offline não concede crédito apenas porque a navegação local
+  mudou a tela, nem pode inventar nota/certificado;
+- os seis E2E continuam bloqueados até source SHA-pinned,
+  schema R2/D1 governado, tenant sintético autorizado e todos os
+  componentes comprovadamente publicados em staging.
+
+**QA focada:** 54/54 Vitest PASS, ESLint PASS, TypeScript focado PASS.
+Esta evidência verifica somente **código de aceitação**. O funcionamento
+real de checkpoints e restore permanece defeito pendente nas frentes A/B,
+registrado em comentários nas PRs #1389 e #1464. Não houve write em
+cliente, migração, deploy ou certificação. D fica DRAFT até o E2E positivo
+e a verificação dos oito gates no mesmo SHA integrado.
