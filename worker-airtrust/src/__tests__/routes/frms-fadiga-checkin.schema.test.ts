@@ -143,8 +143,8 @@ describe('frms-fadiga-checkin schema', () => {
   it('não preserva oportunidade de sono obsoleta quando o check-in é atualizado sem esse dado', () => {
     // Regression guard for the UPDATE persistence contract: omission/null must clear
     // an earlier standby opportunity, never silently award recovery credit again.
-    const routeSource = readFileSync(new URL('../../routes/frms-fadiga-checkin-legacy.ts', import.meta.url), 'utf8');
-    expect(routeSource).toMatch(/oportunidade_sono_horas_24h = \\?,/);
-    expect(routeSource).not.toMatch(/oportunidade_sono_horas_24h = COALESCE\\(/);
+    const routeSource = readFileSync('src/routes/frms-fadiga-checkin-legacy.ts', 'utf8');
+    expect(routeSource).toContain('oportunidade_sono_horas_24h = ?,');
+    expect(routeSource).not.toContain('oportunidade_sono_horas_24h = COALESCE(');
   });
 });
