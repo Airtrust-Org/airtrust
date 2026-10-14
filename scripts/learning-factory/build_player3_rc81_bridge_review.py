@@ -162,3 +162,47 @@ def adapt_rc81_app(original_js: bytes, source_zip_sha256: str, parent_origin: st
     if any(x in result for x in ('.answer?', 'item.answer', 'qq.answer', 'x===s.questions[i].answer', 'window.__AIRTRUST_PLAYER_TEST__', "Scorm?.finish?.()")):
         raise RC81Unsupported('RC81_CLIENT_GRADER_NOT_REMOVED')
     return result.encode('utf8')
+
+def compile_rc81_review(original_zip: bytes, parent_origin: str,
+                        edition_sha256: str):
+    """Build a PRIVATE review candidate, never a publishable course.
+
+    All author-authored media, CSS, and HTML are unchanged; only the verified
+    course models and this exact pinned app.js receive intentional modifications.
+    """
+    import io
+    from zipfile import ZipFile
+    from convert_preserved_html5 import UnsafePackage
+    from prepare_player3_learner_review import compile_review, fixed_zip, sha
+
+    if sha(original_zip) != SOURCE_ZIP_SHA256:
+        raise RC81Unsupported('RC81_SOURCE_ZIP_MISMATCH')
+    archive, meta, projection, bank, receipt = compile_review(
+        original_zip, 'Doutrinamento_Seguranca_Qualidade_RC8_1_CORRIGIDO.zip')
+    if (meta.get('stage_count') != 8 or meta.get('question_count') != 80 or
+            meta.get('certificationModeCandidate') != 'MODULE_CERTIFIED_CANDIDATE'):
+        raise RC81Unsupported('RC81_SOURCE_POLICY_MISMATCH')
+    with ZipFile(io.BytesIO(original_zip)) as source:
+        app = source.read('app.js')
+    with ZipFile(io.BytesIO(archive)) as candidate:
+        files = {name: candidate.read(name) for name in candidate.namelist()}
+    adapted = adapt_rc81_app(app, sha(original_zip), parent_origin,
+                             edition_sha256, projection['stages'])
+    files['app.js'] = adapted
+    receipt.update({
+        'status': 'REVIEW_ONLY_NOT_PUBLISHABLE',
+        'byteIdenticalNonModelFiles': False,
+        'byteIdenticalNonModelNonAdapterFiles': True,
+        'adapter': 'AIRTRUST_PLAYER3_RC81_BRIDGE_REVIEW_V1',
+        'adapterOriginalAppSha256': sha(app),
+        'adapterRuntimeSha256': sha(adapted),
+        'adapterHostBridgeImplemented': False,
+        'adapterServerReceiptRequired': True,
+        'adapterBrowserQaRequired': True,
+        'stageContractApproved': False,
+        'publishable': False,
+    })
+    files['player3-review-manifest.json'] = (
+        json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True)+'\n'
+    ).encode('utf8')
+    return fixed_zip(files), meta, projection, bank, receipt
