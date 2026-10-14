@@ -102,6 +102,8 @@ export function reconcileRows(t0Rows,t1Rows){
     const a=old.get(id),b=latest.get(id);
     let disposition;
     if(!b)disposition='MISSING_FROM_ACTIVE_INVENTORY_REVIEW';
+    else if(!b.tipo_conteudo || (a && !a.tipo_conteudo))
+      disposition='MISSING_CATALOG_COURSE_REVIEW';
     else if(!a)disposition='NEW_ENROLLMENT_REVIEW';
     else if(a.empresa_id!==b.empresa_id ||
       a.funcionario_id!==b.funcionario_id || a.curso_id!==b.curso_id)
@@ -110,7 +112,10 @@ export function reconcileRows(t0Rows,t1Rows){
       disposition='CYCLE_CHANGED_REVIEW';
     else if(cycleBad(a)||cycleBad(b))disposition='SOURCE_CONFLICT_REVIEW';
     else if(a.curso_version_tag!==b.curso_version_tag ||
-      a.scorm_versao!==b.scorm_versao)disposition='SOURCE_EDITION_CHANGED_REVIEW';
+      a.scorm_versao!==b.scorm_versao ||
+      a.catalog_current_scorm_sha256!==b.catalog_current_scorm_sha256 ||
+      a.catalog_current_scorm_version!==b.catalog_current_scorm_version)
+      disposition='SOURCE_EDITION_CHANGED_REVIEW';
     else if(a.matricula_status!==b.matricula_status)
       disposition='STATUS_CHANGED_REVIEW';
     else if(older(a.matricula_updated_at,b.matricula_updated_at) ||
@@ -137,7 +142,10 @@ export function reconcileRows(t0Rows,t1Rows){
       matricula_id:row.matricula_id,funcionario_id:row.funcionario_id,
       curso_id:row.curso_id,ciclo_id:row.ciclo_id,
       ciclo_numero:row.ciclo_numero,source_version_tag:row.curso_version_tag,
-      scorm_version:row.scorm_versao,disposition,
+      scorm_version:row.scorm_versao,
+      catalog_current_scorm_sha256:row.catalog_current_scorm_sha256??null,
+      catalog_current_scorm_version:row.catalog_current_scorm_version??null,
+      catalog_package_is_cycle_verified:false,disposition,
       previous_reported_pct:previousPct,current_reported_pct:currentPct,
       historical_pct_to_preserve:historicalPct,
       prior_row_sha256:a?digest(stable(a)):null,
