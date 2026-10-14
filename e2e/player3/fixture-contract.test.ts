@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {
-  qaPath,validateQaProfile,validateQaModuleSession,
+  qaPath,validateQaProfile,validateQaModuleSession,validateQaJointReadiness,
   type QaModuleSession,type QaProfile,type QaProjectFixture,
 } from './fixture-contract';
 
@@ -213,5 +213,77 @@ describe('Front D — Worker authoritative stage session (read-only)',()=>{
     (s as unknown as {completionSupported:unknown}).completionSupported='true';
     expect(()=>validateQaModuleSession(s,edition,1101,eightStages))
       .toThrow('MODULE_SESSION_NO_PREMATURE_COMPLETION');
+  });
+});
+
+
+describe('Front D — joined content and official-stage readiness (read-only)',()=>{
+  const enrollment=()=>fixture().projects.chromium.doutrinamento;
+  const ready=()=>({
+    matricula_id:1001, editionSha256:edition,cycleId:1101,
+    totalRequiredLessons:42,verifiedLessons:42,
+    officialStageCount:8,officialStagesPassed:8,
+    readyForAtomicTerminalPreflight:true,
+    reason:'READY_FOR_TERMINAL_PREFLIGHT' as const,
+    completionSupported:false,completion_supported:false,
+  });
+  it('accepts real 42/42 plus 8/8 readiness without claiming completion',()=>{
+    const r=ready();
+    expect(validateQaJointReadiness(r,enrollment(),42,8).readyForAtomicTerminalPreflight)
+      .toBe(true);
+    expect(validateQaJointReadiness(r,enrollment(),42,8).completion_supported)
+      .toBe(false);
+  });
+  it('permits genuine incomplete content even with eight passed stages',()=>{
+    const r={...ready(),verifiedLessons:41,reason:'CONTENT_NOT_FINISHED' as const,
+      readyForAtomicTerminalPreflight:false};
+    expect(validateQaJointReadiness(r,enrollment(),42,8).verifiedLessons).toBe(41);
+  });
+  it('permits all content but a failed official module without fake terminal',()=>{
+    const r={...ready(),officialStagesPassed:7,
+      reason:'OFFICIAL_STAGES_NOT_PASSED' as const,
+      readyForAtomicTerminalPreflight:false};
+    expect(validateQaJointReadiness(r,enrollment(),42,8).officialStagesPassed).toBe(7);
+  });
+  it('rejects stale edition, mismatched cycle and cross-enrollment projection',()=>{
+    for(const [field,value] of [
+      ['editionSha256','b'.repeat(64)],['cycleId',999],['matricula_id',900],
+    ] as const) {
+      expect(()=>validateQaJointReadiness({...ready(),[field]:value},
+        enrollment(),42,8)).toThrow('JOINT_READINESS_PINNED_ENROLLMENT_EDITION_CYCLE');
+    }
+  });
+  it('refuses mismatched 41/42 and seven-stage manifests or overstated evidence',()=>{
+    const e=enrollment();
+    for(const r of [
+      {...ready(),totalRequiredLessons:41},
+      {...ready(),officialStageCount:7},
+      {...ready(),verifiedLessons:43},
+      {...ready(),officialStagesPassed:9},
+    ]) {
+      expect(()=>validateQaJointReadiness(r,e,42,8))
+        .toThrow('JOINT_READINESS_CONTENT_STAGE_COUNTS');
+    }
+  });
+  it('refuses ready claims with missing evidence or inconsistent reason',()=>{
+    for(const r of [
+      {...ready(),verifiedLessons:41},
+      {...ready(),officialStagesPassed:7},
+      {...ready(),reason:'CONTENT_NOT_FINISHED'},
+      {...ready(),readyForAtomicTerminalPreflight:false},
+    ]) {
+      expect(()=>validateQaJointReadiness(r,enrollment(),42,8))
+        .toThrow('JOINT_READINESS_REASON_AND_EVIDENCE');
+    }
+  });
+  it('refuses even a ready diagnostic that claims a certificate or completion capability',()=>{
+    for(const r of [
+      {...ready(),completionSupported:true},
+      {...ready(),completion_supported:true},
+      {...ready(),completion_supported:undefined},
+    ]) {
+      expect(()=>validateQaJointReadiness(r,enrollment(),42,8))
+        .toThrow('JOINT_READINESS_NEVER_CERTIFIES');
+    }
   });
 });
