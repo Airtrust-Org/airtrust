@@ -28,10 +28,12 @@ class InventorySqlTests(unittest.TestCase):
         INSERT INTO lms_matriculas VALUES
           (911,6,57,33,'EM_ANDAMENTO',80,0,0,'2026-10-14',NULL,NULL,34,34,NULL),
           (912,7,90,34,'NAO_INICIADO',0,NULL,0,'2026-10-14',NULL,NULL,0,0,NULL),
-          (913,6,57,34,'CONCLUIDO',100,90,1,'2026-10-14',NULL,'2026-10-14',42,42,NULL);
+          (913,6,57,34,'CONCLUIDO',100,90,1,'2026-10-14',NULL,'2026-10-14',42,42,NULL),
+          (914,6,57,35,'NAO_INICIADO',0,NULL,0,'2026-10-14',NULL,NULL,0,0,NULL);
         INSERT INTO lms_matricula_ciclos VALUES
           (1002,6,911,1,'EM_ANDAMENTO',80,0,0,1,'2026-10-14',NULL),
-          (1003,7,912,1,'NAO_INICIADO',0,NULL,0,1,'2026-10-14',NULL);
+          (1003,7,912,1,'NAO_INICIADO',0,NULL,0,1,'2026-10-14',NULL),
+          (1004,6,914,1,'NAO_INICIADO',0,NULL,0,1,'2026-10-14',NULL);
         INSERT INTO lms_xapi_statements VALUES (9,7,912,'2026-10-14');
         INSERT INTO lms_progresso_scorm VALUES
           (800,6,911,'incomplete',NULL,NULL,NULL,'2026-10-14','private_resume','private_cmi');
@@ -45,17 +47,18 @@ class InventorySqlTests(unittest.TestCase):
         self.assertEqual(code.count(';'), 1)
         forbidden = ('UPDATE ', 'DELETE ', 'INSERT ', 'ALTER ', 'DROP ', 'CREATE ', 'ATTACH ')
         self.assertFalse(any(token in code.upper() for token in forbidden))
-    def test_inventory_all_tenants_and_both_active_statuses(self):
+    def test_inventory_only_authorized_tenant_with_both_active_statuses(self):
         rows = list(self.db.execute(SQL))
         self.assertEqual([(r['empresa_id'], r['matricula_id']) for r in rows],
-          [(6,911),(7,912)])
+          [(6,911),(6,914)])
         self.assertEqual(rows[0]['matricula_progresso_pct'],80)
         self.assertEqual(rows[0]['ciclo_progresso_pct'],80)
         self.assertEqual(rows[0]['scorm_suspend_data_PRIVATE'],'private_resume')
-        self.assertEqual(rows[1]['ciclo_id'],1003)
-        self.assertEqual(rows[1]['xapi_statement_count'],1)
+        self.assertEqual(rows[1]['ciclo_id'],1004)
+        self.assertEqual(rows[1]['xapi_statement_count'],0)
         self.assertEqual(rows[0]['xapi_statement_count'],0)
         self.assertNotIn('nome',rows[0].keys())
+        self.assertTrue(all(row['empresa_id']==6 for row in rows))
 
 if __name__ == '__main__':
     unittest.main()
