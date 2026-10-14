@@ -258,6 +258,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       });
       if (index === 20) {
         const before = await snapshot(context, profile, d);
+        const beforeStages = await moduleSession(context,profile,d);
         await evidence(page, testInfo, 'doutrinamento-midpoint');
         // Entire browser session context is closed; no in-memory LMS state survives.
         await context.close();
@@ -268,9 +269,11 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         const after = await snapshot(context, profile, d);
         expect(after.completed_unit_ids).toEqual(before.completed_unit_ids);
         expect(after.attempts).toEqual(before.attempts);
-        expect((await moduleSession(context,profile,d)).allOfficialStagesPassed)
-          .toBe(false);
+        expect((await moduleSession(context,profile,d)).stages)
+          .toEqual(beforeStages.stages);
         const resumedReadiness=await jointReadiness(context,profile,d);
+        expect(resumedReadiness.verifiedLessons).toBeLessThan(
+          resumedReadiness.totalRequiredLessons);
         expect(resumedReadiness.readyForAtomicTerminalPreflight).toBe(false);
       }
     }
