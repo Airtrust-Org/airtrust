@@ -33,6 +33,32 @@ def _host_origin(value):
         raise RC81Unsupported('RC81_PARENT_ORIGIN_INVALID')
     return value
 
+def _rc81_verified_cursor_helper():
+    """UI-only restore from parent-issued, Worker-authenticated next source unit.
+
+    Not an assessment, page credit, or a SCORM write. The exact pinned original
+    exposes slide(), active, view and render(); no source list is fabricated.
+    """
+    return r"""function applyVerifiedCursor(unitId){
+      if(!goodId(unitId))return false;
+      const before=active;
+      let found=-1;
+      for(let i=0;i<42;i++){
+        active=i;
+        const candidate=slide();
+        if(candidate&&candidate.id===unitId){
+          if(found!==-1){active=before;return false;}
+          found=i;
+        }
+      }
+      active=before;
+      if(found===-1)return false;
+      active=found;view=0;mode='journey';courseCompleted=false;
+      render(false);
+      return true;
+    }"""
+
+
 def adapt_rc81_app(original_js: bytes, source_zip_sha256: str, parent_origin: str,
                    edition_sha256: str, learner_stages: list[dict]) -> bytes:
     if source_zip_sha256 != SOURCE_ZIP_SHA256 or hashlib.sha256(original_js).hexdigest() != SOURCE_APP_SHA256:
@@ -118,13 +144,23 @@ def adapt_rc81_app(original_js: bytes, source_zip_sha256: str, parent_origin: st
     _replace_line(lines, 'init', init)
     bridge = r'''const __P3_RC81 = (() => {
       const origin = __ORIGIN__, edition = __EDITION__, qid = __QUESTIONS__;
-      let pending = null;
+      let pending = null, restored = false;
       const goodId = x => typeof x === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(x);
+      __RESTORE_HELPER__
       function post(data){if(window.parent !== window)window.parent.postMessage(data,origin)}
       window.addEventListener('message', e => {
-        if(e.source !== window.parent || e.origin !== origin || !pending) return;
+        if(e.source !== window.parent || e.origin !== origin) return;
         const d=e.data;
-        if(!d || d.type !== 'AIRTRUST_PLAYER3_STAGE_VERDICT_V1' || d.editionSha256 !== edition ||
+        if(d&&d.type==='AIRTRUST_PLAYER3_RESUME_CURSOR_V1'){
+          if(restored||pending||d.editionSha256!==edition||
+             Object.keys(d).sort().join(',')!=='editionSha256,nextUnitId,type'||
+             !applyVerifiedCursor(d.nextUnitId))return;
+          restored=true;
+          post({type:'AIRTRUST_PLAYER3_RESUME_ACK_V1',
+            editionSha256:edition,unitId:d.nextUnitId});
+          return;
+        }
+        if(!pending || !d || d.type !== 'AIRTRUST_PLAYER3_STAGE_VERDICT_V1' || d.editionSha256 !== edition ||
           d.requestId !== pending.id || d.stageId !== pending.stage ||
           typeof d.stage_passed !== 'boolean' || !Number.isInteger(d.score_pct) ||
           d.score_pct < 0 || d.score_pct > 100 || d.persisted !== true) return;
@@ -156,6 +192,7 @@ def adapt_rc81_app(original_js: bytes, source_zip_sha256: str, parent_origin: st
     window.AIRTRUST_PLAYER3_RC81=__P3_RC81;
     '''
     bridge=bridge.replace('__ORIGIN__',json.dumps(parent_origin)).replace('__EDITION__',json.dumps(edition_sha256)).replace('__QUESTIONS__',json.dumps(questions,sort_keys=True))
+    bridge=bridge.replace('__RESTORE_HELPER__',_rc81_verified_cursor_helper())
     lines.insert(1, bridge)
     result = '\n'.join(lines) + '\n'
     # Fail closed: the authored runtime must contain no local exam grading code.
