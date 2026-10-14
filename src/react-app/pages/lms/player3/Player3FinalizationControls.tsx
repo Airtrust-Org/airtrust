@@ -212,7 +212,7 @@ export default function Player3FinalizationControls({
     {(state==='RECORDED'||state==='UNCERTAIN')&&
       <button type="button" data-testid="player3-recheck-completion"
         className="mt-3 rounded border px-3 py-2 text-sm font-semibold disabled:opacity-50"
-        disabled={inFlight.current||state==='CHECKING'}
+        disabled={inFlight.current}
         onClick={()=>void reconcile()}>
         Consultar situação da conclusão
       </button>}
