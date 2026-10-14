@@ -87,6 +87,24 @@ class Player3Html5ReviewTests(unittest.TestCase):
             self.assertIn('Visual original', after.read('index.html').decode())
 
 
+    def test_review_neutralizes_original_scorm_api_but_preserves_all_other_assets(self):
+        source = original(extra={
+            'scorm_api.js': "window.Scorm={set:()=>LMSSetValue('cmi.core.lesson_status','passed')};",
+            'asset-not-scores.js': "window.showMedia=()=>true;",
+        })
+        candidate, _, _, _, receipt = compile_review(source,'source.zip')
+        self.assertFalse(receipt['publishable'])
+        self.assertTrue(receipt['legacyScormApiDisabled'])
+        self.assertTrue(receipt['byteIdenticalNonModelNonScormShimFiles'])
+        self.assertFalse(receipt['byteIdenticalNonModelFiles'])
+        with ZipFile(io.BytesIO(source)) as old, ZipFile(io.BytesIO(candidate)) as new:
+            shim=new.read('scorm_api.js').decode()
+            for forbidden in ('LMSSetValue','lesson_status','passed'):
+                self.assertNotIn(forbidden,shim)
+            self.assertEqual(new.read('index.html'),old.read('index.html'))
+            self.assertEqual(new.read('styles.css'),old.read('styles.css'))
+            self.assertEqual(new.read('asset-not-scores.js'),old.read('asset-not-scores.js'))
+
     def test_dual_models_are_dekeyed_even_when_primary_has_different_layout(self):
         primary = model()
         # Scenario tuples are authored [label, isCorrect, feedback].

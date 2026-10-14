@@ -26,6 +26,14 @@ KEYS = frozenset({
     'feedbackCorrect', 'feedbackIncorrect', 'rationale',
 })
 MODEL_FILES = ('course_data.js', 'course-model.js')
+# A review pack must never write legacy SCORM grades or completion. The
+# original grading runtime remains disabled for release until Server Player3
+# integration; this shim is a local no-op, not a new LMS implementation.
+SCORM_DISABLED_SHIM = (
+    b"window.Scorm=Object.freeze({init:()=>'false',get:()=>'',"
+    b"set:()=>'false',commit:()=>'false',finish:()=>'false',"
+    b"isInitialized:()=>false,isFinished:()=>false});\n"
+)
 # JS ternaries such as 'correct':'incorrect' are interface styling, not a key.
 # Detect static answer objects / known grading assignments, not generic grading code.
 EXTERNAL_KEY = re.compile(
@@ -112,9 +120,9 @@ def compile_review(original: bytes, name: str):
             if path.lower().endswith(('.js', '.json', '.html', '.htm')):
                 if EXTERNAL_KEY.search(raw.decode('utf-8', errors='replace')):
                     raise UnsafePackage('PLAYER3_UNMAPPED_GRADING_SOURCE:' + path)
-            files[path] = raw
+            files[path] = SCORM_DISABLED_SHIM if path == 'scorm_api.js' else raw
         for path, raw in files.items():
-            if path not in models and raw != original_zip.read(path):
+            if path not in models and path != 'scorm_api.js' and raw != original_zip.read(path):
                 raise UnsafePackage('PLAYER3_VISUAL_BYTE_FIDELITY')
     mode = meta['certificationModeCandidate']
     proposed_stages = []
@@ -151,7 +159,9 @@ def compile_review(original: bytes, name: str):
         'proposedCertificationMode': mode,
         'sourceStageCrosswalk': proposed_stages,
         'stageContractApproved': False,
-        'byteIdenticalNonModelFiles': True,
+        'byteIdenticalNonModelFiles': 'scorm_api.js' not in entries,
+        'byteIdenticalNonModelNonScormShimFiles': True,
+        'legacyScormApiDisabled': 'scorm_api.js' in entries,
         'officialAnswerBankExcluded': True,
         'originalRuntimeAssessmentMustBeAdapted': True,
         'browserVisualAndFunctionalQaRequired': True,
