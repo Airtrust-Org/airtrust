@@ -132,7 +132,7 @@ export function FrmsScoreExplanation({ item }: { item: FrmsOperationalSnapshotIt
     {f?.limite_referencia && Number.isFinite(f.limite_referencia.pct_atingido) ? (
       <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-900">
         <div className="flex justify-between gap-2">
-          <span>Consumo do limite informado · {f.limite_referencia.tipo.replaceAll('_', ' ')}</span>
+          <span>Consumo do limite informado · {f.limite_referencia.tipo.replace(/_/g, ' ')}</span>
           <strong>{f.limite_referencia.pct_atingido.toFixed(1).replace('.', ',')}%</strong>
         </div>
         <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
