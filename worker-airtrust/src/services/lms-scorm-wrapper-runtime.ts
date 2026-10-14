@@ -86,6 +86,39 @@ function resolveProbedScormLocation(authored, explicitLocation, domLocation) {
 }
 
 /**
+ * Observação de telas SCORM independente da posição máxima persistida.
+ * Deve executar no mesmo escopo do wrapper; a tela revisitada é registrada
+ * antes do guard que protege o bookmark e apenas no total de slides da edição.
+ */
+export function buildScormVisitTrackingScript(): string {
+  return `
+  // A visit and the last saved bookmark are independent facts. Record the
+  // actual package-authored page BEFORE protecting a regressive bookmark.
+  // Returns true only when this session observed a previously absent page.
+  function updateMaxVisitedFromLocation(location) {
+    var parsed = parseLocationPair(location);
+    if (!parsed || parsed.total <= 0 || parsed.total > 1000 ||
+        parsed.current < 1 || parsed.current > parsed.total) return false;
+    // A different slide total is a different edition, not a missing visit.
+    var persistedTotal = cmi['airtrust.total_slides'];
+    if (persistedTotal != null && Number(persistedTotal) !== parsed.total) return false;
+    if (parsed.current > maxVisitedSlide) maxVisitedSlide = parsed.current;
+    var previous = Array.isArray(cmi['airtrust.viewed_slides'])
+      ? cmi['airtrust.viewed_slides'] : [];
+    var seen = previous.filter(function(n) {
+      return Number.isInteger(n) && n >= 1 && n <= parsed.total;
+    });
+    if (seen.indexOf(parsed.current) >= 0) return false;
+    seen.push(parsed.current);
+    seen.sort(function(a, b) { return a - b; });
+    cmi['airtrust.viewed_slides'] = seen;
+    cmi['airtrust.total_slides'] = parsed.total;
+    return true;
+  }
+`;
+}
+
+/**
  * Parsers de progresso a partir do DOM do frame do pacote. Puros: dependem
  * apenas dos argumentos (`text` / `doc`).
  */

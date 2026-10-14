@@ -817,6 +817,13 @@ export default function LmsPlayer() {
           verifyCanonicalAndReturn();
           return;
         }
+        // Only refresh server-authoritative missing slides after an acknowledged
+        // commit. A local counter/probe alone is not proof that D1 saved it.
+        if (event.data.server_saved === true && !effectiveReviewMode &&
+            typeof event.data.viewed_slide_count === 'number' &&
+            event.data.viewed_slide_count > (closureReadiness?.slide_coverage?.recorded ?? 0)) {
+          void refetchMatricula();
+        }
         return;
       }
 
@@ -835,7 +842,7 @@ export default function LmsPlayer() {
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, queryClient]);
+  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, queryClient, closureReadiness?.slide_coverage?.recorded]);
 
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
