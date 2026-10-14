@@ -132,8 +132,8 @@ export function validateQaProfile(raw: unknown, projectName: string,
       typeof u.visualCue === 'string' && u.visualCue.trim().length > 0 &&
       (u.lessonId===undefined || id.test(u.lessonId)) &&
       (!u.practice || qaChoice(u.practice)) &&
-      (!u.official || (id.test(u.official.stageId) &&
-        Array.isArray(u.official.questions) && u.official.questions.length > 0 &&
+      (!u.official || (u.kind==='assessment' && u.official.stageId===u.id &&
+        Array.isArray(u.official.questions) && u.official.questions.length===10 &&
         u.official.questions.every(qaChoice)))),
     'AUTHOR_UNIT_AND_EXAM_MAP');
     const official = d.units.flatMap(u => u.official ? [u.official.stageId] : []);
