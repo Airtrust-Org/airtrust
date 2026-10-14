@@ -9,7 +9,8 @@ import { resolve } from 'node:path';
 import {
   qaPath as pathOn, requireQa as demand, validateQaProfile,
   validateQaModuleSession,validateQaJointReadiness,validateQaCertificatePdf,
-  validateQaTerminalReceipt,
+  validateQaTerminalReceipt,validateQaCertificateArchiveStatus,
+  type QaCertificateArchiveStatus,
   type QaModuleSession,type QaJointReadiness,
   type QaDoutrinamento,
   type QaChoice as Choice, type QaEnrollment as Enrollment,
@@ -347,8 +348,21 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         id:enrolled.qualificacao_historico_id, certificate_id:enrolled.certificate_id,
         linked_records:1,
       });
+      const archivePath='/api/lms/native/matriculas/'+d.enrollmentId+'/etapas/certificado';
+      // This is Front B's real authenticated post-commit archive reader.
+      // Its R2-header result is still not proof that the PDF stream works.
+      await expect.poll(async () =>
+        (await apiData<QaCertificateArchiveStatus>(context,
+          profile.apiBaseUrl,archivePath)).certificate_state,
+        {timeout:45_000}).toBe('PDF_HEADER_VERIFIED');
+      const archive=validateQaCertificateArchiveStatus(
+        await apiData<QaCertificateArchiveStatus>(context,
+          profile.apiBaseUrl,archivePath),
+        d,enrolled.qualificacao_historico_id!,enrolled.certificate_id!,
+        d.certificatePath);
       const token = process.env.PLAYER3_QA_READONLY_BEARER_TOKEN;
-      const pdf = await context.request.get(pathOn(profile.apiBaseUrl, d.certificatePath), {
+      const pdf = await context.request.get(
+        pathOn(profile.apiBaseUrl, archive.stream_path!), {
         headers:token ? {Authorization:'Bearer '+token}:{},
       });
       expect(pdf.ok()).toBe(true);
@@ -369,7 +383,14 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       const again = await apiData<typeof history>(context, profile.apiBaseUrl, d.qualificationPath);
       expect(again.linked_records).toBe(1);
       expect(again.certificate_id).toBe(enrolled.certificate_id);
-      const againPdf = await context.request.get(pathOn(profile.apiBaseUrl,d.certificatePath), {
+      const reopenedArchive=validateQaCertificateArchiveStatus(
+        await apiData<QaCertificateArchiveStatus>(context,
+          profile.apiBaseUrl,archivePath),
+        d,enrolled.qualificacao_historico_id!,enrolled.certificate_id!,
+        d.certificatePath);
+      expect(reopenedArchive).toEqual(archive);
+      const againPdf = await context.request.get(
+        pathOn(profile.apiBaseUrl,reopenedArchive.stream_path!), {
         headers: token ? {Authorization:'Bearer '+token} : {},
       });
       expect(againPdf.ok()).toBe(true);
