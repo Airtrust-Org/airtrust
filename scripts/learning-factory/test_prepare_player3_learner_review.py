@@ -148,6 +148,17 @@ class Player3Html5ReviewTests(unittest.TestCase):
             ):
                 compile_review(zip_source(files), 'dual-inconsistent.zip')
 
+    def test_dual_model_cross_course_spoof_is_rejected(self):
+        primary = model()
+        secondary = json.loads(json.dumps(primary))
+        secondary['courseId'] = 'different-course'
+        with ZipFile(io.BytesIO(original(primary))) as source:
+            files = {name: source.read(name) for name in source.namelist()}
+        files['course-model.js'] = (
+            'window.AIRTRUST_COURSE_MODEL = ' + json.dumps(secondary) + ';')
+        with self.assertRaisesRegex(UnsafePackage, 'DUAL_MODEL_COURSE_ID_MISMATCH'):
+            compile_review(zip_source(files), 'cross-course.zip')
+
     def test_secondary_presentation_only_still_uses_original_private_bank(self):
         primary = model()
         secondary = json.loads(json.dumps(primary))
