@@ -254,16 +254,26 @@ def build(batches: list[Path], private_output: Path, learner_output: Path)-> dic
     entries=[]
     seen=set()
     for batch in batches:
+        if not batch.is_file() or batch.is_symlink() or batch.stat().st_size>MAX_NESTED_ZIP:
+            fail('INVALID_SOURCE_FILE')
         with ZipFile(batch) as outer:
-            for info in outer.infolist():
-                if (info.is_dir() or not info.filename.lower().endswith('.zip') or
-                    info.filename.startswith('__MACOSX/') or
-                    Path(info.filename).name.startswith('._')):
-                    continue
-                basename=Path(info.filename).name
-                if info.file_size<=0 or info.file_size>MAX_NESTED_ZIP:
-                    fail('NESTED_ZIP_SIZE')
-                original=outer.read(info)
+            names={i.filename for i in outer.infolist()}
+            # Support original authoring packages directly, without making a
+            # second ZIP copy. A batch is recognized by nested *.zip members.
+            if 'index.html' in names and 'imsmanifest.xml' in names:
+                source_packages=[(batch.name,batch.read_bytes())]
+            else:
+                source_packages=[]
+                for info in outer.infolist():
+                    if (info.is_dir() or not info.filename.lower().endswith('.zip') or
+                        info.filename.startswith('__MACOSX/') or
+                        Path(info.filename).name.startswith('._')):
+                        continue
+                    basename=Path(info.filename).name
+                    if info.file_size<=0 or info.file_size>MAX_NESTED_ZIP:
+                        fail('NESTED_ZIP_SIZE')
+                    source_packages.append((basename,outer.read(info)))
+            for basename,original in source_packages:
                 meta,projection,bank=extract(original,basename)
                 unique=(meta['courseId'],meta['original_source_sha256'])
                 if unique in seen:
