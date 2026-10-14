@@ -72,6 +72,13 @@ export default function Player3AuthenticatedStagingEntry({
     contentOrigin={launch.content_origin}
     editionSha256={launch.edition_sha256}
     reviewOnly={false}
+    navigation={{
+      empresaId,matriculaId,cicloId:launch.ciclo_id,
+      editionSha256:launch.edition_sha256,
+      nextUnitId:launch.resume_next_unit_id,
+      checkpointUnitIds:launch.checkpoint_unit_ids,
+      lastVisitedUnitId:launch.last_visited_unit_id,
+    }}
     assessmentPresentation="authored-html5"
     pendingAssessment={stage?{
       context:{
