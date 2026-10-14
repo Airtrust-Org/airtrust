@@ -20,9 +20,10 @@ function project(offset:number):QaProjectFixture {
     ...(i>=8?{lessonId:'unit-'+String(i+1)}:{}),
     visualCue:'Original author content '+String(i+1),
     ...(i===8?{practice:{question:'Synthetic formative?',wrong:'No',correct:'Yes'}}:{}),
-    ...(i<8?{official:{stageId:'mod-'+(i+1),questions:[
-      {question:'Synthetic assessment?',wrong:'No',correct:'Yes'},
-    ]}}:{}),
+    ...(i<8?{official:{stageId:'unit-'+String(i+1),
+      questions:Array.from({length:10},(_,j)=>({
+        question:'Synthetic authored question '+(j+1)+'?',wrong:'No',correct:'Yes',
+      }))}}:{}),
   }));
   return {
     doutrinamento:{...enrollment(1),units,
