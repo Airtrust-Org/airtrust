@@ -419,6 +419,21 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.queryByText('Bloco 1 - Sono')).not.toBeInTheDocument();
   });
 
+  it('bloqueia envio quando a oportunidade de sono é inferior ao sono declarado', () => {
+    render(<FrmsCheckinFadiga />);
+    fireEvent.click(screen.getByRole('radio', { name: '5 horas de oportunidade' }));
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
+    fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
+    fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
+    fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
+    fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
+    fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
+    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diário' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent(/Oportunidade de sono menor que sono informado/);
+  });
+
   it('renderiza as cinco opções de sono definidas para o check-in', () => {
     render(<FrmsCheckinFadiga />);
 
@@ -678,6 +693,7 @@ describe('FrmsCheckinFadiga UI', () => {
   it('mantem observacao obrigatoria para resposta nao apto', () => {
     render(<FrmsCheckinFadiga />);
 
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais de oportunidade' }));
     fireEvent.click(screen.getByRole('radio', { name: '5 horas' }));
     fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
     fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
