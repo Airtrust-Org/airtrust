@@ -15,6 +15,7 @@ function project(offset:number):QaProjectFixture {
   });
   const units=Array.from({length:42},(_,i)=>({
     id:'unit-'+String(i+1),kind:i<8?'assessment' as const:'lesson' as const,
+    ...(i>=8?{lessonId:'unit-'+String(i+1)}:{}),
     visualCue:'Original author content '+String(i+1),
     ...(i===8?{practice:{question:'Synthetic formative?',wrong:'No',correct:'Yes'}}:{}),
     ...(i<8?{official:{stageId:'mod-'+(i+1),questions:[
@@ -23,6 +24,7 @@ function project(offset:number):QaProjectFixture {
   }));
   return {
     doutrinamento:{...enrollment(1),units,
+      requiredLessonIds:units.flatMap(u=>u.lessonId?[u.lessonId]:[]),
       qualificationPath:'/qa/qualification/'+offset,
       certificatePath:'/qa/certificate/'+offset},
     resume80:{...enrollment(2),expectedResumeUnitId:'unit-34',
@@ -85,17 +87,31 @@ describe('Front D QA contract — no network, no real students',()=>{
     delete p.projects.webkit;
     expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001')).toThrow('BOTH_INDEPENDENT_BROWSER_PROJECTS');
   });
-  it('distinguishes exactly eight authored exams from 34 lesson receipts',()=>{
+  it('keeps eight authored exam stages distinct from reviewed lesson receipts',()=>{
     const p=fixture();
-    const authored=p.projects.chromium.doutrinamento.units;
-    expect(authored).toHaveLength(42);
-    expect(authored.filter(u=>u.kind==='lesson')).toHaveLength(34);
-    expect(authored.filter(u=>u.kind==='assessment')).toHaveLength(8);
+    const d=p.projects.chromium.doutrinamento;
+    expect(d.units).toHaveLength(42);
+    expect(d.units.filter(u=>u.kind==='assessment')).toHaveLength(8);
+    expect(d.requiredLessonIds).toHaveLength(34);
     expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001').fixture.doutrinamento.units)
       .toHaveLength(42);
-    authored[0].kind='lesson';
+    d.units[0].lessonId=d.units[8].lessonId;
     expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001'))
-      .toThrow('AUTHOR_UNIT_AND_EXAM_MAP');
+      .toThrow('REVIEWED_CANONICAL_LESSON_CROSSWALK');
+  });
+  it('accepts 42 UI screens and 42 lesson receipts when each exam also records content',()=>{
+    const p=fixture();
+    const d=p.projects.chromium.doutrinamento;
+    d.units.forEach(u=>{u.lessonId=u.id;});
+    d.requiredLessonIds=d.units.map(u=>u.id);
+    expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001')
+      .fixture.doutrinamento.requiredLessonIds).toHaveLength(42);
+  });
+  it('rejects lessons not present on any reviewed author screen',()=>{
+    const p=fixture();
+    p.projects.chromium.doutrinamento.requiredLessonIds.push('invented-lesson');
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001'))
+      .toThrow('REVIEWED_CANONICAL_LESSON_CROSSWALK');
   });
   it('requires all 42 authored units, exactly eight official module assessments and actual practice',()=>{
     const p=fixture();p.projects.chromium.doutrinamento.units.pop();
