@@ -97,7 +97,7 @@ app.get('/matriculas/:matriculaId/etapas/lancamento',async c=>{
       editionSha256:course.editionHash,sourceSha256:binding.source_sha256,
       originBinding:c.env.PLAYER3_AUTHORED_CONTENT_ORIGIN,
       launchTenantAllowlist:launchAllowlist,
-      learnerContent:(policy as unknown as {learnerContent?:unknown}).learnerContent,
+      learnerContent:policy.learnerContent,
     });
     const state=await readPlayer3ModuleSession({
       env:c.env,db:c.env.DB,bucket:c.env.BUCKET,
