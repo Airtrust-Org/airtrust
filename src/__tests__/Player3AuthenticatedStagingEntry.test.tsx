@@ -29,6 +29,8 @@ const launch={
   content_origin:'https://authored-staging.example',
   content_url:'https://authored-staging.example/player3/6/57/'+sha('a')+'/'+sha('b')+'/index.html',
   assessment_presentation:'authored-html5' as const,
+  resume_next_unit_id:'unit22',checkpoint_unit_ids:['unit21','unit22'],
+  last_visited_unit_id:'unit21',
   official_stages_passed:false,completion_supported:false as const,
   pending_assessment:{
     stage_id:'module1',title:'Avaliação do módulo',
@@ -56,6 +58,8 @@ describe('authenticated original HTML5 learner entry (no ungoverned fallback)',(
         correctOptionId:'a'}],
     }},props)).toBe(false);
     expect(validatePlayer3Launch({...launch,official_stages_passed:true},props)).toBe(false);
+    expect(validatePlayer3Launch({...launch,checkpoint_unit_ids:['unit22','unit22']},props)).toBe(false);
+    expect(validatePlayer3Launch({...launch,last_visited_unit_id:'wrong'},props)).toBe(false);
   });
   it('mounts the source-backed iframe only for a valid Worker launch',async()=>{
     mockFetch.mockResolvedValueOnce(response({success:true,data:launch}));
