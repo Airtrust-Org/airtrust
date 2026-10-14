@@ -22,6 +22,9 @@ export type LegacyResumeSource=Readonly<{
   expected_package_version:string;
   /** Ordered original unit IDs, verified against the source package hash. */
   ordered_source_unit_ids:readonly string[];
+  /** Required for historical A10 bitmaps which do not embed a package version. */
+  source_archive_sha256?:string;
+  verified_published_archive_sha256?:string;
 }>;
 const UNIT=/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 function response(source:LegacyResumeSource,
@@ -49,16 +52,53 @@ export function extractPersistedScormResume(source:LegacyResumeSource):LegacyRes
   if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))
     return response(source,'REVIEW_REQUIRED','UNKNOWN_SUSPEND_FORMAT');
   const data=parsed as Record<string,unknown>;
+  const units=source.ordered_source_unit_ids;
+  if(data.s==='A10'){
+    const digest=/^[a-f0-9]{64}$/;
+    if(!source.source_archive_sha256 || !source.verified_published_archive_sha256 ||
+       !digest.test(source.source_archive_sha256) ||
+       source.source_archive_sha256!==source.verified_published_archive_sha256){
+      return response(source,'REVIEW_REQUIRED','UNVERIFIED_A10_EDITION');
+    }
+    if(!Number.isInteger(data.c)||Number(data.c)<0||Number(data.c)>=units.length ||
+       typeof data.v!=='string'||data.v.length>Math.ceil(units.length/6)){
+      return response(source,'REVIEW_REQUIRED','INVALID_A10_BOOKMARK_OR_BITMAP');
+    }
+    const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const seen:string[]=[];
+    for(let k=0;k<data.v.length;k++){
+      const mask=alphabet.indexOf(data.v[k]);
+      if(mask<0)return response(source,'REVIEW_REQUIRED','INVALID_A10_BITMAP');
+      for(let j=0;j<6;j++)if(mask&(1<<j)){
+        const index=k*6+j;
+        if(index>=units.length)return response(source,'REVIEW_REQUIRED','INVALID_A10_BITMAP');
+        seen.push(units[index]);
+      }
+    }
+    return response(source,'VISITED_UNITS','A10_VERIFIED_SOURCE_EDITION',
+      units[Number(data.c)],seen);
+  }
   if(![2,3,4].includes(data.v as number))
     return response(source,'REVIEW_REQUIRED','UNKNOWN_SUSPEND_FORMAT');
   if(data.p!==source.expected_package_version)
     return response(source,'REVIEW_REQUIRED','SOURCE_VERSION_MISMATCH');
-  const units=source.ordered_source_unit_ids;
   const bookmark=typeof data.a==='string'
     ? units.indexOf(data.a) : data.a;
   if(!Number.isInteger(bookmark)||Number(bookmark)<0||Number(bookmark)>=units.length)
     return response(source,'REVIEW_REQUIRED','INVALID_BOOKMARK');
   const active=units[Number(bookmark)];
+  // Residuos model V4 records completed slide IDs under c[], not d[].
+  // d{} in that model is a collection of scenario decisions and is never a
+  // visited slide set. It cannot be interpreted as progress.
+  if(data.v===4 && Array.isArray(data.c) &&
+     data.d && typeof data.d==='object' && !Array.isArray(data.d)){
+    if(data.c.length>units.length || data.c.some(id=>typeof id!=='string'||
+       !units.includes(id)) || new Set(data.c).size!==data.c.length){
+      return response(source,'REVIEW_REQUIRED','INVALID_V4_COMPLETED_SLIDES',active);
+    }
+    return response(source,'VISITED_UNITS','V4_COMPLETED_SLIDE_IDS',
+      active,data.c as string[]);
+  }
   // Compact V4 and historical variants intentionally omit visited sets.
   // Do NOT infer prior visits from position or a reported CMI percent.
   if(!Object.prototype.hasOwnProperty.call(data,'d'))
