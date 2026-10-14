@@ -90,21 +90,22 @@ function statusEquipeLabel(row: Record<string, unknown>): string {
   }
 }
 
-type SonoOpcao = 'h4' | 'h5' | 'h6' | 'h7' | 'h8';
+type SonoOpcao = 'h4' | 'h5' | 'h6' | 'h7' | 'h8' | 'outro';
 
 type EscalaSeveridade = 'melhor' | 'boa' | 'intermediaria' | 'atencao' | 'critica';
 
 const SONO_OPCOES: {
   key: SonoOpcao;
   label: string;
-  horas: number;
+  horas: number | null;
   severidade: EscalaSeveridade;
 }[] = [
-  { key: 'h4', label: '4 horas ou menos', horas: 4, severidade: 'critica' },
+  { key: 'h4', label: '4 horas', horas: 4, severidade: 'critica' },
   { key: 'h5', label: '5 horas', horas: 5, severidade: 'critica' },
   { key: 'h6', label: '6 horas', horas: 6, severidade: 'atencao' },
   { key: 'h7', label: '7 horas', horas: 7, severidade: 'intermediaria' },
-  { key: 'h8', label: '8 horas ou mais', horas: 8, severidade: 'melhor' },
+  { key: 'h8', label: '8 horas', horas: 8, severidade: 'melhor' },
+  { key: 'outro', label: 'Outro valor', horas: null, severidade: 'intermediaria' },
 ];
 
 const KSS_OPCOES = [
@@ -215,6 +216,7 @@ function selectedScaleClasses(severidade: EscalaSeveridade): string {
 
 export function isFadigaCheckinSubmitReady(input: {
   sonoOpcao: SonoOpcao | null;
+  horasSonoPersonalizadas?: number | null;
   repousoHoras?: number | null;
   presentationTime: string;
   wakeTime: string;
@@ -230,6 +232,11 @@ export function isFadigaCheckinSubmitReady(input: {
   const wakeTimeValid = isValidWakeTime(input.wakeTime);
   return (
     input.sonoOpcao !== null &&
+    (input.sonoOpcao !== 'outro' ||
+      (input.horasSonoPersonalizadas !== null &&
+        input.horasSonoPersonalizadas !== undefined &&
+        Number.isFinite(input.horasSonoPersonalizadas) &&
+        input.horasSonoPersonalizadas >= 0 && input.horasSonoPersonalizadas <= 24)) &&
     (input.repousoHoras == null ||
       (Number.isFinite(input.repousoHoras) && input.repousoHoras >= 0 && input.repousoHoras <= 24)) &&
     presentationTimeValid &&
@@ -526,6 +533,7 @@ export default function FrmsFlightCheckinFadiga() {
   const [sonoOpcao, setSonoOpcao] = useState<SonoOpcao | null>(
     (restoredDraft?.sonoOpcao as SonoOpcao | null) ?? null,
   );
+  const [horasSonoPersonalizadas, setHorasSonoPersonalizadas] = useState<number | null>(restoredDraft?.horasSonoPersonalizadas ?? null);
   const [repousoHoras, setRepousoHoras] = useState<number | null>(restoredDraft?.repousoHoras ?? null);
   const [selectedRecoveryActivity, setSelectedRecoveryActivity] = useState<RecoveryActivityType | null>(null);
   const [presentationTime, setPresentationTime] = useState(restoredDraft?.presentationTime ?? '');
@@ -564,8 +572,9 @@ export default function FrmsFlightCheckinFadiga() {
 
   useEffect(() => {
     saveFadigaCheckinDraft(draftKey, {
-      version: 1,
+      version: 2,
       sonoOpcao,
+      horasSonoPersonalizadas,
       repousoHoras,
       presentationTime,
       wakeTime,
@@ -592,6 +601,7 @@ export default function FrmsFlightCheckinFadiga() {
     presentationTime,
     qualidadeSono,
     sonoOpcao,
+    horasSonoPersonalizadas,
     repousoHoras,
     vigilanceResult,
     vigilanceRunning,
@@ -610,6 +620,7 @@ export default function FrmsFlightCheckinFadiga() {
 
   const canSubmit = isFadigaCheckinSubmitReady({
     sonoOpcao,
+    horasSonoPersonalizadas,
     repousoHoras,
     presentationTime,
     wakeTime,
@@ -636,6 +647,9 @@ export default function FrmsFlightCheckinFadiga() {
 
   const missingItems: string[] = [];
   if (sonoOpcao === null) missingItems.push('Sono efetivamente obtido');
+  if (sonoOpcao === 'outro' && (horasSonoPersonalizadas == null ||
+    !Number.isFinite(horasSonoPersonalizadas) || horasSonoPersonalizadas < 0 ||
+    horasSonoPersonalizadas > 24)) missingItems.push('Valor real de sono (0 a 24 horas)');
   if (!presentationTimeValid) {
     if (!presentationTimeHasValue) missingItems.push('Hora de apresentação');
     else missingItems.push('Horário inválido - corrija a hora de apresentação');
@@ -697,7 +711,9 @@ export default function FrmsFlightCheckinFadiga() {
         hora_acordou: wakeTimeNormalized!,
         wake_time: wakeTimeNormalized!,
         // Separate observed self-report of sleep from opportunity for sleep/rest.
-        horas_sono_24h: SONO_OPCOES.find((o) => o.key === sonoOpcao!)!.horas,
+        horas_sono_24h: sonoOpcao === 'outro'
+          ? horasSonoPersonalizadas!
+          : SONO_OPCOES.find((o) => o.key === sonoOpcao!)!.horas!,
         oportunidade_sono_horas_24h: usesAbsoluteRestForRecovery ? (repousoHoras ?? undefined) : undefined,
         qualidade_sono: qualidadeSono!,
         kss_score: kss,
@@ -877,7 +893,7 @@ export default function FrmsFlightCheckinFadiga() {
                     <legend className="mb-2 text-sm font-medium text-slate-700">
                       Sono efetivamente obtido nas últimas 24h
                     </legend>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
                       {SONO_OPCOES.map((op) => {
                         const selected = sonoOpcao === op.key;
                         return (
@@ -902,6 +918,34 @@ export default function FrmsFlightCheckinFadiga() {
                         );
                       })}
                     </div>
+                    {sonoOpcao === 'outro' && (
+                      <div className="mt-3">
+                        <label htmlFor="sono-horas-exatas" className="mb-1 block text-sm font-medium text-slate-700">
+                          Horas de sono efetivamente obtidas (0 a 24)
+                        </label>
+                        <input
+                          id="sono-horas-exatas"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          max="24"
+                          step="0.5"
+                          value={horasSonoPersonalizadas ?? ''}
+                          onChange={(event) => {
+                            const raw = event.currentTarget.value;
+                            setHorasSonoPersonalizadas(raw === '' ? null : Number(raw));
+                          }}
+                          aria-invalid={submitAttempted &&
+                            (horasSonoPersonalizadas == null || !Number.isFinite(horasSonoPersonalizadas) ||
+                              horasSonoPersonalizadas < 0 || horasSonoPersonalizadas > 24)}
+                          className="min-h-11 w-full max-w-52 rounded-xl border border-slate-300 px-3 py-2 text-base"
+                        />
+                        <p className="mt-1 text-xs text-slate-600">
+                          Informe o tempo efetivo, inclusive quando foi inferior a 4 ou superior a 8 horas.
+                          Uma faixa de horas não será convertida em uma duração exata.
+                        </p>
+                      </div>
+                    )}
                   </fieldset>
 
                   <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
