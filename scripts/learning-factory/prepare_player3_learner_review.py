@@ -45,6 +45,12 @@ def dekey(value):
                 if k not in KEYS and not (scenario_choice and k == 'f')}
     if isinstance(value, list):
         # Lists with correctness flags need explicit adapter before stripping.
+        # Authored scenario options are [visible_text, correct_flag, feedback].
+        # Preserve tuple position for the visual JS, but NEVER disclose key/feedback.
+        if len(value) == 3 and isinstance(value[0], str) and type(value[1]) is bool:
+            if not isinstance(value[2], str):
+                raise UnsafePackage('PLAYER3_UNMAPPED_SCENARIO_FEEDBACK')
+            return [value[0], None, None]
         if any(isinstance(item, bool) for item in value):
             raise UnsafePackage('PLAYER3_UNMAPPED_BOOLEAN_LIST')
         return [dekey(v) for v in value]
@@ -67,35 +73,46 @@ def compile_review(original: bytes, name: str):
     with ZipFile(io.BytesIO(original)) as original_zip:
         entries = checked_files(original_zip)
         models = [p for p in MODEL_FILES if p in entries]
-        if len(models) != 1:
-            raise UnsafePackage('PLAYER3_AMBIGUOUS_MODEL_FILES')
-        model_path = models[0]
-        text = original_zip.read(model_path).decode('utf-8-sig').strip()
-        prefix = COURSE.match(text)
-        if not prefix:
-            raise UnsafePackage('PLAYER3_NOT_LITERAL_MODEL')
-        try:
-            model = json.loads(text[prefix.end():].strip().rstrip(';').strip())
-        except ValueError as error:
-            raise UnsafePackage('PLAYER3_INVALID_MODEL') from error
-        sanitized = dekey(model)
-        if not isinstance(model.get('slides'), list) or not isinstance(sanitized.get('slides'), list):
-            raise UnsafePackage('PLAYER3_INVALID_SLIDES')
-        if [(s.get('id'), s.get('kind')) for s in model['slides']] != [
-            (s.get('id'), s.get('kind')) for s in sanitized['slides']
-        ]:
-            raise UnsafePackage('PLAYER3_STAGE_PARITY')
-        sanitized_bytes = (text[:prefix.end()] + json.dumps(
-            sanitized, ensure_ascii=False, separators=(',', ':')) + ';\n').encode('utf-8')
+        if not models:
+            raise UnsafePackage('PLAYER3_NO_AUTHORING_MODEL')
         files = {}
+        stages = None
+        for model_path in models:
+            text = original_zip.read(model_path).decode('utf-8-sig').strip()
+            prefix = COURSE.match(text)
+            if not prefix:
+                raise UnsafePackage('PLAYER3_NOT_LITERAL_MODEL')
+            expected_global = ('COURSE_DATA' if model_path == 'course_data.js'
+                               else 'AIRTRUST_COURSE_MODEL')
+            if not text.startswith('window.' + expected_global):
+                raise UnsafePackage('PLAYER3_MODEL_GLOBAL_MISMATCH')
+            try:
+                model = json.loads(text[prefix.end():].strip().rstrip(';').strip())
+            except ValueError as error:
+                raise UnsafePackage('PLAYER3_INVALID_MODEL') from error
+            sanitized = dekey(model)
+            if not isinstance(model.get('slides'), list) or not isinstance(sanitized.get('slides'), list):
+                raise UnsafePackage('PLAYER3_INVALID_SLIDES')
+            signature = [(slide.get('id'), slide.get('kind')) for slide in model['slides']]
+            if stages is not None and stages != signature:
+                raise UnsafePackage('PLAYER3_DUAL_MODEL_STAGE_MISMATCH')
+            stages = signature
+            if signature != [(slide.get('id'), slide.get('kind')) for slide in sanitized['slides']]:
+                raise UnsafePackage('PLAYER3_STAGE_PARITY')
+            files[model_path] = (
+                text[:prefix.end()] + json.dumps(sanitized, ensure_ascii=False,
+                    separators=(',', ':')) + ';\n'
+            ).encode('utf-8')
         for path in sorted(entries):
+            if path in files:
+                continue
             raw = original_zip.read(path)
-            if path != model_path and path.lower().endswith(('.js', '.json', '.html', '.htm')):
+            if path.lower().endswith(('.js', '.json', '.html', '.htm')):
                 if EXTERNAL_KEY.search(raw.decode('utf-8', errors='replace')):
                     raise UnsafePackage('PLAYER3_UNMAPPED_GRADING_SOURCE:' + path)
-            files[path] = sanitized_bytes if path == model_path else raw
+            files[path] = raw
         for path, raw in files.items():
-            if path != model_path and raw != original_zip.read(path):
+            if path not in models and raw != original_zip.read(path):
                 raise UnsafePackage('PLAYER3_VISUAL_BYTE_FIDELITY')
     receipt = {
         'schema': 'AIRTRUST_PLAYER3_HTML5_DEKEY_REVIEW_V1',
@@ -105,7 +122,8 @@ def compile_review(original: bytes, name: str):
         'sourceVersion': meta['sourceVersion'],
         'stageCount': meta['stage_count'],
         'questionCount': meta['question_count'],
-        'modelFile': model_path,
+        'modelFile': models[0],
+        'modelFiles': models,
         'byteIdenticalNonModelFiles': True,
         'officialAnswerBankExcluded': True,
         'originalRuntimeAssessmentMustBeAdapted': True,
