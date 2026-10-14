@@ -204,3 +204,72 @@ def compile_rc81_review(original_zip: bytes, parent_origin: str,
         json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True)+'\n'
     ).encode('utf8')
     return fixed_zip(files), meta, projection, bank, receipt
+
+def build_rc81_private_review(source_zip, private_output, learner_review_output,
+                              parent_origin: str, edition_sha256: str):
+    """Strict local offline review artifact. No deploy, no learner distribution."""
+    import os
+    import shutil
+    from pathlib import Path
+    from extract_player3_private_assessments import _safe_output_pair, _write_exclusive
+    from prepare_player3_learner_review import sha
+
+    source = Path(source_zip)
+    if not source.is_file() or source.is_symlink() or source.stat().st_size > 120 * 1024 * 1024:
+        raise RC81Unsupported('RC81_INVALID_SOURCE_FILE')
+    private, review = _safe_output_pair(Path(private_output), Path(learner_review_output))
+    candidate, meta, projection, bank, receipt = compile_rc81_review(
+        source.read_bytes(), parent_origin, edition_sha256)
+    digest = sha(candidate)
+    dirs = []
+    try:
+        for path in (private, review):
+            path.mkdir(mode=0o700)
+            dirs.append(path)
+        _write_exclusive(private/'RC81-server-only-bank.json', bank)
+        _write_exclusive(private/'RC81-private-review.json', meta)
+        _write_exclusive(review/'RC81-public-question-projection-review.json', projection)
+        archive_path = review/'RC81-HTML5-REVIEW-ONLY-NOT-DEPLOYABLE.zip'
+        fd = os.open(archive_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(candidate)
+        _write_exclusive(private/'RC81-private-build-receipt.json', {
+            'source_sha256': SOURCE_ZIP_SHA256,
+            'reviewZipSha256': digest,
+            'courseId': receipt['courseId'],
+            'stageCount': meta['stage_count'],
+            'questionCount': meta['question_count'],
+            'status': 'REVIEW_ONLY_NOT_PUBLISHABLE',
+            'adapterHostBridgeImplemented': False,
+        })
+    except BaseException:
+        for folder in reversed(dirs):
+            shutil.rmtree(folder)
+        raise
+    return {
+        'status': 'REVIEW_ONLY_NOT_PUBLISHABLE',
+        'source_sha256': SOURCE_ZIP_SHA256,
+        'reviewZipSha256': digest,
+        'publishable': False,
+        'remoteWrites': False,
+    }
+
+
+def main():
+    import argparse
+    import os
+    from pathlib import Path
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('original_rc81_zip', type=Path)
+    parser.add_argument('--private-output', type=Path, required=True)
+    parser.add_argument('--review-output', type=Path, required=True)
+    parser.add_argument('--parent-origin', type=str, required=True)
+    parser.add_argument('--edition-sha256', type=str, required=True)
+    args = parser.parse_args()
+    os.umask(0o077)
+    print(json.dumps(build_rc81_private_review(
+        args.original_rc81_zip, args.private_output, args.review_output,
+        args.parent_origin, args.edition_sha256), ensure_ascii=False))
+
+if __name__ == '__main__':
+    main()
