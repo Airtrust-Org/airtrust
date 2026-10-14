@@ -62,7 +62,9 @@ A D ainda precisa mapear rotas reais de leitura de tentativas, matrícula, hist�
 
 ## Evidência independente disponível
 
-- Preflight puro: **8/8 Vitest PASS**; ESLint e TypeScript focados PASS.
+- Preflight puro: **9/9 Vitest PASS**; ESLint e TypeScript focados PASS.
 - Playwright da D: 3 jornadas × Chromium/WebKit = **6 testes descobertos**, não executados em staging.
 - Suíte SCORM protocolo Factory/M8 já existente: **2/2 PASS** em Chromium/WebKit (não é SCO externo nem certificado RC8.1).
 - GitHub Actions no HEAD inicial D `78a52ba52aca2b5180af535e6fa71a4db7066bb7`: oito gates PASS; cada commit posterior tem que ter sua própria evidência CI.
+
+- No HEAD desta etapa, tentativa de rodar um cenário de browser sem `PLAYER3_QA_ALLOW_WRITES` terminou com `PLAYER3_CONTRACT_MISSING:STAGING_SYNTHETIC_WRITE_APPROVAL` **antes de navegar ou ler APIs** (preflight de segurança PASS, cenário E2E intencionalmente não executado).
