@@ -235,6 +235,14 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
           const passResponse=page.waitForResponse(response=>
             response.url()===attemptUrl &&
             response.request().method()==='POST',{timeout:45000});
+          const launchUrl=pathOn(profile.apiBaseUrl,
+            '/api/lms/native/matriculas/'+d.enrollmentId+'/etapas/lancamento');
+          // B sends one server-authorized stage per launch. The parent MUST
+          // fetch the next policy after an actual pass, without restarting
+          // the authored iframe at slide one.
+          const nextStageLaunch=page.waitForResponse(response=>
+            response.url()===launchUrl &&
+            response.request().method()==='GET',{timeout:45000});
           await answerAuthoredRc81Assessment(page,unit,stage.questions,'correct');
           const passPost=await passResponse;
           expect([200,201]).toContain(passPost.status());
@@ -243,6 +251,23 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
             expectedPassAttempt,observedOfficialEventIds);
           observedOfficialEventIds.add(passPayload.eventId);
           await expectAuthoredRc81Verdict(page,'passed');
+          const next=await nextStageLaunch;
+          expect(next.status()).toBe(200);
+          const nextPayload=await next.json() as {success?:boolean;data?:{
+            empresa_id:number;matricula_id:number;ciclo_id:number;
+            edition_sha256:string;official_stages_passed:boolean;
+            pending_assessment:null|{stage_id:string};
+          }};
+          const following=d.units.slice(index+1).find(u=>!!u.official);
+          demand(nextPayload.success===true && !!nextPayload.data &&
+            nextPayload.data.empresa_id===profile.empresaId &&
+            nextPayload.data.matricula_id===d.enrollmentId &&
+            nextPayload.data.ciclo_id===d.cycleId &&
+            nextPayload.data.edition_sha256===d.editionSha256 &&
+            nextPayload.data.pending_assessment?.stage_id===
+              (following?.official?.stageId ?? undefined) === Boolean(following) &&
+            nextPayload.data.official_stages_passed===!following,
+            'NEXT_AUTHORED_STAGE_NOT_AUTHORIZED_AFTER_PASS');
           await expect.poll(async ()=>
             (await snapshot(context,profile,d)).attempts.some(a=>
               a.stage_id===stage.stageId && a.passed)).toBe(true);
