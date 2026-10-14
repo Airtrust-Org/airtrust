@@ -84,9 +84,10 @@ jobs:
           # No plaintext snapshot written to disk or printed in any CI log.
           (
             cd worker-airtrust
+            reviewed_sql="$(sed '/^[[:space:]]*--/d' ../scripts/learning-factory/player3-active-enrollments-readonly.sql)"
             npx --no-install wrangler d1 execute airtrust-db \
               --env production --remote --json \
-              --file ../scripts/learning-factory/player3-active-enrollments-readonly.sql
+              --command "$reviewed_sql"
           ) | node scripts/learning-factory/player3-seal-active-inventory.mjs \
             --out "$RUNNER_TEMP/player3-inventory.enc.json" \
             > "$RUNNER_TEMP/player3-summary.json"
