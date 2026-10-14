@@ -100,7 +100,7 @@ recusa origem de assets que não seja explicitamente HTTPS staging/QA.
 
 ## Evidência independente disponível
 
-- Preflight puro: **27/27 Vitest PASS** (inclui módulo autenticado, origem privada e allowlist de tenant); ESLint e TypeScript focados PASS.
+- Preflight puro: **30/30 Vitest PASS** (inclui módulo autenticado, origem privada e allowlist de tenant); ESLint e TypeScript focados PASS.
 - Playwright da D: 3 jornadas × Chromium/WebKit = **6 testes descobertos**, não executados em staging.
 - Suíte SCORM protocolo Factory/M8 já existente: **2/2 PASS** em Chromium/WebKit (não é SCO externo nem certificado RC8.1).
 - GitHub Actions no HEAD inicial D `78a52ba52aca2b5180af535e6fa71a4db7066bb7`: oito gates PASS; cada commit posterior tem que ter sua própria evidência CI.
@@ -147,7 +147,7 @@ de eventual produção, cuja autorização é separada e específica por SHA.
 ### Última execução independente de testes focados — 14/10/2026
 
 - Frente D: `c3a72fa36e21ac86213f34612ff6650617c5782d`:
-  **27/27 Vitest PASS**, ESLint PASS, TypeScript PASS;
+  **30/30 Vitest PASS**, ESLint PASS, TypeScript PASS;
   Playwright descobriu 6 testes (3 casos × Chromium/WebKit),
   ainda **não executados contra staging**.
 - Segurança: sem `PLAYER3_QA_ALLOW_WRITES`, o Playwright interrompeu
@@ -200,6 +200,40 @@ fabricar eventos para produzir 42/42 ou usar indicador visual como
 autorização de fechamento.
 
 ### Revalidação independente do crosswalk — 17h23 BRT, 14/10/2026
-- SHA D `25a6f7f52f7f60de698dd5a7e4ca2a45bf38cc6a`: **27/27 Vitest PASS**, ESLint PASS, TypeScript PASS, 6 Playwright descobertos em Chromium/WebKit; não são testes de staging concluídos.
+- SHA D `25a6f7f52f7f60de698dd5a7e4ca2a45bf38cc6a`: **30/30 Vitest PASS**, ESLint PASS, TypeScript PASS, 6 Playwright descobertos em Chromium/WebKit; não são testes de staging concluídos.
 - O preflight aceita 42 telas com 34 lições e 8 provas ou 42 lições com oito provas embutidas, desde que o manifesto privado **declare explicitamente** os IDs canônicos e eles correspondam às telas autorais; a decisão real aguarda A/B. Sem essa evidência, o teste positivo **não deve iniciar**.
 - Não há alteração em D1/R2 nem em matrícula real; staging e terminal canônico continuam condicionantes.
+
+## Auditoria independente de offline e PDF — 2026-10-14
+
+**Frente D, SHA `222ae8e67ab22b417022513a686ae012fefab421`:**
+30/30 testes de contrato Vitest PASS, ESLint PASS, TypeScript PASS,
+seis cenários Chromium/WebKit descobertos (ainda não executados em staging).
+O teste de retomada offline deixou de usar `unit.id` como se fosse
+necessariamente `lessonId` do Worker: agora escolhe uma unidade autoral
+que tem recibo de lição, usa a identidade canonizada no snapshot e exige
+exatamente um recibo após reconexão.
+
+O certificado agora exige MIME `application/pdf`, tamanho plausível,
+cabeçalho PDF completo, marcador `startxref` e `%%EOF` no final do
+arquivo — além da vinculação já verificada de
+`qualificacao_historico_id`, `certificate_id` e
+`linked_records=1`. A D tenta recuperar e validar o PDF novamente após
+abrir uma sessão de navegador nova. Essa checagem é **mais forte que
+verificar os cinco primeiros bytes**, mas não substitui inspeção
+semântica/visual do certificado por humano, nem prova criptográfica de
+autenticidade do documento. Precisa de staging real.
+
+**Frente A independente:** revisão do SHA
+`f0a7634261b9614ff211dadadab9c314838bdd8f`: 46 testes Python
+executados, 42 aprovados e quatro explicitamente ignorados por exigirem
+originais privados ou condições opcionais. Nenhum pacote review-only
+passou a ser publicável por causa desses testes.
+A B já teve 67/67 testes focados PASS no SHA
+`4291f25276b493e378a31876fccaaffe811603ed`; o código do
+writer canônico ainda não constitui uma rota operacional certificadora.
+
+**Bloqueios invariáveis:** crosswalk original aprovado, rota terminal,
+histórico/PDF real, seis matrículas sintéticas provisionadas, Schema V2 e
+Worker/Pages no mesmo candidato governado, E2E real e evidência visual.
+Até lá, esta PR continua DRAFT. Cada HEAD requer seus próprios checks CI.
