@@ -224,7 +224,7 @@ export function evaluateStaleness({ contract, rootDir }) {
   // enforce unique numeric allocation for 0550+ without rewriting history.
   const allocatedVersions = new Map();
   for (const file of sqlFiles) {
-    const match = /^(\\d{4})_/.exec(file);
+    const match = /^(\d{4})_/.exec(file);
     if (!match || Number(match[1]) < 550) continue;
     const previous = allocatedVersions.get(match[1]);
     if (previous) {
