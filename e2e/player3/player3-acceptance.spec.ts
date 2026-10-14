@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   qaPath as pathOn, requireQa as demand, validateQaProfile,
+  validateQaAuthoredContentUrl,
   validateQaModuleSession,validateQaJointReadiness,validateQaCertificatePdf,
   validateQaTerminalReceipt,validateQaCertificateArchiveStatus,
   validateQaAuthoredStageAttempt,
@@ -160,8 +161,8 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       const frame = page.locator('iframe[title^="Conteúdo original"]');
       await expect(frame).toHaveCount(1);
       const src = await frame.getAttribute('src');
-      demand(src && new URL(src).origin === profile.contentOrigin,
-        'AUTHENTICATED_ISOLATED_CONTENT_FRAME');
+      validateQaAuthoredContentUrl(src ?? '', profile.contentOrigin,
+        profile.empresaId, d);
       await expect(page.getByText(profile.courseTitle, {exact:false}).first()).toBeVisible();
       await evidence(page, testInfo, 'doutrinamento-start');
     });
