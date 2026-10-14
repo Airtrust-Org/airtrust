@@ -113,3 +113,28 @@ autorização, reabertura/reconexão e prova seguida de perda de sinal.
 O resultado `readyForAtomicTerminalPreflight=true` NÃO autoriza tratar o
 aluno como CONCLUIDO. Exigir posteriormente a transação final e o
 certificado realmente recuperável. Não testar em produção.
+
+
+## Marco de integração terminal B — 2026-10-14
+
+A Frente B agora tem preparador server-only de comprovantes reais, pré-validação
+das unidades do conteúdo e guarda de transação na função canônica
+`completeLmsMatricula`. **Isso não disponibiliza conclusão ao aluno**:
+não há endpoint terminal Player3 exposto e faltam o Schema V2 de intent
+atômico, a aplicação governada das migrations, a qualificação/certificado
+validados e os testes E2E.
+
+**Frente A:** cada unidade/lesson obrigatória deve ter ID estável **da edição**,
+para permitir prova de cobertura completa no ledger, mesmo após reabertura.
+Uma etapa de avaliação aprovada **não substitui** evidência de visita às
+unidades de conteúdo. O HTML5 publicado não pode expor gabarito.
+
+**Frente C:** ao transferir 80% de progresso, não forçar `seenLessonIds`,
+nota ou tentativa oficial no banco sem recibo verificável. Equivalência
+administrativa de navegação não é certificado.
+
+**Frente D:** teste E2E precisa observar uma matrícula cujo percurso termina
+com todos os eventos + recibos, `CONCLUIDO` no ciclo certo, qualificação e
+certificado **realmente consultável**. Não basta `/etapas/prontidao=true` ou
+a chamada a `completeLmsMatricula`. Validar falhas no serviço de certificados,
+idempotência e rollback antes de homologar.
