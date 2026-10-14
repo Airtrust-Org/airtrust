@@ -285,3 +285,58 @@ A rota terminal permanece default OFF. **Nenhum aluno foi concluído.**
 Schema V2 0554/0555 com replay/integridade/recovery revisados sem tocar remote,
 certificar o roteiro HTML5 e preparar staging autorizado. Não transformar
 `REQUIRES_VERIFICATION` em `CERTIFICATE_CREATED` sem consulta verdadeira.
+
+## 2026-10-14 — Frente B: incorporação do relatório de entrega da Frente C
+
+**Relatório da Frente C recebido e confrontado com `main` do GitHub.**
+PRs #1461, #1466 e #1468 estão integradas; inventário completo, criptografia
+AES-256-GCM, reconciliação T0/T1, detecção de alteração de nota/tentativa/
+SCORM e documentação foram entregues como **código**. Isso NÃO demonstra
+inventário T0/T1 REAL. A issue #1467 continua aberta: token D1 estritamente
+readonly, chave recuperável de cofre, reviewers humanos no environment e
+autorização de escopo tenant 6 são pré-condições. Não disparar inventário com
+token de deploy ou converter o relatório da C em permissão de cutover.
+
+**Correção concreta da Frente B na PR #1389:**
+
+1. `continuity.ts` passou a comparar explicitamente os campos do contrato
+   Front C (notas, tentativas, resultado SCORM, estados, datas de matrícula,
+   hash de CMI/suspend_data, histórico cifrado por SHA, marcador de edição,
+   versão e hash do pacote atualmente ativo). Diferença com 99% inalterado
+   exige revisão; não é `unchanged`. `ContinuityDelta` inclui
+   `changed_statuses`, `changed_editions` e `changed_evidence`.
+   O reconciliador cifrado da C permanece a autoridade para decisões 1:1;
+   o comparador B é só barreira defensiva, **não** substitui nem reproduz T0/T1.
+2. `createAdminResumeCreditIntent` (ainda **função pura, sem rota/DB writer**)
+   exige agora o objeto de transferência privado da C com proveniência T0/T1,
+   hashes dos inventários cifrados, `decision_key`, hash da linha T1,
+   matrícula/funcionário/curso/ciclo e watermark. A aprovação administrativa
+   precisa ser posterior a T1 e corresponder exatamente à decisão.
+   Declaração de arquivo-fonte verificado deve bater com
+   `source_edition_sha256`; **a edição atual do catálogo não comprova
+   a edição histórica da matrícula**.
+3. Casos de matrícula desaparecida, troca de ciclo/edição, conflito de fonte,
+   mudança de status, chave/timestamp divergentes e decisão que conceda
+   `assessment_pass`, `completion`, qualificação ou certificado são recusados.
+   0/20/50/80/99% são históricos; não se transformam em `seenLessonIds`,
+   `stage_passed`, nota ou certificado. O artefato/revisão individual da C
+   continua cifrado e fora do repositório e das respostas ao aluno.
+4. O `ResumeCreditIntent` agora preserva
+   `front_c_decision_key`, `front_c_t0_sha256` e
+   `front_c_latest_row_sha256` para futura trilha de auditoria. A validação
+   pura não autentica sozinho a custódia criptográfica, RBAC ou identidade
+   do operador: o futuro Writer deverá revalidar chave/proveniência no backend,
+   status/ciclo/edição e fonte atual dentro da transação. **Não há aplicação
+   de crédito administrativo, migration remota ou emissão de certificado.**
+
+**QA focada nesta continuação:** 33 testes Vitest Worker em continuidade,
+SCORM e crédito administrativo PASS; `worker-airtrust/tsc --noEmit` PASS.
+A CI do HEAD final continua sujeita aos gates GitHub Actions; consultar ao vivo.
+Os testes são sintéticos, sem alunos reais.
+
+**Dependências específicas:** A #1464 precisa entregar o crosswalk
+`source_edition_sha256 → target_edition_sha256` com IDs de lição originais
+imutáveis e HTML5 sem gabaritos; C #1467 precisa liberar T0/T1 real em cofre
+seguro; D #1465 valida 0/20/50/80/99, bookmark ausente, WebKit/Chromium,
+SCORM externo e matrícula→qualificação→certificado consultável. B #1389
+permanece DRAFT, sem cutover/staging/produção ou merge nesta rodada.
