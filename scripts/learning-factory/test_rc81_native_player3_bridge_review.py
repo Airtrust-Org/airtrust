@@ -168,7 +168,10 @@ class Rc81BridgeTests(unittest.TestCase):
                         next_button.click(force=True)
                         self.assertEqual(page.locator('#count').inner_text(), '42/42')
                         self.assertEqual(page.evaluate('window.__QA_CONTENT_END__'), approved[-1])
-                        self.assertFalse(page.evaluate('Boolean(window.courseCompleted)'))
+                        self.assertFalse(page.evaluate('window.Scorm.isFinished()'))
+                        self.assertEqual(
+                            page.evaluate("window.Scorm.set('cmi.core.lesson_status','passed')"),
+                            'false')
                         break
                     next_button.click(force=True)
                     self.assertNotEqual(counter, page.locator('#count').inner_text())
