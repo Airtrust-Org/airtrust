@@ -72,3 +72,17 @@ Inspeção privada dos arquivos `app.js` que efetivamente geram `cmi.suspend_dat
 ## Restrição explícita de privacidade multi-tenant
 
 O objetivo de preservação vale para todas as empresas que um dia migrarem para Player3, **mas isso não concede acesso coletivo aos dados de todos os clientes**. O primeiro lote efetivo da Costa do Sol tem `WHERE m.empresa_id=6` no SQL, verificação de escopo no workflow e bloqueio independente no selador AES-256-GCM. Nenhum ID/CMI de outro tenant pode entrar no arquivo. Uma futura migração de outro cliente exige aprovação individual, edição auditada do contrato e segregação de chaves/artefatos. A contagem dos alunos na Costa do Sol continua **desconhecida** até o SELECT ser executado com autorização, gates e credenciais apropriados; não há snapshot real nesta PR.
+
+## Crédito administrativo de retomada — contrato técnico, sem aplicação (2026-10-14)
+
+A Gerência de Treinamento pode reconhecer a experiência comprovada e posicionar administrativamente o aluno na edição nova **sem exigir refazer slides anteriores**, mas não pode forjar nota nem conclusão.
+
+Criado `worker-airtrust/src/lib/lms-player3/resume-credit.ts`:
+
+- Só se aplica quando `planContinuity` classifica `ADMIN_EQUIVALENCE_REVIEW` e existe percentual anterior positivo (ex.: 80%), vínculo de empresa, aluno, curso, matrícula/ciclo e edição alvo válidos.
+- Requer identificação do aprovador da Gerência de Treinamento **e de um segundo aprovador autorizado distinto**, justificativa específica, referência de revisão e SHA-256 do snapshot cifrado original (governança de dois responsáveis).
+- A unidade concedida precisa existir na edição alvo do mesmo curso e tenant. Rejeita matrícula de outro cliente, versão alvo diferente, planagem já resolvida automaticamente e decisões sem evidência/aprovação.
+- Produz apenas `AIRTRUST_PLAYER3_RESUME_CREDIT_V1`, `status=REVIEW_APPROVED_NOT_APPLIED`, `meaning=POSITION_ONLY_NOT_EXAM_OR_COMPLETION`, e flags de `writesPerformed=false`/`grantsCompletion=false`/`grantsQualification=false`/`grantsCertificate=false`/`grantsAssessmentPass=false`.
+- Esta função é **pura e ainda não realiza escrita em D1**. Quando integrado, o backend deve validar RBAC e os dois aprovadores por contexto autenticado, conferir exatamente SHA/ciclo/timestamps da última exportação, gravar crédito e auditoria idempotentemente em Schema V2; não aceitar flags de autorização declaradas pelo navegador.
+
+QA adicional: 5 testes do contrato de crédito, totalizando 43 testes Worker Player3 em execução local, com Worker typecheck PASS. Os 5 testes do selador e 2 da SQL de inventário continuam PASS. O código protege a futura equivalência; **nenhum aluno foi modificado e a contagem real ainda não foi extraída**.
