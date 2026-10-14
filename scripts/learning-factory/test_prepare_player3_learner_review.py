@@ -47,6 +47,14 @@ def original(m=None, extra=None):
     files.update(extra or {})
     return zip_source(files)
 
+
+def zip_source(files):
+    output = io.BytesIO()
+    with ZipFile(output, 'w') as archive:
+        for name, data in files.items():
+            archive.writestr(name, data)
+    return output.getvalue()
+
 class Player3Html5ReviewTests(unittest.TestCase):
     def test_known_keys_removed_and_all_other_bytes_identical(self):
         raw = original()
@@ -69,6 +77,49 @@ class Player3Html5ReviewTests(unittest.TestCase):
                 self.assertNotIn(forbidden, dekeyed)
             self.assertIn('Pergunta de teste', dekeyed)
             self.assertIn('Visual original', after.read('index.html').decode())
+
+
+    def test_dual_models_are_dekeyed_even_when_primary_has_different_layout(self):
+        primary = model()
+        # Scenario tuples are authored [label, isCorrect, feedback].
+        primary['slides'][2]['options'] = [
+            ['A', False, 'PRIVATE_BAD_SCENARIO_321'],
+            ['B', True, 'PRIVATE_GOOD_SCENARIO_321'],
+        ]
+        secondary = json.loads(json.dumps(primary))
+        secondary['slides'][1]['questions'][0]['answer'] = 2
+        secondary['slides'][1]['questions'][0]['explain'] = 'PRIVATE_SECONDARY_KEY_321'
+        dual = {
+            'course_data.js': 'window.COURSE_DATA = ' + json.dumps(primary) + ';',
+            'course-model.js': 'window.AIRTRUST_COURSE_MODEL = ' + json.dumps(secondary) + ';',
+        }
+        with ZipFile(io.BytesIO(original(primary))) as source:
+            files = {name: source.read(name) for name in source.namelist()}
+        files.update(dual)
+        candidate, _, _, bank, receipt = compile_review(zip_source(files), 'RC8.1.zip')
+        self.assertEqual(receipt['modelFiles'], ['course_data.js', 'course-model.js'])
+        self.assertEqual(bank['questions'][0]['correctOptionId'], 'o1')
+        with ZipFile(io.BytesIO(candidate)) as result:
+            for name in receipt['modelFiles']:
+                content = result.read(name).decode('utf8')
+                for private in ('PRIVATE_SECONDARY_KEY_321','PRIVATE_BAD_SCENARIO_321',
+                                'PRIVATE_GOOD_SCENARIO_321', '"answer":', '"correct":'):
+                    self.assertNotIn(private, content)
+                self.assertIn('[["A",null,null],["B",null,null]]', content)
+
+    def test_css_ternary_label_is_not_an_embedded_answer_key(self):
+        source = original(extra={'app.js': "let css=hit?'correct':'incorrect';"})
+        compile_review(source, 'css-test.zip')
+
+    def test_dual_model_identity_mismatch_blocks(self):
+        other = model()
+        other['slides'][0]['id'] = 'different-stage-id'
+        with ZipFile(io.BytesIO(original())) as source:
+            files = {name: source.read(name) for name in source.namelist()}
+        files['course-model.js'] = (
+            'window.AIRTRUST_COURSE_MODEL = ' + json.dumps(other) + ';')
+        with self.assertRaisesRegex(UnsafePackage, 'DUAL_MODEL_STAGE_MISMATCH'):
+            compile_review(zip_source(files), 'mismatch.zip')
 
     def test_same_input_produces_same_edition_bytes(self):
         raw = original()
