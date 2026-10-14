@@ -33,7 +33,8 @@ const receipt=(extra:Record<string,unknown>={})=>({
 
 function transport(responses:Response[]){
   let n=0;
-  const request=vi.fn(async (_url:string,_init:RequestInit)=>{
+  const request=vi.fn(async (url:string,init:RequestInit)=>{
+    void url; void init;
     const response=responses[n++];
     if(!response)throw new Error('unexpected request');
     return response;
@@ -66,7 +67,7 @@ describe('Player 3 — official assessment transport and regraded Worker receipt
     expect(input).toMatchObject({attemptNumber:1,answers});
     expect(input.eventId).toMatch(/^p3-[a-f0-9]{32}$/);
     expect(Object.keys(input).sort()).toEqual(['answers','attemptNumber','eventId']);
-    expect(request.mock.calls[2][0]).toEndWith('/etapas/sessao');
+    expect(request.mock.calls[2][0]).toMatch(/\/etapas\/sessao$/);
   });
   it('retains real failed verdict without unlocking module or reporting completion',async()=>{
     const {submit}=transport([
