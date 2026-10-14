@@ -180,6 +180,23 @@ describe('Player3 terminal: advisory readiness is not a certificate',()=>{
     expect(screen.getByRole('alert')).toHaveTextContent(/edição diferente/);
     await waitFor(()=>expect(request).not.toHaveBeenCalled());
   });
+  it('does not carry a completed state into a different authorized cycle',async()=>{
+    request.mockResolvedValueOnce(ok(done()));
+    const host={
+      title:'Doutrinamento',contentUrl:'https://html5-qa.example/course/index.html',
+      contentOrigin:'https://html5-qa.example',editionSha256:scope.editionSha256,
+      terminalScope:scope,reviewOnly:false,
+    };
+    const {rerender}=render(<Player3Html5Host {...host}/>);
+    click();
+    expect(await screen.findByRole('status')).toHaveTextContent(/Conclusão registrada/);
+    expect(screen.getByTestId('player3-request-finalization')).toBeDisabled();
+    rerender(<Player3Html5Host {...host}
+      terminalScope={{...scope,cycleId:801}}/>);
+    expect(screen.getByTestId('player3-request-finalization')).not.toBeDisabled();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
   it('never exposes a write button on invalid terminal scope',()=>{
     render(<Player3FinalizationControls scope={{...scope,cycleId:0}}/>);
     expect(screen.getByRole('alert')).toBeInTheDocument();
