@@ -4,7 +4,7 @@
  */
 export type QaChoice = { question: string; wrong: string; correct: string };
 export type QaUnit = {
-  id: string; visualCue: string;
+  id: string; kind: 'lesson'|'assessment'; visualCue: string;
   practice?: QaChoice;
   official?: { stageId: string; questions: QaChoice[] };
 };
@@ -125,14 +125,17 @@ export function validateQaProfile(raw: unknown, projectName: string,
     requireQa(Array.isArray(d.units) && d.units.length === 42 &&
       new Set(d.units.map(u => u?.id)).size === 42, 'DOU_RC81_42_UNITS');
     requireQa(d.units.every(u => !!u && id.test(u.id) &&
+      (u.kind==='lesson'||u.kind==='assessment') &&
       typeof u.visualCue === 'string' && u.visualCue.trim().length > 0 &&
-      (!u.practice || qaChoice(u.practice)) &&
+      (!u.practice || (u.kind==='lesson' && qaChoice(u.practice))) &&
+      (u.kind==='assessment' ? !!u.official : !u.official) &&
       (!u.official || (id.test(u.official.stageId) &&
         Array.isArray(u.official.questions) && u.official.questions.length > 0 &&
         u.official.questions.every(qaChoice)))),
     'AUTHOR_UNIT_AND_EXAM_MAP');
     const official = d.units.flatMap(u => u.official ? [u.official.stageId] : []);
-    requireQa(official.length === 8 && new Set(official).size === 8,
+    requireQa(official.length === 8 && new Set(official).size === 8 &&
+      d.units.filter(u=>u.kind==='lesson').length===34,
       'DOU_RC81_EIGHT_MODULAR_ASSESSMENTS');
     requireQa(d.units.some(u => u.practice), 'FORMATIVE_GATE_REQUIRED');
     qaPath(api.origin, d.qualificationPath);
