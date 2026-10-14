@@ -36,7 +36,7 @@ function emit(frame:HTMLIFrameElement,origin:string,data:unknown){
 }
 describe('RC8.1 original iframe ← Worker-authoritative cursor',()=>{
   beforeEach(()=>request.mockReset());
-  it('sends pinned resume on load; only correct frame ACK permits GET→POST→GET',async()=>{
+  it('requires the real frame ACK and lesson exit before GET→POST→GET',async()=>{
     request.mockResolvedValueOnce(body(initial))
       .mockResolvedValueOnce(body({state:'APPLIED',committed_sequence:2,
         edition_sha256:editionSha256,completion_supported:false},201))
@@ -56,9 +56,61 @@ describe('RC8.1 original iframe ← Worker-authoritative cursor',()=>{
     expect(request).not.toHaveBeenCalled();
     emit(frame,base.contentOrigin,{type:'AIRTRUST_PLAYER3_RESUME_ACK_V1',
       editionSha256,unitId:'unit22'});
+    // Opening/reopening a lesson does not by itself complete it.
+    expect(request).not.toHaveBeenCalled();
+    emit(frame,base.contentOrigin,{type:'AIRTRUST_PLAYER3_NAV_HINT_V1',
+      editionSha256,unitId:'unit23'});
     await waitFor(()=>expect(request).toHaveBeenCalledTimes(3));
     expect(request.mock.calls.map(x=>x[1]?.method)).toEqual(['GET','POST','GET']);
+    expect(JSON.parse(request.mock.calls[1][1]!.body as string).unitId).toBe('unit22');
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+  it('initial page and reopening never fabricate checkpoints or completion',async()=>{
+    const fresh={...base,navigation:{
+      ...base.navigation,nextUnitId:'unit1',
+      checkpointUnitIds:['unit1','unit2'],lastVisitedUnitId:null,
+    }};
+    const empty={...initial,next_sequence:1,seen_lesson_ids:[],
+      last_visited_unit_id:null};
+    const first={...initial,next_sequence:2,seen_lesson_ids:['unit1'],
+      last_visited_unit_id:'unit1'};
+    request.mockResolvedValueOnce(body(empty))
+      .mockResolvedValueOnce(body({...{
+        state:'APPLIED',committed_sequence:1,edition_sha256:editionSha256,
+        completion_supported:false,
+      }},201))
+      .mockResolvedValueOnce(body(first));
+    render(<Player3Html5Host {...fresh}/>);
+    const frame=screen.getByTitle('Conteúdo original — Doutrinamento RC8.1') as HTMLIFrameElement;
+    fireEvent.load(frame);
+    emit(frame,base.contentOrigin,{type:'AIRTRUST_PLAYER3_RESUME_ACK_V1',
+      editionSha256,unitId:'unit1'});
+    expect(request).not.toHaveBeenCalled();
+    // A duplicate ACK still must not write or reposition a later stage.
+    emit(frame,base.contentOrigin,{type:'AIRTRUST_PLAYER3_RESUME_ACK_V1',
+      editionSha256,unitId:'unit1'});
+    expect(request).not.toHaveBeenCalled();
+    emit(frame,base.contentOrigin,{type:'AIRTRUST_PLAYER3_NAV_HINT_V1',
+      editionSha256,unitId:'unit2'});
+    await waitFor(()=>expect(request).toHaveBeenCalledTimes(3));
+    expect(JSON.parse(request.mock.calls[1][1]!.body as string).unitId).toBe('unit1');
+  });
+  it('source-authored content end records only a final uncommitted lesson',async()=>{
+    request.mockResolvedValueOnce(body(initial))
+      .mockResolvedValueOnce(body({state:'APPLIED',committed_sequence:2,
+        edition_sha256:editionSha256,completion_supported:false},201))
+      .mockResolvedValueOnce(body(done));
+    render(<Player3Html5Host {...base}/>);
+    const frame=screen.getByTitle('Conteúdo original — Doutrinamento RC8.1') as HTMLIFrameElement;
+    fireEvent.load(frame);
+    emit(frame,base.contentOrigin,{type:'AIRTRUST_PLAYER3_RESUME_ACK_V1',
+      editionSha256,unitId:'unit22'});
+    emit(frame,base.contentOrigin,{type:'AIRTRUST_PLAYER3_CONTENT_END_HINT_V1',
+      editionSha256,unitId:'wrong'});
+    expect(request).not.toHaveBeenCalled();
+    emit(frame,base.contentOrigin,{type:'AIRTRUST_PLAYER3_CONTENT_END_HINT_V1',
+      editionSha256,unitId:'unit22'});
+    await waitFor(()=>expect(request).toHaveBeenCalledTimes(3));
   });
   it('rejects wrong cursor and never creates progress from a forged ACK',async()=>{
     render(<Player3Html5Host {...base}/>);
