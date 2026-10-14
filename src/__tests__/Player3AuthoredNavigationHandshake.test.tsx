@@ -1,6 +1,6 @@
 import React from 'react';
 import {beforeEach,describe,expect,it,vi} from 'vitest';
-import {fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {fetchWithAuth} from '@/react-app/config/api';
 import Player3Html5Host from '@/react-app/pages/lms/player3/Player3Html5Host';
 
@@ -30,9 +30,9 @@ const initial={
 const done={...initial,next_sequence:3,
   seen_lesson_ids:['unit21','unit22'],last_visited_unit_id:'unit22'};
 function emit(frame:HTMLIFrameElement,origin:string,data:unknown){
-  window.dispatchEvent(new MessageEvent('message',{
+  act(()=>window.dispatchEvent(new MessageEvent('message',{
     origin,source:frame.contentWindow,data,
-  }));
+  })));
 }
 describe('RC8.1 original iframe ← Worker-authoritative cursor',()=>{
   beforeEach(()=>request.mockReset());
