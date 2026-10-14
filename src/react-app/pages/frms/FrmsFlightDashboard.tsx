@@ -4,11 +4,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronRight,
-  CircleHelp,
   Clock3,
   Database,
   RefreshCw,
-  ShieldAlert,
   X,
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
@@ -118,6 +116,34 @@ function formatMinutes(value: number | null | undefined): string {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   })} h`;
+}
+
+function fortnightSummary(item: FrmsOperationalSnapshotItem): { status: string; activity: string; period: string | null; score: string | null } {
+  const indicator = item.fortnight_indicator;
+  const period = indicator?.periodo_inicio && indicator?.periodo_fim
+    ? `${indicator.periodo_inicio.slice(8, 10)}/${indicator.periodo_inicio.slice(5, 7)} a ${indicator.periodo_fim.slice(8, 10)}/${indicator.periodo_fim.slice(5, 7)}`
+    : null;
+  const hasSource = indicator != null &&
+    ['REAL', 'DERIVADO', 'ESTIMADO'].includes(indicator.fonte_periodo) &&
+    indicator.freshness_dado !== 'AUSENTE';
+  const completeEvidence = hasSource && indicator.freshness_dado === 'COMPLETO' && indicator.fonte_periodo !== 'ESTIMADO';
+  const status = !period || !indicator ? 'Período não confirmado'
+    : indicator.status_quinzena === 'CRITICO' ? 'Atenção crítica'
+      : indicator.status_quinzena === 'ATENCAO' ? 'Exige atenção'
+        : !hasSource ? 'Fonte do período não confirmada'
+          : !completeEvidence ? 'Avaliação parcial — confirmar dados'
+            : indicator.status_quinzena === 'OK' ? 'Sem alerta no indicador'
+              : 'Avaliação incompleta';
+  const minutes = indicator?.atividade_frms_periodo_min ?? indicator?.duty_time_periodo_min;
+  const activity = indicator && hasSource &&
+    minutes != null && Number.isFinite(minutes) && minutes >= 0
+    ? `${formatMinutes(minutes)} de atividade registrada${(!completeEvidence || indicator.status_quinzena === 'INCOMPLETO') ? ' (parcial)' : ''}`
+    : 'Atividade acumulada não confirmada';
+  const score = indicator && completeEvidence && indicator.status_quinzena !== 'INCOMPLETO' &&
+    indicator.score_acumulado != null && Number.isFinite(indicator.score_acumulado)
+    ? `Índice operacional acumulado: ${indicator.score_acumulado.toFixed(1).replace('.', ',')}/100${indicator.natureza_dado === 'PROJECAO' ? ' (projeção)' : ''}`
+    : null;
+  return { status, activity, period, score };
 }
 
 function dataMomentCopy(moment: ReturnType<typeof resolveOperationalDataMoment>): {
@@ -514,6 +540,22 @@ export default function FrmsFlightDashboard() {
     acc[entry.lane] += 1;
     return acc;
   }, { REVISAO: 0, CHECKIN: 0, EVIDENCIA: 0, AGUARDAR: 0, SEM_ACAO: 0 } as Record<FrmsActionLane, number>);
+  const activeLanes = ACTION_LANES.filter((lane) => laneCounts[lane.key] > 0);
+  const fortnightPeriods = Array.from(new Set(queue.map(({ item }) => fortnightSummary(item).period).filter(
+    (value): value is string => value !== null,
+  )));
+  const periodLabel = fortnightPeriods.length === 1
+    ? fortnightPeriods[0]
+    : fortnightPeriods.length > 1 ? 'períodos individuais distintos' : 'período não confirmado';
+  const evaluatedFortnightCount = queue.filter(({ item }) => {
+    const indicator = item.fortnight_indicator;
+    return Boolean(indicator?.periodo_inicio && indicator.periodo_fim &&
+      ['REAL', 'DERIVADO'].includes(indicator.fonte_periodo) && indicator.freshness_dado === 'COMPLETO' &&
+      (indicator.status_quinzena === 'OK' || indicator.status_quinzena === 'ATENCAO' ||
+        indicator.status_quinzena === 'CRITICO'));
+  }).length;
+  const criticalFortnightCount = queue.filter(({ item }) => item.fortnight_indicator?.status_quinzena === 'CRITICO').length;
+  const attentionFortnightCount = queue.filter(({ item }) => item.fortnight_indicator?.status_quinzena === 'ATENCAO').length;
   const usesSigvoos = queue.some(({ item }) => item.operational_data_source === 'SIGVOOS' ||
     item.operational_data_source === 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS');
 
@@ -588,39 +630,78 @@ export default function FrmsFlightDashboard() {
         </div>
 
         <section className="space-y-3" aria-label="Resumo operacional">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-bold text-slate-950 dark:text-white">O que precisa acontecer agora?</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-bold text-slate-950 dark:text-white">O que precisa acontecer agora?</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                {firstLoad || snapshotUnavailable ? 'Aguardando dados confiáveis da equipe.' :
+                  `${queue.length} pessoa(s) no acompanhamento · ${checkinPendingCount} check-in(s) a receber.`}
+              </p>
+            </div>
             <button type="button" onClick={() => { setOnlyPendingCheckin(false); setActionFilter('TODOS'); }}
-              className="text-xs font-semibold text-primary underline-offset-2 hover:underline">Mostrar todas as situações</button>
+              className="text-sm font-semibold text-primary underline-offset-2 hover:underline">Mostrar todas as situações</button>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {ACTION_LANES.map((lane) => (
-              <button key={lane.key} type="button" aria-pressed={!onlyPendingCheckin && actionFilter === lane.key}
-                onClick={() => { setOnlyPendingCheckin(false); setActionFilter(current => current === lane.key ? 'TODOS' : lane.key); }}
-                className={!onlyPendingCheckin && actionFilter === lane.key
-                    ? 'rounded-xl border border-primary bg-blue-50 p-4 text-left ring-1 ring-primary dark:bg-blue-950/40'
-                    : 'rounded-xl border border-slate-200 bg-white p-4 text-left hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950'}>
-                <span className="block text-sm font-bold text-slate-900 dark:text-white">{lane.title}</span>
-                <span className="mt-1 block text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{firstLoad || snapshotUnavailable ? '—' : laneCounts[lane.key]}</span>
-                <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300">{lane.explanation}</span>
-              </button>
-            ))}
-            <button type="button" aria-pressed={onlyPendingCheckin}
-              onClick={() => { setOnlyPendingCheckin(current => !current); setActionFilter('TODOS'); }}
-              className={onlyPendingCheckin
-                ? 'rounded-xl border border-red-500 bg-red-50 p-4 text-left ring-1 ring-red-500'
-                : 'rounded-xl border border-slate-200 bg-white p-4 text-left hover:bg-red-50'}>
-              <span className="block text-sm font-bold text-slate-900">Check-ins a receber</span>
-              <span className="mt-1 block text-2xl font-bold tabular-nums text-red-800">{firstLoad || snapshotUnavailable ? '—' : checkinPendingCount}</span>
-              <span className="mt-1 block text-xs text-slate-600">Filtro independente: apenas avaliações diárias não recebidas.</span>
-            </button>
-          </div>
-          <p className="text-xs text-slate-500">
-            {snapshotUnavailable ? 'Situação operacional indisponível — não interpretar como zero pendências.' :
-              'Classificação de risco preservada: ' + counts.BLOQUEIO + ' prioritários · ' + counts.DECISAO +
-              ' avaliar · ' + counts.CONFIRMAR + ' verificar · ' + counts.NORMAL +
-              ' sem pendência. Os grupos acima organizam o próximo passo, não alteram a decisão FRMS.'}
-          </p>
+          {firstLoad || snapshotUnavailable ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              {snapshotUnavailable ? 'Situação operacional indisponível — não interpretar como zero pendências.' : 'Carregando prioridades e evidências.'}
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2" aria-label="Filtros por providência">
+              {activeLanes.map((lane) => (
+                <button key={lane.key} type="button" aria-pressed={!onlyPendingCheckin && actionFilter === lane.key}
+                  title={lane.explanation}
+                  onClick={() => { setOnlyPendingCheckin(false); setActionFilter(current => current === lane.key ? 'TODOS' : lane.key); }}
+                  className={!onlyPendingCheckin && actionFilter === lane.key
+                    ? 'rounded-lg border border-primary bg-blue-50 px-3 py-2 text-sm font-bold text-slate-900 ring-1 ring-primary dark:bg-blue-950/40 dark:text-white'
+                    : 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100'}>
+                  {lane.title}: {laneCounts[lane.key]}
+                </button>
+              ))}
+              {checkinPendingCount > 0 ? (
+                <button type="button" aria-pressed={onlyPendingCheckin}
+                  onClick={() => { setOnlyPendingCheckin(current => !current); setActionFilter('TODOS'); }}
+                  className={onlyPendingCheckin
+                    ? 'rounded-lg border border-red-600 bg-red-50 px-3 py-2 text-sm font-bold text-red-900 ring-1 ring-red-600'
+                    : 'rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-800 hover:bg-red-50'}>
+                  Check-ins a receber: {checkinPendingCount}
+                </button>
+              ) : null}
+            </div>
+          )}
+          {!firstLoad && !snapshotUnavailable ? (
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              {[
+                counts.BLOQUEIO > 0 ? `${counts.BLOQUEIO} com atenção prioritária` : null,
+                counts.DECISAO > 0 ? `${counts.DECISAO} para avaliar` : null,
+                counts.CONFIRMAR > 0 ? `${counts.CONFIRMAR} para verificar` : null,
+                counts.NORMAL > 0 ? `${counts.NORMAL} sem pendência indicada` : null,
+              ].filter(Boolean).join(' · ') || 'Nenhuma pessoa no recorte.'}
+              {' '}As filas indicam a próxima ação; não concedem liberação.
+            </p>
+          ) : null}
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50" aria-label="Fadiga acumulada da quinzena">
+          <h2 className="text-base font-bold text-slate-950 dark:text-white">Fadiga acumulada — quinzena</h2>
+          {firstLoad || snapshotUnavailable ? (
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Período e indicadores ainda não disponíveis; não presumir condição normal.</p>
+          ) : (
+            <>
+              <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
+                Período: {periodLabel}. Avaliação do período disponível para {evaluatedFortnightCount} de {queue.length} pessoa(s).
+              </p>
+              <p className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-100">
+                {criticalFortnightCount > 0 ? `${criticalFortnightCount} com atenção crítica · ` : ''}
+                {attentionFortnightCount > 0 ? `${attentionFortnightCount} em atenção · ` : ''}
+                {queue.length - evaluatedFortnightCount > 0
+                  ? `${queue.length - evaluatedFortnightCount} sem avaliação quinzenal completa.`
+                  : 'Não há avaliações quinzenais incompletas neste recorte.'}
+              </p>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                A situação e a atividade acumulada registrada aparecem por pessoa abaixo. O indicador não substitui avaliação individual ou liberação operacional.
+              </p>
+            </>
+          )}
         </section>
 
         {snapshot.unauthorized ? (
@@ -668,7 +749,7 @@ export default function FrmsFlightDashboard() {
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
-              {visibleQueue.map(({ item, bucket, lane }) => {
+              {visibleQueue.map(({ item, bucket }) => {
                 const confidence = operationalConfidence(item);
                 const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
 
@@ -677,22 +758,28 @@ export default function FrmsFlightDashboard() {
                     key={`${item.tripulante_id}-${item.data_operacional}`}
                     type="button"
                     onClick={() => setSelected(item)}
-                    className="grid w-full gap-3 px-4 py-4 text-left transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-900/60 dark:focus:bg-slate-900/60 lg:grid-cols-[105px_minmax(140px,0.9fr)_130px_minmax(230px,1.2fr)_minmax(280px,1.4fr)_24px] lg:items-start"
+                    className="grid w-full gap-3 px-4 py-4 text-left transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-900/60 dark:focus:bg-slate-900/60 lg:grid-cols-[minmax(170px,0.9fr)_minmax(170px,0.9fr)_minmax(210px,1.15fr)_minmax(250px,1.3fr)_20px] lg:items-start"
                   >
-                    <div><DecisionBadge bucket={bucket} /><p className="mt-1 text-xs text-slate-500">{ACTION_LANES.find((entry) => entry.key === lane)?.title}</p></div>
                     <div className="min-w-0">
-                      <p className="truncate font-bold text-slate-950 dark:text-white">{displayName(item)}</p>
+                      <DecisionBadge bucket={bucket} />
+                      <p className="mt-2 truncate font-bold text-slate-950 dark:text-white">{displayName(item)}</p>
                       <p className="truncate text-xs text-slate-500">{[item.funcao, item.base, item.aeronave].filter(Boolean).join(' · ') || 'Função/base não informadas'}</p>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Check-in diário</p>
-                      <span className={`inline-flex rounded-md px-2 py-1 text-xs font-bold ${guidance.checkinComplete
+                      <p className="mt-2 text-xs font-semibold text-slate-600 dark:text-slate-300">Check-in diário</p>
+                      <span className={`mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold ${guidance.checkinComplete
                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
                         : guidance.requiresCheckin
                           ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
                           : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
                         {guidance.checkinLabel}
                       </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Fadiga acumulada · quinzena</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{fortnightSummary(item).status}</p>
+                      {fortnightSummary(item).score ? (
+                        <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{fortnightSummary(item).score}</p>
+                      ) : null}
+                      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{fortnightSummary(item).activity}</p>
                     </div>
                     <div className="min-w-0">
                       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Por quê?</p>
@@ -711,20 +798,7 @@ export default function FrmsFlightDashboard() {
           )}
         </section>
 
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="flex gap-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-            <ShieldAlert className="h-5 w-5 flex-none text-red-500" />
-            <div><p className="text-sm font-bold text-slate-900 dark:text-white">Atenção</p><p className="text-xs text-slate-500">Situações que requerem atenção antes da decisão operacional.</p></div>
-          </div>
-          <div className="flex gap-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-            <AlertTriangle className="h-5 w-5 flex-none text-orange-500" />
-            <div><p className="text-sm font-bold text-slate-900 dark:text-white">Avaliar</p><p className="text-xs text-slate-500">Situações que merecem análise ou ação da coordenação.</p></div>
-          </div>
-          <div className="flex gap-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-            <CircleHelp className="h-5 w-5 flex-none text-amber-500" />
-            <div><p className="text-sm font-bold text-slate-900 dark:text-white">Verificar</p><p className="text-xs text-slate-500">Informações pendentes, estimadas ou que precisam ser confirmadas.</p></div>
-          </div>
-        </div>
+
       </div>
 
       {selected ? <DetailDrawer item={selected} onClose={() => setSelected(null)} todayIso={todayIso} /> : null}

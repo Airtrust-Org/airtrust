@@ -301,7 +301,8 @@ describe('FrmsDashboard simplificado', () => {
     renderDashboard();
 
     expect(screen.getByLabelText('Carregando situação operacional')).toBeInTheDocument();
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4);
+    expect(screen.getByText('Carregando prioridades e evidências.')).toBeInTheDocument();
+    expect(screen.getByText(/Período e indicadores ainda não disponíveis/i)).toBeInTheDocument();
   });
 
   it('não coloca na fila o tripulante da quinzena quando não há atividade no dia', () => {
@@ -371,11 +372,9 @@ describe('FrmsDashboard simplificado', () => {
     renderDashboard();
 
     const summary = within(screen.getByLabelText('Resumo operacional'));
-    expect(summary.getByRole('button', { name: /Revisão operacional/i })).toBeInTheDocument();
-    expect(summary.getByRole('button', { name: /Confirmar evidência/i })).toBeInTheDocument();
-    expect(summary.getByRole('button', { name: /Aguardar a operação/i })).toBeInTheDocument();
-    expect(summary.getByRole('button', { name: /Sem ação agora/i })).toBeInTheDocument();
-    expect(summary.getByText(/Classificação de risco preservada/i)).toBeInTheDocument();
+    expect(within(summary.getByLabelText('Filtros por providência')).getAllByRole('button')).toHaveLength(1);
+    expect(summary.queryByRole('button', { name: /Revisão operacional: 0/i })).not.toBeInTheDocument();
+    expect(summary.getByText(/não concedem liberação/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Como interpretar' })).toHaveAttribute('href', '/frms/conceitos');
     expect(screen.getByText(/O check-in diário, o motivo e a providência aparecem aqui/i)).toBeInTheDocument();
   });
@@ -594,7 +593,88 @@ describe('FrmsDashboard simplificado', () => {
     expect(screen.getByText(/Situação operacional indisponível — não interpretar como zero pendências/i)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Situação FRMS indisponível/i })).toBeInTheDocument();
     expect(screen.queryByText(/0 pessoa\(s\) sem pendência/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText(/Período e indicadores ainda não disponíveis/i)).toBeInTheDocument();
+  });
+
+  it('oculta filtros zerados e deixa explícito quando não há população operacional', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({ data: [] }));
+    renderDashboard('/frms?data=2026-08-27');
+    const filters = within(screen.getByLabelText('Filtros por providência'));
+    expect(filters.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /Check-ins a receber/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Nenhuma pessoa no recorte/i)).toBeInTheDocument();
+    expect(screen.getByText(/Avaliação do período disponível para 0 de 0 pessoa/i)).toBeInTheDocument();
+  });
+
+  it('traz o acumulado e a referência temporal para a lista sem esconder lacunas', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({
+      data: [item({
+        fortnight_indicator: {
+          ...unresolvedFortnight(),
+          periodo_inicio: '2026-08-16',
+          periodo_fim: '2026-08-31',
+          status_quinzena: 'ATENCAO',
+          fonte_periodo: 'REAL',
+          freshness_dado: 'COMPLETO',
+          score_acumulado: 55,
+          atividade_frms_periodo_min: 600,
+        },
+      })],
+    }));
+    renderDashboard('/frms?data=2026-08-27');
+    const period = within(screen.getByLabelText('Fadiga acumulada da quinzena'));
+    expect(period.getByText(/Período: 16\/08 a 31\/08/)).toBeInTheDocument();
+    expect(period.getByText(/1 em atenção/)).toBeInTheDocument();
+    expect(screen.getByText('10,0 h de atividade registrada')).toBeInTheDocument();
+    expect(screen.getByText(/Índice operacional acumulado: 55,0\/100 \(projeção\)/)).toBeInTheDocument();
+    expect(screen.getByText('Exige atenção')).toBeInTheDocument();
+  });
+
+  it('não apresenta ausência de fonte ou período como zero de fadiga', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({
+      data: [item({ fortnight_indicator: unresolvedFortnight() })],
+    }));
+    renderDashboard('/frms?data=2026-08-27');
+    expect(screen.getByText('Atividade acumulada não confirmada')).toBeInTheDocument();
+    expect(screen.getByText('Período não confirmado')).toBeInTheDocument();
+    expect(screen.getByText(/1 sem avaliação quinzenal completa/)).toBeInTheDocument();
+    expect(screen.queryByText('0,0 h de atividade registrada')).not.toBeInTheDocument();
+  });
+
+  it('não apresenta score favorável quando o estado diz OK mas a fonte está ausente', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({
+      data: [item({ fortnight_indicator: {
+        ...unresolvedFortnight(),
+        periodo_inicio: '2026-08-16',
+        periodo_fim: '2026-08-31',
+        status_quinzena: 'OK',
+        score_acumulado: 0,
+      } })],
+    }));
+    renderDashboard('/frms?data=2026-08-27');
+    expect(screen.getByText('Fonte do período não confirmada')).toBeInTheDocument();
+    expect(screen.getByText(/Avaliação do período disponível para 0 de 1 pessoa/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Índice operacional acumulado: 0,0\/100/i)).not.toBeInTheDocument();
+  });
+
+  it('não trata período parcial ou estimado como avaliação plenamente confirmada', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({
+      data: [item({ fortnight_indicator: {
+        ...unresolvedFortnight(),
+        periodo_inicio: '2026-08-16',
+        periodo_fim: '2026-08-31',
+        fonte_periodo: 'ESTIMADO',
+        freshness_dado: 'PARCIAL',
+        status_quinzena: 'OK',
+        score_acumulado: 0,
+        atividade_frms_periodo_min: 240,
+      } })],
+    }));
+    renderDashboard('/frms?data=2026-08-27');
+    expect(screen.getByText('Avaliação parcial — confirmar dados')).toBeInTheDocument();
+    expect(screen.getByText('4,0 h de atividade registrada (parcial)')).toBeInTheDocument();
+    expect(screen.getByText(/Avaliação do período disponível para 0 de 1 pessoa/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Índice operacional acumulado: 0,0/)).not.toBeInTheDocument();
   });
 
   it('mantém o último estado válido visível quando a atualização falha', () => {
