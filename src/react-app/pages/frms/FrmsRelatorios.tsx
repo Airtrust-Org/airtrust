@@ -129,6 +129,29 @@ function formatMonthLabel(monthKey: string): string {
   });
 }
 
+const ALERT_LEVEL_ORDER: Record<string, number> = {
+  VIOLACAO: 0,
+  CRITICO: 1,
+  ATENCAO: 2,
+  AVISO: 3,
+};
+
+function orderReportRows(tipo: TipoRelatorio, rows: FrmsReportRow[]): FrmsReportRow[] {
+  if (tipo !== 'alertas-historico') return rows;
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const severity = (ALERT_LEVEL_ORDER[a.row.nivel ?? ''] ?? 4) - (ALERT_LEVEL_ORDER[b.row.nivel ?? ''] ?? 4);
+      if (severity !== 0) return severity;
+      const closure = Number(Boolean(a.row.resolvido_em)) - Number(Boolean(b.row.resolvido_em));
+      if (closure !== 0) return closure;
+      const date = Date.parse(b.row.created_at ?? '') - Date.parse(a.row.created_at ?? '');
+      if (Number.isFinite(date) && date !== 0) return date;
+      return a.index - b.index;
+    })
+    .map(({ row }) => row);
+}
+
 export default function FrmsRelatorios() {
   const navigate = useNavigate();
   const [tipo, setTipo] = useState<TipoRelatorio>('compliance');
@@ -153,10 +176,11 @@ export default function FrmsRelatorios() {
 
   const { data: rawData, loading, error, refetch } = useApi<FrmsReportRow[] | FrmsReportEnvelope>(endpoint, { requireAuth: true });
   const data = Array.isArray(rawData) ? rawData : rawData?.data ?? null;
+  const orderedData = useMemo(() => (data ? orderReportRows(tipo, data) : null), [data, tipo]);
   const reportMeta = rawData && !Array.isArray(rawData) ? rawData.meta ?? null : null;
   const invalidResponse = rawData != null && !Array.isArray(rawData) && !Array.isArray(rawData.data);
   const reportError = error || (invalidResponse ? 'Resposta inválida recebida do serviço de relatórios.' : null);
-  const insights = data && data.length > 0 ? deriveFrmsReportInsights(tipo, data) : [];
+  const insights = orderedData && orderedData.length > 0 ? deriveFrmsReportInsights(tipo, orderedData) : [];
 
   const reportPeriodLabel =
     tipo === 'compliance'
@@ -240,7 +264,7 @@ export default function FrmsRelatorios() {
 
     if (tipo === 'compliance') {
       csvContent += ['Tripulante', 'Dias avaliados', 'Conformes', 'Violações', 'Não avaliados', 'Mitigação', 'Atenção', 'Fontes normativas'].map(csvCell).join(',') + '\n';
-      for (const row of data) {
+      for (const row of orderedData ?? []) {
         csvContent += [
           row.nome || row.tripulante_id,
           row.dias_avaliados ?? '',
@@ -254,7 +278,7 @@ export default function FrmsRelatorios() {
       }
     } else if (tipo === 'mapa-fadiga') {
       csvContent += ['Tripulante', 'HV 7d%', 'HV Mês%', 'HV 365d%', 'Nível Max', 'Repouso OK'].map(csvCell).join(',') + '\n';
-      for (const row of data) {
+      for (const row of orderedData ?? []) {
         csvContent += [
           row.nome || row.tripulante_id,
           row.pct_7d ?? '',
@@ -266,7 +290,7 @@ export default function FrmsRelatorios() {
       }
     } else {
       csvContent += ['Data', 'Tripulante', 'Nível', 'Tipo Limite', 'Mensagem', 'Resolvido'].map(csvCell).join(',') + '\n';
-      for (const row of data) {
+      for (const row of orderedData ?? []) {
         csvContent += [
           row.created_at ? row.created_at.slice(0, 10) : '',
           row.nome_tripulante || row.tripulante_id,
@@ -396,11 +420,11 @@ export default function FrmsRelatorios() {
         </div>
 
         <div id="frms-report-content" className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-          {!reportError && !loading && data && data.length > 0 ? (
+          {!reportError && !loading && orderedData && orderedData.length > 0 ? (
             <section aria-label="Conclusões e próximas ações do relatório" className="border-b border-slate-200 bg-slate-50 p-5">
               <h2 className="text-base font-bold text-slate-900">O que os dados indicam e o que verificar</h2>
               <p className="mt-1 text-xs text-slate-600">
-                Síntese interpretativa de {data.length} registro(s) retornado(s). Não comprova aptidão nem liberação operacional.
+                Síntese interpretativa de {orderedData.length} registro(s) retornado(s). Não comprova aptidão nem liberação operacional.
               </p>
               <div className="mt-4 grid gap-3 lg:grid-cols-2">
                 {insights.map((insight) => (
@@ -435,17 +459,17 @@ export default function FrmsRelatorios() {
             </div>
           ) : loading ? (
             <div className="p-12 text-center text-gray-400">Carregando relatório...</div>
-          ) : !data || data.length === 0 ? (
+          ) : !orderedData || orderedData.length === 0 ? (
             <div className="flex flex-col items-center gap-2 p-12 text-center text-gray-400">
               <FileText className="h-8 w-8" />
               Nenhum dado encontrado para o recorte deste relatório
             </div>
           ) : tipo === 'compliance' ? (
-            <ComplianceTable data={data} />
+            <ComplianceTable data={orderedData} />
           ) : tipo === 'mapa-fadiga' ? (
-            <MapaFadigaTable data={data} />
+            <MapaFadigaTable data={orderedData} />
           ) : (
-            <AlertasHistoricoTable data={data} />
+            <AlertasHistoricoTable data={orderedData} />
           )}
         </div>
       </div>
@@ -554,6 +578,7 @@ function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
 
 function AlertasHistoricoTable({ data }: { data: FrmsReportRow[] }) {
   return (
+    <div className="overflow-x-auto">
     <table className="w-full text-left text-sm">
       <thead>
         <tr className="border-b border-gray-100 bg-gray-50/50">
@@ -576,7 +601,7 @@ function AlertasHistoricoTable({ data }: { data: FrmsReportRow[] }) {
               </span>
             </td>
             <td className="px-4 py-2.5 text-xs text-gray-500">{r.tipo_limite ? (TIPO_LIMITE_LABEL[r.tipo_limite] ?? r.tipo_limite) : '—'}</td>
-            <td className="max-w-xs truncate px-4 py-2.5 text-gray-700">{r.mensagem}</td>
+            <td className="min-w-72 max-w-md whitespace-normal break-words px-4 py-2.5 text-gray-700">{r.mensagem || 'Mensagem não informada'}</td>
             <td className="px-4 py-2.5 text-center">
               {r.resolvido_em ? (
                 <span className="text-xs font-bold text-emerald-500">Sim</span>
@@ -588,5 +613,9 @@ function AlertasHistoricoTable({ data }: { data: FrmsReportRow[] }) {
         ))}
       </tbody>
     </table>
+    <p className="border-t border-gray-100 px-4 py-3 text-xs text-slate-500">
+      Ordenado por gravidade, casos sem encerramento e data mais recente. A mensagem completa está visível na linha.
+    </p>
+    </div>
   );
 }
