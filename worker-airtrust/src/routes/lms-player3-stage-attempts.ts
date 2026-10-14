@@ -16,6 +16,8 @@ import {readPlayer3ModuleSession} from '../services/lms-player3-module-progress-
 import {readPlayer3JointPreflight} from '../services/lms-player3-joint-preflight';
 import {loadApprovedPlayer3StageContext} from '../services/lms-player3-module-attempt-writer';
 import {approvedAuthoredLaunch} from '../lib/lms-player3/authored-launch-contract';
+import {readNativeLearnerSession} from '../services/lms-native-readiness-repository';
+import {verifiedAuthoredNavigation} from '../lib/lms-player3/verified-authored-navigation';
 
 const app=new Hono<{Bindings:Env}>();
 const ID=/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
@@ -99,6 +101,20 @@ app.get('/matriculas/:matriculaId/etapas/lancamento',async c=>{
       launchTenantAllowlist:launchAllowlist,
       learnerContent:policy.learnerContent,
     });
+    // The resume location is server-derived from the already pinned Native
+    // edition AND its ordered original IDs, with a SHA approved in the policy.
+    // Never accept a slide counter/bookmark from the iframe or the request.
+    const {summary:nativeSession}=await readNativeLearnerSession({
+      env:c.env,db:c.env.DB,actorUserId,artifact:course.artifact,
+      scope:{empresaId,matriculaId,cursoId:course.cursoId,
+        cicloId:course.cicloId,artifactHash:course.editionHash},
+    });
+    const navigation=await verifiedAuthoredNavigation({
+      units:course.artifact.units,
+      approvedOrderedUnitIdsSha256:launch.orderedUnitIdsSha256,
+      session:nativeSession,cycleId:course.cicloId,
+      editionSha256:course.editionHash,
+    });
     const state=await readPlayer3ModuleSession({
       env:c.env,db:c.env.DB,bucket:c.env.BUCKET,
       empresaId,matriculaId,actorUserId,
@@ -144,6 +160,9 @@ app.get('/matriculas/:matriculaId/etapas/lancamento',async c=>{
       edition_sha256:course.editionHash,
       content_url:launch.contentUrl,content_origin:launch.contentOrigin,
       assessment_presentation:'authored-html5',
+      resume_next_unit_id:navigation.resumeNextUnitId,
+      checkpoint_unit_ids:navigation.checkpointUnitIds,
+      last_visited_unit_id:navigation.lastVisitedUnitId,
       official_stages_passed:state.allOfficialStagesPassed,
       completion_supported:false,pending_assessment:assessment,
     }},200);
