@@ -264,8 +264,9 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
             nextPayload.data.matricula_id===d.enrollmentId &&
             nextPayload.data.ciclo_id===d.cycleId &&
             nextPayload.data.edition_sha256===d.editionSha256 &&
-            nextPayload.data.pending_assessment?.stage_id===
-              (following?.official?.stageId ?? undefined) === Boolean(following) &&
+            (following ?
+              nextPayload.data.pending_assessment?.stage_id===following.official!.stageId :
+              nextPayload.data.pending_assessment===null) &&
             nextPayload.data.official_stages_passed===!following,
             'NEXT_AUTHORED_STAGE_NOT_AUTHORIZED_AFTER_PASS');
           await expect.poll(async ()=>
