@@ -100,6 +100,8 @@ def batch_review(batches: list[Path], private_output: Path, learner_output: Path
                             learner / ('edition-' + str(n + 1)))
             index.append({'sourceArchive': outer, 'originalPackage': basename,
                           'source_sha256': receipt['source_sha256'],
+                          'reviewZipSha256': receipt['reviewZipSha256'],
+                          'stageContractApproved': False,
                           'courseId': receipt['courseId'],
                           'stages': v[4], 'assessmentQuestions': v[5],
                           'publishable': False})
