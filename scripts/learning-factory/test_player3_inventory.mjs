@@ -40,6 +40,12 @@ test('refuses malformed input, duplicate cycle conflicts are reported',()=>{
   assert.equal(summarize([row,{...row}]).conflicts,1);
   assert.equal(summarize([{...row,ciclo_progresso_pct:60}]).conflicts,1);
 });
+test('fails closed on any unauthorized tenant in D1 export or ciphertext',()=>{
+  const outside={...row,empresa_id:7};
+  assert.throws(()=>normalizeD1Rows([{results:[row,outside]}]),/CROSS_TENANT/);
+  assert.throws(()=>sealInventory([outside],randomBytes(32)),/CROSS_TENANT/);
+  assert.throws(()=>sealInventory([row,outside],randomBytes(32)),/CROSS_TENANT/);
+});
 test('rejects a key that cannot provide AES-256-GCM',()=>{
   assert.throws(()=>sealInventory([row],Buffer.alloc(16)),/INVALID_KEY/);
 });
