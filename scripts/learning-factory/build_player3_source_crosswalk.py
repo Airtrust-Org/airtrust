@@ -56,7 +56,7 @@ def _mode(assessments: list, manifest: dict, model: dict, last_id: str) -> tuple
     explicit_module = gate is True or gate == 'module-assessment'
     if explicit_module and assessments:
         return 'MODULE_CERTIFIED_CANDIDATE', 'MODULE_GATES_DECLARED_BY_SOURCE'
-    if len(assessments) == 1 and assessments[0]['id'] == last_id:
+    if len(assessments) == 1 and assessments[0]['source_unit_id'] == last_id:
         return 'FINAL_CERTIFIED_CANDIDATE', 'ONE_TERMINAL_ASSESSMENT'
     if not assessments:
         return 'REVIEW_REQUIRED', 'NO_STANDALONE_ASSESSMENT'
