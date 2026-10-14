@@ -237,3 +237,24 @@ writer canônico ainda não constitui uma rota operacional certificadora.
 histórico/PDF real, seis matrículas sintéticas provisionadas, Schema V2 e
 Worker/Pages no mesmo candidato governado, E2E real e evidência visual.
 Até lá, esta PR continua DRAFT. Cada HEAD requer seus próprios checks CI.
+
+## Origem dos assets com allowlist independente — 14/10/2026
+
+Apenas o nome DNS conter `qa` ou `staging` é insuficiente para autorizar
+acesso a uma terceira origem. O perfil privado já exigia que Pages/Worker
+fossem HTTPS e allowlisted independentemente; agora
+`PLAYER3_QA_CONTENT_ORIGIN` também é obrigatório e deve ser **idêntico**
+à origem `contentOrigin` da edição aprovada. Um domínio arbitrário
+`https://qa-qualquer-outro...` é recusado com
+`PLAYER3_CONTRACT_MISSING:ISOLATED_CONTENT_ORIGIN_ALLOWLIST`,
+mesmo sendo HTTPS e contendo `qa`. O segredo de login e o banco de
+respostas jamais transitam pelo iframe. Autorização de staging exige
+concordância de três origens distintas: Pages, Worker e HTML5.
+
+**SHA de código D `2f63c8a428568cfee89f4bcfb20bf618a48706ec`:**
+31/31 Vitest PASS; ESLint e TypeScript PASS; seis cenários Playwright
+listados sem erros. A suíte não foi executada em staging real por ausência
+de pacote original publicável, matrícula/identidade sintética aprovada,
+terminal canônico ativo e publicação governada. Oito gates oficiais
+precisam ser verificados na versão final do HEAD; CI de SHA anterior
+não implica CI aprovado neste SHA.
