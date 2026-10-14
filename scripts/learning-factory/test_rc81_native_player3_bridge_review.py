@@ -67,6 +67,8 @@ class Rc81BridgeTests(unittest.TestCase):
             self.assertIn('AIRTRUST_PLAYER3_STAGE_VERDICT_V1', patched)
             self.assertNotIn('Scorm?.finish?.()', patched)
             self.assertNotIn('window.__AIRTRUST_PLAYER_TEST__', patched)
+            self.assertNotIn('LMSInitialize', z.read('scorm_api.js').decode())
+            self.assertNotIn('LMSSetValue', z.read('scorm_api.js').decode())
             for forbidden in ('item.answer', 'qq.answer', 's.questions[i].answer', 'correctOptionId', 'scenarioCorrect'):
                 self.assertNotIn(forbidden, patched)
             with ZipFile(io.BytesIO(raw)) as original:
