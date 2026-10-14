@@ -378,7 +378,7 @@ describe('Pilot Offline shell', () => {
     expect(controleVoosVooDetalhe).toContain('Planejamento de voo');
     expect(controleVoosVooDetalhe).toContain("current ? 'Substituir' : 'Anexar'");
     expect(controleVoosVooDetalhe).toContain('Histórico de documentos');
-    expect(controleVoosVooDetalhe).toContain('A tripulação receberá aviso para atualizar o pacote offline.');
+    expect(controleVoosVooDetalhe).toContain('Oriente a tripulação a atualizar o voo no Pilot App para receber os arquivos offline.');
   });
 
   it('so confirma consulta offline depois do write cifrado e do read-back', () => {
