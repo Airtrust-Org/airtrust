@@ -22,9 +22,9 @@ import sqlite3
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SQL_0550 = ROOT / 'worker-airtrust/schema-v2/changes/0552_lms_native_v1_evidence.sql'
-SQL_0551 = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0554.REVIEW-ONLY.sql.txt'
-SQL_0552 = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-canonical-completion-0555.REVIEW-ONLY.sql.txt'
+SQL_0550 = ROOT / 'worker-airtrust/schema-v2/changes/0553_lms_native_v1_evidence.sql'
+SQL_0551 = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0555.REVIEW-ONLY.sql.txt'
+SQL_0553 = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-canonical-completion-0556.REVIEW-ONLY.sql.txt'
 
 REQUIRED_TABLES = frozenset({
     'empresas', 'funcionarios', 'usuarios', 'lms_cursos', 'lms_matriculas',
@@ -85,7 +85,7 @@ def rehearse(snapshot):
         # Never apply or modify versioned migration SQL in the rehearsal.
         db.executescript(SQL_0550.read_text(encoding='utf8'))
         db.executescript(SQL_0551.read_text(encoding='utf8'))
-        db.executescript(SQL_0552.read_text(encoding='utf8'))
+        db.executescript(SQL_0553.read_text(encoding='utf8'))
         if db.execute('PRAGMA foreign_key_check').fetchall():
             raise ValueError('NATIVE_SCHEMA_FK_CHECK_FAILED')
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
@@ -107,7 +107,7 @@ def rehearse(snapshot):
         return {'staging_ddl_sha256':fingerprint,'base_tables':len(ddl),
                 'native_tables':native_table_count,'fk_check':'ok',
                 'integrity_check':'ok','mode':'OFFLINE_ONLY',
-                'applied_concepts':['0550','0551_REVIEW_ONLY','0552_REVIEW_ONLY']}
+                'applied_concepts':['0550','0551_REVIEW_ONLY','0553_REVIEW_ONLY']}
     finally:
         db.close()
 

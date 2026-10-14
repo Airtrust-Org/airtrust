@@ -364,8 +364,9 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-14",
-    "last_reconciled_against": "0550/0551 authoritative main; Native 0552 and Player3 0553 additive candidates unapplied",
-    "schema_v2_digest": "2918cae7e7168e2b2f19fb9d3b03f6f5f3ecfa47d0a479e47a0059491fc51192",
+    "last_reconciled_against": "0552 FRMS reserved on canonical main; 0553 Native and 0554 Player3 staged additive candidates unapplied",
+    "schema_v2_digest": "4dd1ccb040ae89c93e945b0af3312c61239a8e40c992fb695738f1b24985a6ce",
+
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1554,9 +1555,23 @@
       "note": "Data-only compensation to restore the sole coordination account to USER while preserving all 26 students converted by 0550. D1 write requires separate governed authorization."
     },
     {
-      "change_file": "0552_lms_native_v1_evidence.sql",
-      "change_id": "lms-native-v1-evidence-0552",
-      "sha256": "2eef2cf2732115efbf05fd4ad57b163196cc787c83c8dc10312cfc957e1daf95",
+      "change_file": "0552_frms_sleep_opportunity.sql",
+      "change_id": "frms-sleep-opportunity-0552",
+      "sha256": "c29e5b38d6e1da17b55312b3a1ff470266ebcf3cd7e178eecd4d0664cec7dd31",
+      "targets": [
+        "frms_fadiga_checkin"
+      ],
+      "domain": "FRMS ANAC RBAC 117 separation of sleep opportunity and effective sleep",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-sleep-opportunity-0552.json",
+      "evidence": "worker-airtrust/schema-v2/plans/frms-sleep-opportunity-0552.md",
+      "note": "0552 is a nullable additive field for reported sleep opportunity. It does not backfill or change historical sleep, policy, coefficients, fatigue thresholds, tenant or RBAC. Runtime Worker must not be deployed until the governed migration has been applied and verified in the target environment. This is repo-reviewed only, not a production schema claim."
+    },
+    {
+      "change_file": "0553_lms_native_v1_evidence.sql",
+      "change_id": "lms-native-v1-evidence-0553",
+      "sha256": "db8e31c3046b3d228f1113e8130f454bc41f95a2af77f251c0cc41f5c98b96e2",
       "targets": [
         "lms_native_edicoes",
         "lms_native_eventos",
@@ -1566,14 +1581,14 @@
       "domain": "LMS Native V1 — course edition, enrollment-cycle pin, evidence event ledger, immutable private grading attempts",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "lms-native-v1-evidence-0552.json",
-      "evidence": "worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0552.md",
+      "reviewed_manifest": "lms-native-v1-evidence-0553.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0553.md",
       "note": "Versioned additive candidate for Player 3, pending governed Schema V2 preflight and recovery point. No staging/production migration, student data writes, or course publication has occurred."
     },
     {
-      "change_file": "0553_lms_player3_module_attempts.sql",
-      "change_id": "lms-player3-module-attempts-0553",
-      "sha256": "b55cdc2a32e81cf2dbb251e2dbb9cda0a65543b85e2fb4522b87b64b881d4eb1",
+      "change_file": "0554_lms_player3_module_attempts.sql",
+      "change_id": "lms-player3-module-attempts-0554",
+      "sha256": "0c4873f58b2e2c17f52d183d55b317ee9d91ee70c56d84807b844a2adf04f282",
       "targets": [
         "lms_player3_politicas",
         "lms_player3_tentativas_modulares"
@@ -1581,9 +1596,10 @@
       "domain": "Player3 certifying module policies and immutable per-stage attempt ledger",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "lms-player3-module-attempts-0553.json",
-      "evidence": "worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0553.md",
-      "note": "Additive staged candidate dependent on 0552; no D1/production mutation or certificate issued. Requires governed schema workflow and actual staging E2E."
+      "reviewed_manifest": "lms-player3-module-attempts-0554.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0554.md",
+      "note": "Additive staged candidate dependent on 0553; no D1/production mutation or certificate issued. Requires governed schema workflow and actual staging E2E."
+
     }
   ]
 }

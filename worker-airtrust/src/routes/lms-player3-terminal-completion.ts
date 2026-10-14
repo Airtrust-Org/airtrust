@@ -18,6 +18,10 @@ import {canReadNativeCatalogActivation} from
   '../services/lms-native-catalog-legacy-guard';
 import {preparePlayer3CanonicalTerminal} from
   '../services/lms-player3-canonical-terminal-preparer';
+import {resolveNativeEnrollmentAdmission,NativeAdmissionError} from
+  '../services/lms-native-enrollment-access';
+import {readPlayer3CertificateStatus,Player3CertificateReadError} from
+  '../services/lms-player3-certificate-status';
 import {completeLmsMatricula,LmsCompletionRejectedError} from
   '../services/lms-completion';
 
@@ -31,6 +35,52 @@ export function canCompletePlayer3(env:Env,tenant:number):boolean{
     !!raw && !raw.includes('*') &&
     raw.split(',').some(value=>value.trim()===String(tenant));
 }
+
+/**
+ * Read-only verification after the canonical batch. Never infer PDF delivery
+ * from the completion receipt. This endpoint checks the enrolled learner and
+ * proves that the linked R2 certificate object starts with PDF magic bytes;
+ * full stream inspection and authorized download remain separate QA gates.
+ */
+app.get('/matriculas/:matriculaId/etapas/certificado',async c=>{
+  c.header('Cache-Control','private, no-store');
+  c.header('X-Content-Type-Options','nosniff');
+  const empresaId=getEmpresaIdSafe(c);
+  if(!canCompletePlayer3(c.env,empresaId)){
+    return c.json({success:false,code:'PLAYER3_TERMINAL_NOT_ENABLED'},404);
+  }
+  const raw=c.req.param('matriculaId');
+  if(!ENROLLMENT.test(raw)){
+    return c.json({success:false,code:'PLAYER3_TERMINAL_INVALID_ID'},400);
+  }
+  const user=c.get('userId' as never) as unknown;
+  const actorUserId=typeof user==='number'?user:
+    typeof user==='string'?Number(user):NaN;
+  if(!Number.isSafeInteger(actorUserId)||actorUserId<=0){
+    return c.json({success:false,code:'PLAYER3_TERMINAL_ACCESS_DENIED'},403);
+  }
+  try{
+    const admission=await resolveNativeEnrollmentAdmission({
+      db:c.env.DB,env:c.env,empresaId,
+      matriculaId:Number(raw),actorUserId,
+    });
+    const snapshot=await readPlayer3CertificateStatus({
+      env:c.env,empresaId,matriculaId:admission.matriculaId,
+      funcionarioId:admission.funcionarioId,
+    });
+    return c.json({success:true,data:snapshot},200);
+  }catch(error){
+    if(error instanceof NativeAdmissionError){
+      return c.json({success:false,code:'PLAYER3_TERMINAL_ACCESS_DENIED'},
+        error.status===400?400:404);
+    }
+    if(error instanceof Player3CertificateReadError){
+      return c.json({success:false,code:error.code},
+        error.code==='PLAYER3_CERTIFICATE_ENROLLMENT_NOT_FOUND'?404:503);
+    }
+    return c.json({success:false,code:'PLAYER3_TERMINAL_STATUS_UNAVAILABLE'},503);
+  }
+});
 
 app.post('/matriculas/:matriculaId/etapas/concluir',async c=>{
   c.header('Cache-Control','private, no-store');

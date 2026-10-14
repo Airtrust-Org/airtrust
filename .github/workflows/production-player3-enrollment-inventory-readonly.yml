@@ -53,6 +53,7 @@ jobs:
           const body=sql.split('\n').filter(line=>!line.trimStart().startsWith('--')).join('\n').trim();
           if(!/^SELECT\b/i.test(body) || !body.endsWith(';') ||
              body.slice(0,-1).includes(';') ||
+             !/\bWHERE\s+m\.empresa_id\s*=\s*6\b/i.test(body) ||
              /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|ATTACH|DETACH|VACUUM|PRAGMA|TRIGGER)\b/i.test(body)){
             throw new Error('PLAYER3_SQL_REVIEW_FAILED');
           }
@@ -65,6 +66,11 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           RELEASE_SHA: ${{ github.sha }}
         run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Validate protected inventory and T0/T1 code (synthetic only)
+        run: |
+          python3 scripts/learning-factory/test_player3_readonly_inventory.py
+          node --test scripts/learning-factory/test_player3_inventory.mjs scripts/learning-factory/test_player3_reconcile_inventories.mjs
 
       - name: Install locked D1 client
         run: npm --prefix worker-airtrust ci

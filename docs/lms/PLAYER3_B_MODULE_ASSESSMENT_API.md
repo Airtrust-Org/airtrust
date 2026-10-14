@@ -54,7 +54,7 @@ homologado até existir leitura reconciliada e conclusão real/certificado.
 ## D1 e R2 (propriedade da Frente B)
 
 Migration aditiva Schema V2: worker-airtrust/schema-v2/changes/
-0553_lms_player3_module_attempts.sql (requer 0552). Não aplicada.
+0554_lms_player3_module_attempts.sql (requer 0553). Não aplicada.
 
 As tabelas lms_player3_politicas e lms_player3_tentativas_modulares mantêm
 respectivamente política e hashes aprovados por edição e tentativas append-only
@@ -75,7 +75,7 @@ qualificação e certificado verificável, sob ciclo e edição imutáveis.
 ## Próximas condições
 
 1. HTML5 fiel sem gabaritos e política pedagógica aprovada (Frente A).
-2. Aplicação Schema V2 0552/0553 apenas por workflow governado em staging.
+2. Aplicação Schema V2 0553/0554 apenas por workflow governado em staging.
 3. Política e gabarito SHA-pinned armazenados no R2 privado.
 4. reconciliação de provas por etapa com as demais evidências e
    integração do resultado com completeLmsMatricula.
@@ -98,8 +98,8 @@ Retorna metadados `totalRequiredLessons`, `verifiedLessons`,
 
 Esta resposta não significa matrícula concluída. A guarda SQL
 `lms-player3-terminal-transaction-guard.ts` já existe e foi testada contra
-SQLite 0552/0553. A guarda está integrada internamente ao writer canônico
-`completeLmsMatricula`; o contrato 0555 continua **REVIEW-ONLY** e o endpoint
+SQLite 0553/0554. A guarda está integrada internamente ao writer canônico
+`completeLmsMatricula`; o contrato 0556 continua **REVIEW-ONLY** e o endpoint
 terminal Player3 é **default OFF** até Schema V2 governado, homologação do
 HTML5 sem gabarito, inventário T0/T1 e E2E de certificado existente.
 
@@ -149,10 +149,10 @@ idempotência e rollback antes de homologar.
   1. SQL de guarda das lições e tentativas aprovadas;
   2. INSERT de `lms_player3_completion_intents` com nonce e recibos privados;
   3. writes canônicos da matrícula, ciclo, histórico, qualificação e audit log;
-  4. DELETE de intent antes de COMMIT. O conceito 0555 exige FK diferida
+  4. DELETE de intent antes de COMMIT. O conceito 0556 exige FK diferida
      contra sentinela não preenchível: o intent órfão aborta a transação.
-- O plano **0554 REVIEW-ONLY** passa a substituir, quando aplicável,
-  o trigger de tentativas de 0553 para reconhecer **somente SCORM explicitamente
+- O plano **0555 REVIEW-ONLY** passa a substituir, quando aplicável,
+  o trigger de tentativas de 0554 para reconhecer **somente SCORM explicitamente
   ativado** no mesmo tenant/curso; SCORM externo não ativado continua recusado.
 - **POST /api/lms/native/matriculas/{matriculaId}/etapas/concluir**:
   rota autenticada, corpo **vazio**, sem nota ou identificadores manipuláveis;
@@ -166,7 +166,7 @@ idempotência e rollback antes de homologar.
 - HTTP 200 apenas com recibo coerente do writer, `status=CONCLUIDO` e
   `certificate_state=REQUIRES_VERIFICATION` quando há qualificação. **Não
   afirma que o certificado foi emitido**. O PDF precisa ser consultado no E2E.
-- 0552/0553 permanecem **não aplicadas**; 0554/0555 permanecem arquivos
+- 0553/0554 permanecem **não aplicadas**; 0555/0556 permanecem arquivos
   `.REVIEW-ONLY.sql.txt`, sem manifest/aprovação de apply. Nenhum recurso
   foi escrito remotamente ou ativado para alunos nesta etapa.
 
@@ -220,3 +220,45 @@ aprovadores humanos); a etapa da C está integrada como código, mas
 sem aceite operacional. Para homologar: casos 0%, 20%, 50%, 80% e 99%,
 versões distintas, WebKit/Chromium, SCORM externo, nota, qualificação e
 certificado realmente consultável em staging após Schema V2 governado.
+
+
+## Observabilidade de certificado pós-conclusão — 14/10/2026
+
+Para eliminar a ambiguidade entre `CONCLUIDO` (matrícula/ciclo D1) e
+**PDF realmente arquivado** (documento vinculado + R2), a PR #1389 inclui
+o endpoint de leitura **GET**
+`/api/lms/native/matriculas/:matriculaId/etapas/certificado`.
+
+- Mesmo conjunto de **seis controles de staging** exigidos pelo terminal
+  Player 3; por padrão desligado, sem acesso em production.
+- `auth()` do router e
+  `resolveNativeEnrollmentAdmission` exigem usuário ativo, funcionário
+  proprietário, empresa exata e matrícula vigente, sem privilégios cruzados.
+- Releitura SQL associa a matrícula e ciclo concluídos à qualificação
+  `CONCLUIDA`, ao documento não excluído do próprio funcionário e à chave
+  de R2 no prefixo exato
+  `certificados/empresa-{empresaId}/funcionario-{funcionarioId}/historico-{historicoId}/`.
+- A leitura R2 (somente os cinco primeiros bytes) prova `%PDF-` e existência
+  mínima do objeto. A chave R2 não é retornada. Não há geração, reparo,
+  `D1.batch`, upload, alteração de matrícula ou certificado.
+- Resposta `success:true,data` com `matricula_id`, `ciclo_id`,
+  `matricula_status`, `historico_id`, `certificate_state`,
+  `documento_id`, `stream_path` e `stream_verified:false`.
+  Estados incluem `ENROLLMENT_NOT_COMPLETED`, `NOT_APPLICABLE`,
+  `HISTORY_NOT_LINKED`, `HISTORY_INVALID`,
+  `CERTIFICATE_NOT_ARCHIVED`, `CERTIFICATE_OBJECT_MISSING`,
+  `CERTIFICATE_PDF_INVALID` e `PDF_HEADER_VERIFIED`.
+
+`PDF_HEADER_VERIFIED` **não significa PDF lido integralmente, licença,
+renderização válida ou stream acessível**. O teste independente da D
+deve chamar a rota real, exigir o estado esperado e executar
+`GET /api/pasta-virtual/stream/:documentoId` **com a mesma sessão de aluno**,
+inspecionando corpo integral `%PDF-`, estrutura/EOF e resposta HTTP 200.
+Não aceitar `certificate_state:REQUIRES_VERIFICATION` do POST como prova.
+O status `CERTIFICATE_NOT_ARCHIVED` após conclusão é falha recuperável
+operacional do serviço de certificado, **não** autorização para repetir
+a transação terminal ou inventar a emissão.
+
+QA local: 44/44 testes focados do serviço de certificado, rota HTTP
+e writer de conclusão + Worker TypeScript (verificar execução final).
+Nenhum certificado foi emitido no staging/produção nesta entrega.

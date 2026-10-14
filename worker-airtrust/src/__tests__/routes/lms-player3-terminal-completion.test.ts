@@ -2,7 +2,7 @@ import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {Hono} from 'hono';
 import type {Env} from '../../types';
 
-const mocks=vi.hoisted(()=>({prepare:vi.fn(),complete:vi.fn()}));
+const mocks=vi.hoisted(()=>({prepare:vi.fn(),complete:vi.fn(),admit:vi.fn(),certificate:vi.fn()}));
 vi.mock('../../middleware/auth',()=>({
   auth:()=>async(c:{
     req:{header(name:string):string|undefined};
@@ -23,6 +23,22 @@ vi.mock('../../services/lms-player3-canonical-terminal-preparer',()=>({
 vi.mock('../../services/lms-completion',()=>({
   LmsCompletionRejectedError:class LmsCompletionRejectedError extends Error{},
   completeLmsMatricula:mocks.complete,
+}));
+vi.mock('../../services/lms-native-enrollment-access',()=>({
+  NativeAdmissionError:class NativeAdmissionError extends Error{
+    constructor(public readonly status:number,public readonly code:string){
+      super(code);
+    }
+  },
+  resolveNativeEnrollmentAdmission:mocks.admit,
+}));
+vi.mock('../../services/lms-player3-certificate-status',()=>({
+  Player3CertificateReadError:class Player3CertificateReadError extends Error{
+    constructor(public readonly code:string){
+      super(code);
+    }
+  },
+  readPlayer3CertificateStatus:mocks.certificate,
 }));
 import nativeRoutes from '../../routes/lms-native';
 
@@ -47,6 +63,7 @@ const canonical={
   existingHistoricoId:null,
 };
 function call(o:{stage?:string;tenant?:number;user?:number;anonymous?:boolean;
+  method?:'POST'|'GET';
   preview?:string;write?:string;modular?:string;catalog?:string;
   terminal?:string;id?:string;body?:string}={}){
   const app=new Hono<{Bindings:Env}>();
@@ -55,7 +72,8 @@ function call(o:{stage?:string;tenant?:number;user?:number;anonymous?:boolean;
     'x-test-user':String(o.user??900),'x-test-tenant':String(o.tenant??6),
   };
   return app.fetch(new Request('http://localhost/api/lms/native/matriculas/'+
-    (o.id??'101')+'/etapas/concluir',{method:'POST',headers,body:o.body}),{
+    (o.id??'101')+(o.method==='GET'?'/etapas/certificado':'/etapas/concluir'),
+    {method:o.method??'POST',headers,body:o.body}),{
       ENVIRONMENT:o.stage??'staging',
       NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS:o.preview??'6',
       NATIVE_LEARNER_WRITE_ENABLED_TENANTS:o.write??'6',
@@ -73,6 +91,47 @@ describe('Player3 canonical terminal: independent staging-only gate',()=>{
     mocks.complete.mockReset().mockResolvedValue({
       matriculaId:101,outcome:'qualification_created',qualificacaoHistoricoId:333,
     });
+    mocks.admit.mockReset().mockResolvedValue({
+      matriculaId:101,cursoId:31,funcionarioId:51,empresaId:6,
+      mode:'REVIEW',
+    });
+    mocks.certificate.mockReset().mockResolvedValue({
+      matricula_id:101,ciclo_id:1001,matricula_status:'CONCLUIDO',
+      historico_id:333,certificate_state:'PDF_HEADER_VERIFIED',
+      documento_id:44,stream_path:'/api/pasta-virtual/stream/44',
+      stream_verified:false,
+    });
+  });
+  it('checks persisted archive only for an authenticated learner, never creates a PDF',async()=>{
+    const r=await call({terminal:'6',method:'GET'});
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({success:true,data:{
+      certificate_state:'PDF_HEADER_VERIFIED',stream_verified:false,
+      stream_path:'/api/pasta-virtual/stream/44',
+    }});
+    expect(mocks.admit).toHaveBeenCalledWith(expect.objectContaining({
+      empresaId:6,matriculaId:101,actorUserId:900,
+    }));
+    expect(mocks.certificate).toHaveBeenCalledWith(expect.objectContaining({
+      empresaId:6,matriculaId:101,funcionarioId:51,
+    }));
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.complete).not.toHaveBeenCalled();
+  });
+  it('stays read-only and fails closed for anonymous, disabled and mismatched learner',async()=>{
+    for(const o of [
+      {method:'GET' as const},{method:'GET' as const,terminal:'*'},
+      {method:'GET' as const,terminal:'6',stage:'production'},
+    ]){
+      const r=await call(o);
+      expect(r.status).toBe(404);
+    }
+    expect((await call({terminal:'6',method:'GET',anonymous:true})).status).toBe(401);
+    expect((await call({terminal:'6',method:'GET',user:0})).status).toBe(403);
+    expect((await call({terminal:'6',method:'GET',id:'bad'})).status).toBe(400);
+    mocks.admit.mockRejectedValueOnce(new Error('private'));
+    expect((await call({terminal:'6',method:'GET'})).status).toBe(503);
+    expect(mocks.certificate).not.toHaveBeenCalled();
   });
   it('defaults OFF and rejects production, wildcard and unmatched tenant without D1',async()=>{
     for(const o of [{},{terminal:'*'},{terminal:'60'},

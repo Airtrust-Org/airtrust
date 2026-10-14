@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0552_lms_native_v1_evidence.sql'
+CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0553_lms_native_v1_evidence.sql'
 
 
 def db_fixture():

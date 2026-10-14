@@ -2,14 +2,14 @@
 -- Intentionally DOES NOT alter lms_cursos.tipo_conteudo (legacy CHECK).
 -- No enrollment, score, qualification, certificate or employee data is modified.
 -- dry_run_required: true
--- rollback_plan_required: worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0552.md
+-- rollback_plan_required: worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0553.md
 -- Preflight: all four tables must be absent; otherwise fail, never mask drift.
 SELECT json(CASE WHEN
   (SELECT COUNT(*) FROM sqlite_master
    WHERE name IN ('lms_native_edicoes','lms_native_matricula_edicoes','lms_native_eventos','lms_native_tentativas'))=0
   AND (SELECT COUNT(*) FROM sqlite_master
    WHERE type='table' AND name IN ('lms_cursos','lms_matriculas','lms_matricula_ciclos'))=3
-THEN 'null' ELSE 'NATIVE_0552_PREFLIGHT_REJECTED' END);
+THEN 'null' ELSE 'NATIVE_0553_PREFLIGHT_REJECTED' END);
 
 CREATE TABLE lms_native_edicoes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
