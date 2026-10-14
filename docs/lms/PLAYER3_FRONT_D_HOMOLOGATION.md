@@ -13,12 +13,12 @@
 ## Pré-requisitos antes de cada execução real
 1. Frente B disponibiliza no **SHA candidato** os endpoints autenticados, HTML5 isolado e sem gabarito exportado, writer de tentativas/fechamento e vínculo histórico/qualificação/certificado. Schema V2 e conteúdo são publicados somente pelo fluxo aprovado. A edição RC8.1 exata e o manifesto pedagógico são revisados; não inventar prova final.
 2. Aprovar staging QA e provisionar **separadamente por navegador** três matrículas sintéticas na mesma empresa de teste: nova RC8.1, continuidade 80% e SCORM 1.2 **externo**; todo conteúdo externo com licença/uso de QA. Reprovação/aprovação devem ser possíveis de forma legítima. A prova de continuidade exige snapshot histórico de QA persistido e crédito de posição aprovado, jamais creditação de avaliação.
-3. Criar um arquivo **privado, fora do repositório**, definido por `PLAYER3_QA_PROFILE_FILE`, com `baseUrl`, `contentOrigin`, `empresaId`, `courseTitle`, `projects.chromium` e `projects.webkit`. Em cada projeto:
-   - `doutrinamento`: `enrollmentId`, `cycleId`, `editionSha256`, `launchPath`, `snapshotPath`, `qualificationPath`, `certificatePath` e `units` (exatamente 42 entradas **na ordem real da edição**; cada entrada `{id,visualCue,practice?,official?}`). `practice` é `{question,wrong,correct}`; `official.stageId` é o identificador da avaliação canônica e `official.questions` é lista de `{question,wrong,correct}` com respostas de **fixture sintética aprovada**. `official.stageId` deve coincidir com o identificador registrado no ledger e pode ser diferente do ID visual da unidade.
+3. Criar um arquivo **privado, fora do repositório**, definido por `PLAYER3_QA_PROFILE_FILE`, com `baseUrl` (Pages staging), `apiBaseUrl` (Worker staging), `expectedSourceSha` (40 hex do commit candidato), `contentOrigin` (HTML5 em terceira origem HTTPS), `empresaId`, `courseTitle`, `projects.chromium` e `projects.webkit`. **Seis matrículas sintéticas distintas:** três Chromium e três WebKit. Em cada projeto:
+   - `doutrinamento`: `enrollmentId`, `cycleId`, `editionSha256`, `launchPath`, `snapshotPath`, `qualificationPath`, `certificatePath` e `units` (exatamente 42 entradas **na ordem real da edição**; cada entrada `{id,visualCue,practice?,official?}`; exatamente **oito avaliações modulares com `official.stageId` diferentes**, sem inventar prova final). `practice` é `{question,wrong,correct}`; `official.stageId` é o identificador da avaliação canônica e `official.questions` é lista de `{question,wrong,correct}` com respostas de **fixture sintética aprovada**. `official.stageId` deve coincidir com o identificador registrado no ledger e pode ser diferente do ID visual da unidade.
    - `resume80`: mesmos campos de identidade e URLs, `expectedResumeUnitId`, `creditedNavigationIds`, `minPreviousPct` (80 a 99).
    - `external`: mesmos campos de identidade e URLs; `scormSnapshotPath`, `frameSelectors` (seletores dos iframes em ordem), `visualLastPageButton`, `wrongAnswerButton`, `correctAnswerButton`, `submitButton`, `finishButton`. Usar um pacote SCORM 1.2 de fornecedor externo, não a fixture M8 da Factory.
 4. Disponibilizar `PLAYER3_QA_STORAGE_STATE` apenas no workspace seguro local do executor: estado de sessão QA autenticada, não um `.auth` versionado. API read-only pode exigir `PLAYER3_QA_READONLY_BEARER_TOKEN` em variável protegida. Nunca registrar credenciais, respostas autorais/gabaritos, dados reais ou arquivos de storage state no Git.
-5. Confirmar origem exata em `PLAYER3_QA_STAGING_ORIGIN` e aceitar explicitamente writes **apenas nas matrículas sintéticas** via `PLAYER3_QA_ALLOW_WRITES=SYNTHETIC_STAGING_ONLY`. Host HTTPS deve conter `staging`, `stage` ou `qa`; `airtrust.online` e `www.airtrust.online` são recusados. A pré-validação é obrigatória, não é opção de skip.
+5. Confirmar a origem exata do Pages em `PLAYER3_QA_STAGING_ORIGIN` e a do Worker em `PLAYER3_QA_API_ORIGIN`. O teste exige que `/api/version` reporte `environment=staging` e `sourceSha=expectedSourceSha` antes de interação mutável. Aceitar explicitamente writes **apenas nas matrículas sintéticas** via `PLAYER3_QA_ALLOW_WRITES=SYNTHETIC_STAGING_ONLY`. Host HTTPS deve conter `staging`, `stage` ou `qa`; `airtrust.online` e `www.airtrust.online` são recusados. A pré-validação é obrigatória, não é opção de skip. `PLAYER3_QA_READONLY_BEARER_TOKEN` é obrigatório em variável protegida para leitura do Worker; não expor seu valor.
 
 ### Interface observável que a Frente B deve fornecer/confirmar
 - Rotas de leitura autenticada de *snapshot* por matrícula/ciclo/edição, retornando `{success:true,data:{empresa_id,matricula_id,ciclo_id,edition_sha256,status,progresso_pct,completed_unit_ids,attempts,qualificacao_historico_id,certificate_id}}`. `attempts[]` contém `stage_id,attempt_number,passed,score_pct`. Se a API final usar outra forma, **adaptar somente o driver de leitura da Frente D após revisar o contrato**; não mudar a regra de negócio da B.
@@ -32,12 +32,13 @@
 Após QA aprovada e ambiente provisionado (com variáveis de ambiente protegidas, fora do log):
 
 ```bash
+npx vitest run --config vitest.player3-front-d.config.ts
 npx playwright test --config=e2e/player3/playwright.player3.config.ts --list
 npx playwright test --config=e2e/player3/playwright.player3.config.ts --project=chromium
 npx playwright test --config=e2e/player3/playwright.player3.config.ts --project=webkit
 ```
 
-Capturas só com `PLAYER3_QA_CAPTURE_ALLOWED=SYNTHETIC_ONLY`, anexadas ao relatório privado; `trace: retain-on-failure`. Sanitizar antes de compartilhar o artefato. Nunca commitar capturas de alunos reais ou respostas. Registrar runner/browser, SHA testado, edição/ZIP SHA-256, staging version/provenance, hora, evidências, status **PASS/FAIL/BLOCKED/INCONCLUSIVE**, diferença real vs contrato e IDs sintéticos apenas em cofre privado.
+Capturas só com `PLAYER3_QA_CAPTURE_ALLOWED=SYNTHETIC_ONLY`, anexadas ao relatório privado; o opt-in salva cada uma das 42 unidades para revisão de fidelidade visual, sem commits. Falhas HTTP ou de rede de CSS, JS, imagens, vídeo e fontes da origem original são erros de QA; `trace: retain-on-failure`. Sanitizar antes de compartilhar o artefato. Nunca commitar capturas de alunos reais ou respostas. Registrar runner/browser, SHA testado, edição/ZIP SHA-256, staging version/provenance, hora, evidências, status **PASS/FAIL/BLOCKED/INCONCLUSIVE**, diferença real vs contrato e IDs sintéticos apenas em cofre privado.
 
 ## Gates de liberação
 - **QA de contrato:** compile do Playwright e preflight negativo (sem fixture/sem autorização deve falhar fechado).
@@ -47,3 +48,21 @@ Capturas só com `PLAYER3_QA_CAPTURE_ALLOWED=SYNTHETIC_ONLY`, anexadas ao relat�
 
 ## Dependência e handoff
 A Frente D pode integrar esta suíte numa branch independente da `main` enquanto B finaliza APIs. **Não fundir na #1389 nem liberar staging sem sincronizar SHA e janela com B.** Publicar no PR de D a matriz e, na #1389, apenas o link para os contratos faltantes. Não reabrir auditoria histórica do 99%; homologar a cadeia nova.
+
+
+## Contratos existentes da Frente B que não substituem o E2E
+
+Na PR #1389 (leitura do código em 2026-10-14), as rotas autenticadas já projetadas incluem:
+
+- `POST /matriculas/:matriculaId/etapas/:stageId/tentativas`: grava evidência de etapa, responde `stage_id`, `edition_sha256`, `score_pct` e `stage_passed`, mas declara `completion_supported:false`. Não se trata de certificado.
+- `GET /matriculas/:matriculaId/sessao`: responde edição e navegação resumida, **não** um ledger completo com histórico/certificado.
+- `POST /matriculas/:matriculaId/concluir`: chama o escritor canônico sob allowlist de staging; o recibo `certificate_state:REQUIRES_VERIFICATION` **não prova PDF emitido**.
+
+A D ainda precisa mapear rotas reais de leitura de tentativas, matrícula, histórico e PDF, adaptando exclusivamente o driver de QA. Se a B não disponibilizar leitura suficiente, usar inspeção read-only governada da fixture D1 staging, sem writes, sem autenticação contornada e sem `localStorage` como evidência oficial. **Estas rotas, embora implementadas no código DRAFT, ainda não foram homologadas em staging.**
+
+## Evidência independente disponível
+
+- Preflight puro: **8/8 Vitest PASS**; ESLint e TypeScript focados PASS.
+- Playwright da D: 3 jornadas × Chromium/WebKit = **6 testes descobertos**, não executados em staging.
+- Suíte SCORM protocolo Factory/M8 já existente: **2/2 PASS** em Chromium/WebKit (não é SCO externo nem certificado RC8.1).
+- GitHub Actions no HEAD inicial D `78a52ba52aca2b5180af535e6fa71a4db7066bb7`: oito gates PASS; cada commit posterior tem que ter sua própria evidência CI.
