@@ -53,3 +53,18 @@ Implementação pura em `worker-airtrust/src/lib/lms-player3/continuity.ts`: `bu
 - Precisamos de aprovação CI da PR, integração segura do workflow e chave de criptografia + token D1 somente leitura no ambiente governado.
 - Precisamos do motor de aplicação de créditos com auditoria e versionamento por edição/ciclo, ligado à nova persistência Player 3 e ao writer canônico do LMS; **não implantar crédito diretamente na tabela de progresso SCORM**.
 - Critérios finais para alunos cujos cursos mudaram exigem confronto pacote original x novo, preservando o design e a pedagogia.
+
+## Adaptação comprovada dos 22 pacotes de origem — 2026-10-14
+
+Inspeção privada dos arquivos `app.js` que efetivamente geram `cmi.suspend_data`:
+
+- **12 cursos:** layout `v=2/3/4` com `a` (posição ativa) e `d[]` (índices ou IDs de slides percorridos). Essa lista pode ser convertida de volta aos IDs estáveis do `course_data.js`, **somente para retomada**, nunca para aprovar prova.
+- **7 cursos:** formato compacto V4 (CRM/Ética/FDM/NR-05/Stop Work), que preserva `a` (bookmark) mas **não** fornece necessariamente o conjunto `d[]`. Não inventar visitas anteriores a partir do bookmark.
+- **1 curso:** Gerenciamento de Resíduos V4 registra slides concluídos em `c[]` e decisões de cenário em `d{}`; distinguir esses campos para não creditar decisões como aulas.
+- **2 cursos:** SGSO no formato bitmap `s='A10'` usa `c` (posição) e `v` (bitmap de visitas). Como não possui versão embutida, só interpretar quando o SHA-256 do original de D1/R2 for comprovadamente o da edição publicada; caso contrário revisão administrativa.
+
+`worker-airtrust/src/lib/lms-player3/legacy-resume-evidence.ts` implementa esses leitores em modo SOMENTE LEITURA. Recebe o estado SCORM persistido em D1 e os IDs da edição **verificada pelo backend**; produz `VISITED_UNITS`, `BOOKMARK_ONLY` ou `REVIEW_REQUIRED`, sempre `grants_assessment_pass=false`, `grants_completion=false`. Não tomar entrada de alunos como fonte de auditoria.
+
+**QA:** 10 testes específicos dos formatos de estado e rejeição de falso "passed", mais 14 testes de continuidade e 11 do núcleo Player3 = 35 Worker PASS; typecheck Worker PASS. Essas são provas de lógica, **não** validação de conteúdos/matrículas reais de produção.
+
+**Aplicação futura:** cruzar com o manifesto/hash original privado e com a edição alvo; mapear `VISITED_UNITS` onde permitido, `BOOKMARK_ONLY` para equivalência administrativa auditada e `REVIEW_REQUIRED` para casos incompatíveis. Preservar 80% como histórico em todas as três categorias; não adiantar 80% das unidades por simples regra de três nem inferir aprovação de avaliações.
