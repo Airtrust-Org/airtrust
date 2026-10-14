@@ -85,6 +85,24 @@ describe('Player3 recovery from persisted SCORM without false certifications',()
       v:3,p:'old-release',a:2,d:[0],
     })}).proposed_resume_unit_id).toBeNull();
   });
+  it('rejects a review-only, partial, or mismatched certified source crosswalk',()=>{
+    // The A factory deliberately delivers source-unit review maps without
+    // approval. Existing key mappings alone cannot make them authoritative.
+    for(const certified of [
+      [],['intro','module1'],['intro','module1','module2','outsider'],
+      ['intro','module1','module2','module2'],
+    ]){
+      const proposal=run({destination:{
+        ...destination,certified_source_unit_ids:certified,
+      }});
+      expect(proposal.proposed_resume_unit_id).toBeNull();
+      expect(proposal.review_required).toBe(true);
+      expect(proposal.grants_exam_pass).toBe(false);
+      expect(proposal.grants_completed).toBe(false);
+      expect(proposal.grants_certificate).toBe(false);
+    }
+    expect(run().proposed_resume_unit_id).toBe('module2');
+  });
   it('does not emit advice from a conflicted current cycle or stale target',()=>{
     expect(run({enrollment:{...enrollment,ciclo_progresso_pct:23}})
       .proposed_resume_unit_id).toBeNull();
