@@ -1,4 +1,5 @@
 """Fixed, SELECT-only Player 3 D1 inventory query — focused schema smoke."""
+import json
 import sqlite3
 import unittest
 from pathlib import Path
@@ -19,7 +20,8 @@ class InventorySqlTests(unittest.TestCase):
           scorm_versao TEXT,version_tag TEXT);
         CREATE TABLE lms_matricula_ciclos(id INTEGER,empresa_id INTEGER,matricula_id INTEGER,
           numero_ciclo INTEGER,status TEXT,progresso_pct INTEGER,score_final INTEGER,
-          tentativas INTEGER,ciclo_atual INTEGER,updated_at TEXT,deleted_at TEXT);
+          tentativas INTEGER,ciclo_atual INTEGER,updated_at TEXT,deleted_at TEXT,
+          data_inicio TEXT,data_conclusao TEXT,qualificacao_historico_id INTEGER);
         CREATE TABLE lms_xapi_statements(id INTEGER,empresa_id INTEGER,matricula_id INTEGER,created_at TEXT);
         CREATE TABLE lms_progresso_scorm(id INTEGER,empresa_id INTEGER,matricula_id INTEGER,
           lesson_status TEXT,completion_status TEXT,success_status TEXT,score_raw INTEGER,
@@ -30,10 +32,18 @@ class InventorySqlTests(unittest.TestCase):
           (912,7,90,34,'NAO_INICIADO',0,NULL,0,'2026-10-14',NULL,NULL,0,0,NULL),
           (913,6,57,34,'CONCLUIDO',100,90,1,'2026-10-14',NULL,'2026-10-14',42,42,NULL),
           (914,6,57,35,'NAO_INICIADO',0,NULL,0,'2026-10-14',NULL,NULL,0,0,NULL);
-        INSERT INTO lms_matricula_ciclos VALUES
+        INSERT INTO lms_matricula_ciclos(id,empresa_id,matricula_id,numero_ciclo,
+          status,progresso_pct,score_final,tentativas,ciclo_atual,updated_at,deleted_at) VALUES
           (1002,6,911,1,'EM_ANDAMENTO',80,0,0,1,'2026-10-14',NULL),
           (1003,7,912,1,'NAO_INICIADO',0,NULL,0,1,'2026-10-14',NULL),
           (1004,6,914,1,'NAO_INICIADO',0,NULL,0,1,'2026-10-14',NULL);
+        INSERT INTO lms_matricula_ciclos(id,empresa_id,matricula_id,numero_ciclo,
+          status,progresso_pct,score_final,tentativas,ciclo_atual,updated_at,
+          deleted_at,data_conclusao,qualificacao_historico_id) VALUES
+          (1000,6,911,0,'CONCLUIDO',100,90,1,0,'2026-09-12',NULL,
+           '2026-09-12',778),
+          (1005,7,911,0,'CONCLUIDO',100,100,1,0,'2026-09-12',NULL,
+           '2026-09-12',999);
         INSERT INTO lms_xapi_statements VALUES (9,7,912,'2026-10-14');
         INSERT INTO lms_progresso_scorm VALUES
           (800,6,911,'incomplete',NULL,NULL,NULL,'2026-10-14','private_resume','private_cmi');
@@ -56,6 +66,13 @@ class InventorySqlTests(unittest.TestCase):
         self.assertEqual(rows[0]['matricula_progresso_pct'],80)
         self.assertEqual(rows[0]['ciclo_progresso_pct'],80)
         self.assertEqual(rows[0]['scorm_suspend_data_PRIVATE'],'private_resume')
+        histories=json.loads(rows[0]['ciclos_historicos_json_PRIVATE'])
+        self.assertEqual(len(histories),2)
+        self.assertEqual({cycle['id'] for cycle in histories},{1000,1002})
+        self.assertTrue(all(cycle['empresa_id']==6 and
+          cycle['matricula_id']==911 for cycle in histories))
+        self.assertEqual(next(h['qualificacao_historico_id'] for h in histories
+          if h['id']==1000),778)
         self.assertEqual(rows[1]['ciclo_id'],1004)
         self.assertEqual(rows[1]['xapi_statement_count'],0)
         self.assertEqual(rows[0]['xapi_statement_count'],0)
