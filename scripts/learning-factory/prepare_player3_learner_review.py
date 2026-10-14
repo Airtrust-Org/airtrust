@@ -66,6 +66,21 @@ def dekey(value):
         return [dekey(v) for v in value]
     return value
 
+def _authored_exam_questions(model):
+    """Compare full authored exam rows only when both models define them.
+
+    Some original dual-model packages intentionally keep their authoritative
+    questions in course_data.js and use course-model.js for presentation only.
+    Do not invent question banks for those presentation-only variants.
+    """
+    result = {}
+    for slide in model['slides']:
+        questions = slide.get('questions')
+        if isinstance(questions, list) and questions:
+            result[slide['id']] = questions
+    return result
+
+
 def fixed_zip(files: dict[str, bytes]) -> bytes:
     out = io.BytesIO()
     with ZipFile(out, 'w', compression=ZIP_DEFLATED, compresslevel=6) as z:
@@ -87,6 +102,7 @@ def compile_review(original: bytes, name: str):
             raise UnsafePackage('PLAYER3_NO_AUTHORING_MODEL')
         files = {}
         stages = None
+        previous_exam_questions = None
         for model_path in models:
             text = original_zip.read(model_path).decode('utf-8-sig').strip()
             prefix = COURSE.match(text)
@@ -107,6 +123,12 @@ def compile_review(original: bytes, name: str):
             if stages is not None and stages != signature:
                 raise UnsafePackage('PLAYER3_DUAL_MODEL_STAGE_MISMATCH')
             stages = signature
+            questions = _authored_exam_questions(model)
+            if previous_exam_questions is not None and questions and previous_exam_questions:
+                if questions != previous_exam_questions:
+                    raise UnsafePackage('PLAYER3_DUAL_MODEL_PRIVATE_BANK_MISMATCH')
+            if questions:
+                previous_exam_questions = questions
             if signature != [(slide.get('id'), slide.get('kind')) for slide in sanitized['slides']]:
                 raise UnsafePackage('PLAYER3_STAGE_PARITY')
             files[model_path] = (
