@@ -572,7 +572,7 @@ describe('FrmsCheckinFadiga UI', () => {
       screen.getByLabelText('KSS 9: Extremamente sonolento, com grande esforço para permanecer acordado'),
     ).toBeInTheDocument();
 
-    expect(within(sonoFieldset as HTMLElement).getAllByRole('radio')).toHaveLength(5);
+    expect(within(sonoFieldset as HTMLElement).getAllByRole('radio')).toHaveLength(6);
   });
 
   it('mantem a ordem semântica original da pergunta de aptidão, sem tratar coordenação como escala ordinal', () => {
