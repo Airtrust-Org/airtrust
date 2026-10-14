@@ -32,7 +32,8 @@ function load(projectName: string) {
     'STAGING_READONLY_API_AUTH');
   return validateQaProfile(raw, projectName,
     process.env.PLAYER3_QA_STAGING_ORIGIN ?? '',
-    process.env.PLAYER3_QA_API_ORIGIN ?? '');
+    process.env.PLAYER3_QA_API_ORIGIN ?? '',
+    process.env.PLAYER3_QA_SYNTHETIC_TENANT_ID ?? '');
 }
 async function openLearner(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const state = process.env.PLAYER3_QA_STORAGE_STATE;
