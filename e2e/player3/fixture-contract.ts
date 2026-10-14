@@ -4,7 +4,7 @@
  */
 export type QaChoice = { question: string; wrong: string; correct: string };
 export type QaUnit = {
-  id: string; kind: 'lesson'|'assessment'; visualCue: string;
+  id: string; kind: 'lesson'|'assessment'; lessonId?: string; visualCue: string;
   practice?: QaChoice;
   official?: { stageId: string; questions: QaChoice[] };
 };
@@ -13,7 +13,8 @@ export type QaEnrollment = {
   enrollmentId: number; cycleId: number;
 };
 export type QaDoutrinamento = QaEnrollment & {
-  units: QaUnit[]; qualificationPath: string; certificatePath: string;
+  units: QaUnit[]; requiredLessonIds: string[];
+  qualificationPath: string; certificatePath: string;
 };
 export type QaResume80 = QaEnrollment & {
   expectedResumeUnitId: string; creditedNavigationIds: string[];
@@ -127,16 +128,24 @@ export function validateQaProfile(raw: unknown, projectName: string,
     requireQa(d.units.every(u => !!u && id.test(u.id) &&
       (u.kind==='lesson'||u.kind==='assessment') &&
       typeof u.visualCue === 'string' && u.visualCue.trim().length > 0 &&
-      (!u.practice || (u.kind==='lesson' && qaChoice(u.practice))) &&
-      (u.kind==='assessment' ? !!u.official : !u.official) &&
+      (u.lessonId===undefined || id.test(u.lessonId)) &&
+      (!u.practice || qaChoice(u.practice)) &&
       (!u.official || (id.test(u.official.stageId) &&
         Array.isArray(u.official.questions) && u.official.questions.length > 0 &&
         u.official.questions.every(qaChoice)))),
     'AUTHOR_UNIT_AND_EXAM_MAP');
     const official = d.units.flatMap(u => u.official ? [u.official.stageId] : []);
-    requireQa(official.length === 8 && new Set(official).size === 8 &&
-      d.units.filter(u=>u.kind==='lesson').length===34,
+    requireQa(official.length === 8 && new Set(official).size === 8,
       'DOU_RC81_EIGHT_MODULAR_ASSESSMENTS');
+    const mappedLessons=d.units.flatMap(u=>u.lessonId?[u.lessonId]:[]);
+    requireQa(Array.isArray(d.requiredLessonIds) &&
+      d.requiredLessonIds.length>0 && d.requiredLessonIds.length<=500 &&
+      d.requiredLessonIds.every(s=>id.test(s)) &&
+      new Set(d.requiredLessonIds).size===d.requiredLessonIds.length &&
+      mappedLessons.length===new Set(mappedLessons).size &&
+      mappedLessons.length===d.requiredLessonIds.length &&
+      mappedLessons.every(s=>d.requiredLessonIds.includes(s)),
+      'REVIEWED_CANONICAL_LESSON_CROSSWALK');
     requireQa(d.units.some(u => u.practice), 'FORMATIVE_GATE_REQUIRED');
     qaPath(api.origin, d.qualificationPath);
     qaPath(api.origin, d.certificatePath);
