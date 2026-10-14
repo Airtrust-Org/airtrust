@@ -80,6 +80,43 @@ describe('Player 3 — official assessment transport and regraded Worker receipt
       stage_passed:false,score_pct:30,persisted:true,
     });
   });
+  it('allows a new attempt only after an authentic failed grade is re-read',async()=>{
+    const fail={
+      ...receipt(),attempt_number:1,score_pct:30,stage_passed:false,
+    };
+    const pass={
+      ...receipt(),attempt_number:2,score_pct:80,stage_passed:true,
+    };
+    const {request,submit}=transport([
+      json(session()),json(fail,201),
+      json(session({stages:[stage({
+        attempts:1,lastScorePct:30,passed:false,nextAttemptNumber:2,
+      })]})),
+      json(session({stages:[stage({
+        attempts:1,lastScorePct:30,passed:false,nextAttemptNumber:2,
+      })]})),
+      json(pass,201),
+      json(session({stages:[stage({
+        attempts:2,lastScorePct:80,passed:true,nextAttemptNumber:3,
+      })]})),
+    ]);
+    const failed=await submit(answers);
+    expect(failed).toMatchObject({
+      attempt_number:1,score_pct:30,stage_passed:false,persisted:true,
+    });
+    const passed=await submit(answers);
+    expect(passed).toMatchObject({
+      attempt_number:2,score_pct:80,stage_passed:true,persisted:true,
+    });
+    expect(request).toHaveBeenCalledTimes(6);
+    const first=JSON.parse(String(request.mock.calls[1][1].body));
+    const second=JSON.parse(String(request.mock.calls[4][1].body));
+    expect(first.attemptNumber).toBe(1);
+    expect(second.attemptNumber).toBe(2);
+    expect(second.eventId).not.toBe(first.eventId);
+    await expect(submit(answers)).rejects.toThrow('REOPEN_TO_RECONCILE');
+    expect(request).toHaveBeenCalledTimes(6);
+  });
   it('rejects fabricated POST grade, edition and attempt number',async()=>{
     for(const changed of [
       {score_pct:120},{edition_sha256:'b'.repeat(64)},
