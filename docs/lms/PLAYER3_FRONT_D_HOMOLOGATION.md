@@ -100,9 +100,12 @@ recusa origem de assets que não seja explicitamente HTTPS staging/QA.
 
 ## Evidência independente disponível
 
-- Preflight puro: **9/9 Vitest PASS**; ESLint e TypeScript focados PASS.
+- Preflight puro: **17/17 Vitest PASS** (inclui módulo autenticado, origem privada e allowlist de tenant); ESLint e TypeScript focados PASS.
 - Playwright da D: 3 jornadas × Chromium/WebKit = **6 testes descobertos**, não executados em staging.
 - Suíte SCORM protocolo Factory/M8 já existente: **2/2 PASS** em Chromium/WebKit (não é SCO externo nem certificado RC8.1).
 - GitHub Actions no HEAD inicial D `78a52ba52aca2b5180af535e6fa71a4db7066bb7`: oito gates PASS; cada commit posterior tem que ter sua própria evidência CI.
 
 - No HEAD desta etapa, tentativa de rodar um cenário de browser sem `PLAYER3_QA_ALLOW_WRITES` terminou com `PLAYER3_CONTRACT_MISSING:STAGING_SYNTHETIC_WRITE_APPROVAL` **antes de navegar ou ler APIs** (preflight de segurança PASS, cenário E2E intencionalmente não executado).
+
+### Limite de homologação confirmado
+Mesmo com 17 testes de contrato, 23 testes locais relevantes da B e seis E2E descobertos, **não houve execução dos 6 E2E contra staging real**. As matrículas RC8.1 e SCORM externos sintéticos, o manifesto de 42 unidades, o terminal canônico Player3, o histórico e a certidão PDF precisam de integração oficial. Não converter o status DRAFT em aprovação antes dessas evidências.
