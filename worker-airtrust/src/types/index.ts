@@ -55,6 +55,10 @@ export interface Env {
   PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS?: string;
   // Extra terminal gate; not equal to grading access. Staging only, default OFF.
   PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS?: string;
+  // Independent authored HTML5 staging launch gate; absent means OFF.
+  PLAYER3_AUTHORED_LAUNCH_ENABLED_TENANTS?: string;
+  // Isolated HTTPS content origin; never accept a URL/host from the learner.
+  PLAYER3_AUTHORED_CONTENT_ORIGIN?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
