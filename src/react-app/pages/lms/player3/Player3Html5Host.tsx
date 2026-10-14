@@ -113,7 +113,9 @@ export default function Player3Html5Host({
         pendingAssessment.context.editionSha256 !== editionSha256 &&
         <p role="alert">Avaliação indisponível: edição diferente do conteúdo autenticado.</p>}
       {!reviewOnly && terminalScope && terminalScope.editionSha256 === editionSha256 &&
-        <Player3FinalizationControls scope={terminalScope} />}
+        <Player3FinalizationControls
+          key={terminalScope.matriculaId+':'+terminalScope.cycleId+':'+terminalScope.editionSha256}
+          scope={terminalScope} />}
       {!reviewOnly && terminalScope && terminalScope.editionSha256 !== editionSha256 &&
         <p role="alert">Conclusão indisponível: edição diferente do conteúdo autenticado.</p>}
     </section>
