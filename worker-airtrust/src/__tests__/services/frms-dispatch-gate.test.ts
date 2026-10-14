@@ -267,7 +267,7 @@ describe('aggregateFlightDispatchAssessment', () => {
     };
   }
 
-  it('2) dois tripulantes, um sem check-in => voo NAO_LIBERADO', () => {
+  it('2) dois tripulantes, um sem check-in => alerta alto sem bloquear o voo', () => {
     const result = aggregateFlightDispatchAssessment([
       assessed({ funcionario_id: 1 }),
       assessed({
@@ -278,7 +278,7 @@ describe('aggregateFlightDispatchAssessment', () => {
       }),
     ]);
     expect(result.frms_status).toBe('NAO_LIBERADO');
-    expect(result.can_release).toBe(false);
+    expect(result.can_release).toBe(true);
     expect(result.frms_primary_reason).toBe('CHECKIN_DIARIO_PENDENTE');
   });
 
@@ -302,10 +302,10 @@ describe('aggregateFlightDispatchAssessment', () => {
     expect(result.can_release).toBe(true);
   });
 
-  it('voo sem tripulacao cadastrada falha fechado e nao pode ser liberado', () => {
+  it('voo sem tripulacao gera alerta informativo e FRMS nao decide liberacao', () => {
     const result = aggregateFlightDispatchAssessment([]);
     expect(result.frms_status).toBe('NAO_LIBERADO');
-    expect(result.can_release).toBe(false);
+    expect(result.can_release).toBe(true);
     expect(result.frms_primary_reason).toBe('TRIPULACAO_AUSENTE');
   });
 });
