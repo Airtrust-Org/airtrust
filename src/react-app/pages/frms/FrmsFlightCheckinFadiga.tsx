@@ -390,7 +390,7 @@ function PainelGestorTab() {
                     <td className="px-4 py-3 font-semibold text-slate-900">
                       {r.score_fadiga == null ? '—' : Math.round(Number(r.score_fadiga))}
                     </td>
-                    <td className="px-4 py-3">{badgeNivel(String(r.nivel_fadiga ?? ''))}</td>
+                    <td className="px-4 py-3">{r.nivel_fadiga == null || String(r.nivel_fadiga).trim() === '' ? 'Não avaliado' : badgeNivel(String(r.nivel_fadiga))}</td>
                     <td className="px-4 py-3 text-slate-600">
                       {statusEquipeLabel(r)}
                     </td>
