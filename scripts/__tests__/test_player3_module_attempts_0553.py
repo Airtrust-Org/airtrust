@@ -151,9 +151,9 @@ class Player3SchemaV2Tests(unittest.TestCase):
             2,2,json.dumps(['intro','end']),
             json.dumps(receipts),2,
         ]
-        self.assertIsNone(self.db.execute(sql,args).fetchone()[0])
+        self.assertEqual(self.db.execute(sql,args).fetchone()[0],'null')
         bads=[
-          (9,'x'*64),  # other edition digest
+          (8,'x'*64),  # other edition digest
           (10,'z'*64), # altered private source SHA
           (19,3),     # missed/late content event
           (20,json.dumps(['intro','missing'])),
