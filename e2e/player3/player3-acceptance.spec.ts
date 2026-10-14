@@ -314,11 +314,61 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       // or a synthetic success message is not acceptance.
       const terminalUrl=pathOn(profile.apiBaseUrl,
         '/api/lms/native/matriculas/'+d.enrollmentId+'/etapas/concluir');
-      const committedResponse=page.waitForResponse(response=>
-        response.url()===terminalUrl &&
-        response.request().method()==='POST', {timeout:45_000});
-      await page.getByTestId('player3-request-finalization').click();
-      const committed=await committedResponse;
+      const archiveBeforeUrl=pathOn(profile.apiBaseUrl,
+        '/api/lms/native/matriculas/'+d.enrollmentId+'/etapas/certificado');
+      const readinessUrl=pathOn(profile.apiBaseUrl,
+        '/api/lms/native/matriculas/'+d.enrollmentId+'/etapas/prontidao');
+      const wireEvents:string[]=[];
+      const observe=(request:{url():string;method():string})=>{
+        if([archiveBeforeUrl,readinessUrl,terminalUrl].includes(request.url())){
+          wireEvents.push(request.method()+':'+request.url());
+        }
+      };
+      page.on('request',observe);
+      let committed;
+      try{
+        // A stale UI must check postcommit history first, then Worker-graded
+        // joint readiness. Only then may it send the bodyless terminal POST.
+        const historyRead=page.waitForResponse(response=>
+          response.url()===archiveBeforeUrl &&
+          response.request().method()==='GET',{timeout:45_000});
+        const readinessRead=page.waitForResponse(response=>
+          response.url()===readinessUrl &&
+          response.request().method()==='GET',{timeout:45_000});
+        const committedResponse=page.waitForResponse(response=>
+          response.url()===terminalUrl &&
+          response.request().method()==='POST',{timeout:45_000});
+        await page.getByTestId('player3-request-finalization').click();
+        const [archiveBefore,readinessBefore,terminal]=await Promise.all([
+          historyRead,readinessRead,committedResponse,
+        ]);
+        expect(archiveBefore.ok()).toBe(true);
+        const archiveBeforeBody=await archiveBefore.json() as {
+          success:boolean;data:QaCertificateArchiveStatus;
+        };
+        expect(archiveBeforeBody.success).toBe(true);
+        expect(archiveBeforeBody.data).toMatchObject({
+          matricula_id:d.enrollmentId,ciclo_id:d.cycleId,
+          certificate_state:'ENROLLMENT_NOT_COMPLETED',
+          documento_id:null,stream_path:null,stream_verified:false,
+        });
+        expect(readinessBefore.ok()).toBe(true);
+        const readinessBeforeBody=await readinessBefore.json() as {
+          success:boolean;data:QaJointReadiness;
+        };
+        expect(readinessBeforeBody.success).toBe(true);
+        expect(validateQaJointReadiness(readinessBeforeBody.data,d,
+          d.requiredLessonIds.length,8).readyForAtomicTerminalPreflight).toBe(true);
+        const archiveIndex=wireEvents.indexOf('GET:'+archiveBeforeUrl);
+        const readinessIndex=wireEvents.indexOf('GET:'+readinessUrl);
+        const terminalIndex=wireEvents.indexOf('POST:'+terminalUrl);
+        demand(archiveIndex>=0 && readinessIndex>archiveIndex &&
+          terminalIndex>readinessIndex,
+          'PLAYER3_TERMINAL_AUTHENTICATED_PREFLIGHT_ORDER');
+        committed=terminal;
+      }finally{
+        page.off('request',observe);
+      }
       demand(committed.request().postData()===null ||
         committed.request().postData()==='',
         'TERMINAL_POST_NO_CLIENT_EVIDENCE_BODY');
