@@ -85,7 +85,7 @@ export type Player3PreparedTerminal=Readonly<{
   /** No course status, qualification or certificate is written. */
   completionSupported:false;
 }>;
-const deny=(code:string):never=>{throw new Player3StageWriteError(code);};
+function deny(code:string):never{throw new Player3StageWriteError(code);}
 export async function preparePlayer3CanonicalTerminal(input:{
   env:Env;db:D1Database;bucket:R2Bucket;actorUserId:number;
   empresaId:number;matriculaId:number;
@@ -146,12 +146,12 @@ export async function preparePlayer3CanonicalTerminal(input:{
   let categoryId:number|null=null,categoryName:string|null=null;
   let categoryCode:string|null=null;
   if(qualification){
-    let c;
+    let c:Awaited<ReturnType<typeof requireActiveQualificationCategoryById>>;
     try{
       c=await requireActiveQualificationCategoryById(
         db,empresaId,metadata.qualificacao_categoria_id!,
       );
-    }catch{deny('PLAYER3_TERMINAL_QUALIFICATION_INVALID');}
+    }catch{throw new Player3StageWriteError('PLAYER3_TERMINAL_QUALIFICATION_INVALID');}
     if(!c||!c.lmsIntegrada||c.empresaId!==empresaId){
       deny('PLAYER3_TERMINAL_QUALIFICATION_INVALID');
     }
