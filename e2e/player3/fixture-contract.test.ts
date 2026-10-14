@@ -4,6 +4,7 @@ import {
   validateQaAuthoredContentUrl,RC81_SOURCE_SHA256,
   validateQaCertificatePdf,validateQaCertificateArchiveStatus,
   validateQaAuthoredStageAttempt,
+  validateQaAuthoredLessonCheckpoint,validateQaNativeLessonSession,
   assertQaReadOnlyNonDisclosure,validateQaTerminalReceipt,
   type QaModuleSession,type QaProfile,type QaProjectFixture,
 } from './fixture-contract';
@@ -561,6 +562,52 @@ describe('Front D — real RC8.1 browser POST replay and grading boundary',()=>{
     ]) {
       expect(()=>validateQaAuthoredStageAttempt(bad,1,new Set()))
         .toThrow('RC81_PUBLIC_CHOICES_ONLY_NO_CLIENT_GRADE');
+    }
+  });
+});
+
+describe('Front D — RC8.1 original lesson D1 evidence, not 42/42 visual illusion',()=>{
+  const e={enrollmentId:600,cycleId:500,editionSha256:edition,
+    launchPath:'/qa/launch/600',snapshotPath:'/qa/snapshot/600'};
+  const ids=['lesson-a','lesson-b'];
+  const recorded={
+    matricula_id:600,ciclo_id:500,edition_sha256:edition,
+    mode:'LEARN',next_sequence:3,seen_lesson_ids:ids,
+    total_lessons:2,last_visited_unit_id:'lesson-b',
+  };
+  it('pins unique checkpoint IDs and strictly increasing sequence to reviewed lesson IDs',()=>{
+    const a=validateQaAuthoredLessonCheckpoint({
+      eventId:'v-'+'a'.repeat(32),sequence:1,unitId:'lesson-a',
+    },'lesson-a',1,new Set());
+    const b=validateQaAuthoredLessonCheckpoint({
+      eventId:'v-'+'b'.repeat(32),sequence:2,unitId:'lesson-b',
+    },'lesson-b',2,new Set([a.eventId]));
+    expect(b.sequence).toBe(2);
+    expect(validateQaNativeLessonSession(recorded,e,ids).next_sequence).toBe(3);
+  });
+  it('rejects invented completion, scores, tenant and cross-cycle evidence in lesson POST',()=>{
+    const base={eventId:'v-'+'a'.repeat(32),sequence:1,unitId:'lesson-a'};
+    for(const payload of [
+      {...base,score_pct:100},{...base,complete:true},{...base,empresa_id:9},
+      {...base,unitId:'lesson-b'},{...base,sequence:3},
+    ]){
+      expect(()=>validateQaAuthoredLessonCheckpoint(payload,'lesson-a',1,new Set()))
+        .toThrow('RC81_LESSON_CHECKPOINT_CANONICAL_ID_SEQUENCE');
+    }
+    expect(()=>validateQaAuthoredLessonCheckpoint(base,'lesson-a',1,
+      new Set([base.eventId]))).toThrow('RC81_LESSON_CHECKPOINT_EVENT_UNIQUE');
+    expect(()=>validateQaAuthoredLessonCheckpoint({...base,eventId:'v-guess'},
+      'lesson-a',1,new Set())).toThrow('RC81_LESSON_CHECKPOINT_EVENT_UNIQUE');
+  });
+  it('rejects phantom lessons, mismatched edition, mode and invalid canonical resume state',()=>{
+    for(const bad of [
+      {matricula_id:999},{ciclo_id:999},{edition_sha256:'b'.repeat(64)},
+      {mode:'REVIEW'},{seen_lesson_ids:['lesson-a','phantom']},
+      {seen_lesson_ids:['lesson-a','lesson-a']},{next_sequence:2},
+      {last_visited_unit_id:'phantom'}, {total_lessons:42},
+    ]){
+      expect(()=>validateQaNativeLessonSession({...recorded,...bad},e,ids))
+        .toThrow('RC81_NATIVE_LESSON_LEDGER_SCOPE');
     }
   });
 });
