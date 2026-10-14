@@ -9,6 +9,7 @@ import { resolve } from 'node:path';
 import {
   qaPath as pathOn, requireQa as demand, validateQaProfile,
   validateQaModuleSession,validateQaJointReadiness,validateQaCertificatePdf,
+  validateQaTerminalReceipt,
   type QaModuleSession,type QaJointReadiness,
   type QaDoutrinamento,
   type QaChoice as Choice, type QaEnrollment as Enrollment,
@@ -307,9 +308,28 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       const pre = await snapshot(context, profile, d);
       expect(pre.status).not.toBe('CONCLUIDO');
       expect(pre.certificate_id).toBeNull();
+      // The learner-visible button MUST call Front B's authenticated,
+      // bodyless, separately gated canonical terminal POST. A local toggle
+      // or a synthetic success message is not acceptance.
+      const terminalUrl=pathOn(profile.apiBaseUrl,
+        '/api/lms/native/matriculas/'+d.enrollmentId+'/etapas/concluir');
+      const committedResponse=page.waitForResponse(response=>
+        response.url()===terminalUrl &&
+        response.request().method()==='POST', {timeout:45_000});
       await page.getByTestId('player3-request-finalization').click();
+      const committed=await committedResponse;
+      demand(committed.request().postData()===null ||
+        committed.request().postData()==='',
+        'TERMINAL_POST_NO_CLIENT_EVIDENCE_BODY');
+      expect(committed.status()).toBe(200);
+      validateQaTerminalReceipt(await committed.json(),d.enrollmentId);
       await expect.poll(async () => (await snapshot(context, profile, d)).status,
         { timeout: 45_000 }).toBe('CONCLUIDO');
+      // Terminal D1 commit can precede certificate service completion.
+      // Never treat HTTP 200 or a status label as issued qualification/PDF.
+      await expect.poll(async ()=>
+        (await snapshot(context,profile,d)).certificate_id,
+        {timeout:45_000}).toBeGreaterThan(0);
       const after = await snapshot(context, profile, d);
       expect(after.progresso_pct).toBe(100);
       expect(after.completed_unit_ids).toEqual(expect.arrayContaining(
