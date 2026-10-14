@@ -435,3 +435,56 @@ Mudanças de tipagem posteriores devem ser revalidadas no SHA final.
 A PR #1389 continua DRAFT; staging, seis jornadas D, origem real A, T0/T1 C
 e PDF integral continuam pendentes. Sem migrations remotas, R2/D1 writes ou
 produção.
+
+## 2026-10-14 — Frente B: retomada autoral autenticada 21/42 → 22/42
+
+**Nova causa tratada no código:** no adaptador RC8.1 a rotina original
+`restore()` reiniciava sempre em 1/42, enquanto a entrada Player 3 não
+carregava o cursor persistido do Worker; a navegação visual do iframe não
+enviava checkpoints para o ledger Native. O usuário que voltasse no
+meio do treinamento não retomaria realmente na página seguinte.
+
+**Contrato implementado nesta branch**, exclusivamente sob gates de
+staging já OFF por padrão:
+
+1. O manifesto de lançamento `learnerContent` exige agora também
+   `orderedUnitIdsSha256`: SHA-256 em hex minúsculo dos bytes UTF-8 de
+   `JSON.stringify(course.artifact.units.map(u => u.id))` com ordem
+   autoral exata, validada/aceita independentemente na edição aprovada.
+   Isto é **adicional** ao `sourceStageCrosswalkSha256`; nunca
+   substituir pelo hash sintético `reviewZipSha256` da Frente A.
+2. `GET /matriculas/:id/etapas/lancamento` consulta o mesmo estado
+   de sessão Native autenticado do Worker que o cliente já usa em
+   `/sessao`: exige mesma empresa, matrícula, ciclo, edição e modo
+   `LEARN`, IDs originais únicos, enumeração imutável e hashes
+   equivalentes. Retorna `resume_next_unit_id` (a unidade **após** o
+   último checkpoint, não a última vista),
+   `checkpoint_unit_ids` (somente lessons) e
+   `last_visited_unit_id`, sem expor credenciais/banco privado.
+   Divergência ⇒ HTTP 409 fail-closed, sem fallback certificador.
+3. Ao carregar o iframe, `Player3Html5Host` encaminha
+   `AIRTRUST_PLAYER3_RESUME_CURSOR_V1` ao frame/HTTPS origin exatos.
+   O RC8.1 adaptado localiza a unidade **por ID autoral**, não por
+   contador visual/SCORM; após posicionar, retorna
+   `AIRTRUST_PLAYER3_RESUME_ACK_V1`. A retomada não atribui nota,
+   não executa conclusão e não altera o ledger por si só.
+4. Só após o ACK do frame correto e o contrato conferido no Worker,
+   uma visita a ID de lesson da allowlist aprovada pode executar
+   `GET /matriculas/:id/sessao → POST /matriculas/:id/checkpoints
+   → GET /matriculas/:id/sessao`. O Worker revalida autenticação,
+   tenant, ciclo, hash de edição, sequência e existência da lesson;
+   tentativa/grade/certificado não fazem parte do payload. Se POST
+   ou a reconsulta ficarem ambíguos, o transporte bloqueia novos
+   envios e exige reabertura/reconciliação, sem retry automático.
+
+**QA focada sintética:** testes Python/Node simulam 42 páginas e a
+retomada 21→22 (inclusive IDs ausentes/duplicados); testes Vitest do
+Worker validam o hash da ordenação, edição, ciclo e ledger; testes
+React validam origem e ACK do iframe, resposta de sessão, checkpoint
+idempotente e bloqueio após falha de transporte. Não significa que
+o RC8.1 privado foi recompilado/aberto de verdade com esta nova versão,
+nem que houve persistência D1 remota. O `orderedUnitIdsSha256`
+definitivo, edição-alvo, origem de conteúdo, 8 avaliações e a
+revisão pedagógica seguem aguardando aprovação. O gate real de seis
+jornadas Chromium/WebKit da D continua pendente. **Nenhum deploy,
+migrations, matrícula real ou produção ocorreu.**
