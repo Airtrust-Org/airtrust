@@ -289,3 +289,49 @@ pois seus gates/default OFF, schemas e ativos ainda não foram autorizados
 e preparados em ambiente QA real. Cabe à B testar especificamente 401/403,
 404 default-off, rejeição de corpo, ciclos/tenant concorrentes e rollback
 antes da implantação governada.
+
+## 14/10/2026 — Driver da experiência autoral RC8.1 (Frente D)
+
+A D não depende mais do antigo `Player3AssessmentModal` para o roteiro
+**Doutrinamento RC8.1**. O driver `e2e/player3/rc81-authored-driver.ts`
+reproduz cliques sobre o **iframe original**, usando exclusivamente os
+seletores visualmente atestados pelo teste opt-in da fábrica A:
+`#viewport .screen[data-unit]`, `#count`, `.assessment-page`,
+`[data-answer]`, `#qNext`, `#next`, `[data-gate]` e `[data-opt]`.
+Nenhum gabarito, nota, LMSSetValue, mudança artificial de DOM ou
+requisição direta de avaliação é usado para aprovar um aluno.
+
+**Contrato privado obrigatoriamente revisado:** 42 unidades visuais,
+oito telas com avaliações de dez perguntas (80 questões), cada
+`official.stageId` igual ao ID autoral de sua tela
+(`slide.id`/`data-unit`), perguntas e rótulos de alternativas exatos,
+`lessonId` somente quando a unidade realmente produz recibo no Worker.
+Um rótulo de opção ausente, duplicado ou parecido apenas por substring
+faz o teste reprovar; as respostas corretas/incorretas ficam somente
+no perfil **sintético privado** e nunca no repositório ou nos artefatos
+de navegador compartilhados.
+
+Ao enviar as alternativas pelo controle `#next` do autor, o Playwright
+observa `POST /etapas/:stageId/tentativas` emitido pela UI B, confirma
+apenas `eventId`, `attemptNumber`, `answers` no corpo, e exige
+recibo persistido e nova leitura da sessão no Worker. Exige primeiro
+uma reprovação real com `Nova tentativa`, depois aprovação com
+`Continuar`/`Concluir curso`, sem transformar o último slide em
+certificado. A navegação `#next`, perda/retorno da internet, retomada
+após nova sessão, conclusão bodyless, D1, histórico único e PDF real
+permanecem provas obrigatórias.
+
+**Evidências de desenvolvimento SHA `f0055405a4257e81fdb23c4222d4955138d12762`:**
+46/46 casos Vitest PASS, ESLint PASS, TypeScript focado PASS;
+seis testes Playwright identificados em Chromium/WebKit, mas
+**nenhuma jornada de staging foi executada**. São testes de contrato
+e código de driver — não equivalem a teste do ZIP original ou a
+homologação do LMS. A execução positiva requer artefato RC8.1 de SHA
+canônico, crosswalk revisado, HTML5/Worker/Pages/D1 autorizados em
+staging, seis matrículas sintéticas e credenciais segregadas de QA.
+
+**Não bloquear a B:** esta adaptação do roteiro autoral foi concluída
+na PR D #1465. A B #1389 pode continuar o mount autenticado do Host,
+a obtenção do contexto/URL e a governança de Schema V2 sem aguardar
+o E2E. A D permanece draft até rodar realmente os seis testes e
+inspecionar a fidelidade autoral e certificados.
