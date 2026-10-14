@@ -217,6 +217,28 @@ export function evaluateStaleness({ contract, rootDir }) {
     return { status: 'FAIL', issues };
   }
 
+  // Guard the monotonically allocated Schema V2 number, not just the full
+  // filename/changeId. Distinct files named 0552_<FRMS> and 0552_<LMS>
+  // previously passed filename-level staleness even though deployment order
+  // would be ambiguous. The historical 0454 pair predates this convention;
+  // enforce unique numeric allocation for 0550+ without rewriting history.
+  const allocatedVersions = new Map();
+  for (const file of sqlFiles) {
+    const match = /^(\\d{4})_/.exec(file);
+    if (!match || Number(match[1]) < 550) continue;
+    const previous = allocatedVersions.get(match[1]);
+    if (previous) {
+      fail(
+        'STALENESS_DUPLICATE_SCHEMA_V2_NUMBER',
+        `Schema V2 numero ${match[1]} reservado por ${previous} e ${file}. ` +
+          'Renumerar a mudança ainda não aplicada, atualizar manifest, hashes, plano e CI.',
+        { change_file: file },
+      );
+    } else {
+      allocatedVersions.set(match[1], file);
+    }
+  }
+
   const onDisk = sqlFiles.map((name) => {
     const content = readFileSync(path.join(changesDirAbs, name), 'utf8');
     return {
