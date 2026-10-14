@@ -214,7 +214,7 @@ function selectedScaleClasses(severidade: EscalaSeveridade): string {
 
 export function isFadigaCheckinSubmitReady(input: {
   sonoOpcao: SonoOpcao | null;
-  repousoHoras: number | null;
+  repousoHoras?: number | null;
   presentationTime: string;
   wakeTime: string;
   qualidadeSono: number | null;
@@ -229,9 +229,10 @@ export function isFadigaCheckinSubmitReady(input: {
   const wakeTimeValid = isValidWakeTime(input.wakeTime);
   return (
     input.sonoOpcao !== null &&
-    input.repousoHoras !== null &&
-    input.repousoHoras >= 0 && input.repousoHoras <= 24 && input.repousoHoras >=
-      SONO_OPCOES.find((o) => o.key === input.sonoOpcao)!.horas &&
+    (input.repousoHoras == null ||
+      (Number.isFinite(input.repousoHoras) && input.repousoHoras >= 0 &&
+       input.repousoHoras <= 24 &&
+       input.repousoHoras >= SONO_OPCOES.find((o) => o.key === input.sonoOpcao)!.horas)) &&
     presentationTimeValid &&
     wakeTimeValid &&
     input.qualidadeSono !== null &&
@@ -628,7 +629,6 @@ export default function FrmsFlightCheckinFadiga() {
     (wakeTimeTouched || submitAttempted) && wakeTimeHasValue && !wakeTimeValid;
 
   const missingItems: string[] = [];
-  if (repousoHoras === null) missingItems.push('Oportunidade de sono (repouso absoluto)');
   if (sonoOpcao === null) missingItems.push('Sono efetivamente obtido');
   if (sonoOpcao !== null && repousoHoras !== null &&
     repousoHoras <
@@ -642,7 +642,7 @@ export default function FrmsFlightCheckinFadiga() {
     if (!wakeTimeHasValue) missingItems.push('Hora em que acordou');
     else missingItems.push('Horário inválido - corrija a hora em que acordou');
   }
-  if (qualidadeSono === null) missingItems.push('Qualidade do repouso absoluto');
+  if (qualidadeSono === null) missingItems.push('Qualidade do sono');
   if (kssScore === null) missingItems.push('Nível de sonolência (KSS)');
   if (vigilanceResult === null) missingItems.push('Teste breve de atenção e tempo de reação');
   if (fitForDutyChoice === null) missingItems.push('Condição para iniciar a jornada');
@@ -696,7 +696,7 @@ export default function FrmsFlightCheckinFadiga() {
         wake_time: wakeTimeNormalized!,
         // Separate observed self-report of sleep from opportunity for sleep/rest.
         horas_sono_24h: SONO_OPCOES.find((o) => o.key === sonoOpcao!)!.horas,
-        oportunidade_sono_horas_24h: repousoHoras!,
+        oportunidade_sono_horas_24h: repousoHoras ?? undefined,
         qualidade_sono: qualidadeSono!,
         kss_score: kss,
         subjective_fatigue_level: subjectiveFatigueLevel,
@@ -839,7 +839,11 @@ export default function FrmsFlightCheckinFadiga() {
             <div className="space-y-3">
               <FormCard label="Bloco 1 - Repouso e sono" hint="Oportunidade de sono é tempo disponível para descansar em ambiente adequado, mesmo sem adormecer. Sono efetivo é o tempo realmente dormido.">
                 <div className="space-y-4">
-                  <div>
+                  <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <summary className="cursor-pointer text-sm font-medium text-slate-700">
+                      Informar oportunidade de sono (repouso absoluto) — opcional
+                    </summary>
+                    <div className="mt-3">
                     <label htmlFor="oportunidade-sono" className="mb-2 block text-sm font-medium text-slate-700">
                       Oportunidade de sono (repouso absoluto) nas últimas 24h
                     </label>
@@ -853,7 +857,9 @@ export default function FrmsFlightCheckinFadiga() {
                         className="w-28 min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-semibold" />
                       <span className="text-sm text-slate-600">horas (valor informado)</span>
                     </div>
-                  </div>
+                    <p className="mt-2 text-xs text-slate-500">Não é obrigatório preencher. Sem esta informação, o sistema não presume oportunidade de sono para conceder crédito de recuperação.</p>
+                    </div>
+                  </details>
                 <div className="space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
@@ -1187,8 +1193,9 @@ export default function FrmsFlightCheckinFadiga() {
                 </div>
               </FormCard>
 
-              <FormCard label="Bloco 5 - Fatores relevantes" hint="Esses itens são opcionais.">
-                <div className="space-y-4">
+              <details className="rounded-2xl border border-slate-200 bg-white p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-800">Fatores adicionais (opcional)</summary>
+                <div className="mt-4 space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
                       Medicação que pode causar sonolência
@@ -1211,7 +1218,7 @@ export default function FrmsFlightCheckinFadiga() {
                     />
                   </fieldset>
                 </div>
-              </FormCard>
+              </details>
 
               <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
