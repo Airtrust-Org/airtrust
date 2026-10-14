@@ -43,7 +43,7 @@ function validContext(context: P3ExamContext): boolean {
         !Array.isArray(q.options) || q.options.length < 2 || q.options.length > 12) return false;
     questions.add(q.id);
     const options = new Set<string>();
-    return q.options.every(o => {
+    return q.options.every((o: {id:string}) => {
       if (!o || !ID.test(o.id) || options.has(o.id)) return false;
       options.add(o.id);
       return true;
