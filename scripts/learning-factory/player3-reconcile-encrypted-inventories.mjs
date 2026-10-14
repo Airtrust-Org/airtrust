@@ -101,8 +101,15 @@ const cycleBad=(r)=>!r || !Number.isSafeInteger(r.ciclo_id) ||
   (r.matricula_status==='NAO_INICIADO' && r.matricula_progresso_pct>0);
 const older=(before,now)=>before!=null &&
   (now==null||!validDate(before)||!validDate(now)||stamp(now)<stamp(before));
+// Detect changes to canonical scoring, attempts, and lifecycle evidence even
+// when the displayed percentage and bookmark stay fixed. Never classify an
+// altered grade as unchanged ahead of independent administrative review.
 const changedEvidence=(a,b)=>[
   'matricula_updated_at','ciclo_updated_at','scorm_last_commit_at',
+  'matricula_score_final','matricula_tentativas',
+  'matricula_data_inicio','matricula_data_conclusao',
+  'ciclo_score_final','ciclo_tentativas',
+  'scorm_id','scorm_score_raw',
   'ultimo_slide','ultima_pagina','scorm_suspend_data_PRIVATE',
   'scorm_cmi_json_PRIVATE','xapi_statement_count','xapi_last_event_at',
   'scorm_lesson_status','scorm_completion_status','scorm_success_status',
@@ -131,7 +138,8 @@ export function reconcileRows(t0Rows,t1Rows){
     else if(a.ciclo_id!==b.ciclo_id || a.ciclo_numero!==b.ciclo_numero)
       disposition='CYCLE_CHANGED_REVIEW';
     else if(cycleBad(a)||cycleBad(b))disposition='SOURCE_CONFLICT_REVIEW';
-    else if(a.curso_version_tag!==b.curso_version_tag ||
+    else if(a.tipo_conteudo!==b.tipo_conteudo ||
+      a.curso_version_tag!==b.curso_version_tag ||
       a.scorm_versao!==b.scorm_versao ||
       a.catalog_current_scorm_sha256!==b.catalog_current_scorm_sha256 ||
       a.catalog_current_scorm_version!==b.catalog_current_scorm_version)

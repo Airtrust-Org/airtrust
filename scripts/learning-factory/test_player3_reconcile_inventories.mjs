@@ -115,6 +115,31 @@ test('detects a new SCORM bookmark even if the percentage is unchanged',()=>{
   const b={...a,scorm_suspend_data_PRIVATE:'{"a":"module_3"}'};
   assert.equal(reconcileRows([a],[b]).decisions[0].disposition,'EVIDENCE_UPDATED_REVIEW');
 });
+test('same-percent grades, attempts and lifecycle changes are never called unchanged',()=>{
+  const a=make(853,80,{
+    matricula_score_final:70,matricula_tentativas:1,
+    ciclo_score_final:70,ciclo_tentativas:1,scorm_score_raw:70,
+    scorm_id:314,matricula_data_inicio:'2026-10-12 12:00:00',
+    matricula_data_conclusao:null,
+  });
+  const changed=[
+    ['matricula_score_final',90],['matricula_tentativas',2],
+    ['ciclo_score_final',90],['ciclo_tentativas',2],
+    ['scorm_score_raw',90],['scorm_id',315],
+    ['matricula_data_inicio','2026-10-13 12:00:00'],
+    ['matricula_data_conclusao','2026-10-14 14:00:00'],
+  ];
+  for(const [field,value] of changed){
+    const result=reconcileRows([a],[{...a,[field]:value}]);
+    assert.equal(result.decisions[0].disposition,'EVIDENCE_UPDATED_REVIEW',field);
+    assert.equal(result.decisions[0].grants_completion,false,field);
+  }
+  // Switching the active content transport requires edition review even
+  // if a catalog revision tag was not correctly incremented.
+  const transportChange=reconcileRows([a],[{...a,tipo_conteudo:'native'}]);
+  assert.equal(transportChange.decisions[0].disposition,'SOURCE_EDITION_CHANGED_REVIEW');
+});
+
 test('preserves historic cycles for authorized tenant and detects same-percent history changes',()=>{
   const a=make(855,80,{ciclos_historicos_json_PRIVATE:JSON.stringify([
     {id:900,empresa_id:6,matricula_id:855,numero_ciclo:1,
