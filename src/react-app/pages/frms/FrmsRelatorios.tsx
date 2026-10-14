@@ -424,7 +424,7 @@ export default function FrmsRelatorios() {
             <section aria-label="Conclusões e próximas ações do relatório" className="border-b border-slate-200 bg-slate-50 p-5">
               <h2 className="text-base font-bold text-slate-900">O que os dados indicam e o que verificar</h2>
               <p className="mt-1 text-xs text-slate-600">
-                Síntese interpretativa de {data.length} registro(s) retornado(s). Não comprova aptidão nem liberação operacional.
+                Síntese interpretativa de {orderedData.length} registro(s) retornado(s). Não comprova aptidão nem liberação operacional.
               </p>
               <div className="mt-4 grid gap-3 lg:grid-cols-2">
                 {insights.map((insight) => (
