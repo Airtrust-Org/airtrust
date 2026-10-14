@@ -32,6 +32,9 @@ export function classifyMaintenanceItem(item: FrmsMaintenanceTeamItem): Maintena
   }
 
   if (!item.checkin_id || !item.readiness_id) return 'PENDING';
+  // Uma sessão PVT concluída não é evidência de prontidão preservada enquanto
+  // o baseline individual não estiver confirmado. Nenhum score é alterado.
+  if (readiness !== 'preserved' || item.baseline_ready !== 1) return 'PENDING';
   return 'NORMAL';
 }
 
@@ -44,6 +47,12 @@ export function maintenanceActionText(bucket: MaintenanceDecisionBucket, item?: 
     case 'PENDING':
       if (item?.checkin_id && !item.readiness_id) return 'Check-in recebido; solicitar PVT/Readiness antes da atividade operacional.';
       if (!item?.checkin_id && item?.readiness_id) return 'PVT/Readiness recebido; solicitar check-in antes da atividade operacional.';
+      if (item?.checkin_id && item.readiness_id) {
+        if (normalized(item.readiness_classification) === 'baseline_building' || item.baseline_ready !== 1) {
+          return 'Check-in e PVT recebidos, mas baseline individual ainda não confirmado; prontidão inconclusiva. Encaminhar à gestão de Manutenção para avaliação antes de tarefa crítica.';
+        }
+        return 'Check-in e PVT recebidos, mas classificação da prontidão não confirmada. Solicitar revisão pela gestão de Manutenção.';
+      }
       return 'Solicitar check-in e PVT/Readiness antes da atividade operacional.';
     case 'NORMAL':
       return 'Sem ação imediata; manter monitoramento normal da jornada.';
