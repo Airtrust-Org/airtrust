@@ -762,7 +762,8 @@ describe('FrmsCheckinFadiga UI', () => {
     const status = screen.getByRole('status');
     expect(status).toBeInTheDocument();
     expect(status).toHaveTextContent(/respostas pendentes/);
-    expect(status).toHaveTextContent(/oportunidade de sono/i);
+    expect(status).toHaveTextContent(/Sono efetivamente obtido/);
+    expect(status).not.toHaveTextContent(/Oportunidade de sono \(repouso absoluto\)/);
     expect(status).toHaveTextContent(/Hora de apresentação/);
     expect(status).toHaveTextContent(/e mais/);
   });
