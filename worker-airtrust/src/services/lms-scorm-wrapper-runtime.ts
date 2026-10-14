@@ -86,6 +86,64 @@ function resolveProbedScormLocation(authored, explicitLocation, domLocation) {
 }
 
 /**
+ * Fingerprint de autosave por evidência: considera somente os campos SCORM
+ * canônicos e o mapa de visitas, sem o ruído de session_time/total_time do CMI.
+ * O fingerprint é extraído do snapshot enviado (e não do CMI mutável atual),
+ * para uma resposta HTTP atrasada não suprimir um commit subsequente.
+ */
+export function buildScormPayloadFingerprintScript(): string {
+  return `
+  function fingerprintPayload(data) {
+    try {
+      var d = data || {};
+      var saved = null;
+      try { saved = typeof d.cmi_json === 'string' ? JSON.parse(d.cmi_json) : null; }
+      catch (_cmiParseError) { saved = null; }
+      var total = saved && Number.isSafeInteger(saved['airtrust.total_slides'])
+        ? saved['airtrust.total_slides'] : null;
+      var seen = saved && Array.isArray(saved['airtrust.viewed_slides'])
+        ? saved['airtrust.viewed_slides'] : null;
+      return JSON.stringify([d.lesson_status, d.completion_status, d.success_status,
+        d.score_raw, d.suspend_data, getScormLocation(), total, seen]);
+    } catch (_error) { return ''; }
+  }
+`;
+}
+
+/**
+ * Observação de telas SCORM independente da posição máxima persistida.
+ * Deve executar no mesmo escopo do wrapper; a tela revisitada é registrada
+ * antes do guard que protege o bookmark e apenas no total de slides da edição.
+ */
+export function buildScormVisitTrackingScript(): string {
+  return `
+  // A visit and the last saved bookmark are independent facts. Record the
+  // actual package-authored page BEFORE protecting a regressive bookmark.
+  // Returns true only when this session observed a previously absent page.
+  function updateMaxVisitedFromLocation(location) {
+    var parsed = parseLocationPair(location);
+    if (!parsed || parsed.total <= 0 || parsed.total > 1000 ||
+        parsed.current < 1 || parsed.current > parsed.total) return false;
+    // A different slide total is a different edition, not a missing visit.
+    var persistedTotal = cmi['airtrust.total_slides'];
+    if (persistedTotal != null && Number(persistedTotal) !== parsed.total) return false;
+    if (parsed.current > maxVisitedSlide) maxVisitedSlide = parsed.current;
+    var previous = Array.isArray(cmi['airtrust.viewed_slides'])
+      ? cmi['airtrust.viewed_slides'] : [];
+    var seen = previous.filter(function(n) {
+      return Number.isInteger(n) && n >= 1 && n <= parsed.total;
+    });
+    if (seen.indexOf(parsed.current) >= 0) return false;
+    seen.push(parsed.current);
+    seen.sort(function(a, b) { return a - b; });
+    cmi['airtrust.viewed_slides'] = seen;
+    cmi['airtrust.total_slides'] = parsed.total;
+    return true;
+  }
+`;
+}
+
+/**
  * Parsers de progresso a partir do DOM do frame do pacote. Puros: dependem
  * apenas dos argumentos (`text` / `doc`).
  */
@@ -249,7 +307,8 @@ export function buildScormSessionCloseRuntimeScript(): string {
           }
         }
       } catch (_terminateError) { /* termination best-effort */ }
-      setStatus('Sessão encerrada', false);
+      setStatus(status === 'closed' ? 'Sessão encerrada' :
+        'Sessão encerrada sem confirmação da última gravação', status !== 'closed', status !== 'closed');
       postToParent({
         type: 'lms:session-close:ack',
         matriculaId: MATRICULA_ID,
@@ -263,11 +322,11 @@ export function buildScormSessionCloseRuntimeScript(): string {
 
     try {
       Promise.resolve(commit(buildPayload(), 0, 'SCORM_FINISH')).then(
-        function() { finish('closed'); },
-        function() { finish('closed'); }
+        function(response) { finish(response && response.ok ? 'closed' : 'save-unconfirmed'); },
+        function() { finish('save-unconfirmed'); }
       );
     } catch (_commitError) {
-      finish('closed');
+      finish('save-unconfirmed');
     }
   }
 
@@ -382,10 +441,40 @@ export function buildScormQueuedCommitScript(): string {
     }
   }
 
+  // A queued commit is NOT persisted yet. Its Promise must settle only
+  // after the queued HTTP write finishes; otherwise session-close can ACK
+  // and unload the iframe before SCORM_FINISH / USER_FINALIZE reaches D1.
   function queueLatestCommit(data, eventType) {
-    if (!queuedCommit ||
-        queuedCommitPriority(eventType) >= queuedCommitPriority(queuedCommit.eventType)) {
-      queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
-    }
+    return new Promise(function(resolve) {
+      if (!queuedCommit) {
+        queuedCommit = {
+          data: data, eventType: eventType || 'SCORM_COMMIT',
+          waiters: [resolve],
+        };
+        return;
+      }
+      queuedCommit.waiters.push(resolve);
+      // Preserve the most important terminal event, but every caller awaits
+      // that single eventual write (including lower-priority close requests).
+      if (queuedCommitPriority(eventType) >= queuedCommitPriority(queuedCommit.eventType)) {
+        queuedCommit.data = data;
+        queuedCommit.eventType = eventType || 'SCORM_COMMIT';
+      }
+    });
+  }
+
+  function flushQueuedCommit() {
+    if (commitInFlight || !queuedCommit) return;
+    var next = queuedCommit;
+    queuedCommit = null;
+    // A queued final event must be persisted before any waiter receives ACK.
+    Promise.resolve(commit(next.data, 0, next.eventType)).then(
+      function(response) {
+        next.waiters.forEach(function(resolve) { resolve(response); });
+      },
+      function() {
+        next.waiters.forEach(function(resolve) { resolve(null); });
+      }
+    );
   }`;
 }

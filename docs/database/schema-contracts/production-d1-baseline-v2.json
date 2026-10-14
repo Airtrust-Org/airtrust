@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-11",
-    "last_reconciled_against": "0549 FDM Tripulação on main and renumbered 0550 Native V1 in PR #1389; neither presumed applied remotely",
-    "schema_v2_digest": "3a7ae5b63abc2a927a2fab1d42029563d693a54d36810b19830ccda470c55496",
+    "last_reconciled_at": "2026-10-14",
+    "last_reconciled_against": "0550/0551 main authoritative; 0552 LMS Native evidence candidate remote apply pending, no D1 write",
+    "schema_v2_digest": "ce7c0dde71da22c053a1e4a82f047e0fadfbc8135a404bcbeea5e8d6a9d15055",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -440,18 +440,6 @@
       "reviewed_manifest": null
     },
     {
-      "change_file": "0454_qualificacoes_tipos_dominio_override.sql",
-      "change_id": null,
-      "sha256": "6aef100bbff18241eae3c067b5c9aadc647a17145fcd136f300cb57244b2b2f6",
-      "targets": [
-        "qualificacoes_tipos"
-      ],
-      "domain": "qualificacoes_tipos operational-domain override (base statement)",
-      "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REPO_EXPECTED",
-      "reviewed_manifest": null
-    },
-    {
       "change_file": "0454_qualificacoes_tipos_dominio_override_reconcile_existing.sql",
       "change_id": "qualificacoes-tipos-dominio-override-0454",
       "sha256": "ca185d203fc0cc11b26be9fb829057c618c6d5f471adadfdba3c67f9526521a3",
@@ -462,6 +450,18 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "qualificacoes-tipos-dominio-override-0454.json"
+    },
+    {
+      "change_file": "0454_qualificacoes_tipos_dominio_override.sql",
+      "change_id": null,
+      "sha256": "6aef100bbff18241eae3c067b5c9aadc647a17145fcd136f300cb57244b2b2f6",
+      "targets": [
+        "qualificacoes_tipos"
+      ],
+      "domain": "qualificacoes_tipos operational-domain override (base statement)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
     },
     {
       "change_file": "0456_lms_h5p_course_binding.sql",
@@ -1420,6 +1420,18 @@
       "note": "0541 is a reviewed, tenant-6 only forward prerequisite for FDM three audiences 0536, needed because production read-only showed no TREINAMENTO_OPERACIONAL category. It creates the canonical category only if absent, without employee/LMS/history writes. File/manifest is not evidence of application; apply through governed Schema V2 after exact release authorization. Production PRAGMA confirms lms_integrada is absent, so reviewed SQL and production postconditions avoid this staging-only field."
     },
     {
+      "change_file": "ead-category-reconciliation-executor-0453.sql",
+      "change_id": null,
+      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
+      "targets": [
+        "ead_category_reconciliation_runs"
+      ],
+      "domain": "EAD category reconciliation executor ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
+    },
+    {
       "change_file": "0542_lms_scorm_formative_assessment_policy.sql",
       "change_id": "lms-scorm-formative-assessment-0542",
       "sha256": "85fe3b4766ef1010c29d3cc314cbc9bd8345d467ea0cb811473f403d51cd36cb",
@@ -1518,33 +1530,45 @@
       "note": "Data-only consolidation: preserves published course 71, its nine completed and two open enrolments, nine historical completions and two function requirements while retiring FDM-TRIPULACAO. Governed production application requires the exact reviewed manifest, D1 recovery point and postconditions."
     },
     {
-      "change_file": "0550_lms_native_v1_evidence.sql",
-      "change_id": "lms-native-v1-evidence-0550",
-      "sha256": "2b698c7810d26a9873480105294e4daa6eb37fc9b9bf5c46937f888e21e879fc",
+      "change_file": "0550_usuarios_costa_do_sol_viewer_aluno.sql",
+      "change_id": "usuarios-costa-do-sol-viewer-aluno-0550",
+      "sha256": "6b01667b60ee8893ce7ed65064644dd9caa7df7100e930415caf66ee5feecf64",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 user-profile authority reconciliation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "usuarios-costa-do-sol-viewer-aluno-0550.json",
+      "evidence": "worker-airtrust/schema-v2/plans/usuarios-costa-do-sol-viewer-aluno-0550.md",
+      "note": "Read-only production audit 2026-10-13: 26 student users have VIEWER default/explicit roles; separate single coordination identity retains COORDENACAO_VOO. Reviewed SQL updates only tenant 6 with guards, and awaits governed Schema V2 apply with recovery point and exact authorization. No production D1 write claimed. D1 TEMP transport removed after SQLITE_AUTH. New authorized apply pending."
+    },
+    {
+      "change_file": "0551_coordenacao_role_user_restore.sql",
+      "change_id": "coordenacao-role-user-restore-0551",
+      "sha256": "8a77552a043d5ed08625c938790f583de13d0cbf2ad4040dea1970556c95489f",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 coordination-only restoration of USER profile",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "coordenacao-role-user-restore-0551.json",
+      "evidence": "worker-airtrust/schema-v2/plans/coordenacao-role-user-restore-0551.md",
+      "note": "Data-only compensation to restore the sole coordination account to USER while preserving all 26 students converted by 0550. D1 write requires separate governed authorization."
+    },
+    {
+      "change_file": "0552_lms_native_v1_evidence.sql",
+      "change_id": "lms-native-v1-evidence-0552",
+      "sha256": "2eef2cf2732115efbf05fd4ad57b163196cc787c83c8dc10312cfc957e1daf95",
       "targets": [
         "lms_native_edicoes",
         "lms_native_eventos",
         "lms_native_matricula_edicoes",
         "lms_native_tentativas"
       ],
-      "domain": "LMS Native V1 / tenant-scoped immutable course editions, enrollment-cycle pins, evidence ledger and private assessment attempts",
+      "domain": "LMS Native V1 — course edition, enrollment-cycle pin, evidence event ledger, immutable private grading attempts",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "lms-native-v1-evidence-0550.json",
-      "evidence": "worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0550.md",
-      "note": "Governed additive Schema V2 candidate only. No remote D1 application or catalog native CHECK change claimed. Four new tables do not belong to the 13 scoped production snapshot tables. Staging/production preflight, backup and current SHA authorization remain required."
-    },
-    {
-      "change_file": "ead-category-reconciliation-executor-0453.sql",
-      "change_id": null,
-      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
-      "targets": [
-        "ead_category_reconciliation_runs"
-      ],
-      "domain": "EAD category reconciliation executor ledger",
-      "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REPO_EXPECTED",
-      "reviewed_manifest": null
+      "reviewed_manifest": "lms-native-v1-evidence-0552.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0552.md",
+      "note": "Versioned additive candidate for Player 3, pending governed Schema V2 preflight and recovery point. No staging/production migration, student data writes, or course publication has occurred."
     }
   ]
 }

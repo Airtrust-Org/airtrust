@@ -1,5 +1,6 @@
 # ========== DEPENDENCIES ==========
 node_modules/
+node_modules.incomplete-generated/
 *.npm
 *.yarn
 *.pnp

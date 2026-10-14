@@ -4,6 +4,7 @@ import {createDecipheriv,randomBytes} from 'node:crypto';
 import {normalizeD1Rows,sealInventory,summarize} from './player3-seal-active-inventory.mjs';
 const row={
   empresa_id:6,matricula_id:911,curso_id:57,funcionario_id:123,
+  inventory_total_expected:1,
   matricula_status:'EM_ANDAMENTO',matricula_progresso_pct:80,
   ciclo_id:332,ciclo_status:'EM_ANDAMENTO',ciclo_atual:1,ciclo_progresso_pct:80,
   scorm_suspend_data_PRIVATE:'{"secret":"resume-marker"}',
@@ -45,6 +46,11 @@ test('fails closed on any unauthorized tenant in D1 export or ciphertext',()=>{
   assert.throws(()=>normalizeD1Rows([{results:[row,outside]}]),/CROSS_TENANT/);
   assert.throws(()=>sealInventory([outside],randomBytes(32)),/CROSS_TENANT/);
   assert.throws(()=>sealInventory([row,outside],randomBytes(32)),/CROSS_TENANT/);
+});
+test('detects truncated D1 payload before encrypting any learner records',()=>{
+  assert.throws(()=>normalizeD1Rows([{results:[{...row,inventory_total_expected:2}]}]),/INCOMPLETE_EXPORT/);
+  assert.throws(()=>sealInventory([{...row,inventory_total_expected:2}],randomBytes(32)),/INCOMPLETE_EXPORT/);
+  assert.throws(()=>normalizeD1Rows([{results:[]}]),/EMPTY_SNAPSHOT/);
 });
 test('rejects a key that cannot provide AES-256-GCM',()=>{
   assert.throws(()=>sealInventory([row],Buffer.alloc(16)),/INVALID_KEY/);

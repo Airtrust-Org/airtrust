@@ -5,6 +5,7 @@ import {
   isOperationallyRelevant,
   operationalConfidence,
   resolveFrmsCoordinationGuidance,
+  resolveFrmsActionLane,
   resolveOperationalDataMoment,
   trustedEffectiveness,
 } from '../frmsOperationalDecision';
@@ -54,6 +55,31 @@ function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperati
 }
 
 describe('frmsOperationalDecision', () => {
+  it('distingue espera do dia em aberto de dados retrospectivos sem reduzir o risco', () => {
+    const incomplete = item({
+      teve_jornada: false, teve_atividade_frms: false, jornada_data_source: 'AUSENTE',
+      fatorizacao_status: 'AUSENTE', snapshot_status: 'INCOMPLETO',
+      estado_operacional: 'NAO_AVALIADO',
+    });
+    expect(classifyOperationalItem(incomplete)).toBe('CONFIRMAR');
+    expect(resolveFrmsActionLane(incomplete, '2026-08-27')).toBe('AGUARDAR');
+    expect(resolveFrmsActionLane(incomplete, '2026-08-28')).toBe('EVIDENCIA');
+    expect(resolveFrmsActionLane(item({ snapshot_status: 'CRITICO' }), '2026-08-27')).toBe('REVISAO');
+    expect(resolveFrmsActionLane(item({ checkin_status: 'PENDENTE' }), '2026-08-27')).toBe('CHECKIN');
+    expect(resolveFrmsActionLane(item(), '2026-08-27')).toBe('SEM_ACAO');
+  });
+
+  it('mantém sinal de atenção acima da espera e não cobra check-in futuro antecipado', () => {
+    expect(resolveFrmsActionLane(item({
+      data_operacional: '2026-08-28', checkin_status: 'PENDENTE',
+      teve_jornada: false, jornada_data_source: 'AUSENTE',
+    }), '2026-08-27')).toBe('AGUARDAR');
+    expect(resolveFrmsActionLane(item({
+      data_operacional: '2026-08-27', checkin_status: 'RECEBIDO',
+      snapshot_status: 'ATENCAO', jornada_data_source: 'AUSENTE', teve_jornada: false,
+    }), '2026-08-27')).toBe('REVISAO');
+  });
+
   it('nunca classifica snapshot incompleto como normal', () => {
     expect(
       classifyOperationalItem(
@@ -224,9 +250,10 @@ describe('frmsOperationalDecision', () => {
       jornada_data_source: 'AUSENTE',
       fatorizacao_status: 'AUSENTE',
       effectiveness_pct: null,
-      checkin_status: 'NAO_APLICAVEL',
-      estado_operacional: 'NORMAL',
-      alertas: [],
+      checkin_status: 'PENDENTE',
+      estado_operacional: 'NAO_AVALIADO',
+      snapshot_status: 'ATENCAO',
+      alertas: ['CHECKIN_PENDENTE'],
       fortnight_indicator: {
         periodo_inicio: '2026-08-16',
         periodo_fim: '2026-08-30',
@@ -269,7 +296,38 @@ describe('frmsOperationalDecision', () => {
     });
 
     expect(isOperationallyRelevant(rosterOnly)).toBe(true);
-    expect(classifyOperationalItem(rosterOnly)).toBe('NORMAL');
+    expect(classifyOperationalItem(rosterOnly)).toBe('CONFIRMAR');
+    const guidance = resolveFrmsCoordinationGuidance(rosterOnly, '2026-08-27');
+    expect(guidance.requiresCheckin).toBe(true);
+    expect(guidance.checkinLabel).toBe('Pendente');
+    expect(guidance.action).toContain('mesmo sem voo programado');
+    expect(operationalConfidence(rosterOnly)).toBe('BAIXA');
+    // Snapshot antigo NAO_APLICAVEL não pode esconder a obrigação já resolvida da quinzena.
+    const legacy = { ...rosterOnly, checkin_status: 'NAO_APLICAVEL' as const, alertas: [] };
+    expect(resolveFrmsCoordinationGuidance(legacy, '2026-08-27').checkinLabel).toBe('Pendente');
+    expect(classifyOperationalItem(legacy)).toBe('CONFIRMAR');
+  });
+
+  it('nao omite check-in pendente de roster comprovado quando faltam datas do indicador', () => {
+    const semAncora = item({
+      na_quinzena_ativa: true,
+      operacao_requer_decisao: false,
+      escalado: false,
+      teve_jornada: false,
+      hora_apresentacao: null,
+      checkin_status: 'PENDENTE',
+      snapshot_status: 'ATENCAO',
+      estado_operacional: 'NAO_AVALIADO',
+      alertas: ['CHECKIN_PENDENTE'],
+      fortnight_indicator: {
+        periodo_inicio: null,
+        periodo_fim: null,
+        status_quinzena: 'INCOMPLETO',
+      } as FrmsOperationalSnapshotItem['fortnight_indicator'],
+    });
+    expect(isOperationallyRelevant(semAncora)).toBe(true);
+    expect(classifyOperationalItem(semAncora)).toBe('CONFIRMAR');
+    expect(resolveFrmsCoordinationGuidance(semAncora, '2026-08-27').checkinLabel).toBe('Pendente');
   });
 
   it('não coloca na fila check-in isolado quando a quinzena não foi resolvida', () => {

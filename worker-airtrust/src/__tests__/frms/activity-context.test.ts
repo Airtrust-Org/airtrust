@@ -219,3 +219,23 @@ describe('FRMS activity context', () => {
     }
   });
 });
+
+describe('Prior-day declared administrative time', () => {
+  it('keeps administrative duty separate from training without rewriting legacy labels', async () => {
+    const sqlSeen: string[] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => {
+        sqlSeen.push(sql);
+        return { bind: () => ({ all: async () => ({ results: [] }) }) };
+      }),
+    } as unknown as D1Database;
+    await loadFrmsActivityRows(db, 63, '2026-10-12', '2026-10-12');
+    const reported = sqlSeen.find(sql => sql.includes('FROM frms_recovery_activity_day rd') &&
+      sql.includes('rd.duty_start_time AS hora_inicio'));
+    expect(reported).toContain("rd.notes");
+    expect(reported).toContain("'Trabalho administrativo'");
+    expect(reported).toContain("THEN 'ATIVIDADE'");
+    expect(reported).toContain("WHEN rd.activity_type = 'ADMIN_TRAINING' THEN 'TREINAMENTO'");
+    expect(reported).toContain("rd.duty_end_time AS hora_fim");
+  });
+});

@@ -10,7 +10,7 @@ import type { CvFrmsOperacionalPainel } from '@/react-app/hooks/useControleVoos'
 // Controle Operacional FRMS / Gate de Despacho V1 — painel compacto da
 // Coordenacao. Reusa exatamente a resposta ja sanitizada do backend
 // (`GET /controle-voos/operacional`), entao o teste de frontend cobre
-// apenas apresentação: estados LIBERÁVEL/ATENÇÃO/NÃO LIBERADO, contadores e
+// apenas apresentação: estados de alerta FRMS (independentes da liberacao), contadores e
 // que nenhum dado sensivel (KSS/sono) aparece renderizado.
 
 vi.mock('@/react-app/services/apiClient', () => ({
@@ -77,7 +77,7 @@ function painel(overrides: Partial<CvFrmsOperacionalPainel> = {}): CvFrmsOperaci
 }
 
 describe('ControleOperacionalFrmsPanel', () => {
-  it('mostra contadores e o estado NAO_LIBERADO quando ha check-in pendente', async () => {
+  it('mostra alerta consultivo quando ha check-in pendente', async () => {
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/operacional')) return apiOk(painel());
       throw new Error(`unexpected url ${url}`);
@@ -86,9 +86,30 @@ describe('ControleOperacionalFrmsPanel', () => {
     renderWithClient(<ControleOperacionalFrmsPanel />);
 
     await waitFor(() => expect(screen.getAllByText('ATX-1001', { exact: false }).length).toBeGreaterThan(0));
-    expect(screen.getByText('NÃO LIBERADO')).toBeInTheDocument();
+    expect(screen.getByText('ALERTA FRMS')).toBeInTheDocument();
     expect(screen.getByText('Piloto Ficticio A', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('Ausente')).toBeInTheDocument();
+  });
+
+  it('mostra horario UTC em Brasilia e nunca o ISO bruto da programacao', async () => {
+    getMock.mockImplementation(async (url: string) => {
+      if (url.includes('/operacional')) return apiOk(painel());
+      throw new Error(`unexpected url ${url}`);
+    });
+    renderWithClient(<ControleOperacionalFrmsPanel />);
+    await waitFor(() => expect(screen.getByText(/07:00.*Brasília/)).toBeInTheDocument());
+    expect(document.body.textContent).not.toContain('2026-08-24T10:00:00Z');
+  });
+
+  it('nao presume o fuso de programacao quando o timestamp nao o informa', async () => {
+    const response = painel();
+    response.voos[0].horario_previsto_partida = '2026-08-24T10:00:00';
+    getMock.mockImplementation(async (url: string) => {
+      if (url.includes('/operacional')) return apiOk(response);
+      throw new Error(`unexpected url ${url}`);
+    });
+    renderWithClient(<ControleOperacionalFrmsPanel />);
+    await waitFor(() => expect(screen.getByText(/fuso não informado/)).toBeInTheDocument());
   });
 
   it('não apresenta NAO_APLICAVEL ou INDISPONIVEL como check-in liberado', async () => {
@@ -108,7 +129,7 @@ describe('ControleOperacionalFrmsPanel', () => {
     expect(await screen.findByText('Não confirmado')).toBeInTheDocument();
     expect(screen.getByText('Indisponível')).toBeInTheDocument();
     expect(screen.queryByText('N/A')).not.toBeInTheDocument();
-    expect(screen.getAllByText('NÃO LIBERADO').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('ALERTA FRMS').length).toBeGreaterThan(0);
   });
 
   it('expande a linha do tripulante e mostra o motivo sanitizado (sem dado sensivel)', async () => {
@@ -129,7 +150,7 @@ describe('ControleOperacionalFrmsPanel', () => {
     expect(document.body.textContent).not.toMatch(/kss|qualidade_sono|horas_sono|medica|alcool/i);
   });
 
-  it('distingue LIBERÁVEL de voo efetivamente LIBERADO com check-in recebido', async () => {
+  it('distingue ausencia de alerta FRMS do status operacional de liberacao', async () => {
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/operacional')) {
         return apiOk(
@@ -175,7 +196,7 @@ describe('ControleOperacionalFrmsPanel', () => {
     renderWithClient(<ControleOperacionalFrmsPanel />);
 
     await waitFor(() => expect(screen.getAllByText('ATX-1002', { exact: false }).length).toBeGreaterThan(0));
-    expect(screen.getAllByText('LIBERÁVEL').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('SEM ALERTAS').length).toBeGreaterThan(0);
     expect(screen.queryByText('LIBERADO')).not.toBeInTheDocument();
     expect(screen.getByText('Recebido')).toBeInTheDocument();
   });

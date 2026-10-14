@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { useApi } from '@/react-app/hooks/useApi';
+import { deriveFrmsReportInsights } from './frmsReportInsights';
 
 function toDateKeyLocal(date: Date): string {
   const year = date.getFullYear();
@@ -128,6 +129,29 @@ function formatMonthLabel(monthKey: string): string {
   });
 }
 
+const ALERT_LEVEL_ORDER: Record<string, number> = {
+  VIOLACAO: 0,
+  CRITICO: 1,
+  ATENCAO: 2,
+  AVISO: 3,
+};
+
+function orderReportRows(tipo: TipoRelatorio, rows: FrmsReportRow[]): FrmsReportRow[] {
+  if (tipo !== 'alertas-historico') return rows;
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const severity = (ALERT_LEVEL_ORDER[a.row.nivel ?? ''] ?? 4) - (ALERT_LEVEL_ORDER[b.row.nivel ?? ''] ?? 4);
+      if (severity !== 0) return severity;
+      const closure = Number(Boolean(a.row.resolvido_em)) - Number(Boolean(b.row.resolvido_em));
+      if (closure !== 0) return closure;
+      const date = Date.parse(b.row.created_at ?? '') - Date.parse(a.row.created_at ?? '');
+      if (Number.isFinite(date) && date !== 0) return date;
+      return a.index - b.index;
+    })
+    .map(({ row }) => row);
+}
+
 export default function FrmsRelatorios() {
   const navigate = useNavigate();
   const [tipo, setTipo] = useState<TipoRelatorio>('compliance');
@@ -152,9 +176,11 @@ export default function FrmsRelatorios() {
 
   const { data: rawData, loading, error, refetch } = useApi<FrmsReportRow[] | FrmsReportEnvelope>(endpoint, { requireAuth: true });
   const data = Array.isArray(rawData) ? rawData : rawData?.data ?? null;
+  const orderedData = useMemo(() => (data ? orderReportRows(tipo, data) : null), [data, tipo]);
   const reportMeta = rawData && !Array.isArray(rawData) ? rawData.meta ?? null : null;
   const invalidResponse = rawData != null && !Array.isArray(rawData) && !Array.isArray(rawData.data);
   const reportError = error || (invalidResponse ? 'Resposta inválida recebida do serviço de relatórios.' : null);
+  const insights = orderedData && orderedData.length > 0 ? deriveFrmsReportInsights(tipo, orderedData) : [];
 
   const reportPeriodLabel =
     tipo === 'compliance'
@@ -238,33 +264,33 @@ export default function FrmsRelatorios() {
 
     if (tipo === 'compliance') {
       csvContent += ['Tripulante', 'Dias avaliados', 'Conformes', 'Violações', 'Não avaliados', 'Mitigação', 'Atenção', 'Fontes normativas'].map(csvCell).join(',') + '\n';
-      for (const row of data) {
+      for (const row of orderedData ?? []) {
         csvContent += [
           row.nome || row.tripulante_id,
-          row.dias_avaliados ?? 0,
-          row.dias_conformes ?? 0,
-          row.dias_violacao ?? 0,
-          row.dias_nao_avaliados ?? 0,
-          row.dias_mitigacao ?? 0,
-          row.dias_atencao ?? 0,
+          row.dias_avaliados ?? '',
+          row.dias_conformes ?? '',
+          row.dias_violacao ?? '',
+          row.dias_nao_avaliados ?? '',
+          row.dias_mitigacao ?? '',
+          row.dias_atencao ?? '',
           Array.isArray(row.fontes_normativas) ? row.fontes_normativas.join(' | ') : '',
         ].map(csvCell).join(',') + '\n';
       }
     } else if (tipo === 'mapa-fadiga') {
       csvContent += ['Tripulante', 'HV 7d%', 'HV Mês%', 'HV 365d%', 'Nível Max', 'Repouso OK'].map(csvCell).join(',') + '\n';
-      for (const row of data) {
+      for (const row of orderedData ?? []) {
         csvContent += [
           row.nome || row.tripulante_id,
           row.pct_7d ?? '',
           row.pct_mes ?? '',
           row.pct_365d ?? '',
           row.nivel_max ?? '',
-          row.repouso_suficiente ? 'Sim' : 'Não',
+          row.repouso_suficiente == null ? '' : row.repouso_suficiente ? 'Sim' : 'Não',
         ].map(csvCell).join(',') + '\n';
       }
     } else {
       csvContent += ['Data', 'Tripulante', 'Nível', 'Tipo Limite', 'Mensagem', 'Resolvido'].map(csvCell).join(',') + '\n';
-      for (const row of data) {
+      for (const row of orderedData ?? []) {
         csvContent += [
           row.created_at ? row.created_at.slice(0, 10) : '',
           row.nome_tripulante || row.tripulante_id,
@@ -291,10 +317,10 @@ export default function FrmsRelatorios() {
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-4">
           <button
-            onClick={() => navigate('/frms?vista=analise')}
+            onClick={() => navigate('/frms')}
             className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
           >
-            <ArrowLeft className="h-4 w-4" /> Análise & Evidências
+            <ArrowLeft className="h-4 w-4" /> Voltar à Operação
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold text-gray-900">Relatórios FRMS</h1>
@@ -394,6 +420,28 @@ export default function FrmsRelatorios() {
         </div>
 
         <div id="frms-report-content" className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          {!reportError && !loading && orderedData && orderedData.length > 0 ? (
+            <section aria-label="Conclusões e próximas ações do relatório" className="border-b border-slate-200 bg-slate-50 p-5">
+              <h2 className="text-base font-bold text-slate-900">O que os dados indicam e o que verificar</h2>
+              <p className="mt-1 text-xs text-slate-600">
+                Síntese interpretativa de {orderedData.length} registro(s) retornado(s). Não comprova aptidão nem liberação operacional.
+              </p>
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {insights.map((insight) => (
+                  <article key={insight.key} className="rounded-lg border border-slate-200 bg-white p-4">
+                    <p className="text-sm font-bold text-slate-900">{insight.title}</p>
+                    <p className="mt-2 text-sm text-slate-700">{insight.explanation}</p>
+                    <p className="mt-2 text-sm text-slate-800"><strong>Próxima ação:</strong> {insight.action}</p>
+                  </article>
+                ))}
+              </div>
+              {reportMeta?.limitations?.length ? (
+                <p className="mt-3 text-xs text-amber-800">Limitações da fonte: {reportMeta.limitations.join(' · ')}</p>
+              ) : (
+                <p className="mt-3 text-xs text-slate-600">Limitações da fonte não informadas nesta resposta: confirme escopo e atualização antes de decidir.</p>
+              )}
+            </section>
+          ) : null}
           {reportError ? (
             <div className="flex flex-col items-center gap-3 p-10 text-center">
               <AlertTriangle className="h-8 w-8 text-amber-500" />
@@ -411,17 +459,17 @@ export default function FrmsRelatorios() {
             </div>
           ) : loading ? (
             <div className="p-12 text-center text-gray-400">Carregando relatório...</div>
-          ) : !data || data.length === 0 ? (
+          ) : !orderedData || orderedData.length === 0 ? (
             <div className="flex flex-col items-center gap-2 p-12 text-center text-gray-400">
               <FileText className="h-8 w-8" />
               Nenhum dado encontrado para o recorte deste relatório
             </div>
           ) : tipo === 'compliance' ? (
-            <ComplianceTable data={data} />
+            <ComplianceTable data={orderedData} />
           ) : tipo === 'mapa-fadiga' ? (
-            <MapaFadigaTable data={data} />
+            <MapaFadigaTable data={orderedData} />
           ) : (
-            <AlertasHistoricoTable data={data} />
+            <AlertasHistoricoTable data={orderedData} />
           )}
         </div>
       </div>
@@ -448,20 +496,20 @@ function ComplianceTable({ data }: { data: FrmsReportRow[] }) {
           {data.map((r, i) => (
             <tr key={i} className="hover:bg-gray-50/50" title={Array.isArray(r.fontes_normativas) ? r.fontes_normativas.join('\n') : undefined}>
               <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}</td>
-              <td className="px-4 py-2.5 text-center text-gray-600">{r.dias_avaliados ?? 0}</td>
-              <td className="px-4 py-2.5 text-center font-semibold text-emerald-700">{r.dias_conformes ?? 0}</td>
+              <td className="px-4 py-2.5 text-center text-gray-600">{r.dias_avaliados ?? '—'}</td>
+              <td className="px-4 py-2.5 text-center font-semibold text-emerald-700">{r.dias_conformes ?? '—'}</td>
               <td className="px-4 py-2.5 text-center">
                 <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.dias_violacao ?? 0) > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {r.dias_violacao ?? 0}
+                  {r.dias_violacao ?? '—'}
                 </span>
               </td>
               <td className="px-4 py-2.5 text-center">
                 <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${(r.dias_nao_avaliados ?? 0) > 0 ? 'bg-slate-200 text-slate-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {r.dias_nao_avaliados ?? 0}
+                  {r.dias_nao_avaliados ?? '—'}
                 </span>
               </td>
-              <td className="px-4 py-2.5 text-center text-orange-700">{r.dias_mitigacao ?? 0}</td>
-              <td className="px-4 py-2.5 text-center text-amber-700">{r.dias_atencao ?? 0}</td>
+              <td className="px-4 py-2.5 text-center text-orange-700">{r.dias_mitigacao ?? '—'}</td>
+              <td className="px-4 py-2.5 text-center text-amber-700">{r.dias_atencao ?? '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -497,23 +545,27 @@ function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
                   ? 'bg-amber-100 text-amber-800'
                   : r.nivel_max === 'AVISO'
                     ? 'bg-yellow-100 text-yellow-800'
-                    : 'bg-green-100 text-green-800';
+                    : r.nivel_max === 'OK'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-slate-100 text-slate-600';
           return (
             <tr key={i} className="hover:bg-gray-50/50">
               <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}</td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_7d?.toFixed(1) ?? '—'}%</td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_mes?.toFixed(1) ?? '—'}%</td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_365d?.toFixed(1) ?? '—'}%</td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_7d == null ? '—' : `${r.pct_7d.toFixed(1)}%`}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_mes == null ? '—' : `${r.pct_mes.toFixed(1)}%`}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_365d == null ? '—' : `${r.pct_365d.toFixed(1)}%`}</td>
               <td className="px-4 py-2.5 text-center">
                 <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${nivelColor}`}>
-                  {r.nivel_max || 'OK'}
+                  {r.nivel_max || 'Não avaliado'}
                 </span>
               </td>
               <td className="px-4 py-2.5 text-center">
-                {r.repouso_suficiente ? (
-                  <span className="text-xs font-bold text-emerald-500">✓</span>
+                {r.repouso_suficiente == null ? (
+                  <span className="text-xs font-bold text-slate-500">Não avaliado</span>
+                ) : r.repouso_suficiente ? (
+                  <span className="text-xs font-bold text-emerald-600">Sim</span>
                 ) : (
-                  <span className="text-xs font-bold text-red-500">✗</span>
+                  <span className="text-xs font-bold text-red-600">Insuficiente</span>
                 )}
               </td>
             </tr>
@@ -526,6 +578,7 @@ function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
 
 function AlertasHistoricoTable({ data }: { data: FrmsReportRow[] }) {
   return (
+    <div className="overflow-x-auto">
     <table className="w-full text-left text-sm">
       <thead>
         <tr className="border-b border-gray-100 bg-gray-50/50">
@@ -548,7 +601,7 @@ function AlertasHistoricoTable({ data }: { data: FrmsReportRow[] }) {
               </span>
             </td>
             <td className="px-4 py-2.5 text-xs text-gray-500">{r.tipo_limite ? (TIPO_LIMITE_LABEL[r.tipo_limite] ?? r.tipo_limite) : '—'}</td>
-            <td className="max-w-xs truncate px-4 py-2.5 text-gray-700">{r.mensagem}</td>
+            <td className="min-w-72 max-w-md whitespace-normal break-words px-4 py-2.5 text-gray-700">{r.mensagem || 'Mensagem não informada'}</td>
             <td className="px-4 py-2.5 text-center">
               {r.resolvido_em ? (
                 <span className="text-xs font-bold text-emerald-500">Sim</span>
@@ -560,5 +613,9 @@ function AlertasHistoricoTable({ data }: { data: FrmsReportRow[] }) {
         ))}
       </tbody>
     </table>
+    <p className="border-t border-gray-100 px-4 py-3 text-xs text-slate-500">
+      Ordenado por gravidade, casos sem encerramento e data mais recente. A mensagem completa está visível na linha.
+    </p>
+    </div>
   );
 }

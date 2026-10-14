@@ -22,9 +22,9 @@ import sqlite3
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SQL_0550 = ROOT / 'worker-airtrust/schema-v2/changes/0550_lms_native_v1_evidence.sql'
-SQL_0551 = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0551.REVIEW-ONLY.sql.txt'
-SQL_0552 = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-canonical-completion-0552.REVIEW-ONLY.sql.txt'
+SQL_0550 = ROOT / 'worker-airtrust/schema-v2/changes/0552_lms_native_v1_evidence.sql'
+SQL_0551 = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0553.REVIEW-ONLY.sql.txt'
+SQL_0552 = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-canonical-completion-0554.REVIEW-ONLY.sql.txt'
 
 REQUIRED_TABLES = frozenset({
     'empresas', 'funcionarios', 'usuarios', 'lms_cursos', 'lms_matriculas',

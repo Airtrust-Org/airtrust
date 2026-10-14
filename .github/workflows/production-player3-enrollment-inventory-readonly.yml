@@ -1,6 +1,6 @@
 name: Player 3 Enrollment Inventory Readonly (Encrypted)
 
-# Protected, main-only read of Costa do Sol (empresa_id=6) LMS enrollments. This workflow
+# Protected, main-only read of every active LMS enrollment. This workflow
 # never writes D1/R2 or publishes individual student/course data to logs.
 on:
   workflow_dispatch:
@@ -53,7 +53,6 @@ jobs:
           const body=sql.split('\n').filter(line=>!line.trimStart().startsWith('--')).join('\n').trim();
           if(!/^SELECT\b/i.test(body) || !body.endsWith(';') ||
              body.slice(0,-1).includes(';') ||
-             !/WHERE\s+m\.empresa_id\s*=\s*6\s+AND\s+m\.deleted_at\s+IS\s+NULL\s+AND\s+m\.status\s+IN\s*\('EM_ANDAMENTO','NAO_INICIADO'\)/i.test(body) ||
              /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|ATTACH|DETACH|VACUUM|PRAGMA|TRIGGER)\b/i.test(body)){
             throw new Error('PLAYER3_SQL_REVIEW_FAILED');
           }
@@ -77,7 +76,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           AIRTRUST_PLAYER3_SNAPSHOT_KEY_B64: ${{ secrets.AIRTRUST_PLAYER3_SNAPSHOT_KEY_B64 }}
           AIRTRUST_PLAYER3_SNAPSHOT_KEY_ID: 'player3-cutover-2026'
-          AIRTRUST_PLAYER3_TARGET_TENANT_ID: '6'
         run: |
           set -euo pipefail
           [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$AIRTRUST_PLAYER3_SNAPSHOT_KEY_B64" ]] || {
@@ -107,8 +105,7 @@ jobs:
           console.log('- Total current enrollments: '+s.enrollments);
           console.log('- In progress: '+s.active);
           console.log('- Not started: '+s.unstarted);
-          console.log('- Authorized tenant: Costa do Sol (empresa_id=6)');
-          if(s.tenants>1) throw new Error('CROSS_TENANT_SUMMARY_REJECTED');
+          console.log('- Tenants covered: '+s.tenants);
           console.log('- Courses covered: '+s.courses);
           console.log('- Source conflicts requiring review: '+s.conflicts);
           console.log('- With SCORM resume state: '+s.with_scorm_resume_state);

@@ -11,8 +11,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0550_lms_native_v1_evidence.sql'
-CANDIDATE = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0551.REVIEW-ONLY.sql.txt'
+CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0552_lms_native_v1_evidence.sql'
+CANDIDATE = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0553.REVIEW-ONLY.sql.txt'
 OLD_NATIVE = "c.tipo_conteudo='native'"
 EFFECTIVE_NATIVE = """(c.tipo_conteudo='native' OR (
   c.tipo_conteudo='scorm' AND EXISTS (
@@ -116,11 +116,11 @@ def fixture():
     # evolves its physical-type triggers without altering any real database.
     ddl = CHANGE.read_text(encoding='utf8')
     if ddl.count(OLD_NATIVE) != 4:
-        raise AssertionError('NATIVE_0550_PREDICATE_CONTRACT_DRIFT')
+        raise AssertionError('NATIVE_0552_PREDICATE_CONTRACT_DRIFT')
     db.executescript(ddl)
     candidate = CANDIDATE.read_text(encoding='utf8')
     if candidate.count("DROP TRIGGER lms_native_") != 4:
-        raise AssertionError('NATIVE_0551_CANDIDATE_TRIGGER_DRIFT')
+        raise AssertionError('NATIVE_0553_CANDIDATE_TRIGGER_DRIFT')
     db.executescript(candidate)
     db.execute('INSERT INTO lms_native_catalog_activation(curso_id,empresa_id) VALUES(10,6)')
     db.commit()

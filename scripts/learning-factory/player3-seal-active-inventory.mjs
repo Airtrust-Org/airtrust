@@ -41,6 +41,11 @@ export function normalizeD1Rows(input){
     }
   }
   assert(rows.length<=100000,'TOO_MANY_ENROLLMENTS');
+  // D1/transport truncation must never silently discard students.
+  // The SELECT includes COUNT(*) OVER () for the identical tenant/status scope.
+  assert(rows.length>0,'EMPTY_SNAPSHOT_REQUIRES_INDEPENDENT_COUNT');
+  assert(rows.every(r=>Number.isSafeInteger(r.inventory_total_expected) &&
+    r.inventory_total_expected===rows.length),'INCOMPLETE_EXPORT');
   return rows;
 }
 export function summarize(rows){
@@ -71,6 +76,8 @@ export function summarize(rows){
 export function sealInventory(rows,key,keyId='player3-private'){
   assert(Array.isArray(rows) && rows.every(r=>r.empresa_id===AUTHORIZED_TENANT_ID),
     'CROSS_TENANT_EXTRACT_REJECTED');
+  assert(rows.length>0 && rows.every(r=>r.inventory_total_expected===rows.length),
+    'INCOMPLETE_EXPORT');
   assert(Buffer.isBuffer(key)&&key.length===32,'INVALID_KEY');
   assert(typeof keyId==='string'&&/^[a-z0-9][a-z0-9_-]{0,63}$/.test(keyId),'INVALID_KEY_ID');
   const summary=summarize(rows);

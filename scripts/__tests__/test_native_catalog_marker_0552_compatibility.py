@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 CHANGE = Path(__file__).resolve().parents[2] / (
-    'worker-airtrust/schema-v2/changes/0550_lms_native_v1_evidence.sql')
+    'worker-airtrust/schema-v2/changes/0552_lms_native_v1_evidence.sql')
 ORIGINAL_NATIVE = "c.tipo_conteudo='native'"
 CANDIDATE_NATIVE = """(c.tipo_conteudo='native'
  OR (c.tipo_conteudo='scorm' AND EXISTS (

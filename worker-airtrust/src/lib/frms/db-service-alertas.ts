@@ -79,6 +79,7 @@ export async function buscarAlertas(
   const rows = await db
     .prepare(
       `SELECT a.*,
+          COUNT(*) OVER (PARTITION BY a.tripulante_id) AS recorrencias_no_filtro,
           j.data as data_jornada,
           j.data as data_fato,
               COALESCE(f.nome, 'Tripulante #' || a.tripulante_id) as nome_tripulante

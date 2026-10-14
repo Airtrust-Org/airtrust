@@ -100,6 +100,8 @@ export interface FrmsOperationalSnapshotItem {
   aeronave: string | null;
 
   escalado: boolean;
+  /** Escala vigente confirmou presenca na quinzena, ainda que faltasse fatorizacao. */
+  na_quinzena_ativa?: boolean;
   /** Indica se existe operação ou declaração de atividade que exige decisão no dia. */
   operacao_requer_decisao?: boolean;
   escala_source: 'SIGVOOS' | 'MANUAL' | 'EVD' | 'AUSENTE';
@@ -120,6 +122,8 @@ export interface FrmsOperationalSnapshotItem {
 
   checkin_status: 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
   checkin_horario: string | null;
+  /** Instante UTC de envio; hora_checkin legada permanece para compatibilidade. */
+  checkin_submitted_at?: string | null;
   kss_score: number | null;
   horas_sono: number | null;
   qualidade_sono: number | null;

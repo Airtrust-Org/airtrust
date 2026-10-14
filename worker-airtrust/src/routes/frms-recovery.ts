@@ -60,6 +60,13 @@ const activitySchema = z
     segments: z.array(segmentSchema).max(3).optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.activity_type === 'ADMIN_TRAINING' && !value.notes?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['notes'],
+        message: 'Informe se foi treinamento ou atividade administrativa.',
+      });
+    }
     if (value.activity_type === 'MIXED' && (!value.segments || value.segments.length < 2)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

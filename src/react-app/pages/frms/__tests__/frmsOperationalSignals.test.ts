@@ -187,6 +187,40 @@ describe('resolveEffectivenessSignal', () => {
     expect(s.tone).toBe('warning');
   });
 
+  it('preserva a faixa canônica de atenção do motor mesmo sem alerta crítico', () => {
+    const s = resolveEffectivenessSignal(
+      item({ effectiveness_pct: 85.6, nivel_fadiga_calculado: 'ATENCAO', alertas: [] }),
+    );
+    expect(s.value).toBe('85,6%');
+    expect(s.tone).toBe('warning');
+    expect(s.detail).toContain('Faixa de efetividade informada pelo motor: ATENCAO');
+  });
+
+  it('trata os rótulos canônicos amarelo e transição como faixa de atenção', () => {
+    for (const nivel of ['amarelo', 'transição']) {
+      const s = resolveEffectivenessSignal(
+        item({ effectiveness_pct: 70, nivel_fadiga_calculado: nivel, alertas: [] }),
+      );
+      expect(s.tone).toBe('warning');
+    }
+  });
+
+  it('preserva a faixa crítica do motor mesmo sem alerta de snapshot', () => {
+    const s = resolveEffectivenessSignal(
+      item({ effectiveness_pct: 64, nivel_fadiga_calculado: 'VERMELHO', alertas: [] }),
+    );
+    expect(s.tone).toBe('critical');
+  });
+
+  it('usa faixa desconhecida quando o snapshot não informa a classificação', () => {
+    const s = resolveEffectivenessSignal(
+      item({ effectiveness_pct: 85.6, nivel_fadiga_calculado: null, alertas: [] }),
+    );
+    expect(s.value).toBe('85,6%');
+    expect(s.tone).toBe('unknown');
+    expect(s.detail).toContain('Faixa de efetividade não informada');
+  });
+
   it('estado crítico → vermelho', () => {
     const s = resolveEffectivenessSignal(
       item({ effectiveness_pct: 40, estado_operacional: 'CRITICO_VIOLACAO' }),

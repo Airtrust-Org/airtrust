@@ -19,7 +19,7 @@ SELECT json(CASE WHEN
   AND (SELECT COUNT(*) FROM lms_native_matricula_edicoes)=0
   AND (SELECT COUNT(*) FROM lms_native_eventos)=0
   AND (SELECT COUNT(*) FROM lms_native_tentativas)=0
-THEN 'null' ELSE 'NATIVE_0551_CANDIDATE_PREFLIGHT_DENIED' END);
+THEN 'null' ELSE 'NATIVE_0553_CANDIDATE_PREFLIGHT_DENIED' END);
 
 CREATE TABLE lms_native_catalog_activation (
   curso_id INTEGER PRIMARY KEY REFERENCES lms_cursos(id) ON DELETE RESTRICT,
