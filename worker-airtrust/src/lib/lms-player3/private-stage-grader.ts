@@ -29,6 +29,9 @@ export type Player3ApprovedPolicy = Readonly<{
   source_sha256:string;courseId:string;editionSha256:string;
   certificationApproved:true;
   stages:readonly Player3StagePolicy[];
+  /** Optional, independently approved immutable authored HTML5 launch metadata.
+   * Absent on legacy/review-only editions; Worker launch remains OFF. */
+  learnerContent?:unknown;
 }>;
 export type Player3StageSubmission = Readonly<{
   stageId:string;answers:readonly Readonly<{questionId:string;optionId:string}>[];
