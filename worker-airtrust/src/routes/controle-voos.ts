@@ -1320,6 +1320,20 @@ controleVoos.post('/voos/:id/status', auth(), requireControleVoosWrite(), async 
   const descricao = normalizeString(payload.descricao, 'descricao');
 
   assertStatusTransition(existing.status, status);
+  // Tripulacao cadastrada e requisito do proprio Controle de Voos; FRMS
+  // permanece exclusivamente consultivo (check-in/indicadores nao vetam liberacao).
+  if (existing.status === 'planejado' && status === 'liberado_operacionalmente') {
+    const crewCount = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS total FROM cv_voo_tripulantes WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL',
+    ).bind(existing.id, empresaId).first<{ total: number }>();
+    if (Number(crewCount?.total ?? 0) === 0) {
+      throw new ApiError(
+        'Cadastrar a tripulacao do voo antes da liberacao operacional',
+        409,
+        'CONTROLE_VOOS_CREW_REQUIRED',
+      );
+    }
+  }
   if (status === 'cancelado' && !motivoId && (!descricao || descricao.trim().length < 10)) {
     throw new ApiError(
       'Motivo operacional obrigatorio para cancelamento',
