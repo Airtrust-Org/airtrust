@@ -8,13 +8,14 @@ const row={
   ciclo_id:332,ciclo_status:'EM_ANDAMENTO',ciclo_atual:1,ciclo_progresso_pct:80,
   scorm_suspend_data_PRIVATE:'{"secret":"resume-marker"}',
   scorm_cmi_json_PRIVATE:'{"cmi":"PRIVATE_LEARNING_STATE"}',
+  xapi_statement_count:1,
 };
 test('accepts fixed read-only D1 result and counts only aggregate fields',()=>{
   const rows=normalizeD1Rows([{results:[row]}]);
   assert.equal(rows.length,1);
   assert.deepEqual(summarize(rows),{
     enrollments:1,active:1,unstarted:0,tenants:1,
-    courses:1,conflicts:0,with_scorm_resume_state:1,
+    courses:1,conflicts:0,with_scorm_resume_state:1,with_xapi_events:1,
     contains_individual_data:false,
   });
 });
