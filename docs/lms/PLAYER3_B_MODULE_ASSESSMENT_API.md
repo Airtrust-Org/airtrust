@@ -262,3 +262,34 @@ a transação terminal ou inventar a emissão.
 QA local: 44/44 testes focados do serviço de certificado, rota HTTP
 e writer de conclusão + Worker TypeScript (verificar execução final).
 Nenhum certificado foi emitido no staging/produção nesta entrega.
+
+## Fechamento resiliente do aluno — reconciliação após resposta ambígua
+
+O componente `Player3FinalizationControls` consulta primeiro **GET**
+`/api/lms/native/matriculas/:id/etapas/certificado`. Se a matrícula e o
+ciclo atual já estiverem `CONCLUIDO`, a tela não envia novo POST. Caso ainda
+estejam ativos, exige a leitura de prontidão `/etapas/prontidao` e só então
+envia uma única solicitação sem corpo para `/etapas/concluir`.
+
+Se o POST retornar sucesso, a tela valida o recibo do Writer e consulta o
+arquivo de certificado separadamente. `REQUIRES_VERIFICATION` nunca afirma
+existência do PDF; `PDF_HEADER_VERIFIED` afirma somente o cabeçalho, não o
+download integral. Cursos cujo contrato não gera qualificação exigem
+`qualification_not_required` com `NOT_APPLICABLE` e não inventam PDF.
+
+Em erro, timeout, perda de conexão **depois de iniciar o POST** ou recibo
+ambíguo, a interface faz apenas uma nova leitura autenticada de
+`/etapas/certificado`. Caso o D1 já registre `CONCLUIDO` para a mesma
+matrícula/ciclo, apresenta conclusão registrada; se não, **permanece incerta,
+sem reenviar o terminal**. O botão `Consultar situação da conclusão` é
+somente leitura e serve para futuras verificações, inclusive de um certificado
+que seja arquivado posteriormente. A identidade da matrícula, o ciclo e
+a edição são imutáveis para essa instância da interface; a troca de ciclo
+remonta o componente, impedindo herdar o estado de conclusão anterior.
+
+**Validação sintética:** 25/25 Vitest em três arquivos de frontend,
+ESLint focado PASS em worktree isolado. Inclui timeout após COMMIT,
+reconciliação posterior, recibo falso, ciclo/tenant de sessão divergente,
+curso sem qualificação e consulta sem segundo POST. O documento PDF integral,
+o replay após desconexão Safari/Chromium e a persistência real seguem para
+homologação independente da Frente D em staging.

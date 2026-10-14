@@ -147,6 +147,11 @@ export function makePlayer3VerifiedStageSubmitter(
     if (verified.attempts !== attemptNumber ||
         verified.lastScorePct !== receipt.score_pct ||
         verified.passed !== receipt.stage_passed) return deny('LEDGER_RECHECK_FAILED');
+    // A failed official grade is a *confirmed* persisted attempt, not an
+    // ambiguous write. A subsequent learner retake may ask the Worker for
+    // the next authorized attempt number; never reuse the previous event ID.
+    // Successful grades stay locked; lost or conflicting responses stay locked.
+    if (!receipt.stage_passed) busyOrUncertain = false;
     return {
       empresa_id:context.empresaId,matricula_id:context.matriculaId,
       ciclo_id:context.cicloId,edition_sha256:context.editionSha256,
