@@ -15,7 +15,7 @@ import shutil
 from pathlib import Path
 from zipfile import ZipFile
 
-from convert_preserved_html5 import UnsafePackage, checked_files
+from convert_preserved_html5 import UnsafePackage, checked_files, MAX_FILES
 from extract_player3_private_assessments import _safe_output_pair, _write_exclusive
 from prepare_player3_learner_review import build, compile_review
 
@@ -28,14 +28,30 @@ KNOWN_SOURCES = {
 def candidates(batches):
     seen = set()
     for path in batches:
-        if not path.is_file() or path.is_symlink():
+        if not path.is_file() or path.is_symlink() or path.stat().st_size > 220 * 1024 * 1024:
             raise UnsafePackage('PLAYER3_SOURCE_NOT_REGULAR_FILE')
         raw = path.read_bytes()
         expected = KNOWN_SOURCES.get(path.name)
         if expected and hashlib.sha256(raw).hexdigest() != expected[0]:
             raise UnsafePackage('PLAYER3_ORIGINAL_ARCHIVE_SHA_MISMATCH')
         with ZipFile(io.BytesIO(raw)) as outer:
-            files = checked_files(outer)
+            infos = outer.infolist()
+            if len(infos) > MAX_FILES:
+                raise UnsafePackage('PLAYER3_OUTER_FILE_LIMIT')
+            visible = []
+            for info in infos:
+                parts = info.filename.rstrip('/').split('/')
+                if (info.filename.startswith('__MACOSX/') or
+                        Path(info.filename).name.startswith('._')):
+                    if ('\\' in info.filename or '\x00' in info.filename or
+                            any(part in ('', '.', '..') for part in parts)):
+                        raise UnsafePackage('PLAYER3_UNSAFE_APPLEDOUBLE')
+                    continue
+                visible.append(info)
+            class _CheckedView:
+                def infolist(self):
+                    return visible
+            files = checked_files(_CheckedView())
             nested = sorted(p for p in files if p.lower().endswith('.zip')
                             and not p.startswith('__MACOSX/')
                             and not Path(p).name.startswith('._'))
