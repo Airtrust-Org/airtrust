@@ -104,3 +104,17 @@ OBJETIVO=Player3 real sem 99%; CASO=Doutrinamento matrícula 911, 42/42 e 100 ma
 - **Testes focados atuais:** 43 Worker Player3 PASS (11 engine + 14 continuity + 10 parser + 3 composite + 5 credit), Worker TypeScript PASS, 5 AES/inventário/cross-tenant PASS, 2 SQLite SQL restrito ao tenant PASS, workflow YAML PASS; Actions completos e lint da PR ainda não verdes/homologados.
 - **Limite estrito:** nenhum snapshot de D1 produção foi capturado e nenhum aluno teve andamento convertido. O fluxo é novo e está numa PR DRAFT, não na main. Contagens de alunos permanecem **não verificadas**; será necessário SHA exato, oito gates, ambiente de produção protegido, token D1 readonly, chave AES segura e guarda corporativa de longo prazo antes do corte.
 - **Próxima ação:** governar integração/execução do T0 Costa do Sol, manter T1 delta até cutover, completar aplicação auditada de equivalência/retomada por edição e novo motor Player3 com E2E real até qualificação/certificado. Não recomeçar investigação dos remendos SCORM.
+
+## Contrato único de retomada após consolidação — 2026-10-14 14:43 BRT
+
+**Evitar duplicação de motor/estado.** A PR teve duas implementações equivalentes de retomada e crédito administrativo: uma promovia `suspend_data` (relato originado no SCORM cliente) a `verified_completed_source_units`, o que não é prova independente. Foi eliminada essa implementação redundante e seus testes para manter **uma única cadeia**, com confiança explícita:
+
+`legacy-resume-evidence.ts` → `continuity-from-scorm.ts` → `continuity.ts` → `admin-resume-credit.ts` (intenção revisada, **sem D1 writes**).
+
+A nova cadeia valida origem/curso/empresa/versão/edição, propõe bookmark de retomada sujeito a revisão e exige dois aprovadores autorizados por RBAC do backend, snapshot SHA, timestamps atuais e ciclo, justificativa e unidade exata. **Nunca trata suspend_data como prova oficial de presença, aprovação ou certificado.** Foram removidos `legacy-continuity-plan.ts`, `resume-credit.ts` e seus testes (não tinham uso de produção; apenas seus próprios testes). Não reintroduzir esses nomes/implementações sem nova evidência de necessidade.
+
+**Teste final do novo contrato unificado:** 49/49 testes focados Player3 PASS (engine 11, continuidade 14, parser 10, ligação SCORM 7, crédito administrativo 7). Worker `tsc --noEmit` PASS. HEAD do lote `fc96afa5e91349ed31733f7ef7db6283482a743d` (consultar HEAD vivo). Nenhum serviço de escrita/certificação/produção implementado por esse lote.
+
+**Inventário separado:** PR [#1461](https://github.com/Airtrust-Org/airtrust/pull/1461) tem SQL de leitura restrita ao tenant6, cifra, verificação de cardinalidade `COUNT(*) OVER()` para detectar truncamento e workflow em CI; só após merge+secrets+aprovação poderá produzir contagem real. Sem snapshot efetivo nesta execução.
+
+**Blocagem principal:** schema V2 `0550` da PR #1389 conflita com a `main` (0550 de usuários); conflito de merge adicional em baseline, LMS middleware e matrículas. Não executar DB writes/staging ou anunciar resolução antes de corrigir delta/schema e demonstrar matrícula real até certificado.
