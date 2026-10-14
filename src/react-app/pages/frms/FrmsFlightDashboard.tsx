@@ -118,22 +118,29 @@ function formatMinutes(value: number | null | undefined): string {
   })} h`;
 }
 
-function fortnightSummary(item: FrmsOperationalSnapshotItem): { status: string; activity: string; period: string | null } {
+function fortnightSummary(item: FrmsOperationalSnapshotItem): { status: string; activity: string; period: string | null; score: string | null } {
   const indicator = item.fortnight_indicator;
   const period = indicator?.periodo_inicio && indicator?.periodo_fim
     ? `${indicator.periodo_inicio.slice(8, 10)}/${indicator.periodo_inicio.slice(5, 7)} a ${indicator.periodo_fim.slice(8, 10)}/${indicator.periodo_fim.slice(5, 7)}`
     : null;
+  const hasSource = indicator?.fonte_periodo != null &&
+    indicator.fonte_periodo !== 'AUSENTE' && indicator.freshness_dado !== 'AUSENTE';
   const status = !period || !indicator ? 'Período não confirmado'
-    : indicator.status_quinzena === 'CRITICO' ? 'Atenção crítica'
+    : !hasSource ? 'Fonte do período não confirmada'
+      : indicator.status_quinzena === 'CRITICO' ? 'Atenção crítica'
       : indicator.status_quinzena === 'ATENCAO' ? 'Exige atenção'
         : indicator.status_quinzena === 'OK' ? 'Sem alerta no indicador'
           : 'Avaliação incompleta';
   const minutes = indicator?.atividade_frms_periodo_min ?? indicator?.duty_time_periodo_min;
-  const activity = indicator && indicator.fonte_periodo !== 'AUSENTE' &&
+  const activity = indicator && hasSource &&
     minutes != null && Number.isFinite(minutes) && minutes >= 0
     ? `${formatMinutes(minutes)} de atividade registrada${indicator.status_quinzena === 'INCOMPLETO' ? ' (parcial)' : ''}`
     : 'Atividade acumulada não confirmada';
-  return { status, activity, period };
+  const score = indicator && hasSource && indicator.status_quinzena !== 'INCOMPLETO' &&
+    indicator.score_acumulado != null && Number.isFinite(indicator.score_acumulado)
+    ? `Índice operacional acumulado: ${indicator.score_acumulado.toFixed(1).replace('.', ',')}/100${indicator.natureza_dado === 'PROJECAO' ? ' (projeção)' : ''}`
+    : null;
+  return { status, activity, period, score };
 }
 
 function dataMomentCopy(moment: ReturnType<typeof resolveOperationalDataMoment>): {
@@ -537,10 +544,13 @@ export default function FrmsFlightDashboard() {
   const periodLabel = fortnightPeriods.length === 1
     ? fortnightPeriods[0]
     : fortnightPeriods.length > 1 ? 'períodos individuais distintos' : 'período não confirmado';
-  const evaluatedFortnightCount = queue.filter(({ item }) =>
-    item.fortnight_indicator?.status_quinzena === 'OK' ||
-    item.fortnight_indicator?.status_quinzena === 'ATENCAO' ||
-    item.fortnight_indicator?.status_quinzena === 'CRITICO').length;
+  const evaluatedFortnightCount = queue.filter(({ item }) => {
+    const indicator = item.fortnight_indicator;
+    return Boolean(indicator?.periodo_inicio && indicator.periodo_fim &&
+      indicator.fonte_periodo !== 'AUSENTE' && indicator.freshness_dado !== 'AUSENTE' &&
+      (indicator.status_quinzena === 'OK' || indicator.status_quinzena === 'ATENCAO' ||
+        indicator.status_quinzena === 'CRITICO'));
+  }).length;
   const criticalFortnightCount = queue.filter(({ item }) => item.fortnight_indicator?.status_quinzena === 'CRITICO').length;
   const attentionFortnightCount = queue.filter(({ item }) => item.fortnight_indicator?.status_quinzena === 'ATENCAO').length;
   const usesSigvoos = queue.some(({ item }) => item.operational_data_source === 'SIGVOOS' ||
@@ -763,6 +773,9 @@ export default function FrmsFlightDashboard() {
                     <div className="min-w-0">
                       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Fadiga acumulada · quinzena</p>
                       <p className="text-sm font-bold text-slate-900 dark:text-white">{fortnightSummary(item).status}</p>
+                      {fortnightSummary(item).score ? (
+                        <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{fortnightSummary(item).score}</p>
+                      ) : null}
                       <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{fortnightSummary(item).activity}</p>
                     </div>
                     <div className="min-w-0">
