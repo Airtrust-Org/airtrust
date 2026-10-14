@@ -116,6 +116,10 @@ def compile_review(original: bytes, name: str):
                 model = json.loads(text[prefix.end():].strip().rstrip(';').strip())
             except ValueError as error:
                 raise UnsafePackage('PLAYER3_INVALID_MODEL') from error
+            # Dual authoring models may vary in presentation/version, but must
+            # never claim another course or contradictory grading policy.
+            if model.get('courseId') != meta['courseId']:
+                raise UnsafePackage('PLAYER3_DUAL_MODEL_COURSE_ID_MISMATCH')
             sanitized = dekey(model)
             if not isinstance(model.get('slides'), list) or not isinstance(sanitized.get('slides'), list):
                 raise UnsafePackage('PLAYER3_INVALID_SLIDES')
