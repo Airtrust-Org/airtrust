@@ -47,7 +47,7 @@ function validCourse(c:P3ExamContext) {
       });
     });
 }
-export default function Player3AssessmentModal({
+function Player3AssessmentSession({
   context,submitOfficialAttempt,onVerifiedStagePassed,onDismiss,
 }:P3ExamProps) {
   const [choices,setChoices]=useState<Record<string,string>>({});
@@ -144,4 +144,12 @@ export default function Player3AssessmentModal({
       </section>
     </div>
   );
+}
+
+export default function Player3AssessmentModal(props:P3ExamProps) {
+  // Reuse must never carry a passed receipt, answer or ambiguous attempt lock
+  // across tenant/enrollment/cycle/edition/stage changes.
+  const s=props.context;
+  const identity=[s.empresaId,s.matriculaId,s.cicloId,s.editionSha256,s.stageId].join(':');
+  return <Player3AssessmentSession key={identity} {...props}/>;
 }
