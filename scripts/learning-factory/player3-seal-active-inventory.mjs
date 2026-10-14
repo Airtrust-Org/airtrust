@@ -36,7 +36,9 @@ function validatePrivateCycleHistory(r){
   }
 }
 export function normalizeD1Rows(input){
-  const decoded=typeof input==='string'?JSON.parse(input):input;
+  let decoded;
+  try{decoded=typeof input==='string'?JSON.parse(input):input;}
+  catch{assert(false,'INVALID_D1_JSON');}
   const blocks=Array.isArray(decoded)?decoded:[decoded];
   assert(blocks.length>0 && blocks.length<=1000,'INVALID_RESULT_BLOCKS');
   const rows=[];
@@ -148,6 +150,11 @@ async function main(){
   })+'\n');
 }
 if(process.argv[1] && import.meta.url===new URL('file://'+resolve(process.argv[1])).href){
-  main().catch(error=>{process.stderr.write((error?.message||'PLAYER3_INVENTORY_FAILED')+'\n');
-    process.exitCode=1;});
+  main().catch(error=>{
+    const message=typeof error?.message==='string'?error.message:'';
+    const code=/^PLAYER3_INVENTORY_[A-Z0-9_]+$/.test(message)
+      ?message:'PLAYER3_INVENTORY_FAILED';
+    process.stderr.write(code+'\n');
+    process.exitCode=1;
+  });
 }
