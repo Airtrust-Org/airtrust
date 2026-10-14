@@ -10,6 +10,7 @@ import {
   qaPath as pathOn, requireQa as demand, validateQaProfile,
   validateQaModuleSession,validateQaJointReadiness,validateQaCertificatePdf,
   validateQaTerminalReceipt,validateQaCertificateArchiveStatus,
+  validateQaAuthoredStageAttempt,
   type QaCertificateArchiveStatus,
   type QaModuleSession,type QaJointReadiness,
   type QaDoutrinamento,
@@ -177,6 +178,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       index>0 && index<d.units.length-1 && !!unit.lessonId && !unit.official);
     demand(offlineUnitIndex>=0,'AUTHORED_OFFLINE_LESSON_RECEIPT_REQUIRED');
     let failureTested = false;
+    const observedOfficialEventIds=new Set<string>();
     for (const [index, unit] of d.units.entries()) {
       await test.step('PLAYER3-UNIT-' + String(index+1).padStart(2, '0') + ':' + unit.id, async () => {
         await expectAuthoredRc81Unit(page,unit,index,d.units.length);
@@ -187,6 +189,10 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         await satisfyAuthoredRc81Practice(page,unit);
         if(unit.official) {
           const stage=unit.official;
+          const stageAtStart=(await moduleSession(context,profile,d)).stages
+            .find(s=>s.stageId===stage.stageId);
+          demand(stageAtStart,'REQUIRED_STAGE_NOT_REGISTERED');
+          let expectedPassAttempt=stageAtStart.attempts+1;
           const attemptUrl=pathOn(profile.apiBaseUrl,
             '/api/lms/native/matriculas/'+d.enrollmentId+'/etapas/'+
             encodeURIComponent(stage.stageId)+'/tentativas');
@@ -201,11 +207,11 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
             await answerAuthoredRc81Assessment(page,unit,stage.questions,'wrong');
             const failedPost=await failedResponse;
             expect([200,201]).toContain(failedPost.status());
-            const failedPayload=JSON.parse(failedPost.request().postData() ?? 'null');
-            expect(Object.keys(failedPayload).sort()).toEqual([
-              'answers','attemptNumber','eventId',
-            ]);
-            expect(failedPayload.answers).toHaveLength(10);
+            const failedPayload=validateQaAuthoredStageAttempt(
+              JSON.parse(failedPost.request().postData() ?? 'null'),
+              stageBefore.attempts+1,observedOfficialEventIds);
+            observedOfficialEventIds.add(failedPayload.eventId);
+            expectedPassAttempt=stageBefore.attempts+2;
             await expectAuthoredRc81Verdict(page,'failed');
             await expect.poll(async ()=>
               (await snapshot(context,profile,d)).attempts.length)
@@ -231,11 +237,10 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
           await answerAuthoredRc81Assessment(page,unit,stage.questions,'correct');
           const passPost=await passResponse;
           expect([200,201]).toContain(passPost.status());
-          const passPayload=JSON.parse(passPost.request().postData() ?? 'null');
-          expect(Object.keys(passPayload).sort()).toEqual([
-            'answers','attemptNumber','eventId',
-          ]);
-          expect(passPayload.answers).toHaveLength(10);
+          const passPayload=validateQaAuthoredStageAttempt(
+            JSON.parse(passPost.request().postData() ?? 'null'),
+            expectedPassAttempt,observedOfficialEventIds);
+          observedOfficialEventIds.add(passPayload.eventId);
           await expectAuthoredRc81Verdict(page,'passed');
           await expect.poll(async ()=>
             (await snapshot(context,profile,d)).attempts.some(a=>
@@ -310,6 +315,8 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       stagesDone.stages.every(stage=>stage.passed && stage.attempts>0),
       'EIGHT_OFFICIAL_STAGES_PASSED_WITHOUT_PREMATURE_CERTIFICATION');
     demand(failureTested, 'OFFICIAL_FAILURE_RETRY_NOT_EXERCISED');
+    demand(observedOfficialEventIds.size===9,
+      'EIGHT_MODULE_PASSES_PLUS_ONE_REAL_FAILED_ATTEMPT');
     await test.step('PLAYER3-JOINT-READINESS / no certificate from 42/42 and 8/8',async()=>{
       const ready=await jointReadiness(context,profile,d);
       expect(ready).toMatchObject({
