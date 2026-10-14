@@ -46,7 +46,7 @@ export function validatePlayer3Launch(
        !Array.isArray(q.options)||q.options.length<2||q.options.length>12)return false;
     questions.add(q.id);
     const ids=new Set<string>();
-    return q.options.every(o=>{
+    return q.options.every((o:P3LearnerQuestion['options'][number])=>{
       if(!o||!ID.test(o.id)||ids.has(o.id)||!o.text?.trim()||
          Object.keys(o).sort().join(',')!=='id,text'||
          'correctOptionId' in o||'feedbackCorrect' in o||'feedbackIncorrect' in o){
