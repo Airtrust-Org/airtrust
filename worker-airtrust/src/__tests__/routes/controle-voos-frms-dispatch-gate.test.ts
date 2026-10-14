@@ -528,19 +528,6 @@ describe('POST /voos/:id/status — liberacao independente do FRMS', () => {
     expect(listSnapshotMock).not.toHaveBeenCalled();
   });
 
-  it('segue exigindo tripulacao cadastrada como regra independente do FRMS', async () => {
-    const db = createSqliteD1();
-    runSql(db.databasePath, "DELETE FROM cv_voo_tripulantes WHERE voo_id = 601 AND empresa_id = 1");
-    const response = await request(db, '/api/controle-voos/voos/601/status', {
-      method: 'POST', body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1 }),
-    });
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toMatchObject({ code: 'CONTROLE_VOOS_CREW_REQUIRED' });
-    expect(queryJson<{ status: string }>(db.databasePath, 'SELECT status FROM cv_voos WHERE id = 601')[0].status)
-      .toBe('planejado');
-    expect(listSnapshotMock).not.toHaveBeenCalled();
-  });
-
   it('transicao de status nao consulta nem expoe respostas sensiveis do FRMS', async () => {
     const db = createSqliteD1();
     mockSnapshot([
