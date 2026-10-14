@@ -26,8 +26,11 @@ function load(projectName: string) {
   const file = process.env.PLAYER3_QA_PROFILE_FILE;
   demand(file, 'PRIVATE_QA_PROFILE');
   const raw: unknown = JSON.parse(readFileSync(resolve(file), 'utf8'));
+  demand(process.env.PLAYER3_QA_READONLY_BEARER_TOKEN,
+    'STAGING_READONLY_API_AUTH');
   return validateQaProfile(raw, projectName,
-    process.env.PLAYER3_QA_STAGING_ORIGIN ?? '');
+    process.env.PLAYER3_QA_STAGING_ORIGIN ?? '',
+    process.env.PLAYER3_QA_API_ORIGIN ?? '');
 }
 async function openLearner(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const state = process.env.PLAYER3_QA_STORAGE_STATE;
@@ -49,10 +52,20 @@ async function apiData<T>(context: BrowserContext, origin: string, path: string)
   demand(json?.success === true && json?.data != null, 'READ_ONLY_JSON_DATA_' + path);
   return json.data;
 }
+/** A new deployment while this test runs is a blocker, not a flaky failure. */
+async function checkStagingProvenance(context: BrowserContext, profile: Profile) {
+  const release = await apiData<{
+    environment:string; sourceSha:string|null;
+  }>(context, profile.apiBaseUrl, '/api/version');
+  demand(release.environment === 'staging' &&
+    release.sourceSha === profile.expectedSourceSha,
+    'STAGING_WORKER_RELEASE_SHA_MISMATCH');
+}
+
 async function snapshot(
   context: BrowserContext, profile: Profile, enrollment: Enrollment,
 ): Promise<Snapshot> {
-  const s = await apiData<Snapshot>(context, profile.baseUrl, enrollment.snapshotPath);
+  const s = await apiData<Snapshot>(context, profile.apiBaseUrl, enrollment.snapshotPath);
   demand(s.empresa_id === profile.empresaId && s.matricula_id === enrollment.enrollmentId &&
     s.ciclo_id === enrollment.cycleId && s.edition_sha256 === enrollment.editionSha256,
     'PINNED_TENANT_ENROLLMENT_CYCLE_EDITION');
@@ -108,6 +121,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
   const contentAssetProblems: string[] = [];
   auditContentAssets(page, profile.contentOrigin, contentAssetProblems);
   try {
+    await checkStagingProvenance(context, profile);
     await test.step('PLAYER3-LAUNCH / original HTML5 on a separate origin', async () => {
       await page.goto(pathOn(profile.baseUrl, d.launchPath));
       await expect(page.getByTestId('player3-root')).toBeVisible();
@@ -203,6 +217,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
     }
     demand(failureTested, 'OFFICIAL_FAILURE_RETRY_NOT_EXERCISED');
     await test.step('PLAYER3-FINALIZATION / backend authoritative, never slide counter', async () => {
+      await checkStagingProvenance(context, profile);
       const pre = await snapshot(context, profile, d);
       expect(pre.status).not.toBe('CONCLUIDO');
       expect(pre.certificate_id).toBeNull();
@@ -219,14 +234,14 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
     await test.step('PLAYER3-HISTORY / unique qualification and authentic PDF', async () => {
       const enrolled = await snapshot(context, profile, d);
       const history = await apiData<{empresa_id:number; matricula_id:number; id:number; certificate_id:number; linked_records:number}>(
-        context, profile.baseUrl, d.qualificationPath);
+        context, profile.apiBaseUrl, d.qualificationPath);
       expect(history).toMatchObject({
         empresa_id:profile.empresaId, matricula_id:d.enrollmentId,
         id:enrolled.qualificacao_historico_id, certificate_id:enrolled.certificate_id,
         linked_records:1,
       });
       const token = process.env.PLAYER3_QA_READONLY_BEARER_TOKEN;
-      const pdf = await context.request.get(pathOn(profile.baseUrl, d.certificatePath), {
+      const pdf = await context.request.get(pathOn(profile.apiBaseUrl, d.certificatePath), {
         headers:token ? {Authorization:'Bearer '+token}:{},
       });
       expect(pdf.ok()).toBe(true);
@@ -242,7 +257,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         certificate_id:enrolled.certificate_id,
       });
       expect(reopened.attempts).toEqual(enrolled.attempts);
-      const again = await apiData<typeof history>(context, profile.baseUrl, d.qualificationPath);
+      const again = await apiData<typeof history>(context, profile.apiBaseUrl, d.qualificationPath);
       expect(again.linked_records).toBe(1);
       expect(contentAssetProblems, 'HTML5 CSS/JS/fonts/images/video request failures')
         .toEqual([]);
@@ -255,6 +270,7 @@ test('Legacy 80%: resume navigation only, without invented examination, grade or
   const r=fixture.resume80;
   let {context,page}=await openLearner(browser);
   try {
+    await checkStagingProvenance(context,profile);
     const before=await snapshot(context,profile,r);
     expect(before.status).not.toBe('CONCLUIDO');
     expect(before.progresso_pct).toBeGreaterThanOrEqual(r.minPreviousPct);
@@ -284,6 +300,7 @@ test('External SCORM 1.2: actual adapter, no fake completion from visual slides,
   const e=fixture.external;
   let {context,page}=await openLearner(browser);
   try {
+    await checkStagingProvenance(context,profile);
     await page.goto(pathOn(profile.baseUrl,e.launchPath));
     await expect(page.getByTestId('scorm-compat-root')).toBeVisible();
     let sco: Page | ReturnType<Page['frameLocator']> = page;
@@ -304,6 +321,7 @@ test('External SCORM 1.2: actual adapter, no fake completion from visual slides,
     await page.goto(pathOn(profile.baseUrl,e.launchPath));
     sco=page;
     for (const selector of e.frameSelectors) sco=sco.frameLocator(selector);
+    await checkStagingProvenance(context,profile);
     await sco.getByRole('button',{name:e.correctAnswerButton}).click();
     await sco.getByRole('button',{name:e.submitButton}).click();
     await sco.getByRole('button',{name:e.finishButton}).click();
