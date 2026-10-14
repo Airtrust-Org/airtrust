@@ -77,7 +77,7 @@ export function draftApprovedResumptionCredit(
     schema:'AIRTRUST_PLAYER3_RESUME_CREDIT_V1',
     tenantId:plan.empresa_id,enrollmentId:plan.matricula_id,
     employeeId:plan.funcionario_id,courseId:plan.curso_id,
-    cycleId:plan.ciclo_id,sourceProgressPct:plan.source_progress_pct,
+    cycleId:plan.ciclo_id as number,sourceProgressPct:plan.source_progress_pct,
     snapshotSha256:decision.snapshotSha256,
     targetEditionSha256:edition.edition_sha256,
     targetResumeUnitId:resumeUnitId,
