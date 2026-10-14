@@ -965,7 +965,7 @@ export default function FrmsFlightCheckinFadiga() {
                       <legend className="mb-2 text-sm font-medium text-slate-700">
                         Qualidade do sono obtido
                       </legend>
-                      <div className="space-y-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                         {QUALIDADE_SONO_OPCOES.map((op) => {
                           const selected = qualidadeSono === op.value;
                           return (
@@ -1010,7 +1010,7 @@ export default function FrmsFlightCheckinFadiga() {
                   <legend className="mb-3 text-xs font-medium text-slate-500">
                     Escala KSS (1-9)
                   </legend>
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {KSS_OPCOES.map((op) => {
                       const selected = kssScore === op.value;
                       const severidade: EscalaSeveridade =
