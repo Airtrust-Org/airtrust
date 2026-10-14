@@ -209,6 +209,31 @@ describe('LmsPlayer — diagnóstico granular de conclusão', () => {
       String(url).endsWith('/lms/matriculas/42/finalizar'))).toHaveLength(0);
   });
 
+  it('exibe todas as pendências calculadas pelo servidor, não só o primeiro código', () => {
+    matriculaMock = {
+      ...baseMatricula(),
+      closure_readiness: {
+        contract_version: 1,
+        eligible_for_server_verification: false,
+        code: 'PROGRESS_EVIDENCE_MISSING',
+        missing: ['distinct_slide_coverage', 'assessment_score', 'terminal_scorm_status'],
+        last_step_reached: true,
+        every_slide_verified: false,
+        terminal_status_verified: false,
+        assessment_verified: false,
+        slide_coverage: { total: 42, recorded: 39, missing_numbers: [2, 7, 22] },
+      },
+    };
+    renderPlayer();
+    expect(screen.getByRole('status')).toHaveTextContent('PROGRESS_EVIDENCE_MISSING');
+    const pending = screen.getByText(/Pendências no último registro do servidor/);
+    expect(pending).toHaveTextContent('telas obrigatórias');
+    expect(pending).toHaveTextContent('nota da avaliação ainda não foi registrada');
+    expect(pending).toHaveTextContent('conclusão ou aprovação válida');
+    expect(screen.getByTestId('lms-missing-slide-numbers')).toHaveTextContent('2, 7, 22');
+    expect(screen.queryByText('Curso concluído')).not.toBeInTheDocument();
+  });
+
   it('não faz reconciliação automática em matrícula de edição incompatível', async () => {
     matriculaMock = {
       ...baseMatricula(), progresso_pct: 99, score_final: 100,
