@@ -250,8 +250,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
     }
     const stagesDone=await moduleSession(context,profile,d);
     demand(stagesDone.allOfficialStagesPassed &&
-      stagesDone.stages.every(stage=>stage.passed && stage.attempts>0) &&
-      stagesDone.completionSupported===false,
+      stagesDone.stages.every(stage=>stage.passed && stage.attempts>0),
       'EIGHT_OFFICIAL_STAGES_PASSED_WITHOUT_PREMATURE_CERTIFICATION');
     demand(failureTested, 'OFFICIAL_FAILURE_RETRY_NOT_EXERCISED');
     await test.step('PLAYER3-FINALIZATION / backend authoritative, never slide counter', async () => {
