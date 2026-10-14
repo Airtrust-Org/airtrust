@@ -42,7 +42,8 @@ class InventorySqlTests(unittest.TestCase):
           status,progresso_pct,score_final,tentativas,ciclo_atual,updated_at,deleted_at) VALUES
           (1002,6,911,1,'EM_ANDAMENTO',80,0,0,1,'2026-10-14',NULL),
           (1003,7,912,1,'NAO_INICIADO',0,NULL,0,1,'2026-10-14',NULL),
-          (1004,6,914,1,'NAO_INICIADO',0,NULL,0,1,'2026-10-14',NULL);
+          (1004,6,914,1,'NAO_INICIADO',0,NULL,0,1,'2026-10-14',NULL),
+          (1006,6,915,1,'EM_ANDAMENTO',20,NULL,0,1,'2026-10-14',NULL);
         INSERT INTO lms_matricula_ciclos(id,empresa_id,matricula_id,numero_ciclo,
           status,progresso_pct,score_final,tentativas,ciclo_atual,updated_at,
           deleted_at,data_conclusao,qualificacao_historico_id) VALUES
@@ -66,9 +67,9 @@ class InventorySqlTests(unittest.TestCase):
     def test_inventory_only_authorized_tenant_with_both_active_statuses(self):
         rows = list(self.db.execute(SQL))
         self.assertEqual([(r['empresa_id'], r['matricula_id']) for r in rows],
-          [(6,911),(6,914)])
-        self.assertEqual(rows[0]['inventory_total_expected'],2)
-        self.assertTrue(all(row['inventory_total_expected']==2 for row in rows))
+          [(6,911),(6,914),(6,915)])
+        self.assertEqual(rows[0]['inventory_total_expected'],3)
+        self.assertTrue(all(row['inventory_total_expected']==3 for row in rows))
         self.assertEqual(rows[0]['matricula_progresso_pct'],80)
         self.assertEqual(rows[0]['ciclo_progresso_pct'],80)
         self.assertEqual(rows[0]['scorm_suspend_data_PRIVATE'],'private_resume')
@@ -82,6 +83,10 @@ class InventorySqlTests(unittest.TestCase):
         self.assertEqual(rows[1]['ciclo_id'],1004)
         self.assertEqual(rows[1]['xapi_statement_count'],0)
         self.assertEqual(rows[0]['xapi_statement_count'],0)
+        self.assertEqual(rows[0]['catalog_current_scorm_sha256'],'test-sha-active')
+        self.assertEqual(rows[0]['catalog_current_scorm_version'],'RC8.1')
+        self.assertIsNone(rows[2]['tipo_conteudo'])
+        self.assertIsNone(rows[2]['catalog_current_scorm_sha256'])
         self.assertNotIn('nome',rows[0].keys())
         self.assertTrue(all(row['empresa_id']==6 for row in rows))
 
