@@ -378,6 +378,7 @@ router.get('/frms-maintenance-team', async (c) => {
           s.nome AS setor_nome,
           ch.id AS checkin_id,
           ch.hora_checkin,
+          ch.submitted_at AS checkin_submitted_at,
           ch.horas_sono,
           ch.qualidade_sono,
           ch.kss_score,
