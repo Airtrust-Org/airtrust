@@ -89,4 +89,23 @@ describe('useApi responses arriving out of order', () => {
     expect(result.current.data).toEqual({ page: 2 });
     expect(mocks.logout).not.toHaveBeenCalled();
   });
+
+  it('aborts a request after its configured timeout and returns a recoverable error', async () => {
+    vi.useFakeTimers();
+    mocks.appFetch.mockImplementation((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    }));
+
+    const { result, unmount } = renderHook(() => useApi('/api/frms/explicacao-dia', {
+      retry: 0,
+      timeoutMs: 1000,
+    }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toContain('tempo de resposta esperado');
+
+    unmount();
+    vi.useRealTimers();
+  });
 });

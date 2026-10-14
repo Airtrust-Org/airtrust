@@ -38,6 +38,7 @@ interface UseApiOptions {
   method?: string;
   staleTime?: number;
   refetchInterval?: number;
+  timeoutMs?: number;
   /** Keep success/data/total for callers that need backend pagination. */
   preserveEnvelope?: boolean;
 }
@@ -84,6 +85,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
     skipAuth = false,
     staleTime = 0,
     refetchInterval,
+    timeoutMs,
     method: optionsMethod,
     preserveEnvelope = false,
   } = options;
@@ -97,6 +99,8 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
   // Uma resposta da consulta anterior nunca pode sobrescrever um filtro/URL mais recente.
   const requestGenerationRef = useRef(0);
   const retryTimeoutRef = useRef<number | null>(null);
+  const activeRequestAbortControllerRef = useRef<AbortController | null>(null);
+  const activeRequestTimeoutRef = useRef<number | null>(null);
 
   const clearRetryTimeout = useCallback(() => {
     if (retryTimeoutRef.current !== null) {
@@ -125,6 +129,10 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
       if (inFlightRef.current && attemptNumber === 0) return;
       const requestGeneration = ++requestGenerationRef.current;
       inFlightRef.current = true;
+      let requestTimeoutId: number | null = null;
+      let requestTimedOut = false;
+      const requestAbortController = timeoutMs && timeoutMs > 0 ? new AbortController() : null;
+      activeRequestAbortControllerRef.current = requestAbortController;
 
       try {
         setLoading(true);
@@ -158,10 +166,19 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
           requestUrl = `${fullUrl}${separator}_t=${Date.now()}`;
         }
 
+        if (requestAbortController && timeoutMs) {
+          requestTimeoutId = window.setTimeout(() => {
+            requestTimedOut = true;
+            requestAbortController.abort();
+          }, timeoutMs);
+          activeRequestTimeoutRef.current = requestTimeoutId;
+        }
+
         requestController.recordRequest();
         const response = await (skipAuth ? apiFetch : appFetch)(requestUrl, {
           method,
           headers,
+          ...(requestAbortController ? { signal: requestAbortController.signal } : {}),
         });
         if (requestGeneration !== requestGenerationRef.current) return;
 
@@ -195,8 +212,14 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
         }
       } catch (caught) {
         if (requestGeneration !== requestGenerationRef.current) return;
-        const classified = classifyFrontendError(caught);
+        const classified = requestTimedOut
+          ? new FrontendApiError(
+              'A explicação operacional excedeu o tempo de resposta esperado.',
+              'client',
+            )
+          : classifyFrontendError(caught);
         const canRetry =
+          !requestTimedOut &&
           !['permission', 'session-expired', 'stale-tenant'].includes(classified.kind) &&
           attemptNumber < retry;
         if (canRetry) {
@@ -210,6 +233,13 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
           hasFetchedInitialRef.current = false;
         }
       } finally {
+        if (requestTimeoutId !== null) {
+          window.clearTimeout(requestTimeoutId);
+          if (activeRequestTimeoutRef.current === requestTimeoutId) activeRequestTimeoutRef.current = null;
+        }
+        if (activeRequestAbortControllerRef.current === requestAbortController) {
+          activeRequestAbortControllerRef.current = null;
+        }
         if (requestGeneration === requestGenerationRef.current) {
           inFlightRef.current = false;
           setLoading(false);
@@ -230,6 +260,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
       scheduleRetry,
       skipAuth,
       staleTime,
+      timeoutMs,
       url,
     ],
   );
@@ -251,6 +282,12 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
       hasFetchedInitialRef.current = false;
       isMountedRef.current = false;
       clearRetryTimeout();
+      if (activeRequestTimeoutRef.current !== null) {
+        window.clearTimeout(activeRequestTimeoutRef.current);
+        activeRequestTimeoutRef.current = null;
+      }
+      activeRequestAbortControllerRef.current?.abort();
+      activeRequestAbortControllerRef.current = null;
       inFlightRef.current = false;
     };
   }, [authToken, clearRetryTimeout, dedupeInitial, enabled, empresaAtualId, fetchData, url]);
