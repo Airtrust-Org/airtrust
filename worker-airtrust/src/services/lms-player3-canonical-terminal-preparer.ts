@@ -75,6 +75,7 @@ export type Player3PreparedTerminal=Readonly<{
     qualificacaoTipoId:number|null;
     qualificacaoCategoriaId:number|null;
     qualificacaoCodigo:string|null;
+    qualificacaoCategoriaCodigo:string|null;
     qualificacaoNome:string|null;
     qualificacaoCategoria:string|null;
     validade:number|null;vencimentoFimMes:0|1|null;
@@ -184,6 +185,7 @@ export async function preparePlayer3CanonicalTerminal(input:{
       qualificacaoTipoId:qualification?metadata.qualificacao_tipo_id:null,
       qualificacaoCategoriaId:categoryId,
       qualificacaoCodigo:qualification?metadata.qualificacao_codigo:null,
+      qualificacaoCategoriaCodigo:categoryCode,
       qualificacaoNome:qualification?metadata.qualificacao_nome:null,
       qualificacaoCategoria:categoryName,
       validade:qualification?metadata.qualificacao_validade:null,

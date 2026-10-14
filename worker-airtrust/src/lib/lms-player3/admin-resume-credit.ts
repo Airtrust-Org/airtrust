@@ -12,6 +12,36 @@ import {
 } from './continuity-from-scorm';
 import type { LegacyEnrollment, DestinationEdition } from './continuity';
 
+/**
+ * A *decrypted in trusted custody* decision produced by the Front C
+ * reconciler; never accept this object from HTTP/browser/user JSON.
+ * The encrypted T0/T1 files and individual decision remain outside GitHub.
+ */
+export type FrontCReconciledHandoff=Readonly<{
+  provenance:Readonly<{
+    authorized_tenant_id:number;
+    source_contract:'player3-active-enrollments-readonly.sql';
+    t0_sha256:string;t1_sha256:string;
+    t0_extracted_utc:string;t1_extracted_utc:string;
+  }>;
+  decision:Readonly<{
+    decision_key:string;empresa_id:number;matricula_id:number;
+    funcionario_id:number;curso_id:number;ciclo_id:number|null;
+    ciclo_numero:number|null;source_version_tag:string|null;
+    disposition:string;previous_reported_pct:number|null;
+    current_reported_pct:number|null;historical_pct_to_preserve:number;
+    prior_row_sha256:string|null;latest_row_sha256:string|null;
+    source_updated_at:string|null;scorm_last_commit_at:string|null;
+    catalog_package_is_cycle_verified:false;
+    requires_source_edition_verification:true;
+    requires_independent_admin_review:true;
+    target_edition_sha256:null;resume_unit_id:null;
+    may_apply_automatically:false;modifies_enrollment:false;
+    grants_exam_pass:false;grants_completion:false;
+    grants_qualification:false;grants_certificate:false;
+  }>;
+}>;
+
 export type ResumeCreditReview = Readonly<{
   actor_user_id:number;
   approver_user_id:number;
@@ -20,6 +50,10 @@ export type ResumeCreditReview = Readonly<{
   second_reviewer_authorized:boolean;
   approved_at:string;
   source_snapshot_sha256:string;
+  /** Must match the decision from the private Front C sealed reconciliation. */
+  front_c_decision_key:string;
+  /** Independently source-archive-verified for this cycle; never catalog-current alone. */
+  verified_source_archive_sha256:string;
   expected_matricula_updated_at:string;
   expected_scorm_commit_at:string|null;
   expected_ciclo_id:number;
@@ -38,6 +72,9 @@ export type ResumeCreditIntent=Readonly<{
   new_edition_sha256:string;
   resume_unit_id:string;
   source_snapshot_sha256:string;
+  front_c_decision_key:string;
+  front_c_t0_sha256:string;
+  front_c_latest_row_sha256:string;
   source_updated_at:string;
   source_scorm_commit_at:string|null;
   actor_user_id:number;
@@ -63,9 +100,12 @@ export function createAdminResumeCreditIntent(params:{
   sourceEdition:LegacySourceEdition;
   destination:DestinationEdition;
   persistedSuspendData:string|null;
+  /** Server-verified private result of the Front C encrypted T0/T1 workflow. */
+  reconciliation:FrontCReconciledHandoff;
   review:ResumeCreditReview;
 }):ResumeCreditIntent{
-  const {enrollment,sourceEdition,destination,persistedSuspendData,review}=params;
+  const {enrollment,sourceEdition,destination,persistedSuspendData,
+    reconciliation,review}=params;
   if(!review || review.training_manager_authorized!==true ||
       review.second_reviewer_authorized!==true ||
       !validInt(review.actor_user_id) ||
@@ -85,6 +125,59 @@ export function createAdminResumeCreditIntent(params:{
       review.expected_scorm_commit_at !== enrollment.scorm_last_commit_at ||
       review.expected_ciclo_id !== enrollment.ciclo_id) {
     deny('REVIEW_CONTEXT_INVALID');
+  }
+  // Front C owns the actual encrypted reconciliation. Front B does not
+  // reimplement the diff and cannot infer the original edition from the
+  // catalog's current hash. This guards the *handoff*, not the signature,
+  // RBAC or the final D1 writer (all must revalidate separately).
+  const p=reconciliation?.provenance;
+  const d=reconciliation?.decision;
+  const eligible=new Set([
+    'UNCHANGED_REVIEW','PROGRESS_ADVANCED_REVIEW',
+    'EVIDENCE_UPDATED_REVIEW','PERCENT_REGRESSION_REVIEW',
+  ]);
+  if(!p||!d||p.authorized_tenant_id!==6||
+     p.source_contract!=='player3-active-enrollments-readonly.sql'||
+     !sha.test(p.t0_sha256)||!sha.test(p.t1_sha256)||
+     !Number.isFinite(Date.parse(p.t0_extracted_utc))||
+     !Number.isFinite(Date.parse(p.t1_extracted_utc))||
+     Date.parse(p.t1_extracted_utc)<Date.parse(p.t0_extracted_utc)||
+     Date.parse(review.approved_at)<Date.parse(p.t1_extracted_utc)||
+     review.source_snapshot_sha256!==p.t1_sha256||
+     review.front_c_decision_key!==d.decision_key||
+     review.verified_source_archive_sha256!==sourceEdition.source_edition_sha256||
+     !sha.test(review.verified_source_archive_sha256)||
+     !sha.test(d.decision_key)||!sha.test(d.prior_row_sha256??'')||
+     !sha.test(d.latest_row_sha256??'')||
+     !eligible.has(d.disposition)||
+     d.empresa_id!==enrollment.empresa_id||
+     d.matricula_id!==enrollment.matricula_id||
+     d.funcionario_id!==enrollment.funcionario_id||
+     d.curso_id!==enrollment.curso_id||
+     d.ciclo_id!==enrollment.ciclo_id||
+     d.ciclo_numero!==enrollment.ciclo_numero||
+     d.source_version_tag!==enrollment.curso_version_tag||
+     d.source_updated_at!==enrollment.matricula_updated_at||
+     d.scorm_last_commit_at!==enrollment.scorm_last_commit_at||
+     typeof enrollment.matricula_progresso_pct!=='number'||
+     d.current_reported_pct!==enrollment.matricula_progresso_pct||
+     typeof d.previous_reported_pct!=='number'||
+     !Number.isFinite(d.previous_reported_pct)||
+     d.previous_reported_pct<0||d.previous_reported_pct>100||
+     !Number.isFinite(d.historical_pct_to_preserve)||
+     d.historical_pct_to_preserve!==Math.max(
+       d.previous_reported_pct,d.current_reported_pct as number)||
+     d.historical_pct_to_preserve<enrollment.matricula_progresso_pct||
+     d.historical_pct_to_preserve>100||
+     d.catalog_package_is_cycle_verified!==false||
+     d.requires_source_edition_verification!==true||
+     d.requires_independent_admin_review!==true||
+     d.target_edition_sha256!==null||d.resume_unit_id!==null||
+     d.may_apply_automatically!==false||
+     d.modifies_enrollment!==false||
+     d.grants_exam_pass!==false||d.grants_completion!==false||
+     d.grants_qualification!==false||d.grants_certificate!==false){
+    deny('FRONT_C_RECONCILIATION_NOT_VERIFIED');
   }
   const suggested=proposeLegacyScormResume({
     enrollment,sourceEdition,destination,persistedSuspendData,
@@ -107,6 +200,9 @@ export function createAdminResumeCreditIntent(params:{
     new_edition_sha256:destination.edition_sha256,
     resume_unit_id:review.approved_resume_unit_id,
     source_snapshot_sha256:review.source_snapshot_sha256,
+    front_c_decision_key:d.decision_key,
+    front_c_t0_sha256:p.t0_sha256,
+    front_c_latest_row_sha256:d.latest_row_sha256 as string,
     source_updated_at:review.expected_matricula_updated_at,
     source_scorm_commit_at:enrollment.scorm_last_commit_at,
     actor_user_id:review.actor_user_id,approver_user_id:review.approver_user_id,

@@ -15,6 +15,7 @@ import { loadNativeVerifiedAsset } from '../services/lms-native-asset-loader';
 import nativeWriteRoutes, { canWriteNative } from './lms-native-write';
 import nativePracticeRoutes from './lms-native-practice';
 import player3StageAttemptRoutes from './lms-player3-stage-attempts';
+import player3TerminalRoutes from './lms-player3-terminal-completion';
 import nativeEnrollmentRoutes from './lms-native-enrollment';
 import nativeCompletionPreflightRoutes from './lms-native-completion-preflight';
 import nativeCompletionRoutes, { canCompleteNative } from './lms-native-completion';
@@ -266,6 +267,8 @@ app.route('/', nativeWriteRoutes);
 app.route('/', nativePracticeRoutes);
 // Player3 official stage attempts: independent OFF-by-default staging capability.
 app.route('/', player3StageAttemptRoutes);
+// Terminal Player3 has a separate OFF-by-default allowlist and Schema V2 intent.
+app.route('/', player3TerminalRoutes);
 // Separate fourth tenant gate; this route never accepts client employee or edition IDs.
 app.route('/', nativeEnrollmentRoutes);
 // Separate read-only completion diagnostics, not a terminal write endpoint.

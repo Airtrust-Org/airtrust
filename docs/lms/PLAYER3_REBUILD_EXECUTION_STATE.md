@@ -234,3 +234,109 @@ A Frente B prosseguiu autonomamente enquanto A (conteúdo), C (continuidade) e D
 **Gate fundamental NÃO cumprido:** a migration `0554` do catálogo e `0555` do intent canônico são **apenas REVIEW-ONLY**, não aplicadas. O contrato de `0555` existente exige tentativa V1 e **não cobre ainda intents modulares Player3**. Sem uma migration governada de **intenção terminal Player3**, homologação R2/HTML5 da A, snapshot de matrículas T0/T1 da C e E2E da D (histórico + certificado efetivamente consultável), **não habilitar o terminal nem prometer conclusão**. Os certificados EAD são um serviço pós-commit no writer canônico; testar falha/reconciliação, não declarar emissão a partir de status `CONCLUIDO` apenas. Nenhum deploy, D1/R2 write, tenant alterado.
 
 **Próxima ação:** definir e versionar o contrato de intent **transacional, consumido no mesmo batch** para Player3 integrado à governança futura do catálogo (sem contornar triggers); testar atomicidade em SQLite e, após integração A/C/D, aprovar Schema V2 e staging real. Não fabricar notas, equivalências ou evidências de conclusão.
+
+## 2026-10-14 — Frente B: terminal Player3 e revisão transacional 0554/0555
+
+**Objetivo preservado:** resolver estruturalmente a conclusão em 99% do LMS,
+sem creditar evidência falsa, mudar SCORM externo nem certificar aluno antes da
+transação canônica real. Execução na **PR #1389 DRAFT**, sem merge/deploy ou
+mutation D1/R2 remota. Consultar SHA HEAD atual da PR antes de continuar.
+
+**O que mudou:**
+
+1. A SQL de catálogo `0554` REVIEW-ONLY inclui agora substituição exata do
+   trigger `lms_player3_attempt_insert` do Schema 0553: permite `scorm` só
+   quando `lms_native_catalog_activation` autoriza precisamente tenant/curso.
+   Conteúdo SCORM de fornecedor sem ativação continua fora do motor Player3.
+2. O `withNativeAtomicGuard` canônico agora inclui, em **um D1.batch**,
+   `Player3 guard -> INSERT intent -> updates de matrícula/ciclo/
+   histórico/qualificação/auditoria -> DELETE intent`, sem criar uma prova
+   global Native V1 artificial. Um nonce aleatório é usado para consumo único.
+3. O plano `0555` REVIEW-ONLY tem tabela, trigger de insert/escopo, recibos
+   modulares e ligação nos dois guards de matrícula/ciclo. A FK diferida de
+   sentinela impossível exige remoção do intent antes de COMMIT. IDs de
+   lições/etapas duplicados, tenant errado, hash incorreto, ciclo vencido,
+   ausência de visita ou de tentativa aprovada devem rejeitar a conclusão.
+4. Nova rota autenticada `POST /api/lms/native/matriculas/:matriculaId/etapas/
+   concluir`, sem payload, só para **staging opt-in adicional** por tenant
+   `PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS`. Preserva os outros gates
+   de conteúdo, write, módulo e ativação, sem wildcard e sem production.
+   Preparador de comprovantes e qualificação é server-only. Resposta final
+   distingue matrícula CONCLUIDO de certificado `REQUIRES_VERIFICATION`.
+5. Criados os testes SQLite de catálogo/intent e HTTP da rota, acoplados à
+   CI oficial; os demais módulos SCORM permanecem com os guards anteriores.
+
+**Validação local reproduzida nesta continuação:** 36 testes SQLite dos
+planos de catálogo+intent e staleness de Schema V2 PASS; novo ensaio de
+intent + suites associadas (18/18) PASS; 56 testes Worker writer/rollback/
+preparadores PASS; 53 testes Worker HTTP/qualificação/preparadores PASS,
+Worker `tsc --noEmit` PASS. Resultados oficiais da CI do último SHA:
+**consultar novamente antes de promover**. Testes usam SQLite sintético,
+nunca substituem staging/D1 real nem certificado existente.
+
+**Bloqueios preservados:** Schema 0552/0553 ainda não aplicado via Schema V2;
+0554/0555 não estão governados como changes executáveis; faltam pacote HTML5
+original preservado e de-keyed + política e banco SHA-pinned da A, T0/T1 real
+criptografado/autorizado da C (issue #1467), E2E de staging e verificação de
+PDF/qualificação/replay/certificado da D, gates oficiais e merge apropriado.
+A rota terminal permanece default OFF. **Nenhum aluno foi concluído.**
+
+**Próxima unidade de trabalho:** validar delta atual entre A/B/C/D, fechar
+Schema V2 0554/0555 com replay/integridade/recovery revisados sem tocar remote,
+certificar o roteiro HTML5 e preparar staging autorizado. Não transformar
+`REQUIRES_VERIFICATION` em `CERTIFICATE_CREATED` sem consulta verdadeira.
+
+## 2026-10-14 — Frente B: incorporação do relatório de entrega da Frente C
+
+**Relatório da Frente C recebido e confrontado com `main` do GitHub.**
+PRs #1461, #1466 e #1468 estão integradas; inventário completo, criptografia
+AES-256-GCM, reconciliação T0/T1, detecção de alteração de nota/tentativa/
+SCORM e documentação foram entregues como **código**. Isso NÃO demonstra
+inventário T0/T1 REAL. A issue #1467 continua aberta: token D1 estritamente
+readonly, chave recuperável de cofre, reviewers humanos no environment e
+autorização de escopo tenant 6 são pré-condições. Não disparar inventário com
+token de deploy ou converter o relatório da C em permissão de cutover.
+
+**Correção concreta da Frente B na PR #1389:**
+
+1. `continuity.ts` passou a comparar explicitamente os campos do contrato
+   Front C (notas, tentativas, resultado SCORM, estados, datas de matrícula,
+   hash de CMI/suspend_data, histórico cifrado por SHA, marcador de edição,
+   versão e hash do pacote atualmente ativo). Diferença com 99% inalterado
+   exige revisão; não é `unchanged`. `ContinuityDelta` inclui
+   `changed_statuses`, `changed_editions` e `changed_evidence`.
+   O reconciliador cifrado da C permanece a autoridade para decisões 1:1;
+   o comparador B é só barreira defensiva, **não** substitui nem reproduz T0/T1.
+2. `createAdminResumeCreditIntent` (ainda **função pura, sem rota/DB writer**)
+   exige agora o objeto de transferência privado da C com proveniência T0/T1,
+   hashes dos inventários cifrados, `decision_key`, hash da linha T1,
+   matrícula/funcionário/curso/ciclo e watermark. A aprovação administrativa
+   precisa ser posterior a T1 e corresponder exatamente à decisão.
+   Declaração de arquivo-fonte verificado deve bater com
+   `source_edition_sha256`; **a edição atual do catálogo não comprova
+   a edição histórica da matrícula**.
+3. Casos de matrícula desaparecida, troca de ciclo/edição, conflito de fonte,
+   mudança de status, chave/timestamp divergentes e decisão que conceda
+   `assessment_pass`, `completion`, qualificação ou certificado são recusados.
+   0/20/50/80/99% são históricos; não se transformam em `seenLessonIds`,
+   `stage_passed`, nota ou certificado. O artefato/revisão individual da C
+   continua cifrado e fora do repositório e das respostas ao aluno.
+4. O `ResumeCreditIntent` agora preserva
+   `front_c_decision_key`, `front_c_t0_sha256` e
+   `front_c_latest_row_sha256` para futura trilha de auditoria. A validação
+   pura não autentica sozinho a custódia criptográfica, RBAC ou identidade
+   do operador: o futuro Writer deverá revalidar chave/proveniência no backend,
+   status/ciclo/edição e fonte atual dentro da transação. **Não há aplicação
+   de crédito administrativo, migration remota ou emissão de certificado.**
+
+**QA focada nesta continuação:** 33 testes Vitest Worker em continuidade,
+SCORM e crédito administrativo PASS; `worker-airtrust/tsc --noEmit` PASS.
+A CI do HEAD final continua sujeita aos gates GitHub Actions; consultar ao vivo.
+Os testes são sintéticos, sem alunos reais.
+
+**Dependências específicas:** A #1464 precisa entregar o crosswalk
+`source_edition_sha256 → target_edition_sha256` com IDs de lição originais
+imutáveis e HTML5 sem gabaritos; C #1467 precisa liberar T0/T1 real em cofre
+seguro; D #1465 valida 0/20/50/80/99, bookmark ausente, WebKit/Chromium,
+SCORM externo e matrícula→qualificação→certificado consultável. B #1389
+permanece DRAFT, sem cutover/staging/produção ou merge nesta rodada.

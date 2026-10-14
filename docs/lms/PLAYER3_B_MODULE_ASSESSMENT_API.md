@@ -98,9 +98,10 @@ Retorna metadados `totalRequiredLessons`, `verifiedLessons`,
 
 Esta resposta não significa matrícula concluída. A guarda SQL
 `lms-player3-terminal-transaction-guard.ts` já existe e foi testada contra
-SQLite 0552/0553, mas ainda não foi conectada ao writer transacional de
-qualificação/certificado. A segurança do conteúdo HTML5 e a comprovação
-visual devem ser concluídas antes de habilitar o fechamento.
+SQLite 0552/0553. A guarda está integrada internamente ao writer canônico
+`completeLmsMatricula`; o contrato 0555 continua **REVIEW-ONLY** e o endpoint
+terminal Player3 é **default OFF** até Schema V2 governado, homologação do
+HTML5 sem gabarito, inventário T0/T1 e E2E de certificado existente.
 
 **Para Frente A:** o mapeamento entre HTML5 autoral e evidência de conteúdo
 deve produzir identificadores estáveis de unidades, vinculados à edição,
@@ -138,3 +139,84 @@ com todos os eventos + recibos, `CONCLUIDO` no ciclo certo, qualificação e
 certificado **realmente consultável**. Não basta `/etapas/prontidao=true` ou
 a chamada a `completeLmsMatricula`. Validar falhas no serviço de certificados,
 idempotência e rollback antes de homologar.
+
+## Marco de terminal transacional B — 2026-10-14 (continuação)
+
+- O preparador `preparePlayer3CanonicalTerminal` é server-only e recolhe
+  recibos de provas corrigidas com gabarito R2 privado, todas as lições
+  efetivamente persistidas e qualificação escopada à matrícula/ciclo/edição.
+- No `completeLmsMatricula` o Player3 usa **um único D1.batch**:
+  1. SQL de guarda das lições e tentativas aprovadas;
+  2. INSERT de `lms_player3_completion_intents` com nonce e recibos privados;
+  3. writes canônicos da matrícula, ciclo, histórico, qualificação e audit log;
+  4. DELETE de intent antes de COMMIT. O conceito 0555 exige FK diferida
+     contra sentinela não preenchível: o intent órfão aborta a transação.
+- O plano **0554 REVIEW-ONLY** passa a substituir, quando aplicável,
+  o trigger de tentativas de 0553 para reconhecer **somente SCORM explicitamente
+  ativado** no mesmo tenant/curso; SCORM externo não ativado continua recusado.
+- **POST /api/lms/native/matriculas/{matriculaId}/etapas/concluir**:
+  rota autenticada, corpo **vazio**, sem nota ou identificadores manipuláveis;
+  protegida por seis gates exatos, independentes e staging-only:
+  `NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS`,
+  `NATIVE_LEARNER_WRITE_ENABLED_TENANTS`,
+  `PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS`,
+  `NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS` e
+  `PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS` (além de `ENVIRONMENT=staging`).
+  Ausência, wildcard ou tenant diferente resultam em 404 sem D1/R2.
+- HTTP 200 apenas com recibo coerente do writer, `status=CONCLUIDO` e
+  `certificate_state=REQUIRES_VERIFICATION` quando há qualificação. **Não
+  afirma que o certificado foi emitido**. O PDF precisa ser consultado no E2E.
+- 0552/0553 permanecem **não aplicadas**; 0554/0555 permanecem arquivos
+  `.REVIEW-ONLY.sql.txt`, sem manifest/aprovação de apply. Nenhum recurso
+  foi escrito remotamente ou ativado para alunos nesta etapa.
+
+**Testes focados:** 36 SQLite de compatibilidade de catálogo + 18 SQLite
+para intent e rollback (suítes com sobreposição); 56 testes Worker do writer,
+53 testes Worker da integração HTTP e TypeScript Worker PASS. O gate de
+regressão SQLite foi incluído no `.github/workflows/ci.yml`. O fechamento
+operacional exige, além dos gates oficiais, origem HTML5 segura homologada,
+T0/T1 da Costa do Sol, migrations governadas, R2 privado SHA-pinned e prova
+visual em staging de matrícula/qualificação/certificado verificável.
+
+
+## Compatibilidade com Frente C — T0/T1 e retomada administrativa (14/10/2026)
+
+O reconciliador da Frente C entregue na `main` mantém todas as decisões
+individuais **somente dentro do arquivo cifrado**. A Frente B não reimplementa
+a comparação e não lê arquivos T0/T1 de produção no Worker de aluno.
+
+O planejador de continuidade da B classifica também alteração de nota final,
+tentativas, estados/resultados SCORM, tipo do conteúdo, versão/hash do pacote,
+datas, histórico e ciclo **mesmo quando o percentual permanece 99%**.
+O hash do pacote atualmente ativo no catálogo não prova que o aluno
+consumiu aquela edição. Qualquer mudança dessas classes impede
+`unchanged` e requer revisão protegida.
+
+A proposta interna de retomada `createAdminResumeCreditIntent` **não grava
+no D1 e não concede visitas, nota, conclusão ou certificado**. Ela passou a
+exigir o contrato privado `FrontCReconciledHandoff`:
+
+- Proveniência T0/T1 com SHA-256 dos arquivos cifrados e tenant autorizado 6.
+- `decision_key` e SHA da linha T1, mesmos IDs de tenant/matrícula/
+  funcionário/curso/ciclo e mesmos watermarks do registro.
+- Decisão elegível, revisão independente após T1, identificação
+  comprovada da edição **original** fora da versão ativa do catálogo,
+  crosswalk validado para o destino e ausência de qualquer sinal de
+  certificação automática.
+- Divergências de identidade, ciclo, fonte, etapa terminal ou consentimento
+  indevido para writes bloqueiam o planejamento; a C deve registrar a
+  exceção no arquivo privado para avaliação humana.
+
+O plano pode conter somente um **bookmark de navegação**; não altera
+`seenLessonIds`, ledger de tentativas, matrícula ou qualificação. A futura
+aplicação exigirá serviço Worker com RBAC real, prova de custódia do
+inventário cifrado, verificação de identidade/timestamps/edição após T1,
+atomicidade, idempotência e auditoria. A existência de uma estrutura JS
+na memória não é aprovação governada. Nenhuma execução T0/T1 real ou
+write administrativo ocorreu nesta entrega.
+
+**Bloqueador operacional:** issue #1467 (token D1 readonly, AES-256 em cofre,
+aprovadores humanos); a etapa da C está integrada como código, mas
+sem aceite operacional. Para homologar: casos 0%, 20%, 50%, 80% e 99%,
+versões distintas, WebKit/Chromium, SCORM externo, nota, qualificação e
+certificado realmente consultável em staging após Schema V2 governado.
