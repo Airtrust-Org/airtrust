@@ -108,8 +108,13 @@ export function makePlayer3VerifiedStageSubmitter(
   request: AuthorizedRequest = fetchWithAuth,
   apiBaseUrl = API_BASE_URL,
 ): (answers: readonly P3ExamAnswer[]) => Promise<P3ExamReceipt> {
+  // Credentials may be attached by fetchWithAuth. Never allow an arbitrary
+  // caller-provided third-party origin, even if it looks like HTTPS staging.
+  const knownApi = apiBaseUrl === API_BASE_URL &&
+    (/^https:\/\/[^/?#]+\/api$/.test(apiBaseUrl) || apiBaseUrl === '/api');
+  const testLocalApi = import.meta.env.MODE === 'test' && apiBaseUrl === '/api';
   if (!validContext(context) || typeof request !== 'function' ||
-      !/^https:\/\/[^/?#]+(?:\/[^?#]*)?$|^\/api$/.test(apiBaseUrl)) {
+      (!knownApi && !testLocalApi)) {
     return deny('UNAPPROVED_CONTEXT');
   }
   const base = apiBaseUrl.replace(/\/$/, '') +
