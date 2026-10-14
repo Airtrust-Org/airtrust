@@ -39,7 +39,7 @@ export function approvedAuthoredLaunch(input:{
   originBinding:string|undefined;
   launchTenantAllowlist:string|undefined;
   learnerContent:unknown;
-}):Readonly<{contentUrl:string;contentOrigin:string;contentSha256:string}>{
+}):Readonly<{contentUrl:string;contentOrigin:string;contentSha256:string;orderedUnitIdsSha256:string}>{
   const {tenant,course,editionSha256,sourceSha256}=input;
   const originValue=origin(input.originBinding);
   const allowed=input.launchTenantAllowlist;
@@ -68,5 +68,6 @@ export function approvedAuthoredLaunch(input:{
     contentOrigin:originValue,
     contentUrl:originValue+path,
     contentSha256:v.contentSha256!,
+    orderedUnitIdsSha256:v.orderedUnitIdsSha256!,
   };
 }
