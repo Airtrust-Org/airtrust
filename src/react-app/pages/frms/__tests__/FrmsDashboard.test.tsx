@@ -615,6 +615,8 @@ describe('FrmsDashboard simplificado', () => {
           periodo_fim: '2026-08-31',
           status_quinzena: 'ATENCAO',
           fonte_periodo: 'REAL',
+          freshness_dado: 'COMPLETO',
+          score_acumulado: 55,
           atividade_frms_periodo_min: 600,
         },
       })],
@@ -624,6 +626,7 @@ describe('FrmsDashboard simplificado', () => {
     expect(period.getByText(/Período: 16\/08 a 31\/08/)).toBeInTheDocument();
     expect(period.getByText(/1 em atenção/)).toBeInTheDocument();
     expect(screen.getByText('10,0 h de atividade registrada')).toBeInTheDocument();
+    expect(screen.getByText('Índice operacional acumulado: 55,0/100')).toBeInTheDocument();
     expect(screen.getByText('Exige atenção')).toBeInTheDocument();
   });
 
@@ -636,6 +639,22 @@ describe('FrmsDashboard simplificado', () => {
     expect(screen.getByText('Período não confirmado')).toBeInTheDocument();
     expect(screen.getByText(/1 sem avaliação quinzenal completa/)).toBeInTheDocument();
     expect(screen.queryByText('0,0 h de atividade registrada')).not.toBeInTheDocument();
+  });
+
+  it('não apresenta score favorável quando o estado diz OK mas a fonte está ausente', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({
+      data: [item({ fortnight_indicator: {
+        ...unresolvedFortnight(),
+        periodo_inicio: '2026-08-16',
+        periodo_fim: '2026-08-31',
+        status_quinzena: 'OK',
+        score_acumulado: 0,
+      } })],
+    }));
+    renderDashboard('/frms?data=2026-08-27');
+    expect(screen.getByText('Fonte do período não confirmada')).toBeInTheDocument();
+    expect(screen.getByText(/Avaliação do período disponível para 0 de 1 pessoa/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Índice operacional acumulado: 0,0\/100/i)).not.toBeInTheDocument();
   });
 
   it('mantém o último estado válido visível quando a atualização falha', () => {
