@@ -54,11 +54,13 @@ export function validatePlayer3Launch(
   const questions=new Set<string>();
   return assessment.questions.every(q=>{
     if(!q||!ID.test(q.id)||questions.has(q.id)||!q.prompt?.trim()||
+       Object.keys(q).sort().join(',')!=='id,options,prompt'||
        !Array.isArray(q.options)||q.options.length<2||q.options.length>12)return false;
     questions.add(q.id);
     const ids=new Set<string>();
     return q.options.every(o=>{
       if(!o||!ID.test(o.id)||ids.has(o.id)||!o.text?.trim()||
+         Object.keys(o).sort().join(',')!=='id,text'||
          'correctOptionId' in o||'feedbackCorrect' in o||'feedbackIncorrect' in o){
         return false;
       }
@@ -78,7 +80,7 @@ export default function Player3AuthenticatedStagingEntry({
     const controller=new AbortController();
     setState({kind:'LOADING'});
     if(!active||![matriculaId,empresaId,cursoId].every(positive)){
-      setState({kind:'BLOCKED'});
+      setState({kind:'LEGACY_PREVIEW'});
       return ()=>controller.abort();
     }
     void (async()=>{
