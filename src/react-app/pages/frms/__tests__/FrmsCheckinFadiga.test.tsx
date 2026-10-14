@@ -1126,6 +1126,8 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.getByText('Sem jornada prevista na data')).toBeInTheDocument();
     expect(screen.getByText('Check-in pendente — confirmar antes da jornada')).toBeInTheDocument();
     expect(screen.queryByText('Sem dados FRMS')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Não avaliado')).toHaveLength(2);
+    expect(screen.queryByText(/^VERDE$/)).not.toBeInTheDocument();
   });
 
   it('na aba Equipe mostra erro claro e nao converte falha em lista vazia', async () => {
