@@ -7,7 +7,7 @@ O RBAC 117 distingue repouso, oportunidade de sono e sono efetivamente obtido; a
 - `horas_sono` é **sono efetivo autodeclarado** para score diário, efetividade e sinais fisiológicos.
 - `oportunidade_sono_horas_24h` é **oportunidade de sono (repouso absoluto)** autodeclarada, separada, nullable, em horas/24h.
 - Linhas históricas permanecem `NULL`: nunca copiar `horas_sono` para o campo novo nem inventar que repouso = sono.
-- O formulário diário continua com **as mesmas respostas obrigatórias**: a oportunidade de sono é facultativa e recolhida, sem acrescentar etapa ao check-in. Quando informada, é persistida em campo próprio e não pode ser inferior ao sono informado. Clientes históricos e registros sem oportunidade permanecem válidos, porém sem crédito presumido de repouso absoluto.
+- O formulário diário continua com **as mesmas respostas obrigatórias**: a oportunidade de sono é facultativa e recolhida, sem acrescentar etapa ao check-in. Quando informada, é persistida em campo próprio (0–24h), sem presumir relação matemática obrigatória com sono obtido nas últimas 24h, que pode incluir cochilos fora da janela de repouso aplicável. Clientes históricos e registros sem oportunidade permanecem válidos, porém sem crédito presumido de repouso absoluto.
 - `frms_recovery_assessment.absolute_rest_hours` recebe somente a oportunidade declarada; `sleep_hours_24h` continua recebendo o sono efetivo. PVT diário permanece obrigatório.
 - Dados de jornada, pousos, temperatura, IMC e limites legais mantêm suas fontes e revisões; esta migration **não** altera políticas, coeficientes, thresholds nem registros existentes.
 
@@ -22,7 +22,7 @@ Ordem: (1) CI/revisão da PR, (2) aplicação governada da migration em staging,
 ## Testes e pós-condições
 - Confirmar coluna nullable, CHECK de 0–24h, e nenhuma mutação histórica.
 - Criar check-in sintético com 8h de oportunidade e 5h de sono: persistir dois números distintos, score diário calculado com 5h, crédito de recuperação apenas com 8h.
-- Verificar rejeição quando oportunidade for menor do que o sono, PVT obrigatório e `NULL` conservador para registros antigos.
+- Verificar ausência de nova pergunta obrigatória, PVT obrigatório, campos independentes 0–24h e `NULL` conservador para registros antigos.
 - Confirmar tenant isolation, revisão de política e idempotência governada via ledger.
 
 ## Recuperação
