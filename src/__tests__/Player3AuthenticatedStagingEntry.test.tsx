@@ -2,8 +2,8 @@ import React from 'react';
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {fetchWithAuth} from '@/react-app/config/api';
-import Player3AuthenticatedStagingEntry,{validatePlayer3Launch}
-  from '@/react-app/pages/lms/player3/Player3AuthenticatedStagingEntry';
+import Player3AuthenticatedStagingEntry from '@/react-app/pages/lms/player3/Player3AuthenticatedStagingEntry';
+import {validatePlayer3Launch} from '@/react-app/pages/lms/player3/Player3AuthoredLaunchValidation';
 
 vi.mock('@/react-app/config/api',()=>({API_BASE_URL:'/api',fetchWithAuth:vi.fn()}));
 vi.mock('@/react-app/pages/lms/player3/Player3Html5Host',()=>({
