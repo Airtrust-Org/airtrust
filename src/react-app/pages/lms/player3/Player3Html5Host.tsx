@@ -5,8 +5,8 @@
  * This is an isolated staging component until a tenant-authorized short-lived
  * content URL, Worker assessment endpoints and governed schema are available.
  */
-import { useEffect, useMemo, useState } from 'react';
-import Player3AssessmentModal, {type P3ExamProps} from './Player3AssessmentModal';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Player3AssessmentModal, {type P3ExamProps, type P3ExamAnswer} from './Player3AssessmentModal';
 import {makePlayer3VerifiedStageSubmitter} from './submitVerifiedStageAttempt';
 import Player3FinalizationControls,{type Player3TerminalScope} from './Player3FinalizationControls';
 
@@ -21,6 +21,8 @@ export type Player3Html5HostProps = {
   /** An independently authenticated server session decides when the exam is due.
    * Never derive this prop from untrusted iframe navigation/postMessage. */
   pendingAssessment?: Omit<P3ExamProps,'submitOfficialAttempt'> | null;
+  /** Only RC8.1 authored exams use the iframe hint/verdict bridge. */
+  assessmentPresentation?: 'modal' | 'authored-html5';
   /** Bound by an authenticated server session, never an iframe hint. */
   terminalScope?: Player3TerminalScope | null;
 };
@@ -51,31 +53,91 @@ function validContentUrl(raw: string, expectedOrigin: string): boolean {
  */
 export default function Player3Html5Host({
   title, contentUrl, editionSha256, contentOrigin, reviewOnly = true, pendingAssessment,
-  terminalScope,
+  terminalScope, assessmentPresentation = 'modal',
 }: Player3Html5HostProps) {
   const [lastHint, setLastHint] = useState<string | null>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
   const safe = useMemo(() =>
     DIGEST.test(editionSha256) && validContentUrl(contentUrl, contentOrigin),
     [contentUrl,contentOrigin,editionSha256],
   );
+  const examContext = pendingAssessment?.context;
+  const verifiedSubmit = useMemo(() => {
+    if (!safe || reviewOnly || !examContext ||
+        examContext.editionSha256 !== editionSha256) return null;
+    return makePlayer3VerifiedStageSubmitter(examContext);
+  }, [safe,reviewOnly,examContext,editionSha256]);
   useEffect(() => {
     setLastHint(null);
     if (!safe) return;
+    let active = true;
+    let submitting = false;
+    const handledRequests = new Set<string>();
+    const origin = new URL(contentOrigin).origin;
     const receive = (event: MessageEvent<unknown>) => {
-      // A message from the content frame can NEVER grade, pass, complete or
-      // issue a certificate. Even its navigation hint is only advisory UI.
-      if (event.origin !== new URL(contentOrigin).origin ||
-        !event.data || typeof event.data !== 'object') return;
-      const msg = event.data as Partial<Player3NavigationHint>;
-      if (msg.type !== 'AIRTRUST_PLAYER3_NAV_HINT_V1' ||
+      // Origin alone is insufficient: only the exact frame being displayed
+      // may request a server-graded attempt, never a sibling content iframe.
+      if (event.origin !== origin ||
+          event.source !== frameRef.current?.contentWindow ||
+          !event.data || typeof event.data !== 'object' ||
+          Array.isArray(event.data)) return;
+      const msg = event.data as Record<string,unknown>;
+      if (msg.type === 'AIRTRUST_PLAYER3_NAV_HINT_V1') {
+        if (msg.editionSha256 === editionSha256 &&
+            typeof msg.unitId === 'string' &&
+            /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(msg.unitId)) {
+          setLastHint(msg.unitId);
+        }
+        return;
+      }
+      // The original RC8.1 iframe can send *choices*, never a grade or
+      // completion. Only a previously authenticated server-pinned exam can
+      // cause an official POST to the Worker. Review always stays read-only.
+      if (msg.type !== 'AIRTRUST_PLAYER3_STAGE_SUBMIT_HINT_V1' ||
+          reviewOnly || assessmentPresentation !== 'authored-html5' ||
+          !examContext || !verifiedSubmit ||
           msg.editionSha256 !== editionSha256 ||
-          typeof msg.unitId !== 'string' ||
-          !/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(msg.unitId)) return;
-      setLastHint(msg.unitId);
+          msg.stageId !== examContext.stageId ||
+          typeof msg.requestId !== 'string' ||
+          !/^[a-f0-9-]{36}$/i.test(msg.requestId) ||
+          !Array.isArray(msg.answers) ||
+          Object.keys(msg).sort().join(',') !==
+            'answers,editionSha256,requestId,stageId,type' ||
+          msg.answers.length !== examContext.questions.length ||
+          submitting || handledRequests.has(msg.requestId)) return;
+      const answers = msg.answers as P3ExamAnswer[];
+      if (!examContext.questions.every((q,i) =>
+        answers[i] && typeof answers[i].questionId === 'string' &&
+        answers[i].questionId === q.id &&
+        typeof answers[i].optionId === 'string' &&
+        q.options.some(o => o.id === answers[i].optionId))) return;
+      handledRequests.add(msg.requestId);
+      submitting = true;
+      const requestId = msg.requestId;
+      const stageId = examContext.stageId;
+      void verifiedSubmit(answers).then(receipt => {
+        // An ambiguous Worker attempt must NEVER receive a fabricated pass.
+        if (!active || !receipt.persisted ||
+            receipt.edition_sha256 !== editionSha256 ||
+            receipt.stage_id !== stageId ||
+            receipt.empresa_id !== examContext.empresaId ||
+            receipt.matricula_id !== examContext.matriculaId ||
+            receipt.ciclo_id !== examContext.cicloId) return;
+        frameRef.current?.contentWindow?.postMessage({
+          type:'AIRTRUST_PLAYER3_STAGE_VERDICT_V1',
+          editionSha256,stageId,requestId,
+          stage_passed:receipt.stage_passed,score_pct:receipt.score_pct,
+          persisted:true,
+        }, origin);
+      }).catch(() => {
+        // The authored HTML5 times out and remains locked. No automatic
+        // re-post: a committed attempt may have lost only its response.
+      }).finally(() => { submitting = false; });
     };
     window.addEventListener('message', receive);
-    return () => window.removeEventListener('message', receive);
-  }, [safe,contentOrigin,editionSha256]);
+    return () => { active = false; window.removeEventListener('message', receive); };
+  }, [safe,contentOrigin,editionSha256,reviewOnly,
+      assessmentPresentation,examContext,verifiedSubmit]);
 
   if (!safe) return (
     <p role="alert">Conteúdo HTML5 indisponível: origem ou edição inválida.
@@ -92,6 +154,7 @@ export default function Player3Html5Host({
         </span>
       </header>
       <iframe
+        ref={frameRef}
         title={'Conteúdo original — ' + title}
         src={contentUrl}
         sandbox="allow-scripts allow-forms allow-same-origin"
@@ -102,13 +165,12 @@ export default function Player3Html5Host({
         {lastHint ? 'Unidade exibida: ' + lastHint + '. ' : ''}
         A navegação no conteúdo não confirma aprovação, matrícula ou certificado.
       </footer>
-      {!reviewOnly && pendingAssessment &&
-        pendingAssessment.context.editionSha256 === editionSha256 &&
+      {!reviewOnly && assessmentPresentation === 'modal' && pendingAssessment &&
+        pendingAssessment.context.editionSha256 === editionSha256 && verifiedSubmit &&
         <Player3AssessmentModal {...pendingAssessment}
           // Do not accept a client- or iframe-supplied "persisted" receipt.
           // Bind directly to Worker POST + authenticated session re-read.
-          submitOfficialAttempt={(answers) =>
-            makePlayer3VerifiedStageSubmitter(pendingAssessment.context)(answers)} />}
+          submitOfficialAttempt={verifiedSubmit} />}
       {!reviewOnly && pendingAssessment &&
         pendingAssessment.context.editionSha256 !== editionSha256 &&
         <p role="alert">Avaliação indisponível: edição diferente do conteúdo autenticado.</p>}
