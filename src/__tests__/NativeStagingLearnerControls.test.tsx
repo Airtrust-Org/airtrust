@@ -103,6 +103,71 @@ describe('Native staging learner — evidence-only interaction', () => {
     expect(api.fetchWithAuth).toHaveBeenCalledTimes(6);
   });
 
+  it('keeps module practice feedback out of the official assessment attempt', async () => {
+    const withPractice: NativeLearnerCourse = {
+      ...course,
+      units: [course.units[0], {
+        id: 'module-practice', title: 'Fixação', kind: 'practice', blocks: [],
+        questionIds: ['practice-question'],
+      }, course.units[1]],
+      questions: [
+        {id:'practice-question', prompt:'Consolidação',
+          options:[{id:'a',text:'Revisar'},{id:'b',text:'Prosseguir'}]},
+        ...course.questions,
+      ],
+    };
+    const session = (attempted: boolean) => respond({success:true,data:{
+      ...scope, next_sequence:1, seen_lesson_ids:[],last_visited_unit_id:null,
+      latest_attempt:attempted
+        ? {attempt_number:1, score_pct:null, assessment_satisfied:true} : null,
+    }});
+    api.fetchWithAuth
+      .mockResolvedValueOnce(respond({success:true,data:{
+        ciclo_id:9,edition_sha256:editionHash,
+        completion_supported:false,state:'STARTED',
+      }}))
+      .mockResolvedValueOnce(session(false))
+      .mockResolvedValueOnce(respond({success:true,data:{
+        question_id:'practice-question', edition_sha256:editionHash,
+        correct:false, feedback:'Reveja o conteúdo de segurança',
+        non_certifying:true,
+      }}))
+      .mockResolvedValueOnce(respond({success:true,data:{
+        attempt_number:1,edition_sha256:editionHash,
+        completion_supported:false,state:'APPLIED',
+        score_pct:null,assessment_satisfied:true,
+      }}))
+      .mockResolvedValueOnce(session(true));
+    render(<NativeStagingLearnerControls
+      matriculaId={101} cycleId={9} editionHash={editionHash}
+      course={withPractice} initialSession={initialSession}
+      fetchAuthorizedAsset={vi.fn()}
+    />);
+    fireEvent.click(screen.getByRole('button',{name:/Iniciar ou retomar/}));
+    expect(await screen.findByText(/Registro de aprendizagem habilitado/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
+    fireEvent.click(screen.getByRole('radio',{name:'Revisar'}));
+    fireEvent.click(screen.getByRole('button',{name:'Conferir resposta de fixação'}));
+    expect(await screen.findByText(/Reveja o conteúdo de segurança/)).toBeInTheDocument();
+    expect(screen.getByText(/Não altera a nota ou a tentativa oficial/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
+    fireEvent.click(screen.getByRole('radio',{name:'Primeira alternativa'}));
+    fireEvent.click(screen.getByRole('button',{name:'Enviar respostas para avaliação'}));
+    expect(await screen.findByText(/critérios de avaliação atendidos/)).toBeInTheDocument();
+    const posts=api.fetchWithAuth.mock.calls.filter(([,opts])=>opts.method==='POST');
+    expect(posts.map(([url])=>url)).toEqual([
+      '/api/lms/native/matriculas/101/iniciar',
+      '/api/lms/native/matriculas/101/pratica',
+      '/api/lms/native/matriculas/101/tentativas',
+    ]);
+    expect(JSON.parse(posts[1][1].body as string)).toEqual({
+      questionId:'practice-question',optionId:'a',
+    });
+    expect(JSON.parse(posts[2][1].body as string).answers).toEqual([
+      {questionId:'q1',optionId:'a'},
+    ]);
+  });
+
   it('finishes only after a second verified server session and confirms the receipt', async () => {
     const readySession=()=>respond({success:true,data:{
       ...scope,completion_supported:true,

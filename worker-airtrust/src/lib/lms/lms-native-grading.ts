@@ -36,10 +36,16 @@ export function evaluateNativeAssessment(
   submission: unknown,
 ): NativeAssessmentResult {
   const course = validateNativeCourseArtifact(artifact);
-  if (!Array.isArray(submission) || submission.length > course.questions.length) {
+  // Module practice is formative: never score it, consume an exam attempt,
+  // or require a practice answer in the certifying submission.
+  const practiceIds = new Set(course.units
+    .filter((unit) => unit.kind === 'practice').flatMap((unit) => unit.questionIds));
+  const certifyingQuestions = course.questions.filter((q) => !practiceIds.has(q.id));
+  if (!Array.isArray(submission) || submission.length > certifyingQuestions.length) {
     throw new NativeSubmissionError('NATIVE_INVALID_SUBMISSION');
   }
-  const questions = new Map(course.questions.map((q) => [q.id, q]));
+  // An injected practice answer is not valid in a formal exam attempt.
+  const questions = new Map(certifyingQuestions.map((q) => [q.id, q]));
   const answerMap = new Map<string, string>();
 
   for (const item of submission) {
@@ -61,7 +67,7 @@ export function evaluateNativeAssessment(
   }
 
   const answered = answerMap.size;
-  const total = course.questions.length;
+  const total = certifyingQuestions.length;
   const scenarios = new Set(course.units.filter((unit) => unit.kind === 'scenario').flatMap((unit) => unit.questionIds));
   const exams = new Set(course.units.filter((unit) => unit.kind === 'assessment').flatMap((unit) => unit.questionIds));
   // Required scenario decisions and certifying exam questions are independent.

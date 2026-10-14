@@ -46,10 +46,16 @@ export default function NativeStagingLearnerControls({
   const [locked, setLocked] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [practiceFeedback, setPracticeFeedback] = useState<{
+    questionId: string; optionId: string; correct: boolean; feedback: string;
+  } | null>(null);
   const inFlight = useRef(false);
 
   const base = `${API_BASE_URL}/lms/native/matriculas/${matriculaId}`;
   const lessonIds = new Set(course.units.filter((unit) => unit.kind === 'lesson').map((unit) => unit.id));
+  const practiceIds = new Set(course.units.filter((unit) => unit.kind === 'practice')
+    .flatMap((unit) => unit.questionIds));
+  const examQuestions = course.questions.filter((q) => !practiceIds.has(q.id));
 
   async function refreshSession(): Promise<NativePilotSession> {
     const response = await fetchWithAuth(`${base}/sessao`, { method: 'GET', cache: 'no-store' });
@@ -152,9 +158,33 @@ export default function NativeStagingLearnerControls({
     setMessage('Visita registrada pelo servidor. Isso não comprova conclusão da aula.');
   });
 
+  const checkPractice = (questionId: string, optionId: string) => void mutate(async () => {
+    if (!started || !practiceIds.has(questionId) ||
+        !course.questions.find((q) => q.id === questionId)?.options.some((o) => o.id === optionId)) {
+      throw new Error('NATIVE_PRACTICE_INVALID');
+    }
+    const response = await fetchWithAuth(`${base}/pratica`, {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ questionId, optionId }),
+    });
+    if (!response.ok) throw new Error('NATIVE_PRACTICE_NOT_CONFIRMED');
+    const body = await response.json() as {success?: boolean; data?: {
+      question_id: string; edition_sha256: string;
+      correct: boolean; feedback: string; non_certifying: boolean;
+    }};
+    if (body.success !== true || body.data?.question_id !== questionId ||
+        body.data.edition_sha256 !== editionHash ||
+        body.data.non_certifying !== true || typeof body.data.correct !== 'boolean' ||
+        typeof body.data.feedback !== 'string' || !body.data.feedback.trim() ||
+        body.data.feedback.length > 4000) throw new Error('NATIVE_PRACTICE_INVALID_RECEIPT');
+    setPracticeFeedback({ questionId, optionId, correct: body.data.correct, feedback: body.data.feedback });
+    setMessage('Fixação corrigida pelo servidor. Não altera a nota ou a tentativa oficial.');
+  });
+
   const submit = (answers: Array<{ questionId: string; optionId: string }>) => void mutate(async () => {
-    if (!started || answers.length !== course.questions.length ||
-        course.questions.some((question, i) =>
+    if (!started || answers.length !== examQuestions.length ||
+        examQuestions.some((question, i) =>
           answers[i]?.questionId !== question.id ||
           !question.options.some((option) => option.id === answers[i].optionId))) {
       throw new Error('NATIVE_ATTEMPT_INVALID');
@@ -239,6 +269,8 @@ export default function NativeStagingLearnerControls({
         serverSeenLessonIds={session.seenLessonIds}
         onRecordLessonVisit={started && !locked && !completed ? visit : undefined}
         onSubmitAssessment={started && !locked && !completed ? submit : undefined}
+        onCheckPractice={started && !locked && !completed ? checkPractice : undefined}
+        practiceFeedback={practiceFeedback}
         evidenceBusy={busy}
       />
     </section>

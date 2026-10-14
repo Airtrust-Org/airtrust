@@ -13,6 +13,7 @@ import { loadNativePublishedCourse, loadNativePrivateCourse, NativeContentLoadEr
 import { readNativeLearnerSession, NativeEvidenceReadError } from '../services/lms-native-readiness-repository';
 import { loadNativeVerifiedAsset } from '../services/lms-native-asset-loader';
 import nativeWriteRoutes, { canWriteNative } from './lms-native-write';
+import nativePracticeRoutes from './lms-native-practice';
 import nativeEnrollmentRoutes from './lms-native-enrollment';
 import nativeCompletionPreflightRoutes from './lms-native-completion-preflight';
 import nativeCompletionRoutes, { canCompleteNative } from './lms-native-completion';
@@ -260,6 +261,8 @@ app.get('/matriculas/:matriculaId/assets/:assetId', async (c) => {
 // Inherits auth() and tenant isolation from this parent. The write router
 // additionally requires two independent exact-tenant staging allowlists.
 app.route('/', nativeWriteRoutes);
+// Formative module feedback does not mutate official attempts or completion.
+app.route('/', nativePracticeRoutes);
 // Separate fourth tenant gate; this route never accepts client employee or edition IDs.
 app.route('/', nativeEnrollmentRoutes);
 // Separate read-only completion diagnostics, not a terminal write endpoint.

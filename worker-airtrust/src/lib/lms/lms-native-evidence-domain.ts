@@ -190,7 +190,10 @@ export function assessNativeCompletionReadiness(
     return { readyForCanonicalCompletion: false, reason: 'ASSESSMENT_EVIDENCE_MISSING' };
   }
   const grade = proof.gradedAttempt.assessment;
-  if (!Number.isSafeInteger(grade.total) || grade.total !== artifact.questions.length ||
+  const practiceIds = new Set(artifact.units
+    .filter((unit) => unit.kind === 'practice').flatMap((unit) => unit.questionIds));
+  const certifyingQuestionCount = artifact.questions.filter((q) => !practiceIds.has(q.id)).length;
+  if (!Number.isSafeInteger(grade.total) || grade.total !== certifyingQuestionCount ||
       grade.answered !== grade.total ||
       (grade.mode === 'SCORED' &&
         (typeof grade.scorePct !== 'number' || !Number.isFinite(grade.scorePct) ||

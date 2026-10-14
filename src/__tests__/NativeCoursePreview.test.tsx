@@ -131,6 +131,40 @@ describe('NativeCoursePreview — display only', () => {
     expect(screen.queryByRole('button', { name: /concluir|certificado/i })).toBeNull();
   });
 
+  it('checks module practice separately and does not submit it as an official exam', () => {
+    const onCheckPractice = vi.fn(), onSubmitAssessment = vi.fn();
+    const withPractice: NativeLearnerCourse = {
+      ...course,
+      units: [
+        course.units[0],
+        { id:'practice-1', kind:'practice', title:'Fixação após módulo',
+          blocks:[], questionIds:['p1'] },
+        course.units[1],
+      ],
+      questions: [
+        { id:'p1', prompt:'Confirme a fixação',
+          options:[{id:'a',text:'Confirmar prática'},{id:'b',text:'Rever conteúdo'}] },
+        ...course.questions,
+      ],
+    };
+    render(<NativeCoursePreview course={withPractice} resolveAssetHref={() => null}
+      onCheckPractice={onCheckPractice} onSubmitAssessment={onSubmitAssessment}
+      practiceFeedback={{questionId:'p1',optionId:'a',correct:false,feedback:'Reveja o conteúdo'}} />);
+    fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
+    expect(screen.getByText('FIXAÇÃO DO MÓDULO')).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Enviar respostas para avaliação'})).toBeNull();
+    fireEvent.click(screen.getByRole('radio',{name:'Confirmar prática'}));
+    expect(screen.getByText(/Reveja o conteúdo/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Conferir resposta de fixação'}));
+    expect(onCheckPractice).toHaveBeenCalledExactlyOnceWith('p1','a');
+    expect(onSubmitAssessment).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
+    expect(screen.getByRole('button',{name:'Enviar respostas para avaliação'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('radio',{name:'Verificar o EPI'}));
+    fireEvent.click(screen.getByRole('button',{name:'Enviar respostas para avaliação'}));
+    expect(onSubmitAssessment).toHaveBeenCalledExactlyOnceWith([{questionId:'q1',optionId:'b'}]);
+  });
+
   it('shows no client grading or server writes at any step', () => {
     const resolve = vi.fn(() => null);
     render(<NativeCoursePreview course={course} resolveAssetHref={resolve} />);

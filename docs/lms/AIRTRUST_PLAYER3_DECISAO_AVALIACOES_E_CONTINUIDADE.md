@@ -40,3 +40,30 @@ No HEAD `0f92441512eaf660da5636493eb7895112d721be` consultado em 2026-10-14:
 - **Bloqueadores:** fluxo formativo separado, HTML5 original fiel, ponte segura, Schema V2 0550 e ativações/aplicações governadas, R2 privado, staging real e conclusão certificadora ponta a ponta.
 - **Não autorizado:** deploy de produção sem SHA/artefatos/escopo explícitos; migrations D1/R2/seed não governados; marcar conclusão sem evidência; trocar conteúdo real por candidato genérico não homologado.
 - **Próxima ação:** executar o lote de construção acima na PR existente, começando pela prova de fidelidade HTML5 e diferenciação de avaliações; revisar delta de main antes de merge. Não repetir auditorias já concluídas.
+
+## Execução técnica — 2026-10-14 — contrato formativo separado (PR #1389)
+
+**Implementado no worktree isolado e testado, sem alteração remota de banco ou publicação de curso:**
+
+- Unidade `practice` distinta de `assessment` e `scenario` no contrato de artefato; o importador dos cursos deve mapear intencionalmente a modalidade com base nas regras pedagógicas originais, sem conversão silenciosa de avaliações certificadoras.
+- `gradeNativePracticeAnswer` usa gabarito privado no Worker e responde exclusivamente à questão do bloco formativo, com correção e feedback, **sem nota, tentativa oficial ou conclusão**.
+- Nova rota autenticada `POST /lms/native/matriculas/:id/pratica`, com limites de entrada e validação de tenant/ambiente/edição/ciclo; staging-only com allowlists exatas, sem escrita D1/R2 de prática.
+- `evaluateNativeAssessment` recebe apenas questões oficiais e decisões de cenários já exigidas pelo contrato; recusa questão formativa em tentativa oficial. `assessNativeCompletionReadiness` não exige respostas formativas nem conta essas questões no total certificador.
+- Interface mostra correção e feedback de cada questão de fixação no módulo e não as envia com a prova. Questões oficiais seguem privadas no Worker, enquanto a apresentação permanece **candidata genérica não homologada para o visual original**.
+- Regressões específicas de segurança e isolamento incluídas nos testes. Nenhum pacote/questão/gabarito privado enviado ao GitHub.
+
+**Testes locais neste lote, no worktree isolado `/tmp/airtrust-player3-exam-20261014`:**
+- 25/25 Worker (grading + practice + evidence domain) PASS;
+- 43/43 Worker rotas LMS Native PASS;
+- 16/16 frontend (prévia + learner controls) PASS;
+- Worker TypeScript `tsc --noEmit` PASS.
+- **`npm run lint` geral FAIL** em regra de governança contra scripts históricos de `wrangler d1 ... --remote` existentes em `scripts/production/apply-simuladores-matriz-remote-migration.sh` e `scripts/setup-local-overrides.sql`. Não modificar ou ignorar esses controles para fazer este lote passar. Verificar o gate oficial do SHA do commit após push; não afirmar CI verde.
+
+**Limitações reais e próximas ações (não recomeçar auditoria):**
+1. Os candidatos `costa_do_sol_9_cursos_native_8_templates_PRIVADO.zip` foram inspecionados somente em workspace privado e permanecem `REQUIRES_PEDAGOGICAL_AND_TECHNICAL_REVIEW`. O ZIP original `SMS(4).zip` está catalogado na Library, mas o serviço de materialização retornou ausência de caminho autorizado de bytes. Cópia original do Doutrinamento localizada no Mac em Google Drive File Provider apresentou `TimeoutError` ao ler. **Não há homologação de paridade do HTML5 original nesta execução**, nem motivo para pedir ao usuário reenviar antes de tentar fonte Cloud aprovada.
+2. Implementar ponte segura para HTML5 autoral real em player isolado; validar com bytes do original e comparar comportamento, telas, interações e mídias. Não aprovar conversão genérica por equivalência de slides.
+3. Estabelecer política explícita de qual questão é formativa versus cenário obrigatoriamente certificador versus prova final no manifesto da versão original. O lote de código não reclassifica automaticamente cursos anteriores.
+4. Completar governança Schema V2 0550/ativações, publicação privada R2, matrículas de teste e integração Worker/Pages em staging. Confirmar conclusão real 42/42 + prova + histórico/qualificação/certificado + reabertura Safari/Chromium.
+5. **Nada de produção sem autorização específica para SHA/artefatos/escopo** e gates oficiais. Nenhuma migration nem D1/R2 write remoto foi executado neste lote.
+
+**Estado compacto:** objetivo=P0 fechamento LMS com fidelidade HTML5; PR=#1389 draft; main=verificar ao vivo; head=verificar PR após commit; última implementação=fixação separada da prova; testes=25+43 Worker e 16 React PASS, tsc PASS, lint geral BLOCKED (scripts históricos); não integrado/não publicado; próxima=obter ZIP original via caminho cloud autorizado + ponte HTML5 fiel + staging E2E; não autorizado=bypass, promover código sem homologação, produção genérica.
