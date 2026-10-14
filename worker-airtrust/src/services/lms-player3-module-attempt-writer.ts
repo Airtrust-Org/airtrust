@@ -17,7 +17,7 @@ const HASH=/^[a-f0-9]{64}$/;
 const ID=/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 const positive=(n:number)=>Number.isSafeInteger(n)&&n>0;
 
-type Binding={vinculo_id:number;politica_id:number;source_sha256:string;
+type Binding={vinculo_id:number;edicao_id:number;politica_id:number;source_sha256:string;
   policy_sha256:string;bank_sha256:string;r2_prefix:string};
 type Stored={politica_id:number;tentativa_numero:number;event_id:string;
   answers_json:string;answers_sha256:string;score_pct:number;passed:number};
@@ -26,7 +26,7 @@ export type Player3StageReceipt=Readonly<{state:'APPLIED'|'IDEMPOTENT_REPLAY';
   scorePct:number;stagePassed:boolean;completionSupported:false}>;
 
 const BINDING=[
-  'SELECT b.id vinculo_id,p.id politica_id,p.source_sha256,p.bank_sha256,p.policy_sha256,ed.r2_prefix',
+  'SELECT b.id vinculo_id,b.edicao_id,p.id politica_id,p.source_sha256,p.bank_sha256,p.policy_sha256,ed.r2_prefix',
   'FROM lms_native_matricula_edicoes b',
   'JOIN lms_player3_politicas p ON p.edicao_id=b.edicao_id AND p.empresa_id=b.empresa_id',
   "AND p.curso_id=b.curso_id AND p.estado='APPROVED'",
