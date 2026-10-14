@@ -26,8 +26,10 @@ KEYS = frozenset({
     'feedbackCorrect', 'feedbackIncorrect', 'rationale',
 })
 MODEL_FILES = ('course_data.js', 'course-model.js')
+# JS ternaries such as 'correct':'incorrect' are interface styling, not a key.
+# Detect static answer objects / known grading assignments, not generic grading code.
 EXTERNAL_KEY = re.compile(
-    r"""(?i)(?:["']?(?:answerKey|correctAnswers|correctOptionId|scenarioCorrect)["']?\s*[:=]|["'](?:answer|correct)["']\s*:\s*(?:[0-9]|["']))"""
+    r"""(?i)(?:\b(?:answerKey|correctAnswers|correctOptionId|scenarioCorrect)\b\s*=\s*(?:[\[{0-9]|["'])|[,{]\s*["'](?:answer|correct)["']\s*:\s*(?:[0-9]|["']))"""
 )
 
 def sha(raw: bytes) -> str:
