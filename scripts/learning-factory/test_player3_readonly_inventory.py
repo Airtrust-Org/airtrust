@@ -51,6 +51,8 @@ class InventorySqlTests(unittest.TestCase):
         rows = list(self.db.execute(SQL))
         self.assertEqual([(r['empresa_id'], r['matricula_id']) for r in rows],
           [(6,911),(6,914)])
+        self.assertEqual(rows[0]['inventory_total_expected'],2)
+        self.assertTrue(all(row['inventory_total_expected']==2 for row in rows))
         self.assertEqual(rows[0]['matricula_progresso_pct'],80)
         self.assertEqual(rows[0]['ciclo_progresso_pct'],80)
         self.assertEqual(rows[0]['scorm_suspend_data_PRIVATE'],'private_resume')
