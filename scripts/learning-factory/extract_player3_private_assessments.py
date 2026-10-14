@@ -26,6 +26,16 @@ from zipfile import ZipFile
 from convert_preserved_html5 import checked_files, UnsafePackage, MAX_NESTED_ZIP
 
 ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
+# Source authoring IDs are immutable, even when a lesson exceeds Worker ID limit.
+# Only *content* units may use this longer syntax; assessment and course IDs
+# must retain the strict backend constraint (<=80 characters).
+SOURCE_CONTENT_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$')
+# Only the exact reviewed source and its one authored overlength lesson ID.
+# The parent/backend will receive a deterministic canonical alias, never this ID.
+SOURCE_LONG_LESSON_ALLOWLIST = {
+    'cd4b4cdbe51b750fa5f27ef74d602a197f44700cc040365993695aef8cfb689f':
+        frozenset({'comite_admin_027_flight_following_informacoes_de_acompanhamento_nao_sao_julgamento'}),
+}
 COURSE = re.compile(r'^window\.(?:COURSE_DATA|AIRTRUST_COURSE_MODEL)\s*=\s*')
 LIMIT_QUESTIONS = 500
 LIMIT_QUESTION_TEXT = 4000
@@ -104,6 +114,7 @@ def extract_question(q: dict, stage: str, i: int) -> tuple[dict, dict]:
 def extract(original: bytes, basename: str) -> tuple[dict, dict, dict]:
     if not isinstance(original, bytes) or len(original) > MAX_NESTED_ZIP:
         fail('SOURCE_SIZE')
+    source_hash=sha(original)
     with ZipFile(io.BytesIO(original)) as archive:
         entries = checked_files(archive)
         if 'index.html' not in entries or 'imsmanifest.xml' not in entries:
@@ -132,7 +143,13 @@ def extract(original: bytes, basename: str) -> tuple[dict, dict, dict]:
             if not isinstance(slide,dict):
                 fail('INVALID_UNIT')
             sid=slide.get('id')
-            if not isinstance(sid,str) or not ID.fullmatch(sid) or sid in seen:
+            source_lesson_exception = (
+                isinstance(sid,str) and slide.get('kind') == 'lesson' and
+                SOURCE_CONTENT_ID.fullmatch(sid) and
+                sid in SOURCE_LONG_LESSON_ALLOWLIST.get(source_hash,())
+            )
+            if (not isinstance(sid,str) or sid in seen or
+                    not (ID.fullmatch(sid) or source_lesson_exception)):
                 fail('DUPLICATE_OR_INVALID_UNIT_ID')
             seen.add(sid)
             if slide.get('kind') in ('assessment','quiz'):
@@ -165,7 +182,6 @@ def extract(original: bytes, basename: str) -> tuple[dict, dict, dict]:
             public_stages.append({'stageId':sid,'questions':projection})
         if len({q['id'] for q in private_questions}) != len(private_questions):
             fail('DUPLICATE_QUESTION_ID')
-        source_hash=sha(original)
         course_id=model.get('courseId')
         if not isinstance(course_id,str) or not ID.fullmatch(course_id):
             fail('INVALID_COURSE_ID')

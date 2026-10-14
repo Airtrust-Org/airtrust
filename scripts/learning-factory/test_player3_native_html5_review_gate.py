@@ -19,3 +19,5 @@ from test_player3_residuos_review import Player3ResiduosReviewTests
 from test_player3_sgso_review import Player3SGSOReviewTests
 
 from test_audit_player3_original_model_coherence import Player3OriginalModelCoherenceTests
+
+from test_player3_source_unit_alias_review import Player3SourceUnitAliasTests

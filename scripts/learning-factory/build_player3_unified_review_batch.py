@@ -75,6 +75,7 @@ def private_source_stage_map(source_sha: str, review_sha: str, binding_sha: str,
     if (not isinstance(original, list) or not 1 <= len(original) <= 500):
         raise UnsafePackage('PLAYER3_SOURCE_STAGE_MAP_MISSING')
     ids=set()
+    canonical_ids=set()
     stages=[]
     for index, row in enumerate(original):
         if not isinstance(row, dict):
@@ -83,14 +84,22 @@ def private_source_stage_map(source_sha: str, review_sha: str, binding_sha: str,
         kind=row.get('originalKind')
         typ=row.get('candidatePlayer3Type')
         review=row.get('requiresPedagogicalApproval')
-        if (not isinstance(stage_id,str) or
-            not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,79}',stage_id) or
-            stage_id in ids or not isinstance(kind,str) or not 1 <= len(kind) <= 80 or
+        source_id_valid=(isinstance(stage_id,str) and
+            re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,159}',stage_id))
+        canonical_id=(stage_id if isinstance(stage_id,str) and len(stage_id)<=80
+                      else 'u-'+hashlib.sha256(stage_id.encode('utf8')).hexdigest()[:32]
+                      if isinstance(stage_id,str) else None)
+        if (not source_id_valid or stage_id in ids or canonical_id in canonical_ids or
+            (len(stage_id)>80 and (kind!='lesson' or typ!='content')) or
+            not isinstance(kind,str) or not 1 <= len(kind) <= 80 or
             (typ is not None and typ not in ('content','practice','module_exam','final_exam')) or
             type(review) is not bool):
             raise UnsafePackage('PLAYER3_SOURCE_STAGE_MAP_INVALID')
         ids.add(stage_id)
+        canonical_ids.add(canonical_id)
         stages.append({'sourceOrder':index,'sourceUnitId':stage_id,
+                       'canonicalUnitId':canonical_id,
+                       'requiresUnitAlias':canonical_id!=stage_id,
                        'sourceKind':kind,'candidatePlayer3Type':typ,
                        'requiresPedagogicalApproval':review})
     canonical=json.dumps(stages,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode('utf8')

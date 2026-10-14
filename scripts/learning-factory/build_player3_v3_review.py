@@ -29,6 +29,13 @@ SOURCES = {
 # The CRM course explicitly declares formative assessment. Never silently
 # authorize it as module-certified based only on navigationGate in source.
 FORMATIVE_ZIPS = frozenset({'fbf9a3958963eb45ec22f0f529dc10bc832f546197c5b832b07bd1f200b5a5bf'})
+# Single original FDM Committee content ID exceeds the backend's 80-char ID.
+# Do not change original slides; use a deterministic alias for display hints.
+SOURCE_CONTENT_HINT_ALIASES = {
+    'cd4b4cdbe51b750fa5f27ef74d602a197f44700cc040365993695aef8cfb689f': {
+        'comite_admin_027_flight_following_informacoes_de_acompanhamento_nao_sao_julgamento': 'u-2b0a7a0fa4dcc111e716d8ddf4cb85dc'
+    }
+}
 ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
 
 
@@ -140,6 +147,15 @@ def adapt_v33_app(original: bytes, source_sha256: str,
     bridge=(BRIDGE.replace('__ORIGIN__',json.dumps(origin))
                  .replace('__EDITION__',json.dumps(edition_sha256))
                  .replace('__STAGES__',json.dumps(stages,sort_keys=True)))
+    # Preserve authored source-unit ID, emit only an alias for the untrusted
+    # navigation display hint when the backend identifier would be too long.
+    aliases=SOURCE_CONTENT_HINT_ALIASES.get(source_sha256,{})
+    hint='function hint(unitId){if(valid(unitId)&&window.parent!==window)'
+    if bridge.count(hint)!=1:raise JourneyUnsupported('V33_NAV_BRIDGE_DRIFT')
+    if aliases:
+        mapping='const sourceHintAliases='+json.dumps(aliases,sort_keys=True)+';'
+        bridge=mapping+bridge.replace(hint,
+            'function hint(unitId){unitId=sourceHintAliases[unitId]||unitId;if(valid(unitId)&&window.parent!==window)')
     # Inside the original IIFE, so call sites cannot inject authority.
     lines=text.splitlines();lines.insert(1,bridge)
     result='\n'.join(lines)+'\n'
