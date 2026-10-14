@@ -86,6 +86,117 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('autosave grava tela revisitada com bookmark 42/42 mesmo sem LMSCommit explícito', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const html = buildLaunchPage({
+      matriculaId: 911,
+      titulo: 'Revisita em progresso',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/57/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.location': '42/42', 'cmi.core.lesson_location': '42/42',
+        'airtrust.total_slides': 42,
+        'airtrust.viewed_slides': Array.from({ length: 35 }, (_, i) => i + 8),
+      }),
+      hasResumeState: false,
+    });
+    new Function(extractWrapperScript(html))();
+    // Same setup as the existing manual-navigation regression: enable autosave
+    // before browser restoration can replace the user's current page.
+    g.window.dispatchEvent(new g.MessageEvent('message', {
+      data: { type: 'lms:navigate', direction: 'prev' },
+    }));
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSSetValue('cmi.core.lesson_location', '3/42');
+    expect(api.LMSGetValue('cmi.core.lesson_location')).toBe('42/42');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1), { timeout: 2500 });
+    const saved = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    const cmi = JSON.parse(saved.cmi_json);
+    expect(cmi['airtrust.viewed_slides']).toContain(3);
+    expect(cmi['airtrust.viewed_slides']).not.toContain(1);
+    expect(cmi['cmi.core.lesson_location']).toBe('42/42');
+    api.LMSSetValue('cmi.core.lesson_location', '3/42');
+    await new Promise(resolve => setTimeout(resolve, 900));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('revisita telas ausentes sem rebaixar bookmark 42/42 e grava a visita real no commit', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const previouslySeen = Array.from({ length: 35 }, (_, i) => i + 8);
+    const html = buildLaunchPage({
+      matriculaId: 911,
+      titulo: 'Curso com retomada',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/57/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_location': '42/42',
+        'cmi.location': '42/42',
+        'cmi.core.lesson_status': 'passed',
+        'airtrust.total_slides': 42,
+        'airtrust.viewed_slides': previouslySeen,
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSSetValue('cmi.core.lesson_location', '3/42');
+    expect(api.LMSGetValue('cmi.core.lesson_location')).toBe('42/42');
+    api.LMSCommit('');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const saved = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    const cmi = JSON.parse(saved.cmi_json);
+    expect(saved.matricula_id).toBe(911);
+    expect(saved.lesson_status).toBe('passed');
+    expect(cmi['cmi.core.lesson_location']).toBe('42/42');
+    expect(cmi['airtrust.viewed_slides']).toContain(3);
+    expect(cmi['airtrust.viewed_slides']).not.toContain(1);
+    // No edition transfer or fabricated consecutive coverage.
+    api.LMSSetValue('cmi.core.lesson_location', '2/43');
+    api.LMSCommit('');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const wrongEdition = JSON.parse(String(fetchMock.mock.calls[1][1].body));
+    expect(JSON.parse(wrongEdition.cmi_json)['airtrust.viewed_slides']).not.toContain(2);
+  });
+
+  it('contador específico do pacote registra tela anterior sem tratar frações genéricas do DOM como visitas', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const html = buildLaunchPage({
+      matriculaId: 911,
+      titulo: 'Curso com contador',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/57/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_location': '42/42', 'cmi.location': '42/42',
+        'airtrust.total_slides': 42,
+        'airtrust.viewed_slides': Array.from({ length: 35 }, (_, i) => i + 8),
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const frame = g.document.getElementById('scorm-frame') as unknown as { contentWindow: { document: { body: { innerHTML: string } } }; dispatchEvent: (event: unknown) => void };
+    frame.contentWindow!.document.body.innerHTML =
+      '<div id="counterText">3/42</div><p>FORM 1/42; unrelated 5/99</p>';
+    frame.dispatchEvent(new g.Event('load'));
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSCommit('');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const cmi = JSON.parse(JSON.parse(String(fetchMock.mock.calls[0][1].body)).cmi_json);
+    expect(cmi['cmi.core.lesson_location']).toBe('42/42');
+    expect(cmi['airtrust.viewed_slides']).toContain(3);
+    expect(cmi['airtrust.viewed_slides']).not.toContain(1);
+    expect(cmi['airtrust.viewed_slides']).not.toContain(5);
+  });
+
   it('mudança apenas de session_time não dispara novo commit (fingerprint ignora campos de tempo)', async () => {
     const fetchMock = mockOkFetch();
     vi.stubGlobal('fetch', fetchMock);
@@ -601,16 +712,16 @@ describe('Wrapper SCORM real (execução em jsdom) — tratamento de erros non-2
     expect(statusText).toBe(errorJson.error);
 
     const saveError = postMessages.find(
-      (m: any) => m && m.type === 'lms:save-error' && m.code === 'LMS_QUALIFICATION_COMPLETION_FAILED',
+      (m: unknown) => m !== null && typeof m === 'object' && 'type' in m && 'code' in m && m.type === 'lms:save-error' && m.code === 'LMS_QUALIFICATION_COMPLETION_FAILED',
     );
     expect(saveError).toBeDefined();
 
     const completionError = postMessages.find(
-      (m: any) =>
-        m && m.type === 'lms:completion-error' && m.code === 'LMS_QUALIFICATION_COMPLETION_FAILED',
+      (m: unknown) =>
+        m !== null && typeof m === 'object' && 'type' in m && 'code' in m && m.type === 'lms:completion-error' && m.code === 'LMS_QUALIFICATION_COMPLETION_FAILED',
     );
     expect(completionError).toBeDefined();
-    expect((completionError as any).message).toBe(errorJson.error);
+    expect((completionError as { message: unknown }).message).toBe(errorJson.error);
   });
 
   it('500 com erro do servidor: realiza retries e faz fallback seguro', async () => {
