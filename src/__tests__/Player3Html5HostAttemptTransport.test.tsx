@@ -90,6 +90,51 @@ describe('Player3 HTML5 Host wiring to real authenticated attempt ledger',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Enviar avaliação ao AirTrust'}));
     expect(authenticatedFetch).toHaveBeenCalledTimes(3);
   });
+  it('preserves ambiguous-POST lock when the same assessment is dismissed and reopened',async()=>{
+    authenticatedFetch.mockResolvedValueOnce(payload(session(false,0)))
+      .mockRejectedValueOnce(new Error('response lost after Worker commit'));
+    const pending=(ctx:typeof context)=>({
+      context:ctx,onVerifiedStagePassed:vi.fn(),onDismiss:vi.fn(),
+    });
+    const {rerender}=render(<Player3Html5Host {...props}
+      pendingAssessment={pending(context)}/>);
+    selected();
+    expect(await screen.findByRole('status')).toHaveTextContent(/Reabra a sessão/);
+    expect(authenticatedFetch).toHaveBeenCalledTimes(2);
+    // A legitimate parent refresh may remount the modal with a new context
+    // object while the same enrollment/stage remains mounted in the host.
+    rerender(<Player3Html5Host {...props} pendingAssessment={null}/>);
+    rerender(<Player3Html5Host {...props} pendingAssessment={pending({
+      ...context,questions:context.questions.map(q=>({
+        ...q,options:q.options.map(o=>({...o})),
+      })),
+    })}/>);
+    selected();
+    expect(await screen.findByRole('status')).toHaveTextContent(/Reabra a sessão/);
+    // No new GET/POST and, crucially, no second eventId/attempt.
+    expect(authenticatedFetch).toHaveBeenCalledTimes(2);
+  });
+  it('fails closed on a changed question policy for the same pinned stage',async()=>{
+    authenticatedFetch.mockResolvedValueOnce(payload(session(false,0)))
+      .mockRejectedValueOnce(new Error('response lost after Worker commit'));
+    const pending=(ctx:typeof context)=>({
+      context:ctx,onVerifiedStagePassed:vi.fn(),onDismiss:vi.fn(),
+    });
+    const {rerender}=render(<Player3Html5Host {...props}
+      pendingAssessment={pending(context)}/>);
+    selected();
+    expect(await screen.findByRole('status')).toHaveTextContent(/Reabra a sessão/);
+    rerender(<Player3Html5Host {...props} pendingAssessment={null}/>);
+    rerender(<Player3Html5Host {...props} pendingAssessment={pending({
+      ...context,questions:[{...context.questions[0],
+        options:[{id:'o2',text:'Nova opção'},{id:'o3',text:'Outra opção'}],
+      }],
+    })}/>);
+    fireEvent.click(screen.getByRole('radio',{name:'Nova opção'}));
+    fireEvent.click(screen.getByRole('button',{name:'Enviar avaliação ao AirTrust'}));
+    expect(await screen.findByRole('status')).toHaveTextContent(/Reabra a sessão/);
+    expect(authenticatedFetch).toHaveBeenCalledTimes(2);
+  });
   it('does not render mismatched edition even with a passed caller-supplied receipt',async()=>{
     render(<Player3Html5Host {...props} pendingAssessment={{
       context:{...context,editionSha256:'b'.repeat(64)},
