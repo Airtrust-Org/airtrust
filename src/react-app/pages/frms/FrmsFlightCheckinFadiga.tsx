@@ -1008,6 +1008,7 @@ export default function FrmsFlightCheckinFadiga() {
                     </fieldset>
                   </div>
                 </div>
+                </div>
               </FormCard>
 
               <FormCard
