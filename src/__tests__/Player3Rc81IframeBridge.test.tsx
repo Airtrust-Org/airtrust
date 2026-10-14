@@ -86,6 +86,7 @@ describe('Player3 RC8.1 preserved HTML5 bridge to Worker immutable grade',()=>{
     send(hint({editionSha256:'b'.repeat(64)}));
     send(hint({answers:[{questionId:'q1',optionId:'o9'}]}));
     send(hint({grade:100}));
+    send(hint({answers:[{questionId:'q1',optionId:'o0',score_pct:100}]}));
     expect(request).not.toHaveBeenCalled();
     sibling.remove();
   });
