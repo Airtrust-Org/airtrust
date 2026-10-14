@@ -13,6 +13,7 @@ import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import {
   buildScormLocationHelpersScript,
   buildScormVisitTrackingScript,
+  buildScormPayloadFingerprintScript,
   buildScormNativeResumeOwnershipScript,
   buildScormProgressParsersScript,
   buildScormSessionCloseRuntimeScript,
@@ -1507,14 +1508,7 @@ ${buildScormLocationHelpersScript()}
     return cmi['cmi.location'] || cmi['cmi.core.lesson_location'] || null;
   }
 
-  function fingerprintPayload(data) {
-    try {
-      var d = data || {};
-      return JSON.stringify([d.lesson_status, d.completion_status, d.success_status, d.score_raw, d.suspend_data, getScormLocation()]);
-    } catch (_error) {
-      return '';
-    }
-  }
+${buildScormPayloadFingerprintScript()}
 
   function parseLocationPair(location) {
     return parseScormLocationPair(location);

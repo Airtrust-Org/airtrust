@@ -86,6 +86,44 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('autosave grava tela revisitada com bookmark 42/42 mesmo sem LMSCommit explícito', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const html = buildLaunchPage({
+      matriculaId: 911,
+      titulo: 'Revisita em progresso',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/57/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.location': '42/42', 'cmi.core.lesson_location': '42/42',
+        'airtrust.total_slides': 42,
+        'airtrust.viewed_slides': Array.from({ length: 35 }, (_, i) => i + 8),
+      }),
+      hasResumeState: false,
+    });
+    new Function(extractWrapperScript(html))();
+    // Same setup as the existing manual-navigation regression: enable autosave
+    // before browser restoration can replace the user's current page.
+    g.window.dispatchEvent(new g.MessageEvent('message', {
+      data: { type: 'lms:navigate', direction: 'prev' },
+    }));
+    g.document.getElementById('scorm-frame').dispatchEvent(new g.Event('load'));
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSSetValue('cmi.core.lesson_location', '3/42');
+    expect(api.LMSGetValue('cmi.core.lesson_location')).toBe('42/42');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1), { timeout: 2500 });
+    const saved = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    const cmi = JSON.parse(saved.cmi_json);
+    expect(cmi['airtrust.viewed_slides']).toContain(3);
+    expect(cmi['airtrust.viewed_slides']).not.toContain(1);
+    expect(cmi['cmi.core.lesson_location']).toBe('42/42');
+    api.LMSSetValue('cmi.core.lesson_location', '3/42');
+    await new Promise(resolve => setTimeout(resolve, 900));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('revisita telas ausentes sem rebaixar bookmark 42/42 e grava a visita real no commit', async () => {
     const fetchMock = mockOkFetch();
     vi.stubGlobal('fetch', fetchMock);

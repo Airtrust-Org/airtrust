@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-assets.ts'), 'utf8');
+const runtimeSource = readFileSync(resolve(process.cwd(), 'src/services/lms-scorm-wrapper-runtime.ts'), 'utf8');
 
 describe('SCORM mobile stability — autosave e resume', () => {
   it('agenda commit ao mudar valor ou registrar visita nova, sem downgrade (SCORM 1.2)', () => {
@@ -19,14 +20,15 @@ describe('SCORM mobile stability — autosave e resume', () => {
   });
 
   it('exclui session_time/total_time (inclusive dentro de cmi_json) do fingerprint de dedup', () => {
-    expect(source).toContain('function fingerprintPayload(data) {');
-    const fn = source.slice(
-      source.indexOf('function fingerprintPayload(data) {'),
-      source.indexOf('function fingerprintPayload(data) {') + 400,
+    expect(runtimeSource).toContain('function fingerprintPayload(data) {');
+    const fn = runtimeSource.slice(
+      runtimeSource.indexOf('function fingerprintPayload(data) {'),
+      runtimeSource.indexOf('function fingerprintPayload(data) {') + 900,
     );
     expect(fn).not.toContain('session_time');
     expect(fn).not.toContain('total_time');
-    expect(fn).not.toContain('cmi_json');
+    expect(fn).toContain('d.cmi_json');
+    expect(fn).toContain("saved['airtrust.viewed_slides']");
     expect(fn).toContain('getScormLocation()');
   });
 

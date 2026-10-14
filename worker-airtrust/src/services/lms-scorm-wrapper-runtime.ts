@@ -86,6 +86,31 @@ function resolveProbedScormLocation(authored, explicitLocation, domLocation) {
 }
 
 /**
+ * Fingerprint de autosave por evidência: considera somente os campos SCORM
+ * canônicos e o mapa de visitas, sem o ruído de session_time/total_time do CMI.
+ * O fingerprint é extraído do snapshot enviado (e não do CMI mutável atual),
+ * para uma resposta HTTP atrasada não suprimir um commit subsequente.
+ */
+export function buildScormPayloadFingerprintScript(): string {
+  return `
+  function fingerprintPayload(data) {
+    try {
+      var d = data || {};
+      var saved = null;
+      try { saved = typeof d.cmi_json === 'string' ? JSON.parse(d.cmi_json) : null; }
+      catch (_cmiParseError) { saved = null; }
+      var total = saved && Number.isSafeInteger(saved['airtrust.total_slides'])
+        ? saved['airtrust.total_slides'] : null;
+      var seen = saved && Array.isArray(saved['airtrust.viewed_slides'])
+        ? saved['airtrust.viewed_slides'] : null;
+      return JSON.stringify([d.lesson_status, d.completion_status, d.success_status,
+        d.score_raw, d.suspend_data, getScormLocation(), total, seen]);
+    } catch (_error) { return ''; }
+  }
+`;
+}
+
+/**
  * Observação de telas SCORM independente da posição máxima persistida.
  * Deve executar no mesmo escopo do wrapper; a tela revisitada é registrada
  * antes do guard que protege o bookmark e apenas no total de slides da edição.
