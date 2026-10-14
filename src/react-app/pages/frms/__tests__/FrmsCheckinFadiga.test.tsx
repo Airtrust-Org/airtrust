@@ -419,6 +419,26 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(screen.queryByText('Bloco 1 - Sono')).not.toBeInTheDocument();
   });
 
+  it('não acrescenta resposta obrigatória de repouso ao check-in diário', async () => {
+    render(<FrmsCheckinFadiga />);
+    expect(screen.getByText(/Informar oportunidade de sono \(repouso absoluto\) — opcional/)).toBeInTheDocument();
+    expect(screen.getByRole('status')).not.toHaveTextContent(/Oportunidade de sono \(repouso absoluto\)/);
+    // O preenchimento-padrão não informa oportunidade: PVT e sono efetivo continuam obrigatórios.
+    fireEvent.click(screen.getByRole('radio', { name: '8 horas ou mais' }));
+    fireEvent.change(screen.getByLabelText('Hora de apresentação'), { target: { value: '0630' } });
+    fireEvent.change(screen.getByLabelText('Hora em que acordou'), { target: { value: '0530' } });
+    fireEvent.click(screen.getByLabelText('Qualidade 4 - Boa'));
+    fireEvent.click(screen.getByLabelText('KSS 3: Alerta'));
+    fireEvent.click(document.getElementById('fit-choice-sim') as HTMLElement);
+    fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.oportunidade_sono_horas_24h).toBeUndefined();
+    expect(payload.readiness).toBeDefined();
+  });
+
   it('bloqueia envio quando a oportunidade de sono é inferior ao sono declarado', () => {
     render(<FrmsCheckinFadiga />);
     fireEvent.change(screen.getByLabelText('Oportunidade de sono (repouso absoluto) nas últimas 24h'), { target: { value: '5' } });
