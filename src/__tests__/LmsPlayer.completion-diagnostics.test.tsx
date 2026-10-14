@@ -221,6 +221,7 @@ describe('LmsPlayer — diagnóstico granular de conclusão', () => {
         every_slide_verified: false,
         terminal_status_verified: false,
         assessment_verified: false,
+        slide_coverage: { total: 42, recorded: 39, missing_numbers: [2, 7, 22] },
       },
     };
     renderPlayer();
@@ -229,6 +230,7 @@ describe('LmsPlayer — diagnóstico granular de conclusão', () => {
     expect(pending).toHaveTextContent('telas obrigatórias');
     expect(pending).toHaveTextContent('nota da avaliação ainda não foi registrada');
     expect(pending).toHaveTextContent('conclusão ou aprovação válida');
+    expect(screen.getByTestId('lms-missing-slide-numbers')).toHaveTextContent('2, 7, 22');
     expect(screen.queryByText('Curso concluído')).not.toBeInTheDocument();
   });
 

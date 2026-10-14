@@ -1310,6 +1310,15 @@ export default function LmsPlayer() {
                         {describeScormClosureMissing(closureReadiness.missing).join('; ')}.
                       </p>
                     ) : null}
+                    {!isCompletedState && closureReadiness?.missing?.includes('distinct_slide_coverage') &&
+                      closureReadiness.slide_coverage?.missing_numbers?.length ? (
+                      <p className="text-xs text-amber-200/90" data-testid="lms-missing-slide-numbers">
+                        Telas sem registro: {closureReadiness.slide_coverage.missing_numbers.slice(0, 12).join(', ')}
+                        {closureReadiness.slide_coverage.missing_numbers.length > 12
+                          ? ` e mais ${closureReadiness.slide_coverage.missing_numbers.length - 12}` : ''}.
+                        Volte a essas telas no conteúdo para registrar a visita antes de solicitar a conclusão.
+                      </p>
+                    ) : null}
                   </>
                 ) : completionDiagnostic?.code && completionDiagnostic.code !== 'SCORM_NONE' ? (
                   <p>Diagnóstico de progresso: {completionDiagnostic.code}</p>
