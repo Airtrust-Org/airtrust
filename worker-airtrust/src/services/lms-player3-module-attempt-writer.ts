@@ -91,18 +91,13 @@ export function canWritePlayer3Stage(env:Env,tenant:number):boolean{
     allowed(env.PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS,tenant);
 }
 
-export async function commitPlayer3StageAttempt(input:{
+export async function loadApprovedPlayer3StageContext(input:{
   env:Env;db:D1Database;bucket:R2Bucket;actorUserId:number;
-  empresaId:number;matriculaId:number;stageId:string;eventId:string;
-  attemptNumber:number;answers:readonly {questionId:string;optionId:string}[];
-}):Promise<Player3StageReceipt>{
-  const {env,db,bucket,actorUserId,empresaId,matriculaId,stageId,eventId,attemptNumber}=input;
-  if(!canWritePlayer3Stage(env,empresaId))deny('STAGE_WRITES_DISABLED');
-  if(!positive(actorUserId)||!positive(matriculaId)||!ID.test(stageId)||!ID.test(eventId)||
-     !positive(attemptNumber)||attemptNumber>500||!Array.isArray(input.answers)||
-     input.answers.length<1||input.answers.length>200||
-     input.answers.some(x=>!x||Object.keys(x).length!==2||!ID.test(x.questionId)||!ID.test(x.optionId))){
-    deny('STAGE_REQUEST_INVALID');
+  empresaId:number;matriculaId:number;
+}){
+  const {env,db,bucket,actorUserId,empresaId,matriculaId}=input;
+  if(!canWritePlayer3Stage(env,empresaId) || !positive(actorUserId) || !positive(matriculaId)){
+    throw new Player3StageWriteError('STAGE_CONTEXT_DISABLED_OR_INVALID');
   }
   const course=await loadNativePrivateCourse({env,db,bucket,empresaId,matriculaId,actorUserId});
   if(course.mode!=='LEARN')deny('STAGE_REVIEW_READ_ONLY');
@@ -125,6 +120,23 @@ export async function commitPlayer3StageAttempt(input:{
   if(!policy||!bank||policy.source_sha256!==binding.source_sha256||
      bank.source_sha256!==binding.source_sha256||
      policy.editionSha256!==course.editionHash)deny('STAGE_EDITION_MISMATCH');
+  return {course,binding,policy,bank};
+}
+
+export async function commitPlayer3StageAttempt(input:{
+  env:Env;db:D1Database;bucket:R2Bucket;actorUserId:number;
+  empresaId:number;matriculaId:number;stageId:string;eventId:string;
+  attemptNumber:number;answers:readonly {questionId:string;optionId:string}[];
+}):Promise<Player3StageReceipt>{
+  const {env,db,bucket,actorUserId,empresaId,matriculaId,stageId,eventId,attemptNumber}=input;
+  if(!canWritePlayer3Stage(env,empresaId))deny('STAGE_WRITES_DISABLED');
+  if(!positive(actorUserId)||!positive(matriculaId)||!ID.test(stageId)||!ID.test(eventId)||
+     !positive(attemptNumber)||attemptNumber>500||!Array.isArray(input.answers)||
+     input.answers.length<1||input.answers.length>200||
+     input.answers.some(x=>!x||Object.keys(x).length!==2||!ID.test(x.questionId)||!ID.test(x.optionId))){
+    deny('STAGE_REQUEST_INVALID');
+  }
+  const {course,binding,policy,bank}=await loadApprovedPlayer3StageContext(input);
   let grade:ReturnType<typeof gradePlayer3ApprovedStage>;
   try{grade=gradePlayer3ApprovedStage(bank,policy,{stageId,answers:input.answers});}
   catch{throw new Player3StageWriteError('STAGE_EVIDENCE_INVALID');}

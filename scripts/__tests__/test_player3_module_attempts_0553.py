@@ -99,6 +99,20 @@ class Player3SchemaV2Tests(unittest.TestCase):
         b2=bind(self.db,ed2,7,11,110,1100)
         with self.assertRaises(sqlite3.IntegrityError):
             attempt(self.db,b2,p2)
+    def test_resume_query_reads_latest_and_earliest_passed_without_losing_pass(self):
+        # Exercises the actual SQL string embedded in the Worker reader.
+        import ast
+        import re
+        source=(ROOT/'worker-airtrust/src/services/lms-player3-module-progress-reader.ts').read_text()
+        segment=source.split('const LAST_AND_FIRST_PASS=[',1)[1].split("].join(' ');",1)[0]
+        parts=re.findall(r'^\s*(\'[^\']*\'|"[^"]*")',segment,re.MULTILINE)
+        statement=' '.join(ast.literal_eval(part) for part in parts)
+        attempt(self.db,self.binding,self.policy,'mod1',1,'e1',100,1)
+        attempt(self.db,self.binding,self.policy,'mod1',2,'e2',50,0)
+        attempt(self.db,self.binding,self.policy,'mod2',1,'e3',100,1)
+        output=self.db.execute(statement,(self.binding,)).fetchall()
+        self.assertEqual([(r[1],r[2],r[7]) for r in output],
+                         [('mod1',1,1),('mod1',2,0),('mod2',1,1)])
     def test_immutable_attempt_ledger(self):
         attempt(self.db,self.binding,self.policy)
         with self.assertRaises(sqlite3.IntegrityError):

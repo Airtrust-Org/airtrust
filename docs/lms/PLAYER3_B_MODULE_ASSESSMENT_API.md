@@ -17,6 +17,14 @@ Nunca enviar grade, correctOptionId, certificate, tenant, ciclo ou edition
 no corpo. A identidade do funcionário, curso, ciclo e edição é verificada
 diretamente pelo Worker a partir de autenticação, banco e R2 privado.
 
+**GET /api/lms/native/matriculas/{matriculaId}/etapas/sessao:** consulta
+protegida do mesmo tenant, matrícula, ciclo e edição para reabrir o treinamento.
+Recalcula os recibos de aprovação com a política e o banco de respostas
+privados; retorna stages (stageId, attempts, lastScorePct, passed,
+nextAttemptNumber), editionSha256, cycleId e allOfficialStagesPassed.
+O booleano de provas aprovadas não significa matrícula concluída:
+completionSupported continua false. Nenhuma resposta ou gabarito sai no GET.
+
 **Resposta:** HTTP 201 para nova tentativa e 200 para replay idêntico.
 Inclui state, stage_id, attempt_number, edition_sha256, score_pct,
 stage_passed e completion_supported=false. Não retorna gabaritos. HTTP
@@ -35,7 +43,7 @@ todas exigindo o mesmo tenant sem wildcard:
 **Frente A:** manter o HTML5 visual original, mas nenhuma mensagem da página
 pode certificar aluno. O AirTrust usa a API acima para tentar a prova. Só
 liberar o próximo módulo após recibo persistido de stage_passed=true.
-Após perda de conexão, reconsultar recibo (GET autenticado ainda pendente).
+Após perda de conexão, consultar GET de sessão modular autenticado e só liberar após confirmação.
 Nunca confiar no contador local ou no fechamento de janela.
 
 **Frente D:** testar aprovação, reprovação, replay, colisão, interrupção,
@@ -69,7 +77,7 @@ qualificação e certificado verificável, sob ciclo e edição imutáveis.
 1. HTML5 fiel sem gabaritos e política pedagógica aprovada (Frente A).
 2. Aplicação Schema V2 0552/0553 apenas por workflow governado em staging.
 3. Política e gabarito SHA-pinned armazenados no R2 privado.
-4. GET autenticado de retomada de etapas, verificação server-side e
+4. reconciliação de provas por etapa com as demais evidências e
    integração do resultado com completeLmsMatricula.
 5. E2E real Doutrinamento 42/42 e SCORM externo, depois oito gates,
    autorização específica de SHA/escopo e fluxo oficial de release.

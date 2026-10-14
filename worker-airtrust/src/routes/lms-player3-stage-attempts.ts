@@ -12,6 +12,7 @@ import {
 } from '../services/lms-player3-module-attempt-writer';
 import {NativeAdmissionError} from '../services/lms-native-enrollment-access';
 import {NativeContentLoadError} from '../services/lms-native-content-loader';
+import {readPlayer3ModuleSession} from '../services/lms-player3-module-progress-reader';
 
 const app=new Hono<{Bindings:Env}>();
 const ID=/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
@@ -102,6 +103,42 @@ app.post('/matriculas/:matriculaId/etapas/:stageId/tentativas',async c=>{
       return c.json({success:false,code:error.code},409);
     }
     return c.json({success:false,code:'PLAYER3_STAGE_UNAVAILABLE'},503);
+  }
+});
+/** Read authenticated, re-graded modular receipt state after reconnect/reopen. */
+app.get('/matriculas/:matriculaId/etapas/sessao',async c=>{
+  c.header('Cache-Control','private, no-store');
+  const empresaId=getEmpresaIdSafe(c);
+  if(!canWritePlayer3Stage(c.env,empresaId)){
+    return c.json({success:false,code:'PLAYER3_SESSION_NOT_ENABLED'},404);
+  }
+  const rawId=c.req.param('matriculaId');
+  if(!ENROLLMENT.test(rawId)){
+    return c.json({success:false,code:'PLAYER3_INVALID_CONTEXT'},400);
+  }
+  const rawActor=c.get('userId' as never) as unknown;
+  const actorUserId=typeof rawActor==='number'?rawActor:
+    typeof rawActor==='string'?Number(rawActor):NaN;
+  if(!Number.isSafeInteger(actorUserId)||actorUserId<=0){
+    return c.json({success:false,code:'PLAYER3_ACCESS_DENIED'},403);
+  }
+  try{
+    const data=await readPlayer3ModuleSession({
+      db:c.env.DB,env:c.env,bucket:c.env.BUCKET,empresaId,
+      matriculaId:Number(rawId),actorUserId,
+    });
+    return c.json({success:true,data},200);
+  }catch(error){
+    if(error instanceof NativeAdmissionError){
+      return c.json({success:false,code:error.code},error.status);
+    }
+    if(error instanceof NativeContentLoadError){
+      return c.json({success:false,code:'PLAYER3_EDITION_UNAVAILABLE'},409);
+    }
+    if(error instanceof Player3StageWriteError){
+      return c.json({success:false,code:error.code},409);
+    }
+    return c.json({success:false,code:'PLAYER3_SESSION_UNAVAILABLE'},503);
   }
 });
 export default app;
