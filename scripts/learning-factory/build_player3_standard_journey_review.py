@@ -20,6 +20,7 @@ from build_player3_rc81_bridge_review import _replace_line, _host_origin, RC81Un
 # SHA values originate in the verified 22-edition source inventory.
 SOURCES = {
     '17dc02353c30db05ca92d187191f59ee2e98993183a169bf67c213ef1fcec4a3': '169b7e9f5d1d84f828fc67a5807263cbae63a3039c08ab75344950cea8fe582b',
+    '402f1c40b4e79b344cd2c1a60b81b932828f0bf7da6b5e04d0228d20ad5d0560': '608d5304566698ad5250e29e54a4b93300406b0fabb07b3d5adda7c83e16159a',
     '9ecf7a13cff4cc70c77869072a25a02527f1816b66cdd20cb88550a1ad18c793': '527612ee676d63e8aba1d23902d025528c110037de1e4b6bddf000a84b1c3070',
     '8145d6c28f3f1b1e1029e38ce3feb69f1dde2833f9f3ec7be98321bd782181bf': '4b7104b9a06f52df8003fda335448c67c80dbd9a412ea01ab4995d168e1c28c6',
     '33ce7f1a473b2c6280bf3ba3a5413ebd6b56e47ac61140838b9840ec0fa55909': '96bb814bc0edd332ca2e6739804d7b1345a4edd5946f1b94173e3e24ba1b3ca9',
@@ -165,8 +166,9 @@ def adapt_standard_app(original_app: bytes, original_zip_sha256: str,
     _replace_line(lines,'emitDiag','function emitDiag(){}')
     _replace_line(lines,'completeCourse',"function completeCourse(){window.AIRTRUST_PLAYER3_JOURNEY?.contentEnd(slide().id);render(false);return false}")
     _replace_line(lines,'finishSession','function finishSession(){return true}')
+    scroll = "saveScroll();" if any(line.startswith("function saveScroll(") for line in lines) else ""
     _replace_line(lines,'evaluate',
-      "function evaluate(){saveScroll();const s=slide();if(s.kind!=='assessment'||mode!=='journey')return;"
+      "function evaluate(){"+scroll+"const s=slide();if(s.kind!=='assessment'||mode!=='journey')return;"
       "if(assessment.evaluated||!assessment.answers.every(x=>x!==null))return;"
       "window.AIRTRUST_PLAYER3_JOURNEY.submit(s.id,assessment.answers).then(v=>{"
       "assessment.evaluated=true;assessment.passed=v.stage_passed;assessment.score=v.score_pct;render(false)"

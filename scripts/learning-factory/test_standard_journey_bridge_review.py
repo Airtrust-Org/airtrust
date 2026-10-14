@@ -1,4 +1,4 @@
-"""Seven SHA-pinned author journeys: generic server-verdict adapter (review only).
+"""Eight SHA-pinned author journeys: generic server-verdict adapter (review only).
 
 Synthetic/negative checks execute in Actions. Opt-in original ZIP tests require
 private source archives mounted outside GitHub; never echo answers or media.
@@ -18,9 +18,9 @@ from build_player3_standard_journey_review import (
 
 
 class StandardJourneyBridgeTests(unittest.TestCase):
-    def test_exactly_seven_review_sources_pinned(self):
-        self.assertEqual(len(SOURCES), 7)
-        self.assertEqual(len(set(SOURCES.values())), 6)  # identical PPSP runtime, separate editions
+    def test_exactly_eight_review_sources_pinned(self):
+        self.assertEqual(len(SOURCES), 8)
+        self.assertEqual(len(set(SOURCES.values())), 7)  # identical PPSP runtime, separate editions
         for source_sha, app_sha in SOURCES.items():
             self.assertRegex(source_sha, r'^[a-f0-9]{64}$')
             self.assertRegex(app_sha, r'^[a-f0-9]{64}$')
@@ -79,11 +79,11 @@ class StandardJourneyBridgeTests(unittest.TestCase):
                           'certificate', 'window.Scorm', 'window.localStorage'):
             self.assertNotIn(forbidden, BRIDGE)
 
-    def test_real_seven_sources_opt_in(self):
+    def test_real_eight_sources_opt_in(self):
         sms = os.environ.get('AIRTRUST_PLAYER3_ORIGINAL_SMS_BATCH')
         op = os.environ.get('AIRTRUST_PLAYER3_ORIGINAL_OPERACIONAL_BATCH')
         if not sms or not op:
-            self.skipTest('7 source-backed tests require both private original batch ZIPs')
+            self.skipTest('8 source-backed tests require both private original batch ZIPs')
         seen=set()
         for batch_path in (Path(sms),Path(op)):
             with ZipFile(batch_path) as batch:
@@ -119,7 +119,7 @@ class StandardJourneyBridgeTests(unittest.TestCase):
                                           'window.__AIRTRUST_PLAYER_TEST__',
                                           'cmi.core.lesson_status'):
                             self.assertNotIn(forbidden,app)
-        self.assertEqual(len(seen),7)
+        self.assertEqual(len(seen),8)
 
 if __name__=='__main__':
     unittest.main()
