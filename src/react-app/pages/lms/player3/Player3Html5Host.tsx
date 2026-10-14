@@ -155,6 +155,10 @@ export default function Player3Html5Host({
           stage_passed:receipt.stage_passed,score_pct:receipt.score_pct,
           persisted:true,
         }, origin);
+        // The parent may refresh its server-only next-stage projection, but
+        // only after the successful official receipt was re-read. No iframe
+        // signal alone can advance the authenticated stage.
+        if (receipt.stage_passed) pendingAssessment?.onVerifiedStagePassed(receipt);
       }).catch(() => {
         // The authored HTML5 times out and remains locked. No automatic
         // re-post: a committed attempt may have lost only its response.
@@ -163,7 +167,7 @@ export default function Player3Html5Host({
     window.addEventListener('message', receive);
     return () => { active = false; window.removeEventListener('message', receive); };
   }, [safe,contentOrigin,editionSha256,reviewOnly,
-      assessmentPresentation,examContext,verifiedSubmit]);
+      assessmentPresentation,examContext,verifiedSubmit,pendingAssessment]);
 
   if (!safe) return (
     <p role="alert">Conteúdo HTML5 indisponível: origem ou edição inválida.
