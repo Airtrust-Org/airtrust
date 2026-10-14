@@ -436,6 +436,11 @@ export default function ControleVoosVooDetalhe() {
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Status do voo</h2>
                 <StatusTimeline status={voo.status} />
+                {flightPresentationStatus(voo) === 'realizado' && voo.status !== 'concluido_operacionalmente' && (
+                  <p className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium text-sky-900 dark:border-sky-900 dark:bg-sky-950/20 dark:text-sky-200">
+                    O RDV enviado indica voo realizado. A linha operacional acima ainda não foi concluída: confira o registro e atualize o status pela Coordenação, conforme o procedimento operacional.
+                  </p>
+                )}
                 <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
                   Esta linha mostra as etapas operacionais do voo, registradas pela Coordenação. O piloto preenche e sincroniza o RDV separadamente; consulte a fila da Coordenação para acompanhar os lançamentos recebidos.
                 </p>
