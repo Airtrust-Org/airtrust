@@ -1,7 +1,7 @@
 """SQLite-only rehearsal of the REVIEW-ONLY Player3 catalog trigger extension.
 
-No D1/R2 or live enrollments. The 0554 candidate must preserve the entire
-official 0553 modular attempt trigger except for its tenant-scoped catalog
+No D1/R2 or live enrollments. The 0555 candidate must preserve the entire
+official 0554 modular attempt trigger except for its tenant-scoped catalog
 activation predicate, and must never accept unactivated external SCORM.
 """
 from pathlib import Path
@@ -9,8 +9,8 @@ import sqlite3
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-PLAN = ROOT / "worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0554.REVIEW-ONLY.sql.txt"
-BASE = ROOT / "worker-airtrust/schema-v2/changes/0553_lms_player3_module_attempts.sql"
+PLAN = ROOT / "worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0555.REVIEW-ONLY.sql.txt"
+BASE = ROOT / "worker-airtrust/schema-v2/changes/0554_lms_player3_module_attempts.sql"
 START = "CREATE TRIGGER lms_player3_attempt_insert BEFORE INSERT"
 OLD = "c.tipo_conteudo='native'"
 ALIAS = ("(c.tipo_conteudo='native' OR (c.tipo_conteudo='scorm' AND EXISTS "
@@ -73,7 +73,7 @@ def insert(db: sqlite3.Connection, binding: int, attempt: int = 1) -> None:
 
 
 class Player3CatalogActivationTriggerReview(unittest.TestCase):
-    def test_review_trigger_differs_from_approved_0553_only_by_course_format(self):
+    def test_review_trigger_differs_from_approved_0554_only_by_course_format(self):
         old = extract_trigger(BASE.read_text(encoding="utf-8"))
         revised = extract_trigger(PLAN.read_text(encoding="utf-8"))
         self.assertEqual(old.count(OLD), 1)

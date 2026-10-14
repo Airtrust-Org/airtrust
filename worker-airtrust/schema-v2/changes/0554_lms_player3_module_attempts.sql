@@ -1,15 +1,15 @@
 -- AirTrust Player 3: immutable stage-specific official attempts.
 -- Versioned additive DDL ONLY; never use to mark a legacy enrollment complete.
--- Prerequisite 0552 lms_native_v1_evidence applied by governed Schema V2.
+-- Prerequisite 0553 lms_native_v1_evidence applied by governed Schema V2.
 -- dry_run_required: true
--- rollback_plan_required: worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0553.md
+-- rollback_plan_required: worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0554.md
 SELECT json(CASE WHEN
   (SELECT COUNT(*) FROM sqlite_master WHERE name IN
     ('lms_player3_politicas','lms_player3_tentativas_modulares'))=0
   AND (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN
     ('lms_native_edicoes','lms_native_matricula_edicoes','lms_matriculas',
      'lms_matricula_ciclos','lms_cursos'))=5
-THEN 'null' ELSE 'PLAYER3_0553_PREFLIGHT_REJECTED' END);
+THEN 'null' ELSE 'PLAYER3_0554_PREFLIGHT_REJECTED' END);
 
 CREATE TABLE lms_player3_politicas (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

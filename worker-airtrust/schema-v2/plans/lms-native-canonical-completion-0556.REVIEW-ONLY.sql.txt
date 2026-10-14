@@ -15,7 +15,7 @@ SELECT json(CASE WHEN
  AND (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('lms_player3_politicas','lms_player3_tentativas_modulares'))=2
  AND (SELECT COUNT(*) FROM pragma_table_info('qualificacoes_categorias')
       WHERE name='lms_integrada')=1
-THEN 'null' ELSE 'NATIVE_0554_REVIEW_PREFLIGHT_DENIED' END);
+THEN 'null' ELSE 'NATIVE_0555_REVIEW_PREFLIGHT_DENIED' END);
 
 -- A matching one-transaction intent is required by both terminal UPDATE
 -- triggers below. The deferred FK to an unfillable sentinel enforces

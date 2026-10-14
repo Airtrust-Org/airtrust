@@ -23,7 +23,7 @@ SELECT json(CASE WHEN
   AND (SELECT COUNT(*) FROM lms_native_matricula_edicoes)=0
   AND (SELECT COUNT(*) FROM lms_native_eventos)=0
   AND (SELECT COUNT(*) FROM lms_native_tentativas)=0
-THEN 'null' ELSE 'NATIVE_0553_CANDIDATE_PREFLIGHT_DENIED' END);
+THEN 'null' ELSE 'NATIVE_0554_CANDIDATE_PREFLIGHT_DENIED' END);
 
 CREATE TABLE lms_native_catalog_activation (
   curso_id INTEGER PRIMARY KEY REFERENCES lms_cursos(id) ON DELETE RESTRICT,
@@ -275,10 +275,10 @@ BEGIN
     (SELECT COALESCE(MAX(tentativa_numero),0)+1 FROM lms_native_tentativas WHERE vinculo_id=NEW.vinculo_id);
 END;
 
--- The 0553 official modular writer also enforces the physical Native type.
+-- The 0554 official modular writer also enforces the physical Native type.
 -- Without this exact replacement, a governed SCORM alias cannot persist any
 -- official module result and the Player3 terminal can never have proof.
--- Preserve the 0553 employee, tenant, edition, cycle, policy, and sequence
+-- Preserve the 0554 employee, tenant, edition, cycle, policy, and sequence
 -- requirements; activate ONLY the same course-scoped catalog marker as above.
 -- A nonactivated / externally supplied SCORM must remain rejected.
 DROP TRIGGER lms_player3_attempt_insert;

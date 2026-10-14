@@ -1,6 +1,6 @@
 # AirTrust Native V1 — schema/readiness e sequência de integração (SEM apply)
 
-**Estado:** especificação e mudança Schema V2 `lms-native-v1-evidence-0552` versionadas na PR #1389 / incidente #1325, com testes SQLite sintéticos. **Nenhuma migration aplicada em staging/produção.**
+**Estado:** especificação e mudança Schema V2 `lms-native-v1-evidence-0553` versionadas na PR #1389 / incidente #1325, com testes SQLite sintéticos. **Nenhuma migration aplicada em staging/produção.**
 **Não é** autorização de staging ou produção; o manifesto versionado não aplica SQL por si só.
 **Fonte canônica:** GitHub/main + D1 schema efetivo de cada ambiente (verificar ao vivo antes de preparar o SQL).
 **Risco:** alto — LMS multi-tenant com matrículas e certificados regulamentares.
@@ -167,7 +167,7 @@ A implementação de início de matrícula agora usa uma única transação `D1.
 
 ## Harden 0550 — integridade de ciclo e contrato de edição
 
-A mudança governada `lms-native-v1-evidence-0552` agora valida no próprio SQLite que **o funcionário e o status da matrícula correspondem aos do ciclo atual** antes de vincular uma edição. Vinculações em matrículas canceladas/concluídas não são admitidas; inserções de eventos e tentativas exigem `EM_ANDAMENTO` em **ambos** os registros. O identificador de versão imutável da edição deve seguir o padrão `n-` + 32 caracteres hexadecimais minúsculos. O Worker aplica as mesmas verificações em suas consultas autenticadas.
+A mudança governada `lms-native-v1-evidence-0553` agora valida no próprio SQLite que **o funcionário e o status da matrícula correspondem aos do ciclo atual** antes de vincular uma edição. Vinculações em matrículas canceladas/concluídas não são admitidas; inserções de eventos e tentativas exigem `EM_ANDAMENTO` em **ambos** os registros. O identificador de versão imutável da edição deve seguir o padrão `n-` + 32 caracteres hexadecimais minúsculos. O Worker aplica as mesmas verificações em suas consultas autenticadas.
 
 **Validações sem escrita remota:** 13 testes SQLite sintéticos da change 0550, incluindo divergência de funcionário/status e formato inválido de versão; 37 testes Worker focados de writers, readiness, paginação e guardas arquiteturais; TypeScript Worker aprovado. Os hashes novos do SQL e do plano foram sincronizados no manifest e conferidos pelo construtor oficial `build-reviewed-schema-apply.mjs`. O SQL resultante foi gerado **apenas em arquivo temporário local**, sem aplicação a staging ou produção.
 
