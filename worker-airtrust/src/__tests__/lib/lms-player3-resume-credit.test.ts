@@ -44,7 +44,7 @@ describe('Player3 administrative resume-only credits',()=>{
  it('refuses auto-approved exact crosswalk or completed plan',()=>{
   expect(()=>draftApprovedResumptionCredit({...plan,disposition:'EXACT_RESTORE'},
    edition,'b',approval)).toThrow(ResumeCreditError);
-  expect(()=>draftApprovedResumptionCredit({...plan,grants_completed:true},
+  expect(()=>draftApprovedResumptionCredit(({...plan,grants_completed:true} as unknown as ContinuityPlan),
    edition,'b',approval)).toThrow(ResumeCreditError);
  });
  it('requires TWO distinct server-authorized reviewers and review rationale',()=>{
