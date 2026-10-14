@@ -97,8 +97,9 @@ async function jointReadiness(context: BrowserContext, profile: Profile,
   course: QaDoutrinamento): Promise<QaJointReadiness> {
   const path='/api/lms/native/matriculas/'+course.enrollmentId+'/etapas/prontidao';
   const result=await apiData<unknown>(context,profile.apiBaseUrl,path);
-  return validateQaJointReadiness(result,course,course.units.length,
-    course.units.filter(unit=>!!unit.official).length);
+  return validateQaJointReadiness(result,course,
+    course.units.filter(unit=>unit.kind==='lesson').length,
+    course.units.filter(unit=>unit.kind==='assessment').length);
 }
 
 async function evidence(page: Page, testInfo: { attach(name: string, options: {body: Buffer; contentType: string}): Promise<void> },
@@ -246,8 +247,14 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
             alreadyPersisted ? d.units[index + 1].id : unit.id);
         }
         if (!alreadyPersisted) await page.getByTestId('player3-next-unit').click();
-        await expect.poll(async () =>
-          (await snapshot(context, profile, d)).completed_unit_ids.includes(unit.id)).toBe(true);
+        if(unit.kind==='lesson'){
+          await expect.poll(async () =>
+            (await snapshot(context, profile, d)).completed_unit_ids.includes(unit.id))
+            .toBe(true);
+        }else{
+          await expect.poll(async()=> (await moduleSession(context,profile,d)).stages
+            .find(s=>s.stageId===unit.official!.stageId)?.passed).toBe(true);
+        }
       });
       if (index === 20) {
         const before = await snapshot(context, profile, d);
@@ -275,7 +282,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
     await test.step('PLAYER3-JOINT-READINESS / no certificate from 42/42 and 8/8',async()=>{
       const ready=await jointReadiness(context,profile,d);
       expect(ready).toMatchObject({
-        totalRequiredLessons:42, verifiedLessons:42,
+        totalRequiredLessons:34, verifiedLessons:34,
         officialStageCount:8,officialStagesPassed:8,
         reason:'READY_FOR_TERMINAL_PREFLIGHT',
         readyForAtomicTerminalPreflight:true,
@@ -295,7 +302,8 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         { timeout: 45_000 }).toBe('CONCLUIDO');
       const after = await snapshot(context, profile, d);
       expect(after.progresso_pct).toBe(100);
-      expect(after.completed_unit_ids).toEqual(expect.arrayContaining(d.units.map(u => u.id)));
+      expect(after.completed_unit_ids).toEqual(expect.arrayContaining(
+        d.units.filter(u=>u.kind==='lesson').map(u=>u.id)));
       expect(after.qualificacao_historico_id).toBeGreaterThan(0);
       expect(after.certificate_id).toBeGreaterThan(0);
       await evidence(page, testInfo, 'doutrinamento-certified');
