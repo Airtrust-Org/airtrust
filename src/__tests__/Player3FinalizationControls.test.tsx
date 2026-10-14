@@ -107,6 +107,23 @@ describe('Player3 terminal: advisory readiness is not a certificate',()=>{
     expect(request).toHaveBeenCalledTimes(4);
     expect(request.mock.calls.filter(x=>x[1]?.method==='POST')).toHaveLength(1);
   });
+  it('records a course with no qualification without inventing a certificate',async()=>{
+    request.mockResolvedValueOnce(ok(archive()))
+      .mockResolvedValueOnce(ok(readiness()))
+      .mockResolvedValueOnce(ok(terminal({
+        qualification_outcome:'qualification_not_required',
+        certificate_state:'NOT_APPLICABLE',
+      })))
+      .mockResolvedValueOnce(ok(done({
+        historico_id:null,certificate_state:'NOT_APPLICABLE',
+      })));
+    render(<Player3FinalizationControls scope={scope}/>);
+    click();
+    expect(await screen.findByRole('status')).toHaveTextContent(/Conclusão registrada/);
+    expect(screen.getByTestId('player3-request-finalization')).toBeDisabled();
+    expect(screen.queryByText(/arquivo do certificado foi localizado/i)).toBeNull();
+    expect(request.mock.calls.filter(x=>x[1]?.method==='POST')).toHaveLength(1);
+  });
   it('does not post when an earlier canonical completion already committed',async()=>{
     request.mockResolvedValueOnce(ok(done()));
     render(<Player3FinalizationControls scope={scope}/>);
