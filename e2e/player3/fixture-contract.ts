@@ -184,9 +184,9 @@ export function assertQaReadOnlyNonDisclosure(raw: unknown): void {
   }
   requireQa(typeof serialized==='string' && serialized.length>0 &&
     serialized.length<=128*1024,'WORKER_READONLY_DATA_BOUNDED');
-  const privateKey=/"(?:answers|answers_json|answersJson|answers_sha256|answersSha256|correctOptionId|correct_option_id|correctAnswers|answerKey|serverPrivateBank|privateBank|feedbackCorrect|feedbackIncorrect|gabarito|solution|questionId|optionId)"\\s*:/i;
+  const privateKey=/"(?:answers|answers_json|answersJson|answers_sha256|answersSha256|correctOptionId|correct_option_id|correctAnswers|answerKey|serverPrivateBank|privateBank|feedbackCorrect|feedbackIncorrect|gabarito|solution|questionId|optionId)"\s*:/i;
   requireQa(!privateKey.test(serialized!) &&
-    !/player3-server-private-bank\\.json/i.test(serialized!),
+    !/player3-server-private-bank\.json/i.test(serialized!),
     'WORKER_READONLY_PRIVATE_MATERIAL_LEAK');
 }
 
