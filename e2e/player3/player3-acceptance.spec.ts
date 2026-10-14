@@ -170,6 +170,9 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
     const initialReadiness=await jointReadiness(context,profile,d);
     expect(initialReadiness.readyForAtomicTerminalPreflight).toBe(false);
     expect(initialReadiness.completion_supported).toBe(false);
+    const offlineUnitIndex=d.units.findIndex((unit,index)=>
+      index>0 && index<d.units.length-1 && !!unit.lessonId && !unit.official);
+    demand(offlineUnitIndex>=0,'AUTHORED_OFFLINE_LESSON_RECEIPT_REQUIRED');
     let failureTested = false;
     for (const [index, unit] of d.units.entries()) {
       await test.step('PLAYER3-UNIT-' + String(index+1).padStart(2, '0') + ':' + unit.id, async () => {
@@ -226,7 +229,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
           await modal.getByRole('button', { name: 'Prosseguir para o próximo módulo' }).click();
         }
         let alreadyPersisted = false;
-        if (index === 10) {
+        if (index === offlineUnitIndex) {
           const before = await snapshot(context, profile, d);
           await context.setOffline(true);
           try {
@@ -242,7 +245,8 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
           await page.reload();
           const resumed = await snapshot(context, profile, d);
           expect(resumed.attempts).toEqual(before.attempts);
-          alreadyPersisted = resumed.completed_unit_ids.includes(unit.id);
+          // The authored screen ID is NOT necessarily the Worker lesson ID.
+          alreadyPersisted = resumed.completed_unit_ids.includes(unit.lessonId!);
           await expect(page.getByTestId('player3-active-unit-id')).toHaveText(
             alreadyPersisted ? d.units[index + 1].id : unit.id);
         }
@@ -250,7 +254,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         if(unit.lessonId){
           await expect.poll(async () =>
             (await snapshot(context, profile, d)).completed_unit_ids
-              .includes(unit.lessonId!)).toBe(true);
+              .filter(id=>id===unit.lessonId).length).toBe(1);
         }
         if(unit.official){
           await expect.poll(async()=> (await moduleSession(context,profile,d)).stages
