@@ -50,7 +50,7 @@ export function proposeLegacyScormResume(input: {
 }): LegacyRecoveryProposal {
   const { enrollment, sourceEdition, destination, persistedSuspendData } = input;
   if (!SHA.test(sourceEdition.source_edition_sha256) ||
-      sourceEdition.course_id !== enrollment.curso_id ||
+      sourceEdition.curso_id !== enrollment.curso_id ||
       sourceEdition.empresa_id !== enrollment.empresa_id ||
       sourceEdition.course_version_tag !== enrollment.curso_version_tag ||
       !sourceEdition.source_package_version ||
