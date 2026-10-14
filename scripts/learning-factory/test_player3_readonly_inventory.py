@@ -32,7 +32,12 @@ class InventorySqlTests(unittest.TestCase):
           (911,6,57,33,'EM_ANDAMENTO',80,0,0,'2026-10-14',NULL,NULL,34,34,NULL),
           (912,7,90,34,'NAO_INICIADO',0,NULL,0,'2026-10-14',NULL,NULL,0,0,NULL),
           (913,6,57,34,'CONCLUIDO',100,90,1,'2026-10-14',NULL,'2026-10-14',42,42,NULL),
-          (914,6,57,35,'NAO_INICIADO',0,NULL,0,'2026-10-14',NULL,NULL,0,0,NULL);
+          (914,6,57,35,'NAO_INICIADO',0,NULL,0,'2026-10-14',NULL,NULL,0,0,NULL),
+          (915,6,999,36,'EM_ANDAMENTO',20,NULL,0,'2026-10-14',NULL,NULL,4,4,NULL);
+        INSERT INTO lms_scorm_package_versions VALUES
+          ('package_rc8',6,57,'ACTIVE','test-sha-active','RC8.1','2026-10-12'),
+          ('package_rc7',6,57,'SUPERSEDED','test-sha-older','RC7','2026-09-01'),
+          ('package_outside',7,90,'ACTIVE','test-sha-outside','RC1','2026-10-10');
         INSERT INTO lms_matricula_ciclos(id,empresa_id,matricula_id,numero_ciclo,
           status,progresso_pct,score_final,tentativas,ciclo_atual,updated_at,deleted_at) VALUES
           (1002,6,911,1,'EM_ANDAMENTO',80,0,0,1,'2026-10-14',NULL),
