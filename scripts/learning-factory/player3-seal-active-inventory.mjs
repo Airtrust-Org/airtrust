@@ -13,6 +13,8 @@ import {openSync,writeFileSync,closeSync,constants} from 'node:fs';
 import {resolve,isAbsolute} from 'node:path';
 
 const assert=(p,code)=>{if(!p) throw new Error('PLAYER3_INVENTORY_'+code);};
+// Exact authorized tenant. Separate tenant requires separate reviewed workflow.
+const AUTHORIZED_TENANT_ID=6;
 export function normalizeD1Rows(input){
   const decoded=typeof input==='string'?JSON.parse(input):input;
   const blocks=Array.isArray(decoded)?decoded:[decoded];
@@ -25,6 +27,7 @@ export function normalizeD1Rows(input){
       for(const col of ['empresa_id','matricula_id','curso_id','funcionario_id']){
         assert(Number.isSafeInteger(r[col]) && r[col]>0,'INVALID_ID_'+col);
       }
+      assert(r.empresa_id===AUTHORIZED_TENANT_ID,'CROSS_TENANT_EXTRACT_REJECTED');
       assert(['EM_ANDAMENTO','NAO_INICIADO'].includes(r.matricula_status),'INVALID_STATUS');
       assert(typeof r.matricula_progresso_pct==='number' &&
         r.matricula_progresso_pct>=0 && r.matricula_progresso_pct<=100,
@@ -66,12 +69,14 @@ export function summarize(rows){
   };
 }
 export function sealInventory(rows,key,keyId='player3-private'){
+  assert(Array.isArray(rows) && rows.every(r=>r.empresa_id===AUTHORIZED_TENANT_ID),
+    'CROSS_TENANT_EXTRACT_REJECTED');
   assert(Buffer.isBuffer(key)&&key.length===32,'INVALID_KEY');
   assert(typeof keyId==='string'&&/^[a-z0-9][a-z0-9_-]{0,63}$/.test(keyId),'INVALID_KEY_ID');
   const summary=summarize(rows);
   const envelope={schema:'AIRTRUST_PLAYER3_PRIVATE_INVENTORY_V1',
     extracted_utc:new Date().toISOString(),source_contract:'player3-active-enrollments-readonly.sql',
-    purpose:'RESUME_ONLY_NOT_COMPLETION',
+    purpose:'RESUME_ONLY_NOT_COMPLETION',authorized_tenant_id:AUTHORIZED_TENANT_ID,
     rows,
   };
   const clear=Buffer.from(JSON.stringify(envelope),'utf8');
