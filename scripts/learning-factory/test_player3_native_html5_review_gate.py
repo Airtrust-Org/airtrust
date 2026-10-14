@@ -9,3 +9,5 @@ from test_build_player3_html5_review_batch import Player3BatchReviewTests
 from test_standard_journey_bridge_review import StandardJourneyBridgeTests
 
 from test_player3_v33_review import Player3V33ReviewTests
+
+from test_player3_legacy_review import Player3LegacyBridgeTests
