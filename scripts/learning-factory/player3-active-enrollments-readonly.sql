@@ -33,7 +33,8 @@ SELECT
   -- All non-deleted cycles for this same enrollment AND tenant, encrypted only.
   -- Never collapse an earlier qualification/completion into the current cycle.
   (SELECT COALESCE(json_group_array(json_object(
-      'id', h.id, 'numero_ciclo', h.numero_ciclo,
+      'id', h.id, 'empresa_id', h.empresa_id, 'matricula_id', h.matricula_id,
+      'numero_ciclo', h.numero_ciclo,
       'ciclo_atual', h.ciclo_atual, 'status', h.status,
       'progresso_pct', h.progresso_pct, 'score_final', h.score_final,
       'tentativas', h.tentativas, 'updated_at', h.updated_at,
