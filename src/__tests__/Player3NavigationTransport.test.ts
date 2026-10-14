@@ -50,6 +50,14 @@ describe('Player3 authenticated navigation checkpoint, never certification',()=>
     expect(req).toHaveBeenCalledTimes(1);
     expect(req.mock.calls[0][1].method).toBe('GET');
   });
+  it('revisiting any committed lesson cannot create a duplicate event',async()=>{
+    const req=vi.fn().mockResolvedValue(payload({
+      ...after,last_visited_unit_id:'unit22',
+    }));
+    const recorder=makePlayer3NavigationRecorder(scope,req,'/api');
+    expect(await recorder('unit21')).toBe(true);
+    expect(req.mock.calls.map(x=>x[1].method)).toEqual(['GET']);
+  });
   it('lost POST response locks the session and never repeats the evidence write',async()=>{
     const req=vi.fn().mockResolvedValueOnce(payload(before))
       .mockRejectedValueOnce(new Error('response dropped after commit'));
