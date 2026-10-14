@@ -28,6 +28,7 @@ import OperationalVigilanceTest, {
 } from './OperationalVigilanceTest';
 import RecoveryActivityCard from './RecoveryActivityCard';
 import { useReadinessBaseline, useReadinessToday } from '@/react-app/hooks/useOperationalReadiness';
+import { previousOperationalDate, useFrmsRecoveryContext, type RecoveryActivityType } from '@/react-app/hooks/useFrmsRecovery';
 import {
   clearFadigaCheckinDraft,
   fadigaCheckinDraftKey,
@@ -526,6 +527,7 @@ export default function FrmsFlightCheckinFadiga() {
     (restoredDraft?.sonoOpcao as SonoOpcao | null) ?? null,
   );
   const [repousoHoras, setRepousoHoras] = useState<number | null>(restoredDraft?.repousoHoras ?? null);
+  const [selectedRecoveryActivity, setSelectedRecoveryActivity] = useState<RecoveryActivityType | null>(null);
   const [presentationTime, setPresentationTime] = useState(restoredDraft?.presentationTime ?? '');
   const [presentationTimeTouched, setPresentationTimeTouched] = useState(false);
   const [wakeTime, setWakeTime] = useState(restoredDraft?.wakeTime ?? '');
@@ -553,6 +555,12 @@ export default function FrmsFlightCheckinFadiga() {
   const submitMutation = useSubmitCheckin();
   const { data: readinessBaseline } = useReadinessBaseline(today);
   const { data: readinessToday } = useReadinessToday(today);
+  const { data: previousActivity } = useFrmsRecoveryContext(previousOperationalDate(today));
+  const recoveryActivityType = selectedRecoveryActivity ??
+    String(previousActivity?.activity?.activity_type ?? '');
+  const usesAbsoluteRestForRecovery =
+    !previousActivity?.flight?.detected &&
+    (recoveryActivityType === 'STANDBY_HOME_HOTEL' || recoveryActivityType === 'STANDBY_ONSITE');
 
   useEffect(() => {
     saveFadigaCheckinDraft(draftKey, {
@@ -690,7 +698,7 @@ export default function FrmsFlightCheckinFadiga() {
         wake_time: wakeTimeNormalized!,
         // Separate observed self-report of sleep from opportunity for sleep/rest.
         horas_sono_24h: SONO_OPCOES.find((o) => o.key === sonoOpcao!)!.horas,
-        oportunidade_sono_horas_24h: repousoHoras ?? undefined,
+        oportunidade_sono_horas_24h: usesAbsoluteRestForRecovery ? (repousoHoras ?? undefined) : undefined,
         qualidade_sono: qualidadeSono!,
         kss_score: kss,
         subjective_fatigue_level: subjectiveFatigueLevel,
@@ -828,14 +836,23 @@ export default function FrmsFlightCheckinFadiga() {
               </div>
             )}
 
-            <RecoveryActivityCard today={today} />
+            <RecoveryActivityCard
+              today={today}
+              onActivityTypeChange={(type) => {
+                setSelectedRecoveryActivity(type);
+                if (type !== 'STANDBY_HOME_HOTEL' && type !== 'STANDBY_ONSITE') {
+                  setRepousoHoras(null);
+                }
+              }}
+            />
 
             <div className="space-y-3">
               <FormCard label="Bloco 1 - Repouso e sono" hint="Oportunidade de sono é tempo disponível para descansar em ambiente adequado, mesmo sem adormecer. Sono efetivo é o tempo realmente dormido.">
                 <div className="space-y-4">
+                  {usesAbsoluteRestForRecovery && (
                   <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <summary className="cursor-pointer text-sm font-medium text-slate-700">
-                      Informar oportunidade de sono (repouso absoluto) — opcional
+                      Oportunidade de sono no standby — opcional
                     </summary>
                     <div className="mt-3">
                     <label htmlFor="oportunidade-sono" className="mb-2 block text-sm font-medium text-slate-700">
@@ -851,9 +868,10 @@ export default function FrmsFlightCheckinFadiga() {
                         className="w-28 min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-semibold" />
                       <span className="text-sm text-slate-600">horas (valor informado)</span>
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">Não é obrigatório preencher. Sem esta informação, o sistema não presume oportunidade de sono para conceder crédito de recuperação.</p>
+                    <p className="mt-2 text-xs text-slate-500">Usada apenas para avaliar crédito de recuperação no standby de ontem, conforme política vigente. Não altera o score de fadiga diária. Sem declaração, não se presume tempo de repouso absoluto.</p>
                     </div>
                   </details>
+                  )}
                 <div className="space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
