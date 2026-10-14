@@ -113,8 +113,6 @@ class Player3Html5ReviewTests(unittest.TestCase):
             ['B', True, 'PRIVATE_GOOD_SCENARIO_321'],
         ]
         secondary = json.loads(json.dumps(primary))
-        secondary['slides'][1]['questions'][0]['answer'] = 2
-        secondary['slides'][1]['questions'][0]['explain'] = 'PRIVATE_SECONDARY_KEY_321'
         dual = {
             'course_data.js': 'window.COURSE_DATA = ' + json.dumps(primary) + ';',
             'course-model.js': 'window.AIRTRUST_COURSE_MODEL = ' + json.dumps(secondary) + ';',
@@ -132,6 +130,38 @@ class Player3Html5ReviewTests(unittest.TestCase):
                                 'PRIVATE_GOOD_SCENARIO_321', '"answer":', '"correct":'):
                     self.assertNotIn(private, content)
                 self.assertIn('[["A",null,null],["B",null,null]]', content)
+
+    def test_conflicting_author_question_or_key_between_models_blocks_before_build(self):
+        primary = model()
+        with ZipFile(io.BytesIO(original(primary))) as source:
+            files = {name: source.read(name) for name in source.namelist()}
+        secondary = json.loads(json.dumps(primary))
+        for field, value in (('answer', 2),
+                             ('explain', 'DIVERGENT_PRIVATE_EXPLANATION_123'),
+                             ('q', 'Divergent public question')):
+            secondary = json.loads(json.dumps(primary))
+            secondary['slides'][1]['questions'][0][field] = value
+            files['course-model.js'] = (
+                'window.AIRTRUST_COURSE_MODEL = ' + json.dumps(secondary) + ';')
+            with self.subTest(field=field), self.assertRaisesRegex(
+                UnsafePackage, 'DUAL_MODEL_PRIVATE_BANK_MISMATCH'
+            ):
+                compile_review(zip_source(files), 'dual-inconsistent.zip')
+
+    def test_secondary_presentation_only_still_uses_original_private_bank(self):
+        primary = model()
+        secondary = json.loads(json.dumps(primary))
+        secondary['slides'][1].pop('questions')
+        with ZipFile(io.BytesIO(original(primary))) as source:
+            files = {name: source.read(name) for name in source.namelist()}
+        files['course-model.js'] = (
+            'window.AIRTRUST_COURSE_MODEL = ' + json.dumps(secondary) + ';')
+        _, _, projection, bank, receipt = compile_review(
+            zip_source(files), 'dual-presentation.zip')
+        self.assertEqual(receipt['modelFiles'], ['course_data.js', 'course-model.js'])
+        self.assertEqual(len(projection['stages']), 1)
+        self.assertEqual(len(bank['questions']), 1)
+        self.assertFalse(receipt['publishable'])
 
     def test_css_ternary_label_is_not_an_embedded_answer_key(self):
         source = original(extra={'app.js': "let css=hit?'correct':'incorrect';"})
