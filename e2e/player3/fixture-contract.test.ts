@@ -14,8 +14,9 @@ function project(offset:number):QaProjectFixture {
     launchPath:'/qa/launch/'+(offset+n),snapshotPath:'/qa/snapshot/'+(offset+n),
   });
   const units=Array.from({length:42},(_,i)=>({
-    id:'unit-'+String(i+1),visualCue:'Original author content '+String(i+1),
-    ...(i===1?{practice:{question:'Synthetic formative?',wrong:'No',correct:'Yes'}}:{}),
+    id:'unit-'+String(i+1),kind:i<8?'assessment' as const:'lesson' as const,
+    visualCue:'Original author content '+String(i+1),
+    ...(i===8?{practice:{question:'Synthetic formative?',wrong:'No',correct:'Yes'}}:{}),
     ...(i<8?{official:{stageId:'mod-'+(i+1),questions:[
       {question:'Synthetic assessment?',wrong:'No',correct:'Yes'},
     ]}}:{}),
@@ -83,6 +84,18 @@ describe('Front D QA contract — no network, no real students',()=>{
     p.contentOrigin=contentOrigin;
     delete p.projects.webkit;
     expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001')).toThrow('BOTH_INDEPENDENT_BROWSER_PROJECTS');
+  });
+  it('distinguishes exactly eight authored exams from 34 lesson receipts',()=>{
+    const p=fixture();
+    const authored=p.projects.chromium.doutrinamento.units;
+    expect(authored).toHaveLength(42);
+    expect(authored.filter(u=>u.kind==='lesson')).toHaveLength(34);
+    expect(authored.filter(u=>u.kind==='assessment')).toHaveLength(8);
+    expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001').fixture.doutrinamento.units)
+      .toHaveLength(42);
+    authored[0].kind='lesson';
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001'))
+      .toThrow('AUTHOR_UNIT_AND_EXAM_MAP');
   });
   it('requires all 42 authored units, exactly eight official module assessments and actual practice',()=>{
     const p=fixture();p.projects.chromium.doutrinamento.units.pop();
