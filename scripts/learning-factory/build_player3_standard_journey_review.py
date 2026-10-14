@@ -96,14 +96,23 @@ def adapt_standard_app(original_app: bytes, original_zip_sha256: str,
             or sid in stages or not isinstance(qs,list) or not qs or len(qs)>100):
             raise JourneyUnsupported('JOURNEY_INVALID_PUBLIC_STAGE')
         parsed=[]
+        seen_questions=set()
         for q in qs:
+            if not isinstance(q,dict):
+                raise JourneyUnsupported('JOURNEY_INVALID_PUBLIC_QUESTION')
             opts=q.get('options')
-            if (not isinstance(q.get('id'),str) or
-                not re.fullmatch('[A-Za-z0-9][A-Za-z0-9._-]{0,79}',q['id']) or
-                not isinstance(opts,list) or not 2<=len(opts)<=10 or
-                [str(i) for i in range(len(opts))]!=[o.get('id','')[1:] for o in opts]):
+            qid=q.get('id')
+            if (not isinstance(qid,str) or
+                not re.fullmatch('[A-Za-z0-9][A-Za-z0-9._-]{0,79}',qid) or
+                qid in seen_questions or not isinstance(opts,list) or
+                not 2<=len(opts)<=10 or
+                any(not isinstance(o,dict) or
+                    o.get('id')!='o'+str(i) or
+                    not isinstance(o.get('text'),str) or not o['text'].strip()
+                    for i,o in enumerate(opts))):
                 raise JourneyUnsupported('JOURNEY_INVALID_OPTIONS')
-            parsed.append({'id':q['id'],'n':len(opts)})
+            seen_questions.add(qid)
+            parsed.append({'id':qid,'n':len(opts)})
         stages[sid]=parsed
     if len(stages)!=1 or sum(len(qs) for qs in stages.values())!=10:
         raise JourneyUnsupported('JOURNEY_STAGE_COUNT_NOT_VERIFIED')

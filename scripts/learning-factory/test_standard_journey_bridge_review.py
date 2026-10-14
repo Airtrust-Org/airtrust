@@ -45,6 +45,28 @@ class StandardJourneyBridgeTests(unittest.TestCase):
             adapt_standard_app(b'x',next(iter(SOURCES)),
                                'https://airtrust.online','not-a-digest',[])
 
+    def test_malformed_public_stage_rejected_without_shipping_adapter(self):
+        from unittest.mock import patch
+        good=bytes(b'synthetic pinned app')
+        digest=hashlib.sha256(good).hexdigest()
+        basic={'stageId':'final','questions':[
+          {'id':'q0','options':[{'id':'o0','text':'A'},{'id':'o1','text':'B'}]}
+        ]}
+        broken=({'stageId':'final','questions':[{'id':'q0','options':[
+                  {'id':'x0','text':'A'},{'id':'o1','text':'B'}]}]},
+                {'stageId':'final','questions':[{'id':'q0','options':[
+                  {'id':'o0','text':'A'},{'id':'o1','text':'B'}]},
+                  {'id':'q0','options':[{'id':'o0','text':'A'},
+                                       {'id':'o1','text':'B'}]}]},
+                {'stageId':'final','questions':[None]},
+                {'stageId':'final','questions':[{'id':'q0','options':['A','B']} ]})
+        with patch.dict(SOURCES,{digest:digest},clear=True):
+            for stage in broken:
+                with self.subTest(stage=str(stage)[:30]), self.assertRaises(JourneyUnsupported):
+                    adapt_standard_app(good,digest,'https://airtrust.online','b'*64,[stage])
+            with self.assertRaisesRegex(JourneyUnsupported, 'STAGE_COUNT_NOT_VERIFIED'):
+                adapt_standard_app(good,digest,'https://airtrust.online','b'*64,[basic])
+
     def test_bridge_explicitly_ignores_unverified_verdicts(self):
         from build_player3_standard_journey_review import BRIDGE
         for marker in ('e.source!==window.parent', 'e.origin!==origin',
