@@ -3,6 +3,7 @@ import type { OperationalVigilanceResult } from './OperationalVigilanceTest';
 export interface FadigaCheckinDraft {
   version: 1;
   sonoOpcao: string | null;
+  repousoOpcao?: string | null;
   presentationTime: string;
   wakeTime: string;
   qualidadeSono: number | null;
