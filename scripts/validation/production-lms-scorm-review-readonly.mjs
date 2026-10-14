@@ -9,6 +9,8 @@ import {
 } from '../smoke-auth-common.mjs';
 import {
   hasMeaningfulScormLocation,
+  evaluateReadOnlyReviewState,
+  summarizeClosureReadiness,
   launchInitialCmi,
   parseLaunchCycle,
   resolveExpectedCandidateId,
@@ -24,6 +26,7 @@ const expectedCandidate = String(process.env.EXPECTED_CANDIDATE_ID || 'auto').tr
 const expectedTenantId = Number(process.env.EXPECTED_TENANT_ID || 6);
 const expectedCycle = Number(process.env.EXPECTED_CYCLE_NUMBER || 0);
 const expectedProgress = Number(process.env.EXPECTED_PROGRESS_PCT || 0);
+const expectedReviewMode = String(process.env.EXPECTED_REVIEW_MODE || 'initial').trim().toLowerCase();
 const reportPath = String(process.env.REPORT_PATH || 'qa-state/production-lms-scorm-review-readonly.json');
 
 function invariant(condition, message) {
@@ -180,10 +183,12 @@ async function run() {
   invariant(Number.isInteger(expectedTenantId) && expectedTenantId > 0, 'EXPECTED_TENANT_ID_INVALID');
   invariant(Number.isInteger(expectedCycle) && expectedCycle >= 0, 'EXPECTED_CYCLE_NUMBER_INVALID');
   invariant(Number.isFinite(expectedProgress) && expectedProgress >= 0 && expectedProgress <= 100, 'EXPECTED_PROGRESS_PCT_INVALID');
+  invariant(['initial', 'resumed'].includes(expectedReviewMode), 'EXPECTED_REVIEW_MODE_INVALID');
 
   const token = await productionToken();
   const { enrollment, candidateId } = await readEnrollment(token);
   const enrollmentSummary = summarizeEnrollment(enrollment);
+  const closureReadiness = summarizeClosureReadiness(enrollment.closure_readiness);
   const cookie = await getAssetSession(token);
   const launch = await fetch(`${api}/api/lms/scorm/launch/${matricula}`, {
     headers: { Cookie: cookie },
@@ -202,6 +207,7 @@ async function run() {
         tenant_id: expectedTenantId,
         cycle_number: expectedCycle || null,
         progress_pct: expectedProgress,
+        review_mode: expectedReviewMode,
       },
       launch: {
         http_status: launch.status,
@@ -248,32 +254,39 @@ async function run() {
   const launchSuspendData = cmi['cmi.suspend_data'];
   const serverResumeLocationPresent = hasMeaningfulScormLocation(enrollmentSummary.scorm.lesson_location);
   const serverSuspendDataPresent = enrollmentSummary.scorm.suspend_data_present;
-  const stateMatches =
-    enrollmentSummary.progress_pct === expectedProgress &&
-    (expectedCycle === 0 || cycle.numero_ciclo === expectedCycle) &&
-    cycle.review_mode === false &&
-    !serverResumeLocationPresent &&
-    !serverSuspendDataPresent &&
-    (launchLocation == null || launchLocation === '') &&
-    !String(launchSuspendData || '').length &&
-    cycle.preview_mode === false;
+  const stateMatches = evaluateReadOnlyReviewState({
+    mode: expectedReviewMode,
+    expectedProgress,
+    actualProgress: enrollmentSummary.progress_pct,
+    expectedCycle,
+    cycle,
+    serverResumeLocationPresent,
+    serverSuspendDataPresent,
+    launchLocation,
+    launchSuspendData,
+  });
   const courseOpens =
     index.ok &&
     (!model.ok || Boolean(modelKey)) &&
     player.frame_loaded &&
     player.frame_candidate_matches_enrollment &&
     player.failed_scorm_asset_count === 0;
-  const result = courseOpens && stateMatches && masteryMatches !== false ? 'PASS' : 'FAIL';
+  // Static mastery regex is not authoritative for a resumed enrollment: server policy is.
+  const result = courseOpens && stateMatches && (expectedReviewMode === 'resumed' || masteryMatches !== false)
+    ? 'PASS' : 'FAIL';
   const report = {
     schema_version: 1,
     generated_at: new Date().toISOString(),
     result,
     writes: 'none (authentication/tenant selection/asset session POSTs only; all non-GET browser requests are blocked; enrollment, progress, cycle, qualification and certificate data are read-only)',
     enrollment: enrollmentSummary,
+    closure_readiness: closureReadiness,
+    scope: 'READ_ONLY_LAUNCH_AND_PERSISTED_STATE_NOT_TRAINING_COMPLETION',
     expected: {
       tenant_id: expectedTenantId,
       cycle_number: expectedCycle || null,
       progress_pct: expectedProgress,
+      review_mode: expectedReviewMode,
     },
     launch: {
       http_status: launch.status,
@@ -297,6 +310,7 @@ async function run() {
       expected_mastery_score: Number.isFinite(expectedMastery) ? expectedMastery : null,
       package_mastery_score: packageMastery,
       mastery_matches_enrollment: masteryMatches,
+      mastery_regex_is_authoritative: false,
     },
   };
 
