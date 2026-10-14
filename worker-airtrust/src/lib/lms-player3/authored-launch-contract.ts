@@ -11,6 +11,8 @@ export type AuthoredLaunchMetadata = Readonly<{
   sourceSha256:string;
   contentSha256:string;
   sourceStageCrosswalkSha256:string;
+  /** Hash of JSON-serialized original unit IDs in approved display order. */
+  orderedUnitIdsSha256:string;
   answersStripped:true;
   legacyScormDisabled:true;
   reviewedImmutableRelease:true;
@@ -50,10 +52,11 @@ export function approvedAuthoredLaunch(input:{
   const v=input.learnerContent as Partial<AuthoredLaunchMetadata>|null;
   if(!v||typeof v!=='object'||Array.isArray(v)||
      Object.keys(v).sort().join(',')!==
-       'answersStripped,contentSha256,legacyScormDisabled,reviewedImmutableRelease,schema,sourceSha256,sourceStageCrosswalkSha256'||
+       'answersStripped,contentSha256,legacyScormDisabled,orderedUnitIdsSha256,reviewedImmutableRelease,schema,sourceSha256,sourceStageCrosswalkSha256'||
      v.schema!=='AIRTRUST_PLAYER3_AUTHORED_LAUNCH_V1'||
      v.sourceSha256!==sourceSha256||!SHA.test(v.contentSha256??'')||
      !SHA.test(v.sourceStageCrosswalkSha256??'')||
+     !SHA.test(v.orderedUnitIdsSha256??'')||
      v.answersStripped!==true||v.legacyScormDisabled!==true||
      v.reviewedImmutableRelease!==true){
     return deny('PLAYER3_AUTHORED_SOURCE_NOT_APPROVED');
