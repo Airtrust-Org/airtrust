@@ -146,3 +146,49 @@ export function validateQaProfile(raw: unknown, projectName: string,
   requireQa(!!data.projects[projectName], 'PROJECT_FIXTURE_' + projectName);
   return {profile:data,fixture:data.projects[projectName]};
 }
+
+/**
+ * Read-only, backend-regraded module session from Front B's exact endpoint.
+ * Never infer certification or progress from this advisory/session projection.
+ */
+export type QaModuleStage = {
+  stageId: string; attempts: number; lastScorePct: number | null;
+  passed: boolean; nextAttemptNumber: number | null;
+};
+export type QaModuleSession = {
+  editionSha256: string; cycleId: number;
+  allOfficialStagesPassed: boolean; completionSupported: false;
+  stages: QaModuleStage[];
+};
+export function validateQaModuleSession(raw: unknown, edition: string,
+  cycle: number, requiredStages: readonly string[]): QaModuleSession {
+  const s=raw as QaModuleSession;
+  requireQa(!!s && s.editionSha256===edition && s.cycleId===cycle,
+    'MODULE_SESSION_PINNED_EDITION_CYCLE');
+  requireQa(Array.isArray(s.stages) && s.stages.length===requiredStages.length &&
+    requiredStages.length>0 && new Set(requiredStages).size===requiredStages.length,
+    'MODULE_SESSION_STAGE_COUNT');
+  const actual=new Set<string>();
+  for(const stage of s.stages) {
+    requireQa(!!stage && typeof stage.stageId==='string' && id.test(stage.stageId) &&
+      !actual.has(stage.stageId), 'MODULE_SESSION_STAGE_ID');
+    actual.add(stage.stageId);
+    const attempts=stage.attempts;
+    requireQa(Number.isSafeInteger(attempts) && attempts>=0 && attempts<=500 &&
+      typeof stage.passed==='boolean' &&
+      (stage.lastScorePct===null ||
+        (Number.isInteger(stage.lastScorePct) &&
+        stage.lastScorePct>=0 && stage.lastScorePct<=100)) &&
+      (attempts===0
+        ? !stage.passed && stage.lastScorePct===null && stage.nextAttemptNumber===1
+        : stage.lastScorePct!==null &&
+          stage.nextAttemptNumber===(attempts<500?attempts+1:null)),
+      'MODULE_SESSION_ATTEMPT_INTEGRITY');
+  }
+  requireQa(requiredStages.every(stage=>actual.has(stage)),
+    'MODULE_SESSION_POLICY_STAGE_MISMATCH');
+  requireQa(typeof s.allOfficialStagesPassed==='boolean' &&
+    s.allOfficialStagesPassed===s.stages.every(stage=>stage.passed) &&
+    s.completionSupported===false, 'MODULE_SESSION_NO_PREMATURE_COMPLETION');
+  return s;
+}
