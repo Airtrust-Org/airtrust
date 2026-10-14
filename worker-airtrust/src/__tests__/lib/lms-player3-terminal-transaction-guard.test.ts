@@ -60,6 +60,23 @@ describe('Player3 transaction-local, non-routed terminal evidence guard',()=>{
       qualificacaoTipoId:7,qualificacaoCategoriaId:8,
     }).bindings).toContain(8);
   });
+  it('permits only governed staging activation of SCORM, never unactivated external SCORM',()=>{
+    const preview={ENVIRONMENT:'staging',NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS:'6'};
+    const active=buildPlayer3TerminalTransactionGuard(anchor,preview as never);
+    expect(active.sql).toContain('lms_native_catalog_activation');
+    expect(active.sql).toContain("c.tipo_conteudo='scorm'");
+    expect(active.sql).toContain('a.empresa_id=c.empresa_id');
+    expect(active.bindings).toHaveLength(23);
+    const production=buildPlayer3TerminalTransactionGuard(anchor,{
+      ...preview,ENVIRONMENT:'production',
+    } as never);
+    expect(production.sql).not.toContain('lms_native_catalog_activation');
+    expect(production.sql).toContain("c.tipo_conteudo='native'");
+    const otherTenant=buildPlayer3TerminalTransactionGuard(anchor,{
+      ...preview,NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS:'7',
+    } as never);
+    expect(otherTenant.sql).not.toContain('lms_native_catalog_activation');
+  });
   it('never performs database writes, and never promises a certificate',()=>{
     const result=buildPlayer3TerminalTransactionGuard(anchor);
     expect(result.sql.trim().startsWith('SELECT json')).toBe(true);
