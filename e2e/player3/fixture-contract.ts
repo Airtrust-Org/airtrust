@@ -261,3 +261,21 @@ export function validateQaJointReadiness(raw: unknown, enrollment: QaEnrollment,
     'JOINT_READINESS_NEVER_CERTIFIES');
   return r;
 }
+
+/**
+ * A 200 OK response or a five-byte %PDF- prefix is not proof of an issued
+ * certificate. Check MIME, bounded complete document and terminal cross-ref.
+ * The E2E separately verifies canonical qualification/certificate IDs.
+ */
+export function validateQaCertificatePdf(raw: Uint8Array, contentType: string): void {
+  requireQa(typeof contentType==='string' &&
+    contentType.split(';')[0].trim().toLowerCase()==='application/pdf',
+    'CERTIFICATE_PDF_CONTENT_TYPE');
+  requireQa(raw instanceof Uint8Array && raw.byteLength>=1024 &&
+    raw.byteLength<=25*1024*1024, 'CERTIFICATE_PDF_SIZE');
+  const header=new TextDecoder('latin1').decode(raw.subarray(0,16));
+  const trailer=new TextDecoder('latin1').decode(raw.subarray(Math.max(0,raw.length-2048)));
+  requireQa(/^%PDF-(?:1\.[0-7]|2\.0)(?:\r?\n|\r)/.test(header) &&
+    /startxref\s+\d+\s+%%EOF\s*$/.test(trailer),
+    'CERTIFICATE_PDF_STRUCTURE');
+}
