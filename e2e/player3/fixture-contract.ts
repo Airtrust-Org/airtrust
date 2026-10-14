@@ -67,7 +67,8 @@ function qaEnrollment(x: QaEnrollment, appOrigin: string, apiOrigin: string): bo
   return true;
 }
 export function validateQaProfile(raw: unknown, projectName: string,
-  approvedStagingOrigin: string, approvedApiOrigin: string): {
+  approvedStagingOrigin: string, approvedApiOrigin: string,
+  approvedSyntheticTenantId: string): {
     profile: QaProfile; fixture: QaProjectFixture;
   } {
   const data = raw as QaProfile;
@@ -94,6 +95,9 @@ export function validateQaProfile(raw: unknown, projectName: string,
   requireQa(/^[a-f0-9]{40}$/.test(data.expectedSourceSha),
     'PINNED_WORKER_SOURCE_SHA');
   requireQa(Number.isSafeInteger(data.empresaId) && data.empresaId > 0, 'TENANT_ID');
+  requireQa(/^[1-9][0-9]{0,15}$/.test(approvedSyntheticTenantId) &&
+    String(data.empresaId)===approvedSyntheticTenantId,
+    'SYNTHETIC_TENANT_ALLOWLIST');
   requireQa(typeof data.courseTitle === 'string' && data.courseTitle.trim().length > 0,
     'ORIGINAL_COURSE_TITLE');
   let assetOrigin: URL;
