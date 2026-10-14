@@ -118,3 +118,19 @@ A nova cadeia valida origem/curso/empresa/versão/edição, propõe bookmark de 
 **Inventário separado:** PR [#1461](https://github.com/Airtrust-Org/airtrust/pull/1461) tem SQL de leitura restrita ao tenant6, cifra, verificação de cardinalidade `COUNT(*) OVER()` para detectar truncamento e workflow em CI; só após merge+secrets+aprovação poderá produzir contagem real. Sem snapshot efetivo nesta execução.
 
 **Blocagem principal:** schema V2 `0550` da PR #1389 conflita com a `main` (0550 de usuários); conflito de merge adicional em baseline, LMS middleware e matrículas. Não executar DB writes/staging ou anunciar resolução antes de corrigir delta/schema e demonstrar matrícula real até certificado.
+
+
+## 2026-10-14 — overlay de avaliação AirTrust sobre HTML5 preservado
+
+**Objetivo pedagógico:** o treinamento HTML5 conserva integralmente seus HTML/CSS/JS/mídias/visual; as avaliações *oficiais* aparecem em janela do próprio AirTrust, no mesmo contexto de matrícula, sob critérios do servidor, sem depender de `LMSFinish`, contadores DOM ou `postMessage` originado pelo curso para conceder aprovação.
+
+**Implementação na PR #1389:** 
+- `src/react-app/pages/lms/player3/Player3AssessmentModal.tsx`: overlay acessível de exame/certificação por módulo; recebe **somente projeção de questões**, sem gabaritos e sem calcular nota. O `submitOfficialAttempt` deve estar conectado à rota Worker autenticada pelo chamador. Rejeita recibos com empresa, matrícula, ciclo, edição, unidade ou tentativa diferentes, respostas sem persistência e score inválido; não prossegue a unidade sem confirmação; bloqueia nova tentativa em resultado de rede ambíguo até reabrir sessão. **Não gera certificado ou status de conclusão.**
+- `src/react-app/pages/lms/player3/Player3Html5Host.tsx`: preserva original em iframe de origem HTTPS distinta, exibe prova somente quando `pendingAssessment` é fornecido pelo orquestrador do Worker autorizado. Mensagens emitidas pelo iframe nunca abrem prova nem concluem treinamento; modo `reviewOnly` nunca mostra avaliação oficial. Um novo tenant/matrícula/ciclo/edição/stage remonta o formulário, impedindo reutilização de notas/seleções do contexto anterior.
+- Testes `src/__tests__/Player3AssessmentModal.test.tsx` e `src/__tests__/Player3Html5Host.test.tsx`: **13/13 PASS**; build frontend **PASS** (warning chunks legados >600kb); Worker tsc **PASS** no HEAD `e65c34af674b6d0eb2b3bde7dbd5e2555a5fe014` após commits de integração visual. Esse lote não usa APIs externas nem escreve banco.
+
+**Não homologado ainda:** esse overlay é **componente técnico não conectado à rota autenticada nem ao Worker com tentativas persisitidas por módulo, sem migrations/Schema V2 e sem E2E real**. `pendingAssessment` deve ser gerado pelo estado durável do backend, não por contador ou sinalização JS do HTML5. Faltam endpoint e escritor transacional versão-presa e prova/retomada Safari+Chromium+certificado. Não fazer deploy/cutover para learners com esse componente isolado.
+
+**Coleta de alunos:** PR #1461 merged na main `daf143ba9aedcfa2b08aca6e888b35897a6fe0e9`. Segredos verificavelmente ausentes em environment production/repo: `CLOUDFLARE_D1_READONLY_API_TOKEN`, `AIRTRUST_PLAYER3_SNAPSHOT_KEY_B64`; a configuração só pode ser feita por ação autorizada no GitHub/provedor, não tentar contornar bloqueio da ferramenta. T0 ainda não capturado. A extração inicial foi restringida ao tenant6. Até secret/provisionamento, não existem contagens de aluno conferidas, nem estado real salvo.
+
+**Próximo avanço estrutural:** integrar API Player3 de checkpoints/questões fixativas/provas por módulo com ledger idempotente no Worker + D1 schema governado de número único após 0551 de `main`, fixar versões R2 privadas e concluir transação canônica sem heurísticas; depois comparar original visual e E2E da matrícula 911 do Doutrinamento. PR #1389 ainda draft com conflitos de merge e esquema V2, não mergear prematuramente.
