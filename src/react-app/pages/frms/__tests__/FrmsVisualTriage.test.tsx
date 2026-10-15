@@ -97,6 +97,12 @@ describe('FRMS triagem visual sem inventar métricas', () => {
     expect(hasFrmsOtherConfidenceGaps(a, '2026-10-14')).toBe(false);
     expect(isFrmsRoutineDutyClosurePending(a, '2026-10-15')).toBe(false);
     expect(hasFrmsOtherConfidenceGaps(a, '2026-10-15')).toBe(true);
+    a.fortnight_indicator!.freshness_dado = 'PARCIAL';
+    expect(isFrmsRoutineDutyClosurePending(a, '2026-10-14')).toBe(false);
+    a.fortnight_indicator!.freshness_dado = 'COMPLETO';
+    a.sleep_data_source = 'ESTIMADO';
+    expect(isFrmsRoutineDutyClosurePending(a, '2026-10-14')).toBe(false);
+    a.sleep_data_source = 'REAL';
     a.alertas = ['DADO_INCONSISTENTE'];
     expect(isFrmsRoutineDutyClosurePending(a, '2026-10-14')).toBe(false);
     a.estado_operacional = 'CRITICO_VIOLACAO';
