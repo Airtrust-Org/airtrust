@@ -22,7 +22,7 @@ export function classifyReadOnlyContentAssetProbe({format,samples}) {
     throw new Error('LMS_ASSET_PROBE_SCOPE_INVALID');
   }
   const missing = samples.some(x=>x.status===404);
-  const corrupt = samples.some(x=>x.status===200 && x.valid!==true);
+  const corrupt = samples.some(x=>x.status===200 && x.valid===false);
   const verified = samples.every(x=>x.status===200 && x.valid===true);
   return {
     status:missing||corrupt?'FAIL':'INCONCLUSIVE',

@@ -1834,7 +1834,7 @@ async function certifyPdfAsset(browser,token,listed){
     const bytes=status===200?await response.body():Buffer.alloc(0);
     const valid=status===200 && bytes.byteLength>100 &&
       bytes.subarray(0,5).toString('ascii')==='%PDF-' &&
-      /^application\\/pdf(?:;|$)/i.test(String(response.headers()['content-type']||''));
+      String(response.headers()['content-type']||'').split(';')[0].trim().toLowerCase()==='application/pdf';
     const verdict=classifyReadOnlyContentAssetProbe({
       format:'pdf',samples:[{status,valid}],
     });
