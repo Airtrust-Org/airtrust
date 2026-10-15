@@ -232,6 +232,7 @@ describe('completeLmsMatricula', () => {
   });
   const player3Env=()=>({
     ...nativeEnv(),PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:'6',
+    PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS:'6',
   });
 
   it.each([false,true])('Player3 guarded batch starts with exact content+modular SQL (qualification=%s)',async qual=>{
@@ -277,6 +278,9 @@ describe('completeLmsMatricula', () => {
       {progressoPct:99},{action:'LMS_MATRICULA_CONCLUIDA'},
       {env:{...player3Env(),ENVIRONMENT:'production'}},
       {env:{...player3Env(),PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:undefined}},
+      {env:{...player3Env(),PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS:undefined}},
+      {env:{...player3Env(),PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS:'*'}},
+      {env:{...player3Env(),NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS:undefined}},
     ]){
       await expect(completeLmsMatricula(baseParams(db,{...base,...patch}) as never))
         .rejects.toMatchObject({code:'PLAYER3_TERMINAL_ANCHOR_MISMATCH'});
