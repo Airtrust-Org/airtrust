@@ -216,7 +216,15 @@ export default function Player3Html5Host({
       submitting = true;
       const requestId = msg.requestId;
       const stageId = examContext.stageId;
-      void verifiedSubmit(answers).then(receipt => {
+      // A lesson-exit checkpoint may have been queued by the immediately
+      // preceding authored navigation hint. The official assessment must not
+      // race ahead of that server evidence.
+      void navigationQueue.current.then(() => {
+        if(navigationFailed.current) {
+          throw new Error('PLAYER3_NAVIGATION_NOT_CONFIRMED');
+        }
+        return verifiedSubmit(answers);
+      }).then(receipt => {
         // An ambiguous Worker attempt must NEVER receive a fabricated pass.
         if (!active || !receipt.persisted ||
             receipt.edition_sha256 !== editionSha256 ||
