@@ -6,6 +6,7 @@ import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
 import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
 import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
+import { classifyPptxAssetProbe, classifyUncoveredContentType } from './lms-format-certification-verdict.mjs';
 import {
   assert,
   assertAllowedProductionBaseUrl,
@@ -1792,25 +1793,25 @@ async function certifyPptxCourse(browser, token, listed) {
     Number(detail?.gerar_qualificacao_ao_concluir ?? listed?.gerar_qualificacao_ao_concluir ?? 0) === 1 ||
     detail?.gerar_qualificacao_ao_concluir === true ||
     listed?.gerar_qualificacao_ao_concluir === true;
-  const completionCertifiable = !generatesQualification;
-  const pass = assetPass && completionCertifiable;
-  const reason = !assetPass
-    ? `PPTX_ASSET_HTTP_${response.status()}`
-    : generatesQualification
-      ? 'PPTX_QUALIFYING_COMPLETION_EVIDENCE_REQUIRED'
-      : null;
+  // Asset availability is not proof of a complete learner cycle,
+  // including nonqualifying courses: never set PASS without an E2E path.
+  const verdict = classifyPptxAssetProbe({
+    httpStatus: response.status(), assetBytes: bytes.byteLength, generatesQualification,
+  });
   return {
     course_id: id,
     titulo: String(listed.titulo || detail.titulo || ''),
     tipo_conteudo: 'pptx',
-    status: pass ? 'PASS' : 'FAIL',
-    reason,
+    status: verdict.status,
+    reason: verdict.reason,
     asset_bytes: bytes.byteLength,
+    asset_load_pass: assetPass,
+    functional_completion_certified: verdict.functionalCompletionCertified,
     generates_qualification: generatesQualification,
     version_tag: detail?.version_tag ? String(detail.version_tag) : null,
     note: generatesQualification
       ? 'Asset load passed, but the current backend intentionally blocks qualifying PPTX completion until server-validated evidence exists.'
-      : 'Exact PPTX asset load certified; this course does not mint a qualification.',
+      : 'PPTX asset availability was checked; the enrollment completion lifecycle was NOT certified.',
   };
 }
 
@@ -1841,7 +1842,10 @@ async function main() {
       try {
         if (type === 'scorm') results.push(await certifyScormCourse(browser, token, course));
         else if (type === 'pptx') results.push(await certifyPptxCourse(browser, token, course));
-        else results.push({ course_id: Number(course.id), titulo: String(course.titulo || ''), tipo_conteudo: type, status: 'FAIL', reason: 'UNSUPPORTED_CONTENT_TYPE' });
+        else results.push({
+          course_id: Number(course.id), titulo: String(course.titulo || ''),
+          ...classifyUncoveredContentType(type),
+        });
       } catch (error) {
         results.push({ course_id: Number(course.id), titulo: String(course.titulo || ''), tipo_conteudo: type, status: 'FAIL', reason: safe(error?.message || error) });
       }

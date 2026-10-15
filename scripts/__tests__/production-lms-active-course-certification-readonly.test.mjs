@@ -140,7 +140,10 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /content_buttons/);
   assert.match(source, /rect\.bottom > 0/);
   assert.match(source, /action\?\.type === 'none'/);
-  assert.match(source, /PPTX_QUALIFYING_COMPLETION_EVIDENCE_REQUIRED/);
+  assert.match(source, /classifyPptxAssetProbe\(/);
+  assert.match(source, /classifyUncoveredContentType\(type\)/);
+  assert.match(source, /functional_completion_certified: verdict\.functionalCompletionCertified/);
+  assert.doesNotMatch(source, /status: pass \? 'PASS' : 'FAIL'/);
   assert.match(source, /generates_qualification/);
   assert.match(source, /forwardId/);
   assert.match(source, /qnext/);
