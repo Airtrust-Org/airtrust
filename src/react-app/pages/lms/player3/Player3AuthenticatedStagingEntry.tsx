@@ -203,7 +203,8 @@ export default function Player3AuthenticatedStagingEntry({
       </p>}
       {activatedStartState==='BLOCKED'&&<>
         <p role="alert">O início ainda não foi confirmado. Nenhuma nova
-          tentativa de gravação será enviada automaticamente.</p>
+          tentativa de gravação será enviada automaticamente.
+          Reabra o treinamento se a conferência não confirmar o início.</p>
         <button type="button" onClick={()=>void verifyPersistedStartWithoutPost()}
           className="mt-2 rounded border px-4 py-2">
           Conferir início registrado
