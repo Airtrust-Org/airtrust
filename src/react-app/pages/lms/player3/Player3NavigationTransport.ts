@@ -22,6 +22,7 @@ export function validNavigationScope(s:Player3NavigationScope):boolean{
     s.checkpointUnitIds.length<=500&&
     s.checkpointUnitIds.every(id=>ID.test(id))&&
     new Set(s.checkpointUnitIds).size===s.checkpointUnitIds.length&&
+    s.checkpointUnitIds.includes(s.nextUnitId)&&
     (s.lastVisitedUnitId===null||
       s.checkpointUnitIds.includes(s.lastVisitedUnitId));
 }
@@ -70,6 +71,9 @@ export function makePlayer3NavigationRecorder(
     if(before.seen_lesson_ids.includes(unitId)){
       locked=false;return true;
     }
+    // Only the edition-pinned next unit may create fresh navigation evidence.
+    // Revisits above are read-only; a later allowlisted unit cannot skip ahead.
+    if(unitId!==s.nextUnitId)throw Error('PLAYER3_NAV_OUT_OF_ORDER');
     if(before.next_sequence>10000)throw Error('PLAYER3_NAV_LEDGER_FULL');
     const random=crypto.getRandomValues(new Uint8Array(16));
     const eventId='p3v-'+[...random].map(v=>v.toString(16).padStart(2,'0')).join('');
