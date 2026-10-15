@@ -9,13 +9,20 @@ vi.mock('@/react-app/config/api',()=>({API_BASE_URL:'/api',fetchWithAuth:vi.fn()
 vi.mock('@/react-app/pages/lms/player3/Player3Html5Host',()=>({
   default:(props:{
     contentUrl:string;reviewOnly:boolean;terminalScope:unknown;
-    pendingAssessment?:{onVerifiedStagePassed:(r:never)=>void}|null;
+    pendingAssessment?:{context:{stageId:string};onVerifiedStagePassed:(r:never)=>void}|null;
+    onVerifiedLessonCheckpoint?:()=>void;
   })=><div data-testid="player3-host">
     <span>{props.contentUrl}</span>
     <span>{props.reviewOnly?'review':'learner'}</span>
     <span>{props.terminalScope?'terminal':'assessment'}</span>
+    <span data-testid="pending-stage">
+      {props.pendingAssessment?.context.stageId??'not yet eligible'}
+    </span>
     <button onClick={()=>props.pendingAssessment?.onVerifiedStagePassed({} as never)}>
       confirmed by Worker
+    </button>
+    <button onClick={props.onVerifiedLessonCheckpoint}>
+      lesson checkpoint verified
     </button>
   </div>,
 }));
@@ -339,6 +346,20 @@ describe('authenticated original HTML5 learner entry (no ungoverned fallback)',(
     expect(await screen.findByTestId('native-preview')).toBeInTheDocument();
   });
 
+  it('unlocks questions with a fresh authenticated launch after a durable lesson checkpoint',async()=>{
+    mockFetch.mockResolvedValueOnce(response({success:true,data:{
+      ...launch,pending_assessment:null,
+    }})).mockResolvedValueOnce(response({success:true,data:launch}));
+    render(<Player3AuthenticatedStagingEntry {...props}/>);
+    expect(await screen.findByTestId('pending-stage'))
+      .toHaveTextContent('not yet eligible');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button',{name:'lesson checkpoint verified'}));
+    await waitFor(()=>expect(screen.getByTestId('pending-stage'))
+      .toHaveTextContent('module1'));
+    expect(mockFetch.mock.calls.map(([,opts])=>opts?.method))
+      .toEqual(['GET','GET']);
+  });
   it('updates the stage only after a Worker-verified callback',async()=>{
     mockFetch.mockResolvedValueOnce(response({success:true,data:launch}))
       .mockResolvedValueOnce(response({success:true,data:{
