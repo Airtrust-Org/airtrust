@@ -1765,7 +1765,8 @@ async function certifyScormCourse(browser, token, listed) {
     status: classification.status,
     reason: functional.reason,
     certification_evidence: classification.evidence,
-    functional_completion_certified: classification.status === 'PASS',
+    browser_preview_lifecycle_pass: classification.status === 'PASS',
+    enrolled_learner_end_to_end_tested: false,
     package_sha256: pkg?.sha256 ?? null,
     legacy_unversioned: legacyUnversioned,
     stored_gate: pkg ? {
@@ -1808,6 +1809,7 @@ async function certifyPptxCourse(browser, token, listed) {
     asset_bytes: bytes.byteLength,
     asset_load_pass: assetPass,
     functional_completion_certified: verdict.functionalCompletionCertified,
+    enrolled_learner_end_to_end_tested: false,
     generates_qualification: generatesQualification,
     version_tag: detail?.version_tag ? String(detail.version_tag) : null,
     note: generatesQualification
@@ -1875,7 +1877,7 @@ async function main() {
   };
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, inconclusive_count: report.inconclusive_count, course_count: report.course_count, functional_certified_count: report.format_coverage.functional_certified_count, formats: report.format_coverage.formats })}\n`);
+  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, inconclusive_count: report.inconclusive_count, course_count: report.course_count, scorm_preview_pass_count: report.format_coverage.scorm_preview_pass_count, enrolled_learner_end_to_end_tested: false, formats: report.format_coverage.formats })}\n`);
   // Both explicit failures and inconclusive runs block certification/release.
   if (report.fail_count + report.inconclusive_count > 0) process.exitCode = 2;
 }

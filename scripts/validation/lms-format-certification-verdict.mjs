@@ -27,8 +27,8 @@ export function classifyUncoveredContentType(type) {
 
 /**
  * Portable, deterministic readiness ledger, derived only from actual probe
- * results for the pinned runtime and browser. An asset HTTP 200 is not an E2E
- * certification, and omitted/unsupported formats never increment certified.
+ * results for the pinned runtime and browser. An asset HTTP 200 and an
+ * isolated SCORM preview are NOT end-to-end enrollment/certificate evidence.
  */
 export function summarizeCourseFormatCoverage(results) {
   const groups = new Map();
@@ -36,15 +36,18 @@ export function summarizeCourseFormatCoverage(results) {
     const format = String(result.tipo_conteudo || 'unknown').trim().toLowerCase() || 'unknown';
     const group = groups.get(format) || {
       tipo_conteudo: format, course_count: 0, pass_count: 0,
-      fail_count: 0, inconclusive_count: 0, functional_certified_count: 0,
+      fail_count: 0, inconclusive_count: 0, scorm_preview_pass_count: 0,
     };
     group.course_count += 1;
     if (result.status === 'PASS') group.pass_count += 1;
     else if (result.status === 'FAIL') group.fail_count += 1;
     else if (result.status === 'INCONCLUSIVE') group.inconclusive_count += 1;
     else throw new Error('LMS_CERTIFICATION_UNKNOWN_STATUS');
-    if (result.status === 'PASS' && result.functional_completion_certified === true) {
-      group.functional_certified_count += 1;
+    // The SCORM preview is an isolated synthetic runtime. It does NOT
+    // exercise an enrolled learner's persisted qualification/certificate.
+    if (format === 'scorm' && result.status === 'PASS' &&
+        result.certification_evidence === 'PREVIEW_LIFECYCLE_PASSED') {
+      group.scorm_preview_pass_count += 1;
     }
     groups.set(format, group);
   }
@@ -52,7 +55,10 @@ export function summarizeCourseFormatCoverage(results) {
     a.tipo_conteudo.localeCompare(b.tipo_conteudo, 'en'));
   return {
     format_count: formats.length,
-    functional_certified_count: formats.reduce((n, item) => n + item.functional_certified_count, 0),
+    scorm_preview_pass_count: formats.reduce((n, item) => n + item.scorm_preview_pass_count, 0),
+    // This workflow forbids LMS writes and cannot validate terminal lifecycle
+    // or certificate provenance of any real enrollment. Never imply otherwise.
+    enrolled_learner_end_to_end_tested: false,
     formats,
   };
 }
