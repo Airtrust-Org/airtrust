@@ -1,7 +1,7 @@
 /**
  * All learner PDF/PPTX asset downloads must use the same rotating, tenant-bound
  * authenticated transport as the rest of the LMS. Reading a cached access
- * token and calling fetch() directly strands long-running learners on 401
+ * token and sending an unauthenticated transport request strands learners on 401
  * after an access-token rotation. This helper never grants completion.
  */
 import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
