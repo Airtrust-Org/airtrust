@@ -48,7 +48,8 @@ export function validatePlayer3Launch(
   const assessment=data.pending_assessment;
   // An unfinished course may be between lessons, with no stage available
   // yet. This is not a completion claim or a missing-official-stage bypass.
-  if(!assessment)return true;
+  if(assessment===null)return true;
+  if(!assessment||typeof assessment!=='object'||Array.isArray(assessment))return false;
   if(!ID.test(assessment.stage_id)||!assessment.title?.trim()||
      !Array.isArray(assessment.questions)||assessment.questions.length<1||
      assessment.questions.length>100)return false;
