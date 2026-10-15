@@ -14,6 +14,27 @@ export function classifyPptxAssetProbe({ httpStatus, assetBytes, generatesQualif
   };
 }
 
+// Read-only media checks prove an asset, NEVER completion or certification.
+// Exact required asset count prevents a partial H5P package from being green.
+export function classifyReadOnlyContentAssetProbe({format,samples}) {
+  if (!['pdf','h5p'].includes(format) || !Array.isArray(samples) ||
+      samples.length !== (format==='h5p'?2:1)) {
+    throw new Error('LMS_ASSET_PROBE_SCOPE_INVALID');
+  }
+  const missing = samples.some(x=>x.status===404);
+  const corrupt = samples.some(x=>x.status===200 && x.valid===false);
+  const verified = samples.every(x=>x.status===200 && x.valid===true);
+  return {
+    status:missing||corrupt?'FAIL':'INCONCLUSIVE',
+    reason:missing?format.toUpperCase()+'_ASSET_NOT_FOUND':
+      corrupt?format.toUpperCase()+'_ASSET_INVALID':
+      verified?format.toUpperCase()+'_COMPLETION_LIFECYCLE_NOT_TESTED':
+      format.toUpperCase()+'_ASSET_ACCESS_UNCONFIRMED',
+    assetLoadPass:verified,
+    functionalCompletionCertified:false,
+  };
+}
+
 // A missing format-specific certifier is a coverage gap, not evidence that
 // a published PDF, H5P or video is defective; it still must block release.
 export function classifyUncoveredContentType(type) {
@@ -37,6 +58,7 @@ export function summarizeCourseFormatCoverage(results) {
     const group = groups.get(format) || {
       tipo_conteudo: format, course_count: 0, pass_count: 0,
       fail_count: 0, inconclusive_count: 0, scorm_preview_pass_count: 0,
+      asset_probe_pass_count: 0,
     };
     group.course_count += 1;
     if (result.status === 'PASS') group.pass_count += 1;
@@ -49,6 +71,8 @@ export function summarizeCourseFormatCoverage(results) {
         result.certification_evidence === 'PREVIEW_LIFECYCLE_PASSED') {
       group.scorm_preview_pass_count += 1;
     }
+    if (result.asset_load_pass === true &&
+        ['pdf','h5p','pptx'].includes(format)) group.asset_probe_pass_count += 1;
     groups.set(format, group);
   }
   const formats = [...groups.values()].sort((a, b) =>
@@ -56,6 +80,7 @@ export function summarizeCourseFormatCoverage(results) {
   return {
     format_count: formats.length,
     scorm_preview_pass_count: formats.reduce((n, item) => n + item.scorm_preview_pass_count, 0),
+    asset_probe_pass_count: formats.reduce((n, item) => n + item.asset_probe_pass_count, 0),
     // This workflow forbids LMS writes and cannot validate terminal lifecycle
     // or certificate provenance of any real enrollment. Never imply otherwise.
     enrolled_learner_end_to_end_tested: false,

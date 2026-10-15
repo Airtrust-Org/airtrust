@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  classifyPptxAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage,
+  classifyPptxAssetProbe, classifyReadOnlyContentAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage,
 } from '../validation/lms-format-certification-verdict.mjs';
 
 test('a PPTX asset alone never certifies a nonqualifying enrollment', () => {
@@ -78,4 +78,43 @@ test('unproven PASS or unsupported status can never inflate SCORM preview counts
   assert.throws(() => summarizeCourseFormatCoverage([
     { tipo_conteudo:'pdf', status:'SUCCESS' },
   ]), /LMS_CERTIFICATION_UNKNOWN_STATUS/);
+});
+
+test('valid PDF asset is accessible but never a completed enrollment',()=>{
+  const verdict=classifyReadOnlyContentAssetProbe({format:'pdf',samples:[{status:200,valid:true}]});
+  assert.deepEqual(verdict,{status:'INCONCLUSIVE',reason:'PDF_COMPLETION_LIFECYCLE_NOT_TESTED',
+    assetLoadPass:true,functionalCompletionCertified:false});
+  assert.equal(classifyReadOnlyContentAssetProbe({format:'pdf',samples:[{status:404,valid:false}]}).status,'FAIL');
+  assert.equal(classifyReadOnlyContentAssetProbe({format:'pdf',samples:[{status:200,valid:false}]}).status,'FAIL');
+  assert.equal(classifyReadOnlyContentAssetProbe({format:'pdf',samples:[{status:503,valid:false}]}).status,'INCONCLUSIVE');
+});
+
+test('H5P requires two intact JSON entrypoints, without claiming xAPI completion',()=>{
+  const samples=[{status:200,valid:true},{status:200,valid:true}];
+  const verdict=classifyReadOnlyContentAssetProbe({format:'h5p',samples});
+  assert.equal(verdict.assetLoadPass,true);
+  assert.equal(verdict.status,'INCONCLUSIVE');
+  assert.equal(verdict.functionalCompletionCertified,false);
+  for (const bad of [
+    [{status:200,valid:true},{status:404,valid:false}],
+    [{status:200,valid:true},{status:200,valid:false}],
+  ]) assert.equal(classifyReadOnlyContentAssetProbe({format:'h5p',samples:bad}).status,'FAIL');
+  assert.equal(classifyReadOnlyContentAssetProbe({format:'h5p',samples:[
+    {status:403,valid:false},{status:200,valid:true},
+  ]}).status,'INCONCLUSIVE');
+  assert.equal(classifyReadOnlyContentAssetProbe({format:'h5p',samples:[
+    {status:200,valid:null},{status:200,valid:true},
+  ]}).status,'INCONCLUSIVE');
+  assert.throws(()=>classifyReadOnlyContentAssetProbe({format:'h5p',samples:[samples[0]]}),/LMS_ASSET_PROBE_SCOPE_INVALID/);
+});
+
+test('media asset probes do not inflate SCORM preview completion',()=>{
+  const summary=summarizeCourseFormatCoverage([
+    {tipo_conteudo:'pdf',status:'INCONCLUSIVE',asset_load_pass:true},
+    {tipo_conteudo:'h5p',status:'INCONCLUSIVE',asset_load_pass:true},
+    {tipo_conteudo:'pptx',status:'INCONCLUSIVE',asset_load_pass:true},
+  ]);
+  assert.equal(summary.asset_probe_pass_count,3);
+  assert.equal(summary.scorm_preview_pass_count,0);
+  assert.equal(summary.enrolled_learner_end_to_end_tested,false);
 });
