@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { readNativeCanonicalReadiness, readNativeLearnerSession } from '../../services/lms-native-readiness-repository';
 import { validateNativeCourseArtifact } from '../../lib/lms/lms-native-course-contract';
 import type { NativeSessionScope } from '../../lib/lms/lms-native-evidence-domain';
@@ -31,19 +32,28 @@ async function digest(input: string) {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
   return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
+function eventHash(event: { event_id: string; sequencia: number; unidade_id: string }) {
+  return createHash('sha256').update(JSON.stringify([
+    scope.empresaId, scope.matriculaId, scope.cicloId, scope.cursoId, scope.artifactHash,
+    event.event_id, event.sequencia, event.unidade_id,
+  ])).digest('hex');
+}
 type Attempt = {
   id: number; tentativa_numero: number; answers_json: string; answers_sha256: string;
   policy: string; score_pct: number | null; assessment_satisfied: number;
 };
 function dbMock(settings: {
   binding?: { id: number; status: string } | null;
-  events?: Array<{ event_id: string; sequencia: number; unidade_id: string }>;
+  events?: Array<{ event_id: string; sequencia: number; unidade_id: string; payload_sha256?: string }>;
   attempt?: Attempt | null;
   expectedActor?: number;
 } = {}) {
   const calls: Array<{ query: string; params: unknown[] }> = [];
   const binding = settings.binding === undefined ? { id: 41, status: 'EM_ANDAMENTO' } : settings.binding;
-  const events = settings.events ?? [{ event_id: 'visit-1', sequencia: 1, unidade_id: 'opening' }];
+  const rawEvents = settings.events ?? [{ event_id: 'visit-1', sequencia: 1, unidade_id: 'opening' }];
+  const events = rawEvents.map(event => ({
+    ...event, payload_sha256: event.payload_sha256 ?? eventHash(event),
+  }));
   const attempt = settings.attempt ?? null;
   const db = {
     prepare(query: string) {
@@ -101,6 +111,15 @@ describe('Native V1 persisted-readiness bridge (read only)', () => {
       policy: 'SCORED', score_pct: 100, assessment_satisfied: 1,
     } });
     await expect(run(db)).rejects.toMatchObject({ code: 'NATIVE_READ_ATTEMPT_HASH_CONFLICT' });
+  });
+
+  it('rejects a persisted lesson checkpoint whose server hash no longer matches', async () => {
+    const { db } = dbMock({ events: [{
+      event_id: 'visit-1', sequencia: 1, unidade_id: 'opening',
+      payload_sha256: 'f'.repeat(64),
+    }] });
+    await expect(readNativeLearnerSession({ db, actorUserId: 12, scope, artifact }))
+      .rejects.toMatchObject({ code: 'NATIVE_READ_INVALID_EVENT_LEDGER' });
   });
 
   it('re-evaluates and rejects forged persisted grades and pass flags', async () => {
