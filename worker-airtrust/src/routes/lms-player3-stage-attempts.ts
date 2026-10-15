@@ -129,9 +129,19 @@ app.get('/matriculas/:matriculaId/etapas/lancamento',async c=>{
       throw Error('PLAYER3_AUTHORED_SESSION_POLICY_CONFLICT');
     }
     const policyStage=pending&&policy.stages.find(p=>p.stageId===pending.stageId);
+    // Official questions are not released merely because a stage is next.
+    // The same authorial-prefix rule is enforced by the Worker POST writer;
+    // the launch projection must not disclose the exam ahead of progress.
+    const stageIndex=pending?course.artifact.units.findIndex(unit=>
+      unit.id===pending.stageId&&unit.kind==='assessment'):-1;
+    if(pending&&stageIndex<0)throw Error('PLAYER3_AUTHORED_STAGE_NOT_FOUND');
+    const priorLessons=pending?course.artifact.units.slice(0,stageIndex)
+      .filter(unit=>unit.kind==='lesson').map(unit=>unit.id):[];
+    const canPresentStage=!!pending&&priorLessons.every((id,index)=>
+      nativeSession.seenLessonIds[index]===id);
     let assessment:null|{stage_id:string;title:string;
       questions:{id:string;prompt:string;options:{id:string;text:string}[]}[]}=null;
-    if(pending){
+    if(canPresentStage&&pending){
       if(!policyStage||!Array.isArray(policyStage.requiredQuestionIds)||
          policyStage.requiredQuestionIds.length<1||
          policyStage.requiredQuestionIds.length>100){
