@@ -39,6 +39,7 @@ describe('Player3 transaction-local, non-routed terminal evidence guard',()=>{
       {...anchor,officialStages:[anchor.officialStages[0],anchor.officialStages[0]]},
       {...anchor,officialStages:[{...anchor.officialStages[0],answersHash:'not-a-digest'}]},
       {...anchor,recordedEventCount:1},
+      {...anchor,recordedEventCount:3},
       {...anchor,editionHash:'wrong'},
       {...anchor,cicloId:0},
     ];
