@@ -46,6 +46,7 @@ const accepted = {
 describe('Native route admission for physical Native and governed SCORM-backed Player3', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.fetchWithAuth.mockReset();
     mocks.params.matriculaId = '101';
     mocks.auth={user:{id:900},empresaAtualId:6,isAuthenticated:true};
     mocks.useMatriculaDetalhe.mockReturnValue({isLoading:false,data:{...enrollment}});
@@ -84,10 +85,10 @@ describe('Native route admission for physical Native and governed SCORM-backed P
     const view=render(<LmsNativePlayer/>);
     const previous=(await screen.findByTestId('native-entry')).getAttribute('data-mount');
     mocks.auth={...mocks.auth,user:{id:901}};
+    mocks.fetchWithAuth.mockResolvedValueOnce(response(accepted));
     view.rerender(<LmsNativePlayer/>);
     expect(screen.queryByTestId('native-entry')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent(/verificando acesso/i);
-    mocks.fetchWithAuth.mockResolvedValueOnce(response(accepted));
     const child=await screen.findByTestId('native-entry');
     expect(child.getAttribute('data-mount')).not.toBe(previous);
     expect(mocks.fetchWithAuth).toHaveBeenCalledTimes(2);
