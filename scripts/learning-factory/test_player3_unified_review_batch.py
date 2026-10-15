@@ -145,10 +145,22 @@ class Player3UnifiedBatchWriteTests(unittest.TestCase):
                 self.assertEqual([row['sourceUnitId'] for row in crosswalk['sourceStages']],
                                  ['unit-1','synthetic-stage'])
                 self.assertTrue(crosswalk['sourceUnitIdsSha256'])
+                ids=[u['canonicalUnitId'] for u in crosswalk['sourceStages']]
+                expected=hashlib.sha256(
+                    json.dumps(ids,separators=(',',':'),ensure_ascii=False).encode('utf8')
+                ).hexdigest()
+                self.assertEqual(crosswalk['candidateOrderedUnitIdsSha256'],expected)
+                self.assertFalse(crosswalk['orderedUnitIdsApproved'])
+                self.assertNotEqual(expected,crosswalk['sourceUnitIdsSha256'])
             for row in result['courses']:
                 self.assertIsNone(row['targetEditionSha256'])
                 self.assertFalse(row['sourceStageMapApproved'])
                 self.assertEqual(row['sourceUnitCount'],2)
+                self.assertFalse(row['orderedUnitIdsApproved'])
+                self.assertEqual(
+                    row['candidateOrderedUnitIdsSha256'],
+                    hashlib.sha256(b'["unit-1","synthetic-stage"]').hexdigest(),
+                )
             self.assertFalse(list(learner.rglob('*server-only-bank.json')))
             for path in editions:
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode),0o600)
@@ -173,6 +185,74 @@ class Player3UnifiedBatchWriteTests(unittest.TestCase):
         ):
             with self.subTest(broken=broken), self.assertRaises(UnsafePackage):
                 private_source_stage_map(digest,'b'*64,'c'*64,broken)
+
+    def test_source_order_digest_alias_is_candidate_never_governed(self):
+        # The long original ID was observed in the 22-source review. The alias
+        # must be identical to the future Native contract before publishing.
+        long_id='long-'+('q'*77)  # 82 chars, not a Native unit ID
+        crosswalk=private_source_stage_map('a'*64,'b'*64,'c'*64,{
+          'sourceStageCrosswalk':[
+            {'stageId':'slide1','originalKind':'lesson',
+             'candidatePlayer3Type':'content','requiresPedagogicalApproval':False},
+            {'stageId':long_id,'originalKind':'lesson',
+             'candidatePlayer3Type':'content','requiresPedagogicalApproval':True},
+          ],
+        })
+        ids=[x['canonicalUnitId'] for x in crosswalk['sourceStages']]
+        self.assertTrue(crosswalk['sourceStages'][1]['requiresUnitAlias'])
+        self.assertRegex(ids[1],r'^u-[0-9a-f]{32}
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            batches,known,source_digests=self.fixture(root)
+            private=root/'private';learner=root/'learner'
+            attempts=[0]
+            def fail_midbatch(raw,name,origin):
+                attempts[0]+=1
+                if attempts[0]==15:
+                    raise UnsafePackage('SYNTHETIC_PRECHECK_FAILURE')
+                return self.compiler(raw,name,origin)
+            with patch.dict(KNOWN_SOURCES_BY_SHA,known,clear=True), \
+                 patch.object(factory,'ADAPTED',source_digests), \
+                 patch.object(factory,'compile_safe_review',side_effect=fail_midbatch):
+                with self.assertRaisesRegex(UnsafePackage,'SYNTHETIC_PRECHECK_FAILURE'):
+                    factory.unified_review(batches,private,learner,'https://airtrust.online')
+            self.assertEqual(attempts[0],15)
+            self.assertFalse(private.exists())
+            self.assertFalse(learner.exists())
+
+    def test_disk_write_error_rolls_back_22_review_outputs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            batches,known,source_digests=self.fixture(root)
+            private=root/'private';learner=root/'learner'
+            real_writer=factory._write_exclusive
+            count=[0]
+            def fail_write(path,data):
+                count[0]+=1
+                if count[0]==21:
+                    raise OSError('SYNTHETIC_DISK_IO_FAILURE')
+                return real_writer(path,data)
+            with patch.dict(KNOWN_SOURCES_BY_SHA,known,clear=True), \
+                 patch.object(factory,'ADAPTED',source_digests), \
+                 patch.object(factory,'compile_safe_review',side_effect=self.compiler), \
+                 patch.object(factory,'_write_exclusive',side_effect=fail_write):
+                with self.assertRaisesRegex(OSError,'SYNTHETIC_DISK_IO_FAILURE'):
+                    factory.unified_review(batches,private,learner,'https://airtrust.online')
+            self.assertEqual(count[0],21)
+            self.assertFalse(private.exists())
+            self.assertFalse(learner.exists())
+
+
+if __name__=='__main__':unittest.main())
+        self.assertEqual(len(set(ids)),2)
+        self.assertEqual(crosswalk['candidateOrderedUnitIdsSha256'],
+          hashlib.sha256(json.dumps(ids,separators=(',',':')).encode()).hexdigest())
+        self.assertNotEqual(crosswalk['candidateOrderedUnitIdsSha256'],
+                            crosswalk['sourceUnitIdsSha256'])
+        self.assertFalse(crosswalk['targetEditionApproved'])
+        self.assertFalse(crosswalk['orderedUnitIdsApproved'])
+        self.assertIsNone(crosswalk['targetEditionSha256'])
+        self.assertFalse(crosswalk['lessonEvidencePersisted'])
 
     def test_compile_error_before_write_leaves_no_partial_artifacts(self):
         with tempfile.TemporaryDirectory() as folder:
