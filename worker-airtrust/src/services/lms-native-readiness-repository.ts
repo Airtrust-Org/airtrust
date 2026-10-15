@@ -112,12 +112,16 @@ export async function readNativeLearnerSession(params: {
   }
   // A malformed or reordered server ledger is a consistency incident, not
   // an opportunity to guess a location or award course completion.
-  const lessons = new Set(artifact.units.filter((unit) => unit.kind === 'lesson').map((unit) => unit.id));
-  if (rows.some((row, index) =>
-      row.sequencia !== index + 1 || typeof row.event_id !== 'string' ||
-      !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(row.event_id) ||
-      !lessons.has(row.unidade_id)) ||
-      new Set(rows.map((row) => row.event_id)).size !== rows.length) {
+  const orderedLessons = artifact.units
+    .filter((unit) => unit.kind === 'lesson').map((unit) => unit.id);
+  const lessons = new Set(orderedLessons);
+  if (rows.length > orderedLessons.length ||
+      rows.some((row, index) =>
+        row.sequencia !== index + 1 || typeof row.event_id !== 'string' ||
+        !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(row.event_id) ||
+        !lessons.has(row.unidade_id) || row.unidade_id !== orderedLessons[index]) ||
+      new Set(rows.map((row) => row.event_id)).size !== rows.length ||
+      new Set(rows.map((row) => row.unidade_id)).size !== rows.length) {
     fail('NATIVE_READ_INVALID_EVENT_LEDGER');
   }
   const snapshot: NativeProgressSnapshot = {
@@ -126,7 +130,7 @@ export async function readNativeLearnerSession(params: {
     recordedEvents: rows.map((row) => ({
       eventId: row.event_id, sequence: row.sequencia, unitId: row.unidade_id,
     })),
-    seenLessonIds: [...new Set(rows.map((row) => row.unidade_id))],
+    seenLessonIds: rows.map((row) => row.unidade_id),
   };
 
   const stored = await db.prepare(ATTEMPT_SQL).bind(binding.id).first<AttemptRow>();
