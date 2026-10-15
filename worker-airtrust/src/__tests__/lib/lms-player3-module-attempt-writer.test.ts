@@ -140,6 +140,22 @@ describe('Player 3 staging module attempt writer',()=>{
     expect(f.db.prepare).not.toHaveBeenCalled();
     expect(f.bucket.get).not.toHaveBeenCalled();
   });
+  it('rejects an approved policy whose stage order contradicts authored assessment order',async()=>{
+    const f=await fixture();
+    vi.mocked(loadNativePrivateCourse).mockResolvedValueOnce({
+      editionHash:EDITION,cursoId:10,cicloId:1000,mode:'LEARN',
+      artifact:{units:[
+        {id:'lesson1',kind:'lesson'},
+        {id:'m2',kind:'assessment'},
+        {id:'lesson2',kind:'lesson'},
+        {id:'m1',kind:'assessment'},
+      ]} as never,
+    });
+    await expect(f.call()).rejects.toMatchObject({
+      code:'STAGE_AUTHORED_CROSSWALK_INVALID',
+    });
+    expect(f.stored.size).toBe(0);
+  });
   it('rejects an official assessment until all authored lessons before it are persisted',async()=>{
     const f=await fixture();
     vi.mocked(readNativeLearnerSession).mockResolvedValueOnce({summary:{
