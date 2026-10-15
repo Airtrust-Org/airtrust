@@ -183,7 +183,18 @@ describe('Native V1 atomic checkpoint writer — no LMS completion side effects'
     const f = harness();
     await f.commit();
     f.rows[0]!.payload_sha256 = 'f'.repeat(64);
-    await expect(f.commit()).rejects.toThrowError('NATIVE_CHECKPOINT_REPLAY_CONFLICT');
+    await expect(f.commit()).rejects.toThrowError('NATIVE_CHECKPOINT_INVALID_LEDGER');
+  });
+
+  it('refuses to append after a previously persisted checkpoint hash is corrupted', async () => {
+    const f = harness({ artifact: twoLessonCourse });
+    await f.commit();
+    f.rows[0]!.payload_sha256 = '0'.repeat(64);
+    await expect(f.commit({
+      eventId: 'view-second-2', sequence: 2, unitId: 'second-lesson',
+    })).rejects.toThrowError('NATIVE_CHECKPOINT_INVALID_LEDGER');
+    expect(f.rows).toHaveLength(1);
+    expect(f.insertAttempts()).toBe(1);
   });
 
   it('rejects malformed authenticated context before selecting the enrollment', async () => {
