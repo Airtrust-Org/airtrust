@@ -16,7 +16,7 @@ import {
 } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
 import { FrmsSignalGrid } from './components/FrmsOperationalSignals';
-import { FrmsOverview, FrmsScoreMeter, FrmsScoreExplanation, FrmsEvidenceActions } from './components/FrmsVisualTriage';
+import { FrmsOverview, FrmsScoreMeter, FrmsScoreExplanation, FrmsEvidenceActions, matchesFrmsOverviewFilter, type FrmsOverviewFilter, FRMS_OVERVIEW_FILTER_LABELS } from './components/FrmsVisualTriage';
 import {
   bucketPriority,
   classifyOperationalItem,
@@ -485,6 +485,7 @@ export default function FrmsFlightDashboard() {
   const [selected, setSelected] = useState<FrmsOperationalSnapshotItem | null>(null);
   const [onlyPendingCheckin, setOnlyPendingCheckin] = useState(false);
   const [actionFilter, setActionFilter] = useState<FrmsActionLane | 'TODOS'>('TODOS');
+  const [overviewFilter, setOverviewFilter] = useState<FrmsOverviewFilter | null>(null);
 
   useEffect(() => {
     if (requestedDate === date) return;
@@ -522,11 +523,18 @@ export default function FrmsFlightDashboard() {
     if (match) setSelected(match);
   }, [requestedFuncionarioId, selected, snapshot.data]);
 
-  const visibleQueue = useMemo(() => queue.filter(({ item, lane }) =>
-    onlyPendingCheckin
-      ? resolveFrmsCoordinationGuidance(item, todayIso).requiresCheckin && item.checkin_status !== 'RECEBIDO'
-      : actionFilter === 'TODOS' || lane === actionFilter,
-  ), [queue, onlyPendingCheckin, actionFilter, todayIso]);
+  const visibleQueue = useMemo(() => queue.filter(({ item, lane, bucket }) =>
+    overviewFilter
+      ? matchesFrmsOverviewFilter(item, bucket, overviewFilter, todayIso)
+      : onlyPendingCheckin
+        ? resolveFrmsCoordinationGuidance(item, todayIso).requiresCheckin && item.checkin_status !== 'RECEBIDO'
+        : actionFilter === 'TODOS' || lane === actionFilter,
+  ), [queue, onlyPendingCheckin, actionFilter, overviewFilter, todayIso]);
+  const changeOverviewFilter = (next: FrmsOverviewFilter | null) => {
+    setOverviewFilter(next);
+    setOnlyPendingCheckin(false);
+    setActionFilter('TODOS');
+  };
   const checkinPendingCount = queue.filter(({ item }) =>
     resolveFrmsCoordinationGuidance(item, todayIso).requiresCheckin &&
     item.checkin_status !== 'RECEBIDO').length;
@@ -634,7 +642,7 @@ export default function FrmsFlightDashboard() {
           ) : null}
         </div>
 
-        {!firstLoad && !snapshotUnavailable ? <FrmsOverview queue={queue} checkinPendingCount={checkinPendingCount} /> : null}
+        {!firstLoad && !snapshotUnavailable ? <FrmsOverview queue={queue} checkinPendingCount={checkinPendingCount} activeFilter={overviewFilter} onFilterChange={changeOverviewFilter} /> : null}
 
         <section className="space-y-3" aria-label="Resumo operacional">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -645,7 +653,7 @@ export default function FrmsFlightDashboard() {
                   `${queue.length} pessoa(s) no acompanhamento · ${checkinPendingCount} check-in(s) a receber.`}
               </p>
             </div>
-            <button type="button" onClick={() => { setOnlyPendingCheckin(false); setActionFilter('TODOS'); }}
+            <button type="button" onClick={() => { setOnlyPendingCheckin(false); setActionFilter('TODOS'); setOverviewFilter(null); }}
               className="text-sm font-semibold text-primary underline-offset-2 hover:underline">Mostrar todas as situações</button>
           </div>
           {firstLoad || snapshotUnavailable ? (
@@ -655,19 +663,19 @@ export default function FrmsFlightDashboard() {
           ) : (
             <div className="flex flex-wrap gap-2" aria-label="Filtros por providência">
               {activeLanes.map((lane) => (
-                <button key={lane.key} type="button" aria-pressed={!onlyPendingCheckin && actionFilter === lane.key}
+                <button key={lane.key} type="button" aria-pressed={!overviewFilter && !onlyPendingCheckin && actionFilter === lane.key}
                   title={lane.explanation}
-                  onClick={() => { setOnlyPendingCheckin(false); setActionFilter(current => current === lane.key ? 'TODOS' : lane.key); }}
-                  className={!onlyPendingCheckin && actionFilter === lane.key
+                  onClick={() => { setOverviewFilter(null); setOnlyPendingCheckin(false); setActionFilter(current => current === lane.key ? 'TODOS' : lane.key); }}
+                  className={!overviewFilter && !onlyPendingCheckin && actionFilter === lane.key
                     ? 'rounded-lg border border-primary bg-blue-50 px-3 py-2 text-sm font-bold text-slate-900 ring-1 ring-primary dark:bg-blue-950/40 dark:text-white'
                     : 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100'}>
                   {lane.title}: {laneCounts[lane.key]}
                 </button>
               ))}
               {checkinPendingCount > 0 ? (
-                <button type="button" aria-pressed={onlyPendingCheckin}
-                  onClick={() => { setOnlyPendingCheckin(current => !current); setActionFilter('TODOS'); }}
-                  className={onlyPendingCheckin
+                <button type="button" aria-pressed={!overviewFilter && onlyPendingCheckin}
+                  onClick={() => { setOverviewFilter(null); setOnlyPendingCheckin(current => !current); setActionFilter('TODOS'); }}
+                  className={!overviewFilter && onlyPendingCheckin
                     ? 'rounded-lg border border-red-600 bg-red-50 px-3 py-2 text-sm font-bold text-red-900 ring-1 ring-red-600'
                     : 'rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-800 hover:bg-red-50'}>
                   Check-ins a receber: {checkinPendingCount}
@@ -718,7 +726,7 @@ export default function FrmsFlightDashboard() {
           </div>
         ) : null}
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+        <section id="frms-decision-queue" className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
             <div>
               <h2 className="font-bold text-slate-950 dark:text-white">Fila de decisão</h2>
@@ -752,8 +760,8 @@ export default function FrmsFlightDashboard() {
           ) : visibleQueue.length === 0 ? (
             <div className="p-10 text-center">
               <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-500" />
-              <h3 className="mt-3 font-bold text-slate-900 dark:text-white">{onlyPendingCheckin ? 'Nenhum check-in pendente neste recorte' : actionFilter !== 'TODOS' ? 'Nenhuma pessoa neste grupo' : 'Nenhuma pendência operacional no recorte'}</h3>
-              <p className="mt-1 text-sm text-slate-500">{onlyPendingCheckin || actionFilter !== 'TODOS' ? 'O filtro atual não encontrou registros. Mostre todas as situações para conferir o recorte completo.' : 'Não há pessoas escaladas, com jornada ou alerta que exijam atenção neste dia.'}</p>
+              <h3 className="mt-3 font-bold text-slate-900 dark:text-white">{overviewFilter ? 'Nenhuma pessoa com o filtro ' + FRMS_OVERVIEW_FILTER_LABELS[overviewFilter] : onlyPendingCheckin ? 'Nenhum check-in pendente neste recorte' : actionFilter !== 'TODOS' ? 'Nenhuma pessoa neste grupo' : 'Nenhuma pendência operacional no recorte'}</h3>
+              <p className="mt-1 text-sm text-slate-500">{overviewFilter || onlyPendingCheckin || actionFilter !== 'TODOS' ? 'O filtro atual não encontrou registros. Mostre todas as situações para conferir o recorte completo.' : 'Não há pessoas escaladas, com jornada ou alerta que exijam atenção neste dia.'}</p>
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
