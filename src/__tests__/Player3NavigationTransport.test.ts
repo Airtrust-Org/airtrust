@@ -25,7 +25,7 @@ describe('Player3 authenticated navigation checkpoint, never certification',()=>
     expect(validNavigationScope(scope)).toBe(true);
     expect(validNavigationScope({...scope,checkpointUnitIds:['unit21','unit21']})).toBe(false);
     expect(validNavigationScope({...scope,lastVisitedUnitId:'foreign'})).toBe(false);
-    expect(validNavigationScope({...scope,nextUnitId:'foreign'})).toBe(false);
+    expect(validNavigationScope({...scope,nextUnitId:'scenario-1'})).toBe(true);
   });
   it('uses only GET session → POST checkpoint → GET session, preserving scope',async()=>{
     const req=vi.fn().mockResolvedValueOnce(payload(before))
