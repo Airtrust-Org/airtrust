@@ -41,7 +41,7 @@ function fakeDb(options: {
   } as unknown as D1Database;
   const start = (override: Partial<typeof context>={}) =>
     startNativeEnrollment({ db, ...context, ...override });
-  return { batch, prepared, start };
+  return { db, batch, prepared, start };
 }
 
 describe('Native start transaction — D1 batch and tenant/cycle scope', () => {
@@ -69,6 +69,45 @@ describe('Native start transaction — D1 batch and tenant/cycle scope', () => {
       expect(statement.sql).toContain('ed.artifact_sha256=?');
       expect(statement.sql).not.toContain('qualificacoes_historico');
       expect(statement.sql).not.toContain('certificados');
+    }
+  });
+
+  it('authorizes a SCORM-physical activated course only through all four scoped D1 statements', async () => {
+    const f = fakeDb();
+    const env = {
+      ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6',
+    } as import('../../types').Env;
+    await expect(startNativeEnrollment({
+      db: f.db, ...context, env,
+    })).resolves.toMatchObject({state:'STARTED',cicloId:1001});
+    expect(f.prepared).toHaveLength(4);
+    expect(f.batch).toHaveBeenCalledOnce();
+    for(const statement of f.prepared){
+      expect(statement.sql).toContain("c.tipo_conteudo='scorm'");
+      expect(statement.sql).toContain('lms_native_catalog_activation');
+      expect(statement.sql).toContain('a.empresa_id=c.empresa_id');
+      expect(statement.sql).toContain('a.curso_id=c.id');
+      expect(statement.sql).toContain("c.tipo_conteudo='native'");
+      expect(statement.binds).toEqual([
+        900,101,6,31,1001,context.editionHash,
+      ]);
+    }
+  });
+
+  it('keeps activation lookup OFF in production and unallowlisted tenants', async()=>{
+    for(const env of [
+      {ENVIRONMENT:'production',NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS:'6'},
+      {ENVIRONMENT:'staging',NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS:''},
+    ]){
+      const f=fakeDb();
+      await f.start();
+      expect(f.prepared.every(stmt=>!stmt.sql.includes('lms_native_catalog_activation'))).toBe(true);
+      // A marker lookup is never available when the feature is not enabled.
+      const another=fakeDb();
+      await startNativeEnrollment({db:another.db,...context,env:env as import('../../types').Env});
+      expect(another.prepared.every(stmt=>
+        !stmt.sql.includes('lms_native_catalog_activation'))).toBe(true);
     }
   });
 
