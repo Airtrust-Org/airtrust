@@ -104,6 +104,16 @@ Checklist de dados confirmados/estimados/ausentes por dimensão, data/fonte/revi
 
 **Restrição intencional:** não há endpoint operacional, UI de pontuação, consulta D1, dados privados ou interface de despacho para esse protótipo. Publicá-lo como código não equivale a habilitar o índice. O resultado 0–100 não é extrapolação do score legado, SAFTE, FAID ou HSE.
 
+## Implementação de viabilidade longitudinal — 15/10/2026 (somente código puro)
+
+A etapa seguinte, `ima-v3-longitudinal-audit.ts`, **não faz leitura de banco nem usa pessoas reais**. Ela recebe somente eventos previamente autorizados, tenant-scoped e pseudonimizados **em memória**, verifica dias duplicados, períodos de sete datas consecutivas, proveniência de janela de sono reportada e episódios impossíveis/repetidos, e devolve **apenas contagens agregadas**. Não retorna nomes, IDs ou scores.
+
+**Limitação estrutural comprovada no código atual:** `frms_fadiga_checkin.schema.ts` aceita `horas_sono_24h` **ou** um par `hora_dormiu + hora_acordou`; a hora de dormir é opcional, e `frms_fadiga_checkin-legacy.ts` também calcula duração a partir dos horários. `frms_jornada` conserva `hora_dormiu`, `hora_acordou`, `sono_efetivo_min` e `fonte_sono`, mas a proveniência `INFORMADO` de uma duração não prova que **ambas as bordas do episódio** foram declaradas pelo tripulante. Por isso um horário derivado ou sem origem inequívoca **não** pode virar episódio observado no novo motor.
+
+Mesmo sete dias consecutivos de janelas de sono reportadas **não comprovam 168 horas de sono-vigília ininterrupta**, cochilos intermediários ou comportamento fisiológico individual. O `operationalModelReady` dessa auditoria é sempre `false`. Não somar dias sem voo para obter “sono recuperador”. Ver testes `ima-v3-evidence-audit.test.ts` e `ima-v3-longitudinal-audit.test.ts`.
+
+Para extrair métricas reais futuramente: verificar o perfil autorizado; limitar exclusivamente à empresa ativa e à janela aprovada; capturar a proveniência diretamente da fonte de check-in, nunca do cache de `frms_jornada` sem reconciliação; não levar IDs identificáveis à issue, CI ou relatórios; comparar somente agregados com supressão de coortes pequenas; executar sem writes nem D1 remoto improvisado. A pesquisa e o parecer do responsável FRMS continuam indispensáveis.
+
 ## Gates de aceitação científica antes de operar um IMA
 
 1. Especificar uso-alvo: antecipar degradação de vigilância e comparar cenários de escala, **não** diagnosticar nem estimar probabilidade de acidente.
