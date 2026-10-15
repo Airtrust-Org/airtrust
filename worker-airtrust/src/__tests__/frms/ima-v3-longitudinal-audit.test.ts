@@ -27,6 +27,7 @@ const fullDay = (dayIndex: number): ImaDailyDataEvidence => {
 
 const record = (subject: string, index: number): ImaLongitudinalEvidenceRow => ({
   subjectKey: subject,
+  empresaId: 6,
   operationalDate: dateOnly(BASE_DAY + index * DAY_MS),
   evidence: fullDay(index),
 });
@@ -34,7 +35,7 @@ const series = (subject: string, ...indices: number[]) => indices.map((index) =>
 
 describe('FRMS V3 longitudinal IMA data feasibility — read-only and no identifiers in output', () => {
   it('marks empty cohorts unknown rather than calibrated or safe', () => {
-    const value = auditImaLongitudinalEvidence([]);
+    const value = auditImaLongitudinalEvidence(6, []);
     expect(value).toMatchObject({
       inputRows: 0,
       distinctSubjects: 0,
@@ -49,7 +50,7 @@ describe('FRMS V3 longitudinal IMA data feasibility — read-only and no identif
   });
 
   it('counts seven reported days across calendar months but NEVER asserts 168h wake/sleep', () => {
-    const value = auditImaLongitudinalEvidence(series('transient-pseudonym-A', 0, 1, 2, 3, 4, 5, 6));
+    const value = auditImaLongitudinalEvidence(6, series('transient-pseudonym-A', 0, 1, 2, 3, 4, 5, 6));
     expect(value).toMatchObject({
       inputRows: 7,
       distinctSubjects: 1,
@@ -66,7 +67,7 @@ describe('FRMS V3 longitudinal IMA data feasibility — read-only and no identif
   });
 
   it('counts overlapping seven-day research windows for eight days without producing a score', () => {
-    const value = auditImaLongitudinalEvidence(series('one', 0, 1, 2, 3, 4, 5, 6, 7));
+    const value = auditImaLongitudinalEvidence(6, series('one', 0, 1, 2, 3, 4, 5, 6, 7));
     expect(value.sevenDayConsecutiveDateWindows).toBe(2);
     expect(value.sevenDayCrewReportedWindowCandidates).toBe(2);
     expect(value.subjectsWithCandidateWindows).toBe(1);
@@ -76,7 +77,7 @@ describe('FRMS V3 longitudinal IMA data feasibility — read-only and no identif
   it('quarantines duplicate subject-day pairs even when the two rows look identical', () => {
     const records = series('crew', 0, 1, 2, 3, 4, 5, 6);
     records.push(record('crew', 3));
-    const value = auditImaLongitudinalEvidence(records);
+    const value = auditImaLongitudinalEvidence(6, records);
     expect(value).toMatchObject({
       inputRows: 8,
       distinctSubjectDays: 7,
@@ -91,7 +92,7 @@ describe('FRMS V3 longitudinal IMA data feasibility — read-only and no identif
   });
 
   it('does not confuse seven isolated check-ins with seven consecutive days', () => {
-    const value = auditImaLongitudinalEvidence(series('crew', 0, 1, 2, 4, 5, 6, 7));
+    const value = auditImaLongitudinalEvidence(6, series('crew', 0, 1, 2, 4, 5, 6, 7));
     expect(value.sevenDayConsecutiveDateWindows).toBe(0);
     expect(value.sevenDayCrewReportedWindowCandidates).toBe(0);
     expect(value.state).toBe('INSUFFICIENT_REPORTED_WINDOWS');
@@ -103,7 +104,7 @@ describe('FRMS V3 longitudinal IMA data feasibility — read-only and no identif
       ...rows[3],
       evidence: { ...rows[3].evidence, sleepEpisodeProvenance: 'DERIVED' },
     };
-    const value = auditImaLongitudinalEvidence(rows);
+    const value = auditImaLongitudinalEvidence(6, rows);
     expect(value.sevenDayConsecutiveDateWindows).toBe(1);
     expect(value.sevenDayCrewReportedWindowCandidates).toBe(0);
     expect(value.dailyCoverage.unprovenSleepWindowRows).toBe(1);
@@ -119,7 +120,7 @@ describe('FRMS V3 longitudinal IMA data feasibility — read-only and no identif
         observedSleepEndAt: wrongDay[3].evidence.observedSleepEndAt,
       } },
     };
-    expect(auditImaLongitudinalEvidence(wrongDay).sevenDayCrewReportedWindowCandidates).toBe(0);
+    expect(auditImaLongitudinalEvidence(6, wrongDay).sevenDayCrewReportedWindowCandidates).toBe(0);
 
     const overlaps = series('crew', 0, 1, 2, 3, 4, 5, 6);
     const d = dateOnly(BASE_DAY + 3 * DAY_MS);
@@ -132,14 +133,21 @@ describe('FRMS V3 longitudinal IMA data feasibility — read-only and no identif
       },
     };
     // Above spans 27 hours: rejected by the daily data hygiene rule.
-    expect(auditImaLongitudinalEvidence(overlaps).sevenDayCrewReportedWindowCandidates).toBe(0);
+    expect(auditImaLongitudinalEvidence(6, overlaps).sevenDayCrewReportedWindowCandidates).toBe(0);
+  });
+
+  it('rejects mixed-tenant rows before aggregating or exposing counts', () => {
+    const rows = series('crew', 0, 1, 2, 3, 4, 5, 6);
+    rows[4] = { ...rows[4], empresaId: 9 };
+    expect(() => auditImaLongitudinalEvidence(6, rows)).toThrow('IMA_TENANT_SCOPE_MISMATCH');
+    expect(() => auditImaLongitudinalEvidence(0, rows)).toThrow('IMA_AUTHORIZED_TENANT_REQUIRED');
   });
 
   it('rejects invalid calendar dates and missing transient keys without echoing identifiers', () => {
-    expect(() => auditImaLongitudinalEvidence([{
+    expect(() => auditImaLongitudinalEvidence(6, [{
       ...record('crew', 0), operationalDate: '2026-02-30',
     }])).toThrow('IMA_INVALID_OPERATIONAL_DATE');
-    expect(() => auditImaLongitudinalEvidence([{
+    expect(() => auditImaLongitudinalEvidence(6, [{
       ...record('crew', 0), subjectKey: '',
     }])).toThrow('IMA_SUBJECT_PSEUDONYM_REQUIRED');
   });
