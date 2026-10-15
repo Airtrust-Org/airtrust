@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { FrmsOverview, FrmsScoreExplanation, FrmsEvidenceActions, FrmsScoreMeter, matchesFrmsOverviewFilter } from '../components/FrmsVisualTriage';
+import { frmsAttentionFacts, hasFrmsOtherConfidenceGaps, isFrmsRoutineDutyClosurePending } from '../frmsEvidenceContext';
 
 const baseline = (): FrmsOperationalSnapshotItem => ({
   empresa_id: 1, data_operacional: '2026-10-14', funcionario_id: 7, tripulante_id: 7,
@@ -36,10 +37,11 @@ const baseline = (): FrmsOperationalSnapshotItem => ({
 describe('FRMS triagem visual sem inventar métricas', () => {
   it('expõe distribuição de riscos e confiança em canais independentes, omitindo contagens zero', () => {
     const a = baseline();
-    render(<FrmsOverview queue={[{ item: a, bucket: 'DECISAO' }]} checkinPendingCount={0} activeFilter={null} onFilterChange={vi.fn()} />);
+    render(<FrmsOverview queue={[{ item: a, bucket: 'DECISAO' }]} checkinPendingCount={0} activeFilter={null} onFilterChange={vi.fn()} todayIso="2026-10-14" />);
     const summary = within(screen.getByLabelText('Visão visual da operação'));
     expect(summary.getByText('Avaliar')).toBeInTheDocument();
-    expect(summary.getByText('Confiança baixa')).toBeInTheDocument();
+    expect(summary.getByText('Jornada a consolidar')).toBeInTheDocument();
+    expect(summary.queryByText('Outras lacunas de dados')).not.toBeInTheDocument();
     expect(summary.queryByText('Crítico')).not.toBeInTheDocument();
     expect(summary.queryByText('Check-ins pendentes')).not.toBeInTheDocument();
     expect(summary.getByRole('group', { name: 'Filtrar pela distribuição de prioridades' })).toBeInTheDocument();
@@ -52,6 +54,7 @@ describe('FRMS triagem visual sem inventar métricas', () => {
       checkinPendingCount={1}
       activeFilter={null}
       onFilterChange={onFilterChange}
+      todayIso="2026-10-14"
     />);
     const overview = within(screen.getByLabelText('Visão visual da operação'));
     const grid = overview.getByRole('button', { name: 'Filtrar fila: Check-ins pendentes (1)' }).parentElement;
@@ -67,6 +70,7 @@ describe('FRMS triagem visual sem inventar métricas', () => {
       checkinPendingCount={1}
       activeFilter="AVALIAR"
       onFilterChange={onFilterChange}
+      todayIso="2026-10-14"
     />);
     fireEvent.click(overview.getByRole('button', { name: 'Filtrar fila: Avaliar (1)' }));
     expect(onFilterChange).toHaveBeenLastCalledWith(null);
@@ -77,11 +81,37 @@ describe('FRMS triagem visual sem inventar métricas', () => {
   it('mantém confiança baixa diferente de risco e check-in ao filtrar', () => {
     const a = baseline();
     expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'AVALIAR', '2026-10-14')).toBe(true);
-    expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'CONFIANCA', '2026-10-14')).toBe(true);
+    expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'CONFIANCA', '2026-10-14')).toBe(false);
+    expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'JORNADA', '2026-10-14')).toBe(true);
     expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'CHECKIN', '2026-10-14')).toBe(false);
     a.checkin_status = 'PENDENTE';
     expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'CHECKIN', '2026-10-14')).toBe(true);
+    expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'JORNADA', '2026-10-14')).toBe(false);
+    expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'CONFIANCA', '2026-10-14')).toBe(true);
     expect(matchesFrmsOverviewFilter(a, 'DECISAO', null, '2026-10-14')).toBe(true);
+  });
+
+  it('não confunde encerramento normal do dia com evidência realmente pendente ou vencida', () => {
+    const a = baseline();
+    expect(isFrmsRoutineDutyClosurePending(a, '2026-10-14')).toBe(true);
+    expect(hasFrmsOtherConfidenceGaps(a, '2026-10-14')).toBe(false);
+    expect(isFrmsRoutineDutyClosurePending(a, '2026-10-15')).toBe(false);
+    expect(hasFrmsOtherConfidenceGaps(a, '2026-10-15')).toBe(true);
+    a.alertas = ['DADO_INCONSISTENTE'];
+    expect(isFrmsRoutineDutyClosurePending(a, '2026-10-14')).toBe(false);
+    a.estado_operacional = 'CRITICO_VIOLACAO';
+    expect(isFrmsRoutineDutyClosurePending(a, '2026-10-14')).toBe(false);
+  });
+
+  it('discrimina check-in histórico de check-in recebido hoje sem inventar limite', () => {
+    const a = baseline();
+    a.fortnight_indicator!.alertas_quinzena = ['SCORE_QUINZENAL_ATENCAO'];
+    expect(frmsAttentionFacts(a)).toContain('Índice da quinzena na faixa de atenção');
+    expect(frmsAttentionFacts(a)).toContain('1 dia(s) com check-in pendente na quinzena');
+    expect(frmsAttentionFacts(a)).not.toContain('Check-in do dia ainda não recebido');
+    a.checkin_status = 'PENDENTE';
+    a.alertas = ['CHECKIN_PENDENTE'];
+    expect(frmsAttentionFacts(a)).toContain('Check-in do dia ainda não recebido');
   });
 
   it('renderiza pontos e atenuadores exatos do motor, sem bonificações hipotéticas', () => {
