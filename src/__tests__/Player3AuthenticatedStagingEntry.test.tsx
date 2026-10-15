@@ -103,11 +103,67 @@ describe('authenticated original HTML5 learner entry (no ungoverned fallback)',(
     view.unmount();
     const noStart=render(<Player3AuthenticatedStagingEntry
       {...props} active={false} allowLegacyNativePreview={false}/>);
-    expect(screen.getByRole('alert')).toHaveTextContent(/indisponível/i);
+    expect(screen.getByRole('button',{name:/iniciar treinamento no Player 3/i})).toBeInTheDocument();
     expect(screen.queryByTestId('native-preview')).toBeNull();
     noStart.unmount();
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
+  it('starts an activated SCORM only after Worker POST and verified readback',async()=>{
+    const digest=sha('a');
+    mockFetch.mockResolvedValueOnce(response({success:true,data:{
+      state:'STARTED',ciclo_id:333,edition_sha256:digest,
+      completion_supported:false,
+    }},201)).mockResolvedValueOnce(response({success:true,data:{
+      matricula_id:911,ciclo_id:333,edition_sha256:digest,
+      mode:'LEARN',next_sequence:1,
+    }})).mockResolvedValueOnce(response({success:true,data:launch}));
+    render(<Player3AuthenticatedStagingEntry {...props}
+      active={false} allowLegacyNativePreview={false}/>);
+    expect(screen.queryByTestId('player3-host')).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:/iniciar treinamento no Player 3/i}));
+    expect(await screen.findByTestId('player3-host')).toHaveTextContent('learner');
+    expect(screen.queryByTestId('native-preview')).toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenNthCalledWith(1,
+      '/api/lms/native/matriculas/911/iniciar',
+      expect.objectContaining({method:'POST',body:'{}'}));
+    expect(mockFetch).toHaveBeenNthCalledWith(2,
+      '/api/lms/native/matriculas/911/sessao',
+      expect.objectContaining({method:'GET'}));
+    expect(mockFetch).toHaveBeenNthCalledWith(3,
+      '/api/lms/native/matriculas/911/etapas/lancamento',
+      expect.objectContaining({method:'GET'}));
+  });
+  it('never retries or launches after ambiguous start or conflicting cycle readback',async()=>{
+    for(const responses of [
+      [response({success:false},503)],
+      [response({success:true,data:{
+        state:'STARTED',ciclo_id:333,edition_sha256:sha('a'),
+        completion_supported:false,
+      }},201),response({success:true,data:{
+        matricula_id:911,ciclo_id:444,edition_sha256:sha('a'),
+        mode:'LEARN',next_sequence:1,
+      }})],
+    ]){
+      for(const r of responses)mockFetch.mockResolvedValueOnce(r);
+      const view=render(<Player3AuthenticatedStagingEntry {...props}
+        active={false} allowLegacyNativePreview={false}/>);
+      fireEvent.click(screen.getByRole('button',{name:/iniciar treinamento no Player 3/i}));
+      expect(await screen.findByRole('alert')).toHaveTextContent(/reabra o treinamento/i);
+      expect(screen.getByRole('button',{name:/iniciar treinamento no Player 3/i})).toBeDisabled();
+      expect(screen.queryByTestId('player3-host')).toBeNull();
+      expect(screen.queryByTestId('native-preview')).toBeNull();
+      view.unmount();
+    }
+  });
+  it('does not restart an already completed SCORM enrollment',async()=>{
+    render(<Player3AuthenticatedStagingEntry {...props}
+      active={false} completed={true} allowLegacyNativePreview={false}/>);
+    expect(screen.getByRole('status')).toHaveTextContent(/histórico/i);
+    expect(screen.queryByRole('button',{name:/iniciar treinamento/i})).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('rejects a generic 404 rather than treating it as pilot permission',async()=>{
     mockFetch.mockResolvedValueOnce(response({
       success:false,code:'NATIVE_ENROLLMENT_NOT_FOUND',

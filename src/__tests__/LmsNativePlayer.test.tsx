@@ -23,10 +23,11 @@ vi.mock('@/react-app/config/api', () => ({
   fetchWithAuth: mocks.fetchWithAuth,
 }));
 vi.mock('@/react-app/pages/lms/player3/Player3AuthenticatedStagingEntry', () => {
-  function MockNativeEntry({matriculaId,active,allowLegacyNativePreview}: {matriculaId:number;active:boolean;allowLegacyNativePreview:boolean}) {
+  function MockNativeEntry({matriculaId,active,allowLegacyNativePreview,completed}: {matriculaId:number;active:boolean;allowLegacyNativePreview:boolean;completed:boolean}) {
     const [mount]=React.useState(()=>++mocks.childMounts.count);
     return <span data-testid="native-entry" data-mount={mount}
-      data-legacy-native-preview={String(allowLegacyNativePreview)}>
+      data-legacy-native-preview={String(allowLegacyNativePreview)}
+      data-completed={String(completed)}>
       Matrícula {matriculaId}; {active?'active':'unstarted'}</span>;
   }
   return {default:MockNativeEntry};
@@ -154,6 +155,7 @@ describe('Native route admission for physical Native and governed SCORM-backed P
     }));
     render(<LmsNativePlayer />);
     expect(await screen.findByTestId('native-entry')).toHaveTextContent('unstarted');
+    expect(screen.getByTestId('native-entry')).toHaveAttribute('data-completed','true');
     expect(mocks.fetchWithAuth).toHaveBeenCalledTimes(1);
   });
 

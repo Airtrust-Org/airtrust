@@ -3,7 +3,7 @@
  * A new Worker launch is required on every mount; no browser-configured URL
  * or review ZIP may upgrade to an official learner course.
  */
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {API_BASE_URL,fetchWithAuth} from '@/react-app/config/api';
 import Player3Html5Host from './Player3Html5Host';
 import {validatePlayer3Launch, type Launch} from './Player3AuthoredLaunchValidation';
@@ -21,16 +21,21 @@ const launchMatches=(launch:Launch,empresaId:number,cursoId:number,
 
 export default function Player3AuthenticatedStagingEntry({
   matriculaId,empresaId,cursoId,title,active,allowLegacyNativePreview=false,
+  completed=false,
 }:{
   matriculaId:number;empresaId:number;cursoId:number;title:string;active:boolean;
   /** Only the physical Native V1 pilot may use its earlier assessment UI. */
   allowLegacyNativePreview?:boolean;
+  /** Completed enrollment is read-only: never issue a new start. */
+  completed?:boolean;
 }){
   const [state,setState]=useState<State>({kind:'LOADING'});
   const [refresh,setRefresh]=useState(0);
   // A fresh enrollment uses the verified Native start receipt before launch.
   // A scoped latch cannot be reused for a different tenant, course or enrollment.
   const [verifiedStartScope,setVerifiedStartScope]=useState('');
+  const [activatedStartState,setActivatedStartState]=useState<'IDLE'|'STARTING'|'BLOCKED'>('IDLE');
+  const activatedStartIssued=useRef(false);
   const scopeKey=[empresaId,cursoId,matriculaId].join(':');
   const learnerStarted=active||verifiedStartScope===scopeKey;
   const readyForScope=state.kind==='READY' && learnerStarted &&
@@ -73,6 +78,75 @@ export default function Player3AuthenticatedStagingEntry({
     });
     return ()=>controller.abort();
   },[matriculaId,empresaId,cursoId,learnerStarted,refresh,allowLegacyNativePreview]);
+
+  // An activated SCORM-backed course must never use the old Native pilot
+  // as its start button. Perform one explicit, Worker-owned Native start and
+  // re-read the durable edition/cycle before requesting authored HTML5.
+  async function startActivatedScorm(){
+    if(allowLegacyNativePreview||completed||learnerStarted||
+       activatedStartIssued.current||
+       ![empresaId,cursoId,matriculaId].every(positive))return;
+    activatedStartIssued.current=true;
+    setActivatedStartState('STARTING');
+    const base=API_BASE_URL+'/lms/native/matriculas/'+matriculaId;
+    try{
+      const response=await fetchWithAuth(base+'/iniciar',{
+        method:'POST',cache:'no-store',
+        headers:{'Content-Type':'application/json'},body:'{}',
+      });
+      if(!response.ok)throw Error('PLAYER3_START_NOT_CONFIRMED');
+      const body=await response.json() as {success?:boolean;data?:{
+        state?:string;ciclo_id?:number;edition_sha256?:string;
+        completion_supported?:boolean;
+      }};
+      const receipt=body?.data;
+      if(body.success!==true||!receipt||!positive(receipt.ciclo_id!)||
+         !/^[a-f0-9]{64}$/.test(receipt.edition_sha256??'')||
+         receipt.completion_supported!==false||
+         !['STARTED','ALREADY_STARTED'].includes(receipt.state??'')){
+        throw Error('PLAYER3_START_SCOPE_INVALID');
+      }
+      const verify=await fetchWithAuth(base+'/sessao',{
+        method:'GET',cache:'no-store',
+      });
+      if(!verify.ok)throw Error('PLAYER3_START_RECHECK_UNAVAILABLE');
+      const snapshot=await verify.json() as {success?:boolean;data?:{
+        matricula_id?:number;ciclo_id?:number;edition_sha256?:string;
+        mode?:string;next_sequence?:number;
+      }};
+      if(snapshot.success!==true||
+         snapshot.data?.matricula_id!==matriculaId||
+         snapshot.data?.ciclo_id!==receipt.ciclo_id||
+         snapshot.data?.edition_sha256!==receipt.edition_sha256||
+         snapshot.data?.mode!=='LEARN'||
+         !positive(snapshot.data.next_sequence!)){
+        throw Error('PLAYER3_START_RECHECK_CONFLICT');
+      }
+      setVerifiedStartScope(scopeKey);
+    }catch{
+      // A lost HTTP reply may hide a committed D1 start. No automatic
+      // duplicate POST; a fresh session can resume via authenticated GET.
+      setActivatedStartState('BLOCKED');
+    }
+  }
+
+  if(!learnerStarted&&!allowLegacyNativePreview){
+    if(completed)return <p role="status">
+      Treinamento concluído. Consulte o histórico de qualificações e certificados.
+    </p>;
+    return <section aria-label="Iniciar Player 3" className="px-4 py-3">
+      <button type="button" onClick={()=>void startActivatedScorm()}
+        disabled={activatedStartState!=='IDLE'}
+        className="rounded border px-4 py-2 disabled:opacity-50">
+        {activatedStartState==='STARTING'?'Confirmando início…':
+         'Iniciar treinamento no Player 3'}
+      </button>
+      {activatedStartState==='BLOCKED'&&<p role="alert">
+        Não foi possível confirmar o início no Worker.
+        Reabra o treinamento antes de tentar novamente.
+      </p>}
+    </section>;
+  }
 
   if(state.kind==='LOADING')return (
     <p role="status">Verificando edição aprovada do Player 3…</p>

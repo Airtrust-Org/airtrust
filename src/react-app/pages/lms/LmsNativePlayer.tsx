@@ -100,6 +100,7 @@ export default function LmsNativePlayer() {
         title={matricula.titulo ?? 'Treinamento'}
         active={matricula.status === 'EM_ANDAMENTO'}
         allowLegacyNativePreview={matricula.tipo_conteudo === 'native'}
+        completed={matricula.status === 'CONCLUIDO'}
       />
     </main>
   );
