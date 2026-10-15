@@ -224,7 +224,7 @@ describe('FrmsDashboard simplificado', () => {
     fireEvent.click(overview.getByRole('button', { name: 'Limpar filtro' }));
     expect(screen.getByText('Max')).toBeInTheDocument();
 
-    fireEvent.click(overview.getByRole('button', { name: 'Filtrar fila: Confiança baixa (1)' }));
+    fireEvent.click(overview.getByRole('button', { name: 'Filtrar fila: Outras lacunas de dados (1)' }));
     expect(screen.getByText('Bia')).toBeInTheDocument();
     expect(screen.queryByText('Max')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Mostrar todas as situações' }));
