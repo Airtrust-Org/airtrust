@@ -68,6 +68,27 @@ describe('Player3 authenticated navigation checkpoint, never certification',()=>
     expect(req.mock.calls.map(x=>x[1].method)).toEqual(['GET']);
     await expect(recorder('unit22')).rejects.toThrow('REOPEN_TO_RECONCILE');
   });
+  it('advances across multiple lessons using fresh server sequence, not frozen launch cursor',async()=>{
+    const scope3={...scope,checkpointUnitIds:['unit21','unit22','unit23']};
+    const after22={...after};
+    const after23={...after22,next_sequence:4,
+      seen_lesson_ids:['unit21','unit22','unit23'],last_visited_unit_id:'unit23'};
+    const applied23={...applied,committed_sequence:3};
+    const req=vi.fn()
+      .mockResolvedValueOnce(payload(before))
+      .mockResolvedValueOnce(payload(applied,201))
+      .mockResolvedValueOnce(payload(after22))
+      .mockResolvedValueOnce(payload(after22))
+      .mockResolvedValueOnce(payload(applied23,201))
+      .mockResolvedValueOnce(payload(after23));
+    const recorder=makePlayer3NavigationRecorder(scope3,req,'/api');
+    expect(await recorder('unit22')).toBe(true);
+    expect(await recorder('unit23')).toBe(true);
+    expect(req.mock.calls.map(x=>x[1].method))
+      .toEqual(['GET','POST','GET','GET','POST','GET']);
+    expect(JSON.parse(req.mock.calls[4][1].body as string).sequence).toBe(3);
+  });
+
   it('lost POST response locks the session and never repeats the evidence write',async()=>{
     const req=vi.fn().mockResolvedValueOnce(payload(before))
       .mockRejectedValueOnce(new Error('response dropped after commit'));
