@@ -84,6 +84,24 @@ describe('Native pilot preview — authenticated read-only React', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/verified-asset');
   });
 
+  it('never shows a previous enrollment course while a new enrollment is being checked',async()=>{
+    const plainCourse={...course,assets:[],units:[{
+      ...course.units[0],blocks:[{type:'paragraph',text:'Regras de segurança'}],
+    }]};
+    api.fetchWithAuth
+      .mockResolvedValueOnce(response(payload({course:plainCourse})))
+      .mockResolvedValueOnce(response(resume()))
+      .mockImplementationOnce(()=>new Promise<Response>(()=>undefined));
+    const view=render(<NativeStagingCoursePreview matriculaId={101}/>);
+    expect(await screen.findByRole('heading',{name:'Treinamento NR-6'})).toBeInTheDocument();
+    view.rerender(<NativeStagingCoursePreview matriculaId={202}/>);
+    expect(screen.queryByRole('heading',{name:'Treinamento NR-6'})).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('Carregando prévia');
+    await waitFor(()=>expect(api.fetchWithAuth).toHaveBeenCalledWith(
+      '/api/lms/native/matriculas/202/curso',expect.objectContaining({method:'GET'}),
+    ));
+  });
+
   it('fails closed when independently loaded course and session disagree about completion', async () => {
     api.fetchWithAuth.mockResolvedValueOnce(response(payload({ completion_supported: true })))
       .mockResolvedValueOnce(response(resume({ completion_supported: false })));

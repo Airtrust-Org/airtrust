@@ -48,12 +48,16 @@ export default function NativeStagingCoursePreview({ matriculaId, onVerifiedStar
   const [course, setCourse] = useState<NativeLearnerCourse | null>(null);
   const [resume, setResume] = useState<NativeResume | null>(null);
   const [status, setStatus] = useState<'LOADING' | 'READY' | 'UNAVAILABLE'>('LOADING');
+  // READY belongs to the enrollment whose Worker snapshots were checked.
+  // Effect cleanup runs after render, so state alone cannot guard a prop switch.
+  const [authorizedMatriculaId,setAuthorizedMatriculaId]=useState<number|null>(null);
   const [writeScope, setWriteScope] = useState<{ cycleId: number; editionHash: string; enabled: boolean; completionSupported: boolean } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     setCourse(null);
     setResume(null);
+    setAuthorizedMatriculaId(null);
     setWriteScope(null);
     setStatus('LOADING');
     if (!Number.isSafeInteger(matriculaId) || matriculaId <= 0) {
@@ -135,6 +139,7 @@ export default function NativeStagingCoursePreview({ matriculaId, onVerifiedStar
           enabled: payload.data.evidence_write_enabled === true && payload.data.mode === 'LEARN',
           completionSupported: payload.data.completion_supported === true,
         });
+        setAuthorizedMatriculaId(matriculaId);
         setStatus('READY');
       }
     })().catch(() => {
@@ -168,6 +173,11 @@ export default function NativeStagingCoursePreview({ matriculaId, onVerifiedStar
     return blob;
   }, [matriculaId]);
 
+  // Hide the old course immediately on a React prop change, before the new
+  // request effect can clear its previous course, assessments or write scope.
+  if (status === 'READY' && authorizedMatriculaId !== matriculaId) {
+    return <p role="status">Carregando prévia do treinamento…</p>;
+  }
   if (status !== 'READY' || !course || !resume) {
     return <p role={status === 'UNAVAILABLE' ? 'alert' : 'status'}>
       {status === 'LOADING'
