@@ -70,7 +70,7 @@ export default function Player3AuthenticatedStagingEntry({
     <p role="status">Verificando edição aprovada do Player 3…</p>
   );
   if(state.kind==='LEGACY_PREVIEW')return (
-    <NativeStagingCoursePreview matriculaId={matriculaId}
+    <NativeStagingCoursePreview key={scopeKey} matriculaId={matriculaId}
       onVerifiedStarted={()=>setVerifiedStartScope(scopeKey)}/>
   );
   if(state.kind==='BLOCKED')return (

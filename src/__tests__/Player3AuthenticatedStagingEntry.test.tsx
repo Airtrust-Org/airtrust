@@ -19,11 +19,15 @@ vi.mock('@/react-app/pages/lms/player3/Player3Html5Host',()=>({
     </button>
   </div>,
 }));
+const previewMounts=vi.hoisted(()=>({count:0}));
 vi.mock('@/react-app/pages/lms/native/NativeStagingCoursePreview',()=>({
-  default:({onVerifiedStarted}:{onVerifiedStarted?:()=>void})=>
-    <div data-testid="native-preview">Native existing pilot
+  default:({onVerifiedStarted}:{onVerifiedStarted?:()=>void})=>{
+    const [instance]=React.useState(()=>++previewMounts.count);
+    return <div data-testid="native-preview">Native existing pilot
+      <span data-testid="native-preview-instance">{instance}</span>
       <button type="button" onClick={onVerifiedStarted}>verified pilot start</button>
-    </div>,
+    </div>;
+  },
 }));
 const sha=(s:string)=>s.repeat(64);
 const launch={
@@ -91,6 +95,17 @@ describe('authenticated original HTML5 learner entry (no ungoverned fallback)',(
     expect(await screen.findByTestId('native-preview')).toBeInTheDocument();
     expect(mockFetch).not.toHaveBeenCalled();
   });
+  it('remounts the fallback preview when tenant or course changes with the same enrollment id',async()=>{
+    const view=render(<Player3AuthenticatedStagingEntry {...props} active={false}/>);
+    const first=(await screen.findByTestId('native-preview-instance')).textContent;
+    view.rerender(<Player3AuthenticatedStagingEntry {...props} active={false} empresaId={7}/>);
+    const second=screen.getByTestId('native-preview-instance').textContent;
+    expect(second).not.toBe(first);
+    view.rerender(<Player3AuthenticatedStagingEntry {...props} active={false} empresaId={7} cursoId={58}/>);
+    expect(screen.getByTestId('native-preview-instance').textContent).not.toBe(second);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('moves a first-time learner into the original HTML5 only after a Worker-verified Native start',async()=>{
     mockFetch.mockResolvedValueOnce(response({success:true,data:{
       ...launch,resume_next_unit_id:'unit21',last_visited_unit_id:null,
