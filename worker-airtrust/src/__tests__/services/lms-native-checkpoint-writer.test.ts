@@ -19,9 +19,21 @@ const event = {
   eventId: 'view-intro-1', sequence: 1,
   artifactHash: scope.artifactHash, unitId: 'opening',
 };
+const twoLessonCourse = validateNativeCourseArtifact(JSON.parse(JSON.stringify({
+  ...course,
+  units: [
+    course.units[0],
+    {
+      id: 'second-lesson', title: 'Segunda unidade', kind: 'lesson',
+      blocks: [{ type: 'paragraph', text: 'Segundo conteúdo.' }],
+      questionIds: [], sourceRefs: ['NR6'],
+    },
+    ...course.units.slice(1),
+  ],
+})));
 type Row = { event_id: string; sequencia: number; unidade_id: string; payload_sha256: string };
 
-function harness(settings: { owner?: number; binding?: boolean; race?: 'SAME' | 'CONFLICT' } = {}) {
+function harness(settings: { owner?: number; binding?: boolean; race?: 'SAME' | 'CONFLICT'; artifact?: typeof course } = {}) {
   const calls: Array<{ sql: string; binds: unknown[] }> = [];
   const rows: Row[] = [];
   let insertAttempts = 0;
@@ -79,7 +91,7 @@ function harness(settings: { owner?: number; binding?: boolean; race?: 'SAME' | 
     scoped: Partial<NativeSessionScope> = {}) =>
     commitNativeLessonCheckpoint({
       db, actorUserId: who, scope: { ...scope, ...scoped },
-      artifact: course, event: { ...event, ...override },
+      artifact: settings.artifact ?? course, event: { ...event, ...override },
     });
   return { rows, calls, commit, insertAttempts: () => insertAttempts };
 }
@@ -126,6 +138,25 @@ describe('Native V1 atomic checkpoint writer — no LMS completion side effects'
     await expect(f.commit({ artifactHash: 'b'.repeat(64) })).rejects.toThrowError('NATIVE_EDITION_CONFLICT');
     await expect(f.commit({ sequence: 4 })).rejects.toThrowError('NATIVE_STALE_OR_GAP_SEQUENCE');
     expect(f.insertAttempts()).toBe(0);
+  });
+
+  it('enforces authored lesson order on the server and rejects duplicate forward evidence', async () => {
+    const f = harness({ artifact: twoLessonCourse });
+    await expect(f.commit({ unitId: 'second-lesson' }))
+      .rejects.toThrowError('NATIVE_OUT_OF_ORDER_UNIT');
+    expect(f.insertAttempts()).toBe(0);
+
+    await expect(f.commit()).resolves.toMatchObject({ state: 'APPLIED' });
+    await expect(f.commit({
+      eventId: 'view-opening-again', sequence: 2, unitId: 'opening',
+    })).rejects.toThrowError('NATIVE_OUT_OF_ORDER_UNIT');
+    await expect(f.commit({
+      eventId: 'view-second-2', sequence: 2, unitId: 'second-lesson',
+    })).resolves.toMatchObject({ state: 'APPLIED', committedSequence: 2 });
+    await expect(f.commit({
+      eventId: 'view-after-end', sequence: 3, unitId: 'second-lesson',
+    })).rejects.toThrowError('NATIVE_CHECKPOINT_SEQUENCE_COMPLETE');
+    expect(f.rows.map(row => row.unidade_id)).toEqual(['opening','second-lesson']);
   });
 
   it('refuses requests from a different user, tenant, enrollment, cycle or edition', async () => {
