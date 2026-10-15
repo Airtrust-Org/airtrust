@@ -106,7 +106,8 @@ export async function readPlayer3ModuleSession(input:{
       stageId:stage.stageId,attempts:v?.latest??0,
       lastScorePct:v?.latestScore??null,
       passed:v?.passed??false,
-      nextAttemptNumber:(v?.latest??0)<500?(v?.latest??0)+1:null,
+      nextAttemptNumber:(v?.passed??false)?null:
+        (v?.latest??0)<500?(v?.latest??0)+1:null,
     };
   });
   return {
