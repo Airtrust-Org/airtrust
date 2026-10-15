@@ -58,6 +58,9 @@ export async function preparePlayer3VerifiedPassProofs(input:{
   try{
     const result=await input.db.prepare(PROOFS)
       .bind(binding.vinculo_id,binding.politica_id).all<Row>();
+    if(result.success!==true||!Array.isArray(result.results)){
+      deny('PLAYER3_TERMINAL_PROOFS_READ_FAILED');
+    }
     rows=result.results;
   }catch{throw new Player3StageWriteError('PLAYER3_TERMINAL_PROOFS_READ_FAILED');}
   if(!Array.isArray(rows)||rows.length!==required.size||rows.length>100){
