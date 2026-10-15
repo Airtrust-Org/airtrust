@@ -144,7 +144,7 @@ app.get('/matriculas/:matriculaId/etapas/lancamento',async c=>{
       nativeSession.seenLessonIds[index]===id);
     let assessment:null|{stage_id:string;title:string;
       questions:{id:string;prompt:string;options:{id:string;text:string}[]}[]}=null;
-    if(canPresentStage&&pending){
+    if(pending){
       if(!policyStage||!Array.isArray(policyStage.requiredQuestionIds)||
          policyStage.requiredQuestionIds.length<1||
          policyStage.requiredQuestionIds.length>100){
@@ -165,7 +165,7 @@ app.get('/matriculas/:matriculaId/etapas/lancamento',async c=>{
       if(new Set(questions.map((q:{id:string})=>q.id)).size!==questions.length){
         throw Error('PLAYER3_AUTHORED_DUPLICATE_QUESTION');
       }
-      assessment={stage_id:pending.stageId,title:pending.stageId,questions};
+      if(canPresentStage)assessment={stage_id:pending.stageId,title:pending.stageId,questions};
     }
     return c.json({success:true,data:{
       empresa_id:empresaId,matricula_id:matriculaId,
