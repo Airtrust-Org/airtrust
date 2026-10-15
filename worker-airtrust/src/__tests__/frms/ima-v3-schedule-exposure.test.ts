@@ -46,7 +46,9 @@ describe('IMA V3 schedule exposure — descriptive, never a fatigue or fitness s
     expect(v).toMatchObject({
       state: 'DESCRIPTIVE_EVIDENCE_ONLY', actualDutyHours: 8,
       offDutyOpportunityHours: 16, plannedDutyHours: 0,
-      referenceNightDutyHours: 4, eventCount: 3, gapHours: 0,
+      referenceNightDutyHours: 4, actualReferenceNightDutyHours: 4,
+      plannedReferenceNightDutyHours: 0, actualOffDutyOpportunityHours: 16,
+      plannedOffDutyOpportunityHours: 0, eventCount: 3, gapHours: 0,
       verifiedSleepHours: null, fatigueIndex: null,
       referenceClock: 'FIXED_OFFSET_RESEARCH_ONLY',
     });
@@ -61,6 +63,8 @@ describe('IMA V3 schedule exposure — descriptive, never a fatigue or fitness s
     expect(v).toMatchObject({
       state: 'MIXED_ACTUAL_AND_PLANNED', actualDutyHours: 6,
       plannedStandbyHours: 6, offDutyOpportunityHours: 12,
+      plannedOffDutyOpportunityHours: 12, actualOffDutyOpportunityHours: 0,
+      actualReferenceNightDutyHours: 4, plannedReferenceNightDutyHours: 0,
       gapHours: 0, verifiedSleepHours: null,
     });
     expect(v.reasons).toContain('REALIZADO_E_PLANEJADO_NAO_EQUIVALENTES');
@@ -73,6 +77,8 @@ describe('IMA V3 schedule exposure — descriptive, never a fatigue or fitness s
     ]));
     expect(v).toMatchObject({
       estimatedHours: 24, estimatedDutyHours: 12, actualDutyHours: 0,
+      estimatedOffDutyOpportunityHours: 12, actualOffDutyOpportunityHours: 0,
+      estimatedReferenceNightDutyHours: 4, actualReferenceNightDutyHours: 0,
       plannedDutyHours: 0, state: 'ESTIMATED_SEGMENTS',
     });
     expect(v.reasons).toContain('PERIODOS_ESTIMADOS');
