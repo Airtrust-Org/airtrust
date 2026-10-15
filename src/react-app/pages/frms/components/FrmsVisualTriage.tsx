@@ -6,9 +6,6 @@ import {
 } from '../frmsOperationalDecision';
 
 type Row = { item: FrmsOperationalSnapshotItem; bucket: FrmsDecisionBucket };
-const riskTone: Record<FrmsDecisionBucket, string> = {
-  BLOQUEIO: 'bg-rose-500', DECISAO: 'bg-amber-500', CONFIRMAR: 'bg-sky-500', NORMAL: 'bg-emerald-500',
-};
 const cardBase = 'rounded-xl border px-4 py-3 dark:border-slate-700';
 
 function verifiedIndicator(item: FrmsOperationalSnapshotItem) {
@@ -48,50 +45,127 @@ export function FrmsScoreMeter({ item, compact = false }: { item: FrmsOperationa
   );
 }
 
-export function FrmsOverview({ queue, checkinPendingCount }: { queue: Row[]; checkinPendingCount: number }) {
+export type FrmsOverviewFilter = 'CRITICO' | 'AVALIAR' | 'CHECKIN' | 'CONFIANCA' | 'CONFIRMAR' | 'NORMAL';
+
+export function matchesFrmsOverviewFilter(
+  item: FrmsOperationalSnapshotItem,
+  bucket: FrmsDecisionBucket,
+  filter: FrmsOverviewFilter | null,
+  todayIso: string,
+): boolean {
+  if (!filter) return true;
+  if (filter === 'CRITICO') return bucket === 'BLOQUEIO';
+  if (filter === 'AVALIAR') return bucket === 'DECISAO';
+  if (filter === 'CONFIRMAR') return bucket === 'CONFIRMAR';
+  if (filter === 'NORMAL') return bucket === 'NORMAL';
+  if (filter === 'CONFIANCA') return operationalConfidence(item) === 'BAIXA';
+  const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
+  return guidance.requiresCheckin && !guidance.checkinComplete;
+}
+
+export const FRMS_OVERVIEW_FILTER_LABELS: Record<FrmsOverviewFilter, string> = {
+  CRITICO: 'Crítico',
+  AVALIAR: 'Avaliar',
+  CHECKIN: 'Check-ins pendentes',
+  CONFIANCA: 'Confiança baixa',
+  CONFIRMAR: 'Confirmar dados',
+  NORMAL: 'Sem pendência',
+};
+
+export function FrmsOverview({
+  queue, checkinPendingCount, activeFilter, onFilterChange,
+}: {
+  queue: Row[];
+  checkinPendingCount: number;
+  activeFilter: FrmsOverviewFilter | null;
+  onFilterChange: (filter: FrmsOverviewFilter | null) => void;
+}) {
   const critical = queue.filter(r => r.bucket === 'BLOQUEIO').length;
   const attention = queue.filter(r => r.bucket === 'DECISAO').length;
   const confirm = queue.filter(r => r.bucket === 'CONFIRMAR').length;
   const normal = queue.filter(r => r.bucket === 'NORMAL').length;
   const lowConfidence = queue.filter(r => operationalConfidence(r.item) === 'BAIXA').length;
   const buckets = [
-    { name: 'Crítico', value: critical, tone: 'border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/30', icon: ShieldAlert },
-    { name: 'Avaliar', value: attention, tone: 'border-amber-200 bg-amber-50 text-amber-900 dark:bg-amber-950/30', icon: AlertTriangle },
-    { name: 'Check-ins pendentes', value: checkinPendingCount, tone: 'border-orange-200 bg-orange-50 text-orange-900 dark:bg-orange-950/30', icon: Clock3 },
-    { name: 'Confiança baixa', value: lowConfidence, tone: 'border-sky-200 bg-sky-50 text-sky-900 dark:bg-sky-950/30', icon: Database },
+    { key: 'CRITICO' as const, name: 'Crítico', value: critical, tone: 'border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/30', icon: ShieldAlert },
+    { key: 'AVALIAR' as const, name: 'Avaliar', value: attention, tone: 'border-amber-200 bg-amber-50 text-amber-900 dark:bg-amber-950/30', icon: AlertTriangle },
+    { key: 'CHECKIN' as const, name: 'Check-ins pendentes', value: checkinPendingCount, tone: 'border-orange-200 bg-orange-50 text-orange-900 dark:bg-orange-950/30', icon: Clock3 },
+    { key: 'CONFIANCA' as const, name: 'Confiança baixa', value: lowConfidence, tone: 'border-sky-200 bg-sky-50 text-sky-900 dark:bg-sky-950/30', icon: Database },
   ].filter(card => card.value > 0);
+  const cols = buckets.length === 1 ? 'lg:grid-cols-1' :
+    buckets.length === 2 ? 'lg:grid-cols-2' :
+      buckets.length === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-4';
+  const segments: { filter: FrmsOverviewFilter; count: number; color: string; label: string }[] = [
+    { filter: 'CRITICO' as FrmsOverviewFilter, count: critical, color: 'bg-rose-500', label: 'críticos' },
+    { filter: 'AVALIAR' as FrmsOverviewFilter, count: attention, color: 'bg-amber-500', label: 'para avaliar' },
+    { filter: 'CONFIRMAR' as FrmsOverviewFilter, count: confirm, color: 'bg-sky-500', label: 'para confirmar' },
+    { filter: 'NORMAL' as FrmsOverviewFilter, count: normal, color: 'bg-emerald-500', label: 'sem pendência indicada' },
+  ].filter(s => s.count > 0);
+  const select = (key: FrmsOverviewFilter) => onFilterChange(activeFilter === key ? null : key);
   return (
     <section aria-label="Visão visual da operação" className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-bold text-slate-900 dark:text-white">Panorama operacional</h2>
-        <span className="text-xs text-slate-500">{queue.length} pessoa(s) no recorte</span>
+        <span className="text-xs text-slate-500">{queue.length} pessoa(s) no recorte · Clique nos indicadores para filtrar</span>
       </div>
       {buckets.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {buckets.map(card => <div key={card.name} className={cardBase + ' ' + card.tone}>
-            <div className="flex items-center gap-2 text-xs font-semibold"><card.icon className="h-4 w-4" />{card.name}</div>
-            <div className="mt-2 text-3xl font-extrabold tabular-nums">{card.value}</div>
-          </div>)}
+        <div className={'grid grid-cols-1 gap-3 sm:grid-cols-2 ' + cols}>
+          {buckets.map(card => (
+            <button
+              type="button" key={card.key} aria-pressed={activeFilter === card.key}
+              aria-label={'Filtrar fila: ' + card.name + ' (' + card.value + ')'}
+              aria-controls="frms-decision-queue"
+              onClick={() => select(card.key)}
+              className={cardBase + ' ' + card.tone +
+                ' w-full cursor-pointer text-left transition-colors hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ' +
+                (activeFilter === card.key ? 'ring-2 ring-blue-600 ring-offset-1' : '')}
+              title={'Filtrar fila: ' + card.name}
+            >
+              <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+                <span className="flex items-center gap-2"><card.icon className="h-4 w-4" />{card.name}</span>
+                <span aria-hidden="true" className="text-base">›</span>
+              </div>
+              <div className="mt-2 text-3xl font-extrabold tabular-nums">{card.value}</div>
+              <div className="mt-1 text-[11px] font-semibold">{activeFilter === card.key ? 'Filtro aplicado' : 'Ver pessoas ›'}</div>
+            </button>
+          ))}
         </div>
       ) : null}
       {queue.length > 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950">
           <div className="mb-2 flex flex-wrap justify-between gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
-            <span>Distribuição por prioridade</span>
+            <span>Distribuição por prioridade · selecione uma faixa</span>
             <span>Risco e confiança são indicadores diferentes</span>
           </div>
-          <div role="img" aria-label={'Distribuição: ' + critical + ' críticos, ' + attention + ' para avaliar, ' + confirm + ' para confirmar, ' + normal + ' sem pendência'}
-            className="flex h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-            {([['BLOQUEIO', critical], ['DECISAO', attention], ['CONFIRMAR', confirm], ['NORMAL', normal]] as const)
-              .filter(([, count]) => count > 0)
-              .map(([key, count]) => <div key={key} className={riskTone[key]} style={{ width: (count / queue.length * 100) + '%' }} />)}
+          <div role="group" aria-label="Filtrar pela distribuição de prioridades" className="flex h-5 overflow-hidden rounded-md bg-slate-100 dark:bg-slate-800">
+            {segments.map(segment => (
+              <button
+                key={segment.filter} type="button"
+                aria-label={'Filtrar ' + segment.count + ' ' + segment.label}
+                aria-pressed={activeFilter === segment.filter}
+                aria-controls="frms-decision-queue"
+                onClick={() => select(segment.filter)}
+                className={segment.color + ' h-full min-w-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700 ' +
+                  (activeFilter === segment.filter ? 'ring-2 ring-inset ring-slate-900 dark:ring-white' : '')}
+                style={{ width: (segment.count / queue.length * 100) + '%' }}
+                title={'Filtrar ' + segment.label}
+              />
+            ))}
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
-            {critical > 0 ? <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-rose-500" />{critical} críticos</span> : null}
-            {attention > 0 ? <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-amber-500" />{attention} para avaliar</span> : null}
-            {confirm > 0 ? <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-sky-500" />{confirm} confirmar</span> : null}
-            {normal > 0 ? <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-500" />{normal} sem pendência indicada</span> : null}
+            {segments.map(segment => (
+              <button key={segment.filter} type="button" aria-pressed={activeFilter === segment.filter}
+                onClick={() => select(segment.filter)} className="inline-flex items-center gap-1 rounded px-1 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
+                <i className={'h-2 w-2 rounded-full ' + segment.color} />
+                {segment.count} {segment.label}
+              </button>
+            ))}
           </div>
+        </div>
+      ) : null}
+      {activeFilter ? (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+          <span>Filtro aplicado: <strong>{FRMS_OVERVIEW_FILTER_LABELS[activeFilter]}</strong>. A fila abaixo mostra apenas as pessoas correspondentes.</span>
+          <button type="button" onClick={() => onFilterChange(null)} className="font-bold underline underline-offset-2">Limpar filtro</button>
         </div>
       ) : null}
     </section>
