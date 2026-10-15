@@ -40,8 +40,8 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /CERT_COURSE_IDS/);
   assert.match(source, /summarizeStalledSlide/);
   assert.match(source, /captureVisibleControls/);
-  assert.match(source, /readVisibleVideo\\(frame\\)/);
-  assert.match(source, /startRealVisibleVideo\\(frame\\)/);
+  assert.ok(source.includes('readVisibleVideo(frame)'));
+  assert.ok(source.includes('startRealVisibleVideo(frame)'));
   assert.match(source, /video_duration_seconds/);
   assert.match(source, /video_gate_seen/);
   assert.match(source, /video-blocked/);
