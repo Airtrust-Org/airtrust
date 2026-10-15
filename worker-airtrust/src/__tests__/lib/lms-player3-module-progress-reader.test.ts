@@ -67,7 +67,7 @@ describe('Player3 authenticated modular resumed session',()=>{
       ],
     });
   });
-  it('retains an earlier module pass after a later failed repeat',async()=>{
+  it('retains historical pass evidence but closes any further retry cursor',async()=>{
     const s=await read([
       await row('module1',1,correct1,100,1),
       await row('module1',2,wrong1,50,0),
@@ -76,8 +76,8 @@ describe('Player3 authenticated modular resumed session',()=>{
     expect(s).toMatchObject({editionSha256:edition,cycleId:1000,
       allOfficialStagesPassed:true,completionSupported:false,
       stages:[
-        {stageId:'module1',attempts:2,lastScorePct:50,passed:true,nextAttemptNumber:3},
-        {stageId:'module2',attempts:1,lastScorePct:100,passed:true,nextAttemptNumber:2},
+        {stageId:'module1',attempts:2,lastScorePct:50,passed:true,nextAttemptNumber:null},
+        {stageId:'module2',attempts:1,lastScorePct:100,passed:true,nextAttemptNumber:null},
       ],
     });
     expect(JSON.stringify(s)).not.toContain('SECRET');
