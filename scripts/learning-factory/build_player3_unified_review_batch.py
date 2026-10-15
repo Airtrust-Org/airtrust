@@ -103,6 +103,13 @@ def private_source_stage_map(source_sha: str, review_sha: str, binding_sha: str,
                        'sourceKind':kind,'candidatePlayer3Type':typ,
                        'requiresPedagogicalApproval':review})
     canonical=json.dumps(stages,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode('utf8')
+    # Candidate ONLY: matches Worker SHA-256(UTF8(JSON.stringify(native.units.map(u=>u.id))))
+    # when the eventual edition uses this reviewed canonical source ordering.
+    # Unlike sourceUnitIdsSha256 this hashes the ordered ID ARRAY, not the
+    # complete crosswalk objects. Both are private and independently reviewed.
+    ordered_ids=[row['canonicalUnitId'] for row in stages]
+    ordered_json=json.dumps(ordered_ids,separators=(',',':'),ensure_ascii=False).encode('utf8')
+    candidate_order_digest=hashlib.sha256(ordered_json).hexdigest()
     return {
         'schema':'AIRTRUST_PLAYER3_PRIVATE_SOURCE_STAGE_CROSSWALK_REVIEW_V1',
         'sourceEditionSha256':source_sha,
@@ -112,6 +119,8 @@ def private_source_stage_map(source_sha: str, review_sha: str, binding_sha: str,
         'targetEditionApproved':False,
         'lessonEvidencePersisted':False,
         'sourceUnitIdsSha256':hashlib.sha256(canonical).hexdigest(),
+        'candidateOrderedUnitIdsSha256':candidate_order_digest,
+        'orderedUnitIdsApproved':False,
         'sourceUnitCount':len(stages),
         'sourceLessonCandidateCount':sum(x['candidatePlayer3Type']=='content' for x in stages),
         'sourceStages':stages,
@@ -175,6 +184,8 @@ def unified_review(batches:list[Path], private_output:Path, learner_output:Path,
                 'targetEditionSha256':None,'sourceUnitCount':stage_map['sourceUnitCount'],
                 'sourceLessonCandidateCount':stage_map['sourceLessonCandidateCount'],
                 'sourceUnitIdsSha256':stage_map['sourceUnitIdsSha256'],
+                'candidateOrderedUnitIdsSha256':stage_map['candidateOrderedUnitIdsSha256'],
+                'orderedUnitIdsApproved':False,
                 'sourceStageMapApproved':False,
                 'stageCount':meta['stage_count'],'questionCount':meta['question_count'],
                 'formativePolicyReviewRequired':digest in FORMATIVE_ZIPS,
