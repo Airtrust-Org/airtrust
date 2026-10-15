@@ -127,7 +127,7 @@ export function buildPlayer3TerminalTransactionGuard(
        s.scorePct<0||s.scorePct>100)||
      new Set(stages.map(s=>s.stageId)).size!==stages.length||
      !Number.isSafeInteger(anchor.recordedEventCount)||
-     anchor.recordedEventCount<lessons.length||anchor.recordedEventCount>10000||
+     anchor.recordedEventCount!==lessons.length||
      typeof anchor.gerarQualificacaoAoConcluir!=='boolean'){
     throw new Player3TerminalGuardError('PLAYER3_TERMINAL_INVALID_ANCHOR');
   }
