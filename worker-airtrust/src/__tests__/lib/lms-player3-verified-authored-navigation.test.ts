@@ -45,6 +45,9 @@ describe('Worker-authoritative authored restart cursor',()=>{
       {...good,cycleId:999},
       {...good,session:{...session,lastVisitedUnitId:'fake'} as never},
       {...good,session:{...session,seenLessonIds:[]} as never},
+      {...good,session:{...session,seenLessonIds:['unit22'],
+        lastVisitedUnitId:'unit22',nextSequence:2} as never},
+      {...good,session:{...session,nextSequence:3} as never},
       {...good,approvedOrderedUnitIdsSha256:sha('9')},
     ]){
       await expect(verifiedAuthoredNavigation(v)).rejects.toThrow();
