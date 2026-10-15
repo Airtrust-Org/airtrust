@@ -25,6 +25,7 @@ describe('Player3 authenticated navigation checkpoint, never certification',()=>
     expect(validNavigationScope(scope)).toBe(true);
     expect(validNavigationScope({...scope,checkpointUnitIds:['unit21','unit21']})).toBe(false);
     expect(validNavigationScope({...scope,lastVisitedUnitId:'foreign'})).toBe(false);
+    expect(validNavigationScope({...scope,nextUnitId:'foreign'})).toBe(false);
   });
   it('uses only GET session → POST checkpoint → GET session, preserving scope',async()=>{
     const req=vi.fn().mockResolvedValueOnce(payload(before))
@@ -57,6 +58,15 @@ describe('Player3 authenticated navigation checkpoint, never certification',()=>
     const recorder=makePlayer3NavigationRecorder(scope,req,'/api');
     expect(await recorder('unit21')).toBe(true);
     expect(req.mock.calls.map(x=>x[1].method)).toEqual(['GET']);
+  });
+  it('rejects skipping to a later allowlisted unit without writing evidence',async()=>{
+    const req=vi.fn().mockResolvedValue(payload(before));
+    const recorder=makePlayer3NavigationRecorder({
+      ...scope,checkpointUnitIds:['unit21','unit22','unit23'],
+    },req,'/api');
+    await expect(recorder('unit23')).rejects.toThrow('OUT_OF_ORDER');
+    expect(req.mock.calls.map(x=>x[1].method)).toEqual(['GET']);
+    await expect(recorder('unit22')).rejects.toThrow('REOPEN_TO_RECONCILE');
   });
   it('lost POST response locks the session and never repeats the evidence write',async()=>{
     const req=vi.fn().mockResolvedValueOnce(payload(before))
