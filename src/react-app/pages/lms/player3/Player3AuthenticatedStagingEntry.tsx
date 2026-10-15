@@ -247,6 +247,9 @@ export default function Player3AuthenticatedStagingEntry({
       lastVisitedUnitId:launch.last_visited_unit_id,
     }}
     assessmentPresentation="authored-html5"
+    // A newly earned checkpoint can unlock the official stage on a fresh
+    // Worker projection. Preserve the same iframe; do not reload or rewind it.
+    onVerifiedLessonCheckpoint={()=>setRefresh(n=>n+1)}
     pendingAssessment={stage?{
       context:{
         empresaId,matriculaId,cicloId:launch.ciclo_id,
