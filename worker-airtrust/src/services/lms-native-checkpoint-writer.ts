@@ -140,6 +140,17 @@ export async function commitNativeLessonCheckpoint(params: {
   } catch {
     reject('NATIVE_CHECKPOINT_INVALID_LEDGER');
   }
+  for (const row of rows) {
+    const storedHash=row.payload_sha256;
+    if (typeof storedHash !== 'string' || !/^[a-f0-9]{64}$/.test(storedHash) ||
+        await checkpointHash(scope, {
+          eventId: row.event_id, sequence: row.sequencia,
+          unitId: row.unidade_id, artifactHash: scope.artifactHash,
+        }) !== storedHash) {
+      reject('NATIVE_CHECKPOINT_INVALID_LEDGER');
+    }
+  }
+
   const snapshot: NativeProgressSnapshot = {
     scope,
     nextSequence: rows.length + 1,
