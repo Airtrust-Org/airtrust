@@ -125,6 +125,13 @@ Checklist de dados confirmados/estimados/ausentes por dimensão, data/fonte/revi
 - **Motor aberto próprio**: utilizar literatura e implementações sob licença compatível, sem copiar código ou parâmetros proprietários. Custos relevantes passam a ser calibração, governança, operação e auditoria.
 - **Decisão de custo:** priorizar prova técnica transparente e abrir consulta comercial em paralelo; não criar dependência comercial antes de verificação de cobertura e ganho incremental sobre o motor aberto.
 
+### Consulta de fornecedores atualizada em 15/10/2026
+
+- **SAFTE-FAST Real Time:** fabricante anuncia API para integração com sistemas de escalas, incluindo plataformas de aviação; contato público `info@saftefast.com`. Não há tabela pública comprovada de preço para uso do AirTrust SaaS, limites de requisições, redistribuição ou multi-tenant. Fonte: https://www.saftefast.com/real-time
+- **FAID Quantum:** o fabricante publica tabela de preços de licenças **desktop**, incluindo personal `US$ 225` e opções superiores por porte/funcionalidade. Esses valores **não são custo de integração do AirTrust**. A mesma tabela descreve **Shared Object Library para uso em software de escalas de terceiros** e **Web Service**, ambos **price on application**; licença/sublicença/uso por tenant devem ser negociados. Fonte: https://www.interdynamics.com/fatigue-risk-management-solutions/fatigue-risk-management-products/faid-price-list/
+- **Teste gratuito FAID:** web gratuito limita a um roster por sete dias; desktop é temporário e permite até três semanas/três rosters, sem autorização de uso comercial. Isso é útil para avaliação manual de plausibilidade **somente com dados sintéticos** antes de contrato e termos de privacidade. Fonte: https://www.interdynamics.com/fatigue-risk-management-solutions/fatigue-risk-management-products/download-faid-quantum/
+- **Conclusão de procurement:** não contratar nem introduzir dependência de API nesta etapa. Preparar amostra sintética de comparação e solicitar proposta por volume, latência, privacidade, uso multi-tenant, direitos de derivação/armazenamento de outputs, SLA e possibilidade de validação offshore.
+
 ## Fontes verificáveis
 
 - ICAO, guia de helicópteros 2020 e Doc 9966: https://www.icao.int/operational-safety/fatigue-management/resources
