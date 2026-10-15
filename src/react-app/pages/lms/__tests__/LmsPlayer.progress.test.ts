@@ -87,6 +87,7 @@ describe('SCORM closure panel shows evidence only at the appropriate stage', () 
       { completed: false, atFinalSlide: false, finalizationFailed: true, readyToVerify: false },
       { completed: false, atFinalSlide: false, finalizationFailed: false, readyToVerify: true },
       { completed: true, atFinalSlide: false, finalizationFailed: false, readyToVerify: false },
+      { completed: false, atFinalSlide: false, finalizationFailed: false, readyToVerify: false, lastStepReached: true },
     ]) expect(shouldShowScormClosureDetails(state)).toBe(true);
   });
 });

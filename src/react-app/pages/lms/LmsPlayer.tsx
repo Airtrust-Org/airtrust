@@ -129,8 +129,10 @@ export function shouldShowScormClosureDetails(input: {
   atFinalSlide: boolean;
   finalizationFailed: boolean;
   readyToVerify: boolean;
+  /** Server proved a prior visit to the final screen, even if learner is revisiting. */
+  lastStepReached?: boolean;
 }): boolean {
-  return input.completed || input.atFinalSlide ||
+  return input.completed || input.atFinalSlide || input.lastStepReached === true ||
     input.finalizationFailed || input.readyToVerify;
 }
 
@@ -322,6 +324,7 @@ export default function LmsPlayer() {
     atFinalSlide: legacyFinalSlide,
     finalizationFailed: completionState === 'error',
     readyToVerify: closureReadiness?.eligible_for_server_verification === true,
+    lastStepReached: closureReadiness?.last_step_reached === true,
   });
   const legacyAssessmentEvidence = curso?.scorm_assessment_policy === 'FORMATIVE' ||
     (curso?.scorm_assessment_policy === 'SCORED' &&
