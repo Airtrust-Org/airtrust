@@ -29,6 +29,7 @@ export interface CheckinFormData {
   wake_time?: string;
   hora_apresentacao?: string;
   horas_sono_24h?: number;
+  oportunidade_sono_horas_24h?: number;
   horas_sono_48h?: number;
   qualidade_sono?: number;
   kss_score?: number;

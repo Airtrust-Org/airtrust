@@ -193,6 +193,7 @@ export interface CvRdvFilaItem {
   status: CvRdvStatus;
   workflow_status: CvRdvWorkflowStatus;
   versao: number;
+  updated_at: string | null;
   responsavel_preenchimento_id: number | null;
   enviado_em: string | null;
   aprovado_coordenacao_em: string | null;

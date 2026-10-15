@@ -21,9 +21,9 @@ async function captureMain(page: Page, name: string) {
 
 test('FRMS UX 30d staging: platform admin selects only synthetic tenant and reads operational flows', async ({ page }) => {
   test.setTimeout(150_000);
-  const email = String(process.env.STAGING_SMOKE_EMAIL || '').trim();
-  const password = String(process.env.STAGING_SMOKE_PASSWORD || '');
-  if (!email || !password) throw new Error('STAGING_QA_CREDENTIAL_PAIR_MISSING');
+  const email = String(process.env.FRMS_QA_EMAIL || '').trim();
+  const password = String(process.env.FRMS_QA_PASSWORD || '');
+  if (!email || !password) throw new Error('FRMS_PLATFORM_QA_CREDENTIAL_PAIR_MISSING');
 
   const guard = installReadOnlyGuard(page);
   const failures: string[] = [];
@@ -40,6 +40,8 @@ test('FRMS UX 30d staging: platform admin selects only synthetic tenant and read
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 });
 
+  // The dedicated QA principal must be independently authorized as platform admin.
+  // The general staging smoke principal is intentionally not sufficient.
   // A tenant is selectable only if the backend grants platform-admin scope.
   // Never forge JWT/localStorage or add membership to the synthetic tenant.
   const selector = page.locator('select').filter({

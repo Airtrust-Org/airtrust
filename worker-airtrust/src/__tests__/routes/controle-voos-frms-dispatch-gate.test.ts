@@ -81,7 +81,6 @@ vi.mock('../../utils/auditoria', () => ({
 
 import controleVoosRoutes from '../../routes/controle-voos';
 import controleVoosDispatchGateRoutes, {
-  controleVoosDispatchGateGuard,
 } from '../../routes/controle-voos-frms-dispatch-gate';
 import { auth } from '../../middleware/auth';
 import type { FrmsOperationalSnapshotItem } from '../../lib/frms/operational-snapshot';
@@ -350,7 +349,6 @@ function createApp() {
   // controle-voos.ts) consegue ler o tenant sem depender do `auth()`
   // proprio daquela rota, que so roda depois na cadeia.
   app.use('/api/*', auth());
-  app.use('/api/controle-voos/voos/:id/status', controleVoosDispatchGateGuard());
   app.route('/api/controle-voos', controleVoosRoutes);
   app.route('/api/controle-voos', controleVoosDispatchGateRoutes);
   return app;
@@ -473,7 +471,7 @@ beforeEach(() => {
   listSnapshotMock.mockReset();
 });
 
-describe('POST /voos/:id/status — guard do gate de despacho FRMS', () => {
+describe('POST /voos/:id/status — liberacao independente do FRMS', () => {
   it('PATCH nao aceita transicao para liberado_operacionalmente e preserva o voo com pendencia FRMS', async () => {
     const db = createSqliteD1();
     mockSnapshot([
@@ -514,54 +512,33 @@ describe('POST /voos/:id/status — guard do gate de despacho FRMS', () => {
     expect(listSnapshotMock).not.toHaveBeenCalled();
   });
 
-  it('1/4) chamada direta de status com check-in ausente e bloqueada com 409 (nao contorna o gate)', async () => {
+  it('libera voo pela Coordenação mesmo com check-in FRMS ausente sem consultar gate', async () => {
     const db = createSqliteD1();
     mockSnapshot([
       baseSnapshotItem({ funcionario_id: 1001, checkin_status: 'AUSENTE' }),
-      baseSnapshotItem({ funcionario_id: 1002, nome: 'Copiloto Ficticio A', checkin_status: 'RECEBIDO' }),
+      baseSnapshotItem({ funcionario_id: 1002, checkin_status: 'RECEBIDO' }),
     ]);
-
     const response = await request(db, '/api/controle-voos/voos/601/status', {
       method: 'POST',
       body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1 }),
     });
-
-    expect(response.status).toBe(409);
-    const body = (await response.json()) as {
-      success: boolean;
-      code: string;
-      data: { frms_status: string; tripulacao: Array<{ funcionario_id: number; reasons: string[] }> };
-    };
-    expect(body.success).toBe(false);
-    expect(body.code).toBe('CONTROLE_VOOS_FRMS_RELEASE_BLOCKED');
-    expect(body.data.frms_status).toBe('NAO_LIBERADO');
-    expect(
-      body.data.tripulacao.find((t) => t.funcionario_id === 1001)?.reasons,
-    ).toContain('CHECKIN_DIARIO_PENDENTE');
-
-    // Nao deve ter mudado o status no banco.
-    const rows = queryJson<{ status: string }>(
-      db.databasePath,
-      'SELECT status FROM cv_voos WHERE id = 601',
-    );
-    expect(rows[0].status).toBe('planejado');
+    expect(response.status).toBe(200);
+    expect(queryJson<{ status: string }>(db.databasePath, 'SELECT status FROM cv_voos WHERE id = 601')[0].status)
+      .toBe('liberado_operacionalmente');
+    expect(listSnapshotMock).not.toHaveBeenCalled();
   });
 
-  it('nenhum dado sensivel (KSS/sono) vaza no corpo do 409', async () => {
+  it('transicao de status nao consulta nem expoe respostas sensiveis do FRMS', async () => {
     const db = createSqliteD1();
     mockSnapshot([
       baseSnapshotItem({ funcionario_id: 1001, checkin_status: 'AUSENTE', kss_score: 9, horas_sono: 2 }),
-      baseSnapshotItem({ funcionario_id: 1002, checkin_status: 'RECEBIDO' }),
     ]);
-
     const response = await request(db, '/api/controle-voos/voos/601/status', {
-      method: 'POST',
-      body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1 }),
+      method: 'POST', body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1 }),
     });
-
-    expect(response.status).toBe(409);
-    const text = await response.text();
-    expect(text).not.toMatch(/kss|sono|medica|alcool/i);
+    expect(response.status).toBe(200);
+    expect(await response.text()).not.toMatch(/kss|sono|medica|alcool/i);
+    expect(listSnapshotMock).not.toHaveBeenCalled();
   });
 
   it('check-in recebido + decisao NORMAL para toda a tripulacao => libera a transicao (200)', async () => {
@@ -584,19 +561,17 @@ describe('POST /voos/:id/status — guard do gate de despacho FRMS', () => {
     expect(rows[0].status).toBe('liberado_operacionalmente');
   });
 
-  it('5) CRITICO_VIOLACAO bloqueia mesmo com check-in RECEBIDO para todos', async () => {
+  it('alerta FRMS critico segue consultivo, sem bloquear transicao de status', async () => {
     const db = createSqliteD1();
     mockSnapshot([
       baseSnapshotItem({ funcionario_id: 1001, checkin_status: 'RECEBIDO', estado_operacional: 'CRITICO_VIOLACAO' }),
       baseSnapshotItem({ funcionario_id: 1002, checkin_status: 'RECEBIDO' }),
     ]);
-
     const response = await request(db, '/api/controle-voos/voos/601/status', {
-      method: 'POST',
-      body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1 }),
+      method: 'POST', body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1 }),
     });
-
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(200);
+    expect(listSnapshotMock).not.toHaveBeenCalled();
   });
 
   it('13) transicao diferente de liberado_operacionalmente nao sofre bloqueio novo (em_andamento -> pousado)', async () => {
@@ -646,20 +621,18 @@ describe('POST /voos/:id/status — guard do gate de despacho FRMS', () => {
     expect(response.status).toBe(200);
   });
 
-  it('empresa_id do payload e ignorado — gate usa somente o tenant autenticado', async () => {
+  it('tenant do payload nao substitui tenant autenticado: campo nao permitido', async () => {
     const db = createSqliteD1();
-    // Tenant 1 (autenticado) tem check-in ausente; se o handler confiasse em
-    // um empresa_id vindo do corpo da requisicao, um payload malicioso
-    // poderia tentar escapar do tenant certo.
     mockSnapshot([baseSnapshotItem({ funcionario_id: 1001, checkin_status: 'AUSENTE' })]);
-
     const response = await request(db, '/api/controle-voos/voos/601/status', {
       method: 'POST',
       body: JSON.stringify({ status: 'liberado_operacionalmente', versao: 1, empresa_id: 999 }),
     });
-
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ code: 'CONTROLE_VOOS_FORBIDDEN_FIELD' });
+    expect(listSnapshotMock).not.toHaveBeenCalled();
   });
+
 });
 
 describe('GET /api/controle-voos/operacional', () => {

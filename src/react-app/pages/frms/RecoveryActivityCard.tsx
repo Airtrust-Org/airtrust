@@ -76,7 +76,13 @@ function defaultSegments(): RecoveryActivitySegmentInput[] {
   ];
 }
 
-export default function RecoveryActivityCard({ today }: { today: string }) {
+export default function RecoveryActivityCard({
+  today,
+  onActivityTypeChange,
+}: {
+  today: string;
+  onActivityTypeChange?: (type: RecoveryActivityType | null) => void;
+}) {
   const referenceDate = useMemo(() => previousOperationalDate(today), [today]);
   const { data: context, isLoading, isError } = useFrmsRecoveryContext(referenceDate);
   const [editing, setEditing] = useState(false);
@@ -98,6 +104,7 @@ export default function RecoveryActivityCard({ today }: { today: string }) {
 
   const stageActivity = (nextType: RecoveryActivityType | null) => {
     setActivityType(nextType);
+    onActivityTypeChange?.(nextType);
     if (!nextType) {
       stagePendingFrmsRecoveryActivity(referenceDate, null, true);
       return;
