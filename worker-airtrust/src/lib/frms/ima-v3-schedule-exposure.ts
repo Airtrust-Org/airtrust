@@ -47,8 +47,14 @@ export interface ScheduleExposureResult {
   estimatedStandbyHours: number;
   /** Off duty is an opportunity only, never evidence of sleep. */
   offDutyOpportunityHours: number;
+  actualOffDutyOpportunityHours: number;
+  plannedOffDutyOpportunityHours: number;
+  estimatedOffDutyOpportunityHours: number;
   /** Time in 02:00–06:00, for all DUTY sources; descriptive, not a legal limit. */
   referenceNightDutyHours: number;
+  actualReferenceNightDutyHours: number;
+  plannedReferenceNightDutyHours: number;
+  estimatedReferenceNightDutyHours: number;
   /** Count of events clipped to window (never identifiable employee data). */
   eventCount: number;
   reasons: string[];
@@ -151,7 +157,13 @@ export function describeImaScheduleExposure(input: ScheduleExposureInput): Sched
   let plannedStandbyMs = 0;
   let estimatedStandbyMs = 0;
   let offDutyMs = 0;
+  let actualOffDutyMs = 0;
+  let plannedOffDutyMs = 0;
+  let estimatedOffDutyMs = 0;
   let nightDutyMs = 0;
+  let actualNightDutyMs = 0;
+  let plannedNightDutyMs = 0;
+  let estimatedNightDutyMs = 0;
   let actualSeen = false;
   let plannedSeen = false;
   let cursor = from;
@@ -172,12 +184,21 @@ export function describeImaScheduleExposure(input: ScheduleExposureInput): Sched
       if (event.source === 'ACTUAL') actualDutyMs += duration;
       else if (event.source === 'PLANNED') plannedDutyMs += duration;
       else estimatedDutyMs += duration;
-      nightDutyMs += referenceNightOverlap(start, end, input.referenceUtcOffsetMinutes);
+      const night = referenceNightOverlap(start, end, input.referenceUtcOffsetMinutes);
+      nightDutyMs += night;
+      if (event.source === 'ACTUAL') actualNightDutyMs += night;
+      else if (event.source === 'PLANNED') plannedNightDutyMs += night;
+      else estimatedNightDutyMs += night;
     } else if (event.activity === 'STANDBY') {
       if (event.source === 'ACTUAL') actualStandbyMs += duration;
       else if (event.source === 'PLANNED') plannedStandbyMs += duration;
       else estimatedStandbyMs += duration;
-    } else offDutyMs += duration;
+    } else {
+      offDutyMs += duration;
+      if (event.source === 'ACTUAL') actualOffDutyMs += duration;
+      else if (event.source === 'PLANNED') plannedOffDutyMs += duration;
+      else estimatedOffDutyMs += duration;
+    }
     cursor = end;
   }
   if (cursor < to) gapMs += to - cursor;
@@ -207,7 +228,13 @@ export function describeImaScheduleExposure(input: ScheduleExposureInput): Sched
     plannedStandbyHours: round(plannedStandbyMs / HOUR),
     estimatedStandbyHours: round(estimatedStandbyMs / HOUR),
     offDutyOpportunityHours: round(offDutyMs / HOUR),
+    actualOffDutyOpportunityHours: round(actualOffDutyMs / HOUR),
+    plannedOffDutyOpportunityHours: round(plannedOffDutyMs / HOUR),
+    estimatedOffDutyOpportunityHours: round(estimatedOffDutyMs / HOUR),
     referenceNightDutyHours: round(nightDutyMs / HOUR),
+    actualReferenceNightDutyHours: round(actualNightDutyMs / HOUR),
+    plannedReferenceNightDutyHours: round(plannedNightDutyMs / HOUR),
+    estimatedReferenceNightDutyHours: round(estimatedNightDutyMs / HOUR),
     eventCount,
     reasons,
     fatigueIndex: null,
