@@ -8,6 +8,7 @@ import {nativeScopedSql} from './lms-native-catalog-legacy-guard';
 import {NATIVE_ACTIVE_EMPLOYEE_JOIN,NATIVE_ACTIVE_USER_CONDITION} from './lms-native-active-learner-sql';
 import {gradePlayer3ApprovedStage, type Player3ApprovedPolicy,
   type Player3PrivateBank} from '../lib/lms-player3/private-stage-grader';
+import {readNativeLearnerSession} from './lms-native-readiness-repository';
 
 export class Player3StageWriteError extends Error {
   constructor(public readonly code:string){super(code);this.name='Player3StageWriteError';}
@@ -173,6 +174,25 @@ export async function commitPlayer3StageAttempt(input:{
   const missingPrerequisite=policy.stages.slice(0,policyIndex)
     .some(stage=>!passedStages.has(stage.stageId));
   if(missingPrerequisite)deny('STAGE_PREREQUISITE_NOT_PASSED');
+
+  const authoredStageIndex=course.artifact.units.findIndex(unit=>
+    unit.id===stageId && unit.kind==='assessment');
+  if(authoredStageIndex<0)deny('STAGE_AUTHORED_CROSSWALK_INVALID');
+  const priorLessonIds=course.artifact.units.slice(0,authoredStageIndex)
+    .filter(unit=>unit.kind==='lesson').map(unit=>unit.id);
+  const learner=await readNativeLearnerSession({
+    env,db,actorUserId,artifact:course.artifact,
+    scope:{empresaId,matriculaId,cursoId:course.cursoId,
+      cicloId:course.cicloId,artifactHash:course.editionHash},
+  });
+  const seen=learner.summary.seenLessonIds;
+  if(learner.summary.mode!=='LEARN'||
+     learner.summary.editionHash!==course.editionHash||
+     learner.summary.cicloId!==course.cicloId||
+     !Array.isArray(seen)||
+     priorLessonIds.some((lessonId,index)=>seen[index]!==lessonId)){
+    deny('STAGE_CONTENT_PREREQUISITE_MISSING');
+  }
   const last=await db.prepare(LAST).bind(binding.vinculo_id,stageId).first<{number:number|null}>();
   if(attemptNumber!==(last?.number??0)+1)deny('STAGE_SEQUENCE_CONFLICT');
   try{
