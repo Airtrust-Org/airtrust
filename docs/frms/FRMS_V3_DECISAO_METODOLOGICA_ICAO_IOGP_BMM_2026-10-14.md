@@ -93,6 +93,17 @@ Checklist de dados confirmados/estimados/ausentes por dimensão, data/fonte/revi
 4. **Após ação:** registrar medida, quem aprovou e evidência; comparar trajetória observada/projetada sem declarar recuperação por mera passagem de tempo.
 5. **Auditoria:** demonstrar fonte, modelo, revisão, limitações, decisão humana, efeitos e evolução dos indicadores.
 
+## Protótipo técnico implementado neste PR (não operacional)
+
+- `worker-airtrust/src/lib/frms/ima-v3-shadow.ts`: cálculo puro de hipótese homeostática com estado inicial desconhecido propagado pelos dois extremos `S0=0` e `S0=1`, pressão de vigília/sono real, componente circadiano com offset explícito e mapeamento experimental 0–100. **Só fornece candidato numérico com `syntheticResearchFixture: true`**; qualquer chamada não sintética devolve `researchCandidateIndex: null` e `UNVALIDATED_NO_OPERATIONAL_INDEX`, mesmo que a cronologia esteja completa.
+- `worker-airtrust/src/lib/frms/ima-v3-evidence-audit.ts`: inventário estatístico puro de prontidão dos dados diários sem PII e sem SQL. Separa duração do sono autodeclarada de horário real do episódio, check-ins, KSS, baseline PVT-B e lacunas; cobertura vazia não é 100%. Mesmo 100% de episódios datados **não constitui cronologia completa de vigília** ou validação operacional.
+- `classifyImaDecisionCue`: sinaliza revisão humana, violação regulatória e ausência de evidências **independentemente** do número IMA; nunca gera autorização automática.
+- `worker-airtrust/src/__tests__/frms/ima-v3-shadow.test.ts` e `ima-v3-evidence-audit.test.ts`: testes sintéticos, invariantes de não compensação, fonte, tempo, sono/vigília e falta de dados.
+
+**Verificação local isolada (15/10/2026):** 32/32 testes focados aprovados em 4 arquivos, incluindo `fortnight-indicator.test.ts` e `frms-governance-readiness.test.ts`. Typecheck do Worker aprovado no SHA inicial do motor; revisão de todo o lote aguarda confirmação final do executor e GitHub Actions oficial.
+
+**Restrição intencional:** não há endpoint operacional, UI de pontuação, consulta D1, dados privados ou interface de despacho para esse protótipo. Publicá-lo como código não equivale a habilitar o índice. O resultado 0–100 não é extrapolação do score legado, SAFTE, FAID ou HSE.
+
 ## Gates de aceitação científica antes de operar um IMA
 
 1. Especificar uso-alvo: antecipar degradação de vigilância e comparar cenários de escala, **não** diagnosticar nem estimar probabilidade de acidente.
