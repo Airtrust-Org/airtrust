@@ -30,6 +30,8 @@ export function validatePlayer3Launch(
      (data.last_visited_unit_id!==null&&
        !data.checkpoint_unit_ids.includes(data.last_visited_unit_id))||
      data.completion_supported!==false||
+     !Object.prototype.hasOwnProperty.call(data,'pending_assessment')||
+     data.pending_assessment===undefined||
      typeof data.official_stages_passed!=='boolean'||
      (data.official_stages_passed&&data.pending_assessment!==null))return false;
   try{
