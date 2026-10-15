@@ -13,6 +13,7 @@ const sample: ImaDailyDataEvidence = {
   kssScore: 3,
   observedSleepStartAt: null,
   observedSleepEndAt: null,
+  sleepEpisodeProvenance: 'UNKNOWN',
   readinessBaselineReady: true,
 };
 
@@ -73,6 +74,7 @@ describe('FRMS V3 IMA data feasibility audit', () => {
         ...sample,
         observedSleepStartAt: '2026-10-14T22:00:00-03:00',
         observedSleepEndAt: '2026-10-15T06:00:00-03:00',
+        sleepEpisodeProvenance: 'CREW_REPORTED',
       },
     ]);
     expect(result).toMatchObject({
@@ -81,6 +83,33 @@ describe('FRMS V3 IMA data feasibility audit', () => {
       datedSleepEpisodeCoveragePct: 100,
       assessment: 'HISTORICAL_DATA_AUDIT_NEEDED',
     });
+  });
+
+  it('rejects computed bedtime as verified sleep even if it forms a neat eight-hour interval', () => {
+    const result = auditImaDailyEvidence([
+      {
+        ...sample,
+        observedSleepStartAt: '2026-10-14T22:00:00-03:00',
+        observedSleepEndAt: '2026-10-15T06:00:00-03:00',
+        sleepEpisodeProvenance: 'DERIVED',
+      },
+    ]);
+    expect(result.datedSleepEpisodeRows).toBe(0);
+    expect(result.unprovenSleepWindowRows).toBe(1);
+    expect(result.estimatedSourceRows).toBe(1);
+    expect(result.blockerCodes).toContain('HORARIO_DE_SONO_DERIVADO_OU_SEM_ORIGEM_CONFIRMADA');
+  });
+
+  it('rejects unmarked check-in timestamps rather than assuming crew provenance', () => {
+    const result = auditImaDailyEvidence([
+      {
+        ...sample,
+        observedSleepStartAt: '2026-10-14T22:00:00-03:00',
+        observedSleepEndAt: '2026-10-15T06:00:00-03:00',
+      },
+    ]);
+    expect(result.datedSleepEpisodeCoveragePct).toBe(0);
+    expect(result.assessment).toBe('INSUFFICIENT_SLEEP_TIMELINE');
   });
 
   it('rejects impossible or offset-ambiguous timing without exposing row-level personal data', () => {

@@ -9,6 +9,8 @@
  */
 export type ImaDailySource = 'REAL' | 'ESTIMADO' | 'AUSENTE';
 export type ImaCheckinSource = 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
+/** Explicit provenance of BOTH boundaries; computed bedtimes never become observed sleep. */
+export type ImaSleepWindowProvenance = 'CREW_REPORTED' | 'DERIVED' | 'ESTIMATED' | 'UNKNOWN';
 
 export interface ImaDailyDataEvidence {
   sleepDataSource: ImaDailySource;
@@ -21,6 +23,8 @@ export interface ImaDailyDataEvidence {
   /** Human-reported start/end of an actual sleep episode, if they exist. */
   observedSleepStartAt: string | null;
   observedSleepEndAt: string | null;
+  /** A reported bed/wake window is not proof of uninterrupted sleep or a full wake timeline. */
+  sleepEpisodeProvenance?: ImaSleepWindowProvenance;
   /** Does NOT mean PVT-60s is clinically validated. */
   readinessBaselineReady: boolean | null;
 }
@@ -32,6 +36,7 @@ export interface ImaDataReadinessAudit {
   wakeEvidenceRows: number;
   knownKssRows: number;
   datedSleepEpisodeRows: number;
+  unprovenSleepWindowRows: number;
   readyPvtBaselineRows: number;
   pendingCheckinRows: number;
   sourceGapRows: number;
@@ -57,6 +62,16 @@ function hasValidEpisode(start: string | null, end: string | null): boolean {
   return Number.isFinite(a) && Number.isFinite(b) && b > a && b - a <= 24 * 3_600_000;
 }
 
+/** Verifies data hygiene + explicit crew origin; NOT objective physiological validation. */
+export function hasCrewReportedSleepWindow(row: ImaDailyDataEvidence): boolean {
+  return row.sleepDataSource === 'REAL' &&
+    typeof row.sleepHours24h === 'number' &&
+    Number.isFinite(row.sleepHours24h) &&
+    row.sleepHours24h > 0 && row.sleepHours24h <= 24 &&
+    row.sleepEpisodeProvenance === 'CREW_REPORTED' &&
+    hasValidEpisode(row.observedSleepStartAt, row.observedSleepEndAt);
+}
+
 export function auditImaDailyEvidence(rows: readonly ImaDailyDataEvidence[]): ImaDataReadinessAudit {
   const sampleSize = rows.length;
   let knownDutyRows = 0;
@@ -64,6 +79,7 @@ export function auditImaDailyEvidence(rows: readonly ImaDailyDataEvidence[]): Im
   let wakeEvidenceRows = 0;
   let knownKssRows = 0;
   let datedSleepEpisodeRows = 0;
+  let unprovenSleepWindowRows = 0;
   let readyPvtBaselineRows = 0;
   let pendingCheckinRows = 0;
   let sourceGapRows = 0;
@@ -80,12 +96,14 @@ export function auditImaDailyEvidence(rows: readonly ImaDailyDataEvidence[]): Im
     if (sleepKnown) realSleepDurationRows++;
     if (wakeKnown) wakeEvidenceRows++;
     if (Number.isInteger(row.kssScore) && (row.kssScore ?? 0) >= 1 && (row.kssScore ?? 0) <= 9) knownKssRows++;
-    if (sleepKnown && hasValidEpisode(row.observedSleepStartAt, row.observedSleepEndAt)) datedSleepEpisodeRows++;
+    if (hasCrewReportedSleepWindow(row)) datedSleepEpisodeRows++;
+    if ((row.observedSleepStartAt || row.observedSleepEndAt) && !hasCrewReportedSleepWindow(row)) unprovenSleepWindowRows++;
     if (row.readinessBaselineReady === true) readyPvtBaselineRows++;
     if (row.checkinStatus === 'PENDENTE') pendingCheckinRows++;
     if (!dutyKnown || !sleepKnown || !wakeKnown || row.checkinStatus === 'AUSENTE') sourceGapRows++;
     if (row.dutyDataSource === 'ESTIMADO' ||
-        row.sleepDataSource === 'ESTIMADO' || row.wakeDataSource === 'ESTIMADO') estimatedSourceRows++;
+        row.sleepDataSource === 'ESTIMADO' || row.wakeDataSource === 'ESTIMADO' ||
+        row.sleepEpisodeProvenance === 'DERIVED' || row.sleepEpisodeProvenance === 'ESTIMATED') estimatedSourceRows++;
   }
 
   const blockerCodes: string[] = [];
@@ -98,6 +116,7 @@ export function auditImaDailyEvidence(rows: readonly ImaDailyDataEvidence[]): Im
     blockerCodes.push('SONO_DIARIO_NAO_COMPROVA_CRONOLOGIA_DE_SONO_VIGILIA');
   }
   if (sampleSize > 0 && sourceGapRows > 0) blockerCodes.push('FONTES_INCOMPLETAS');
+  if (unprovenSleepWindowRows > 0) blockerCodes.push('HORARIO_DE_SONO_DERIVADO_OU_SEM_ORIGEM_CONFIRMADA');
   if (sampleSize > 0 && readyPvtBaselineRows < sampleSize) blockerCodes.push('BASELINE_PVT_NAO_UNIVERSAL');
 
   return {
@@ -107,6 +126,7 @@ export function auditImaDailyEvidence(rows: readonly ImaDailyDataEvidence[]): Im
     wakeEvidenceRows,
     knownKssRows,
     datedSleepEpisodeRows,
+    unprovenSleepWindowRows,
     readyPvtBaselineRows,
     pendingCheckinRows,
     sourceGapRows,
