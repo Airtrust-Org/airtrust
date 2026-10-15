@@ -82,12 +82,34 @@ const DAY = 24 * HOUR;
 const round = (hours: number): number => Math.round((hours + Number.EPSILON) * 100) / 100;
 
 function instant(value: string): number {
-  if (typeof value !== 'string' || !/^(?:\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d{1,3})?)?)(?:Z|[+-]\d\d:\d\d)$/i.test(value)) {
-    throw new Error('IMA_SCHEDULE_EXPLICIT_TIMESTAMP_REQUIRED');
+  const match = typeof value === 'string'
+    ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-]\d{2}:\d{2})$/i.exec(value)
+    : null;
+  if (!match) throw new Error('IMA_SCHEDULE_EXPLICIT_TIMESTAMP_REQUIRED');
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+  const millis = match[7] ? Number(match[7].padEnd(3, '0')) : 0;
+  const civil = new Date(Date.UTC(year, month - 1, day, hour, minute, second || 0, millis));
+  // Date.parse silently normalizes Feb 30 and 24:00. Do not accept falsified
+  // operation dates or reinterpret a midnight shift as the following day.
+  if (civil.getUTCFullYear() !== year || civil.getUTCMonth() !== month - 1 ||
+      civil.getUTCDate() !== day || civil.getUTCHours() !== hour ||
+      civil.getUTCMinutes() !== minute || civil.getUTCSeconds() !== (second || 0)) {
+    throw new Error('IMA_SCHEDULE_INVALID_INSTANT');
   }
-  const date = Date.parse(value);
-  if (!Number.isFinite(date)) throw new Error('IMA_SCHEDULE_INVALID_INSTANT');
-  return date;
+  const zone = match[8];
+  let offsetMinutes = 0;
+  if (zone.toUpperCase() !== 'Z') {
+    const offsetHours = Number(zone.slice(1, 3));
+    const offsetRemainder = Number(zone.slice(4, 6));
+    if (offsetHours > 14 || offsetRemainder > 59 ||
+        (offsetHours === 14 && offsetRemainder !== 0)) {
+      throw new Error('IMA_SCHEDULE_INVALID_INSTANT');
+    }
+    offsetMinutes = (zone[0] === '+' ? 1 : -1) * (offsetHours * 60 + offsetRemainder);
+  }
+  const result = civil.getTime() - offsetMinutes * 60_000;
+  if (!Number.isFinite(result)) throw new Error('IMA_SCHEDULE_INVALID_INSTANT');
+  return result;
 }
 
 function validEvent(event: ScheduleExposureEvent): void {
