@@ -6,6 +6,7 @@ import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
 import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
 import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
+import { readVisibleVideo, startRealVisibleVideo } from './lms-scorm-video-playback-readonly.mjs';
 import { classifyPptxAssetProbe, classifyReadOnlyContentAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage } from './lms-format-certification-verdict.mjs';
 import {
   assert,
@@ -260,7 +261,12 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
     last_action: null,
     error_examples: [],
     halted_due_to_repeated_error: false,
+    video_gate_seen: false,
+    video_duration_seconds: null,
+    video_started_observed: false,
+    video_ended_observed: false,
   };
+  const videoAttemptsByLocation=new Map();
   while (Date.now() - started < untilMs && steps < maxSteps) {
     const state = await getTrace(page).catch(() => null);
     if (state?.values && terminalState(state.values)) break;
@@ -1182,7 +1188,37 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       }
     }
 
-    // Fallback only when the package exposes no usable visible control.
+    // If Next is disabled by a required native video, use genuine browser
+    // playback instead of a generic DOM/button heuristic. Do not set media
+    // currentTime, forge ended events, or invoke LMS completion.
+    if(action?.type==='none'){
+      const video=await readVisibleVideo(frame);
+      if(video.kind!=='absent' && video.kind!=='unavailable'){
+        diagnostics.video_gate_seen=true;
+        if(Number.isFinite(video.duration)&&video.duration>0){
+          diagnostics.video_duration_seconds=video.duration;
+        }
+        if(video.kind==='ended')diagnostics.video_ended_observed=true;
+        if(video.kind==='playing')diagnostics.video_started_observed=true;
+        if(video.kind==='paused'){
+          const key=String(currentLocation||'unknown');
+          const attempts=videoAttemptsByLocation.get(key)||0;
+          if(attempts<2){
+            videoAttemptsByLocation.set(key,attempts+1);
+            const played=await startRealVisibleVideo(frame);
+            if(played.kind==='started')diagnostics.video_started_observed=true;
+            action={type:'video-'+played.kind};
+          }else{
+            action={type:'video-blocked'};
+          }
+        }else{
+          action={type:'video-'+video.kind};
+        }
+      }
+    }
+
+    // Fallback only when the package exposes no usable visible control AND
+    // no authored media gate. Never bypass a watched-video requirement.
     if (action?.type === 'none') {
       await page.evaluate(() => {
         const f = document.getElementById('scorm-frame');
@@ -1192,7 +1228,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
     diagnostics.last_location = String(currentLocation || '').slice(0, 100);
     diagnostics.last_action = action?.type || null;
-    if (action?.type === 'retry-deferred' || action?.type === 'adaptive-exhausted') break;
+    if (action?.type === 'retry-deferred' || action?.type === 'adaptive-exhausted' ||
+        action?.type === 'video-blocked' || action?.type === 'video-error') break;
     if (action?.type === 'frame-error') {
       diagnostics.frame_error_count += 1;
       const signature = diagnostics.last_location + ':' + String(action.message || '');
@@ -1220,7 +1257,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       idle = 0;
     }
     steps += 1;
-    await page.waitForTimeout(idle > 5 ? 180 : 90);
+    await page.waitForTimeout(String(action?.type||'').startsWith('video-')
+      ? 750 : (idle > 5 ? 180 : 90));
   }
   return { steps, diagnostics };
 }
@@ -1726,12 +1764,17 @@ async function certifyScormCourse(browser, token, listed) {
     Number(manifest.requiredSlides || 0),
     Number(suspend.model?.slide_count || 0),
   );
+  // Focused, read-only certification must allow actual authored video time,
+  // plus room for the remaining lessons and assessments. NEVER seek or skip.
+  const observedVideoSeconds=Number(suspend.drive_diagnostics?.video_duration_seconds||0);
   const focusedCompletionBudgetMs = COURSE_IDS.size > 0
     ? Math.min(
         420_000,
         Math.max(
           180_000,
           slideCount * 4_000 + Number(manifest.requiredInteractions || 0) * 50_000,
+          Number.isFinite(observedVideoSeconds) && observedVideoSeconds>0
+            ? observedVideoSeconds * 1000 + 180_000 : 0,
         ),
       )
     : 0;
