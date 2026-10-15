@@ -357,7 +357,7 @@ function LmsEntryRouter() {
 }
 
 function TreinamentosEntryRouter() {
-  const { user, isLoading, empresas, empresaAtualId } = useAuth();
+  const { isLoading, empresas, empresaAtualId } = useAuth();
   const { can, isAluno, isInstrutor } = usePermissions();
   if (isLoading) return null;
 
