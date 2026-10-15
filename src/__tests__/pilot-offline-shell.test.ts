@@ -91,6 +91,13 @@ describe('Partidas entre etapas', () => {
 });
 
 describe('Pilot Offline shell', () => {
+  it('abre visualização do anexo no gesto original e oferece link manual quando o navegador bloqueia janela', () => {
+    expect(pilotApp).toContain("window.open('about:blank', '_blank')");
+    expect(pilotApp).toContain('previewWindow.location.replace(url)');
+    expect(pilotApp).toContain("link.rel = 'noopener noreferrer'");
+    expect(pilotApp).toContain('await verifyCachedFlightDocument(state, document)');
+  });
+
   it('mantem os scripts estaticos do Pilot App sintaticamente validos como ESM moderno', () => {
     const assertParses = (source: string) => {
       const result = ts.transpileModule(source, {
@@ -371,7 +378,7 @@ describe('Pilot Offline shell', () => {
     expect(controleVoosVooDetalhe).toContain('Planejamento de voo');
     expect(controleVoosVooDetalhe).toContain("current ? 'Substituir' : 'Anexar'");
     expect(controleVoosVooDetalhe).toContain('Histórico de documentos');
-    expect(controleVoosVooDetalhe).toContain('A tripulação receberá aviso para atualizar o pacote offline.');
+    expect(controleVoosVooDetalhe).toContain('Oriente a tripulação a atualizar o voo no Pilot App para receber os arquivos offline.');
   });
 
   it('so confirma consulta offline depois do write cifrado e do read-back', () => {

@@ -1009,16 +1009,44 @@ function offlineDocumentPreparationSummary(states) {
   return groups.join(' · ');
 }
 
-function openFlightDocumentBlob(blob) {
+function openFlightDocumentBlob(blob, previewWindow = null) {
   const url = URL.createObjectURL(blob);
-  window.open(url, '_blank', 'noopener,noreferrer');
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  if (previewWindow && !previewWindow.closed) {
+    // A aba foi aberta diretamente pelo clique do tripulante, antes do await.
+    // Isso evita o bloqueio de pop-up do Safari/iPad após leitura cifrada assíncrona.
+    previewWindow.location.replace(url);
+  } else {
+    // Navegadores em modo instalado podem impedir nova janela. Não perder o arquivo:
+    // oferecer um link que o tripulante possa tocar diretamente.
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Abrir documento';
+    sessionStatus.className = 'statusline ok';
+    sessionStatus.replaceChildren(document.createTextNode('Documento pronto para abrir: '), link);
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60_000);
 }
 
 async function openFlightDocument(documentEventId) {
   const packageData = activePackageData();
   const flightId = packageData?.voo?.id;
   if (!flightId || !documentEventId) return;
+  // Abrir antes do primeiro await para preservar a ativação do usuário no iPad.
+  let previewWindow = null;
+  try {
+    previewWindow = window.open('about:blank', '_blank');
+    if (previewWindow) {
+      previewWindow.opener = null;
+      previewWindow.document.title = 'Abrindo documento do voo';
+      if (previewWindow.document.body) {
+        previewWindow.document.body.textContent = 'Preparando documento…';
+      }
+    }
+  } catch {
+    previewWindow = null;
+  }
   const document = currentFlightDocuments(packageData).find(
     (candidate) => Number(candidate.id) === Number(documentEventId),
   );
@@ -1030,12 +1058,14 @@ async function openFlightDocument(documentEventId) {
       if (cached) {
         openFlightDocumentBlob(
           new Blob([cached.bytes], { type: document.content_type || state.content_type || 'application/pdf' }),
+          previewWindow,
         );
         return;
       }
     }
 
     if (!navigator.onLine) {
+      previewWindow?.close();
       setSessionMessage(
         (document?.label || 'Documento') +
           ' não estava disponível neste tablet quando o voo foi preparado. Isso não bloqueia o voo.',
@@ -1048,8 +1078,9 @@ async function openFlightDocument(documentEventId) {
       '/controle-voos/voos/' + encodeURIComponent(String(flightId)) + '/documentos/' + encodeURIComponent(String(documentEventId)),
       { allowDuringFlight: true },
     );
-    openFlightDocumentBlob(blob);
+    openFlightDocumentBlob(blob, previewWindow);
   } catch (error) {
+    previewWindow?.close();
     setSessionMessage(
       error instanceof Error ? error.message : 'Falha ao abrir documento.',
       'error',
