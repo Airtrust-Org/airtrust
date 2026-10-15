@@ -1,6 +1,6 @@
 import React from 'react';
 import {beforeEach,describe,expect,it,vi} from 'vitest';
-import {fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {fetchWithAuth} from '@/react-app/config/api';
 import Player3Html5Host from '@/react-app/pages/lms/player3/Player3Html5Host';
 
@@ -34,6 +34,11 @@ const official={
   edition_sha256:editionSha256,score_pct:80,
   stage_passed:true,completion_supported:false,
 };
+function emit(frame:HTMLIFrameElement,data:unknown){
+  act(()=>window.dispatchEvent(new MessageEvent('message',{
+    origin:props.contentOrigin,source:frame.contentWindow,data,
+  })));
+}
 const selected=()=>{
   fireEvent.click(screen.getByRole('radio',{name:'Aplicar procedimento'}));
   fireEvent.click(screen.getByRole('button',{name:'Enviar avaliação ao AirTrust'}));
@@ -73,6 +78,50 @@ describe('Player3 HTML5 Host wiring to real authenticated attempt ledger',()=>{
     expect(passed).toHaveBeenCalledWith(expect.objectContaining({
       stage_passed:true,score_pct:80,persisted:true,
     }));
+  });
+  it('waits for the last lesson checkpoint before sending an authored assessment',async()=>{
+    const nav={
+      matriculaId:911,empresaId:6,cicloId:800,editionSha256,
+      nextUnitId:'lesson-final',checkpointUnitIds:['lesson-final'],
+      lastVisitedUnitId:null,
+    };
+    const beforeNav={
+      matricula_id:911,ciclo_id:800,edition_sha256:editionSha256,
+      mode:'LEARN',next_sequence:1,seen_lesson_ids:[],
+      last_visited_unit_id:null,
+    };
+    const afterNav={...beforeNav,next_sequence:2,
+      seen_lesson_ids:['lesson-final'],last_visited_unit_id:'lesson-final'};
+    const checkpoint={state:'APPLIED',committed_sequence:1,
+      edition_sha256:editionSha256,completion_supported:false};
+    authenticatedFetch
+      .mockResolvedValueOnce(payload(beforeNav))
+      .mockResolvedValueOnce(payload(checkpoint,201))
+      .mockResolvedValueOnce(payload(afterNav))
+      .mockResolvedValueOnce(payload(session(false,0)))
+      .mockResolvedValueOnce(payload(official,201))
+      .mockResolvedValueOnce(payload(session(true,1)));
+    render(<Player3Html5Host {...props} navigation={nav}
+      assessmentPresentation="authored-html5" pendingAssessment={{
+        context,onVerifiedStagePassed:vi.fn(),onDismiss:vi.fn(),
+      }}/>);
+    const frame=screen.getByTitle('Conteúdo original — Doutrinamento') as HTMLIFrameElement;
+    fireEvent.load(frame);
+    emit(frame,{type:'AIRTRUST_PLAYER3_RESUME_ACK_V1',
+      editionSha256,unitId:'lesson-final'});
+    emit(frame,{type:'AIRTRUST_PLAYER3_NAV_HINT_V1',
+      editionSha256,unitId:'stage-1'});
+    emit(frame,{type:'AIRTRUST_PLAYER3_STAGE_SUBMIT_HINT_V1',
+      editionSha256,stageId:'stage-1',
+      requestId:'00000000-0000-4000-8000-000000000001',
+      answers:[{questionId:'q1',optionId:'o0'}]});
+    await waitFor(()=>expect(authenticatedFetch).toHaveBeenCalledTimes(6));
+    expect(authenticatedFetch.mock.calls.map(call=>call[1]?.method))
+      .toEqual(['GET','POST','GET','GET','POST','GET']);
+    expect(authenticatedFetch.mock.calls[0][0])
+      .toBe('/api/lms/native/matriculas/911/sessao');
+    expect(authenticatedFetch.mock.calls[3][0])
+      .toBe('/api/lms/native/matriculas/911/etapas/sessao');
   });
   it('keeps module blocked after a successful POST if Worker re-read disagrees',async()=>{
     authenticatedFetch.mockResolvedValueOnce(payload(session(false,0)))
