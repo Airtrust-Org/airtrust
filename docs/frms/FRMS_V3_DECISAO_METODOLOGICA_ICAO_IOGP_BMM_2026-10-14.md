@@ -61,7 +61,7 @@ Se o algoritmo ainda não estiver parametrizado/calibrado para a população, de
 
 ### 2. Estado individual observado
 
-Sono reportado (horas e janela), KSS, PVT-B versão e baseline, condição declarada, horário/frescura, discrepância previsão × observação. Situação: `SEM_SINAL`, `ATENCAO`, `REVISAO_IMEDIATA`, `SEM_EVIDENCIA_SUFFICIENTE`, com categorias aprovadas e explicação. Estado crítico ou autodeclaração incompatível com jornada **não é compensável por IMA alto**.
+Sono reportado (horas e janela), KSS, PVT-B versão e baseline, condição declarada, horário/frescura, discrepância previsão × observação. Situação: `SEM_SINAL`, `ATENCAO`, `REVISAO_IMEDIATA`, `DADOS_INSUFICIENTES`, com categorias aprovadas e explicação. Estado crítico ou autodeclaração incompatível com jornada **não é compensável por IMA alto**.
 
 ### 3. Limites regulatórios, contrato e segurança
 
@@ -70,6 +70,18 @@ Validação separada de horas de voo, jornada, FDP, repouso e cláusula contratu
 ### 4. Confiança, conformidade e ação
 
 Checklist de dados confirmados/estimados/ausentes por dimensão, data/fonte/revisão; status do check-in e de sincronização; responsável, prazo, ação, evidência de mitigação, decisão e acompanhamento. **Check-in pendente vale cobrança de conformidade, não subtração biológica**. Ausência de fonte não cria verde e tampouco inventa fadiga elevada.
+
+## Cenários de aceitação operacional (sem pontuação inventada)
+
+| Situação | Número/observação | Resultado e ação exigida |
+|---|---|---|
+| Últimas noites com sono curto e apresentações muito cedo | Projeção numérica somente se validada; senão `UNAVAILABLE_UNVALIDATED` | Comparar adiamento, substituição ou ampliação de recuperação; revisão humana |
+| KSS 8 e PVT-B desfavorável ao baseline, mesmo que IMA projetado alto | Sinais conflitantes, não média favorável | Prioridade para revisão imediata e registro de medida, sem liberação automática |
+| Check-in não realizado, jornada confirmada | IMA fisiológico não sofre débito “administrativo”; confiança é parcial | Solicitar check-in e tratar elegibilidade/decisão com evidência insuficiente |
+| Dia sem voo, porém com standby acionável | Não conceder restauração automática; sono efetivo ainda desconhecido | Confirmar tipo de atividade, oportunidade e relato de sono |
+| Violação de FDP, mesmo com sono/KSS favoráveis | IMA não compensa limite | Tratar violação/regime e decisão autorizada fora do índice |
+| Mudança de apresentação 05h→08h com horas/sono idênticos | Comparação contrafactual versionada, sem reset histórico | Exibir diferença projetada e incerteza, sem reivindicar magnitude calibrada |
+| Conjunto de dados incompleto | `INSUFFICIENT_DATA` e motivos, nunca 100/verde | Solicitar dados ou intervenção antes de interpretação do índice |
 
 ## Contrato operacional de uso pela Coordenação
 
