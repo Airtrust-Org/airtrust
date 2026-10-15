@@ -22,7 +22,6 @@ export function validNavigationScope(s:Player3NavigationScope):boolean{
     s.checkpointUnitIds.length<=500&&
     s.checkpointUnitIds.every(id=>ID.test(id))&&
     new Set(s.checkpointUnitIds).size===s.checkpointUnitIds.length&&
-    s.checkpointUnitIds.includes(s.nextUnitId)&&
     (s.lastVisitedUnitId===null||
       s.checkpointUnitIds.includes(s.lastVisitedUnitId));
 }
@@ -37,7 +36,6 @@ export function makePlayer3NavigationRecorder(
   }
   const base=apiBase.replace(/\/$/,'')+'/lms/native/matriculas/'+s.matriculaId;
   let locked=false;
-  let launchCursorVerified=false;
   async function session(){
     const response=await request(base+'/sessao',{method:'GET',cache:'no-store'});
     if(!response.ok)throw Error('PLAYER3_NAV_SESSION_UNAVAILABLE');
@@ -72,15 +70,11 @@ export function makePlayer3NavigationRecorder(
     if(before.seen_lesson_ids.includes(unitId)){
       locked=false;return true;
     }
-    // Derive the expected next lesson from the fresh authenticated ledger,
-    // not from the launch-time cursor. The launch cursor is verified once;
-    // subsequent checkpoints advance using the server sequence.
+    // Checkpoint ordering follows the fresh authenticated lesson ledger.
+    // nextUnitId is an authored presentation cursor and may legitimately be a
+    // scenario/assessment rather than a checkpoint-bearing lesson.
     const expectedUnitId=s.checkpointUnitIds[before.next_sequence-1];
     if(!expectedUnitId)throw Error('PLAYER3_NAV_LEDGER_FULL');
-    if(!launchCursorVerified){
-      if(s.nextUnitId!==expectedUnitId)throw Error('PLAYER3_NAV_LAUNCH_CURSOR_CONFLICT');
-      launchCursorVerified=true;
-    }
     if(unitId!==expectedUnitId)throw Error('PLAYER3_NAV_OUT_OF_ORDER');
     if(before.next_sequence>10000)throw Error('PLAYER3_NAV_LEDGER_FULL');
     const random=crypto.getRandomValues(new Uint8Array(16));
