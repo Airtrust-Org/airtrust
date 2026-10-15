@@ -50,18 +50,21 @@ async function fixture(){
       return {bind:(...values:unknown[])=>{
         params.push(values);
         return {
+          all:async()=>{
+            if(sql.startsWith('SELECT DISTINCT etapa_id FROM lms_player3_tentativas_modulares')){
+              const stages=[...stored.entries()]
+                .filter(([,value])=>value.politica_id===Number(values[1])&&value.passed===1)
+                .map(([key])=>({etapa_id:key.split(':')[0]}));
+              return {success:true,results:[...new Map(stages.map(row=>[row.etapa_id,row])).values()]};
+            }
+            throw Error('UNEXPECTED_SQL_ALL');
+          },
           first:async()=>{
             if(sql.startsWith('SELECT b.id vinculo_id'))return {
               vinculo_id:222,politica_id:301,source_sha256:SOURCE,
               policy_sha256:policyData.hash,bank_sha256:bankData.hash,r2_prefix:prefix,
             };
             if(sql.startsWith('SELECT politica_id'))return stored.get(String(values[1])+':'+String(values[2]))??null;
-            if(sql.startsWith('SELECT 1 passed FROM lms_player3_tentativas_modulares')){
-              const passed=[...stored.entries()].some(([key,value])=>
-                key.startsWith(String(values[2])+':') &&
-                value.politica_id===Number(values[1]) && value.passed===1);
-              return passed?{passed:1}:null;
-            }
             if(sql.startsWith('SELECT MAX(tentativa_numero)')){
               const nums=[...stored.entries()].filter(([key])=>key.startsWith(String(values[1])+':'))
                 .map(([,v])=>v.tentativa_numero);
@@ -152,8 +155,12 @@ describe('Player 3 staging module attempt writer',()=>{
     expect(f.stored.size).toBe(1);
     expect((await f.call()).state).toBe('IDEMPOTENT_REPLAY');
   });
-  it('allows module 2 to start at attempt 1 independently of module 1',async()=>{
+  it('requires earlier approved modules before a later official stage',async()=>{
     const f=await fixture();
+    await expect(f.call({stageId:'m2',eventId:'m2early',
+      answers:[{questionId:'q3',optionId:'o1'}]}))
+      .rejects.toMatchObject({code:'STAGE_PREREQUISITE_NOT_PASSED'});
+    expect(f.stored.size).toBe(0);
     await f.call();
     expect((await f.call({stageId:'m2',eventId:'m2event',
       answers:[{questionId:'q3',optionId:'o1'}]})).stagePassed).toBe(true);
