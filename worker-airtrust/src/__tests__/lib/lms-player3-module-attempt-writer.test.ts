@@ -43,7 +43,7 @@ type Persisted={
  politica_id:number;tentativa_numero:number;event_id:string;
  answers_json:string;answers_sha256:string;score_pct:number;passed:number;
 };
-async function fixture(){
+async function fixture(options:{stalePassedRead?:boolean}={}){
   const policyData=await hashed(policy),bankData=await hashed(bank);
   const stored=new Map<string,Persisted>();
   const query=vi.fn();
@@ -56,6 +56,8 @@ async function fixture(){
         return {
           all:async()=>{
             if(sql.startsWith('SELECT DISTINCT etapa_id FROM lms_player3_tentativas_modulares')){
+              // Simulate a replica lagging behind an already committed pass.
+              if(options.stalePassedRead)return {success:true,results:[]};
               const stages=[...stored.entries()]
                 .filter(([,value])=>value.politica_id===Number(values[1])&&value.passed===1)
                 .map(([key])=>({etapa_id:key.split(':')[0]}));
@@ -79,6 +81,17 @@ async function fixture(){
           run:async()=>{
             if(!sql.startsWith('INSERT INTO lms_player3_tentativas_modulares'))throw Error('UNEXPECTED_WRITE');
             const [stage,num,event,answers,digest,score,pass,pid]=values;
+            if(options.stalePassedRead) {
+              // D1 INSERT...SELECT evaluates the guard on the write database,
+              // despite the stale, earlier SELECT of approved stages.
+              if(sql.includes('AND NOT EXISTS (SELECT 1 FROM lms_player3_tentativas_modulares approved') &&
+                 values.at(-1)===stage &&
+                 [...stored.entries()].some(([key,row]) =>
+                   key.startsWith(String(stage)+':') && row.passed===1 &&
+                   row.politica_id===Number(pid))) {
+                return {success:true,meta:{changes:0}};
+              }
+            }
             const k=String(stage)+':'+String(num);
             if(stored.has(k))throw Error('UNIQUE');
             stored.set(k,{
@@ -194,6 +207,20 @@ describe('Player 3 staging module attempt writer',()=>{
       .rejects.toMatchObject({code:'STAGE_ALREADY_PASSED'});
     expect(f.stored.size).toBe(1);
     expect((await f.call()).state).toBe('IDEMPOTENT_REPLAY');
+  });
+  it('refuses a later attempt atomically when a stale preflight missed an approved stage',async()=>{
+    const f=await fixture({stalePassedRead:true});
+    f.stored.set('m1:1',{
+      politica_id:301,tentativa_numero:1,event_id:'winner',
+      answers_json:'[]',answers_sha256:'a'.repeat(64),score_pct:100,passed:1,
+    });
+    await expect(f.call({attemptNumber:2,eventId:'stale-attempt'}))
+      .rejects.toMatchObject({code:'STAGE_ATOMIC_COMMIT_CONFLICT'});
+    expect(f.stored.size).toBe(1);
+    const insert=f.db.prepare.mock.calls.find(([sql])=>
+      String(sql).startsWith('INSERT INTO lms_player3_tentativas_modulares'));
+    expect(insert?.[0]).toContain('approved.passed=1');
+    expect(insert?.[0]).toContain('approved.politica_id=p.id');
   });
   it('requires earlier approved modules before a later official stage',async()=>{
     const f=await fixture();
