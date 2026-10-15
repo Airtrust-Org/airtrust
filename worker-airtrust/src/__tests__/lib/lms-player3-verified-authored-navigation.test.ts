@@ -53,6 +53,30 @@ describe('Worker-authoritative authored restart cursor',()=>{
       await expect(verifiedAuthoredNavigation(v)).rejects.toThrow();
     }
   });
+  it('resumes after a verified passed assessment rather than replaying it',async()=>{
+    const good=await input();
+    const afterTwo={...session,seenLessonIds:['unit21','unit22'],
+      lastVisitedUnitId:'unit22',nextSequence:3} as never;
+    const stuck=await verifiedAuthoredNavigation({...good,session:afterTwo});
+    expect(stuck.resumeNextUnitId).toBe('exam1');
+    const advanced=await verifiedAuthoredNavigation({...good,session:afterTwo,
+      passedOfficialStageIds:['exam1']});
+    expect(advanced.resumeNextUnitId).toBe('unit23');
+    expect(advanced.checkpointUnitIds).toEqual(['unit21','unit22','unit23']);
+    // A pass never fabricates a checkpoint for the earlier unvisited lesson.
+    expect((await verifiedAuthoredNavigation({...good,
+      passedOfficialStageIds:['exam1']})).resumeNextUnitId).toBe('unit22');
+  });
+  it('refuses forged, repeated or non-assessment pass markers',async()=>{
+    const good=await input();
+    for(const passedOfficialStageIds of [
+      ['unit21'],['unknown'],['exam1','exam1'],
+    ]){
+      await expect(verifiedAuthoredNavigation({
+        ...good,passedOfficialStageIds,
+      })).rejects.toThrow('PLAYER3_NAV_UNVERIFIED_STAGE');
+    }
+  });
   it('stays at final page rather than resetting to first on final bookmark',async()=>{
     const good=await input();
     expect(await verifiedAuthoredNavigation({...good,session:{
