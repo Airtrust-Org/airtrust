@@ -42,9 +42,9 @@ const correct1=[
 const wrong1=[
   {questionId:'q1',optionId:'o0'},{questionId:'q2',optionId:'o0'},
 ];
-function read(rows:unknown[]){
+function read(rows:unknown[],success=true){
   const db={prepare:vi.fn(()=>({bind:vi.fn(()=>({
-    all:vi.fn(async()=>({results:rows})),
+    all:vi.fn(async()=>({success,results:rows})),
   }))}))};
   return readPlayer3ModuleSession({env:{} as Env,db:db as unknown as D1Database,
     bucket:{} as R2Bucket,empresaId:6,matriculaId:911,actorUserId:31});
@@ -83,6 +83,12 @@ describe('Player3 authenticated modular resumed session',()=>{
     expect(JSON.stringify(s)).not.toContain('SECRET');
     expect(JSON.stringify(s)).not.toContain('correctOptionId');
     expect(JSON.stringify(s)).not.toContain('optionId');
+  });
+  it('does not interpret a failed D1 read as no attempts or as persisted approval',async()=>{
+    await expect(read([],false)).rejects
+      .toMatchObject({code:'STAGE_SESSION_LEDGER_UNAVAILABLE'});
+    await expect(read([await row('module1',1,correct1,100,1)],false)).rejects
+      .toMatchObject({code:'STAGE_SESSION_LEDGER_UNAVAILABLE'});
   });
   it('rejects stored grades that cannot be reproduced from private answers',async()=>{
     await expect(read([await row('module1',1,wrong1,100,1)]))
