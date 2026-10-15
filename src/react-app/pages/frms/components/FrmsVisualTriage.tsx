@@ -111,7 +111,7 @@ export function FrmsOverview({
         <div className={'grid grid-cols-1 gap-3 sm:grid-cols-2 ' + cols}>
           {buckets.map(card => (
             <button
-              type="button" key={card.key} aria-pressed={activeFilter === card.key}
+              type="button" key={card.key} aria-pressed={activeFilter === card.key}\n              aria-label={'Filtrar fila: ' + card.name + ' (' + card.value + ')'}
               aria-controls="frms-decision-queue"
               onClick={() => select(card.key)}
               className={cardBase + ' ' + card.tone +
