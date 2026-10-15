@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canReconcilePersistedScormCompletion,
   resolveLmsDisplayProgress,
+  shouldShowScormClosureDetails,
   shouldVerifyCanonicalProgress,
 } from '../LmsPlayer';
 
@@ -69,5 +70,23 @@ describe('server-verified SCORM completion recovery', () => {
     expect(canReconcilePersistedScormCompletion({
       ...base, diagnostic: { ...diagnostic, score_pct: 50 },
     })).toBe(false);
+  });
+});
+
+describe('SCORM closure panel shows evidence only at the appropriate stage', () => {
+  it('does not describe remaining slides as a server error on 14/70', () => {
+    expect(shouldShowScormClosureDetails({
+      completed: false, atFinalSlide: false,
+      finalizationFailed: false, readyToVerify: false,
+    })).toBe(false);
+  });
+
+  it('displays the full authoritative checklist at the end or on a failed finalization', () => {
+    for (const state of [
+      { completed: false, atFinalSlide: true, finalizationFailed: false, readyToVerify: false },
+      { completed: false, atFinalSlide: false, finalizationFailed: true, readyToVerify: false },
+      { completed: false, atFinalSlide: false, finalizationFailed: false, readyToVerify: true },
+      { completed: true, atFinalSlide: false, finalizationFailed: false, readyToVerify: false },
+    ]) expect(shouldShowScormClosureDetails(state)).toBe(true);
   });
 });
