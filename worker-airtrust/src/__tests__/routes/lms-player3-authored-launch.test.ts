@@ -110,12 +110,67 @@ describe('Player3 authenticated authored stage launch GET',()=>{
       resume_next_unit_id:'unit22',last_visited_unit_id:'unit21',
       checkpoint_unit_ids:['unit21','unit22'],
       official_stages_passed:false,completion_supported:false,
-      pending_assessment:{stage_id:'module1',questions:[
-        {id:'q1',prompt:'Pergunta autenticada',options:[
-          {id:'x',text:'Alternativa X'},{id:'y',text:'Alternativa Y'},
-        ]},
-      ]},
+      // The second lesson is not checkpointed yet: no official question leak.
+      pending_assessment:null,
     });
+  });
+  it('discloses the official module only after all preceding lessons are persisted',async()=>{
+    native.mockResolvedValueOnce({summary:{
+      editionHash:sha('a'),cicloId:333,mode:'LEARN',
+      nextSequence:3,seenLessonIds:['unit21','unit22'],
+      lastVisitedUnitId:'unit22',totalLessons:2,latestAttempt:null,
+    }} as never);
+    const res=await request();
+    expect(res.status).toBe(200);
+    const body=await res.json() as {data:Record<string,unknown>};
+    expect(body.data.resume_next_unit_id).toBe('module1');
+    expect(body.data.pending_assessment).toEqual({
+      stage_id:'module1',title:'module1',questions:[{
+        id:'q1',prompt:'Pergunta autenticada',
+        options:[{id:'x',text:'Alternativa X'},{id:'y',text:'Alternativa Y'}],
+      }],
+    });
+    expect(JSON.stringify(body)).not.toContain('SECRET');
+  });
+  it('keeps a later official assessment hidden until its own lesson prefix is complete',async()=>{
+    const multi={...approved,course:{...approved.course,artifact:{
+      ...approved.course.artifact,
+      units:[
+        {id:'unit21',kind:'lesson'},{id:'module1',kind:'assessment'},
+        {id:'unit22',kind:'lesson'},{id:'module2',kind:'assessment'},
+      ],
+      questions:[...approved.course.artifact.questions,{
+        id:'q2',prompt:'Questão segundo módulo',
+        options:[{id:'x',text:'X'},{id:'y',text:'Y'}],
+      }],
+    }},policy:{...approved.policy,stages:[
+      ...approved.policy.stages,{stageId:'module2',requiredQuestionIds:['q2']},
+    ]},bank:{questions:[
+      ...approved.bank.questions,{id:'q2',stageId:'module2',options:['x','y']},
+    ]}};
+    const ids=multi.course.artifact.units.map(unit=>unit.id);
+    const digest=await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(JSON.stringify(ids)));
+    content.orderedUnitIdsSha256=[...new Uint8Array(digest)]
+      .map(x=>x.toString(16).padStart(2,'0')).join('');
+    load.mockResolvedValue(multi as never);
+    progress.mockResolvedValue({...session,stages:[
+      {stageId:'module1',passed:true},{stageId:'module2',passed:false},
+    ]} as never);
+    let res=await request();
+    expect(res.status).toBe(200);
+    expect((await res.json() as {data:{pending_assessment:unknown}})
+      .data.pending_assessment).toBeNull();
+    native.mockResolvedValueOnce({summary:{
+      editionHash:sha('a'),cicloId:333,mode:'LEARN',
+      nextSequence:3,seenLessonIds:['unit21','unit22'],
+      lastVisitedUnitId:'unit22',totalLessons:2,latestAttempt:null,
+    }} as never);
+    res=await request();
+    expect(res.status).toBe(200);
+    expect((await res.json() as {data:{
+      pending_assessment:{stage_id:string}|null,
+    }}).data.pending_assessment?.stage_id).toBe('module2');
   });
   it('fails closed if source is unapproved, edition wrong or answers differ',async()=>{
     load.mockResolvedValueOnce({...approved,policy:{
