@@ -27,6 +27,7 @@ type Props = {
   initialSession: NativePilotSession;
   completionSupported?: boolean;
   fetchAuthorizedAsset: (asset: NativeAsset, signal: AbortSignal) => Promise<Blob>;
+  onVerifiedStarted?: () => void;
 };
 
 function newEventId(): string {
@@ -38,7 +39,7 @@ function newEventId(): string {
 
 export default function NativeStagingLearnerControls({
   matriculaId, cycleId, editionHash, course, initialSession,
-  completionSupported = false, fetchAuthorizedAsset,
+  completionSupported = false, fetchAuthorizedAsset, onVerifiedStarted,
 }: Props) {
   const [session, setSession] = useState(initialSession);
   const [started, setStarted] = useState(false);
@@ -137,6 +138,8 @@ export default function NativeStagingLearnerControls({
     await refreshSession();
     setStarted(true);
     setMessage('Registro de aprendizagem habilitado neste ciclo. Ainda não é uma conclusão.');
+    // A verified server receipt and persisted re-read may unlock authored content.
+    onVerifiedStarted?.();
   });
 
   const visit = (unitId: string) => void mutate(async () => {
