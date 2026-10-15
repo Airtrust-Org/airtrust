@@ -165,6 +165,53 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     expect(JSON.parse(wrongEdition.cmi_json)['airtrust.viewed_slides']).not.toContain(2);
   });
 
+  it('registra revisita real no #count do pacote 42/42 sem SetValue, sem inventar visitas anteriores', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const html = buildLaunchPage({
+      matriculaId: 911,
+      titulo: 'Doutrinamento em Segurança e Qualidade',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/57/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_location': '42/42',
+        'cmi.location': '42/42',
+        'cmi.core.lesson_status': 'passed',
+        'airtrust.total_slides': 42,
+        'airtrust.viewed_slides': Array.from({ length: 35 }, (_, i) => i + 8),
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const frame = g.document.getElementById('scorm-frame') as unknown as {
+      contentWindow: { document: { body: { innerHTML: string } } };
+      dispatchEvent: (event: unknown) => void;
+    };
+    // Exact DOM contract of the deployed package: #count inside .bottomnav.
+    // The unrelated regulatory fraction must never become evidence.
+    frame.contentWindow.document.body.innerHTML =
+      '<div class="bottomnav"><div class="footer-center"><span id="count">2/42</span></div></div>' +
+      '<p>RBAC 121/135; documento 1/42</p>';
+    // The learner deliberately navigated back, so do not replay a 42/42 bookmark.
+    g.window.dispatchEvent(new g.MessageEvent('message', {
+      data: { type: 'lms:navigate', direction: 'prev' },
+    }));
+    frame.dispatchEvent(new g.Event('load'));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled(), { timeout: 2500 });
+    const ownRequest = fetchMock.mock.calls.find(([, options]) =>
+      JSON.parse(String((options as { body: string }).body)).matricula_id === 911
+    );
+    expect(ownRequest).toBeDefined();
+    const cmi = JSON.parse(JSON.parse(String(ownRequest![1].body)).cmi_json);
+    expect(cmi['cmi.core.lesson_location']).toBe('42/42');
+    expect(cmi['airtrust.viewed_slides']).toContain(2);
+    expect(cmi['airtrust.viewed_slides']).not.toContain(1);
+    expect(cmi['airtrust.viewed_slides']).toContain(42);
+    expect(cmi['airtrust.total_slides']).toBe(42);
+  });
+
   it('contador específico do pacote registra tela anterior sem tratar frações genéricas do DOM como visitas', async () => {
     const fetchMock = mockOkFetch();
     vi.stubGlobal('fetch', fetchMock);
