@@ -187,20 +187,31 @@ class Player3UnifiedBatchWriteTests(unittest.TestCase):
                 private_source_stage_map(digest,'b'*64,'c'*64,broken)
 
     def test_source_order_digest_alias_is_candidate_never_governed(self):
-        # The long original ID was observed in the 22-source review. The alias
-        # must be identical to the future Native contract before publishing.
         long_id='long-'+('q'*77)  # 82 chars, not a Native unit ID
         crosswalk=private_source_stage_map('a'*64,'b'*64,'c'*64,{
-          'sourceStageCrosswalk':[
-            {'stageId':'slide1','originalKind':'lesson',
-             'candidatePlayer3Type':'content','requiresPedagogicalApproval':False},
-            {'stageId':long_id,'originalKind':'lesson',
-             'candidatePlayer3Type':'content','requiresPedagogicalApproval':True},
-          ],
+            'sourceStageCrosswalk':[
+                {'stageId':'slide1','originalKind':'lesson',
+                 'candidatePlayer3Type':'content','requiresPedagogicalApproval':False},
+                {'stageId':long_id,'originalKind':'lesson',
+                 'candidatePlayer3Type':'content','requiresPedagogicalApproval':True},
+            ],
         })
         ids=[x['canonicalUnitId'] for x in crosswalk['sourceStages']]
         self.assertTrue(crosswalk['sourceStages'][1]['requiresUnitAlias'])
-        self.assertRegex(ids[1],r'^u-[0-9a-f]{32}
+        self.assertTrue(ids[1].startswith('u-'))
+        self.assertEqual(len(ids[1]),34)
+        self.assertTrue(set(ids[1][2:]) <= set('0123456789abcdef'))
+        self.assertEqual(len(set(ids)),2)
+        self.assertEqual(crosswalk['candidateOrderedUnitIdsSha256'],
+          hashlib.sha256(json.dumps(ids,separators=(',',':')).encode()).hexdigest())
+        self.assertNotEqual(crosswalk['candidateOrderedUnitIdsSha256'],
+                            crosswalk['sourceUnitIdsSha256'])
+        self.assertFalse(crosswalk['targetEditionApproved'])
+        self.assertFalse(crosswalk['orderedUnitIdsApproved'])
+        self.assertIsNone(crosswalk['targetEditionSha256'])
+        self.assertFalse(crosswalk['lessonEvidencePersisted'])
+
+    def test_compile_error_before_write_leaves_no_partial_artifacts(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)
             batches,known,source_digests=self.fixture(root)
