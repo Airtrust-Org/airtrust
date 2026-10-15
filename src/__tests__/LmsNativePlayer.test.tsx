@@ -23,9 +23,10 @@ vi.mock('@/react-app/config/api', () => ({
   fetchWithAuth: mocks.fetchWithAuth,
 }));
 vi.mock('@/react-app/pages/lms/player3/Player3AuthenticatedStagingEntry', () => {
-  function MockNativeEntry({matriculaId,active}: {matriculaId:number;active:boolean}) {
+  function MockNativeEntry({matriculaId,active,allowLegacyNativePreview}: {matriculaId:number;active:boolean;allowLegacyNativePreview:boolean}) {
     const [mount]=React.useState(()=>++mocks.childMounts.count);
-    return <span data-testid="native-entry" data-mount={mount}>
+    return <span data-testid="native-entry" data-mount={mount}
+      data-legacy-native-preview={String(allowLegacyNativePreview)}>
       Matrícula {matriculaId}; {active?'active':'unstarted'}</span>;
   }
   return {default:MockNativeEntry};
@@ -58,6 +59,7 @@ describe('Native route admission for physical Native and governed SCORM-backed P
     expect(screen.queryByTestId('native-entry')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent(/verificando acesso/i);
     expect(await screen.findByTestId('native-entry')).toHaveTextContent('Matrícula 101');
+    expect(screen.getByTestId('native-entry')).toHaveAttribute('data-legacy-native-preview','true');
     expect(mocks.fetchWithAuth).toHaveBeenCalledWith(
       '/api/lms/native/matriculas/101/admissao',
       expect.objectContaining({method:'GET',cache:'no-store',signal:expect.any(AbortSignal)}),
@@ -115,6 +117,7 @@ describe('Native route admission for physical Native and governed SCORM-backed P
     expect(screen.queryByTestId('native-entry')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent(/verificando acesso/i);
     expect(await screen.findByTestId('native-entry')).toHaveTextContent('Matrícula 101');
+    expect(screen.getByTestId('native-entry')).toHaveAttribute('data-legacy-native-preview','false');
     expect(mocks.fetchWithAuth).toHaveBeenCalledWith(
       '/api/lms/native/matriculas/101/admissao',
       expect.objectContaining({method:'GET',cache:'no-store',signal:expect.any(AbortSignal)}),

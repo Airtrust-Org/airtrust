@@ -46,7 +46,7 @@ const launch={
     ]}],
   },
 };
-const props={matriculaId:911,empresaId:6,cursoId:57,title:'Doutrinamento',active:true};
+const props={matriculaId:911,empresaId:6,cursoId:57,title:'Doutrinamento',active:true,allowLegacyNativePreview:true};
 const mockFetch=vi.mocked(fetchWithAuth);
 const response=(body:unknown,status=200)=>new Response(JSON.stringify(body),{
   status,headers:{'content-type':'application/json'},
@@ -79,8 +79,8 @@ describe('authenticated original HTML5 learner entry (no ungoverned fallback)',(
       expect.objectContaining({method:'GET',cache:'no-store'}));
     expect(screen.queryByTestId('native-preview')).toBeNull();
   });
-  it('404 means feature OFF, preserving existing Native; 409 must block',async()=>{
-    mockFetch.mockResolvedValueOnce(response({success:false},404));
+  it('exact 404 launch-OFF preserves physical Native only; 409 still blocks',async()=>{
+    mockFetch.mockResolvedValueOnce(response({success:false,code:'PLAYER3_AUTHORED_LAUNCH_NOT_ENABLED'},404));
     const {unmount}=render(<Player3AuthenticatedStagingEntry {...props}/>);
     expect(await screen.findByTestId('native-preview')).toBeInTheDocument();
     unmount();
@@ -90,6 +90,32 @@ describe('authenticated original HTML5 learner entry (no ungoverned fallback)',(
     expect(screen.queryByTestId('native-preview')).toBeNull();
     expect(screen.queryByTestId('player3-host')).toBeNull();
   });
+  it('never falls back from activated SCORM to the older Native pilot',async()=>{
+    mockFetch.mockResolvedValueOnce(response({
+      success:false,code:'PLAYER3_AUTHORED_LAUNCH_NOT_ENABLED',
+    },404));
+    const view=render(<Player3AuthenticatedStagingEntry
+      {...props} allowLegacyNativePreview={false}/>);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/indisponível/i);
+    expect(screen.queryByTestId('native-preview')).toBeNull();
+    expect(screen.queryByTestId('player3-host')).toBeNull();
+    view.unmount();
+    const noStart=render(<Player3AuthenticatedStagingEntry
+      {...props} active={false} allowLegacyNativePreview={false}/>);
+    expect(screen.getByRole('alert')).toHaveTextContent(/indisponível/i);
+    expect(screen.queryByTestId('native-preview')).toBeNull();
+    noStart.unmount();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+  it('rejects a generic 404 rather than treating it as pilot permission',async()=>{
+    mockFetch.mockResolvedValueOnce(response({
+      success:false,code:'NATIVE_ENROLLMENT_NOT_FOUND',
+    },404));
+    render(<Player3AuthenticatedStagingEntry {...props}/>);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/indisponível/i);
+    expect(screen.queryByTestId('native-preview')).toBeNull();
+  });
+
   it('never attempts an authored write for unstarted enrollment',async()=>{
     render(<Player3AuthenticatedStagingEntry {...props} active={false}/>);
     expect(await screen.findByTestId('native-preview')).toBeInTheDocument();

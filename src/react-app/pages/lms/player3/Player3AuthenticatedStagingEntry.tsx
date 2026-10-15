@@ -20,9 +20,11 @@ const launchMatches=(launch:Launch,empresaId:number,cursoId:number,
   launch.curso_id===cursoId && launch.matricula_id===matriculaId;
 
 export default function Player3AuthenticatedStagingEntry({
-  matriculaId,empresaId,cursoId,title,active,
+  matriculaId,empresaId,cursoId,title,active,allowLegacyNativePreview=false,
 }:{
   matriculaId:number;empresaId:number;cursoId:number;title:string;active:boolean;
+  /** Only the physical Native V1 pilot may use its earlier assessment UI. */
+  allowLegacyNativePreview?:boolean;
 }){
   const [state,setState]=useState<State>({kind:'LOADING'});
   const [refresh,setRefresh]=useState(0);
@@ -42,16 +44,22 @@ export default function Player3AuthenticatedStagingEntry({
       launchMatches(previous.launch,empresaId,cursoId,matriculaId)
       ?previous:{kind:'LOADING'});
     if(!learnerStarted||![matriculaId,empresaId,cursoId].every(positive)){
-      setState({kind:'LEGACY_PREVIEW'});
+      setState({kind:allowLegacyNativePreview?'LEGACY_PREVIEW':'BLOCKED'});
       return ()=>controller.abort();
     }
     void (async()=>{
       const res=await fetchWithAuth(
         API_BASE_URL+'/lms/native/matriculas/'+matriculaId+'/etapas/lancamento',
         {method:'GET',cache:'no-store',signal:controller.signal});
-      // Feature flag absent is not an error for the existing Native pilot.
+      // A 404 is NOT a license to fall back to another completion engine.
+      // Only physical Native V1 may retain its own pilot when explicitly OFF.
       if(res.status===404){
-        if(!controller.signal.aborted)setState({kind:'LEGACY_PREVIEW'});
+        const unavailable=await res.json() as {code?:string};
+        if(!controller.signal.aborted)setState({
+          kind:allowLegacyNativePreview &&
+            unavailable?.code==='PLAYER3_AUTHORED_LAUNCH_NOT_ENABLED'
+            ?'LEGACY_PREVIEW':'BLOCKED',
+        });
         return;
       }
       if(!res.ok)throw Error('PLAYER3_LAUNCH_NOT_APPROVED');
@@ -64,7 +72,7 @@ export default function Player3AuthenticatedStagingEntry({
       if(!controller.signal.aborted)setState({kind:'BLOCKED'});
     });
     return ()=>controller.abort();
-  },[matriculaId,empresaId,cursoId,learnerStarted,refresh]);
+  },[matriculaId,empresaId,cursoId,learnerStarted,refresh,allowLegacyNativePreview]);
 
   if(state.kind==='LOADING')return (
     <p role="status">Verificando edição aprovada do Player 3…</p>
