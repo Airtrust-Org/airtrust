@@ -156,6 +156,81 @@ describe('authenticated original HTML5 learner entry (no ungoverned fallback)',(
       view.unmount();
     }
   });
+  it('reconciles a lost start reply with Worker-owned GET only, never a second POST',async()=>{
+    const digest=sha('a');
+    mockFetch.mockRejectedValueOnce(new Error('reply lost after commit'))
+      .mockResolvedValueOnce(response({success:true,data:{
+        id:911,empresa_id:6,curso_id:57,
+        tipo_conteudo:'scorm',status:'EM_ANDAMENTO',
+      }}))
+      .mockResolvedValueOnce(response({success:true,data:{
+        matricula_id:911,ciclo_id:333,edition_sha256:digest,
+        mode:'LEARN',next_sequence:1,
+      }}))
+      .mockResolvedValueOnce(response({success:true,data:launch}));
+    render(<Player3AuthenticatedStagingEntry {...props}
+      active={false} allowLegacyNativePreview={false}/>);
+    fireEvent.click(screen.getByRole('button',{name:/iniciar treinamento no Player 3/i}));
+    expect(await screen.findByRole('button',{name:/conferir início registrado/i}))
+      .toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:/conferir início registrado/i}));
+    expect(await screen.findByTestId('player3-host')).toHaveTextContent('learner');
+    expect(mockFetch.mock.calls.map(([url,opts])=>[url,opts?.method])).toEqual([
+      ['/api/lms/native/matriculas/911/iniciar','POST'],
+      ['/api/lms/matriculas/911','GET'],
+      ['/api/lms/native/matriculas/911/sessao','GET'],
+      ['/api/lms/native/matriculas/911/etapas/lancamento','GET'],
+    ]);
+  });
+  it('does not trust a LEARN session alone if a lost POST never started the enrollment',async()=>{
+    mockFetch.mockRejectedValueOnce(new Error('network timeout'))
+      .mockResolvedValueOnce(response({success:true,data:{
+        id:911,empresa_id:6,curso_id:57,
+        tipo_conteudo:'scorm',status:'NAO_INICIADO',
+      }}));
+    render(<Player3AuthenticatedStagingEntry {...props}
+      active={false} allowLegacyNativePreview={false}/>);
+    fireEvent.click(screen.getByRole('button',{name:/iniciar treinamento no Player 3/i}));
+    fireEvent.click(await screen.findByRole('button',{name:/conferir início registrado/i}));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não foi confirmado/i);
+    expect(screen.queryByTestId('player3-host')).toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls.filter(([,opts])=>opts?.method==='POST')).toHaveLength(1);
+  });
+  it('blocks an ambiguous start when the read-only tenant/course evidence changes',async()=>{
+    const digest=sha('a');
+    mockFetch.mockResolvedValueOnce(response({success:false},503))
+      .mockResolvedValueOnce(response({success:true,data:{
+        id:911,empresa_id:7,curso_id:57,
+        tipo_conteudo:'scorm',status:'EM_ANDAMENTO',
+      }}));
+    const view=render(<Player3AuthenticatedStagingEntry {...props}
+      active={false} allowLegacyNativePreview={false}/>);
+    fireEvent.click(screen.getByRole('button',{name:/iniciar treinamento no Player 3/i}));
+    fireEvent.click(await screen.findByRole('button',{name:/conferir início registrado/i}));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não foi confirmado/i);
+    expect(screen.queryByTestId('player3-host')).toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    view.unmount();
+    mockFetch.mockReset();
+    mockFetch.mockRejectedValueOnce(new Error('reply lost'))
+      .mockResolvedValueOnce(response({success:true,data:{
+        id:911,empresa_id:6,curso_id:57,
+        tipo_conteudo:'scorm',status:'EM_ANDAMENTO',
+      }}))
+      .mockResolvedValueOnce(response({success:true,data:{
+        matricula_id:911,ciclo_id:333,edition_sha256:digest,
+        mode:'REVIEW',next_sequence:1,
+      }}));
+    render(<Player3AuthenticatedStagingEntry {...props}
+      active={false} allowLegacyNativePreview={false}/>);
+    fireEvent.click(screen.getByRole('button',{name:/iniciar treinamento no Player 3/i}));
+    fireEvent.click(await screen.findByRole('button',{name:/conferir início registrado/i}));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não foi confirmado/i);
+    expect(screen.queryByTestId('player3-host')).toBeNull();
+    expect(mockFetch.mock.calls.filter(([,opts])=>opts?.method==='POST')).toHaveLength(1);
+  });
+
   it('unmounts an activated SCORM iframe immediately after completion',async()=>{
     const digest=sha('a');
     mockFetch.mockResolvedValueOnce(response({success:true,data:{

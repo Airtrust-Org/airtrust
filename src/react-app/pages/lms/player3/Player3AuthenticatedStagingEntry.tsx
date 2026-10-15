@@ -34,7 +34,7 @@ export default function Player3AuthenticatedStagingEntry({
   // A fresh enrollment uses the verified Native start receipt before launch.
   // A scoped latch cannot be reused for a different tenant, course or enrollment.
   const [verifiedStartScope,setVerifiedStartScope]=useState('');
-  const [activatedStartState,setActivatedStartState]=useState<'IDLE'|'STARTING'|'BLOCKED'>('IDLE');
+  const [activatedStartState,setActivatedStartState]=useState<'IDLE'|'STARTING'|'BLOCKED'|'RECHECKING'>('IDLE');
   const activatedStartIssued=useRef(false);
   const scopeKey=[empresaId,cursoId,matriculaId].join(':');
   // A previously verified start cannot keep an authored learner iframe alive
@@ -132,6 +132,61 @@ export default function Player3AuthenticatedStagingEntry({
     }
   }
 
+  // Lost POST responses are ambiguous: the transactional start may have
+  // committed despite an HTTP error. Never replay the write. Recovery is a
+  // separate, explicitly requested read-only check of the authoritative LMS
+  // enrollment AND Native edition/cycle, followed by the normal authenticated
+  // authored-launch admission. A session snapshot alone cannot prove STARTED:
+  // an untouched NAO_INICIADO enrollment also has a LEARN-mode snapshot.
+  async function verifyPersistedStartWithoutPost(){
+    if(allowLegacyNativePreview||completed||learnerStarted||
+       activatedStartState!=='BLOCKED'||!activatedStartIssued.current||
+       ![empresaId,cursoId,matriculaId].every(positive))return;
+    setActivatedStartState('RECHECKING');
+    const base=API_BASE_URL+'/lms/native/matriculas/'+matriculaId;
+    try{
+      const enrollmentResponse=await fetchWithAuth(
+        API_BASE_URL+'/lms/matriculas/'+matriculaId,
+        {method:'GET',cache:'no-store'},
+      );
+      if(!enrollmentResponse.ok)throw Error('PLAYER3_START_STATUS_UNAVAILABLE');
+      const enrollment=await enrollmentResponse.json() as {
+        success?:boolean;data?:{
+          id?:number;empresa_id?:number;curso_id?:number;
+          tipo_conteudo?:string;status?:string;
+        };
+      };
+      if(enrollment.success!==true||
+         enrollment.data?.id!==matriculaId||
+         enrollment.data?.empresa_id!==empresaId||
+         enrollment.data?.curso_id!==cursoId||
+         enrollment.data?.tipo_conteudo!=='scorm'||
+         enrollment.data?.status!=='EM_ANDAMENTO'){
+        throw Error('PLAYER3_START_NOT_PERSISTED');
+      }
+      const sessionResponse=await fetchWithAuth(base+'/sessao',{
+        method:'GET',cache:'no-store',
+      });
+      if(!sessionResponse.ok)throw Error('PLAYER3_START_SESSION_UNAVAILABLE');
+      const session=await sessionResponse.json() as {success?:boolean;data?:{
+        matricula_id?:number;ciclo_id?:number;
+        edition_sha256?:string;mode?:string;next_sequence?:number;
+      }};
+      if(session.success!==true||
+         session.data?.matricula_id!==matriculaId||
+         !positive(session.data?.ciclo_id??0)||
+         !/^[a-f0-9]{64}$/.test(session.data?.edition_sha256??'')||
+         session.data?.mode!=='LEARN'||
+         !positive(session.data?.next_sequence??0)){
+        throw Error('PLAYER3_START_SESSION_SCOPE_MISMATCH');
+      }
+      setVerifiedStartScope(scopeKey);
+    }catch{
+      // Read-only verification can be repeated; the original POST cannot.
+      setActivatedStartState('BLOCKED');
+    }
+  }
+
   if(!learnerStarted&&!allowLegacyNativePreview){
     if(completed)return <p role="status">
       Treinamento concluído. Consulte o histórico de qualificações e certificados.
@@ -143,10 +198,17 @@ export default function Player3AuthenticatedStagingEntry({
         {activatedStartState==='STARTING'?'Confirmando início…':
          'Iniciar treinamento no Player 3'}
       </button>
-      {activatedStartState==='BLOCKED'&&<p role="alert">
-        Não foi possível confirmar o início no Worker.
-        Reabra o treinamento antes de tentar novamente.
+      {activatedStartState==='RECHECKING'&&<p role="status">
+        Conferindo matrícula e sessão no servidor, sem repetir o início…
       </p>}
+      {activatedStartState==='BLOCKED'&&<>
+        <p role="alert">O início ainda não foi confirmado. Nenhuma nova
+          tentativa de gravação será enviada automaticamente.</p>
+        <button type="button" onClick={()=>void verifyPersistedStartWithoutPost()}
+          className="mt-2 rounded border px-4 py-2">
+          Conferir início registrado
+        </button>
+      </>}
     </section>;
   }
 
