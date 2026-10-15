@@ -50,7 +50,9 @@ function dbMock(settings: {
 } = {}) {
   const calls: Array<{ query: string; params: unknown[] }> = [];
   const binding = settings.binding === undefined ? { id: 41, status: 'EM_ANDAMENTO' } : settings.binding;
-  const rawEvents = settings.events ?? [{ event_id: 'visit-1', sequencia: 1, unidade_id: 'opening' }];
+  const rawEvents: Array<{
+    event_id: string; sequencia: number; unidade_id: string; payload_sha256?: string;
+  }> = settings.events ?? [{ event_id: 'visit-1', sequencia: 1, unidade_id: 'opening' }];
   const events = rawEvents.map(event => ({
     ...event, payload_sha256: event.payload_sha256 ?? eventHash(event),
   }));
