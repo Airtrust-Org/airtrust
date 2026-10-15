@@ -16,6 +16,8 @@ export async function verifiedAuthoredNavigation(input:{
   units:readonly NativeUnit[];
   approvedOrderedUnitIdsSha256:string;
   session:NativeSessionSummary;
+  /** Only server-regraded official module results, never iframe hints. */
+  passedOfficialStageIds?:readonly string[];
   cycleId:number;editionSha256:string;
 }):Promise<Readonly<{
   resumeNextUnitId:string;
@@ -44,6 +46,13 @@ export async function verifiedAuthoredNavigation(input:{
   }
   const lessons=units.filter(unit=>unit.kind==='lesson').map(unit=>unit.id);
   const lessonSet=new Set(lessons);
+  const passedIds=input.passedOfficialStageIds??[];
+  if(!Array.isArray(passedIds)||
+     new Set(passedIds).size!==passedIds.length||
+     passedIds.some(id=>!units.some(unit=>unit.id===id&&unit.kind==='assessment'))){
+    return reject('PLAYER3_NAV_UNVERIFIED_STAGE');
+  }
+  const passedStages=new Set(passedIds);
   const seen=session.seenLessonIds;
   const expectedLast=Array.isArray(seen)&&seen.length?seen[seen.length-1]:null;
   if(!Array.isArray(seen)||
@@ -59,7 +68,14 @@ export async function verifiedAuthoredNavigation(input:{
     ?-1:ids.indexOf(session.lastVisitedUnitId);
   // Resume at the NEXT authored source unit, not at the last checkpoint.
   // At the end, keep the last authored screen instead of resetting to page 1.
-  const next=ids[Math.min(lastIndex+1,ids.length-1)];
-  return {resumeNextUnitId:next,checkpointUnitIds:lessons,
+  let nextIndex=Math.min(lastIndex+1,ids.length-1);
+  // Persisted approval may advance past an already-completed assessment.
+  // Never leap over an unrecorded lesson, scenario or practice unit.
+  while(nextIndex<ids.length-1&&
+        units[nextIndex].kind==='assessment'&&
+        passedStages.has(ids[nextIndex])){
+    nextIndex+=1;
+  }
+  return {resumeNextUnitId:ids[nextIndex],checkpointUnitIds:lessons,
     lastVisitedUnitId:session.lastVisitedUnitId};
 }
