@@ -63,7 +63,7 @@ export default function LmsNativePlayer() {
     return <p role="alert">Identificador de matrícula inválido.</p>;
   }
   if (isLoading) return <p role="status">Carregando matrícula…</p>;
-  if (!validEnrollment || !['native','scorm'].includes(matricula.tipo_conteudo)) {
+  if (!validEnrollment || (matricula.tipo_conteudo !== 'native' && matricula.tipo_conteudo !== 'scorm')) {
     return <p role="alert">Curso Native indisponível para esta matrícula.</p>;
   }
   if (isMarkerCandidate && markerCheck?.scope !== scope) {
