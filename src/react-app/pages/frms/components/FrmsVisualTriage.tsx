@@ -99,7 +99,7 @@ export function FrmsOverview({
   ].filter(card => card.value > 0);
   const cols = buckets.length === 1 ? 'lg:grid-cols-1' :
     buckets.length === 2 ? 'lg:grid-cols-2' :
-      buckets.length === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-4';
+      buckets.length === 3 ? 'lg:grid-cols-3' : buckets.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-5';
   const segments: { filter: FrmsOverviewFilter; count: number; color: string; label: string }[] = [
     { filter: 'CRITICO' as FrmsOverviewFilter, count: critical, color: 'bg-rose-500', label: 'críticos' },
     { filter: 'AVALIAR' as FrmsOverviewFilter, count: attention, color: 'bg-amber-500', label: 'para avaliar' },
