@@ -59,6 +59,17 @@ async function sha256(input: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+async function checkpointPayloadHash(
+  scope: NativeSessionScope,
+  row: { event_id: string; sequencia: number; unidade_id: string },
+): Promise<string> {
+  return sha256(JSON.stringify([
+    scope.empresaId, scope.matriculaId, scope.cicloId,
+    scope.cursoId, scope.artifactHash,
+    row.event_id, row.sequencia, row.unidade_id,
+  ]));
+}
+
 /** Used only after auth and integrity-checked edition lookup. */
 export type NativeSessionSummary = Readonly<{
   editionHash: string;
@@ -116,13 +127,19 @@ export async function readNativeLearnerSession(params: {
     .filter((unit) => unit.kind === 'lesson').map((unit) => unit.id);
   const lessons = new Set(orderedLessons);
   if (rows.length > orderedLessons.length ||
-      rows.some((row, index) =>
-        row.sequencia !== index + 1 || typeof row.event_id !== 'string' ||
-        !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(row.event_id) ||
-        !lessons.has(row.unidade_id) || row.unidade_id !== orderedLessons[index]) ||
       new Set(rows.map((row) => row.event_id)).size !== rows.length ||
       new Set(rows.map((row) => row.unidade_id)).size !== rows.length) {
     fail('NATIVE_READ_INVALID_EVENT_LEDGER');
+  }
+  for (const [index, row] of rows.entries()) {
+    if (row.sequencia !== index + 1 || typeof row.event_id !== 'string' ||
+        !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(row.event_id) ||
+        !lessons.has(row.unidade_id) || row.unidade_id !== orderedLessons[index] ||
+        typeof row.payload_sha256 !== 'string' ||
+        !VALID_HASH.test(row.payload_sha256) ||
+        await checkpointPayloadHash(scope, row) !== row.payload_sha256) {
+      fail('NATIVE_READ_INVALID_EVENT_LEDGER');
+    }
   }
   const snapshot: NativeProgressSnapshot = {
     scope,
