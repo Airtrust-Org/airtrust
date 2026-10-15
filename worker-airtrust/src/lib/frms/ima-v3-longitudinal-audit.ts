@@ -105,13 +105,21 @@ export function auditImaLongitudinalEvidence(
       // Day ordinals increment by one even over month/year boundaries.
       if (ordinals[i] - ordinals[i - 6] !== 6) continue;
       sevenDayConsecutiveDateWindows++;
-      const allReported = ordinals.slice(i - 6, i + 1).every(
-        (ordinal) => {
-          const evidence = days.get(ordinal);
-          return evidence != null && hasCrewReportedSleepWindow(evidence) &&
-            evidence.wakeDataSource === 'REAL';
-        },
-      );
+      let previousWakeInstant = Number.NEGATIVE_INFINITY;
+      const allReported = ordinals.slice(i - 6, i + 1).every((ordinal) => {
+        const evidence = days.get(ordinal);
+        if (evidence == null || !hasCrewReportedSleepWindow(evidence) ||
+            evidence.wakeDataSource !== 'REAL') return false;
+        // An episode copied to multiple dates cannot count as repeated sleep.
+        // These date labels must be in the same local zone as the check-in.
+        const operationalDay = new Date(ordinal * DAY_MS).toISOString().slice(0, 10);
+        if (evidence.observedSleepEndAt?.slice(0, 10) !== operationalDay) return false;
+        const start = Date.parse(evidence.observedSleepStartAt!);
+        const end = Date.parse(evidence.observedSleepEndAt!);
+        if (start < previousWakeInstant) return false; // overlapping nights
+        previousWakeInstant = end;
+        return true;
+      });
       if (allReported) {
         sevenDayCrewReportedWindowCandidates++;
         hasCandidate = true;
