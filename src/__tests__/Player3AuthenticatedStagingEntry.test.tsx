@@ -67,7 +67,10 @@ describe('authenticated original HTML5 learner entry (no ungoverned fallback)',(
     expect(validatePlayer3Launch({...launch,pending_assessment:null},props)).toBe(true);
     expect(validatePlayer3Launch({...launch,pending_assessment:null,
       official_stages_passed:true},props)).toBe(true);
-    expect(validatePlayer3Launch({...launch,pending_assessment:undefined},props)).toBe(false);
+    for(const invalid of [undefined,false,0,'locked']){
+      expect(validatePlayer3Launch({...launch,pending_assessment:invalid as never},props))
+        .toBe(false);
+    }
     expect(validatePlayer3Launch({...launch,empresa_id:7},props)).toBe(false);
     expect(validatePlayer3Launch({...launch,content_url:'https://evil.example/test'},props)).toBe(false);
     expect(validatePlayer3Launch({...launch,content_url:
