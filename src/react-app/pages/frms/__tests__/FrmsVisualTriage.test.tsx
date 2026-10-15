@@ -42,7 +42,7 @@ describe('FRMS triagem visual sem inventar métricas', () => {
     expect(summary.getByText('Confiança baixa')).toBeInTheDocument();
     expect(summary.queryByText('Crítico')).not.toBeInTheDocument();
     expect(summary.queryByText('Check-ins pendentes')).not.toBeInTheDocument();
-    expect(summary.getByRole('img')).toHaveAccessibleName(/1 para avaliar/i);
+    expect(summary.getByRole('group', { name: 'Filtrar pela distribuição de prioridades' })).toBeInTheDocument();
   });
 
   it('filtra pelos cartões e pela faixa de prioridade, sem deixar coluna vazia', () => {
@@ -54,11 +54,11 @@ describe('FRMS triagem visual sem inventar métricas', () => {
       onFilterChange={onFilterChange}
     />);
     const overview = within(screen.getByLabelText('Visão visual da operação'));
-    const grid = overview.getByRole('button', { name: /Check-ins pendentes/i }).parentElement;
+    const grid = overview.getByRole('button', { name: 'Filtrar fila: Check-ins pendentes (1)' }).parentElement;
     expect(grid).toHaveClass('lg:grid-cols-3');
-    fireEvent.click(overview.getByRole('button', { name: /Avaliar/i }));
+    fireEvent.click(overview.getByRole('button', { name: 'Filtrar fila: Avaliar (1)' }));
     expect(onFilterChange).toHaveBeenCalledWith('AVALIAR');
-    fireEvent.click(overview.getByRole('button', { name: /Check-ins pendentes/i }));
+    fireEvent.click(overview.getByRole('button', { name: 'Filtrar fila: Check-ins pendentes (1)' }));
     expect(onFilterChange).toHaveBeenCalledWith('CHECKIN');
     fireEvent.click(overview.getByRole('button', { name: /Filtrar 1 para avaliar/i }));
     expect(onFilterChange).toHaveBeenCalledWith('AVALIAR');
@@ -68,7 +68,7 @@ describe('FRMS triagem visual sem inventar métricas', () => {
       activeFilter="AVALIAR"
       onFilterChange={onFilterChange}
     />);
-    fireEvent.click(overview.getByRole('button', { name: /Avaliar/i }));
+    fireEvent.click(overview.getByRole('button', { name: 'Filtrar fila: Avaliar (1)' }));
     expect(onFilterChange).toHaveBeenLastCalledWith(null);
     fireEvent.click(overview.getByRole('button', { name: 'Limpar filtro' }));
     expect(onFilterChange).toHaveBeenLastCalledWith(null);
