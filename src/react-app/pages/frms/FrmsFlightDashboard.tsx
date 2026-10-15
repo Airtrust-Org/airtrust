@@ -16,6 +16,7 @@ import {
 } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
 import { FrmsSignalGrid } from './components/FrmsOperationalSignals';
+import { FrmsOverview, FrmsScoreMeter, FrmsScoreExplanation, FrmsEvidenceActions } from './components/FrmsVisualTriage';
 import {
   bucketPriority,
   classifyOperationalItem,
@@ -262,14 +263,19 @@ function DetailDrawer({
                   ? 'Revisão operacional necessária'
                   : bucket === 'CONFIRMAR' ? 'Aguardando confirmação de dados' : 'Sem pendência FRMS identificada'}
             </p>
-            <p className="mt-2 text-sm">{guidance.reason}</p>
-            <p className="mt-3 text-sm"><strong>Próxima providência:</strong> {guidance.action}</p>
-            {gaps.length > 0 ? <p className="mt-2 text-xs"><strong>Dados a conferir:</strong> {gaps.join(' · ')}.</p> : null}
-            {decisionIsLimited ? (
-              <p className="mt-2 text-xs font-bold">Indicadores favoráveis abaixo são apenas sinais parciais: não comprovam aptidão nem autorizam liberação.</p>
-            ) : null}
-            <p className="mt-2 text-xs">Responsável e prazo devem ser definidos pela Coordenação; não foram atribuídos automaticamente.</p>
+            <p className="mt-2 line-clamp-2 text-sm" title={guidance.reason}>{guidance.reason}</p>
+            <details className="mt-2 text-xs">
+              <summary className="cursor-pointer font-semibold">Entenda esta decisão</summary>
+              <p className="mt-2 text-sm"><strong>Próxima providência:</strong> {guidance.action}</p>
+              {gaps.length > 0 ? <p className="mt-2"><strong>Dados a conferir:</strong> {gaps.join(' · ')}.</p> : null}
+              {decisionIsLimited ? <p className="mt-2 font-bold">Indicadores favoráveis abaixo são apenas sinais parciais: não comprovam aptidão nem autorizam liberação.</p> : null}
+              <p className="mt-2">Responsável e prazo devem ser definidos pela Coordenação; não foram atribuídos automaticamente.</p>
+            </details>
           </section>
+
+          <FrmsScoreExplanation item={item} />
+          <FrmsEvidenceActions item={item} todayIso={todayIso} />
+
           {outsideFortnightExtension ? (
             <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
               <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">
@@ -283,12 +289,10 @@ function DetailDrawer({
           ) : null}
 
           {momentCopy ? (
-            <section className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-sm text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
-              <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">
-                <Clock3 className="h-4 w-4" /> {momentCopy.title}
-              </h3>
+            <details className="rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-sm text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+              <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">{momentCopy.title}</summary>
               <p className="mt-2 leading-relaxed">{momentCopy.text}</p>
-            </section>
+            </details>
           ) : null}
 
           <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
@@ -296,8 +300,9 @@ function DetailDrawer({
             <FrmsSignalGrid item={item} className="mt-3" />
           </section>
 
-          <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+          <details className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+            <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-slate-500">Mais motivos e evidências</summary>
+            <h3 className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">
               {dayIsOpen && decisionIsLimited
                 ? 'Confirmações restantes para o fechamento'
                 : decisionIsLimited
@@ -318,10 +323,11 @@ function DetailDrawer({
                 Nenhum motivo adicional foi registrado para este estado.
               </p>
             )}
-          </section>
+          </details>
 
-          <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Ação operacional</h3>
+          <details className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+            <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-slate-500">Orientação completa</summary>
+            <h3 className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">Ação operacional</h3>
             <p className="mt-2 text-base font-semibold text-slate-950 dark:text-white">
               {guidance.action}
             </p>
@@ -340,7 +346,7 @@ function DetailDrawer({
                 </p>
               </div>
             ) : null}
-          </section>
+          </details>
 
           <section className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
@@ -393,8 +399,9 @@ function DetailDrawer({
             </section>
           ) : null}
 
-          <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <details className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+            <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-slate-500">Fontes técnicas e justificativas</summary>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
                 <Database className="h-4 w-4" /> Fonte e confiança
               </h3>
@@ -441,7 +448,7 @@ function DetailDrawer({
                 Fonte dos dados de voo: {operationalSourceLabel(item.operational_data_source)}
               </p>
             ) : null}
-          </section>
+          </details>
 
           <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -571,9 +578,7 @@ export default function FrmsFlightDashboard() {
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">FRMS</p>
             <h1 className="mt-1 text-2xl font-bold text-slate-950 dark:text-white">Operação</h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
-              Exceções que exigem decisão, confirmação ou bloqueio. O que está normal fica em segundo plano.
-            </p>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">Prioridades, evidências e ações por pessoa.</p>
           </div>
 
           <div className="flex flex-wrap items-end gap-2">
@@ -603,10 +608,10 @@ export default function FrmsFlightDashboard() {
         </header>
 
         {date === todayIso ? (
-          <div className="rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-sm text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
-            <span className="font-bold">Leitura do dia em curso.</span>{' '}
-            O check-in apoia a decisão antes da missão. A jornada realizada fecha depois da operação; em dia sem voo, a pessoa registra a atividade de hoje no próximo check-in. O acumulado usa somente atividade já registrada.
-          </div>
+          <details className="rounded-lg border border-sky-200 bg-sky-50/60 px-3 py-2 text-xs text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
+            <summary className="cursor-pointer font-semibold">Entenda os dados do dia</summary>
+            <p className="mt-2"><strong>Leitura do dia em curso.</strong> O check-in apoia a decisão antes da missão. A jornada realizada fecha depois da operação; em dia sem voo, a pessoa registra a atividade de hoje no próximo check-in. O acumulado usa somente atividade já registrada.</p>
+          </details>
         ) : null}
 
         {legacyControlRoute ? (
@@ -628,6 +633,8 @@ export default function FrmsFlightDashboard() {
             </span>
           ) : null}
         </div>
+
+        {!firstLoad && !snapshotUnavailable ? <FrmsOverview queue={queue} checkinPendingCount={checkinPendingCount} /> : null}
 
         <section className="space-y-3" aria-label="Resumo operacional">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -697,9 +704,10 @@ export default function FrmsFlightDashboard() {
                   ? `${queue.length - evaluatedFortnightCount} sem avaliação quinzenal completa.`
                   : 'Não há avaliações quinzenais incompletas neste recorte.'}
               </p>
-              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                A situação e a atividade acumulada registrada aparecem por pessoa abaixo. O indicador não substitui avaliação individual ou liberação operacional.
-              </p>
+              <details className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                <summary className="cursor-pointer">Como interpretar a quinzena</summary>
+                <p className="mt-1">A situação e a atividade acumulada registrada aparecem por pessoa abaixo. O indicador não substitui avaliação individual ou liberação operacional.</p>
+              </details>
             </>
           )}
         </section>
@@ -758,7 +766,7 @@ export default function FrmsFlightDashboard() {
                     key={`${item.tripulante_id}-${item.data_operacional}`}
                     type="button"
                     onClick={() => setSelected(item)}
-                    className="grid w-full gap-3 px-4 py-4 text-left transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-900/60 dark:focus:bg-slate-900/60 lg:grid-cols-[minmax(170px,0.9fr)_minmax(170px,0.9fr)_minmax(210px,1.15fr)_minmax(250px,1.3fr)_20px] lg:items-start"
+                    className="grid w-full gap-3 border-l-4 border-transparent px-4 py-3 text-left transition-colors hover:border-sky-400 hover:bg-slate-50 focus:border-sky-400 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-900/60 dark:focus:bg-slate-900/60 lg:grid-cols-[minmax(160px,0.95fr)_minmax(170px,1fr)_minmax(190px,1.2fr)_minmax(170px,1.1fr)_20px] lg:items-center"
                   >
                     <div className="min-w-0">
                       <DecisionBadge bucket={bucket} />
@@ -775,7 +783,8 @@ export default function FrmsFlightDashboard() {
                     </div>
                     <div className="min-w-0">
                       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Fadiga acumulada · quinzena</p>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">{fortnightSummary(item).status}</p>
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">{fortnightSummary(item).status}</p>
+                      <FrmsScoreMeter item={item} compact />
                       {fortnightSummary(item).score ? (
                         <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{fortnightSummary(item).score}</p>
                       ) : null}
@@ -783,12 +792,13 @@ export default function FrmsFlightDashboard() {
                     </div>
                     <div className="min-w-0">
                       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Por quê?</p>
-                      <p className="text-sm text-slate-700 dark:text-slate-200">{guidance.reason}</p>
-                      <p className="mt-1 text-xs text-slate-500">{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'} · Confiança {confidence.toLowerCase()}</p>
+                      <p className="line-clamp-2 text-sm text-slate-700 dark:text-slate-200" title={guidance.reason}>{guidance.reason}</p>
+                      <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200">Dados: confiança {confidence.toLowerCase()}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</p>
                     </div>
                     <div className="min-w-0">
                       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">O que fazer?</p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">{guidance.action}</p>
+                      <p className="line-clamp-2 text-sm font-semibold text-slate-900 dark:text-white" title={guidance.action}>{guidance.action}</p>
                     </div>
                     <ChevronRight className="hidden h-4 w-4 text-slate-400 lg:block" />
                   </button>
