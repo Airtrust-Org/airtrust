@@ -159,8 +159,12 @@ describe('Player3 authenticated authored stage launch GET',()=>{
     ]} as never);
     let res=await request();
     expect(res.status).toBe(200);
-    expect((await res.json() as {data:{pending_assessment:unknown}})
-      .data.pending_assessment).toBeNull();
+    const first=await res.json() as {data:{
+      pending_assessment:unknown;resume_next_unit_id:string,
+    }};
+    expect(first.data.pending_assessment).toBeNull();
+    // Module 1 is approved, so restart must NOT land on its exam again.
+    expect(first.data.resume_next_unit_id).toBe('unit22');
     native.mockResolvedValueOnce({summary:{
       editionHash:sha('a'),cicloId:333,mode:'LEARN',
       nextSequence:3,seenLessonIds:['unit21','unit22'],
