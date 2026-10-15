@@ -28,6 +28,8 @@ export type Player3Html5HostProps = {
   terminalScope?: Player3TerminalScope | null;
   /** Worker-pinned visual navigation only; never a completion authority. */
   navigation?: Player3NavigationScope | null;
+  /** Refresh the Worker-approved launch only after a confirmed lesson checkpoint. */
+  onVerifiedLessonCheckpoint?: () => void;
 };
 
 const DIGEST = /^[a-f0-9]{64}$/;
@@ -57,6 +59,7 @@ function validContentUrl(raw: string, expectedOrigin: string): boolean {
 export default function Player3Html5Host({
   title, contentUrl, editionSha256, contentOrigin, reviewOnly = true, pendingAssessment,
   terminalScope, assessmentPresentation = 'modal', navigation,
+  onVerifiedLessonCheckpoint,
 }: Player3Html5HostProps) {
   const [lastHint, setLastHint] = useState<string | null>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -68,6 +71,8 @@ export default function Player3Html5Host({
   const displayedUnit=useRef<string|null>(null);
   const navigationFailed=useRef(false);
   const navigationQueue=useRef<Promise<unknown>>(Promise.resolve());
+  const refreshedLessons=useRef(new Set<string>());
+  const lastResumeCursorFrame=useRef<string|null>(null);
   const navigationRecorder=useRef<{identity:string;policy:string;
     record:(unitId:string)=>Promise<boolean>} | null>(null);
   const safe = useMemo(() =>
@@ -133,7 +138,13 @@ export default function Player3Html5Host({
       const record=navigationRecorder.current.record;
       navigationQueue.current=navigationQueue.current.then(async()=>{
         if(navigationFailed.current)return;
-        await record(unitId);
+        const confirmed=await record(unitId);
+        if(confirmed&&active&&!refreshedLessons.current.has(unitId)){
+          refreshedLessons.current.add(unitId);
+          // No browser-side progress inference: the Worker has committed
+          // and re-read this checkpoint before another launch GET is made.
+          onVerifiedLessonCheckpoint?.();
+        }
       }).catch(()=>{
         navigationFailed.current=true;
         setNavigationError(true);
@@ -250,7 +261,8 @@ export default function Player3Html5Host({
     window.addEventListener('message', receive);
     return () => { active = false; window.removeEventListener('message', receive); };
   }, [safe,contentOrigin,editionSha256,reviewOnly,
-      assessmentPresentation,examContext,verifiedSubmit,pendingAssessment,navigation]);
+      assessmentPresentation,examContext,verifiedSubmit,pendingAssessment,navigation,
+      onVerifiedLessonCheckpoint]);
 
   // Do not trust a localStorage/SCORM bookmark: only the launch projection
   // from the authenticated Worker may move the original authored presentation.
@@ -258,6 +270,12 @@ export default function Player3Html5Host({
     if(!safe||reviewOnly||frameLoadVersion===0||!navigation||
        !validNavigationScope(navigation)||
        navigation.editionSha256!==editionSha256)return;
+    // Refreshing assessment eligibility must not reposition a live HTML5
+    // iframe. Only send the server cursor once per actual frame load.
+    const frameKey=[frameLoadVersion,navigation.empresaId,
+      navigation.matriculaId,navigation.cicloId,navigation.editionSha256].join(':');
+    if(lastResumeCursorFrame.current===frameKey)return;
+    lastResumeCursorFrame.current=frameKey;
     frameRef.current?.contentWindow?.postMessage({
       type:'AIRTRUST_PLAYER3_RESUME_CURSOR_V1',
       editionSha256,nextUnitId:navigation.nextUnitId,
