@@ -109,12 +109,6 @@ app.get('/matriculas/:matriculaId/etapas/lancamento',async c=>{
       scope:{empresaId,matriculaId,cursoId:course.cursoId,
         cicloId:course.cicloId,artifactHash:course.editionHash},
     });
-    const navigation=await verifiedAuthoredNavigation({
-      units:course.artifact.units,
-      approvedOrderedUnitIdsSha256:launch.orderedUnitIdsSha256,
-      session:nativeSession,cycleId:course.cicloId,
-      editionSha256:course.editionHash,
-    });
     const state=await readPlayer3ModuleSession({
       env:c.env,db:c.env.DB,bucket:c.env.BUCKET,
       empresaId,matriculaId,actorUserId,
@@ -124,6 +118,15 @@ app.get('/matriculas/:matriculaId/etapas/lancamento',async c=>{
        !Array.isArray(state.stages)||state.stages.length!==policy.stages.length){
       throw Error('PLAYER3_AUTHORED_SESSION_EDITION_CONFLICT');
     }
+    // The cursor must be derived from BOTH immutable evidence streams:
+    // ordered lesson checkpoints and independently regraded passed modules.
+    const navigation=await verifiedAuthoredNavigation({
+      units:course.artifact.units,
+      approvedOrderedUnitIdsSha256:launch.orderedUnitIdsSha256,
+      session:nativeSession,cycleId:course.cicloId,
+      editionSha256:course.editionHash,
+      passedOfficialStageIds:state.stages.filter(row=>row.passed).map(row=>row.stageId),
+    });
     const pending=state.stages.find(row=>!row.passed);
     if(Boolean(pending)===state.allOfficialStagesPassed){
       throw Error('PLAYER3_AUTHORED_SESSION_POLICY_CONFLICT');
