@@ -44,15 +44,15 @@ export async function verifiedAuthoredNavigation(input:{
   }
   const lessons=units.filter(unit=>unit.kind==='lesson').map(unit=>unit.id);
   const lessonSet=new Set(lessons);
-  if(!Array.isArray(session.seenLessonIds)||
-     session.seenLessonIds.length>lessons.length||
-     new Set(session.seenLessonIds).size!==session.seenLessonIds.length||
-     session.seenLessonIds.some(id=>!lessonSet.has(id))||
-     (session.lastVisitedUnitId!==null&&
-       !lessonSet.has(session.lastVisitedUnitId))||
-     (session.lastVisitedUnitId!==null&&
-       !session.seenLessonIds.includes(session.lastVisitedUnitId))||
-     (session.lastVisitedUnitId===null&&session.seenLessonIds.length!==0)){
+  const seen=session.seenLessonIds;
+  const expectedLast=Array.isArray(seen)&&seen.length?seen[seen.length-1]:null;
+  if(!Array.isArray(seen)||
+     seen.length>lessons.length||
+     new Set(seen).size!==seen.length||
+     seen.some(id=>!lessonSet.has(id))||
+     seen.some((id,index)=>id!==lessons[index])||
+     session.nextSequence!==seen.length+1||
+     session.lastVisitedUnitId!==expectedLast){
     return reject('PLAYER3_NAV_LEDGER_CONFLICT');
   }
   const lastIndex=session.lastVisitedUnitId===null
