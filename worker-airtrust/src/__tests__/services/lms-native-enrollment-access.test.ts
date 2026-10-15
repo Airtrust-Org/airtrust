@@ -103,6 +103,39 @@ describe('Native V1 read-only enrollment admission / integration contract', () =
     expect(queries.find((q) => q.sql.includes('FROM usuarios'))?.bindings).toEqual([99, 6, 101]);
   });
 
+  it('denies a foreign learner before probing the Player3 activation marker', async () => {
+    const { db, calls } = createHarness(
+      { tipo_conteudo: 'scorm' },
+      { funcionario_id: 2000 },
+    );
+    const env = {
+      DB: db, ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6',
+    } as import('../../types').Env;
+    await expect(request(db, { env })).rejects.toMatchObject({
+      code: 'NATIVE_ENROLLMENT_ACCESS_DENIED',
+      status: 403,
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls.some(call =>
+      call.sql.includes('FROM lms_native_catalog_activation'))).toBe(false);
+  });
+
+  it('refuses invalid status before any activation-side-table lookup', async () => {
+    const { db, calls } = createHarness(
+      { tipo_conteudo: 'scorm', status: 'CANCELADO' },
+    );
+    const env = {
+      DB: db, ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6',
+    } as import('../../types').Env;
+    await expect(request(db, { env })).rejects.toMatchObject({
+      code: 'NATIVE_ENROLLMENT_NOT_ACTIVE',
+      status: 409,
+    });
+    expect(calls).toHaveLength(2);
+  });
+
   it('rejects physical SCORM despite staging admission preview when no marker exists', async () => {
     const { db } = createHarness({ tipo_conteudo: 'scorm' });
     const env = { DB: db, ENVIRONMENT: 'staging',

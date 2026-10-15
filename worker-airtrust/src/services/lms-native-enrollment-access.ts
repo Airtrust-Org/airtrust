@@ -53,14 +53,6 @@ export async function resolveNativeEnrollmentAdmission(params: {
   if (!enrollment || enrollment.empresa_id !== empresaId || enrollment.id !== matriculaId) {
     throw new NativeAdmissionError(404, 'NATIVE_ENROLLMENT_NOT_FOUND');
   }
-  // Exact staging marker lookup is fail-closed when explicitly enabled.
-  // Existing physical Native courses remain recognized without any flag.
-  if (!(params.env
-    ? await isNativeForLegacyLmsPath(params.env, empresaId, enrollment.curso_id, enrollment.tipo_conteudo)
-    : enrollment.tipo_conteudo === 'native')) {
-    throw new NativeAdmissionError(404, 'NATIVE_COURSE_NOT_AVAILABLE');
-  }
-
   // Always resolve employee ownership from the DB, never JWT's possibly stale
   // funcionarioId or user-provided identification. Global auth guards tenant
   // membership, but the individual enrollment still needs exact ownership.
@@ -81,6 +73,15 @@ export async function resolveNativeEnrollmentAdmission(params: {
   }
   if (!['NAO_INICIADO', 'EM_ANDAMENTO', 'CONCLUIDO'].includes(enrollment.status)) {
     throw new NativeAdmissionError(409, 'NATIVE_ENROLLMENT_NOT_ACTIVE');
+  }
+  // Determine effective course type only AFTER the actor's active employee
+  // ownership and the enrollment/course status have been proved. Otherwise
+  // an unauthorized account can probe whether a SCORM course was activated
+  // for Player3, even if it cannot read that learner's enrollment.
+  if (!(params.env
+    ? await isNativeForLegacyLmsPath(params.env, empresaId, enrollment.curso_id, enrollment.tipo_conteudo)
+    : enrollment.tipo_conteudo === 'native')) {
+    throw new NativeAdmissionError(404, 'NATIVE_COURSE_NOT_AVAILABLE');
   }
   return {
     matriculaId,
