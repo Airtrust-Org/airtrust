@@ -60,7 +60,9 @@ export async function readPlayer3ModuleSession(input:{
     response=await input.db.prepare(LAST_AND_FIRST_PASS)
       .bind(binding.vinculo_id).all<Row>();
   }catch{error('STAGE_SESSION_LEDGER_UNAVAILABLE');}
-  const rows=response?.results;
+  // A failed D1 read must never look like an empty attempt history.
+  if(response?.success!==true)error('STAGE_SESSION_LEDGER_UNAVAILABLE');
+  const rows=response.results;
   if(!Array.isArray(rows)||rows.length>200)throw new Player3StageWriteError('STAGE_SESSION_LEDGER_INVALID');
   const observed=new Map<string,{
     latest:number;latestScore:number|null;passed:boolean;
