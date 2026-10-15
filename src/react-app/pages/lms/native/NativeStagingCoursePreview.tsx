@@ -42,7 +42,9 @@ type ResumeResponse = {
 };
 type NativeResume = NativePilotSession & { initialUnitId: string | null };
 
-export default function NativeStagingCoursePreview({ matriculaId }: { matriculaId: number }) {
+export default function NativeStagingCoursePreview({ matriculaId, onVerifiedStarted }: {
+  matriculaId: number; onVerifiedStarted?: () => void;
+}) {
   const [course, setCourse] = useState<NativeLearnerCourse | null>(null);
   const [resume, setResume] = useState<NativeResume | null>(null);
   const [status, setStatus] = useState<'LOADING' | 'READY' | 'UNAVAILABLE'>('LOADING');
@@ -183,6 +185,7 @@ export default function NativeStagingCoursePreview({ matriculaId }: { matriculaI
       initialSession={resume}
       completionSupported={writeScope.completionSupported}
       fetchAuthorizedAsset={fetchAsset}
+      onVerifiedStarted={onVerifiedStarted}
     />;
   }
   return (
