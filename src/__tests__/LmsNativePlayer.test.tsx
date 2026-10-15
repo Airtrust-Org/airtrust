@@ -1,3 +1,4 @@
+import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
@@ -6,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   fetchWithAuth: vi.fn(),
   navigate: vi.fn(),
   params: { matriculaId: '101' },
+  auth: {user:{id:900},empresaAtualId:6,isAuthenticated:true},
+  childMounts:{count:0},
 }));
 vi.mock('react-router-dom', () => ({
   useParams: () => mocks.params,
@@ -14,13 +17,17 @@ vi.mock('react-router-dom', () => ({
 vi.mock('@/react-app/hooks/useLms', () => ({
   useMatriculaDetalhe: mocks.useMatriculaDetalhe,
 }));
+vi.mock('@/react-app/hooks/useAuth',()=>({useAuth:()=>mocks.auth}));
 vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: '/api',
   fetchWithAuth: mocks.fetchWithAuth,
 }));
 vi.mock('@/react-app/pages/lms/player3/Player3AuthenticatedStagingEntry', () => ({
-  default: ({matriculaId,active}: {matriculaId:number;active:boolean}) =>
-    <span data-testid="native-entry">Matrícula {matriculaId}; {active?'active':'unstarted'}</span>,
+  default: ({matriculaId,active}: {matriculaId:number;active:boolean}) => {
+    const [mount]=React.useState(()=>++mocks.childMounts.count);
+    return <span data-testid="native-entry" data-mount={mount}>
+      Matrícula {matriculaId}; {active?'active':'unstarted'}</span>;
+  },
 }));
 import LmsNativePlayer from '@/react-app/pages/lms/LmsNativePlayer';
 
@@ -39,6 +46,7 @@ describe('Native route admission for a governed SCORM-backed Player3 marker', ()
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.params.matriculaId = '101';
+    mocks.auth={user:{id:900},empresaAtualId:6,isAuthenticated:true};
     mocks.useMatriculaDetalhe.mockReturnValue({isLoading:false,data:{...enrollment}});
   });
 
@@ -46,6 +54,28 @@ describe('Native route admission for a governed SCORM-backed Player3 marker', ()
     render(<LmsNativePlayer />);
     expect(screen.getByTestId('native-entry')).toHaveTextContent('Matrícula 101');
     expect(screen.queryByRole('button',{name:/concluir|certificado/i})).toBeNull();
+    expect(mocks.fetchWithAuth).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on a cached matrícula from a different active tenant or logged-out user',()=>{
+    const view=render(<LmsNativePlayer/>);
+    expect(screen.getByTestId('native-entry')).toBeInTheDocument();
+    mocks.auth={...mocks.auth,empresaAtualId:7};
+    view.rerender(<LmsNativePlayer/>);
+    expect(screen.queryByTestId('native-entry')).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent(/indisponível/i);
+    mocks.auth={...mocks.auth,empresaAtualId:6,isAuthenticated:false};
+    view.rerender(<LmsNativePlayer/>);
+    expect(screen.queryByTestId('native-entry')).toBeNull();
+    expect(mocks.fetchWithAuth).not.toHaveBeenCalled();
+  });
+
+  it('forces a new Worker-backed child after changing account within the same tenant',()=>{
+    const view=render(<LmsNativePlayer/>);
+    const previous=screen.getByTestId('native-entry').getAttribute('data-mount');
+    mocks.auth={...mocks.auth,user:{id:901}};
+    view.rerender(<LmsNativePlayer/>);
+    expect(screen.getByTestId('native-entry').getAttribute('data-mount')).not.toBe(previous);
     expect(mocks.fetchWithAuth).not.toHaveBeenCalled();
   });
 

@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMatriculaDetalhe } from '@/react-app/hooks/useLms';
+import { useAuth } from '@/react-app/hooks/useAuth';
 import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import Player3AuthenticatedStagingEntry from './player3/Player3AuthenticatedStagingEntry';
 
@@ -20,20 +21,29 @@ const permittedStatuses = new Set(['NAO_INICIADO', 'EM_ANDAMENTO', 'CONCLUIDO'])
 export default function LmsNativePlayer() {
   const { matriculaId } = useParams<{ matriculaId: string }>();
   const navigate = useNavigate();
+  const {user,isAuthenticated,empresaAtualId}=useAuth();
   const validId = typeof matriculaId === 'string' && /^[1-9][0-9]{0,15}$/.test(matriculaId);
   const id = validId ? Number(matriculaId) : 0;
   const { data: matricula, isLoading } = useMatriculaDetalhe(id);
   const [markerCheck, setMarkerCheck] = useState<MarkerCheck | null>(null);
 
-  const validEnrollment = validId && Number.isSafeInteger(id) && id > 0 &&
+  // A cached LMS query from the preceding logged-in user or selected tenant
+  // is NOT admission. Hide it before render/effects and require a fresh child
+  // launch on each authenticated identity transition. The Worker still checks
+  // actual employee ownership, tenant, cycle and edition independently.
+  const validActor=isAuthenticated && Number.isSafeInteger(user?.id) &&
+    Number(user?.id)>0 && Number.isSafeInteger(empresaAtualId) &&
+    Number(empresaAtualId)>0;
+  const validEnrollment = validActor && validId && Number.isSafeInteger(id) && id > 0 &&
     !!matricula && matricula.id === id &&
+    matricula.empresa_id === empresaAtualId &&
     Number.isSafeInteger(matricula.empresa_id) && matricula.empresa_id > 0 &&
     Number.isSafeInteger(matricula.curso_id) && matricula.curso_id > 0 &&
     permittedStatuses.has(matricula.status);
   const isMarkerCandidate = validEnrollment && matricula.tipo_conteudo === 'scorm';
   const expectedMode = matricula?.status === 'CONCLUIDO' ? 'REVIEW' : 'LEARN';
   const scope = isMarkerCandidate
-    ? [id,matricula.empresa_id,matricula.curso_id,matricula.status].join(':')
+    ? [user?.id,empresaAtualId,id,matricula.curso_id,matricula.status].join(':')
     : '';
 
   useEffect(() => {
@@ -80,6 +90,7 @@ export default function LmsNativePlayer() {
         </button>
       </header>
       <Player3AuthenticatedStagingEntry
+        key={[user?.id,empresaAtualId,id,matricula.curso_id].join(':')}
         matriculaId={id}
         empresaId={matricula.empresa_id}
         cursoId={matricula.curso_id}
