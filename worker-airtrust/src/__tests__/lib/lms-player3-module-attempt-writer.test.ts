@@ -1,5 +1,6 @@
 import {describe,it,expect,vi,beforeEach} from 'vitest';
 import {loadNativePrivateCourse} from '../../services/lms-native-content-loader';
+import {readNativeLearnerSession} from '../../services/lms-native-readiness-repository';
 import {
   commitPlayer3StageAttempt,canWritePlayer3Stage,Player3StageWriteError,
 } from '../../services/lms-player3-module-attempt-writer';
@@ -7,6 +8,9 @@ import type {Env} from '../../types';
 
 vi.mock('../../services/lms-native-content-loader',()=>({
   loadNativePrivateCourse:vi.fn(),
+}));
+vi.mock('../../services/lms-native-readiness-repository',()=>({
+  readNativeLearnerSession:vi.fn(),
 }));
 const EDITION='a'.repeat(64),SOURCE='b'.repeat(64);
 const prefix='lms/native/6/10/'+EDITION+'/';
@@ -112,10 +116,20 @@ async function fixture(){
 }
 beforeEach(()=>{
   vi.mocked(loadNativePrivateCourse).mockReset();
+  vi.mocked(readNativeLearnerSession).mockReset();
   vi.mocked(loadNativePrivateCourse).mockResolvedValue({
     editionHash:EDITION,cursoId:10,cicloId:1000,mode:'LEARN',
-    artifact:{} as never,
+    artifact:{units:[
+      {id:'lesson1',kind:'lesson'},
+      {id:'m1',kind:'assessment'},
+      {id:'lesson2',kind:'lesson'},
+      {id:'m2',kind:'assessment'},
+    ]} as never,
   });
+  vi.mocked(readNativeLearnerSession).mockResolvedValue({summary:{
+    editionHash:EDITION,cicloId:1000,mode:'LEARN',
+    seenLessonIds:['lesson1','lesson2'],
+  }} as never);
 });
 describe('Player 3 staging module attempt writer',()=>{
   it('keeps staging and exact-tenant opt-ins OFF by default',async()=>{
@@ -125,6 +139,16 @@ describe('Player 3 staging module attempt writer',()=>{
       .rejects.toMatchObject({code:'STAGE_WRITES_DISABLED'});
     expect(f.db.prepare).not.toHaveBeenCalled();
     expect(f.bucket.get).not.toHaveBeenCalled();
+  });
+  it('rejects an official assessment until all authored lessons before it are persisted',async()=>{
+    const f=await fixture();
+    vi.mocked(readNativeLearnerSession).mockResolvedValueOnce({summary:{
+      editionHash:EDITION,cicloId:1000,mode:'LEARN',seenLessonIds:[],
+    }} as never);
+    await expect(f.call()).rejects.toMatchObject({
+      code:'STAGE_CONTENT_PREREQUISITE_MISSING',
+    });
+    expect(f.stored.size).toBe(0);
   });
   it('writes one server-graded immutable stage with no completion claim',async()=>{
     const f=await fixture();
