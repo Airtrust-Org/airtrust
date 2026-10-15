@@ -65,6 +65,12 @@ const INSERT=[
   NATIVE_ACTIVE_USER_CONDITION,NATIVE_ACTIVE_EMPLOYEE_JOIN,
   'WHERE b.id=? AND b.empresa_id=? AND b.matricula_id=? AND b.ciclo_id=?',
   'AND b.curso_id=? AND ed.artifact_sha256=?',
+  // The earlier passed-stage read is a UX preflight, not a transaction guard.
+  // Recheck on the authoritative write to forbid a new attempt after pass
+  // even when another device has completed this stage meanwhile.
+  'AND NOT EXISTS (SELECT 1 FROM lms_player3_tentativas_modulares approved',
+  'WHERE approved.vinculo_id=b.id AND approved.politica_id=p.id',
+  'AND approved.etapa_id=? AND approved.passed=1)',
 ].join(' ');
 const EXACT='SELECT politica_id,tentativa_numero,event_id,answers_json,answers_sha256,score_pct,passed FROM lms_player3_tentativas_modulares WHERE vinculo_id=? AND etapa_id=? AND tentativa_numero=? LIMIT 1';
 const LAST='SELECT MAX(tentativa_numero) number FROM lms_player3_tentativas_modulares WHERE vinculo_id=? AND etapa_id=?';
@@ -214,6 +220,7 @@ export async function commitPlayer3StageAttempt(input:{
       stageId,attemptNumber,eventId,normalized,digest,grade.scorePct,Number(grade.stagePassed),
       binding.politica_id,actorUserId,binding.vinculo_id,
       empresaId,matriculaId,course.cicloId,course.cursoId,course.editionHash,
+      stageId,
     ).run();
     if(result.success&&result.meta.changes===1)return receipt('APPLIED');
   }catch{/* Only an EXACT matching concurrent insert is accepted below. */}
