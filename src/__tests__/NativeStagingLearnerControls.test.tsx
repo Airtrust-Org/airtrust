@@ -66,14 +66,17 @@ describe('Native staging learner — evidence-only interaction', () => {
           score_pct: null, assessment_satisfied: true },
       }))
       .mockResolvedValueOnce(session(true, true));
+    const onVerifiedStarted=vi.fn();
     render(<NativeStagingLearnerControls
       matriculaId={101} cycleId={9} editionHash={editionHash}
       course={course} initialSession={initialSession}
-      fetchAuthorizedAsset={vi.fn()}
+      fetchAuthorizedAsset={vi.fn()} onVerifiedStarted={onVerifiedStarted}
     />);
+    expect(onVerifiedStarted).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /Registrar visita/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Iniciar ou retomar/ }));
     expect(await screen.findByText(/Registro de aprendizagem habilitado/)).toBeInTheDocument();
+    expect(onVerifiedStarted).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Registrar visita a esta aula' }));
     expect(await screen.findByText(/Visita registrada pelo servidor/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Visita registrada no servidor' })).toBeDisabled();
@@ -101,6 +104,40 @@ describe('Native staging learner — evidence-only interaction', () => {
     expect(JSON.stringify(attempt)).not.toMatch(/correctOptionId|score_pct|assessment_satisfied/);
     expect(api.fetchWithAuth.mock.calls.filter(([url]) => typeof url === 'string' && url.endsWith('/sessao'))).toHaveLength(3);
     expect(api.fetchWithAuth).toHaveBeenCalledTimes(6);
+  });
+
+  it('never signals an authored start when the server start receipt is unavailable',async()=>{
+    const onVerifiedStarted=vi.fn();
+    api.fetchWithAuth.mockResolvedValueOnce(new Response(
+      JSON.stringify({success:false}),{status:409},
+    ));
+    render(<NativeStagingLearnerControls
+      matriculaId={101} cycleId={9} editionHash={editionHash}
+      course={course} initialSession={initialSession}
+      fetchAuthorizedAsset={vi.fn()} onVerifiedStarted={onVerifiedStarted}
+    />);
+    fireEvent.click(screen.getByRole('button',{name:/Iniciar ou retomar/}));
+    expect(await screen.findByText(/Atualize a página antes de tentar novamente/)).toBeInTheDocument();
+    expect(onVerifiedStarted).not.toHaveBeenCalled();
+    expect(api.fetchWithAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('never signals an authored start if the persisted session conflicts with the cycle',async()=>{
+    const onVerifiedStarted=vi.fn();
+    api.fetchWithAuth.mockResolvedValueOnce(respond({success:true,data:{
+      ciclo_id:9,edition_sha256:editionHash,completion_supported:false,state:'STARTED',
+    }})).mockResolvedValueOnce(respond({success:true,data:{
+      ...scope,ciclo_id:10,next_sequence:1,seen_lesson_ids:[],
+      last_visited_unit_id:null,latest_attempt:null,
+    }}));
+    render(<NativeStagingLearnerControls
+      matriculaId={101} cycleId={9} editionHash={editionHash}
+      course={course} initialSession={initialSession}
+      fetchAuthorizedAsset={vi.fn()} onVerifiedStarted={onVerifiedStarted}
+    />);
+    fireEvent.click(screen.getByRole('button',{name:/Iniciar ou retomar/}));
+    expect(await screen.findByText(/Atualize a página antes de tentar novamente/)).toBeInTheDocument();
+    expect(onVerifiedStarted).not.toHaveBeenCalled();
   });
 
   it('keeps module practice feedback out of the official assessment attempt', async () => {
