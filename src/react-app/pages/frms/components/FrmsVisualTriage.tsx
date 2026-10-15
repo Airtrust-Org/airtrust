@@ -95,10 +95,10 @@ export function FrmsOverview({
     buckets.length === 2 ? 'lg:grid-cols-2' :
       buckets.length === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-4';
   const segments: { filter: FrmsOverviewFilter; count: number; color: string; label: string }[] = [
-    { filter: 'CRITICO', count: critical, color: 'bg-rose-500', label: 'críticos' },
-    { filter: 'AVALIAR', count: attention, color: 'bg-amber-500', label: 'para avaliar' },
-    { filter: 'CONFIRMAR', count: confirm, color: 'bg-sky-500', label: 'para confirmar' },
-    { filter: 'NORMAL', count: normal, color: 'bg-emerald-500', label: 'sem pendência indicada' },
+    { filter: 'CRITICO' as FrmsOverviewFilter, count: critical, color: 'bg-rose-500', label: 'críticos' },
+    { filter: 'AVALIAR' as FrmsOverviewFilter, count: attention, color: 'bg-amber-500', label: 'para avaliar' },
+    { filter: 'CONFIRMAR' as FrmsOverviewFilter, count: confirm, color: 'bg-sky-500', label: 'para confirmar' },
+    { filter: 'NORMAL' as FrmsOverviewFilter, count: normal, color: 'bg-emerald-500', label: 'sem pendência indicada' },
   ].filter(s => s.count > 0);
   const select = (key: FrmsOverviewFilter) => onFilterChange(activeFilter === key ? null : key);
   return (
