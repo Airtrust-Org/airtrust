@@ -20,15 +20,16 @@ vi.mock('@/react-app/pages/lms/player3/Player3Html5Host',()=>({
   </div>,
 }));
 const previewMounts=vi.hoisted(()=>({count:0}));
-vi.mock('@/react-app/pages/lms/native/NativeStagingCoursePreview',()=>({
-  default:({onVerifiedStarted}:{onVerifiedStarted?:()=>void})=>{
+vi.mock('@/react-app/pages/lms/native/NativeStagingCoursePreview',()=>{
+  function MockNativePreview({onVerifiedStarted}:{onVerifiedStarted?:()=>void}){
     const [instance]=React.useState(()=>++previewMounts.count);
     return <div data-testid="native-preview">Native existing pilot
       <span data-testid="native-preview-instance">{instance}</span>
       <button type="button" onClick={onVerifiedStarted}>verified pilot start</button>
     </div>;
-  },
-}));
+  }
+  return {default:MockNativePreview};
+});
 const sha=(s:string)=>s.repeat(64);
 const launch={
   empresa_id:6,matricula_id:911,curso_id:57,ciclo_id:333,
