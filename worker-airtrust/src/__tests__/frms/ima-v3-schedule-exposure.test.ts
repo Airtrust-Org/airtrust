@@ -135,6 +135,12 @@ describe('IMA V3 schedule exposure — descriptive, never a fatigue or fitness s
       shift('2026-10-10T09:00:00', at('10','17:00'), 'DUTY'),
     ]))).toThrow('IMA_SCHEDULE_EXPLICIT_TIMESTAMP_REQUIRED');
     expect(() => describeImaScheduleExposure({
+      ...day([]), windowStartAt: '2026-02-30T00:00:00-03:00',
+    })).toThrow('IMA_SCHEDULE_INVALID_INSTANT');
+    expect(() => describeImaScheduleExposure({
+      ...day([]), windowStartAt: '2026-10-10T24:00:00-03:00',
+    })).toThrow('IMA_SCHEDULE_INVALID_INSTANT');
+    expect(() => describeImaScheduleExposure({
       ...day([]), windowEndAt: at('10','00:00'),
     })).toThrow('IMA_SCHEDULE_INVALID_WINDOW');
     expect(() => describeImaScheduleExposure({
