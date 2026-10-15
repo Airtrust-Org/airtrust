@@ -7,6 +7,7 @@ import { hasApprovedScormCategoryLink } from './lms-scorm-category-compatibility
 import { buildNativeTerminalTransactionGuard, type NativeTerminalAnchor } from './lms-native-terminal-transaction-guard';
 import { canProvisionNative } from './lms-native-enrollment-provisioner';
 import {canWritePlayer3Stage} from './lms-player3-module-attempt-writer';
+import {canReadNativeCatalogActivation} from './lms-native-catalog-legacy-guard';
 import {buildPlayer3TerminalTransactionGuard,type Player3TerminalAnchor} from './lms-player3-terminal-transaction-guard';
 
 export type LmsCompletionOutcome =
@@ -727,6 +728,14 @@ function buildNotRequiredBatchStatements(
  * This is NOT a Native terminal endpoint: governed Schema V2 still blocks
  * completion until an audited, transaction-scoped completion intent exists.
  */
+function canUsePlayer3CanonicalTerminal(env: Env, empresaId: number): boolean {
+  const raw=env.PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS;
+  return canWritePlayer3Stage(env,empresaId) &&
+    canReadNativeCatalogActivation(env,empresaId) &&
+    !!raw && !raw.includes('*') &&
+    raw.split(',').some(value=>value.trim()===String(empresaId));
+}
+
 function withNativeAtomicGuard(
   params: CompleteLmsMatriculaParams,
   statements: { sql: string; args: unknown[] }[],
@@ -741,7 +750,7 @@ function withNativeAtomicGuard(
   }
   if(p){
     const env=params.env;
-    if(!env || !canWritePlayer3Stage(env,params.empresaId) ||
+    if(!env || !canUsePlayer3CanonicalTerminal(env,params.empresaId) ||
        p.empresaId!==params.empresaId ||
        p.matriculaId!==params.matriculaId ||
        p.cursoId!==params.cursoId ||
