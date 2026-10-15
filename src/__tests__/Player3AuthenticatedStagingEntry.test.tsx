@@ -117,6 +117,35 @@ describe('authenticated original HTML5 learner entry (no ungoverned fallback)',(
     expect(screen.queryByTestId('native-preview')).toBeNull();
   });
 
+  it('hides an old tenant iframe before the next Worker admission completes',async()=>{
+    mockFetch.mockResolvedValueOnce(response({success:true,data:launch}));
+    let releaseNext:((res:Response)=>void)|undefined;
+    mockFetch.mockImplementationOnce(()=>new Promise<Response>(resolve=>{
+      releaseNext=resolve;
+    }));
+    const view=render(<Player3AuthenticatedStagingEntry {...props}/>);
+    expect(await screen.findByTestId('player3-host')).toHaveTextContent('/player3/6/57/');
+    view.rerender(<Player3AuthenticatedStagingEntry {...props} empresaId={7}/>);
+    expect(screen.queryByTestId('player3-host')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent(/verificando edição/i);
+    await waitFor(()=>expect(mockFetch).toHaveBeenCalledTimes(2));
+    releaseNext?.(response({success:true,data:{
+      ...launch,empresa_id:7,
+      content_url:'https://authored-staging.example/player3/7/57/'+
+        sha('a')+'/'+sha('b')+'/index.html',
+    }}));
+    expect(await screen.findByTestId('player3-host')).toHaveTextContent('/player3/7/57/');
+  });
+
+  it('hides a learner iframe immediately if the enrollment is no longer started',async()=>{
+    mockFetch.mockResolvedValueOnce(response({success:true,data:launch}));
+    const view=render(<Player3AuthenticatedStagingEntry {...props}/>);
+    expect(await screen.findByTestId('player3-host')).toBeInTheDocument();
+    view.rerender(<Player3AuthenticatedStagingEntry {...props} active={false}/>);
+    expect(screen.queryByTestId('player3-host')).toBeNull();
+    expect(await screen.findByTestId('native-preview')).toBeInTheDocument();
+  });
+
   it('updates the stage only after a Worker-verified callback',async()=>{
     mockFetch.mockResolvedValueOnce(response({success:true,data:launch}))
       .mockResolvedValueOnce(response({success:true,data:{

@@ -13,6 +13,11 @@ type ResponseBody={success?:boolean;data?:Launch};
 type State={kind:'LOADING'|'BLOCKED'|'LEGACY_PREVIEW'}|
   {kind:'READY';launch:Launch};
 const positive=(n:number)=>Number.isSafeInteger(n)&&n>0;
+// A stage refresh may retain the authored frame ONLY within the identical
+// authorized enrollment. Tenant/learner changes must synchronously hide it.
+const launchMatches=(launch:Launch,empresaId:number,cursoId:number,
+  matriculaId:number)=>launch.empresa_id===empresaId &&
+  launch.curso_id===cursoId && launch.matricula_id===matriculaId;
 
 export default function Player3AuthenticatedStagingEntry({
   matriculaId,empresaId,cursoId,title,active,
@@ -26,12 +31,16 @@ export default function Player3AuthenticatedStagingEntry({
   const [verifiedStartScope,setVerifiedStartScope]=useState('');
   const scopeKey=[empresaId,cursoId,matriculaId].join(':');
   const learnerStarted=active||verifiedStartScope===scopeKey;
+  const readyForScope=state.kind==='READY' && learnerStarted &&
+    launchMatches(state.launch,empresaId,cursoId,matriculaId);
   useEffect(()=>{
     const controller=new AbortController();
     // Do not unmount the authored iframe while delivering a persisted stage
     // verdict: postMessage delivery is asynchronous. Keep its exact pinned
     // frame mounted while refreshing the next Worker-authenticated projection.
-    setState(previous=>previous.kind==='READY'?previous:{kind:'LOADING'});
+    setState(previous=>previous.kind==='READY' && learnerStarted &&
+      launchMatches(previous.launch,empresaId,cursoId,matriculaId)
+      ?previous:{kind:'LOADING'});
     if(!learnerStarted||![matriculaId,empresaId,cursoId].every(positive)){
       setState({kind:'LEGACY_PREVIEW'});
       return ()=>controller.abort();
@@ -67,6 +76,11 @@ export default function Player3AuthenticatedStagingEntry({
   if(state.kind==='BLOCKED')return (
     <p role="alert">Player 3 indisponível: lançamento ainda não autorizado.
       Nenhum progresso, nota ou certificado foi alterado.</p>
+  );
+  // React renders before effects run: never expose the preceding enrollment's
+  // iframe or its protected assessment while new props await Worker admission.
+  if(state.kind==='READY' && !readyForScope)return (
+    <p role="status">Verificando edição aprovada do Player 3…</p>
   );
   if(state.kind!=='READY')return <p role="alert">Lançamento inválido.</p>;
   const launch=state.launch;
