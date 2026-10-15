@@ -105,15 +105,19 @@ function validPersistedNativeEvidence(
   course: NativeCourseArtifact,
   snapshot: NativeProgressSnapshot,
 ): boolean {
-  const lessons = new Set(course.units.filter((unit) => unit.kind === 'lesson').map((unit) => unit.id));
+  const orderedLessons = course.units.filter((unit) => unit.kind === 'lesson').map((unit) => unit.id);
+  const lessons = new Set(orderedLessons);
   if (!Number.isSafeInteger(snapshot.nextSequence) || snapshot.nextSequence < 1 ||
       !Array.isArray(snapshot.seenLessonIds) || !Array.isArray(snapshot.recordedEvents)) return false;
   const ledger = snapshot.recordedEvents;
   if (ledger.length !== snapshot.nextSequence - 1 ||
+      ledger.length > orderedLessons.length ||
       ledger.some((entry, index) => entry.sequence !== index + 1 ||
-        !EVENT_ID.test(entry.eventId) || !lessons.has(entry.unitId)) ||
-      new Set(ledger.map((entry) => entry.eventId)).size !== ledger.length) return false;
-  const expectedSeen = [...new Set(ledger.map((event) => event.unitId))];
+        !EVENT_ID.test(entry.eventId) || !lessons.has(entry.unitId) ||
+        entry.unitId !== orderedLessons[index]) ||
+      new Set(ledger.map((entry) => entry.eventId)).size !== ledger.length ||
+      new Set(ledger.map((entry) => entry.unitId)).size !== ledger.length) return false;
+  const expectedSeen = ledger.map((event) => event.unitId);
   return expectedSeen.length === snapshot.seenLessonIds.length &&
     expectedSeen.every((unitId, index) => unitId === snapshot.seenLessonIds[index]);
 }
@@ -133,7 +137,8 @@ export function validateNativeCheckpoint(
   if (!EVENT_ID.test(event.eventId) || !Number.isSafeInteger(event.sequence) || event.sequence < 1) {
     reject('NATIVE_INVALID_EVENT');
   }
-  const lessons = new Set(artifact.units.filter((unit) => unit.kind === 'lesson').map((unit) => unit.id));
+  const orderedLessons = artifact.units.filter((unit) => unit.kind === 'lesson').map((unit) => unit.id);
+  const lessons = new Set(orderedLessons);
   if (!lessons.has(event.unitId)) reject('NATIVE_INVALID_UNIT_EVENT');
   // Requests are idempotent only if all fields match the original committed
   // record. Reusing the same key with different data is a hard conflict.
@@ -149,6 +154,9 @@ export function validateNativeCheckpoint(
     };
   }
   if (event.sequence !== snapshot.nextSequence) reject('NATIVE_STALE_OR_GAP_SEQUENCE');
+  const expectedUnitId = orderedLessons[snapshot.nextSequence - 1];
+  if (!expectedUnitId) reject('NATIVE_CHECKPOINT_SEQUENCE_COMPLETE');
+  if (event.unitId !== expectedUnitId) reject('NATIVE_OUT_OF_ORDER_UNIT');
 
   return {
     decision: 'APPLIED',
