@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
-import { FrmsOverview, FrmsScoreExplanation, FrmsEvidenceActions, FrmsScoreMeter } from '../components/FrmsVisualTriage';
+import { FrmsOverview, FrmsScoreExplanation, FrmsEvidenceActions, FrmsScoreMeter, matchesFrmsOverviewFilter } from '../components/FrmsVisualTriage';
 
 const baseline = (): FrmsOperationalSnapshotItem => ({
   empresa_id: 1, data_operacional: '2026-10-14', funcionario_id: 7, tripulante_id: 7,
@@ -36,13 +36,52 @@ const baseline = (): FrmsOperationalSnapshotItem => ({
 describe('FRMS triagem visual sem inventar métricas', () => {
   it('expõe distribuição de riscos e confiança em canais independentes, omitindo contagens zero', () => {
     const a = baseline();
-    render(<FrmsOverview queue={[{ item: a, bucket: 'DECISAO' }]} checkinPendingCount={0} />);
+    render(<FrmsOverview queue={[{ item: a, bucket: 'DECISAO' }]} checkinPendingCount={0} activeFilter={null} onFilterChange={vi.fn()} />);
     const summary = within(screen.getByLabelText('Visão visual da operação'));
     expect(summary.getByText('Avaliar')).toBeInTheDocument();
     expect(summary.getByText('Confiança baixa')).toBeInTheDocument();
     expect(summary.queryByText('Crítico')).not.toBeInTheDocument();
     expect(summary.queryByText('Check-ins pendentes')).not.toBeInTheDocument();
     expect(summary.getByRole('img')).toHaveAccessibleName(/1 para avaliar/i);
+  });
+
+  it('filtra pelos cartões e pela faixa de prioridade, sem deixar coluna vazia', () => {
+    const onFilterChange = vi.fn();
+    const view = render(<FrmsOverview
+      queue={[{ item: baseline(), bucket: 'DECISAO' }]}
+      checkinPendingCount={1}
+      activeFilter={null}
+      onFilterChange={onFilterChange}
+    />);
+    const overview = within(screen.getByLabelText('Visão visual da operação'));
+    const grid = overview.getByRole('button', { name: /Check-ins pendentes/i }).parentElement;
+    expect(grid).toHaveClass('lg:grid-cols-3');
+    fireEvent.click(overview.getByRole('button', { name: /Avaliar/i }));
+    expect(onFilterChange).toHaveBeenCalledWith('AVALIAR');
+    fireEvent.click(overview.getByRole('button', { name: /Check-ins pendentes/i }));
+    expect(onFilterChange).toHaveBeenCalledWith('CHECKIN');
+    fireEvent.click(overview.getByRole('button', { name: /Filtrar 1 para avaliar/i }));
+    expect(onFilterChange).toHaveBeenCalledWith('AVALIAR');
+    view.rerender(<FrmsOverview
+      queue={[{ item: baseline(), bucket: 'DECISAO' }]}
+      checkinPendingCount={1}
+      activeFilter="AVALIAR"
+      onFilterChange={onFilterChange}
+    />);
+    fireEvent.click(overview.getByRole('button', { name: /Avaliar/i }));
+    expect(onFilterChange).toHaveBeenLastCalledWith(null);
+    fireEvent.click(overview.getByRole('button', { name: 'Limpar filtro' }));
+    expect(onFilterChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('mantém confiança baixa diferente de risco e check-in ao filtrar', () => {
+    const a = baseline();
+    expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'AVALIAR', '2026-10-14')).toBe(true);
+    expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'CONFIANCA', '2026-10-14')).toBe(true);
+    expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'CHECKIN', '2026-10-14')).toBe(false);
+    a.checkin_status = 'PENDENTE';
+    expect(matchesFrmsOverviewFilter(a, 'DECISAO', 'CHECKIN', '2026-10-14')).toBe(true);
+    expect(matchesFrmsOverviewFilter(a, 'DECISAO', null, '2026-10-14')).toBe(true);
   });
 
   it('renderiza pontos e atenuadores exatos do motor, sem bonificações hipotéticas', () => {
