@@ -77,6 +77,8 @@ describe('Native start transaction — D1 batch and tenant/cycle scope', () => {
     const env = {
       ENVIRONMENT: 'staging',
       NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6',
+      PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS: '6',
+      PLAYER3_AUTHORED_LAUNCH_ENABLED_TENANTS: '6',
     } as import('../../types').Env;
     await expect(startNativeEnrollment({
       db: f.db, ...context, env,
@@ -89,6 +91,9 @@ describe('Native start transaction — D1 batch and tenant/cycle scope', () => {
       expect(statement.sql).toContain('a.empresa_id=c.empresa_id');
       expect(statement.sql).toContain('a.curso_id=c.id');
       expect(statement.sql).toContain("c.tipo_conteudo='native'");
+      expect(statement.sql).toContain('FROM lms_player3_politicas p');
+      expect(statement.sql).toContain("p.estado='APPROVED'");
+      expect(statement.sql).toContain('p.edicao_id=ed.id');
       expect(statement.binds).toEqual([
         900,101,6,31,1001,context.editionHash,
       ]);
@@ -108,6 +113,28 @@ describe('Native start transaction — D1 batch and tenant/cycle scope', () => {
       await startNativeEnrollment({db:another.db,...context,env:env as import('../../types').Env});
       expect(another.prepared.every(stmt=>
         !stmt.sql.includes('lms_native_catalog_activation'))).toBe(true);
+    }
+  });
+
+  it('refuses activated SCORM start before authored launch and modular grading are enabled', async()=>{
+    for(const variant of [
+      {PLAYER3_AUTHORED_LAUNCH_ENABLED_TENANTS:'',PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:'6'},
+      {PLAYER3_AUTHORED_LAUNCH_ENABLED_TENANTS:'6',PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:''},
+      {PLAYER3_AUTHORED_LAUNCH_ENABLED_TENANTS:'*',PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:'6'},
+    ]){
+      const f=fakeDb();
+      const env={
+        ENVIRONMENT:'staging',
+        NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS:'6',
+        ...variant,
+      } as import('../../types').Env;
+      await startNativeEnrollment({db:f.db,...context,env});
+      expect(f.prepared).toHaveLength(4);
+      for(const stmt of f.prepared){
+        expect(stmt.sql).toContain("c.tipo_conteudo='scorm' AND (0)");
+        expect(stmt.sql).not.toContain('lms_player3_politicas');
+        expect(stmt.sql).toContain('lms_native_catalog_activation');
+      }
     }
   });
 

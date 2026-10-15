@@ -8,7 +8,7 @@
  */
 import type { Env } from '../types';
 import { NATIVE_ACTIVE_EMPLOYEE_JOIN, NATIVE_ACTIVE_USER_CONDITION } from './lms-native-active-learner-sql';
-import { nativeScopedSql } from './lms-native-catalog-legacy-guard';
+import { canReadNativeCatalogActivation, nativeScopedSql } from './lms-native-catalog-legacy-guard';
 
 export class NativeEnrollmentStartError extends Error {
   constructor(public readonly code: string) {
@@ -77,6 +77,37 @@ const POSTCHECK_SQL = [
   "THEN 'null' ELSE 'NATIVE_START_ATOMIC_SYNC_FAILED' END)",
 ].join(' ');
 
+
+// Activating the SCORM catalog marker alone must not start an enrollment.
+// The authored HTML5 launch and modular grading capabilities must be enabled,
+// and an APPROVED policy must belong to the exact pinned edition. Physical
+// Native V1 keeps its original start contract.
+function exactTenant(raw: string | undefined, tenant: number): boolean {
+  return !!raw && !raw.includes('*') &&
+    raw.split(',').some(value => value.trim() === String(tenant));
+}
+
+function scopedStartSql(sql: string, env: Env | undefined, tenant: number): string {
+  const scoped = nativeScopedSql(sql, env, tenant);
+  if (!env || !canReadNativeCatalogActivation(env, tenant)) return scoped;
+  const launchReady =
+    exactTenant(env.PLAYER3_AUTHORED_LAUNCH_ENABLED_TENANTS, tenant) &&
+    exactTenant(env.PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS, tenant);
+  // Do not even reference the modular table while either gate is OFF:
+  // the catalog marker can predate the governed modular schema.
+  const approval = launchReady
+    ? `EXISTS (SELECT 1 FROM lms_player3_politicas p
+       WHERE p.edicao_id=ed.id AND p.empresa_id=c.empresa_id
+         AND p.curso_id=c.id AND p.estado='APPROVED')`
+    : '0';
+  const anchor = "c.tipo_conteudo='scorm' AND EXISTS (";
+  if (scoped.split(anchor).length !== 2) {
+    throw new NativeEnrollmentStartError('NATIVE_START_SCOPE_CONTRACT_INVALID');
+  }
+  return scoped.replace(anchor,
+    `c.tipo_conteudo='scorm' AND (${approval}) AND EXISTS (`);
+}
+
 export type NativeEnrollmentStartReceipt = Readonly<{
   state: 'STARTED' | 'ALREADY_STARTED';
   editionHash: string;
@@ -106,10 +137,10 @@ export async function startNativeEnrollment(params: {
   let results: D1Result[];
   try {
     results = await db.batch([
-      db.prepare(nativeScopedSql(PREFLIGHT_SQL, params.env, empresaId)).bind(...binds),
-      db.prepare(nativeScopedSql(START_MATRICULA_SQL, params.env, empresaId)).bind(...binds),
-      db.prepare(nativeScopedSql(START_CYCLE_SQL, params.env, empresaId)).bind(...binds),
-      db.prepare(nativeScopedSql(POSTCHECK_SQL, params.env, empresaId)).bind(...binds),
+      db.prepare(scopedStartSql(PREFLIGHT_SQL, params.env, empresaId)).bind(...binds),
+      db.prepare(scopedStartSql(START_MATRICULA_SQL, params.env, empresaId)).bind(...binds),
+      db.prepare(scopedStartSql(START_CYCLE_SQL, params.env, empresaId)).bind(...binds),
+      db.prepare(scopedStartSql(POSTCHECK_SQL, params.env, empresaId)).bind(...binds),
     ]);
   } catch {
     throw new NativeEnrollmentStartError('NATIVE_START_ATOMIC_SYNC_REJECTED');
