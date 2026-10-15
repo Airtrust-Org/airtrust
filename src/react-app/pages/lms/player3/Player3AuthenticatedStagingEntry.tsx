@@ -37,7 +37,9 @@ export default function Player3AuthenticatedStagingEntry({
   const [activatedStartState,setActivatedStartState]=useState<'IDLE'|'STARTING'|'BLOCKED'>('IDLE');
   const activatedStartIssued=useRef(false);
   const scopeKey=[empresaId,cursoId,matriculaId].join(':');
-  const learnerStarted=active||verifiedStartScope===scopeKey;
+  // A previously verified start cannot keep an authored learner iframe alive
+  // after the enrollment becomes completed in another tab or refresh.
+  const learnerStarted=!completed&&(active||verifiedStartScope===scopeKey);
   const readyForScope=state.kind==='READY' && learnerStarted &&
     launchMatches(state.launch,empresaId,cursoId,matriculaId);
   useEffect(()=>{

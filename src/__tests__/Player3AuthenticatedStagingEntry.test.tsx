@@ -156,6 +156,26 @@ describe('authenticated original HTML5 learner entry (no ungoverned fallback)',(
       view.unmount();
     }
   });
+  it('unmounts an activated SCORM iframe immediately after completion',async()=>{
+    const digest=sha('a');
+    mockFetch.mockResolvedValueOnce(response({success:true,data:{
+      state:'STARTED',ciclo_id:333,edition_sha256:digest,
+      completion_supported:false,
+    }},201)).mockResolvedValueOnce(response({success:true,data:{
+      matricula_id:911,ciclo_id:333,edition_sha256:digest,
+      mode:'LEARN',next_sequence:1,
+    }})).mockResolvedValueOnce(response({success:true,data:launch}));
+    const view=render(<Player3AuthenticatedStagingEntry {...props}
+      active={false} allowLegacyNativePreview={false}/>);
+    fireEvent.click(screen.getByRole('button',{name:/iniciar treinamento no Player 3/i}));
+    expect(await screen.findByTestId('player3-host')).toBeInTheDocument();
+    view.rerender(<Player3AuthenticatedStagingEntry {...props}
+      active={false} completed={true} allowLegacyNativePreview={false}/>);
+    expect(screen.queryByTestId('player3-host')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent(/concluído/i);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
   it('does not restart an already completed SCORM enrollment',async()=>{
     render(<Player3AuthenticatedStagingEntry {...props}
       active={false} completed={true} allowLegacyNativePreview={false}/>);

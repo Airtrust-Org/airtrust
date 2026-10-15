@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaIdSafe } from './escalas-shared';
+import { canReadNativeCatalogActivation } from '../services/lms-native-catalog-legacy-guard';
 import { loadNativePublishedCourse, loadNativePrivateCourse, NativeContentLoadError } from '../services/lms-native-content-loader';
 import { readNativeLearnerSession, NativeEvidenceReadError } from '../services/lms-native-readiness-repository';
 import { loadNativeVerifiedAsset } from '../services/lms-native-asset-loader';
@@ -30,9 +31,11 @@ app.use('*', auth());
 app.get('/matriculas/:matriculaId/admissao', async (c) => {
   c.header('Cache-Control', 'private, no-store');
   const empresaId = getEmpresaIdSafe(c);
-  // Admission metadata is part of the Native pilot. Do not expose it to
-  // production or non-allowlisted tenants before the Native catalog is live.
-  if (!canPreviewNativeInStaging(c.env, empresaId)) {
+  const previewEnabled = canPreviewNativeInStaging(c.env, empresaId);
+  // A separately enabled staging activation marker can outlive the preview
+  // flag. Never return the legacy-fallback 404 for an activated SCORM course.
+  // With both capabilities OFF (including production), perform zero D1 reads.
+  if (!previewEnabled && !canReadNativeCatalogActivation(c.env, empresaId)) {
     return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED' }, 404);
   }
   const rawId = c.req.param('matriculaId');
@@ -49,6 +52,11 @@ app.get('/matriculas/:matriculaId/admissao', async (c) => {
       matriculaId: Number(rawId),
       actorUserId: actorUserId as number,
     });
+    // Ownership and enrollment status have been checked before the marker.
+    // When preview is OFF, an activated enrollment must block SCORM playback.
+    if (!previewEnabled) {
+      return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED_FOR_ACTIVATED_COURSE' }, 409);
+    }
     return c.json({
       success: true,
       data: {
@@ -60,6 +68,11 @@ app.get('/matriculas/:matriculaId/admissao', async (c) => {
     });
   } catch (error) {
     if (error instanceof NativeAdmissionError) {
+      // A verified ordinary SCORM enrollment still uses the legacy player.
+      // Do not grant that fallback for missing/unauthorized enrollments.
+      if (!previewEnabled && error.code === 'NATIVE_COURSE_NOT_AVAILABLE') {
+        return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED' }, 404);
+      }
       return c.json({ success: false, code: error.code }, error.status);
     }
     throw error;

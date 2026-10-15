@@ -26,6 +26,7 @@ const base: Row = {
 };
 let data: Row | null;
 let employee: { funcionario_id: number | null } | null;
+let activated: boolean;
 let statements: string[];
 let bindings: unknown[][];
 const makeDb = () => ({
@@ -34,7 +35,12 @@ const makeDb = () => ({
     return {
       bind(...values: unknown[]) {
         bindings.push(values);
-        return { async first() { return sql.includes('FROM lms_matriculas') ? data : employee; } };
+        return { async first() {
+          if (sql.includes('FROM lms_native_catalog_activation')) {
+            return activated ? { curso_id: 7 } : null;
+          }
+          return sql.includes('FROM lms_matriculas') ? data : employee;
+        } };
       },
     };
   },
@@ -52,17 +58,19 @@ const req = (params: { id?: string; tenant?: string; user?: string } = {}) =>
       'x-test-tenant': params.tenant ?? '6',
     },
   });
-const fetch = (request: Request, config: { environment?: string; allowlist?: string } = {}) =>
+const fetch = (request: Request, config: { environment?: string; allowlist?: string; activationRead?: string } = {}) =>
   app().fetch(request, {
     DB: makeDb(),
     ENVIRONMENT: config.environment ?? 'staging',
     NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS: config.allowlist ?? '6',
+    NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: config.activationRead ?? '',
   } as unknown as Env);
 
 describe('Native integration admission endpoint — read only and tenant scoped', () => {
   beforeEach(() => {
     data = { ...base };
     employee = { funcionario_id: 19 };
+    activated = false;
     statements = [];
     bindings = [];
   });
@@ -95,6 +103,38 @@ describe('Native integration admission endpoint — read only and tenant scoped'
     }
     expect(statements).toHaveLength(0);
     expect(bindings).toHaveLength(0);
+  });
+
+  it('blocks activated SCORM when preview is OFF but catalog read remains ON', async () => {
+    data = { ...base, tipo_conteudo: 'scorm' };
+    activated = true;
+    const response = await fetch(req(), { allowlist: '', activationRead: '6' });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'NATIVE_PLAYER_NOT_ENABLED_FOR_ACTIVATED_COURSE',
+    });
+    expect(bindings).toEqual([[51, 6], [51, 6, 100], [6, 7]]);
+    expect(statements[2]).toContain('FROM lms_native_catalog_activation');
+    expect(statements.every(sql => sql.trimStart().toUpperCase().startsWith('SELECT'))).toBe(true);
+  });
+
+  it('keeps legacy SCORM fallback only for a verified enrollment without activation', async () => {
+    data = { ...base, tipo_conteudo: 'scorm' };
+    const response = await fetch(req(), { allowlist: '', activationRead: '6' });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ code: 'NATIVE_PLAYER_NOT_ENABLED' });
+    expect(statements).toHaveLength(3);
+  });
+
+  it('never checks the activation marker before verifying employee ownership', async () => {
+    data = { ...base, tipo_conteudo: 'scorm' };
+    activated = true;
+    employee = { funcionario_id: 50 };
+    const response = await fetch(req(), { allowlist: '', activationRead: '6' });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'NATIVE_ENROLLMENT_ACCESS_DENIED' });
+    expect(statements).toHaveLength(2);
+    expect(statements.some(sql => sql.includes('FROM lms_native_catalog_activation'))).toBe(false);
   });
 
   it('completed course admits review only, never re-enrollment', async () => {
