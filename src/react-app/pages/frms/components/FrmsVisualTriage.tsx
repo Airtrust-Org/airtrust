@@ -1,5 +1,6 @@
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, Clock3, Database, ShieldAlert } from 'lucide-react';
 import type { FrmsOperationalSnapshotItem, FrmsFortnightModifier } from '@/react-app/hooks/useFrmsOperationalSnapshot';
+import { frmsAttentionFacts, hasFrmsOtherConfidenceGaps, isFrmsRoutineDutyClosurePending } from '../frmsEvidenceContext';
 import {
   operationalConfidence, resolveFrmsCoordinationGuidance,
   resolveOperationalDataMoment, type FrmsDecisionBucket,
@@ -45,7 +46,7 @@ export function FrmsScoreMeter({ item, compact = false }: { item: FrmsOperationa
   );
 }
 
-export type FrmsOverviewFilter = 'CRITICO' | 'AVALIAR' | 'CHECKIN' | 'CONFIANCA' | 'CONFIRMAR' | 'NORMAL';
+export type FrmsOverviewFilter = 'CRITICO' | 'AVALIAR' | 'CHECKIN' | 'CONFIANCA' | 'JORNADA' | 'CONFIRMAR' | 'NORMAL';
 
 export function matchesFrmsOverviewFilter(
   item: FrmsOperationalSnapshotItem,
@@ -58,7 +59,8 @@ export function matchesFrmsOverviewFilter(
   if (filter === 'AVALIAR') return bucket === 'DECISAO';
   if (filter === 'CONFIRMAR') return bucket === 'CONFIRMAR';
   if (filter === 'NORMAL') return bucket === 'NORMAL';
-  if (filter === 'CONFIANCA') return operationalConfidence(item) === 'BAIXA';
+  if (filter === 'CONFIANCA') return hasFrmsOtherConfidenceGaps(item, todayIso);
+  if (filter === 'JORNADA') return isFrmsRoutineDutyClosurePending(item, todayIso);
   const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
   return guidance.requiresCheckin && !guidance.checkinComplete;
 }
@@ -67,33 +69,37 @@ export const FRMS_OVERVIEW_FILTER_LABELS: Record<FrmsOverviewFilter, string> = {
   CRITICO: 'Crítico',
   AVALIAR: 'Avaliar',
   CHECKIN: 'Check-ins pendentes',
-  CONFIANCA: 'Confiança baixa',
+  CONFIANCA: 'Outras lacunas de dados',
+  JORNADA: 'Jornada a consolidar',
   CONFIRMAR: 'Confirmar dados',
   NORMAL: 'Sem pendência',
 };
 
 export function FrmsOverview({
-  queue, checkinPendingCount, activeFilter, onFilterChange,
+  queue, checkinPendingCount, activeFilter, onFilterChange, todayIso,
 }: {
   queue: Row[];
   checkinPendingCount: number;
   activeFilter: FrmsOverviewFilter | null;
   onFilterChange: (filter: FrmsOverviewFilter | null) => void;
+  todayIso: string;
 }) {
   const critical = queue.filter(r => r.bucket === 'BLOQUEIO').length;
   const attention = queue.filter(r => r.bucket === 'DECISAO').length;
   const confirm = queue.filter(r => r.bucket === 'CONFIRMAR').length;
   const normal = queue.filter(r => r.bucket === 'NORMAL').length;
-  const lowConfidence = queue.filter(r => operationalConfidence(r.item) === 'BAIXA').length;
+  const routineClosure = queue.filter(r => isFrmsRoutineDutyClosurePending(r.item, todayIso)).length;
+  const lowConfidence = queue.filter(r => hasFrmsOtherConfidenceGaps(r.item, todayIso)).length;
   const buckets = [
     { key: 'CRITICO' as const, name: 'Crítico', value: critical, tone: 'border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/30', icon: ShieldAlert },
     { key: 'AVALIAR' as const, name: 'Avaliar', value: attention, tone: 'border-amber-200 bg-amber-50 text-amber-900 dark:bg-amber-950/30', icon: AlertTriangle },
     { key: 'CHECKIN' as const, name: 'Check-ins pendentes', value: checkinPendingCount, tone: 'border-orange-200 bg-orange-50 text-orange-900 dark:bg-orange-950/30', icon: Clock3 },
-    { key: 'CONFIANCA' as const, name: 'Confiança baixa', value: lowConfidence, tone: 'border-sky-200 bg-sky-50 text-sky-900 dark:bg-sky-950/30', icon: Database },
+    { key: 'JORNADA' as const, name: 'Jornada a consolidar', value: routineClosure, tone: 'border-indigo-200 bg-indigo-50 text-indigo-900 dark:bg-indigo-950/30', icon: Clock3 },
+    { key: 'CONFIANCA' as const, name: 'Outras lacunas de dados', value: lowConfidence, tone: 'border-sky-200 bg-sky-50 text-sky-900 dark:bg-sky-950/30', icon: Database },
   ].filter(card => card.value > 0);
   const cols = buckets.length === 1 ? 'lg:grid-cols-1' :
     buckets.length === 2 ? 'lg:grid-cols-2' :
-      buckets.length === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-4';
+      buckets.length === 3 ? 'lg:grid-cols-3' : buckets.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-5';
   const segments: { filter: FrmsOverviewFilter; count: number; color: string; label: string }[] = [
     { filter: 'CRITICO' as FrmsOverviewFilter, count: critical, color: 'bg-rose-500', label: 'críticos' },
     { filter: 'AVALIAR' as FrmsOverviewFilter, count: attention, color: 'bg-amber-500', label: 'para avaliar' },
@@ -235,6 +241,8 @@ export function FrmsEvidenceActions({ item, todayIso }: { item: FrmsOperationalS
   const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
   const confidence = operationalConfidence(item);
   const moment = resolveOperationalDataMoment(item, todayIso);
+  const routineClosure = isFrmsRoutineDutyClosurePending(item, todayIso);
+  const attentionFacts = frmsAttentionFacts(item);
   const gaps: string[] = [];
   if (guidance.requiresCheckin && !guidance.checkinComplete) gaps.push('Solicitar check-in diário');
   if (item.escala_source === 'AUSENTE') gaps.push('Conferir escala na origem');
@@ -252,6 +260,10 @@ export function FrmsEvidenceActions({ item, todayIso }: { item: FrmsOperationalS
       </span>
     </div>
     <p className="mt-2 text-xs text-slate-500">Confiança é a completude/confiabilidade da evidência, não um percentual de risco.</p>
+    {routineClosure ? <p className="mt-2 rounded-lg border border-indigo-200 bg-indigo-50 p-2 text-sm text-indigo-900">Jornada do dia em aberto: encerramento aguardado após a operação. A confiança oficial permanece baixa enquanto faltar a confirmação; isso não significa que já exista atraso ou que o voo esteja liberado.</p> : null}
+    {attentionFacts.length > 0 ? <div className="mt-3 flex flex-wrap gap-2" aria-label="Sinais observados no período">
+      {attentionFacts.slice(0, 3).map(fact => <span key={fact} className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">{fact}</span>)}
+    </div> : null}
     {unique.length ? <ol className="mt-3 space-y-2">
       {unique.slice(0, 5).map((g, i) => <li key={g} className="flex items-center gap-2 text-sm">
         <span className="grid h-6 w-6 flex-none place-content-center rounded-full bg-sky-100 text-xs font-bold text-sky-800">{i + 1}</span>{g}
