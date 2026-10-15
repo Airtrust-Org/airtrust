@@ -22,13 +22,14 @@ vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: '/api',
   fetchWithAuth: mocks.fetchWithAuth,
 }));
-vi.mock('@/react-app/pages/lms/player3/Player3AuthenticatedStagingEntry', () => ({
-  default: ({matriculaId,active}: {matriculaId:number;active:boolean}) => {
+vi.mock('@/react-app/pages/lms/player3/Player3AuthenticatedStagingEntry', () => {
+  function MockNativeEntry({matriculaId,active}: {matriculaId:number;active:boolean}) {
     const [mount]=React.useState(()=>++mocks.childMounts.count);
     return <span data-testid="native-entry" data-mount={mount}>
       Matrícula {matriculaId}; {active?'active':'unstarted'}</span>;
-  },
-}));
+  }
+  return {default:MockNativeEntry};
+});
 import LmsNativePlayer from '@/react-app/pages/lms/LmsNativePlayer';
 
 const enrollment = {
