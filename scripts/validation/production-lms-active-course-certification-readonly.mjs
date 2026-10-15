@@ -6,7 +6,7 @@ import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
 import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
 import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
-import { classifyPptxAssetProbe, classifyUncoveredContentType } from './lms-format-certification-verdict.mjs';
+import { classifyPptxAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage } from './lms-format-certification-verdict.mjs';
 import {
   assert,
   assertAllowedProductionBaseUrl,
@@ -1765,6 +1765,7 @@ async function certifyScormCourse(browser, token, listed) {
     status: classification.status,
     reason: functional.reason,
     certification_evidence: classification.evidence,
+    functional_completion_certified: classification.status === 'PASS',
     package_sha256: pkg?.sha256 ?? null,
     legacy_unversioned: legacyUnversioned,
     stored_gate: pkg ? {
@@ -1868,12 +1869,13 @@ async function main() {
     inconclusive_count: results.filter((r) => r.status === 'INCONCLUSIVE').length,
     scorm_count: results.filter((r) => r.tipo_conteudo === 'scorm').length,
     pptx_count: results.filter((r) => r.tipo_conteudo === 'pptx').length,
+    format_coverage: summarizeCourseFormatCoverage(results),
     writes: 'none (authentication/company-selection/asset-session POSTs only; no LMS progress/enrollment/certificate/course mutations)',
     results,
   };
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, inconclusive_count: report.inconclusive_count, course_count: report.course_count })}\n`);
+  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, inconclusive_count: report.inconclusive_count, course_count: report.course_count, functional_certified_count: report.format_coverage.functional_certified_count, formats: report.format_coverage.formats })}\n`);
   // Both explicit failures and inconclusive runs block certification/release.
   if (report.fail_count + report.inconclusive_count > 0) process.exitCode = 2;
 }

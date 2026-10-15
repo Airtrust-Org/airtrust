@@ -24,3 +24,35 @@ export function classifyUncoveredContentType(type) {
     functional_completion_certified: false,
   };
 }
+
+/**
+ * Portable, deterministic readiness ledger, derived only from actual probe
+ * results for the pinned runtime and browser. An asset HTTP 200 is not an E2E
+ * certification, and omitted/unsupported formats never increment certified.
+ */
+export function summarizeCourseFormatCoverage(results) {
+  const groups = new Map();
+  for (const result of results) {
+    const format = String(result.tipo_conteudo || 'unknown').trim().toLowerCase() || 'unknown';
+    const group = groups.get(format) || {
+      tipo_conteudo: format, course_count: 0, pass_count: 0,
+      fail_count: 0, inconclusive_count: 0, functional_certified_count: 0,
+    };
+    group.course_count += 1;
+    if (result.status === 'PASS') group.pass_count += 1;
+    else if (result.status === 'FAIL') group.fail_count += 1;
+    else if (result.status === 'INCONCLUSIVE') group.inconclusive_count += 1;
+    else throw new Error('LMS_CERTIFICATION_UNKNOWN_STATUS');
+    if (result.status === 'PASS' && result.functional_completion_certified === true) {
+      group.functional_certified_count += 1;
+    }
+    groups.set(format, group);
+  }
+  const formats = [...groups.values()].sort((a, b) =>
+    a.tipo_conteudo.localeCompare(b.tipo_conteudo, 'en'));
+  return {
+    format_count: formats.length,
+    functional_certified_count: formats.reduce((n, item) => n + item.functional_certified_count, 0),
+    formats,
+  };
+}

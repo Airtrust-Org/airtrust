@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  classifyPptxAssetProbe, classifyUncoveredContentType,
+  classifyPptxAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage,
 } from '../validation/lms-format-certification-verdict.mjs';
 
 test('a PPTX asset alone never certifies a nonqualifying enrollment', () => {
@@ -41,4 +41,39 @@ test('H5P, PDF, video and unknown course types stay uncertified, not falsely def
       functional_completion_certified:false,
     });
   }
+});
+
+test('format coverage counts certified, proven failures and untested separately', () => {
+  const summary = summarizeCourseFormatCoverage([
+    { tipo_conteudo:'scorm', status:'PASS', functional_completion_certified:true },
+    { tipo_conteudo:'scorm', status:'INCONCLUSIVE', functional_completion_certified:false },
+    { tipo_conteudo:'pptx', status:'INCONCLUSIVE', asset_load_pass:true,
+      functional_completion_certified:false },
+    { tipo_conteudo:'pdf', status:'INCONCLUSIVE', functional_completion_certified:false },
+    { tipo_conteudo:'h5p', status:'INCONCLUSIVE', functional_completion_certified:false },
+    { tipo_conteudo:'video', status:'INCONCLUSIVE', functional_completion_certified:false },
+    { tipo_conteudo:'video', status:'FAIL', functional_completion_certified:false },
+  ]);
+  assert.equal(summary.format_count, 5);
+  assert.equal(summary.functional_certified_count, 1);
+  assert.deepEqual(summary.formats.map(({tipo_conteudo,course_count,pass_count,
+    fail_count,inconclusive_count,functional_certified_count}) =>
+    [tipo_conteudo,course_count,pass_count,fail_count,inconclusive_count,functional_certified_count]), [
+    ['h5p',1,0,0,1,0],
+    ['pdf',1,0,0,1,0],
+    ['pptx',1,0,0,1,0],
+    ['scorm',2,1,0,1,1],
+    ['video',2,0,1,1,0],
+  ]);
+});
+
+test('unproven PASS or unsupported status can never inflate certified counts', () => {
+  assert.equal(summarizeCourseFormatCoverage([
+    { tipo_conteudo:'pdf', status:'PASS', functional_completion_certified:false },
+    { tipo_conteudo:'scorm', status:'FAIL', functional_completion_certified:true },
+    { tipo_conteudo:'video', status:'PASS' },
+  ]).functional_certified_count,0);
+  assert.throws(() => summarizeCourseFormatCoverage([
+    { tipo_conteudo:'pdf', status:'SUCCESS' },
+  ]), /LMS_CERTIFICATION_UNKNOWN_STATUS/);
 });
