@@ -21,13 +21,18 @@ export default function Player3AuthenticatedStagingEntry({
 }){
   const [state,setState]=useState<State>({kind:'LOADING'});
   const [refresh,setRefresh]=useState(0);
+  // A fresh enrollment uses the verified Native start receipt before launch.
+  // A scoped latch cannot be reused for a different tenant, course or enrollment.
+  const [verifiedStartScope,setVerifiedStartScope]=useState('');
+  const scopeKey=[empresaId,cursoId,matriculaId].join(':');
+  const learnerStarted=active||verifiedStartScope===scopeKey;
   useEffect(()=>{
     const controller=new AbortController();
     // Do not unmount the authored iframe while delivering a persisted stage
     // verdict: postMessage delivery is asynchronous. Keep its exact pinned
     // frame mounted while refreshing the next Worker-authenticated projection.
     setState(previous=>previous.kind==='READY'?previous:{kind:'LOADING'});
-    if(!active||![matriculaId,empresaId,cursoId].every(positive)){
+    if(!learnerStarted||![matriculaId,empresaId,cursoId].every(positive)){
       setState({kind:'LEGACY_PREVIEW'});
       return ()=>controller.abort();
     }
@@ -50,13 +55,14 @@ export default function Player3AuthenticatedStagingEntry({
       if(!controller.signal.aborted)setState({kind:'BLOCKED'});
     });
     return ()=>controller.abort();
-  },[matriculaId,empresaId,cursoId,active,refresh]);
+  },[matriculaId,empresaId,cursoId,learnerStarted,refresh]);
 
   if(state.kind==='LOADING')return (
     <p role="status">Verificando edição aprovada do Player 3…</p>
   );
   if(state.kind==='LEGACY_PREVIEW')return (
-    <NativeStagingCoursePreview matriculaId={matriculaId}/>
+    <NativeStagingCoursePreview matriculaId={matriculaId}
+      onVerifiedStarted={()=>setVerifiedStartScope(scopeKey)}/>
   );
   if(state.kind==='BLOCKED')return (
     <p role="alert">Player 3 indisponível: lançamento ainda não autorizado.
