@@ -192,7 +192,11 @@ export function buildScormProgressParsersScript(): string {
     // "Tela 54 de 69". Ler o contador do pacote é mais confiável do que varrer o
     // body inteiro, onde números de formulário ("FORM-MNT-005/123") ou referências
     // regulatórias ("operadores 121/135") poderiam ser lidos como progresso.
-    var counterNode = doc.querySelector('#counterText, #counter, #progressText, #lesson-counter, [data-slide-counter]');
+    // Legacy packages may use #count in their footer (confirmed in the
+    // deployed 42-slide Doutrinamento ZIP). Unlike a body-wide fraction,
+    // this is an explicit package navigation counter, not quiz/form text.
+    var counterNode = doc.querySelector('#counterText, #counter, #progressText, #lesson-counter, [data-slide-counter]') ||
+      doc.querySelector('.bottomnav #count, .footer-center #count');
     var counterText = counterNode ? String(counterNode.textContent || '') : '';
     var counterMatch = counterText.match(/(\\d+)\\s*(?:\\/|de|of)\\s*(\\d+)/i);
     if (counterMatch) {

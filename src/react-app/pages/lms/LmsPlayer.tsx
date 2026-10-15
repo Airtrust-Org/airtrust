@@ -118,6 +118,24 @@ const SCORM_CANDIDATE_RECHECK_DELAY_MS = 1_000;
 const SCORM_UNRESOLVED_MESSAGE =
   'O conteúdo chegou ao fim, mas não enviou a confirmação SCORM. Seu progresso foi preservado.';
 
+/**
+ * The server closure checklist describes what is still required to CERTIFY,
+ * not errors in the current slide's autosave. Never present future/unvisited
+ * slides and not-yet-taken assessments as failure during ordinary playback.
+ * Keep all guards and server evidence intact for actual finalization.
+ */
+export function shouldShowScormClosureDetails(input: {
+  completed: boolean;
+  atFinalSlide: boolean;
+  finalizationFailed: boolean;
+  readyToVerify: boolean;
+  /** Server proved a prior visit to the final screen, even if learner is revisiting. */
+  lastStepReached?: boolean;
+}): boolean {
+  return input.completed || input.atFinalSlide || input.lastStepReached === true ||
+    input.finalizationFailed || input.readyToVerify;
+}
+
 // Only enables an authenticated attempt at the existing server-side qualification
 // and completion gate; this predicate never marks a course as passed.
 export function canReconcilePersistedScormCompletion(params: {
@@ -301,6 +319,13 @@ export default function LmsPlayer() {
   const legacyFinalSlide = parsedCurrentLocation != null &&
     parsedCurrentLocation.total > 0 &&
     parsedCurrentLocation.current >= parsedCurrentLocation.total;
+  const showScormClosureDetails = shouldShowScormClosureDetails({
+    completed: isCompletedState,
+    atFinalSlide: legacyFinalSlide,
+    finalizationFailed: completionState === 'error',
+    readyToVerify: closureReadiness?.eligible_for_server_verification === true,
+    lastStepReached: closureReadiness?.last_step_reached === true,
+  });
   const legacyAssessmentEvidence = curso?.scorm_assessment_policy === 'FORMATIVE' ||
     (curso?.scorm_assessment_policy === 'SCORED' &&
       (matricula?.score_final != null || completionDiagnostic?.score_pct != null));
@@ -1292,7 +1317,12 @@ export default function LmsPlayer() {
                 </p>
                 {matricula.score_final != null ? <p>Nota: {matricula.score_final}%</p> : null}
                 {isScormContent && closureReadiness ? (
-                  <>
+                  !showScormClosureDetails
+                    ? <p role="status">
+                        Treinamento em andamento. Os requisitos de conclusão serão
+                        apresentados ao chegar à última tela.
+                      </p>
+                    : <>
                     <p role="status">
                     Fechamento: {closureReadiness.code === 'SCORM_ALREADY_COMPLETED'
                       ? 'confirmado pelo AirTrust'
