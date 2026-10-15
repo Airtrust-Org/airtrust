@@ -49,7 +49,7 @@ const good=async()=>[
   await row(42,'mod1',[{questionId:'q1',optionId:'o1'},{questionId:'q2',optionId:'o0'}]),
   await row(43,'mod2',[{questionId:'q3',optionId:'o1'}]),
 ];
-function read(rows:unknown[]){
+function read(rows:unknown[],success=true){
   const sqls:string[]=[];
   const db={
     prepare:vi.fn((sql:string)=>{
@@ -57,7 +57,7 @@ function read(rows:unknown[]){
       return {bind:vi.fn((...bindings:unknown[])=>({
         all:vi.fn(async()=>{
           expect(bindings).toEqual([200,301]);
-          return {results:rows};
+          return {success,results:rows};
         }),
       }))};
     }),
@@ -85,6 +85,10 @@ describe('Worker-only Player3 terminal proof preparation',()=>{
     ]);
     expect(fixture.sqls[0]).toContain('MIN(a.tentativa_numero)');
     expect(JSON.stringify(result.officialStages)).not.toMatch(/PRIVATE|correctOptionId|optionId/);
+  });
+  it('refuses certification on a D1 error even if plausible passed rows were returned',async()=>{
+    await expect(read(await good(),false).invoke()).rejects
+      .toMatchObject({code:'PLAYER3_TERMINAL_PROOFS_READ_FAILED'});
   });
   it('refuses certification when even one required stage is absent',async()=>{
     const rows=await good();
