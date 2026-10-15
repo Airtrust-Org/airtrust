@@ -6,7 +6,7 @@ import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
 import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
 import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
-import { classifyPptxAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage } from './lms-format-certification-verdict.mjs';
+import { classifyPptxAssetProbe, classifyReadOnlyContentAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage } from './lms-format-certification-verdict.mjs';
 import {
   assert,
   assertAllowedProductionBaseUrl,
@@ -1818,6 +1818,71 @@ async function certifyPptxCourse(browser, token, listed) {
   };
 }
 
+
+/**
+ * Verify protected PDF/H5P assets used by the learner player with read-only GET.
+ * Even a valid payload NEVER proves a complete enrolled learner journey.
+ */
+async function certifyPdfAsset(browser,token,listed){
+  const id=Number(listed.id);
+  const context=await browser.newContext();
+  try {
+    const response=await context.request.get(`${API}/api/lms/pdf/asset/${id}`,{
+      headers:{Authorization:`Bearer ${token}`},timeout:15_000,
+    });
+    const status=response.status();
+    const bytes=status===200?await response.body():Buffer.alloc(0);
+    const valid=status===200 && bytes.byteLength>100 &&
+      bytes.subarray(0,5).toString('ascii')==='%PDF-' &&
+      /^application\\/pdf(?:;|$)/i.test(String(response.headers()['content-type']||''));
+    const verdict=classifyReadOnlyContentAssetProbe({
+      format:'pdf',samples:[{status,valid}],
+    });
+    return {course_id:id,titulo:String(listed.titulo||''),tipo_conteudo:'pdf',
+      status:verdict.status,reason:verdict.reason,
+      asset_bytes:bytes.byteLength,asset_load_pass:verdict.assetLoadPass,
+      functional_completion_certified:false,enrolled_learner_end_to_end_tested:false};
+  }finally{await context.close();}
+}
+
+async function certifyH5pAssets(browser,token,listed){
+  const id=Number(listed.id);
+  const detail=await courseDetail(token,id);
+  const h5pId=Number(detail?.h5p_conteudo_id??0);
+  if(!Number.isSafeInteger(h5pId)||h5pId<=0){
+    return {course_id:id,titulo:String(listed.titulo||detail?.titulo||''),
+      tipo_conteudo:'h5p',status:'FAIL',reason:'H5P_CONTENT_LINKAGE_MISSING',
+      asset_load_pass:false,functional_completion_certified:false,
+      enrolled_learner_end_to_end_tested:false};
+  }
+  const context=await browser.newContext();
+  try {
+    const samples=[];
+    for(const asset of ['h5p.json','content/content.json']){
+      const response=await context.request.get(
+        `${API}/api/lms/h5p/assets/${h5pId}/${asset}`,{
+          headers:{Authorization:`Bearer ${token}`},timeout:15_000,
+        });
+      let valid=false;
+      if(response.status()===200){
+        const bytes=await response.body();
+        if(bytes.byteLength>2&&bytes.byteLength<=2_000_000){
+          try{
+            const parsed=JSON.parse(bytes.toString('utf8'));
+            valid=parsed!==null&&typeof parsed==='object'&&!Array.isArray(parsed);
+          }catch{/* Successful HTTP status with invalid JSON = corrupt content. */}
+        }
+      }
+      samples.push({status:response.status(),valid});
+    }
+    const verdict=classifyReadOnlyContentAssetProbe({format:'h5p',samples});
+    return {course_id:id,titulo:String(listed.titulo||detail?.titulo||''),
+      tipo_conteudo:'h5p',status:verdict.status,reason:verdict.reason,
+      asset_load_pass:verdict.assetLoadPass,
+      functional_completion_certified:false,enrolled_learner_end_to_end_tested:false};
+  }finally{await context.close();}
+}
+
 async function main() {
   await assertPinnedProduction();
   let token = await productionToken();
@@ -1845,6 +1910,8 @@ async function main() {
       try {
         if (type === 'scorm') results.push(await certifyScormCourse(browser, token, course));
         else if (type === 'pptx') results.push(await certifyPptxCourse(browser, token, course));
+        else if (type === 'pdf') results.push(await certifyPdfAsset(browser, token, course));
+        else if (type === 'h5p') results.push(await certifyH5pAssets(browser, token, course));
         else results.push({
           course_id: Number(course.id), titulo: String(course.titulo || ''),
           ...classifyUncoveredContentType(type),

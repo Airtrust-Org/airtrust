@@ -141,7 +141,12 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /rect\.bottom > 0/);
   assert.match(source, /action\?\.type === 'none'/);
   assert.match(source, /classifyPptxAssetProbe\(/);
-  assert.match(source, /classifyUncoveredContentType\(type\)/);
+  assert.match(source, /classifyUncoveredContentType\\(type\\)/);
+  assert.match(source, /certifyPdfAsset\\(browser, token, course\\)/);
+  assert.match(source, /certifyH5pAssets\\(browser, token, course\\)/);
+  assert.match(source, /\\/api\\/lms\\/pdf\\/asset\\/\\$\\{id\\}/);
+  assert.match(source, /\\/api\\/lms\\/h5p\\/assets\\/\\$\\{h5pId\\}/);
+  assert.match(source, /classifyReadOnlyContentAssetProbe\\(/);
   assert.match(source, /format_coverage: summarizeCourseFormatCoverage\(results\)/);
   assert.match(source, /browser_preview_lifecycle_pass: classification.status === 'PASS'/);
   assert.match(source, /enrolled_learner_end_to_end_tested: false/);
