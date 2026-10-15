@@ -56,6 +56,12 @@ async function fixture(){
               policy_sha256:policyData.hash,bank_sha256:bankData.hash,r2_prefix:prefix,
             };
             if(sql.startsWith('SELECT politica_id'))return stored.get(String(values[1])+':'+String(values[2]))??null;
+            if(sql.startsWith('SELECT 1 passed FROM lms_player3_tentativas_modulares')){
+              const passed=[...stored.entries()].some(([key,value])=>
+                key.startsWith(String(values[2])+':') &&
+                value.politica_id===Number(values[1]) && value.passed===1);
+              return passed?{passed:1}:null;
+            }
             if(sql.startsWith('SELECT MAX(tentativa_numero)')){
               const nums=[...stored.entries()].filter(([key])=>key.startsWith(String(values[1])+':'))
                 .map(([,v])=>v.tentativa_numero);
@@ -137,6 +143,14 @@ describe('Player 3 staging module attempt writer',()=>{
     await expect(f.call({eventId:'other-event'})).rejects.toMatchObject({
       code:'STAGE_REPLAY_CONFLICT',
     });
+  });
+  it('does not create a new official attempt after that stage already passed',async()=>{
+    const f=await fixture();
+    await expect(f.call()).resolves.toMatchObject({stagePassed:true});
+    await expect(f.call({attemptNumber:2,eventId:'stage-event-2'}))
+      .rejects.toMatchObject({code:'STAGE_ALREADY_PASSED'});
+    expect(f.stored.size).toBe(1);
+    expect((await f.call()).state).toBe('IDEMPOTENT_REPLAY');
   });
   it('allows module 2 to start at attempt 1 independently of module 1',async()=>{
     const f=await fixture();
