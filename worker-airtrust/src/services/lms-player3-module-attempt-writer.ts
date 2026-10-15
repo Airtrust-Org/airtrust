@@ -122,6 +122,20 @@ export async function loadApprovedPlayer3StageContext(input:{
   if(!policy||!bank||policy.source_sha256!==binding.source_sha256||
      bank.source_sha256!==binding.source_sha256||
      policy.editionSha256!==course.editionHash)deny('STAGE_EDITION_MISMATCH');
+  if(!Array.isArray(policy.stages)||policy.stages.length<1||
+     policy.stages.length>100||
+     policy.stages.some(stage=>!stage||!ID.test(stage.stageId))||
+     new Set(policy.stages.map(stage=>stage.stageId)).size!==policy.stages.length){
+    deny('STAGE_POLICY_NOT_APPROVED');
+  }
+  const authoredPositions=policy.stages.map(stage=>
+    course.artifact.units.findIndex(unit=>
+      unit.id===stage.stageId&&unit.kind==='assessment'));
+  if(authoredPositions.some(index=>index<0)||
+     authoredPositions.some((index,position)=>
+       position>0&&index<=authoredPositions[position-1])){
+    deny('STAGE_AUTHORED_CROSSWALK_INVALID');
+  }
   return {course,binding,policy,bank};
 }
 
