@@ -11,6 +11,18 @@ const artifact = validateNativeCourseArtifact(JSON.parse(readFileSync(
 const scope: NativeSessionScope = {
   empresaId: 6, cursoId: 10, matriculaId: 100, cicloId: 1000, artifactHash: 'a'.repeat(64),
 };
+const twoLessonArtifact = validateNativeCourseArtifact(JSON.parse(JSON.stringify({
+  ...artifact,
+  units: [
+    artifact.units[0],
+    {
+      id: 'second-lesson', title: 'Segunda unidade', kind: 'lesson',
+      blocks: [{ type: 'paragraph', text: 'Segundo conteúdo.' }],
+      questionIds: [], sourceRefs: ['NR6'],
+    },
+    ...artifact.units.slice(1),
+  ],
+})));
 const answers = JSON.stringify([
   { questionId: 'choice-question-001', optionId: 'option-2' },
   { questionId: 'exam-question-001', optionId: 'option-2' },
@@ -167,6 +179,23 @@ describe('Native V1 persisted-readiness bridge (read only)', () => {
     const { db } = dbMock({ events });
     await expect(readNativeLearnerSession({ db, actorUserId: 12, scope, artifact }))
       .rejects.toMatchObject({ code: 'NATIVE_READ_INVALID_EVENT_LEDGER' });
+  });
+
+  it('rejects reordered or duplicate persisted lessons before resume projection', async () => {
+    const outOfOrder=dbMock({events:[
+      {event_id:'event-1',sequencia:1,unidade_id:'second-lesson'},
+    ]});
+    await expect(readNativeLearnerSession({
+      db:outOfOrder.db,actorUserId:12,scope,artifact:twoLessonArtifact,
+    })).rejects.toMatchObject({code:'NATIVE_READ_INVALID_EVENT_LEDGER'});
+
+    const duplicate=dbMock({events:[
+      {event_id:'event-1',sequencia:1,unidade_id:'opening'},
+      {event_id:'event-2',sequencia:2,unidade_id:'opening'},
+    ]});
+    await expect(readNativeLearnerSession({
+      db:duplicate.db,actorUserId:12,scope,artifact:twoLessonArtifact,
+    })).rejects.toMatchObject({code:'NATIVE_READ_INVALID_EVENT_LEDGER'});
   });
 
   it('refuses forged full coverage when the event sequence has a gap', async () => {
