@@ -21,6 +21,8 @@ import {
 export interface ImaLongitudinalEvidenceRow {
   /** Transient pseudonymous key; never emitted. Never use a name or registration. */
   subjectKey: string;
+  /** Tenant ID from the trusted backend context; compared before aggregation. */
+  empresaId: number;
   /** Local operational day YYYY-MM-DD, with source timezone resolved upstream. */
   operationalDate: string;
   evidence: ImaDailyDataEvidence;
@@ -64,12 +66,19 @@ function dayOrdinal(value: string): number {
  * check-in or silently double counting a day.
  */
 export function auditImaLongitudinalEvidence(
+  expectedEmpresaId: number,
   rows: readonly ImaLongitudinalEvidenceRow[],
 ): ImaLongitudinalAudit {
+  if (!Number.isSafeInteger(expectedEmpresaId) || expectedEmpresaId <= 0) {
+    throw new Error('IMA_AUTHORIZED_TENANT_REQUIRED');
+  }
   const bySubject = new Map<string, Map<number, ImaDailyDataEvidence | null>>();
   let conflictingDuplicateRows = 0;
 
   for (const row of rows) {
+    if (!Number.isSafeInteger(row.empresaId) || row.empresaId !== expectedEmpresaId) {
+      throw new Error('IMA_TENANT_SCOPE_MISMATCH');
+    }
     if (typeof row.subjectKey !== 'string' || !row.subjectKey.trim()) {
       throw new Error('IMA_SUBJECT_PSEUDONYM_REQUIRED');
     }
