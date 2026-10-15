@@ -67,6 +67,7 @@ const INSERT=[
 ].join(' ');
 const EXACT='SELECT politica_id,tentativa_numero,event_id,answers_json,answers_sha256,score_pct,passed FROM lms_player3_tentativas_modulares WHERE vinculo_id=? AND etapa_id=? AND tentativa_numero=? LIMIT 1';
 const LAST='SELECT MAX(tentativa_numero) number FROM lms_player3_tentativas_modulares WHERE vinculo_id=? AND etapa_id=?';
+const PASSED='SELECT 1 passed FROM lms_player3_tentativas_modulares WHERE vinculo_id=? AND politica_id=? AND etapa_id=? AND passed=1 LIMIT 1';
 
 async function sha256(buffer:ArrayBuffer):Promise<string>{
   const raw=await crypto.subtle.digest('SHA-256',buffer);
@@ -157,6 +158,10 @@ export async function commitPlayer3StageAttempt(input:{
     if(!matches(existing))deny('STAGE_REPLAY_CONFLICT');
     return receipt('IDEMPOTENT_REPLAY');
   }
+  const alreadyPassed=await db.prepare(PASSED)
+    .bind(binding.vinculo_id,binding.politica_id,stageId)
+    .first<{passed:number}>();
+  if(alreadyPassed?.passed===1)deny('STAGE_ALREADY_PASSED');
   const last=await db.prepare(LAST).bind(binding.vinculo_id,stageId).first<{number:number|null}>();
   if(attemptNumber!==(last?.number??0)+1)deny('STAGE_SEQUENCE_CONFLICT');
   try{
