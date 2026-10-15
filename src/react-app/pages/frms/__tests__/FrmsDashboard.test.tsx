@@ -197,6 +197,40 @@ describe('FrmsDashboard simplificado', () => {
     expect(summary.compareDocumentPosition(indicators) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('filtra a fila real por KPI de check-in e confiança e permite limpar', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({
+      data: [
+        item({ nome: 'Max', nome_guerra: 'Max' }),
+        item({
+          funcionario_id: 11, tripulante_id: 11, nome: 'Bia', nome_guerra: 'Bia',
+          checkin_status: 'PENDENTE', estado_operacional: 'NAO_AVALIADO',
+          snapshot_status: 'INCOMPLETO', fatorizacao_status: 'AUSENTE',
+          jornada_data_source: 'AUSENTE',
+        }),
+      ],
+    }));
+    renderDashboard('/frms?data=2026-08-27');
+    const overview = within(screen.getByLabelText('Visão visual da operação'));
+    expect(screen.getByText('Max')).toBeInTheDocument();
+    expect(screen.getByText('Bia')).toBeInTheDocument();
+
+    const checkin = overview.getByRole('button', { name: 'Filtrar fila: Check-ins pendentes (1)' });
+    fireEvent.click(checkin);
+    expect(checkin).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Bia')).toBeInTheDocument();
+    expect(screen.queryByText('Max')).not.toBeInTheDocument();
+    expect(screen.getByText('1 de 2 pessoa(s)')).toBeInTheDocument();
+
+    fireEvent.click(overview.getByRole('button', { name: 'Limpar filtro' }));
+    expect(screen.getByText('Max')).toBeInTheDocument();
+
+    fireEvent.click(overview.getByRole('button', { name: 'Filtrar fila: Confiança baixa (1)' }));
+    expect(screen.getByText('Bia')).toBeInTheDocument();
+    expect(screen.queryByText('Max')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar todas as situações' }));
+    expect(screen.getByText('Max')).toBeInTheDocument();
+  });
+
   it('separa jornada do dia em aberto do histórico a confirmar na fila', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-27T12:00:00Z'));
