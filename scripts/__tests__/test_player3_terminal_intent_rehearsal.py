@@ -121,5 +121,117 @@ class Player3TerminalIntentReviewTests(unittest.TestCase):
         finally:db.close()
 
 
+
+def seeded_42_lessons_8_stages(*,last_stage_passed=True):
+    """All 42 authored navigation receipts + 8 separate modular attempts.
+
+    Tests the *physical* reviewed Schema V2 guard; it does not validate
+    pedagogy, grade answers, generate a PDF or exercise a live browser.
+    """
+    db,m,cy,b,first_attempt=seeded()
+    for n in range(2,43):
+        db.execute("""INSERT INTO lms_native_eventos(
+          vinculo_id,event_id,sequencia,unidade_id,payload_sha256
+        ) VALUES(?,?,?,?,?)""",(b,f"visit-{n}",n,f"lesson-{n}",HASH))
+    stages=[{
+        'stageId':'stage-1','attemptId':first_attempt,'attemptNumber':1,
+        'answersHash':HASH,'scorePct':85,
+    }]
+    for n in range(2,9):
+        passed=1 if n<8 or last_stage_passed else 0
+        attempt=db.execute("""INSERT INTO lms_player3_tentativas_modulares(
+          vinculo_id,politica_id,etapa_id,tentativa_numero,event_id,
+          answers_json,answers_sha256,score_pct,passed
+        ) VALUES(?,1,?,1,?,'[]',?,85,?)""",
+        (b,f"stage-{n}",f"exam-{n}",HASH,passed)).lastrowid
+        stages.append({
+            'stageId':f'stage-{n}','attemptId':attempt,
+            'attemptNumber':1,'answersHash':HASH,'scorePct':85,
+        })
+    db.commit()
+    lessons=[f'lesson-{i}' for i in range(1,43)]
+    return db,m,cy,b,first_attempt,lessons,stages
+
+
+class Player3FullCourseAtomicReviewTests(unittest.TestCase):
+    def test_42_navigation_lessons_and_8_passed_stages_can_commit_as_one_unit(self):
+        db,m,cy,b,first,lessons,stages=seeded_42_lessons_8_stages()
+        try:
+            self.assertEqual(len(lessons),42)
+            self.assertEqual(len(stages),8)
+            with db:
+                db.execute('BEGIN IMMEDIATE')
+                insert(db,m,cy,b,first,lessons=lessons,stages=stages,
+                       events=42,distinct=42)
+                complete(db,m,cy)
+                db.execute("DELETE FROM lms_player3_completion_intents WHERE nonce=?",
+                           (NONCE,))
+            self.assertEqual(db.execute(
+                "SELECT status,progresso_pct FROM lms_matriculas WHERE id=?",
+                (m,)).fetchone(),('CONCLUIDO',100))
+            self.assertEqual(db.execute(
+                "SELECT status,progresso_pct FROM lms_matricula_ciclos WHERE id=?",
+                (cy,)).fetchone(),('CONCLUIDO',100))
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM lms_player3_completion_intents").fetchone()[0],0)
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+        finally:
+            db.close()
+
+    def test_missing_required_lesson_or_stage_receipt_cannot_close_at_99_percent(self):
+        # Physical ledger contains 42 lessons + 8 stage receipts. An
+        # incomplete client/server projection may NOT set either row completed.
+        for missing in ('lesson','stage'):
+            with self.subTest(missing=missing):
+                db,m,cy,b,first,lessons,stages=seeded_42_lessons_8_stages()
+                try:
+                    with self.assertRaisesRegex(
+                        sqlite3.IntegrityError,
+                        'PLAYER3_TERMINAL_INTENT_SCOPE_DENIED',
+                    ):
+                        insert(db,m,cy,b,first,
+                               lessons=lessons[:-1] if missing=='lesson' else lessons,
+                               stages=stages[:-1] if missing=='stage' else stages,
+                               events=42,distinct=42)
+                    self.assertEqual(db.execute(
+                        "SELECT status FROM lms_matriculas WHERE id=?",
+                        (m,)).fetchone()[0],'EM_ANDAMENTO')
+                    self.assertEqual(db.execute(
+                        "SELECT status FROM lms_matricula_ciclos WHERE id=?",
+                        (cy,)).fetchone()[0],'EM_ANDAMENTO')
+                finally:
+                    db.close()
+
+    def test_one_failed_stage_never_certifies_the_other_seven_passes(self):
+        db,m,cy,b,first,lessons,stages=seeded_42_lessons_8_stages(
+            last_stage_passed=False)
+        try:
+            with self.assertRaisesRegex(
+                sqlite3.IntegrityError,'PLAYER3_TERMINAL_INTENT_SCOPE_DENIED',
+            ):
+                insert(db,m,cy,b,first,lessons=lessons,stages=stages,
+                       events=42,distinct=42)
+            self.assertEqual(db.execute(
+                "SELECT status FROM lms_matriculas WHERE id=?",
+                (m,)).fetchone()[0],'EM_ANDAMENTO')
+        finally:
+            db.close()
+
+    def test_tampered_attempt_hash_fails_even_with_all_42_lessons(self):
+        db,m,cy,b,first,lessons,stages=seeded_42_lessons_8_stages()
+        try:
+            altered=[*stages[:-1],{**stages[-1],'answersHash':'b'*64}]
+            with self.assertRaisesRegex(
+                sqlite3.IntegrityError,'PLAYER3_TERMINAL_INTENT_SCOPE_DENIED',
+            ):
+                insert(db,m,cy,b,first,lessons=lessons,stages=altered,
+                       events=42,distinct=42)
+            self.assertEqual(db.execute(
+                "SELECT status FROM lms_matricula_ciclos WHERE id=?",
+                (cy,)).fetchone()[0],'EM_ANDAMENTO')
+        finally:
+            db.close()
+
+
 if __name__ == "__main__":
     unittest.main()
