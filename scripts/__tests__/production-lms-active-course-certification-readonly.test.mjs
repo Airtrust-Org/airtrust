@@ -140,7 +140,13 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /content_buttons/);
   assert.match(source, /rect\.bottom > 0/);
   assert.match(source, /action\?\.type === 'none'/);
-  assert.match(source, /PPTX_QUALIFYING_COMPLETION_EVIDENCE_REQUIRED/);
+  assert.match(source, /classifyPptxAssetProbe\(/);
+  assert.match(source, /classifyUncoveredContentType\(type\)/);
+  assert.match(source, /format_coverage: summarizeCourseFormatCoverage\(results\)/);
+  assert.match(source, /browser_preview_lifecycle_pass: classification.status === 'PASS'/);
+  assert.match(source, /enrolled_learner_end_to_end_tested: false/);
+  assert.match(source, /functional_completion_certified: verdict\.functionalCompletionCertified/);
+  assert.doesNotMatch(source, /status: pass \? 'PASS' : 'FAIL'/);
   assert.match(source, /generates_qualification/);
   assert.match(source, /forwardId/);
   assert.match(source, /qnext/);
@@ -238,6 +244,8 @@ test('production certification workflow is governed, online-triggerable, SHA-pin
   assert.match(workflow, /if:\s*always\(\)/);
   assert.match(workflow, /actions\/upload-artifact@v7/);
   assert.match(workflow, /lms-active-certification-diagnostics/);
+  assert.match(workflow, /format_coverage\?\.formats/);
+  assert.match(workflow, /INCONCLUSIVE:/);
   assert.match(workflow, /Enforce zero certification failures/);
 
   assert.match(resolver, /COMMENT_ACTOR_MISMATCH/);

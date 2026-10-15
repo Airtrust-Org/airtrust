@@ -185,7 +185,16 @@ jobs:
           console.log(`- courses: \`${r.course_count}\``);
           console.log(`- PASS: \`${r.pass_count}\``);
           console.log(`- FAIL: \`${r.fail_count}\``);
+          console.log(`- INCONCLUSIVE: \`${r.inconclusive_count}\``);
+          console.log(`- prévias SCORM com ciclo de navegador validado: \`${r.format_coverage?.scorm_preview_pass_count ?? 0}\``); 
+          console.log('- Matrícula real, qualificação e certificado: NÃO TESTADOS neste fluxo somente leitura');
           console.log(`- writes: \`${r.writes}\``);
+          console.log('');
+          console.log('| Formato | Cursos | Prévia SCORM válida | Falhas | Inconclusivos |');
+          console.log('| --- | ---: | ---: | ---: | ---: |');
+          for (const format of r.format_coverage?.formats ?? []) {
+            console.log(`| ${format.tipo_conteudo} | ${format.course_count} | ${format.scorm_preview_pass_count} | ${format.fail_count} | ${format.inconclusive_count} |`);
+          }
           console.log('');
           for (const item of r.results) {
             console.log(`- ${item.status} — #${item.course_id} ${item.titulo}${item.reason ? ` — ${item.reason}` : ''}`);

@@ -6,6 +6,7 @@ import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
 import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
 import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
+import { classifyPptxAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage } from './lms-format-certification-verdict.mjs';
 import {
   assert,
   assertAllowedProductionBaseUrl,
@@ -1764,6 +1765,8 @@ async function certifyScormCourse(browser, token, listed) {
     status: classification.status,
     reason: functional.reason,
     certification_evidence: classification.evidence,
+    browser_preview_lifecycle_pass: classification.status === 'PASS',
+    enrolled_learner_end_to_end_tested: false,
     package_sha256: pkg?.sha256 ?? null,
     legacy_unversioned: legacyUnversioned,
     stored_gate: pkg ? {
@@ -1792,25 +1795,26 @@ async function certifyPptxCourse(browser, token, listed) {
     Number(detail?.gerar_qualificacao_ao_concluir ?? listed?.gerar_qualificacao_ao_concluir ?? 0) === 1 ||
     detail?.gerar_qualificacao_ao_concluir === true ||
     listed?.gerar_qualificacao_ao_concluir === true;
-  const completionCertifiable = !generatesQualification;
-  const pass = assetPass && completionCertifiable;
-  const reason = !assetPass
-    ? `PPTX_ASSET_HTTP_${response.status()}`
-    : generatesQualification
-      ? 'PPTX_QUALIFYING_COMPLETION_EVIDENCE_REQUIRED'
-      : null;
+  // Asset availability is not proof of a complete learner cycle,
+  // including nonqualifying courses: never set PASS without an E2E path.
+  const verdict = classifyPptxAssetProbe({
+    httpStatus: response.status(), assetBytes: bytes.byteLength, generatesQualification,
+  });
   return {
     course_id: id,
     titulo: String(listed.titulo || detail.titulo || ''),
     tipo_conteudo: 'pptx',
-    status: pass ? 'PASS' : 'FAIL',
-    reason,
+    status: verdict.status,
+    reason: verdict.reason,
     asset_bytes: bytes.byteLength,
+    asset_load_pass: assetPass,
+    functional_completion_certified: verdict.functionalCompletionCertified,
+    enrolled_learner_end_to_end_tested: false,
     generates_qualification: generatesQualification,
     version_tag: detail?.version_tag ? String(detail.version_tag) : null,
     note: generatesQualification
       ? 'Asset load passed, but the current backend intentionally blocks qualifying PPTX completion until server-validated evidence exists.'
-      : 'Exact PPTX asset load certified; this course does not mint a qualification.',
+      : 'PPTX asset availability was checked; the enrollment completion lifecycle was NOT certified.',
   };
 }
 
@@ -1841,7 +1845,10 @@ async function main() {
       try {
         if (type === 'scorm') results.push(await certifyScormCourse(browser, token, course));
         else if (type === 'pptx') results.push(await certifyPptxCourse(browser, token, course));
-        else results.push({ course_id: Number(course.id), titulo: String(course.titulo || ''), tipo_conteudo: type, status: 'FAIL', reason: 'UNSUPPORTED_CONTENT_TYPE' });
+        else results.push({
+          course_id: Number(course.id), titulo: String(course.titulo || ''),
+          ...classifyUncoveredContentType(type),
+        });
       } catch (error) {
         results.push({ course_id: Number(course.id), titulo: String(course.titulo || ''), tipo_conteudo: type, status: 'FAIL', reason: safe(error?.message || error) });
       }
@@ -1864,12 +1871,13 @@ async function main() {
     inconclusive_count: results.filter((r) => r.status === 'INCONCLUSIVE').length,
     scorm_count: results.filter((r) => r.tipo_conteudo === 'scorm').length,
     pptx_count: results.filter((r) => r.tipo_conteudo === 'pptx').length,
+    format_coverage: summarizeCourseFormatCoverage(results),
     writes: 'none (authentication/company-selection/asset-session POSTs only; no LMS progress/enrollment/certificate/course mutations)',
     results,
   };
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, inconclusive_count: report.inconclusive_count, course_count: report.course_count })}\n`);
+  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, inconclusive_count: report.inconclusive_count, course_count: report.course_count, scorm_preview_pass_count: report.format_coverage.scorm_preview_pass_count, enrolled_learner_end_to_end_tested: false, formats: report.format_coverage.formats })}\n`);
   // Both explicit failures and inconclusive runs block certification/release.
   if (report.fail_count + report.inconclusive_count > 0) process.exitCode = 2;
 }
