@@ -54,8 +54,13 @@ describe('Native V1 — optimistic checkpoint sequence, version pinning and repl
       recordedEvents: [{ eventId: 'event-1', sequence: 1, unitId: 'intro' }],
     };
     expect(validateNativeCheckpoint(course, saved, {
-      eventId: 'event-2', sequence: 2, artifactHash: sha, unitId: 'intro',
-    })).toEqual({ decision: 'APPLIED', nextSequence: 3, seenLessonIds: ['intro'] });
+      eventId: 'event-2', sequence: 2, artifactHash: sha, unitId: 'safety',
+    })).toEqual({
+      decision: 'APPLIED', nextSequence: 3, seenLessonIds: ['intro', 'safety'],
+    });
+    expect(() => validateNativeCheckpoint(course, saved, {
+      eventId: 'event-2b', sequence: 2, artifactHash: sha, unitId: 'intro',
+    })).toThrowError('NATIVE_OUT_OF_ORDER_UNIT');
   });
 
   it('exact retry is idempotent; altered retry is a conflict', () => {
