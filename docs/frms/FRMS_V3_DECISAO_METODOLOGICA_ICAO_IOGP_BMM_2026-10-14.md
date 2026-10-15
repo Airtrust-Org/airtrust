@@ -122,7 +122,7 @@ Checklist de dados confirmados/estimados/ausentes por dimensão, data/fonte/revi
 - IOGP 626-2, explícita não preferência por BMM: https://idms.iogp.org/Documents/860
 - ORR sobre benefícios, limitações e retirada do FRI: https://www.orr.gov.uk/managing-rail-staff-fatigue/13-appendix-d-benefits-and-limitations-fatigue-risk-assessment-tools
 - SAFTE-FAST Real Time: https://www.saftefast.com/real-time
-- Modelo de dois processos e cautelas de validação (ICAO/CASA, 2014): https://www.icao.int/safety/fatiguemanagement/ArticlesPublications/biomathematical_fatigue_models.pdf
+- Validação e aplicação do modelo de três processos em operações aéreas: https://pmc.ncbi.nlm.nih.gov/articles/PMC4203690/
 - Publicação acadêmica sobre subjetividade KSS vs desempenho: https://pubmed.ncbi.nlm.nih.gov/33994837/
 - Contrato e riscos reais do FRMS: `docs/frms/FRMS_CHECKIN_SCIENCE_UX_CONTRACT_2026-10-14.md`; issue #1476.
 
