@@ -20,7 +20,10 @@ vi.mock('@/react-app/pages/lms/player3/Player3Html5Host',()=>({
   </div>,
 }));
 vi.mock('@/react-app/pages/lms/native/NativeStagingCoursePreview',()=>({
-  default:()=> <div data-testid="native-preview">Native existing pilot</div>,
+  default:({onVerifiedStarted}:{onVerifiedStarted?:()=>void})=>
+    <div data-testid="native-preview">Native existing pilot
+      <button type="button" onClick={onVerifiedStarted}>verified pilot start</button>
+    </div>,
 }));
 const sha=(s:string)=>s.repeat(64);
 const launch={
@@ -88,6 +91,32 @@ describe('authenticated original HTML5 learner entry (no ungoverned fallback)',(
     expect(await screen.findByTestId('native-preview')).toBeInTheDocument();
     expect(mockFetch).not.toHaveBeenCalled();
   });
+  it('moves a first-time learner into the original HTML5 only after a Worker-verified Native start',async()=>{
+    mockFetch.mockResolvedValueOnce(response({success:true,data:{
+      ...launch,resume_next_unit_id:'unit21',last_visited_unit_id:null,
+    }}));
+    render(<Player3AuthenticatedStagingEntry {...props} active={false}/>);
+    expect(await screen.findByTestId('native-preview')).toBeInTheDocument();
+    expect(mockFetch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'verified pilot start'}));
+    const host=await screen.findByTestId('player3-host');
+    expect(host).toHaveTextContent('learner');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/lms/native/matriculas/911/etapas/lancamento',
+      expect.objectContaining({method:'GET',cache:'no-store'}),
+    );
+  });
+
+  it('does not fall back to an unverified authored launch after confirmed start',async()=>{
+    mockFetch.mockResolvedValueOnce(response({success:false},409));
+    render(<Player3AuthenticatedStagingEntry {...props} active={false}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'verified pilot start'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não autorizado/i);
+    expect(screen.queryByTestId('player3-host')).toBeNull();
+    expect(screen.queryByTestId('native-preview')).toBeNull();
+  });
+
   it('updates the stage only after a Worker-verified callback',async()=>{
     mockFetch.mockResolvedValueOnce(response({success:true,data:launch}))
       .mockResolvedValueOnce(response({success:true,data:{
