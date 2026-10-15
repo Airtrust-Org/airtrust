@@ -7,13 +7,17 @@ import { operationalConfidence, resolveOperationalDataMoment } from './frmsOpera
  * Apenas distingue a coleta esperada pós-operação de outras lacunas atuais.
  */
 export function isFrmsRoutineDutyClosurePending(item: FrmsOperationalSnapshotItem, todayIso: string): boolean {
-  return resolveOperationalDataMoment(item, todayIso) === 'DIA_EM_ABERTO' &&
+  const period = item.fortnight_indicator;
+  return Boolean(period?.periodo_inicio && period.periodo_fim &&
+      (period.fonte_periodo === 'REAL' || period.fonte_periodo === 'DERIVADO') &&
+      period.freshness_dado === 'COMPLETO') &&
+    resolveOperationalDataMoment(item, todayIso) === 'DIA_EM_ABERTO' &&
     item.checkin_status === 'RECEBIDO' &&
     item.jornada_data_source === 'AUSENTE' &&
     item.fatorizacao_status !== 'AUSENTE' &&
     item.escala_source !== 'AUSENTE' &&
-    item.sleep_data_source !== 'AUSENTE' &&
-    item.wake_data_source !== 'AUSENTE' &&
+    item.sleep_data_source === 'REAL' &&
+    item.wake_data_source === 'REAL' &&
     item.snapshot_status !== 'INCOMPLETO' &&
     item.estado_operacional !== 'NAO_AVALIADO' &&
     item.estado_operacional !== 'CRITICO_VIOLACAO' &&
