@@ -43,7 +43,7 @@ const accepted = {
   data: {matricula_id:101,curso_id:31,mode:'LEARN',native_package:'NOT_YET_ENABLED'},
 };
 
-describe('Native route admission for a governed SCORM-backed Player3 marker', () => {
+describe('Native route admission for physical Native and governed SCORM-backed Player3', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.params.matriculaId = '101';
@@ -51,16 +51,24 @@ describe('Native route admission for a governed SCORM-backed Player3 marker', ()
     mocks.useMatriculaDetalhe.mockReturnValue({isLoading:false,data:{...enrollment}});
   });
 
-  it('keeps physical Native enrollment working without a redundant marker lookup', () => {
+  it('checks ownership on the Worker before mounting a physical Native learner', async () => {
+    mocks.fetchWithAuth.mockResolvedValueOnce(response(accepted));
     render(<LmsNativePlayer />);
-    expect(screen.getByTestId('native-entry')).toHaveTextContent('Matrícula 101');
+    expect(screen.queryByTestId('native-entry')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent(/verificando acesso/i);
+    expect(await screen.findByTestId('native-entry')).toHaveTextContent('Matrícula 101');
+    expect(mocks.fetchWithAuth).toHaveBeenCalledWith(
+      '/api/lms/native/matriculas/101/admissao',
+      expect.objectContaining({method:'GET',cache:'no-store',signal:expect.any(AbortSignal)}),
+    );
+    expect(mocks.fetchWithAuth).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button',{name:/concluir|certificado/i})).toBeNull();
-    expect(mocks.fetchWithAuth).not.toHaveBeenCalled();
   });
 
-  it('fails closed on a cached matrícula from a different active tenant or logged-out user',()=>{
+  it('fails closed on a cached matrícula from a different active tenant or logged-out user',async()=>{
+    mocks.fetchWithAuth.mockResolvedValueOnce(response(accepted));
     const view=render(<LmsNativePlayer/>);
-    expect(screen.getByTestId('native-entry')).toBeInTheDocument();
+    expect(await screen.findByTestId('native-entry')).toBeInTheDocument();
     mocks.auth={...mocks.auth,empresaAtualId:7};
     view.rerender(<LmsNativePlayer/>);
     expect(screen.queryByTestId('native-entry')).toBeNull();
@@ -68,16 +76,33 @@ describe('Native route admission for a governed SCORM-backed Player3 marker', ()
     mocks.auth={...mocks.auth,empresaAtualId:6,isAuthenticated:false};
     view.rerender(<LmsNativePlayer/>);
     expect(screen.queryByTestId('native-entry')).toBeNull();
-    expect(mocks.fetchWithAuth).not.toHaveBeenCalled();
+    expect(mocks.fetchWithAuth).toHaveBeenCalledTimes(1);
   });
 
-  it('forces a new Worker-backed child after changing account within the same tenant',()=>{
+  it('requires fresh admission after changing accounts within the same tenant',async()=>{
+    mocks.fetchWithAuth.mockResolvedValueOnce(response(accepted));
     const view=render(<LmsNativePlayer/>);
-    const previous=screen.getByTestId('native-entry').getAttribute('data-mount');
+    const previous=(await screen.findByTestId('native-entry')).getAttribute('data-mount');
     mocks.auth={...mocks.auth,user:{id:901}};
     view.rerender(<LmsNativePlayer/>);
-    expect(screen.getByTestId('native-entry').getAttribute('data-mount')).not.toBe(previous);
-    expect(mocks.fetchWithAuth).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('native-entry')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent(/verificando acesso/i);
+    mocks.fetchWithAuth.mockResolvedValueOnce(response(accepted));
+    const child=await screen.findByTestId('native-entry');
+    expect(child.getAttribute('data-mount')).not.toBe(previous);
+    expect(mocks.fetchWithAuth).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects cached enrollment ownership when Worker denies a new account',async()=>{
+    mocks.fetchWithAuth.mockResolvedValueOnce(response(accepted));
+    const view=render(<LmsNativePlayer/>);
+    expect(await screen.findByTestId('native-entry')).toBeInTheDocument();
+    mocks.fetchWithAuth.mockResolvedValueOnce(response({success:false},403));
+    mocks.auth={...mocks.auth,user:{id:902}};
+    view.rerender(<LmsNativePlayer/>);
+    expect(screen.queryByTestId('native-entry')).toBeNull();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/indisponível/i);
+    expect(mocks.fetchWithAuth).toHaveBeenCalledTimes(2);
   });
 
   it('requires the Worker to authenticate the exact activated SCORM course', async () => {
@@ -87,7 +112,7 @@ describe('Native route admission for a governed SCORM-backed Player3 marker', ()
     mocks.fetchWithAuth.mockResolvedValueOnce(response(accepted));
     render(<LmsNativePlayer />);
     expect(screen.queryByTestId('native-entry')).toBeNull();
-    expect(screen.getByRole('status')).toHaveTextContent(/verificando ativação/i);
+    expect(screen.getByRole('status')).toHaveTextContent(/verificando acesso/i);
     expect(await screen.findByTestId('native-entry')).toHaveTextContent('Matrícula 101');
     expect(mocks.fetchWithAuth).toHaveBeenCalledWith(
       '/api/lms/native/matriculas/101/admissao',
