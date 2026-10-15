@@ -1842,6 +1842,12 @@ async function certifyPdfAsset(browser,token,listed){
       status:verdict.status,reason:verdict.reason,
       asset_bytes:bytes.byteLength,asset_load_pass:verdict.assetLoadPass,
       functional_completion_certified:false,enrolled_learner_end_to_end_tested:false};
+  }catch{
+    // Network timeout is not proof of defective PDF content.
+    return {course_id:id,titulo:String(listed.titulo||''),tipo_conteudo:'pdf',
+      status:'INCONCLUSIVE',reason:'PDF_ASSET_PROBE_UNAVAILABLE',
+      asset_load_pass:false,functional_completion_certified:false,
+      enrolled_learner_end_to_end_tested:false};
   }finally{await context.close();}
 }
 
@@ -1863,14 +1869,16 @@ async function certifyH5pAssets(browser,token,listed){
         `${API}/api/lms/h5p/assets/${h5pId}/${asset}`,{
           headers:{Authorization:`Bearer ${token}`},timeout:15_000,
         });
-      let valid=false;
+      // Null = inspection budget exceeded, not proof of corrupt media.
+      let valid=null;
       if(response.status()===200){
         const bytes=await response.body();
-        if(bytes.byteLength>2&&bytes.byteLength<=2_000_000){
+        if(bytes.byteLength<=2){valid=false;}
+        else if(bytes.byteLength<=2_000_000){
           try{
             const parsed=JSON.parse(bytes.toString('utf8'));
             valid=parsed!==null&&typeof parsed==='object'&&!Array.isArray(parsed);
-          }catch{/* Successful HTTP status with invalid JSON = corrupt content. */}
+          }catch{valid=false;/* Invalid JSON with HTTP 200 = corrupt content. */}
         }
       }
       samples.push({status:response.status(),valid});
@@ -1879,6 +1887,12 @@ async function certifyH5pAssets(browser,token,listed){
     return {course_id:id,titulo:String(listed.titulo||detail?.titulo||''),
       tipo_conteudo:'h5p',status:verdict.status,reason:verdict.reason,
       asset_load_pass:verdict.assetLoadPass,
+      functional_completion_certified:false,enrolled_learner_end_to_end_tested:false};
+  }catch{
+    // Transport outages do not establish that either authored H5P asset is bad.
+    return {course_id:id,titulo:String(listed.titulo||detail?.titulo||''),
+      tipo_conteudo:'h5p',status:'INCONCLUSIVE',
+      reason:'H5P_ASSET_PROBE_UNAVAILABLE',asset_load_pass:false,
       functional_completion_certified:false,enrolled_learner_end_to_end_tested:false};
   }finally{await context.close();}
 }

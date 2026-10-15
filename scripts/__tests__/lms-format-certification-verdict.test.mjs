@@ -102,6 +102,9 @@ test('H5P requires two intact JSON entrypoints, without claiming xAPI completion
   assert.equal(classifyReadOnlyContentAssetProbe({format:'h5p',samples:[
     {status:403,valid:false},{status:200,valid:true},
   ]}).status,'INCONCLUSIVE');
+  assert.equal(classifyReadOnlyContentAssetProbe({format:'h5p',samples:[
+    {status:200,valid:null},{status:200,valid:true},
+  ]}).status,'INCONCLUSIVE');
   assert.throws(()=>classifyReadOnlyContentAssetProbe({format:'h5p',samples:[samples[0]]}),/LMS_ASSET_PROBE_SCOPE_INVALID/);
 });
 
