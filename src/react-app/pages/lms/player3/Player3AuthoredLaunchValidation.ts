@@ -31,7 +31,7 @@ export function validatePlayer3Launch(
        !data.checkpoint_unit_ids.includes(data.last_visited_unit_id))||
      data.completion_supported!==false||
      typeof data.official_stages_passed!=='boolean'||
-     Boolean(data.pending_assessment)===data.official_stages_passed)return false;
+     (data.official_stages_passed&&data.pending_assessment!==null))return false;
   try{
     const origin=new URL(data.content_origin);
     const url=new URL(data.content_url);
@@ -44,7 +44,9 @@ export function validatePlayer3Launch(
     }
   }catch{return false;}
   const assessment=data.pending_assessment;
-  if(!assessment)return data.official_stages_passed;
+  // An unfinished course may be between lessons, with no stage available
+  // yet. This is not a completion claim or a missing-official-stage bypass.
+  if(!assessment)return true;
   if(!ID.test(assessment.stage_id)||!assessment.title?.trim()||
      !Array.isArray(assessment.questions)||assessment.questions.length<1||
      assessment.questions.length>100)return false;
