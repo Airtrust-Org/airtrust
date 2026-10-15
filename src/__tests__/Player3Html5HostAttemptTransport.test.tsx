@@ -123,6 +123,54 @@ describe('Player3 HTML5 Host wiring to real authenticated attempt ledger',()=>{
     expect(authenticatedFetch.mock.calls[3][0])
       .toBe('/api/lms/native/matriculas/911/etapas/sessao');
   });
+  it('refreshes official stage eligibility after verified checkpoint without rewinding live iframe',async()=>{
+    const nav={
+      matriculaId:911,empresaId:6,cicloId:800,editionSha256,
+      nextUnitId:'lesson-final',checkpointUnitIds:['lesson-final'],
+      lastVisitedUnitId:null,
+    };
+    const before={
+      matricula_id:911,ciclo_id:800,edition_sha256:editionSha256,
+      mode:'LEARN',next_sequence:1,seen_lesson_ids:[],
+      last_visited_unit_id:null,
+    };
+    const after={...before,next_sequence:2,
+      seen_lesson_ids:['lesson-final'],last_visited_unit_id:'lesson-final'};
+    const checkpoint={state:'APPLIED',committed_sequence:1,
+      edition_sha256:editionSha256,completion_supported:false};
+    const onCheckpoint=vi.fn();
+    authenticatedFetch
+      .mockResolvedValueOnce(payload(before))
+      .mockResolvedValueOnce(payload(checkpoint,201))
+      .mockResolvedValueOnce(payload(after))
+      .mockResolvedValue(payload(after));
+    const view=render(<Player3Html5Host {...props} navigation={nav}
+      onVerifiedLessonCheckpoint={onCheckpoint}
+      assessmentPresentation="authored-html5" pendingAssessment={null}/>);
+    const frame=screen.getByTitle('Conteúdo original — Doutrinamento') as HTMLIFrameElement;
+    const post=vi.spyOn(frame.contentWindow!,'postMessage');
+    fireEvent.load(frame);
+    await waitFor(()=>expect(post.mock.calls.filter(([msg])=>
+      (msg as {type?:string}).type==='AIRTRUST_PLAYER3_RESUME_CURSOR_V1')).toHaveLength(1));
+    emit(frame,{type:'AIRTRUST_PLAYER3_RESUME_ACK_V1',
+      editionSha256,unitId:'lesson-final'});
+    emit(frame,{type:'AIRTRUST_PLAYER3_NAV_HINT_V1',
+      editionSha256,unitId:'stage-1'});
+    await waitFor(()=>expect(onCheckpoint).toHaveBeenCalledTimes(1));
+    expect(authenticatedFetch.mock.calls.map(([,opts])=>opts?.method))
+      .toEqual(['GET','POST','GET']);
+
+    // A new launch projection arrives on the same mounted frame.
+    view.rerender(<Player3Html5Host {...props} navigation={{...nav,
+      nextUnitId:'stage-1',lastVisitedUnitId:'lesson-final'}}
+      onVerifiedLessonCheckpoint={onCheckpoint}
+      assessmentPresentation="authored-html5" pendingAssessment={null}/>);
+    expect(post.mock.calls.filter(([msg])=>
+      (msg as {type?:string}).type==='AIRTRUST_PLAYER3_RESUME_CURSOR_V1'))
+      .toHaveLength(1);
+    expect(screen.getByTitle('Conteúdo original — Doutrinamento')).toBe(frame);
+    post.mockRestore();
+  });
   it('keeps module blocked after a successful POST if Worker re-read disagrees',async()=>{
     authenticatedFetch.mockResolvedValueOnce(payload(session(false,0)))
       .mockResolvedValueOnce(payload(official,201))
