@@ -188,4 +188,44 @@ describe('Native route admission for physical Native and governed SCORM-backed P
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.queryByTestId('native-entry')).toBeNull();
   });
+  it('never reuses an admitted Native session after logout then login with the same actor',async()=>{
+    mocks.fetchWithAuth.mockResolvedValueOnce(response(accepted));
+    const view=render(<LmsNativePlayer/>);
+    expect(await screen.findByTestId('native-entry')).toBeInTheDocument();
+    mocks.auth={...mocks.auth,isAuthenticated:false};
+    view.rerender(<LmsNativePlayer/>);
+    expect(screen.queryByTestId('native-entry')).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent(/indisponível/i);
+
+    let finish:((value:Response)=>void)|undefined;
+    mocks.fetchWithAuth.mockImplementationOnce(()=>new Promise<Response>(resolve=>{
+      finish=resolve;
+    }));
+    mocks.auth={...mocks.auth,isAuthenticated:true};
+    view.rerender(<LmsNativePlayer/>);
+    expect(screen.getByRole('status')).toHaveTextContent(/verificando acesso/i);
+    expect(screen.queryByTestId('native-entry')).toBeNull();
+    finish?.(response({success:false},403));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/indisponível/i);
+    expect(screen.queryByTestId('native-entry')).toBeNull();
+    expect(mocks.fetchWithAuth).toHaveBeenCalledTimes(2);
+  });
+
+  it('remounts Player3 after account A to B to A, never reusing account A admission',async()=>{
+    mocks.fetchWithAuth.mockResolvedValueOnce(response(accepted));
+    const view=render(<LmsNativePlayer/>);
+    expect(await screen.findByTestId('native-entry')).toBeInTheDocument();
+    mocks.auth={...mocks.auth,user:{id:901}};
+    mocks.fetchWithAuth.mockResolvedValueOnce(response({success:false},403));
+    view.rerender(<LmsNativePlayer/>);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/indisponível/i);
+    mocks.auth={...mocks.auth,user:{id:900}};
+    mocks.fetchWithAuth.mockResolvedValueOnce(response({success:false},403));
+    view.rerender(<LmsNativePlayer/>);
+    expect(screen.getByRole('status')).toHaveTextContent(/verificando acesso/i);
+    expect(screen.queryByTestId('native-entry')).toBeNull();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/indisponível/i);
+    expect(mocks.fetchWithAuth).toHaveBeenCalledTimes(3);
+  });
+
 });

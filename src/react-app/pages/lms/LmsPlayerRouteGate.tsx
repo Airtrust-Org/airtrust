@@ -31,19 +31,15 @@ const allowedLegacyCodes=new Set([
 const validId=(v:unknown):v is number=>
   typeof v==='number'&&Number.isSafeInteger(v)&&v>0;
 
-export default function LmsPlayerRouteGate(){
-  const {matriculaId}=useParams<{matriculaId:string}>();
-  const {user,empresaAtualId,isAuthenticated}=useAuth();
-  const idValid=typeof matriculaId==='string'&&
-    /^[1-9][0-9]{0,15}$/.test(matriculaId);
-  const id=idValid?Number(matriculaId):0;
-  const canCheck=idValid&&validId(id)&&isAuthenticated&&
-    validId(user?.id)&&validId(empresaAtualId);
-  const scope=canCheck?[user.id,empresaAtualId,id].join(':'):'';
+/**
+ * This component owns the admission result for exactly one mounted identity.
+ * The outer gate unmounts it on logout or account/tenant change, so a previously
+ * approved SCORM or Player3 route cannot reappear during re-authentication.
+ */
+function ScopedPlayerLaunch({id,scope}:{id:number;scope:string}){
   const [state,setState]=useState<GateState|null>(null);
 
   useEffect(()=>{
-    if(!canCheck)return;
     const controller=new AbortController();
     void(async()=>{
       const response=await fetchWithAuth(
@@ -68,11 +64,8 @@ export default function LmsPlayerRouteGate(){
       if(!controller.signal.aborted)setState({scope,result:'BLOCKED'});
     });
     return()=>controller.abort();
-  },[canCheck,id,scope]);
+  },[id,scope]);
 
-  if(!canCheck){
-    return <p role="alert">Acesso à matrícula não autorizado.</p>;
-  }
   if(state?.scope!==scope){
     return <p role="status">Verificando o player autorizado para esta matrícula…</p>;
   }
@@ -82,4 +75,19 @@ export default function LmsPlayerRouteGate(){
   }
   return <p role="alert">Não foi possível confirmar o player desta matrícula.
     Nenhuma conclusão ou progresso foi enviado.</p>;
+}
+
+export default function LmsPlayerRouteGate(){
+  const {matriculaId}=useParams<{matriculaId:string}>();
+  const {user,empresaAtualId,isAuthenticated}=useAuth();
+  const idValid=typeof matriculaId==='string'&&
+    /^[1-9][0-9]{0,15}$/.test(matriculaId);
+  const id=idValid?Number(matriculaId):0;
+  const canCheck=idValid&&validId(id)&&isAuthenticated&&
+    validId(user?.id)&&validId(empresaAtualId);
+  if(!canCheck){
+    return <p role="alert">Acesso à matrícula não autorizado.</p>;
+  }
+  const scope=[user.id,empresaAtualId,id].join(':');
+  return <ScopedPlayerLaunch key={scope} id={id} scope={scope}/>;
 }

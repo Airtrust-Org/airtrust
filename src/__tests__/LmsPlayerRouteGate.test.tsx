@@ -120,4 +120,44 @@ describe('LMS launch router — Player3 admission must precede legacy SCORM',()=
     expect(screen.queryByTestId('route-player3')).toBeNull();
     expect(mocks.legacyMounts).toBeGreaterThan(0);
   });
+  it('requires fresh Worker admission after logout and re-login with the same identity',async()=>{
+    mocks.fetch.mockResolvedValueOnce(notNative('NATIVE_COURSE_NOT_AVAILABLE'));
+    const view=render(<LmsPlayerRouteGate/>);
+    expect(await screen.findByTestId('route-legacy')).toBeInTheDocument();
+    mocks.auth={...mocks.auth,isAuthenticated:false};
+    view.rerender(<LmsPlayerRouteGate/>);
+    expect(screen.queryByTestId('route-legacy')).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent(/não autorizado/i);
+
+    let rejectAdmission:((response:Response)=>void)|undefined;
+    mocks.fetch.mockImplementationOnce(()=>new Promise<Response>(resolve=>{
+      rejectAdmission=resolve;
+    }));
+    mocks.auth={...mocks.auth,isAuthenticated:true};
+    view.rerender(<LmsPlayerRouteGate/>);
+    expect(screen.getByRole('status')).toHaveTextContent(/verificando/i);
+    expect(screen.queryByTestId('route-legacy')).toBeNull();
+    rejectAdmission?.(payload({success:false},403));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não foi possível/i);
+    expect(mocks.legacyMounts).toBe(1);
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('cannot reuse an old account admission after switching away and back',async()=>{
+    mocks.fetch.mockResolvedValueOnce(payload(admitted));
+    const view=render(<LmsPlayerRouteGate/>);
+    expect(await screen.findByTestId('route-player3')).toBeInTheDocument();
+    mocks.auth={...mocks.auth,user:{id:901}};
+    mocks.fetch.mockResolvedValueOnce(payload({success:false},403));
+    view.rerender(<LmsPlayerRouteGate/>);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não foi possível/i);
+    mocks.auth={...mocks.auth,user:{id:900}};
+    mocks.fetch.mockResolvedValueOnce(payload({success:false},403));
+    view.rerender(<LmsPlayerRouteGate/>);
+    expect(screen.getByRole('status')).toHaveTextContent(/verificando/i);
+    expect(screen.queryByTestId('route-player3')).toBeNull();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não foi possível/i);
+    expect(mocks.fetch).toHaveBeenCalledTimes(3);
+  });
+
 });

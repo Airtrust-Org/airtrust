@@ -18,7 +18,7 @@ type Admission = { success?: boolean; data?: {
 } };
 const permittedStatuses = new Set(['NAO_INICIADO', 'EM_ANDAMENTO', 'CONCLUIDO']);
 
-export default function LmsNativePlayer() {
+function LmsNativePlayerSession() {
   const { matriculaId } = useParams<{ matriculaId: string }>();
   const navigate = useNavigate();
   const {user,isAuthenticated,empresaAtualId}=useAuth();
@@ -104,4 +104,22 @@ export default function LmsNativePlayer() {
       />
     </main>
   );
+}
+
+/**
+ * Session boundary: a cached Worker admission is valid only until this
+ * authenticated route instance unmounts. Logout, login, account, tenant or
+ * enrollment switches remount the learner and require a new Worker admission,
+ * even when the same account/enrollment returns after a logout.
+ */
+export default function LmsNativePlayer() {
+  const { matriculaId } = useParams<{ matriculaId: string }>();
+  const { user, empresaAtualId, isAuthenticated } = useAuth();
+  const sessionScope = [
+    isAuthenticated ? 'authenticated' : 'unauthenticated',
+    user?.id ?? 'no-user',
+    empresaAtualId ?? 'no-tenant',
+    matriculaId ?? 'no-enrollment',
+  ].join(':');
+  return <LmsNativePlayerSession key={sessionScope}/>;
 }
