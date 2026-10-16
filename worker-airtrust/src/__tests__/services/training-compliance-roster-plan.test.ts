@@ -81,6 +81,12 @@ describe('Matrícula orientada por função e situação da qualificação',()=>
     expect(result.remove).toHaveLength(0);
     expect(result.enroll).toHaveLength(0);
   });
+  it('retira matrícula sem requisito mesmo em curso despublicado, mas não cria nova',()=>{
+    const archived={...course,publicado:0};
+    const outdated=plan(snapshot(person(101,[])),[archived],[row(30)]);
+    expect(outdated.remove.map(r=>r.matriculaId)).toEqual([30]);
+    expect(plan(snapshot(person(101,[requirement('VENCIDO')])),[archived]).enroll).toHaveLength(0);
+  });
   it('prioriza apenas cursos do mapeamento e ignora cursos desconhecidos',()=>{
     const result=plan(snapshot(person(101,[])),[otherCourse],[row(30)]);
     expect(result.remove).toHaveLength(0);
