@@ -12,6 +12,7 @@ import {
   type ScheduleExposureEvent,
   type ScheduleExposureResult,
 } from './ima-v3-schedule-exposure';
+import { auditImaDailyEvidence, type ImaDataReadinessAudit } from './ima-v3-evidence-audit';
 
 export type ImaSnapshotEvidenceRow = Pick<
   FrmsOperationalSnapshotItem,
@@ -20,7 +21,10 @@ export type ImaSnapshotEvidenceRow = Pick<
   | 'jornada_data_source' | 'operational_data_source'
   | 'escala_source' | 'escalado' | 'teve_jornada'
   | 'snapshot_status'
->;
+> & Partial<Pick<
+  FrmsOperationalSnapshotItem,
+  'sleep_data_source' | 'wake_data_source' | 'horas_sono' | 'kss_score' | 'checkin_status'
+>>;
 
 export interface ImaSnapshotBridgeInput {
   expectedEmpresaId: number;
@@ -40,6 +44,10 @@ export interface ImaSnapshotBridgeResult {
   mappedActualRows: number;
   mappedPlannedRows: number;
   mappedEstimatedRows: number;
+  /** Real operational event, but start/end may be reconstructed (-30/+30). */
+  reconstructedOperationalRows: number;
+  /** Aggregated availability of observed self-reports; never a clinical conclusion. */
+  dailyEvidence: ImaDataReadinessAudit;
   rejectedRows: number;
   rejectedReasons: Record<RejectionReason, number>;
   operationalDecision: 'NOT_ASSESSED';
@@ -86,10 +94,12 @@ function nextDate(date: string): string {
 }
 
 /**
- * Conservative source precedence. A real jornada can be considered ACTUAL
- * only when backed by canonical Controle de Voos/SIGVOOS provenance.
- * Mixed fallback and manual/unclear lineage are ESTIMATED, never actual.
- * An EVD scale with no real jornada is PLANNED. No roster-only rows.
+ * The current preferred-operational-source pipeline calculates presentation
+ * from engine-start -30m and completion from engine-stop +30m, and sometimes
+ * uses SigVoos fallback. Real flight/activity does NOT imply observed duty
+ * boundaries. Until explicit boundary-level provenance is carried through the
+ * read model, categorize even canonical CV/SigVoos windows as ESTIMATED.
+ * EVD rows without a completed journey are PLANNED; roster-only is unknown.
  */
 function classify(row: ImaSnapshotEvidenceRow):
   | 'ACTUAL' | 'PLANNED' | 'ESTIMATED' | RejectionReason {
@@ -97,7 +107,7 @@ function classify(row: ImaSnapshotEvidenceRow):
     return 'INCONSISTENT_SNAPSHOT';
   }
   if (row.teve_jornada && row.jornada_data_source === 'REAL') {
-    return ACTUAL_SOURCES.has(row.operational_data_source ?? '') ? 'ACTUAL' : 'ESTIMATED';
+    return 'ESTIMATED';
   }
   if (row.teve_jornada && row.jornada_data_source !== 'AUSENTE') {
     return 'ESTIMATED';
@@ -123,6 +133,7 @@ export function bridgeImaOperationalSnapshot(input: ImaSnapshotBridgeInput): Ima
   let mappedActualRows = 0;
   let mappedPlannedRows = 0;
   let mappedEstimatedRows = 0;
+  let reconstructedOperationalRows = 0;
 
   for (const row of input.snapshotRows) {
     if (row.empresa_id !== input.expectedEmpresaId) throw new Error('IMA_BRIDGE_CROSS_TENANT');
@@ -152,6 +163,8 @@ export function bridgeImaOperationalSnapshot(input: ImaSnapshotBridgeInput): Ima
     if (source === 'ACTUAL') mappedActualRows++;
     else if (source === 'PLANNED') mappedPlannedRows++;
     else mappedEstimatedRows++;
+    if (row.teve_jornada && row.jornada_data_source === 'REAL' &&
+        ACTUAL_SOURCES.has(row.operational_data_source ?? '')) reconstructedOperationalRows++;
   }
 
   // The schedule engine rejects overlaps and keeps gaps UNKNOWN, never sleep.
@@ -161,8 +174,27 @@ export function bridgeImaOperationalSnapshot(input: ImaSnapshotBridgeInput): Ima
     events,
     referenceUtcOffsetMinutes: input.referenceUtcOffsetMinutes,
   });
+  // The current check-in snapshot has sleep *duration* and wake time, not a
+  // verified sleep episode. Never manufacture observed startAt from duration.
+  const dailyEvidence = auditImaDailyEvidence(input.snapshotRows.map((row) => {
+    const received = row.checkin_status === 'RECEBIDO';
+    return {
+      dutyDataSource: row.jornada_data_source,
+      sleepDataSource: received ? (row.sleep_data_source ?? 'AUSENTE') : 'AUSENTE',
+      wakeDataSource: received ? (row.wake_data_source ?? 'AUSENTE') : 'AUSENTE',
+      checkinStatus: row.checkin_status ?? 'AUSENTE',
+      sleepHours24h: received ? row.horas_sono ?? null : null,
+      kssScore: received ? row.kss_score ?? null : null,
+      observedSleepStartAt: null,
+      observedSleepEndAt: null,
+      sleepEpisodeProvenance: 'UNKNOWN' as const,
+      readinessBaselineReady: null,
+    };
+  }));
   return {
     exposure,
+    dailyEvidence,
+    reconstructedOperationalRows,
     sourceRows: input.snapshotRows.length,
     mappedActualRows,
     mappedPlannedRows,
