@@ -160,12 +160,13 @@ describe('dashboard home reliability fixes', () => {
       nao_realizados: 3,
       compliance_pct: 80,
       cobertura: 'PARCIAL',
-      escopo_modelo: 'SETOR_OU_TRANSVERSAL',
+      escopo_modelo: 'MATRIZ_CANONICA',
     });
 
     const sql = calls.find((call) => call.query.includes('WITH active_employees AS'))?.query || '';
     expect(sql).toContain("classe_requisito, '')) IN ('DOCUMENTO', 'AVALIACAO')");
-    expect(sql).toContain('qualificacoes_tipos_setores');
+    expect(sql).toContain('treinamento_requisitos');
+    expect(sql).not.toContain('qualificacoes_tipos_setores');
     expect(sql).toContain('current_licenses');
     expect(sql).not.toContain('simulador_agendamentos');
     expect(sql).not.toContain('requisitos_compliance');
