@@ -36,6 +36,7 @@ describe('IMA V3 cohort historical evidence inventory — privacy and scientific
       approximateCrew: null, approximateCrewDays: null,
       checkinReceivedPctApprox: null, realSleepDurationPctApprox: null,
       realWakeReportPctApprox: null, validKssPctApprox: null,
+      storedKssValuePctApprox: null, verifiedCrewReportedKssPctApprox: null,
       sourceIncompletePctApprox: null, reconstructedDutyBoundaryPctApprox: null,
       verifiedSleepEpisodePct: null, validatedPvtBaselinePct: null,
       physiologicalImaScore: null, operationalFitness: 'NOT_ASSESSED',
@@ -60,7 +61,8 @@ describe('IMA V3 cohort historical evidence inventory — privacy and scientific
       state: 'AGGREGATED_RESEARCH_COVERAGE',
       approximateCrew: 15, approximateCrewDays: 10,
       checkinReceivedPctApprox: 100, realSleepDurationPctApprox: 100,
-      realWakeReportPctApprox: 100, validKssPctApprox: 100,
+      realWakeReportPctApprox: 100, validKssPctApprox: null,
+      storedKssValuePctApprox: 100, verifiedCrewReportedKssPctApprox: null,
       reconstructedDutyBoundaryPctApprox: 100,
       sourceIncompletePctApprox: 0,
       verifiedSleepEpisodePct: null, validatedPvtBaselinePct: null,
@@ -82,11 +84,23 @@ describe('IMA V3 cohort historical evidence inventory — privacy and scientific
     expect(report).toMatchObject({
       checkinReceivedPctApprox: 90,
       realSleepDurationPctApprox: 80,
-      validKssPctApprox: 80,
+      validKssPctApprox: null,
+      storedKssValuePctApprox: 80,
+      verifiedCrewReportedKssPctApprox: null,
       realWakeReportPctApprox: 80,
       sourceIncompletePctApprox: 40,
     });
     expect(report.blockers).toContain('FONTES_DE_DADOS_INCOMPLETAS');
+  });
+
+  it('never certifies crew KSS from ten persisted values, even if all are 5', () => {
+    const rows = cohort(10).map((row) => ({ ...row, kss_score: 5 }));
+    const report = audit(rows);
+    expect(report.storedKssValuePctApprox).toBe(100);
+    expect(report.validKssPctApprox).toBeNull();
+    expect(report.verifiedCrewReportedKssPctApprox).toBeNull();
+    expect(report.blockers).toContain('KSS_PERSISTIDO_PODE_SER_DERIVADO_OU_DEFAULT_5');
+    expect(report.methodologyStatus).toBe('NOT_VALIDATED');
   });
 
   it('does not classify valid check-ins on non-duty days as missing duty evidence', () => {

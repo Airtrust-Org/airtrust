@@ -36,7 +36,10 @@ describe('FRMS V3 IMA data feasibility audit', () => {
       datedSleepEpisodeRows: 0,
       datedSleepEpisodeCoveragePct: 0,
       assessment: 'INSUFFICIENT_SLEEP_TIMELINE',
-      blockerCodes: ['SONO_DIARIO_NAO_COMPROVA_CRONOLOGIA_DE_SONO_VIGILIA'],
+      blockerCodes: [
+        'SONO_DIARIO_NAO_COMPROVA_CRONOLOGIA_DE_SONO_VIGILIA',
+        'KSS_PERSISTIDO_SEM_ORIGEM_CONFIRMADA',
+      ],
     });
   });
 
@@ -66,6 +69,28 @@ describe('FRMS V3 IMA data feasibility audit', () => {
     });
     expect(result.blockerCodes).toContain('FONTES_INCOMPLETAS');
     expect(result.blockerCodes).toContain('BASELINE_PVT_NAO_UNIVERSAL');
+  });
+
+  it('does not certify a default or derived KSS just because it is within 1–9', () => {
+    const audit = auditImaDailyEvidence([
+      { ...sample, kssScore: 5 },
+      { ...sample, kssScore: 5, kssProvenance: 'DEFAULTED' },
+      { ...sample, kssScore: 4, kssProvenance: 'DERIVED' },
+      { ...sample, kssScore: 7, kssProvenance: 'CREW_REPORTED' },
+    ]);
+    expect(audit.knownKssRows).toBe(4);
+    expect(audit.confirmedCrewReportedKssRows).toBe(1);
+    expect(audit.kssValueWithoutCrewProvenanceRows).toBe(3);
+    expect(audit.blockerCodes).toContain('KSS_PERSISTIDO_SEM_ORIGEM_CONFIRMADA');
+  });
+
+  it('ignores a filled KSS on a pending check-in even if reported is claimed', () => {
+    const audit = auditImaDailyEvidence([
+      { ...sample, checkinStatus: 'PENDENTE', kssProvenance: 'CREW_REPORTED' },
+    ]);
+    expect(audit.knownKssRows).toBe(0);
+    expect(audit.confirmedCrewReportedKssRows).toBe(0);
+    expect(audit.pendingCheckinRows).toBe(1);
   });
 
   it('accepts an explicitly timestamped sleep episode only as data hygiene, NOT a validated fatigue model', () => {
