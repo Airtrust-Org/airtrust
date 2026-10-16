@@ -14,7 +14,7 @@ const API_BASE = process.env.PROD_API_BASE_URL || 'https://api.airtrust.online';
 const REPAIR_MARKER = 'Matrícula criada pela reconciliação exata da matriz obrigatória EAD — lote autorizado pela Gerência de Treinamento.';
 const DRY_CONFIRM = 'AIRTRUST_PRODUCTION_DRYRUN_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR';
 const APPLY_CONFIRM = 'AIRTRUST_PRODUCTION_APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_AND_REDUNDANT_VALID_EVIDENCE_NO_EMAIL';
-const RENEWAL_WINDOW_DAYS = 60;
+const RENEWAL_WINDOW_DAYS = 0;
 
 const mode = process.argv[2] || process.env.TRAINING_COMPLIANCE_MATRIX_REPAIR_MODE || 'dry-run';
 
@@ -186,9 +186,9 @@ function requirementNeedsEnrollment(requirement) {
   const today = new Date().toISOString().slice(0, 10);
   if (realizedOn && realizedOn > today) fail('CANONICAL_FUTURE_EVIDENCE_REQUIRES_WORKER_FIX');
   const status = String(requirement?.status_compliance || '').trim().toUpperCase();
-  if (['NAO_REALIZADO', 'VENCIDO', 'VENCENDO'].includes(status)) return true;
+  if (['NAO_REALIZADO', 'VENCIDO'].includes(status)) return true;
   if (status === 'EM_ANDAMENTO') return false;
-  if (status === 'CONFORME') {
+  if (status === 'CONFORME' || status === 'VENCENDO') {
     const days = requirement?.dias_para_vencer;
     if (days == null || days === '') return false;
     const parsed = Number(days);
@@ -199,7 +199,8 @@ function requirementNeedsEnrollment(requirement) {
 }
 
 function requirementSuppressesEnrollment(requirement) {
-  return String(requirement?.status_compliance || '').trim().toUpperCase() === 'CONFORME' &&
+  return ['CONFORME', 'VENCENDO'].includes(
+    String(requirement?.status_compliance || '').trim().toUpperCase()) &&
     !requirementNeedsEnrollment(requirement);
 }
 
