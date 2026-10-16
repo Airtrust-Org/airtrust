@@ -10,15 +10,20 @@ const MODE=process.env.LMS99_MODE;
 const MAIN=String(process.env.EXPECTED_MAIN_SHA||'').toLowerCase();
 const PROD=String(process.env.EXPECTED_PRODUCTION_SHA||'').toLowerCase();
 const TENANT=Number(process.env.TARGET_COMPANY_ID);
-const REASON='Regularizacao administrativa de treinamento concluido, confirmada pela Gerencia de Treinamento em 10/10/2026; falha de encerramento LMS/SCORM 99%, incidente #1325. Preservar trilha de auditoria, sem exigir repeticao do treinamento.';
+const REASON='Regularizacao administrativa de treinamento concluido, confirmada pela Gerencia de Treinamento em 16/10/2026, para as 16 matriculas especificas; falha de encerramento LMS/SCORM 99%, incidente #1325. Preservar trilha de auditoria, sem exigir repeticao do treinamento.';
 const valid=(v,code)=>{if(!v)throw Error('LMS99_'+code);};
 const upper=x=>String(x??'').trim().toUpperCase();
 const progress=x=>Number(x?.progresso_bruto??x?.progresso_pct??-1);
-export function plan(courses){
+export function plan(courses, authorizedIds = null){
+  if (authorizedIds !== null) {
+    valid(authorizedIds instanceof Set && authorizedIds.size===16,'AUTHORIZED_IDS_INVALID');
+  }
   const rows=[],excluded={cancelled:0,reproved:0,other:0};
   const seen=new Set();
   for(const course of courses)for(const row of course.enrollments){
     const s=upper(row.status),p=progress(row),id=Number(row.id),cid=Number(course.id);
+    if(authorizedIds !== null && !authorizedIds.has(id)) continue;
+    if(authorizedIds !== null) valid(s==='EM_ANDAMENTO' && p===100,'AUTHORIZED_ENROLLMENT_DRIFT');
     if(s==='CONCLUIDO'||p<99)continue;
     if(s==='CANCELADO'){excluded.cancelled++;continue;}
     if(s==='REPROVADO'){excluded.reproved++;continue;}
@@ -29,6 +34,7 @@ export function plan(courses){
   }
   rows.sort((a,b)=>a.cid-b.cid||a.id-b.id);
   valid(rows.length<=100,'COHORT_LIMIT');
+  if(authorizedIds !== null) valid(rows.length===authorizedIds.size,'AUTHORIZED_COHORT_MISSING');
   return {rows,excluded,hash:createHash('sha256').update(JSON.stringify(rows)).digest('hex')};
 }
 async function get(token,route){
@@ -59,7 +65,17 @@ async function authorize(){
   valid(company.status===200&&Number(company.json?.data?.id)===TENANT,'TENANT_MISMATCH');
   return token;
 }
-async function collect(token){
+export function authorizedEnrollmentIds(){
+  const raw=String(process.env.LMS99_TARGET_ENROLLMENT_IDS||'').trim().split(',');
+  valid(raw.length===16 && raw.every(x=>/^[1-9][0-9]{0,8}$/.test(x.trim())),'AUTHORIZED_INPUT');
+  const ids=raw.map(x=>Number(x.trim()));
+  valid(new Set(ids).size===16,'AUTHORIZED_DUPLICATES');
+  return new Set(ids);
+}
+function authorizedIdsHash(ids){
+  return createHash('sha256').update(JSON.stringify([...ids].sort((a,b)=>a-b))).digest('hex');
+}
+async function collect(token,ids){
   let courses=[],total=-1;
   for(let n=1;n<=20;n++){
     const r=await get(token,'/api/lms/cursos?page='+n+'&limit=200');
@@ -88,14 +104,14 @@ async function collect(token){
     valid(enrollments.length===expected,'ENROLLMENT_COUNT_MISMATCH');
     cohort.push({id:course.id,enrollments});
   }
-  return plan(cohort);
+  return plan(cohort,ids);
 }
-function report(p,results){
+function report(p,results,ids){
   const by_course={};
   for(const row of p.rows)by_course[row.cid]=(by_course[row.cid]||0)+1;
   return {schema_version:1,repo_sha:MAIN,production_sha:PROD,tenant:TENANT,
-    mode:MODE,administrator_attestation:'TRAINING_MANAGEMENT_CONFIRMED_REAL_COMPLETION_2026_10_10',
-    candidates:p.rows.length,candidate_hash:p.hash,by_course,excluded:p.excluded,
+    mode:MODE,administrator_attestation:'TRAINING_MANAGEMENT_CONFIRMED_REAL_COMPLETION_2026_10_16',
+    candidates:p.rows.length,candidate_hash:p.hash,authorized_count:ids.size,authorized_ids_hash:authorizedIdsHash(ids),by_course,excluded:p.excluded,
     writes:results.completed||0,results,scorm_cmi_changed:false,personal_data:false,
     completion_date_rule:'CANONICAL_SERVER_DATE',historical_training_date_not_fabricated:true};
 }
@@ -109,10 +125,11 @@ async function main(){
   valid(/^[a-f0-9]{40}$/.test(PROD)&&TENANT===6,'PRODUCTION_SCOPE_INVALID');
   valid(['dry-run','apply'].includes(MODE),'MODE_INVALID');
   valid(process.env.LMS99_CONFIRMATION===('AIRTRUST_LMS99_'+(MODE==='apply'?'APPLY':'DRY_RUN')),'CONFIRMATION_MISSING');
-  await pin();const token=await authorize();const cohort=await collect(token);
-  if(MODE==='dry-run'){process.stdout.write(JSON.stringify(report(cohort,{completed:0}),null,2));return;}
+  const ids=authorizedEnrollmentIds();
+  await pin();const token=await authorize();const cohort=await collect(token,ids);
+  if(MODE==='dry-run'){process.stdout.write(JSON.stringify(report(cohort,{completed:0},ids),null,2));return;}
   valid(cohort.rows.length>0&&cohort.hash===process.env.REVIEWED_COHORT_HASH,'REVIEWED_COHORT_CHANGED');
-  const results={completed:0,already_completed:0,rejected_409:0,rejected_403:0,other_error:0,qualification_linked:0};
+  const results={completed:0,already_completed:0,rejected_409:0,rejected_403:0,other_error:0,qualification_linked:0,detail:[]};
   for(const row of cohort.rows){
     await pin();
     const before=await get(token,'/api/lms/matriculas/'+row.id);
@@ -123,17 +140,18 @@ async function main(){
     const res=await fetchJson(API+'/api/lms/matriculas/'+row.id+'/status',{
       method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
       body:JSON.stringify({status:'CONCLUIDO',observacoes:administrativeObservations(data.observacoes)})});
-    if(res.status===409){results.rejected_409++;continue;}
-    if(res.status===403){results.rejected_403++;continue;}
-    if(res.status!==200||res.json?.success!==true){results.other_error++;break;}
+    if(res.status===409){results.rejected_409++;results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'REJECTED_409'});continue;}
+    if(res.status===403){results.rejected_403++;results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'REJECTED_403'});continue;}
+    if(res.status!==200||res.json?.success!==true){results.other_error++;results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'ERROR'});break;}
     const after=await get(token,'/api/lms/matriculas/'+row.id);
     valid(after.status===200&&upper(after.json?.data?.status)==='CONCLUIDO'&&
       Number(after.json?.data?.progresso_pct)===100&&
       Boolean(String(after.json?.data?.data_conclusao||'').trim()),'POSTCHECK_FAILED');
     if(after.json?.data?.qualificacao_historico_id)results.qualification_linked++;
+    results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'CONCLUIDO',qualification_linked:Boolean(after.json?.data?.qualificacao_historico_id)});
     results.completed++;
   }
-  process.stdout.write(JSON.stringify(report(cohort,results),null,2));
+  process.stdout.write(JSON.stringify(report(cohort,results,ids),null,2));
   valid(results.other_error===0&&results.rejected_409===0&&results.rejected_403===0,'RECONCILIATION_PARTIAL_REVIEW_REQUIRED');
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(e=>{console.error('LMS99_GOVERNED_FAILED:'+String(e.message).slice(0,90));process.exitCode=1;});
