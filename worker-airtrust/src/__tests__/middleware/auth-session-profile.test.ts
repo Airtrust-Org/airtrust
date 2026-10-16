@@ -519,6 +519,17 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
     expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
   });
 
+  it('ADMINISTRADOR sempre pode entrar como ALUNO sem matrícula, mesmo com ALUNO explícito inativo', async () => {
+    const db = createDb({
+      ...b,
+      explicitProfiles: [
+        { perfil: 'ADMINISTRADOR', ativo: 1 },
+        { perfil: 'ALUNO', ativo: 0 },
+      ],
+    });
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['ADMINISTRADOR', 'ALUNO']);
+  });
+
   it('isolamento por empresa_id: perfis explícitos da empresa B não vazam para a empresa A', async () => {
     const db = createDb({
       ...b,
@@ -533,6 +544,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
     expect(await resolveAvailableSessionRoles(db, 43, 99)).toEqual([
       'ADMINISTRADOR',
       'INSTRUTOR',
+      'ALUNO',
     ]);
   });
 
