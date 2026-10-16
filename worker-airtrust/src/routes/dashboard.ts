@@ -10,6 +10,7 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
+import { buildSnapshot as buildTrainingComplianceSnapshot } from './compliance-treinamentos';
 import { getSchemaColumns } from '../utils/db-schema';
 import {
   buildFuncionarioScopeWhere,
@@ -132,8 +133,7 @@ app.get('/qualificacoes', async (c) => {
             AND qh_renovadora.renovacao_de = qh.id
         )`
       : legacyRenewedPredicate;
-    const effectiveRenewedPredicate =
-      `((${explicitRenewalLinkPredicate}) OR (${newerQualificationExistsPredicate}))`;
+    const effectiveRenewedPredicate = `((${explicitRenewalLinkPredicate}) OR (${newerQualificationExistsPredicate}))`;
 
     const effectiveActiveRenewedPredicate = `(qh.deleted_at IS NULL AND NOT (${sqlStatusEqualsAny(QUALIFICATION_STATUS_EXPR, CANCELLED_STATUS_VALUES)}) AND ${effectiveRenewedPredicate})`;
 
@@ -394,6 +394,7 @@ import {
   getDashboardMetrics,
   getDashboardAlerts,
   getComplianceScore,
+  getQualificationComplianceSummary,
   getDemandaTreinamento,
   getAtividadesRecentes,
   getDashboardEscalasResumo,
@@ -456,6 +457,26 @@ app.get('/compliance-score', async (c) => {
       toError(error),
     );
     return c.json({ success: false, error: 'Erro ao buscar score de compliance' }, 500);
+  }
+});
+
+/**
+ * GET /api/dashboard/qualification-compliance
+ * Compliance independente de licenças/habilitações/CMA/cheques modelados.
+ * Não inclui treinamentos nem sessões de simulador como um terceiro índice.
+ */
+app.get('/qualification-compliance', async (c) => {
+  try {
+    const { empresaId } = getTenantContext(c);
+    const access = await getEmployeeSectorAccess(c, empresaId);
+    const summary = await getQualificationComplianceSummary(c.env.DB, empresaId, access);
+    return c.json({ success: true, data: summary });
+  } catch (error) {
+    createLogger(c as Context, 'Dashboard').error(
+      'Erro ao buscar Compliance de Qualificações',
+      toError(error),
+    );
+    return c.json({ success: false, error: 'Erro ao buscar Compliance de Qualificações' }, 500);
   }
 });
 
@@ -702,6 +723,8 @@ app.get('/operational-summary', requireRole('admin', 'manager'), async (c) => {
       escalasResult,
       sessoesResult,
       simuladoresResult,
+      trainingComplianceResult,
+      qualificationComplianceResult,
     ] = await Promise.allSettled([
       getDashboardMetrics(db, empresaId, effectiveAccess),
       getDashboardAlerts(db, empresaId, effectiveAccess),
@@ -709,6 +732,8 @@ app.get('/operational-summary', requireRole('admin', 'manager'), async (c) => {
       getDashboardEscalasResumo(db, empresaId, effectiveAccess, mes, ano, 6),
       getDashboardUpcomingSessions(db, empresaId, effectiveAccess, hoje, 24),
       getDashboardSimuladoresAlertas(db, empresaId, effectiveAccess),
+      buildTrainingComplianceSnapshot(db, empresaId, effectiveAccess),
+      getQualificationComplianceSummary(db, empresaId, effectiveAccess),
     ]);
 
     const unavailableSources: string[] = [];
@@ -721,6 +746,54 @@ app.get('/operational-summary', requireRole('admin', 'manager'), async (c) => {
       );
       return null;
     };
+
+    const trainingSnapshot = readSource(trainingComplianceResult, 'compliance_treinamentos');
+    const qualificationCompliance = readSource(
+      qualificationComplianceResult,
+      'compliance_qualificacoes',
+    );
+    const trainingCompliance = trainingSnapshot
+      ? (() => {
+          const pessoas = trainingSnapshot.people.length;
+          const pessoasSemConfiguracao = trainingSnapshot.people.filter(
+            (person) => !person.configurado,
+          ).length;
+          const requisitosObrigatorios = trainingSnapshot.people.reduce(
+            (sum, person) => sum + person.total_obrigatorios,
+            0,
+          );
+          const conformes = trainingSnapshot.people.reduce(
+            (sum, person) => sum + person.conformes,
+            0,
+          );
+          return {
+            pessoas,
+            pessoas_sem_configuracao: pessoasSemConfiguracao,
+            requisitos_obrigatorios: requisitosObrigatorios,
+            conformes,
+            vencendo: trainingSnapshot.people.reduce((sum, person) => sum + person.vencendo, 0),
+            vencidos: trainingSnapshot.people.reduce((sum, person) => sum + person.vencidos, 0),
+            nao_realizados: trainingSnapshot.people.reduce(
+              (sum, person) => sum + person.nao_realizados,
+              0,
+            ),
+            em_andamento: trainingSnapshot.people.reduce(
+              (sum, person) => sum + person.em_andamento,
+              0,
+            ),
+            compliance_pct:
+              requisitosObrigatorios > 0
+                ? Math.round((conformes / requisitosObrigatorios) * 1000) / 10
+                : null,
+            cobertura:
+              requisitosObrigatorios === 0
+                ? ('NAO_CONFIGURADA' as const)
+                : pessoasSemConfiguracao > 0
+                  ? ('PARCIAL' as const)
+                  : ('COMPLETA' as const),
+          };
+        })()
+      : null;
 
     const selectedSetorIds =
       effectiveAccess.mode === 'all'
@@ -749,6 +822,8 @@ app.get('/operational-summary', requireRole('admin', 'manager'), async (c) => {
         escalas: readSource(escalasResult, 'escalas'),
         sessoes: readSource(sessoesResult, 'simuladores_sessoes'),
         simuladoresAlertas: readSource(simuladoresResult, 'simuladores_pendencias'),
+        trainingCompliance,
+        qualificationCompliance,
         unavailableSources,
       },
     });

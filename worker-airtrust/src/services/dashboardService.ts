@@ -657,6 +657,240 @@ export async function getDashboardAlerts(
  * Calcula score de compliance geral
  * Usa cálculo DINÂMICO de vencimento (data_conclusao + validade meses)
  */
+export interface QualificationComplianceSummary {
+  pessoas: number;
+  pessoas_sem_configuracao: number;
+  requisitos_obrigatorios: number;
+  conformes: number;
+  vencendo: number;
+  vencidos: number;
+  nao_realizados: number;
+  compliance_pct: number | null;
+  cobertura: 'COMPLETA' | 'PARCIAL' | 'NAO_CONFIGURADA';
+  escopo_modelo: 'SETOR_OU_TRANSVERSAL';
+}
+
+/**
+ * Compliance de Qualificações é independente de Compliance de Treinamentos.
+ *
+ * Denominador: modelos ativos classificados como DOCUMENTO ou AVALIACAO (ou is_check=1)
+ * aplicáveis ao setor do funcionário; modelo sem vínculo setorial é transversal.
+ * Evidência: último histórico operacional da qualificação e, para documentos/licenças,
+ * registro em `licencas` com código equivalente. Evidência nunca cria obrigação.
+ */
+export async function getQualificationComplianceSummary(
+  db: D1Database,
+  empresaId: number,
+  access?: EmployeeSectorAccess,
+): Promise<QualificationComplianceSummary> {
+  const empty: QualificationComplianceSummary = {
+    pessoas: 0,
+    pessoas_sem_configuracao: 0,
+    requisitos_obrigatorios: 0,
+    conformes: 0,
+    vencendo: 0,
+    vencidos: 0,
+    nao_realizados: 0,
+    compliance_pct: null,
+    cobertura: 'NAO_CONFIGURADA',
+    escopo_modelo: 'SETOR_OU_TRANSVERSAL',
+  };
+
+  if (
+    !(await tableExists(db, 'qualificacoes_tipos')) ||
+    !(await tableExists(db, 'qualificacoes_historico')) ||
+    !(await tableExists(db, 'qualificacoes_tipos_setores'))
+  ) {
+    return empty;
+  }
+
+  const employeeScope = buildEmployeeScopeSql(access, 'f');
+  const hoje = getTodayIsoSaoPaulo();
+  const thresholdDias = await getQualificacoesAlertaDias(db, empresaId);
+  const currentQualificationPredicate = buildCurrentOperationalQualificationPredicate('qh');
+  const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
+  const hasLicencas = await tableExists(db, 'licencas');
+  const licensesCte = hasLicencas
+    ? `current_licenses AS (
+        SELECT funcionario_id, codigo, data_vencimento
+        FROM (
+          SELECT
+            l.funcionario_id,
+            UPPER(TRIM(COALESCE(l.tipo, ''))) AS codigo,
+            l.data_vencimento,
+            ROW_NUMBER() OVER (
+              PARTITION BY l.funcionario_id, UPPER(TRIM(COALESCE(l.tipo, '')))
+              ORDER BY date(l.data_vencimento) DESC, l.id DESC
+            ) AS rn
+          FROM licencas l
+          WHERE l.empresa_id = ?
+            AND l.deleted_at IS NULL
+            AND TRIM(COALESCE(l.tipo, '')) <> ''
+        )
+        WHERE rn = 1
+      )`
+    : `current_licenses AS (
+        SELECT NULL AS funcionario_id, '' AS codigo, NULL AS data_vencimento
+        WHERE 1 = 0
+      )`;
+
+  const result = await db
+    .prepare(
+      `WITH active_employees AS (
+         SELECT f.id, f.setor_id
+         FROM funcionarios f
+         WHERE f.empresa_id = ?
+           AND f.deleted_at IS NULL
+           AND COALESCE(f.ativo, 1) = 1
+           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+           AND ${employeeScope.clause}
+       ),
+       qualification_types AS (
+         SELECT
+           qt.id,
+           UPPER(TRIM(COALESCE(qt.codigo, ''))) AS codigo,
+           qt.validade
+         FROM qualificacoes_tipos qt
+         WHERE qt.empresa_id = ?
+           AND qt.deleted_at IS NULL
+           AND COALESCE(qt.ativo, 1) = 1
+           AND (
+             UPPER(COALESCE(qt.classe_requisito, '')) IN ('DOCUMENTO', 'AVALIACAO')
+             OR COALESCE(qt.is_check, 0) = 1
+           )
+       ),
+       requirements AS (
+         SELECT e.id AS funcionario_id, qt.id AS qualificacao_id, qt.codigo
+         FROM active_employees e
+         CROSS JOIN qualification_types qt
+         WHERE
+           NOT EXISTS (
+             SELECT 1
+             FROM qualificacoes_tipos_setores qts_any
+             WHERE qts_any.empresa_id = ?
+               AND qts_any.tipo_id = qt.id
+               AND qts_any.deleted_at IS NULL
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM qualificacoes_tipos_setores qts
+             WHERE qts.empresa_id = ?
+               AND qts.tipo_id = qt.id
+               AND qts.setor_id = e.setor_id
+               AND qts.deleted_at IS NULL
+           )
+       ),
+       current_history AS (
+         SELECT funcionario_id, qualificacao_id, data_vencimento
+         FROM (
+           SELECT
+             qh.funcionario_id,
+             qh.qualificacao_id,
+             ${vencimentoExpr} AS data_vencimento,
+             ROW_NUMBER() OVER (
+               PARTITION BY qh.funcionario_id, qh.qualificacao_id
+               ORDER BY datetime(COALESCE(${vencimentoExpr}, qh.data_conclusao, qh.updated_at, qh.created_at)) DESC,
+                        qh.id DESC
+             ) AS rn
+           FROM qualificacoes_historico qh
+           JOIN qualification_types qt ON qt.id = qh.qualificacao_id
+           WHERE qh.empresa_id = ?
+             AND ${currentQualificationPredicate}
+         )
+         WHERE rn = 1
+       ),
+       ${licensesCte},
+       evidence AS (
+         SELECT
+           r.funcionario_id,
+           r.qualificacao_id,
+           r.codigo,
+           h.qualificacao_id IS NOT NULL AS has_history,
+           l.funcionario_id IS NOT NULL AS has_license,
+           CASE
+             WHEN h.qualificacao_id IS NULL THEN l.data_vencimento
+             WHEN l.funcionario_id IS NULL THEN h.data_vencimento
+             WHEN h.data_vencimento IS NULL OR l.data_vencimento IS NULL THEN NULL
+             WHEN date(h.data_vencimento) >= date(l.data_vencimento) THEN h.data_vencimento
+             ELSE l.data_vencimento
+           END AS data_vencimento
+         FROM requirements r
+         LEFT JOIN current_history h
+           ON h.funcionario_id = r.funcionario_id
+          AND h.qualificacao_id = r.qualificacao_id
+         LEFT JOIN current_licenses l
+           ON l.funcionario_id = r.funcionario_id
+          AND l.codigo = r.codigo
+       ),
+       scored AS (
+         SELECT
+           *,
+           CASE
+             WHEN has_history = 0 AND has_license = 0 THEN 'NAO_REALIZADO'
+             WHEN data_vencimento IS NOT NULL AND date(data_vencimento) < date(?) THEN 'VENCIDO'
+             WHEN data_vencimento IS NOT NULL
+               AND date(data_vencimento) <= date(?, '+' || ? || ' days') THEN 'VENCENDO'
+             ELSE 'CONFORME'
+           END AS status_compliance
+         FROM evidence
+       )
+       SELECT
+         (SELECT COUNT(*) FROM active_employees) AS pessoas,
+         (SELECT COUNT(*)
+            FROM active_employees e
+           WHERE NOT EXISTS (
+             SELECT 1 FROM requirements r WHERE r.funcionario_id = e.id
+           )) AS pessoas_sem_configuracao,
+         COUNT(scored.qualificacao_id) AS requisitos_obrigatorios,
+         COALESCE(SUM(CASE WHEN scored.status_compliance IN ('CONFORME', 'VENCENDO') THEN 1 ELSE 0 END), 0) AS conformes,
+         COALESCE(SUM(CASE WHEN scored.status_compliance = 'VENCENDO' THEN 1 ELSE 0 END), 0) AS vencendo,
+         COALESCE(SUM(CASE WHEN scored.status_compliance = 'VENCIDO' THEN 1 ELSE 0 END), 0) AS vencidos,
+         COALESCE(SUM(CASE WHEN scored.status_compliance = 'NAO_REALIZADO' THEN 1 ELSE 0 END), 0) AS nao_realizados
+       FROM scored`,
+    )
+    .bind(
+      empresaId,
+      ...employeeScope.bindings,
+      empresaId,
+      empresaId,
+      empresaId,
+      empresaId,
+      ...(hasLicencas ? [empresaId] : []),
+      hoje,
+      hoje,
+      thresholdDias,
+    )
+    .first<{
+      pessoas: number;
+      pessoas_sem_configuracao: number;
+      requisitos_obrigatorios: number;
+      conformes: number;
+      vencendo: number;
+      vencidos: number;
+      nao_realizados: number;
+    }>();
+
+  const pessoas = Number(result?.pessoas || 0);
+  const pessoasSemConfiguracao = Number(result?.pessoas_sem_configuracao || 0);
+  const requisitos = Number(result?.requisitos_obrigatorios || 0);
+  const conformes = Number(result?.conformes || 0);
+  const cobertura: QualificationComplianceSummary['cobertura'] =
+    requisitos === 0 ? 'NAO_CONFIGURADA' : pessoasSemConfiguracao > 0 ? 'PARCIAL' : 'COMPLETA';
+
+  return {
+    pessoas,
+    pessoas_sem_configuracao: pessoasSemConfiguracao,
+    requisitos_obrigatorios: requisitos,
+    conformes,
+    vencendo: Number(result?.vencendo || 0),
+    vencidos: Number(result?.vencidos || 0),
+    nao_realizados: Number(result?.nao_realizados || 0),
+    compliance_pct: requisitos > 0 ? Math.round((conformes / requisitos) * 1000) / 10 : null,
+    cobertura,
+    escopo_modelo: 'SETOR_OU_TRANSVERSAL',
+  };
+}
+
 export async function getComplianceScore(
   db: D1Database,
   empresaId: number,

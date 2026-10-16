@@ -107,6 +107,30 @@ function buildSummary(selectable = true) {
       edicoes_pendentes: 0,
       janela_sessoes_proximas_horas: 24,
     },
+    trainingCompliance: {
+      pessoas: 12,
+      pessoas_sem_configuracao: 0,
+      requisitos_obrigatorios: 40,
+      conformes: 32,
+      vencendo: 2,
+      vencidos: 2,
+      nao_realizados: 4,
+      em_andamento: 2,
+      compliance_pct: 80,
+      cobertura: 'COMPLETA' as const,
+    },
+    qualificationCompliance: {
+      pessoas: 12,
+      pessoas_sem_configuracao: 1,
+      requisitos_obrigatorios: 24,
+      conformes: 21,
+      vencendo: 2,
+      vencidos: 1,
+      nao_realizados: 2,
+      compliance_pct: 87.5,
+      cobertura: 'PARCIAL' as const,
+      escopo_modelo: 'SETOR_OU_TRANSVERSAL' as const,
+    },
     unavailableSources: [],
   };
 }
@@ -158,6 +182,18 @@ describe('DashboardPrincipal setorial', () => {
     expect(screen.getByText(/Tripulante Teste/)).toBeInTheDocument();
     expect(screen.getByText('Indicadores do escopo selecionado')).toBeInTheDocument();
     expect(screen.queryByText('Módulos do sistema')).toBeNull();
+  });
+
+  it('separa Compliance de Treinamentos de Compliance de Qualificações sem score global', () => {
+    renderDashboard();
+
+    expect(screen.getByText('Compliance de Treinamentos')).toBeInTheDocument();
+    expect(screen.getByText('80%')).toBeInTheDocument();
+    expect(screen.getByText(/32\/40 obrigações cumpridas/)).toBeInTheDocument();
+    expect(screen.getByText('Compliance de Qualificações')).toBeInTheDocument();
+    expect(screen.getByText('87.5% (parcial)')).toBeInTheDocument();
+    expect(screen.getByText(/21\/24 requisitos válidos/)).toBeInTheDocument();
+    expect(screen.queryByText('Score de Compliance')).toBeNull();
   });
 
   it('só aplica a seleção do administrador quando ele confirma o filtro', () => {
