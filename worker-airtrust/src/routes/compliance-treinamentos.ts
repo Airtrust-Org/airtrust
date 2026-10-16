@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { createTrainingComplianceReconciliationActions, loadReconciliationDecisions, type LmsEnrollment, type ReconciliationDecision } from './compliance-treinamentos-reconciliation-actions';
 import { reconcileTrainingComplianceRuleEnrollment } from '../services/training-compliance-rule-enrollment';
+import { countActiveRequiredEnrollmentsByType } from '../services/training-compliance-course-metrics';
 import { reconcileFdmMaintenance72 } from '../services/training-compliance-fdm72-reconciliation';
 import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModalitySql } from '../services/training-compliance-history-identity';
 import { auth } from '../middleware/auth';
@@ -1389,23 +1390,7 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
       map.set(req.qualificacao_tipo_id, current);
     }
   }
-  const requiredPairs = new Set<string>();
-  for (const person of people) {
-    for (const req of person.requisitos) {
-      if (req.obrigatoriedade === 'OBRIGATORIA') {
-        requiredPairs.add(`${person.id}:${req.qualificacao_tipo_id}`);
-      }
-    }
-  }
-  const enrolledPeopleByType = new Map<number, Set<number>>();
-  for (const enrollment of activeEnrollments) {
-    const typeId = Number(enrollment.qualificacao_tipo_id);
-    const employeeId = Number(enrollment.funcionario_id);
-    if (!typeId || !requiredPairs.has(`${employeeId}:${typeId}`)) continue;
-    const set = enrolledPeopleByType.get(typeId) || new Set<number>();
-    set.add(employeeId);
-    enrolledPeopleByType.set(typeId, set);
-  }
+  const enrolledPeopleByType = countActiveRequiredEnrollmentsByType(people, activeEnrollments);
 
   const data = Array.from(map.values())
     .map((row) => ({
