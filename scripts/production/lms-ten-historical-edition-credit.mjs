@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// source_reference: authenticated tenant-6 LMS99 administrative apply #38846270040; exactly ten LMS_NEW_EDITION_REQUIRED enrollments.
+// operational_decision: training manager explicitly authorized historical-edition credit for the ten prior-edition completions; never claim new-edition SCORM pass.
+// dry_run_required: official GitHub Actions main-SHA-pinned read-only cohort report and matching reviewed hash before any correction.
+// rollback_plan_required: production D1 Time Travel recovery point and reviewed forward-only compensation if subsequent production writes prevent rewind.
 // Production tenant6: 10 administrative credits for training attended in an older SCORM edition.
 // Does not modify SCORM, exam grades, qualifications, package versions or issue certificates.
 import {createHash} from 'node:crypto';
