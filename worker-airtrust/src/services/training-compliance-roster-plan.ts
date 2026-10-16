@@ -24,6 +24,7 @@ export type RosterEnrollment = {
   has_xapi: number;
   has_history: number;
   has_diagnostics: number;
+  has_cycle_evidence: number;
 };
 export type RosterEnrollAction = {
   funcionarioId: number;
@@ -49,7 +50,7 @@ export type RosterPlan = {
 export function rosterEnrollmentHasEvidence(row: RosterEnrollment): boolean {
   return Number(row.progresso_pct || 0) > 0 ||
     Boolean(row.data_inicio || row.data_conclusao || row.qualificacao_historico_id) ||
-    Boolean(row.has_scorm || row.has_xapi || row.has_history || row.has_diagnostics);
+    Boolean(row.has_scorm || row.has_xapi || row.has_history || row.has_diagnostics || row.has_cycle_evidence);
 }
 
 export function buildTrainingComplianceRosterPlan(
