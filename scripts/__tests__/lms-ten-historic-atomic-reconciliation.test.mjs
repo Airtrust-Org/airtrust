@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import {strict as assert} from 'node:assert';
 import {readFileSync} from 'node:fs';
-import {plan,authorizedEnrollmentIds,administrativeObservations,isVerifiedCompletedCredit} from
+import {plan,authorizedEnrollmentIds,administrativeObservations,isVerifiedCompletedCredit,classifyHistoricAssessment} from
  '../production/lms-ten-historic-atomic-reconciliation.mjs';
 const targets=[[2106,68],[384,34],[201,28],[608,43],[2139,68],
  [610,43],[544,7],[624,43],[700,55],[2052,68]];
@@ -74,4 +74,35 @@ test('workflow validates ten total linked qualifications, not ten repeat PATCH o
  assert.match(script,/PATCH_UNCERTAIN_NO_SAFE_RETRY/);
  assert.match(script,/HTTP_UNCERTAIN_VERIFIED_CANONICAL/);
  assert.doesNotMatch(script,/method:'PATCH'[\s\S]{0,200}retry/);
+});
+
+test('triage classifies real score 0 below mastery without certifying 100% progress',()=>{
+ const row={scorm_mastery_score:70,scorm_assessment_policy:'SCORED',gerar_qualificacao_ao_concluir:1,
+  edition_mismatch:{required:true},progresso_pct:100,scorm_progresso:{
+    score_raw:0,score_min:0,score_max:100,lesson_status:'incomplete'}};
+ const assessment=classifyHistoricAssessment(row);
+ assert.equal(assessment.category,'SCORE_BELOW_MASTERY');
+ assert.equal(assessment.score_pct,0);
+ assert.equal(assessment.mastery_score,70);
+ assert.equal(assessment.terminal_status_present,false);
+ assert.equal(assessment.edition_mismatch_required,true);
+ assert.ok(!('id' in assessment || 'funcionario_id' in assessment || 'cmi_json' in assessment));
+});
+test('triage treats missing, scaled, low score, and failed status fail-closed',()=>{
+ const base={scorm_mastery_score:75,gerar_qualificacao_ao_concluir:1,scorm_assessment_policy:'SCORED'};
+ assert.equal(classifyHistoricAssessment({...base,scorm_progresso:{score_raw:80}}).category,'SCORE_AT_OR_ABOVE_MASTERY');
+ assert.equal(classifyHistoricAssessment({...base,scorm_progresso:{score_scaled:0.6,score_raw:99}}).category,'SCORE_BELOW_MASTERY');
+ assert.equal(classifyHistoricAssessment({...base,scorm_progresso:{score_raw:null}}).category,'SCORE_MISSING');
+ assert.equal(classifyHistoricAssessment({...base,scorm_progresso:{score_scaled:101}}).category,'SCORE_INVALID');
+ assert.equal(classifyHistoricAssessment({...base,scorm_progresso:{score_raw:90,success_status:'failed'}}).category,'EXPLICIT_FAILURE');
+ assert.equal(classifyHistoricAssessment({...base,scorm_progresso:null}).category,'SCORM_EVIDENCE_MISSING');
+ assert.equal(classifyHistoricAssessment({...base,scorm_mastery_score:null,scorm_progresso:{score_raw:95}}).category,'MASTERY_INVALID_OR_MISSING');
+ assert.equal(classifyHistoricAssessment({...base,scorm_assessment_policy:'FORMATIVE',scorm_progresso:{score_raw:null}}).category,'NOT_SCORED_POLICY_NEEDS_REVIEW');
+});
+test('workflow remains strictly bounded to exact ten IDs and read-only triage never mutates SCORM',()=>{
+ const script=readFileSync(new URL('../production/lms-ten-historic-atomic-reconciliation.mjs',import.meta.url),'utf8');
+ assert.match(script,/assessment_by_ordinal/);
+ assert.match(script,/qualification_linked:Boolean/);
+ assert.match(script,/const assessmentByOrdinal=\[\]/);
+ assert.match(script,/candidate_hash:p.hash/);
 });
