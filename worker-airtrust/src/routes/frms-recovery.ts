@@ -443,18 +443,19 @@ async function upsertRecoveryAssessment(params: {
     )
     .bind(params.empresaId, params.funcionarioId, params.referenceDate)
     .first<{ id: string }>();
+  const statements: D1PreparedStatement[] = [];
   if (existing?.id) {
-    await params.db
+    statements.push(params.db
       .prepare(
         `UPDATE frms_recovery_assessment SET deleted_at = ?, updated_at = ?
           WHERE id = ? AND empresa_id = ?`,
       )
       .bind(now, now, existing.id, params.empresaId)
-      .run();
+    );
   }
 
   const id = crypto.randomUUID();
-  await params.db
+  statements.push(params.db
     .prepare(
       `INSERT INTO frms_recovery_assessment (
          id, empresa_id, funcionario_id, reference_date, recovery_day_id,
@@ -495,7 +496,10 @@ async function upsertRecoveryAssessment(params: {
       now,
       now,
     )
-    .run();
+  );
+  // Soft-delete and replacement commit together. A failed insert must not
+  // erase the previous active recovery assessment.
+  await params.db.batch(statements);
 
   return {
     id,
@@ -518,6 +522,13 @@ async function upsertRecoveryAssessment(params: {
     reasons: result.reasons,
     effectiveness_delta_pct: null,
   };
+}
+
+/** Only absence of the historical recovery table is a compatibility no-op.
+ * Never conceal write/constraint failures as if recovery had no evidence. */
+export function isMissingRecoverySchemaError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /\bno such table:\s*(?:main\.)?(?:frms_recovery_activity_day|frms_recovery_assessment)\b/i.test(message);
 }
 
 export async function refreshRecoveryAssessmentForActivityDate(params: {
@@ -548,9 +559,9 @@ export async function refreshRecoveryAssessmentForActivityDate(params: {
         activity.immediate_callout_required == null ? null : Number(activity.immediate_callout_required) === 1,
       totalDutyMinutes: activity.total_duty_minutes,
     });
-  } catch {
-    // Migration may not yet be applied in older environments.
-    return null;
+  } catch (error) {
+    if (isMissingRecoverySchemaError(error)) return null;
+    throw error;
   }
 }
 
