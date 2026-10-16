@@ -7,11 +7,9 @@
  * employee-sector-access.ts (setor resolution) and normalizeTenantRole
  * (role normalization) rather than reimplementing either.
  *
- * ADMINISTRADOR does not receive operational access from the role alone —
- * access here is derived purely from active setores_gestores membership,
- * so an admin who is also assigned as gestor of a setor gets exactly the
- * same operational access a regular gestor of that setor would get, no
- * more and no less.
+ * ADMINISTRADOR receives all active sectors of the authenticated tenant.
+ * GESTOR remains constrained to explicit setores_gestores assignments.
+ * Unclassified resources are still denied; cross-tenant resources never pass.
  *
  * Rollout is per-tenant via empresas.operational_domain_rbac_enabled:
  *   - disabled (0, default): assertOperationalAccess/requireOperationalAccess
@@ -272,7 +270,17 @@ export async function resolveOperationalAccess(
     return { enabled: true, domains: [], setorIds: [], actions: {} };
   }
 
-  const setorIds = await resolveManagedSetorIds(db, empresaId, userId);
+  // Administrador do tenant opera em todos os seus setores ativos. Gestores
+  // continuam estritamente limitados aos setores atribuídos.
+  const setorIds = normalizedRole === 'admin'
+    ? (await db.prepare(
+        `SELECT id AS setor_id FROM setores
+           WHERE empresa_id = ? AND ativo = 1 AND deleted_at IS NULL
+           ORDER BY id`,
+      ).bind(empresaId).all<{ setor_id: number }>()).results
+        .map((row) => Number(row.setor_id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    : await resolveManagedSetorIds(db, empresaId, userId);
   if (setorIds.length === 0) {
     return { enabled: true, domains: [], setorIds: [], actions: {} };
   }
