@@ -32,6 +32,7 @@ export const OperationsOverview = React.memo(function OperationsOverview({
     staleTime: 3 * 60 * 1000,
     retry: false,
   });
+  const trainingIncomplete = Boolean(training.data?.pessoas_sem_configuracao);
   const tripulantesEmDia = Math.max(metrics.tripulantesAtivos - metrics.tripulantesComQualificacoesVencidas, 0);
   const score = safePct(tripulantesEmDia, metrics.tripulantesAtivos);
   // Este percentual parcial não representa o Compliance de Treinamentos nem todas as qualificações.
@@ -61,9 +62,9 @@ export const OperationsOverview = React.memo(function OperationsOverview({
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
           <p className="text-xs font-semibold text-slate-500">Compliance de Treinamentos</p>
-          <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{training.isLoading ? 'Carregando…' : training.isError ? 'Indisponível' : training.data?.compliance_pct == null ? 'Não configurado' : `${training.data.compliance_pct}%`}</p>
-          <p className="text-xs text-slate-500">{training.data ? `${training.data.conformes} de ${training.data.requisitos_obrigatorios} obrigações cumpridas` : 'EAD, presencial, simulador e demais modalidades'}</p>
-          {training.data && training.data.pessoas_sem_configuracao > 0 && <p className="text-xs text-amber-700">{training.data.pessoas_sem_configuracao} pessoas sem matriz configurada</p>}
+          <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{training.isLoading ? 'Carregando…' : training.isError ? 'Indisponível' : training.data?.compliance_pct == null ? 'Não configurado' : `${training.data.compliance_pct}%${trainingIncomplete ? ' (parcial)' : ''}`}</p>
+          <p className="text-xs text-slate-500">{training.data ? `${training.data.conformes} de ${training.data.requisitos_obrigatorios} obrigações cumpridas` : 'Treinamentos de todas as modalidades aplicáveis'}</p>
+          {training.data && training.data.pessoas_sem_configuracao > 0 && <p className="text-xs text-amber-700">{training.data.pessoas_sem_configuracao} pessoas sem matriz configurada — percentual não representa cobertura integral</p>}
         </div>
         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
           <p className="text-xs font-semibold text-slate-500">Compliance de Qualificações</p>
