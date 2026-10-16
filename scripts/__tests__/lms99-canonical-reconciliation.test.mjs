@@ -70,6 +70,23 @@ test('classifyEnrollment never treats progress alone as completion evidence', ()
   });
 });
 
+test('drift to NAO_INICIADO or an unknown status never qualifies for canonical reconciliation', () => {
+  for (const status of ['NAO_INICIADO', 'UNKNOWN', '']) {
+    const result = classifyEnrollment({
+      status,
+      progresso_bruto: 100,
+      tipo_conteudo: 'scorm',
+      closure_readiness: {
+        code: 'SCORM_READY_FOR_SERVER_VERIFICATION',
+        eligible_for_server_verification: true,
+      },
+    });
+    assert.deepEqual(result, {
+      bucket: 'EXCLUDED', code: 'ENROLLMENT_NOT_ACTIVE', ready: false,
+    });
+  }
+});
+
 test('cohortHash is deterministic and independent of input order', () => {
   const a = cohortHash([{ id: 9, course_id: 4 }, { id: 3, course_id: 56 }]);
   const b = cohortHash([{ id: 3, course_id: 56 }, { id: 9, course_id: 4 }]);
