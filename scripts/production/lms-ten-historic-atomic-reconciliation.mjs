@@ -138,7 +138,7 @@ function report(p,results,ids){
 }
 export function administrativeObservations(existing){
   const prior=String(existing??'').trim();
-  return prior?prior+'\n\n'+REASON:REASON;
+  return prior?REASON+'\n\n'+prior:REASON;
 }
 export function isOnlyReviewedException(plan){
   return plan.pendingReview.length===1 &&
