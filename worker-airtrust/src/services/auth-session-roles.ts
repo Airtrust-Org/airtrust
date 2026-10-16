@@ -87,7 +87,7 @@ async function hasLmsStudentLink(
  * - INSTRUTOR: cadastro ativo em instrutores_simulador;
  * - ALUNO: matrícula LMS ativa/não removida no tenant no fallback legado.
  *
- * Invariante de negócio: todo GESTOR também pode atuar como ALUNO, mesmo sem
+ * Invariante de negócio: todo GESTOR ou ADMINISTRADOR também pode atuar como ALUNO, mesmo sem
  * matrícula LMS e mesmo quando a estrutura explícita de perfis já existe.
  *
  * Nenhum perfil é criado por simples pedido do cliente; o backend sempre valida
@@ -187,10 +187,10 @@ export async function resolveAvailableSessionRoles(
     }
   }
 
-  // Regra de negócio: todo GESTOR também precisa poder atuar como ALUNO.
+  // Regra de negócio: todo GESTOR ou ADMINISTRADOR também pode atuar como ALUNO.
   // A derivação em tempo de autorização cobre gestores já existentes sem
   // migration/backfill e mantém ADMINISTRADOR como perfil independente.
-  if (roles.has('GESTOR')) {
+  if (roles.has('GESTOR') || roles.has('ADMINISTRADOR')) {
     roles.add('ALUNO');
   }
 

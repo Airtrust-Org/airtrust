@@ -1,3 +1,4 @@
+import { LmsCourseComplianceMetrics, useLmsCourseCompliance } from './LmsCourseComplianceMetrics';
 /**
  * LmsMatriculas — Gestão de matrículas de um curso específico
  * Rota: /lms/matriculas/:cursoId
@@ -497,6 +498,7 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
 export default function LmsMatriculas() {
   const { cursoId: cursoIdParam } = useParams<{ cursoId: string }>();
   const navigate = useNavigate();
+  const { data: complianceRows } = useLmsCourseCompliance();
   const cursoId = Number(cursoIdParam);
 
   const [showModal, setShowModal] = useState(false);
@@ -696,10 +698,8 @@ export default function LmsMatriculas() {
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                           {cursoItem.categoria ?? 'Sem categoria'}
                         </p>
-                        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                          {(cursoItem.total_matriculas ?? 0).toString()} matrícula(s) ·{' '}
-                          {(cursoItem.total_concluidos ?? 0).toString()} concluída(s)
-                        </p>
+
+                        <LmsCourseComplianceMetrics curso={cursoItem} rows={complianceRows} compact />
                       </button>
                     ))}
                   </div>
@@ -761,6 +761,13 @@ export default function LmsMatriculas() {
             </div>
           </div>
         </section>
+
+        {curso ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+            <h3 className="mb-2 font-semibold">Indicadores do treinamento</h3>
+            <LmsCourseComplianceMetrics curso={curso} rows={complianceRows} />
+          </div>
+        ) : null}
 
         <div className="grid gap-4 lg:grid-cols-4">
           <LmsMetricCard
