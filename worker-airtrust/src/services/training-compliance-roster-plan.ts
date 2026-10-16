@@ -9,6 +9,8 @@ import { trainingComplianceNeedsEnrollment } from './training-compliance-enrollm
 export type RosterCourse = {
   id: number;
   qualificacao_tipo_id: number;
+  ativo?: number;
+  publicado?: number;
 };
 export type RosterEnrollment = {
   id: number;
@@ -61,6 +63,7 @@ export function buildTrainingComplianceRosterPlan(
 ): RosterPlan {
   const byType = new Map<number, number[]>();
   for (const course of courses) {
+    if (course.ativo === 0 || course.publicado === 0) continue;
     const typeId = Number(course.qualificacao_tipo_id);
     byType.set(typeId, [...(byType.get(typeId) || []), Number(course.id)]);
   }
