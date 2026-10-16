@@ -15,7 +15,7 @@ interface OperationsOverviewProps {
 
 export const OperationsOverview = React.memo(function OperationsOverview({
   metrics,
-  compliance,
+  compliance: _compliance,
   frmsAlertas: _frmsAlertas,
   treinamentos,
 }: OperationsOverviewProps) {
@@ -34,7 +34,7 @@ export const OperationsOverview = React.memo(function OperationsOverview({
   });
   const tripulantesEmDia = Math.max(metrics.tripulantesAtivos - metrics.tripulantesComQualificacoesVencidas, 0);
   const score = safePct(tripulantesEmDia, metrics.tripulantesAtivos);
-  // A proporção de tripulantes sem qualificações vencidas não é um score\n  // de Compliance de Treinamentos nem comprova todas as qualificações exigidas.
+  // Este percentual parcial não representa o Compliance de Treinamentos nem todas as qualificações.
   const tripulantesEmDiaPct = safePct(tripulantesEmDia, metrics.tripulantesAtivos);
   const tripulantesComVencimentoPct = safePct(metrics.tripulantesComQualificacoesVencendo, metrics.tripulantesAtivos);
 
