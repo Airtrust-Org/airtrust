@@ -19,7 +19,9 @@ function fakeDb(
     return {
       bind: (...values: unknown[]) => {
         expect(values).toEqual([6, '2026-09-01', '2026-09-30']);
-        return { all: async () => ({ results: isCheckin ? checkins : journeys }) };
+        return { all: async () => ({ results: (isCheckin ? checkins : journeys).map((row) => ({
+          funcao: 'PILOTO', cargo: null, ...row,
+        })) }) };
       },
     };
   });
@@ -98,6 +100,21 @@ describe('FRMS IMA V3 cohort scan — bounded, read-only, tenant-only', () => {
     });
     expect(report.state).toBe('PRIVACY_SUPPRESSED');
     expect(report.reconstructedDutyBoundaryPctApprox).toBeNull();
+  });
+
+  it('excludes non-operational roles before counting distinct crew and exposing coverage', async () => {
+    const { db } = fakeDb([
+      { funcionario_id: 42, data_operacional: '2026-09-01',
+        horas_sono: 7, wake_time: '06:00', kss_score: 3, funcao: 'MECANICO' },
+      { funcionario_id: 43, data_operacional: '2026-09-01',
+        horas_sono: 8, wake_time: '06:00', kss_score: 4, funcao: 'PILOTO' },
+    ], [
+      { funcionario_id: 42, data_operacional: '2026-09-01', funcao: 'MECANICO' },
+      { funcionario_id: 43, data_operacional: '2026-09-01', funcao: 'PILOTO' },
+    ]);
+    const rows = await loadImaCohortEvidenceRows(db, 6, '2026-09-01', '2026-09-30');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.funcionario_id).toBe(43);
   });
 
   it('rejects requests without a valid tenant BEFORE opening the database', async () => {
