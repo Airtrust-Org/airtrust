@@ -38,7 +38,7 @@ export const AUTH_POST_ALLOWLIST = Object.freeze([
   '/api/auth/select-empresa',
 ]);
 
-export const SAFE_METHODS = Object.freeze(['GET', 'HEAD', 'OPTIONS']);
+// Session-profile selection rotates only the authenticated access token. It is\n// required by the real multi-role login flow and is NOT an operational data write.\n// Keep it exact-match only; never widen this to arbitrary /api/me mutations.\nexport const SESSION_AUTH_POST_ALLOWLIST = Object.freeze([\n  '/api/me/operational-access/session-profile',\n]);\n\nexport const SAFE_METHODS = Object.freeze(['GET', 'HEAD', 'OPTIONS']);
 export const MUTATION_METHODS = Object.freeze(['DELETE', 'PATCH', 'PUT']);
 
 /**
@@ -163,12 +163,15 @@ export function classifyRequest({ method, url }) {
       return { decision: 'suppress', reason: `optional-read-only-post:${host}${pathname}` };
     }
 
-    const pathAllowed =
+    const legacyAuthPathAllowed =
       STAGING_API_HOST_ALLOWLIST.includes(host) &&
       AUTH_POST_ALLOWLIST.some(
         (allowed) => pathname === allowed || pathname.startsWith(`${allowed}/`),
       );
-    if (pathAllowed) {
+    const sessionAuthPathAllowed =
+      STAGING_API_HOST_ALLOWLIST.includes(host) &&
+      SESSION_AUTH_POST_ALLOWLIST.includes(pathname);
+    if (legacyAuthPathAllowed || sessionAuthPathAllowed) {
       return { decision: 'allow', reason: `auth-post:${host}${pathname}` };
     }
 
