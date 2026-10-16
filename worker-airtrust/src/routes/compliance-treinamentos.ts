@@ -1339,10 +1339,7 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
   const q = normalizeSearchText(c.req.query('q'));
-  const [snapshot, activeEnrollments] = await Promise.all([
-    buildSnapshot(c.env.DB, empresaId, access),
-    loadLmsEnrollments(c.env.DB, empresaId),
-  ]);
+  const [snapshot, activeEnrollments] = await Promise.all([buildSnapshot(c.env.DB, empresaId, access), loadLmsEnrollments(c.env.DB, empresaId)]);
   const people = snapshot.people.filter(
     (p) =>
       (!setorId || p.setor_id === setorId) &&
