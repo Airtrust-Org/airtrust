@@ -43,8 +43,8 @@ env:
   PROD_API_BASE_URL: 'https://api.airtrust.online'
 
 jobs:
-  reconcile:
-    name: Canonical 99% SCORM reconciliation
+  d1_recovery_and_reconcile:
+    name: D1 recovery preflight and canonical 99% SCORM reconciliation
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: production
