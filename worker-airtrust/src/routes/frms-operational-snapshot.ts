@@ -11,6 +11,8 @@ import {
 import { FrmsParameterResolutionError } from '../lib/frms/parameter-governance';
 import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import { createLogger, toError } from '../utils/logger';
+import { isImaV3StagingPreviewEnabled } from '../lib/frms/ima-v3-preview-access';
+import { bridgeImaOperationalSnapshot } from '../lib/frms/ima-v3-operational-snapshot-bridge';
 
 type SnapshotContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
 
@@ -213,6 +215,96 @@ router.get('/operational-snapshot', async (c) => {
       },
       500,
     );
+  }
+});
+
+
+/**
+ * Experimental shadow: staging and explicit tenant allowlist only. No runtime
+ * score, no write, no PII returned. Protected by existing auth plus team RBAC.
+ */
+router.get('/ima-v3/schedule-exposure-shadow', async (c) => {
+  const empresaId = getEmpresaId(c);
+  if (!isImaV3StagingPreviewEnabled(c.env, empresaId)) {
+    return c.json({ success: false, code: 'NOT_FOUND' }, 404);
+  }
+  if (!(await canSeeTeam(c))) {
+    return c.json({ success: false, code: 'FRMS_TEAM_SCOPE_REQUIRED' }, 403);
+  }
+  const parsed = z.object({
+    data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    funcionario_id: z.coerce.number().int().positive().safe(),
+    reference_utc_offset_minutes: z.coerce.number().int().min(-720).max(840),
+  }).safeParse({
+    data_inicio: c.req.query('data_inicio'),
+    data_fim: c.req.query('data_fim'),
+    funcionario_id: c.req.query('funcionario_id'),
+    reference_utc_offset_minutes: c.req.query('reference_utc_offset_minutes'),
+  });
+  if (!parsed.success) return c.json({ success: false, code: 'INVALID_SHADOW_SCOPE' }, 400);
+  const { data_inicio, data_fim, funcionario_id, reference_utc_offset_minutes } = parsed.data;
+  const validDay = (value: string) => {
+    const d = new Date(value + 'T00:00:00Z');
+    return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === value;
+  };
+  if (!validDay(data_inicio) || !validDay(data_fim)) {
+    return c.json({ success: false, code: 'INVALID_SHADOW_DATE' }, 400);
+  }
+  const days = Math.round(
+    (Date.parse(data_fim + 'T00:00:00Z') - Date.parse(data_inicio + 'T00:00:00Z')) / 86_400_000,
+  );
+  if (days < 0 || days > 6) {
+    return c.json({ success: false, code: 'SHADOW_WINDOW_1_TO_7_DAYS_ONLY' }, 400);
+  }
+  try {
+    const employee = await c.env.DB.prepare(
+      'SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? ' +
+      'AND deleted_at IS NULL AND COALESCE(ativo, 1) = 1 LIMIT 1',
+    ).bind(funcionario_id, empresaId).first<{ id: number }>();
+    if (!employee?.id) {
+      return c.json({ success: false, code: 'NOT_FOUND' }, 404);
+    }
+    const snapshot = await listFrmsOperationalSnapshot(c.env.DB, {
+      empresaId,
+      dataInicio: data_inicio,
+      dataFim: data_fim,
+      filters: { funcionario_id, include_inconsistencies: true },
+    });
+    const absOffset = Math.abs(reference_utc_offset_minutes);
+    const offset = (reference_utc_offset_minutes < 0 ? '-' : '+') +
+      String(Math.floor(absOffset / 60)).padStart(2, '0') + ':' +
+      String(absOffset % 60).padStart(2, '0');
+    const endExclusive = new Date(Date.parse(data_fim + 'T00:00:00Z') + 86_400_000)
+      .toISOString().slice(0, 10);
+    const audit = bridgeImaOperationalSnapshot({
+      expectedEmpresaId: empresaId,
+      expectedFuncionarioId: funcionario_id,
+      snapshotRows: snapshot.items,
+      windowStartAt: data_inicio + 'T00:00:00' + offset,
+      windowEndAt: endExclusive + 'T00:00:00' + offset,
+      referenceUtcOffsetMinutes: reference_utc_offset_minutes,
+    });
+    return c.json({
+      success: true,
+      data: audit,
+      meta: {
+        mode: 'EXPERIMENTAL_SHADOW_ONLY',
+        physiologyValidated: false,
+        writes: 0,
+        civilClockAssumption: 'CALLER_SUPPLIED_FIXED_OFFSET_NOT_ZONE_VERIFIED',
+      },
+    });
+  } catch (error) {
+    if (error instanceof FrmsParameterResolutionError) {
+      return c.json({ success: false, code: 'FRMS_CONTEXT_UNAVAILABLE' }, 503);
+    }
+    if (error instanceof Error && error.message.startsWith('IMA_')) {
+      return c.json({ success: false, code: 'IMA_SHADOW_UNRESOLVED_EVIDENCE' }, 409);
+    }
+    const logger = createLogger(c as SnapshotContext, 'FrmsImaV3Shadow');
+    logger.error('FRMS shadow preview failed', toError(error));
+    return c.json({ success: false, code: 'IMA_SHADOW_UNAVAILABLE' }, 500);
   }
 });
 
