@@ -1,0 +1,172 @@
+name: Production LMS99 Canonical Reconciliation
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        required: true
+        type: choice
+        default: dry-run
+        options: [dry-run, apply]
+      expected_main_sha:
+        description: 'Exact current main SHA'
+        required: true
+        type: string
+      expected_production_sha:
+        description: 'Exact deployed production Worker SHA'
+        required: true
+        type: string
+      confirmation:
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: 'Required for apply; successful dry-run run ID from identical source SHA'
+        required: false
+        type: string
+      expected_cohort_hash:
+        description: 'Required for apply; cohort hash from reviewed dry-run'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-lms99-canonical-reconciliation
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  PROD_API_BASE_URL: 'https://api.airtrust.online'
+
+jobs:
+  reconcile:
+    name: Canonical 99% SCORM reconciliation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+      LMS99_CANONICAL_MODE: ${{ inputs.mode }}
+      EXPECTED_COHORT_HASH: ${{ inputs.expected_cohort_hash }}
+      TARGET_COMPANY_ID: '6'
+      PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL }}
+      PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Require exact governed request
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$EXPECTED_MAIN_SHA" == "$GITHUB_SHA" ]]
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[a-f0-9]{40}$ ]]
+          if [[ "$LMS99_CANONICAL_MODE" == dry-run ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_LMS99_CANONICAL_DRY_RUN ]]
+          elif [[ "$LMS99_CANONICAL_MODE" == apply ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_LMS99_CANONICAL_APPLY ]]
+            [[ "$EXPECTED_COHORT_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            exit 1
+          fi
+
+      - name: Verify eight canonical release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Verify reconciliation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/production/lms99-canonical-reconciliation.mjs
+          node --test scripts/__tests__/lms99-canonical-reconciliation.test.mjs
+
+      - name: Verify reviewed identical-SHA dry-run
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN_ID: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$DRY_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo DRY_RUN_REQUIRED >&2; exit 1; }
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$DRY_RUN_ID")"
+          [[ "$(jq -r .name <<< "$run")" == "Production LMS99 Canonical Reconciliation" ]]
+          [[ "$(jq -r .event <<< "$run")" == workflow_dispatch ]]
+          [[ "$(jq -r .head_sha <<< "$run")" == "$GITHUB_SHA" ]]
+          [[ "$(jq -r .conclusion <<< "$run")" == success ]]
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$DRY_RUN_ID" --repo "$GITHUB_REPOSITORY"             --name "lms99-canonical-dry-run-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
+          jq -e --arg main "$GITHUB_SHA" --arg prod "$EXPECTED_PRODUCTION_SHA" --arg hash "$EXPECTED_COHORT_HASH" '
+            .schema_version==1 and .repo_sha==$main and .production_sha==$prod and
+            .mode=="dry-run" and .tenant==6 and .no_personal_data==true and
+            .writes==0 and .cohort_hash==$hash and .canonical_ready_count>0
+          ' "$RUNNER_TEMP/reviewed/result.json" >/dev/null
+
+      - name: Verify D1 recovery window before apply
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+          npm ci --ignore-scripts >/dev/null
+          npx wrangler d1 time-travel info airtrust-db --env production             --timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$RUNNER_TEMP/d1-recovery.txt"
+          test -s "$RUNNER_TEMP/d1-recovery.txt"
+          rm -f "$RUNNER_TEMP/d1-recovery.txt"
+
+      - name: Run canonical reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/production/lms99-canonical-reconciliation.mjs > "$RUNNER_TEMP/result.json"
+          test -s "$RUNNER_TEMP/result.json"
+          jq -e --arg mode "$LMS99_CANONICAL_MODE" '
+            .schema_version==1 and .mode==$mode and .tenant==6 and .no_personal_data==true
+          ' "$RUNNER_TEMP/result.json" >/dev/null
+
+      - name: Publish sanitized aggregate summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/result.json"
+          if [[ ! -s "$report" ]]; then
+            echo '## LMS99 canonical reconciliation' >> "$GITHUB_STEP_SUMMARY"
+            echo '- No report produced; inspect the failing guard.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          jq '{
+            repo_sha,production_sha,mode,candidate_count,canonical_ready_count,
+            blocked_count,excluded_count,already_completed_during_scan,cohort_hash,
+            by_course,by_code,writes,results
+          }' "$report" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lms99-canonical-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          retention-days: 30
+          if-no-files-found: warn
