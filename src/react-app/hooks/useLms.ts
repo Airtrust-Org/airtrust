@@ -754,7 +754,7 @@ export function useMatriculasCurso(
   opts: { status?: string; page?: number; limit?: number } = {},
 ) {
   return useQuery({
-    queryKey: lmsKeys.matriculaCurso(cursoId),
+    queryKey: [...lmsKeys.matriculaCurso(cursoId), opts.status ?? '', opts.page ?? 1, opts.limit ?? 50],
     queryFn: () => {
       const params = new URLSearchParams();
       if (opts.status) params.set('status', opts.status);

@@ -1510,7 +1510,8 @@ app.get('/', async (c) => {
         h.id AS h5p_conteudo_id,
         ${formatoSelect}
         (SELECT COUNT(*) FROM lms_matriculas m
-         WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.deleted_at IS NULL${matriculaScope.clause}) AS total_matriculas,
+         WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.deleted_at IS NULL
+           AND UPPER(TRIM(COALESCE(m.status,''))) IN ('NAO_INICIADO','EM_ANDAMENTO','REPROVADO')${matriculaScope.clause}) AS total_matriculas,
         (SELECT COUNT(*) FROM lms_matriculas m
          WHERE m.curso_id = c.id AND m.empresa_id = c.empresa_id AND m.status = 'CONCLUIDO' AND m.deleted_at IS NULL${matriculaScope.clause}) AS total_concluidos,
         ${setoresJsonExpr} AS setores_json

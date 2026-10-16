@@ -14,7 +14,8 @@ describe('matrícula ao salvar requisitos de Compliance', () => {
   });
 
   it('não antecipa renovação ao alterar a matriz', () => {
-    expect(trainingComplianceNeedsEnrollment('VENCENDO', 15)).toBe(true);
+    expect(trainingComplianceNeedsEnrollment('VENCENDO', 15)).toBe(false);
+    expect(trainingComplianceNeedsEnrollment('VENCENDO', 0)).toBe(true);
     expect(trainingComplianceNeedsImmediateEnrollmentOnRuleSave('VENCENDO')).toBe(false);
   });
 });
