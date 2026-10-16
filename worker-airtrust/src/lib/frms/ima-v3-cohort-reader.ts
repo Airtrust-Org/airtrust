@@ -7,6 +7,7 @@
  */
 import type { D1Database } from '@cloudflare/workers-types';
 import type { ImaCohortSourceRow } from './ima-v3-cohort-evidence';
+import { isOperationalCrewRole } from './operational-crew';
 
 type CheckinRow = {
   funcionario_id: number;
@@ -14,14 +15,20 @@ type CheckinRow = {
   horas_sono: number | null;
   wake_time: string | null;
   kss_score: number | null;
+  funcao: string | null;
+  cargo: string | null;
 };
-type JourneyRow = { funcionario_id: number; data_operacional: string };
+type JourneyRow = {
+  funcionario_id: number; data_operacional: string;
+  funcao: string | null; cargo: string | null;
+};
 const MAX_SOURCE_ROWS = 15_000;
 
 // SQL is static and parameters are bound. No mutation, client SQL or R2 write.
 export const IMA_COHORT_CHECKIN_SQL = [
   'SELECT CAST(ch.funcionario_id AS INTEGER) AS funcionario_id,',
-  'ch.data_checkin AS data_operacional, ch.horas_sono, ch.wake_time, ch.kss_score',
+  'ch.data_checkin AS data_operacional, ch.horas_sono, ch.wake_time, ch.kss_score,',
+  'f.funcao, f.cargo',
   'FROM frms_fadiga_checkin ch',
   'JOIN funcionarios f ON f.id = CAST(ch.funcionario_id AS INTEGER)',
   'AND f.empresa_id = ch.empresa_id',
@@ -32,7 +39,7 @@ export const IMA_COHORT_CHECKIN_SQL = [
 
 export const IMA_COHORT_JOURNEY_SQL = [
   'SELECT CAST(j.tripulante_id AS INTEGER) AS funcionario_id,',
-  'j.data AS data_operacional FROM frms_jornada j',
+  'j.data AS data_operacional, f.funcao, f.cargo FROM frms_jornada j',
   'JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER)',
   'AND f.empresa_id = j.empresa_id',
   'WHERE j.empresa_id = ? AND j.deleted_at IS NULL',
@@ -103,6 +110,7 @@ export async function loadImaCohortEvidenceRows(
   const keyFor = (id: number, day: string) => id + ':' + day;
 
   for (const row of checkinRows) {
+    if (!isOperationalCrewRole(row.funcao, row.cargo)) continue;
     const key = keyFor(row.funcionario_id, row.data_operacional);
     if (seenCheckins.has(key)) throw new Error('IMA_COHORT_DUPLICATE_CHECKIN');
     seenCheckins.add(key);
@@ -117,6 +125,7 @@ export async function loadImaCohortEvidenceRows(
   }
 
   for (const row of journeyRows) {
+    if (!isOperationalCrewRole(row.funcao, row.cargo)) continue;
     const key = keyFor(row.funcionario_id, row.data_operacional);
     const data = byCrewDay.get(key) ??
       sourceRow(empresaId, row.funcionario_id, row.data_operacional);
