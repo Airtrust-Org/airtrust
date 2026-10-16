@@ -28,6 +28,7 @@ import {
 import { validateCheckinPayloadCompleteness } from './frms-fadiga-checkin-validation';
 import { getFadigaConfig as getConfig, updateFadigaDutyConfig } from './frms-fadiga-config';
 import { loadDailyFatigueTeamRoster } from '../lib/frms/daily-fatigue-team-roster';
+import { resolveCheckinKssProvenance, kssProvenanceEventFields } from '../lib/frms/kss-checkin-provenance';
 const router = new Hono<AppEnv>();
 router.use('*', auth());
 type FrmsContext = Context<AppEnv>;
@@ -43,6 +44,7 @@ type NormalizedCheckinInput = {
   horasSono48h: number | null;
   qualidadeSono: number | null;
   kssScore: number;
+  kssProvenance: ReturnType<typeof resolveCheckinKssProvenance>;
   subjectiveFatigueLevel: number | null;
   sleepinessLevel: number | null;
   apto: 0 | 1;
@@ -260,6 +262,7 @@ function normalizeCheckinInput(
     qualidadeSono:
       typeof input.qualidade_sono === 'number' ? clamp(input.qualidade_sono, 1, 5) : null,
     kssScore,
+    kssProvenance: resolveCheckinKssProvenance(input),
     subjectiveFatigueLevel,
     sleepinessLevel,
     apto: aptoNormalizado,
@@ -1223,6 +1226,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           hora_apresentacao: input.jornadaInicioPrevista,
           presentation_time_source: 'CREW_REPORTED',
           componentes: scoreBase.componentes,
+          ...kssProvenanceEventFields(input.kssProvenance),
         }),
         now,
       )
@@ -1294,6 +1298,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         requires_operational_review: requiresOperationalReview,
         hora_apresentacao: input.jornadaInicioPrevista,
         presentation_time_source: 'CREW_REPORTED',
+        ...kssProvenanceEventFields(input.kssProvenance),
       },
       ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
       user_agent: c.req.header('user-agent'),
@@ -1331,6 +1336,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           data_checkin: dataCheckin,
           hora_checkin: horaCheckin,
           kss_score: input.kssScore,
+          ...kssProvenanceEventFields(input.kssProvenance),
           horas_sono: input.horasSono24h,
           oportunidade_sono_horas_24h: input.oportunidadeSonoHoras24h,
           horas_sono_48h: input.horasSono48h,
