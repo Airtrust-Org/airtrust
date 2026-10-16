@@ -84,22 +84,34 @@ async function completeViaXapi(page: Page, matriculaId: number, suffix: string) 
   expect(session.ok, JSON.stringify(session.json)).toBe(true);
   expect(session.json.data).toMatchObject({ active: true, matriculaId });
 
+  const terminalStatement = {
+    matricula_id: matriculaId,
+    actor: { name: `QA lifecycle ${CODE}` },
+    verb: {
+      id: 'http://adlnet.gov/expapi/verbs/completed',
+      display: { 'pt-BR': 'concluiu' },
+    },
+    object: { id: `urn:airtrust:qa:${CODE}:${suffix}`, objectType: 'Activity' },
+    result: {
+      success: true,
+      completion: true,
+      score: { raw: 85, max: 100, min: 0, scaled: 0.85 },
+    },
+  };
+  // A passive terminal signal must NOT mint a qualification: the learner's
+  // explicit confirmation from the H5P "Concluir curso" dialog is mandatory.
+  // Unit tests separately click that dialog; this isolated lifecycle fixture
+  // exercises the same authenticated command payload and its rejection gate.
+  const passive = await api(page, '/api/lms/xapi/statements', {
+    method: 'POST',
+    body: terminalStatement,
+  });
+  expect(passive.status).toBe(409);
+  expect(passive.json).toMatchObject({ code: 'USER_COMPLETION_REQUIRED' });
+
   return api(page, '/api/lms/xapi/statements', {
     method: 'POST',
-    body: {
-      matricula_id: matriculaId,
-      actor: { name: `QA lifecycle ${CODE}` },
-      verb: {
-        id: 'http://adlnet.gov/expapi/verbs/completed',
-        display: { 'pt-BR': 'concluiu' },
-      },
-      object: { id: `urn:airtrust:qa:${CODE}:${suffix}`, objectType: 'Activity' },
-      result: {
-        success: true,
-        completion: true,
-        score: { raw: 85, max: 100, min: 0, scaled: 0.85 },
-      },
-    },
+    body: { ...terminalStatement, completion_intent: 'USER_CONFIRMED' },
   });
 }
 
