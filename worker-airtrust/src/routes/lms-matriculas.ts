@@ -479,9 +479,16 @@ app.get(
                       AND ${funcionarioScope.clause}
                  )`;
     const binds: (string | number)[] = [cursoId, empresaId, ...funcionarioScope.bindings];
-    if (status) {
-      where += ' AND m.status = ?';
-      binds.push(status);
+    // Matrículas canceladas sem deleted_at (legado) são histórico, não alunos
+    // vinculados. Exibir apenas quando o administrador solicitar esse filtro.
+    if (status === 'CANCELADO') {
+      where += " AND UPPER(TRIM(COALESCE(m.status,''))) IN ('CANCELADO','CANCELADA')";
+    } else {
+      where += " AND UPPER(TRIM(COALESCE(m.status,''))) NOT IN ('CANCELADO','CANCELADA')";
+      if (status) {
+        where += ' AND m.status = ?';
+        binds.push(status);
+      }
     }
 
     const total = await db
