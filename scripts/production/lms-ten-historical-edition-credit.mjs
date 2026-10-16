@@ -132,6 +132,9 @@ async function main(){
   administrative_credit_only:true,personal_data:false};
  if(MODE==='apply'){
   require(p.allowed.length===10&&p.blocked.length===0,'PRECONDITIONS_NOT_MET');
+  // Admin training credit for qualifying courses must use the canonical backend
+  // so qualification records are created atomically. Never write orphaned completions.
+  require(p.qualifications.length===0,'QUALIFICATIONS_REQUIRE_CANONICAL_API');
   require(process.env.HISTORIC_CREDIT_RECOVERY_READY==='yes','RECOVERY');
   require(process.env.HISTORIC_CREDIT_REVIEWED_HASH===p.hash,'REVIEWED_COHORT_DRIFT');
   await pinWorker();
