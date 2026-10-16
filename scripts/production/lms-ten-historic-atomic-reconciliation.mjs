@@ -57,7 +57,20 @@ export function plan(courses, authorizedIds = null){
 }
 async function get(token,route){
   valid(route.startsWith('/api/lms/')||['/api/auth/empresas','/api/auth/me','/api/empresas/minha'].includes(route),'PATH_BLOCKED');
-  return fetchJson(API+route,{headers:{Authorization:'Bearer '+token}});
+  // Only GET is retryable: never repeat an administrative PATCH after a network error.
+  let last;
+  for(let attempt=0;attempt<3;attempt++){
+    try{return await fetchJson(API+route,{headers:{Authorization:'Bearer '+token}});}
+    catch(error){last=error;}
+  }
+  throw Error('READ_NETWORK_FAILED:'+route.split('?')[0]+':'+String(last?.message||'network').slice(0,30));
+}
+export function isVerifiedCompletedCredit(row){
+  return Number(row?.empresa_id)===6 &&
+    PAIRS.get(Number(row?.id))===Number(row?.curso_id) &&
+    upper(row?.status)==='CONCLUIDO' && progress(row)===100 &&
+    Boolean(String(row?.data_conclusao||'').trim()) &&
+    Boolean(row?.qualificacao_historico_id);
 }
 async function pin(){
   const r=await fetchJson(API+'/api/version');
@@ -94,36 +107,27 @@ function authorizedIdsHash(ids){
   return createHash('sha256').update(JSON.stringify([...ids].sort((a,b)=>a-b))).digest('hex');
 }
 async function collect(token,ids){
-  let courses=[],total=-1;
-  for(let n=1;n<=20;n++){
-    const r=await get(token,'/api/lms/cursos?page='+n+'&limit=200');
-    valid(r.status===200,'COURSES_HTTP');
-    const list=r.json?.data||[];valid(Array.isArray(list),'COURSES_INVALID');
-    if(total===-1)total=Number(r.json?.pagination?.total??list.length);
-    courses.push(...list);
-    if(courses.length>=total)break;
-    valid(list.length&&n<20,'COURSE_PAGES_EXHAUSTED');
-  }
-  valid(courses.length===total,'COURSE_COUNT_CHANGED');
+  // Address the exact authorized IDs. Course rosters may hide concluded rows,
+  // so an all-courses scan cannot safely resume after a partial production write.
   const cohort=[];
-  for(const course of courses.filter(c=>Number(c.ativo)===1&&Number(c.publicado)===1)){
-    const enrollments=[];let expected=-1;
-    for(let n=1;n<=100;n++){
-      const r=await get(token,'/api/lms/matriculas/curso/'+Number(course.id)+'?page='+n+'&limit=200');
-      valid(r.status===200,'ENROLLMENTS_HTTP');
-      const list=r.json?.data||[];valid(Array.isArray(list),'ENROLLMENTS_INVALID');
-      const count=Number(r.json?.pagination?.total??0);
-      if(expected===-1)expected=count;
-      valid(expected===count,'PAGINATION_DRIFT');
-      enrollments.push(...list);
-      if(enrollments.length>=expected)break;
-      valid(list.length&&n<100,'ENROLLMENT_PAGES_EXHAUSTED');
+  for(const id of ids){
+    const response=await get(token,'/api/lms/matriculas/'+id);
+    valid(response.status===200&&response.json?.success===true,'ENROLLMENT_READ_FAILED');
+    const row=response.json?.data;
+    valid(row&&Number(row.id)===id&&Number(row.empresa_id)===TENANT,'ENROLLMENT_TENANT_OR_IDENTITY');
+    const course=Number(row.curso_id);
+    valid(PAIRS.get(id)===course,'ENROLLMENT_COURSE_DRIFT');
+    if(upper(row.status)==='CONCLUIDO'){
+      // Refuse to treat bare status/progress as evidence of canonical qualification.
+      valid(isVerifiedCompletedCredit(row),'COMPLETED_WITHOUT_LINKED_QUALIFICATION');
+    } else {
+      valid(row.edition_mismatch?.required===true,'HISTORIC_EDITION_NOT_PROVEN');
     }
-    valid(enrollments.length===expected,'ENROLLMENT_COUNT_MISMATCH');
-    cohort.push({id:course.id,enrollments});
+    cohort.push({id:course,enrollments:[row]});
   }
   return plan(cohort,ids);
 }
+
 function report(p,results,ids){
   const by_course={};
   for(const row of p.rows)by_course[row.cid]=(by_course[row.cid]||0)+1;
@@ -156,8 +160,8 @@ async function main(){
   const ids=authorizedEnrollmentIds();
   await pin();const token=await authorize();const cohort=await collect(token,ids);
   if(MODE==='dry-run'){process.stdout.write(JSON.stringify(report(cohort,{completed:0},ids),null,2));return;}
-  valid(cohort.pendingReview.length===0 && cohort.rows.length===10 &&
-    cohort.alreadyCompleted.length===0,'TEN_PRECONDITIONS_CHANGED');
+  valid(cohort.pendingReview.length===0 &&
+    cohort.rows.length+cohort.alreadyCompleted.length===10,'TEN_PRECONDITIONS_CHANGED');
   valid(cohort.hash===process.env.REVIEWED_COHORT_HASH,'REVIEWED_COHORT_CHANGED');
   const results={completed:0,already_completed:0,review_required:0,rejected_409:0,rejected_403:0,other_error:0,qualification_linked:0,detail:[]};
   const ordinalById=new Map([...ids].map((id,i)=>[id,i+1]));
@@ -165,11 +169,11 @@ async function main(){
     const response=await get(token,'/api/lms/matriculas/'+row.id);
     valid(response.status===200,'ALREADY_COMPLETED_READ_FAILED');
     const d=response.json?.data||{};
-    valid(upper(d.status)==='CONCLUIDO'&&Number(d.curso_id)===row.cid&&progress(d)===100&&
-      Boolean(String(d.data_conclusao||'').trim()),'ALREADY_COMPLETED_STATE_CHANGED');
+    valid(isVerifiedCompletedCredit(d),'ALREADY_COMPLETED_STATE_CHANGED');
     results.already_completed++;
+    results.qualification_linked++;
     results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,
-      outcome:'ALREADY_CONCLUIDO',qualification_linked:Boolean(d.qualificacao_historico_id)});
+      outcome:'ALREADY_CONCLUIDO',qualification_linked:true});
   }
   for(const row of cohort.rows){
     await pin();
@@ -177,19 +181,37 @@ async function main(){
     valid(before.status===200,'ROW_READ_FAILED');
     const data=before.json?.data||{};
     if(upper(data.status)==='CONCLUIDO'){
-      valid(progress(data)===100&&Boolean(String(data.data_conclusao||'').trim()),'COMPLETED_CONCURRENTLY_INVALID');
+      valid(isVerifiedCompletedCredit(data),'COMPLETED_CONCURRENTLY_INVALID');
       results.already_completed++;
+      results.qualification_linked++;
       results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,
-        outcome:'ALREADY_CONCLUIDO',qualification_linked:Boolean(data.qualificacao_historico_id)});
+        outcome:'ALREADY_CONCLUIDO',qualification_linked:true});
       continue;
     }
     valid(upper(data.status)===row.status&&Number(data.curso_id)===row.cid&&progress(data)===row.p,'ROW_DRIFT');
     valid(data.edition_mismatch?.required===true,'HISTORIC_EDITION_NOT_PROVEN');
-    const res=await fetchJson(API+'/api/lms/matriculas/'+row.id+'/status',{
-      method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-      body:JSON.stringify({status:'CONCLUIDO',observacoes:administrativeObservations(data.observacoes)})});
-    if(res.status===409){results.rejected_409++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'REJECTED_409',reason_code:String(res.json?.code||'UNSPECIFIED').slice(0,64)});continue;}
-    if(res.status===403){results.rejected_403++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'REJECTED_403',reason_code:String(res.json?.code||'UNSPECIFIED').slice(0,64)});continue;}
+    let res;
+    try{
+      res=await fetchJson(API+'/api/lms/matriculas/'+row.id+'/status',{
+        method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({status:'CONCLUIDO',observacoes:administrativeObservations(data.observacoes)})});
+    }catch(error){
+      // A lost HTTP response does not prove the server rolled back. Never send
+      // the PATCH again; verify the exact same row and qualification by GET.
+      const observed=await get(token,'/api/lms/matriculas/'+row.id);
+      const current=observed.json?.data;
+      if(observed.status===200&&isVerifiedCompletedCredit(current)&&
+          String(current.observacoes||'').includes('AIRTRUST_MANAGER_HISTORICAL_EDITION_CREDIT_20261016:')){
+        results.completed++;
+        results.qualification_linked++;
+        results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,
+          outcome:'HTTP_UNCERTAIN_VERIFIED_CANONICAL',qualification_linked:true});
+        continue;
+      }
+      throw Error('PATCH_UNCERTAIN_NO_SAFE_RETRY:'+row.id+':'+String(error?.message||'network').slice(0,32));
+    }
+    if(res.status===409){results.rejected_409++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'REJECTED_409',reason_code:String(res.json?.code||'UNSPECIFIED').slice(0,64)});break;}
+    if(res.status===403){results.rejected_403++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'REJECTED_403',reason_code:String(res.json?.code||'UNSPECIFIED').slice(0,64)});break;}
     if(res.status!==200||res.json?.success!==true){results.other_error++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'ERROR'});break;}
     const after=await get(token,'/api/lms/matriculas/'+row.id);
     valid(after.status===200&&upper(after.json?.data?.status)==='CONCLUIDO'&&

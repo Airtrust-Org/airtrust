@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import {strict as assert} from 'node:assert';
 import {readFileSync} from 'node:fs';
-import {plan,authorizedEnrollmentIds,administrativeObservations} from
+import {plan,authorizedEnrollmentIds,administrativeObservations,isVerifiedCompletedCredit} from
  '../production/lms-ten-historic-atomic-reconciliation.mjs';
 const targets=[[2106,68],[384,34],[201,28],[608,43],[2139,68],
  [610,43],[544,7],[624,43],[700,55],[2052,68]];
@@ -41,4 +41,37 @@ test('workflow pins SHA and safeguards 10 qualification-linked writes',()=>{
  const wf=readFileSync(new URL('../../.github/workflows/production-lms-ten-historic-atomic-qualification.yml',import.meta.url),'utf8');
  for(const s of ['verify-release-gates.mjs','reviewed_dry_run_run_id','time-travel info',
   'environment: production','.results.qualification_linked==10'])assert.ok(wf.includes(s),s);
+});
+
+
+test('one already completed credit resumes only when qualification is linked',()=>{
+ const ids=new Set(targets.map(x=>x[0]));
+ const rows=targets.map(([id,course])=>({id:course,enrollments:[{
+   id,status:id===700?'CONCLUIDO':'EM_ANDAMENTO',progresso_bruto:100
+ }]}));
+ const p=plan(rows,ids);
+ assert.equal(p.rows.length,9);assert.equal(p.alreadyCompleted.length,1);
+ assert.equal(p.pendingReview.length,0);assert.match(p.hash,/^[a-f0-9]{64}$/);
+ const base={id:700,empresa_id:6,curso_id:55,status:'CONCLUIDO',progresso_bruto:100,
+   data_conclusao:'2026-10-16',qualificacao_historico_id:12345};
+ assert.equal(isVerifiedCompletedCredit(base),true);
+ for(const change of [
+   {qualificacao_historico_id:null},
+   {status:'EM_ANDAMENTO'},
+   {empresa_id:7},
+   {curso_id:68},
+   {data_conclusao:null},
+   {progresso_bruto:99},
+ ])assert.equal(isVerifiedCompletedCredit({...base,...change}),false);
+});
+test('workflow validates ten total linked qualifications, not ten repeat PATCH operations',()=>{
+ const wf=readFileSync(new URL('../../.github/workflows/production-lms-ten-historic-atomic-qualification.yml',import.meta.url),'utf8');
+ const script=readFileSync(new URL('../production/lms-ten-historic-atomic-reconciliation.mjs',import.meta.url),'utf8');
+ assert.match(wf,/\.candidates\+\.already_completed/);
+ assert.match(wf,/\.writes==\.candidates/);
+ assert.match(wf,/\.results\.qualification_linked==10/);
+ assert.match(script,/COMPLETED_WITHOUT_LINKED_QUALIFICATION/);
+ assert.match(script,/PATCH_UNCERTAIN_NO_SAFE_RETRY/);
+ assert.match(script,/HTTP_UNCERTAIN_VERIFIED_CANONICAL/);
+ assert.doesNotMatch(script,/method:'PATCH'[\s\S]{0,200}retry/);
 });
