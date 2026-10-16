@@ -33,16 +33,18 @@ function mockDb() {
   const db = {
     prepare: vi.fn((sql: string) => {
       queries.push(sql);
-      const excluded = sql.includes("NOT IN ('CANCELADO','CANCELADA')");
-      const cancelledOnly = !excluded && sql.includes("IN ('CANCELADO','CANCELADA')");
-      const filtered = enrollments.filter((row) => cancelledOnly
-        ? row.status === 'CANCELADO'
-        : excluded && row.status !== 'CANCELADO');
+      const activeOnly = sql.includes("IN ('NAO_INICIADO','EM_ANDAMENTO','REPROVADO')");
       return {
-        bind: (..._args: unknown[]) => ({
-          first: async () => ({ n: filtered.length }),
-          all: async () => ({ results: filtered }),
-        }),
+        bind: (...args: unknown[]) => {
+          const filtered = enrollments.filter((row) =>
+            activeOnly ? row.status === 'NAO_INICIADO'
+              : sql.includes('AND m.status = ?') ? row.status === String(args[args.length - (sql.includes('LIMIT ? OFFSET ?') ? 3 : 1)]) : true,
+          );
+          return {
+            first: async () => ({ n: filtered.length }),
+            all: async () => ({ results: filtered }),
+          };
+        },
       };
     }),
   } as unknown as D1Database;
@@ -69,10 +71,10 @@ describe('LMS course roster — cancelled legacy enrollments', () => {
       data: Array<{ id: number }>;
       pagination: { total: number };
     };
-    expect(body.data.map((row) => row.id)).toEqual([11, 12]);
-    expect(body.pagination.total).toBe(2);
+    expect(body.data.map((row) => row.id)).toEqual([11]);
+    expect(body.pagination.total).toBe(1);
     expect(queries.filter((sql) => sql.includes('FROM lms_matriculas m')))
-      .toEqual(expect.arrayContaining([expect.stringContaining("NOT IN ('CANCELADO','CANCELADA')")]));
+      .toEqual(expect.arrayContaining([expect.stringContaining("IN ('NAO_INICIADO','EM_ANDAMENTO','REPROVADO')")]));
   });
 
   it('keeps the cancelled audit history available only via explicit status filter', async () => {
@@ -90,6 +92,6 @@ describe('LMS course roster — cancelled legacy enrollments', () => {
     expect(body.data.map((row) => row.id)).toEqual([13]);
     expect(body.pagination.total).toBe(1);
     expect(queries.filter((sql) => sql.includes('FROM lms_matriculas m')))
-      .toEqual(expect.arrayContaining([expect.stringContaining("IN ('CANCELADO','CANCELADA')")]));
+      .toEqual(expect.arrayContaining([expect.stringContaining("AND m.status = ?")]));
   });
 });
