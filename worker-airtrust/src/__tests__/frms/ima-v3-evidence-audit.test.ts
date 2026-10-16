@@ -36,7 +36,10 @@ describe('FRMS V3 IMA data feasibility audit', () => {
       datedSleepEpisodeRows: 0,
       datedSleepEpisodeCoveragePct: 0,
       assessment: 'INSUFFICIENT_SLEEP_TIMELINE',
-      blockerCodes: ['SONO_DIARIO_NAO_COMPROVA_CRONOLOGIA_DE_SONO_VIGILIA'],
+      blockerCodes: [
+        'SONO_DIARIO_NAO_COMPROVA_CRONOLOGIA_DE_SONO_VIGILIA',
+        'KSS_PERSISTIDO_SEM_ORIGEM_CONFIRMADA',
+      ],
     });
   });
 
