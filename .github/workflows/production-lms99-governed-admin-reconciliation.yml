@@ -104,7 +104,8 @@ jobs:
           jq -e --arg main "$GITHUB_SHA" --arg prod "$EXPECTED_PRODUCTION_SHA" '
             .schema_version==1 and .repo_sha==$main and .production_sha==$prod and
             .mode=="dry-run" and .tenant==6 and .writes==0 and
-            .personal_data==false and .candidates==16 and .authorized_count==16 and
+            .personal_data==false and .authorized_count==16 and
+            .pending_review_count==0 and (.candidates + .already_completed)==16 and
             (.authorized_ids_hash|test("^[a-f0-9]{64}$")) and
             (.candidate_hash|test("^[a-f0-9]{64}$"))
           ' "$RUNNER_TEMP/reviewed/result.json" >/dev/null
@@ -137,7 +138,7 @@ jobs:
           node scripts/production/lms99-admin-reconciliation.mjs > "$RUNNER_TEMP/result.json"
           test -s "$RUNNER_TEMP/result.json"
           jq -e --arg mode "$LMS99_MODE" '.mode==$mode and .tenant==6 and .personal_data==false' "$RUNNER_TEMP/result.json" >/dev/null
-          jq '{mode,repo_sha,production_sha,candidates,candidate_hash,authorized_count,by_course,excluded,writes,results:(.results|del(.detail)),scorm_cmi_changed,completion_date_rule,historical_training_date_not_fabricated}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+          jq '{mode,repo_sha,production_sha,candidates,already_completed,pending_review_count,pending_review,raw_99_candidates,candidate_hash,authorized_count,by_course,excluded,writes,results:(.results|del(.detail)),scorm_cmi_changed,completion_date_rule,historical_training_date_not_fabricated}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload sanitized non-personal evidence
         if: always()
         uses: actions/upload-artifact@v7
