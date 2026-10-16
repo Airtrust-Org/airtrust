@@ -19,7 +19,7 @@ function fixture() {
     CREATE TABLE lms_progresso_scorm (id INTEGER PRIMARY KEY, empresa_id INTEGER, matricula_id INTEGER);
     CREATE TABLE lms_xapi_statements (id INTEGER PRIMARY KEY, empresa_id INTEGER, matricula_id INTEGER);
     CREATE TABLE lms_completion_diagnostics_snapshots (id INTEGER PRIMARY KEY, empresa_id INTEGER,matricula_id INTEGER);
-    CREATE TABLE lms_matricula_ciclos (id INTEGER PRIMARY KEY,empresa_id INTEGER,matricula_id INTEGER,ciclo_atual INTEGER,deleted_at TEXT,status TEXT,updated_at TEXT);
+    CREATE TABLE lms_matricula_ciclos (id INTEGER PRIMARY KEY,empresa_id INTEGER,matricula_id INTEGER,ciclo_atual INTEGER,deleted_at TEXT,status TEXT,updated_at TEXT,progresso_pct INTEGER,data_inicio TEXT,data_conclusao TEXT,qualificacao_historico_id INTEGER,historico_importado_id INTEGER);
     CREATE TABLE notificacoes_inapp (id TEXT PRIMARY KEY,empresa_id INTEGER,referencia_id TEXT,referencia_tipo TEXT,tipo TEXT,deleted_at TEXT);
     CREATE TABLE audit_logs (
       id INTEGER PRIMARY KEY,user_id INTEGER,action TEXT,entity_type TEXT,entity_id INTEGER,
@@ -72,6 +72,14 @@ describe('Governed all-course cleanup D1 — transactional and tenant-scoped',()
   it('does not cancel untouched status when SCORM/xAPI or historical proof exists',async()=>{
     const db=fixture();
     db.database.exec(`INSERT INTO lms_progresso_scorm VALUES (1,6,10);`);
+    const result=await applyTrainingRosterPlan(db.asD1(),6,plan([10]),10);
+    expect(result.removed).toBe(0);
+    expect(db.database.prepare('SELECT deleted_at FROM lms_matriculas WHERE id=10').get())
+      .toMatchObject({deleted_at:null});
+  });
+  it('preserves a parent still at 0% when its current cycle has SCORM progress evidence',async()=>{
+    const db=fixture();
+    db.database.exec("UPDATE lms_matricula_ciclos SET progresso_pct=42 WHERE matricula_id=10");
     const result=await applyTrainingRosterPlan(db.asD1(),6,plan([10]),10);
     expect(result.removed).toBe(0);
     expect(db.database.prepare('SELECT deleted_at FROM lms_matriculas WHERE id=10').get())
