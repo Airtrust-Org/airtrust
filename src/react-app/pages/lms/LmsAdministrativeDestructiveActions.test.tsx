@@ -12,6 +12,11 @@ const { deleteCursoMock, cancelarMatriculaMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/react-app/hooks/useApi', () => ({ useApi: () => ({ data: [] }) }));
+vi.mock('./LmsCourseComplianceMetrics', () => ({
+  useLmsCourseCompliance: () => ({ data: [] }),
+  getLmsCourseCompliance: () => null,
+  LmsCourseComplianceMetrics: () => null,
+}));
 vi.mock('@/react-app/hooks/useLms', () => ({
   useDeleteCurso: () => ({ mutateAsync: deleteCursoMock, isPending: false }),
   useUpdateCurso: () => ({ mutateAsync: vi.fn(), isPending: false }),
