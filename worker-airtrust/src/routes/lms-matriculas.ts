@@ -479,16 +479,13 @@ app.get(
                       AND ${funcionarioScope.clause}
                  )`;
     const binds: (string | number)[] = [cursoId, empresaId, ...funcionarioScope.bindings];
-    // Matrículas canceladas sem deleted_at (legado) são histórico, não alunos
-    // vinculados. Exibir apenas quando o administrador solicitar esse filtro.
-    if (status === 'CANCELADO') {
-      where += " AND UPPER(TRIM(COALESCE(m.status,''))) IN ('CANCELADO','CANCELADA')";
+    // A grade operacional não é o histórico: só possui ciclos que ainda
+    // exigem treinamento. Concluídos/cancelados continuam auditáveis por filtro.
+    if (status) {
+      where += ' AND m.status = ?';
+      binds.push(status);
     } else {
-      where += " AND UPPER(TRIM(COALESCE(m.status,''))) NOT IN ('CANCELADO','CANCELADA')";
-      if (status) {
-        where += ' AND m.status = ?';
-        binds.push(status);
-      }
+      where += " AND UPPER(TRIM(COALESCE(m.status,''))) IN ('NAO_INICIADO','EM_ANDAMENTO','REPROVADO')";
     }
 
     const total = await db
