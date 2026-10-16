@@ -251,6 +251,7 @@ export async function run() {
     course_count: result.length,
     total_matriculas: result.reduce((n, row) => n + row.matriculas, 0),
     total_concluidas: result.reduce((n, row) => n + row.concluidas, 0),
+    enrollment_scope: 'active_published_courses_active_employees_operational_and_completed; excludes_cancelled_and_inactive',
     total_pendentes_99: result.reduce((n, row) => n + row.pendentes_99_ou_mais, 0),
     diagnostic_scope: 'Only SCORM inconsistencies flagged by the backend; not a complete explanation of every unfinished enrollment',
     total_scorm_inconsistencies_at_99: result.reduce((n, row) => n + row.scorm_inconsistencies_at_99, 0),
