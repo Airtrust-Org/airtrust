@@ -654,8 +654,7 @@ export async function getDashboardAlerts(
 }
 
 /**
- * Calcula score de compliance geral
- * Usa cálculo DINÂMICO de vencimento (data_conclusao + validade meses)
+ * Contrato independente de Compliance de Qualificações.
  */
 export interface QualificationComplianceSummary {
   pessoas: number;
@@ -891,6 +890,10 @@ export async function getQualificationComplianceSummary(
   };
 }
 
+/**
+ * LEGADO DE COMPATIBILIDADE. Não apresentar como Compliance global.
+ * A Home e o Assistente usam os indicadores separados de Treinamentos e Qualificações.
+ */
 export async function getComplianceScore(
   db: D1Database,
   empresaId: number,

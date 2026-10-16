@@ -443,7 +443,7 @@ app.get('/alertas-criticos', async (c) => {
 
 /**
  * GET /api/dashboard/compliance-score
- * Retorna score de compliance geral
+ * Endpoint legado de compatibilidade. Não é usado pela Home como Compliance global.
  */
 app.get('/compliance-score', async (c) => {
   try {
