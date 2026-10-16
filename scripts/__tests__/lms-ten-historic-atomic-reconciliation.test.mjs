@@ -35,6 +35,7 @@ test('history is explicitly attributed to manager, not new SCORM edition',()=>{
  const note=administrativeObservations('existing notes');
  assert.match(note,/AIRTRUST_MANAGER_HISTORICAL_EDITION_CREDIT_20261016:/);
  assert.match(note,/existing notes/);
+ assert.ok(note.startsWith('AIRTRUST_MANAGER_HISTORICAL_EDITION_CREDIT_20261016:'),'manager marker must be first');
 });
 test('workflow pins SHA and safeguards 10 qualification-linked writes',()=>{
  const wf=readFileSync(new URL('../../.github/workflows/production-lms-ten-historic-atomic-qualification.yml',import.meta.url),'utf8');
