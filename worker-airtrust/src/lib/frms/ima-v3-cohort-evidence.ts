@@ -41,7 +41,12 @@ export interface ImaCohortEvidenceReport {
   checkinReceivedPctApprox: number | null;
   realSleepDurationPctApprox: number | null;
   realWakeReportPctApprox: number | null;
-  validKssPctApprox: number | null;
+  /** Deprecated legacy label: provenance unavailable, so validity cannot be asserted. */
+  validKssPctApprox: null;
+  /** Valid 1–9 numeric KSS stored in D1. May be derived/defaulted. */
+  storedKssValuePctApprox: number | null;
+  /** Cannot be inferred from legacy kss_score: no field-level origin persisted. */
+  verifiedCrewReportedKssPctApprox: null;
   reconstructedDutyBoundaryPctApprox: number | null;
   sourceIncompletePctApprox: number | null;
   /** The legacy snapshot cannot prove two observed sleep-episode boundaries. */
@@ -146,6 +151,7 @@ export function auditImaCohortEvidence(input: ImaCohortEvidenceInput): ImaCohort
     'SEM_ORIGEM_VERIFICADA_DAS_DUAS_BORDAS_DO_SONO',
     'PVT_INDIVIDUAL_NAO_VALIDADO_PELO_SNAPSHOT',
     'CALIBRACAO_PROSPECTIVA_PENDENTE',
+    'KSS_PERSISTIDO_PODE_SER_DERIVADO_OU_DEFAULT_5',
   ];
   if (suppressed) blockers.push('PRIVACIDADE_COORTE_INSUFICIENTE');
   if (input.boundaryProvenanceUnavailable) blockers.push('PROVENIENCIA_LIMITES_JORNADA_NAO_DISPONIVEL');
@@ -160,7 +166,9 @@ export function auditImaCohortEvidence(input: ImaCohortEvidenceInput): ImaCohort
     checkinReceivedPctApprox: suppressed ? null : approxPct(received, denominator),
     realSleepDurationPctApprox: suppressed ? null : approxPct(realSleep, denominator),
     realWakeReportPctApprox: suppressed ? null : approxPct(realWake, denominator),
-    validKssPctApprox: suppressed ? null : approxPct(kss, denominator),
+    validKssPctApprox: null,
+    storedKssValuePctApprox: suppressed ? null : approxPct(kss, denominator),
+    verifiedCrewReportedKssPctApprox: null,
     reconstructedDutyBoundaryPctApprox: suppressed || input.boundaryProvenanceUnavailable
       ? null : approxPct(reconstructedBoundary, denominator),
     sourceIncompletePctApprox: suppressed ? null : approxPct(incompleteSource, denominator),

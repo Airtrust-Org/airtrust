@@ -185,6 +185,8 @@ export function bridgeImaOperationalSnapshot(input: ImaSnapshotBridgeInput): Ima
       checkinStatus: row.checkin_status ?? 'AUSENTE',
       sleepHours24h: received ? row.horas_sono ?? null : null,
       kssScore: received ? row.kss_score ?? null : null,
+      // Legacy check-in can backfill KSS from sleepiness or default it to 5.
+      kssProvenance: 'UNKNOWN' as const,
       observedSleepStartAt: null,
       observedSleepEndAt: null,
       sleepEpisodeProvenance: 'UNKNOWN' as const,
