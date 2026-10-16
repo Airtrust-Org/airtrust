@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { plan, administrativeObservations } from '../production/lms99-admin-reconciliation.mjs';
+import { plan, administrativeObservations, authorizedEnrollmentIds } from '../production/lms99-admin-reconciliation.mjs';
 test('includes only 100% raw not completed and stable idempotent hash',()=>{
  const cohort=[{id:4,enrollments:[{id:1,status:'EM_ANDAMENTO',progresso_bruto:100},{id:2,status:'CONCLUIDO',progresso_bruto:100},{id:3,status:'CANCELADO',progresso_bruto:100},{id:4,status:'REPROVADO',progresso_bruto:100}]}];
  const r=plan(cohort);
@@ -34,4 +34,20 @@ test('preserves existing LMS notes when appending audited administrative reason'
   assert.ok(after.startsWith(before+'\n\n'));
   assert.match(after,/Regularizacao administrativa/);
   assert.equal(administrativeObservations(null).startsWith('Regularizacao administrativa'),true);
+});
+
+test('explicit list has exactly 16 distinct IDs and rejects missing IDs',()=>{
+ const original=process.env.LMS99_TARGET_ENROLLMENT_IDS;
+ try {
+  process.env.LMS99_TARGET_ENROLLMENT_IDS=Array.from({length:16},(_,i)=>String(i+100)).join(',');
+  const ids=authorizedEnrollmentIds();
+  assert.equal(ids.size,16);
+  const all=Array.from(ids).map(id=>({id,status:'EM_ANDAMENTO',progresso_bruto:100}));
+  const cohort=plan([{id:43,enrollments:all}],ids);
+  assert.equal(cohort.rows.length,16);
+  assert.throws(()=>plan([{id:43,enrollments:all.slice(1)}],ids),/AUTHORIZED_COHORT_MISSING/);
+  assert.throws(()=>plan([{id:43,enrollments:all.map((row,i)=>i===0?{...row,status:'NAO_INICIADO'}:row)}],ids),/AUTHORIZED_ENROLLMENT_DRIFT/);
+  process.env.LMS99_TARGET_ENROLLMENT_IDS='100,100';
+  assert.throws(()=>authorizedEnrollmentIds(),/AUTHORIZED_INPUT|AUTHORIZED_DUPLICATES/);
+ } finally {if(original===undefined) delete process.env.LMS99_TARGET_ENROLLMENT_IDS;else process.env.LMS99_TARGET_ENROLLMENT_IDS=original;}
 });
