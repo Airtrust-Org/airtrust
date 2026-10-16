@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { plan, administrativeObservations, authorizedEnrollmentIds } from '../production/lms99-admin-reconciliation.mjs';
+import { plan, administrativeObservations, authorizedEnrollmentIds, isOnlyReviewedException } from '../production/lms99-admin-reconciliation.mjs';
 test('includes only 100% raw not completed and stable idempotent hash',()=>{
  const cohort=[{id:4,enrollments:[{id:1,status:'EM_ANDAMENTO',progresso_bruto:100},{id:2,status:'CONCLUIDO',progresso_bruto:100},{id:3,status:'CANCELADO',progresso_bruto:100},{id:4,status:'REPROVADO',progresso_bruto:100}]}];
  const r=plan(cohort);
@@ -73,4 +73,22 @@ test('authorized cancellations and failed attempts become review-only rather tha
   assert.equal(cancelled.pendingReview[0].ordinal,3);
   assert.equal(cancelled.rows.length,15);
   assert.notDeepEqual(cancelled.rows,plan([{id:68,enrollments:all}],ids).rows);
+});
+
+test('only the already-reviewed matrícula 614 (ordinal 3, course 43, raw 4) may remain untouched',()=>{
+  const ids=new Set([1232,2106,614,384,201,608,679,2139,610,544,594,624,700,2052,1383,863]);
+  const enrollments=[...ids].map(id=>({id,status:'EM_ANDAMENTO',progresso_bruto:100}));
+  const completed=2106,exception=614;
+  const group=enrollments.map(r=>r.id===completed?{...r,status:'CONCLUIDO'}:
+    r.id===exception?{...r,progresso_bruto:4}:r);
+  const result=plan([{id:43,enrollments:group}],ids);
+  assert.equal(result.rows.length,14);
+  assert.equal(result.alreadyCompleted.length,1);
+  assert.equal(result.pendingReview.length,1);
+  assert.deepEqual(result.pendingReview,[{ordinal:3,curso_id:43,status:'EM_ANDAMENTO',progresso_bruto:4}]);
+  assert.equal(isOnlyReviewedException(result),true);
+  const altered=plan([{id:43,enrollments:group.map(r=>r.id===614?{...r,progresso_bruto:5}:r)}],ids);
+  assert.equal(isOnlyReviewedException(altered),false);
+  const invalid=plan([{id:44,enrollments:group}],ids);
+  assert.equal(isOnlyReviewedException(invalid),false);
 });
