@@ -102,7 +102,7 @@ function nextDate(date: string): string {
  * EVD rows without a completed journey are PLANNED; roster-only is unknown.
  */
 function classify(row: ImaSnapshotEvidenceRow):
-  | 'ACTUAL' | 'PLANNED' | 'ESTIMATED' | RejectionReason {
+  | 'ACTUAL' | 'PLANNED' | 'ESTIMATED' | Exclude<RejectionReason, 'INCOMPLETE_BOUNDARY'> {
   if (row.snapshot_status === 'INCOMPLETO' || row.jornada_data_source === 'INCONSISTENTE') {
     return 'INCONSISTENT_SNAPSHOT';
   }
