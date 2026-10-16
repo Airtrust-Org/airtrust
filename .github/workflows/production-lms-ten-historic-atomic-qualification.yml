@@ -1,0 +1,154 @@
+name: Production LMS Ten Historic Edition Atomic Qualification
+# Source: authorized historical-edition recognition for ten tenant6 enrollments; backend must mint qualifications atomically.
+# Administrative attestation is distinct from SCORM runtime certification.
+# Performs canonical API PATCH with tenant, RBAC, integrity and qualification
+# gates intact; never direct SQL or mass edits by percentage alone.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        required: true
+        type: choice
+        default: dry-run
+        options: [dry-run, apply]
+      expected_main_sha:
+        required: true
+        type: string
+      expected_production_sha:
+        required: true
+        type: string
+      confirmation:
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        required: false
+        type: string
+      target_enrollment_ids:
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-lms-ten-historic-atomic-qualification
+  cancel-in-progress: false
+jobs:
+  d1_reconcile:
+    name: Governed production tenant6 D1-recovery and canonical atomic qualification
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+      TARGET_COMPANY_ID: '6'
+      LMS_HIST_ATOMIC_MODE: ${{ inputs.mode }}
+      LMS_HIST_ATOMIC_CONFIRMATION: ${{ inputs.confirmation }}
+      LMS_HIST_ATOMIC_TARGET_ENROLLMENT_IDS: ${{ inputs.target_enrollment_ids }}
+      PROD_API_BASE_URL: https://api.airtrust.online
+      PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL }}
+      PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Require explicit immutable authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$EXPECTED_MAIN_SHA" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ -n "$LMS_HIST_ATOMIC_TARGET_ENROLLMENT_IDS" ]] || exit 1
+          if [[ "$LMS_HIST_ATOMIC_MODE" == dry-run ]]; then
+            [[ "$LMS_HIST_ATOMIC_CONFIRMATION" == AIRTRUST_LMS_HIST_ATOMIC_DRY_RUN ]] || exit 1
+          elif [[ "$LMS_HIST_ATOMIC_MODE" == apply ]]; then
+            [[ "$LMS_HIST_ATOMIC_CONFIRMATION" == AIRTRUST_LMS_HIST_ATOMIC_APPLY ]] || exit 1
+          else
+            exit 1
+          fi
+      - name: Verify canonical eight release gates of reviewed main
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Verify deterministic cohort selection and syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/production/lms-ten-historic-atomic-reconciliation.mjs
+          node --test scripts/__tests__/lms-ten-historic-atomic-reconciliation.test.mjs
+      - name: Verify successful identical-SHA reviewed dry-run
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN_ID: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$DRY_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo DRY_RUN_REQUIRED >&2; exit 1; }
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$DRY_RUN_ID")"
+          [[ "$(jq -r .name <<< "$run")" == "Production LMS Ten Historic Edition Atomic Qualification" ]] || exit 1
+          [[ "$(jq -r .event <<< "$run")" == workflow_dispatch ]] || exit 1
+          [[ "$(jq -r .head_sha <<< "$run")" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$(jq -r .conclusion <<< "$run")" == success ]] || exit 1
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$DRY_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "lms-historic-ten-atomic-dry-run-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
+          jq -e --arg main "$GITHUB_SHA" --arg prod "$EXPECTED_PRODUCTION_SHA" '
+            .schema_version==1 and .repo_sha==$main and .production_sha==$prod and
+            .mode=="dry-run" and .tenant==6 and .writes==0 and
+            .personal_data==false and .authorized_count==10 and
+            .pending_review_count==0 and .candidates==10 and .already_completed==0 and
+            .pending_review==[] and
+            (.authorized_ids_hash|test("^[a-f0-9]{64}$")) and
+            (.candidate_hash|test("^[a-f0-9]{64}$"))
+          ' "$RUNNER_TEMP/reviewed/result.json" >/dev/null
+          expected_ids_hash="$(node -e '
+            const {createHash}=require("node:crypto");
+            const arr=String(process.env.LMS_HIST_ATOMIC_TARGET_ENROLLMENT_IDS||"").split(",").map(Number).sort((a,b)=>a-b);
+            if(arr.length!==10||new Set(arr).size!==10||arr.some(x=>!Number.isSafeInteger(x)||x<=0))process.exit(1);
+            process.stdout.write(createHash("sha256").update(JSON.stringify(arr)).digest("hex"));
+          ')"
+          [[ "$(jq -r .authorized_ids_hash "$RUNNER_TEMP/reviewed/result.json")" == "$expected_ids_hash" ]] || exit 1
+          echo "REVIEWED_COHORT_HASH=$(jq -r .candidate_hash "$RUNNER_TEMP/reviewed/result.json")" >> "$GITHUB_ENV"
+      - name: Check D1 recovery window before any API mutation
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || exit 1
+          npm ci --ignore-scripts >/dev/null
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$RUNNER_TEMP/d1-recovery.txt"
+          test -s "$RUNNER_TEMP/d1-recovery.txt"
+          rm -f "$RUNNER_TEMP/d1-recovery.txt"
+      - name: Run read-only cohort or canonical administrative API reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/production/lms-ten-historic-atomic-reconciliation.mjs > "$RUNNER_TEMP/result.json"
+          test -s "$RUNNER_TEMP/result.json"
+          jq -e --arg mode "$LMS_HIST_ATOMIC_MODE" '
+            .mode==$mode and .tenant==6 and .personal_data==false and .authorized_count==10 and
+            (.mode=="dry-run" or (.writes==10 and .results.completed==10 and .results.qualification_linked==10))
+          ' "$RUNNER_TEMP/result.json" >/dev/null
+          jq '{mode,repo_sha,production_sha,candidates,already_completed,pending_review_count,pending_review,raw_99_candidates,candidate_hash,authorized_count,by_course,excluded,writes,results:(.results|del(.detail)),scorm_cmi_changed,completion_date_rule,historical_training_date_not_fabricated}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload sanitized non-personal evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lms-historic-ten-atomic-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          retention-days: 30
+          if-no-files-found: warn
