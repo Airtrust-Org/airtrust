@@ -53,6 +53,21 @@ test('classifyEnrollment never treats progress alone as completion evidence', ()
       eligible_for_server_verification: true,
     },
   }).ready, false);
+
+  assert.deepEqual(classifyEnrollment({
+    status: 'EM_ANDAMENTO',
+    progresso_pct: 100,
+    tipo_conteudo: 'scorm',
+    edition_mismatch: { required: true },
+    closure_readiness: {
+      code: 'SCORM_READY_FOR_SERVER_VERIFICATION',
+      eligible_for_server_verification: true,
+    },
+  }), {
+    bucket: 'BLOCKED',
+    code: 'LMS_NEW_EDITION_REQUIRED',
+    ready: false,
+  });
 });
 
 test('cohortHash is deterministic and independent of input order', () => {
