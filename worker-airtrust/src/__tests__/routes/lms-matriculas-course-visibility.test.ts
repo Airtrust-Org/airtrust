@@ -33,8 +33,8 @@ function mockDb() {
   const db = {
     prepare: vi.fn((sql: string) => {
       queries.push(sql);
-      const cancelledOnly = sql.includes("IN ('CANCELADO','CANCELADA')");
       const excluded = sql.includes("NOT IN ('CANCELADO','CANCELADA')");
+      const cancelledOnly = !excluded && sql.includes("IN ('CANCELADO','CANCELADA')");
       const filtered = enrollments.filter((row) => cancelledOnly
         ? row.status === 'CANCELADO'
         : excluded && row.status !== 'CANCELADO');
