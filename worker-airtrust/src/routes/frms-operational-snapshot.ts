@@ -13,6 +13,8 @@ import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import { createLogger, toError } from '../utils/logger';
 import { isImaV3StagingPreviewEnabled } from '../lib/frms/ima-v3-preview-access';
 import { bridgeImaOperationalSnapshot } from '../lib/frms/ima-v3-operational-snapshot-bridge';
+import { auditImaCohortEvidence } from '../lib/frms/ima-v3-cohort-evidence';
+import { lastClosedMonthWindow, loadImaCohortEvidenceRows } from '../lib/frms/ima-v3-cohort-reader';
 
 type SnapshotContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
 
@@ -306,6 +308,65 @@ router.get('/ima-v3/schedule-exposure-shadow', async (c) => {
     const logger = createLogger(c as SnapshotContext, 'FrmsImaV3Shadow');
     logger.error('FRMS shadow preview failed', toError(error));
     return c.json({ success: false, code: 'IMA_SHADOW_UNAVAILABLE' }, 500);
+  }
+});
+
+
+/**
+ * A coarsened, fixed-window pilot of the historic data feasibility audit.
+ * Strictly staging + explicit tenant allowlist + team FRMS role. All read-only.
+ * Only aggregates are returned, and only when >= 10 distinct people exist.
+ */
+router.get('/ima-v3/cohort-readiness-shadow', async (c) => {
+  const empresaId = getEmpresaId(c);
+  if (!isImaV3StagingPreviewEnabled(c.env, empresaId)) {
+    return c.json({ success: false, code: 'NOT_FOUND' }, 404);
+  }
+  if (!(await canSeeTeam(c))) {
+    return c.json({ success: false, code: 'FRMS_TEAM_SCOPE_REQUIRED' }, 403);
+  }
+
+  // No configurable employees, roles, groups, dates or base filters:
+  // prevents small-cell probing and arbitrary overlapping cohort comparisons.
+  const fields = Object.keys(c.req.query());
+  if (fields.length !== 1 || fields[0] !== 'window_days') {
+    return c.json({ success: false, code: 'IMA_COHORT_FIXED_WINDOW_ONLY' }, 400);
+  }
+  const parsed = z.enum(['30', '60', '90']).safeParse(c.req.query('window_days'));
+  if (!parsed.success) {
+    return c.json({ success: false, code: 'IMA_COHORT_FIXED_WINDOW_ONLY' }, 400);
+  }
+
+  try {
+    const window = lastClosedMonthWindow(new Date(), Number(parsed.data) as 30 | 60 | 90);
+    const rows = await loadImaCohortEvidenceRows(
+      c.env.DB, empresaId, window.startDate, window.endDate,
+    );
+    const report = auditImaCohortEvidence({
+      expectedEmpresaId: empresaId,
+      startDate: window.startDate,
+      endDate: window.endDate,
+      rows,
+      boundaryProvenanceUnavailable: true,
+    });
+    return c.json({
+      success: true,
+      data: report,
+      meta: {
+        mode: 'EXPERIMENTAL_COHORT_SHADOW_ONLY',
+        source: 'CHECKIN_OR_JOURNEY_DAYS_ONLY',
+        suppressedSmallCohorts: true,
+        dataCompleteness: 'PARTIAL_ACTIVITY_BASED_DENOMINATOR',
+        writes: 0,
+        clinicalValidation: false,
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('IMA_')) {
+      return c.json({ success: false, code: 'IMA_COHORT_EVIDENCE_RECONCILIATION_REQUIRED' }, 409);
+    }
+    // No identifiers or raw SQL errors are exported to the browser.
+    return c.json({ success: false, code: 'IMA_COHORT_UNAVAILABLE' }, 503);
   }
 });
 
