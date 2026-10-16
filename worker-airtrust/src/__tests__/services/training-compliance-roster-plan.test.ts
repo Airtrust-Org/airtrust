@@ -76,6 +76,15 @@ describe('Matrícula orientada por função e situação da qualificação',()=>
     const result=plan(snapshot(person(101,[])),[course],[row(12),row(13,'CANCELADO')],new Set([12]));
     expect(result.remove).toHaveLength(0);
   });
+  it('não toma decisão destrutiva quando o mesmo tipo exige dois perfis',()=>{
+    const result=plan(snapshot(person(101,[
+      requirement('CONFORME',{perfil_competencia:'PERFIL_1'}),
+      requirement('NAO_REALIZADO',{perfil_competencia:'PERFIL_2'}),
+    ])),[course],[row(12)]);
+    expect(result.enroll).toHaveLength(0);
+    expect(result.remove).toHaveLength(0);
+    expect(result.protectedCount).toBe(1);
+  });
   it('não limpa matrícula quando qualificação está vencida/sem realização',()=>{
     const result=plan(snapshot(person(101,[requirement('VENCIDO')])),[course],[row(12)]);
     expect(result.remove).toHaveLength(0);
