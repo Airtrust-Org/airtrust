@@ -7,6 +7,8 @@ vi.mock('../../middleware/auth', () => ({
 }));
 vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  hasRole: () => true,
 }));
 vi.mock('../../routes/escalas-shared', () => ({
   getEmpresaIdSafe: () => 6,
