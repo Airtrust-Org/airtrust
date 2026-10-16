@@ -45,9 +45,32 @@ test('explicit list has exactly 16 distinct IDs and rejects missing IDs',()=>{
   const all=Array.from(ids).map(id=>({id,status:'EM_ANDAMENTO',progresso_bruto:100}));
   const cohort=plan([{id:43,enrollments:all}],ids);
   assert.equal(cohort.rows.length,16);
-  assert.throws(()=>plan([{id:43,enrollments:all.slice(1)}],ids),/AUTHORIZED_COHORT_MISSING/);
-  assert.throws(()=>plan([{id:43,enrollments:all.map((row,i)=>i===0?{...row,status:'NAO_INICIADO'}:row)}],ids),/AUTHORIZED_ENROLLMENT_DRIFT/);
+
+  const missing=plan([{id:43,enrollments:all.slice(1)}],ids);
+  assert.equal(missing.pendingReview.length,1);
+  assert.deepEqual(missing.pendingReview[0],{ordinal:1,curso_id:null,status:'NOT_FOUND',progresso_bruto:null});
+  const changed=plan([{id:43,enrollments:all.map((row,i)=>i===0?{...row,status:'NAO_INICIADO'}:row)}],ids);
+  assert.equal(changed.rows.length,15);
+  assert.deepEqual(changed.pendingReview[0],{ordinal:1,curso_id:43,status:'NAO_INICIADO',progresso_bruto:100});
+  const already=plan([{id:43,enrollments:all.map((row,i)=>i===0?{...row,status:'CONCLUIDO'}:row)}],ids);
+  assert.equal(already.rows.length,15);
+  assert.equal(already.alreadyCompleted.length,1);
+  assert.equal(already.pendingReview.length,0);
+  assert.notEqual(already.hash,cohort.hash);
+  const authorized99=plan([{id:43,enrollments:all.map((row,i)=>i===0?{...row,progresso_bruto:99}:row)}],ids);
+  assert.equal(authorized99.rows.length,16);
+  assert.equal(authorized99.pendingReview.length,0);
   process.env.LMS99_TARGET_ENROLLMENT_IDS='100,100';
   assert.throws(()=>authorizedEnrollmentIds(),/AUTHORIZED_INPUT|AUTHORIZED_DUPLICATES/);
  } finally {if(original===undefined) delete process.env.LMS99_TARGET_ENROLLMENT_IDS;else process.env.LMS99_TARGET_ENROLLMENT_IDS=original;}
+});
+
+test('authorized cancellations and failed attempts become review-only rather than completions',()=>{
+  const ids=new Set(Array.from({length:16},(_,i)=>i+1));
+  const all=Array.from(ids).map(id=>({id,status:'EM_ANDAMENTO',progresso_bruto:100}));
+  const cancelled=plan([{id:68,enrollments:all.map((r,i)=>i===2?{...r,status:'CANCELADO'}:r)}],ids);
+  assert.equal(cancelled.pendingReview.length,1);
+  assert.equal(cancelled.pendingReview[0].ordinal,3);
+  assert.equal(cancelled.rows.length,15);
+  assert.notDeepEqual(cancelled.rows,plan([{id:68,enrollments:all}],ids).rows);
 });
