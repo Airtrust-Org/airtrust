@@ -32,7 +32,11 @@ export async function readTrainingRosterPlan(
         EXISTS(SELECT 1 FROM lms_progresso_scorm s WHERE s.matricula_id=m.id AND s.empresa_id=m.empresa_id) has_scorm,
         EXISTS(SELECT 1 FROM lms_xapi_statements x WHERE x.matricula_id=m.id AND x.empresa_id=m.empresa_id) has_xapi,
         EXISTS(SELECT 1 FROM qualificacoes_historico h WHERE h.lms_matricula_id=m.id AND h.empresa_id=m.empresa_id AND h.deleted_at IS NULL) has_history,
-        EXISTS(SELECT 1 FROM lms_completion_diagnostics_snapshots d WHERE d.matricula_id=m.id AND d.empresa_id=m.empresa_id) has_diagnostics
+        EXISTS(SELECT 1 FROM lms_completion_diagnostics_snapshots d WHERE d.matricula_id=m.id AND d.empresa_id=m.empresa_id) has_diagnostics,
+        EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+          AND cy.deleted_at IS NULL AND (COALESCE(cy.progresso_pct,0)>0 OR cy.data_inicio IS NOT NULL
+            OR cy.data_conclusao IS NOT NULL OR cy.qualificacao_historico_id IS NOT NULL
+            OR cy.historico_importado_id IS NOT NULL OR UPPER(TRIM(COALESCE(cy.status,''))) NOT IN ('NAO_INICIADO','CANCELADO'))) has_cycle_evidence
        FROM lms_matriculas m WHERE m.empresa_id=?`)
       .bind(empresaId).all<RosterEnrollment>(),
   ]);
@@ -89,8 +93,12 @@ async function retireUnusedEnrollment(db: D1Database, empresaId: number, id: num
         AND NOT EXISTS(SELECT 1 FROM lms_progresso_scorm s WHERE s.empresa_id=? AND s.matricula_id=lms_matriculas.id)
         AND NOT EXISTS(SELECT 1 FROM lms_xapi_statements x WHERE x.empresa_id=? AND x.matricula_id=lms_matriculas.id)
         AND NOT EXISTS(SELECT 1 FROM lms_completion_diagnostics_snapshots d WHERE d.empresa_id=? AND d.matricula_id=lms_matriculas.id)
-        AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico h WHERE h.empresa_id=? AND h.lms_matricula_id=lms_matriculas.id AND h.deleted_at IS NULL)`)
-      .bind(id,empresaId,empresaId,empresaId,empresaId,empresaId),
+        AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico h WHERE h.empresa_id=? AND h.lms_matricula_id=lms_matriculas.id AND h.deleted_at IS NULL)
+        AND NOT EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.empresa_id=? AND cy.matricula_id=lms_matriculas.id
+          AND cy.deleted_at IS NULL AND (COALESCE(cy.progresso_pct,0)>0 OR cy.data_inicio IS NOT NULL
+          OR cy.data_conclusao IS NOT NULL OR cy.qualificacao_historico_id IS NOT NULL OR cy.historico_importado_id IS NOT NULL
+          OR UPPER(TRIM(COALESCE(cy.status,''))) NOT IN ('NAO_INICIADO','CANCELADO')))`)
+      .bind(id,empresaId,empresaId,empresaId,empresaId,empresaId,empresaId),
     db.prepare(`INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
       SELECT NULL,'LMS_ROSTER_RECONCILIATION','lms_matriculas',?,
          '{"status":"NAO_INICIADO"}',?, ?,datetime('now') WHERE changes()=1`)
