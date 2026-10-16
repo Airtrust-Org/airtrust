@@ -167,6 +167,7 @@ function baseCte() {
       FROM lms_cursos
      WHERE empresa_id=${EMPRESA_ID}
        AND deleted_at IS NULL AND COALESCE(ativo,1)=1
+       AND publicado=1
        AND qualificacao_tipo_id IS NOT NULL
      GROUP BY qualificacao_tipo_id
   )`;
