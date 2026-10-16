@@ -6,6 +6,7 @@ import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { getEmployeeSectorAccess, type EmployeeSectorAccess } from '../services/employee-sector-access';
 import { trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
+import { readTrainingRosterPlan, applyTrainingRosterPlan } from '../services/training-compliance-roster-sync';
 import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle, syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
@@ -77,6 +78,28 @@ function asPositiveInt(value: unknown): number | null {
 
 export function createTrainingComplianceReconciliationActions(deps: ReconciliationDeps) {
   const router = new Hono<{ Bindings: Env }>();
+// Prévia determinística antes de qualquer alteração. Status cancelado/concluído
+// é histórico, não aluno ativo da grade LMS.
+router.post('/sincronizar-matriz', requireRole('admin'), async (c) => {
+  const empresaId = getEmpresaId(c);
+  if (empresaId !== 6) throw new ApiError('Somente matriz da Costa do Sol', 403);
+  const payload = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const aplicar = payload.aplicar === true;
+  const { plan, hash, resumo } = await readTrainingRosterPlan(c.env.DB, empresaId, deps.buildSnapshot);
+  if (!aplicar) return c.json({
+    success: true,
+    data: { modo:'PREVIEW', plano_hash:hash, ...resumo, email_enviado:false },
+  });
+  if (typeof payload.plano_hash !== 'string' || !/^[a-f0-9]{64}$/.test(payload.plano_hash) || payload.plano_hash !== hash) {
+    throw new ApiError('Prévia alterada; obtenha novo plano de matrícula antes de aplicar', 409);
+  }
+  const result = await applyTrainingRosterPlan(c.env.DB, empresaId, plan);
+  return c.json({
+    success: true,
+    data: { modo:'APLICACAO', plano_hash:hash, ...resumo, ...result },
+  });
+});
+
 // Reconciliação operacional: o requisito vem da matriz, a pendência do histórico
 // e a matrícula é apenas o ciclo de execução. A conclusão anterior permanece no
 // histórico e nunca bloqueia uma nova matrícula de renovação.
