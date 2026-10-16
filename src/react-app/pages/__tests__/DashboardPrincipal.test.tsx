@@ -129,7 +129,7 @@ function buildSummary(selectable = true) {
       nao_realizados: 2,
       compliance_pct: 87.5,
       cobertura: 'PARCIAL' as const,
-      escopo_modelo: 'SETOR_OU_TRANSVERSAL' as const,
+      escopo_modelo: 'MATRIZ_CANONICA' as const,
     },
     unavailableSources: [],
   };
