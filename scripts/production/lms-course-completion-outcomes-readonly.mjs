@@ -124,28 +124,53 @@ async function listActivePublished(token) {
   requireValue(new Set(ids).size === ids.length, 'DUPLICATE_COURSE_ID');
   return courses;
 }
-async function aggregateCourse(token, course) {
+/** The management grid deliberately omits CONCLUIDO without an explicit status.
+ * Read both disjoint status buckets; a partial operational list is not a
+ * tenant-wide completion inventory. IDs stay in memory only to reject
+ * concurrent status transitions rather than double count one enrollment.
+ */
+export async function aggregateCourse(token, course, fetcher = readOnlyGet) {
   const totals = aggregateEnrollments([]);
-  let expectedTotal = null;
-  let fetched = 0;
-  for (let page = 1; page <= MAX_COURSE_PAGES; page += 1) {
-    const route = '/api/lms/matriculas/curso/' + Number(course.id) + '?page=' + page + '&limit=' + LIMIT;
-    const result = await readOnlyGet(token, route);
-    requireValue(result.status === 200, 'COURSE_ENROLLMENTS_HTTP_' + course.id + '_' + result.status);
-    const rows = Array.isArray(result.json?.data) ? result.json.data : [];
-    const total = Number(result.json?.pagination?.total ?? 0);
-    requireValue(Number.isInteger(total) && total >= 0, 'ENROLLMENT_TOTAL_INVALID');
-    if (expectedTotal !== null) requireValue(total === expectedTotal, 'ENROLLMENT_TOTAL_CHANGED_RETRY_REQUIRED');
-    expectedTotal = total;
-    addAggregates(totals, aggregateEnrollments(rows));
-    fetched += rows.length;
-    if (fetched >= total) {
-      requireValue(fetched === total, 'ENROLLMENT_COUNT_MISMATCH');
-      return sanitizeCourse(course, totals);
+  const seen = new Set();
+  const courseId = Number(course.id);
+  requireValue(Number.isSafeInteger(courseId) && courseId > 0, 'COURSE_ID_INVALID');
+
+  for (const bucket of ['operational', 'completed']) {
+    let expectedTotal = null;
+    let fetched = 0;
+    const suffix = bucket === 'completed' ? '&status=CONCLUIDO' : '';
+    for (let page = 1; page <= MAX_COURSE_PAGES; page += 1) {
+      const route = '/api/lms/matriculas/curso/' + courseId +
+        '?page=' + page + '&limit=' + LIMIT + suffix;
+      const result = await fetcher(token, route);
+      requireValue(result.status === 200, 'COURSE_ENROLLMENTS_HTTP_' + courseId + '_' + result.status);
+      const rows = Array.isArray(result.json?.data) ? result.json.data : [];
+      const total = Number(result.json?.pagination?.total ?? -1);
+      requireValue(Number.isInteger(total) && total >= 0, 'ENROLLMENT_TOTAL_INVALID');
+      if (expectedTotal !== null) requireValue(total === expectedTotal, 'ENROLLMENT_TOTAL_CHANGED_RETRY_REQUIRED');
+      expectedTotal = total;
+      for (const row of rows) {
+        const status = String(row?.status || '').trim().toUpperCase();
+        const validStatus = bucket === 'completed'
+          ? status === 'CONCLUIDO'
+          : ['NAO_INICIADO', 'EM_ANDAMENTO', 'REPROVADO'].includes(status);
+        requireValue(validStatus, 'ENROLLMENT_STATUS_SCOPE_CHANGED_RETRY_REQUIRED');
+        const id = Number(row?.id);
+        requireValue(Number.isSafeInteger(id) && id > 0 && !seen.has(id),
+          'ENROLLMENT_DUPLICATE_OR_STATUS_DRIFT_RETRY_REQUIRED');
+        seen.add(id);
+      }
+      addAggregates(totals, aggregateEnrollments(rows));
+      fetched += rows.length;
+      if (fetched >= total) {
+        requireValue(fetched === total, 'ENROLLMENT_COUNT_MISMATCH');
+        break;
+      }
+      requireValue(rows.length > 0 && page < MAX_COURSE_PAGES, 'ENROLLMENT_PAGE_LIMIT');
     }
-    requireValue(rows.length > 0 && page < MAX_COURSE_PAGES, 'ENROLLMENT_PAGE_LIMIT');
+    requireValue(fetched === expectedTotal, 'ENROLLMENT_PAGE_LIMIT');
   }
-  throw new Error('ENROLLMENT_PAGE_LIMIT');
+  return sanitizeCourse(course, totals);
 }
 
 /**
