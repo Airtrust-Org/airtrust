@@ -1337,7 +1337,10 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
   const q = normalizeSearchText(c.req.query('q'));
-  const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+  const [snapshot, activeEnrollments] = await Promise.all([
+    buildSnapshot(c.env.DB, empresaId, access),
+    loadLmsEnrollments(c.env.DB, empresaId),
+  ]);
   const people = snapshot.people.filter(
     (p) =>
       (!setorId || p.setor_id === setorId) &&
@@ -1386,9 +1389,30 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
       map.set(req.qualificacao_tipo_id, current);
     }
   }
+  const requiredPairs = new Set<string>();
+  for (const person of people) {
+    for (const req of person.requisitos) {
+      if (req.obrigatoriedade === 'OBRIGATORIA') {
+        requiredPairs.add(`${person.id}:${req.qualificacao_tipo_id}`);
+      }
+    }
+  }
+  const enrolledPeopleByType = new Map<number, Set<number>>();
+  for (const enrollment of activeEnrollments) {
+    const typeId = Number(enrollment.qualificacao_tipo_id);
+    const employeeId = Number(enrollment.funcionario_id);
+    if (!typeId || !requiredPairs.has(`${employeeId}:${typeId}`)) continue;
+    const set = enrolledPeopleByType.get(typeId) || new Set<number>();
+    set.add(employeeId);
+    enrolledPeopleByType.set(typeId, set);
+  }
+
   const data = Array.from(map.values())
     .map((row) => ({
       ...row,
+      matriculados: enrolledPeopleByType.get(Number(row.qualificacao_tipo_id))?.size ?? 0,
+      // "Concluídos" nesta visão significa treinamento válido e fora da janela de renovação.
+      concluidos: Math.max(0, Number(row.conformes) - Number(row.vencendo)),
       compliance_pct:
         Number(row.pessoas) > 0
           ? Math.round((Number(row.conformes) / Number(row.pessoas)) * 1000) / 10
