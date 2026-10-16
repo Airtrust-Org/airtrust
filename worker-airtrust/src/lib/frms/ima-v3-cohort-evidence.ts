@@ -26,12 +26,15 @@ export interface ImaCohortEvidenceInput {
   startDate: string;
   endDate: string;
   rows: readonly ImaCohortSourceRow[];
+  /** True for low-cost checkin/journey query without boundary-level source lineage. */
+  boundaryProvenanceUnavailable?: boolean;
 }
 
 export interface ImaCohortEvidenceReport {
   state: 'PRIVACY_SUPPRESSED' | 'AGGREGATED_RESEARCH_COVERAGE';
   windowDays: 30 | 60 | 90;
   minCrewForRelease: 10;
+  denominatorDefinition: 'CHECKIN_OR_JOURNEY_DAYS_NOT_FULL_ROSTER';
   /** Quantities are rounded; null if the sample fails the privacy threshold. */
   approximateCrew: number | null;
   approximateCrewDays: number | null;
@@ -145,18 +148,21 @@ export function auditImaCohortEvidence(input: ImaCohortEvidenceInput): ImaCohort
     'CALIBRACAO_PROSPECTIVA_PENDENTE',
   ];
   if (suppressed) blockers.push('PRIVACIDADE_COORTE_INSUFICIENTE');
+  if (input.boundaryProvenanceUnavailable) blockers.push('PROVENIENCIA_LIMITES_JORNADA_NAO_DISPONIVEL');
   else if (incompleteSource > 0) blockers.push('FONTES_DE_DADOS_INCOMPLETAS');
   return {
     state: suppressed ? 'PRIVACY_SUPPRESSED' : 'AGGREGATED_RESEARCH_COVERAGE',
     windowDays: span as 30 | 60 | 90,
     minCrewForRelease: MIN_CREW,
+    denominatorDefinition: 'CHECKIN_OR_JOURNEY_DAYS_NOT_FULL_ROSTER',
     approximateCrew: suppressed ? null : approxCount(crew.size, 5),
     approximateCrewDays: suppressed ? null : approxCount(denominator, 10),
     checkinReceivedPctApprox: suppressed ? null : approxPct(received, denominator),
     realSleepDurationPctApprox: suppressed ? null : approxPct(realSleep, denominator),
     realWakeReportPctApprox: suppressed ? null : approxPct(realWake, denominator),
     validKssPctApprox: suppressed ? null : approxPct(kss, denominator),
-    reconstructedDutyBoundaryPctApprox: suppressed ? null : approxPct(reconstructedBoundary, denominator),
+    reconstructedDutyBoundaryPctApprox: suppressed || input.boundaryProvenanceUnavailable
+      ? null : approxPct(reconstructedBoundary, denominator),
     sourceIncompletePctApprox: suppressed ? null : approxPct(incompleteSource, denominator),
     verifiedSleepEpisodePct: null,
     validatedPvtBaselinePct: null,
