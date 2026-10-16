@@ -11,7 +11,7 @@ import {
 import { FrmsParameterResolutionError } from '../lib/frms/parameter-governance';
 import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import { createLogger, toError } from '../utils/logger';
-import { isImaV3StagingPreviewEnabled } from '../lib/frms/ima-v3-preview-access';
+import { isImaV3StagingPreviewEnabled, isImaV3StagingCohortStudyEnabled } from '../lib/frms/ima-v3-preview-access';
 import { bridgeImaOperationalSnapshot } from '../lib/frms/ima-v3-operational-snapshot-bridge';
 import { auditImaCohortEvidence } from '../lib/frms/ima-v3-cohort-evidence';
 import { lastClosedMonthWindow, loadImaCohortEvidenceRows } from '../lib/frms/ima-v3-cohort-reader';
@@ -319,7 +319,7 @@ router.get('/ima-v3/schedule-exposure-shadow', async (c) => {
  */
 router.get('/ima-v3/cohort-readiness-shadow', async (c) => {
   const empresaId = getEmpresaId(c);
-  if (!isImaV3StagingPreviewEnabled(c.env, empresaId)) {
+    if (!isImaV3StagingCohortStudyEnabled(c.env, empresaId)) {
     return c.json({ success: false, code: 'NOT_FOUND' }, 404);
   }
   if (!(await canSeeTeam(c))) {
