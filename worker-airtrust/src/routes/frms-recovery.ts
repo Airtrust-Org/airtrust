@@ -524,6 +524,13 @@ async function upsertRecoveryAssessment(params: {
   };
 }
 
+/** Only absence of the historical recovery table is a compatibility no-op.
+ * Never conceal write/constraint failures as if recovery had no evidence. */
+export function isMissingRecoverySchemaError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /\bno such table:\s*(?:main\.)?(?:frms_recovery_activity_day|frms_recovery_assessment)\b/i.test(message);
+}
+
 export async function refreshRecoveryAssessmentForActivityDate(params: {
   db: D1Database;
   empresaId: number;
@@ -552,9 +559,9 @@ export async function refreshRecoveryAssessmentForActivityDate(params: {
         activity.immediate_callout_required == null ? null : Number(activity.immediate_callout_required) === 1,
       totalDutyMinutes: activity.total_duty_minutes,
     });
-  } catch {
-    // Migration may not yet be applied in older environments.
-    return null;
+  } catch (error) {
+    if (isMissingRecoverySchemaError(error)) return null;
+    throw error;
   }
 }
 
