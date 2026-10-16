@@ -6,17 +6,18 @@ import type { Env } from '../../types';
 const listSnapshotMock = vi.fn();
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: any, next: () => Promise<void>) => {
+  auth: () => async (context: unknown, next: () => Promise<void>) => {
+    const c = context as { set: (key: string, value: unknown) => void; req: { header: (key: string) => string | undefined } };
     c.set('userId', 101);
     c.set('userRole', c.req.header('x-role') || 'viewer');
     await next();
   },
 }));
 vi.mock('../../middleware/tenant', () => ({
-  getEmpresaId: (c: any) => Number(c.req.header('x-empresa-id') || 0),
+  getEmpresaId: (context: unknown) => Number((context as { req: { header: (key: string) => string | undefined } }).req.header('x-empresa-id') || 0),
 }));
 vi.mock('../../lib/frms/access', () => ({
-  canSeeFrmsTeamScopeForContext: async (c: any) => c.req.header('x-role') === 'manager',
+  canSeeFrmsTeamScopeForContext: async (context: unknown) => (context as { req: { header: (key: string) => string | undefined } }).req.header('x-role') === 'manager',
 }));
 vi.mock('../../lib/frms/operational-snapshot', () => ({
   listFrmsOperationalSnapshot: (...args: unknown[]) => listSnapshotMock(...args),
@@ -129,7 +130,7 @@ describe('FRMS IMA V3 research preview route: staging/tenant/RBAC isolation', ()
       empresaId: 6, dataInicio: '2026-10-15', dataFim: '2026-10-15',
       filters: { funcionario_id: 42, include_inconsistencies: true },
     });
-    const body = (await response.json()) as any;
+    const body: unknown = await response.json();
     expect(body).toMatchObject({
       success: true,
       meta: { mode: 'EXPERIMENTAL_SHADOW_ONLY', physiologyValidated: false, writes: 0 },
