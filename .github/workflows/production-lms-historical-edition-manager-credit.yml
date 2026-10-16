@@ -20,8 +20,8 @@ concurrency:
   group: production-tenant6-lms-historical-credit
   cancel-in-progress: false
 jobs:
-  credit:
-    name: Ten tenant6 pre-approved historical-edition administrative credits
+  d1_credit:
+    name: Reviewed production D1 tenant-6 historical-edition administrative credits
     environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 40
