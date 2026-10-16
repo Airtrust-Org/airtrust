@@ -14,3 +14,16 @@ export function isImaV3StagingPreviewEnabled(
   if (!raw || !/^\d+(?:\s*,\s*\d+)*$/.test(raw)) return false;
   return raw.split(',').some((token) => Number(token.trim()) === empresaId);
 }
+
+/** Cohort authorization is deliberately independent of the individual preview.
+ * Enabling a 90-day aggregate research study must NOT enable crew-specific reads.
+ */
+export function isImaV3StagingCohortStudyEnabled(
+  env: { ENVIRONMENT?: string; FRMS_V3_COHORT_STUDY_TENANTS?: string },
+  empresaId: number,
+): boolean {
+  return isImaV3StagingPreviewEnabled({
+    ENVIRONMENT: env.ENVIRONMENT,
+    FRMS_V3_SHADOW_PREVIEW_TENANTS: env.FRMS_V3_COHORT_STUDY_TENANTS,
+  }, empresaId);
+}
