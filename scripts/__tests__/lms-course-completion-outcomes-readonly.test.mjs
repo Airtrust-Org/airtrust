@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { aggregateEnrollments, addAggregates, sanitizeCourse, tallyScormDiagnostics } from '../production/lms-course-completion-outcomes-readonly.mjs';
+import { aggregateEnrollments, aggregateCourse, addAggregates, sanitizeCourse, tallyScormDiagnostics } from '../production/lms-course-completion-outcomes-readonly.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
 const script = readFileSync(new URL('scripts/production/lms-course-completion-outcomes-readonly.mjs', ROOT), 'utf8');
@@ -37,6 +37,44 @@ test('pagination fragments preserve counts and 99% semantics', () => {
   assert.equal(combined.concluidas, 1);
   assert.equal(combined.pendentes_99_ou_mais, 2);
   assert.equal(combined.pendentes_100_bruto, 1);
+});
+
+test('inventory combines default operational grid with explicit completed status, without counting any row twice', async () => {
+  const routes = [];
+  const fetcher = async (_token, route) => {
+    routes.push(route);
+    if (route.includes('status=CONCLUIDO')) {
+      return { status: 200, json: { data: [
+        { id: 301, status: 'CONCLUIDO', progresso_pct: 100, data_conclusao: '2026-10-12', funcionario_nome: 'Secret Name' },
+        { id: 302, status: 'CONCLUIDO', progresso_pct: 100, data_conclusao: '2026-10-12' },
+      ], pagination: { total: 2 } } };
+    }
+    return { status: 200, json: { data: [
+      { id: 303, status: 'EM_ANDAMENTO', progresso_bruto: 100 },
+      { id: 304, status: 'NAO_INICIADO', progresso_pct: 0 },
+    ], pagination: { total: 2 } } };
+  };
+  const result = await aggregateCourse('not-a-real-token', { id: 31, titulo: 'Inspeção', tipo_conteudo: 'scorm' }, fetcher);
+  assert.deepEqual(routes, [
+    '/api/lms/matriculas/curso/31?page=1&limit=200',
+    '/api/lms/matriculas/curso/31?page=1&limit=200&status=CONCLUIDO',
+  ]);
+  assert.equal(result.matriculas, 4);
+  assert.equal(result.concluidas, 2);
+  assert.equal(result.pendentes_99_ou_mais, 1);
+  assert.doesNotMatch(JSON.stringify(result), /Secret|funcionario_nome|not-a-real-token/);
+});
+
+test('read-only inventory fails closed on status drift between operational and completed buckets', async () => {
+  const fetcher = async (_token, route) => ({
+    status: 200, json: { data: [
+      { id: 301, status: route.includes('status=CONCLUIDO') ? 'CONCLUIDO' : 'EM_ANDAMENTO', progresso_pct: 100 },
+    ], pagination: { total: 1 } },
+  });
+  await assert.rejects(
+    aggregateCourse('fake-token', { id: 31, titulo: 'Curso', tipo_conteudo: 'scorm' }, fetcher),
+    /ENROLLMENT_DUPLICATE_OR_STATUS_DRIFT_RETRY_REQUIRED/,
+  );
 });
 
 test('production outcome audit has strict SHA, tenant, read-only scope, no learner payloads', () => {
