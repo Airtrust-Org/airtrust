@@ -108,7 +108,7 @@ export function buildTrainingComplianceRosterPlan(
         ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(row.status).toUpperCase()))) continue;
       plan.enroll.push({
         funcionarioId: person.id,
-        cursoId,
+        cursoId: courseId,
         tipoId: Number(req.qualificacao_tipo_id),
         existingId: existing[0]?.id || null,
       });
