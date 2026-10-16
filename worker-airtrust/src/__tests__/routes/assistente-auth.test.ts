@@ -30,14 +30,39 @@ vi.mock('../../services/dashboardService', () => ({
     qualificacoesVencidas: 1,
     demandaFutura30Dias: 3,
   })),
-  getComplianceScore: vi.fn(async () => ({
-    scoreGeral: 90,
-    metaOrganizacional: 95,
-    qualificacoesValidas: 20,
-    totalQualificacoes: 22,
+  getQualificationComplianceSummary: vi.fn(async () => ({
+    pessoas: 10,
+    pessoas_sem_configuracao: 0,
+    requisitos_obrigatorios: 22,
+    conformes: 20,
+    vencendo: 2,
+    vencidos: 1,
+    nao_realizados: 1,
+    compliance_pct: 90.9,
+    cobertura: 'COMPLETA',
+    escopo_modelo: 'SETOR_OU_TRANSVERSAL',
   })),
   getDashboardAlerts: vi.fn(async () => []),
   getAtividadesRecentes: vi.fn(async () => []),
+}));
+
+vi.mock('../../routes/compliance-treinamentos', () => ({
+  buildSnapshot: vi.fn(async () => ({
+    employees: [],
+    rules: [],
+    people: [
+      {
+        id: 1,
+        configurado: true,
+        total_obrigatorios: 10,
+        conformes: 8,
+        vencendo: 1,
+        vencidos: 1,
+        nao_realizados: 1,
+        em_andamento: 0,
+      },
+    ],
+  })),
 }));
 
 import assistenteRoutes from '../../routes/assistente';
