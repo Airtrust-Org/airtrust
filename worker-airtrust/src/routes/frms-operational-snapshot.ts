@@ -235,7 +235,8 @@ router.get('/ima-v3/schedule-exposure-shadow', async (c) => {
     data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     funcionario_id: z.coerce.number().int().positive().safe(),
-    reference_utc_offset_minutes: z.coerce.number().int().min(-720).max(840),
+    reference_utc_offset_minutes: z.string().regex(/^[+-]?\d+$/)
+      .transform(Number).pipe(z.number().int().min(-720).max(840)),
   }).safeParse({
     data_inicio: c.req.query('data_inicio'),
     data_fim: c.req.query('data_fim'),
