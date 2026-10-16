@@ -110,6 +110,8 @@ describe('FRMS IMA V3 research preview route: staging/tenant/RBAC isolation', ()
       endpoint.replace('data_fim=2026-10-15', 'data_fim=2026-10-25'),
       endpoint.replace('data_inicio=2026-10-15', 'data_inicio=2026-02-30'),
       endpoint.replace('reference_utc_offset_minutes=-180', 'reference_utc_offset_minutes=2500'),
+      endpoint.replace('reference_utc_offset_minutes=-180', 'reference_utc_offset_minutes='),
+      endpoint.replace('&reference_utc_offset_minutes=-180', ''),
       endpoint.replace('funcionario_id=42', 'funcionario_id='),
     ];
     for (const url of invalid) {
