@@ -18,7 +18,7 @@ export const OperationsOverview = React.memo(function OperationsOverview({
 }: OperationsOverviewProps) {
   const tripulantesEmDia = Math.max(metrics.tripulantesAtivos - metrics.tripulantesComQualificacoesVencidas, 0);
   const score = safePct(tripulantesEmDia, metrics.tripulantesAtivos);
-  const meta = compliance.metaOrganizacional || 90;
+  // A proporção de tripulantes sem qualificações vencidas não é um score\n  // de Compliance de Treinamentos nem comprova todas as qualificações exigidas.
   const tripulantesEmDiaPct = safePct(tripulantesEmDia, metrics.tripulantesAtivos);
   const tripulantesComVencimentoPct = safePct(metrics.tripulantesComQualificacoesVencendo, metrics.tripulantesAtivos);
 
@@ -36,7 +36,7 @@ export const OperationsOverview = React.memo(function OperationsOverview({
             </p>
             <p className="mt-0.5 text-xl font-black leading-none text-slate-900 dark:text-slate-100">{score}%</p>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              Compliance {score >= meta ? 'acima' : 'abaixo'} da meta {meta}%
+              Tripulantes sem qualificações vencidas (não é o Compliance completo)
             </p>
           </div>
         </div>
