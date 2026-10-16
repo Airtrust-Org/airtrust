@@ -11,7 +11,7 @@ import {
 import { FrmsParameterResolutionError } from '../lib/frms/parameter-governance';
 import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import { createLogger, toError } from '../utils/logger';
-import { isImaV3StagingPreviewEnabled, isImaV3StagingCohortStudyEnabled } from '../lib/frms/ima-v3-preview-access';
+import { isImaV3StagingPreviewEnabled, isImaV3StagingCohortStudyEnabled, isImaV3ApprovedCohortWindow } from '../lib/frms/ima-v3-preview-access';
 import { bridgeImaOperationalSnapshot } from '../lib/frms/ima-v3-operational-snapshot-bridge';
 import { auditImaCohortEvidence } from '../lib/frms/ima-v3-cohort-evidence';
 import { lastClosedMonthWindow, loadImaCohortEvidenceRows } from '../lib/frms/ima-v3-cohort-reader';
@@ -339,6 +339,11 @@ router.get('/ima-v3/cohort-readiness-shadow', async (c) => {
 
   try {
     const window = lastClosedMonthWindow(new Date(), Number(parsed.data) as 30 | 60 | 90);
+    // Exactly one approved, closed-month cohort per staging configuration.
+    // Enforce before opening DB; no overlapping-window or monthly differencing.
+    if (!isImaV3ApprovedCohortWindow(c.env, empresaId, window.windowDays, window.endDate)) {
+      return c.json({ success: false, code: 'NOT_FOUND' }, 404);
+    }
     const rows = await loadImaCohortEvidenceRows(
       c.env.DB, empresaId, window.startDate, window.endDate,
     );

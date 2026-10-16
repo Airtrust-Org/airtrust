@@ -88,6 +88,9 @@ export interface Env {
   FRMS_V3_SHADOW_PREVIEW_TENANTS?: string;
   // Independent staging-only cohort research allowlist; default disabled, never 'all'.
   FRMS_V3_COHORT_STUDY_TENANTS?: string;
+  // Explicit, single approved historical cohort. Absent = no data access.
+  FRMS_V3_COHORT_APPROVED_WINDOW_DAYS?: string;
+  FRMS_V3_COHORT_APPROVED_END_DATE?: string;
 
 
   // CORS Origins (pode ser string separada por vírgula)

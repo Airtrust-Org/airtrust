@@ -60,6 +60,8 @@ function env(overrides: Record<string, unknown> = {}): Env {
     ENVIRONMENT: 'staging',
     FRMS_V3_SHADOW_PREVIEW_TENANTS: '',
     FRMS_V3_COHORT_STUDY_TENANTS: '6',
+    FRMS_V3_COHORT_APPROVED_WINDOW_DAYS: '30',
+    FRMS_V3_COHORT_APPROVED_END_DATE: '2026-09-30',
     ...overrides,
   } as unknown as Env;
 }
@@ -92,6 +94,33 @@ describe('GET /frms/ima-v3/cohort-readiness-shadow', () => {
       FRMS_V3_COHORT_STUDY_TENANTS: '',
     }), {} as ExecutionContext);
     expect(response.status).toBe(404);
+    expect(reader).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the tenant allowlist is on but the approved study window is missing', async () => {
+    const variants = [
+      { FRMS_V3_COHORT_APPROVED_WINDOW_DAYS: undefined },
+      { FRMS_V3_COHORT_APPROVED_END_DATE: undefined },
+      { FRMS_V3_COHORT_APPROVED_WINDOW_DAYS: '' },
+      { FRMS_V3_COHORT_APPROVED_END_DATE: '' },
+      { FRMS_V3_COHORT_APPROVED_WINDOW_DAYS: 'all' },
+      { FRMS_V3_COHORT_APPROVED_END_DATE: '2026-09-31' },
+      { FRMS_V3_COHORT_APPROVED_END_DATE: '2026-08-31' },
+      { FRMS_V3_COHORT_APPROVED_WINDOW_DAYS: '90' },
+    ];
+    for (const config of variants) {
+      const response = await app().fetch(request(), env(config), {} as ExecutionContext);
+      expect(response.status).toBe(404);
+    }
+    expect(reader).not.toHaveBeenCalled();
+  });
+
+  it('does not reveal overlapping period lengths after approving only one cohort', async () => {
+    for (const days of ['60', '90']) {
+      const path = endpoint.replace('window_days=30', 'window_days=' + days);
+      const response = await app().fetch(request(path), env(), {} as ExecutionContext);
+      expect(response.status).toBe(404);
+    }
     expect(reader).not.toHaveBeenCalled();
   });
 
