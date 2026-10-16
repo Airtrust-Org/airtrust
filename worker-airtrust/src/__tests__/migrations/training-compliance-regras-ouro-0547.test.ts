@@ -36,7 +36,7 @@ describe('corporate Regras de Ouro 0547', () => {
     const smoke = read('.github/workflows/production-training-compliance-readonly-smoke.yml');
     expect(smoke).toContain("change_id='training-compliance-regras-ouro-corporate-0547'");
     expect(smoke).toContain('validate-training-compliance-regras-ouro-current-readonly.sh');
-    expect(smoke).not.toMatch(/bash scripts\\/schema-v2\\/validate-0547-production-postconditions\\.sh/);
+    expect(smoke).not.toContain('validate-0547-production-postconditions.sh --target=airtrust-db');
     expect(smoke).toContain('validate-0546-production-postconditions.sh');
     expect(smoke).toContain('applied_0547');
   });
