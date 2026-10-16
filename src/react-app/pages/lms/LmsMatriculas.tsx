@@ -698,10 +698,7 @@ export default function LmsMatriculas() {
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                           {cursoItem.categoria ?? 'Sem categoria'}
                         </p>
-                        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                          {(cursoItem.total_matriculas ?? 0).toString()} matrícula(s) ·{' '}
-                          {(cursoItem.total_concluidos ?? 0).toString()} conclusão(ões) registradas no LMS
-                        </p>
+                        
                         <LmsCourseComplianceMetrics curso={cursoItem} rows={complianceRows} compact />
                       </button>
                     ))}
