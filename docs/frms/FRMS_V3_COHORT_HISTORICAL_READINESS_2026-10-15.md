@@ -12,7 +12,7 @@ O snapshot FRMS atual recalcula período embarcado, conformidade, efetividade e 
 
 `GET /api/frms/ima-v3/cohort-readiness-shadow?window_days=30` com opções `30`, `60`, `90`.
 
-- Responde **404** fora de staging ou sem a allowlist explícita `FRMS_V3_SHADOW_PREVIEW_TENANTS`. A configuração não permite `all`.
+- Responde **404** fora de staging ou sem a allowlist **independente** `FRMS_V3_COHORT_STUDY_TENANTS` (não habilita o preview individual). A configuração não permite `all`.
 - Exige autenticação normal da API, isolamento de `empresa_id` e permissão da equipe FRMS no backend; recusa escopo individual.
 - Intervalos são ancorados **ao fim do último mês UTC integralmente concluído**. Não há datas arbitrárias, nomes, funcionário, base, papel ou outro filtro na requisição; qualquer filtro extra é rejeitado.
 - No máximo **15.000 linhas** das fontes e 15.000 pares pessoa-dia no agregado; recusa duplicidade de check-in. Jornadas múltiplas por pessoa/dia representam a presença de uma jornada sem contagem dupla.
