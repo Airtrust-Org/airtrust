@@ -13,6 +13,13 @@ test('repair derives only mandatory EAD requirements from the current matrix', (
 });
 
 
+test('active course mapping ignores an unpublished parallel draft', () => {
+  const match = script.match(/active_courses AS \(([^]*?)\n  \)/);
+  assert.ok(match, 'active_courses CTE absent');
+  assert.match(match[1], /deleted_at IS NULL AND COALESCE\(ativo,1\)=1\s+AND publicado=1\s+AND qualificacao_tipo_id IS NOT NULL/);
+  assert.match(match[1], /COUNT\(\*\) n_courses,MIN\(id\) course_id/);
+});
+
 test('missing enrollment target is organizational-role only and defers designation-specific training', () => {
   assert.match(script, /enrollment_target AS/);
   assert.match(script, /condicao_id IS NULL/);
