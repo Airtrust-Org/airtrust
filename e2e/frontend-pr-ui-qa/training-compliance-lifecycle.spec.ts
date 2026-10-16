@@ -419,11 +419,15 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   await changeMatrixRule(page, requiredTypeCode, 'NAO_APLICA', 'POST');
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).requisitos_obrigatorios).toBe(0);
   recon = await reconciliation(page, sector.id, fn.id);
+  // A completed enrollment is historical qualification evidence, not an
+  // actionable N/A enrollment to review or cancel. The roster intentionally
+  // omits completed cycles; restoring inheritance below proves evidence remains.
   expect(
     recon.matriculas_revisao.filter(
-      (row: any) => row.qualificacao_tipo_codigo === requiredTypeCode && row.situacao === 'NAO_APLICA_MATRICULADO',
+      (row: any) => row.qualificacao_tipo_codigo === requiredTypeCode,
     ),
-  ).toHaveLength(2);
+  ).toHaveLength(0);
+  expect(recon.resumo.nao_aplica_matriculados).toBe(0);
   await changeMatrixRule(page, requiredTypeCode, 'HERDAR', 'DELETE');
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).compliance_pct).toBe(100);
 
