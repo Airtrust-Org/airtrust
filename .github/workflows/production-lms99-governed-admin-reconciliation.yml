@@ -105,7 +105,13 @@ jobs:
             .schema_version==1 and .repo_sha==$main and .production_sha==$prod and
             .mode=="dry-run" and .tenant==6 and .writes==0 and
             .personal_data==false and .authorized_count==16 and
-            .pending_review_count==0 and (.candidates + .already_completed)==16 and
+            .pending_review_count==1 and .candidates==14 and .already_completed==1 and
+            (.candidates + .already_completed + .pending_review_count)==16 and
+            (.pending_review|length)==1 and
+            .pending_review[0].ordinal==3 and
+            .pending_review[0].curso_id==43 and
+            .pending_review[0].status=="EM_ANDAMENTO" and
+            .pending_review[0].progresso_bruto==4 and
             (.authorized_ids_hash|test("^[a-f0-9]{64}$")) and
             (.candidate_hash|test("^[a-f0-9]{64}$"))
           ' "$RUNNER_TEMP/reviewed/result.json" >/dev/null
