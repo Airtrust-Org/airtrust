@@ -86,6 +86,15 @@ describe('GET /frms/ima-v3/cohort-readiness-shadow', () => {
     expect(reader).not.toHaveBeenCalled();
   });
 
+  it('never activates cohort read merely by enabling the individual preview flag', async () => {
+    const response = await app().fetch(request(), env({
+      FRMS_V3_SHADOW_PREVIEW_TENANTS: '6',
+      FRMS_V3_COHORT_STUDY_TENANTS: '',
+    }), {} as ExecutionContext);
+    expect(response.status).toBe(404);
+    expect(reader).not.toHaveBeenCalled();
+  });
+
   it('denies a user with no FRMS team scope, before opening the data reader', async () => {
     const response = await app().fetch(request(endpoint, 'viewer'), env(), {} as ExecutionContext);
     expect(response.status).toBe(403);
