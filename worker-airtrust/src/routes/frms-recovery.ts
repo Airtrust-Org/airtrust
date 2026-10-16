@@ -443,18 +443,19 @@ async function upsertRecoveryAssessment(params: {
     )
     .bind(params.empresaId, params.funcionarioId, params.referenceDate)
     .first<{ id: string }>();
+  const statements: D1PreparedStatement[] = [];
   if (existing?.id) {
-    await params.db
+    statements.push(params.db
       .prepare(
         `UPDATE frms_recovery_assessment SET deleted_at = ?, updated_at = ?
           WHERE id = ? AND empresa_id = ?`,
       )
       .bind(now, now, existing.id, params.empresaId)
-      .run();
+    );
   }
 
   const id = crypto.randomUUID();
-  await params.db
+  statements.push(params.db
     .prepare(
       `INSERT INTO frms_recovery_assessment (
          id, empresa_id, funcionario_id, reference_date, recovery_day_id,
@@ -495,7 +496,10 @@ async function upsertRecoveryAssessment(params: {
       now,
       now,
     )
-    .run();
+  );
+  // Soft-delete and replacement commit together. A failed insert must not
+  // erase the previous active recovery assessment.
+  await params.db.batch(statements);
 
   return {
     id,
