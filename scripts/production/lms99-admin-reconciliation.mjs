@@ -173,8 +173,8 @@ async function main(){
     const res=await fetchJson(API+'/api/lms/matriculas/'+row.id+'/status',{
       method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
       body:JSON.stringify({status:'CONCLUIDO',observacoes:administrativeObservations(data.observacoes)})});
-    if(res.status===409){results.rejected_409++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'REJECTED_409'});continue;}
-    if(res.status===403){results.rejected_403++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'REJECTED_403'});continue;}
+    if(res.status===409){results.rejected_409++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'REJECTED_409',reason_code:String(res.json?.code||'UNSPECIFIED').slice(0,64)});continue;}
+    if(res.status===403){results.rejected_403++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'REJECTED_403',reason_code:String(res.json?.code||'UNSPECIFIED').slice(0,64)});continue;}
     if(res.status!==200||res.json?.success!==true){results.other_error++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'ERROR'});break;}
     const after=await get(token,'/api/lms/matriculas/'+row.id);
     valid(after.status===200&&upper(after.json?.data?.status)==='CONCLUIDO'&&
