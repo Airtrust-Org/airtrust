@@ -4,7 +4,8 @@ vi.mock('../../utils/qualificacoes-alerta-config', () => ({
   getQualificacoesAlertaDias: vi.fn(async () => 30),
   getTodayIsoSaoPaulo: vi.fn(() => '2026-05-26'),
   getQualificacoesVencimentoExpr: vi.fn(
-    () => `COALESCE(qh.data_vencimento, CASE WHEN qh.data_conclusao IS NOT NULL AND (qh.validade_meses IS NOT NULL OR qt.validade IS NOT NULL) THEN date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months') ELSE NULL END)`,
+    () =>
+      `COALESCE(qh.data_vencimento, CASE WHEN qh.data_conclusao IS NOT NULL AND (qh.validade_meses IS NOT NULL OR qt.validade IS NOT NULL) THEN date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months') ELSE NULL END)`,
   ),
 }));
 
@@ -12,6 +13,7 @@ import {
   getAtividadesRecentes,
   getComplianceScore,
   getDashboardMetrics,
+  getQualificationComplianceSummary,
 } from '../../services/dashboardService';
 
 type QueryCall = { query: string; args: unknown[] };
@@ -43,7 +45,7 @@ function createDbForMetricsAndCompliance(calls: QueryCall[]) {
         if (query.includes("strftime('%Y-%m', date('now', '-2 months'))")) {
           return { first: async () => ({ taxa: 77 }) };
         }
-        if (query.includes('COUNT(CASE WHEN data BETWEEN date(\'now\')')) {
+        if (query.includes("COUNT(CASE WHEN data BETWEEN date('now')")) {
           return {
             first: async () => ({ proximos_30: 4, dias_31_60: 3, dias_61_90: 2 }),
           };
@@ -118,10 +120,61 @@ describe('dashboard home reliability fixes', () => {
     expect(complianceSimuladores?.args).toEqual([77, 77]);
   });
 
+  it('calcula Compliance de Qualificações separado de treinamentos e usa só obrigações modeladas', async () => {
+    const calls: QueryCall[] = [];
+    const db = {
+      prepare: vi.fn((query: string) => ({
+        bind: (...args: unknown[]) => {
+          calls.push({ query, args });
+          if (query.includes('FROM sqlite_master')) {
+            return {
+              first: async () => ({ name: String(args[0] || '') }),
+            };
+          }
+          if (query.includes('WITH active_employees AS')) {
+            return {
+              first: async () => ({
+                pessoas: 10,
+                pessoas_sem_configuracao: 1,
+                requisitos_obrigatorios: 20,
+                conformes: 16,
+                vencendo: 2,
+                vencidos: 1,
+                nao_realizados: 3,
+              }),
+            };
+          }
+          return { first: async () => ({}), all: async () => ({ results: [] }) };
+        },
+      })),
+    } as unknown as D1Database;
+
+    const summary = await getQualificationComplianceSummary(db, 6);
+    expect(summary).toEqual({
+      pessoas: 10,
+      pessoas_sem_configuracao: 1,
+      requisitos_obrigatorios: 20,
+      conformes: 16,
+      vencendo: 2,
+      vencidos: 1,
+      nao_realizados: 3,
+      compliance_pct: 80,
+      cobertura: 'PARCIAL',
+      escopo_modelo: 'SETOR_OU_TRANSVERSAL',
+    });
+
+    const sql = calls.find((call) => call.query.includes('WITH active_employees AS'))?.query || '';
+    expect(sql).toContain("classe_requisito, '')) IN ('DOCUMENTO', 'AVALIACAO')");
+    expect(sql).toContain('qualificacoes_tipos_setores');
+    expect(sql).toContain('current_licenses');
+    expect(sql).not.toContain('simulador_agendamentos');
+    expect(sql).not.toContain('requisitos_compliance');
+  });
+
   it('propaga erro em atividades recentes para evitar sucesso silencioso', async () => {
     const db = {
-      prepare: vi.fn((_query: string) => ({
-        bind: (..._args: unknown[]) => ({
+      prepare: vi.fn(() => ({
+        bind: () => ({
           all: async () => {
             throw new Error('db failure');
           },
