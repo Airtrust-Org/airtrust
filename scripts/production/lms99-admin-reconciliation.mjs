@@ -133,6 +133,13 @@ export function administrativeObservations(existing){
   const prior=String(existing??'').trim();
   return prior?prior+'\n\n'+REASON:REASON;
 }
+export function isOnlyReviewedException(plan){
+  return plan.pendingReview.length===1 &&
+    plan.pendingReview[0].ordinal===3 &&
+    plan.pendingReview[0].curso_id===43 &&
+    plan.pendingReview[0].status==='EM_ANDAMENTO' &&
+    plan.pendingReview[0].progresso_bruto===4;
+}
 async function main(){
   valid(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_REF==='refs/heads/main','GITHUB_MAIN_REQUIRED');
   valid(/^[a-f0-9]{40}$/.test(MAIN)&&process.env.GITHUB_SHA===MAIN,'SOURCE_SHA_CHANGED');
@@ -142,10 +149,16 @@ async function main(){
   const ids=authorizedEnrollmentIds();
   await pin();const token=await authorize();const cohort=await collect(token,ids);
   if(MODE==='dry-run'){process.stdout.write(JSON.stringify(report(cohort,{completed:0},ids),null,2));return;}
-  valid(cohort.pendingReview.length===0,'REVIEW_REQUIRED');
-  valid(cohort.rows.length+cohort.alreadyCompleted.length===ids.size,'AUTHORIZED_COHORT_MISSING');
+  // Manager-authorized 16: 14 to close, 1 already closed, and the precise
+  // anomalous record #614 (ordinal 3) remains READ ONLY until its 4% is investigated.
+  valid(isOnlyReviewedException(cohort),'UNREVIEWED_EXCEPTION');
+  valid(cohort.rows.length+cohort.alreadyCompleted.length+cohort.pendingReview.length===ids.size,'AUTHORIZED_COHORT_MISSING');
   valid(cohort.hash===process.env.REVIEWED_COHORT_HASH,'REVIEWED_COHORT_CHANGED');
-  const results={completed:0,already_completed:0,rejected_409:0,rejected_403:0,other_error:0,qualification_linked:0,detail:[]};
+  const results={completed:0,already_completed:0,review_required:cohort.pendingReview.length,rejected_409:0,rejected_403:0,other_error:0,qualification_linked:0,detail:[]};
+  for(const exception of cohort.pendingReview)results.detail.push({
+    ordinal:exception.ordinal,course_id:exception.curso_id,
+    outcome:'REVIEW_REQUIRED',reason_code:'PROGRESS_CHANGED_FROM_100_TO_4',write:false
+  });
   const ordinalById=new Map([...ids].map((id,i)=>[id,i+1]));
   for(const row of cohort.alreadyCompleted){
     const response=await get(token,'/api/lms/matriculas/'+row.id);
