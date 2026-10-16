@@ -101,6 +101,22 @@ setup('real staging login', async ({ page }) => {
     if ((await rememberMe.count()) > 0) await rememberMe.check();
 
     await page.getByRole('button', { name: /entrar|sign in/i }).click();
+
+    // Administrators can legitimately have more than one session role. When
+    // the real login presents the profile chooser, activate the explicit
+    // ADMINISTRADOR role instead of treating the still-on-/login state as a
+    // navigation failure.
+    if (profile === 'admin') {
+      const adminProfileButton = page.getByRole('button', {
+        name: /entrar como administrador geral/i,
+      });
+      const chooserVisible = await adminProfileButton
+        .waitFor({ state: 'visible', timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (chooserVisible) await adminProfileButton.click();
+    }
+
     try {
       await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
         timeout: timeoutMs, waitUntil: 'domcontentloaded',
