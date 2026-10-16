@@ -715,7 +715,7 @@ export default function LmsMatriculas() {
   const isLoading = loadingCurso || loadingMat;
 
   // Estatísticas rápidas
-  const total = matriculasRes?.pagination?.total ?? todasMatriculas.length;
+  const total = matriculasRes?.total ?? todasMatriculas.length;
   const concluidos = todasMatriculas.filter((m) => m.status === 'CONCLUIDO').length;
   const emAndamento = todasMatriculas.filter((m) => m.status === 'EM_ANDAMENTO').length;
   const naoIniciados = todasMatriculas.filter((m) => m.status === 'NAO_INICIADO').length;
