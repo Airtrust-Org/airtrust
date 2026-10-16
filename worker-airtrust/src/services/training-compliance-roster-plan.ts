@@ -4,7 +4,7 @@
  * mere applicability is not. Historical/terminal cycles are never deleted.
  */
 import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
-import { trainingComplianceNeedsImmediateEnrollmentOnRuleSave } from './training-compliance-enrollment-policy';
+import { trainingComplianceNeedsEnrollment } from './training-compliance-enrollment-policy';
 
 export type RosterCourse = {
   id: number;
@@ -96,7 +96,7 @@ export function buildTrainingComplianceRosterPlan(
         plan.skippedManualModality++;
         continue;
       }
-      if (!trainingComplianceNeedsImmediateEnrollmentOnRuleSave(req.status_compliance)) continue;
+      if (!trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;
       const candidateCourses = byType.get(Number(req.qualificacao_tipo_id)) || [];
       if (candidateCourses.length !== 1) {
         plan.skippedAmbiguousCourses++;
@@ -138,7 +138,8 @@ export function buildTrainingComplianceRosterPlan(
       plan.protectedCount++;
       continue;
     }
-    if (req && !['CONFORME', 'VENCENDO'].includes(req.status_compliance)) continue;
+    if (req && (!['CONFORME', 'VENCENDO'].includes(req.status_compliance) ||
+      trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer))) continue;
     plan.remove.push({
       matriculaId: row.id, funcionarioId: row.funcionario_id, cursoId: row.curso_id,
       motivo: req ? 'EVIDENCIA_VALIDA' : 'SEM_REQUISITO',
