@@ -1,4 +1,4 @@
-import { LmsCourseComplianceMetrics, useLmsCourseCompliance } from './LmsCourseComplianceMetrics';
+import { getLmsCourseCompliance, LmsCourseComplianceMetrics, useLmsCourseCompliance } from './LmsCourseComplianceMetrics';
 import { useMemo, useState } from 'react';
 import { useApi } from '@/react-app/hooks/useApi';
 import { useNavigate } from 'react-router-dom';
@@ -65,12 +65,7 @@ function contentTypeLabel(type: TipoConteudo) {
   }
 }
 
-function completionRate(curso: Pick<LmsCurso, 'total_matriculas' | 'total_concluidos'>) {
-  const total = curso.total_matriculas ?? 0;
-  const completed = curso.total_concluidos ?? 0;
-  if (!total) return 0;
-  return Math.round((completed / total) * 100);
-}
+
 
 const adminActionButtonClass =
   'inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900';
@@ -446,7 +441,7 @@ export default function LmsAdminCursos() {
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {visibleCourses.map((curso) => {
-                            const taxa = completionRate(curso);
+                            const taxa = getLmsCourseCompliance(curso, complianceRows)?.compliance ?? null;
                             const statusMeta = getMatriculaStatusMeta(
                               curso.publicado ? 'PUBLICADO' : 'RASCUNHO',
                             );
@@ -540,17 +535,17 @@ export default function LmsAdminCursos() {
                                       <div className="h-1.5 flex-1 rounded-full bg-slate-100 dark:bg-slate-700">
                                         <div
                                           className={`h-1.5 rounded-full ${
-                                            taxa >= 80
+                                            (taxa ?? 0) >= 80
                                               ? 'bg-emerald-500'
-                                              : taxa >= 40
+                                              : (taxa ?? 0) >= 40
                                                 ? 'bg-amber-500'
                                                 : 'bg-rose-400'
                                           }`}
-                                          style={{ width: `${taxa}%` }}
+                                          style={{ width: `${taxa ?? 0}%` }}
                                         />
                                       </div>
                                       <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                                        {taxa}%
+                                        {taxa === null ? '—' : `${taxa}%`}
                                       </span>
                                     </div>
                                   </div>
