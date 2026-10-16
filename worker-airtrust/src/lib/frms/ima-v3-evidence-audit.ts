@@ -11,6 +11,8 @@ export type ImaDailySource = 'REAL' | 'ESTIMADO' | 'AUSENTE';
 export type ImaCheckinSource = 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
 /** Explicit provenance of BOTH boundaries; computed bedtimes never become observed sleep. */
 export type ImaSleepWindowProvenance = 'CREW_REPORTED' | 'DERIVED' | 'ESTIMATED' | 'UNKNOWN';
+/** Value in the legacy KSS column may be synthetic when the crew omits KSS. */
+export type ImaKssProvenance = 'CREW_REPORTED' | 'DERIVED' | 'DEFAULTED' | 'UNKNOWN';
 
 export interface ImaDailyDataEvidence {
   sleepDataSource: ImaDailySource;
@@ -20,6 +22,8 @@ export interface ImaDailyDataEvidence {
   /** Do not use zeros as evidence of no sleep or no fatigue. */
   sleepHours24h: number | null;
   kssScore: number | null;
+  /** Must be explicit; absent origin is UNKNOWN, never assumed CREW_REPORTED. */
+  kssProvenance?: ImaKssProvenance;
   /** Human-reported start/end of an actual sleep episode, if they exist. */
   observedSleepStartAt: string | null;
   observedSleepEndAt: string | null;
@@ -34,7 +38,10 @@ export interface ImaDataReadinessAudit {
   knownDutyRows: number;
   realSleepDurationRows: number;
   wakeEvidenceRows: number;
+  /** Numeric KSS stored or supplied; not necessarily answered by the crew. */
   knownKssRows: number;
+  confirmedCrewReportedKssRows: number;
+  kssValueWithoutCrewProvenanceRows: number;
   datedSleepEpisodeRows: number;
   unprovenSleepWindowRows: number;
   readyPvtBaselineRows: number;
@@ -78,6 +85,8 @@ export function auditImaDailyEvidence(rows: readonly ImaDailyDataEvidence[]): Im
   let realSleepDurationRows = 0;
   let wakeEvidenceRows = 0;
   let knownKssRows = 0;
+  let confirmedCrewReportedKssRows = 0;
+  let kssValueWithoutCrewProvenanceRows = 0;
   let datedSleepEpisodeRows = 0;
   let unprovenSleepWindowRows = 0;
   let readyPvtBaselineRows = 0;
@@ -95,7 +104,13 @@ export function auditImaDailyEvidence(rows: readonly ImaDailyDataEvidence[]): Im
     if (dutyKnown) knownDutyRows++;
     if (sleepKnown) realSleepDurationRows++;
     if (wakeKnown) wakeEvidenceRows++;
-    if (Number.isInteger(row.kssScore) && (row.kssScore ?? 0) >= 1 && (row.kssScore ?? 0) <= 9) knownKssRows++;
+    const storedKss = row.checkinStatus === 'RECEBIDO' &&
+      Number.isInteger(row.kssScore) && (row.kssScore ?? 0) >= 1 && (row.kssScore ?? 0) <= 9;
+    if (storedKss) {
+      knownKssRows++;
+      if (row.kssProvenance === 'CREW_REPORTED') confirmedCrewReportedKssRows++;
+      else kssValueWithoutCrewProvenanceRows++;
+    }
     if (hasCrewReportedSleepWindow(row)) datedSleepEpisodeRows++;
     if ((row.observedSleepStartAt || row.observedSleepEndAt) && !hasCrewReportedSleepWindow(row)) unprovenSleepWindowRows++;
     if (row.readinessBaselineReady === true) readyPvtBaselineRows++;
@@ -118,6 +133,7 @@ export function auditImaDailyEvidence(rows: readonly ImaDailyDataEvidence[]): Im
   if (sampleSize > 0 && sourceGapRows > 0) blockerCodes.push('FONTES_INCOMPLETAS');
   if (unprovenSleepWindowRows > 0) blockerCodes.push('HORARIO_DE_SONO_DERIVADO_OU_SEM_ORIGEM_CONFIRMADA');
   if (sampleSize > 0 && readyPvtBaselineRows < sampleSize) blockerCodes.push('BASELINE_PVT_NAO_UNIVERSAL');
+  if (kssValueWithoutCrewProvenanceRows > 0) blockerCodes.push('KSS_PERSISTIDO_SEM_ORIGEM_CONFIRMADA');
 
   return {
     sampleSize,
@@ -125,6 +141,8 @@ export function auditImaDailyEvidence(rows: readonly ImaDailyDataEvidence[]): Im
     realSleepDurationRows,
     wakeEvidenceRows,
     knownKssRows,
+    confirmedCrewReportedKssRows,
+    kssValueWithoutCrewProvenanceRows,
     datedSleepEpisodeRows,
     unprovenSleepWindowRows,
     readyPvtBaselineRows,
