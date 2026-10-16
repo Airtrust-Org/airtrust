@@ -57,6 +57,9 @@ export function classifyEnrollment(detail) {
   if (status === 'REPROVADO') return { bucket: 'EXCLUDED', code: 'ENROLLMENT_FAILED', ready: false };
   if (contentType !== 'scorm') return { bucket: 'EXCLUDED', code: 'NOT_SCORM', ready: false };
   if (progress < 99) return { bucket: 'EXCLUDED', code: 'PROGRESS_BELOW_99', ready: false };
+  if (detail?.edition_mismatch?.required === true) {
+    return { bucket: 'BLOCKED', code: 'LMS_NEW_EDITION_REQUIRED', ready: false };
+  }
   if (!closure) return { bucket: 'BLOCKED', code: 'CLOSURE_READINESS_MISSING', ready: false };
 
   const code = safeCode(closure.code, 'CLOSURE_UNCLASSIFIED');
@@ -255,6 +258,18 @@ async function evaluateCandidates(token, candidates) {
   return { evaluations, ready };
 }
 
+async function createAssetSession(token, matriculaId) {
+  const response = await fetch(API + '/api/lms/assets/session', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ matricula_id: matriculaId }),
+  });
+  invariant(response.ok, 'ASSET_SESSION_HTTP_' + response.status);
+  const cookie = String(response.headers.get('set-cookie') || '').split(';')[0];
+  invariant(cookie.includes('='), 'ASSET_SESSION_COOKIE_MISSING');
+  return cookie;
+}
+
 async function finalizeReady(token, ready) {
   const results = { attempted: 0, completed: 0, already_completed: 0, rejected_409: 0, forbidden_403: 0, other_error: 0, by_code: {} };
   for (const candidate of ready) {
@@ -268,9 +283,18 @@ async function finalizeReady(token, ready) {
     }
     invariant(current.ready, 'COHORT_READINESS_DRIFT');
 
+    // The canonical integrity middleware requires the same short-lived,
+    // tenant-bound asset capability as a real player session. Creating this
+    // session does not alter enrollment progress, score, qualification or
+    // certificate state; it only authorizes the existing persisted evidence.
+    const assetCookie = await createAssetSession(token, candidate.id);
     const response = await fetchJson(API + '/api/lms/matriculas/' + candidate.id + '/finalizar', {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        Cookie: assetCookie,
+      },
       body: '{}',
     });
     results.attempted += 1;
