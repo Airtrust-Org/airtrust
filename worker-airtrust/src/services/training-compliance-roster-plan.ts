@@ -68,10 +68,13 @@ export function buildTrainingComplianceRosterPlan(
     byType.set(typeId, [...(byType.get(typeId) || []), Number(course.id)]);
   }
   const byPersonType = new Map<string, TrainingComplianceSnapshot['people'][number]['requisitos'][number]>();
+  const ambiguousRequirementPairs = new Set<string>();
   for (const person of snapshot.people) {
     for (const req of person.requisitos) {
       if (req.obrigatoriedade === 'OBRIGATORIA') {
-        byPersonType.set(`${person.id}:${req.qualificacao_tipo_id}`, req);
+        const key = `${person.id}:${req.qualificacao_tipo_id}`;
+        if (byPersonType.has(key)) ambiguousRequirementPairs.add(key);
+        byPersonType.set(key, req);
       }
     }
   }
@@ -92,6 +95,10 @@ export function buildTrainingComplianceRosterPlan(
   for (const person of snapshot.people) {
     for (const req of person.requisitos) {
       if (req.obrigatoriedade !== 'OBRIGATORIA') continue;
+      if (ambiguousRequirementPairs.has(`${person.id}:${req.qualificacao_tipo_id}`)) {
+        plan.skippedAmbiguousCourses++;
+        continue;
+      }
       if (req.evidencia_pendente_validacao) {
         plan.skippedPendingEvidence++;
         continue;
@@ -137,7 +144,12 @@ export function buildTrainingComplianceRosterPlan(
       plan.protectedCount++;
       continue;
     }
-    const req = byPersonType.get(`${row.funcionario_id}:${typeId}`);
+    const pairKey = `${row.funcionario_id}:${typeId}`;
+    if (ambiguousRequirementPairs.has(pairKey)) {
+      plan.protectedCount++;
+      continue;
+    }
+    const req = byPersonType.get(pairKey);
     if (req?.evidencia_pendente_validacao) {
       plan.protectedCount++;
       continue;
