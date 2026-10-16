@@ -38,7 +38,14 @@ export const AUTH_POST_ALLOWLIST = Object.freeze([
   '/api/auth/select-empresa',
 ]);
 
-// Session-profile selection rotates only the authenticated access token. It is\n// required by the real multi-role login flow and is NOT an operational data write.\n// Keep it exact-match only; never widen this to arbitrary /api/me mutations.\nexport const SESSION_AUTH_POST_ALLOWLIST = Object.freeze([\n  '/api/me/operational-access/session-profile',\n]);\n\nexport const SAFE_METHODS = Object.freeze(['GET', 'HEAD', 'OPTIONS']);
+// Session-profile selection rotates only the authenticated access token. It is
+// required by the real multi-role login flow and is NOT an operational data write.
+// Keep it exact-match only; never widen this to arbitrary /api/me mutations.
+export const SESSION_AUTH_POST_ALLOWLIST = Object.freeze([
+  '/api/me/operational-access/session-profile',
+]);
+
+export const SAFE_METHODS = Object.freeze(['GET', 'HEAD', 'OPTIONS']);
 export const MUTATION_METHODS = Object.freeze(['DELETE', 'PATCH', 'PUT']);
 
 /**
