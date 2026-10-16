@@ -110,7 +110,10 @@ async function collect(token,ids){
   // Address the exact authorized IDs. Course rosters may hide concluded rows,
   // so an all-courses scan cannot safely resume after a partial production write.
   const cohort=[];
+  const assessmentByOrdinal=[];
+  let ordinal=0;
   for(const id of ids){
+    ordinal++;
     const response=await get(token,'/api/lms/matriculas/'+id);
     valid(response.status===200&&response.json?.success===true,'ENROLLMENT_READ_FAILED');
     const row=response.json?.data;
@@ -123,9 +126,63 @@ async function collect(token,ids){
     } else {
       valid(row.edition_mismatch?.required===true,'HISTORIC_EDITION_NOT_PROVEN');
     }
+    const assessed=classifyHistoricAssessment(row);
+    assessmentByOrdinal.push({ordinal,curso_id:course,
+      enrollment_status:upper(row.status),qualification_linked:Boolean(row.qualificacao_historico_id),
+      ...assessed});
     cohort.push({id:course,enrollments:[row]});
   }
-  return plan(cohort,ids);
+  return {...plan(cohort,ids),assessmentByOrdinal};
+}
+
+
+/**
+ * Read-only historical evidence triage. Identifies what the CURRENT strict
+ * canonical scorer would see, without turning administrative attestation into
+ * a SCORM pass. No CMI, learner identity, notes or credentials in the report.
+ */
+export function classifyHistoricAssessment(row){
+  const scorm=row?.scorm_progresso;
+  const policy=upper(row?.scorm_assessment_policy);
+  const mastery=row?.scorm_mastery_score;
+  const requiresAssessment=policy!=='FORMATIVE' &&
+    (Number(row?.gerar_qualificacao_ao_concluir)===1 || mastery!=null);
+  const isNumber=x=>typeof x==='number'&&Number.isFinite(x);
+  const raw=scorm?.score_raw, scaled=scorm?.score_scaled;
+  const min=scorm?.score_min, max=scorm?.score_max;
+  const lesson=String(scorm?.lesson_status??'').trim().toLowerCase();
+  const success=String(scorm?.success_status??'').trim().toLowerCase();
+  const completion=String(scorm?.completion_status??'').trim().toLowerCase();
+  let scorePct=null,scoreIssue=null;
+  if(scaled!=null){
+    if(!isNumber(scaled)||scaled<0||scaled>1)scoreIssue='INVALID';
+    else scorePct=scaled*100;
+  }else if(raw!=null){
+    if(!isNumber(raw))scoreIssue='INVALID';
+    else if(max!=null){
+      const minimum=min==null?0:min;
+      if(!isNumber(max)||!isNumber(minimum)||max<=minimum||raw<minimum||raw>max)scoreIssue='INVALID';
+      else scorePct=(raw-minimum)/(max-minimum)*100;
+    }else if(raw<0||raw>100)scoreIssue='INVALID';
+    else scorePct=raw;
+  }
+  const normalizedMastery=isNumber(mastery)?mastery:null;
+  const explicitFailure=lesson==='failed'||success==='failed';
+  const explicitTerminal=['passed','completed','complete'].includes(lesson)||
+    success==='passed'||['completed','complete'].includes(completion);
+  let category;
+  if(explicitFailure)category='EXPLICIT_FAILURE';
+  else if(!scorm)category='SCORM_EVIDENCE_MISSING';
+  else if(!requiresAssessment)category='NOT_SCORED_POLICY_NEEDS_REVIEW';
+  else if(!isNumber(mastery)||mastery<=0||mastery>100)category='MASTERY_INVALID_OR_MISSING';
+  else if(scoreIssue)category='SCORE_INVALID';
+  else if(scorePct==null)category='SCORE_MISSING';
+  else if(scorePct<mastery)category='SCORE_BELOW_MASTERY';
+  else category='SCORE_AT_OR_ABOVE_MASTERY';
+  return {category,score_pct:scorePct===null?null:Number(scorePct.toFixed(4)),
+    mastery_score:normalizedMastery,assessment_required:requiresAssessment,
+    terminal_status_present:explicitTerminal,explicit_failure:explicitFailure,
+    edition_mismatch_required:row?.edition_mismatch?.required===true};
 }
 
 function report(p,results,ids){
@@ -137,6 +194,7 @@ function report(p,results,ids){
     pending_review_count:p.pendingReview.length,pending_review:p.pendingReview,
     raw_99_candidates:p.rows.filter(r=>r.p===99).length,
     candidate_hash:p.hash,authorized_count:ids.size,authorized_ids_hash:authorizedIdsHash(ids),by_course,excluded:p.excluded,
+    assessment_by_ordinal:p.assessmentByOrdinal??[],
     writes:results.completed||0,results,scorm_cmi_changed:false,personal_data:false,
     completion_date_rule:'CANONICAL_SERVER_DATE',historical_training_date_not_fabricated:true};
 }
