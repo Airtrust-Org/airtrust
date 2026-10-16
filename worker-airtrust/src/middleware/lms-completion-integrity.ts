@@ -630,10 +630,14 @@ async function guardAdministrativeStatus(
         hasScormEvidence: hasStoredRuntimeEvidence(row),
         lessonStatus: row.lesson_status, successStatus: row.success_status,
       });
-      if (historicCredit) return null;
-      return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
-        'A conclusão administrativa não pode usar evidências de outra edição.',
-        { matricula_id: matriculaId, edition_mismatch: edition });
+      if (!historicCredit) {
+        return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
+          'A conclusão administrativa não pode usar evidências de outra edição.',
+          { matricula_id: matriculaId, edition_mismatch: edition });
+      }
+      // Edition mismatch is the only waived condition. Continue through the
+      // canonical administrative decision below: score/mastery, failure
+      // precedence, authorization and content evidence MUST still pass.
     }
   }
 
