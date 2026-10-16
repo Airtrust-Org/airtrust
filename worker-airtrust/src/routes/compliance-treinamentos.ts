@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { createTrainingComplianceReconciliationActions, loadReconciliationDecisions, type LmsEnrollment, type ReconciliationDecision } from './compliance-treinamentos-reconciliation-actions';
 import { reconcileTrainingComplianceRuleEnrollment } from '../services/training-compliance-rule-enrollment';
-import { countActiveRequiredEnrollmentsByType } from '../services/training-compliance-course-metrics';
 import { reconcileFdmMaintenance72 } from '../services/training-compliance-fdm72-reconciliation';
 import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModalitySql } from '../services/training-compliance-history-identity';
 import { auth } from '../middleware/auth';
