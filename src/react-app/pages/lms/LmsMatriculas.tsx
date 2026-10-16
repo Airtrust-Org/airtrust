@@ -698,7 +698,7 @@ export default function LmsMatriculas() {
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                           {cursoItem.categoria ?? 'Sem categoria'}
                         </p>
-                        
+
                         <LmsCourseComplianceMetrics curso={cursoItem} rows={complianceRows} compact />
                       </button>
                     ))}
