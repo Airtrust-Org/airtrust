@@ -23,6 +23,7 @@ type JourneyRow = {
   funcao: string | null; cargo: string | null;
 };
 const MAX_SOURCE_ROWS = 15_000;
+const PAGE_SIZE = 1_000;
 
 // SQL is static and parameters are bound. No mutation, client SQL or R2 write.
 export const IMA_COHORT_CHECKIN_SQL = [
@@ -34,7 +35,9 @@ export const IMA_COHORT_CHECKIN_SQL = [
   'AND f.empresa_id = ch.empresa_id',
   'WHERE ch.empresa_id = ? AND ch.deleted_at IS NULL',
   'AND f.deleted_at IS NULL AND COALESCE(f.ativo, 1) = 1',
-  'AND ch.data_checkin BETWEEN ? AND ? LIMIT 15001',
+  'AND ch.data_checkin BETWEEN ? AND ?',
+  'ORDER BY ch.data_checkin, CAST(ch.funcionario_id AS INTEGER), ch.id',
+  'LIMIT 1000 OFFSET ?',
 ].join(' ');
 
 export const IMA_COHORT_JOURNEY_SQL = [
@@ -44,7 +47,9 @@ export const IMA_COHORT_JOURNEY_SQL = [
   'AND f.empresa_id = j.empresa_id',
   'WHERE j.empresa_id = ? AND j.deleted_at IS NULL',
   'AND f.deleted_at IS NULL AND COALESCE(f.ativo, 1) = 1',
-  'AND j.data BETWEEN ? AND ? LIMIT 15001',
+  'AND j.data BETWEEN ? AND ?',
+  'ORDER BY j.data, CAST(j.tripulante_id AS INTEGER), j.id',
+  'LIMIT 1000 OFFSET ?',
 ].join(' ');
 
 /** A completed UTC calendar month avoids flexible-day small-cohort differencing. */
@@ -81,6 +86,22 @@ function sourceRow(empresaId: number, funcionarioId: number, day: string): ImaCo
   };
 }
 
+/** Bounded, stable-keyset ordering with pages below the 1000-row SQL guard. */
+async function readSourcePages<T>(
+  db: D1Database, sql: string, empresaId: number, startDate: string, endDate: string,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let offset = 0; offset <= MAX_SOURCE_ROWS; offset += PAGE_SIZE) {
+    const result = await db.prepare(sql)
+      .bind(empresaId, startDate, endDate, offset).all<T>();
+    const page = result.results ?? [];
+    out.push(...page);
+    if (out.length > MAX_SOURCE_ROWS) throw new Error('IMA_COHORT_ROW_LIMIT_EXCEEDED');
+    if (page.length < PAGE_SIZE) return out;
+  }
+  throw new Error('IMA_COHORT_ROW_LIMIT_EXCEEDED');
+}
+
 /**
  * Internal read-only fetch. Identity never leaves the Worker: the route
  * immediately passes rows to the privacy-gated cohort aggregator.
@@ -95,15 +116,10 @@ export async function loadImaCohortEvidenceRows(
   if (!Number.isSafeInteger(empresaId) || empresaId <= 0) {
     throw new Error('IMA_COHORT_TENANT_REQUIRED');
   }
-  const [checkins, jornadas] = await Promise.all([
-    db.prepare(IMA_COHORT_CHECKIN_SQL).bind(empresaId, startDate, endDate).all<CheckinRow>(),
-    db.prepare(IMA_COHORT_JOURNEY_SQL).bind(empresaId, startDate, endDate).all<JourneyRow>(),
+  const [checkinRows, journeyRows] = await Promise.all([
+    readSourcePages<CheckinRow>(db, IMA_COHORT_CHECKIN_SQL, empresaId, startDate, endDate),
+    readSourcePages<JourneyRow>(db, IMA_COHORT_JOURNEY_SQL, empresaId, startDate, endDate),
   ]);
-  const checkinRows = checkins.results ?? [];
-  const journeyRows = jornadas.results ?? [];
-  if (checkinRows.length > MAX_SOURCE_ROWS || journeyRows.length > MAX_SOURCE_ROWS) {
-    throw new Error('IMA_COHORT_ROW_LIMIT_EXCEEDED');
-  }
 
   const byCrewDay = new Map<string, ImaCohortSourceRow>();
   const seenCheckins = new Set<string>();
