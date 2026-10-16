@@ -33,7 +33,9 @@ setup('real staging login', async ({ page }) => {
   const authPath = (url: string) => {
     try {
       const path = new URL(url).pathname;
-      return /^\/api\/auth\/(login|empresas|me)$/.test(path) ? path : null;
+      if (/^\/api\/auth\/(login|empresas|me)$/.test(path)) return path;
+      if (/^\/api\/me\/operational-access\/session-profiles?$/.test(path)) return path;
+      return null;
     } catch { return null; }
   };
   let tenantProofRequest: { url: string; bearer: string } | null = null;
@@ -101,12 +103,46 @@ setup('real staging login', async ({ page }) => {
     if ((await rememberMe.count()) > 0) await rememberMe.check();
 
     await page.getByRole('button', { name: /entrar|sign in/i }).click();
-    try {
-      await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
-        timeout: timeoutMs, waitUntil: 'domcontentloaded',
-      });
-      return true;
-    } catch { return false; }
+
+    const deadline = Date.now() + timeoutMs;
+    const profileHeading = page.getByRole('heading', { name: /como você quer entrar\?/i });
+
+    while (Date.now() < deadline) {
+      if (!new URL(page.url()).pathname.startsWith('/login')) return true;
+
+      if (await profileHeading.isVisible().catch(() => false)) {
+        const adminRole = page.getByRole('button', { name: /entrar como administrador geral/i });
+        const managerRole = page.getByRole('button', { name: /entrar como administrador da empresa/i });
+        const anyRole = page.getByRole('button', { name: /entrar como /i }).first();
+
+        let roleButton = anyRole;
+        if (profile === 'admin' && (await adminRole.isVisible().catch(() => false))) {
+          roleButton = adminRole;
+        } else if (await managerRole.isVisible().catch(() => false)) {
+          roleButton = managerRole;
+        }
+
+        if (!(await roleButton.isVisible().catch(() => false))) {
+          throw new Error('QA_SESSION_PROFILE_SELECTION_UNAVAILABLE');
+        }
+
+        await roleButton.click();
+        const remainingMs = Math.max(1_000, deadline - Date.now());
+        try {
+          await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
+            timeout: remainingMs,
+            waitUntil: 'domcontentloaded',
+          });
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      await page.waitForTimeout(200);
+    }
+
+    return false;
   }
 
   let loginSucceeded = await submitRealLogin(25_000);
