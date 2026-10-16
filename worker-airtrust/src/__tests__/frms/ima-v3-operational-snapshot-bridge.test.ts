@@ -11,6 +11,8 @@ const actual: ImaSnapshotEvidenceRow = {
   jornada_data_source: 'REAL', operational_data_source: 'CONTROLE_VOOS',
   escala_source: 'EVD', escalado: true, teve_jornada: true,
   snapshot_status: 'OK',
+  checkin_status: 'RECEBIDO', sleep_data_source: 'REAL', wake_data_source: 'REAL',
+  horas_sono: 7.5, kss_score: 4,
 };
 
 const input = (rows: ImaSnapshotEvidenceRow[]): ImaSnapshotBridgeInput => ({
@@ -23,18 +25,26 @@ const input = (rows: ImaSnapshotEvidenceRow[]): ImaSnapshotBridgeInput => ({
 });
 
 describe('FRMS IMA V3 operational snapshot bridge — tenant-scoped, no dispatch hook', () => {
-  it('reports real CV duty and night overlap, never credits gaps as sleep', () => {
+  it('does not promote reconstructed CV +/-30min duty boundaries to observed, or gaps to sleep', () => {
     const result = bridgeImaOperationalSnapshot(input([actual]));
     expect(result).toMatchObject({
-      sourceRows: 1, mappedActualRows: 1, mappedPlannedRows: 0,
+      sourceRows: 1, mappedActualRows: 0, mappedPlannedRows: 0,
+      mappedEstimatedRows: 1, reconstructedOperationalRows: 1,
       rejectedRows: 0, operationalDecision: 'NOT_ASSESSED',
       modelValidation: 'NOT_VALIDATED',
       exposure: {
-        state: 'INCOMPLETE_SCHEDULE', actualDutyHours: 8, gapHours: 16,
-        actualReferenceNightDutyHours: 3, offDutyOpportunityHours: 0,
+        state: 'INCOMPLETE_SCHEDULE', estimatedDutyHours: 8, actualDutyHours: 0,
+        gapHours: 16, estimatedReferenceNightDutyHours: 3,
+        actualReferenceNightDutyHours: 0, offDutyOpportunityHours: 0,
         verifiedSleepHours: null, fatigueIndex: null, fitForDuty: null,
         flightAuthorization: 'NOT_PROVIDED',
       },
+    });
+    expect(result.dailyEvidence).toMatchObject({
+      sampleSize: 1, realSleepDurationRows: 1, wakeEvidenceRows: 1,
+      knownKssRows: 1, datedSleepEpisodeRows: 0,
+      datedSleepEpisodeCoveragePct: 0, readyPvtBaselineRows: 0,
+      assessment: 'INSUFFICIENT_SLEEP_TIMELINE',
     });
     expect(JSON.stringify(result)).not.toContain('"funcionario_id"');
     expect(JSON.stringify(result)).not.toContain('"empresa_id"');
@@ -56,6 +66,7 @@ describe('FRMS IMA V3 operational snapshot bridge — tenant-scoped, no dispatch
       ...actual, operational_data_source: 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS',
     }]));
     expect(mixed.exposure.estimatedDutyHours).toBe(8);
+    expect(mixed.reconstructedOperationalRows).toBe(0);
     expect(mixed.exposure.actualDutyHours).toBe(0);
     expect(mixed.mappedEstimatedRows).toBe(1);
 
@@ -114,9 +125,34 @@ describe('FRMS IMA V3 operational snapshot bridge — tenant-scoped, no dispatch
     const result = bridgeImaOperationalSnapshot(input([{
       ...actual, hora_apresentacao: '22:30', hora_termino: '04:30',
     }]));
-    expect(result.exposure.actualDutyHours).toBe(1.5); // clipped at midnight
-    expect(result.exposure.actualReferenceNightDutyHours).toBe(0);
+    expect(result.exposure.estimatedDutyHours).toBe(1.5); // clipped at midnight
+    expect(result.exposure.actualDutyHours).toBe(0);
+    expect(result.exposure.estimatedReferenceNightDutyHours).toBe(0);
     expect(result.exposure.gapHours).toBe(22.5);
+  });
+
+  it('does not mark check-in values as observed if check-in was not received', () => {
+    const result = bridgeImaOperationalSnapshot(input([{
+      ...actual, checkin_status: 'PENDENTE',
+    }]));
+    expect(result.dailyEvidence).toMatchObject({
+      sampleSize: 1, pendingCheckinRows: 1,
+      realSleepDurationRows: 0, wakeEvidenceRows: 0,
+      knownKssRows: 0, datedSleepEpisodeRows: 0,
+      readyPvtBaselineRows: 0,
+    });
+    expect(result.dailyEvidence.blockerCodes)
+      .toContain('SONO_DIARIO_NAO_COMPROVA_CRONOLOGIA_DE_SONO_VIGILIA');
+  });
+
+  it('never creates a sleep episode from declared duration plus wake hour', () => {
+    const evidence = bridgeImaOperationalSnapshot(input([{
+      ...actual, horas_sono: 8, kss_score: 8,
+    }])).dailyEvidence;
+    expect(evidence.realSleepDurationRows).toBe(1);
+    expect(evidence.knownKssRows).toBe(1);
+    expect(evidence.datedSleepEpisodeRows).toBe(0);
+    expect(evidence.assessment).toBe('INSUFFICIENT_SLEEP_TIMELINE');
   });
 
   it('rejects invalid clock, same start/end and impossible calendar dates', () => {
