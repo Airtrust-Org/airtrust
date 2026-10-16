@@ -136,7 +136,7 @@ export function auditImaCohortEvidence(input: ImaCohortEvidenceInput): ImaCohort
     if (!hasSleep || !hasWake || !hasKss ||
         row.jornada_data_source === 'INCONSISTENTE' ||
         row.jornada_data_source === 'ESTIMADO' ||
-        row.jornada_data_source === 'AUSENTE') incompleteSource++;
+        (row.teve_jornada && row.jornada_data_source === 'AUSENTE')) incompleteSource++;
   }
 
   const suppressed = crew.size < MIN_CREW;
