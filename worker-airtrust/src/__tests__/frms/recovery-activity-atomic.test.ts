@@ -10,7 +10,10 @@ function fixture() {
   const prepare = vi.fn((sql: string) => ({
     bind: (...args: unknown[]) => ({ sql, binds: args, run }),
   }));
-  const batch = vi.fn(async (_statements: unknown[]) => []);
+  const batch = vi.fn(async (statements: unknown[]) => {
+    if (!Array.isArray(statements)) throw new Error('expected atomic statements');
+    return [];
+  });
   const db = { prepare, batch } as unknown as D1Database;
   const params: Params = {
     db, empresaId: 11, funcionarioId: 22,
