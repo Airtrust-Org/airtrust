@@ -385,7 +385,7 @@ describe('POST /historico/:id/certificados/gerar — categoria mista (tipo "EAD"
     expect(generateCertMock).not.toHaveBeenCalled();
   });
 
-  it('admin sem NENHUMA atribuição em setores_gestores continua sem wildcard, mesmo após a correção', async () => {
+  it('admin sem setor individual pode gerar certificado classificado no seu tenant', async () => {
     const db = makeRouteDb(buildFixtures());
     const app = makeApp(db);
 
@@ -400,10 +400,8 @@ describe('POST /historico/:id/certificados/gerar — categoria mista (tipo "EAD"
       body: JSON.stringify({}),
     });
 
-    expect(res.status).toBe(403);
-    const json = (await res.json()) as { success: boolean; code?: string };
-    expect(json.code).toBe('CERTIFICATE_ACCESS_DENIED');
-    expect(generateCertMock).not.toHaveBeenCalled();
+    expect(res.status).toBe(201);
+    expect(generateCertMock).toHaveBeenCalled();
   });
 
   it('tipo genuinamente não classificado (sem override, categoria sem domínio) continua fail-closed mesmo dentro do setor certo', async () => {
