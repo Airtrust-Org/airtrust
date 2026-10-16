@@ -7,6 +7,8 @@ type ComplianceRow = {
   pessoas: number;
   conformes: number;
   vencendo: number;
+  matriculados: number;
+  concluidos: number;
   compliance_pct: number;
 };
 
@@ -33,13 +35,10 @@ export function getLmsCourseCompliance(
   if (!rows || !curso.qualificacao_tipo_id) return null;
   const row = rows.find((item) => item.qualificacao_tipo_id === curso.qualificacao_tipo_id);
   if (!row) return null;
-  // No relatório canônico, "conformes" inclui os que estão vencendo.
-  // Na visão operacional, estes já precisam de nova matrícula e não contam como concluídos em dia.
-  const concluidos = Math.max(0, row.conformes - row.vencendo);
   return {
     obrigatorios: row.pessoas,
-    matriculados: Math.max(0, row.pessoas - concluidos),
-    concluidos,
+    matriculados: row.matriculados,
+    concluidos: row.concluidos,
     compliance: row.compliance_pct,
   };
 }
