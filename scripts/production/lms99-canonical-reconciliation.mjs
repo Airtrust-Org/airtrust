@@ -205,7 +205,7 @@ async function candidateIds(token, courses) {
     for (let page = 1; page <= 100; page += 1) {
       const response = await apiGet(
         token,
-        '/api/lms/matriculas/curso/' + Number(course.id) + '?page=' + page + '&limit=' + LIMIT,
+        '/api/lms/matriculas/curso/' + Number(course.id) + '?status=EM_ANDAMENTO&page=' + page + '&limit=' + LIMIT,
       );
       invariant(response.status === 200, 'ENROLLMENTS_HTTP_' + Number(course.id) + '_' + response.status);
       const rows = Array.isArray(response.json?.data) ? response.json.data : [];
@@ -215,7 +215,7 @@ async function candidateIds(token, courses) {
       for (const row of rows) {
         const status = upper(row?.status);
         const progress = rawProgress(row);
-        if (!['CONCLUIDO', 'CANCELADO', 'REPROVADO'].includes(status) && progress >= 99) {
+        if (status === 'EM_ANDAMENTO' && progress >= 99) {
           const id = Number(row?.id);
           invariant(Number.isSafeInteger(id) && id > 0, 'ENROLLMENT_ID_INVALID');
           out.push({ id, course_id: Number(course.id) });
