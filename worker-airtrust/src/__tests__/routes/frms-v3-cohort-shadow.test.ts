@@ -58,7 +58,8 @@ function env(overrides: Record<string, unknown> = {}): Env {
   return {
     DB: {} as D1Database,
     ENVIRONMENT: 'staging',
-    FRMS_V3_SHADOW_PREVIEW_TENANTS: '6',
+    FRMS_V3_SHADOW_PREVIEW_TENANTS: '',
+    FRMS_V3_COHORT_STUDY_TENANTS: '6',
     ...overrides,
   } as unknown as Env;
 }
@@ -79,7 +80,7 @@ describe('GET /frms/ima-v3/cohort-readiness-shadow', () => {
 
   it('rejects absent/wildcard/different-tenant allowlists without a read', async () => {
     for (const setting of ['', undefined, 'all', '9']) {
-      const response = await app().fetch(request(), env({ FRMS_V3_SHADOW_PREVIEW_TENANTS: setting }), {} as ExecutionContext);
+      const response = await app().fetch(request(), env({ FRMS_V3_COHORT_STUDY_TENANTS: setting }), {} as ExecutionContext);
       expect(response.status).toBe(404);
     }
     expect(reader).not.toHaveBeenCalled();
