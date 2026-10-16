@@ -42,7 +42,7 @@ export interface DashboardTrainingComplianceSummary extends DashboardComplianceS
 }
 
 export interface DashboardQualificationComplianceSummary extends DashboardComplianceSummary {
-  escopo_modelo: 'SETOR_OU_TRANSVERSAL';
+  escopo_modelo: 'MATRIZ_CANONICA';
 }
 
 export interface DashboardOperationalSummary {
