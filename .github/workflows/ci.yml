@@ -106,8 +106,11 @@ jobs:
         run: node --test scripts/__tests__/lms-fdm13-reassignment-preflight-readonly.test.mjs
       - name: verify SCORM 99 percent production proof is read only
         run: node --test scripts/__tests__/lms-scorm99-proof-readonly.test.mjs
-      - name: validate LMS active-course production certification read-only contract
-        run: node --test scripts/__tests__/production-lms-active-course-certification-readonly.test.mjs
+      - name: validate LMS active-course certification across SCORM, PDF, PPTX and H5P
+        run: |
+          node --test scripts/__tests__/production-lms-active-course-certification-readonly.test.mjs
+          node --test scripts/__tests__/lms-format-certification-verdict.test.mjs
+          node --test scripts/__tests__/lms-scorm-video-playback-readonly.test.mjs
       - name: require evidence-complete P0 SCORM functional certification verdict
         run: node --test scripts/__tests__/lms-scorm-functional-certification-gate.test.mjs
       - name: verify SCORM M8 runtime assessment answer provenance
