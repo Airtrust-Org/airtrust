@@ -21,9 +21,9 @@ export async function readTrainingRosterPlan(
   if (empresaId !== ROSTER_RECONCILIATION_TENANT) throw new Error('ROSTER_TENANT_NOT_AUTHORIZED');
   const [snapshot, courses, enrollments] = await Promise.all([
     buildSnapshot(db, empresaId, ALL_ACCESS),
-    db.prepare(`SELECT c.id,c.qualificacao_tipo_id FROM lms_cursos c
+    db.prepare(`SELECT c.id,c.qualificacao_tipo_id,c.ativo,c.publicado FROM lms_cursos c
       JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id
-      WHERE c.empresa_id=? AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL
+      WHERE c.empresa_id=? AND c.deleted_at IS NULL
         AND qt.ativo=1 AND qt.deleted_at IS NULL
         AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')`)
       .bind(empresaId).all<RosterCourse>(),
