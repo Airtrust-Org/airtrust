@@ -89,6 +89,16 @@ describe('IMA V3 cohort historical evidence inventory — privacy and scientific
     expect(report.blockers).toContain('FONTES_DE_DADOS_INCOMPLETAS');
   });
 
+  it('does not classify valid check-ins on non-duty days as missing duty evidence', () => {
+    const rows = cohort(10).map((r) => ({
+      ...r, teve_jornada: false, jornada_data_source: 'AUSENTE' as const,
+      operational_data_source: 'AUSENTE' as const,
+    }));
+    const report = audit(rows);
+    expect(report.sourceIncompletePctApprox).toBe(0);
+    expect(report.realSleepDurationPctApprox).toBe(100);
+  });
+
   it('handles 30, 60 and 90 day windows without exposing dates or crew', () => {
     expect(audit(cohort(10), START, END).windowDays).toBe(30);
     expect(audit(cohort(10), '2026-08-02', END).windowDays).toBe(60);
