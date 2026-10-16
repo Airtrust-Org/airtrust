@@ -1,4 +1,4 @@
-export const TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS = 0;
+export const TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS = 30;
 
 export function trainingComplianceNeedsEnrollment(
   status: string,

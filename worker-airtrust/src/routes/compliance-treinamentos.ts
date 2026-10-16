@@ -46,6 +46,7 @@ import {
 } from '../services/training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from '../services/training-compliance-evidence-profile';
 import { TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS, trainingComplianceEvidenceIsRealizedBy, trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
+import { summarizeTrainingComplianceCourses } from '../services/training-compliance-training-summary';
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 const SCOPES = TRAINING_COMPLIANCE_SCOPES;
@@ -1337,7 +1338,7 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
   const q = normalizeSearchText(c.req.query('q'));
-  const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+  const [snapshot, activeEnrollments] = await Promise.all([buildSnapshot(c.env.DB, empresaId, access), loadLmsEnrollments(c.env.DB, empresaId)]);
   const people = snapshot.people.filter(
     (p) =>
       (!setorId || p.setor_id === setorId) &&
@@ -1345,61 +1346,7 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
       (!aeronaveModelo || p.aeronaves_modelos.includes(aeronaveModelo)) &&
       (!q || normalizeSearchText(p.nome).includes(q)),
   );
-  const map = new Map<
-    number,
-    {
-      qualificacao_tipo_id: number;
-      qualificacao_tipo_nome: string | null;
-      qualificacao_tipo_codigo: string | null;
-      pessoas: number;
-      conformes: number;
-      vencendo: number;
-      vencidos: number;
-      nao_realizados: number;
-      em_andamento: number;
-    }
-  >();
-  for (const person of people) {
-    for (const req of person.requisitos.filter((r) => r.obrigatoriedade === 'OBRIGATORIA')) {
-      const current = map.get(req.qualificacao_tipo_id) || {
-        qualificacao_tipo_id: req.qualificacao_tipo_id,
-        qualificacao_tipo_nome: req.qualificacao_tipo_nome,
-        qualificacao_tipo_codigo: req.qualificacao_tipo_codigo,
-        pessoas: 0,
-        conformes: 0,
-        vencendo: 0,
-        vencidos: 0,
-        nao_realizados: 0,
-        em_andamento: 0,
-      };
-      current.pessoas = Number(current.pessoas) + 1;
-      if (req.status_compliance === 'CONFORME') current.conformes = Number(current.conformes) + 1;
-      if (req.status_compliance === 'VENCENDO') {
-        current.conformes = Number(current.conformes) + 1;
-        current.vencendo = Number(current.vencendo) + 1;
-      }
-      if (req.status_compliance === 'VENCIDO') current.vencidos = Number(current.vencidos) + 1;
-      if (req.status_compliance === 'NAO_REALIZADO')
-        current.nao_realizados = Number(current.nao_realizados) + 1;
-      if (req.status_compliance === 'EM_ANDAMENTO')
-        current.em_andamento = Number(current.em_andamento) + 1;
-      map.set(req.qualificacao_tipo_id, current);
-    }
-  }
-  const data = Array.from(map.values())
-    .map((row) => ({
-      ...row,
-      compliance_pct:
-        Number(row.pessoas) > 0
-          ? Math.round((Number(row.conformes) / Number(row.pessoas)) * 1000) / 10
-          : 100,
-    }))
-    .sort((a, b) =>
-      String(a.qualificacao_tipo_nome || '').localeCompare(
-        String(b.qualificacao_tipo_nome || ''),
-        'pt-BR',
-      ),
-    );
+  const data = summarizeTrainingComplianceCourses(people, activeEnrollments);
   return c.json({ success: true, data });
 });
 
