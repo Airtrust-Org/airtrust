@@ -101,12 +101,55 @@ setup('real staging login', async ({ page }) => {
     if ((await rememberMe.count()) > 0) await rememberMe.check();
 
     await page.getByRole('button', { name: /entrar|sign in/i }).click();
+
+    // Login may now stay on /login intentionally while the user chooses one
+    // of multiple authorized session profiles. Wait for either the historical
+    // redirect or the real profile chooser rendered by LoginSimple.
+    try {
+      await page.waitForFunction(
+        () => {
+          if (!window.location.pathname.startsWith('/login')) return true;
+          return Array.from(document.querySelectorAll('button')).some((button) =>
+            /^Entrar como /i.test((button.textContent || '').trim()),
+          );
+        },
+        undefined,
+        { timeout: timeoutMs },
+      );
+    } catch {
+      return false;
+    }
+
+    if (!new URL(page.url()).pathname.startsWith('/login')) {
+      return true;
+    }
+
+    // The governed QA admin credential must activate an administrative session
+    // through the real UI. Never guess another profile and never forge storage.
+    if (profile !== 'admin') {
+      throw new Error('QA_SESSION_PROFILE_SELECTION_REQUIRED_FOR_NON_ADMIN_PAIR');
+    }
+
+    const adminProfileButton = page
+      .getByRole('button', {
+        name: /entrar como (administrador geral|administrador da empresa)/i,
+      })
+      .first();
+
+    if ((await adminProfileButton.count()) === 0 || !(await adminProfileButton.isVisible())) {
+      throw new Error('QA_ADMIN_SESSION_PROFILE_NOT_AVAILABLE');
+    }
+
+    await adminProfileButton.click();
     try {
       await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
-        timeout: timeoutMs, waitUntil: 'domcontentloaded',
+        timeout: timeoutMs,
+        waitUntil: 'domcontentloaded',
       });
       return true;
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   }
 
   let loginSucceeded = await submitRealLogin(25_000);
