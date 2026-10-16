@@ -1403,7 +1403,7 @@ describe('training compliance engine', () => {
     expect(gap).toMatchObject({ pessoas: 2, nunca_realizados: 2 });
   });
 
-  it('não abre matrícula antes do vencimento e mantém Compliance conforme', async () => {
+  it('não abre renovação fora da janela de 30 dias e mantém Compliance conforme', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
         (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
@@ -1427,7 +1427,7 @@ describe('training compliance engine', () => {
     expect(gap).toMatchObject({
       pessoas: 1,
       renovacao_antecipada: 0,
-      janela_renovacao_dias: 0,
+      janela_renovacao_dias: 30,
     });
   });
 
