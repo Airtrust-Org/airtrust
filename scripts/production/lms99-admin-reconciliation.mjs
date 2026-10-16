@@ -110,7 +110,7 @@ function report(p,results,ids){
   const by_course={};
   for(const row of p.rows)by_course[row.cid]=(by_course[row.cid]||0)+1;
   return {schema_version:1,repo_sha:MAIN,production_sha:PROD,tenant:TENANT,
-    mode:MODE,administrator_attestation:'TRAINING_MANAGEMENT_CONFIRMED_REAL_COMPLETION_2026_10_10',
+    mode:MODE,administrator_attestation:'TRAINING_MANAGEMENT_CONFIRMED_REAL_COMPLETION_2026_10_16',
     candidates:p.rows.length,candidate_hash:p.hash,authorized_count:ids.size,authorized_ids_hash:authorizedIdsHash(ids),by_course,excluded:p.excluded,
     writes:results.completed||0,results,scorm_cmi_changed:false,personal_data:false,
     completion_date_rule:'CANONICAL_SERVER_DATE',historical_training_date_not_fabricated:true};
