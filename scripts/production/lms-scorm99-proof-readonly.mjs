@@ -34,8 +34,7 @@ WITH base AS (
       WHEN ps.score_raw IS NOT NULL AND ps.score_max>COALESCE(ps.score_min,0)
         AND ps.score_raw BETWEEN COALESCE(ps.score_min,0) AND ps.score_max
         THEN (ps.score_raw-COALESCE(ps.score_min,0))*100.0/(ps.score_max-COALESCE(ps.score_min,0))
-      WHEN ps.score_raw BETWEEN 0 AND 100 AND ps.score_max IS NULL
-        AND ps.score_min IS NULL THEN ps.score_raw
+      WHEN ps.score_raw BETWEEN 0 AND 100 AND ps.score_max IS NULL THEN ps.score_raw
       ELSE NULL END score_pct,
  NULLIF(c.scorm_mastery_score,0) mastery,
  CASE WHEN ps.last_commit_at IS NOT NULL THEN 1 ELSE 0 END committed
