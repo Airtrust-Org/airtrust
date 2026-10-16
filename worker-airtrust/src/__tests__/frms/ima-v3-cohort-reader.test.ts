@@ -18,10 +18,13 @@ function fakeDb(
     }
     return {
       bind: (...values: unknown[]) => {
-        expect(values).toEqual([6, '2026-09-01', '2026-09-30']);
-        return { all: async () => ({ results: (isCheckin ? checkins : journeys).map((row) => ({
-          funcao: 'PILOTO', cargo: null, ...row,
-        })) }) };
+        expect(values.slice(0, 3)).toEqual([6, '2026-09-01', '2026-09-30']);
+        const offset = Number(values[3]);
+        expect(Number.isInteger(offset)).toBe(true);
+        return { all: async () => ({ results: (isCheckin ? checkins : journeys)
+          .slice(offset, offset + 1000).map((row) => ({
+            funcao: 'PILOTO', cargo: null, ...row,
+          })) }) };
       },
     };
   });
@@ -34,7 +37,8 @@ describe('FRMS IMA V3 cohort scan — bounded, read-only, tenant-only', () => {
       expect(sql).toMatch(/^SELECT\s/i);
       expect(sql).toContain('empresa_id = ?');
       expect(sql).toContain('f.empresa_id =');
-      expect(sql).toContain('LIMIT 15001');
+      expect(sql).toContain('LIMIT 1000 OFFSET ?');
+      expect(sql).toContain('ORDER BY');
       expect(sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP)\s+/i);
     }
   });
@@ -72,6 +76,18 @@ describe('FRMS IMA V3 cohort scan — bounded, read-only, tenant-only', () => {
       funcionario_id: 43, checkin_status: 'AUSENTE',
       teve_jornada: true, sleep_data_source: 'AUSENTE',
     });
+  });
+
+  it('reads 1000-row pages with bounded offsets and never extends SQL LIMIT', async () => {
+    const checkins = Array.from({ length: 1003 }, (_, i) => ({
+      funcionario_id: 1000 + i, data_operacional: '2026-09-01',
+      horas_sono: 7, wake_time: '06:00', kss_score: 4,
+    }));
+    const { db, prepare } = fakeDb(checkins, []);
+    const rows = await loadImaCohortEvidenceRows(db, 6, '2026-09-01', '2026-09-30');
+    expect(rows).toHaveLength(1003);
+    expect(prepare).toHaveBeenCalledTimes(3); // two check-in pages, one journey page
+    expect(prepare.mock.calls.every(([sql]) => String(sql).includes('LIMIT 1000 OFFSET ?'))).toBe(true);
   });
 
   it('rejects duplicate check-ins and refuses to release any aggregated evidence', async () => {
