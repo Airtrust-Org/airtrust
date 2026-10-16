@@ -25,7 +25,7 @@ function row(id:number, status='NAO_INICIADO', extra:Partial<RosterEnrollment>={
     id, funcionario_id:101, curso_id:56, status,deleted_at:null,
     progresso_pct:0,data_inicio:null,data_conclusao:null,
     qualificacao_historico_id:null,has_scorm:0,has_xapi:0,
-    has_history:0,has_diagnostics:0,...extra,
+    has_history:0,has_diagnostics:0,has_cycle_evidence:0,...extra,
   };
 }
 const plan = (s:ReturnType<typeof snapshot>, courses:RosterCourse[]=[course], rows:RosterEnrollment[]=[], keep?:Set<number>) =>
