@@ -23,6 +23,8 @@ export function plan(courses, authorizedIds = null){
     const s=upper(row.status),p=progress(row),id=Number(row.id),cid=Number(course.id);
     if(authorizedIds!==null&&!authorizedIds.has(id))continue;
     if(authorizedIds!==null && PAIRS.get(id)!==cid){
+      valid(!seen.has(id),'DUPLICATE_ENROLLMENT');
+      seen.add(id);
       pendingReview.push({ordinal:order.get(id),curso_id:cid,status:'COURSE_MISMATCH',progresso_bruto:p});
       continue;
     }
