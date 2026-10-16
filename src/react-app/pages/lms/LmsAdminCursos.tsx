@@ -534,12 +534,7 @@ export default function LmsAdminCursos() {
                                 </td>
                                 <td className="px-4 py-3 align-top">
                                   <div className="min-w-[150px] space-y-2">
-                                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                      {curso.total_matriculas ?? 0} matrícula(s) registradas
-                                    </p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                                      {curso.total_concluidos ?? 0} conclusão(ões) no LMS
-                                    </p>
+                                    
                                     <LmsCourseComplianceMetrics curso={curso} rows={complianceRows} compact />
                                     <div className="flex items-center gap-2">
                                       <div className="h-1.5 flex-1 rounded-full bg-slate-100 dark:bg-slate-700">
