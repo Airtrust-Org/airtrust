@@ -10,6 +10,8 @@ describe('LMS operational compliance metrics', () => {
       pessoas: 12,
       conformes: 8,
       vencendo: 3,
+      matriculados: 7,
+      concluidos: 5,
       compliance_pct: 66.7,
     }])).toEqual({
       obrigatorios: 12,
