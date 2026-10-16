@@ -140,15 +140,15 @@ async function main(){
     const res=await fetchJson(API+'/api/lms/matriculas/'+row.id+'/status',{
       method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
       body:JSON.stringify({status:'CONCLUIDO',observacoes:administrativeObservations(data.observacoes)})});
-    if(res.status===409){results.rejected_409++;results.detail.push({id:row.id,course_id:row.cid,outcome:'REJECTED_409'});continue;}
-    if(res.status===403){results.rejected_403++;results.detail.push({id:row.id,course_id:row.cid,outcome:'REJECTED_403'});continue;}
-    if(res.status!==200||res.json?.success!==true){results.other_error++;results.detail.push({id:row.id,course_id:row.cid,outcome:'ERROR'});break;}
+    if(res.status===409){results.rejected_409++;results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'REJECTED_409'});continue;}
+    if(res.status===403){results.rejected_403++;results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'REJECTED_403'});continue;}
+    if(res.status!==200||res.json?.success!==true){results.other_error++;results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'ERROR'});break;}
     const after=await get(token,'/api/lms/matriculas/'+row.id);
     valid(after.status===200&&upper(after.json?.data?.status)==='CONCLUIDO'&&
       Number(after.json?.data?.progresso_pct)===100&&
       Boolean(String(after.json?.data?.data_conclusao||'').trim()),'POSTCHECK_FAILED');
     if(after.json?.data?.qualificacao_historico_id)results.qualification_linked++;
-    results.detail.push({id:row.id,course_id:row.cid,outcome:'CONCLUIDO',qualification_linked:Boolean(after.json?.data?.qualificacao_historico_id)});
+    results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'CONCLUIDO',qualification_linked:Boolean(after.json?.data?.qualificacao_historico_id)});
     results.completed++;
   }
   process.stdout.write(JSON.stringify(report(cohort,results,ids),null,2));
