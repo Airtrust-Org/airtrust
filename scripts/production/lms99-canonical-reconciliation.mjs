@@ -55,6 +55,7 @@ export function classifyEnrollment(detail) {
   if (status === 'CONCLUIDO') return { bucket: 'ALREADY_COMPLETED', code: 'SCORM_ALREADY_COMPLETED', ready: false };
   if (status === 'CANCELADO') return { bucket: 'EXCLUDED', code: 'ENROLLMENT_CANCELLED', ready: false };
   if (status === 'REPROVADO') return { bucket: 'EXCLUDED', code: 'ENROLLMENT_FAILED', ready: false };
+  if (status !== 'EM_ANDAMENTO') return { bucket: 'EXCLUDED', code: 'ENROLLMENT_NOT_ACTIVE', ready: false };
   if (contentType !== 'scorm') return { bucket: 'EXCLUDED', code: 'NOT_SCORM', ready: false };
   if (progress < 99) return { bucket: 'EXCLUDED', code: 'PROGRESS_BELOW_99', ready: false };
   if (detail?.edition_mismatch?.required === true) {
