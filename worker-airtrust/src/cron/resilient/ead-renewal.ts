@@ -18,7 +18,7 @@ import { runCronJobWithLease, type CronJobLogger } from './job-runner';
 
 const JOB_NAME = 'ead-renewal';
 const SCOPE_KEY = 'global';
-export const LMS_RENOVACAO_EAD_JANELA_DIAS = 30;
+export const LMS_RENOVACAO_EAD_JANELA_DIAS = 0;
 export const EAD_RENEWAL_DISCOVERY_BATCH = 100;
 export const EAD_RENEWAL_PROCESS_BATCH = 50;
 

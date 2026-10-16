@@ -1,0 +1,167 @@
+/**
+ * Tenant-scoped reconciliation between mandatory Compliance requirements and the
+ * LMS execution roster. Absence of historical evidence is an enrollment reason;
+ * mere applicability is not. Historical/terminal cycles are never deleted.
+ */
+import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
+import { trainingComplianceNeedsEnrollment } from './training-compliance-enrollment-policy';
+
+export type RosterCourse = {
+  id: number;
+  qualificacao_tipo_id: number;
+  ativo?: number;
+  publicado?: number;
+};
+export type RosterEnrollment = {
+  id: number;
+  funcionario_id: number;
+  curso_id: number;
+  status: string;
+  deleted_at: string | null;
+  progresso_pct: number | null;
+  data_inicio: string | null;
+  data_conclusao: string | null;
+  qualificacao_historico_id: number | null;
+  has_scorm: number;
+  has_xapi: number;
+  has_history: number;
+  has_diagnostics: number;
+  has_cycle_evidence: number;
+};
+export type RosterEnrollAction = {
+  funcionarioId: number;
+  cursoId: number;
+  tipoId: number;
+  existingId: number | null;
+};
+export type RosterRemoveAction = {
+  matriculaId: number;
+  funcionarioId: number;
+  cursoId: number;
+  motivo: 'EVIDENCIA_VALIDA' | 'SEM_REQUISITO';
+};
+export type RosterPlan = {
+  enroll: RosterEnrollAction[];
+  remove: RosterRemoveAction[];
+  protectedCount: number;
+  skippedAmbiguousCourses: number;
+  skippedPendingEvidence: number;
+  skippedManualModality: number;
+};
+
+export function rosterEnrollmentHasEvidence(row: RosterEnrollment): boolean {
+  return Number(row.progresso_pct || 0) > 0 ||
+    Boolean(row.data_inicio || row.data_conclusao || row.qualificacao_historico_id) ||
+    Boolean(row.has_scorm || row.has_xapi || row.has_history || row.has_diagnostics || row.has_cycle_evidence);
+}
+
+export function buildTrainingComplianceRosterPlan(
+  snapshot: Pick<TrainingComplianceSnapshot, 'people'>,
+  courses: RosterCourse[],
+  enrollments: RosterEnrollment[],
+  keepStandaloneEnrollmentIds: Set<number> = new Set(),
+): RosterPlan {
+  const byType = new Map<number, number[]>();
+  for (const course of courses) {
+    if (course.ativo === 0 || course.publicado === 0) continue;
+    const typeId = Number(course.qualificacao_tipo_id);
+    byType.set(typeId, [...(byType.get(typeId) || []), Number(course.id)]);
+  }
+  const byPersonType = new Map<string, TrainingComplianceSnapshot['people'][number]['requisitos'][number]>();
+  const ambiguousRequirementPairs = new Set<string>();
+  for (const person of snapshot.people) {
+    for (const req of person.requisitos) {
+      if (req.obrigatoriedade === 'OBRIGATORIA') {
+        const key = `${person.id}:${req.qualificacao_tipo_id}`;
+        if (byPersonType.has(key)) ambiguousRequirementPairs.add(key);
+        byPersonType.set(key, req);
+      }
+    }
+  }
+  const courseToType = new Map(courses.map(c => [Number(c.id), Number(c.qualificacao_tipo_id)]));
+  const enrollmentsByPair = new Map<string, RosterEnrollment[]>();
+  for (const row of enrollments) {
+    const key = `${row.funcionario_id}:${row.curso_id}`;
+    enrollmentsByPair.set(key, [...(enrollmentsByPair.get(key) || []), row]);
+  }
+  for (const rows of enrollmentsByPair.values()) {
+    rows.sort((a, b) => Number(Boolean(a.deleted_at)) - Number(Boolean(b.deleted_at)) || b.id - a.id);
+  }
+  const plan: RosterPlan = {
+    enroll: [], remove: [], protectedCount: 0,
+    skippedAmbiguousCourses: 0, skippedPendingEvidence: 0, skippedManualModality: 0,
+  };
+
+  for (const person of snapshot.people) {
+    for (const req of person.requisitos) {
+      if (req.obrigatoriedade !== 'OBRIGATORIA') continue;
+      if (ambiguousRequirementPairs.has(`${person.id}:${req.qualificacao_tipo_id}`)) {
+        plan.skippedAmbiguousCourses++;
+        continue;
+      }
+      if (req.evidencia_pendente_validacao) {
+        plan.skippedPendingEvidence++;
+        continue;
+      }
+      if (req.modalidade_requerida && req.modalidade_requerida !== 'EAD') {
+        plan.skippedManualModality++;
+        continue;
+      }
+      if (!trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;
+      const candidateCourses = byType.get(Number(req.qualificacao_tipo_id)) || [];
+      if (candidateCourses.length !== 1) {
+        plan.skippedAmbiguousCourses++;
+        continue;
+      }
+      const courseId = candidateCourses[0];
+      const existing = enrollmentsByPair.get(`${person.id}:${courseId}`) || [];
+      if (existing.some(row => !row.deleted_at &&
+        ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(row.status).toUpperCase()))) continue;
+      plan.enroll.push({
+        funcionarioId: person.id,
+        cursoId: courseId,
+        tipoId: Number(req.qualificacao_tipo_id),
+        existingId: existing[0]?.id || null,
+      });
+    }
+  }
+
+  const activePeople = new Set(snapshot.people.map(person => Number(person.id)));
+  for (const row of enrollments) {
+    if (!activePeople.has(Number(row.funcionario_id)) || row.deleted_at) continue;
+    if (String(row.status).toUpperCase() !== 'NAO_INICIADO') continue;
+    if (keepStandaloneEnrollmentIds.has(row.id)) {
+      plan.protectedCount++;
+      continue;
+    }
+    if (rosterEnrollmentHasEvidence(row)) {
+      plan.protectedCount++;
+      continue;
+    }
+    const typeId = courseToType.get(Number(row.curso_id));
+    // Unmapped courses are manual-review items, never auto-removed.
+    if (!typeId) {
+      plan.protectedCount++;
+      continue;
+    }
+    const pairKey = `${row.funcionario_id}:${typeId}`;
+    if (ambiguousRequirementPairs.has(pairKey)) {
+      plan.protectedCount++;
+      continue;
+    }
+    const req = byPersonType.get(pairKey);
+    if (req?.evidencia_pendente_validacao) {
+      plan.protectedCount++;
+      continue;
+    }
+    if (req && (!['CONFORME', 'VENCENDO'].includes(req.status_compliance) ||
+      trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer))) continue;
+    plan.remove.push({
+      matriculaId: row.id, funcionarioId: row.funcionario_id, cursoId: row.curso_id,
+      motivo: req ? 'EVIDENCIA_VALIDA' : 'SEM_REQUISITO',
+    });
+  }
+  plan.enroll.sort((a, b) => a.cursoId - b.cursoId || a.funcionarioId - b.funcionarioId);
+  plan.remove.sort((a, b) => a.matriculaId - b.matriculaId);
+  return plan;
+}

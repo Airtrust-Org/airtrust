@@ -26,8 +26,8 @@ test('missing enrollment target is organizational-role only and defers designati
 });
 
 
-test('repair uses canonical compliance evidence and a 60-day renewal window before enrolling', () => {
-  assert.match(script, /RENEWAL_WINDOW_DAYS = 60/);
+test('repair uses canonical compliance evidence and expiry-only enrollment before enrolling', () => {
+  assert.match(script, /RENEWAL_WINDOW_DAYS = 0/);
   assert.match(script, /\/api\/compliance-treinamentos\/funcionarios\/\$\{funcionarioId\}/);
   assert.match(script, /status === 'CONFORME'/);
   assert.match(script, /parsed <= RENEWAL_WINDOW_DAYS/);

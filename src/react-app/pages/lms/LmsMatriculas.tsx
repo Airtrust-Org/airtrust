@@ -715,8 +715,8 @@ export default function LmsMatriculas() {
   const isLoading = loadingCurso || loadingMat;
 
   // Estatísticas rápidas
-  const total = todasMatriculas.length;
-  const concluidos = todasMatriculas.filter((m) => m.status === 'CONCLUIDO').length;
+  const total = matriculasRes?.total ?? todasMatriculas.length;
+  const reprovados = todasMatriculas.filter((m) => m.status === 'REPROVADO').length;
   const emAndamento = todasMatriculas.filter((m) => m.status === 'EM_ANDAMENTO').length;
   const naoIniciados = todasMatriculas.filter((m) => m.status === 'NAO_INICIADO').length;
   const activeFuncionarioIds = new Set(
@@ -728,7 +728,7 @@ export default function LmsMatriculas() {
       <LmsPageShell>
         <PageHeader
           title={loadingCurso ? 'Carregando matrículas...' : (curso?.titulo ?? 'Matrículas')}
-          subtitle={`Gerenciamento de matrículas${curso ? ` · ${total} aluno(s) vinculados` : ''}`}
+          subtitle={`Gerenciamento de matrículas${curso ? ` · ${total} ${statusFilter ? 'registro(s) filtrado(s)' : 'matrícula(s) operacional(is)'}` : ''}`}
           actions={
             <div className="flex gap-2">
               <Button variant="secondary" onClick={() => navigate('/lms/admin/cursos')}>
@@ -750,7 +750,7 @@ export default function LmsMatriculas() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-2xl space-y-2">
                 <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">
-                  Acompanhe distribuição, conclusão e pendências do curso em uma única grade.
+                  Acompanhe as matrículas necessárias e as pendências do curso em uma única grade.
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
                   Consulte o estado das matrículas, identifique atrasos e abra novas atribuições sem
@@ -766,14 +766,14 @@ export default function LmsMatriculas() {
           <LmsMetricCard
             title="Total"
             value={total}
-            description="Matrículas ativas no curso"
+            description={statusFilter ? 'Registros no filtro selecionado' : 'Pessoas que precisam realizar o curso'}
             icon={<Users className="h-5 w-5" />}
             accent="bg-slate-100 text-slate-700"
           />
           <LmsMetricCard
-            title="Concluídos"
-            value={concluidos}
-            description="Treinamentos finalizados"
+            title="Reprovados"
+            value={reprovados}
+            description="Necessitam nova tentativa"
             icon={<CheckCircle2 className="h-5 w-5" />}
             accent="bg-emerald-100 text-emerald-700"
           />

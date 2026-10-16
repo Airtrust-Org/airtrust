@@ -1376,7 +1376,7 @@ describe('training compliance engine', () => {
     expect(gap).toMatchObject({ pessoas: 2, nunca_realizados: 2 });
   });
 
-  it('abre renovação antecipada em 60 dias sem alterar o status global de compliance', async () => {
+  it('não abre matrícula antes do vencimento e mantém Compliance conforme', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
         (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
@@ -1398,9 +1398,9 @@ describe('training compliance engine', () => {
     const reconciliation = (await (await app.request('/reconciliacao')).json()) as any;
     const gap = reconciliation.data.gaps_matricula.find((item: any) => item.qualificacao_tipo_id === 100);
     expect(gap).toMatchObject({
-      pessoas: 2,
-      renovacao_antecipada: 1,
-      janela_renovacao_dias: 60,
+      pessoas: 1,
+      renovacao_antecipada: 0,
+      janela_renovacao_dias: 0,
     });
   });
 
