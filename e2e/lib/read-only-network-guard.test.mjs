@@ -122,6 +122,29 @@ test('auth POST is allowed on an allowlisted staging host', () => {
   );
 });
 
+test('exact session-profile auth POST is allowed only on staging', () => {
+  const staging = classifyRequest({
+    method: 'POST',
+    url: `${STG}/api/me/operational-access/session-profile`,
+  });
+  assert.equal(staging.decision, 'allow');
+  assert.match(staging.reason, /auth-post/);
+
+  const sibling = classifyRequest({
+    method: 'POST',
+    url: `${STG}/api/me/operational-access/session-profile/impersonate`,
+  });
+  assert.equal(sibling.decision, 'block');
+  assert.match(sibling.reason, /operational-post/);
+
+  const production = classifyRequest({
+    method: 'POST',
+    url: `${PROD_API}/api/me/operational-access/session-profile`,
+  });
+  assert.equal(production.decision, 'block');
+  assert.match(production.reason, /^PRODUCTION_HOST_BLOCKED/);
+});
+
 test('auth POST on attacker.example is blocked (host not allowlisted)', () => {
   const r = classifyRequest({ method: 'POST', url: `${EVIL}/api/auth/login` });
   assert.equal(r.decision, 'block');
