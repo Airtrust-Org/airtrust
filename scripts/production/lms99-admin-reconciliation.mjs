@@ -15,15 +15,20 @@ const valid=(v,code)=>{if(!v)throw Error('LMS99_'+code);};
 const upper=x=>String(x??'').trim().toUpperCase();
 const progress=x=>Number(x?.progresso_bruto??x?.progresso_pct??-1);
 export function plan(courses, authorizedIds = null){
-  if (authorizedIds !== null) {
-    valid(authorizedIds instanceof Set && authorizedIds.size===16,'AUTHORIZED_IDS_INVALID');
-  }
-  const rows=[],excluded={cancelled:0,reproved:0,other:0};
-  const seen=new Set();
+  if(authorizedIds !== null)valid(authorizedIds instanceof Set&&authorizedIds.size===16,'AUTHORIZED_IDS_INVALID');
+  const rows=[],alreadyCompleted=[],pendingReview=[],excluded={cancelled:0,reproved:0,other:0},seen=new Set();
+  const order=authorizedIds===null?new Map():new Map([...authorizedIds].map((id,i)=>[id,i+1]));
   for(const course of courses)for(const row of course.enrollments){
     const s=upper(row.status),p=progress(row),id=Number(row.id),cid=Number(course.id);
-    if(authorizedIds !== null && !authorizedIds.has(id)) continue;
-    if(authorizedIds !== null) valid(s==='EM_ANDAMENTO' && p===100,'AUTHORIZED_ENROLLMENT_DRIFT');
+    if(authorizedIds!==null&&!authorizedIds.has(id))continue;
+    if(authorizedIds!==null){
+      valid(Number.isInteger(id)&&id>0&&Number.isInteger(cid)&&cid>0&&!seen.has(id),'IDENTITY_INVALID');
+      seen.add(id);
+      if(s==='CONCLUIDO'&&p===100){alreadyCompleted.push({id,cid,status:s,p});continue;}
+      if(s==='EM_ANDAMENTO'&&p>=99&&p<=100){rows.push({id,cid,status:s,p});continue;}
+      pendingReview.push({ordinal:order.get(id),curso_id:cid,status:s,progresso_bruto:p});
+      continue;
+    }
     if(s==='CONCLUIDO'||p<99)continue;
     if(s==='CANCELADO'){excluded.cancelled++;continue;}
     if(s==='REPROVADO'){excluded.reproved++;continue;}
@@ -32,10 +37,16 @@ export function plan(courses, authorizedIds = null){
     valid(Number.isInteger(id)&&id>0&&Number.isInteger(cid)&&cid>0&&!seen.has(id),'IDENTITY_INVALID');
     seen.add(id);rows.push({id,cid,status:s,p});
   }
+  if(authorizedIds!==null)for(const [id,ordinal] of order){
+    if(!seen.has(id))pendingReview.push({ordinal,curso_id:null,status:'NOT_FOUND',progresso_bruto:null});
+  }
   rows.sort((a,b)=>a.cid-b.cid||a.id-b.id);
+  alreadyCompleted.sort((a,b)=>a.cid-b.cid||a.id-b.id);
+  pendingReview.sort((a,b)=>a.ordinal-b.ordinal);
   valid(rows.length<=100,'COHORT_LIMIT');
-  if(authorizedIds !== null) valid(rows.length===authorizedIds.size,'AUTHORIZED_COHORT_MISSING');
-  return {rows,excluded,hash:createHash('sha256').update(JSON.stringify(rows)).digest('hex')};
+  const payload=authorizedIds===null?rows:{rows,alreadyCompleted,pendingReview};
+  return {rows,alreadyCompleted,pendingReview,excluded,
+    hash:createHash('sha256').update(JSON.stringify(payload)).digest('hex')};
 }
 async function get(token,route){
   valid(route.startsWith('/api/lms/')||['/api/auth/empresas','/api/auth/me','/api/empresas/minha'].includes(route),'PATH_BLOCKED');
@@ -111,7 +122,10 @@ function report(p,results,ids){
   for(const row of p.rows)by_course[row.cid]=(by_course[row.cid]||0)+1;
   return {schema_version:1,repo_sha:MAIN,production_sha:PROD,tenant:TENANT,
     mode:MODE,administrator_attestation:'TRAINING_MANAGEMENT_CONFIRMED_REAL_COMPLETION_2026_10_16',
-    candidates:p.rows.length,candidate_hash:p.hash,authorized_count:ids.size,authorized_ids_hash:authorizedIdsHash(ids),by_course,excluded:p.excluded,
+    candidates:p.rows.length,already_completed:p.alreadyCompleted.length,
+    pending_review_count:p.pendingReview.length,pending_review:p.pendingReview,
+    raw_99_candidates:p.rows.filter(r=>r.p===99).length,
+    candidate_hash:p.hash,authorized_count:ids.size,authorized_ids_hash:authorizedIdsHash(ids),by_course,excluded:p.excluded,
     writes:results.completed||0,results,scorm_cmi_changed:false,personal_data:false,
     completion_date_rule:'CANONICAL_SERVER_DATE',historical_training_date_not_fabricated:true};
 }
@@ -128,27 +142,46 @@ async function main(){
   const ids=authorizedEnrollmentIds();
   await pin();const token=await authorize();const cohort=await collect(token,ids);
   if(MODE==='dry-run'){process.stdout.write(JSON.stringify(report(cohort,{completed:0},ids),null,2));return;}
-  valid(cohort.rows.length>0&&cohort.hash===process.env.REVIEWED_COHORT_HASH,'REVIEWED_COHORT_CHANGED');
+  valid(cohort.pendingReview.length===0,'REVIEW_REQUIRED');
+  valid(cohort.rows.length+cohort.alreadyCompleted.length===ids.size,'AUTHORIZED_COHORT_MISSING');
+  valid(cohort.hash===process.env.REVIEWED_COHORT_HASH,'REVIEWED_COHORT_CHANGED');
   const results={completed:0,already_completed:0,rejected_409:0,rejected_403:0,other_error:0,qualification_linked:0,detail:[]};
+  const ordinalById=new Map([...ids].map((id,i)=>[id,i+1]));
+  for(const row of cohort.alreadyCompleted){
+    const response=await get(token,'/api/lms/matriculas/'+row.id);
+    valid(response.status===200,'ALREADY_COMPLETED_READ_FAILED');
+    const d=response.json?.data||{};
+    valid(upper(d.status)==='CONCLUIDO'&&Number(d.curso_id)===row.cid&&progress(d)===100&&
+      Boolean(String(d.data_conclusao||'').trim()),'ALREADY_COMPLETED_STATE_CHANGED');
+    results.already_completed++;
+    results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,
+      outcome:'ALREADY_CONCLUIDO',qualification_linked:Boolean(d.qualificacao_historico_id)});
+  }
   for(const row of cohort.rows){
     await pin();
     const before=await get(token,'/api/lms/matriculas/'+row.id);
     valid(before.status===200,'ROW_READ_FAILED');
     const data=before.json?.data||{};
-    if(upper(data.status)==='CONCLUIDO'){results.already_completed++;continue;}
-    valid(upper(data.status)===row.status&&Number(data.curso_id)===row.cid&&progress(data)===100,'ROW_DRIFT');
+    if(upper(data.status)==='CONCLUIDO'){
+      valid(progress(data)===100&&Boolean(String(data.data_conclusao||'').trim()),'COMPLETED_CONCURRENTLY_INVALID');
+      results.already_completed++;
+      results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,
+        outcome:'ALREADY_CONCLUIDO',qualification_linked:Boolean(data.qualificacao_historico_id)});
+      continue;
+    }
+    valid(upper(data.status)===row.status&&Number(data.curso_id)===row.cid&&progress(data)===row.p,'ROW_DRIFT');
     const res=await fetchJson(API+'/api/lms/matriculas/'+row.id+'/status',{
       method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
       body:JSON.stringify({status:'CONCLUIDO',observacoes:administrativeObservations(data.observacoes)})});
-    if(res.status===409){results.rejected_409++;results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'REJECTED_409'});continue;}
-    if(res.status===403){results.rejected_403++;results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'REJECTED_403'});continue;}
-    if(res.status!==200||res.json?.success!==true){results.other_error++;results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'ERROR'});break;}
+    if(res.status===409){results.rejected_409++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'REJECTED_409'});continue;}
+    if(res.status===403){results.rejected_403++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'REJECTED_403'});continue;}
+    if(res.status!==200||res.json?.success!==true){results.other_error++;results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'ERROR'});break;}
     const after=await get(token,'/api/lms/matriculas/'+row.id);
     valid(after.status===200&&upper(after.json?.data?.status)==='CONCLUIDO'&&
       Number(after.json?.data?.progresso_pct)===100&&
       Boolean(String(after.json?.data?.data_conclusao||'').trim()),'POSTCHECK_FAILED');
     if(after.json?.data?.qualificacao_historico_id)results.qualification_linked++;
-    results.detail.push({ordinal:results.detail.length+1,course_id:row.cid,outcome:'CONCLUIDO',qualification_linked:Boolean(after.json?.data?.qualificacao_historico_id)});
+    results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'CONCLUIDO',qualification_linked:Boolean(after.json?.data?.qualificacao_historico_id)});
     results.completed++;
   }
   process.stdout.write(JSON.stringify(report(cohort,results,ids),null,2));
