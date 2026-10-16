@@ -13,7 +13,7 @@ export type BuildRosterSnapshot = (
   access: { mode: 'all'; setorIds: []; funcionarioId: null },
 ) => Promise<TrainingComplianceSnapshot>;
 
-const ALL_ACCESS = { mode: 'all', setorIds: [], funcionarioId: null } as const;
+const ALL_ACCESS: { mode: 'all'; setorIds: []; funcionarioId: null } = { mode: 'all', setorIds: [], funcionarioId: null };
 
 export async function readTrainingRosterPlan(
   db: D1Database, empresaId: number, buildSnapshot: BuildRosterSnapshot,
