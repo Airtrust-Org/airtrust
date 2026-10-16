@@ -35,9 +35,21 @@ describe('corporate Regras de Ouro 0547', () => {
   it('uses 0547 postconditions in production readonly smoke after applying the compensating requirement', () => {
     const smoke = read('.github/workflows/production-training-compliance-readonly-smoke.yml');
     expect(smoke).toContain("change_id='training-compliance-regras-ouro-corporate-0547'");
-    expect(smoke).toContain('validate-0547-production-postconditions.sh');
+    expect(smoke).toContain('validate-training-compliance-regras-ouro-current-readonly.sh');
+    expect(smoke).not.toMatch(/bash scripts\\/schema-v2\\/validate-0547-production-postconditions\\.sh/);
     expect(smoke).toContain('validate-0546-production-postconditions.sh');
     expect(smoke).toContain('applied_0547');
+  });
+
+  it('verifies the current canonical OURO obligation after historic duplicate consolidation', () => {
+    const current = read('scripts/production/validate-training-compliance-regras-ouro-current-readonly.sh');
+    expect(current).toContain("codigo='OURO'");
+    expect(current).toContain('REGRAS_OURO_PETROBRAS_UNUSED_%');
+    expect(current).toContain('assert_count mandatory-all-roles 1');
+    expect(current).toContain('assert_count unique-active-obligation 1');
+    expect(current).toContain('assert_count no-active-legacy-model 0');
+    expect(current).toContain('TRAINING_COMPLIANCE_OURO_CURRENT_READONLY=PASS');
+    expect(current).not.toMatch(/\\b(?:UPDATE|INSERT|DELETE|REPLACE|ALTER|DROP|CREATE)\\s+(?:INTO|TABLE|FROM|treinamento_requisitos|qualificacoes_tipos)/i);
   });
 
   it('requires official Schema V2 preflight and postconditions', () => {
