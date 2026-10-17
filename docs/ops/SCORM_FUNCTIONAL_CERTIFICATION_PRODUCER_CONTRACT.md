@@ -30,7 +30,15 @@ novamente antes de trocar o ponteiro do curso. A projeção canônica contém:
   `GOVERNED_STAGING_SYNTHETIC`;
 - perfis de avaliação pontuada/formativa, resultados independentes em
   Chromium e WebKit e SHA-256 dos respectivos artefatos sanitizados;
-- SHA-256 do documento PDF de certificado verificado no QA.
+- testemunhos de dois documentos PDF **distintos**, um por execução Chromium
+  e outro por execução WebKit, com IDs independentes de matrícula, ciclo,
+  histórico de qualificação e documento e SHA-256 dos bytes obtidos por download
+  autenticado no backend (não apenas a existência de um arquivo PDF).
+- cada relatório do navegador deve conter `certificateDocument` com
+  `enrollmentId`, `cycleId`, `qualificationHistoryId`,
+  `documentId`, `sha256` e `certificateDownloadHttpStatus=200`;
+  a assinatura exige `certificatePdfFiles.CHROMIUM` e
+  `certificatePdfFiles.WEBKIT` distintos.
 
 O endpoint administrativo autenticado
 `POST /lms/cursos/:id/scorm-package-versions/:packageId/functional-attestation`
