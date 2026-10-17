@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-17",
-    "last_reconciled_against": "0553 LMS cycle evidence archive pending reviewed Schema V2 apply",
-    "schema_v2_digest": "8248f77cfa3bd638385d8304c7015f1f341632940d2405928fd3e2818e45800b",
+    "last_reconciled_against": "0557 LMS cycle evidence archive, reserved separately from Player 3 0553/0554; pending governed apply",
+    "schema_v2_digest": "bee189fac6d5e14bf2ccf1b2ecf3ebadc8e308c5d5c6b03ce454c83c2f12ad55",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1568,9 +1568,9 @@
       "note": "0552 is a nullable additive field for reported sleep opportunity. It does not backfill or change historical sleep, policy, coefficients, fatigue thresholds, tenant or RBAC. Runtime Worker must not be deployed until the governed migration has been applied and verified in the target environment. This is repo-reviewed only, not a production schema claim."
     },
     {
-      "change_file": "0553_lms_cycle_evidence_archive.sql",
-      "change_id": "lms-cycle-evidence-0553",
-      "sha256": "3abc7eaf235211ba8c91002f9fa67c207979362b050b0aed9466ab66a8ba936b",
+      "change_file": "0557_lms_cycle_evidence_archive.sql",
+      "change_id": "lms-cycle-evidence-0557",
+      "sha256": "6df04a3d9fa5f3975a914d978600ac00f492438c02655deb211893f208a32b8e",
       "targets": [
         "lms_ciclo_evidencias",
         "lms_xapi_statements"
@@ -1578,9 +1578,9 @@
       "domain": "LMS integrity: immutable per-cycle SCORM/diagnostics and attribution of xAPI statements",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "lms-cycle-evidence-0553.json",
-      "evidence": "worker-airtrust/schema-v2/plans/lms-cycle-evidence-0553.md",
-      "note": "Additive DDL only. Runtime atomic enrollment/cycle reset is gated on migration 0553 and consumes only active-cycle xAPI. No production D1 data write or production schema application claimed; requires SHA-specific governance and recovery. Immutable audit storage is enforced by D1 triggers: archive snapshots and attributed xAPI cannot be updated/deleted, and tenant/cycle mismatch aborts attribution."
+      "reviewed_manifest": "lms-cycle-evidence-0557.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-cycle-evidence-0557.md",
+      "note": "Additive DDL only. Runtime atomic enrollment/cycle reset is gated on migration 0557 and consumes only active-cycle xAPI. No production D1 data write or production schema application claimed; requires SHA-specific governance and recovery. Immutable audit storage is enforced by D1 triggers: archive snapshots and attributed xAPI cannot be updated/deleted, and tenant/cycle mismatch aborts attribution."
     }
   ]
 }

@@ -61,9 +61,9 @@ LMS_MIGRATIONS=(
   # 0519 adds scalar competency-profile lineage; 0520 normalizes multi-profile qualification evidence.
   "$WORKER_DIR/migrations/0519_training_compliance_evidence_profiles.sql"
   "$WORKER_DIR/migrations/0520_training_compliance_evidence_multi_profiles.sql"
-  # Governed Schema V2 0553 mirror: isolated local smoke D1 only.
+  # Governed Schema V2 0557 mirror: isolated local smoke D1 only.
   # Production/staging schema remains governed by its own workflow.
-  "$WORKER_DIR/migrations/0553_lms_cycle_evidence_archive.sql"
+  "$WORKER_DIR/migrations/0557_lms_cycle_evidence_archive.sql"
 )
 
 error() {

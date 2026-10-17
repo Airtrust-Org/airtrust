@@ -1,4 +1,4 @@
-# Schema V2 0553 — Evidências imutáveis por ciclo LMS
+# Schema V2 0557 — Evidências imutáveis por ciclo LMS
 
 ## Objetivo e alcance
 Adicionar uma trilha de retenção para o snapshot completo SCORM de cada ciclo encerrado por renovação, e atribuir statements xAPI antigos ao ciclo anterior sem excluí-los. A matrícula operacional conserva ID único (empresa, funcionário, curso), mas seu progresso pertence somente ao ciclo ativo.

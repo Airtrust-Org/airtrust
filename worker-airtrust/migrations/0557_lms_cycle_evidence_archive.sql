@@ -1,4 +1,4 @@
--- 0553: Preserve SCORM/qualification runtime and xAPI across LMS renewal cycles.
+-- 0557: Preserve SCORM/qualification runtime and xAPI across LMS renewal cycles.
 -- Additive Schema V2 contract. No data rewrite or retroactive reclassification.
 ALTER TABLE lms_xapi_statements ADD COLUMN archived_cycle_id INTEGER REFERENCES lms_matricula_ciclos(id);
 

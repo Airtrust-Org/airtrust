@@ -453,7 +453,7 @@ export async function upsertImportedEdappCycle(
  * to the immutable per-cycle archive and all xAPI rows remain physically intact,
  * marked as historical. Completion guards query only unarchived xAPI rows.
  *
- * Requires Schema V2 lms-cycle-evidence-0553. If it is missing, D1.batch fails
+ * Requires Schema V2 lms-cycle-evidence-0557. If it is missing, D1.batch fails
  * closed and rolls back; never fall back to destructive legacy reset.
  */
 export async function resetMatriculaForNewCycle(
