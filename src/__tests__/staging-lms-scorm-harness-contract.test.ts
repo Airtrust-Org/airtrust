@@ -35,6 +35,19 @@ describe('staging LMS SCORM governed harness contract', () => {
     expect(workflow).not.toContain('https://airtrust.online');
   });
 
+  it('accepts only a reviewed open same-repo candidate when staging SHA is outside main', () => {
+    const workflow = read(workflowPath);
+    expect(workflow).toContain('pr_number:');
+    expect(workflow).toContain('OPEN_REVIEWED_PR_REQUIRED');
+    expect(workflow).toContain('OPEN_REVIEWED_PR_SHA_OR_SCOPE_MISMATCH');
+    expect(workflow).toContain("pr.state !== 'open' || pr.draft");
+    expect(workflow).toContain("pr.base?.ref !== 'main'");
+    expect(workflow).toContain("pr.head?.repo?.full_name !== repo");
+    expect(workflow).toContain("pr.head?.sha?.toLowerCase() !== sha");
+    expect(workflow).toContain('verify-release-gates.mjs');
+    expect(workflow).toContain('STAGING_WORKER_SHA_MISMATCH');
+  });
+
   it('keeps synthetic SCORM fixtures unique across workflow reruns', () => {
     const harness = read(harnessPath);
 
