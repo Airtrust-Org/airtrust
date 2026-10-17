@@ -28,7 +28,6 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
 
   await expect(page.locator('#workspace')).toBeVisible();
   await expect(page.locator('#legacy-vault-card')).toBeHidden();
-  await expect(page.getByText('PIN offline')).toHaveCount(0);
 
   await openDiagnosticCard(page);
   const marker = `pilot-offline-ci-${Date.now()}`;
@@ -204,33 +203,39 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
 });
 
 
-test('does not prompt for a legacy PIN and preserves the old encrypted vault untouched', async ({ page }) => {
+test('recovers encrypted legacy draft and outbox only after PIN, with verified V2 read-back and intact V1', async ({ page }) => {
   const legacyPin = '654321';
-  const marker = `pilot-legacy-archive-${Date.now()}`;
+  const marker = `pilot-legacy-recovery-${Date.now()}`;
+  const outboxId = 'operation:legacy:123';
 
   await page.goto('/');
-  await page.evaluate(
-    async ({ pin, value }) => {
-      const { PilotVault } = await import('/pilot/pilot-vault.js');
-      const vault = await PilotVault.open();
-      await vault.provision(pin);
-      await vault.putJson(
-        'rdv_drafts',
-        'phase1-synthetic-rdv-draft',
-        { observacoes: value },
-        1,
-      );
-    },
-    { pin: legacyPin, value: marker },
-  );
+  await page.evaluate(async ({ pin, value, operationId }) => {
+    const { PilotVault } = await import('/pilot/pilot-vault.js');
+    const vault = await PilotVault.open();
+    await vault.provision(pin);
+    await vault.putJson('rdv_drafts', 'phase1-synthetic-rdv-draft', { observacoes: value }, 1);
+    await vault.putJson('rdv_drafts', 'rdv:legacy:123', { voo_id: 123, note: value }, 2);
+    await vault.putJson('outbox', operationId, { client_operation_id: operationId, status: 'pending' }, 3);
+    await vault.putBytes('attachments', 'attachment:legacy', new Uint8Array([10, 20, 30]), 4);
+  }, { pin: legacyPin, value: marker, operationId: outboxId });
 
   await page.goto('/pilot/');
-  await expect(page.locator('#legacy-vault-card')).toHaveCount(0);
+  await expect(page.locator('#legacy-vault-card')).toBeVisible();
+  await expect(page.locator('#workspace')).toBeHidden();
+
+  await page.locator('#legacy-vault-pin').fill('000000');
+  await page.locator('#legacy-vault-recover').click();
+  await expect(page.locator('#legacy-vault-status')).toContainText('Código local antigo incorreto');
+  await expect(page.locator('#workspace')).toBeHidden();
+
+  await page.locator('#legacy-vault-pin').fill(legacyPin);
+  await page.locator('#legacy-vault-recover').click();
+  await expect(page.locator('#legacy-vault-card')).toBeHidden();
   await expect(page.locator('#workspace')).toBeVisible();
   await openDiagnosticCard(page);
-  await expect(page.locator('#draft')).toHaveValue('');
+  await expect(page.locator('#draft')).toHaveValue(marker);
 
-  const proof = await page.evaluate(async (plainMarker) => {
+  const proof = await page.evaluate(async ({ value, operationId }) => {
     async function open(name: string): Promise<IDBDatabase> {
       return await new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open(name);
@@ -238,44 +243,157 @@ test('does not prompt for a legacy PIN and preserves the old encrypted vault unt
         request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
       });
     }
-    async function config(database: IDBDatabase): Promise<Record<string, unknown> | undefined> {
-      return await new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
-        const transaction = database.transaction('meta', 'readonly');
-        const request = transaction.objectStore('meta').get('vault-config');
+    async function get(database: IDBDatabase, store: string, id: string): Promise<any> {
+      return await new Promise((resolve, reject) => {
+        const tx = database.transaction(store, 'readonly');
+        const request = tx.objectStore(store).get(id);
         request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error || new Error('IndexedDB meta read failed'));
+        request.onerror = () => reject(request.error || new Error('IndexedDB read failed'));
       });
     }
-
-    const legacyDatabase = await open('airtrust-pilot-v1');
-    const currentDatabase = await open('airtrust-pilot-v2');
-    const legacyConfig = await config(legacyDatabase);
-    const currentConfig = await config(currentDatabase);
-    const legacyDrafts = await new Promise<unknown[]>((resolve, reject) => {
-      const transaction = legacyDatabase.transaction('rdv_drafts', 'readonly');
-      const request = transaction.objectStore('rdv_drafts').getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error || new Error('IndexedDB draft read failed'));
-    });
-    const currentKey = currentConfig?.device_key as CryptoKey | undefined;
+    const legacy = await open('airtrust-pilot-v1');
+    const current = await open('airtrust-pilot-v2');
+    const v1 = await get(legacy, 'meta', 'vault-config');
+    const v2 = await get(current, 'meta', 'vault-config');
+    const legacyDraft = await get(legacy, 'rdv_drafts', 'phase1-synthetic-rdv-draft');
+    const v2Draft = await get(current, 'rdv_drafts', 'phase1-synthetic-rdv-draft');
+    const v2Outbox = await get(current, 'outbox', operationId);
+    const recovery = await get(current, 'meta', 'legacy-pin-v1-recovery-proof');
+    const { PilotVault } = await import('/pilot/pilot-vault.js');
+    const verifiedVault = await PilotVault.open();
+    const ready = await verifiedVault.openAutomatically();
+    const attachment = await verifiedVault.getBytes('attachments', 'attachment:legacy');
     return {
-      legacyVersion: legacyConfig?.version,
-      legacyDraftCount: legacyDrafts.length,
-      legacyContainsPlaintext: JSON.stringify(legacyDrafts).includes(plainMarker),
-      currentConfig: {
-        version: currentConfig?.version,
-        keyProtection: currentConfig?.key_protection,
-        keyExtractable: currentKey?.extractable ?? null,
-      },
+      recoveryReady: ready.status === 'ready',
+      attachmentRestored: attachment?.bytes.join(',') === '10,20,30',
+      v1Version: v1.version, v2Version: v2.version,
+      v1PlaintextLeak: JSON.stringify(legacyDraft).includes(value),
+      v1Ciphertext: legacyDraft.ciphertext,
+      v2Ciphertext: v2Draft.ciphertext,
+      v2Outbox: Boolean(v2Outbox),
+      proof: recovery?.completed === true && recovery?.records_verified >= 3,
     };
-  }, marker);
+  }, { value: marker, operationId: outboxId });
 
-  expect(proof.legacyVersion).toBe(1);
-  expect(proof.legacyDraftCount).toBeGreaterThan(0);
-  expect(proof.legacyContainsPlaintext).toBe(false);
-  expect(proof.currentConfig).toEqual({
-    version: 2,
-    keyProtection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY',
-    keyExtractable: false,
+  expect(proof.v1Version).toBe(1);
+  expect(proof.v2Version).toBe(2);
+  expect(proof.v1PlaintextLeak).toBe(false);
+  expect(proof.v1Ciphertext).toBeTruthy();
+  expect(proof.v2Ciphertext).toBeTruthy();
+  expect(proof.v2Ciphertext).not.toBe(proof.v1Ciphertext);
+  expect(proof.v2Outbox).toBe(true);
+  expect(proof.recoveryReady).toBe(true);
+  expect(proof.attachmentRestored).toBe(true);
+  expect(proof.proof).toBe(true);
+
+  await page.reload();
+  await expect(page.locator('#legacy-vault-card')).toBeHidden();
+  await expect(page.locator('#workspace')).toBeVisible();
+  await openDiagnosticCard(page);
+  await expect(page.locator('#draft')).toHaveValue(marker);
+});
+
+test('blocks legacy recovery when V2 already contains different unsynced data', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { PilotVault } = await import('/pilot/pilot-vault.js');
+    const v1 = await PilotVault.open();
+    await v1.provision('654321');
+    await v1.putJson('outbox', 'operation:collision', { status: 'legacy' }, 1);
+    const v2 = await PilotVault.open();
+    await v2.provisionDeviceKey();
+    await v2.putJson('outbox', 'operation:collision', { status: 'newer' }, 2);
   });
+  await page.goto('/pilot/');
+  await expect(page.locator('#legacy-vault-card')).toBeVisible();
+  await page.locator('#legacy-vault-pin').fill('654321');
+  await page.locator('#legacy-vault-recover').click();
+  await expect(page.locator('#legacy-vault-status')).toContainText('Conflito com rascunho/outbox');
+  await expect(page.locator('#workspace')).toBeHidden();
+  const intact = await page.evaluate(async () => {
+    const request = indexedDB.open('airtrust-pilot-v1');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const tx = db.transaction('meta', 'readonly');
+    return await new Promise((resolve, reject) => {
+      const req = tx.objectStore('meta').get('vault-config');
+      req.onsuccess = () => resolve(req.result.version === 1);
+      req.onerror = () => reject(req.error);
+    });
+  });
+  expect(intact).toBe(true);
+});
+
+test('reports denied persistence without claiming permanent local retention', async ({ page }) => {
+  await page.addInitScript(() => {
+    // WebKit may not expose navigator.storage at all. Provide the API itself
+    // so this tests an explicit denial, not the separate "unavailable" state.
+    const storage = navigator.storage;
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: {
+        persist: async () => false,
+        estimate: async () => storage?.estimate
+          ? storage.estimate()
+          : { usage: 0, quota: 0 },
+      },
+    });
+  });
+  await page.goto('/pilot/');
+  await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.locator('#storage-retention-status')).toHaveAttribute('data-retention', 'denied');
+  await expect(page.locator('#storage-retention-status')).toContainText('não concedeu retenção persistente');
+});
+
+test('marks quota failure without claiming the diagnostic draft was saved', async ({ page }) => {
+  await page.goto('/pilot/');
+  await expect(page.locator('#workspace')).toBeVisible();
+  await openDiagnosticCard(page);
+  await page.evaluate(() => {
+    const previous = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (...args) {
+      if (this.name === 'rdv_drafts') throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return previous.apply(this, args as Parameters<typeof previous>);
+    };
+  });
+  await page.locator('#draft').fill('quota-failure-test');
+  await page.locator('#save-now').click();
+  await expect(page.locator('#save-status')).toContainText('Falha ao salvar no tablet');
+  await expect(page.locator('#save-status')).not.toContainText('Salvo no tablet');
+});
+
+test('keeps V1 intact and retries recovery after an interrupted V2 write', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { PilotVault } = await import('/pilot/pilot-vault.js');
+    const vault = await PilotVault.open();
+    await vault.provision('654321');
+    await vault.putJson('rdv_drafts', 'phase1-synthetic-rdv-draft',
+      { observacoes: 'restore-after-interruption' }, 1);
+  });
+  await page.goto('/pilot/');
+  await expect(page.locator('#legacy-vault-card')).toBeVisible();
+  await page.evaluate(() => {
+    const previous = IDBObjectStore.prototype.put;
+    (window as any).__restorePut = () => { IDBObjectStore.prototype.put = previous; };
+    IDBObjectStore.prototype.put = function (...args) {
+      if (this.name === 'rdv_drafts') throw new DOMException('Simulated write abort', 'AbortError');
+      return previous.apply(this, args as Parameters<typeof previous>);
+    };
+  });
+  await page.locator('#legacy-vault-pin').fill('654321');
+  await page.locator('#legacy-vault-recover').click();
+  await expect(page.locator('#legacy-vault-status')).toContainText('armazenamento antigo foi preservado');
+  await expect(page.locator('#workspace')).toBeHidden();
+
+  await page.evaluate(() => (window as any).__restorePut());
+  await page.reload();
+  await expect(page.locator('#legacy-vault-card')).toBeVisible();
+  await page.locator('#legacy-vault-pin').fill('654321');
+  await page.locator('#legacy-vault-recover').click();
+  await expect(page.locator('#workspace')).toBeVisible();
+  await openDiagnosticCard(page);
+  await expect(page.locator('#draft')).toHaveValue('restore-after-interruption');
 });
