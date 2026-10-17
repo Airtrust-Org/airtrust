@@ -418,7 +418,7 @@ adminUsuariosRoutes.post('/', async (c) => {
   const callerId = getCallerId(c);
   const callerRole = getCallerRole(c);
   const tenantCtx = getTenantContext(c);
-  const { empresaId, empresaCodigo } = tenantCtx;
+  const { empresaId } = tenantCtx;
   const db = c.env.DB;
   const logger = createLogger(c, 'AdminUsuarios.create');
 
