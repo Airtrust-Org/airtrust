@@ -16,3 +16,7 @@ Preflight read-only: baseline atual, existência das tabelas `lms_matriculas`, `
 Runtime exige `db.batch` atômico com guarda tenant/status/ciclo, snapshot antes de zerar CMI, atualização de `archived_cycle_id` sem DELETE, criação de ciclo único, auditoria e pós-check. Queries de conclusão e listagem operacional xAPI aceitam somente `archived_cycle_id IS NULL`. Registros históricos seguem disponíveis para leitura auditada, nunca contam como evidência para finalizar novo ciclo. Testar corrida, rollback por falha, repetição, zero-histórico, fronteira tenant, conclusão/cancelamento e disponibilidade do schema. Dados sensíveis permanecem no D1 protegido, sem publicação de artefato nominal.
 
 **Autorização:** este plano não autoriza apply em D1 de produção, backfill, seed ou deploy.
+
+## Retenção do diagnóstico e isolamento do novo ciclo
+
+Na renovação terminal, a transação grava o snapshot anterior com CMI, curso, datas, cursor e diagnósticos por tentativa; somente depois limpa a tabela de diagnósticos correntes junto do estado SCORM. Esses dados correntes são incompatíveis com tentativas do novo ciclo e não podem influenciar o novo aluno. O histórico imutável permanece preservado em `lms_ciclo_evidencias`. A falha em qualquer escrita aborta todo o `db.batch` e mantém a linha original de diagnóstico.

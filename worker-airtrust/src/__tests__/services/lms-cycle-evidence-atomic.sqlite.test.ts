@@ -93,6 +93,8 @@ describe('LMS immutable cycle evidence, D1 SQLite transaction',()=>{
     expect(JSON.parse(String(archived.enrollment_json))).toMatchObject({status:'CONCLUIDO',progresso_pct:100,qualificacao_historico_id:700});
     expect(JSON.parse(String(archived.scorm_json))).toMatchObject({lesson_status:'passed',suspend_data:'opaque-old-state',score_raw:93});
     expect(JSON.parse(String(archived.diagnostics_json))).toEqual([{tentativa:2,diagnostics_json:'{"explanation":"historical"}'}]);
+    expect(one(db,"SELECT COUNT(*) AS n FROM lms_completion_diagnostics_snapshots WHERE matricula_id=384"))
+      .toEqual({n:0});
     expect(archived.course_package_prefix).toBe('lms/scorm/1/34/v1');
     expect(one(db,"SELECT cmi_json,lesson_status FROM lms_progresso_scorm WHERE matricula_id=384"))
       .toEqual({cmi_json:null,lesson_status:null});
@@ -142,6 +144,8 @@ describe('LMS immutable cycle evidence, D1 SQLite transaction',()=>{
     expect(one(db,"SELECT COUNT(*) AS n FROM lms_ciclo_evidencias")).toEqual({n:0});
     expect(one(db,"SELECT archived_cycle_id FROM lms_xapi_statements WHERE id=500"))
       .toEqual({archived_cycle_id:null});
+    expect(one(db,"SELECT COUNT(*) AS n FROM lms_completion_diagnostics_snapshots WHERE matricula_id=384"))
+      .toEqual({n:1});
     expect(one(db,"SELECT COUNT(*) AS n FROM audit_logs")).toEqual({n:0});
   });
   it('rejects cross-tenant attempts with no archived or mutated evidence',async()=>{

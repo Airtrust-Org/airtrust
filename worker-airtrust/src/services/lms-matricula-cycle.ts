@@ -527,6 +527,8 @@ export async function resetMatriculaForNewCycle(
          json_object('status',m.status,'progresso_pct',m.progresso_pct,
            'score_final',m.score_final,'tentativas',m.tentativas,
            'data_inicio',m.data_inicio,'data_conclusao',m.data_conclusao,
+           'data_matricula',m.data_matricula,'data_expiracao',m.data_expiracao,
+           'ultimo_slide',m.ultimo_slide,'ultima_pagina',m.ultima_pagina,
            'qualificacao_historico_id',m.qualificacao_historico_id),
          (SELECT json_object(
            'lesson_status',p.lesson_status,'lesson_location',p.lesson_location,
@@ -535,7 +537,8 @@ export async function resetMatriculaForNewCycle(
            'score_scaled',p.score_scaled,'session_time',p.session_time,
            'total_time',p.total_time,'suspend_data',p.suspend_data,
            'launch_data',p.launch_data,'cmi_json',p.cmi_json,
-           'session_count',p.session_count)
+           'session_count',p.session_count,'last_commit_at',p.last_commit_at,
+           'updated_at',p.updated_at)
           FROM lms_progresso_scorm p WHERE p.matricula_id=m.id AND p.empresa_id=m.empresa_id),
          (SELECT json_group_array(json_object('tentativa',d.tentativa,'diagnostics_json',d.diagnostics_json))
             FROM lms_completion_diagnostics_snapshots d
@@ -567,6 +570,13 @@ export async function resetMatriculaForNewCycle(
            last_commit_at = datetime('now'),updated_at=datetime('now')
        WHERE matricula_id=? AND empresa_id=? AND ${markerExists}`)
       .bind(params.matriculaId,params.empresaId,...guarded),
+
+    // Diagnostic snapshots are scoped to the old attempts, not to the new
+    // cycle. Archive them above, then clear only the active-table copies in
+    // this same transaction. A rollback restores both automatically.
+    db.prepare(`DELETE FROM lms_completion_diagnostics_snapshots
+       WHERE empresa_id = ? AND matricula_id = ? AND ${markerExists}`)
+      .bind(params.empresaId,params.matriculaId,...guarded),
 
     db.prepare(`UPDATE lms_matriculas
        SET status = 'NAO_INICIADO',deleted_at=NULL,progresso_pct = 0,
