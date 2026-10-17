@@ -145,7 +145,7 @@ describe('frms-fadiga-checkin schema', () => {
     // Vitest 2 (Vite) cannot resolve node:sqlite via dynamic import; native Node require bypasses bundling.
     const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
     const source = readFileSync('src/routes/frms-fadiga-checkin-legacy.ts', 'utf8');
-    const sql = source.match(/`UPDATE frms_fadiga_checkin\s+SET[\s\S]*?WHERE id = \?`/)?.[0].slice(1, -1);
+    const sql = source.match(/`UPDATE frms_fadiga_checkin\s+SET[\s\S]*?WHERE id = \? AND empresa_id = \? AND funcionario_id = \? AND data_checkin = \? AND deleted_at IS NULL`/)?.[0].slice(1, -1);
     expect(sql).toBeTruthy();
 
     // Executa exatamente o UPDATE do handler, não uma cópia simplificada do SQL.
@@ -157,18 +157,18 @@ describe('frms-fadiga-checkin schema', () => {
 
     const db = new DatabaseSync(':memory:');
     try {
-      db.exec(`CREATE TABLE frms_fadiga_checkin (id TEXT PRIMARY KEY, ${columns.map((column) =>
+      db.exec(`CREATE TABLE frms_fadiga_checkin (id TEXT PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER, data_checkin TEXT, deleted_at TEXT, ${columns.map((column) =>
         `${column} ${column === 'oportunidade_sono_horas_24h' ? 'REAL' : 'TEXT'}`,
       ).join(', ')})`);
-      db.prepare('INSERT INTO frms_fadiga_checkin (id, horas_sono, oportunidade_sono_horas_24h) VALUES (?, ?, ?)')
-        .run('checkin-qa', 5, 8);
+      db.prepare('INSERT INTO frms_fadiga_checkin (id, empresa_id, funcionario_id, data_checkin, horas_sono, oportunidade_sono_horas_24h) VALUES (?, ?, ?, ?, ?, ?)')
+        .run('checkin-qa', 7, 70, '2026-10-16', 5, 8);
 
       const update = (opportunity: number | null) => db.prepare(sql!).run(
         ...placeholders.map((column) => column === 'oportunidade_sono_horas_24h' ? opportunity
           : column === 'horas_sono' ? 5
             : column === 'kss_score' ? 6
               : null),
-        'checkin-qa',
+        'checkin-qa', 7, 70, '2026-10-16',
       );
       // Cliente remove oportunidade do standby; ausência tem semântica NULL.
       update(null);
@@ -179,6 +179,15 @@ describe('frms-fadiga-checkin schema', () => {
       expect(Number(afterOmission.horas_sono)).toBe(5);
 
       update(6);
+      expect(db.prepare(
+        'SELECT oportunidade_sono_horas_24h FROM frms_fadiga_checkin WHERE id = ?',
+      ).get('checkin-qa')?.oportunidade_sono_horas_24h).toBe(6);
+
+      const badTenant = db.prepare(sql!).run(
+        ...placeholders.map((column) => column === 'oportunidade_sono_horas_24h' ? 9 : null),
+        'checkin-qa', 999, 70, '2026-10-16',
+      );
+      expect(badTenant.changes).toBe(0);
       expect(db.prepare(
         'SELECT oportunidade_sono_horas_24h FROM frms_fadiga_checkin WHERE id = ?',
       ).get('checkin-qa')?.oportunidade_sono_horas_24h).toBe(6);
