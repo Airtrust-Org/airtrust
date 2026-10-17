@@ -7,8 +7,8 @@ import { JSDOM } from 'jsdom';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const source = fs.readFileSync(path.join(root, 'scripts/validation/production-lms-active-course-certification-readonly.mjs'), 'utf8');
-const startMarker = 'frame.evaluate(({ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices }) => {';
-const endMarker = '}, { plan: answerPlan, location: currentLocation, allowAdaptiveRetry, requiredDecisionSlideIndices }).catch';
+const startMarker = 'frame.evaluate(({ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices, checklistSlideIndices }) => {';
+const endMarker = '}, { plan: answerPlan, location: currentLocation, allowAdaptiveRetry, requiredDecisionSlideIndices, checklistSlideIndices }).catch';
 const start = source.indexOf(startMarker);
 const end = source.indexOf(endMarker, start);
 assert.ok(start >= 0 && end > start, 'must execute real read-only driver callback');
@@ -39,7 +39,7 @@ function fixture({ initialSelection = false, disabled = false, legacy = false } 
   });
   const action = dom.window.eval(`(${callback})`);
   const step = (plan = [{ slideIndex: 10, indices: [1] }]) =>
-    action({ plan, location: '10/42', allowAdaptiveRetry: false, requiredDecisionSlideIndices: [] });
+    action({ plan, location: '10/42', allowAdaptiveRetry: false, requiredDecisionSlideIndices: [], checklistSlideIndices: [] });
   return { step, clicked, close: () => dom.window.close() };
 }
 
@@ -69,10 +69,12 @@ test('native disabled gate cannot be bypassed even with a selected response', ()
   } finally { f.close(); }
 });
 
-test('existing data-next navigation is preserved', () => {
+test('data-next now requires an authored selected answer before advancing', () => {
   const f = fixture({ legacy: true });
   try {
+    assert.equal(f.step().type, 'inline-quiz-authored-answer');
+    assert.deepEqual(f.clicked, ['answer-1']);
     assert.equal(f.step().type, 'inline-quiz-next');
-    assert.deepEqual(f.clicked, ['next']);
+    assert.deepEqual(f.clicked, ['answer-1', 'next']);
   } finally { f.close(); }
 });
