@@ -330,7 +330,7 @@ describe('lms matriculas progress integrity', () => {
     'informa %s por funcionário e preserva a matrícula anterior', async (reason) => {
       reactivateCancelledMatriculaMock.mockResolvedValue(reason);
       const { db, calls } = createMockDb([
-        ['SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CFIT', qualificacao_tipo_id: null }) }],
+        ['SELECT id, titulo, tipo_conteudo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CFIT', tipo_conteudo: 'scorm', qualificacao_tipo_id: null }) }],
         ['SELECT id, nome, setor_id FROM funcionarios', { all: () => ({ results: [{ id: 77, nome: 'Aluno QA', setor_id: 1 }] }) }],
         ['FROM lms_matriculas\n        WHERE curso_id = ?', { first: () => ({ id: 501, status: 'CANCELADO', deleted_at: '2026-09-15' }) }],
       ]);
@@ -354,7 +354,7 @@ describe('lms matriculas progress integrity', () => {
     'não trata falha posterior ao insert como conflito de inserção: %s', async (message) => {
     stampLmsEnrollmentEvidenceProfileMock.mockRejectedValue(new Error(message));
     const { db, calls } = createMockDb([
-      ['SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CFIT', qualificacao_tipo_id: null }) }],
+      ['SELECT id, titulo, tipo_conteudo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CFIT', tipo_conteudo: 'scorm', qualificacao_tipo_id: null }) }],
       ['SELECT id, nome, setor_id FROM funcionarios', { all: () => ({ results: [{ id: 77, nome: 'Aluno QA', setor_id: 1 }] }) }],
       ['FROM lms_matriculas\n        WHERE curso_id = ?', { first: () => null }],
       ['INSERT INTO lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 777 } }) }],
