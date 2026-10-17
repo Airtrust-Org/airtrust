@@ -97,8 +97,8 @@ BEGIN
        AND fs.deleted_at IS NULL
        AND fs.assinatura_aluno_timestamp IS NOT NULL
        AND fs.assinatura_instrutor_timestamp IS NOT NULL
-       AND fs.status IN ('APROVADO','CONCLUIDA')
-       AND fs.aprovado = 1
+       AND fs.status IN ('APROVADO','NAO_APROVADO','CONCLUIDA')
+       AND fs.aprovado IN (0, 1)
   ) THEN RAISE(ABORT, 'INDIVIDUAL_CHECK_FICHE_NOT_SIGNED') END;
 END;
 
@@ -113,8 +113,8 @@ BEGIN
        AND fs.deleted_at IS NULL
        AND fs.assinatura_aluno_timestamp IS NOT NULL
        AND fs.assinatura_instrutor_timestamp IS NOT NULL
-       AND fs.status IN ('APROVADO','CONCLUIDA')
-       AND fs.aprovado = 1
+       AND fs.status IN ('APROVADO','NAO_APROVADO','CONCLUIDA')
+       AND fs.aprovado IN (0, 1)
   ) THEN RAISE(ABORT, 'INDIVIDUAL_CHECK_FICHE_NOT_SIGNED') END;
 END;
 

@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-14",
     "last_reconciled_against": "0554 simulator individual check evidence schema reviewed, remote apply pending",
-    "schema_v2_digest": "c4e840b28ea5631f10af57b962690b3cfd55755df1c9dcc2c32a240601605cd8",
+    "schema_v2_digest": "dc8982c5a5cdfaee2455655944180f6e7146dcf6f31338709332d633d433f4c7",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1582,8 +1582,10 @@
     {
       "change_file": "0554_simulator_individual_check_evidence.sql",
       "change_id": "simulator-individual-check-evidence-0554",
-      "sha256": "34bfa7a113334432fffb2f3becf0e5ab1cbcbeba1e9542b4b9c2e025ec33aefe",
-      "targets": ["sessoes_checks_resultados_individuais"],
+      "sha256": "332fc97b61d53749e4d9591480ffeb4e8326421ebe78f1def4e39e2ef24b64a9",
+      "targets": [
+        "sessoes_checks_resultados_individuais"
+      ],
       "domain": "Simuladores: individual signed check evidence with tenant and per-fiche scope",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",

@@ -87,7 +87,7 @@ describe('Schema V2 0554 — simulator check evidence belongs to a person', () =
     // The second fiche gets its own signature, without inheriting first result.
     db!.exec(`UPDATE fichas_sessao SET
       assinatura_instrutor_timestamp='2026-10-12',
-      status='APROVADO', aprovado=1 WHERE id=102;`);
+      status='NAO_APROVADO', aprovado=0 WHERE id=102;`);
     insert(db!, { fiche: 102, employee: 202, approved: 0 });
     const rows = db!.prepare(
       'SELECT funcionario_id,aprovado FROM sessoes_checks_resultados_individuais ORDER BY funcionario_id',
@@ -96,6 +96,15 @@ describe('Schema V2 0554 — simulator check evidence belongs to a person', () =
       { funcionario_id: 201, aprovado: 1 },
       { funcionario_id: 202, aprovado: 0 },
     ]);
+  });
+
+  it('records explicit check failure even when the signed individual fiche was not approved', () => {
+    db = fixture();
+    db!.exec("UPDATE fichas_sessao SET assinatura_instrutor_timestamp='2026-10-12', status='NAO_APROVADO', aprovado=0 WHERE id=102;");
+    insert(db!, { fiche:102, employee:202, approved:0 });
+    const item = db!.prepare('SELECT funcionario_id, aprovado, estado FROM sessoes_checks_resultados_individuais').get();
+    expect(item).toEqual({ funcionario_id:202, aprovado:0, estado:'CONFIRMADO' });
+    expect(() => insert(db!, { fiche:102, employee:202, approved:1 })).toThrow(/UNIQUE constraint failed/);
   });
 
   it('cannot insert approval for a different employee or fiche/session', () => {
