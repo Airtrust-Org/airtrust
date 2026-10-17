@@ -45,6 +45,7 @@ import {
   type TrainingComplianceScope,
 } from '../services/training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from '../services/training-compliance-evidence-profile';
+import { nativeLmsComplianceEvidencePredicate } from '../services/training-compliance-native-lms-evidence';
 import { TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS, trainingComplianceEvidenceIsRealizedBy, trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
 import { summarizeTrainingComplianceCourses } from '../services/training-compliance-training-summary';
 const app = new Hono<{ Bindings: Env }>();
@@ -457,6 +458,10 @@ async function loadLmsEvidence(
   const matriculaCols = await columnSet(db, 'lms_matriculas');
   const hasProfile = matriculaCols.has('perfil_competencia');
   const profileSelect = hasProfile ? 'm.perfil_competencia' : 'NULL';
+  const nativeCompletionScope = nativeLmsComplianceEvidencePredicate(
+    await tableExists(db, 'lms_native_catalog_activation'),
+    await tableExists(db, 'qualificacoes_historico'),
+  );
   const { results } = await db
     .prepare(
       `SELECT m.id, m.funcionario_id, c.qualificacao_tipo_id AS tipo_id,
@@ -471,6 +476,7 @@ async function loadLmsEvidence(
           AND m.deleted_at IS NULL
           AND c.qualificacao_tipo_id IS NOT NULL
           AND UPPER(COALESCE(m.status, '')) <> 'CANCELADO'
+          AND ${nativeCompletionScope}
         ORDER BY m.funcionario_id, c.qualificacao_tipo_id,
                  datetime(COALESCE(m.data_conclusao, m.updated_at, m.created_at)) DESC, m.id DESC`,
     )
