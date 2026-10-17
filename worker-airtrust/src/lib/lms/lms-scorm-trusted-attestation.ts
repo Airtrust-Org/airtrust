@@ -22,8 +22,11 @@ export type TrustedScormAttestationPayload = {
   requiresAssessment: boolean;
   /** Hashes of sanitized independent browser traces. */
   browserEvidenceSha256: { CHROMIUM: string; WEBKIT: string };
-  /** SHA-256 of the verified generated certificate document, not a flag. */
-  certificateDocumentSha256: string;
+  /** One independently downloaded certificate per isolated browser enrollment. */
+  certificateDocuments: {
+    CHROMIUM: { enrollmentId: number; cycleId: number; qualificationHistoryId: number; documentId: string; sha256: string };
+    WEBKIT: { enrollmentId: number; cycleId: number; qualificationHistoryId: number; documentId: string; sha256: string };
+  };
   runs: ScormFunctionalBrowserRun[];
 };
 export type TrustedScormAttestation = {
@@ -55,7 +58,10 @@ export function serializeScormAttestation(payload: TrustedScormAttestationPayloa
       CHROMIUM: payload.browserEvidenceSha256.CHROMIUM,
       WEBKIT: payload.browserEvidenceSha256.WEBKIT,
     },
-    certificateDocumentSha256: payload.certificateDocumentSha256,
+    certificateDocuments: {
+      CHROMIUM: { ...payload.certificateDocuments.CHROMIUM },
+      WEBKIT: { ...payload.certificateDocuments.WEBKIT },
+    },
     runs,
   });
 }
@@ -86,7 +92,7 @@ export async function verifyTrustedScormAttestation(
   if (!exactKeys(p, [
     'kind','empresaId','cursoId','packageId','packageSha256','runtimeSha',
     'harnessSha','issuedAt','scope','requiresAssessment','browserEvidenceSha256',
-    'certificateDocumentSha256','runs',
+    'certificateDocuments','runs',
   ])) return false;
   if (p.kind !== TRUSTED_SCORM_ATTESTATION_KIND ||
       p.scope !== 'GOVERNED_STAGING_SYNTHETIC' ||
@@ -98,7 +104,7 @@ export async function verifyTrustedScormAttestation(
       !/^[a-f\d-]{36}$/.test(p.packageId) ||
       !SHA256.test(p.packageSha256) || !COMMIT.test(p.runtimeSha) ||
       !COMMIT.test(p.harnessSha) ||
-      !SHA256.test(p.certificateDocumentSha256) ||
+      !exactKeys(p.certificateDocuments, ['CHROMIUM','WEBKIT']) ||
       !exactKeys(p.browserEvidenceSha256, ['CHROMIUM','WEBKIT']) ||
       !SHA256.test(p.browserEvidenceSha256.CHROMIUM) ||
       !SHA256.test(p.browserEvidenceSha256.WEBKIT) ||
@@ -109,6 +115,23 @@ export async function verifyTrustedScormAttestation(
       Date.parse(p.issuedAt) > now + 60_000 ||
       now - Date.parse(p.issuedAt) > 30 * 86400_000 ||
       !HEX_SIGNATURE.test(envelope.signature)) return false;
+  const docs = p.certificateDocuments;
+  for (const browser of ['CHROMIUM','WEBKIT'] as const) {
+    const document = docs[browser];
+    if (!exactKeys(document, [
+      'enrollmentId','cycleId','qualificationHistoryId','documentId','sha256',
+    ]) || !Number.isSafeInteger(document.enrollmentId) || document.enrollmentId <= 0 ||
+      !Number.isSafeInteger(document.cycleId) || document.cycleId <= 0 ||
+      !Number.isSafeInteger(document.qualificationHistoryId) ||
+      document.qualificationHistoryId <= 0 ||
+      typeof document.documentId !== 'string' || !document.documentId.trim() ||
+      document.documentId.length > 128 ||
+      !SHA256.test(document.sha256)) return false;
+  }
+  if (docs.CHROMIUM.enrollmentId === docs.WEBKIT.enrollmentId ||
+      docs.CHROMIUM.cycleId === docs.WEBKIT.cycleId ||
+      docs.CHROMIUM.qualificationHistoryId === docs.WEBKIT.qualificationHistoryId ||
+      docs.CHROMIUM.documentId === docs.WEBKIT.documentId) return false;
   if (!Array.isArray(p.runs) || p.runs.length !== 2 ||
       p.runs.some(run => !exactKeys(run,
         ['harness','browser','packageSha256','cases']) ||
