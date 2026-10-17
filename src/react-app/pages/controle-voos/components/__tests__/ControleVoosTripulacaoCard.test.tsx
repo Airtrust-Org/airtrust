@@ -72,6 +72,7 @@ describe('ControleVoosTripulacaoCard — apresentação manual', () => {
 
   it('permite definir a apresentação ao adicionar segundo tripulante', async () => {
     render(<ControleVoosTripulacaoCard vooId={99} aeronaveId={20} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Adicionar tripulante' })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar tripulante' }));
     fireEvent.change(screen.getByLabelText('Tripulante'), { target: { value: '102' } });
     fireEvent.change(screen.getByLabelText('Hora de apresentação (manual)'), { target: { value: '08:05' } });
