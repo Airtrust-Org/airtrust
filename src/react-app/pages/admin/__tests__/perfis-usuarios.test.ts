@@ -14,8 +14,8 @@ describe('gestão de usuários — padronização de perfis', () => {
   });
 
   it.each([
-    ['ADMIN', 'ADMINISTRADOR', 'Administrador Geral'],
-    ['MANAGER', 'GESTOR', 'Administrador da Empresa'],
+    ['ADMIN', 'ADMINISTRADOR', 'Administrador'],
+    ['MANAGER', 'GESTOR', 'Gestor'],
     ['INSTRUCTOR', 'INSTRUTOR', 'Instrutor'],
     ['STUDENT', 'ALUNO', 'Aluno'],
     [' aluno ', 'ALUNO', 'Aluno'],

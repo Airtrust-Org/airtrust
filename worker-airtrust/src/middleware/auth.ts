@@ -20,6 +20,7 @@ import {
   resolveRequestedSessionRole,
 } from '../services/auth-session-roles';
 import { unauthorized, serviceUnavailable } from './error-handler';
+import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 
 const USUARIOS_TABLE_SQL =
@@ -212,14 +213,30 @@ export async function validateAccessTokenSecurityState(
     );
   }
 
-  if (!security.hasMembership) {
+  // A autorização global vem EXCLUSIVAMENTE da concessão persistida.
+  // Nunca confiar em role/empresa recebidos do JWT para elevar privilégios.
+  // O tenantMiddleware valida a existência e atividade da empresa selecionada.
+  let platformAdmin = false;
+  try {
+    platformAdmin = isPlatformAdminAccess(
+      await resolvePlatformAccessState(db, payload.sub),
+    );
+  } catch (e) {
+    console.error('[AUTH] Falha ao validar autorização global:', (e as Error).message);
+    return serviceUnavailable(
+      'Não foi possível validar as permissões da conta. Tente novamente.',
+      'PLATFORM_ACCESS_CHECK_UNAVAILABLE',
+    );
+  }
+
+  if (!security.hasMembership && !platformAdmin) {
     return unauthorized(
       'Usuário sem vínculo válido com o tenant do token.',
       'TENANT_MEMBERSHIP_INVALID',
     );
   }
 
-  return { role: security.role };
+  return { role: platformAdmin ? 'ADMINISTRADOR' : security.role };
 }
 
 async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<number | null> {
