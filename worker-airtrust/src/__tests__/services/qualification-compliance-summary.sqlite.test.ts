@@ -15,15 +15,63 @@ describe('getQualificationComplianceSummary sqlite', () => {
     db.database.exec(`
       ALTER TABLE funcionarios ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1;
       ALTER TABLE funcionarios ADD COLUMN status TEXT NOT NULL DEFAULT 'ATIVO';
+      ALTER TABLE funcionarios ADD COLUMN funcao_id INTEGER;
+      ALTER TABLE funcionarios ADD COLUMN aeronave TEXT;
       ALTER TABLE qualificacoes_tipos ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1;
       ALTER TABLE qualificacoes_tipos ADD COLUMN classe_requisito TEXT;
       ALTER TABLE qualificacoes_tipos ADD COLUMN is_check INTEGER NOT NULL DEFAULT 0;
 
-      CREATE TABLE qualificacoes_tipos_setores (
+      CREATE TABLE treinamento_requisitos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         empresa_id INTEGER NOT NULL,
-        tipo_id INTEGER NOT NULL,
-        setor_id INTEGER NOT NULL,
+        qualificacao_tipo_id INTEGER NOT NULL,
+        escopo TEXT NOT NULL,
+        setor_id INTEGER,
+        funcao_id INTEGER,
+        funcionario_id INTEGER,
+        condicao_id INTEGER,
+        aeronave_modelo TEXT,
+        perfil_competencia TEXT,
+        obrigatoriedade TEXT NOT NULL,
+        auto_matricular_ead INTEGER NOT NULL DEFAULT 0,
+        vigencia_inicio TEXT,
+        vigencia_fim TEXT,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        deleted_at TEXT
+      );
+
+      CREATE TABLE compliance_condicoes (
+        id INTEGER PRIMARY KEY,
+        empresa_id INTEGER NOT NULL,
+        deleted_at TEXT
+      );
+
+      CREATE TABLE funcionarios_compliance_condicoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        empresa_id INTEGER NOT NULL,
+        funcionario_id INTEGER NOT NULL,
+        condicao_id INTEGER NOT NULL,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        data_inicio TEXT,
+        data_fim TEXT,
+        deleted_at TEXT
+      );
+
+      CREATE TABLE aeronaves (
+        id INTEGER PRIMARY KEY,
+        empresa_id INTEGER NOT NULL,
+        modelo TEXT,
+        deleted_at TEXT
+      );
+
+      CREATE TABLE funcionarios_aeronaves (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        empresa_id INTEGER NOT NULL,
+        funcionario_id INTEGER NOT NULL,
+        aeronave_id INTEGER NOT NULL,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        data_inicio TEXT,
+        data_fim TEXT,
         deleted_at TEXT
       );
 
@@ -53,9 +101,13 @@ describe('getQualificationComplianceSummary sqlite', () => {
          SET classe_requisito = 'AVALIACAO', is_check = 1
        WHERE id = 106;
 
-      INSERT INTO qualificacoes_tipos_setores (empresa_id, tipo_id, setor_id)
-      VALUES (1, 105, 10), (1, 106, 10);
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, obrigatoriedade, ativo)
+      VALUES
+        (1, 105, 'SETOR', 10, 'OBRIGATORIA', 1),
+        (1, 106, 'SETOR', 10, 'OBRIGATORIA', 1);
 
+      -- Vínculo/catálogo não é necessário: a obrigação vem exclusivamente da matriz canônica.
       INSERT INTO licencas (empresa_id, funcionario_id, tipo, data_vencimento)
       VALUES (1, 1000, 'CMA', '2099-12-31');
     `);
@@ -91,7 +143,7 @@ describe('getQualificationComplianceSummary sqlite', () => {
       nao_realizados: 2,
       compliance_pct: 50,
       cobertura: 'PARCIAL',
-      escopo_modelo: 'SETOR_OU_TRANSVERSAL',
+      escopo_modelo: 'MATRIZ_CANONICA',
     });
   });
 });
