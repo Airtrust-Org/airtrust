@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { signGovernedScormEvidence } from '../ci/sign-scorm-functional-attestation.mjs';
@@ -17,8 +17,11 @@ function fixture(){
   const dir=mkdtempSync(join(tmpdir(),'airtrust-scorm-sign-test-'));
   const zip=Buffer.from('SYNTHETIC TEST ZIP NOT A REAL TRAINING PACKAGE');
   const zipPath=join(dir,'candidate.zip');writeFileSync(zipPath,zip);
-  const pdfPath=join(dir,'cert.pdf');
-  writeFileSync(pdfPath,Buffer.from('%PDF-1.4\n'+('test synthetic document\n').repeat(12)+'%%EOF\n'));
+  const pdfPaths={CHROMIUM:join(dir,'chromium.pdf'),WEBKIT:join(dir,'webkit.pdf')};
+  for(const [browser,file] of Object.entries(pdfPaths)){
+    writeFileSync(file,Buffer.from('%PDF-1.4\n'+
+      ('test synthetic '+browser+' document\n').repeat(12)+'%%EOF\n'));
+  }
   const runtimeSha='a'.repeat(40),harnessSha='b'.repeat(40);
   const candidate={scope:'GOVERNED_STAGING_SYNTHETIC',
     empresaId:6,cursoId:23,packageId:'123e4567-e89b-42d3-a456-426614174000',
@@ -31,7 +34,14 @@ function fixture(){
     runtimeSha,harnessSha,syntheticEnrollment:true,
     persistedBackendEvidence:true,verifiedCrossTenantDenial:true,
     verifiedIndependentCycle:true,qualificationHistoryVerified:true,
-    certificateDocumentVerified:true,
+    certificateDocumentVerified:true,certificateDownloadHttpStatus:200,
+    certificateDocument:{
+      enrollmentId:browser==='CHROMIUM'?1001:1002,
+      cycleId:browser==='CHROMIUM'?2001:2002,
+      qualificationHistoryId:browser==='CHROMIUM'?3001:3002,
+      documentId:browser==='CHROMIUM'?'qa-doc-chromium':'qa-doc-webkit',
+      sha256:sha(readFileSync(pdfPaths[browser])),
+    },
     cases:checks.map(name=>({name,status:'PASS'})),
   });
   const chromiumFile=join(dir,'chromium.json');
@@ -39,9 +49,9 @@ function fixture(){
   const save=(browser,file)=>writeFileSync(file,JSON.stringify(browserRow(browser)));
   save('CHROMIUM',chromiumFile);save('WEBKIT',webkitFile);
   const sign=(overrides={})=>signGovernedScormEvidence({
-    candidate,chromiumFile,webkitFile,certificatePdfFile:pdfPath,
+    candidate,chromiumFile,webkitFile,certificatePdfFiles:pdfPaths,
     secret,runtimeSha,harnessSha,...overrides});
-  return {dir,candidate,sign,chromiumFile,webkitFile,pdfPath,browserRow};
+  return {dir,candidate,sign,chromiumFile,webkitFile,pdfPaths,browserRow};
 }
 test('signer produces separate SHA-bound browser artifact hashes for complete synthetic QA',()=>{
   const f=fixture();try{
@@ -76,7 +86,7 @@ test('signer rejects ZIP drift, runtime mismatch, incomplete PDF and missing sec
     writeFileSync(f.candidate.zipPath,'different bytes');
     assert.throws(()=>f.sign(),/ZIP_SHA_DRIFT/);
     writeFileSync(f.candidate.zipPath,'SYNTHETIC TEST ZIP NOT A REAL TRAINING PACKAGE');
-    writeFileSync(f.pdfPath,'not a certificate');
+    writeFileSync(f.pdfPaths.CHROMIUM,'not a certificate');
     assert.throws(()=>f.sign(),/CERTIFICATE_DOCUMENT_UNVERIFIED/);
   }finally{rmSync(f.dir,{recursive:true,force:true});}
 });
@@ -95,5 +105,19 @@ test('legitimate formative ZIP requires both browsers without fabricated scored 
     assert.equal(signed.payload.requiresAssessment,false);
     assert.equal(signed.payload.runs[0].cases.length,9);
     assert.equal(signed.payload.runs[1].cases.length,9);
+  }finally{rmSync(f.dir,{recursive:true,force:true});}
+});
+
+test('signer refuses to reuse a different learner certificate in the second browser',()=>{
+  const f=fixture();try{
+    const webkit=f.browserRow('WEBKIT');
+    const chromium=f.browserRow('CHROMIUM');
+    webkit.certificateDocument.documentId=chromium.certificateDocument.documentId;
+    writeFileSync(f.webkitFile,JSON.stringify(webkit));
+    assert.throws(()=>f.sign(),/CERTIFICATE_BROWSER_ISOLATION_VIOLATION/);
+    webkit.certificateDocument.documentId='qa-doc-webkit';
+    webkit.certificateDocument.sha256=chromium.certificateDocument.sha256;
+    writeFileSync(f.webkitFile,JSON.stringify(webkit));
+    assert.throws(()=>f.sign(),/CERTIFICATE_DOCUMENT_UNVERIFIED_WEBKIT/);
   }finally{rmSync(f.dir,{recursive:true,force:true});}
 });
