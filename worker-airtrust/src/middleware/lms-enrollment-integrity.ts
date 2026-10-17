@@ -339,7 +339,9 @@ async function handleRematriculation(
           SELECT 1 FROM lms_matricula_ciclos cy
            WHERE cy.matricula_id=? AND cy.empresa_id=?
              AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
-        ) THEN 1 ELSE json_extract('INVALID_CYCLE_STATE','
+        ) THEN 1 ELSE json_extract('INVALID_CYCLE_STATE','$') END`,
+      ).bind(matriculaId,empresaId)] : []),
+      c.env.DB.prepare(
         `UPDATE lms_matriculas
               SET status = 'NAO_INICIADO',
                   progresso_pct = 0,
