@@ -30,13 +30,13 @@ const base = (mode: 'commit' | 'reconcile' = 'commit') => ({
 });
 
 describe('Player 2.0: one SCORM completion readiness contract', () => {
-  it('reports recorded and missing slide numbers without turning a position badge into evidence', () => {
+  it('preserves visit diagnostics without making them a redundant requirement for passed SCORED courses', () => {
     const input = JSON.stringify({
       'cmi.core.lesson_location': '42/42', 'airtrust.total_slides': 42,
       'airtrust.viewed_slides': [1, 3, 42],
     });
     const result = evaluateScormClosureReadiness({ ...base(), cmiJson: input });
-    expect(result.eligible_for_server_verification).toBe(false);
+    expect(result.eligible_for_server_verification).toBe(true);
     expect(result.slide_coverage).toMatchObject({ total: 42, recorded: 3 });
     expect(result.slide_coverage?.missing_numbers).toContain(2);
     expect(result.slide_coverage?.missing_numbers).not.toContain(42);
