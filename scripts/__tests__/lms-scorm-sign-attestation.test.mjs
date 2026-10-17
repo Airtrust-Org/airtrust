@@ -78,3 +78,19 @@ test('signer rejects ZIP drift, runtime mismatch, incomplete PDF and missing sec
     assert.throws(()=>f.sign(),/CERTIFICATE_DOCUMENT_UNVERIFIED/);
   }finally{rmSync(f.dir,{recursive:true,force:true});}
 });
+
+test('legitimate formative ZIP requires both browsers without fabricated scored quiz',()=>{
+  const f=fixture();try{
+    f.candidate.requiresAssessment=false;
+    for(const [name,path] of [['CHROMIUM',f.chromiumFile],['WEBKIT',f.webkitFile]]){
+      const row=f.browserRow(name);
+      row.cases=row.cases.filter(item=>
+        item.name!=='ASSESSMENT_INSUFFICIENT'&&item.name!=='ASSESSMENT_APPROVED');
+      writeFileSync(path,JSON.stringify(row));
+    }
+    const signed=f.sign();
+    assert.equal(signed.payload.requiresAssessment,false);
+    assert.equal(signed.payload.runs[0].cases.length,6);
+    assert.equal(signed.payload.runs[1].cases.length,6);
+  }finally{rmSync(f.dir,{recursive:true,force:true});}
+});
