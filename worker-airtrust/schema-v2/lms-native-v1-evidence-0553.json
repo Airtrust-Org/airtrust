@@ -1,8 +1,0 @@
-{
-  "changeId": "lms-native-v1-evidence-0553",
-  "baselineId": "production-d1-baseline-v2-20260714",
-  "filePath": "worker-airtrust/schema-v2/changes/0553_lms_native_v1_evidence.sql",
-  "fileHash": "db8e31c3046b3d228f1113e8130f454bc41f95a2af77f251c0cc41f5c98b96e2",
-  "planPath": "worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0553.md",
-  "planHash": "c4534859021e175dc5c33c3d08dca28154d8a1779204e055aca69a7ebf2c4c28"
-}

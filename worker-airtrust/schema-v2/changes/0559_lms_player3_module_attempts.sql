@@ -2,7 +2,7 @@
 -- Versioned additive DDL ONLY; never use to mark a legacy enrollment complete.
 -- Prerequisite 0553 lms_native_v1_evidence applied by governed Schema V2.
 -- dry_run_required: true
--- rollback_plan_required: worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0554.md
+-- rollback_plan_required: worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0559.md
 SELECT json(CASE WHEN
   (SELECT COUNT(*) FROM sqlite_master WHERE name IN
     ('lms_player3_politicas','lms_player3_tentativas_modulares'))=0

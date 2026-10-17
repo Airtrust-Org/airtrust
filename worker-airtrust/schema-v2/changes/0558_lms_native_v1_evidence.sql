@@ -2,7 +2,7 @@
 -- Intentionally DOES NOT alter lms_cursos.tipo_conteudo (legacy CHECK).
 -- No enrollment, score, qualification, certificate or employee data is modified.
 -- dry_run_required: true
--- rollback_plan_required: worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0553.md
+-- rollback_plan_required: worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0558.md
 -- Preflight: all four tables must be absent; otherwise fail, never mask drift.
 SELECT json(CASE WHEN
   (SELECT COUNT(*) FROM sqlite_master

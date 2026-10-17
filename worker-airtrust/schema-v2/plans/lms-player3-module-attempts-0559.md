@@ -1,10 +1,10 @@
-# lms-player3-module-attempts-0554 — Schema V2 aditivo, NÃO APLICADO
+# lms-player3-module-attempts-0559 — Schema V2 aditivo, NÃO APLICADO
 
 ## Escopo
 Adicionar armazenamento imutável para política de avaliações aprovada por edição
 e tentativas oficiais independentes por módulo, preservando o legado SCORM.
 **Não altera matrículas, progresso, certificados, qualificações nem o curso original.**
-Depende do Schema V2 0553 (lms_native_edicoes e lms_native_matricula_edicoes)
+Depende do Schema V2 0558 (lms_native_edicoes e lms_native_matricula_edicoes)
 já aplicado oficialmente no ambiente e da ativação governada do catálogo Native
 (planejada separadamente). O versionamento deste arquivo não implica aplicação.
 
@@ -31,13 +31,13 @@ já aplicado oficialmente no ambiente e da ativação governada do catálogo Nat
    ambiente; não usar SQL remoto improvisado ou atualizar estado do aluno.
 2. Verificar `lms_native_edicoes`, `lms_native_matricula_edicoes`,
    `lms_matriculas`, `lms_matricula_ciclos`, `lms_cursos` reais no destino,
-   inclusive FKs, colunas e triggers de 0553. Conferir ledger Schema V2.
+   inclusive FKs, colunas e triggers de 0558. Conferir ledger Schema V2.
 3. Verificar ausência de `lms_player3_politicas` e
    `lms_player3_tentativas_modulares` e seus triggers/índices. O SQL exige
    preflight; qualquer divergência aborta o processo.
 4. Conferir o hash do SQL e deste plano no manifest
-   `lms-player3-module-attempts-0554.json`; executar os testes sintéticos
-   `scripts/__tests__/test_player3_module_attempts_0554.py` e smoke do
+   `lms-player3-module-attempts-0559.json`; executar os testes sintéticos
+   `scripts/__tests__/test_player3_module_attempts_0559.py` e smoke do
    Writer com staging. Criar recovery point antes do apply.
 5. Aplicar **somente pelo Schema V2/workflow autorizado**. Em staging, depois
    de aplicar, confirmar objetos criados inicialmente vazios, matrícula e

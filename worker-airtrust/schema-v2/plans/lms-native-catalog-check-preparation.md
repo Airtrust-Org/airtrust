@@ -170,7 +170,7 @@ O primeiro desenho da tabela de ativação protegia apenas o ato de ativação e
 
 ### SQL do 0550 confrontado com D1 real — ensaio de compatibilidade (11/10/2026)
 
-A verificação `scripts/__tests__/test_native_catalog_marker_0553_compatibility.py` exercita **os quatro triggers de `0553_lms_native_v1_evidence.sql`** sobre fixture SQLite em memória com o mesmo CHECK de formatos legado do staging e `PRAGMA foreign_keys=ON`:
+A verificação `scripts/__tests__/test_native_catalog_marker_0558_compatibility.py` exercita **os quatro triggers de `0558_lms_native_v1_evidence.sql`** sobre fixture SQLite em memória com o mesmo CHECK de formatos legado do staging e `PRAGMA foreign_keys=ON`:
 
 - O SQL versionado atual **recusa corretamente** a primeira edição Native quando o curso possui marca de ativação mas está fisicamente como `scorm`; o CHECK também impede atualizar a coluna para `native`.
 - Uma cópia **temporária, exclusivamente em memória**, dos quatro predicados com verificação adicional da tabela de ativação permitiu edição publicada, vínculo com ciclo, evento e tentativa para o curso marcado **da mesma empresa**, recusando outros cursos e empresa diferente; `foreign_key_check` e `integrity_check` passaram.
@@ -194,7 +194,7 @@ Foram confirmadas em **10/10 provas locais de laboratório**: percurso íntegro 
 
 **Arquivo de referência não executável:** `worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0555.REVIEW-ONLY.sql.txt`. É **texto de SQL**, não `schema-v2/changes/*.sql`; não possui change_id aplicado, manifest/hashes aprovados, release provenance, compensação autorizada ou permissão de staging. Sua extensão `.txt` impede o uso direto pelo seletor de arquivos SQL do executor Schema V2.
 
-O candidato parte do `0553_lms_native_v1_evidence.sql` versionado e requer suas quatro tabelas de evidência **vazias**, os quatro triggers conhecidos presentes, ausência das novas tabelas de ativação/intenção e `foreign_keys=ON`. A prova em memória executa **0550 original intacto → candidato consolidado → ativação fictícia → edição revisada/publicada → matrícula + ciclo + pin na mesma transação → eventos e tentativa privados**; não depende de mutação do `CHECK` físico de `lms_cursos`.
+O candidato parte do `0558_lms_native_v1_evidence.sql` versionado e requer suas quatro tabelas de evidência **vazias**, os quatro triggers conhecidos presentes, ausência das novas tabelas de ativação/intenção e `foreign_keys=ON`. A prova em memória executa **0550 original intacto → candidato consolidado → ativação fictícia → edição revisada/publicada → matrícula + ciclo + pin na mesma transação → eventos e tentativa privados**; não depende de mutação do `CHECK` físico de `lms_cursos`.
 
 O candidato só substitui as quatro verificações `tipo_conteudo='native'` dos triggers do 0550 por predicado Native efetivo com correlação `empresa_id + curso_id`. Acrescenta bloqueios de alterações de identidade de matrícula, retarget/ciclos extras legados, criação de pacote SCORM pós-ativação e mudanças do curso que converteriam conteúdo Native marcado em outro formato. A intenção temporária usa FK diferida para sentinela não preenchível; sem remoção da intenção antes do COMMIT, toda a transação é rejeitada. A admissão executa tanto `ativo=1` como status funcional `ATIVO`, com funcionário da mesma empresa e edição `PUBLISHED`.
 

@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-17",
-    "last_reconciled_against": "0553/0554 Player 3 pending governed apply; 0557 LMS cycle evidence archive pending governed apply",
-    "schema_v2_digest": "41cc28d0519eea9b85f9db51adc843e001bf332a173592d06c475bd185164845",
+    "last_reconciled_against": "0553 LGPD + 0554 Simuladores + 0557 LMS cycle (main), 0558 Native + 0559 Player3 (PR #1389)",
+    "schema_v2_digest": "b4e6cb8a4ea1ddf0491cea68c71f9080b200f9b88b935e4a5321df95497332d9",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1556,36 +1556,30 @@
       "note": "0552 is a nullable additive field for reported sleep opportunity. It does not backfill or change historical sleep, policy, coefficients, fatigue thresholds, tenant or RBAC. Runtime Worker must not be deployed until the governed migration has been applied and verified in the target environment. This is repo-reviewed only, not a production schema claim."
     },
     {
-      "change_file": "0553_lms_native_v1_evidence.sql",
-      "change_id": "lms-native-v1-evidence-0553",
-      "sha256": "db8e31c3046b3d228f1113e8130f454bc41f95a2af77f251c0cc41f5c98b96e2",
-      "targets": [
-        "lms_native_edicoes",
-        "lms_native_eventos",
-        "lms_native_matricula_edicoes",
-        "lms_native_tentativas"
-      ],
-      "domain": "LMS Native V1 — course edition, enrollment-cycle pin, evidence event ledger, immutable private grading attempts",
+      "change_file": "0553_retire_empty_lgpd_seg_info_model.sql",
+      "change_id": "retire-empty-lgpd-seg-info-model-0553",
+      "sha256": "63528601b365117d1f7d0aeaa46eb2ffffc912a091c4591001167dd1b4690610",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 empty LGPD qualification model retirement",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "lms-native-v1-evidence-0553.json",
-      "evidence": "worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0553.md",
-      "note": "Versioned additive candidate for Player 3, pending governed Schema V2 preflight and recovery point. No staging/production migration, student data writes, or course publication has occurred."
+      "reviewed_manifest": "retire-empty-lgpd-seg-info-model-0553.json",
+      "evidence": "worker-airtrust/schema-v2/plans/retire-empty-lgpd-seg-info-model-0553.md",
+      "note": "Data-only retirement permitted only when all checked active references are zero. Governed apply soft-deletes LGPD_SEG_INFO without transfers, enrolments or notifications."
     },
     {
-      "change_file": "0554_lms_player3_module_attempts.sql",
-      "change_id": "lms-player3-module-attempts-0554",
-      "sha256": "0c4873f58b2e2c17f52d183d55b317ee9d91ee70c56d84807b844a2adf04f282",
+      "change_file": "0554_simulator_individual_check_evidence.sql",
+      "change_id": "simulator-individual-check-evidence-0554",
+      "sha256": "bcbdcf8bd78c3a3d6393624e62ae70e691190e3ae2d35c0951c0bc56470b4bf5",
       "targets": [
-        "lms_player3_politicas",
-        "lms_player3_tentativas_modulares"
+        "sessoes_checks_resultados_individuais"
       ],
-      "domain": "Player3 certifying module policies and immutable per-stage attempt ledger",
+      "domain": "Simuladores: individual signed check evidence with tenant and per-fiche scope",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "lms-player3-module-attempts-0554.json",
-      "evidence": "worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0554.md",
-      "note": "Additive staged candidate dependent on 0553; no D1/production mutation or certificate issued. Requires governed schema workflow and actual staging E2E."
+      "reviewed_manifest": "simulator-individual-check-evidence-0554.json",
+      "evidence": "worker-airtrust/schema-v2/plans/simulator-individual-check-evidence-0554.md",
+      "note": "Additive table/indexes/triggers only. Never synthesizes per-employee approvals from legacy session-level results. Runtime rollout is separately gated after governed schema apply."
     },
     {
       "change_file": "0557_lms_cycle_evidence_archive.sql",
@@ -1601,6 +1595,38 @@
       "reviewed_manifest": "lms-cycle-evidence-0557.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-cycle-evidence-0557.md",
       "note": "Additive DDL only. Runtime atomic enrollment/cycle reset is gated on migration 0557 and consumes only active-cycle xAPI. No production D1 data write or production schema application claimed; requires SHA-specific governance and recovery. Immutable audit storage is enforced by D1 triggers: archive snapshots and attributed xAPI cannot be updated/deleted, and tenant/cycle mismatch aborts attribution."
+    },
+    {
+      "change_file": "0558_lms_native_v1_evidence.sql",
+      "change_id": "lms-native-v1-evidence-0558",
+      "sha256": "b0f5b51f26f2428d23468751f575fdfb03ce1583635ef980c33d9ae27b204f57",
+      "targets": [
+        "lms_native_edicoes",
+        "lms_native_eventos",
+        "lms_native_matricula_edicoes",
+        "lms_native_tentativas"
+      ],
+      "domain": "LMS Native V1 — course edition, enrollment-cycle pin, evidence event ledger, immutable private grading attempts",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-native-v1-evidence-0558.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0558.md",
+      "note": "Versioned additive candidate for Player 3, pending governed Schema V2 preflight and recovery point. No staging/production migration, student data writes, or course publication has occurred."
+    },
+    {
+      "change_file": "0559_lms_player3_module_attempts.sql",
+      "change_id": "lms-player3-module-attempts-0559",
+      "sha256": "a8c56c0bce48476f48e20bd5d5d33befe6c0becc98d2af309c4fc78d5d18d775",
+      "targets": [
+        "lms_player3_politicas",
+        "lms_player3_tentativas_modulares"
+      ],
+      "domain": "Player3 certifying module policies and immutable per-stage attempt ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-player3-module-attempts-0559.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0559.md",
+      "note": "Additive staged candidate dependent on 0558; no D1/production mutation or certificate issued. Requires governed schema workflow and actual staging E2E."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

@@ -2,11 +2,11 @@
 import sqlite3
 import unittest
 from pathlib import Path
-from test_lms_native_v1_evidence_0553 import db_fixture, create_edition, publish, bind
+from test_lms_native_v1_evidence_0558 import db_fixture, create_edition, publish, bind
 
 ROOT=Path(__file__).resolve().parents[2]
-BASE=ROOT/'worker-airtrust/schema-v2/changes/0553_lms_native_v1_evidence.sql'
-MIGRATION=ROOT/'worker-airtrust/schema-v2/changes/0554_lms_player3_module_attempts.sql'
+BASE=ROOT/'worker-airtrust/schema-v2/changes/0558_lms_native_v1_evidence.sql'
+MIGRATION=ROOT/'worker-airtrust/schema-v2/changes/0559_lms_player3_module_attempts.sql'
 HASH='a'*64
 
 def approve(db,ed,company=6,course=10):

@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0553_lms_native_v1_evidence.sql'
+CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0558_lms_native_v1_evidence.sql'
 CANDIDATE = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0555.REVIEW-ONLY.sql.txt'
 OLD_NATIVE = "c.tipo_conteudo='native'"
 EFFECTIVE_NATIVE = """(c.tipo_conteudo='native' OR (
@@ -121,7 +121,7 @@ def fixture():
     # Candidate 0555 now requires the actual 0554 modular policy/attempt
     # tables and trigger; rehearse the exact versioned predecessor first.
     stage_ddl = (ROOT / 'worker-airtrust/schema-v2/changes/'
-                 '0554_lms_player3_module_attempts.sql').read_text(encoding='utf8')
+                 '0559_lms_player3_module_attempts.sql').read_text(encoding='utf8')
     db.executescript(stage_ddl)
     candidate = CANDIDATE.read_text(encoding='utf8')
     if candidate.count("DROP TRIGGER lms_native_") != 4:

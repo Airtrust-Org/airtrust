@@ -45,7 +45,7 @@ test('does not implicitly trust a lower-numbered future Schema V2 critical chang
   const contents = 'ALTER TABLE lms_xapi_statements ADD COLUMN future TEXT;';
   const digest = createHash('sha256').update(contents).digest('hex');
   const reviewed = { '0557_lms_cycle_evidence_archive.sql': digest };
-  assert.equal(isReviewedCriticalChange('0553_lms_native_v1_evidence.sql', contents, reviewed), false);
+  assert.equal(isReviewedCriticalChange('0558_lms_native_v1_evidence.sql', contents, reviewed), false);
   assert.equal(isReviewedCriticalChange('0557_lms_cycle_evidence_archive.sql', contents, reviewed), true);
   assert.equal(isReviewedCriticalChange('0557_lms_cycle_evidence_archive.sql', contents + ' -- drift', reviewed), false);
 });

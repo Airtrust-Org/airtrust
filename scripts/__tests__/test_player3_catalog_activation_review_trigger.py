@@ -10,7 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 PLAN = ROOT / "worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0555.REVIEW-ONLY.sql.txt"
-BASE = ROOT / "worker-airtrust/schema-v2/changes/0554_lms_player3_module_attempts.sql"
+BASE = ROOT / "worker-airtrust/schema-v2/changes/0559_lms_player3_module_attempts.sql"
 START = "CREATE TRIGGER lms_player3_attempt_insert BEFORE INSERT"
 OLD = "c.tipo_conteudo='native'"
 ALIAS = ("(c.tipo_conteudo='native' OR (c.tipo_conteudo='scorm' AND EXISTS "
