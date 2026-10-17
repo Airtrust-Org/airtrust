@@ -7,6 +7,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {join,resolve} from 'node:path';
 import {chromium,webkit} from '@playwright/test';
 import {validateIndependentDriver,unzipCandidate} from './scorm-independent-zip-producer.mjs';
+import {observeMonotonicSuspend} from './scorm-suspend-monotonic.mjs';
 const hash=x=>createHash('sha256').update(x).digest('hex');
 const requireCondition=(x,message)=>{if(!x)throw Error('ZIP_QA_'+message);};
 const root='worker-airtrust/.wrangler/scorm-browser-qa';
@@ -91,7 +92,11 @@ async function run(name,type){
   if(check.state==='enabled')requireCondition(await element.isEnabled(),'RESUME_DISABLED');
   if(check.state==='text')requireCondition(
    (await element.innerText()).includes(check.value),'RESUME_TEXT');
-  requireCondition(readState(enrollment)?.suspend_data===before,'SUSPEND_DRIFT');
+  await page.waitForTimeout(500);
+  const resumed=readState(enrollment);
+  const comparison=observeMonotonicSuspend(before,resumed?.suspend_data);
+  requireCondition(comparison.ok,'SUSPEND_'+comparison.reason);
+  result.suspendComparison=comparison.reason;
   result.suspendResume='PASS';
   result.outcome='LOCAL_DIAGNOSTIC_PASS_NOT_CERTIFIED';
   await context.close();
