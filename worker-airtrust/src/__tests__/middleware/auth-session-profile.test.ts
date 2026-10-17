@@ -142,6 +142,27 @@ beforeEach(() => {
 });
 
 describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () => {
+  it('ADMINISTRADOR tem somente modo administrativo mesmo com perfis extras explícitos', async () => {
+    const db = createDb({
+      userId: 10, empresaId: 500, perfil: 'ADMINISTRADOR', membershipRole: 'admin',
+      explicitProfiles: [
+        { perfil: 'ADMINISTRADOR', ativo: 1 },
+        { perfil: 'INSTRUTOR', ativo: 1 },
+        { perfil: 'ALUNO', ativo: 1 },
+      ],
+    });
+    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['ADMINISTRADOR']);
+    expect(await resolveRequestedSessionRole(db, 10, 500, 'ALUNO')).toBeNull();
+  });
+
+  it('ADMINISTRADOR legado tem somente modo administrativo apesar de vínculos de aluno/instrutor', async () => {
+    const db = createDb({
+      userId: 10, empresaId: 500, perfil: 'admin', membershipRole: 'admin',
+      funcionarioId: 77, funcionarioEmpresaId: 500, instrutor: true, aluno: true,
+    });
+    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['ADMINISTRADOR']);
+  });
+
 
   it('GESTOR sempre recebe ALUNO mesmo quando ALUNO explícito está inativo', async () => {
     const db = createDb({
