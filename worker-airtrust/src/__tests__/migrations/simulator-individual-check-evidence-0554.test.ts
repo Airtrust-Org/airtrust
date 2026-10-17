@@ -100,10 +100,10 @@ describe('Schema V2 0554 — simulator check evidence belongs to a person', () =
 
   it('cannot insert approval for a different employee or fiche/session', () => {
     db = fixture();
-    expect(() => insert(db, { employee: 202 })).toThrow(/INDIVIDUAL_CHECK_SCOPE_INVALID/);
-    expect(() => insert(db, { fiche: 201, employee: 501, evaluator: 601, empresa: 7, check: 900 }))
+    expect(() => insert(db, { employee: 202, state: 'RASCUNHO', signed: false })).toThrow(/INDIVIDUAL_CHECK_SCOPE_INVALID/);
+    expect(() => insert(db, { fiche: 201, employee: 501, evaluator: 601, empresa: 7, check: 900, state:'RASCUNHO', signed: false }))
       .toThrow(/INDIVIDUAL_CHECK_SCOPE_INVALID/);
-    expect(() => insert(db, { fiche: 101, employee: 201, check: 999 }))
+    expect(() => insert(db, { fiche: 101, employee: 201, check: 999, state:'RASCUNHO', signed: false }))
       .toThrow(/INDIVIDUAL_CHECK_SCOPE_INVALID/);
   });
 
