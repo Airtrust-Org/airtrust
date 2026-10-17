@@ -34,11 +34,77 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     }
   });
 
-  await page.goto(BASE + '/login', { waitUntil: 'domcontentloaded' });
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(password);
-  await page.getByRole('button', { name: /entrar|sign in/i }).click();
-  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 });
+  // The previously captured real-browser trace (run #39037634258) showed
+  // POST /api/auth/login aborted by the browser (net::ERR_ABORTED), with no
+  // server response, while the SPA was clearing legacy caches. A single
+  // bounded retry is allowed ONLY for that transport failure, never 401/403
+  // or missing access. No mocked auth, JWT, storage or bypass of the guard.
+  const loginResponses: number[] = [];
+  const loginAborted: string[] = [];
+  page.on('response', (response) => {
+    const url = new URL(response.url());
+    if (url.hostname === API_HOST && url.pathname === '/api/auth/login' &&
+        response.request().method() === 'POST') {
+      loginResponses.push(response.status());
+    }
+  });
+  page.on('requestfailed', (request) => {
+    const url = new URL(request.url());
+    if (url.hostname === API_HOST && url.pathname === '/api/auth/login' &&
+        request.method() === 'POST' && request.failure() === 'net::ERR_ABORTED') {
+      loginAborted.push('ABORTED');
+    }
+  });
+
+  const loginPage = async () => {
+    await page.goto(BASE + '/login', { waitUntil: 'domcontentloaded' });
+    await page.locator('input[type="email"]').fill(email);
+    await page.locator('input[type="password"]').fill(password);
+    await page.getByRole('button', { name: /entrar|sign in/i }).click();
+  };
+  const completeRealLogin = async (timeoutMs: number): Promise<boolean> => {
+    // A tenant-scoped ADMIN may legitimately be offered an operational
+    // profile chooser before navigation. Choose only an actual manager/admin
+    // role shown by the server-driven UI, never an unrelated learner role.
+    const ready = await page.waitForFunction(() =>
+      !window.location.pathname.startsWith('/login') ||
+      Array.from(document.querySelectorAll('button')).some((button) =>
+        /^Entrar como (Administrador(?: Geral| da Empresa)?|Gestor)$/i.test(
+          (button.textContent || '').trim().split('\\n')[0].trim(),
+        )),
+    undefined, { timeout: timeoutMs }).then(() => true).catch(() => false);
+    if (!ready) return false;
+    if (!new URL(page.url()).pathname.startsWith('/login')) return true;
+
+    const managerOrAdmin = page.getByRole('button', {
+      name: /entrar como (administrador(?: geral| da empresa)?|gestor)/i,
+    }).first();
+    if (!(await managerOrAdmin.isVisible().catch(() => false))) {
+      throw new Error('FRMS_QA_AUTHORIZED_OPERATIONAL_PROFILE_NOT_PRESENT');
+    }
+    await managerOrAdmin.click();
+    return page.waitForURL((u) => !u.pathname.startsWith('/login'), {
+      timeout: timeoutMs,
+    }).then(() => true).catch(() => false);
+  };
+
+  await loginPage();
+  let loggedIn = await completeRealLogin(20_000);
+  if (!loggedIn && loginAborted.length > 0 && loginResponses.length === 0 &&
+      guard.violations.length === 0) {
+    // Retry the real form once after the browser abort; do not retry HTTP
+    // errors or repeatedly resend a successful credential request.
+    await loginPage();
+    loggedIn = await completeRealLogin(25_000);
+  }
+  if (!loggedIn) {
+    throw new Error(
+      'FRMS_QA_REAL_LOGIN_INCOMPLETE:responses=' +
+      (loginResponses.join(',') || 'none') +
+      ';aborted=' + loginAborted.length +
+      ';guard_violations=' + guard.violations.length,
+    );
+  }
 
   // Account is scoped to exactly tenant 999013 by the governed staging fixture.
   // With only one authorized tenant, the UI may omit the company selector.
