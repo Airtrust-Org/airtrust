@@ -26,6 +26,12 @@ on:
       target_enrollment_ids:
         required: true
         type: string
+      apply_scope:
+        description: 'Explicitly approve only the three score-proven IDs; dry-run uses none'
+        required: true
+        default: none
+        type: choice
+        options: [none, score-proven-three]
 permissions:
   contents: read
   actions: read
@@ -47,6 +53,7 @@ jobs:
       LMS_HIST_ATOMIC_MODE: ${{ inputs.mode }}
       LMS_HIST_ATOMIC_CONFIRMATION: ${{ inputs.confirmation }}
       LMS_HIST_ATOMIC_TARGET_ENROLLMENT_IDS: ${{ inputs.target_enrollment_ids }}
+      LMS_HIST_ATOMIC_APPLY_SCOPE: ${{ inputs.apply_scope }}
       PROD_API_BASE_URL: https://api.airtrust.online
       PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL }}
       PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
@@ -68,8 +75,10 @@ jobs:
           [[ -n "$LMS_HIST_ATOMIC_TARGET_ENROLLMENT_IDS" ]] || exit 1
           if [[ "$LMS_HIST_ATOMIC_MODE" == dry-run ]]; then
             [[ "$LMS_HIST_ATOMIC_CONFIRMATION" == AIRTRUST_LMS_HIST_ATOMIC_DRY_RUN ]] || exit 1
+            [[ "$LMS_HIST_ATOMIC_APPLY_SCOPE" == none ]] || exit 1
           elif [[ "$LMS_HIST_ATOMIC_MODE" == apply ]]; then
             [[ "$LMS_HIST_ATOMIC_CONFIRMATION" == AIRTRUST_LMS_HIST_ATOMIC_APPLY ]] || exit 1
+            [[ "$LMS_HIST_ATOMIC_APPLY_SCOPE" == score-proven-three ]] || { echo SCOPE_NOT_APPROVED >&2; exit 1; }
           else
             exit 1
           fi
@@ -106,8 +115,11 @@ jobs:
             .schema_version==1 and .repo_sha==$main and .production_sha==$prod and
             .mode=="dry-run" and .tenant==6 and .writes==0 and
             .personal_data==false and .authorized_count==10 and
-            .pending_review_count==0 and .candidates>=0 and .already_completed>=0 and
+            .pending_review_count==0 and .candidates==9 and .already_completed==1 and
+            .score_proven_pending_count==3 and .blocked_pending_count==6 and
             (.candidates+.already_completed)==10 and
+            .apply_scope=="none" and
+            (.assessment_hash|test("^[a-f0-9]{64}$")) and
             .pending_review==[] and
             (.authorized_ids_hash|test("^[a-f0-9]{64}$")) and
             (.candidate_hash|test("^[a-f0-9]{64}$"))
@@ -120,6 +132,7 @@ jobs:
           ')"
           [[ "$(jq -r .authorized_ids_hash "$RUNNER_TEMP/reviewed/result.json")" == "$expected_ids_hash" ]] || exit 1
           echo "REVIEWED_COHORT_HASH=$(jq -r .candidate_hash "$RUNNER_TEMP/reviewed/result.json")" >> "$GITHUB_ENV"
+          echo "REVIEWED_ASSESSMENT_HASH=$(jq -r .assessment_hash "$RUNNER_TEMP/reviewed/result.json")" >> "$GITHUB_ENV"
       - name: Check D1 recovery window before any API mutation
         if: ${{ inputs.mode == 'apply' }}
         shell: bash
@@ -142,10 +155,15 @@ jobs:
           test -s "$RUNNER_TEMP/result.json"
           jq -e --arg mode "$LMS_HIST_ATOMIC_MODE" '
             .mode==$mode and .tenant==6 and .personal_data==false and .authorized_count==10 and
-            (.mode=="dry-run" or (.writes==.candidates and .results.completed==.candidates and
-              .results.already_completed==.already_completed and .results.qualification_linked==10))
+            (.mode=="dry-run" or
+              (.apply_scope=="score-proven-three" and .candidates==9 and
+               .already_completed==1 and .score_proven_pending_count==3 and
+               .blocked_pending_count==6 and .writes==.results.completed and
+               .writes>=0 and .writes<=3 and .results.selected_verified==3 and
+               .results.blocked_preserved==6 and .results.already_completed==1 and
+               .results.qualification_linked==4))
           ' "$RUNNER_TEMP/result.json" >/dev/null
-          jq '{mode,repo_sha,production_sha,candidates,already_completed,pending_review_count,pending_review,raw_99_candidates,candidate_hash,authorized_count,by_course,excluded,writes,results:(.results|del(.detail)),scorm_cmi_changed,completion_date_rule,historical_training_date_not_fabricated}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+          jq '{mode,repo_sha,production_sha,candidates,already_completed,pending_review_count,pending_review,raw_99_candidates,candidate_hash,assessment_hash,authorized_count,by_course,excluded,apply_scope,score_proven_pending_count,blocked_pending_count,writes,results:(.results|del(.detail)),scorm_cmi_changed,completion_date_rule,historical_training_date_not_fabricated}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload sanitized non-personal evidence
         if: always()
         uses: actions/upload-artifact@v7
