@@ -278,16 +278,16 @@ export async function prepareReadinessAssessmentWrites(
   return {
     statements,
     result: {
-    assessmentId,
-    classification: assessment.classification,
-    baselineSessions: assessment.baselineSessions,
-    baselineReady: assessment.baselineReady,
-    baselineMedianRtMs: baseline.medianRtMs,
-    baselineLapseRate: baseline.lapseRate,
-    medianRtDeltaPct,
-    lapseRateDelta,
-    warningSignals: assessment.warningSignals,
-    criticalSignals: assessment.criticalSignals,
+      assessmentId,
+      classification: assessment.classification,
+      baselineSessions: assessment.baselineSessions,
+      baselineReady: assessment.baselineReady,
+      baselineMedianRtMs: baseline.medianRtMs,
+      baselineLapseRate: baseline.lapseRate,
+      medianRtDeltaPct,
+      lapseRateDelta,
+      warningSignals: assessment.warningSignals,
+      criticalSignals: assessment.criticalSignals,
     },
   };
 }
