@@ -23,7 +23,8 @@ function d1(sql,label){
 }
 const safeInt=(v)=>v==null?null:Number.isFinite(Number(v))?Number(v):null;
 const safeStamp=(v)=>typeof v==='string'&&/^\d{4}-\d\d-\d\d/.test(v)?v.slice(0,19):null;
-const state=(x)=>String(x??'').toUpperCase().slice(0,26);
+const state=(x)=>{const v=String(x??'').trim().toUpperCase();return ['NAO_INICIADO','EM_ANDAMENTO','CANCELADO','CONCLUIDO','REPROVADO','PASSED','FAILED','COMPLETE','COMPLETED','INCOMPLETE'].includes(v)?v:'UNKNOWN'};
+const action=(x)=>{const v=String(x??'').trim();return /^[A-Z0-9_]{1,75}$/.test(v)?v:'UNKNOWN'};
 const parse=(x)=>{try{return JSON.parse(String(x))}catch{return null}};
 const location=(cmi)=>{const obj=parse(cmi);const l=obj?.['cmi.location']??obj?.['cmi.core.lesson_location'];return typeof l==='string'&&/^\d{1,4}(?:\/\d{1,4})?$/.test(l)?l:null};
 const summaryScorm=(v)=>({score_raw:safeInt(v?.score_raw),lesson_status:state(v?.lesson_status),
@@ -53,7 +54,7 @@ async function main(){
  const audit=logs.map(l=>{
   const old=parse(l.old_values);const next=parse(l.new_values);
   const sc=old?.scorm_progress??old?.scorm??null;
-  return {action:String(l.action||'').slice(0,75),at:safeStamp(l.created_at),
+  return {action:action(l.action),at:safeStamp(l.created_at),
    previous_status:state(old?.status),previous_progress:safeInt(old?.progresso_pct??old?.progress),
    prior_scorm:summaryScorm(sc),
    new_status:state(next?.status),new_progress:safeInt(next?.progresso_pct??next?.progress),
@@ -63,7 +64,7 @@ async function main(){
  const report={schema_version:1,main_sha:source,production_sha:production,
   tenant:6,enrollment:384,course:34,mode:'read-only',writes:0,
   current:{status:state(c.status),progress:safeInt(c.progresso_pct),
-   slide:safeInt(c.ultimo_slide),location:typeof c.lesson_location==='string'?c.lesson_location.slice(0,32):null,
+   slide:safeInt(c.ultimo_slide),location:typeof c.lesson_location==='string'&&/^\\d{1,4}(?:\\/\\d{1,4})?$/.test(c.lesson_location)?c.lesson_location:null,
    updated_at:safeStamp(c.updated_at),started_at:safeStamp(c.data_inicio),
    ...summaryScorm(c)},
   cycles:cycles.map(x=>({number:safeInt(x.numero_ciclo),status:state(x.status),
