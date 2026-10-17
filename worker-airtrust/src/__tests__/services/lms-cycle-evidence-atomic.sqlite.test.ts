@@ -42,11 +42,7 @@ function fixture(withMigration=true) {
       id INTEGER PRIMARY KEY,empresa_id INTEGER,matricula_id INTEGER,
       tentativa INTEGER,diagnostics_json TEXT
     );
-    CREATE TABLE qualificacoes_historico (
-      id INTEGER PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER,
-      status TEXT, certificado_arquivo_id INTEGER, renovacao_de INTEGER,
-      validade_ate TEXT
-    );
+    ALTER TABLE qualificacoes_historico ADD COLUMN certificado_arquivo_id INTEGER;
     CREATE TABLE documentos (
       id INTEGER PRIMARY KEY, empresa_id INTEGER, arquivo TEXT, deleted_at TEXT
     );
@@ -55,7 +51,7 @@ function fixture(withMigration=true) {
       entity_id INTEGER,old_values TEXT,new_values TEXT,empresa_id INTEGER,created_at TEXT
     );
     INSERT INTO documentos VALUES(910,1,'certificado/910.pdf',NULL);
-    INSERT INTO qualificacoes_historico VALUES(700,1,77,'VIGENTE',910,NULL,'2027-10-03');
+    INSERT INTO qualificacoes_historico (id,empresa_id,funcionario_id,status,certificado_arquivo_id,renovacao_de,data_vencimento) VALUES(700,1,77,'VIGENTE',910,NULL,'2027-10-03');
     INSERT INTO lms_cursos VALUES (34,1,'lms/scorm/1/34/v1');
     INSERT INTO lms_matriculas VALUES
       (384,1,34,77,'CONCLUIDO',NULL,'evidencia original','2026-10-01',
