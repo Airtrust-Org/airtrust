@@ -51,6 +51,9 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
         id INTEGER PRIMARY KEY, tabela TEXT, acao TEXT, registro_id TEXT,
         dados_anteriores TEXT, dados_novos TEXT
       );
+      ALTER TABLE simulador_agendamentos ADD COLUMN data TEXT;
+      ALTER TABLE fichas_sessao ADD COLUMN data_sessao TEXT;
+      UPDATE qualificacoes_tipos SET validade=12 WHERE id=101;
       INSERT INTO funcionarios (id,empresa_id,setor_id,nome)
         VALUES (1100,1,11,'Instrutor'),(1200,1,11,'Examinador');
       INSERT INTO usuarios VALUES
@@ -62,6 +65,7 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
         (112,1,10,1000,1100,0,'NAO_APROVADO','2026-10-17','2026-10-17',NULL),
         (113,1,10,1001,1100,NULL,'AGUARDANDO_ASSINATURA_INSTRUTOR','2026-10-17',NULL,NULL);
     `);
+    db.database.exec("UPDATE fichas_sessao SET data_sessao='2026-10-17' WHERE empresa_id=1");
     if (withSchema) db.database.exec(migration);
   }
   afterEach(() => { db?.close(); db = null; });
@@ -91,7 +95,10 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
     const a = await (await request(111)).json() as any;
     const b = await (await request(112)).json() as any;
     const c = await (await request(113)).json() as any;
-    expect(a.data[0]).toMatchObject({ situacao:'APROVADO', aprovado_comprovado:true });
+    expect(a.data[0]).toMatchObject({
+      situacao:'APROVADO', aprovado_comprovado:true, data_conclusao:'2026-10-17',
+      data_vencimento:'2027-10-17',
+    });
     expect(b.data[0]).toMatchObject({ situacao:'REPROVADO', aprovado_comprovado:false });
     expect(c.data[0]).toMatchObject({ situacao:'PENDENTE_AVALIACAO', aprovado_comprovado:false });
   });
