@@ -291,7 +291,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v35'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v36'");
     expect(pilotSw).toContain('PILOT_NETWORK_TIMEOUT_MS = 4_000');
     expect(pilotSw).toContain('controller.abort()');
     expect(pilotSw).not.toContain("'/pilot/index.html'");
@@ -595,7 +595,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('fields.peso_padrao_ativo = false;');
     expect(pilotApp).toContain('applyStandardPassengerBaggageWeight(fields)');
     expect(pilotIndex).toContain('.pilot-standard-weight-toggle');
-    expect(pilotSw).toContain('airtrust-pilot-shell-v35');
+    expect(pilotSw).toContain('airtrust-pilot-shell-v36');
     expect(pilotApp).not.toContain("['Hora', 'hora', 'time'");
     expect(pilotApp).not.toContain("['Nota do combustível', 'nota'");
     expect(pilotSync).not.toContain('nota: optionalText(fueling?.nota)');
@@ -611,7 +611,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotRdvDraft).not.toContain('next.ciclos =');
   });
 
-  it('simplifica o fluxo operacional, não exibe PIN legado e preserva o vault antigo isolado', () => {
+  it('simplifica o fluxo operacional e recupera PIN legado somente quando há vault antigo', () => {
     expect(pilotIndex).toContain('1. Preparar voo');
     expect(pilotIndex).toContain('2. Registrar voo');
     expect(pilotIndex).toContain('3. Enviar');
@@ -632,12 +632,15 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('Nome de guerra: ');
     expect(pilotApp).toContain('ANAC: ');
     expect(pilotApp).toContain('Aguardando FRMS');
-    expect(pilotIndex).not.toContain('PIN offline');
+    expect(pilotIndex).toContain('PIN offline antigo');
+    expect(pilotIndex).toContain('id="legacy-vault-card"');
+    expect(pilotIndex).toContain('id="legacy-vault-pin"');
     expect(pilotIndex).not.toContain('Código local antigo');
     expect(pilotIndex).not.toContain('Atualizar armazenamento deste tablet');
     expect(pilotApp).toContain('await vault.openAutomatically()');
     expect(pilotApp).toContain("vaultOpenState.status !== 'ready'");
-    expect(pilotApp).not.toContain('showLegacyVaultMigration');
+    expect(pilotApp).toContain('vault.recoverLegacyPin(pin)');
+    expect(pilotVault).toContain('async recoverLegacyPin(pin)');
     expect(pilotVault).toContain("const DEVICE_DB_NAME = 'airtrust-pilot-v2'");
     expect(pilotVault).toContain('primaryDatabase.close()');
     expect(pilotVault).toContain("key_protection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY'");
