@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
-import type { Env } from '../../types';
+import type { Env, Variables } from '../../types';
 import { errorHandler } from '../../middleware/error-handler';
 
 vi.mock('../../middleware/tenant', () => ({
@@ -27,14 +27,22 @@ function makeApp(platformAdmin: boolean) {
       return stmt;
     },
   } as unknown as D1Database;
-  const app = new Hono<{ Bindings: Env }>();
+  const app = new Hono<{ Bindings: Env; Variables: Variables }>();
   app.onError(errorHandler);
   app.use('*', async (c, next) => {
     c.set('tenantContext', {
       empresaId: 1, empresaCodigo: 'airtrust', empresaNome: 'AirTrust',
       role: 'admin', plano: 'pro', permissions: ['*'],
     });
-    c.set('platformAccessState', { hasPersistedPlatformAdmin: platformAdmin });
+    c.set('platformAccessState', {
+      userId: 42,
+      isLegacyPlatformAdmin: false,
+      hasPersistedPlatformAdmin: platformAdmin,
+      hasSupportReadOnlyRole: false,
+      hasSupportElevatedRole: false,
+      supportGrants: [],
+      source: platformAdmin ? 'persisted' : 'none',
+    });
     await next();
   });
   app.route('/api/empresas', empresasUsuariosRoutes);
