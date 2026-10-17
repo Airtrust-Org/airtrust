@@ -139,7 +139,10 @@ describe('migration governance', () => {
     expect(files).toContain('0543_fdm_target_qualification_links.sql');
     expect(files).toContain('0545_training_compliance_canonical_pdf_alignment.sql');
     expect(files).toContain('0546_training_compliance_canonical_category_repair.sql');
-    const expectedLatest = 546;
+    // 0553 adds the reviewed LMS per-cycle evidence archive. It is
+    // a local migration mirror of the separately governed Schema V2 change.
+    expect(files).toContain('0553_lms_cycle_evidence_archive.sql');
+    const expectedLatest = 553;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(
