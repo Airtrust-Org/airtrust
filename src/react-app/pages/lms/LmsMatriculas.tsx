@@ -310,8 +310,17 @@ export function ModalMatricular({
       }
       await onMatriculasChanged(result.matriculas ?? []);
       if (result.erros === 0) onClose();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao matricular');
+    } catch {
+      // A lost response does not prove a failed write. Never auto-retry.
+      setSelected(new Set());
+      setBatchErrors([]);
+      setBatchErrorSummary('Não foi possível confirmar o resultado da operação. Atualize a lista e confira as matrículas antes de selecionar novamente.');
+      toast.warning('Resultado da matrícula não confirmado. Confira a lista antes de tentar novamente.');
+      try {
+        await onMatriculasChanged([]);
+      } catch {
+        // Refresh is best-effort; keep the uncertain-state warning visible.
+      }
     }
   }
 

@@ -37,6 +37,33 @@ describe('matrículas em lote com falhas', () => {
     expect(screen.getByRole('button', { name: 'Matricular' })).toBeDisabled();
   });
 
+  it('erro de rede nao provoca reenvio nem revela detalhes internos', async () => {
+    mutate.mockRejectedValue(new Error('sensitive internal backend detail'));
+    const onMatriculasChanged = vi.fn().mockResolvedValue(undefined);
+    render(<ModalMatricular cursoId={9} activeFuncionarioIds={new Set()} onClose={vi.fn()} onMatriculasChanged={onMatriculasChanged} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Selecionar Aluno QA' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Matricular' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Não foi possível confirmar o resultado da operação');
+    expect(alert).not.toHaveTextContent('sensitive internal backend detail');
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(onMatriculasChanged).toHaveBeenCalledWith([]);
+    expect(screen.getByRole('button', { name: 'Matricular' })).toBeDisabled();
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('não confirmado'));
+  });
+
+  it('mantem alerta quando atualizar a lista tambem falha', async () => {
+    mutate.mockRejectedValue(new Error('request failed'));
+    const onMatriculasChanged = vi.fn().mockRejectedValue(new Error('refresh failed'));
+    render(<ModalMatricular cursoId={9} activeFuncionarioIds={new Set()} onClose={vi.fn()} onMatriculasChanged={onMatriculasChanged} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Selecionar Aluno QA' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Matricular' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('confira as matrículas');
+    await waitFor(() => expect(onMatriculasChanged).toHaveBeenCalledTimes(1));
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Matricular' })).toBeDisabled();
+  });
+
   it('adverte que o estado é incerto para falhas inesperadas e respostas antigas', async () => {
     mutate.mockResolvedValueOnce({ criadas: 0, ignoradas: 0, erros: 1, detalhes_erros: [
       { funcionario_id: 77, funcionario_nome: 'Aluno QA', codigo: 'ESTADO_NAO_CONFIRMADO' },
