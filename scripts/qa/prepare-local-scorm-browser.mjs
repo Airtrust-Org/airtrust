@@ -13,6 +13,7 @@ import { strToU8, zipSync, unzipSync } from 'fflate';
 import { DatabaseSync } from 'node:sqlite';
 import { buildInteractiveM8QaFiles } from '../staging/lms-scorm-m8-fixture.mjs';
 import { validateIndependentDriver, unzipCandidate } from './scorm-independent-zip-producer.mjs';
+import { validateNavigationDiagnostic } from './scorm-navigation-diagnostic-driver.mjs';
 // External candidate is never published. This isolated QA course exists only
 // in disposable local D1/R2; the original course/edition is untouched.
 
@@ -64,7 +65,9 @@ async function main(){
   const externalFiles=externalBytes?unzipCandidate(externalBytes):null;
   const externalDriver=externalDriverPath?
     JSON.parse(fs.readFileSync(path.resolve(externalDriverPath),'utf8')):null;
-  if(externalDriver)validateIndependentDriver(externalDriver,externalSha,externalFiles);
+  if(externalDriver?.kind==='LOCAL_NAVIGATION_DIAGNOSTIC_ONLY')
+    validateNavigationDiagnostic(externalDriver,externalSha,externalFiles);
+  else if(externalDriver)validateIndependentDriver(externalDriver,externalSha,externalFiles);
   const launchFile=externalDriver?.launchFile??'index.html';
   const masteryScore=externalDriver?.masteryScore??70;
   assert(typeof launchFile==='string'&&launchFile.length<300,'LAUNCH_FILE_INVALID');

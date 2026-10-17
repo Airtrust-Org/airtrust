@@ -7,6 +7,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {join,resolve} from 'node:path';
 import {chromium,webkit} from '@playwright/test';
 import {validateIndependentDriver,unzipCandidate} from './scorm-independent-zip-producer.mjs';
+import {validateNavigationDiagnostic} from './scorm-navigation-diagnostic-driver.mjs';
 import {observeMonotonicSuspend} from './scorm-suspend-monotonic.mjs';
 const hash=x=>createHash('sha256').update(x).digest('hex');
 const requireCondition=(x,message)=>{if(!x)throw Error('ZIP_QA_'+message);};
@@ -22,26 +23,9 @@ requireCondition(fixture.origin==='http://127.0.0.1:8787'&&
  'DISPOSABLE_ONLY');
 requireCondition(sha===fixture.packageSha256,'ZIP_SHA_DRIFT');
 const files=unzipCandidate(bytes);
-if(driver.kind==='LOCAL_NAVIGATION_DIAGNOSTIC_ONLY'){
-  requireCondition(driver.packageSha256===sha&&driver.launchFile==='index.html'&&
-    files[driver.launchFile]&&driver.activationAuthorized===false,
-    'DIAGNOSTIC_EXACT_ZIP_OR_SCOPE_INVALID');
-  requireCondition(!driver.pass&&!driver.fail&&!('requiresAssessment' in driver),
-    'DIAGNOSTIC_CANNOT_SUPPLY_ASSESSMENT_VERDICTS');
-  requireCondition(Array.isArray(driver.requiredContent)&&
-    driver.requiredContent.length>0&&driver.requiredContent.length<=8&&
-    driver.requiredContent.every(x=>typeof x.selector==='string'&&
-      x.selector.length>0&&x.selector.length<240),'DIAGNOSTIC_CONTENT_INVALID');
-  requireCondition(Array.isArray(driver.resume?.actions)&&
-    driver.resume.actions.length>0&&driver.resume.actions.length<=5&&
-    driver.resume.actions.every(x=>x.op==='click'&&
-      typeof x.selector==='string'&&x.selector.length>0&&x.selector.length<240)&&
-    driver.resume?.assertion?.state==='visible'&&
-    typeof driver.resume.assertion.selector==='string',
-    'DIAGNOSTIC_NAVIGATION_ONLY');
-}else{
-  validateIndependentDriver(driver,sha,files);
-}
+if(driver.kind==='LOCAL_NAVIGATION_DIAGNOSTIC_ONLY')
+ validateNavigationDiagnostic(driver,sha,files);
+else validateIndependentDriver(driver,sha,files);
 const email=process.env.AIRTRUST_SCORM_QA_EMAIL || 'admin@airtrust.com';
 // Disposable local auth is seeded by prepare-local-lms-auth.mjs, never production.
 const password=process.env.AIRTRUST_SCORM_QA_PASSWORD || 'Admin@123';
