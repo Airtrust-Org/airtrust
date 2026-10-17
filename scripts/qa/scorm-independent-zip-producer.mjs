@@ -17,9 +17,17 @@ const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const SHA=/^[a-f0-9]{64}$/;
 const fail=code=>{throw Error('SCORM_ZIP_PROBE_'+code);};
 const check=(yes,code)=>{if(!yes)fail(code);};
-const statusOf=values=>String(values['cmi.success_status']||values['cmi.core.lesson_status']||
-  values['cmi.completion_status']||'').toLowerCase();
-const scoreOf=values=>Number(values['cmi.score.raw']??values['cmi.core.score.raw']);
+const statusOf=values=>{
+  const success=String(values['cmi.success_status']||'').toLowerCase();
+  if(success==='passed'||success==='failed')return success;
+  const lesson=String(values['cmi.core.lesson_status']||'').toLowerCase();
+  if(['passed','failed','completed'].includes(lesson))return lesson;
+  return String(values['cmi.completion_status']||lesson).toLowerCase();
+};
+const scoreOf=values=>{
+  const raw=values['cmi.score.raw'];
+  return Number(raw!==undefined&&raw!==''?raw:values['cmi.core.score.raw']);
+};
 const safeName=name=>typeof name==='string'&&name.length>0&&name.length<350&&
   !name.startsWith('/')&&!name.includes('\\')&&!name.split('/').includes('..')&&
   !name.includes('\0');
