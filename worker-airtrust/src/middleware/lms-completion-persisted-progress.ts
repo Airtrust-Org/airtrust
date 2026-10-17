@@ -212,7 +212,8 @@ export async function enforcePersistedLmsProgressEvidence(
               (SELECT COUNT(*)
                  FROM lms_xapi_statements x
                 WHERE x.matricula_id = m.id
-                  AND x.empresa_id = m.empresa_id) AS xapi_count
+                  AND x.empresa_id = m.empresa_id
+                  AND x.archived_cycle_id IS NULL) AS xapi_count
          FROM lms_matriculas m
          LEFT JOIN lms_progresso_scorm p
            ON p.matricula_id = m.id
