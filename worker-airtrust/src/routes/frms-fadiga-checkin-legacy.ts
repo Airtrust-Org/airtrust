@@ -91,13 +91,6 @@ function parseTimeToMinutes(value: string): number | null {
   return h * 60 + m;
 }
 
-function minutesToTime(minutes: number): string {
-  const normalized = ((minutes % 1440) + 1440) % 1440;
-  const h = Math.floor(normalized / 60);
-  const m = normalized % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
 async function isManagerPlus(c: FrmsContext): Promise<boolean> {
   return canSeeFrmsTeamScopeForContext(c);
 }
@@ -1200,8 +1193,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           userId || null,
           now,
           now,
-        )
-;
+        );
 
     const eventType = existing?.id ? 'CHECKIN_ATUALIZADO' : 'CHECKIN_CRIADO';
     const provenanceEvent = c.env.DB.prepare(
