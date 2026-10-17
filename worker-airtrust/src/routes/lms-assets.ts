@@ -24,9 +24,9 @@ import { getEmpresaIdOptional } from './escalas-shared';
 import type { Env, JwtPayload } from '../types';
 import { buildLmsContentSecurityPolicy } from '../lib/lms/security-headers';
 import { LMS_ASSET_TOKEN_COOKIE } from '../lib/lms/lms-asset-session';
+import { assertScormAssetRouteAllowed, isPrivilegedRole } from '../lib/lms/lms-scorm-asset-eligibility';
 
 const app = new Hono<{ Bindings: Env }>();
-
 
 const LMS_ASSET_TOKEN_MAX_AGE_SECONDS = 15 * 60;
 const LMS_PPTX_VIEWER_TOKEN_MAX_AGE_SECONDS = 5 * 60;
@@ -59,13 +59,6 @@ function shouldUseSecureAssetCookie(request: Request): boolean {
   } catch {
     return true;
   }
-}
-
-function isPrivilegedRole(rawRole: unknown): boolean {
-  const role = String(rawRole ?? '')
-    .trim()
-    .toLowerCase();
-  return ['admin', 'administrador', 'manager', 'gestor', 'instrutor', 'instructor'].includes(role);
 }
 
 export function parseScormLocationMarker(
@@ -534,7 +527,7 @@ app.post('/assets/session', auth(), async (c) => {
 
   if (matriculaId > 0) {
     const matricula = await c.env.DB.prepare(
-      `SELECT m.id, m.curso_id, m.funcionario_id, m.status, c.ativo, c.publicado, c.scorm_package_r2_prefix
+      `SELECT m.id, m.curso_id, m.funcionario_id, m.status, c.ativo, c.publicado, c.tipo_conteudo, c.scorm_package_r2_prefix
            FROM lms_matriculas m
            JOIN lms_cursos c
              ON c.id = m.curso_id
@@ -552,10 +545,12 @@ app.post('/assets/session', auth(), async (c) => {
         status: string;
         ativo: number;
         publicado: number;
+        tipo_conteudo: string | null;
         scorm_package_r2_prefix: string | null;
       }>();
 
     if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
+    await assertScormAssetRouteAllowed(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo, 'Curso nativo exige os assets do player próprio.');
 
     const canManage = isPrivilegedRole(accessPayload.role);
     const callerFuncionarioId = Number(accessPayload.funcionario_id ?? 0);
@@ -575,7 +570,7 @@ app.post('/assets/session', auth(), async (c) => {
     if (!isPreviewAllowedRole(accessPayload.role)) {
       throw new ApiError('Acesso negado', 403);
     }
-    await ensureCourseAssetAccess(c.env.DB, accessPayload, empresaId, requestedCursoId);
+    await ensureCourseAssetAccess(c.env.DB, accessPayload, empresaId, requestedCursoId, c.env);
     cursoId = requestedCursoId;
   } else {
     throw new ApiError('Informe matricula_id ou curso_id com preview=true', 400);
@@ -639,7 +634,7 @@ app.get('/pptx/viewer/:cursoId', async (c) => {
     throw new ApiError('Token de visualização não pode emitir outro token de visualização', 403);
   }
 
-  await ensureCourseAssetAccess(db, payload, empresaId, cursoId);
+  await ensureCourseAssetAccess(db, payload, empresaId, cursoId, c.env);
 
   const secret = c.env.JWT_SECRET;
   if (!secret) {
@@ -684,6 +679,7 @@ async function ensureCourseAssetAccess(
   payload: JwtPayload,
   empresaId: number,
   cursoId: number,
+  env: Env,
 ) {
   const tokenEmpresaId = Number(payload.empresa_id ?? 0);
   if (!tokenEmpresaId || tokenEmpresaId !== empresaId) {
@@ -695,15 +691,16 @@ async function ensureCourseAssetAccess(
 
   const curso = await db
     .prepare(
-      `SELECT id, ativo, publicado, scorm_package_r2_prefix
+      `SELECT id, ativo, publicado, tipo_conteudo, scorm_package_r2_prefix
          FROM lms_cursos
         WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
     )
     .bind(cursoId, empresaId)
-    .first<{ id: number; ativo: number; publicado: number; scorm_package_r2_prefix: string | null }>();
+    .first<{ id: number; ativo: number; publicado: number; tipo_conteudo: string | null; scorm_package_r2_prefix: string | null }>();
   if (!curso) {
     throw new ApiError('Curso não encontrado', 404);
   }
+  await assertScormAssetRouteAllowed(env, empresaId, cursoId, curso.tipo_conteudo, 'Curso nativo exige os assets do player próprio.');
 
   if (canManage) {
     return curso;
@@ -833,7 +830,7 @@ app.get('/scorm/assets/:empresa_id/:curso_id/*', async (c) => {
   const cursoId = c.req.param('curso_id');
   assertCourseAssetToken(payload, Number(cursoId));
   const cacheBuster = new URL(c.req.url).searchParams.get('airtrust_scorm')?.trim() || null;
-  const cursoAccess = await ensureCourseAssetAccess(c.env.DB, payload, Number(empresaId), Number(cursoId));
+  const cursoAccess = await ensureCourseAssetAccess(c.env.DB, payload, Number(empresaId), Number(cursoId), c.env);
   const wildcard = extractAssetPathFromRequest(
     new URL(c.req.url).pathname,
     `/api/lms/scorm/assets/${empresaId}/${cursoId}`,
@@ -904,7 +901,7 @@ app.get('/scorm/assets-by-curso/:cursoId/*', async (c) => {
     .first<{ id: number; empresa_id: number; scorm_package_r2_prefix: string | null }>();
   if (!curso) return c.text('Not found', 404);
   assertCourseAssetToken(payload, curso.id);
-  await ensureCourseAssetAccess(db, payload, curso.empresa_id, curso.id);
+  await ensureCourseAssetAccess(db, payload, curso.empresa_id, curso.id, c.env);
 
   const { object: foundObject, resolvedKey } = await resolveScormObject(
     c.env.BUCKET,
@@ -1036,11 +1033,11 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     .prepare(
       `
       SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.data_inicio,
-        c.id AS curso_id, c.titulo, c.scorm_versao,
+        c.id AS curso_id, c.titulo, c.scorm_versao, c.tipo_conteudo,
         c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado
       FROM lms_matriculas m
-      JOIN lms_cursos c ON c.id = m.curso_id
-      WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL
+      JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
+      WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL AND c.deleted_at IS NULL
     `,
     )
     .bind(matriculaId, empresaId)
@@ -1053,6 +1050,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       curso_id: number;
       titulo: string;
       scorm_versao: string | null;
+      tipo_conteudo: string | null;
       scorm_package_r2_prefix: string | null;
       scorm_launch_file: string | null;
       ativo: number;
@@ -1074,6 +1072,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       throw new ApiError('Curso não disponível para este usuário', 403);
     }
   }
+  await assertScormAssetRouteAllowed(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo, 'Curso nativo exige o player próprio.');
   if (!matricula.scorm_launch_file)
     throw new ApiError('Este curso não tem conteúdo SCORM configurado', 400);
 
@@ -1172,7 +1171,7 @@ app.get('/scorm/preview/:curso_id', async (c) => {
   const curso = await db
     .prepare(
       `
-      SELECT id, empresa_id, titulo, scorm_versao, scorm_launch_file, scorm_package_r2_prefix
+      SELECT id, empresa_id, titulo, scorm_versao, tipo_conteudo, scorm_launch_file, scorm_package_r2_prefix
       FROM lms_cursos
       WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
     `,
@@ -1183,11 +1182,13 @@ app.get('/scorm/preview/:curso_id', async (c) => {
       empresa_id: number;
       titulo: string;
       scorm_versao: string | null;
+      tipo_conteudo: string | null;
       scorm_launch_file: string | null;
       scorm_package_r2_prefix: string | null;
     }>();
 
   if (!curso) throw new ApiError('Curso não encontrado', 404);
+  await assertScormAssetRouteAllowed(c.env, empresaId, curso.id, curso.tipo_conteudo, 'Curso nativo não pode usar a prévia SCORM.');
   assertCourseAssetToken(payload, curso.id, { preview: true });
   if (!curso.scorm_launch_file)
     throw new ApiError('Este curso não tem conteúdo SCORM configurado', 400);
@@ -2661,7 +2662,7 @@ app.get('/pdf/asset/:cursoId', async (c) => {
     throw new ApiError('Token de visualização não é válido para PDF', 403);
   }
 
-  await ensureCourseAssetAccess(db, payload, empresaId, cursoId);
+  await ensureCourseAssetAccess(db, payload, empresaId, cursoId, c.env);
 
   const curso = await db
     .prepare(
@@ -2698,7 +2699,7 @@ app.get('/pptx/asset/:cursoId', async (c) => {
 
   assertPptxViewerAssetToken(payload, cursoId);
 
-  await ensureCourseAssetAccess(db, payload, empresaId, cursoId);
+  await ensureCourseAssetAccess(db, payload, empresaId, cursoId, c.env);
 
   const curso = await db
     .prepare(

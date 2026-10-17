@@ -17,6 +17,8 @@ type PreviewProps = {
   serverSeenLessonIds?: readonly string[];
   onRecordLessonVisit?: (unitId: string) => void;
   onSubmitAssessment?: (answers: Array<{ questionId: string; optionId: string }>) => void;
+  onCheckPractice?: (questionId: string, optionId: string) => void;
+  practiceFeedback?: { questionId: string; optionId: string; correct: boolean; feedback: string } | null;
   evidenceBusy?: boolean;
 };
 
@@ -111,7 +113,7 @@ function ProtectedNativeMedia({ asset, type, alt, stacked = false, fetchAsset }:
  */
 export default function NativeCoursePreview({
   course, resolveAssetHref, fetchAuthorizedAsset, initialUnitId,
-  serverSeenLessonIds, onRecordLessonVisit, onSubmitAssessment, evidenceBusy = false,
+  serverSeenLessonIds, onRecordLessonVisit, onSubmitAssessment, onCheckPractice, practiceFeedback, evidenceBusy = false,
 }: PreviewProps) {
   const [unitIndex, setUnitIndex] = useState(() => {
     const index = initialUnitId ? course.units.findIndex((u) => u.id === initialUnitId) : -1;
@@ -135,7 +137,20 @@ export default function NativeCoursePreview({
 
   const mediaBlocks = unit.blocks.filter((block) => block.type === 'image' || block.type === 'video');
   const contentBlocks = unit.blocks.filter((block) => block.type !== 'image' && block.type !== 'video');
-  const isActivity = unit.kind === 'scenario' || unit.kind === 'assessment';
+  const isActivity = unit.kind === 'practice' || unit.kind === 'scenario' || unit.kind === 'assessment';
+  // Legacy scenarios may still be mandatory; practice never contributes to
+  // certifying attempts, even when its answer happens to be correct.
+  const practiceIds = new Set(course.units.filter((candidate) => candidate.kind === 'practice')
+    .flatMap((candidate) => candidate.questionIds));
+  const certifyingQuestions = course.questions.filter((q) => !practiceIds.has(q.id));
+  const assessmentIndexes = course.units.flatMap((candidate, i) =>
+    candidate.kind === 'assessment' ? [i] : []);
+  // Module-scored courses have several assessment units but no invented
+  // standalone final exam. The current staging API accepts only the consolidated
+  // certifying attempt, so don't offer a premature impossible submission.
+  const canSubmitOfficialAttempt = (unit.kind === 'assessment' &&
+      unitIndex === assessmentIndexes[assessmentIndexes.length - 1]) ||
+    (unit.kind === 'scenario' && assessmentIndexes.length === 0);
   const template = selectNativeLessonTemplate(unitIndex, unit);
   const vertical = template === 'wide-top' || template === 'wide-bottom' || template === 'banner-list';
   const reversed = template === 'media-left' || template === 'editorial-dashboard';
@@ -159,7 +174,9 @@ export default function NativeCoursePreview({
     (overlay ? ' lg:absolute lg:inset-0 lg:h-full' : '');
 
   const unitLabel = unit.kind === 'lesson' ? 'CONTEÚDO DO TREINAMENTO'
-    : unit.kind === 'scenario' ? 'DECISÃO OPERACIONAL' : 'AVALIAÇÃO';
+    : unit.kind === 'practice' ? 'FIXAÇÃO DO MÓDULO'
+    : unit.kind === 'scenario' ? 'DECISÃO OPERACIONAL'
+    : assessmentIndexes.length > 1 ? 'AVALIAÇÃO DO MÓDULO' : 'AVALIAÇÃO OFICIAL';
   const navigationProgress = ((unitIndex + 1) / course.units.length) * 100;
 
   function navigateTo(index: number) {
@@ -321,7 +338,7 @@ export default function NativeCoursePreview({
                           {question.prompt}
                         </legend>
                         <span className="block text-xs font-bold uppercase tracking-wide text-[#e65300]">
-                          {unit.kind === 'scenario' ? 'Decisão do cenário' : 'Questão'} {position + 1}
+                          {unit.kind === 'scenario' ? 'Decisão do cenário' : unit.kind === 'practice' ? 'Questão de fixação' : 'Questão'} {position + 1}
                         </span>
                         <div className="grid gap-2.5">
                           {question.options.map((option, optionIndex) => (
@@ -343,6 +360,22 @@ export default function NativeCoursePreview({
                             </label>
                           ))}
                         </div>
+                        {unit.kind === 'practice' && onCheckPractice && (
+                          <div className="mt-4 space-y-2">
+                            <button type="button" disabled={evidenceBusy || !choices[question.id]}
+                              onClick={() => onCheckPractice(question.id, choices[question.id])}
+                              className="rounded-full bg-[#123b5e] px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                              Conferir resposta de fixação
+                            </button>
+                            {practiceFeedback?.questionId === question.id &&
+                              practiceFeedback.optionId === choices[question.id] && (
+                                <p role="status" className="text-sm text-[#203c56]">
+                                  {practiceFeedback.correct ? 'Resposta correta. ' : 'Revise este conceito. '}
+                                  {practiceFeedback.feedback}
+                                </p>
+                              )}
+                          </div>
+                        )}
                       </fieldset>
                     );
                   })}
@@ -365,15 +398,22 @@ export default function NativeCoursePreview({
                   {serverSeenLessonIds?.includes(unit.id) ? 'Visita registrada no servidor' : 'Registrar visita a esta aula'}
                 </button>
               )}
-              {onSubmitAssessment && isActivity && course.questions.length > 0 && (
+              {unit.kind === 'assessment' && !canSubmitOfficialAttempt && (
+                <p role="status" className="text-sm text-[#536b82]">
+                  Avaliação modular: prossiga para os próximos módulos. Esta prévia
+                  mantém as seleções somente na sessão do navegador; a gravação
+                  independente de cada avaliação no servidor ainda está pendente.
+                </p>
+              )}
+              {onSubmitAssessment && canSubmitOfficialAttempt && certifyingQuestions.length > 0 && (
                 <div className="rounded-2xl border border-[#e1e9ef] bg-[#f7fafc] p-4">
                   <button type="button"
-                    disabled={evidenceBusy || course.questions.some((q) => !choices[q.id])}
-                    onClick={() => onSubmitAssessment(course.questions.map((q) => ({ questionId: q.id, optionId: choices[q.id] })))}
+                    disabled={evidenceBusy || certifyingQuestions.some((q) => !choices[q.id])}
+                    onClick={() => onSubmitAssessment(certifyingQuestions.map((q) => ({ questionId: q.id, optionId: choices[q.id] })))}
                     className="rounded-full bg-[#e65300] px-5 py-3 text-sm font-bold text-white hover:bg-[#bd4300] disabled:cursor-not-allowed disabled:opacity-50">
                     Enviar respostas para avaliação
                   </button>
-                  <p className="mt-2 text-sm text-[#536b82]">Todas as questões devem ser respondidas. O envio não conclui o curso.</p>
+                  <p className="mt-2 text-sm text-[#536b82]">Somente questões oficiais e decisões obrigatórias integram esta tentativa. Fixações não alteram a nota. O envio não conclui o curso.</p>
                 </div>
               )}
             </div>

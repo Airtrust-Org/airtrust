@@ -17,4 +17,3 @@ export function describeLmsQualificationFailure(error: LmsCompletionRejectedErro
       : 'Não foi possível confirmar a qualificação exigida por este curso. A matrícula não foi concluída — tente novamente.',
   };
 }
-

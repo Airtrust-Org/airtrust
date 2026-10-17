@@ -124,6 +124,44 @@ test('guard CLI exits non-zero when a change file is added without a contract en
   }
 });
 
+test('new Schema V2 numbers cannot collide across modules even with valid hashes and ledger', () => {
+  const ws = makeWorkspace();
+  try {
+    const frms = writeChange(
+      ws.changesDir,'0552_frms_sleep_opportunity.sql',
+      'CREATE TABLE frms_sleep_test (id INTEGER);',
+    );
+    const lms = writeChange(
+      ws.changesDir,'0552_lms_native_evidence.sql',
+      'CREATE TABLE lms_evidence_test (id INTEGER);',
+    );
+    const contract=contractFor([frms,lms]);
+    const r=evaluateStaleness({contract,rootDir:ws.root});
+    assert.equal(r.status,'FAIL');
+    assert.ok(r.issues.some(i=>i.code==='STALENESS_DUPLICATE_SCHEMA_V2_NUMBER'));
+  } finally {
+    rmSync(ws.root,{recursive:true,force:true});
+  }
+});
+
+test('historical 0454 dual migration remains grandfathered, independent 0552/0553 pass', () => {
+  const ws=makeWorkspace();
+  try {
+    const entries=[
+      ['0454_qualificacoes_override.sql','CREATE TABLE historical_a(id INTEGER);'],
+      ['0454_qualificacoes_override_reconcile.sql','CREATE TABLE historical_b(id INTEGER);'],
+      ['0552_frms_sleep.sql','CREATE TABLE new_frms(id INTEGER);'],
+      ['0553_lms_evidence.sql','CREATE TABLE new_lms(id INTEGER);'],
+    ].map(([name,sql])=>writeChange(ws.changesDir,name,sql));
+    const result=evaluateStaleness({
+      contract:contractFor(entries),rootDir:ws.root,
+    });
+    assert.equal(result.status,'PASS',JSON.stringify(result.issues));
+  } finally {
+    rmSync(ws.root,{recursive:true,force:true});
+  }
+});
+
 test('critical guard: a change touching a scoped table must be REFLECTED_IN_CONTRACT', () => {
   const ws = makeWorkspace();
   try {

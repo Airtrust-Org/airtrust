@@ -239,10 +239,13 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
       preComAnterior,
     );
 
-    // Falha injetada no INSERT do novo Histórico (statement 0): o anterior
-    // NUNCA deve virar RENOVADA sem sucessor real.
+    // Falha injetada no INSERT do novo Histórico, após a nova
+    // assertion atômica do predecessor.
+    const insertIndex = statements.findIndex((s) =>
+      s.sql.includes('INSERT INTO qualificacoes_historico'));
+    expect(insertIndex).toBeGreaterThanOrEqual(0);
     const corrupted = statements.map((s, i) =>
-      i === 0
+      i === insertIndex
         ? {
             sql: s.sql.replace(
               'INSERT INTO qualificacoes_historico',
@@ -280,6 +283,38 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
     expect(novo.renovacao_de).toBe(500);
   });
 
+  it.each(['CANCELADA', 'RENOVADA', 'PLANEJADA'])(
+    'bloqueia sucessor de histórico revogado após preflight (%s)', (status) => {
+      seedMatricula(10);
+      execSql(dbPath, `
+        INSERT INTO qualificacoes_historico
+          (id, empresa_id, funcionario_id, qualificacao_codigo, data_conclusao, status, renovada)
+        VALUES (800, 6, 77, 'QUAL-X', '2025-07-30', 'CONCLUIDA', 0);`);
+      const pre = {
+        ...preNoAnterior, anteriorAtivaId: 800,
+        anteriorAtivaObservacoes: null,
+      };
+      const statements = buildCompletionBatchStatements(
+        baseParams({ matriculaId: 10 }), pre);
+      execSql(dbPath, `UPDATE qualificacoes_historico
+        SET status='${status}' WHERE id=800;`);
+      const result = runSqliteBatch(dbPath, statements);
+      expect(result.committed).toBe(false);
+      expect(result.stderr).toContain('malformed JSON');
+      const original = querySql(
+        dbPath, 'SELECT status, renovada FROM qualificacoes_historico WHERE id=800;',
+      )[0] as Record<string, unknown>;
+      expect(original.status).toBe(status);
+      expect(original.renovada).toBe(0);
+      expect(querySql(dbPath, 'SELECT * FROM qualificacoes_historico;')).toHaveLength(1);
+      expect((querySql(dbPath,
+        'SELECT status FROM lms_matriculas WHERE id=10;')[0] as Record<string, unknown>).status)
+        .toBe('EM_ANDAMENTO');
+      expect(querySql(dbPath, 'SELECT * FROM lms_matricula_ciclos;')).toHaveLength(0);
+      expect(querySql(dbPath, 'SELECT * FROM audit_logs;')).toHaveLength(0);
+    },
+  );
+
   it('duas conclusões concorrentes: a segunda perde a UNIQUE constraint, seu batch inteiro reverte, retry vira reuso', () => {
     seedMatricula(4);
     seedMatricula(5);
@@ -314,7 +349,7 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
     const existingId = (
       querySql(dbPath, 'SELECT id FROM qualificacoes_historico;')[0] as Record<string, unknown>
     ).id as number;
-    const retryPre = { ...preNoAnterior, existingHistoricoId: existingId };
+    const retryPre = { ...preNoAnterior, existingHistoricoId: existingId, existingHistoricoStatus: 'CONCLUIDA' };
     const retryStatements = buildCompletionBatchStatements(
       baseParams({ matriculaId: 5, existingHistoricoId: existingId }),
       retryPre,
@@ -329,6 +364,66 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
     )[0] as Record<string, unknown>;
     expect(matricula5AposRetry.status).toBe('CONCLUIDO');
     expect(matricula5AposRetry.qualificacao_historico_id).toBe(existingId);
+  });
+
+  it.each(['CANCELADA', 'RENOVADA', 'PLANEJADA', null])(
+    'bloqueia reuso se o histórico mudar depois do preflight (%s)', (newStatus) => {
+      seedMatricula(7);
+      execSql(dbPath, `
+        INSERT INTO qualificacoes_historico
+          (id, empresa_id, funcionario_id, qualificacao_codigo, data_conclusao, status)
+        VALUES (777, 6, 77, 'QUAL-X', '2026-07-30', 'CONCLUIDA');`);
+      const pre = {
+        ...preNoAnterior, existingHistoricoId: 777,
+        existingHistoricoStatus: 'CONCLUIDA',
+      };
+      const batch = buildCompletionBatchStatements(
+        baseParams({ matriculaId: 7, existingHistoricoId: 777 }), pre);
+      const sqlStatus = newStatus === null ? 'NULL' : `'${newStatus}'`;
+      execSql(dbPath, `UPDATE qualificacoes_historico
+                        SET status = ${sqlStatus} WHERE id = 777;`);
+      const outcome = runSqliteBatch(dbPath, batch);
+      expect(outcome.committed).toBe(false);
+      expect(outcome.stderr).toContain('malformed JSON');
+      expect((querySql(dbPath,
+        'SELECT status FROM lms_matriculas WHERE id = 7;')[0] as Record<string, unknown>).status)
+        .toBe('EM_ANDAMENTO');
+      expect(querySql(dbPath, 'SELECT * FROM lms_matricula_ciclos;')).toHaveLength(0);
+      expect(querySql(dbPath, 'SELECT * FROM audit_logs;')).toHaveLength(0);
+    },
+  );
+
+  it('permite realizar PLANEJADA estável e não confirma contra outro tenant', () => {
+    seedMatricula(8);
+    execSql(dbPath, `
+      INSERT INTO qualificacoes_historico
+        (id, empresa_id, funcionario_id, qualificacao_codigo, data_conclusao, status)
+      VALUES (778, 6, 77, 'QUAL-X', '2026-07-30', 'PLANEJADA');`);
+    const pre = {
+      ...preNoAnterior, existingHistoricoId: 778,
+      existingHistoricoStatus: 'PLANEJADA',
+    };
+    const batch = buildCompletionBatchStatements(
+      baseParams({ matriculaId: 8, existingHistoricoId: 778 }), pre);
+    expect(runSqliteBatch(dbPath, batch).committed).toBe(true);
+    expect((querySql(dbPath,
+      'SELECT status FROM qualificacoes_historico WHERE id = 778;')[0] as Record<string, unknown>).status)
+      .toBe('CONCLUIDA');
+
+    // A second completion using an existing row from a different tenant
+    // must abort before creating any cycle or success audit.
+    seedMatricula(9);
+    const alienPre = {
+      ...preNoAnterior, existingHistoricoId: 778,
+      existingHistoricoStatus: 'CONCLUIDA',
+    };
+    execSql(dbPath, "UPDATE qualificacoes_historico SET empresa_id = 7 WHERE id = 778;");
+    const alien = buildCompletionBatchStatements(
+      baseParams({ matriculaId: 9, existingHistoricoId: 778 }), alienPre);
+    expect(runSqliteBatch(dbPath, alien).committed).toBe(false);
+    expect((querySql(dbPath,
+      'SELECT status FROM lms_matriculas WHERE id = 9;')[0] as Record<string, unknown>).status)
+      .toBe('EM_ANDAMENTO');
   });
 
   it('cinco retries idempotentes do mesmo batch (histórico já existente) nunca duplicam nem regridem', () => {
@@ -350,6 +445,7 @@ describe('lms-completion — atomicidade real (SQLite via CLI, não mock)', () =
       const retryPre = {
         ...preNoAnterior,
         existingHistoricoId: existingId,
+        existingHistoricoStatus: 'CONCLUIDA',
         currentCycleId: (cicloAtual?.id as number | undefined) ?? null,
       };
       const retry = buildCompletionBatchStatements(

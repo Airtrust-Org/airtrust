@@ -1147,6 +1147,12 @@ export default function LmsPlayer() {
     );
   }
 
+  // Never mount the legacy SCORM runtime or manual completion controls for Native.
+  // The separate page is backed by staging-only server admission and is read-only.
+  if (matricula.tipo_conteudo === 'native') {
+    navigate(`/lms/player/native/${id}`, { replace: true });
+    return null;
+  }
   // Redirect non-SCORM types to their own players
   if (matricula.tipo_conteudo === 'h5p') {
     navigate(`/lms/player/h5p/${id}`, { replace: true });

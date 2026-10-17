@@ -28,13 +28,13 @@ import {
 
 const app = new Hono<{ Bindings: Env }>();
 
-const InitSchema = z.object({
+const InitSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   idempotency_key: z.string().trim().min(1).max(200).optional(),
   skip_purge: z.boolean().optional(),
 });
 
-const CompleteSchema = z.object({
+const CompleteSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   upload_id: z
     .string()

@@ -10,7 +10,7 @@ import { safeLmsResponseErrorText } from '@/react-app/lib/lms-safe-error-respons
 
 export type ScormVersao = '1.2' | '2004' | null;
 export type ScormAssessmentPolicy = 'SCORED' | 'FORMATIVE';
-export type TipoConteudo = 'scorm' | 'h5p' | 'video' | 'pdf' | 'pptx';
+export type TipoConteudo = 'scorm' | 'h5p' | 'video' | 'pdf' | 'pptx' | 'native';
 export type MatriculaStatus =
   'NAO_INICIADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'REPROVADO' | 'CANCELADO';
 

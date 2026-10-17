@@ -6,6 +6,8 @@
  * - Endpoint de commit SCORM (runtime state)
  * - Geração automática de qualificação ao concluir
  */
+import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-guard';
+import { projectNativeCatalogEnrollments } from '../services/lms-native-catalog-course-projection';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -84,7 +86,6 @@ import { activeXapiFirst } from '../services/lms-active-xapi-read';
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 app.route('/convites', lmsMatriculasConvitesRoutes);
-
 function getCallerFuncionarioId(c: Context): number | null {
   const raw = c.get('funcionarioId' as never) as unknown;
   const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
@@ -309,7 +310,7 @@ app.get('/minhas-ead', async (c) => {
     .bind(funcionarioId, empresaId)
     .all<Record<string, unknown>>();
 
-  const data = (rows.results ?? []).map((row) => {
+  const data = (await projectNativeCatalogEnrollments(c.env, empresaId, rows.results ?? [])).map((row) => {
     const effectiveProgress = resolveLmsEffectiveProgress({
       status: row.status as string | null,
       progressoBruto: row.progresso_pct as number | null,
@@ -370,7 +371,7 @@ app.get('/minhas', async (c) => {
     .bind(funcionarioId, empresaId, limit, offset)
     .all<Record<string, unknown>>();
 
-  const data = (rows.results ?? []).map((row) => {
+  const data = (await projectNativeCatalogEnrollments(c.env, empresaId, rows.results ?? [])).map((row) => {
     const effectiveProgress = resolveLmsEffectiveProgress({
       status: row.status as string | null,
       progressoBruto: row.progresso_pct as number | null,
@@ -509,7 +510,7 @@ app.get('/:id', async (c) => {
   const canManage = hasRole(c, 'admin', 'manager');
   const callerFuncionarioId = canManage ? null : await resolveCallerFuncionarioId(c, db);
 
-  const matricula = await db
+  let matricula = await db
     .prepare(
       `
       SELECT m.*, c.titulo, c.tipo_conteudo, c.scorm_versao, c.scorm_launch_file, c.scorm_package_r2_prefix,
@@ -559,6 +560,7 @@ app.get('/:id', async (c) => {
     }
   }
 
+  [matricula] = await projectNativeCatalogEnrollments(c.env, empresaId, [matricula]);
   const tipoConteudo = (matricula.tipo_conteudo as string) ?? 'scorm';
 
   // Para SCORM: retornar progresso SCORM
@@ -689,14 +691,14 @@ app.post('/', async (c) => {
 
   // Verificar se curso existe e está publicado/ativo
   const cursoQuery = canManage
-    ? 'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL'
-    : 'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND publicado = 1 AND deleted_at IS NULL';
+    ? 'SELECT id, titulo, tipo_conteudo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL'
+    : 'SELECT id, titulo, tipo_conteudo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND publicado = 1 AND deleted_at IS NULL';
   const curso = await db
     .prepare(cursoQuery)
     .bind(curso_id, empresaId)
-    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null }>();
+    .first<{ id: number; titulo: string; tipo_conteudo: string | null; qualificacao_tipo_id: number | null }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
-
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, curso_id, curso.tipo_conteudo)) throw new ApiError('Matrícula Native exige o fluxo próprio.', 409, 'NATIVE_LEGACY_ENROLLMENT_BLOCKED');
   const funcionario = await db
     .prepare(
       `SELECT id, nome
@@ -944,12 +946,12 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
 
   const curso = await db
     .prepare(
-      'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL',
+      'SELECT id, titulo, tipo_conteudo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL',
     )
     .bind(curso_id, empresaId)
-    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null }>();
+    .first<{ id: number; titulo: string; tipo_conteudo: string | null; qualificacao_tipo_id: number | null }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
-
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, curso_id, curso.tipo_conteudo)) throw new ApiError('Matrícula Native exige o fluxo próprio.', 409, 'NATIVE_LEGACY_ENROLLMENT_BLOCKED');
   const loteAccess = await getEmployeeSectorAccess(c, empresaId);
   if (loteAccess.mode === 'restricted') {
     if (loteAccess.setorIds.length === 0) {
@@ -1274,7 +1276,7 @@ app.post('/scorm/commit', async (c) => {
       `
       SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.tentativas,
         m.qualificacao_historico_id,
-        c.id AS curso_id, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
+        c.id AS curso_id, c.tipo_conteudo, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
         c.qualificacao_tipo_id, c.titulo AS curso_titulo,
         qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
         qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1295,6 +1297,7 @@ app.post('/scorm/commit', async (c) => {
       tentativas: number;
       qualificacao_historico_id: number | null;
       curso_id: number;
+      tipo_conteudo: string | null;
       scorm_mastery_score: number | null;
       scorm_assessment_policy: 'FORMATIVE' | 'SCORED' | null;
       gerar_qualificacao_ao_concluir: number;
@@ -1330,19 +1333,20 @@ app.post('/scorm/commit', async (c) => {
       launch_data: string | null;
       cmi_json: string | null;
     }>();
-
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
   if (!canManage) {
     if (!callerFuncionarioId || matricula.funcionario_id !== callerFuncionarioId) {
       throw new ApiError('Acesso negado', 403);
     }
   }
-
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo)) {
+    throw new ApiError('Curso nativo exige checkpoints do player próprio.', 409);
+  }
+  // Do not bypass the current cycle guard when recording standard SCORM.
   await assertScormCommitCycle(db, empresaId, d.matricula_id, d.ciclo_id);
 
   // ─── Guard: prevent CONCLUIDO downgrade via SCORM commit ─────────────────
-  // Completed enrollments must never be downgraded to incomplete/failed/not attempted.
-  // Only idempotent commits preserving completion state are allowed.
+  // Completed enrollments allow only idempotent non-downgrading SCORM commits.
   const matriculaWasConcluido = matricula.status === 'CONCLUIDO';
   if (matriculaWasConcluido) {
     const incomingStatus = (d.lesson_status ?? d.completion_status ?? '').toLowerCase();
@@ -2547,6 +2551,9 @@ app.post('/:id/progresso-recuperacao/dry-run', requireRole('admin'), async (c) =
   const enrollment = await loadProgressRecoveryEnrollment(db, matriculaId, empresaId);
 
   if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, enrollment.curso_id, enrollment.tipo_conteudo)) {
+    throw new ApiError('Recuperação SCORM não pode alterar evidências Native.', 409, 'NATIVE_SCORM_RECOVERY_DENIED');
+  }
   const evaluation = evaluateProgressRecovery({
     enrollment,
     targetLessonLocation: target_lesson_location,
@@ -2625,6 +2632,9 @@ app.post('/:id/progresso-recuperacao/apply', requireRole('admin'), async (c) => 
 
   const enrollment = await loadProgressRecoveryEnrollment(db, matriculaId, empresaId);
   if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, enrollment.curso_id, enrollment.tipo_conteudo)) {
+    throw new ApiError('Recuperação SCORM não pode alterar evidências Native.', 409, 'NATIVE_SCORM_RECOVERY_DENIED');
+  }
 
   const evaluation = evaluateProgressRecovery({
     enrollment,
@@ -2776,6 +2786,9 @@ app.post('/:id/progresso-recuperacao/rollback', requireRole('admin'), async (c) 
 
   const enrollment = await loadProgressRecoveryEnrollment(db, matriculaId, empresaId);
   if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, enrollment.curso_id, enrollment.tipo_conteudo)) {
+    throw new ApiError('Recuperação SCORM não pode alterar evidências Native.', 409, 'NATIVE_SCORM_RECOVERY_DENIED');
+  }
 
   const auditLog = await db
     .prepare(

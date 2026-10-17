@@ -2,6 +2,7 @@
  * LMS — Rotas de Cursos
  * CRUD do catálogo, upload e extração de pacotes SCORM para R2.
  */
+import { projectNativeCatalogCourses } from '../services/lms-native-catalog-course-projection';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -489,7 +490,7 @@ const setorIdsSchema = z.preprocess((value) => {
   return value;
 }, z.array(z.number().int().positive()).optional());
 
-const CursoCreateSchema = z.object({
+const CursoCreateSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   titulo: z.string().min(2).max(255),
   descricao: trimNullableText,
   categoria: trimNullableText,
@@ -519,7 +520,7 @@ const CursoCreateSchema = z.object({
   dominio_codigo: z.string().trim().min(1).optional().nullable(),
 });
 
-const CursoUpdateSchema = z.object({
+const CursoUpdateSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   titulo: z.string().min(2).max(255).optional(),
   descricao: trimNullableText,
   categoria: trimNullableText,
@@ -550,12 +551,12 @@ const CursoUpdateSchema = z.object({
   formato_id: z.number().int().positive().nullable().optional(),
 });
 
-const StructuredContentInitSchema = z.object({
+const StructuredContentInitSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   skip_purge: z.boolean().optional(),
 });
 
-const StructuredContentCompleteSchema = z.object({
+const StructuredContentCompleteSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   launch_file: trimNullableText,
   scorm_versao: optionalNullableScormVersion,
@@ -759,7 +760,7 @@ async function parseCursoCreateRequest(c: Context) {
         if (Number.isFinite(n) && n > 0) parsedSetorIds.push(n);
       }
     }
-    const payload = {
+    const payload = { native_pilot_format: formData.get('native_pilot_format') ?? undefined, nativePilotFormat: formData.get('nativePilotFormat') ?? undefined,
       titulo: String(formData.get('titulo') ?? '').trim(),
       descricao: parseNullableText(formText(formData.get('descricao'))),
       categoria: parseNullableText(formText(formData.get('categoria'))),
@@ -1368,7 +1369,6 @@ export async function hasOwnEnrolledCourseReadAccess(
   return ownEnrollment?.allowed === 1;
 }
 
-
 // ── Listar cursos ────────────────────────────────────────────────────────────
 
 app.get('/', async (c) => {
@@ -1535,7 +1535,8 @@ app.get('/', async (c) => {
     rowsStatement.all<Record<string, unknown>>(),
   ]);
 
-  const data = (rows.results ?? []).map((row) => {
+  const displayRows = await projectNativeCatalogCourses(c.env, empresaId, rows.results ?? []);
+  const data = displayRows.map((row) => {
     const setoresJson = row.setores_json as string | null;
     const { setores_json: _, ...rest } = row;
     return {
@@ -1875,7 +1876,7 @@ app.get('/:id{[0-9]+}', async (c) => {
   await assertLmsCursoDetailDomainAccess({ db, empresaId, c, cursoId });
 
   const setoresJson = curso.setores_json as string | null;
-  const { setores_json: _, ...cursoRest } = curso;
+  const [{ setores_json: _, ...cursoRest }] = await projectNativeCatalogCourses(c.env, empresaId, [curso]);
   const data = {
     ...cursoRest,
     setores: setoresJson ? (JSON.parse(setoresJson) as { id: number; nome: string }[]) : [],

@@ -1,0 +1,312 @@
+"""Conversion tests use synthetic fixtures only; never include private course content."""
+import hashlib
+import json
+import tempfile
+import unittest
+from unittest.mock import patch
+from pathlib import Path
+from zipfile import ZipFile
+
+from convert_scorm_to_native import extract_draft
+from compile_native_draft import NativeCompileError, compile_candidate
+
+
+def fixture(path: Path, *, kind='scenario', correct=1, mastery=80):
+    slides = [
+        {'id': 'opening', 'kind': 'lesson', 'title': 'Abertura', 'lead': 'Introdução.',
+         'media': 'media/hero.webp', 'visualAlt': 'Ambiente de treinamento', 'sourceRefs': ['NR6']},
+        {'id': 'choice', 'kind': kind, 'title': 'Cenário', 'lead': 'Um risco observado.',
+         'question': 'Qual conduta?', 'options': [
+             ['Ignorar', False, 'Não atende'], ['Interromper', bool(correct), 'Correto'],
+         ]},
+        {'id': 'exam', 'kind': 'assessment', 'title': 'Avaliação',
+         'questions': [{'q': 'Qual alternativa?', 'options': ['A', 'B', 'C'], 'answer': 1,
+                        'explain': 'Justificativa normativa'}]},
+    ]
+    package = {
+        'courseId': 'training', 'title': 'Treinamento de referência',
+        'packageVersion': 'RC1 — setembro', 'masteryScore': mastery,
+        'slides': slides, 'sources': [{'label': 'NR-6', 'detail': 'Regulamento técnico'}],
+    }
+    with ZipFile(path, 'w') as archive:
+        archive.writestr('imsmanifest.xml', '<manifest/>')
+        archive.writestr('course_data.js', 'window.COURSE_DATA = ' + json.dumps(package) + ';')
+        archive.writestr('media/hero.webp', b'RIFF-WEBP-MOCK')
+        archive.writestr('app.js', 'throw new Error("do not execute")')
+
+
+class CompileNativeDraftTests(unittest.TestCase):
+    def prepare(self, root: Path):
+        source = root / 'course.zip'
+        fixture(source)
+        location = root / 'draft'
+        extract_draft(source, location)
+        draft = json.loads((location / 'native-import-draft.json').read_text())
+        return draft, location
+
+    def test_convert_lesson_scenario_and_final_test_without_scorm_runtime(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            candidate, report = compile_candidate(draft, location)
+            self.assertEqual(candidate['schema'], 'AIRTRUST_NATIVE_COURSE_V1')
+            self.assertEqual([u['kind'] for u in candidate['units']],
+                             ['lesson', 'scenario', 'assessment'])
+            self.assertEqual(len(candidate['questions']), 2)
+            self.assertEqual(candidate['questions'][0]['correctOptionId'], 'option-2')
+            self.assertEqual(candidate['questions'][1]['correctOptionId'], 'option-2')
+            self.assertEqual(candidate['policy']['masteryScore'], 80)
+            self.assertEqual(candidate['units'][0]['sourceRefs'], ['NR6'])
+            self.assertEqual(candidate['references'][0]['label'], 'NR-6')
+            self.assertEqual(candidate['assets'][0]['sha256'], hashlib.sha256(b'RIFF-WEBP-MOCK').hexdigest())
+            self.assertEqual(report['assessmentQuestions'], 1)
+            self.assertEqual(report['scenarioQuestions'], 1)
+            self.assertFalse(report['publishable'])
+            self.assertEqual(report['certification'], 'BLOCKED_UNTIL_LMS_STAGING_E2E')
+            self.assertEqual(candidate['packageVersion'], 'n-' + report['nativeCandidateSha256'][:32])
+            self.assertEqual(report['artifactBytesSha256'], hashlib.sha256(
+                (json.dumps(candidate, ensure_ascii=False, indent=2) + '\n').encode('utf-8')
+            ).hexdigest())
+
+    def test_compiled_candidate_matches_cross_runtime_golden_fixture(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            candidate, report = compile_candidate(draft, location)
+            expected = json.loads(
+                (Path(__file__).parent / 'fixtures/native-v1-synthetic.json').read_text(encoding='utf-8')
+            )
+            self.assertEqual(candidate, expected)
+            self.assertEqual(report['nativeCandidateSha256'],
+                             '74b62b661a6ed4334474cab1c6109c28' + report['nativeCandidateSha256'][32:])
+
+    def test_converter_version_changes_when_content_changes_but_scorm_source_is_same(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            first, first_report = compile_candidate(draft, location)
+            draft['course']['slides'][0]['lead'] = 'Texto revisado pela engenharia'
+            second, second_report = compile_candidate(draft, location)
+            self.assertEqual(first_report['originalArchiveSha256'],
+                             second_report['originalArchiveSha256'])
+            self.assertNotEqual(first['packageVersion'], second['packageVersion'])
+            self.assertNotEqual(first_report['nativeCandidateSha256'],
+                                second_report['nativeCandidateSha256'])
+
+    def test_preserves_authored_steps_columns_sections_and_gate_items(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            intro = draft['course']['slides'][0]
+            intro['steps'] = ['Conferir a situação', 'Comunicar o responsável']
+            intro['columns'] = [
+                {'title': 'Antes da atividade', 'items': ['Verificar EPI', 'Confirmar documentação']},
+                {'title': 'Durante a atividade', 'items': ['Manter atenção']},
+            ]
+            intro['sectionGroups'] = [
+                {'title': 'Procedimentos', 'range': 'Itens 2-4',
+                 'items': ['Planejamento', 'Execução controlada']},
+            ]
+            intro['gateItems'] = [
+                ['Bloqueio de segurança', 'Interromper a atividade'],
+            ]
+            candidate, report = compile_candidate(draft, location)
+            blocks = candidate['units'][0]['blocks']
+            texts = [block.get('text') for block in blocks if block['type'] == 'heading']
+            bullets = [
+                item
+                for block in blocks if block['type'] == 'bullets'
+                for item in block['items']
+            ]
+            self.assertIn('Etapas', texts)
+            self.assertIn('Antes da atividade', texts)
+            self.assertIn('Durante a atividade', texts)
+            self.assertIn('Procedimentos (Itens 2-4)', texts)
+            self.assertIn('Pontos de atenção', texts)
+            self.assertIn('Conferir a situação', bullets)
+            self.assertIn('Manter atenção', bullets)
+            self.assertIn('Planejamento', bullets)
+            self.assertIn('Bloqueio de segurança: Interromper a atividade', bullets)
+            self.assertEqual(
+                report['richContentFieldsConverted'],
+                ['columns', 'gateItems', 'sectionGroups', 'steps']
+            )
+            self.assertTrue(all(field not in report['unmappedLayoutFields']
+                                for field in report['richContentFieldsConverted']))
+            self.assertFalse(report['publishable'])
+
+    def test_preserves_explicit_per_module_scorm_mastery(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            meta = {'assessment': {}, 'completion': {}}
+            draft['legacyCompletionManifest'] = meta
+            meta['assessment'] = {'moduleGate': True, 'moduleAssessments': ['exam']}
+            candidate, report = compile_candidate(draft, location)
+            self.assertEqual(candidate['policy']['moduleGate'], True)
+            self.assertEqual(candidate['policy']['masteryScore'], 80)
+            self.assertFalse(report['publishable'])
+            meta['assessment']['moduleAssessments'] = ['missing']
+            with self.assertRaisesRegex(NativeCompileError, 'MODULE_GATE_ASSESSMENTS_MISMATCH'):
+                compile_candidate(draft, location)
+            meta['assessment'] = {}
+            meta['completion'] = {'moduleGate': 'module-assessment'}
+            candidate, _ = compile_candidate(draft, location)
+            self.assertTrue(candidate['policy']['moduleGate'])
+
+    def test_preserves_authored_module_and_eyebrow_without_moving_answers(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            base, _ = compile_candidate(draft, location)
+            original = draft['course']['slides'][0]
+            original['module'] = 'Módulo A — Prevenção'
+            original['eyebrow'] = 'Antes de começar'
+            converted, report = compile_candidate(draft, location)
+            first = converted['units'][0]['blocks']
+            self.assertEqual(first[0], {'type': 'heading', 'text': 'Módulo A — Prevenção'})
+            self.assertEqual(first[1], {'type': 'paragraph', 'text': 'Antes de começar'})
+            self.assertEqual(first[2:], base['units'][0]['blocks'])
+            self.assertEqual(converted['questions'], base['questions'])
+            self.assertEqual(converted['assets'], base['assets'])
+            self.assertNotEqual(converted['packageVersion'], base['packageVersion'])
+            self.assertNotIn('module', report['unmappedLayoutFields'])
+            self.assertNotIn('eyebrow', report['unmappedLayoutFields'])
+            self.assertFalse(report['publishable'])
+
+    def test_invalid_authored_context_must_fail_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            slide = draft['course']['slides'][0]
+            for name, value in [
+                ('module', ''), ('module', 17), ('module', 'm' * 201),
+                ('eyebrow', ' '), ('eyebrow', []), ('eyebrow', 'e' * 201),
+            ]:
+                with self.subTest(name=name, value=str(value)[:30]):
+                    slide[name] = value
+                    with self.assertRaises(NativeCompileError):
+                        compile_candidate(draft, location)
+                    slide.pop(name)
+
+    def test_scorm_presentation_families_select_eight_noncertifying_layouts(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            expected = {
+                'cover': 'image-overlay',
+                'editorial-briefing': 'media-right',
+                'comparison': 'media-left',
+                'process': 'wide-top',
+                'synthesis': 'wide-bottom',
+                'checklist': 'banner-list',
+                'visual-explainer': 'double-crop',
+                'assessment': 'editorial-dashboard',
+            }
+            baseline, _ = compile_candidate(draft, location)
+            for family, template in expected.items():
+                with self.subTest(family=family):
+                    draft['course']['slides'][0]['family'] = family
+                    candidate, report = compile_candidate(draft, location)
+                    self.assertEqual(candidate['units'][0]['presentationTemplate'], template)
+                    self.assertEqual(candidate['questions'], baseline['questions'])
+                    self.assertEqual(candidate['policy'], baseline['policy'])
+                    self.assertEqual(candidate['assets'], baseline['assets'])
+                    self.assertNotIn('family', report['unmappedLayoutFields'])
+                    self.assertFalse(report['publishable'])
+            draft['course']['slides'][0]['family'] = 'unsupported-experiment'
+            with self.assertRaisesRegex(NativeCompileError, 'UNSUPPORTED_PRESENTATION_FAMILY'):
+                compile_candidate(draft, location)
+
+    def test_preserves_gate_label_when_source_has_no_detail(self):
+        # Real SCORM authoring includes label-only gate items; they remain
+        # visible, without fake pedagogical explanations or dropped content.
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            draft['course']['slides'][0]['gateItems'] = [
+                ['Consultar procedimento vigente', ''],
+                ['Bloqueio de segurança', 'Interromper'],
+            ]
+            candidate, report = compile_candidate(draft, location)
+            bullets = [item for block in candidate['units'][0]['blocks']
+                       if block['type'] == 'bullets' for item in block['items']]
+            self.assertIn('Consultar procedimento vigente', bullets)
+            self.assertIn('Bloqueio de segurança: Interromper', bullets)
+            self.assertEqual(report['publishable'], False)
+
+    def test_rejects_malformed_authored_rich_content_instead_of_dropping_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            intro = draft['course']['slides'][0]
+            for name, value in [
+                ('steps', []),
+                ('steps', [{'unexpected': 'dict'}]),
+                ('columns', [{'title': 'Checklist', 'items': [9]}]),
+                ('sectionGroups', [{'title': 'Requisitos', 'range': '1-3'}]),
+                ('gateItems', [['Apenas o rótulo']]),
+                ('gateItems', [['EPI', 'O' * 1001]]),
+            ]:
+                with self.subTest(name=name, value=str(value)[:40]):
+                    intro[name] = value
+                    with self.assertRaises(NativeCompileError):
+                        compile_candidate(draft, location)
+                    intro.pop(name)
+
+    def test_content_addressed_version_changes_for_step_revisions(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            intro = draft['course']['slides'][0]
+            intro['steps'] = ['Ação inicial', 'Ação final']
+            initial, _ = compile_candidate(draft, location)
+            intro['steps'][1] = 'Ação final revisada'
+            modified, _ = compile_candidate(draft, location)
+            self.assertNotEqual(initial['packageVersion'], modified['packageVersion'])
+
+    def test_preview_asset_limit_is_a_blocking_review_finding_not_silent_loss(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            # Simulate a protected-media payload beyond the active preview
+            # budget without checking any private training files into GitHub.
+            with patch('compile_native_draft.MAX_NATIVE_PREVIEW_ASSET_BYTES', 10):
+                candidate, report = compile_candidate(draft, location)
+            self.assertEqual(len(report['mediaTransportBlockers']), 1)
+            blocker = report['mediaTransportBlockers'][0]
+            self.assertEqual(blocker['sourcePath'], 'media/hero.webp')
+            self.assertEqual(blocker['reason'], 'REQUIRES_APPROVED_LARGE_MEDIA_TRANSPORT')
+            self.assertEqual(blocker['previewLimitBytes'], 10)
+            self.assertFalse(report['publishable'])
+            self.assertEqual(len(candidate['assets']), 1)
+
+    def test_fail_closed_on_missing_source_or_unmapped_slide(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            draft['course']['slides'][0]['kind'] = 'unknown-quiz'
+            with self.assertRaisesRegex(NativeCompileError, 'UNSUPPORTED_SLIDE_KIND'):
+                compile_candidate(draft, location)
+
+    def test_detect_media_tampering(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            (location / 'media/media/hero.webp').write_bytes(b'CHANGED')
+            with self.assertRaisesRegex(NativeCompileError, 'MEDIA_DIGEST_MISMATCH'):
+                compile_candidate(draft, location)
+
+    def test_never_promote_draft_even_if_user_sets_publishable(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            draft['publishable'] = True
+            with self.assertRaisesRegex(NativeCompileError, 'INVALID_OR_PUBLISHABLE_DRAFT'):
+                compile_candidate(draft, location)
+
+    def test_reject_missing_or_ambiguous_correct_answers(self):
+        with tempfile.TemporaryDirectory() as d:
+            draft, location = self.prepare(Path(d))
+            draft['course']['slides'][1]['options'][0][1] = True
+            with self.assertRaisesRegex(NativeCompileError, 'AMBIGUOUS_SCENARIO_ANSWER'):
+                compile_candidate(draft, location)
+
+    def test_reject_unsafe_copied_media_path_even_if_metadata_is_tampered(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            draft, location = self.prepare(root)
+            outside = root / 'secret.webp'
+            outside.write_bytes(b'SECRET')
+            draft['media'][0]['localPath'] = 'media/../../../secret.webp'
+            with self.assertRaisesRegex(NativeCompileError, 'MISSING_COPIED_MEDIA'):
+                compile_candidate(draft, location)
+
+
+if __name__ == '__main__':
+    unittest.main()

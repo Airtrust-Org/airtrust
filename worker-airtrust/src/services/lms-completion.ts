@@ -4,6 +4,11 @@ import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { requireActiveQualificationCategoryById } from './qualification-category-contract';
 import { ensureCertificateForQualification } from './ensure-certificate';
 import { hasApprovedScormCategoryLink } from './lms-scorm-category-compatibility';
+import { buildNativeTerminalTransactionGuard, type NativeTerminalAnchor } from './lms-native-terminal-transaction-guard';
+import { canProvisionNative } from './lms-native-enrollment-provisioner';
+import {canWritePlayer3Stage} from './lms-player3-module-attempt-writer';
+import {canReadNativeCatalogActivation} from './lms-native-catalog-legacy-guard';
+import {buildPlayer3TerminalTransactionGuard,type Player3TerminalAnchor} from './lms-player3-terminal-transaction-guard';
 
 export type LmsCompletionOutcome =
   | 'qualification_created'
@@ -58,6 +63,10 @@ export interface CompleteLmsMatriculaParams {
   actorUserId?: number;
   ipAddress?: string;
   userAgent?: string;
+  /** Only a Worker-verified Native snapshot can enable this atomic assertion. */
+  nativeTerminalAnchor?: NativeTerminalAnchor;
+  /** Only an internal, regraded Player3 terminal preparer can supply this. */
+  player3TerminalAnchor?: Player3TerminalAnchor;
 }
 
 type PreBatchState = {
@@ -70,6 +79,13 @@ type PreBatchState = {
 };
 
 const LMS_REUSABLE_STATUSES = new Set(['CONCLUIDA', 'PLANEJADA', 'PLANEJADO']);
+
+function hasNonReusableHistory(pre: PreBatchState): boolean {
+  // A null/unknown status is not a completed qualification. Never finalize
+  // an LMS enrollment using a canceled, renewed or ambiguous history row.
+  return pre.existingHistoricoId !== null &&
+    !LMS_REUSABLE_STATUSES.has(pre.existingHistoricoStatus ?? '');
+}
 
 function isCanonicalEadCategory(category: { codigo?: string | null; nome?: string | null }): boolean {
   const code = String(category.codigo || '').trim().toUpperCase();
@@ -333,6 +349,53 @@ export function buildCompletionBatchStatements(
   const qualificacaoCategoriaId = params.qualificacaoCategoriaId ?? null;
   const statements: { sql: string; args: unknown[] }[] = [];
   const needsInsert = !pre.existingHistoricoId;
+
+  if (!needsInsert) {
+    // Preflight alone cannot authorize an existing qualification: its status,
+    // owner or date may change before the canonical D1.batch begins.
+    // Keep this assertion in the SAME transaction, BEFORE any LMS/history
+    // mutation; invalid JSON deliberately aborts the entire batch.
+    statements.push({
+      sql: `SELECT json(CASE WHEN EXISTS (
+              SELECT 1 FROM qualificacoes_historico
+               WHERE id = ? AND empresa_id = ? AND funcionario_id = ?
+                 AND qualificacao_codigo = ? AND data_conclusao = ?
+                 AND deleted_at IS NULL AND status = ?
+                 AND status IN ('CONCLUIDA', 'PLANEJADA', 'PLANEJADO')
+            ) THEN 'null' ELSE 'LMS_QUALIFICATION_REUSE_STATE_CHANGED' END)`,
+      args: [
+        pre.existingHistoricoId, params.empresaId, params.funcionarioId,
+        qualificacaoCodigo, params.dataConclusao, pre.existingHistoricoStatus,
+      ],
+    });
+  }
+
+  // The previously-active qualification may also be revoked, renewed,
+  // transferred or backdated after the read-only predecessor lookup.
+  // Recheck it inside the same D1.batch before creating a successor or
+  // changing any qualification history. It is not part of an idempotent
+  // CONCLUIDA reuse, which performs no predecessor renewal.
+  const creatingOrRealizing = needsInsert ||
+    pre.existingHistoricoStatus === 'PLANEJADA' ||
+    pre.existingHistoricoStatus === 'PLANEJADO';
+  if (creatingOrRealizing && pre.anteriorAtivaId !== null) {
+    statements.push({
+      sql: `SELECT json(CASE WHEN EXISTS (
+              SELECT 1 FROM qualificacoes_historico
+               WHERE id = ? AND empresa_id = ? AND funcionario_id = ?
+                 AND qualificacao_codigo = ? AND deleted_at IS NULL
+                 AND COALESCE(renovada, 0) = 0
+                 AND UPPER(COALESCE(status, '')) NOT IN (
+                   'PLANEJADA', 'PLANEJADO', 'CANCELADA', 'CANCELADO', 'RENOVADA'
+                 )
+                 AND date(COALESCE(data_conclusao, '1900-01-01')) < date(?)
+            ) THEN 'null' ELSE 'LMS_QUALIFICATION_PREDECESSOR_CHANGED' END)`,
+      args: [
+        pre.anteriorAtivaId, params.empresaId, params.funcionarioId,
+        qualificacaoCodigo, params.dataConclusao,
+      ],
+    });
+  }
 
   if (needsInsert) {
     const validadeMeses =
@@ -658,6 +721,131 @@ function buildNotRequiredBatchStatements(
   return statements;
 }
 
+/**
+ * Insert an evidence snapshot assertion as the FIRST statement of the same
+ * canonical D1.batch. Existing SCORM calls remain unchanged when absent.
+ *
+ * This is NOT a Native terminal endpoint: governed Schema V2 still blocks
+ * completion until an audited, transaction-scoped completion intent exists.
+ */
+function canUsePlayer3CanonicalTerminal(env: Env, empresaId: number): boolean {
+  const raw=env.PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS;
+  return canWritePlayer3Stage(env,empresaId) &&
+    canReadNativeCatalogActivation(env,empresaId) &&
+    !!raw && !raw.includes('*') &&
+    raw.split(',').some(value=>value.trim()===String(empresaId));
+}
+
+function withNativeAtomicGuard(
+  params: CompleteLmsMatriculaParams,
+  statements: { sql: string; args: unknown[] }[],
+): { sql: string; args: unknown[] }[] {
+  const a=params.nativeTerminalAnchor;
+  const p=params.player3TerminalAnchor;
+  if(a&&p){
+    throw new LmsCompletionRejectedError(
+      'Dois motores terminais incompatíveis para a mesma matrícula',
+      'PLAYER3_DUAL_TERMINAL_DENIED',
+    );
+  }
+  if(p){
+    const env=params.env;
+    if(!env || !canUsePlayer3CanonicalTerminal(env,params.empresaId) ||
+       p.empresaId!==params.empresaId ||
+       p.matriculaId!==params.matriculaId ||
+       p.cursoId!==params.cursoId ||
+       p.funcionarioId!==params.funcionarioId ||
+       p.actorUserId!==params.actorUserId ||
+       p.gerarQualificacaoAoConcluir!==params.gerarQualificacaoAoConcluir ||
+       p.qualificacaoTipoId!==params.qualificacaoTipoId ||
+       p.qualificacaoCategoriaId!==(params.qualificacaoCategoriaId??null) ||
+       params.scoreFinal!=null ||
+       (params.progressoPct??100)!==100 ||
+       params.action!=='LMS_PLAYER3_CANONICAL_CONCLUIDA'){
+      throw new LmsCompletionRejectedError(
+        'Comprovante Player3 inválido ou fluxo terminal não autorizado',
+        'PLAYER3_TERMINAL_ANCHOR_MISMATCH',
+      );
+    }
+    const gate=buildPlayer3TerminalTransactionGuard(p,env);
+    // The assertion, terminal intent, canonical mutations and intent deletion
+    // form ONE D1.batch. The review-only 0555 plan defines a deferred FK to an
+    // unfillable sentinel: forgetting the DELETE aborts the whole commit.
+    // This code is not reachable from HTTP until the governed schema/endpoint
+    // and audited staging rollout have been completed.
+    const nonce=Array.from(crypto.getRandomValues(new Uint8Array(32)),
+      byte=>byte.toString(16).padStart(2,'0')).join('');
+    const intent={
+      sql:`INSERT INTO lms_player3_completion_intents (
+        nonce,empresa_id,curso_id,matricula_id,ciclo_id,funcionario_id,
+        actor_user_id,vinculo_id,edicao_id,politica_id,edition_sha256,
+        source_sha256,bank_sha256,policy_sha256,required_lesson_ids_json,
+        official_stage_receipts_json,event_count,distinct_lesson_count,
+        official_stage_count,gerar_qualificacao,qualificacao_tipo_id,
+        qualificacao_categoria_id
+      ) VALUES (${Array.from({length:22},()=>'?').join(',')})`,
+      args:[
+        nonce,p.empresaId,p.cursoId,p.matriculaId,p.cicloId,p.funcionarioId,
+        p.actorUserId,p.bindingId,p.edicaoId,p.politicaId,p.editionHash,
+        p.sourceHash,p.bankHash,p.policyHash,JSON.stringify(p.requiredLessonIds),
+        JSON.stringify(p.officialStages.map(s=>({
+          stageId:s.stageId,attemptId:s.attemptId,
+          attemptNumber:s.attemptNumber,answersHash:s.answersHash,
+          scorePct:s.scorePct,
+        }))),p.recordedEventCount,p.requiredLessonIds.length,
+        p.officialStages.length,Number(p.gerarQualificacaoAoConcluir),
+        p.qualificacaoTipoId,p.qualificacaoCategoriaId,
+      ],
+    };
+    return [
+      {sql:gate.sql,args:[...gate.bindings]},intent,...statements,
+      {sql:'DELETE FROM lms_player3_completion_intents WHERE nonce=?',args:[nonce]},
+    ];
+  }
+  if (!a) return statements;
+  if (!params.env || !canProvisionNative(params.env,params.empresaId) ||
+      a.empresaId !== params.empresaId || a.matriculaId !== params.matriculaId ||
+      a.cursoId !== params.cursoId || a.funcionarioId !== params.funcionarioId ||
+      a.actorUserId !== params.actorUserId ||
+      a.gerarQualificacaoAoConcluir !== params.gerarQualificacaoAoConcluir ||
+      a.qualificacaoTipoId !== params.qualificacaoTipoId ||
+      a.qualificacaoCategoriaId !== (params.qualificacaoCategoriaId ?? null) ||
+      a.scorePct !== (params.scoreFinal ?? null) ||
+      (params.progressoPct ?? 100) !== 100 ||
+      params.action !== 'LMS_NATIVE_CANONICAL_CONCLUIDA') {
+    throw new LmsCompletionRejectedError(
+      'Snapshot Native não corresponde à conclusão canônica solicitada',
+      'NATIVE_TERMINAL_ANCHOR_MISMATCH',
+    );
+  }
+  const gate=buildNativeTerminalTransactionGuard(a);
+  const nonce=Array.from(crypto.getRandomValues(new Uint8Array(32)),
+    byte=>byte.toString(16).padStart(2,'0')).join('');
+  const insertIntent={
+    sql: `INSERT INTO lms_native_completion_intents(
+      nonce,empresa_id,curso_id,matricula_id,ciclo_id,funcionario_id,
+      actor_user_id,edicao_id,vinculo_id,tentativa_id,tentativa_numero,
+      answers_sha256,score_pct,event_count,distinct_lesson_count,
+      gerar_qualificacao,qualificacao_tipo_id,qualificacao_categoria_id
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    args: [
+      nonce,a.empresaId,a.cursoId,a.matriculaId,a.cicloId,a.funcionarioId,
+      a.actorUserId,a.edicaoId,a.bindingId,a.latestAttemptId,a.latestAttemptNumber,
+      a.answersHash,a.scorePct,a.eventCount,a.distinctLessonCount,
+      Number(a.gerarQualificacaoAoConcluir),a.qualificacaoTipoId,a.qualificacaoCategoriaId,
+    ],
+  };
+  // A deferred FK to a non-fillable sentinel in the REVIEW-ONLY 0552 SQL
+  // prevents an orphan intent from surviving COMMIT. Never run separate
+  // batches for the anchor, canonical writes and intent consumption.
+  return [
+    {sql:gate.sql,args:[...gate.bindings]},
+    insertIntent,
+    ...statements,
+    {sql:'DELETE FROM lms_native_completion_intents WHERE nonce=?',args:[nonce]},
+  ];
+}
+
 export async function completeLmsMatricula(
   params: CompleteLmsMatriculaParams,
 ): Promise<LmsCompletionResult> {
@@ -665,7 +853,9 @@ export async function completeLmsMatricula(
 
   if (!params.gerarQualificacaoAoConcluir) {
     const pre = await readPreBatchState(db, params, '');
-    const statements = buildNotRequiredBatchStatements(params, pre);
+    const statements = withNativeAtomicGuard(
+      params,buildNotRequiredBatchStatements(params, pre),
+    );
     await db.batch(
       statements.map((statement) => db.prepare(statement.sql).bind(...statement.args)),
     );
@@ -722,11 +912,7 @@ export async function completeLmsMatricula(
   // closed — the matricula must NOT be marked CONCLUIDO on top of a
   // CANCELADA or already-RENOVADA (superseded) qualification record, nor on
   // an unrecognized status. Reject before touching lms_matriculas at all.
-  if (
-    pre.existingHistoricoId &&
-    pre.existingHistoricoStatus !== null &&
-    !LMS_REUSABLE_STATUSES.has(pre.existingHistoricoStatus)
-  ) {
+  if (hasNonReusableHistory(pre)) {
     await logRejectionAudit(
       db,
       params,
@@ -739,17 +925,46 @@ export async function completeLmsMatricula(
   }
 
   const wasReuse = pre.existingHistoricoId !== null;
-  const statements = buildCompletionBatchStatements(canonicalParams, pre);
+  const statements = withNativeAtomicGuard(
+    canonicalParams,buildCompletionBatchStatements(canonicalParams, pre),
+  );
 
+  let insertedHistoricoId: number | null = null;
   try {
-    await db.batch(
+    const batchResults = await db.batch(
       statements.map((statement) => db.prepare(statement.sql).bind(...statement.args)),
     );
+    const insertIndex = statements.findIndex(statement =>
+      statement.sql.includes('INSERT INTO qualificacoes_historico ('),
+    );
+    const insertMeta = insertIndex >= 0 ? batchResults[insertIndex]?.meta : null;
+    const rowId = insertMeta?.last_row_id;
+    // A stale last_row_id is not evidence that this statement inserted a row.
+    if (!wasReuse && insertMeta?.changes === 1 && typeof rowId === 'number' &&
+        Number.isSafeInteger(rowId) && rowId > 0) {
+      insertedHistoricoId = rowId;
+    }
   } catch (error) {
     if (isConcurrentQualificationUniqueConstraint(error)) {
       const retryPre = await readPreBatchState(db, canonicalParams, qualificacaoCodigo);
       if (retryPre.existingHistoricoId) {
-        const retryStatements = buildCompletionBatchStatements(canonicalParams, retryPre);
+        // A concurrent UNIQUE winner is only reusable if its persisted status
+        // matches the same allowlist enforced on the initial read. Otherwise
+        // retries could certify a CANCELADA/RENOVADA/null history row.
+        if (hasNonReusableHistory(retryPre)) {
+          await logRejectionAudit(
+            db,
+            params,
+            `Histórico concorrente #${retryPre.existingHistoricoId} tem status incompatível para reuso: ${retryPre.existingHistoricoStatus}`,
+          );
+          throw new LmsCompletionRejectedError(
+            'Histórico concorrente com status incompatível; conclusão não autorizada',
+            'LMS_QUALIFICATION_STATUS_INCOMPATIBLE',
+          );
+        }
+        const retryStatements = withNativeAtomicGuard(
+          canonicalParams,buildCompletionBatchStatements(canonicalParams, retryPre),
+        );
         try {
           await db.batch(
             retryStatements.map((statement) => db.prepare(statement.sql).bind(...statement.args)),
@@ -785,6 +1000,16 @@ export async function completeLmsMatricula(
       'LMS_QUALIFICATION_COMPLETION_FAILED',
       error,
     );
+  }
+
+  const committedHistoricoId = wasReuse ? pre.existingHistoricoId : insertedHistoricoId;
+  if (committedHistoricoId !== null) {
+    await ensureEadCertificateAfterCompletion(canonicalParams, category, committedHistoricoId);
+    return {
+      outcome: wasReuse ? 'qualification_reused' : 'qualification_created',
+      qualificacaoHistoricoId: committedHistoricoId,
+      matriculaId: params.matriculaId,
+    };
   }
 
   const historico = await db

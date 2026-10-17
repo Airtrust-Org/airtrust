@@ -1,0 +1,206 @@
+import React from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import NativeCoursePreview, { selectNativeLessonTemplate } from '@/react-app/pages/lms/native/NativeCoursePreview';
+import type { NativeLearnerCourse } from '../../worker-airtrust/src/lib/lms/lms-native-course-contract';
+
+const course: NativeLearnerCourse = {
+  schema: 'AIRTRUST_NATIVE_COURSE_V1',
+  courseId: 'nr6-epi',
+  packageVersion: 'rc1',
+  title: 'NR-6 — EPI',
+  locale: 'pt-BR',
+  policy: { mode: 'SCORED', masteryScore: 80 },
+  assets: [{ id: 'hero', path: 'media/hero.webp', sha256: 'a'.repeat(64), mime: 'image/webp' }],
+  units: [
+    {
+      id: 'intro', title: 'Introdução', kind: 'lesson', questionIds: [], sourceRefs: ['NR6'],
+      blocks: [
+        { type: 'heading', text: 'Segurança no trabalho' },
+        { type: 'paragraph', text: '<img src=x onerror=alert(1)>' },
+        { type: 'image', assetId: 'hero', alt: 'Capacete e EPI' },
+      ],
+    },
+    {
+      id: 'quiz', title: 'Avaliação', kind: 'assessment', blocks: [],
+      questionIds: ['q1'],
+    },
+  ],
+  questions: [
+    { id: 'q1', prompt: 'Qual procedimento?', options: [
+      { id: 'a', text: 'Ignorar' }, { id: 'b', text: 'Verificar o EPI' },
+    ] },
+  ],
+};
+
+describe('NativeCoursePreview — display only', () => {
+  it('selects all eight approved 16:9 layouts across source lessons without altering grading', () => {
+    const expected = ['media-right', 'media-left', 'wide-top', 'wide-bottom',
+      'image-overlay', 'banner-list', 'double-crop', 'editorial-dashboard'];
+    const lesson: NativeLearnerCourse['units'][number] = {
+      id: 'source-lesson', kind: 'lesson', title: 'Operações de segurança',
+      questionIds: [], blocks: [
+        { type: 'paragraph', text: 'Treinamento da Costa do Sol' },
+        { type: 'image', assetId: 'hero', alt: 'Helicóptero' },
+      ],
+    };
+    expect(expected.map((_, i) => selectNativeLessonTemplate(i, lesson))).toEqual(expected);
+    expect(selectNativeLessonTemplate(6, { ...lesson, blocks: [
+      { type: 'video', assetId: 'hero', alt: 'Vídeo original' },
+    ] })).toBe('media-right');
+    expect(selectNativeLessonTemplate(1, { ...lesson, blocks: [
+      { type: 'paragraph', text: 'Conteúdo sem fotografia' },
+    ] })).toBe('editorial-dashboard');
+    const dense = { ...lesson, blocks: [
+      { type: 'paragraph' as const, text: 'Texto técnico completo. '.repeat(100) },
+      { type: 'image' as const, assetId: 'hero', alt: 'Contexto real' },
+    ] };
+    expect(selectNativeLessonTemplate(4, dense)).toBe('media-right');
+  });
+
+  it('shows Costa do Sol SCORM identity for its courses, without branding another tenant', () => {
+    const source = { ...course, courseId: 'costa-do-sol-nr6-epi' };
+    const { unmount } = render(<NativeCoursePreview course={source} resolveAssetHref={() => null} />);
+    expect(screen.getByRole('img', { name: 'Costa do Sol Táxi Aéreo' })).toHaveAttribute(
+      'src', '/branding/costa-do-sol-scorm.svg');
+    unmount();
+    render(<NativeCoursePreview course={course} resolveAssetHref={() => null} />);
+    expect(screen.queryByRole('img', { name: 'Costa do Sol Táxi Aéreo' })).not.toBeInTheDocument();
+  });
+
+  it('renders content literally and does not execute user-authored markup', () => {
+    const resolve = vi.fn(() => '/api/lms/native/assets/hero');
+    const { container } = render(<NativeCoursePreview course={course} resolveAssetHref={resolve} />);
+    expect(screen.getByRole('heading', { name: 'NR-6 — EPI' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Referências da unidade' })).toHaveTextContent('NR6');
+    expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
+    expect(container.querySelector('img[onerror]')).toBeNull();
+    expect(screen.getByRole('img', { name: 'Capacete e EPI' }).getAttribute('src'))
+      .toBe('/api/lms/native/assets/hero');
+    expect(screen.queryByRole('button', { name: /concluir|finalizar|certificado/i })).toBeNull();
+  });
+
+  it('navigates between units and permits local sample choices but never grades', () => {
+    const { container } = render(<NativeCoursePreview course={course} resolveAssetHref={() => null} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
+    expect(screen.getByRole('heading', { name: 'Avaliação' })).toBeInTheDocument();
+    const fieldset = container.querySelector('fieldset');
+    expect(fieldset).not.toBeNull();
+    fireEvent.click(within(fieldset!).getByRole('radio', { name: 'Verificar o EPI' }));
+    expect(within(fieldset!).getByRole('radio', { name: 'Verificar o EPI' })).toBeChecked();
+    expect(screen.queryByText(/aprovado|concluído|nota/i)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Próximo' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Anterior' }));
+    expect(screen.getByRole('heading', { name: 'Introdução' })).toBeInTheDocument();
+  });
+
+  it('refuses non-LMS and external media urls before rendering', () => {
+    for (const url of ['https://host.invalid/asset', 'javascript:alert(1)', '/api/lms/../secret', '/api/lms/%2fsecret']) {
+      const { container, unmount } = render(<NativeCoursePreview course={course} resolveAssetHref={() => url} />);
+      expect(container.querySelector('img')).toBeNull();
+      expect(screen.getByText('Mídia indisponível nesta visualização: Capacete e EPI')).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+
+  it('permits server submission on an assessment that is not the final unit', () => {
+    const onSubmitAssessment = vi.fn();
+    const trailingLesson: NativeLearnerCourse = {
+      ...course,
+      units: [...course.units, {
+        id: 'final', title: 'Encerramento', kind: 'lesson', questionIds: [],
+        blocks: [{ type: 'paragraph', text: 'Revisão dos conceitos' }],
+      }],
+    };
+    render(<NativeCoursePreview
+      course={trailingLesson}
+      resolveAssetHref={() => null}
+      onSubmitAssessment={onSubmitAssessment}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
+    expect(screen.getByRole('heading', { name: 'Avaliação' })).toBeInTheDocument();
+    const send = screen.getByRole('button', { name: 'Enviar respostas para avaliação' });
+    expect(send).toBeDisabled();
+    fireEvent.click(screen.getByRole('radio', { name: 'Verificar o EPI' }));
+    fireEvent.click(send);
+    expect(onSubmitAssessment).toHaveBeenCalledExactlyOnceWith([{ questionId: 'q1', optionId: 'b' }]);
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
+    expect(screen.getByRole('heading', { name: 'Encerramento' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Enviar respostas para avaliação' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /concluir|certificado/i })).toBeNull();
+  });
+
+  it('checks module practice separately and does not submit it as an official exam', () => {
+    const onCheckPractice = vi.fn(), onSubmitAssessment = vi.fn();
+    const withPractice: NativeLearnerCourse = {
+      ...course,
+      units: [
+        course.units[0],
+        { id:'practice-1', kind:'practice', title:'Fixação após módulo',
+          blocks:[], questionIds:['p1'] },
+        course.units[1],
+      ],
+      questions: [
+        { id:'p1', prompt:'Confirme a fixação',
+          options:[{id:'a',text:'Confirmar prática'},{id:'b',text:'Rever conteúdo'}] },
+        ...course.questions,
+      ],
+    };
+    render(<NativeCoursePreview course={withPractice} resolveAssetHref={() => null}
+      onCheckPractice={onCheckPractice} onSubmitAssessment={onSubmitAssessment}
+      practiceFeedback={{questionId:'p1',optionId:'a',correct:false,feedback:'Reveja o conteúdo'}} />);
+    fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
+    expect(screen.getByText('FIXAÇÃO DO MÓDULO')).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Enviar respostas para avaliação'})).toBeNull();
+    fireEvent.click(screen.getByRole('radio',{name:'Confirmar prática'}));
+    expect(screen.getByText(/Reveja o conteúdo/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Conferir resposta de fixação'}));
+    expect(onCheckPractice).toHaveBeenCalledExactlyOnceWith('p1','a');
+    expect(onSubmitAssessment).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
+    expect(screen.getByRole('button',{name:'Enviar respostas para avaliação'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('radio',{name:'Verificar o EPI'}));
+    fireEvent.click(screen.getByRole('button',{name:'Enviar respostas para avaliação'}));
+    expect(onSubmitAssessment).toHaveBeenCalledExactlyOnceWith([{questionId:'q1',optionId:'b'}]);
+  });
+
+  it('preserves multi-module scored assessments without inventing a final exam', () => {
+    const onSubmitAssessment = vi.fn();
+    const modular: NativeLearnerCourse = {
+      ...course,
+      units: [
+        course.units[0],
+        { id:'module-quiz-1',title:'Avaliação módulo 1',kind:'assessment',blocks:[],
+          questionIds:['q1'] },
+        { id:'module-quiz-2',title:'Avaliação módulo 2',kind:'assessment',blocks:[],
+          questionIds:['q2'] },
+      ],
+      questions: [...course.questions, {
+        id:'q2',prompt:'Outro módulo',options:[
+          {id:'a',text:'Verificar condição'},{id:'b',text:'Ignorar desvio'},
+        ],
+      }],
+    };
+    render(<NativeCoursePreview course={modular}
+      resolveAssetHref={() => null} onSubmitAssessment={onSubmitAssessment} />);
+    fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
+    expect(screen.getByText('AVALIAÇÃO DO MÓDULO')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio',{name:'Verificar o EPI'}));
+    expect(screen.queryByRole('button',{name:'Enviar respostas para avaliação'})).toBeNull();
+    expect(screen.getByText(/gravação independente de cada avaliação/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
+    fireEvent.click(screen.getByRole('radio',{name:'Verificar condição'}));
+    fireEvent.click(screen.getByRole('button',{name:'Enviar respostas para avaliação'}));
+    expect(onSubmitAssessment).toHaveBeenCalledExactlyOnceWith([
+      {questionId:'q1',optionId:'b'},{questionId:'q2',optionId:'a'},
+    ]);
+  });
+
+  it('shows no client grading or server writes at any step', () => {
+    const resolve = vi.fn(() => null);
+    render(<NativeCoursePreview course={course} resolveAssetHref={resolve} />);
+    expect(screen.getByText(/não são gravadas e não concluem treinamentos/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Registrar no AirTrust' })).toBeNull();
+  });
+});

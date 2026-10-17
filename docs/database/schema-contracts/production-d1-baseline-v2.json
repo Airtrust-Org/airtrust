@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-17",
-    "last_reconciled_against": "0557 LMS cycle evidence archive, reserved separately from Player 3 0553/0554; pending governed apply",
-    "schema_v2_digest": "bee189fac6d5e14bf2ccf1b2ecf3ebadc8e308c5d5c6b03ce454c83c2f12ad55",
+    "last_reconciled_against": "0553/0554 Player 3 pending governed apply; 0557 LMS cycle evidence archive pending governed apply",
+    "schema_v2_digest": "41cc28d0519eea9b85f9db51adc843e001bf332a173592d06c475bd185164845",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -440,18 +440,6 @@
       "reviewed_manifest": null
     },
     {
-      "change_file": "0454_qualificacoes_tipos_dominio_override_reconcile_existing.sql",
-      "change_id": "qualificacoes-tipos-dominio-override-0454",
-      "sha256": "ca185d203fc0cc11b26be9fb829057c618c6d5f471adadfdba3c67f9526521a3",
-      "targets": [
-        "qualificacoes_tipos"
-      ],
-      "domain": "qualificacoes_tipos operational-domain override (reconcile existing rows)",
-      "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "qualificacoes-tipos-dominio-override-0454.json"
-    },
-    {
       "change_file": "0454_qualificacoes_tipos_dominio_override.sql",
       "change_id": null,
       "sha256": "6aef100bbff18241eae3c067b5c9aadc647a17145fcd136f300cb57244b2b2f6",
@@ -462,6 +450,18 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
       "reviewed_manifest": null
+    },
+    {
+      "change_file": "0454_qualificacoes_tipos_dominio_override_reconcile_existing.sql",
+      "change_id": "qualificacoes-tipos-dominio-override-0454",
+      "sha256": "ca185d203fc0cc11b26be9fb829057c618c6d5f471adadfdba3c67f9526521a3",
+      "targets": [
+        "qualificacoes_tipos"
+      ],
+      "domain": "qualificacoes_tipos operational-domain override (reconcile existing rows)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "qualificacoes-tipos-dominio-override-0454.json"
     },
     {
       "change_file": "0456_lms_h5p_course_binding.sql",
@@ -1420,18 +1420,6 @@
       "note": "0541 is a reviewed, tenant-6 only forward prerequisite for FDM three audiences 0536, needed because production read-only showed no TREINAMENTO_OPERACIONAL category. It creates the canonical category only if absent, without employee/LMS/history writes. File/manifest is not evidence of application; apply through governed Schema V2 after exact release authorization. Production PRAGMA confirms lms_integrada is absent, so reviewed SQL and production postconditions avoid this staging-only field."
     },
     {
-      "change_file": "ead-category-reconciliation-executor-0453.sql",
-      "change_id": null,
-      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
-      "targets": [
-        "ead_category_reconciliation_runs"
-      ],
-      "domain": "EAD category reconciliation executor ledger",
-      "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REPO_EXPECTED",
-      "reviewed_manifest": null
-    },
-    {
       "change_file": "0542_lms_scorm_formative_assessment_policy.sql",
       "change_id": "lms-scorm-formative-assessment-0542",
       "sha256": "85fe3b4766ef1010c29d3cc314cbc9bd8345d467ea0cb811473f403d51cd36cb",
@@ -1568,6 +1556,38 @@
       "note": "0552 is a nullable additive field for reported sleep opportunity. It does not backfill or change historical sleep, policy, coefficients, fatigue thresholds, tenant or RBAC. Runtime Worker must not be deployed until the governed migration has been applied and verified in the target environment. This is repo-reviewed only, not a production schema claim."
     },
     {
+      "change_file": "0553_lms_native_v1_evidence.sql",
+      "change_id": "lms-native-v1-evidence-0553",
+      "sha256": "db8e31c3046b3d228f1113e8130f454bc41f95a2af77f251c0cc41f5c98b96e2",
+      "targets": [
+        "lms_native_edicoes",
+        "lms_native_eventos",
+        "lms_native_matricula_edicoes",
+        "lms_native_tentativas"
+      ],
+      "domain": "LMS Native V1 — course edition, enrollment-cycle pin, evidence event ledger, immutable private grading attempts",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-native-v1-evidence-0553.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0553.md",
+      "note": "Versioned additive candidate for Player 3, pending governed Schema V2 preflight and recovery point. No staging/production migration, student data writes, or course publication has occurred."
+    },
+    {
+      "change_file": "0554_lms_player3_module_attempts.sql",
+      "change_id": "lms-player3-module-attempts-0554",
+      "sha256": "0c4873f58b2e2c17f52d183d55b317ee9d91ee70c56d84807b844a2adf04f282",
+      "targets": [
+        "lms_player3_politicas",
+        "lms_player3_tentativas_modulares"
+      ],
+      "domain": "Player3 certifying module policies and immutable per-stage attempt ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-player3-module-attempts-0554.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0554.md",
+      "note": "Additive staged candidate dependent on 0553; no D1/production mutation or certificate issued. Requires governed schema workflow and actual staging E2E."
+    },
+    {
       "change_file": "0557_lms_cycle_evidence_archive.sql",
       "change_id": "lms-cycle-evidence-0557",
       "sha256": "6df04a3d9fa5f3975a914d978600ac00f492438c02655deb211893f208a32b8e",
@@ -1581,6 +1601,18 @@
       "reviewed_manifest": "lms-cycle-evidence-0557.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-cycle-evidence-0557.md",
       "note": "Additive DDL only. Runtime atomic enrollment/cycle reset is gated on migration 0557 and consumes only active-cycle xAPI. No production D1 data write or production schema application claimed; requires SHA-specific governance and recovery. Immutable audit storage is enforced by D1 triggers: archive snapshots and attributed xAPI cannot be updated/deleted, and tenant/cycle mismatch aborts attribution."
+    },
+    {
+      "change_file": "ead-category-reconciliation-executor-0453.sql",
+      "change_id": null,
+      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
+      "targets": [
+        "ead_category_reconciliation_runs"
+      ],
+      "domain": "EAD category reconciliation executor ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
     }
   ]
 }

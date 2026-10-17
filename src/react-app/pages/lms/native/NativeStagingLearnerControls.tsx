@@ -1,0 +1,281 @@
+/**
+ * Native V1 staging learner pilot: explicit start, durable lesson visits and
+ * server-graded attempts. Never sets a completion status or certificate.
+ * All mutations are re-read from the authenticated, pinned edition/cycle.
+ */
+import { useRef, useState } from 'react';
+import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
+import type { NativeAsset, NativeLearnerCourse } from '../../../../../worker-airtrust/src/lib/lms/lms-native-course-contract';
+import NativeCoursePreview from './NativeCoursePreview';
+
+export type NativePilotSession = {
+  nextSequence: number;
+  seenLessonIds: string[];
+  lastVisitedUnitId: string | null;
+  latestAttempt: null | {
+    attempt_number: number;
+    score_pct: number | null;
+    assessment_satisfied: boolean;
+  };
+};
+
+type Props = {
+  matriculaId: number;
+  cycleId: number;
+  editionHash: string;
+  course: NativeLearnerCourse;
+  initialSession: NativePilotSession;
+  completionSupported?: boolean;
+  fetchAuthorizedAsset: (asset: NativeAsset, signal: AbortSignal) => Promise<Blob>;
+  onVerifiedStarted?: () => void;
+};
+
+function newEventId(): string {
+  // Cryptographically random event ID, not a credential. Never use the
+  // lesson ID as an idempotency key across enrollment cycles or retries.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return 'v-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export default function NativeStagingLearnerControls({
+  matriculaId, cycleId, editionHash, course, initialSession,
+  completionSupported = false, fetchAuthorizedAsset, onVerifiedStarted,
+}: Props) {
+  const [session, setSession] = useState(initialSession);
+  const [started, setStarted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [practiceFeedback, setPracticeFeedback] = useState<{
+    questionId: string; optionId: string; correct: boolean; feedback: string;
+  } | null>(null);
+  const inFlight = useRef(false);
+
+  const base = `${API_BASE_URL}/lms/native/matriculas/${matriculaId}`;
+  const lessonIds = new Set(course.units.filter((unit) => unit.kind === 'lesson').map((unit) => unit.id));
+  const practiceIds = new Set(course.units.filter((unit) => unit.kind === 'practice')
+    .flatMap((unit) => unit.questionIds));
+  const examQuestions = course.questions.filter((q) => !practiceIds.has(q.id));
+
+  async function refreshSession(): Promise<NativePilotSession> {
+    const response = await fetchWithAuth(`${base}/sessao`, { method: 'GET', cache: 'no-store' });
+    if (!response.ok) throw new Error('NATIVE_SESSION_RECHECK_FAILED');
+    const body = await response.json() as { success?: boolean; data?: Record<string, unknown> };
+    const data = body.data;
+    if (body.success !== true || !data ||
+        data.matricula_id !== matriculaId || data.ciclo_id !== cycleId ||
+        data.edition_sha256 !== editionHash || data.mode !== 'LEARN' ||
+        data.completion_supported !== completionSupported ||
+        !Number.isSafeInteger(data.next_sequence) ||
+        (data.next_sequence as number) < 1 || (data.next_sequence as number) > 10001 ||
+        !Array.isArray(data.seen_lesson_ids) ||
+        data.seen_lesson_ids.some((id: unknown) => typeof id !== 'string' || !lessonIds.has(id)) ||
+        new Set(data.seen_lesson_ids).size !== data.seen_lesson_ids.length ||
+        (data.last_visited_unit_id !== null &&
+          (typeof data.last_visited_unit_id !== 'string' ||
+            !data.seen_lesson_ids.includes(data.last_visited_unit_id)))) {
+      throw new Error('NATIVE_SESSION_SCOPE_OR_LEDGER_CONFLICT');
+    }
+    const latest = data.latest_attempt;
+    if (latest != null && (
+      typeof latest !== 'object' || Array.isArray(latest) ||
+      !Number.isSafeInteger((latest as Record<string, unknown>).attempt_number) ||
+      ((latest as Record<string, number>).attempt_number < 1 ||
+        (latest as Record<string, number>).attempt_number > 500) ||
+      typeof (latest as Record<string, unknown>).assessment_satisfied !== 'boolean' ||
+      ((latest as Record<string, unknown>).score_pct !== null &&
+        (typeof (latest as Record<string, unknown>).score_pct !== 'number' ||
+         !Number.isFinite((latest as Record<string, number>).score_pct) ||
+         (latest as Record<string, number>).score_pct < 0 ||
+         (latest as Record<string, number>).score_pct > 100))
+    )) throw new Error('NATIVE_SESSION_INVALID_ATTEMPT');
+    const next: NativePilotSession = {
+      nextSequence: data.next_sequence as number,
+      seenLessonIds: data.seen_lesson_ids as string[],
+      lastVisitedUnitId: data.last_visited_unit_id as string | null,
+      latestAttempt: latest as NativePilotSession['latestAttempt'] ?? null,
+    };
+    setSession(next);
+    return next;
+  }
+
+  async function postEvidence(path: 'iniciar' | 'checkpoints' | 'tentativas', payload: unknown): Promise<Record<string, unknown>> {
+    const response = await fetchWithAuth(`${base}/${path}`, {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error('NATIVE_WRITE_REJECTED');
+    const json = await response.json() as { success?: boolean; data?: Record<string, unknown> };
+    if (json.success !== true || !json.data || json.data.edition_sha256 !== editionHash ||
+        json.data.completion_supported !== false) throw new Error('NATIVE_WRITE_SCOPE_CONFLICT');
+    return json.data;
+  }
+
+  async function mutate(action: () => Promise<void>): Promise<void> {
+    if (inFlight.current || locked) return;
+    inFlight.current = true;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await action();
+    } catch {
+      // The server may have committed despite a transport error. Lock writes
+      // rather than risk replay with an invented sequence or attempt number.
+      setLocked(true);
+      setMessage('Não foi possível confirmar o registro. Atualize a página antes de tentar novamente.');
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  const start = () => void mutate(async () => {
+    const receipt = await postEvidence('iniciar', {});
+    if (receipt.ciclo_id !== cycleId ||
+        !['STARTED', 'ALREADY_STARTED'].includes(String(receipt.state))) throw new Error('NATIVE_START_MISMATCH');
+    await refreshSession();
+    setStarted(true);
+    setMessage('Registro de aprendizagem habilitado neste ciclo. Ainda não é uma conclusão.');
+    // A verified server receipt and persisted re-read may unlock authored content.
+    onVerifiedStarted?.();
+  });
+
+  const visit = (unitId: string) => void mutate(async () => {
+    if (!started || !lessonIds.has(unitId) ||
+        session.seenLessonIds.includes(unitId) ||
+        session.nextSequence > 10000) throw new Error('NATIVE_VISIT_INVALID');
+    const sequence = session.nextSequence;
+    const receipt = await postEvidence('checkpoints', {
+      eventId: newEventId(), sequence, unitId,
+    });
+    if (receipt.committed_sequence !== sequence ||
+        !['APPLIED', 'IDEMPOTENT_REPLAY'].includes(String(receipt.state))) {
+      throw new Error('NATIVE_CHECKPOINT_MISMATCH');
+    }
+    const updated = await refreshSession();
+    if (!updated.seenLessonIds.includes(unitId) || updated.nextSequence <= sequence) {
+      throw new Error('NATIVE_CHECKPOINT_UNCONFIRMED');
+    }
+    setMessage('Visita registrada pelo servidor. Isso não comprova conclusão da aula.');
+  });
+
+  const checkPractice = (questionId: string, optionId: string) => void mutate(async () => {
+    if (!started || !practiceIds.has(questionId) ||
+        !course.questions.find((q) => q.id === questionId)?.options.some((o) => o.id === optionId)) {
+      throw new Error('NATIVE_PRACTICE_INVALID');
+    }
+    const response = await fetchWithAuth(`${base}/pratica`, {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ questionId, optionId }),
+    });
+    if (!response.ok) throw new Error('NATIVE_PRACTICE_NOT_CONFIRMED');
+    const body = await response.json() as {success?: boolean; data?: {
+      question_id: string; edition_sha256: string;
+      correct: boolean; feedback: string; non_certifying: boolean;
+    }};
+    if (body.success !== true || body.data?.question_id !== questionId ||
+        body.data.edition_sha256 !== editionHash ||
+        body.data.non_certifying !== true || typeof body.data.correct !== 'boolean' ||
+        typeof body.data.feedback !== 'string' || !body.data.feedback.trim() ||
+        body.data.feedback.length > 4000) throw new Error('NATIVE_PRACTICE_INVALID_RECEIPT');
+    setPracticeFeedback({ questionId, optionId, correct: body.data.correct, feedback: body.data.feedback });
+    setMessage('Fixação corrigida pelo servidor. Não altera a nota ou a tentativa oficial.');
+  });
+
+  const submit = (answers: Array<{ questionId: string; optionId: string }>) => void mutate(async () => {
+    if (!started || answers.length !== examQuestions.length ||
+        examQuestions.some((question, i) =>
+          answers[i]?.questionId !== question.id ||
+          !question.options.some((option) => option.id === answers[i].optionId))) {
+      throw new Error('NATIVE_ATTEMPT_INVALID');
+    }
+    const attemptNumber = (session.latestAttempt?.attempt_number ?? 0) + 1;
+    if (attemptNumber > 500) throw new Error('NATIVE_ATTEMPTS_EXHAUSTED');
+    const receipt = await postEvidence('tentativas', { attemptNumber, answers });
+    if (receipt.attempt_number !== attemptNumber ||
+        typeof receipt.assessment_satisfied !== 'boolean') throw new Error('NATIVE_ATTEMPT_MISMATCH');
+    const updated = await refreshSession();
+    if (updated.latestAttempt?.attempt_number !== attemptNumber ||
+        updated.latestAttempt.assessment_satisfied !== receipt.assessment_satisfied ||
+        updated.latestAttempt.score_pct !== receipt.score_pct) throw new Error('NATIVE_ATTEMPT_UNCONFIRMED');
+    setMessage(updated.latestAttempt.assessment_satisfied
+      ? completionSupported
+        ? 'Avaliação registrada e critérios atendidos. A conclusão ainda precisa ser confirmada pelo servidor.'
+        : 'Avaliação registrada e critérios de avaliação atendidos. Certificação ainda indisponível.'
+      : 'Avaliação registrada; critérios de aprovação ainda não atendidos. Nenhum certificado emitido.');
+  });
+
+  const readyToComplete = completionSupported && started && !busy &&
+    !locked && !completed && session.latestAttempt?.assessment_satisfied === true &&
+    lessonIds.size > 0 && session.seenLessonIds.length === lessonIds.size &&
+    session.seenLessonIds.every((id) => lessonIds.has(id));
+
+  const finish = () => void mutate(async () => {
+    // Refresh durable evidence immediately before requesting canonical
+    // completion. Client readiness never authorizes the server-side write.
+    const current = await refreshSession();
+    if (current.latestAttempt?.assessment_satisfied !== true ||
+        lessonIds.size === 0 || current.seenLessonIds.length !== lessonIds.size ||
+        current.seenLessonIds.some((id) => !lessonIds.has(id))) {
+      throw new Error('NATIVE_COMPLETION_NOT_READY');
+    }
+    const response = await fetchWithAuth(`${base}/concluir`, {
+      method: 'POST', cache: 'no-store',
+    });
+    if (!response.ok) throw new Error('NATIVE_CANONICAL_COMPLETION_REJECTED');
+    const result = await response.json() as {
+      success?: boolean;
+      data?: { matricula_id: number; status: string;
+        qualification_outcome: string; certificate_state: string };
+    };
+    if (result.success !== true || result.data?.matricula_id !== matriculaId ||
+        result.data.status !== 'CONCLUIDO' ||
+        !['qualification_created', 'qualification_reused', 'qualification_not_required']
+          .includes(result.data.qualification_outcome) ||
+        !['REQUIRES_VERIFICATION', 'NOT_APPLICABLE']
+          .includes(result.data.certificate_state)) {
+      throw new Error('NATIVE_COMPLETION_INVALID_RECEIPT');
+    }
+    setCompleted(true);
+    setLocked(true);
+    setMessage(result.data.certificate_state === 'REQUIRES_VERIFICATION'
+      ? 'Treinamento concluído pelo servidor. A disponibilidade do certificado deve ser confirmada no histórico.'
+      : 'Treinamento concluído pelo servidor. Este curso não exige certificado.');
+  });
+
+  return (
+    <section aria-label="Piloto Native com evidências" className="space-y-4">
+      <div className="mx-auto max-w-5xl space-y-2 px-4 pt-4">
+        <p className="text-sm font-semibold">Piloto exclusivo de staging. A conclusão e a emissão de certificados dependem de confirmação do servidor.</p>
+        {!started && !locked && (
+          <button type="button" onClick={start} disabled={busy}
+            className="rounded border px-4 py-2 disabled:opacity-50">
+            Iniciar ou retomar registro do treinamento
+          </button>
+        )}
+        {readyToComplete && (
+          <button type="button" onClick={finish} disabled={busy}
+            className="rounded border px-4 py-2 disabled:opacity-50">
+            Finalizar treinamento
+          </button>
+        )}
+        {message && <p role={locked && !completed ? 'alert' : 'status'}>{message}</p>}
+      </div>
+      <NativeCoursePreview
+        course={course}
+        resolveAssetHref={() => null}
+        fetchAuthorizedAsset={fetchAuthorizedAsset}
+        initialUnitId={initialSession.lastVisitedUnitId}
+        serverSeenLessonIds={session.seenLessonIds}
+        onRecordLessonVisit={started && !locked && !completed ? visit : undefined}
+        onSubmitAssessment={started && !locked && !completed ? submit : undefined}
+        onCheckPractice={started && !locked && !completed ? checkPractice : undefined}
+        practiceFeedback={practiceFeedback}
+        evidenceBusy={busy}
+      />
+    </section>
+  );
+}

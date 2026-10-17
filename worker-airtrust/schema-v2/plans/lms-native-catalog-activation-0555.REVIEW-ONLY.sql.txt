@@ -1,0 +1,313 @@
+-- NON-DEPLOYABLE REVIEW CANDIDATE: Native catalog activation (0551 concept).
+-- This is a .sql.txt reference file, not an executable .sql change or an allowed reviewed Schema V2 SQL path.
+-- NO manifest, SHA authorization, recovery point or Schema V2 apply exists.
+-- Requires governed application of 0550 first on a verified EMPTY Native schema.
+-- Do not enable staging tenant flags until D1 batch, audits and rollback are validated.
+-- SQL rehearsal only on synthetic SQLite with PRAGMA foreign_keys=ON.
+SELECT json(CASE WHEN
+  (SELECT foreign_keys FROM pragma_foreign_keys)=1
+  AND (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN
+    ('lms_native_edicoes','lms_native_matricula_edicoes',
+     'lms_native_eventos','lms_native_tentativas'))=4
+  AND (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN
+    ('lms_native_edicoes_tenant_insert','lms_native_vinculo_tenant_insert',
+     'lms_native_event_scope_sequence','lms_native_attempt_scope'))=4
+  AND (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'
+      AND name='lms_player3_attempt_insert')=1
+  AND (SELECT COUNT(*) FROM sqlite_master WHERE type='table'
+      AND name IN ('lms_player3_politicas','lms_player3_tentativas_modulares'))=2
+  AND (SELECT COUNT(*) FROM sqlite_master WHERE name IN
+    ('lms_native_catalog_activation','lms_native_enrollment_intents',
+     'lms_native_uncommittable_intent_guard'))=0
+  AND (SELECT COUNT(*) FROM lms_native_edicoes)=0
+  AND (SELECT COUNT(*) FROM lms_native_matricula_edicoes)=0
+  AND (SELECT COUNT(*) FROM lms_native_eventos)=0
+  AND (SELECT COUNT(*) FROM lms_native_tentativas)=0
+THEN 'null' ELSE 'NATIVE_0554_CANDIDATE_PREFLIGHT_DENIED' END);
+
+CREATE TABLE lms_native_catalog_activation (
+  curso_id INTEGER PRIMARY KEY REFERENCES lms_cursos(id) ON DELETE RESTRICT,
+  empresa_id INTEGER NOT NULL CHECK(empresa_id > 0),
+  activated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TRIGGER trg_native_catalog_activation_insert BEFORE INSERT ON lms_native_catalog_activation
+BEGIN
+  SELECT RAISE(ABORT,'NATIVE_CATALOG_TENANT_OR_SOURCE_CONFLICT')
+    WHERE NOT EXISTS (
+      SELECT 1 FROM lms_cursos c
+       WHERE c.id=NEW.curso_id AND c.empresa_id=NEW.empresa_id
+         AND c.tipo_conteudo='scorm' AND c.deleted_at IS NULL
+         AND NULLIF(TRIM(COALESCE(c.scorm_launch_file,'')),'') IS NULL
+         AND NULLIF(TRIM(COALESCE(c.scorm_package_r2_prefix,'')),'') IS NULL
+    );
+  SELECT RAISE(ABORT,'NATIVE_CATALOG_PREEXISTING_ENROLLMENT')
+    WHERE EXISTS (SELECT 1 FROM lms_matriculas m WHERE m.curso_id=NEW.curso_id);
+  SELECT RAISE(ABORT,'NATIVE_CATALOG_PREEXISTING_SCORM_PACKAGE')
+    WHERE EXISTS (SELECT 1 FROM lms_scorm_package_versions v WHERE v.curso_id=NEW.curso_id);
+END;
+CREATE TRIGGER trg_native_catalog_activation_immutable_update
+BEFORE UPDATE ON lms_native_catalog_activation
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_ACTIVATION_IMMUTABLE'); END;
+CREATE TRIGGER trg_native_catalog_activation_immutable_delete
+BEFORE DELETE ON lms_native_catalog_activation
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_ACTIVATION_IMMUTABLE'); END;
+CREATE TRIGGER trg_native_catalog_course_format_lock BEFORE UPDATE ON lms_cursos
+WHEN EXISTS (SELECT 1 FROM lms_native_catalog_activation marker WHERE marker.curso_id=OLD.id)
+  AND (NEW.empresa_id != OLD.empresa_id OR NEW.tipo_conteudo != OLD.tipo_conteudo
+    OR NEW.scorm_launch_file IS NOT OLD.scorm_launch_file
+    OR NEW.scorm_package_r2_prefix IS NOT OLD.scorm_package_r2_prefix)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COURSE_FORMAT_LOCKED'); END;
+-- This offline pilot is deliberately enrollment-frozen until a governed,
+-- atomic Native enrollment + edition-pin contract supersedes these triggers.
+-- Replaced the pilot-wide enrollment deny with a one-transaction, deferred-FK intent gate.
+CREATE TRIGGER trg_native_catalog_no_legacy_enrollment_retarget
+BEFORE UPDATE OF curso_id ON lms_matriculas
+WHEN EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.curso_id=NEW.curso_id)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_ENROLLMENT_REQUIRES_NATIVE_PIN'); END;
+CREATE TRIGGER trg_native_catalog_no_scorm_version_insert
+BEFORE INSERT ON lms_scorm_package_versions
+WHEN EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.curso_id=NEW.curso_id)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_SCORM_VERSION_DENIED'); END;
+CREATE TRIGGER trg_native_catalog_no_scorm_version_retarget
+BEFORE UPDATE OF curso_id ON lms_scorm_package_versions
+WHEN EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.curso_id=NEW.curso_id)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_SCORM_VERSION_DENIED'); END;
+
+-- A deferred FK to an UNFILLABLE sentinel prevents any persistent orphan
+-- intent at COMMIT. Within a single transaction the intent may exist briefly,
+-- but it MUST be deleted after the matching enrollment/cycle/pin is verified.
+CREATE TABLE lms_native_uncommittable_intent_guard(
+  id INTEGER PRIMARY KEY CHECK(0)
+);
+CREATE TABLE lms_native_enrollment_intents(
+  nonce TEXT PRIMARY KEY CHECK(length(nonce)=64),
+  empresa_id INTEGER NOT NULL, curso_id INTEGER NOT NULL,
+  funcionario_id INTEGER NOT NULL, actor_user_id INTEGER NOT NULL,
+  edicao_id INTEGER NOT NULL REFERENCES lms_native_edicoes(id),
+  matricula_id INTEGER, ciclo_id INTEGER,
+  uncommittable INTEGER NOT NULL DEFAULT 1
+    REFERENCES lms_native_uncommittable_intent_guard(id)
+    DEFERRABLE INITIALLY DEFERRED
+);
+CREATE TRIGGER native_intent_required BEFORE INSERT ON lms_matriculas
+WHEN EXISTS(SELECT 1 FROM lms_native_catalog_activation a
+             WHERE a.empresa_id=NEW.empresa_id AND a.curso_id=NEW.curso_id)
+BEGIN
+ SELECT RAISE(ABORT,'NATIVE_ENROLLMENT_INTENT_REQUIRED')
+ WHERE NOT EXISTS (
+   SELECT 1 FROM lms_native_enrollment_intents i
+   WHERE i.empresa_id=NEW.empresa_id AND i.curso_id=NEW.curso_id
+     AND i.funcionario_id=NEW.funcionario_id AND i.matricula_id IS NULL
+     AND i.ciclo_id IS NULL
+ );
+END;
+
+-- Immutable identity: never transform an existing marked course enrollment
+-- into another person's/certificate context via a legacy administrative writer.
+CREATE TRIGGER trg_native_catalog_enrollment_identity_lock
+BEFORE UPDATE OF empresa_id,curso_id,funcionario_id ON lms_matriculas
+WHEN EXISTS (
+ SELECT 1 FROM lms_native_catalog_activation a
+ WHERE a.curso_id=OLD.curso_id OR a.curso_id=NEW.curso_id
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_ENROLLMENT_IDENTITY_IMMUTABLE'); END;
+
+-- No legacy/background cycle insertion or silent cycle retarget after Native activation.
+-- The initial cycle must be inserted while a matching one-transaction intent
+-- exists; all other new cycles require a future reviewed lifecycle contract.
+CREATE TRIGGER trg_native_catalog_cycle_requires_intent
+BEFORE INSERT ON lms_matricula_ciclos
+WHEN EXISTS (
+ SELECT 1 FROM lms_native_catalog_activation a
+ WHERE a.empresa_id=NEW.empresa_id AND a.curso_id=NEW.curso_id
+)
+BEGIN
+ SELECT RAISE(ABORT,'NATIVE_CATALOG_CYCLE_INTENT_REQUIRED') WHERE NOT EXISTS (
+  SELECT 1 FROM lms_native_enrollment_intents i
+  WHERE i.empresa_id=NEW.empresa_id AND i.curso_id=NEW.curso_id
+    AND i.funcionario_id=NEW.funcionario_id AND i.matricula_id=NEW.matricula_id
+    AND i.ciclo_id IS NULL
+ );
+END;
+CREATE TRIGGER trg_native_catalog_cycle_identity_lock
+BEFORE UPDATE OF empresa_id,curso_id,funcionario_id,matricula_id,numero_ciclo,ciclo_atual
+ON lms_matricula_ciclos
+WHEN EXISTS (
+ SELECT 1 FROM lms_native_catalog_activation a
+ WHERE a.curso_id=OLD.curso_id OR a.curso_id=NEW.curso_id
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_CYCLE_IDENTITY_IMMUTABLE'); END;
+
+
+-- Until canonical Native completion (evidence + history + certificate) is
+-- governed, legacy writers must never stamp a Native-marked cycle as
+-- completed or silently attach qualification history. Ordinary START /
+-- IN_PROGRESS transitions remain possible through the Native worker.
+CREATE TRIGGER trg_native_catalog_no_ungoverned_matricula_completion_insert
+BEFORE INSERT ON lms_matriculas
+WHEN EXISTS (
+  SELECT 1 FROM lms_native_catalog_activation a
+  WHERE a.empresa_id=NEW.empresa_id AND a.curso_id=NEW.curso_id
+) AND (
+  NEW.status='CONCLUIDO' OR COALESCE(NEW.progresso_pct,0)>=100
+  OR NEW.data_conclusao IS NOT NULL OR NEW.qualificacao_historico_id IS NOT NULL
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'); END;
+
+CREATE TRIGGER trg_native_catalog_no_ungoverned_matricula_completion_update
+BEFORE UPDATE OF status,progresso_pct,data_conclusao,qualificacao_historico_id
+ON lms_matriculas
+WHEN EXISTS (
+  SELECT 1 FROM lms_native_catalog_activation a
+  WHERE a.empresa_id=NEW.empresa_id AND a.curso_id=NEW.curso_id
+) AND (
+  NEW.status='CONCLUIDO' OR COALESCE(NEW.progresso_pct,0)>=100
+  OR NEW.data_conclusao IS NOT NULL OR NEW.qualificacao_historico_id IS NOT NULL
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'); END;
+
+CREATE TRIGGER trg_native_catalog_no_ungoverned_cycle_completion_insert
+BEFORE INSERT ON lms_matricula_ciclos
+WHEN EXISTS (
+  SELECT 1 FROM lms_native_catalog_activation a
+  WHERE a.empresa_id=NEW.empresa_id AND a.curso_id=NEW.curso_id
+) AND (
+  NEW.status='CONCLUIDO' OR COALESCE(NEW.progresso_pct,0)>=100
+  OR NEW.data_conclusao IS NOT NULL OR NEW.qualificacao_historico_id IS NOT NULL
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'); END;
+
+CREATE TRIGGER trg_native_catalog_no_ungoverned_cycle_completion_update
+BEFORE UPDATE OF status,progresso_pct,data_conclusao,qualificacao_historico_id
+ON lms_matricula_ciclos
+WHEN EXISTS (
+  SELECT 1 FROM lms_native_catalog_activation a
+  WHERE a.empresa_id=NEW.empresa_id AND a.curso_id=NEW.curso_id
+) AND (
+  NEW.status='CONCLUIDO' OR COALESCE(NEW.progresso_pct,0)>=100
+  OR NEW.data_conclusao IS NOT NULL OR NEW.qualificacao_historico_id IS NOT NULL
+)
+BEGIN SELECT RAISE(ABORT,'NATIVE_CATALOG_COMPLETION_NOT_GOVERNED'); END;
+
+-- The 0550 triggers assert physical 'native', which staging D1 CHECK rejects.
+-- Replace only the four known course-identity predicates (tenant-correlated).
+-- All owner, cycle, employee, edition, hash, status and R2 constraints are retained.
+DROP TRIGGER lms_native_edicoes_tenant_insert;
+CREATE TRIGGER lms_native_edicoes_tenant_insert BEFORE INSERT ON lms_native_edicoes
+BEGIN
+  SELECT RAISE(ABORT,'NATIVE_EDITION_COURSE_SCOPE') WHERE NOT EXISTS (
+    SELECT 1 FROM lms_cursos c
+     WHERE c.id=NEW.curso_id AND c.empresa_id=NEW.empresa_id
+       AND (c.tipo_conteudo='native' OR (c.tipo_conteudo='scorm' AND EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id))) AND c.deleted_at IS NULL
+  );
+  SELECT RAISE(ABORT,'NATIVE_EDITION_R2_SCOPE') WHERE
+    NEW.r2_prefix != ('lms/native/' || NEW.empresa_id || '/' ||
+                      NEW.curso_id || '/' || NEW.artifact_sha256 || '/');
+  SELECT RAISE(ABORT,'NATIVE_EDITION_REVIEW_GATE') WHERE
+    NEW.status!='DRAFT' OR NEW.reviewed_at IS NOT NULL OR NEW.published_at IS NOT NULL;
+END;
+
+DROP TRIGGER lms_native_vinculo_tenant_insert;
+CREATE TRIGGER lms_native_vinculo_tenant_insert BEFORE INSERT ON lms_native_matricula_edicoes
+BEGIN
+  SELECT RAISE(ABORT,'NATIVE_BINDING_COURSE_TENANT') WHERE NOT EXISTS (
+    SELECT 1 FROM lms_matriculas m
+    JOIN lms_matricula_ciclos ciclo
+      ON ciclo.id=NEW.ciclo_id AND ciclo.matricula_id=m.id
+     AND ciclo.empresa_id=m.empresa_id AND ciclo.curso_id=m.curso_id
+    JOIN lms_native_edicoes e
+      ON e.id=NEW.edicao_id AND e.curso_id=m.curso_id AND e.empresa_id=m.empresa_id
+    WHERE m.id=NEW.matricula_id AND m.empresa_id=NEW.empresa_id
+      AND m.curso_id=NEW.curso_id AND m.deleted_at IS NULL
+      AND ciclo.deleted_at IS NULL AND ciclo.ciclo_atual=1
+      AND ciclo.funcionario_id=m.funcionario_id AND ciclo.status=m.status
+      AND m.status IN ('NAO_INICIADO','EM_ANDAMENTO')
+      AND EXISTS (SELECT 1 FROM lms_cursos c WHERE c.id=m.curso_id
+         AND c.empresa_id=m.empresa_id AND (c.tipo_conteudo='native' OR (c.tipo_conteudo='scorm' AND EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id)))
+         AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL)
+      AND e.status='PUBLISHED'
+  );
+END;
+
+DROP TRIGGER lms_native_event_scope_sequence;
+CREATE TRIGGER lms_native_event_scope_sequence BEFORE INSERT ON lms_native_eventos
+BEGIN
+  SELECT RAISE(ABORT,'NATIVE_EVENT_BINDING_NOT_ACTIVE') WHERE NOT EXISTS (
+    SELECT 1 FROM lms_native_matricula_edicoes b
+    JOIN lms_native_edicoes ed
+      ON ed.id=b.edicao_id AND ed.empresa_id=b.empresa_id AND ed.curso_id=b.curso_id
+    JOIN lms_matriculas m
+      ON m.id=b.matricula_id AND m.empresa_id=b.empresa_id AND m.curso_id=b.curso_id
+    JOIN lms_matricula_ciclos ciclo
+      ON ciclo.id=b.ciclo_id AND ciclo.matricula_id=m.id
+     AND ciclo.empresa_id=m.empresa_id AND ciclo.curso_id=m.curso_id
+    JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+    WHERE b.id=NEW.vinculo_id AND ed.status='PUBLISHED'
+      AND m.status='EM_ANDAMENTO' AND m.deleted_at IS NULL
+      AND ciclo.status='EM_ANDAMENTO' AND ciclo.funcionario_id=m.funcionario_id
+      AND ciclo.ciclo_atual=1 AND ciclo.deleted_at IS NULL
+      AND (c.tipo_conteudo='native' OR (c.tipo_conteudo='scorm' AND EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id))) AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL
+  );
+  SELECT RAISE(ABORT,'NATIVE_EVENT_SEQUENCE_CONFLICT') WHERE NEW.sequencia !=
+    (SELECT COALESCE(MAX(sequencia),0)+1 FROM lms_native_eventos WHERE vinculo_id=NEW.vinculo_id);
+END;
+
+DROP TRIGGER lms_native_attempt_scope;
+CREATE TRIGGER lms_native_attempt_scope BEFORE INSERT ON lms_native_tentativas
+BEGIN
+  SELECT RAISE(ABORT,'NATIVE_ATTEMPT_BINDING_NOT_ACTIVE') WHERE NOT EXISTS (
+    SELECT 1 FROM lms_native_matricula_edicoes b
+    JOIN lms_native_edicoes ed
+      ON ed.id=b.edicao_id AND ed.empresa_id=b.empresa_id AND ed.curso_id=b.curso_id
+    JOIN lms_matriculas m
+      ON m.id=b.matricula_id AND m.empresa_id=b.empresa_id AND m.curso_id=b.curso_id
+    JOIN lms_matricula_ciclos ciclo
+      ON ciclo.id=b.ciclo_id AND ciclo.matricula_id=m.id
+     AND ciclo.empresa_id=m.empresa_id AND ciclo.curso_id=m.curso_id
+    JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+    WHERE b.id=NEW.vinculo_id AND ed.status='PUBLISHED'
+      AND m.status='EM_ANDAMENTO' AND m.deleted_at IS NULL
+      AND ciclo.status='EM_ANDAMENTO' AND ciclo.funcionario_id=m.funcionario_id
+      AND ciclo.ciclo_atual=1 AND ciclo.deleted_at IS NULL
+      AND (c.tipo_conteudo='native' OR (c.tipo_conteudo='scorm' AND EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id))) AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL
+  );
+  SELECT RAISE(ABORT,'NATIVE_ATTEMPT_SEQUENCE_CONFLICT') WHERE NEW.tentativa_numero !=
+    (SELECT COALESCE(MAX(tentativa_numero),0)+1 FROM lms_native_tentativas WHERE vinculo_id=NEW.vinculo_id);
+END;
+
+-- The 0554 official modular writer also enforces the physical Native type.
+-- Without this exact replacement, a governed SCORM alias cannot persist any
+-- official module result and the Player3 terminal can never have proof.
+-- Preserve the 0554 employee, tenant, edition, cycle, policy, and sequence
+-- requirements; activate ONLY the same course-scoped catalog marker as above.
+-- A nonactivated / externally supplied SCORM must remain rejected.
+DROP TRIGGER lms_player3_attempt_insert;
+CREATE TRIGGER lms_player3_attempt_insert BEFORE INSERT ON lms_player3_tentativas_modulares
+BEGIN
+  SELECT RAISE(ABORT,'PLAYER3_STAGE_ACTIVE_SCOPE') WHERE NOT EXISTS (
+    SELECT 1 FROM lms_native_matricula_edicoes b
+    JOIN lms_player3_politicas p ON p.id=NEW.politica_id
+      AND p.edicao_id=b.edicao_id AND p.empresa_id=b.empresa_id
+      AND p.curso_id=b.curso_id AND p.estado='APPROVED'
+    JOIN lms_native_edicoes ed ON ed.id=b.edicao_id
+      AND ed.empresa_id=b.empresa_id AND ed.curso_id=b.curso_id
+      AND ed.status='PUBLISHED'
+    JOIN lms_matriculas m ON m.id=b.matricula_id AND m.empresa_id=b.empresa_id
+      AND m.curso_id=b.curso_id AND m.status='EM_ANDAMENTO'
+      AND m.deleted_at IS NULL
+    JOIN lms_matricula_ciclos cy ON cy.id=b.ciclo_id AND cy.matricula_id=m.id
+      AND cy.empresa_id=m.empresa_id AND cy.curso_id=m.curso_id
+      AND cy.funcionario_id=m.funcionario_id AND cy.ciclo_atual=1
+      AND cy.status='EM_ANDAMENTO' AND cy.deleted_at IS NULL
+    JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+      AND (c.tipo_conteudo='native' OR (c.tipo_conteudo='scorm' AND EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id))) AND c.ativo=1
+      AND c.publicado=1 AND c.deleted_at IS NULL
+    WHERE b.id=NEW.vinculo_id
+  );
+  SELECT RAISE(ABORT,'PLAYER3_STAGE_SEQUENCE_CONFLICT') WHERE
+    NEW.tentativa_numero != (
+      SELECT COALESCE(MAX(tentativa_numero),0)+1
+        FROM lms_player3_tentativas_modulares
+       WHERE vinculo_id=NEW.vinculo_id AND etapa_id=NEW.etapa_id
+    );
+END;

@@ -54,7 +54,9 @@ export default function LmsCursoDetalhe() {
   const learningGoals = useMemo(() => {
     if (!curso) return [];
     return [
-      curso.tipo_conteudo === 'scorm'
+      curso.tipo_conteudo === 'native'
+        ? 'Prévia técnica do curso Native, disponível apenas no piloto autorizado de staging; sem certificação.'
+        : curso.tipo_conteudo === 'scorm'
         ? 'Concluir o pacote SCORM no player protegido e registrar o progresso automaticamente.'
         : curso.tipo_conteudo === 'h5p'
           ? 'Executar o conteúdo interativo H5P com rastreamento do avanço na trilha.'
@@ -75,7 +77,9 @@ export default function LmsCursoDetalhe() {
   function navigatePlayer(matriculaId: number, review?: boolean) {
     if (!curso) return;
     const suffix = review ? '?review=1' : '';
-    if (curso.tipo_conteudo === 'h5p') {
+    if (curso.tipo_conteudo === 'native') {
+      navigate(`/lms/player/native/${matriculaId}${suffix}`);
+    } else if (curso.tipo_conteudo === 'h5p') {
       navigate(`/lms/player/h5p/${matriculaId}${suffix}`);
     } else if (curso.tipo_conteudo === 'pdf') {
       navigate(`/lms/player/pdf/${matriculaId}${suffix}`);

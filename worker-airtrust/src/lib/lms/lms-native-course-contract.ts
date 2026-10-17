@@ -32,7 +32,7 @@ export type NativePresentationTemplate = typeof NATIVE_PRESENTATION_TEMPLATES[nu
 export type NativeUnit = {
   id: string;
   title: string;
-  kind: 'lesson' | 'scenario' | 'assessment';
+  kind: 'lesson' | 'practice' | 'scenario' | 'assessment';
   blocks: NativeBlock[];
   questionIds: string[];
   sourceRefs?: string[];
@@ -227,10 +227,11 @@ export function validateNativeCourseArtifact(input: unknown): NativeCourseArtifa
     if (unit.sourceRefs !== undefined) boundedArray(unit.sourceRefs, 100, true).forEach((ref) => text(ref, 250));
     id(unit.id);
     text(unit.title, 200);
-    if (unit.kind !== 'lesson' && unit.kind !== 'scenario' && unit.kind !== 'assessment') fail('NATIVE_INVALID_UNIT_KIND');
+    if (unit.kind !== 'lesson' && unit.kind !== 'practice' && unit.kind !== 'scenario' && unit.kind !== 'assessment') fail('NATIVE_INVALID_UNIT_KIND');
     const questionIds = boundedArray(unit.questionIds, MAX_QUESTIONS, true).map(id);
     unique(questionIds);
     if (unit.kind === 'lesson' && questionIds.length > 0) fail('NATIVE_QUESTIONS_IN_LESSON');
+    if (unit.kind === 'practice' && !questionIds.length) fail('NATIVE_EMPTY_PRACTICE');
     if (unit.kind === 'assessment' && !questionIds.length) fail('NATIVE_EMPTY_ASSESSMENT');
     if (unit.kind === 'scenario' && !questionIds.length) fail('NATIVE_EMPTY_SCENARIO');
     if (questionIds.some((q) => !knownQuestions.has(q))) fail('NATIVE_UNKNOWN_QUESTION');
