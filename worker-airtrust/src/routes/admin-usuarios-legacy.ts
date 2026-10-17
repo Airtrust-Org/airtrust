@@ -681,7 +681,16 @@ adminUsuariosRoutes.put('/:id', async (c) => {
   const existingCoordinator = await db.prepare(`SELECT 1 AS active FROM usuarios_empresas_perfis
     WHERE usuario_id = ? AND empresa_id = ? AND perfil = 'COORDENACAO_VOO' AND ativo = 1 LIMIT 1`)
     .bind(id, empresaId).first<{active: number}>();
-  const targetPerfil = body?.perfil?.toUpperCase() || (existingCoordinator ? 'COORDENACAO_VOO' : existente.perfil.toUpperCase());
+  // User identity profile is global/legacy; management scope is per tenant.
+  // Read the current membership so editing an existing manager's sectors works
+  // even when usuarios.perfil still says ALUNO from another company.
+  const membership = await db.prepare(`SELECT role FROM usuarios_empresas
+    WHERE usuario_id = ? AND empresa_id = ? LIMIT 1`)
+    .bind(id, empresaId).first<{ role: string }>();
+  const currentTenantPerfil = existingCoordinator
+    ? 'COORDENACAO_VOO'
+    : String(membership?.role || existente.perfil).toUpperCase();
+  const targetPerfil = body?.perfil?.toUpperCase() || currentTenantPerfil;
   if (body?.aluno_tambem !== undefined) {
     if (typeof body.aluno_tambem !== 'boolean') {
       throw badRequest('Opção Aluno deve ser booleana', 'INVALID_ADDITIONAL_PROFILE');
@@ -699,6 +708,7 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     existente.perfil.toUpperCase() === 'ADMINISTRADOR' ||
     existente.perfil.toUpperCase() === 'ADMIN' ||
     isManagerPerfil(existente.perfil) ||
+    isManagerPerfil(currentTenantPerfil) ||
     Boolean(existingCoordinator) ||
     targetPerfil === 'ADMINISTRADOR' ||
     targetPerfil === 'ADMIN' ||
@@ -714,7 +724,11 @@ adminUsuariosRoutes.put('/:id', async (c) => {
   const ativandoGestor = body?.active === true && isManagerPerfil(targetPerfil);
   let setorStatementsParaGestor: D1PreparedStatement[] = [];
 
-  if (tornandoSeGestor || ativandoGestor) {
+  // Existing managers can extend their tenant-scoped sector assignments
+  // without a role change. The same strict tenant validation still applies.
+  const editandoSetoresGestor =
+    isManagerPerfil(targetPerfil) && Array.isArray(body?.setor_ids) && body.setor_ids.length > 0;
+  if (tornandoSeGestor || ativandoGestor || editandoSetoresGestor) {
     if (Array.isArray(body?.setor_ids) && body.setor_ids.length > 0) {
       try {
         setorStatementsParaGestor = await buildManagerSetorInsertStatements(
