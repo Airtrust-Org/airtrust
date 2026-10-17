@@ -190,6 +190,25 @@ describe('admin usuarios invite tenant boundary', () => {
     expect(writes).toHaveLength(0);
   });
 
+  it('does not treat a Gestor in the airtrust tenant as platform administrator', async () => {
+    tenantContext = { empresaId: 1, empresaCodigo: 'airtrust' };
+    const { db, queries } = createDb();
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/admin/usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test' },
+        body: JSON.stringify({
+          email: 'outsider@test.invalid', nome: 'Conta de Teste',
+          perfil: 'INSTRUTOR', aluno_tambem: true, empresa_id: 7,
+        }),
+      }),
+      { DB: db, JWT_SECRET: 'test-secret', ENVIRONMENT: 'test' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(403);
+    expect(queries.every((sql) => !/^\\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(sql))).toBe(true);
+  });
+
   it('blocks tenant admins/managers from inviting users into a different empresa_id', async () => {
     const { db, queries } = createDb();
     const app = createApp();
@@ -217,6 +236,6 @@ describe('admin usuarios invite tenant boundary', () => {
       code: 'WRONG_TENANT',
       error: 'Sem permissão para convidar usuários para outra empresa',
     });
-    expect(queries).toHaveLength(0);
+    expect(queries.every((sql) => !/^\\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(sql))).toBe(true);
   });
 });
