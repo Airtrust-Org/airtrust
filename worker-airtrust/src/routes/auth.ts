@@ -1441,12 +1441,10 @@ authRoutes.get('/me', auth(), async (c) => {
     const empresaIdRaw = c.get('empresaId');
     const empresaId =
       typeof empresaIdRaw === 'string' ? Number(empresaIdRaw) : Number(empresaIdRaw || 0);
-    const resolvedRole = await resolveAuthRoleForUser(
-      db,
-      (user as NonNullable<MeRow>).id,
-      empresaId,
-      (user as NonNullable<MeRow>).perfil,
-    );
+    // auth() já revalidou contra D1 a role ativa da sessão (incluindo
+    // Aluno/Instrutor ou Gestor). Não sobrescrever essa escolha ao restaurar
+    // o contexto React após o login ou o refresh de página.
+    const resolvedRole = normalizeAuthRole((c.get as (key: string) => unknown)('userRole'));
 
     return c.json({
       success: true,
