@@ -67,7 +67,7 @@ function fixture(withMigration=true) {
       VALUES(8,1,384,2,'{"explanation":"historical"}');
   `);
   if(withMigration){
-    const sql=readFileSync(resolve(process.cwd(),'migrations/0551_lms_cycle_evidence_archive.sql'),'utf8');
+    const sql=readFileSync(resolve(process.cwd(),'migrations/0553_lms_cycle_evidence_archive.sql'),'utf8');
     db.database.exec(sql);
   }
   return db;
