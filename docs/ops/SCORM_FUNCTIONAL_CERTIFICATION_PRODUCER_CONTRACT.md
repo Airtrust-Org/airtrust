@@ -104,3 +104,17 @@ Exemplo de comando: `node scripts/qa/scorm-independent-zip-producer.mjs /qa/paco
 ATENCAO: o executor local usa uma API SCORM emulada, NAO o Worker autenticado e seu D1. Seu relatorio sempre contem `source=AIRTRUST_LOCAL_INDEPENDENT_ZIP_PROBE_V1`, `status=UNCERTIFIED`, `activationAuthorized=false` e lista explicitamente provas ausentes: launch autenticado da edicao candidata antes da ativacao, persistencia backend, ciclos/tenant, dois certificados PDF independentes e assinatura governada. Nenhuma observacao local se transforma em atestacao assinada.
 
 Bloqueio de integracao: para produzir a atestacao confiavel, e necessario um launch de staging autenticado da edicao ZIP imutavel antes de sua ativacao, configuracao de matriculas/ciclos sinteticos governados, roteiro independente por hash, consulta read-only do backend e downloads reais dos dois documentos PDF. O pipeline deve produzir evidencias por navegador desse conjunto antes de usar `sign-scorm-functional-attestation.mjs`, sem atalhos do Player 3.
+
+## QA autenticado de edição inativa: rota somente-leitura e limites
+
+A PR #1422 acrescenta inspeção de um **candidato VALIDATED, ainda INACTIVE** no Worker, sem sobrescrever `lms_cursos.scorm_package_r2_prefix` nem usar o launch padrão de uma matrícula. Nenhuma operação abaixo cria matrícula, certificado ou resultado SCORM persistido.
+
+**Em staging ou desenvolvimento apenas**, um gestor com sessão de acesso válida requisita:
+`POST /api/lms/assets/session` com `{ "curso_id": 15, "preview": true, "candidate_package_id": "<uuid>", "candidate_package_sha256": "<64 hex>" }`.
+O serviço exige correspondência exata no banco do **mesmo tenant e curso** entre ID, SHA, prefixo `lms/scorm/<empresa>/<curso>/_candidates/<uuid>/`, status `VALIDATED` e edição **distinta da ativa**, retornando cookie de asset escopado e temporário. O browser então abre `GET /api/lms/scorm/qa-preview/:curso_id/:candidate_id`; assets usam exclusivamente `GET /api/lms/scorm/qa-assets/:empresa_id/:curso_id/:candidate_id/*`. Todas as chamadas revalidam edição e tenant, role de preview e cookie QA; o cookie QA é proibido nas rotas regulares de aprendizagem. Em produção, a API retorna 403 mesmo para administradores.
+
+O preview marca `previewMode=true`, usa `commitUrl=null` e não aceita matrícula real. Sua finalidade é eliminar a circularidade técnica **"ativar para conseguir renderizar candidato"** sem relaxar a assinatura de ativação. **Não** produz atestação, não prova persistência de CMI, avaliação, histórico ou PDF; é uma fase independente anterior ao QA sintético governado.
+
+**Fronteira de integração ainda faltante:** a jornada completa exige tenant/cursos/funcionários e ciclos *sintéticos* autorizados em staging, lançamento de learner que persista CMI da **mesma edição candidata** sem usar o ponteiro ativo, qualificação e PDF baixado do backend com hash. A rota preview NÃO deve ser reutilizada como substituto desta jornada. A assinatura para ativação continua bloqueada até o conjunto de provas real dos dois navegadores.
+
+**Entrada da Frente 3 (não recebida por bytes nesta PR):** ZIP corrigido #15 SHA-256 `cdc5a3cf30e4d37697c1f411977d87e16538bc75a6c03379252bbc2c8c06f6d2` + ZIP original exato #41/CFIT com hash independente; roteiros externos revisados e proveniência segura. O ZIP histórico corrigido #15 `381ef573...` registrado no issue #1311 **não** é intercambiável. Sem acesso verificável aos arquivos, estado `INCONCLUSIVE / CONTENT_NOT_DELIVERED`, nunca `CERTIFIED`.
