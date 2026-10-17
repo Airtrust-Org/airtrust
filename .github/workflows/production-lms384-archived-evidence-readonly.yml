@@ -1,0 +1,71 @@
+name: Production LMS384 Archived Progress Evidence Readonly
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        required: true
+        description: 'Exact reviewed main commit'
+        type: string
+      expected_production_sha:
+        required: true
+        description: 'Exact published Worker source'
+        type: string
+      confirmation:
+        required: true
+        description: 'AIRTRUST_LMS384_READONLY_EVIDENCE'
+        type: string
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-lms384-archived-evidence-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - name: Enforce exact main and eight canonical release gates
+        env:
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_MAIN_SHA" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$CONFIRMATION" == "AIRTRUST_LMS384_READONLY_EVIDENCE" ]] || exit 1
+          node scripts/ci/verify-release-gates.mjs
+      - name: Install locked read-only database client
+        run: npm --prefix worker-airtrust ci --ignore-scripts
+      - name: Run fixed tenant and enrollment SELECT-only investigation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || exit 1
+          node scripts/production/lms384-cancelled-progress-evidence-readonly.mjs > "$RUNNER_TEMP/lms384-evidence.json"
+          node -e "const x=require(process.argv[1]);if(x.tenant!==6||x.enrollment!==384||x.course!==34||x.writes!==0||x.personal_data!==false)process.exit(1);console.log('LMS384_FIXED_READONLY_EVIDENCE_PASS')" "$RUNNER_TEMP/lms384-evidence.json"
+      - name: Record sanitized history report
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lms384-historic-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/lms384-evidence.json
+          retention-days: 7
+          if-no-files-found: error
