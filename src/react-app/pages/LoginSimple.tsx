@@ -90,8 +90,8 @@ type SelectProfileResponse = {
 };
 
 const PROFILE_LABELS: Record<SessionRole, string> = {
-  ADMINISTRADOR: 'Administrador Geral',
-  GESTOR: 'Administrador da Empresa',
+  ADMINISTRADOR: 'Administrador',
+  GESTOR: 'Gestor',
   COORDENACAO_VOO: 'Coordenação de Voo',
   INSTRUTOR: 'Instrutor',
   ALUNO: 'Aluno',
