@@ -80,6 +80,12 @@ const flightDateTodayButton = document.querySelector('#flight-date-today');
 const flightDateNextButton = document.querySelector('#flight-date-next');
 const cachedCount = document.querySelector('#cached-count');
 const storageLabel = document.querySelector('#storage');
+const storageRetentionStatus = document.querySelector('#storage-retention-status');
+const legacyVaultCard = document.querySelector('#legacy-vault-card');
+const legacyVaultForm = document.querySelector('#legacy-vault-form');
+const legacyVaultPin = document.querySelector('#legacy-vault-pin');
+const legacyVaultRecoverButton = document.querySelector('#legacy-vault-recover');
+const legacyVaultStatus = document.querySelector('#legacy-vault-status');
 const cachedFlights = document.querySelector('#cached-flights');
 const onlineFlights = document.querySelector('#online-flights');
 const flightDetailCard = document.querySelector('#flight-detail-card');
@@ -729,14 +735,27 @@ async function updateStorageEstimate() {
     ' MB';
 }
 
-async function requestPersistentStorage() {
+export async function requestPersistentStorage() {
+  let state = 'unavailable';
   if (navigator.storage && typeof navigator.storage.persist === 'function') {
     try {
-      await navigator.storage.persist();
+      state = (await navigator.storage.persist()) === true ? 'granted' : 'denied';
     } catch {
-      // A UI nunca transforma esta tentativa em garantia de persistência.
+      state = 'error';
     }
   }
+  if (storageRetentionStatus) {
+    const messages = {
+      granted: 'Retenção persistente autorizada pelo navegador. Ainda faça a sincronização após o voo.',
+      denied: 'Navegador não concedeu retenção persistente. Há risco de limpeza automática: sincronize assim que tiver conexão.',
+      unavailable: 'Retenção persistente não disponível neste dispositivo. Dados locais podem ser removidos pelo sistema.',
+      error: 'Não foi possível verificar a retenção persistente. Não considere os dados locais um backup permanente.',
+    };
+    storageRetentionStatus.className = 'statusline ' + (state === 'granted' ? 'ok' : 'attention');
+    storageRetentionStatus.textContent = messages[state];
+    storageRetentionStatus.dataset.retention = state;
+  }
+  return state;
 }
 
 async function registerPilotServiceWorker() {
@@ -5340,6 +5359,11 @@ function enqueueDiagnosticSave(snapshot) {
         },
         nextRevision,
       );
+      const confirmedDraft = await vault.getJson('rdv_drafts', DRAFT_ID);
+      if (confirmedDraft?.localRevision !== nextRevision ||
+          confirmedDraft?.value?.observacoes !== snapshot) {
+        throw new Error('Rascunho diagnóstico não passou na leitura após gravação.');
+      }
       localRevision = nextRevision;
       revisionLabel.textContent = String(localRevision);
       lastSavedLabel.textContent = formatTimestamp(new Date().toISOString());
@@ -5501,12 +5525,42 @@ window.addEventListener('pagehide', () => {
   }
 });
 
+legacyVaultForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const pin = legacyVaultPin.value;
+  legacyVaultPin.value = '';
+  legacyVaultRecoverButton.disabled = true;
+  legacyVaultStatus.className = 'statusline attention';
+  legacyVaultStatus.textContent = 'Verificando e recuperando os registros cifrados…';
+  try {
+    const result = await vault.recoverLegacyPin(pin);
+    if (result.status !== 'ready' || (await vault.openAutomatically()).status !== 'ready') {
+      throw new Error('Recuperação não foi confirmada.');
+    }
+    legacyVaultCard.classList.add('hidden');
+    await openWorkspace();
+    setSessionMessage('Armazenamento antigo recuperado e verificado. O banco V1 original foi preservado.', 'ok');
+  } catch (error) {
+    legacyVaultStatus.className = 'statusline error';
+    legacyVaultStatus.textContent =
+      (error instanceof Error ? error.message : 'Falha na recuperação.') +
+      ' O armazenamento antigo foi preservado. Não limpe os dados deste dispositivo.';
+  } finally {
+    legacyVaultRecoverButton.disabled = false;
+  }
+});
+
 async function bootstrapPilotApp() {
   try {
     updateFlightNotificationControl();
     if (!offlineFlightLockMarkerActive()) await registerPilotServiceWorker();
     vault = await PilotVault.open();
     const vaultOpenState = await vault.openAutomatically();
+    if (vaultOpenState.status === 'legacy-pin-required') {
+      legacyVaultCard.classList.remove('hidden');
+      legacyVaultPin.focus();
+      return;
+    }
     if (vaultOpenState.status !== 'ready') {
       throw new Error('Falha ao preparar armazenamento offline automático.');
     }

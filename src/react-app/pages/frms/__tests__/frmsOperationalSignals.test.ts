@@ -83,10 +83,22 @@ function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperati
 }
 
 describe('resolveDailyFatigueSignal', () => {
-  it('RECEBIDO → verde "Realizada"', () => {
+  it('check-in recebido é coleta informativa, nunca liberação', () => {
     const s = resolveDailyFatigueSignal(item({ checkin_status: 'RECEBIDO' }));
-    expect(s.tone).toBe('ok');
-    expect(s.value).toBe('Realizada');
+    expect(s.tone).toBe('info');
+    expect(s.value).toBe('Recebido');
+    expect(s.detail).toContain('não comprova baixa fadiga nem autoriza liberação');
+  });
+
+  it('mantém a coleta informativa mesmo com KSS alto', () => {
+    const s = resolveDailyFatigueSignal(item({
+      checkin_status: 'RECEBIDO',
+      kss_score: 8,
+      alertas: ['KSS_ALTO'],
+      snapshot_status: 'ATENCAO',
+    }));
+    expect(s.tone).toBe('info');
+    expect(s.detail).toContain('KSS 8');
   });
 
   it('AUSENTE → vermelho e nunca verde', () => {

@@ -217,4 +217,96 @@ describe('useFrmsOperationalSnapshot', () => {
     expect(result.current.lastUpdatedAt).toBe(previousStamp);
     expect(result.current.error).toBeTruthy();
   });
+  it('não mistura snapshots de dias diferentes quando o novo recorte falha', async () => {
+    const valid = (day: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        data: [{ data_operacional: day, funcionario_id: 10, nome: 'QA tripulante' }],
+        summary: { total_tripulantes: 1 },
+      }),
+    });
+    let resolveSecond: (value: unknown) => void = () => {};
+    fetchWithAuthMock
+      .mockResolvedValueOnce(valid('2026-10-13'))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+
+    const { result, rerender } = renderHook(
+      ({ day }) => useFrmsOperationalSnapshot({ data_inicio: day, data_fim: day }),
+      { initialProps: { day: '2026-10-13' } },
+    );
+    await waitFor(() => expect(result.current.data[0]?.data_operacional).toBe('2026-10-13'));
+    rerender({ day: '2026-10-14' });
+    expect(result.current.data).toEqual([]);
+    expect(result.current.summary.total_tripulantes).toBe(0);
+    expect(result.current.lastUpdatedAt).toBeNull();
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      resolveSecond({ ok: false, status: 500, json: async () => ({ success: false, error: 'indisponível' }) });
+    });
+    await waitFor(() => expect(result.current.error).toBe('indisponível'));
+    expect(result.current.data).toEqual([]);
+    expect(result.current.summary.total_tripulantes).toBe(0);
+    expect(result.current.loading).toBe(false);
+    expect(result.current.lastUpdatedAt).toBeNull();
+  });
+
+  it('ignora resposta atrasada do filtro anterior, mesmo depois do novo snapshot', async () => {
+    let resolveOld: (value: unknown) => void = () => {};
+    const valid = (id: number) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        data: [{ funcionario_id: id, data_operacional: '2026-10-13' }],
+        summary: { total_tripulantes: 1 },
+      }),
+    });
+    fetchWithAuthMock
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
+      .mockResolvedValueOnce(valid(20));
+
+    const { result, rerender } = renderHook(
+      ({ funcionario }) => useFrmsOperationalSnapshot({
+        data_inicio: '2026-10-13',
+        data_fim: '2026-10-13',
+        funcionario_id: funcionario,
+      }),
+      { initialProps: { funcionario: '10' } },
+    );
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(1));
+    rerender({ funcionario: '20' });
+    await waitFor(() => expect(result.current.data[0]?.funcionario_id).toBe(20));
+
+    await act(async () => { resolveOld(valid(10)); });
+    expect(result.current.data[0]?.funcionario_id).toBe(20);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('descarta evidência antiga quando o mesmo recorte perde autorização', async () => {
+    fetchWithAuthMock
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ success: true, data: [{ funcionario_id: 10 }], summary: { total_tripulantes: 1 } }),
+      })
+      .mockResolvedValueOnce({
+        ok: false, status: 403,
+        json: async () => ({ success: false, error: 'Acesso negado' }),
+      });
+
+    const { result } = renderHook(() => useFrmsOperationalSnapshot({
+      data_inicio: '2026-10-13', data_fim: '2026-10-13',
+    }));
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    await act(async () => { await result.current.refetch(); });
+
+    expect(result.current.unauthorized).toBe(true);
+    expect(result.current.data).toEqual([]);
+    expect(result.current.summary.total_tripulantes).toBe(0);
+    expect(result.current.lastUpdatedAt).toBeNull();
+  });
+
 });

@@ -26,10 +26,12 @@ export function getFrmsVerboseLabel(signal: FrmsTripulanteSignalLike): string {
 }
 
 export function buildFrmsLink(data: string, funcionarioId?: number | string | null): string {
-  const params = new URLSearchParams({ data_inicio: data, data_fim: data });
+  // Operação FRMS reads 'data' on its canonical single-day route.
+  // The old data_inicio/data_fim link silently opened the wrong day.
+  const params = new URLSearchParams({ data });
   const id = Number(funcionarioId);
   if (Number.isFinite(id) && id > 0) params.set('funcionario_id', String(id));
-  return `/frms/controle-operacional?${params.toString()}`;
+  return `/frms?${params.toString()}`;
 }
 
 export function buildFrmsTooltipLabel(

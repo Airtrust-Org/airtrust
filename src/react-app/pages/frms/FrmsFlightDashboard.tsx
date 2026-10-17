@@ -625,7 +625,7 @@ export default function FrmsFlightDashboard() {
 
         {legacyControlRoute ? (
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
-            Controle Operacional foi consolidado nesta tela de Operação FRMS. Os filtros de data e tripulante da rota anterior foram preservados.
+            Controle Operacional foi consolidado nesta tela diária. A data inicial e o tripulante do link antigo foram preservados, quando informados. Se o link original usava um intervalo, esta tela exibe apenas o primeiro dia; escolha outra data para consultar os demais.
           </div>
         ) : null}
 

@@ -109,6 +109,30 @@ export function parseFlightPlanningInput(payload: Record<string, unknown>): Flig
   };
 }
 
+async function refreshFlightStageTotalWeights(
+  db: D1Database,
+  empresaId: number,
+  vooId: number,
+): Promise<void> {
+  const stages = await db.prepare(`SELECT id, payload, combustivel_inicio, unidade_combustivel,
+    peso_vazio, peso_tripulacao, peso_passageiros, peso_bagagem, unidade_peso
+    FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`)
+    .bind(empresaId, vooId).all<{
+      id: number; payload: number | null; combustivel_inicio: number | null;
+      unidade_combustivel: string | null; peso_vazio: number | null;
+      peso_tripulacao: number | null; peso_passageiros: number | null;
+      peso_bagagem: number | null; unidade_peso: string | null;
+    }>();
+  const updates = (stages.results || []).flatMap(stage => {
+    const total = computeEtapaPesoTotal(stage);
+    return total == null ? [] : [db.prepare(`UPDATE cv_voo_etapas
+      SET peso_total = ?, updated_at = datetime('now')
+      WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL`)
+      .bind(total, stage.id, vooId, empresaId)];
+  });
+  if (updates.length) await db.batch(updates);
+}
+
 export async function applyAircraftBasicWeightToFlightStages(
   db: D1Database,
   empresaId: number,
@@ -126,6 +150,8 @@ export async function applyAircraftBasicWeightToFlightStages(
           SET peso_vazio = ?, unidade_peso = ?, updated_at = datetime('now')
         WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`,
     ).bind(pesoVazio, planningUnit, empresaId, vooId).run();
+    // O peso básico recém-propagado também compõe o total de cada etapa.
+    await refreshFlightStageTotalWeights(db, empresaId, vooId);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!message.includes('no such column')) throw error;
@@ -183,23 +209,7 @@ export async function updateFlightStagePlanningIfSupported(
     ).run();
     // Same certified weight formula used by server-side RDV stage edits and Pilot App.
     // Payload is stored in KG; other values are expressed in unidade_peso.
-    const stages = await db.prepare(`SELECT id, payload, combustivel_inicio, unidade_combustivel,
-      peso_vazio, peso_tripulacao, peso_passageiros, peso_bagagem, unidade_peso
-      FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`)
-      .bind(empresaId, vooId).all<{
-        id: number; payload: number | null; combustivel_inicio: number | null;
-        unidade_combustivel: string | null; peso_vazio: number | null;
-        peso_tripulacao: number | null; peso_passageiros: number | null;
-        peso_bagagem: number | null; unidade_peso: string | null;
-      }>();
-    const updates = (stages.results || []).flatMap(stage => {
-      const total = computeEtapaPesoTotal(stage);
-      return total == null ? [] : [db.prepare(`UPDATE cv_voo_etapas
-        SET peso_total = ?, updated_at = datetime('now')
-        WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL`)
-        .bind(total, stage.id, vooId, empresaId)];
-    });
-    if (updates.length) await db.batch(updates);
+    await refreshFlightStageTotalWeights(db, empresaId, vooId);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!message.includes('no such column')) throw error;

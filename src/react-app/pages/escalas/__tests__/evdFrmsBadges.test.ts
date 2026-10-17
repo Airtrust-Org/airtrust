@@ -76,21 +76,21 @@ describe('getFrmsVerboseLabel', () => {
 });
 
 describe('buildFrmsLink', () => {
-  it('gera link com data_inicio e data_fim para a mesma data', () => {
+  it('gera link canônico com o dia exato aceito pelo painel FRMS', () => {
     const link = buildFrmsLink('2026-05-27');
-    expect(link).toContain('/frms/controle-operacional');
-    expect(link).toContain('data_inicio=2026-05-27');
-    expect(link).toContain('data_fim=2026-05-27');
+    expect(link).toBe('/frms?data=2026-05-27');
+    expect(link).not.toContain('data_inicio');
+    expect(link).not.toContain('data_fim');
   });
 
   it('inclui funcionario_id quando fornecido como number', () => {
     const link = buildFrmsLink('2026-05-27', 35);
-    expect(link).toContain('funcionario_id=35');
+    expect(link).toBe('/frms?data=2026-05-27&funcionario_id=35');
   });
 
   it('inclui funcionario_id quando fornecido como string numérica', () => {
     const link = buildFrmsLink('2026-05-27', '42');
-    expect(link).toContain('funcionario_id=42');
+    expect(link).toBe('/frms?data=2026-05-27&funcionario_id=42');
   });
 
   it('omite funcionario_id quando null', () => {
