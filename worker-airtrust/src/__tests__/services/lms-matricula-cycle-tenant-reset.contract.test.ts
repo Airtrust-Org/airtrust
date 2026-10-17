@@ -11,8 +11,8 @@ describe('LMS cycle reset tenant scope', () => {
 
     expect(source).toContain('empresaId: number;');
     expect(source).toContain('AND empresa_id = ?');
-    expect(source).toContain('m.id = lms_progresso_scorm.matricula_id');
-    expect(source).toContain('m.empresa_id = ?');
+    expect(source).toContain('p.matricula_id=m.id AND p.empresa_id=m.empresa_id');
+    expect(source).toContain('archived_cycle_id IS NULL');
     expect(source).toContain('UPDATE lms_xapi_statements SET archived_cycle_id');
     expect(source).not.toContain('DELETE FROM lms_xapi_statements');
     expect(source).toContain('INSERT INTO lms_ciclo_evidencias');
