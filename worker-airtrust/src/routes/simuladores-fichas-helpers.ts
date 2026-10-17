@@ -258,9 +258,9 @@ export async function gerarQualificacaoDaFicha(
                AND f2.empresa_id = ?
                AND f2.deleted_at IS NULL
                AND (f2.colaborador_id_aluno IS NULL OR f2.colaborador_id_aluno <> ?)
-           )
+           )`
       )
-      .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, colaboradorId, colaboradorId, f.empresa_id, colaboradorId)
+      .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, colaboradorId, f.empresa_id, colaboradorId)
       .all<QualificationCheckRow>();
 
     for (const check of checksMarcados.results || []) {
