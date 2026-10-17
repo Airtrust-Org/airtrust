@@ -27,7 +27,7 @@ function fixture(withMigration=true) {
     CREATE UNIQUE INDEX idx_test_current ON lms_matricula_ciclos(matricula_id)
       WHERE ciclo_atual=1 AND deleted_at IS NULL;
     CREATE TABLE lms_progresso_scorm (
-      matricula_id INTEGER,empresa_id INTEGER,lesson_status TEXT,lesson_location TEXT,
+      matricula_id INTEGER,empresa_id INTEGER,lesson_status TEXT,
       completion_status TEXT,success_status TEXT,score_raw REAL,score_min REAL,
       score_max REAL,score_scaled REAL,session_time TEXT,total_time TEXT,
       suspend_data TEXT,launch_data TEXT,cmi_json TEXT,session_count INTEGER,
@@ -42,10 +42,20 @@ function fixture(withMigration=true) {
       id INTEGER PRIMARY KEY,empresa_id INTEGER,matricula_id INTEGER,
       tentativa INTEGER,diagnostics_json TEXT
     );
+    CREATE TABLE qualificacoes_historico (
+      id INTEGER PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER,
+      status TEXT, certificado_arquivo_id INTEGER, renovacao_de INTEGER,
+      validade_ate TEXT
+    );
+    CREATE TABLE documentos (
+      id INTEGER PRIMARY KEY, empresa_id INTEGER, arquivo TEXT, deleted_at TEXT
+    );
     CREATE TABLE audit_logs (
       id INTEGER PRIMARY KEY,user_id INTEGER,action TEXT,entity_type TEXT,
       entity_id INTEGER,old_values TEXT,new_values TEXT,empresa_id INTEGER,created_at TEXT
     );
+    INSERT INTO documentos VALUES(910,1,'certificado/910.pdf',NULL);
+    INSERT INTO qualificacoes_historico VALUES(700,1,77,'VIGENTE',910,NULL,'2027-10-03');
     INSERT INTO lms_cursos VALUES (34,1,'lms/scorm/1/34/v1');
     INSERT INTO lms_matriculas VALUES
       (384,1,34,77,'CONCLUIDO',NULL,'evidencia original','2026-10-01',
@@ -103,6 +113,20 @@ describe('LMS immutable cycle evidence, D1 SQLite transaction',()=>{
     expect(one(db,"SELECT COUNT(*) AS n FROM lms_matricula_ciclos WHERE matricula_id=384 AND ciclo_atual=1"))
       .toEqual({n:1});
     expect(one(db,"SELECT COUNT(*) AS n FROM audit_logs WHERE action='LMS_CYCLE_ATOMIC_RENEWAL'"))
+      .toEqual({n:1});
+  });
+  it('preserves an issued certificate and historical qualification without inheriting either in a new cycle',async()=>{
+    const db=fixture();
+    const oldQualification=one(db,"SELECT * FROM qualificacoes_historico WHERE id=700");
+    const oldDocument=one(db,"SELECT * FROM documentos WHERE id=910");
+    await reset(db);
+    expect(one(db,"SELECT * FROM qualificacoes_historico WHERE id=700")).toEqual(oldQualification);
+    expect(one(db,"SELECT * FROM documentos WHERE id=910")).toEqual(oldDocument);
+    expect(one(db,"SELECT qualificacao_historico_id,status,progresso_pct FROM lms_matriculas WHERE id=384"))
+      .toEqual({qualificacao_historico_id:null,status:'NAO_INICIADO',progresso_pct:0});
+    expect(JSON.parse(String(one(db,"SELECT enrollment_json FROM lms_ciclo_evidencias WHERE ciclo_id=99").enrollment_json)))
+      .toMatchObject({qualificacao_historico_id:700,status:'CONCLUIDO'});
+    expect(one(db,"SELECT COUNT(*) AS n FROM qualificacoes_historico WHERE id=700 AND certificado_arquivo_id=910"))
       .toEqual({n:1});
   });
   it('prevents mutation/deletion of archived xAPI and immutable snapshots',async()=>{

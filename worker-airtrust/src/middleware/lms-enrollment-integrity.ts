@@ -398,7 +398,7 @@ async function handleRematriculation(
            SELECT m.empresa_id,m.id,cy.id,
              ?,
              (SELECT json_object(
-               'lesson_status',p.lesson_status,'lesson_location',p.lesson_location,
+               'lesson_status',p.lesson_status,
                'completion_status',p.completion_status,'success_status',p.success_status,
                'score_raw',p.score_raw,'score_min',p.score_min,'score_max',p.score_max,
                'score_scaled',p.score_scaled,'session_time',p.session_time,
@@ -407,13 +407,21 @@ async function handleRematriculation(
                FROM lms_progresso_scorm p WHERE p.empresa_id=m.empresa_id AND p.matricula_id=m.id),
              (SELECT json_group_array(json_object('tentativa',d.tentativa,'diagnostics_json',d.diagnostics_json))
                FROM lms_completion_diagnostics_snapshots d WHERE d.empresa_id=m.empresa_id AND d.matricula_id=m.id),
-             c.scorm_package_r2_prefix
+             NULL /* previous active package prefix is unverified after edition activation */
            FROM lms_matriculas m
            JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
            JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
              AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
            WHERE m.id=? AND m.empresa_id=? AND ${markerExists}`,
-        ).bind(JSON.stringify(existing),matriculaId, empresaId, matriculaId, empresaId, operationMarker),
+        ).bind(JSON.stringify({
+          ...existing,
+          historical_edition_provenance: {
+            previous_package_prefix: null,
+            previous_package_version: editionMismatch?.previous_version ?? null,
+            active_package_prefix_at_reset: verifiedActivePrefix,
+            status: 'HISTORICAL_PACKAGE_PREFIX_UNVERIFIED',
+          },
+        }),matriculaId, empresaId, matriculaId, empresaId, operationMarker),
         c.env.DB.prepare(
           `UPDATE lms_xapi_statements
               SET archived_cycle_id = (

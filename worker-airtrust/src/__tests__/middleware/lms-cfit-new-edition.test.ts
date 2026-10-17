@@ -92,6 +92,8 @@ describe('CFIT 842 — rematrícula auditada de edição ativa incompatível', (
     expect(sql).toContain('lms_progresso_scorm');
     expect(sql).toContain('INSERT INTO audit_logs');
     expect(sql).toContain('INSERT INTO lms_ciclo_evidencias');
+    expect(sql).not.toContain('p.lesson_location');
+    expect(sql).toContain('HISTORICAL_PACKAGE_PREFIX_UNVERIFIED');
     expect(sql).toContain('UPDATE lms_xapi_statements');
     expect(sql).toContain('archived_cycle_id');
     expect(sql).not.toContain('DELETE FROM lms_xapi_statements');

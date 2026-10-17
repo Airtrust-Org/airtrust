@@ -20,3 +20,9 @@ Runtime exige `db.batch` atômico com guarda tenant/status/ciclo, snapshot antes
 ## Retenção do diagnóstico e isolamento do novo ciclo
 
 Na renovação terminal, a transação grava o snapshot anterior com CMI, curso, datas, cursor e diagnósticos por tentativa; somente depois limpa a tabela de diagnósticos correntes junto do estado SCORM. Esses dados correntes são incompatíveis com tentativas do novo ciclo e não podem influenciar o novo aluno. O histórico imutável permanece preservado em `lms_ciclo_evidencias`. A falha em qualquer escrita aborta todo o `db.batch` e mantém a linha original de diagnóstico.
+
+## Proveniência da edição anterior
+
+Uma troca de edição pode atualizar o prefixo ativo do catálogo antes do reset. O prefixo atual **não comprova** qual pacote o aluno utilizou no ciclo anterior. No reset de nova edição o snapshot registra `previous_package_prefix=null`/`HISTORICAL_PACKAGE_PREFIX_UNVERIFIED`, o prefixo ativo no instante da operação e eventual versão antiga reportada pelo CMI. Não se atribui a edição atual ao histórico por inferência. O CMI original é preservado no snapshot e a reconciliação de versões é independente, somente leitura.
+
+O schema canônico `0337_lms_progresso_scorm.sql` não possui coluna `lesson_location`; a posição está no CMI e nos campos `ultimo_slide`/`ultima_pagina` da matrícula. Toda consulta de snapshot e reset deve dispensar essa coluna física.
