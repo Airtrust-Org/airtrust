@@ -12,7 +12,7 @@
  */
 
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, Variables } from '../types';
 import { AppError } from '../utils/errors';
 import { getTenantContext, isPlatformAdminContext, requireTenantRole } from '../middleware/tenant';
 import { generateRefreshToken } from '../utils/security';
@@ -22,7 +22,7 @@ import {
   SetorGestorValidationError,
 } from '../services/setores-gestores';
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 app.use('/*', async (c, next) => {
   await next();
