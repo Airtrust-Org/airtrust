@@ -10,9 +10,11 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const K='AIRTRUST_SCORM_STAGING_ATTESTATION_V1';
-const cases=['FIRST_ACCESS','SUSPEND_RESUME','ASSESSMENT_INSUFFICIENT',
-  'ASSESSMENT_APPROVED','EXPLICIT_FINALIZATION','REOPEN_COMPLETED',
-  'NO_STATUS_DOWNGRADE','TENANT_CYCLE_ISOLATION'];
+const cases=['FIRST_ACCESS','REQUIRED_CONTENT_COVERAGE',
+  'REQUIRED_INTERACTIONS','PERSISTENCE_VERIFIED','SUSPEND_RESUME',
+  'ASSESSMENT_INSUFFICIENT','ASSESSMENT_APPROVED','ASSESSMENT_THRESHOLD',
+  'EXPLICIT_FINALIZATION','REOPEN_COMPLETED','NO_STATUS_DOWNGRADE',
+  'TENANT_CYCLE_ISOLATION'];
 const sha=/^[a-f0-9]{64}$/, commit=/^[a-f0-9]{40}$/;
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const assert=(condition,reason)=>{if(!condition)throw Error('SCORM_ATTESTATION_'+reason);};
@@ -58,12 +60,12 @@ export function signGovernedScormEvidence({
     // authoritatively declared profile removes those two case requirements.
     const required=candidate.requiresAssessment?cases:
       cases.filter(name=>name!=='ASSESSMENT_INSUFFICIENT'&&
-        name!=='ASSESSMENT_APPROVED');
+        name!=='ASSESSMENT_APPROVED'&&name!=='ASSESSMENT_THRESHOLD');
     assert(Array.isArray(row.cases)&&row.cases.length===required.length&&
       row.cases.every(v=>required.includes(v.name)&&v.status==='PASS')&&
       new Set(row.cases.map(v=>v.name)).size===required.length,
       'CASES_INCOMPLETE_'+browser);
-    runs.push({harness:'AIRTRUST_SCORM_FUNCTIONAL_HARNESS_V1',
+    runs.push({harness:'AIRTRUST_SCORM_FUNCTIONAL_HARNESS_V2',
       browser,packageSha256:candidate.packageSha256,
       cases:row.cases.map(c=>({name:c.name,status:c.status}))});
     browserEvidenceSha256[browser]=digest(bytes);
