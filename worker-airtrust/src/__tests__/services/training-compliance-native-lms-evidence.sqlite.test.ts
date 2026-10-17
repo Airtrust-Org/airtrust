@@ -1,7 +1,11 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
-import { nativeLmsComplianceEvidencePredicate } from '../../services/training-compliance-native-lms-evidence';
+import {
+  nativeLmsComplianceEvidencePredicate,
+  isNativeLmsComplianceCourse,
+} from '../../services/training-compliance-native-lms-evidence';
+import { reconcileTrainingComplianceRuleEnrollment } from '../../services/training-compliance-rule-enrollment';
 
 const NodeDatabaseSync = createRequire(import.meta.url)('node:sqlite').DatabaseSync as {
   new (filename: string): DatabaseSync;
@@ -82,5 +86,73 @@ describe('Native completion evidence isolation in Training Compliance', () => {
 
   it('fails closed on Native completion if qualification history schema is absent', () => {
     expect(fixture(true, false)).toEqual([6,7]);
+  });
+});
+
+describe('Native course admission for automatic Compliance enrollment', () => {
+  function adapter(db: DatabaseSync) {
+    const writes: string[] = [];
+    const wrapper = {
+      prepare(sql: string) {
+        return {
+          bind(...values: unknown[]) {
+            return {
+              async first() {
+                return db.prepare(sql).get(...values as (string | number | null)[]);
+              },
+              async all() {
+                return { results: db.prepare(sql).all(...values as (string | number | null)[]) };
+              },
+              async run() {
+                writes.push(sql);
+                throw new Error('NATIVE_COMPLIANCE_LEGACY_WRITE_DENIED');
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+    return { wrapper, writes };
+  }
+
+  it.each([
+    ['native', false],
+    ['scorm', true],
+  ] as const)('refuses %s course before legacy auto-enrollment writes', async (type, activated) => {
+    const db = new NodeDatabaseSync(':memory:');
+    db.exec(`
+      CREATE TABLE lms_cursos(
+        id INTEGER PRIMARY KEY, empresa_id INTEGER, qualificacao_tipo_id INTEGER,
+        tipo_conteudo TEXT, ativo INTEGER, publicado INTEGER, deleted_at TEXT
+      );
+      CREATE TABLE lms_native_catalog_activation(empresa_id INTEGER, curso_id INTEGER);
+    `);
+    db.prepare('INSERT INTO lms_cursos VALUES(?,?,?,?,1,1,NULL)').run(39,6,100,type);
+    if (activated) db.exec('INSERT INTO lms_native_catalog_activation VALUES(6,39)');
+    const { wrapper, writes } = adapter(db);
+    const result = await reconcileTrainingComplianceRuleEnrollment(
+      wrapper,6,200,{} as never,{} as never,
+      async () => ({
+        rules: [{id:200,qualificacao_tipo_id:100,obrigatoriedade:'OBRIGATORIA',modalidade_requerida:'EAD'}],
+        people: [{id:69,requisitos:[{regra_id:200,obrigatoriedade:'OBRIGATORIA',status_compliance:'NAO_REALIZADO'}]}],
+      }),
+    );
+    expect(result.auto_enrollment_warning).toBe('LMS_COURSE_MAPPING_UNAVAILABLE');
+    expect(result.auto_enrollment?.unavailable_course).toBe(1);
+    expect(writes).toEqual([]);
+    db.close();
+  });
+
+  it('fails closed on activation lookup errors instead of writing through a SCORM fallback', async () => {
+    const prepare = (sql: string) => ({
+      bind: (...args: unknown[]) => ({
+        all: async () => ({results: [{id:39,tipo_conteudo:'scorm'}]}),
+        first: async () => sql.includes('sqlite_master') ? {found:1} : Promise.reject(new Error('D1 unavailable')),
+        run: async () => { throw new Error('MUST_NOT_WRITE'); },
+      }),
+    });
+    const db = {prepare} as unknown as D1Database;
+    await expect(isNativeLmsComplianceCourse(db,6,39,'scorm'))
+      .rejects.toThrow('D1 unavailable');
   });
 });

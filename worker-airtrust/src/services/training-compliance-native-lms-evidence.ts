@@ -1,3 +1,5 @@
+import { hasSchemaTable } from '../utils/db-schema';
+
 /**
  * Training Compliance must never treat a Native player percentage, legacy
  * SCORM completion marker or bare enrollment status as canonical evidence.
@@ -38,4 +40,23 @@ export function nativeLmsComplianceEvidencePredicate(
     OR UPPER(TRIM(COALESCE(m.status, ''))) <> 'CONCLUIDO'
     OR ${verifiedQualification}
   )`;
+}
+
+/**
+ * Enrollment reconciliation must not create/reset a legacy SCORM cycle on a
+ * Native course. Check the marker independently of UI flags to prevent a
+ * disabled preview from silently falling back to legacy auto-enrollment.
+ */
+export async function isNativeLmsComplianceCourse(
+  db: D1Database, empresaId: number, cursoId: number, physicalType: string | null,
+): Promise<boolean> {
+  const physical = String(physicalType ?? '').trim().toLowerCase();
+  if (physical === 'native') return true;
+  if (physical !== 'scorm') return false;
+  if (!(await hasSchemaTable(db, 'lms_native_catalog_activation'))) return false;
+  const row = await db.prepare(
+    'SELECT curso_id FROM lms_native_catalog_activation ' +
+    'WHERE empresa_id=? AND curso_id=? LIMIT 1',
+  ).bind(empresaId, cursoId).first<{ curso_id: number }>();
+  return Number(row?.curso_id) === cursoId;
 }
