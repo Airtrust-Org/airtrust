@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
+import { hasSchemaTable, getSchemaTriggerNames } from '../utils/db-schema';
 import { getTenantContext } from '../middleware/tenant';
 import { requireOperationalAccess } from '../services/operational-domain-access';
 import { gerarQualificacaoDaFicha } from './simuladores-fichas-helpers';
@@ -40,31 +41,23 @@ function positiveId(value: unknown): number | null {
   const id = typeof value === 'string' && value.trim() ? Number(value) : value;
   return Number.isSafeInteger(id) && Number(id) > 0 ? Number(id) : null;
 }
+const REQUIRED_CHECK_TRIGGERS = [
+  'trg_checks_individuais_scope_insert',
+  'trg_checks_individuais_immutable_scope',
+  'trg_checks_individuais_confirm_insert',
+  'trg_checks_individuais_confirm_update',
+  'trg_checks_individuais_annulled_immutable',
+  'trg_checks_individuais_confirmed_immutable',
+] as const;
+
 async function schemaReady(db: D1Database): Promise<boolean> {
-  // A similarly named table is not enough. The official Schema V2 ledger and
-  // fail-closed triggers must exist in this same database before any
-  // individual evidence can be read or written.
+  // Shared schema metadata cache is scoped to the D1 binding. Never rely on
+  // table name alone: six physical tenant/signature/immutability guards plus
+  // the exact governed ledger entry must be present in this same database.
   try {
-    const schema = await db.prepare(`
-      SELECT
-        (SELECT COUNT(*) FROM sqlite_master
-          WHERE type='table' AND name='sessoes_checks_resultados_individuais') AS table_count,
-        (SELECT COUNT(*) FROM sqlite_master
-          WHERE type='table' AND name='airtrust_schema_changes_v2') AS ledger_count,
-        (SELECT COUNT(*) FROM sqlite_master
-          WHERE type='trigger' AND tbl_name='sessoes_checks_resultados_individuais'
-            AND name IN (
-              'trg_checks_individuais_scope_insert',
-              'trg_checks_individuais_immutable_scope',
-              'trg_checks_individuais_confirm_insert',
-              'trg_checks_individuais_confirm_update',
-              'trg_checks_individuais_annulled_immutable',
-              'trg_checks_individuais_confirmed_immutable'
-            )) AS trigger_count
-    `).first<{ table_count: number; ledger_count: number; trigger_count: number }>();
-    if (Number(schema?.table_count) !== 1 ||
-        Number(schema?.ledger_count) !== 1 ||
-        Number(schema?.trigger_count) !== 6) return false;
+    if (!(await hasSchemaTable(db, 'sessoes_checks_resultados_individuais'))) return false;
+    const triggers = await getSchemaTriggerNames(db, 'sessoes_checks_resultados_individuais');
+    if (!REQUIRED_CHECK_TRIGGERS.every((name) => triggers.has(name))) return false;
     const applied = await db.prepare(
       "SELECT 1 AS applied FROM airtrust_schema_changes_v2 WHERE change_id=? AND baseline_id=? LIMIT 1",
     ).bind('simulator-individual-check-evidence-0554', 'production-d1-baseline-v2-20260714')

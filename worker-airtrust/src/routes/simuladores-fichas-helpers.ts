@@ -5,6 +5,7 @@
  */
 
 import { audit } from './simuladores-shared';
+import { hasSchemaTable } from '../utils/db-schema';
 import { upsertQualificacaoHistoricoDaFicha } from '../services/qualificacoes-historico-ficha';
 import { realizarG1SemPendente } from '../services/qualificacoes-g1-sem';
 import {
@@ -177,10 +178,8 @@ export async function gerarQualificacaoDaFicha(
   // sufficient evidence for ANY automatic qualification, including the
   // principal model. Every configured check requires explicit employee proof.
   const individualSchema = f.agendamento_slot_id
-    ? await db.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='sessoes_checks_resultados_individuais'",
-      ).first()
-    : null;
+    ? await hasSchemaTable(db, 'sessoes_checks_resultados_individuais')
+    : false;
   let principalHasIndividualEvidence = true;
   if (individualSchema && f.agendamento_slot_id) {
     const coverage = await db.prepare(`
