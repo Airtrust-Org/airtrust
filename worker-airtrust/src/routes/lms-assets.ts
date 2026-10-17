@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { ApiError } from '../middleware/error-handler';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
+import { assertCandidateQaScope, assertScormCandidateQaEnvironment, readScormQaCandidate } from '../lib/lms/lms-scorm-candidate-preview';
 import { auth, validateAccessTokenSecurityState } from '../middleware/auth';
 import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import {
@@ -409,6 +410,12 @@ async function authenticateLmsAssetRequest(
   if (!payload) {
     throw new ApiError('Token inválido ou expirado', 401);
   }
+  // QA tokens are exclusively for immutable candidate previews, never
+  // normal learner, active-course or legacy asset routes.
+  const qaClaims = payload as JwtPayload & { asset_qa_candidate_id?: string };
+  if (qaClaims.asset_qa_candidate_id && !new URL(request.url).pathname.startsWith('/api/lms/scorm/qa-')) {
+    throw new ApiError('Token QA limitado à edição candidata', 403);
+  }
 
   if (resolved.source !== 'authorization') {
     if (payload.token_type !== 'lms_asset') {
@@ -515,6 +522,8 @@ app.post('/assets/session', auth(), async (c) => {
     matricula_id?: number;
     curso_id?: number;
     preview?: boolean;
+    candidate_package_id?: string;
+    candidate_package_sha256?: string;
   };
   const body: AssetSessionRequest = await c.req
     .json<AssetSessionRequest>()
@@ -523,6 +532,12 @@ app.post('/assets/session', auth(), async (c) => {
   const matriculaId = Number(body.matricula_id ?? 0);
   const requestedCursoId = Number(body.curso_id ?? 0);
   const preview = body.preview === true;
+  const candidatePackageId = body.candidate_package_id?.trim() ?? '';
+  const candidateSha = body.candidate_package_sha256?.trim() ?? '';
+  if (Boolean(candidatePackageId) !== Boolean(candidateSha) ||
+      (candidatePackageId && (!preview || matriculaId > 0))) {
+    throw new ApiError('QA de candidato requer preview, curso, edição e SHA; matrícula real não permitida', 400);
+  }
 
   if (!empresaId) {
     throw new ApiError('Empresa não identificada no token', 401);
@@ -531,6 +546,7 @@ app.post('/assets/session', auth(), async (c) => {
   let cursoId = 0;
   let scopedMatriculaId: number | undefined;
   let scopedScormPackagePrefix: string | undefined;
+  let candidateScope: { id: string; package_sha256: string } | null = null;
 
   if (matriculaId > 0) {
     const matricula = await c.env.DB.prepare(
@@ -577,6 +593,16 @@ app.post('/assets/session', auth(), async (c) => {
     }
     await ensureCourseAssetAccess(c.env.DB, accessPayload, empresaId, requestedCursoId);
     cursoId = requestedCursoId;
+    if (candidatePackageId) {
+      assertScormCandidateQaEnvironment(c.env.ENVIRONMENT);
+      const role = (await validateAccessTokenSecurityState(c.env.DB, accessPayload)).role;
+      if (!isPreviewAllowedRole(role)) throw new ApiError('Acesso QA negado', 403);
+      const candidate = await readScormQaCandidate(c.env.DB, {
+        empresaId, cursoId, packageId: candidatePackageId, expectedSha: candidateSha,
+      });
+      candidateScope = { id: candidate.id, package_sha256: candidate.package_sha256 };
+      scopedScormPackagePrefix = candidate.r2_prefix;
+    }
   } else {
     throw new ApiError('Informe matricula_id ou curso_id com preview=true', 400);
   }
@@ -591,6 +617,8 @@ app.post('/assets/session', auth(), async (c) => {
       asset_curso_id: cursoId,
       asset_matricula_id: scopedMatriculaId,
       asset_scorm_package_prefix: scopedScormPackagePrefix,
+      asset_qa_candidate_id: candidateScope?.id,
+      asset_qa_candidate_sha256: candidateScope?.package_sha256,
       asset_preview: preview || undefined,
       empresa_id: empresaId,
       empresas: accessPayload.empresas,
@@ -620,6 +648,8 @@ app.post('/assets/session', auth(), async (c) => {
         cursoId,
         matriculaId: scopedMatriculaId ?? null,
         preview,
+        candidatePackageId: candidateScope?.id ?? null,
+        candidatePackageSha256: candidateScope?.package_sha256 ?? null,
       },
     }),
     {
