@@ -137,7 +137,8 @@ async function readEnrollmentEvidence(
               p.score_raw, p.score_min, p.score_max, p.score_scaled,
               p.session_time, p.total_time, p.suspend_data, p.cmi_json,
               (SELECT COUNT(*) FROM lms_xapi_statements x
-                WHERE x.matricula_id = m.id AND x.empresa_id = m.empresa_id) AS xapi_count
+                WHERE x.matricula_id = m.id AND x.empresa_id = m.empresa_id
+                  AND x.archived_cycle_id IS NULL) AS xapi_count
          FROM lms_matriculas m
          JOIN lms_cursos c
            ON c.id = m.curso_id
