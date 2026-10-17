@@ -7,8 +7,8 @@ import { JSDOM } from 'jsdom';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const source = fs.readFileSync(path.join(root, 'scripts/validation/production-lms-active-course-certification-readonly.mjs'), 'utf8');
-const startMarker = 'frame.evaluate(({ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices }) => {';
-const endMarker = '}, { plan: answerPlan, location: currentLocation, allowAdaptiveRetry, requiredDecisionSlideIndices }).catch';
+const startMarker = 'frame.evaluate(({ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices, checklistSlideIndices }) => {';
+const endMarker = '}, { plan: answerPlan, location: currentLocation, allowAdaptiveRetry, requiredDecisionSlideIndices, checklistSlideIndices }).catch';
 const start = source.indexOf(startMarker);
 const end = source.indexOf(endMarker, start);
 assert.ok(start >= 0 && end > start, 'the tested callback must be the real in-frame driver');
@@ -31,7 +31,7 @@ function fixture(withChoice = true) {
   });
   const action = dom.window.eval(`(${callback})`);
   const step = (requiredDecisionSlideIndices = [9], plan = [{ slideIndex: 9, indices: [0] }]) =>
-    action({ plan, location: '9/126', allowAdaptiveRetry: false, requiredDecisionSlideIndices });
+    action({ plan, location: '9/126', allowAdaptiveRetry: false, requiredDecisionSlideIndices, checklistSlideIndices: [] });
   return { step, clicked, close: () => dom.window.close() };
 }
 
