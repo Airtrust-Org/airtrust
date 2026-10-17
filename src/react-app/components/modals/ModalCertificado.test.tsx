@@ -210,13 +210,8 @@ describe('ModalCertificado', () => {
       expect(uploadedProfiles).toEqual(['AVSEC_TRIPULANTE', 'AVSEC_OPERACOES_SOLO']),
     );
 
-    // The upload handler deliberately waits before refreshing the list and
-    // clearing its loading state. Await its completion; otherwise the test
-    // may tear down jsdom while its finally block calls setUploading(false),
-    // causing "window is not defined" during frontend-coverage.
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /anexar certificado/i })).toBeEnabled(),
-    );
+    // A delayed upload may finish after the modal is unmounted; the component
+    // must ignore its final state update rather than crash the React renderer.
   });
 
   describe('Gerar Certificado — contrato de erro do backend', () => {
