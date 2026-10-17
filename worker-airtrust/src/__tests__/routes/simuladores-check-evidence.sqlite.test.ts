@@ -171,13 +171,13 @@ describe('individual evidence for simulator-generated FAP (real SQLite)', () => 
         (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
       VALUES (1,1,70,1002,50,1,'CONFIRMADO');
     `);
-    expect((await generate()).qualificacoes_geradas.map(q => q.codigo)).toEqual(['OPS-12']);
+    expect((await generate()).qualificacoes_geradas.map(q => q.codigo)).toEqual([]);
     db!.database.exec(`
       INSERT INTO sessoes_checks_resultados_individuais
         (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
       VALUES (2,1,70,1002,52,0,'CONFIRMADO');
     `);
-    expect((await generate()).qualificacoes_geradas.map(q => q.codigo)).toEqual(['OPS-12']);
+    expect((await generate()).qualificacoes_geradas.map(q => q.codigo)).toEqual([]);
     // Re-evaluation is a new signed fiche; never rewrite the immutable failure.
     db!.database.exec(`
       INSERT INTO fichas_sessao
@@ -216,8 +216,8 @@ describe('individual evidence for simulator-generated FAP (real SQLite)', () => 
     const b = await gerarQualificacaoDaFicha(db!.asD1(),71);
     const c = await gerarQualificacaoDaFicha(db!.asD1(),72);
     expect(a.qualificacoes_geradas.map((q) => q.codigo)).toEqual(['OPS-12','SIX']);
-    expect(b.qualificacoes_geradas.map((q) => q.codigo)).toEqual(['OPS-12']);
-    expect(c.qualificacoes_geradas.map((q) => q.codigo)).toEqual(['OPS-12']);
+    expect(b.qualificacoes_geradas.map((q) => q.codigo)).toEqual([]);
+    expect(c.qualificacoes_geradas.map((q) => q.codigo)).toEqual([]);
     // A's explicit check did not approve B or C; the old session pass did not
     // approve anybody lacking a positive individual record.
     expect(mocks.upsert.mock.calls.filter(([,q]) => q.qualificacaoCodigo === 'SIX'))
