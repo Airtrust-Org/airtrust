@@ -62,6 +62,9 @@ try{
  if(v.status!=='VALIDATED')throw Error('CANDIDATE_STATIC_GATE_'+v.status);
  const assetPath='/lms/scorm/qa-assets/'+f.companyId+'/'+f.courseId+'/'+v.packageId+'/'+driver.launchFile;
  const previewPath='/lms/scorm/qa-preview/'+f.courseId+'/'+v.packageId;
+ const anonymous=await fetch(api+assetPath);
+ output.anonymousAssetHttp=anonymous.status;
+ assert(anonymous.status===401,'ANONYMOUS_CANDIDATE_ASSET_NOT_DENIED');
  for(const [name,type] of [['CHROMIUM',chromium],['WEBKIT',webkit]]){
   let browser;const obs={browser:name,outcome:'INCONCLUSIVE'};
   try{
@@ -75,9 +78,26 @@ try{
     data:{curso_id:f.courseId,preview:true,candidate_package_id:v.packageId,
      candidate_package_sha256:sha}});
    obs.sessionHttp=session.status();
+   obs.cookieIssued=Boolean(session.headers()['set-cookie']);
+   obs.cookieFlags=(session.headers()['set-cookie']||'').split(';').slice(1).join(';').slice(0,150);
+   obs.cookieScopes=(await context.cookies()).map(x=>({name:x.name,path:x.path,domain:x.domain,secure:x.secure}));
    assert(session.ok(),'QA_SESSION_HTTP_'+session.status());
+   const wrongSha=await page.request.post(api+'/lms/assets/session',{
+    headers:{Authorization:'Bearer '+t},
+    data:{curso_id:f.courseId,preview:true,candidate_package_id:v.packageId,
+     candidate_package_sha256:'0'.repeat(64)}});
+   obs.wrongShaHttp=wrongSha.status();
+   assert([400,409].includes(wrongSha.status()),'WRONG_SHA_NOT_DENIED');
+   const normal=await page.request.get(api+'/lms/scorm/assets/'+f.companyId+'/'+f.courseId+'/'+driver.launchFile);
+   obs.qaTokenActiveAssetHttp=normal.status();
+   assert(normal.status()===403,'CANDIDATE_TOKEN_ESCAPED_TO_ACTIVE_ASSET');
+   const foreign=await page.request.get(api+'/lms/scorm/qa-assets/'+f.foreignTenant.empresaId+'/'+f.courseId+'/'+v.packageId+'/'+driver.launchFile);
+   obs.foreignTenantAssetHttp=foreign.status();
+   assert([403,404].includes(foreign.status()),'CANDIDATE_TOKEN_CROSSED_TENANT');
    const asset=await page.request.get(api+assetPath);
    obs.assetHttp=asset.status();
+   obs.cookieForAsset=(await context.cookies(api+assetPath)).length;
+   if(!asset.ok()) { const err=await asset.json().catch(()=>({}));obs.assetErrorCode=String(err.code||'none');obs.assetError=String(err.error||'').slice(0,100); }
    assert(asset.ok(),'CANDIDATE_ASSET_HTTP_'+asset.status());
    obs.exactAssetSha=hash(Buffer.from(await asset.body()));
    assert(obs.exactAssetSha===hash(files[driver.launchFile]),'CANDIDATE_ASSET_BYTES_DRIFT');
