@@ -204,7 +204,7 @@ function assertManagerMayManageTarget(callerRole: string, targetRole: string): v
   );
   if (privilegedTarget && !['ADMINISTRADOR', 'ADMIN'].includes(callerRole)) {
     throw forbidden(
-      'Apenas ADMINISTRADOR pode gerenciar Administradores da Empresa ou Administradores Gerais',
+      'Gestor não pode administrar outros Gestores ou Administradores',
       'INSUFFICIENT_ROLE',
     );
   }
