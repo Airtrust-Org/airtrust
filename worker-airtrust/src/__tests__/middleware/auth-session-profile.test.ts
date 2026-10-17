@@ -208,9 +208,9 @@ describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () =>
     expect(await resolveRequestedSessionRole(db, 11, 500, 'ADMINISTRADOR')).toBeNull();
   });
 
-  it('ADMINISTRADOR tem somente modo administrativo mesmo com perfis extras explícitos', async () => {
+  it('administrador de plataforma persistido tem somente modo administrativo com perfis extras', async () => {
     const db = createDb({
-      userId: 10, empresaId: 500, perfil: 'ADMINISTRADOR', membershipRole: 'admin',
+      userId: 10, empresaId: 500, perfil: 'ADMINISTRADOR', membershipRole: 'admin', platformAdmin: true,
       explicitProfiles: [
         { perfil: 'ADMINISTRADOR', ativo: 1 },
         { perfil: 'INSTRUTOR', ativo: 1 },
@@ -221,12 +221,24 @@ describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () =>
     expect(await resolveRequestedSessionRole(db, 10, 500, 'ALUNO')).toBeNull();
   });
 
-  it('ADMINISTRADOR legado tem somente modo administrativo apesar de vínculos de aluno/instrutor', async () => {
+  it('admin local legado sem grant é GESTOR e preserva modo de aprendizado', async () => {
     const db = createDb({
       userId: 10, empresaId: 500, perfil: 'admin', membershipRole: 'admin',
       funcionarioId: 77, funcionarioEmpresaId: 500, instrutor: true, aluno: true,
     });
-    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['ADMINISTRADOR']);
+    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['GESTOR', 'INSTRUTOR', 'ALUNO']);
+    expect(await resolveRequestedSessionRole(db, 10, 500, 'ADMINISTRADOR')).toBeNull();
+  });
+
+  it('admin local sem grant com perfil explícito admin apresenta apenas GESTOR e aprendizado', async () => {
+    const db = createDb({
+      userId: 59, empresaId: 6, perfil: 'ADMIN', membershipRole: 'admin',
+      platformAdmin: false,
+      explicitProfiles: [{ perfil: 'admin', ativo: 1 }],
+    });
+    expect(await resolveAvailableSessionRoles(db, 59, 6)).toEqual(['GESTOR', 'ALUNO']);
+    expect(await resolveRequestedSessionRole(db, 59, 6, 'GESTOR')).toBe('GESTOR');
+    expect(await resolveRequestedSessionRole(db, 59, 6, 'ADMINISTRADOR')).toBeNull();
   });
 
 
@@ -623,7 +635,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
     expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
   });
 
-  it('ADMINISTRADOR nunca alterna para ALUNO, mesmo com ALUNO explícito inativo', async () => {
+  it('admin local explícito sem grant vira GESTOR, mesmo com ALUNO inativo', async () => {
     const db = createDb({
       ...b,
       explicitProfiles: [
@@ -631,7 +643,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
         { perfil: 'ALUNO', ativo: 0 },
       ],
     });
-    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['ADMINISTRADOR']);
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
   });
 
   it('isolamento por empresa_id: perfis explícitos da empresa B não vazam para a empresa A', async () => {
@@ -645,7 +657,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
       },
     });
     expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
-    expect(await resolveAvailableSessionRoles(db, 43, 99)).toEqual(['ADMINISTRADOR']);
+    expect(await resolveAvailableSessionRoles(db, 43, 99)).toEqual(['GESTOR', 'INSTRUTOR', 'ALUNO']);
   });
 
   it('ausência da tabela (ambiente sem 0473) → inferência legada de bootstrap', async () => {
