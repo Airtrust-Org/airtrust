@@ -57,7 +57,12 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
   });
 
   const loginPage = async () => {
-    await page.goto(BASE + '/login', { waitUntil: 'domcontentloaded' });
+    // CSS/legacy cache recovery can navigate the login document as it boots.
+    // Wait for a stable public login before the real credential POST; never
+    // forge tokens or retry a potentially successful FRMS data submission.
+    await page.goto(BASE + '/login', { waitUntil: 'networkidle' });
+    await expect(page.locator('#airtrust-boot-fallback')).toHaveCount(0);
+    await expect(page.locator('input[type="email"]')).toBeVisible();
     await page.locator('input[type="email"]').fill(email);
     await page.locator('input[type="password"]').fill(password);
     await page.getByRole('button', { name: /entrar|sign in/i }).click();
