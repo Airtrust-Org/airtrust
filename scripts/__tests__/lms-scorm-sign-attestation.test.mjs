@@ -7,9 +7,11 @@ import { tmpdir } from 'node:os';
 import { signGovernedScormEvidence } from '../ci/sign-scorm-functional-attestation.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
-const checks=['FIRST_ACCESS','SUSPEND_RESUME','ASSESSMENT_INSUFFICIENT',
-  'ASSESSMENT_APPROVED','EXPLICIT_FINALIZATION','REOPEN_COMPLETED',
-  'NO_STATUS_DOWNGRADE','TENANT_CYCLE_ISOLATION'];
+const checks=['FIRST_ACCESS','REQUIRED_CONTENT_COVERAGE',
+  'REQUIRED_INTERACTIONS','PERSISTENCE_VERIFIED','SUSPEND_RESUME',
+  'ASSESSMENT_INSUFFICIENT','ASSESSMENT_APPROVED','ASSESSMENT_THRESHOLD',
+  'EXPLICIT_FINALIZATION','REOPEN_COMPLETED','NO_STATUS_DOWNGRADE',
+  'TENANT_CYCLE_ISOLATION'];
 const secret='qa-secret-only-for-tests-with-length-over-32';
 function fixture(){
   const dir=mkdtempSync(join(tmpdir(),'airtrust-scorm-sign-test-'));
@@ -85,12 +87,13 @@ test('legitimate formative ZIP requires both browsers without fabricated scored 
     for(const [name,path] of [['CHROMIUM',f.chromiumFile],['WEBKIT',f.webkitFile]]){
       const row=f.browserRow(name);
       row.cases=row.cases.filter(item=>
-        item.name!=='ASSESSMENT_INSUFFICIENT'&&item.name!=='ASSESSMENT_APPROVED');
+        item.name!=='ASSESSMENT_INSUFFICIENT'&&item.name!=='ASSESSMENT_APPROVED'&&
+        item.name!=='ASSESSMENT_THRESHOLD');
       writeFileSync(path,JSON.stringify(row));
     }
     const signed=f.sign();
     assert.equal(signed.payload.requiresAssessment,false);
-    assert.equal(signed.payload.runs[0].cases.length,6);
-    assert.equal(signed.payload.runs[1].cases.length,6);
+    assert.equal(signed.payload.runs[0].cases.length,9);
+    assert.equal(signed.payload.runs[1].cases.length,9);
   }finally{rmSync(f.dir,{recursive:true,force:true});}
 });
