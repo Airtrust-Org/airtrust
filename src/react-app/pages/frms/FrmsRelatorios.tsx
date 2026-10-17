@@ -515,7 +515,7 @@ function ComplianceTable({ data }: { data: FrmsReportRow[] }) {
         </tbody>
       </table>
       <p className="border-t border-gray-100 px-4 py-3 text-xs text-slate-500">
-        Violações e não avaliados vêm do motor regulatório canônico. Mitigação e atenção são estados preventivos do FRMS e não equivalem a infração normativa.
+        Avaliados são apenas os dias com veredito regulatório (conforme ou violação). Não avaliados são dias sem evidência suficiente para um veredito, e não comprovam conformidade. Mitigação e atenção são estados preventivos de fadiga e não equivalem a infração normativa.
       </p>
     </div>
   );

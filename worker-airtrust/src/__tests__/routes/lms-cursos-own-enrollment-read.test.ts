@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { hasOwnEnrolledCourseReadAccess } from '../../routes/lms-cursos-legacy';
 import type { EmployeeSectorAccess } from '../../services/employee-sector-access';
@@ -51,5 +53,13 @@ describe('LMS course details — own enrollment exception', () => {
   it('sem matrícula ativa, a consulta continua negada', async () => {
     const { db } = enrollmentDb([]);
     await expect(hasOwnEnrolledCourseReadAccess(db, 1, 55, student)).resolves.toBe(false);
+  });
+});
+
+describe('LMS catalog operational enrollment count', () => {
+  it('counts only actionable cycles and leaves completed audit history separate', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-cursos-legacy.ts'), 'utf8');
+    expect(source).toMatch(/m\.deleted_at IS NULL\s+AND UPPER\(TRIM\(COALESCE\(m\.status,''\)\)\) IN \('NAO_INICIADO','EM_ANDAMENTO','REPROVADO'\)\$\{matriculaScope\.clause\}\) AS total_matriculas/);
+    expect(source).toContain("m.status = 'CONCLUIDO' AND m.deleted_at IS NULL");
   });
 });

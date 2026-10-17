@@ -95,3 +95,16 @@ completo elegível e exceção administrativa auditada. A emissão continua
 restrita ao serviço de conclusão transacional. Estes testes não são
 certificação de navegador dos cursos ativos nem comprovam a correção de
 matrículas específicas em 99%.
+
+## Simplificação do veredito de aprendizagem para SCORM avaliado (proposta de PR — ainda sem release)
+
+O controle proprietário `airtrust.viewed_slides` foi criado para verificar navegação, mas não é evidência SCORM padronizada. Bloquear **também** por visita a cada tela uma matrícula que já tem evidência terminal do pacote e nota normalizada superior à nota mínima duplica o veredito pedagógico, causando incidentes como a matrícula 691 (55/55, `passed`, nota 100, somente 26 visitas no ledger).
+
+Contrato proposto, **sem dispensar validação backend**:
+
+- **SCORED**: status terminal real de aprovação/conclusão vindo de SCORM + nota legítima, normalizada, válida e >= nota mínima do curso. O ledger de páginas e a posição terminal continuam como telemetria diagnóstica; não são mais pré-condições da conclusão de conteúdo avaliado.
+- **FORMATIVE**: sem avaliação para comprovar aprendizagem, mantém cobertura autenticada de conteúdo e registro da última tela (não autorizar somente pelo indicador visual 100%).
+- **Todos**: sessão autenticada, empresa/tenant, matrícula ativa, pacote/edição/ciclo, erro ou reprovação explícitos, idempotência, RBAC e emissão transacional de qualificação continuam protegidos. Uma mudança de contagem de telas entre estado salvo e commit recebido também é rejeitada.
+- **O wrapper/UI** não reimplementa uma verificação de visita que contradiga o veredito canônico do servidor. Submete a confirmação do aluno ao backend, e somente o backend decide.
+
+Essa simplificação não resolve automaticamente o bloqueio de uma nova edição do treinamento, não homologa pacotes SCORM incompatíveis e não autoriza finalização administrativa retroativa. É necessário validar testes, staging, os fluxos SCORM reais, certificados e um release de produção específico antes de considerá-la publicada.

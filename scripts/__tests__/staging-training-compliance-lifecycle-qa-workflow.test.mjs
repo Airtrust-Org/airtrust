@@ -36,7 +36,9 @@ test('browser simulation covers organization, enrollment, progress, completion a
     'OBRIGATORIA',
     'NAO_APLICA',
     'RECOMENDADA',
-    'Matricular gaps (sem e-mail)',
+    'automaticRows',
+    'completion_intent',
+    'USER_COMPLETION_REQUIRED',
     'EM_ANDAMENTO',
     '/progresso',
     'progresso_pct: 50',
@@ -47,6 +49,7 @@ test('browser simulation covers organization, enrollment, progress, completion a
     'REABRIR',
     'VINCULAR_SETOR_FUNCAO',
   ]) assert.ok(spec.includes(token), `missing lifecycle token: ${token}`);
+  assert.doesNotMatch(spec, /getByRole\('button', \{ name: 'Matricular gaps \(sem e-mail\)'/);
   assert.match(spec, /PRODUCTION_TARGET_REJECTED/);
   assert.match(spec, /describe\.configure\(\{ retries: 0 \}\)/);
 });

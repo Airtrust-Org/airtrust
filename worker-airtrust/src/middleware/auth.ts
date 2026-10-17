@@ -20,6 +20,7 @@ import {
   resolveRequestedSessionRole,
 } from '../services/auth-session-roles';
 import { unauthorized, serviceUnavailable } from './error-handler';
+import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 
 const USUARIOS_TABLE_SQL =
@@ -212,14 +213,30 @@ export async function validateAccessTokenSecurityState(
     );
   }
 
-  if (!security.hasMembership) {
+  // A autorização global vem EXCLUSIVAMENTE da concessão persistida.
+  // Nunca confiar em role/empresa recebidos do JWT para elevar privilégios.
+  // O tenantMiddleware valida a existência e atividade da empresa selecionada.
+  let platformAdmin = false;
+  try {
+    platformAdmin = isPlatformAdminAccess(
+      await resolvePlatformAccessState(db, payload.sub),
+    );
+  } catch (e) {
+    console.error('[AUTH] Falha ao validar autorização global:', (e as Error).message);
+    return serviceUnavailable(
+      'Não foi possível validar as permissões da conta. Tente novamente.',
+      'PLATFORM_ACCESS_CHECK_UNAVAILABLE',
+    );
+  }
+
+  if (!security.hasMembership && !platformAdmin) {
     return unauthorized(
       'Usuário sem vínculo válido com o tenant do token.',
       'TENANT_MEMBERSHIP_INVALID',
     );
   }
 
-  return { role: security.role };
+  return { role: platformAdmin ? 'ADMINISTRADOR' : security.role };
 }
 
 async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<number | null> {
@@ -507,7 +524,16 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
     // uma seleção EXPLÍCITA de perfil na sessão é que consultamos o backend
     // para validá-la contra vínculos reais do usuário neste tenant. Sem
     // seleção, nenhuma consulta adicional é feita e a role canônica é usada.
-    const selectedSessionRole = parseSessionRoleFromCookieHeader(c.req.header('Cookie'));
+    // A escolha de perfil também viaja no JWT assinado, pois navegadores
+    // podem não reenviar cookie SameSite entre Pages preview e Worker staging.
+    // Não basta haver a role no JWT: a escolha segue revalidada no D1 em
+    // cada request; um perfil revogado resulta em 401.
+    const tokenSessionRole = typeof payload.role === 'string' &&
+      normalizeRuntimeRole(payload.role) !== normalizeRuntimeRole(security.role)
+      ? payload.role
+      : null;
+    const selectedSessionRole =
+      parseSessionRoleFromCookieHeader(c.req.header('Cookie')) || tokenSessionRole;
     if (selectedSessionRole) {
       let activeRole: string | null;
       try {
@@ -612,7 +638,12 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
             // Perfil ativo de sessão: mesma regra do auth() obrigatório, mas
             // optionalAuth nunca bloqueia — se a seleção não puder ser
             // validada, mantém-se a role canônica já resolvida acima.
-            const optSessionRole = parseSessionRoleFromCookieHeader(c.req.header('Cookie'));
+            const tokenSessionRole = typeof payload.role === 'string' &&
+              normalizeRuntimeRole(payload.role) !== normalizeRuntimeRole(effectiveRole)
+              ? payload.role
+              : null;
+            const optSessionRole =
+              parseSessionRoleFromCookieHeader(c.req.header('Cookie')) || tokenSessionRole;
             if (optSessionRole) {
               try {
                 const activeRole = await resolveRequestedSessionRole(

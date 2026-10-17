@@ -1,11 +1,12 @@
-export const TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS = 60;
+export const TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS = 30;
 
 export function trainingComplianceNeedsEnrollment(
   status: string,
   daysToExpire: number | null,
 ): boolean {
-  if (['NAO_REALIZADO', 'VENCIDO', 'VENCENDO'].includes(status)) return true;
-  return status === 'CONFORME' && daysToExpire !== null && daysToExpire <= TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS;
+  if (['NAO_REALIZADO', 'VENCIDO'].includes(status)) return true;
+  return ['VENCENDO','CONFORME'].includes(status) &&
+    daysToExpire !== null && daysToExpire <= TRAINING_COMPLIANCE_ENROLLMENT_RENEWAL_WINDOW_DAYS;
 }
 
 /**

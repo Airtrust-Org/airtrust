@@ -78,6 +78,8 @@ jobs:
           console.log('Explicit SCORM complete but canonical pending: '+j.totals.explicit_but_pending);
           console.log('Without final SCORM status, mastery not blocking: '+j.totals.mastery_met_missing_final);
           console.log('Mastery not proven: '+j.totals.mastery_unproven);
+          console.log('Assessment score absent/invalid: '+j.totals.score_missing_or_invalid);
+          console.log('Valid score below minimum: '+j.totals.score_below_mastery);
           for(const row of j.fdm13){
             console.log('FDM13 '+row.audience+': total='+row.enrolled+', 99%='+row.incomplete_99+', concluded='+row.concluded);
           }

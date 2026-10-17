@@ -8,6 +8,7 @@ import { logCronHealthSnapshot } from './cron-health';
 import { runDailyFrmsOperations } from './daily-frms';
 import { runDomainEventDispatchJob } from './domain-events';
 import { runEadRenewalJob } from './ead-renewal';
+import { runTrainingComplianceRosterJob } from './compliance-roster';
 import { runSigvoosFrmsJobs } from './sigvoos-frms';
 
 const TEN_MINUTE_CRON = '*/10 * * * *';
@@ -25,6 +26,7 @@ export interface ResilientCronPlan {
   runDailyAlerts: boolean;
   runComplianceReports: boolean;
   runEadRenewal: boolean;
+  runComplianceRoster: boolean;
   runDailyFrms: boolean;
   runSigvoosFrms: boolean;
   runDomainEvents: boolean;
@@ -40,6 +42,7 @@ export function getResilientCronPlan(cron: string, _now = new Date()): Resilient
     runDailyAlerts: isDaily,
     runComplianceReports: isTenMinute || isDaily,
     runEadRenewal: isTenMinute || isDaily,
+    runComplianceRoster: isTenMinute || isDaily,
     runDailyFrms: isDaily,
     runSigvoosFrms: isTenMinute,
     runDomainEvents: isTenMinute,
@@ -138,6 +141,7 @@ export async function runResilientScheduledJobs(
   await runStep('training-alerts', plan.runDailyAlerts, () => processarNotificacoes(env));
   await runStep('daily-alerts', plan.runDailyAlerts, () => alertasDiariosHandler(event, env));
   await runStep('ead-renewal', plan.runEadRenewal, () => runEadRenewalJob(env.DB, logger));
+  await runStep('lms-compliance-roster', plan.runComplianceRoster, () => runTrainingComplianceRosterJob(env.DB, logger));
   await runStep('sigvoos-frms', plan.runSigvoosFrms, () =>
     runSigvoosFrmsJobs(env.DB, env, logger, now),
   );

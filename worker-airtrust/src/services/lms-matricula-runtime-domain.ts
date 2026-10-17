@@ -221,6 +221,10 @@ export function evaluateScormClosureReadiness(params: {
   // This is the same fail-closed default as evaluateLmsCompletionEvidence.
   const policy = params.policy ?? 'SCORED';
   const lastStep = Boolean(location?.total && location.current >= location.total);
+  // A scored package provides learning evidence through its terminal SCORM
+  // success AND a valid passing assessment. Requiring a separate AirTrust-only
+  // page-visit ledger as well rejects valid SCORM packages and older sessions.
+  // Formative content has no exam and must still prove actual page coverage.
   const everySlide = hasCompleteScormSlideCoverage(cmiJson);
   const failed = isScormFailed(commit);
   const scoreRequired = policy === 'SCORED';
@@ -239,8 +243,10 @@ export function evaluateScormClosureReadiness(params: {
 
   const missing = [
     ...(!userConfirmed ? ['user_confirmation'] : []),
-    ...(!lastStep ? ['terminal_location'] : []),
-    ...(!everySlide ? ['distinct_slide_coverage'] : []),
+    // Navigation requirements belong only to non-scored content. For SCORED,
+    // terminal success plus the verified course mastery result are sufficient.
+    ...(policy === 'FORMATIVE' && !lastStep ? ['terminal_location'] : []),
+    ...(policy === 'FORMATIVE' && !everySlide ? ['distinct_slide_coverage'] : []),
     ...(!terminal ? ['terminal_scorm_status'] : []),
     ...(scoreRequired && !validMastery ? ['course_mastery_policy'] : []),
     ...(scoreRequired && !validScore ? ['assessment_score'] : []),
@@ -251,7 +257,7 @@ export function evaluateScormClosureReadiness(params: {
   if (wasCompleted) code = 'SCORM_ALREADY_COMPLETED';
   else if (failed) code = 'EXPLICIT_FAILURE';
   else if (!userConfirmed) code = 'SCORM_USER_CONFIRMATION_REQUIRED';
-  else if (!everySlide || !lastStep) code = 'PROGRESS_EVIDENCE_MISSING';
+  else if (policy === 'FORMATIVE' && (!everySlide || !lastStep)) code = 'PROGRESS_EVIDENCE_MISSING';
   else if (policy !== 'SCORED' && policy !== 'FORMATIVE') code = 'SCORM_ASSESSMENT_POLICY_INVALID';
   else if (scoreRequired && !validMastery) code = 'MASTERY_SCORE_MISSING';
   else if (scoreRequired && !validScore) code = 'SCORE_MISSING';

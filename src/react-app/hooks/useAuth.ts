@@ -26,17 +26,11 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
 
-  const activeSessionRole = readActiveSessionRole();
-
+  // Cookies são controláveis pelo navegador e transportam preferência,
+  // não autorização. O contexto tem a role já validada por /auth/me e auth().
   return useMemo(() => {
-    const user =
-      context.user && activeSessionRole
-        ? { ...context.user, role: activeSessionRole }
-        : context.user;
-
     return {
       ...context,
-      user,
       logout: () => {
         clearActiveSessionRole();
         context.logout();
@@ -51,5 +45,5 @@ export function useAuth() {
         }
       },
     };
-  }, [activeSessionRole, context]);
+  }, [context]);
 }

@@ -13,8 +13,12 @@ describe('matrícula ao salvar requisitos de Compliance', () => {
     expect(trainingComplianceNeedsImmediateEnrollmentOnRuleSave('EM_ANDAMENTO')).toBe(false);
   });
 
-  it('não antecipa renovação ao alterar a matriz', () => {
+  it('abre o ciclo automático assim que o treinamento entra na janela de 30 dias', () => {
+    expect(trainingComplianceNeedsEnrollment('VENCENDO', 30)).toBe(true);
     expect(trainingComplianceNeedsEnrollment('VENCENDO', 15)).toBe(true);
+    expect(trainingComplianceNeedsEnrollment('VENCENDO', 0)).toBe(true);
+    expect(trainingComplianceNeedsEnrollment('VENCENDO', 31)).toBe(false);
+    // Salvar a matriz não duplica ciclo; o roster resiliente faz a reconciliação.
     expect(trainingComplianceNeedsImmediateEnrollmentOnRuleSave('VENCENDO')).toBe(false);
   });
 });

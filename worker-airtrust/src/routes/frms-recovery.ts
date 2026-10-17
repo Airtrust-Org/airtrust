@@ -443,18 +443,19 @@ async function upsertRecoveryAssessment(params: {
     )
     .bind(params.empresaId, params.funcionarioId, params.referenceDate)
     .first<{ id: string }>();
+  const statements: D1PreparedStatement[] = [];
   if (existing?.id) {
-    await params.db
+    statements.push(params.db
       .prepare(
         `UPDATE frms_recovery_assessment SET deleted_at = ?, updated_at = ?
           WHERE id = ? AND empresa_id = ?`,
       )
       .bind(now, now, existing.id, params.empresaId)
-      .run();
+    );
   }
 
   const id = crypto.randomUUID();
-  await params.db
+  statements.push(params.db
     .prepare(
       `INSERT INTO frms_recovery_assessment (
          id, empresa_id, funcionario_id, reference_date, recovery_day_id,
@@ -495,7 +496,10 @@ async function upsertRecoveryAssessment(params: {
       now,
       now,
     )
-    .run();
+  );
+  // Soft-delete and replacement commit together. A failed insert must not
+  // erase the previous active recovery assessment.
+  await params.db.batch(statements);
 
   return {
     id,
@@ -518,6 +522,13 @@ async function upsertRecoveryAssessment(params: {
     reasons: result.reasons,
     effectiveness_delta_pct: null,
   };
+}
+
+/** Only absence of the historical recovery table is a compatibility no-op.
+ * Never conceal write/constraint failures as if recovery had no evidence. */
+export function isMissingRecoverySchemaError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /\bno such table:\s*(?:main\.)?(?:frms_recovery_activity_day|frms_recovery_assessment)\b/i.test(message);
 }
 
 export async function refreshRecoveryAssessmentForActivityDate(params: {
@@ -548,9 +559,9 @@ export async function refreshRecoveryAssessmentForActivityDate(params: {
         activity.immediate_callout_required == null ? null : Number(activity.immediate_callout_required) === 1,
       totalDutyMinutes: activity.total_duty_minutes,
     });
-  } catch {
-    // Migration may not yet be applied in older environments.
-    return null;
+  } catch (error) {
+    if (isMissingRecoverySchemaError(error)) return null;
+    throw error;
   }
 }
 
@@ -625,6 +636,63 @@ router.get('/context', async (c) => {
   });
 });
 
+/** All persisted activity rows are one D1 transaction. An invalid segment or
+ * a competing active day must not erase an existing active classification. */
+export async function persistRecoveryActivityDay(params: {
+  db: D1Database;
+  empresaId: number;
+  funcionarioId: number;
+  existingId: string | null;
+  activityId: string;
+  data: z.infer<typeof activitySchema>;
+  totalDutyMinutes: number | null;
+  noFlightConfirmed: 0 | 1;
+  createdBy: number | null;
+  now: string;
+}): Promise<void> {
+  const { db, data } = params;
+  const statements: D1PreparedStatement[] = [];
+  if (params.existingId) {
+    statements.push(db.prepare(`UPDATE frms_recovery_activity_day
+      SET deleted_at = ?, updated_at = ?
+      WHERE id = ? AND empresa_id = ? AND funcionario_id = ? AND deleted_at IS NULL`)
+      .bind(params.now, params.now, params.existingId, params.empresaId, params.funcionarioId));
+  }
+  statements.push(db.prepare(`INSERT INTO frms_recovery_activity_day (
+    id, empresa_id, funcionario_id, reference_date, no_flight_confirmed,
+    activity_type, standby_location, immediate_callout_required,
+    duty_start_time, duty_end_time, total_duty_minutes,
+    source, confidence, notes, created_by, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CREW_REPORTED', 'REPORTED', ?, ?, ?, ?)`)
+    .bind(
+      params.activityId, params.empresaId, params.funcionarioId,
+      data.reference_date, params.noFlightConfirmed, data.activity_type,
+      data.standby_location ?? null,
+      data.immediate_callout_required == null ? null : data.immediate_callout_required ? 1 : 0,
+      data.duty_start_time ?? null, data.duty_end_time ?? null,
+      params.totalDutyMinutes, data.notes ?? null, params.createdBy,
+      params.now, params.now,
+    ));
+  if (data.activity_type === 'MIXED' && data.segments) {
+    for (const [index, segment] of data.segments.entries()) {
+      statements.push(db.prepare(`INSERT INTO frms_recovery_activity_segment (
+        id, recovery_day_id, empresa_id, funcionario_id, sequence,
+        activity_type, start_time, end_time, duration_minutes,
+        location_kind, immediate_callout_required, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(
+          crypto.randomUUID(), params.activityId, params.empresaId, params.funcionarioId,
+          index + 1, segment.activity_type, segment.start_time ?? null,
+          segment.end_time ?? null, durationMinutes(segment.start_time, segment.end_time),
+          segment.location_kind ?? null,
+          segment.immediate_callout_required == null ? null : segment.immediate_callout_required ? 1 : 0,
+          params.now,
+        ));
+    }
+  }
+  await db.batch(statements);
+}
+
 router.post('/activity', async (c) => {
   const empresaId = getEmpresaId(c);
   const funcionarioId = await resolveOwnFuncionarioId(c, empresaId);
@@ -670,16 +738,6 @@ router.post('/activity', async (c) => {
     )
     .bind(empresaId, funcionarioId, data.reference_date)
     .first<{ id: string }>();
-  if (existing?.id) {
-    await c.env.DB
-      .prepare(
-        `UPDATE frms_recovery_activity_day SET deleted_at = ?, updated_at = ?
-          WHERE id = ? AND empresa_id = ?`,
-      )
-      .bind(now, now, existing.id, empresaId)
-      .run();
-  }
-
   const activityId = crypto.randomUUID();
   const totalDutyMinutes =
     data.activity_type === 'OFF_DUTY'
@@ -692,61 +750,18 @@ router.post('/activity', async (c) => {
         : durationMinutes(data.duty_start_time, data.duty_end_time);
   const noFlightConfirmed =
     data.activity_type !== 'FLIGHT_NOT_IN_SOURCE' && data.activity_type !== 'UNKNOWN' ? 1 : 0;
-  await c.env.DB
-    .prepare(
-      `INSERT INTO frms_recovery_activity_day (
-         id, empresa_id, funcionario_id, reference_date, no_flight_confirmed,
-         activity_type, standby_location, immediate_callout_required,
-         duty_start_time, duty_end_time, total_duty_minutes,
-         source, confidence, notes, created_by, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CREW_REPORTED', 'REPORTED', ?, ?, ?, ?)`,
-    )
-    .bind(
-      activityId,
-      empresaId,
-      funcionarioId,
-      data.reference_date,
-      noFlightConfirmed,
-      data.activity_type,
-      data.standby_location ?? null,
-      data.immediate_callout_required == null ? null : data.immediate_callout_required ? 1 : 0,
-      data.duty_start_time ?? null,
-      data.duty_end_time ?? null,
-      totalDutyMinutes,
-      data.notes ?? null,
-      Number(c.get('userId') || 0) || null,
-      now,
-      now,
-    )
-    .run();
-
-  if (data.activity_type === 'MIXED' && data.segments) {
-    const statements = data.segments.map((segment, index) =>
-      c.env.DB
-        .prepare(
-          `INSERT INTO frms_recovery_activity_segment (
-             id, recovery_day_id, empresa_id, funcionario_id, sequence,
-             activity_type, start_time, end_time, duration_minutes,
-             location_kind, immediate_callout_required, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          crypto.randomUUID(),
-          activityId,
-          empresaId,
-          funcionarioId,
-          index + 1,
-          segment.activity_type,
-          segment.start_time ?? null,
-          segment.end_time ?? null,
-          durationMinutes(segment.start_time, segment.end_time),
-          segment.location_kind ?? null,
-          segment.immediate_callout_required == null ? null : segment.immediate_callout_required ? 1 : 0,
-          now,
-        ),
-    );
-    if (statements.length > 0) await c.env.DB.batch(statements);
-  }
+  await persistRecoveryActivityDay({
+    db: c.env.DB,
+    empresaId,
+    funcionarioId,
+    existingId: existing?.id ?? null,
+    activityId,
+    data,
+    totalDutyMinutes,
+    noFlightConfirmed,
+    createdBy: Number(c.get('userId') || 0) || null,
+    now,
+  });
 
   const assessment = await upsertRecoveryAssessment({
     db: c.env.DB,

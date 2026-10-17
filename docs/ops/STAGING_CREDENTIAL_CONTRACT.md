@@ -45,8 +45,19 @@ examiner QA seed and certificate/session workflows depend on a dedicated
 synthetic tenant and RBAC fixture. Do not collapse the two identities merely
 to reduce secret count.
 
-Both identities are staging-only and must never be real Costa do Sol users or
-other operational production identities.
+A dedicated FRMS 30-day UX QA identity is also staging-only:
+`qa-frms-ux@staging.airtrust.invalid`, scoped **only** to synthetic tenant
+`999013` and employee code `QA-FRMS-UX-01`. The reviewed
+`.github/workflows/staging-frms-ux-identity.yml` provisions or disables it
+after a staging D1 recovery bookmark. It reuses the central
+`STAGING_SMOKE_PASSWORD` secret; there are **no** separate
+`FRMS_QA_EMAIL`/`FRMS_QA_PASSWORD` secrets or agent-local credentials.
+The browser acceptance workflow is read-only and runs only after provisioning.
+This account is not a platform administrator and cannot be used to select an
+arbitrary company.
+
+All these identities are staging-only and must never be real Costa do Sol users
+or other operational production identities.
 
 ## 3. Permanent staging infrastructure credentials
 

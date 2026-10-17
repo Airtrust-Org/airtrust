@@ -124,7 +124,7 @@ describe('HomePerfil quick access cards', () => {
     expect(paraAvaliar).toBeUndefined();
   });
 
-  it('mantem avaliação de fichas somente no perfil INSTRUTOR, sem misturar fichas próprias', () => {
+  it('INSTRUTOR reúne fichas próprias de Aluno e fichas para avaliar', () => {
     const cards = buildHomeAccessCards({
       role: 'INSTRUTOR',
       can: canAll,
@@ -136,7 +136,7 @@ describe('HomePerfil quick access cards', () => {
       (card) => card.title === 'Fichas de Treinamento de Voo para Avaliar',
     );
 
-    expect(minhas).toBeUndefined();
+    expect(minhas?.route).toBe('/simuladores/fichas/minhas');
     expect(paraAvaliar).toBeDefined();
     expect(paraAvaliar?.route).toBe('/simuladores/fichas/para-avaliar');
     expect(paraAvaliar?.description).toBe(
