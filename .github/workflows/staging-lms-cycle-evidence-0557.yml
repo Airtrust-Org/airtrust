@@ -277,6 +277,8 @@ jobs:
             { echo 'LMS_0557_ARCHIVE_TABLE_MISSING' >&2; exit 1; }
           [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('lms_ciclo_evidencias') WHERE name IN ('id','empresa_id','matricula_id','ciclo_id','enrollment_json','scorm_json','diagnostics_json','course_package_prefix','created_at')")" == '9' ]] ||
             { echo 'LMS_0557_ARCHIVE_SHAPE_MISMATCH' >&2; exit 1; }
+          [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_index_list('lms_ciclo_evidencias') WHERE \"unique\"=1")" == '1' ]] ||
+            { echo 'LMS_0557_ARCHIVE_CYCLE_UNIQUE_CONSTRAINT_MISSING' >&2; exit 1; }
           [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='index' AND name IN ('idx_lms_xapi_current_cycle','idx_lms_xapi_archived_cycle','idx_lms_ciclo_evidencias_tenant')")" == '3' ]] ||
             { echo 'LMS_0557_INDEX_POSTCONDITION_FAILED' >&2; exit 1; }
           [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name IN ('trg_lms_ciclo_evidencias_no_update','trg_lms_ciclo_evidencias_no_delete','trg_lms_xapi_archive_scope','trg_lms_xapi_archived_no_update','trg_lms_xapi_archived_no_delete')")" == '5' ]] ||
