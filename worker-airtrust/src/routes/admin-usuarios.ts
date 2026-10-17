@@ -532,6 +532,15 @@ protectedAdminUsuariosRoutes.patch('/:id/reset-senha', async (c) => {
     throw forbidden('Usuário não pertence à sua empresa', 'WRONG_TENANT');
   }
 
+  // Credential recovery must not become a tenant-admin route for takeover of
+  // the persisted platform administrator, even if both share a membership.
+  if (targetUserId === callerId) {
+    throw forbidden('Use o fluxo pessoal para redefinir sua senha', 'SELF_PASSWORD_RESET_FORBIDDEN');
+  }
+  if (await hasPlatformAdminAccess(db, targetUserId)) {
+    throw forbidden('Conta administrativa de plataforma exige recuperação própria', 'PLATFORM_ADMIN_CREDENTIAL_PROTECTED');
+  }
+
   const novoHash = await hashPassword(novaSenha);
   const hasJti = await hasRefreshTokensAccessTokenJtiColumn(db);
   const statements: D1PreparedStatement[] = [];
