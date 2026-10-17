@@ -159,11 +159,24 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
   await expect(page.getByText('Carregando prioridades e evidências.')).toHaveCount(0, { timeout: 30_000 });
   await captureMain(page, '01-operacao-frms-qa', 'Operação');
 
-  // Receipt must be informational, never a green "normal fatigue" signal.
+  // The decision queue is NOT the 4-signal grid. Audit the visible receipt
+  // badge there first, then open a REAL row to inspect the independent signals.
   const receivedCount = payload.data?.filter((row) => row.checkin_status === 'RECEBIDO').length ?? 0;
   if (receivedCount > 0) {
-    await expect(page.locator('main [aria-label="Check-in diário: Recebido — informativo"]').first())
-      .toBeVisible();
+    const receipt = page.locator('main [aria-label="Check-in diário: Recebido — informativo"]').first();
+    await expect(receipt).toBeVisible();
+    await expect(receipt).toHaveClass(/bg-sky-100/);
+    await expect(receipt).toHaveAttribute('title', /Não comprova baixa fadiga nem autoriza liberação/);
+    const crewRow = page.locator('main button').filter({ has: receipt }).first();
+    await crewRow.click();
+    const detail = page.getByRole('dialog');
+    await expect(detail.getByLabelText('Check-in diário: Recebido — informativo')).toBeVisible();
+    await test.info().attach('01b-frms-checkin-recebido-nao-libera', {
+      body: await detail.screenshot({ animations: 'disabled' }),
+      contentType: 'image/png',
+    });
+    await detail.getByRole('button', { name: 'Fechar', exact: true }).click();
+    await expect(detail).toHaveCount(0);
   }
   await expect(page.locator('main [aria-label^="Check-in diário: Recebido — normal"]')).toHaveCount(0);
 
