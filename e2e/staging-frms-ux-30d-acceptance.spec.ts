@@ -161,9 +161,14 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
 
   await page.getByRole('link', { name: 'Casos', exact: true }).click();
   await expect(page).toHaveURL((url) => url.pathname === '/frms/alertas');
-  await expect(page.locator('[aria-label="Carregando casos"]')).toHaveCount(0, { timeout: 30_000 });
-  await expect(page.getByText('Casos nesta página')).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText(/Serviço temporariamente indisponível/i)).toHaveCount(0);
+  // A loader that has not mounted yet also has count 0. Require a terminal
+  // DOM state derived from the real API response before taking a screenshot:
+  // either an empty queue or an actual case row, never initial skeletons.
+  const casesSettled = page.getByText('Nenhum caso neste filtro', { exact: true })
+    .or(page.locator('main article').first());
+  await expect(casesSettled).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator('[aria-label="Carregando casos"]')).toHaveCount(0);
+  await expect(page.getByText('Não foi possível atualizar os casos.')).toHaveCount(0);
   await captureMain(page, '02-casos-frms-qa', 'Casos');
 
   // Management of maintenance personnel requires an explicit backend grant.
@@ -189,9 +194,16 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
   await page.getByRole('navigation', { name: 'Administração FRMS' })
     .getByRole('link', { name: 'Relatórios', exact: true }).click();
   await expect(page).toHaveURL((url) => url.pathname === '/frms/relatorios');
-  await expect(page.getByText('Carregando relatório...')).toHaveCount(0, { timeout: 30_000 });
+  // The prior assertion 'loading count === 0' raced before the first API
+  // request. Only accept a rendered report table or a definitive empty state.
+  const reportsSettled = page.getByText('Nenhum dado encontrado para o recorte deste relatório', { exact: true })
+    .or(page.locator('main table').first());
+  await expect(reportsSettled).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText('Não foi possível gerar este relatório')).toHaveCount(0);
   await captureMain(page, '04-relatorios-frms-qa', 'Relatórios FRMS');
   await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(reportsSettled).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText('Não foi possível gerar este relatório')).toHaveCount(0);
   await captureMain(page, '05-relatorios-deeplink-frms-qa', 'Relatórios FRMS');
 
   expect(failures, 'Erros 5xx no escopo QA autenticado').toEqual([]);
