@@ -1,3 +1,10 @@
+// source_reference: scripts/staging/provision-frms-ux-identity.mjs and the
+//   staging synthetic tenant 999013 reviewed fixture contract.
+// operational_decision: test only the fixed-scope generated DML and guards;
+//   these tests never run SQL or access remote staging/production databases.
+// dry_run_required: this is a pure offline node:test suite without DB writes.
+// rollback_plan_required: asserts the provisioner's scoped disabling SQL; no
+//   live rollback or other mutation is executed by these unit tests.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import {
