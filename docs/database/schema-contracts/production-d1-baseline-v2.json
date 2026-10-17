@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-17",
-    "last_reconciled_against": "0557 LMS cycle evidence archive, reserved separately from Player 3 0553/0554; pending governed apply",
-    "schema_v2_digest": "bee189fac6d5e14bf2ccf1b2ecf3ebadc8e308c5d5c6b03ce454c83c2f12ad55",
+    "last_reconciled_against": "0553 LGPD, 0554 simulator individual evidence, and 0557 LMS cycle evidence queued; no remote Schema V2 application asserted",
+    "schema_v2_digest": "a25a237ac1d215003624bb90a531108a421d679cfeb435c9468af8b5eb99483a",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1420,18 +1420,6 @@
       "note": "0541 is a reviewed, tenant-6 only forward prerequisite for FDM three audiences 0536, needed because production read-only showed no TREINAMENTO_OPERACIONAL category. It creates the canonical category only if absent, without employee/LMS/history writes. File/manifest is not evidence of application; apply through governed Schema V2 after exact release authorization. Production PRAGMA confirms lms_integrada is absent, so reviewed SQL and production postconditions avoid this staging-only field."
     },
     {
-      "change_file": "ead-category-reconciliation-executor-0453.sql",
-      "change_id": null,
-      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
-      "targets": [
-        "ead_category_reconciliation_runs"
-      ],
-      "domain": "EAD category reconciliation executor ledger",
-      "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REPO_EXPECTED",
-      "reviewed_manifest": null
-    },
-    {
       "change_file": "0542_lms_scorm_formative_assessment_policy.sql",
       "change_id": "lms-scorm-formative-assessment-0542",
       "sha256": "85fe3b4766ef1010c29d3cc314cbc9bd8345d467ea0cb811473f403d51cd36cb",
@@ -1568,6 +1556,32 @@
       "note": "0552 is a nullable additive field for reported sleep opportunity. It does not backfill or change historical sleep, policy, coefficients, fatigue thresholds, tenant or RBAC. Runtime Worker must not be deployed until the governed migration has been applied and verified in the target environment. This is repo-reviewed only, not a production schema claim."
     },
     {
+      "change_file": "0553_retire_empty_lgpd_seg_info_model.sql",
+      "change_id": "retire-empty-lgpd-seg-info-model-0553",
+      "sha256": "63528601b365117d1f7d0aeaa46eb2ffffc912a091c4591001167dd1b4690610",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 empty LGPD qualification model retirement",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "retire-empty-lgpd-seg-info-model-0553.json",
+      "evidence": "worker-airtrust/schema-v2/plans/retire-empty-lgpd-seg-info-model-0553.md",
+      "note": "Data-only retirement permitted only when all checked active references are zero. Governed apply soft-deletes LGPD_SEG_INFO without transfers, enrolments or notifications."
+    },
+    {
+      "change_file": "0554_simulator_individual_check_evidence.sql",
+      "change_id": "simulator-individual-check-evidence-0554",
+      "sha256": "bcbdcf8bd78c3a3d6393624e62ae70e691190e3ae2d35c0951c0bc56470b4bf5",
+      "targets": [
+        "sessoes_checks_resultados_individuais"
+      ],
+      "domain": "Simuladores: individual signed check evidence with tenant and per-fiche scope",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "simulator-individual-check-evidence-0554.json",
+      "evidence": "worker-airtrust/schema-v2/plans/simulator-individual-check-evidence-0554.md",
+      "note": "Additive table/indexes/triggers only. Never synthesizes per-employee approvals from legacy session-level results. Runtime rollout is separately gated after governed schema apply."
+    },
+    {
       "change_file": "0557_lms_cycle_evidence_archive.sql",
       "change_id": "lms-cycle-evidence-0557",
       "sha256": "6df04a3d9fa5f3975a914d978600ac00f492438c02655deb211893f208a32b8e",
@@ -1581,6 +1595,18 @@
       "reviewed_manifest": "lms-cycle-evidence-0557.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-cycle-evidence-0557.md",
       "note": "Additive DDL only. Runtime atomic enrollment/cycle reset is gated on migration 0557 and consumes only active-cycle xAPI. No production D1 data write or production schema application claimed; requires SHA-specific governance and recovery. Immutable audit storage is enforced by D1 triggers: archive snapshots and attributed xAPI cannot be updated/deleted, and tenant/cycle mismatch aborts attribution."
+    },
+    {
+      "change_file": "ead-category-reconciliation-executor-0453.sql",
+      "change_id": null,
+      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
+      "targets": [
+        "ead_category_reconciliation_runs"
+      ],
+      "domain": "EAD category reconciliation executor ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
     }
   ]
 }
