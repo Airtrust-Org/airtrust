@@ -126,7 +126,7 @@ app.get('/fichas/:id/checks-individuais', async (c) => {
     success:true, data:(rows.results || []).map((row: Record<string, unknown>) => {
       const approved = row.estado === 'CONFIRMADO' && Number(row.aprovado) === 1;
       const completionDate = String(ficha.data_sessao || '').slice(0, 10);
-      const expiration = approved && /^\\d{4}-\\d{2}-\\d{2}$/.test(completionDate)
+      const expiration = approved && /^\d{4}-\d{2}-\d{2}$/.test(completionDate)
         ? calculateQualificationExpiry({
             completionDate,
             validityMonths:normalizeValidityMonths(row.validade as number | string | null),
