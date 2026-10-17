@@ -383,6 +383,8 @@ export interface JwtPayload {
   asset_curso_id?: number;
   asset_matricula_id?: number;
   asset_scorm_package_prefix?: string;
+  asset_qa_candidate_id?: string; // Short-lived non-production preview scope only
+  asset_qa_candidate_sha256?: string; // Exact staged candidate ZIP identity
   asset_preview?: boolean;
   nome?: string;
   empresa_id?: number; // Multi-tenant: ID da empresa ativa
