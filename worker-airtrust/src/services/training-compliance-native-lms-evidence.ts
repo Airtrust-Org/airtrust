@@ -70,3 +70,37 @@ export async function isNativeLmsComplianceCourse(
   ).bind(empresaId, cursoId).first<{ curso_id: number }>();
   return Number(row?.curso_id) === cursoId;
 }
+
+/** Read-only LMS evidence shared by both legacy Compliance endpoints.
+ * Native requires a tenant-, employee- and qualification-linked completion;
+ * external SCORM keeps its historical contract. */
+export async function loadVerifiedComplianceLmsEnrollments(
+  db: D1Database, empresaId: number, funcionarioIds: readonly number[],
+): Promise<Record<string, unknown>[]> {
+  if (!Number.isSafeInteger(empresaId) || empresaId <= 0 ||
+      funcionarioIds.length > 2000 ||
+      funcionarioIds.some(id => !Number.isSafeInteger(id) || id <= 0)) {
+    throw new Error('COMPLIANCE_LMS_INVALID_TENANT_EMPLOYEE_SCOPE');
+  }
+  if (!funcionarioIds.length) return [];
+  const [activationTable, historyTable] = await Promise.all([
+    hasLiveNativeLmsActivationTable(db),
+    hasSchemaTable(db, 'qualificacoes_historico'),
+  ]);
+  const nativeGuard = nativeLmsComplianceEvidencePredicate(activationTable, historyTable);
+  const placeholders = funcionarioIds.map(() => '?').join(',');
+  const result = await db.prepare(`
+    SELECT m.funcionario_id, m.curso_id, m.status, m.data_expiracao
+      FROM lms_matriculas m
+      JOIN lms_cursos c ON c.id = m.curso_id
+       AND c.empresa_id = m.empresa_id AND c.deleted_at IS NULL
+     WHERE m.funcionario_id IN (${placeholders})
+       AND m.empresa_id = ?
+       AND m.deleted_at IS NULL
+       AND ${nativeGuard}
+  `).bind(...funcionarioIds, empresaId).all<Record<string, unknown>>();
+  if (!result || !Array.isArray(result.results)) {
+    throw new Error('COMPLIANCE_LMS_EVIDENCE_READ_FAILED');
+  }
+  return result.results;
+}
