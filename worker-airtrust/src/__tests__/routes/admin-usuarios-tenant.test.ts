@@ -696,6 +696,24 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
     });
   });
 
+  describe('proteção de credenciais do administrador global', () => {
+    it('administrador de empresa não redefine senha do administrador de plataforma', async () => {
+      const response = await adminRequest('PATCH', '/99/reset-senha', {
+        callerId: 10,
+        callerRole: 'ADMINISTRADOR',
+        callerEmpresaId: 1,
+        body: { nova_senha: 'SenhaDeTesteForte!2026' },
+        db: createDb({
+          targetExists: true,
+          targetPerfil: 'ADMINISTRADOR',
+          targetEmpresaId: 1,
+          targetHasVinculo: true,
+        }),
+      });
+      expect(response.status).toBe(403);
+    });
+  });
+
   // ────────────────────────────────────────────
   // GESTOR cross-tenant
   // ────────────────────────────────────────────
