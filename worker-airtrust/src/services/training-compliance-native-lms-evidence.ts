@@ -1,3 +1,5 @@
+import { hasSchemaTable } from '../utils/db-schema';
+
 /**
  * Training Compliance must never treat a Native player percentage, legacy
  * SCORM completion marker or bare enrollment status as canonical evidence.
@@ -14,10 +16,7 @@
  * D1 errors fail closed instead of silently trusting the physical format.
  */
 export async function hasLiveNativeLmsActivationTable(db: D1Database): Promise<boolean> {
-  const row = await db.prepare(
-    "SELECT 1 AS found FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
-  ).bind('lms_native_catalog_activation').first<{ found: number }>();
-  return Boolean(row?.found);
+  return hasSchemaTable(db, 'lms_native_catalog_activation', { fresh: true });
 }
 
 export function nativeLmsComplianceEvidencePredicate(
