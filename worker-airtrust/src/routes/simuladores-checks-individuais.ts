@@ -30,6 +30,7 @@ type EvidenceRow = {
   observacoes: string | null;
   avaliador_funcionario_id: number;
   revisao_numero: number;
+  revisao_de_id: number | null;
 };
 
 function positiveId(value: unknown): number | null {
@@ -131,7 +132,7 @@ app.post(
     }
     if (!ficha.assinatura_aluno_timestamp || !ficha.assinatura_instrutor_timestamp ||
         !['APROVADO', 'NAO_APROVADO', 'CONCLUIDA'].includes(ficha.status) ||
-        ![0, 1].includes(Number(ficha.aprovado))) {
+        ficha.aprovado === null || ![0, 1].includes(Number(ficha.aprovado))) {
       return c.json({ success:false, code:'FICHA_INDIVIDUAL_NAO_ASSINADA', error:'A ficha individual precisa estar assinada e finalizada' }, 409);
     }
     const body: unknown = await c.req.json().catch(() => null);
@@ -161,7 +162,7 @@ app.post(
     if (!check) return c.json({ success:false, error:'Check não pertence à ficha' }, 404);
 
     const existing = await c.env.DB.prepare(`
-      SELECT id, aprovado, estado, observacoes, avaliador_funcionario_id, revisao_numero
+      SELECT id, aprovado, estado, observacoes, avaliador_funcionario_id, revisao_numero, revisao_de_id
       FROM sessoes_checks_resultados_individuais
       WHERE empresa_id=? AND ficha_id=? AND sessao_check_id=?
         AND deleted_at IS NULL AND estado<>'ANULADO' LIMIT 1
@@ -170,8 +171,7 @@ app.post(
       if (existing.estado === 'CONFIRMADO' &&
           existing.aprovado === Number(approved) &&
           (existing.observacoes || '') === obs && existing.avaliador_funcionario_id === actor &&
-          ((revisionId === null && existing.revisao_numero === 1) ||
-           (revisionId !== null && existing.revisao_numero > 1))) {
+          (existing.revisao_de_id === revisionId)) {
         return c.json({ success:true, data:{ id:existing.id, idempotente:true, estado:'CONFIRMADO' } });
       }
       return c.json({ success:false, code:'CHECK_INDIVIDUAL_JA_REGISTRADO', error:'Evidência existente e imutável' }, 409);
