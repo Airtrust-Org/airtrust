@@ -141,7 +141,7 @@ describe('daily check-in atomic commit', () => {
     expect(writes.slice(2, 12).every((s) => s.sql.includes('INSERT INTO frms_readiness_vigilance_trial'))).toBe(true);
     expect(writes[12].sql).toContain('INSERT INTO frms_fadiga_evento');
     expect(writes[12].binds[1]).toBe(7);
-    expect(JSON.parse(String(writes[12].binds[4]))).toMatchObject({ kssProvenance: 'CREW_REPORTED' });
+    expect(JSON.parse(String(writes[12].binds[4]))).toMatchObject({ kss_field_provenance: 'CREW_REPORTED', kss_field_provenance_version: 'CHECKIN_SERVER_V1' });
     expect(syncMock).toHaveBeenCalledWith(expect.objectContaining({ readinessAlreadyPersisted: true }));
   });
 
