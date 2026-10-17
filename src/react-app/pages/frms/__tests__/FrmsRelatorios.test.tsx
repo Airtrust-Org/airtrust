@@ -58,6 +58,11 @@ describe('FrmsRelatorios', () => {
       loading: false, error: null, refetch: refetchMock,
     });
     render(<FrmsRelatorios />);
+    // The backend's dias_avaliados counts every day in the report window,
+    // including UNKNOWN compliance. Never label it as a count of evaluated days.
+    expect(screen.getByRole('columnheader', { name: 'Dias no recorte' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Não avaliados' })).toBeInTheDocument();
+    expect(screen.getByText(/Dias no recorte incluem os dias sem avaliação de conformidade/i)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /Conclusões e próximas ações/i })).toBeInTheDocument();
     expect(screen.getByText(/1 profissional\(is\) com dias de violação/i)).toBeInTheDocument();
     expect(screen.getByText(/Limitações da fonte: Dados sintéticos/i)).toBeInTheDocument();
