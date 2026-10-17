@@ -76,9 +76,10 @@ export function signGovernedScormEvidence({
       doc.documentId.length<=128&&sha.test(doc.sha256)&&
       row.certificateDownloadHttpStatus===200,
       'CERTIFICATE_BACKEND_WITNESS_MISSING_'+browser);
-    const file=certificatePdfFiles?.[browser];
-    assert(typeof file==='string'&&file,'CERTIFICATE_FILE_MISSING_'+browser);
-    const pdf=readFileSync(file);
+    const certificatePath=certificatePdfFiles?.[browser];
+    assert(typeof certificatePath==='string'&&certificatePath,
+      'CERTIFICATE_FILE_MISSING_'+browser);
+    const pdf=readFileSync(certificatePath);
     assert(pdf.length>150&&pdf.subarray(0,5).toString()==='%PDF-'&&
       pdf.includes(Buffer.from('%%EOF'))&&
       digest(pdf)===doc.sha256,'CERTIFICATE_DOCUMENT_UNVERIFIED_'+browser);
