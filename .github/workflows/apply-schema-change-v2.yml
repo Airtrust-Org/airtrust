@@ -632,6 +632,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0549-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight simulator individual check evidence 0554
+        if: ${{ inputs.change_id == 'simulator-individual-check-evidence-0554' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0554-production-preflight.sh --target=airtrust-db
+
       - name: Preflight empty LGPD model retirement 0553
         if: ${{ inputs.change_id == 'retire-empty-lgpd-seg-info-model-0553' }}
         shell: bash
@@ -788,6 +796,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0549-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate simulator individual check evidence 0554
+        if: ${{ inputs.change_id == 'simulator-individual-check-evidence-0554' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0554-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate empty LGPD model retirement 0553
         if: ${{ inputs.change_id == 'retire-empty-lgpd-seg-info-model-0553' }}
