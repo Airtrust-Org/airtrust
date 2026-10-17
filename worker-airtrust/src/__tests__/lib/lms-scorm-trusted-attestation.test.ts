@@ -85,6 +85,10 @@ describe('governed independent SCORM browser attestation', () => {
         altered.certificateDocuments.CHROMIUM[field];
       expect(await verifyTrustedScormAttestation(seal(altered), context, secret, now)).toBe(false);
     }
+    const reusedPdf = structuredClone(original);
+    reusedPdf.certificateDocuments.WEBKIT.sha256 =
+      reusedPdf.certificateDocuments.CHROMIUM.sha256;
+    expect(await verifyTrustedScormAttestation(seal(reusedPdf), context, secret, now)).toBe(false);
   });
   it('rejects unexpected object fields, malicious extra certificate state and malformed evidence', async () => {
     const extended = { ...payload(), publishable: true };
