@@ -124,23 +124,26 @@ setup('real staging login', async ({ page }) => {
       return true;
     }
 
-    // The governed QA admin credential must activate an administrative session
-    // through the real UI. Never guess another profile and never forge storage.
+    // The QA admin credentials belong to the isolated examiner *tenant*.
+    // Under persisted platform RBAC, this is not automatically a global
+    // ADMINISTRADOR grant: the real UI may offer Gestor + Aluno/Instrutor.
+    // Select only a visible operational manager/administrator option from
+    // the server-authorized chooser; never select learner as a substitute.
     if (profile !== 'admin') {
       throw new Error('QA_SESSION_PROFILE_SELECTION_REQUIRED_FOR_NON_ADMIN_PAIR');
     }
 
-    const adminProfileButton = page
+    const qaOperationalRole = page
       .getByRole('button', {
-        name: /entrar como (administrador geral|administrador da empresa)/i,
+        name: /entrar como (administrador(?: geral| da empresa)?|gestor)/i,
       })
       .first();
 
-    if ((await adminProfileButton.count()) === 0 || !(await adminProfileButton.isVisible())) {
-      throw new Error('QA_ADMIN_SESSION_PROFILE_NOT_AVAILABLE');
+    if ((await qaOperationalRole.count()) === 0 || !(await qaOperationalRole.isVisible())) {
+      throw new Error('QA_SCOPED_ADMIN_OPERATIONAL_PROFILE_NOT_AVAILABLE');
     }
 
-    await adminProfileButton.click();
+    await qaOperationalRole.click();
     try {
       await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
         timeout: timeoutMs,
