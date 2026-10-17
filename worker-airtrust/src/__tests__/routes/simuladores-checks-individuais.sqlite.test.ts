@@ -60,7 +60,7 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
         (91,1100,NULL),(92,1200,NULL),(93,1002,NULL),(94,2000,NULL);
       INSERT INTO simulador_agendamentos (id,empresa_id,examinador_id,funcionario_id,deleted_at) VALUES (10,1,1200,NULL,NULL);
       INSERT INTO sessoes_checks VALUES (11,10,101,NULL);
-      INSERT INTO fichas_sessao VALUES
+      INSERT INTO fichas_sessao (id,empresa_id,agendamento_slot_id,colaborador_id_aluno,instrutor_id,aprovado,status,assinatura_aluno_timestamp,assinatura_instrutor_timestamp,deleted_at) VALUES
         (111,1,10,1002,1100,1,'APROVADO','2026-10-17','2026-10-17',NULL),
         (112,1,10,1000,1100,0,'NAO_APROVADO','2026-10-17','2026-10-17',NULL),
         (113,1,10,1001,1100,NULL,'AGUARDANDO_ASSINATURA_INSTRUTOR','2026-10-17',NULL,NULL);
