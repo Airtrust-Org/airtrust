@@ -41,10 +41,38 @@ function positiveId(value: unknown): number | null {
   return Number.isSafeInteger(id) && Number(id) > 0 ? Number(id) : null;
 }
 async function schemaReady(db: D1Database): Promise<boolean> {
-  const row = await db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='sessoes_checks_resultados_individuais'",
-  ).first();
-  return !!row;
+  // A similarly named table is not enough. The official Schema V2 ledger and
+  // fail-closed triggers must exist in this same database before any
+  // individual evidence can be read or written.
+  try {
+    const schema = await db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM sqlite_master
+          WHERE type='table' AND name='sessoes_checks_resultados_individuais') AS table_count,
+        (SELECT COUNT(*) FROM sqlite_master
+          WHERE type='table' AND name='airtrust_schema_changes_v2') AS ledger_count,
+        (SELECT COUNT(*) FROM sqlite_master
+          WHERE type='trigger' AND tbl_name='sessoes_checks_resultados_individuais'
+            AND name IN (
+              'trg_checks_individuais_scope_insert',
+              'trg_checks_individuais_immutable_scope',
+              'trg_checks_individuais_confirm_insert',
+              'trg_checks_individuais_confirm_update',
+              'trg_checks_individuais_annulled_immutable',
+              'trg_checks_individuais_confirmed_immutable'
+            )) AS trigger_count
+    `).first<{ table_count: number; ledger_count: number; trigger_count: number }>();
+    if (Number(schema?.table_count) !== 1 ||
+        Number(schema?.ledger_count) !== 1 ||
+        Number(schema?.trigger_count) !== 6) return false;
+    const applied = await db.prepare(
+      "SELECT 1 AS applied FROM airtrust_schema_changes_v2 WHERE change_id=? AND baseline_id=? LIMIT 1",
+    ).bind('simulator-individual-check-evidence-0554', 'production-d1-baseline-v2-20260714')
+      .first();
+    return !!applied;
+  } catch {
+    return false;
+  }
 }
 async function fichaScope(db: D1Database, empresaId: number, id: number): Promise<FichaCheckScope | null> {
   return db.prepare(`
