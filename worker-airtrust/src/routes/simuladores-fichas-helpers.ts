@@ -50,6 +50,7 @@ type QualificationGenerationFichaRow = {
 };
 
 type QualificationCheckRow = {
+  evidencia_ids?: string | null;
   qualificacao_tipo_id: number;
   qt_codigo: string;
   qt_nome: string;
@@ -220,29 +221,39 @@ export async function gerarQualificacaoDaFicha(
     ).first();
     const checksMarcados = individualSchema
       ? await db.prepare(`
-          SELECT DISTINCT sc.qualificacao_tipo_id,
+          SELECT sc.qualificacao_tipo_id,
                  qt.codigo AS qt_codigo, qt.nome AS qt_nome,
-                 qt.validade AS qt_validade
+                 qt.validade AS qt_validade,
+                 GROUP_CONCAT(DISTINCT evidence.id) AS evidencia_ids
             FROM sessoes_checks sc
             JOIN simulador_agendamentos sa
               ON sa.id=sc.sessao_id AND sa.empresa_id=? AND sa.deleted_at IS NULL
             JOIN qualificacoes_tipos qt
               ON qt.id=sc.qualificacao_tipo_id AND qt.empresa_id=?
                AND qt.deleted_at IS NULL AND qt.ativo=1
-            JOIN sessoes_checks_resultados_individuais e
-              ON e.sessao_check_id=sc.id AND e.empresa_id=?
-               AND e.ficha_id=? AND e.funcionario_id=?
-               AND e.estado='CONFIRMADO' AND e.aprovado=1
-               AND e.deleted_at IS NULL
+            JOIN sessoes_checks_resultados_individuais evidence
+              ON evidence.sessao_check_id=sc.id AND evidence.empresa_id=?
+               AND evidence.ficha_id=? AND evidence.funcionario_id=?
+               AND evidence.estado='CONFIRMADO' AND evidence.aprovado=1
+               AND evidence.deleted_at IS NULL
            WHERE sc.sessao_id=? AND sc.deleted_at IS NULL
              AND sc.qualificacao_tipo_id IS NOT NULL
+             -- Multiple mandatory checks for the same qualification are
+             -- conjunctive: one failed/missing/draft check blocks the FAP.
              AND NOT EXISTS (
-               SELECT 1 FROM sessoes_checks_resultados_individuais conflict
-                WHERE conflict.sessao_check_id=sc.id AND conflict.empresa_id=?
-                  AND conflict.ficha_id=? AND conflict.funcionario_id=?
-                  AND conflict.deleted_at IS NULL
-                  AND (conflict.estado<>'CONFIRMADO' OR conflict.aprovado<>1)
+               SELECT 1 FROM sessoes_checks other
+                WHERE other.sessao_id=sc.sessao_id
+                  AND other.qualificacao_tipo_id=sc.qualificacao_tipo_id
+                  AND other.deleted_at IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM sessoes_checks_resultados_individuais passed
+                     WHERE passed.sessao_check_id=other.id
+                       AND passed.empresa_id=? AND passed.ficha_id=?
+                       AND passed.funcionario_id=? AND passed.estado='CONFIRMADO'
+                       AND passed.aprovado=1 AND passed.deleted_at IS NULL
+                  )
              )
+           GROUP BY sc.qualificacao_tipo_id, qt.codigo, qt.nome, qt.validade
         `).bind(f.empresa_id, f.empresa_id, f.empresa_id, fid,
           colaboradorId, f.agendamento_slot_id, f.empresa_id, fid, colaboradorId)
         .all<QualificationCheckRow>()
@@ -313,7 +324,9 @@ export async function gerarQualificacaoDaFicha(
         qualificacaoCodigo: check.qt_codigo,
         dataConclusao,
         dataVencimento: dataVencimentoFap,
-        observacoes: `FAP gerada da ficha #${fid} (check aprovado)`,
+        observacoes: check.evidencia_ids
+          ? `FAP da ficha #${fid} — evidências individuais confirmadas #${check.evidencia_ids}`
+          : `FAP gerada da ficha #${fid} (check legado inequívoco)`,
         empresaId: alunoEmpresaId,
         status: qualificacaoStatus,
       });
