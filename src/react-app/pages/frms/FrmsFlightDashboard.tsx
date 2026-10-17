@@ -782,11 +782,19 @@ export default function FrmsFlightDashboard() {
                       <p className="mt-2 truncate font-bold text-slate-950 dark:text-white">{displayName(item)}</p>
                       <p className="truncate text-xs text-slate-500">{[item.funcao, item.base, item.aeronave].filter(Boolean).join(' · ') || 'Função/base não informadas'}</p>
                       <p className="mt-2 text-xs font-semibold text-slate-600 dark:text-slate-300">Check-in diário</p>
-                      <span className={`mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold ${guidance.checkinComplete
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-                        : guidance.requiresCheckin
-                          ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
-                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                      <span
+                        className={`mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold ${guidance.checkinComplete
+                          ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200'
+                          : guidance.requiresCheckin
+                            ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}
+                        aria-label={guidance.checkinComplete
+                          ? 'Check-in diário: Recebido — informativo'
+                          : `Check-in diário: ${guidance.checkinLabel}`}
+                        title={guidance.checkinComplete
+                          ? 'Coleta recebida. Não comprova baixa fadiga nem autoriza liberação operacional.'
+                          : undefined}
+                      >
                         {guidance.checkinLabel}
                       </span>
                     </div>
