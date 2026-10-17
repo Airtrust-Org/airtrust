@@ -64,13 +64,13 @@ describe('FrmsSignalChips', () => {
     render(<FrmsSignalChips item={item()} />);
     const list = screen.getByLabelText('Sinais operacionais do dia');
     const chips = within(list);
-    expect(chips.getByLabelText('Check-in diário: Realizada — normal')).toBeInTheDocument();
+    expect(chips.getByLabelText('Check-in diário: Recebido — informativo')).toBeInTheDocument();
     expect(chips.getByLabelText('Risco do período: Dados incompletos — sem dado')).toBeInTheDocument();
     expect(chips.getByLabelText('Efetividade: 92,0% — normal')).toBeInTheDocument();
     expect(chips.getByLabelText('Prontidão: Resultado não registrado — sem dado')).toBeInTheDocument();
   });
 
-  it('mantém verde todo sinal positivo apurado mesmo quando a fila exige decisão', () => {
+  it('check-in recebido permanece informativo mesmo com decisão pendente', () => {
     render(
       <FrmsSignalChips
         item={item()}
@@ -81,7 +81,7 @@ describe('FrmsSignalChips', () => {
 
     const chips = within(screen.getByLabelText('Sinais operacionais do dia'));
     const positiveSuffix = 'sinal positivo já apurado; a decisão operacional ainda requer avaliação dos demais sinais.';
-    expect(chips.getByLabelText(`Check-in diário: Realizada — normal — ${positiveSuffix}`)).toHaveClass('bg-emerald-50');
+    expect(chips.getByLabelText('Check-in diário: Recebido — informativo')).toHaveClass('bg-sky-50');
     expect(chips.getByLabelText(`Efetividade: 92,0% — normal — ${positiveSuffix}`)).toHaveClass('bg-emerald-50');
     expect(chips.getByLabelText(`Prontidão: Preservada — normal — ${positiveSuffix}`)).toHaveClass('bg-emerald-50');
     expect(chips.getByLabelText('Risco do período: Dados incompletos — sem dado')).toHaveClass('bg-slate-50');
