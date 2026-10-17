@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
@@ -65,6 +67,15 @@ function fixture(markerTable = true, historyTable = true) {
 }
 
 describe('Native completion evidence isolation in Training Compliance', () => {
+  it('keeps the Compliance reader wired to the Native completion guard', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/routes/compliance-treinamentos.ts'), 'utf8');
+    const reader = source.slice(source.indexOf('async function loadLmsEvidence('),
+      source.indexOf('function latestEvidence(', source.indexOf('async function loadLmsEvidence(')));
+    expect(reader).toContain("hasLiveNativeLmsActivationTable(db)");
+    expect(reader).toContain('nativeLmsComplianceEvidencePredicate(');
+    expect(reader).toContain('AND ${nativeCompletionScope}');
+  });
+
   it('accepts only canonical linked qualification for physical and activated Native completions', () => {
     expect(fixture()).toEqual([2, 6, 7]);
   });

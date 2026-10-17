@@ -48,3 +48,14 @@ O frontend recebe a projeção de catálogo/matrícula como `tipo_conteudo:'nati
 - Registrar evidência de Compliance/certificado na mesma execução real.
 
 **Não autorizado nesta PR:** habilitar Native, migrar schema, semear, escrever D1/R2 de staging/produção, emitir certificado, fazer merge/deploy ou usar produção como ambiente de testes. Bloqueios exigem coordenação; gates verdes não resolvem os pré-requisitos de conteúdo e ambiente.
+
+## 2026-10-17 — Correção na leitura e reconciliação de Compliance
+
+A leitura de Compliance passou a exigir prova de qualificação para **matrículas Native concluídas**. O filtro `nativeLmsComplianceEvidencePredicate` impede que `lms_matriculas.status='CONCLUIDO'` seja reconhecido como evidência Native suficiente se não existir registro `qualificacoes_historico` vinculado à matrícula, com **mesma empresa, mesmo funcionário e tipo de qualificação, status CONCLUIDA, não excluído**. O filtro preserva o contrato histórico de cursos SCORM não ativados e mantém Native em andamento como não concluído.
+
+O side-table `lms_native_catalog_activation` é consultado com presença de schema *live*, por `hasSchemaTable(db, ..., { fresh: true })`, pois a ausência cacheada antes de uma migration pode converter indevidamente um curso Native efetivo em SCORM. O probe continua read-only, com introspecção concentrada no utilitário comum; erro no probe/lookup impede o snapshot (fail-closed), sem ampliar o ratchet de introspecção.
+
+O serviço de sincronização automática de matrículas de regras de Compliance (`training-compliance-rule-enrollment.ts`, inclusive uso via FDM72) recusa curso físico Native e curso SCORM com ativação Native antes de chamar `resetMatriculaForNewCycle` ou criar matrícula. Retorna `LMS_COURSE_MAPPING_UNAVAILABLE` para curso inapropriado e `AUTO_ENROLLMENT_DEFERRED` para falha operacional; **nunca faz fallback silencioso para SCORM**. A migração para provisionamento Native permanece governada e não é feita automaticamente.
+
+**QA deste avanço:** 24/24 testes focados aprovados em quatro suites (10 com SQL/SQLite real, incluindo marker adicionado na vida do Worker e auto-enrollment com zero writes, 5 do comportamento de enrollment, 4 FDM72 e 5 architecture guard); Worker TypeScript PASS. Nenhuma alteração em D1/R2 remoto, nenhum schema aplicado ou deploy. **Ainda falta** demonstrar o mesmo histórico e status Compliance a partir de uma conclusão real em staging com matrículas sintéticas e PDF reaberto.
+
