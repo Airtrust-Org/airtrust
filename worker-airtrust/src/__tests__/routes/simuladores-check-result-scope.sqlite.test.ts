@@ -33,6 +33,14 @@ describe('simulator session check-result tenant and session boundaries', () => {
         id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, is_check INTEGER,
         funcionario_id INTEGER, instrutor_id INTEGER, data TEXT, deleted_at TEXT
       );
+      CREATE TABLE sessoes_participantes (
+        id INTEGER PRIMARY KEY, sessao_id INTEGER NOT NULL,
+        funcionario_id INTEGER, deleted_at TEXT
+      );
+      CREATE TABLE fichas_sessao (
+        id INTEGER PRIMARY KEY, agendamento_slot_id INTEGER NOT NULL,
+        empresa_id INTEGER NOT NULL, colaborador_id_aluno INTEGER, deleted_at TEXT
+      );
       CREATE TABLE sessoes_checks (
         id INTEGER PRIMARY KEY, sessao_id INTEGER NOT NULL,
         qualificacao_tipo_id INTEGER, deleted_at TEXT
@@ -44,6 +52,8 @@ describe('simulator session check-result tenant and session boundaries', () => {
       );
       INSERT INTO simulador_agendamentos (id, empresa_id, is_check)
         VALUES (10, 6, 1), (11, 7, 1), (12, 6, 1);
+      INSERT INTO sessoes_participantes (id, sessao_id, funcionario_id)
+        VALUES (1, 10, 44), (2, 11, 55), (3, 12, 66);
       INSERT INTO sessoes_checks (id, sessao_id)
         VALUES (101, 10), (102, 10), (201, 11), (301, 12);
     `);
@@ -76,6 +86,31 @@ describe('simulator session check-result tenant and session boundaries', () => {
     setup();
     const response = await save([{ sessao_check_id: 201, aprovado: true }]);
     expect(response.status).toBe(400);
+    expect(persisted()).toEqual([]);
+  });
+
+  it('refuses legacy session-wide writes for two distinct participants', async () => {
+    setup();
+    db!.database.exec("INSERT INTO sessoes_participantes VALUES (4, 10, 99, NULL)");
+    const response = await save([{ sessao_check_id: 101, aprovado: true }]);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'INDIVIDUAL_CHECK_EVIDENCE_REQUIRED' });
+    expect(persisted()).toEqual([]);
+  });
+
+  it('refuses legacy writes even if an additional participant was removed', async () => {
+    setup();
+    db!.database.exec("INSERT INTO sessoes_participantes VALUES (4, 10, 99, datetime('now'))");
+    const response = await save([{ sessao_check_id: 101, aprovado: true }]);
+    expect(response.status).toBe(409);
+    expect(persisted()).toEqual([]);
+  });
+
+  it('refuses legacy writes for an additional employee with only a fiche', async () => {
+    setup();
+    db!.database.exec("INSERT INTO fichas_sessao VALUES (77, 10, 6, 99, NULL)");
+    const response = await save([{ sessao_check_id: 101, aprovado: true }]);
+    expect(response.status).toBe(409);
     expect(persisted()).toEqual([]);
   });
 
