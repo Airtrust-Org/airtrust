@@ -21,6 +21,7 @@ import {
   ensureMatriculaCycle,
   hasActiveMatriculaCycle,
   resetMatriculaForNewCycle,
+  reactivateCancelledMatriculaPreservingProgress,
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
 import {
@@ -760,14 +761,22 @@ app.post('/', async (c) => {
     const reativavel =
       Boolean(existente.deleted_at) || String(existente.status || '').toUpperCase() === 'CANCELADO';
     if (reativavel) {
-      await resetMatriculaForNewCycle(db, {
+      const resume = await reactivateCancelledMatriculaPreservingProgress(db, {
         matriculaId: existente.id,
         dataExpiracao: data_expiracao ?? null,
         observacoes: observacoes ?? null,
         matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
-        origin: 'MANUAL',
-        empresaId,
+        empresaId, bucket: c.env.BUCKET,
       });
+      if (resume === 'NEW_EDITION_REQUIRED') {
+        throw new ApiError(
+          'O curso mudou de edição. O progresso anterior foi preservado; peça ao administrador o início auditado da nova edição.',
+          409,
+        );
+      }
+      if (resume === 'NOT_ELIGIBLE') {
+        throw new ApiError('Esta matrícula não pode ser reativada; revise o estado atual.', 409);
+      }
       await stampLmsEnrollmentEvidenceProfile(db, {
         empresaId,
         matriculaId: existente.id,
@@ -787,7 +796,9 @@ app.post('/', async (c) => {
         action: 'LMS_MATRICULA_REATIVADA',
         matriculaId: existente.id,
         oldValues: { status: existente.status, deleted_at: existente.deleted_at },
-        newValues: { curso_id, funcionario_id, data_expiracao: data_expiracao ?? null },
+        newValues: { curso_id, funcionario_id, data_expiracao: data_expiracao ?? null,
+          preserved_progress: true, preserved_scorm_state: resume.scormPreserved,
+          resumed_status: resume.status, resumed_progress_pct: resume.progressoPct },
       });
       if (enviar_convite_email)
         await sendMatriculaEmail(c, c.env, db, {
@@ -1060,14 +1071,19 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           results.ignoradas++;
           continue;
         }
-        await resetMatriculaForNewCycle(db, {
+        const resume = await reactivateCancelledMatriculaPreservingProgress(db, {
           matriculaId: existente.id,
           dataExpiracao: data_expiracao ?? null,
           observacoes: observacoes ?? null,
           matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
-          origin: 'MANUAL',
-          empresaId,
+          empresaId, bucket: c.env.BUCKET,
         });
+        if (resume === 'NEW_EDITION_REQUIRED' || resume === 'NOT_ELIGIBLE') {
+          // Batch is per learner: do not erase the old SCORM state and do not
+          // count an incompatible course as successfully re-enrolled.
+          results.erros++;
+          continue;
+        }
         await stampLmsEnrollmentEvidenceProfile(db, {
           empresaId,
           matriculaId: existente.id,
@@ -1091,6 +1107,8 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
             curso_id,
             funcionario_id: funcionarioId,
             data_expiracao: data_expiracao ?? null,
+            preserved_progress: true, preserved_scorm_state: resume.scormPreserved,
+            resumed_status: resume.status, resumed_progress_pct: resume.progressoPct,
           },
         });
         if (enviar_convite_email)
