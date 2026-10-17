@@ -8,6 +8,7 @@ vi.mock('../../middleware/tenant', () => ({
     empresaId: Number(c.req.header('x-test-empresa-id')),
     empresaCodigo: c.req.header('x-test-platform-admin') === 'true' ? 'airtrust' : 'empresa-teste',
   }),
+  isPlatformAdminContext: (c: any) => c.req.header('x-test-platform-admin') === 'true',
   requireTenantRole: () => async (_c: any, next: () => Promise<void>) => next(),
 }));
 
