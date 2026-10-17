@@ -580,10 +580,10 @@ app.get('/:id', async (c) => {
       .prepare(
         `
         SELECT COUNT(*) AS total_statements,
-          (SELECT verb_id FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? ORDER BY created_at DESC LIMIT 1) AS last_verb,
-          (SELECT timestamp FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? ORDER BY created_at DESC LIMIT 1) AS last_timestamp
+          (SELECT verb_id FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? AND archived_cycle_id IS NULL ORDER BY created_at DESC LIMIT 1) AS last_verb,
+          (SELECT timestamp FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? AND archived_cycle_id IS NULL ORDER BY created_at DESC LIMIT 1) AS last_timestamp
         FROM lms_xapi_statements
-        WHERE matricula_id = ? AND empresa_id = ?
+        WHERE matricula_id = ? AND empresa_id = ? AND archived_cycle_id IS NULL
       `,
       )
       .bind(matriculaId, empresaId, matriculaId, empresaId, matriculaId, empresaId)
