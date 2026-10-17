@@ -590,7 +590,7 @@ export async function reactivateCancelledMatriculaPreservingProgress(
             m.status, m.deleted_at, m.qualificacao_historico_id,
             m.progresso_pct, m.ultimo_slide, m.data_inicio,
             c.tipo_conteudo, c.scorm_package_r2_prefix,
-            p.cmi_json, p.suspend_data, p.lesson_status, p.lesson_location
+            p.cmi_json, p.suspend_data, p.lesson_status
        FROM lms_matriculas m
        JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
        LEFT JOIN lms_progresso_scorm p
@@ -602,7 +602,7 @@ export async function reactivateCancelledMatriculaPreservingProgress(
     status:string;deleted_at:string|null;qualificacao_historico_id:number|null;
     progresso_pct:number|null;ultimo_slide:number|null;data_inicio:string|null;tipo_conteudo:string|null;
     scorm_package_r2_prefix:string|null;cmi_json:string|null;suspend_data:string|null;
-    lesson_status:string|null;lesson_location:string|null;
+    lesson_status:string|null;
   }>();
   if(!row || (!row.deleted_at && String(row.status).toUpperCase()!=='CANCELADO') ||
       row.qualificacao_historico_id != null) return 'NOT_ELIGIBLE';
@@ -617,7 +617,7 @@ export async function reactivateCancelledMatriculaPreservingProgress(
   if(edition) return 'NEW_EDITION_REQUIRED';
   const originalProgress=Number(row.progresso_pct ?? 0);
   const hasProgress=originalProgress>0 || Number(row.ultimo_slide||0)>0 ||
-    Boolean(row.lesson_location || row.cmi_json || row.suspend_data ||
+    Boolean(row.cmi_json || row.suspend_data ||
       (row.lesson_status && !['not attempted','not_attempted','unknown'].includes(row.lesson_status.toLowerCase())));
   const resumeStatus=hasProgress?'EM_ANDAMENTO':'NAO_INICIADO';
   const update=await db.prepare(
