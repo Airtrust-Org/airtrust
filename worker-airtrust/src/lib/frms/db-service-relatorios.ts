@@ -105,10 +105,18 @@ export function aggregateCanonicalComplianceReport(
       };
       byCrew.set(id, row);
     }
-    row.dias_avaliados += 1;
-    if (item.compliance_status === 'VIOLATION') row.dias_violacao += 1;
-    else if (item.compliance_status === 'COMPLIANT') row.dias_conformes += 1;
-    else row.dias_nao_avaliados += 1;
+    // Only a definitive canonical regulatory verdict counts as evaluated.
+    // UNKNOWN or missing evidence contributes exclusively to "não avaliados";
+    // counting it in both columns incorrectly implies that a review happened.
+    if (item.compliance_status === 'VIOLATION') {
+      row.dias_avaliados += 1;
+      row.dias_violacao += 1;
+    } else if (item.compliance_status === 'COMPLIANT') {
+      row.dias_avaliados += 1;
+      row.dias_conformes += 1;
+    } else {
+      row.dias_nao_avaliados += 1;
+    }
 
     if (item.estado_operacional === 'MITIGACAO_NECESSARIA') row.dias_mitigacao += 1;
     if (item.estado_operacional === 'ATENCAO') row.dias_atencao += 1;
