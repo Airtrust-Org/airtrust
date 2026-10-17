@@ -20,6 +20,7 @@ import { syncRuntimeTranslation } from './i18n/runtimeTranslator';
 import { ThemeProvider } from './theme/ThemeProvider';
 import HomeRouter from './components/HomeRouter';
 import { resolveTrainingEntryPath } from './lib/training-entry';
+import { canonicalizeLegacyFrmsOperationalQuery } from './pages/frms/frmsLegacyOperationalQuery';
 import { CANONICAL_DUPLICATE_ROUTE_TARGETS } from './lib/canonical-duplicate-routes';
 
 // 🚀 LAZY LOADING: Páginas principais (code splitting)
@@ -106,9 +107,7 @@ function LegacyPastaVirtualRedirect() {
 }
 function LegacyFrmsOperationalRedirect() {
   const location = useLocation();
-  const params = new URLSearchParams(location.search);
-  params.set('origem', 'controle-operacional-legado');
-  const query = params.toString();
+  const query = canonicalizeLegacyFrmsOperationalQuery(location.search);
   return <Navigate to={'/frms' + (query ? '?' + query : '')} replace />;
 }
 
@@ -356,7 +355,7 @@ function LmsEntryRouter() {
 }
 
 function TreinamentosEntryRouter() {
-  const { user, isLoading, empresas, empresaAtualId } = useAuth();
+  const { isLoading, empresas, empresaAtualId } = useAuth();
   const { can, isAluno, isInstrutor } = usePermissions();
   if (isLoading) return null;
 
