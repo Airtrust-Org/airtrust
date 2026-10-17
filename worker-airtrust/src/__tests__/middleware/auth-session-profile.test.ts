@@ -45,8 +45,9 @@ function createDb(fx: Fixture) {
         },
         async first<T>() {
           if (sql.includes("name = 'usuarios_empresas'")) return { found: 1 } as T;
-          if (sql.includes("name = 'user_platform_roles'")) return { found: 1 } as T;
-          if (sql.includes("name = 'support_access_grants'")) return null as T;
+          if (sql.includes('sqlite_master') && sql.includes('name = ?')) {
+            return statement.params[0] === 'user_platform_roles' ? ({ found: 1 } as T) : (null as T);
+          }
           if (sql.includes('PRAGMA table_info')) return null as T;
           if (sql.includes('FROM token_blocklist')) return null as T;
 
