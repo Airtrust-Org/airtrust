@@ -85,6 +85,36 @@ describe('HomeRouter', () => {
     expect(buscarPorIdMock).not.toHaveBeenCalled();
   });
 
+  it.each(['ALUNO', 'STUDENT', 'INSTRUTOR', 'INSTRUCTOR'])(
+    'mantém a home self-service para %s mesmo com GRANT de Controle de Voos',
+    async (role) => {
+      authMock.mockReturnValue({
+        user: {
+          nome: 'Tripulante com múltiplos perfis',
+          role,
+          funcionario_id: 10,
+          permissions: ['GRANT:controle_voos.view'],
+        },
+        isLoading: false,
+      });
+      buscarPorIdMock.mockResolvedValue({
+        id: 10,
+        funcao: 'Piloto',
+        cargo: 'Comandante',
+        setor: 'Operações Aéreas',
+        setor_id: 2,
+      });
+
+      renderHomeRouter('/');
+
+      await waitFor(() => {
+        expect(screen.getByText('home-profile:STUDENT_TRIPULACAO:Operações Aéreas')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('controle-voos-page')).not.toBeInTheDocument();
+      expect(buscarPorIdMock).toHaveBeenCalledWith('10');
+    },
+  );
+
   it('renderiza o dashboard apenas para o admin principal allowlisted', () => {
     authMock.mockReturnValue({
       user: {

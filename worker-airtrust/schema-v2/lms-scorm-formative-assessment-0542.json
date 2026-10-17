@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-scorm-formative-assessment-0542",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0542_lms_scorm_formative_assessment_policy.sql",
+  "fileHash": "85fe3b4766ef1010c29d3cc314cbc9bd8345d467ea0cb811473f403d51cd36cb",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-scorm-formative-assessment-0542.md",
+  "planHash": "a9c1278f438f5df4d5f9be29e50df724ce3d23843206adf5395eeef090777aa9"
+}

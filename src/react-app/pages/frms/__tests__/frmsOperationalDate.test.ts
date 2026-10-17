@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { localTodayIso, resolveCalendarFortnightRange, resolveFrmsOperationalDate } from '../frmsOperationalDate';
+import { frmsBrazilOperationalTodayIso, localTodayIso, resolveCalendarFortnightRange, resolveFrmsOperationalDate } from '../frmsOperationalDate';
 
 describe('FRMS operational date', () => {
+  it('usa o dia operacional do Brasil, sem antecipar a virada UTC', () => {
+    expect(frmsBrazilOperationalTodayIso(new Date('2026-10-13T01:30:00Z'))).toBe('2026-10-12');
+    expect(frmsBrazilOperationalTodayIso(new Date('2026-10-13T03:30:00Z'))).toBe('2026-10-13');
+  });
+
+  it('não depende do fuso horário do dispositivo', () => {
+    const timestamp = new Date('2026-10-13T01:30:00Z');
+    Object.defineProperty(timestamp, 'getTimezoneOffset', { value: () => -540 });
+    expect(frmsBrazilOperationalTodayIso(timestamp)).toBe('2026-10-12');
+  });
+
   it('preserva a data operacional explícita da URL', () => {
     expect(resolveFrmsOperationalDate('2026-09-25', new Date('2026-09-26T02:00:00Z'))).toBe(
       '2026-09-25',

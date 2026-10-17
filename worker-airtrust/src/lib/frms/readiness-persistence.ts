@@ -130,10 +130,10 @@ export async function getReadinessBaselineSnapshot(
   return { sessions, medianRtMs, lapseRate };
 }
 
-export async function persistReadinessAssessment(
+export async function prepareReadinessAssessmentWrites(
   db: D1Database,
   input: PersistReadinessInput,
-): Promise<PersistReadinessResult> {
+): Promise<{ statements: D1PreparedStatement[]; result: PersistReadinessResult }> {
   if (!Number.isInteger(input.empresaId) || input.empresaId <= 0) throw new Error('invalid_empresa_id');
   if (!Number.isInteger(input.funcionarioId) || input.funcionarioId <= 0) throw new Error('invalid_funcionario_id');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.referenceDate)) throw new Error('invalid_reference_date');
@@ -275,18 +275,29 @@ export async function persistReadinessAssessment(
     );
   }
 
-  await db.batch(statements);
-
   return {
-    assessmentId,
-    classification: assessment.classification,
-    baselineSessions: assessment.baselineSessions,
-    baselineReady: assessment.baselineReady,
-    baselineMedianRtMs: baseline.medianRtMs,
-    baselineLapseRate: baseline.lapseRate,
-    medianRtDeltaPct,
-    lapseRateDelta,
-    warningSignals: assessment.warningSignals,
-    criticalSignals: assessment.criticalSignals,
+    statements,
+    result: {
+      assessmentId,
+      classification: assessment.classification,
+      baselineSessions: assessment.baselineSessions,
+      baselineReady: assessment.baselineReady,
+      baselineMedianRtMs: baseline.medianRtMs,
+      baselineLapseRate: baseline.lapseRate,
+      medianRtDeltaPct,
+      lapseRateDelta,
+      warningSignals: assessment.warningSignals,
+      criticalSignals: assessment.criticalSignals,
+    },
   };
+}
+
+/** Existing standalone readiness submissions retain the same atomic D1 boundary. */
+export async function persistReadinessAssessment(
+  db: D1Database,
+  input: PersistReadinessInput,
+): Promise<PersistReadinessResult> {
+  const prepared = await prepareReadinessAssessmentWrites(db, input);
+  await db.batch(prepared.statements);
+  return prepared.result;
 }

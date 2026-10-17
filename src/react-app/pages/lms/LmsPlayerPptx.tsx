@@ -12,6 +12,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { fetchLmsCourseAsset } from './lmsProtectedCourseAsset';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import {
   useFinalizarMatricula,
@@ -40,6 +41,7 @@ export default function LmsPlayerPptx() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [maxReached, setMaxReached] = useState(0);
+  const [visitedSlideIndexes, setVisitedSlideIndexes] = useState<number[]>([]);
   const [completed, setCompleted] = useState(false);
   const [qualificacaoGerada, setQualificacaoGerada] = useState(false);
   const [slideScale, setSlideScale] = useState(1);
@@ -50,17 +52,14 @@ export default function LmsPlayerPptx() {
   const slideContentRef = useRef<HTMLDivElement | null>(null);
 
   const alreadyConcluded = matricula?.status === 'CONCLUIDO';
-  const allSlidesViewed = slides !== null && maxReached >= slides.length - 1;
-  const canConclude = alreadyConcluded || allSlidesViewed;
+  // The final slide index is not proof of having actually viewed each slide.
+  const allSlidesViewed = slides !== null && slides.length > 0 && visitedSlideIndexes.length === slides.length;
+  const canConclude = allSlidesViewed && !alreadyConcluded;
   const done = completed || alreadyConcluded;
 
   const loadRenderedSlides = useCallback(
     async (cursoId: number) => {
-      const activeToken = getAccessToken() ?? token ?? '';
-      const url = `${API_BASE_URL}/lms/pptx/asset/${cursoId}`;
-      const resp = await fetch(url, {
-        headers: { Authorization: `Bearer ${activeToken}` },
-      });
+      const resp = await fetchLmsCourseAsset('pptx', cursoId);
       if (!resp.ok) throw new Error(`Falha ao carregar apresentação (${resp.status})`);
       const arrayBuffer = await resp.arrayBuffer();
       return pptxToHtml(arrayBuffer, {
@@ -162,6 +161,12 @@ export default function LmsPlayerPptx() {
     });
   }, [id, token]);
 
+  useEffect(() => {
+    if (!slides || currentSlide < 0 || currentSlide >= slides.length) return;
+    setVisitedSlideIndexes((previous) => previous.includes(currentSlide)
+      ? previous : [...previous, currentSlide]);
+  }, [slides, currentSlide]);
+
   const slideHtml = slides?.[currentSlide];
 
   // Flush latest progress when user reloads/closes quickly.
@@ -224,6 +229,8 @@ export default function LmsPlayerPptx() {
       const clamped = Math.max(0, Math.min(index, slides.length - 1));
       setCurrentSlide(clamped);
       setMaxReached((prev) => Math.max(prev, clamped));
+      setVisitedSlideIndexes((previous) => previous.includes(clamped)
+        ? previous : [...previous, clamped]);
       saveProgress(clamped, slides.length);
     },
     [slides, saveProgress],
@@ -353,9 +360,9 @@ export default function LmsPlayerPptx() {
                     </span>
                   )}
                 </div>
-              ) : canConclude ? (
+              ) : (
                 <button
-                  disabled={finalizarMatricula.isPending}
+                  disabled={!canConclude || finalizarMatricula.isPending}
                   onClick={handleConclude}
                   className="hidden items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"
                 >
@@ -364,9 +371,9 @@ export default function LmsPlayerPptx() {
                   ) : (
                     <CheckCircle2 className="h-3.5 w-3.5" />
                   )}
-                  Marcar como concluído
+                  Concluir curso
                 </button>
-              ) : null}
+              )}
             </div>
           </div>
         </div>
@@ -506,10 +513,10 @@ export default function LmsPlayerPptx() {
       </div>
 
       {/* Floating conclude button (mobile) */}
-      {!done && canConclude ? (
+      {!done ? (
         <div className="border-t border-white/10 bg-slate-900 px-3 py-3 sm:hidden">
           <button
-            disabled={finalizarMatricula.isPending}
+            disabled={!canConclude || finalizarMatricula.isPending}
             onClick={handleConclude}
             className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -518,7 +525,7 @@ export default function LmsPlayerPptx() {
             ) : (
               <CheckCircle2 className="h-4 w-4" />
             )}
-            Marcar como concluído
+            Concluir curso
           </button>
         </div>
       ) : null}

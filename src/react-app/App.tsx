@@ -243,6 +243,7 @@ const LmsCursoDetalhe = lazyWithRetry(
 );
 const LmsAdminCursos = lazyWithRetry(() => import('./pages/lms/LmsAdminCursos'), 'LmsAdminCursos');
 const LmsPlayer = lazyWithRetry(() => import('./pages/lms/LmsPlayer'), 'LmsPlayer');
+const NativeReviewZipPilot = lazyWithRetry(() => import('./pages/lms/NativeReviewZipPilot'), 'NativeReviewZipPilot');
 const LmsPreviewPlayer = lazyWithRetry(
   () => import('./pages/lms/LmsPreviewPlayer'),
   'LmsPreviewPlayer',
@@ -256,6 +257,10 @@ const LmsHistoricoEdApp = lazyWithRetry(
   'LmsHistoricoEdApp',
 );
 const LmsDashboard = lazyWithRetry(() => import('./pages/lms/LmsDashboard'), 'LmsDashboard');
+const LmsMeusTreinamentos = lazyWithRetry(
+  () => import('./pages/lms/LmsMeusTreinamentos'),
+  'LmsMeusTreinamentos',
+);
 const LmsMatriculas = lazyWithRetry(() => import('./pages/lms/LmsMatriculas'), 'LmsMatriculas');
 const ConhecimentoAtivoHome = lazyWithRetry(
   () => import('./pages/conhecimento-ativo/ConhecimentoAtivoHome'),
@@ -346,7 +351,7 @@ function LmsEntryRouter() {
   const { user, isLoading } = useAuth();
   if (isLoading) return null;
   const role = user?.role?.toUpperCase() ?? '';
-  if (role === 'ALUNO' || role === 'STUDENT' || role === 'INSTRUTOR' || role === 'INSTRUCTOR') return <Navigate to="/lms/cursos" replace />;
+  if (role === 'ALUNO' || role === 'STUDENT' || role === 'INSTRUTOR' || role === 'INSTRUCTOR') return <LmsMeusTreinamentos />;
   return <LmsDashboard />;
 }
 
@@ -1110,6 +1115,14 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <LmsCatalogo />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/lms/native/revisao"
+                      element={
+                        <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
+                          <NativeReviewZipPilot />
                         </ProtectedRoute>
                       }
                     />

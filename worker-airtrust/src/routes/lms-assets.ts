@@ -7,12 +7,17 @@
 import { Hono } from 'hono';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { ApiError } from '../middleware/error-handler';
+import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 import { auth, validateAccessTokenSecurityState } from '../middleware/auth';
 import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import {
   buildScormLocationHelpersScript,
+  buildScormVisitTrackingScript,
+  buildScormPayloadFingerprintScript,
+  buildScormNativeResumeOwnershipScript,
   buildScormProgressParsersScript,
   buildScormSessionCloseRuntimeScript,
+  buildScormQueuedCommitScript,
 } from '../services/lms-scorm-wrapper-runtime';
 import { generateJWT, verifyJWT } from '../utils/security';
 import { getEmpresaIdOptional } from './escalas-shared';
@@ -1030,7 +1035,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   const matricula = await db
     .prepare(
       `
-      SELECT m.id, m.funcionario_id, m.empresa_id, m.status,
+      SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.data_inicio,
         c.id AS curso_id, c.titulo, c.scorm_versao,
         c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado
       FROM lms_matriculas m
@@ -1044,6 +1049,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       funcionario_id: number;
       empresa_id: number;
       status: string;
+      data_inicio: string | null;
       curso_id: number;
       titulo: string;
       scorm_versao: string | null;
@@ -1097,6 +1103,15 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     .bind(matricula.id, empresaId)
     .first<{ suspend_data: string | null; cmi_json: string | null }>();
 
+  if (matricula.status !== 'CONCLUIDO') {
+    const mismatch = await detectLmsEditionMismatch({
+      bucket: c.env.BUCKET, db, contentType: 'scorm', activePrefix: matricula.scorm_package_r2_prefix,
+      empresaId, cursoId: matricula.curso_id,
+      cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data,
+      enrollmentStartedAt: matricula.data_inicio,
+    });
+    if (mismatch) throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
+  }
   const { initialCmiJson, hasResumeState } = buildScormLaunchState(
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
@@ -1493,14 +1508,7 @@ ${buildScormLocationHelpersScript()}
     return cmi['cmi.location'] || cmi['cmi.core.lesson_location'] || null;
   }
 
-  function fingerprintPayload(data) {
-    try {
-      var d = data || {};
-      return JSON.stringify([d.lesson_status, d.completion_status, d.success_status, d.score_raw, d.suspend_data, getScormLocation()]);
-    } catch (_error) {
-      return '';
-    }
-  }
+${buildScormPayloadFingerprintScript()}
 
   function parseLocationPair(location) {
     return parseScormLocationPair(location);
@@ -1704,13 +1712,7 @@ ${buildScormLocationHelpersScript()}
     return { value: nextText || currentText || '', blocked: false, reason: 'accepted-suspend-data' };
   }
 
-  function updateMaxVisitedFromLocation(location) {
-    var parsed = parseLocationPair(location);
-    if (!parsed) return;
-    if (parsed.current > maxVisitedSlide) {
-      maxVisitedSlide = parsed.current;
-    }
-  }
+${buildScormVisitTrackingScript()}
 
   function emitProgress(payload) {
     if (MATRICULA_ID == null) return;
@@ -1718,10 +1720,15 @@ ${buildScormLocationHelpersScript()}
       type: 'lms:progress',
       matriculaId: MATRICULA_ID,
       location: getScormLocation(),
+      viewed_slide_count: Array.isArray(cmi['airtrust.viewed_slides']) ? cmi['airtrust.viewed_slides'].length : 0,
+      viewed_slide_total: Number(cmi['airtrust.total_slides']) || null,
     }, payload || {}));
   }
 
 ${buildScormProgressParsersScript()}
+
+  // Native cursor wins over the LMS location high-water mark.
+${buildScormNativeResumeOwnershipScript()}
 
   function navigateFrameToSlide(frameWindow, target) {
     try {
@@ -1738,11 +1745,8 @@ ${buildScormProgressParsersScript()}
 
       if (frameWindow.location) {
         var targetHash = '#slide/' + String(target);
-        if (frameWindow.location.hash !== targetHash) {
-          frameWindow.location.hash = targetHash;
-        } else if (typeof frameWindow.location.assign === 'function') {
-          frameWindow.location.assign(targetHash);
-        }
+        if (frameWindow.location.hash === targetHash) return false;
+        frameWindow.location.hash = targetHash;
         return true;
       }
     } catch (_error) {
@@ -1772,6 +1776,7 @@ ${buildScormProgressParsersScript()}
 
       var frameWindow = frame.contentWindow;
       var doc = frameWindow.document;
+      if (isNativeCourseResumeOwner(frameWindow, doc)) { autosaveReady = true; return; }
       var parsed = parseProgressFromDocument(doc);
       var observedLocation = parsed ? String(parsed.current) + '/' + String(parsed.total) : null;
       var effectiveTarget = resolveScormResumeTargetSlide(savedLocation, observedLocation);
@@ -1845,6 +1850,7 @@ ${buildScormProgressParsersScript()}
     }
   }
 
+  var lastCanonicalProbeLocation = null;
   function probeFrameProgress() {
     try {
       var frame = document.getElementById('scorm-frame');
@@ -1862,6 +1868,18 @@ ${buildScormProgressParsersScript()}
       var existingLocation = getScormLocation();
       var previousLocation = existingLocation;
       var existingParsed = parseLocationMarker(existingLocation);
+      // Only the package-owned counter element can supplement explicit CMI
+      // when a resume bookmark is pinned at the highest slide. Never infer
+      // visits from body text, unrelated fractions or a changed slide total.
+      var header = parseProgressFromHeader(doc);
+      var trustedVisiblePage = !!(existingParsed && existingParsed.total != null && header &&
+        header.total === existingParsed.total && header.current >= 1 &&
+        header.current <= header.total);
+      if (trustedVisiblePage &&
+          updateMaxVisitedFromLocation(String(header.current) + '/' + String(header.total))) {
+        scheduleCommit(800);
+        emitProgress({ location: existingLocation });
+      }
       var domLocationRaw = parsed.total > 0
         ? String(parsed.current) + '/' + String(parsed.total)
         : String(parsed.current);
@@ -1879,15 +1897,25 @@ ${buildScormProgressParsersScript()}
       if (!probeDecision.persist) {
         diag(' PROBE_LOCATION_KEPT reason=' + probeDecision.reason + ' loc=' + (existingLocation || 'null'));
         if (existingParsed) {
+          // The server bookmark is a high-water mark, NOT the page currently
+          // visible in the content. Only the trusted package counter may report
+          // a revisited page while retaining the persisted 42/42 bookmark.
+          var visibleLocation = trustedVisiblePage
+            ? String(header.current) + '/' + String(header.total) : existingLocation;
+          var canonicalProbeKey = String(existingLocation) + '|' + String(parsed.total) + '|' + String(visibleLocation);
+          if (canonicalProbeKey === lastCanonicalProbeLocation) return;
+          lastCanonicalProbeLocation = canonicalProbeKey;
           var keptTotal = existingParsed.total != null ? existingParsed.total : parsed.total;
           emitProgress({
             progresso_pct: keptTotal
               ? Math.round((existingParsed.current / keptTotal) * 100)
               : undefined,
-            location: existingLocation,
-            slide_current: existingParsed.current,
-            slide_total: existingParsed.total != null ? existingParsed.total : undefined,
-            reached_end: existingParsed.total != null && existingParsed.current >= existingParsed.total,
+            location: visibleLocation,
+            slide_current: trustedVisiblePage ? header.current : existingParsed.current,
+            slide_total: trustedVisiblePage ? header.total : existingParsed.total,
+            reached_end: trustedVisiblePage
+              ? header.current >= header.total
+              : existingParsed.total != null && existingParsed.current >= existingParsed.total,
           });
         }
         return;
@@ -1940,6 +1968,7 @@ ${buildScormProgressParsersScript()}
   function isFinalCommitEvent(eventType) {
     return [
       'SCORM_FINISH',
+      'SCORM_USER_FINALIZE',
       'SCORM_COMPLETION_CANDIDATE',
       'SCORM_BEFORE_UNLOAD_COMMIT',
       'SCORM_VISIBILITY_COMMIT',
@@ -1950,18 +1979,7 @@ ${buildScormProgressParsersScript()}
     return status === 408 || status === 425 || status === 429 || status >= 500;
   }
 
-  function queueLatestCommit(data, eventType) {
-    if (!queuedCommit || isFinalCommitEvent(eventType) || !isFinalCommitEvent(queuedCommit.eventType)) {
-      queuedCommit = { data: data, eventType: eventType || 'SCORM_COMMIT' };
-    }
-  }
-
-  function flushQueuedCommit() {
-    if (commitInFlight || !queuedCommit) return;
-    var next = queuedCommit;
-    queuedCommit = null;
-    commit(next.data, 0, next.eventType);
-  }
+${buildScormQueuedCommitScript()}
 
   function commit(data, attempt, eventType) {
     if (PREVIEW_MODE || REVIEW_MODE || !COMMIT_URL || MATRICULA_ID == null) {
@@ -1971,9 +1989,9 @@ ${buildScormProgressParsersScript()}
 
     var currentAttempt = attempt || 0;
     if (currentAttempt === 0 && commitInFlight) {
-      queueLatestCommit(data, eventType);
+      var queuedResult = queueLatestCommit(data, eventType);
       diag(' COMMIT_QUEUED event=' + (eventType || '?'));
-      return Promise.resolve(null);
+      return queuedResult;
     }
     if (currentAttempt === 0) commitInFlight = true;
 
@@ -1987,13 +2005,14 @@ ${buildScormProgressParsersScript()}
 
     var requestBody = Object.assign({
       matricula_id: MATRICULA_ID,
+      ciclo_id: CICLO_ID,
       commit_event: eventType || 'SCORM_COMMIT',
-      completion_candidate: completionPending ? true : null,
-      completion_observed_at: completionObservedAt,
+      completion_candidate: eventType === 'SCORM_USER_FINALIZE' ? true : null,
+      completion_observed_at: eventType === 'SCORM_USER_FINALIZE' ? completionObservedAt : null,
     }, data);
     // The wrapper never receives an access bearer. The browser sends only the
     // short-lived, HttpOnly, enrollment-scoped LMS capability cookie.
-    var needsKeepalive = eventType === 'SCORM_BEFORE_UNLOAD_COMMIT' || eventType === 'SCORM_VISIBILITY_COMMIT';
+    var needsKeepalive = isFinalCommitEvent(eventType); // Preserve completion if the learner exits immediately.
     var requestPromise = fetch(COMMIT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2003,13 +2022,16 @@ ${buildScormProgressParsersScript()}
     }).then(function(response) {
       if (response && response.ok) {
         diag(' COMMIT_FETCH_STATUS=' + String(response.status) + ' OK');
-        setStatus('Progresso salvo', true);
+        // Routine saves are silent; errors and final results stay visible.
+        if (isFinalCommitEvent(eventType)) setStatus('Progresso salvo', true);
+        else document.getElementById('status-bar')?.classList.remove('visible', 'error');
         if (payloadFingerprint) lastCommittedFingerprint = payloadFingerprint;
         response.clone().json().then(function(json) {
           if (!json || !json.success || !json.data) return;
           emitProgress({
             progresso_pct: Number(json.data.progresso_pct || 0),
             novo_status: json.data.novo_status || null,
+            server_saved: true,
           });
           if (json.data.novo_status === 'CONCLUIDO') {
             completed = true;
@@ -2025,13 +2047,13 @@ ${buildScormProgressParsersScript()}
           if (json.data.completion_diagnostic && json.data.completion_diagnostic.status === 'candidate') {
             // High progress/final location alone is not a completion event. Keep
             // the runtime quiet unless this session actually observed one.
-            if (completionPending) {
+            if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
               notifyCompletionPending('pending', json.data.completion_diagnostic.code || null);
             }
             return;
           }
 
-          if (completionPending) {
+          if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
             notifyCompletionError(
               json.data.completion_diagnostic && json.data.completion_diagnostic.code,
               'server-did-not-confirm-completion',
@@ -2070,7 +2092,7 @@ ${buildScormProgressParsersScript()}
           message: err.message,
           attempt: currentAttempt,
         });
-        if (completionPending) {
+        if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
           notifyCompletionError(err.code, err.reason, err.message);
         }
       };
@@ -2107,7 +2129,7 @@ ${buildScormProgressParsersScript()}
         reason: 'network-error',
         attempt: currentAttempt,
       });
-      if (completionPending) {
+      if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
         notifyCompletionError('SCORM_FINAL_COMMIT_MISSING', 'network-error');
       }
       return null;
@@ -2177,10 +2199,10 @@ ${buildScormProgressParsersScript()}
       cs === 'completed' ||
       (ss === 'passed' && cs !== 'incomplete')
     ) {
-      notifyCompletionPending('saving', 'status-signaled-completion');
+      // Save terminal package status; the student's confirmation triggers issuance.
       emitTelemetry('SCORM_COMPLETION_CANDIDATE', {
-        decision: 'pending-server-confirmation',
-        reason: 'status-signaled-completion',
+        decision: 'awaiting-user-confirmation',
+        reason: 'terminal-package-status-saved',
       });
       commit(buildPayload(), 0, 'SCORM_COMPLETION_CANDIDATE');
     }
@@ -2361,7 +2383,16 @@ ${buildScormSessionCloseRuntimeScript()}
     // so they must be matched by source identity before the parent-origin gate.
     if (relayPackageDiagnostics(event)) return;
     if (PARENT_ORIGIN !== '*' && event.origin !== PARENT_ORIGIN) return;
+    if (event.data.type === 'lms:request-completion') {
+      if (event.source !== window.parent || event.data.matriculaId !== MATRICULA_ID) return;
+      performExplicitCompletionRequest();
+      return;
+    }
     if (event.data.type === 'lms:session-close') {
+      // Source identity is mandatory; an optional enrollment ID allows newer
+      // parents to scope close commands without breaking deployed older Pages.
+      if (event.source !== window.parent ||
+          (event.data.matriculaId != null && event.data.matriculaId !== MATRICULA_ID)) return;
       performGovernedSessionClose(typeof event.data.reason === 'string' ? event.data.reason : null);
       return;
     }
@@ -2398,8 +2429,10 @@ ${buildScormSessionCloseRuntimeScript()}
       return 'true';
     },
     LMSFinish: function() {
-      probeFrameProgress(); var finalLocation = parseLocationMarker(getScormLocation()); if (finalLocation && finalLocation.total != null && finalLocation.current >= finalLocation.total) notifyCompletionPending('saving', 'finish-at-final-location'); diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
-      commit(buildPayload(), 0, 'SCORM_FINISH');
+      probeFrameProgress(); diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
+      // A governed parent close already persisted SCORM_FINISH before invoking
+      // the SCORM API termination. Do not start another save after its ACK.
+      if (!sessionCloseHandled) commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
     },
@@ -2411,6 +2444,10 @@ ${buildScormSessionCloseRuntimeScript()}
       var nextValue = value;
       var decision = 'accepted';
       var reason = 'passthrough';
+      // A backward navigation is a real visit even when its location would
+      // downgrade a stronger resume bookmark. Do not confuse the two.
+      var newVisit = element === 'cmi.core.lesson_location' || element === 'cmi.location'
+        ? updateMaxVisitedFromLocation(String(value || '')) : false;
 
       if (element === 'cmi.core.lesson_location') {
         var locationDecision = protectLocationValue(getScormLocation(), String(value || ''));
@@ -2432,7 +2469,6 @@ ${buildScormSessionCloseRuntimeScript()}
       if (element === 'cmi.core.lesson_location' || element === 'cmi.suspend_data') {
         if (element === 'cmi.core.lesson_location') {
           setScormLocation(String(nextValue || ''));
-          updateMaxVisitedFromLocation(cmi['cmi.location']);
           if (decision !== 'blocked' && parseScormLocationMarker(String(nextValue || ''))) {
             explicitLocationAuthored = true;
           }
@@ -2440,7 +2476,7 @@ ${buildScormSessionCloseRuntimeScript()}
         writeLocalResumeBackup('set-value');
         emitProgress({ location: getScormLocation() });
         diag(' LMSSetValue field=' + element + ' changed=' + (previousValue === nextValue ? '0' : '1') + ' loc=' + (getScormLocation() || 'null') + ' blocked=' + (decision === 'blocked' ? '1' : '0'));
-        if (previousValue !== nextValue) scheduleCommit(800);
+        if (previousValue !== nextValue || newVisit) scheduleCommit(800);
       }
       emitTelemetry(decision === 'blocked' ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_SET_VALUE', {
         field: element,
@@ -2476,7 +2512,7 @@ ${buildScormSessionCloseRuntimeScript()}
     },
     Terminate: function() {
       diag(' LMSFinish_CALLED_2004 loc=' + (getScormLocation() || 'null'));
-      commit(buildPayload(), 0, 'SCORM_FINISH');
+      if (!sessionCloseHandled) commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
     },
@@ -2488,6 +2524,10 @@ ${buildScormSessionCloseRuntimeScript()}
       var nextValue = value;
       var decision = 'accepted';
       var reason = 'passthrough';
+      // A backward navigation is a real visit even when its location would
+      // downgrade a stronger resume bookmark. Do not confuse the two.
+      var newVisit = element === 'cmi.core.lesson_location' || element === 'cmi.location'
+        ? updateMaxVisitedFromLocation(String(value || '')) : false;
 
       if (element === 'cmi.location') {
         var locationDecision = protectLocationValue(getScormLocation(), String(value || ''));
@@ -2509,14 +2549,13 @@ ${buildScormSessionCloseRuntimeScript()}
       if (element === 'cmi.location' || element === 'cmi.suspend_data') {
         if (element === 'cmi.location') {
           setScormLocation(String(nextValue || ''));
-          updateMaxVisitedFromLocation(cmi['cmi.location']);
           if (decision !== 'blocked' && parseScormLocationMarker(String(nextValue || ''))) {
             explicitLocationAuthored = true;
           }
         }
         writeLocalResumeBackup('set-value');
         emitProgress({ location: getScormLocation() });
-        if (previousValue !== nextValue) scheduleCommit(800);
+        if (previousValue !== nextValue || newVisit) scheduleCommit(800);
       }
       emitTelemetry(decision === 'blocked' ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_SET_VALUE', {
         field: element,

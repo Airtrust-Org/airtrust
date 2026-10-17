@@ -4,7 +4,7 @@
   "base_schema": "scripts/schema-local.sql",
   "canonical_bootstrap_command": "npm run setup:lms:local:reset",
   "bootstrap_script": "scripts/setup-local-lms-smoke-db.sh",
-  "reviewed_through_schema_v2_change": "0534_training_compliance_final_matrix.sql",
+  "reviewed_through_schema_v2_change": "0542_lms_scorm_formative_assessment_policy.sql",
   "critical_tables": [
     "token_blocklist",
     "audit_logs",
@@ -34,5 +34,5 @@
     "A Schema V2 change newer than reviewed_through_schema_v2_change that targets a critical table fails closed until this contract/bootstrap is reviewed.",
     "No remote D1 target is permitted by this guard or bootstrap."
   ],
-  "review_note": "Reviewed 2026-10-06: 0534 is tenant-6 data-only alignment of qualification metadata, LMS course metadata and training requirements to the final Training Management matrix; it adds no schema/DDL, so the canonical isolated LMS bootstrap schema remains unchanged. Remote application remains governed by Schema V2."
+  "review_note": "Reviewed 2026-10-08: 0542 adds lms_cursos.scorm_assessment_policy with fail-closed SCORED default and a narrow production-only tenant-6 CRM metadata update. Canonical disposable local LMS bootstrap now creates the matching CHECK-constrained column without touching remote D1 or applying tenant-specific metadata. Schema V2 remote apply remains separately governed."
 }

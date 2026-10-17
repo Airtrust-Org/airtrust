@@ -35,6 +35,11 @@ export interface CvVoo {
   origem_id: number;
   destino_id: number;
   rota_codigos?: string[];
+  planejamento_status?: 'previo' | 'confirmado';
+  pendencias_planejamento?: string[];
+  peso_passageiros_planejado?: number | null;
+  peso_bagagem_planejado?: number | null;
+  peso_carga_planejado?: number | null;
   rota_pontos?: Array<{
     id: number | null;
     codigo: string;
@@ -53,6 +58,7 @@ export interface CvVoo {
   tipo_voo_id: number;
   natureza_voo_id: number;
   aeronave_id: number | null;
+  modelo_aeronave?: string | null;
   horario_previsto_partida: string;
   horario_previsto_chegada: string;
   horario_real_partida: string | null;
@@ -187,6 +193,7 @@ export interface CvRdvFilaItem {
   status: CvRdvStatus;
   workflow_status: CvRdvWorkflowStatus;
   versao: number;
+  updated_at: string | null;
   responsavel_preenchimento_id: number | null;
   enviado_em: string | null;
   aprovado_coordenacao_em: string | null;
@@ -194,6 +201,7 @@ export interface CvRdvFilaItem {
   motivo_devolucao: string | null;
   prefixo: string;
   aeronave_id: number | null;
+  modelo_aeronave?: string | null;
   data_programacao: string;
   origem_id: number;
   flight_status: CvFlightStatus;
@@ -241,12 +249,14 @@ export interface CvFrmsCrewDispatchAssessment {
   fadiga_acumulada: FrmsDispatchFadigaNivel;
   reasons: FrmsDispatchGateReasonCode[];
   primary_reason: FrmsDispatchGateReasonCode | null;
+  recommended_action: string;
   natureza_dado: string | null;
 }
 
 export interface CvFrmsFlightDispatchItem {
   voo_id: number;
   prefixo: string;
+  modelo_aeronave?: string | null;
   status: CvFlightStatus;
   horario_previsto_partida: string;
   aeronave_id: number | null;

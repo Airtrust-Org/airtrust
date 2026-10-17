@@ -10,7 +10,10 @@ describe('Controle de Voos - gestão de tripulação no voo criado', () => {
     const card = source('src/react-app/pages/controle-voos/components/ControleVoosTripulacaoCard.tsx');
     expect(detail).not.toContain('Dados de tripulação não disponíveis nesta versão N1');
     expect(detail).toContain('ControleVoosTripulacaoCard');
-    expect(detail).toContain('Alterar Tripulação');
+    // A troca permanece no cartão de cada tripulante; não duplicar o botão geral.
+    expect(detail).not.toContain('Alterar Tripulação');
+    expect(detail).toContain('ControleVoosFadigaCard');
+    expect(detail).toContain('ControleVoosEdicaoRapida');
     expect(card).toContain('Cadastrar tripulação');
     expect(card).toContain('Trocar');
     expect(card).toContain('useCriarTripulante');

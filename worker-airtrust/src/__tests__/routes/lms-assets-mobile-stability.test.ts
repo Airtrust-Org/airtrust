@@ -3,29 +3,32 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-assets.ts'), 'utf8');
+const runtimeSource = readFileSync(resolve(process.cwd(), 'src/services/lms-scorm-wrapper-runtime.ts'), 'utf8');
 
 describe('SCORM mobile stability — autosave e resume', () => {
-  it('só agenda commit quando o valor de lesson_location/suspend_data realmente muda (SCORM 1.2)', () => {
+  it('agenda commit ao mudar valor ou registrar visita nova, sem downgrade (SCORM 1.2)', () => {
     expect(source).toContain("changed=' + (previousValue === nextValue ? '0' : '1')");
-    expect(source).toContain('if (previousValue !== nextValue) scheduleCommit(800);');
+    expect(source).toContain('if (previousValue !== nextValue || newVisit) scheduleCommit(800);');
+    expect(source).toContain("updateMaxVisitedFromLocation(String(value || ''))");
   });
 
-  it('só agenda commit quando o valor de location/suspend_data realmente muda (SCORM 2004)', () => {
+  it('agenda commit ao mudar valor ou registrar visita nova, sem downgrade (SCORM 2004)', () => {
     const scorm2004Block = source.slice(source.indexOf('var SCORM2004 = {'));
     expect(scorm2004Block).toMatch(
-      /emitProgress\(\{ location: getScormLocation\(\) \}\);\s*\n\s*if \(previousValue !== nextValue\) scheduleCommit\(800\);/,
+      /emitProgress\(\{ location: getScormLocation\(\) \}\);\s*\n\s*if \(previousValue !== nextValue \|\| newVisit\) scheduleCommit\(800\);/,
     );
   });
 
   it('exclui session_time/total_time (inclusive dentro de cmi_json) do fingerprint de dedup', () => {
-    expect(source).toContain('function fingerprintPayload(data) {');
-    const fn = source.slice(
-      source.indexOf('function fingerprintPayload(data) {'),
-      source.indexOf('function fingerprintPayload(data) {') + 400,
+    expect(runtimeSource).toContain('function fingerprintPayload(data) {');
+    const fn = runtimeSource.slice(
+      runtimeSource.indexOf('function fingerprintPayload(data) {'),
+      runtimeSource.indexOf('function fingerprintPayload(data) {') + 900,
     );
     expect(fn).not.toContain('session_time');
     expect(fn).not.toContain('total_time');
-    expect(fn).not.toContain('cmi_json');
+    expect(fn).toContain('d.cmi_json');
+    expect(fn).toContain("saved['airtrust.viewed_slides']");
     expect(fn).toContain('getScormLocation()');
   });
 

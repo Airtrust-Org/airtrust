@@ -1,6 +1,8 @@
 import type { Context } from 'hono';
 import type { Env, Variables } from '../types';
 import { hasRole } from './rbac';
+import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
+import { reactivateCancelledMatriculaPreservingProgress } from '../services/lms-matricula-cycle';
 
 type EnrollmentContext = { Bindings: Env; Variables: Variables };
 type JsonRecord = Record<string, unknown>;
@@ -19,6 +21,7 @@ type RematriculationRow = {
 };
 
 const REMATRICULATION_PATH = /^\/api\/lms\/matriculas\/(\d+)\/rematricular$/;
+const NEW_EDITION_PATH = /^\/api\/lms\/matriculas\/(\d+)\/nova-edicao$/;
 
 function jsonResponse(c: Context<EnrollmentContext>, status: number, body: JsonRecord): Response {
   return c.json(body, status as never);
@@ -171,8 +174,11 @@ async function handleRematriculation(
   c: Context<EnrollmentContext>,
   empresaId: number,
   matriculaId: number,
+  newEdition: boolean = false,
 ): Promise<Response> {
-  if (!hasRole(c, 'admin', 'manager')) {
+  // Starting a new edition resets the CURRENT SCORM runtime. Only tenant
+  // administrators may authorize that high-impact operation.
+  if (newEdition ? !hasRole(c, 'admin') : !hasRole(c, 'admin', 'manager')) {
     return errorResponse(c, 403, 'LMS_REMATRICULATION_FORBIDDEN', 'Acesso negado.');
   }
 
@@ -209,12 +215,54 @@ async function handleRematriculation(
   if (!existing) {
     return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
   }
-  if (!existing.deleted_at && String(existing.status).toUpperCase() !== 'CANCELADO') {
+  const status = String(existing.status).toUpperCase();
+  const normalRematriculation = Boolean(existing.deleted_at) || status === 'CANCELADO';
+  // Cancelled, unqualified learners may also need a new edition after
+  // explicit administrator approval; ordinary rematriculation never resets it.
+  const eligibleForNewEdition = !existing.deleted_at &&
+    ['NAO_INICIADO', 'EM_ANDAMENTO', 'CANCELADO'].includes(status);
+  let editionMismatch: Awaited<ReturnType<typeof detectLmsEditionMismatch>> = null;
+  let verifiedActivePrefix: string | null = null;
+  let verifiedPreviousCmi: string | null = null;
+
+  if (newEdition && eligibleForNewEdition && !existing.qualificacao_historico_id) {
+    const edition = await c.env.DB.prepare(
+      `SELECT c.tipo_conteudo, c.scorm_package_r2_prefix, p.cmi_json, p.suspend_data
+         FROM lms_matriculas m
+         JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
+           AND c.deleted_at IS NULL AND c.ativo = 1 AND c.publicado = 1
+         LEFT JOIN lms_progresso_scorm p
+           ON p.matricula_id = m.id AND p.empresa_id = m.empresa_id
+        WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL`,
+    ).bind(matriculaId, empresaId).first<{
+      tipo_conteudo: string | null;
+      scorm_package_r2_prefix: string | null;
+      cmi_json: string | null;
+      suspend_data: string | null;
+    }>();
+    editionMismatch = await detectLmsEditionMismatch({
+      bucket: c.env.BUCKET,
+      contentType: edition?.tipo_conteudo,
+      activePrefix: edition?.scorm_package_r2_prefix,
+      empresaId,
+      cursoId: existing.curso_id,
+      cmiJson: edition?.cmi_json,
+      suspendData: edition?.suspend_data,
+      db: c.env.DB, enrollmentStartedAt: existing.data_inicio,
+    });
+    if (editionMismatch) {
+      verifiedActivePrefix = edition?.scorm_package_r2_prefix ?? null;
+      verifiedPreviousCmi = edition?.cmi_json ?? null;
+    }
+  }
+  if (newEdition ? (!eligibleForNewEdition || !editionMismatch) : !normalRematriculation) {
     return errorResponse(
       c,
       409,
-      'LMS_REMATRICULATION_NOT_ALLOWED',
-      'A matrícula ainda está ativa.',
+      newEdition ? 'LMS_NEW_EDITION_EVIDENCE_REQUIRED' : 'LMS_REMATRICULATION_NOT_ALLOWED',
+      newEdition
+        ? 'Não foi comprovada uma nova edição para esta matrícula ativa. Nenhum progresso foi alterado.'
+        : 'A matrícula ainda está ativa.',
     );
   }
   if (existing.qualificacao_historico_id) {
@@ -224,6 +272,32 @@ async function handleRematriculation(
       'LMS_COMPLETION_REVERSAL_REQUIRED',
       'A matrícula possui qualificação vinculada. Reverta a conclusão antes de rematricular.',
     );
+  }
+
+  if (!newEdition) {
+    const resumed = await reactivateCancelledMatriculaPreservingProgress(c.env.DB,{
+      empresaId, matriculaId, bucket:c.env.BUCKET,
+      dataExpiracao:expiration,observacoes:reason,
+    });
+    if(resumed==='NEW_EDITION_REQUIRED')
+      return errorResponse(c,409,'LMS_NEW_EDITION_REQUIRED',
+        'Esta matrícula corresponde a uma edição anterior. O progresso foi preservado; abra um novo ciclo auditado.');
+    if(resumed==='NOT_ELIGIBLE')
+      return errorResponse(c,409,'LMS_REMATRICULATION_CONFLICT','Matrícula alterada durante a reativação.');
+    await c.env.DB.prepare(
+      `INSERT INTO audit_logs
+        (user_id,action,entity_type,entity_id,old_values,new_values,
+         empresa_id,created_at)
+        VALUES (?, 'LMS_REMATRICULATION_PRESERVED',
+          'lms_matriculas', ?, ?, ?, ?, datetime('now'))`,
+    ).bind(getUserId(c),matriculaId,
+      JSON.stringify({status:existing.status,progresso_pct:existing.progresso_pct}),
+      JSON.stringify({status:resumed.status,progresso_pct:resumed.progressoPct,
+        scorm_preserved:true,reason}),empresaId).run();
+    return jsonResponse(c,200,{success:true,data:{
+      matricula_id:matriculaId,status:resumed.status,rematriculated:true,
+      new_edition:false,preserved_progress:true,progresso_pct:resumed.progressoPct,
+    }});
   }
 
   const progressSnapshot = await c.env.DB.prepare(
@@ -241,9 +315,12 @@ async function handleRematriculation(
     status: 'NAO_INICIADO',
     progresso_pct: 0,
     reason,
+    ...(editionMismatch ? { edition_mismatch: editionMismatch } : {}),
     operation_id: operationId,
   });
-  const reasonLine = `Rematrícula: ${reason}`;
+  const reasonLine = newEdition
+    ? `Novo ciclo SCORM (${editionMismatch!.previous_total} → ${editionMismatch!.active_total}): ${reason}`
+    : `Rematrícula: ${reason}`;
 
   const markerExists = `EXISTS (
     SELECT 1
@@ -274,7 +351,22 @@ async function handleRematriculation(
             WHERE id = ?
               AND empresa_id = ?
               AND qualificacao_historico_id IS NULL
-              AND (deleted_at IS NOT NULL OR status = 'CANCELADO')`,
+              AND ${newEdition
+                ? `status IN ('NAO_INICIADO','EM_ANDAMENTO','CANCELADO')
+                   AND EXISTS (
+                     SELECT 1 FROM lms_cursos edition_c
+                      WHERE edition_c.id = lms_matriculas.curso_id
+                        AND edition_c.empresa_id = lms_matriculas.empresa_id
+                        AND edition_c.deleted_at IS NULL
+                        AND edition_c.scorm_package_r2_prefix = ?
+                   )
+                   AND EXISTS (
+                     SELECT 1 FROM lms_progresso_scorm old_p
+                      WHERE old_p.matricula_id = lms_matriculas.id
+                        AND old_p.empresa_id = lms_matriculas.empresa_id
+                        AND old_p.cmi_json = ?
+                   )`
+                : "(deleted_at IS NOT NULL OR status = 'CANCELADO')"}`,
       ).bind(
         expiration,
         reasonLine,
@@ -283,11 +375,12 @@ async function handleRematriculation(
         operationMarker,
         matriculaId,
         empresaId,
+        ...(newEdition ? [verifiedActivePrefix, verifiedPreviousCmi] : []),
       ),
       c.env.DB.prepare(
         `UPDATE lms_matricula_ciclos
               SET ciclo_atual = 0,
-                  status = 'CANCELADO',
+                  status = ${newEdition ? 'status' : "'CANCELADO'"},
                   updated_at = datetime('now')
             WHERE matricula_id = ?
               AND empresa_id = ?
@@ -373,6 +466,11 @@ async function handleRematriculation(
         empresaId,
         operationMarker,
       ),
+      ...(newEdition ? [c.env.DB.prepare(
+        `DELETE FROM lms_completion_diagnostics_snapshots
+          WHERE empresa_id = ? AND matricula_id = ?
+            AND ${markerExists}`,
+      ).bind(empresaId, matriculaId, matriculaId, empresaId, operationMarker)] : []),
       c.env.DB.prepare(
         `UPDATE lms_matriculas
               SET observacoes = TRIM(REPLACE(COALESCE(observacoes, ''), ?, '')),
@@ -419,6 +517,7 @@ async function handleRematriculation(
       matricula_id: matriculaId,
       status: 'NAO_INICIADO',
       rematriculated: true,
+      new_edition: newEdition,
       operation_id: operationId,
     },
   });
@@ -440,12 +539,13 @@ export async function enforceLmsEnrollmentIntegrity(
   }
 
   const rematriculation = c.req.path.match(REMATRICULATION_PATH);
-  if (rematriculation) {
-    const matriculaId = parsePositiveInt(rematriculation[1]);
+  const newEdition = c.req.path.match(NEW_EDITION_PATH);
+  if (rematriculation || newEdition) {
+    const matriculaId = parsePositiveInt((rematriculation ?? newEdition)![1]);
     if (!matriculaId) {
       return errorResponse(c, 400, 'LMS_ENROLLMENT_ID_INVALID', 'ID inválido.');
     }
-    return handleRematriculation(c, empresaId, matriculaId);
+    return handleRematriculation(c, empresaId, matriculaId, Boolean(newEdition));
   }
 
   return null;

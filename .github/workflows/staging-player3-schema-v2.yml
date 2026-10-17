@@ -1,0 +1,310 @@
+name: Apply Reviewed Schema V2 (Staging — Player 3 Additive)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_STAGING_SCHEMA_V2
+        required: true
+        type: string
+      pr_number:
+        description: Open same-repository PR containing the reviewed change
+        required: true
+        type: string
+      release_sha:
+        description: Exact reviewed 40-character PR HEAD SHA
+        required: true
+        type: string
+      change_id:
+        description: Explicitly reviewed Schema V2 change
+        required: true
+        type: choice
+        options:
+          - lms-native-v1-evidence-0553
+          - lms-player3-module-attempts-0554
+      release_reason:
+        description: Reason and authorization for the staging schema change
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+# Share the existing staging mutation lock: no overlapping schema, deploy or SCORM QA.
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Verify and apply one reviewed staging Schema V2 change
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 25
+    env:
+      NODE_VERSION: '24'
+      STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+      STAGING_DB_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+      PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+      # One signed-off, additive Schema V2 change per run. The existing FRMS 0552
+      # entry point is left untouched to avoid changing its governance contract.
+      BASELINE_ID: production-d1-baseline-v2-20260714
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      CHANGE_ID: ${{ inputs.change_id }}
+    steps:
+      - name: Validate manual dispatch on trusted main
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          RELEASE_REASON: ${{ inputs.release_reason }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo 'TRUSTED_MAIN_REQUIRED' >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_SCHEMA_V2' ]] || { echo 'INVALID_CONFIRMATION' >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'INVALID_RELEASE_SHA' >&2; exit 1; }
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'INVALID_PR_NUMBER' >&2; exit 1; }
+          case "$CHANGE_ID" in
+            lms-native-v1-evidence-0553|lms-player3-module-attempts-0554) ;;
+            *) echo 'UNAPPROVED_PLAYER3_CHANGE_ID' >&2; exit 1 ;;
+          esac
+          [[ -n "$RELEASE_REASON" ]] || { echo 'REASON_REQUIRED' >&2; exit 1; }
+          [[ "$STAGING_DB_ID" != "$PRODUCTION_DB_ID" ]] || { echo 'PRODUCTION_TARGET_REJECTED' >&2; exit 1; }
+          node --input-type=module <<'NODE'
+          const token = process.env.GITHUB_TOKEN;
+          const repo = process.env.GITHUB_REPOSITORY;
+          const number = process.env.PR_NUMBER;
+          const sha = process.env.RELEASE_SHA;
+          const actor = process.env.GITHUB_ACTOR;
+          async function github(path) {
+            const response = await fetch('https://api.github.com/repos/' + repo + path, {
+              headers: {
+                authorization: 'Bearer ' + token,
+                accept: 'application/vnd.github+json',
+                'x-github-api-version': '2022-11-28',
+              },
+            });
+            if (!response.ok) throw new Error('GITHUB_GUARD_HTTP_' + response.status);
+            return response.json();
+          }
+          const pr = await github('/pulls/' + number);
+          if (pr.state !== 'open' || pr.base?.ref !== 'main' ||
+              pr.head?.repo?.full_name !== repo || pr.head?.repo?.fork ||
+              pr.head?.sha?.toLowerCase() !== sha) {
+            throw new Error('REVIEWED_PR_HEAD_OR_ORIGIN_MISMATCH');
+          }
+          const permissions = await github('/collaborators/' + encodeURIComponent(actor) + '/permission');
+          if (!['write', 'push', 'maintain', 'admin'].includes(permissions.permission)) {
+            throw new Error('WORKFLOW_ACTOR_NOT_AUTHORIZED');
+          }
+          console.log('REVIEWED_PR_ORIGIN_HEAD_AND_ACTOR=PASS');
+          NODE
+
+      - name: Checkout trusted release gates
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Verify eight required GitHub release gates for exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Checkout exact reviewed candidate separately
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          path: release
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Verify candidate, manifest, and pinned staging database configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git -C release rev-parse HEAD)" == "$RELEASE_SHA" ]] || { echo 'RELEASE_SHA_DRIFT' >&2; exit 1; }
+          test -f "release/worker-airtrust/schema-v2/$CHANGE_ID.json"
+          test ! -L "release/worker-airtrust/schema-v2/$CHANGE_ID.json"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const config = readFileSync('release/worker-airtrust/wrangler.toml', 'utf8');
+          const section = config.split('[[env.staging.d1_databases]]')[1]?.split(/^\[/m)[0];
+          const name = process.env.STAGING_DB_NAME;
+          const id = process.env.STAGING_DB_ID;
+          if (!section || !section.includes('database_name = "' + name + '"') ||
+              !section.includes('database_id = "' + id + '"') ||
+              section.includes(process.env.PRODUCTION_DB_ID)) {
+            throw new Error('STAGING_D1_PIN_MISMATCH');
+          }
+          const manifest = JSON.parse(readFileSync('release/worker-airtrust/schema-v2/' +
+            process.env.CHANGE_ID + '.json', 'utf8'));
+          const pinned = Object.freeze({
+            'lms-native-v1-evidence-0553': {
+              fileHash: 'db8e31c3046b3d228f1113e8130f454bc41f95a2af77f251c0cc41f5c98b96e2',
+              planHash: 'c4534859021e175dc5c33c3d08dca28154d8a1779204e055aca69a7ebf2c4c28',
+              filePath: 'worker-airtrust/schema-v2/changes/0553_lms_native_v1_evidence.sql',
+            },
+            'lms-player3-module-attempts-0554': {
+              fileHash: '0c4873f58b2e2c17f52d183d55b317ee9d91ee70c56d84807b844a2adf04f282',
+              planHash: 'a4859d99280e16244e6011d5490a0a3aaa19c4073b875e3f5e8f17689f9980c2',
+              filePath: 'worker-airtrust/schema-v2/changes/0554_lms_player3_module_attempts.sql',
+            },
+          });
+          const approved = pinned[process.env.CHANGE_ID];
+          if (!approved || manifest.changeId !== process.env.CHANGE_ID ||
+              manifest.baselineId !== process.env.BASELINE_ID ||
+              manifest.fileHash !== approved.fileHash ||
+              manifest.planHash !== approved.planHash ||
+              manifest.filePath !== approved.filePath) {
+            throw new Error('PLAYER3_PINNED_MANIFEST_SCOPE_MISMATCH');
+          }
+          if (!manifest.planPath?.startsWith('worker-airtrust/schema-v2/plans/')) {
+            throw new Error('PLAYER3_PLAN_PATH_INVALID');
+          }
+          console.log('STAGING_TARGET_AND_MANIFEST_SCOPE=PASS');
+          NODE
+
+      - name: Install trusted main Worker CLI without executing PR dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Build verified SQL and Schema V2 ledger bundle
+        id: bundle
+        working-directory: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          output="$RUNNER_TEMP/staging-reviewed-schema-v2.sql"
+          node ../scripts/schema-v2/build-reviewed-schema-apply.mjs \
+            "worker-airtrust/schema-v2/$CHANGE_ID.json" "$output" "$CHANGE_ID" "$RELEASE_SHA"
+          test -s "$output"
+          echo "combined_sql=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Verify staging credentials and physical preconditions read-only
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] ||
+            { echo 'STAGING_MIGRATION_CREDENTIALS_MISSING' >&2; exit 1; }
+          query_count() {
+            (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 execute "$STAGING_DB_NAME" \
+              --env staging --remote --json --command="$1") |
+              node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{
+                const rows=JSON.parse(s);const entry=Array.isArray(rows)?rows[0]:rows;
+                const count=entry?.results?.[0]?.total;
+                if(entry?.success!==true || !Number.isInteger(count) || count<0)process.exit(1);
+                console.log(count);
+              });'
+          }
+          [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_baselines_v2 WHERE baseline_id = '$BASELINE_ID' AND status = 'ACTIVE'")" == '1' ]] ||
+            { echo 'STAGING_SCHEMA_V2_BASELINE_NOT_ACTIVE' >&2; exit 1; }
+          [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id = '$CHANGE_ID'")" == '0' ]] ||
+            { echo 'CHANGE_ALREADY_APPLIED_OR_LEDGER_DRIFT' >&2; exit 1; }
+          # Absence of every target table before apply; no replay/ad hoc schema
+          # repair. 0554 has a strict ledger dependency on completed 0553.
+          if [[ "$CHANGE_ID" == 'lms-native-v1-evidence-0553' ]]; then
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_cursos','lms_matriculas','lms_matricula_ciclos','usuarios')")" == '4' ]] ||
+              { echo 'PLAYER3_LEGACY_BASE_TABLES_MISSING' >&2; exit 1; }
+            # Validate columns used by 0553 FK/tenant/status triggers on the
+            # REAL staging legacy schema; a table name alone is insufficient.
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('lms_cursos') WHERE name IN ('id','empresa_id','tipo_conteudo','ativo','publicado','deleted_at')")" == '6' ]] ||
+              { echo 'PLAYER3_LEGACY_COURSE_SHAPE_MISMATCH' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('lms_matriculas') WHERE name IN ('id','curso_id','empresa_id','funcionario_id','status','deleted_at')")" == '6' ]] ||
+              { echo 'PLAYER3_LEGACY_ENROLLMENT_SHAPE_MISMATCH' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('lms_matricula_ciclos') WHERE name IN ('id','matricula_id','empresa_id','curso_id','funcionario_id','status','ciclo_atual','deleted_at')")" == '8' ]] ||
+              { echo 'PLAYER3_LEGACY_CYCLE_SHAPE_MISMATCH' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_native_edicoes','lms_native_matricula_edicoes','lms_native_eventos','lms_native_tentativas')")" == '0' ]] ||
+              { echo 'PLAYER3_NATIVE_0553_PHYSICAL_DRIFT' >&2; exit 1; }
+          else
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='lms-native-v1-evidence-0553' AND baseline_id='$BASELINE_ID' AND file_hash='db8e31c3046b3d228f1113e8130f454bc41f95a2af77f251c0cc41f5c98b96e2'")" == '1' ]] ||
+              { echo 'PLAYER3_NATIVE_0553_REQUIRED_FIRST' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_native_edicoes','lms_native_matricula_edicoes','lms_native_eventos','lms_native_tentativas')")" == '4' ]] ||
+              { echo 'PLAYER3_0553_TABLES_MISSING' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_player3_politicas','lms_player3_tentativas_modulares')")" == '0' ]] ||
+              { echo 'PLAYER3_0554_PHYSICAL_DRIFT' >&2; exit 1; }
+          fi
+          echo 'SCHEMA_V2_STAGING_PREFLIGHT=PASS'
+
+      - name: Capture verified staging D1 Time Travel recovery point
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 time-travel info "$STAGING_DB_NAME" \
+            --timestamp="$timestamp" --json) > "$RUNNER_TEMP/staging-d1-recovery.json"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const data = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/staging-d1-recovery.json', 'utf8'));
+          if (!/bookmark/i.test(JSON.stringify(data))) throw new Error('STAGING_TIME_TRAVEL_BOOKMARK_MISSING');
+          console.log('STAGING_RECOVERY_BOOKMARK_VERIFIED=PASS');
+          NODE
+          echo "STAGING_RECOVERY_TIMESTAMP_UTC=$timestamp" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply exact reviewed bundle to pinned staging D1
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          COMBINED_SQL: ${{ steps.bundle.outputs.combined_sql }}
+        run: |
+          set -euo pipefail
+          test -s "$COMBINED_SQL"
+          (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 execute "$STAGING_DB_NAME" \
+            --env staging --remote --file="$COMBINED_SQL") > "$RUNNER_TEMP/staging-schema-apply.out"
+          echo 'STAGING_SCHEMA_V2_APPLY_RETURNED_SUCCESS=true'
+
+      - name: Verify additive physical tables and exact Schema V2 ledger provenance
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          query_count() {
+            (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 execute "$STAGING_DB_NAME" \
+              --env staging --remote --json --command="$1") |
+              node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{
+                const rows=JSON.parse(s);const entry=Array.isArray(rows)?rows[0]:rows;
+                const count=entry?.results?.[0]?.total;
+                if(entry?.success!==true || !Number.isInteger(count) || count<0)process.exit(1);
+                console.log(count);
+              });'
+          }
+          metadata="$(node -e 'const m=require("./release/worker-airtrust/schema-v2/"+process.env.CHANGE_ID+".json");console.log(m.fileHash+" "+m.planHash)')"
+          read -r file_hash plan_hash <<< "$metadata"
+          [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID' AND baseline_id='$BASELINE_ID' AND file_hash='$file_hash' AND plan_hash='$plan_hash' AND github_sha='$RELEASE_SHA'")" == '1' ]] ||
+            { echo 'SCHEMA_V2_EXACT_LEDGER_POSTCONDITION_FAILED' >&2; exit 1; }
+          if [[ "$CHANGE_ID" == 'lms-native-v1-evidence-0553' ]]; then
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_native_edicoes','lms_native_matricula_edicoes','lms_native_eventos','lms_native_tentativas')")" == '4' ]] ||
+              { echo 'PLAYER3_0553_TABLE_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name IN ('lms_native_edicoes_tenant_insert','lms_native_edicoes_scope_update','lms_native_vinculo_tenant_insert','lms_native_event_scope_sequence','lms_native_attempt_scope','lms_native_vinculo_immutable_update','lms_native_vinculo_immutable_delete','lms_native_event_immutable_update','lms_native_event_immutable_delete','lms_native_attempt_immutable_update','lms_native_attempt_immutable_delete')")" == '11' ]] ||
+              { echo 'PLAYER3_0553_TRIGGER_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='index' AND name IN ('idx_lms_native_edicoes_course_status','idx_lms_native_vinculo_edicao','idx_lms_native_eventos_vinculo','idx_lms_native_tentativas_vinculo')")" == '4' ]] ||
+              { echo 'PLAYER3_0553_INDEX_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM lms_native_edicoes")" == '0' ]] ||
+              { echo 'PLAYER3_0553_EDITION_TABLE_NOT_EMPTY' >&2; exit 1; }
+          else
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_player3_politicas','lms_player3_tentativas_modulares')")" == '2' ]] ||
+              { echo 'PLAYER3_0554_TABLE_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name IN ('lms_player3_policy_insert','lms_player3_policy_update','lms_player3_policy_delete','lms_player3_attempt_insert','lms_player3_attempt_update','lms_player3_attempt_delete')")" == '6' ]] ||
+              { echo 'PLAYER3_0554_TRIGGER_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='index' AND name IN ('idx_lms_player3_stage_binding','idx_lms_player3_policy_tenant')")" == '2' ]] ||
+              { echo 'PLAYER3_0554_INDEX_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM lms_player3_politicas")" == '0' ]] ||
+              { echo 'PLAYER3_0554_POLICY_TABLE_NOT_EMPTY' >&2; exit 1; }
+          fi
+          echo "SCHEMA_V2_STAGING_APPLIED_AND_VERIFIED=$CHANGE_ID" >> "$GITHUB_STEP_SUMMARY"

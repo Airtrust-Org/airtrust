@@ -52,7 +52,7 @@ export function canSeeControleVoosDevelopmentModule(
 
   // Controle de Voos é superfície operacional de Admin e Gestor/Manager.
   // O backend continua sendo a autoridade final de RBAC por rota/capability.
-  return OPERATIONAL_DASHBOARD_ROLES.has(normalizeRole(user.role));
+  return OPERATIONAL_DASHBOARD_ROLES.has(normalizeRole(user.role)) || normalizeRole(user.role) === 'COORDENACAO_VOO';
 }
 
 export function canSeeOperationalDashboard(

@@ -14,6 +14,7 @@ import {
   type SigvoosConfig as ClientSigvoosConfig,
 } from '../lib/sigvoos/client';
 import { extractSigvoosLegOperationalContext } from '../lib/sigvoos/leg-context';
+import { getSchemaColumns } from '../utils/db-schema';
 import {
   shouldMergeDuplicataIntoManualEmpty,
   type JornadaDuplicataCandidate,
@@ -1457,12 +1458,7 @@ export async function findTripulanteByCanacOrName(
     name: string | null;
   },
 ): Promise<SigvoosTripulanteResolution> {
-  const funcionariosColumns = await db
-    .prepare("PRAGMA table_info('funcionarios')")
-    .all<{ name: string }>();
-  const columnNames = new Set(
-    (funcionariosColumns.results || []).map((column) => String(column.name || '')),
-  );
+  const columnNames = await getSchemaColumns(db, 'funcionarios');
   const hasCodigoAnac = columnNames.has('codigo_anac');
   const hasCanac = columnNames.has('canac');
   const hasMatricula = columnNames.has('matricula');
@@ -1689,11 +1685,7 @@ export async function listSigvoosUnmappedTripulantes(
   // Preload once to avoid N×DB queries in the loop (sequential to avoid concurrent DDL locks)
   const eventos = await listSigvoosEventos(db, empresaId, 150);
   const mappings = await loadSigvoosManualMappings(db, empresaId);
-  const funcionariosColumns = await db
-    .prepare("PRAGMA table_info('funcionarios')")
-    .all<{ name: string }>();
-
-  const columnNames = new Set((funcionariosColumns.results || []).map((c) => String(c.name || '')));
+  const columnNames = await getSchemaColumns(db, 'funcionarios');
   const hasCodigoAnac = columnNames.has('codigo_anac');
   const hasCanac = columnNames.has('canac');
   const hasMatricula = columnNames.has('matricula');

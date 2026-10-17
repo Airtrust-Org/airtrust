@@ -1,0 +1,8 @@
+{
+  "changeId": "avsec-corporativo-historico-0544",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0544_avsec_corporativo_historico.sql",
+  "fileHash": "f8e43d6ad12f634eebeb56598e2ecc5823426a09db1d1a5b4a50ddaa0c8e5dd1",
+  "planPath": "worker-airtrust/schema-v2/plans/avsec-corporativo-historico-0544.md",
+  "planHash": "52cf0fb3332f095723edfc63dfdb03c6b4eae9ca1c73b22d000fb1a5f5c2ae5f"
+}

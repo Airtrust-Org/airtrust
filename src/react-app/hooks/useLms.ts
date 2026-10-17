@@ -9,6 +9,7 @@ import { safeLmsResponseErrorText } from '@/react-app/lib/lms-safe-error-respons
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
 export type ScormVersao = '1.2' | '2004' | null;
+export type ScormAssessmentPolicy = 'SCORED' | 'FORMATIVE';
 export type TipoConteudo = 'scorm' | 'h5p' | 'video' | 'pdf' | 'pptx';
 export type MatriculaStatus =
   'NAO_INICIADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'REPROVADO' | 'CANCELADO';
@@ -29,7 +30,8 @@ export interface LmsCurso {
   scorm_versao: ScormVersao;
   scorm_package_r2_prefix: string | null;
   scorm_launch_file: string | null;
-  scorm_mastery_score: number;
+  scorm_mastery_score: number | null;
+  scorm_assessment_policy?: ScormAssessmentPolicy;
   conteudo_arquivo_nome?: string | null;
   qualificacao_tipo_id: number | null;
   qualificacao_tipo_nome?: string | null;
@@ -110,6 +112,18 @@ export interface LmsMatricula {
   scorm_mastery_score?: number | null;
   gerar_qualificacao_ao_concluir?: 0 | 1;
   publicado?: 0 | 1;
+  /** Player 2.0 persisted SCORM evidence checklist; never a certificate/approval. */
+  closure_readiness?: {
+    contract_version: 1;
+    eligible_for_server_verification: boolean;
+    code: string;
+    missing: string[];
+    last_step_reached: boolean;
+    every_slide_verified: boolean;
+    terminal_status_verified: boolean;
+    assessment_verified: boolean;
+    slide_coverage?: { total: number; recorded: number; missing_numbers: number[] } | null;
+  } | null;
   completion_diagnostic?: LmsCompletionDiagnostic | null;
   /** Progresso efetivo (resolveLmsEffectiveProgress) — só 100 quando status é CONCLUIDO. Preferir sobre progresso_pct bruto para exibição. */
   progresso_efetivo?: number;
@@ -195,6 +209,7 @@ export interface CreateCursoDTO {
   qualificacao_area_id?: number | null;
   gerar_qualificacao_ao_concluir?: 0 | 1;
   scorm_mastery_score?: number;
+  scorm_assessment_policy?: ScormAssessmentPolicy;
   scorm_versao?: ScormVersao;
   tipo_conteudo?: TipoConteudo;
   publicado?: 0 | 1;
@@ -504,6 +519,7 @@ function invalidateMatriculaCollections(
     }
   }
 
+  qc.invalidateQueries({ queryKey: ['training-compliance'] });
   qc.invalidateQueries({ queryKey: lmsKeys.minhasMatriculas() });
   qc.invalidateQueries({ queryKey: lmsKeys.minhasEAD() });
   invalidateCursoCollections(qc);
@@ -738,7 +754,7 @@ export function useMatriculasCurso(
   opts: { status?: string; page?: number; limit?: number } = {},
 ) {
   return useQuery({
-    queryKey: lmsKeys.matriculaCurso(cursoId),
+    queryKey: [...lmsKeys.matriculaCurso(cursoId), opts.status ?? '', opts.page ?? 1, opts.limit ?? 50],
     queryFn: () => {
       const params = new URLSearchParams();
       if (opts.status) params.set('status', opts.status);
@@ -1119,6 +1135,7 @@ export function useScormState(matriculaId: number) {
 
 export interface PostXapiStatementDTO {
   matricula_id: number;
+  completion_intent?: 'USER_CONFIRMED';
   actor: Record<string, unknown>;
   verb: { id: string; display?: Record<string, string> };
   object: { id: string; objectType?: string; definition?: Record<string, unknown> };

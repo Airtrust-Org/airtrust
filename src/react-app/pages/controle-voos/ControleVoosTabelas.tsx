@@ -181,8 +181,8 @@ async function loadCatalog(name: CatalogName) {
 }
 
 export default function ControleVoosTabelas() {
-  const { isAdmin, isGestor } = usePermissions();
-  const canManage = isAdmin || isGestor;
+  const { isAdmin, isGestor, can } = usePermissions();
+  const canManage = isAdmin || isGestor || can('controle_voos.edit');
   const [activeCatalog, setActiveCatalog] = useState<CatalogName>('pontos');
   const [pontoSearch, setPontoSearch] = useState('');
   const [justificationSearch, setJustificationSearch] = useState('');

@@ -1,0 +1,8 @@
+{
+  "changeId": "frms-sleep-opportunity-0552",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0552_frms_sleep_opportunity.sql",
+  "fileHash": "c29e5b38d6e1da17b55312b3a1ff470266ebcf3cd7e178eecd4d0664cec7dd31",
+  "planPath": "worker-airtrust/schema-v2/plans/frms-sleep-opportunity-0552.md",
+  "planHash": "8e4eefde2853f3a1adaa9ffac08fba364e277f99728c911a9ea9939cd0fb1b45"
+}

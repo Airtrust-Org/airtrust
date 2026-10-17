@@ -24,7 +24,24 @@ type ApiEnvelope = {
   data?: {
     status?: string;
     publishable?: boolean;
-    runtime?: { status?: string };
+    structural?: { status?: string };
+    completionManifest?: { status?: string };
+    diagnostics?: { status?: string };
+    conformance?: {
+      status?: string;
+      tests?: Array<{ name?: string; status?: string; detail?: string }>;
+    };
+    runtime?: {
+      status?: string;
+      functionalCompletionVerified?: boolean;
+      functionalCompletionReason?: string | null;
+      failureStage?: string;
+      failureCategory?: string;
+      initializeObserved?: boolean;
+      commitObserved?: boolean;
+      finishObserved?: boolean;
+      completionReached?: boolean;
+    };
   };
 };
 
@@ -54,7 +71,37 @@ async function delayedRealResponse(
 }
 
 async function openCourseEditor(page: Page, course: QaCourse) {
+  // The catalog fetches draft courses asynchronously after the page mounts.
+  // A visible searchbox is NOT proof of a completed catalog query. Record the
+  // real tenant-scoped draft API verdict before assessing the synthetic card.
+  // Never fake or fulfill auth, tenant context or course responses.
+  const draftQuery = page.waitForResponse((response) => {
+    if (response.request().method() !== 'GET') return false;
+    const url = new URL(response.url());
+    return url.pathname === '/api/lms/cursos' && url.searchParams.get('publicados') === '0';
+  }, { timeout: 45_000 });
   await page.goto('/lms/cursos', { waitUntil: 'domcontentloaded' });
+  const draftResponse = await draftQuery;
+  if (draftResponse.status() !== 200) {
+    throw new Error('QA_SCORM_DRAFT_CATALOG_API_HTTP_' + draftResponse.status());
+  }
+  const draftPayload = await draftResponse.json().catch(() => null) as {
+    success?: boolean;
+    data?: Array<{ id: number }>;
+    pagination?: { total?: number };
+  } | null;
+  if (!draftPayload?.success || !Array.isArray(draftPayload.data)) {
+    throw new Error('QA_SCORM_DRAFT_CATALOG_API_INVALID');
+  }
+  if (!draftPayload.data.some((item) => Number(item.id) === Number(course.id))) {
+    // Only sanitized aggregate dimensions and a reason code; no employee or
+    // course PII, tokens, request headers, or raw backend response data.
+    throw new Error(
+      'QA_SCORM_SYNTHETIC_COURSE_ABSENT_FROM_DRAFT_CATALOG:' +
+      'page_rows=' + draftPayload.data.length +
+      ';pagination_total=' + (draftPayload.pagination?.total ?? 'unknown'),
+    );
+  }
 
   const releaseShortSha = String(process.env.RELEASE_SHA || '').slice(0, 7);
   if (releaseShortSha) {
@@ -62,13 +109,13 @@ async function openCourseEditor(page: Page, course: QaCourse) {
   }
 
   const search = page.getByRole('searchbox', {
-    name: /Buscar cursos por título, categoria ou descrição/i,
+    name: /Buscar cursos/i,
   });
   await expect(search).toBeVisible();
   await search.fill(course.title);
 
   const card = page.locator('article').filter({ hasText: course.title });
-  await expect(card).toHaveCount(1);
+  await expect(card).toHaveCount(1, { timeout: 30_000 });
   await expect(card).toBeVisible();
   await card.getByRole('button', { name: 'Editar' }).click();
 
@@ -125,6 +172,39 @@ test('LMS SCORM staging: real success, rejection, timeout and visible progress',
     timeout: 30_000,
   });
   await expect(page.getByText('65%', { exact: true })).toBeVisible();
+  // The API may reject conformance before activation. Report its sanitized
+  // contract verdict instead of masking the cause behind a 30-second UI timeout.
+  await expect.poll(() => successConformance !== null, {
+    timeout: 35_000,
+    message: 'A API de conformidade não retornou resposta à auditoria SCORM',
+  }).toBe(true);
+  const conformanceVerdict = successConformance?.data;
+  const evidence = conformanceVerdict?.conformance?.tests?.find(
+    (item) => item.name === 'FUNCTIONAL_COMPLETION_EVIDENCE',
+  );
+  const safeDiagnostic = {
+    api_success: successConformance?.success ?? false,
+    publishable: conformanceVerdict?.publishable ?? false,
+    structural: conformanceVerdict?.structural?.status ?? null,
+    manifest: conformanceVerdict?.completionManifest?.status ?? null,
+    diagnostics: conformanceVerdict?.diagnostics?.status ?? null,
+    conformance: conformanceVerdict?.conformance?.status ?? null,
+    functional_evidence: evidence?.status ?? null,
+    functional_reason: evidence?.detail ?? null,
+    runtime_status: conformanceVerdict?.runtime?.status ?? null,
+    runtime_failure_stage: conformanceVerdict?.runtime?.failureStage ?? null,
+    runtime_failure_category: conformanceVerdict?.runtime?.failureCategory ?? null,
+    runtime_driver_reason: conformanceVerdict?.runtime?.functionalCompletionReason ?? null,
+    runtime_driver_completed: conformanceVerdict?.runtime?.functionalCompletionVerified ?? false,
+    initialized: conformanceVerdict?.runtime?.initializeObserved ?? false,
+    committed: conformanceVerdict?.runtime?.commitObserved ?? false,
+    finished: conformanceVerdict?.runtime?.finishObserved ?? false,
+    completion_reached: conformanceVerdict?.runtime?.completionReached ?? false,
+  };
+  // Do not print URLs, learner identities, tokens, SCORM CMI or uploaded content.
+  expect(conformanceVerdict?.publishable, 
+    `SCORM_STAGING_CONFORMANCE_NOT_PUBLISHABLE:${JSON.stringify(safeDiagnostic)}`,
+  ).toBe(true);
   await expect(page.getByText('Ativando nova versão...', { exact: true })).toBeVisible({
     timeout: 30_000,
   });

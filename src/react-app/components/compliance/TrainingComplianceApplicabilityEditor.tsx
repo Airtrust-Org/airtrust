@@ -4,6 +4,7 @@ import { AlertTriangle, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { showToast } from '@/react-app/utils/toast';
+import { notifyComplianceSaveWithEnrollment } from './complianceEnrollmentFeedback';
 
 type Scope = 'EMPRESA' | 'SETOR' | 'FUNCAO' | 'SETOR_FUNCAO' | 'FUNCIONARIO';
 type Obrigatoriedade = 'OBRIGATORIA' | 'RECOMENDADA' | 'NAO_APLICA';
@@ -275,8 +276,8 @@ export function TrainingComplianceApplicabilityEditor({
       });
       return readJson<{ id: number }>(response);
     },
-    onSuccess: async () => {
-      showToast.success('Aplicabilidade de compliance atualizada.');
+    onSuccess: async (result) => {
+      notifyComplianceSaveWithEnrollment(result, 'Aplicabilidade de compliance atualizada.');
       setReferencia('');
       setJustificativa('');
       setPerfilCompetencia('');
@@ -297,9 +298,12 @@ export function TrainingComplianceApplicabilityEditor({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       });
-      await readJson<Record<string, never>>(response);
+      return readJson(response);
     },
-    onSuccess: invalidate,
+    onSuccess: async (result) => {
+      notifyComplianceSaveWithEnrollment(result, 'Requisito atualizado.');
+      await invalidate();
+    },
     onError: (error) =>
       showToast.error(error instanceof Error ? error.message : 'Erro ao atualizar requisito'),
   });

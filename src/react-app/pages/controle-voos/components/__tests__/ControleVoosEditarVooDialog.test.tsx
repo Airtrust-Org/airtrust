@@ -14,6 +14,11 @@ const contratos = [
   { id: 40, codigo: 'CTR-001', nome: 'Contrato 001' },
   { id: 41, codigo: 'CTR-002', nome: 'Contrato 002' },
 ];
+const aeroportos = [
+  { id: 1, codigo: 'SBME', nome: 'Macaé' },
+  { id: 2, codigo: '9PGB', nome: 'Plataforma' },
+  { id: 3, codigo: 'SBRJ', nome: 'Santos Dumont' },
+];
 const tipos = [
   { id: 10, codigo: 'REGULAR', nome: 'Regular' },
   { id: 11, codigo: 'EXTRA', nome: 'Extra' },
@@ -29,6 +34,9 @@ function mockCatalogs() {
     }
     if (url === '/controle-voos/catalogos/tipos') {
       return Promise.resolve({ success: true, data: tipos });
+    }
+    if (url === '/controle-voos/catalogos/aeroportos') {
+      return Promise.resolve({ success: true, data: aeroportos });
     }
     return Promise.reject(new Error(`GET inesperado: ${url}`));
   });
@@ -70,6 +78,19 @@ describe('ControleVoosEditarVooDialog', () => {
     await waitFor(() => expect(screen.getByLabelText('Aeronave')).not.toBeDisabled());
   }
 
+  it('edita rota e carga com conversão lb/kg', async () => {
+    patchMock.mockResolvedValue({ success: true, data: { ...voo, versao: 5 } });
+    render(<ControleVoosEditarVooDialog open voo={voo} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await waitCatalogsReady();
+    fireEvent.change(screen.getByLabelText('Ponto da rota 2'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Peso da carga (kg)'), { target: { value: '50' } });
+    fireEvent.change(screen.getByLabelText('Peso da bagagem (lb)'), { target: { value: '44' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
+    expect(patchMock.mock.calls[0][1]).toMatchObject({ rota_ids: [1, 3], peso_bagagem: 44 });
+    expect(Number(patchMock.mock.calls[0][1].peso_carga)).toBeCloseTo(110.231, 2);
+  });
+
   it('edita programação existente usando a versão CAS atual do voo', async () => {
     patchMock.mockResolvedValue({
       success: true,
@@ -93,7 +114,6 @@ describe('ControleVoosEditarVooDialog', () => {
       expect.objectContaining({
         versao: 4,
         numero_voo: 'V999',
-        numero_db: 'DB456',
         data_programacao: '2026-09-21',
         observacoes: 'Atualizado',
       }),
@@ -138,7 +158,7 @@ describe('ControleVoosEditarVooDialog', () => {
     );
   });
 
-  it('ao mudar a data preserva os horários na nova data antes de salvar', async () => {
+  it('deriva data operacional da partida prevista sem campo de data duplicado', async () => {
     patchMock.mockResolvedValue({
       success: true,
       data: { ...voo, data_programacao: '2026-09-22', versao: 5 },
@@ -149,8 +169,15 @@ describe('ControleVoosEditarVooDialog', () => {
     );
     await waitCatalogsReady();
 
-    fireEvent.change(screen.getByLabelText('Data da programação'), {
-      target: { value: '2026-09-22' },
+    expect(screen.queryByLabelText('Data da programação')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Número DB')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Equipamento Petrobras')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Atendimento Petrobras')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Partida prevista'), {
+      target: { value: '2026-09-22T13:00' },
+    });
+    fireEvent.change(screen.getByLabelText('Chegada prevista'), {
+      target: { value: '2026-09-22T15:00' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
 
@@ -159,8 +186,8 @@ describe('ControleVoosEditarVooDialog', () => {
       '/controle-voos/voos/77',
       expect.objectContaining({
         data_programacao: '2026-09-22',
-        horario_previsto_partida: expect.stringContaining('2026-09-22T13:00:00'),
-        horario_previsto_chegada: expect.stringContaining('2026-09-22T15:00:00'),
+        horario_previsto_partida: new Date('2026-09-22T13:00').toISOString(),
+        horario_previsto_chegada: new Date('2026-09-22T15:00').toISOString(),
       }),
     );
   });
@@ -197,4 +224,37 @@ describe('ControleVoosEditarVooDialog', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Versao do voo desatualizada/);
     expect(onClose).not.toHaveBeenCalled();
   });
+  it('abre com área rolável, largura ampla e preserva pesos em branco sem enviar zeros implícitos', async () => {
+    patchMock.mockResolvedValue({ success: true, data: { ...voo, versao: 5 } });
+    render(<ControleVoosEditarVooDialog open voo={voo} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await waitCatalogsReady();
+    expect(screen.getByRole('dialog').querySelector('[data-testid="flight-edit-scroll-region"]'))
+      .toHaveClass('overflow-y-auto');
+    expect(screen.getByRole('dialog').querySelector('form'))
+      .toHaveClass('max-w-6xl');
+    expect(screen.queryByText(/Preencha 0 quando não houver/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Peso da bagagem (lb)')).toHaveValue(null);
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
+    const patch = patchMock.mock.calls[0][1];
+    expect(patch).not.toHaveProperty('peso_passageiros');
+    expect(patch).not.toHaveProperty('peso_bagagem');
+    expect(patch).not.toHaveProperty('peso_carga');
+    expect(patch).not.toHaveProperty('unidade_peso_planejado');
+  });
+
+  it('permite limpar explicitamente um peso já informado, preservando os demais', async () => {
+    patchMock.mockResolvedValue({ success: true, data: { ...voo, versao: 5 } });
+    const comPeso = { ...voo, peso_passageiros_planejado: 100, peso_bagagem_planejado: 50 };
+    render(<ControleVoosEditarVooDialog open voo={comPeso} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await waitCatalogsReady();
+    fireEvent.change(screen.getByLabelText('Peso da bagagem (lb)'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
+    const patch = patchMock.mock.calls[0][1];
+    expect(patch.peso_bagagem).toBeNull();
+    expect(patch).not.toHaveProperty('peso_passageiros');
+    expect(patch).not.toHaveProperty('peso_carga');
+  });
+
 });

@@ -1,0 +1,93 @@
+name: Staging Critical Readonly Performance (Official)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_deployed_sha:
+        description: 'Exact 40-char SHA already published to staging Worker and Pages'
+        required: true
+        type: string
+      attempts:
+        description: 'Requests per endpoint (1 to 10; small samples are indicative only)'
+        required: true
+        type: number
+        default: 5
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: airtrust-staging-readonly-performance
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    env:
+      STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+      STAGING_FRONTEND_BASE_URL: https://staging.airtrust.pages.dev
+      RELEASE_SHA: ${{ inputs.expected_deployed_sha }}
+      PERF_ATTEMPTS: ${{ inputs.attempts }}
+      STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Check strict main and staging input provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_ONLY >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo INVALID_RELEASE_SHA >&2; exit 1; }
+          [[ "$PERF_ATTEMPTS" =~ ^([1-9]|10)$ ]] || { echo INVALID_ATTEMPTS >&2; exit 1; }
+          [[ -n "$STAGING_SMOKE_EMAIL" && -n "$STAGING_SMOKE_PASSWORD" ]] || { echo STAGING_QA_CREDENTIALS_MISSING >&2; exit 1; }
+          git cat-file -e "$RELEASE_SHA^{commit}"
+          git merge-base --is-ancestor "$RELEASE_SHA" HEAD
+      - name: Verify eight release gates for deployed SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Verify live Worker and Pages match expected staging SHA
+        run: |
+          node --input-type=module <<'NODE'
+          const expected = process.env.RELEASE_SHA.toLowerCase();
+          const worker = await fetch(process.env.STAGING_API_BASE_URL + '/api/version', {headers: {Accept: 'application/json'}, signal: AbortSignal.timeout(10000)});
+          if (!worker.ok) throw Error('STAGING_VERSION_HTTP_' + worker.status);
+          const response = await worker.json();
+          const actual = String(response?.data?.sourceSha ?? response?.sourceSha ?? '').toLowerCase();
+          if (actual !== expected) throw Error('STAGING_WORKER_SHA_MISMATCH');
+          const {assertLiveFrontendShaFromOrigin} = await import('./e2e/lib/live-sha-guard.mjs');
+          await assertLiveFrontendShaFromOrigin(process.env.STAGING_FRONTEND_BASE_URL, expected.slice(0, 7));
+          console.log('STAGING_PERFORMANCE_PROVENANCE_PASS');
+          NODE
+      - name: Check readonly measurement contract
+        run: node --test scripts/__tests__/staging-critical-readonly-performance.test.mjs
+      - name: Measure four staging GET endpoints without business-data writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/staging/qa-critical-readonly-performance.mjs | tee "$RUNNER_TEMP/staging-readonly-perf.txt"
+      - name: Publish sanitized sampled latency and payload report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Staging read-only critical endpoint performance'
+            echo ''
+            echo "- Expected Worker/Pages SHA: \`$RELEASE_SHA\`"
+            echo '- Values are small-sample timings from an Actions runner; not production SLOs or user p95.'
+            echo '- No real enrollment, qualification, D1 migration or production write.'
+            if [[ -f "$RUNNER_TEMP/staging-readonly-perf.txt" ]]; then
+              grep '^PERF_BASELINE' "$RUNNER_TEMP/staging-readonly-perf.txt" | sed 's/^/- /' || true
+            else
+              echo '- Measurement: NOT_COMPLETED'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

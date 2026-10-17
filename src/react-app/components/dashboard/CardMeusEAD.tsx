@@ -10,14 +10,12 @@ import {
   Award,
   Download,
   AlertTriangle,
-  Clock,
   CheckCircle2,
   Circle,
   Play,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMinhasEAD, type LmsMatriculaEAD } from '@/react-app/hooks/useLms';
-import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import { parseJsonResponse } from '@/react-app/lib/parseJsonResponse';
 import {
@@ -196,14 +194,14 @@ function LinhaMatricula({
           {/* nome em linha própria no mobile */}
           <button
             onClick={onAbrir}
-            className="flex-1 min-w-0 text-sm font-semibold text-slate-800 hover:text-primary transition-colors text-left leading-snug truncate dark:text-slate-200 dark:hover:text-primary"
+            className="flex-1 min-w-0 text-sm font-semibold text-slate-800 hover:text-primary transition-colors text-left leading-snug break-words dark:text-slate-200 dark:hover:text-primary"
             title={matricula.titulo ?? `Curso #${matricula.curso_id}`}
           >
             {matricula.titulo ?? `Curso #${matricula.curso_id}`}
           </button>
         </div>
 
-        <div className="mt-2 flex items-center justify-between gap-3">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <span
             className={`text-xs font-medium ${
               concluido
@@ -219,7 +217,7 @@ function LinhaMatricula({
           </span>
 
           {/* ação principal + certificado (conclusão) */}
-          <div className="shrink-0 flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {concluido ? (
               <>
                 <button
@@ -293,109 +291,129 @@ function LinhaMatricula({
 
 // ─── componente principal ─────────────────────────────────────────────────────
 
-export function CardMeusEAD() {
-  const navigate = useNavigate();
-  const { isAluno, isInstrutor } = usePermissions();
-  const { data: matriculas, isLoading, error } = useMinhasEAD();
+type AbaEad = 'andamento' | 'naoIniciados' | 'finalizados';
 
-  const emAndamento = (matriculas ?? []).filter(
-    (m) => m.status !== 'CANCELADO' && m.status !== 'CONCLUIDO',
-  );
-  const concluidos = (matriculas ?? []).filter((m) => m.status === 'CONCLUIDO');
-  const lista = [...emAndamento, ...concluidos];
+export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: boolean }) {
+  const navigate = useNavigate();
+  const { data: matriculas, isLoading, error } = useMinhasEAD();
+  const [abaSelecionada, setAbaSelecionada] = useState<AbaEad | null>(null);
+
+  // Matrículas canceladas não representam treinamento ativo ou concluído.
+  // Reprovados ficam na aba de ação pendente, com seu status real preservado.
+  const grupos: Record<AbaEad, LmsMatriculaEAD[]> = {
+    andamento: (matriculas ?? []).filter(
+      (m) => m.status === 'EM_ANDAMENTO' || m.status === 'REPROVADO',
+    ),
+    naoIniciados: (matriculas ?? []).filter((m) => m.status === 'NAO_INICIADO'),
+    finalizados: (matriculas ?? []).filter((m) => m.status === 'CONCLUIDO'),
+  };
+  const total = grupos.andamento.length + grupos.naoIniciados.length + grupos.finalizados.length;
+  // Ao carregar, abrir a primeira categoria que requer atenção, sem alterar
+  // a escolha manual do usuário (inclusive quando uma categoria está vazia).
+  const abaAtiva: AbaEad = abaSelecionada ??
+    (grupos.andamento.length ? 'andamento' : grupos.naoIniciados.length ? 'naoIniciados' : 'finalizados');
+
+  const abas = [
+    { id: 'andamento', label: 'Em andamento', count: grupos.andamento.length, Icon: Play },
+    { id: 'naoIniciados', label: 'Não iniciado', count: grupos.naoIniciados.length, Icon: Circle },
+    { id: 'finalizados', label: 'Finalizados', count: grupos.finalizados.length, Icon: CheckCircle2 },
+  ] as const;
 
   return (
-    <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-      {/* cabeçalho */}
-      <div className="px-4 py-4 sm:px-5 sm:py-5 border-b border-slate-100">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="inline-flex items-center gap-2">
-              <span className="inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
-                <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
-              </span>
-              <h2 className="text-base sm:text-lg font-semibold text-slate-900">Meus Treinamentos EAD</h2>
-            </div>
-            <p className="mt-1 text-xs sm:text-sm text-slate-500">Seus cursos, progresso e certificados.</p>
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5 sm:py-5 dark:border-slate-800">
+        <div>
+          <div className="inline-flex items-center gap-2">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sky-100 text-sky-700 sm:h-10 sm:w-10 dark:bg-sky-500/20 dark:text-sky-300">
+              <BookOpen className="h-5 w-5" />
+            </span>
+            <h2 className="text-base font-semibold text-slate-900 sm:text-lg dark:text-slate-100">Meus treinamentos EAD</h2>
           </div>
-        {lista.length > 0 && (
+          <p className="mt-1 text-xs text-slate-500 sm:text-sm dark:text-slate-400">
+            {total} treinamento{total !== 1 ? 's' : ''} · Acompanhe o andamento e acesse seus certificados.
+          </p>
+        </div>
+        {showOpenPageLink && (
           <button
+            type="button"
             onClick={() => navigate('/lms')}
-            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 hover:text-primary transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:text-sky-300 dark:hover:bg-slate-800"
           >
-            Ver todos
-            <ChevronRight className="w-4 h-4" />
+            Abrir em página completa
+            <ChevronRight className="h-4 w-4" />
           </button>
         )}
       </div>
-      </div>
 
-      {/* corpo */}
       <div className="p-4 sm:p-5">
         {isLoading ? (
-          <div className="space-y-2">
+          <div className="space-y-2" aria-label="Carregando treinamentos">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-12 sm:h-14 rounded-xl bg-slate-100 animate-pulse" />
+              <div key={i} className="h-16 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
             ))}
           </div>
         ) : error ? (
-          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
             Erro ao carregar treinamentos.
           </div>
-        ) : lista.length === 0 ? (
-          <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-6 sm:py-8 text-center">
-            <Award className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-            <p className="text-sm font-medium text-slate-600">Nenhum treinamento EAD encontrado.</p>
-            <p className="text-xs text-slate-400 mt-1">
-              Quando houver cursos disponíveis, eles aparecerão aqui.
+        ) : total === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center dark:border-slate-700 dark:bg-slate-800">
+            <Award className="mx-auto mb-2 h-8 w-8 text-slate-400" />
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Nenhum treinamento EAD encontrado.</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Quando houver cursos atribuídos a você, eles aparecerão aqui.
             </p>
-            <button
-              onClick={() => navigate('/lms/cursos')}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors"
-            >
-              <BookOpen className="w-4 h-4" />
-              Ver catálogo de cursos
-            </button>
           </div>
         ) : (
-          <div className="space-y-2">
-            {lista.slice(0, 10).map((m) => (
-              <LinhaMatricula
-                key={m.id}
-                matricula={m}
-                onAbrir={() =>
-                  navigate(
-                    m.status === 'CONCLUIDO'
-                      ? `/lms/player/${m.id}?review=1`
-                      : `/lms/player/${m.id}`,
-                  )
-                }
-              />
-            ))}
-            {lista.length > 10 && (
-              <button
-                onClick={() => navigate('/lms')}
-                className="w-full py-2 text-sm text-slate-500 hover:text-primary transition-colors"
-              >
-                +{lista.length - 10} mais → Ver todos
-              </button>
+          <>
+            <div role="group" aria-label="Filtrar treinamentos EAD por situação" className="grid grid-cols-3 gap-2 rounded-xl bg-slate-100 p-1.5 dark:bg-slate-800">
+              {abas.map(({ id, label, count, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={abaAtiva === id}
+                  onClick={() => setAbaSelecionada(id)}
+                  className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1.5 py-2.5 text-center text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
+                    abaAtiva === id
+                      ? 'bg-white text-sky-800 shadow-sm ring-1 ring-sky-200 dark:bg-slate-700 dark:text-sky-200 dark:ring-sky-500/40'
+                      : 'text-slate-600 hover:bg-white/70 dark:text-slate-300 dark:hover:bg-slate-700/70'
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="leading-tight">{label}</span>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${
+                    abaAtiva === id ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200' : 'bg-slate-200 text-slate-600 dark:bg-slate-600 dark:text-slate-100'
+                  }`}>{count}</span>
+                </button>
+              ))}
+            </div>
+            <p className="my-3 text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
+              {grupos[abaAtiva].length} treinamento{grupos[abaAtiva].length !== 1 ? 's' : ''} nesta categoria
+            </p>
+            {grupos[abaAtiva].length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                Nenhum treinamento nesta situação.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
+                {grupos[abaAtiva].map((m) => (
+                  <LinhaMatricula
+                    key={m.id}
+                    matricula={m}
+                    onAbrir={() =>
+                      navigate(
+                        m.status === 'CONCLUIDO'
+                          ? `/lms/player/${m.id}?review=1`
+                          : `/lms/player/${m.id}`,
+                      )
+                    }
+                  />
+                ))}
+              </div>
             )}
-          </div>
+          </>
         )}
       </div>
-
-      {/* rodapé mobile */}
-      {lista.length > 0 && (
-        <div className="sm:hidden border-t border-slate-100 px-4 py-3">
-          <button
-            onClick={() => navigate('/lms')}
-            className="w-full flex items-center justify-center gap-2 text-sm font-medium text-primary"
-          >
-            Ver todos os treinamentos
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      )}
     </section>
   );
 }

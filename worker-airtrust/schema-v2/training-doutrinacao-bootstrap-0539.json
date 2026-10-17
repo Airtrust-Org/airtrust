@@ -1,0 +1,8 @@
+{
+  "changeId": "training-doutrinacao-bootstrap-0539",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0539_training_doutrinacao_bootstrap.sql",
+  "fileHash": "e10c80ea539a8f2313af4abc84cda8fd18eae640bb6e71efc34b64e970e93236",
+  "planPath": "worker-airtrust/schema-v2/plans/training-doutrinacao-bootstrap-0539.md",
+  "planHash": "f15775c694c94594b314b88f02611834610eb822e3491e4099ea20a99c81d281"
+}

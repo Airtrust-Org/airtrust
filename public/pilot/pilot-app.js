@@ -8,6 +8,7 @@ import { PILOT_OFFLINE_APP_VERSION } from '/pilot/pilot-lease-trust.js';
 import {
   applySafeStageAggregates,
   applyStageContinuity,
+  applyStandardPassengerBaggageWeight,
   assertPackageIdentity,
   buildCommonFlightFields,
   assertVerifiedLeaseAllowsDraft,
@@ -200,7 +201,9 @@ function showActiveFlightUpdateAlert(revision) {
   activeFlightUpdateAvailable = revision || {};
   if (flightUpdateMessage) {
     flightUpdateMessage.textContent =
-      'A Coordenação alterou este voo depois da preparação offline. Atualize para receber novas etapas, tripulação ou outros dados antes de concluir o lançamento.';
+      (revision?.planejamento_status === 'confirmado'
+        ? 'A Coordenação confirmou o planejamento deste voo. Atualize para receber os dados consolidados antes da partida.'
+        : 'O voo possui uma versão mais recente no servidor. Atualize para receber rota, documentos ou dados revisados antes do envio, preservando o rascunho local.');
   }
   flightUpdateAlert?.classList.remove('hidden');
   if (refreshFlightUpdateButton) refreshFlightUpdateButton.disabled = !navigator.onLine;
@@ -839,8 +842,16 @@ async function authenticatedBlob(path, options = {}) {
   return response.blob();
 }
 
+const FLIGHT_DOCUMENT_GROUPS = [
+  { type: 'WEATHER_REPORT', label: 'Weather Report' },
+  { type: 'PLANO_VOO', label: 'Planejamento de voo' },
+  { type: 'MTA_EMBARQUE', label: 'MTA de embarque' },
+  { type: 'MTA_DESEMBARQUE', label: 'MTA de desembarque' },
+  { type: 'OUTROS', label: 'Outros documentos' },
+];
+
 function flightDocumentLabel(type) {
-  return type === 'WEATHER_REPORT' ? 'Weather Report' : 'Planejamento de voo atualizado';
+  return FLIGHT_DOCUMENT_GROUPS.find((group) => group.type === type)?.label || 'Documento do voo';
 }
 
 function currentFlightDocuments(packageData) {
@@ -848,10 +859,13 @@ function currentFlightDocuments(packageData) {
     ? packageData.workspace.planning.documentos
     : [];
   const sorted = [...documents].sort((left, right) => Number(right?.id || 0) - Number(left?.id || 0));
-  return ['WEATHER_REPORT', 'PLANO_VOO'].flatMap((type) => {
-    const current = sorted.find((document) => String(document?.type || '').toUpperCase() === type);
-    return current ? [current] : [];
-  });
+  return [
+    ...FLIGHT_DOCUMENT_GROUPS.filter(({ type }) => type !== 'OUTROS').flatMap(({ type }) => {
+      const current = sorted.find((document) => String(document?.type || '').toUpperCase() === type);
+      return current ? [current] : [];
+    }),
+    ...sorted.filter((document) => String(document?.type || '').toUpperCase() === 'OUTROS'),
+  ];
 }
 
 function flightDocumentCacheKey(flightId, documentEventId) {
@@ -933,7 +947,13 @@ async function cacheFlightDocumentForOffline(flightId, document, existingRecord,
       cached_at: new Date().toISOString(),
       cache_error: null,
     };
-  } catch {
+  } catch (error) {
+    // Keep the flight accessible, but never misreport a failed file as cached.
+    const cacheError = error instanceof PilotOnlineRequestError && error.status
+      ? 'HTTP_' + String(error.status)
+      : error instanceof Error && /integridade|tamanho.*diverge|verificação local/i.test(error.message)
+        ? 'INTEGRITY_MISMATCH'
+        : 'CACHE_FAILED';
     return {
       id: Number(document.id),
       type: String(document.type),
@@ -945,7 +965,7 @@ async function cacheFlightDocumentForOffline(flightId, document, existingRecord,
       cache_key: cacheKey,
       available_offline: false,
       cached_at: null,
-      cache_error: 'CACHE_FAILED',
+      cache_error: cacheError,
     };
   }
 }
@@ -964,39 +984,69 @@ function changedFlightDocumentLabels(previousPackage, nextPackage) {
   const next = currentFlightDocuments(nextPackage);
   return next
     .filter((document) => {
-      const prior = previous.find((candidate) => candidate.type === document.type);
-      if (!prior) return true;
-      return (
-        Number(prior.id) !== Number(document.id) ||
-        String(prior.content_hash || '') !== String(document.content_hash || '')
-      );
+      // OUTROS can contain multiple independent files; never compare by type alone.
+      const prior = document.type === 'OUTROS'
+        ? previous.find((candidate) => Number(candidate.id) === Number(document.id))
+        : previous.find((candidate) => candidate.type === document.type);
+      return !prior || Number(prior.id) !== Number(document.id) ||
+        String(prior.content_hash || '') !== String(document.content_hash || '');
     })
-    .map((document) => flightDocumentLabel(document.type));
+    .map((document) => document.type === 'OUTROS'
+      ? 'Outros documentos: ' + String(document.file_name || 'arquivo')
+      : flightDocumentLabel(document.type));
 }
 
 function offlineDocumentPreparationSummary(states) {
-  const byType = new Map(states.map((state) => [String(state.type), state]));
-  return ['WEATHER_REPORT', 'PLANO_VOO']
-    .map((type) => {
-      const state = byType.get(type);
-      if (!state) return flightDocumentLabel(type) + ': ainda não recebido pela Coordenação';
-      return state.available_offline
-        ? flightDocumentLabel(type) + ': disponível offline'
-        : flightDocumentLabel(type) + ': não pôde ser salvo offline';
-    })
-    .join(' · ');
+  const byType = new Map(states.filter((state) => state.type !== 'OUTROS').map((state) => [String(state.type), state]));
+  const groups = FLIGHT_DOCUMENT_GROUPS.filter(({ type }) => type !== 'OUTROS').map(({ type }) => {
+    const state = byType.get(type);
+    if (!state) return flightDocumentLabel(type) + ': ainda não recebido pela Coordenação';
+    return flightDocumentLabel(type) + (state.available_offline ? ': disponível offline' : ': falha no download');
+  });
+  for (const state of states.filter((item) => item.type === 'OUTROS')) {
+    groups.push('Outros: ' + state.file_name + (state.available_offline ? ' — offline' : ' — falha no download'));
+  }
+  return groups.join(' · ');
 }
 
-function openFlightDocumentBlob(blob) {
+function openFlightDocumentBlob(blob, previewWindow = null) {
   const url = URL.createObjectURL(blob);
-  window.open(url, '_blank', 'noopener,noreferrer');
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  if (previewWindow && !previewWindow.closed) {
+    // A aba foi aberta diretamente pelo clique do tripulante, antes do await.
+    // Isso evita o bloqueio de pop-up do Safari/iPad após leitura cifrada assíncrona.
+    previewWindow.location.replace(url);
+  } else {
+    // Navegadores em modo instalado podem impedir nova janela. Não perder o arquivo:
+    // oferecer um link que o tripulante possa tocar diretamente.
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Abrir documento';
+    sessionStatus.className = 'statusline ok';
+    sessionStatus.replaceChildren(document.createTextNode('Documento pronto para abrir: '), link);
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60_000);
 }
 
 async function openFlightDocument(documentEventId) {
   const packageData = activePackageData();
   const flightId = packageData?.voo?.id;
   if (!flightId || !documentEventId) return;
+  // Abrir antes do primeiro await para preservar a ativação do usuário no iPad.
+  let previewWindow = null;
+  try {
+    previewWindow = window.open('about:blank', '_blank');
+    if (previewWindow) {
+      previewWindow.opener = null;
+      previewWindow.document.title = 'Abrindo documento do voo';
+      if (previewWindow.document.body) {
+        previewWindow.document.body.textContent = 'Preparando documento…';
+      }
+    }
+  } catch {
+    previewWindow = null;
+  }
   const document = currentFlightDocuments(packageData).find(
     (candidate) => Number(candidate.id) === Number(documentEventId),
   );
@@ -1008,12 +1058,14 @@ async function openFlightDocument(documentEventId) {
       if (cached) {
         openFlightDocumentBlob(
           new Blob([cached.bytes], { type: document.content_type || state.content_type || 'application/pdf' }),
+          previewWindow,
         );
         return;
       }
     }
 
     if (!navigator.onLine) {
+      previewWindow?.close();
       setSessionMessage(
         (document?.label || 'Documento') +
           ' não estava disponível neste tablet quando o voo foi preparado. Isso não bloqueia o voo.',
@@ -1026,8 +1078,9 @@ async function openFlightDocument(documentEventId) {
       '/controle-voos/voos/' + encodeURIComponent(String(flightId)) + '/documentos/' + encodeURIComponent(String(documentEventId)),
       { allowDuringFlight: true },
     );
-    openFlightDocumentBlob(blob);
+    openFlightDocumentBlob(blob, previewWindow);
   } catch (error) {
+    previewWindow?.close();
     setSessionMessage(
       error instanceof Error ? error.message : 'Falha ao abrir documento.',
       'error',
@@ -1255,7 +1308,7 @@ async function notifyFlightUpdate(voo) {
   try {
     const registration = await navigator.serviceWorker?.ready;
     await registration?.showNotification?.('AirTrust — voo atualizado', {
-      body: flightListTitle(voo) + ' recebeu uma alteração da Coordenação. Abra o Pilot App e atualize o voo.',
+      body: flightListTitle(voo) + (voo?.planejamento_status === 'confirmado' ? ' teve o planejamento confirmado.' : ' recebeu uma alteração da Coordenação.') + ' Abra o Pilot App e atualize o voo.',
       tag: 'airtrust-flight-' + String(voo.id),
     });
   } catch {}
@@ -1444,6 +1497,10 @@ async function prepareFlightPackage(flightId, options = {}) {
       existing,
       options,
     );
+    // Download failures must not prevent flight/RDV access. Keep each failed
+    // attachment explicitly unavailable; the package itself remains encrypted
+    // and is only confirmed after the local read-back below.
+    const missingDocuments = offlineDocuments.filter((entry) => !entry.available_offline);
     const nextRevision = Number(existing?.localRevision || 0) + 1;
     const preparedAt = new Date().toISOString();
 
@@ -1475,10 +1532,14 @@ async function prepareFlightPackage(flightId, options = {}) {
       : '';
     setSessionMessage(
       updateNotice +
-        'Voo preparado neste tablet. ' +
+        (missingDocuments.length
+          ? 'Dados do voo salvos offline, com documentos pendentes de download. '
+          : 'Voo preparado neste tablet. ') +
         offlineDocumentPreparationSummary(offlineDocuments) +
-        '. A ausência de documentos não bloqueia o voo.',
-      'ok',
+        (missingDocuments.length
+          ? '. Os anexos pendentes não estarão disponíveis sem internet. Atualize antes da saída e verifique com a Coordenação os documentos operacionais exigidos.'
+          : '.'),
+      missingDocuments.length ? 'attention' : 'ok',
     );
     await loadCachedPackages();
     if (offlineFlightLocked && options.allowDuringFlight === true) {
@@ -1806,8 +1867,9 @@ async function getCoordinationState() {
   );
   const justificationBlocker =
     packageRequiredJustificationMinutes > 0 &&
+    packageAssignedJustificationMinutes > 0 &&
     packageAssignedJustificationMinutes !== packageRequiredJustificationMinutes
-      ? 'A diferença entre o voo planejado e o realizado precisa ser justificada exatamente antes de finalizar.'
+      ? 'Se optar por justificar, os minutos precisam fechar a diferença. Também é possível concluir sem justificativas.'
       : null;
 
   const editableWorkflow = ['rascunho', 'devolvido'].includes(
@@ -1870,7 +1932,7 @@ async function refreshCoordinationControls() {
   const rdv = state.rdv;
   if (activeFlightUpdateAvailable) {
     setCoordinationMessage(
-      'A Coordenação alterou este voo. Atualize o voo antes de sincronizar, finalizar ou enviar.',
+      'O pacote local está desatualizado em relação ao servidor. Atualize o voo antes de sincronizar, finalizar ou enviar.',
       'error',
     );
     return;
@@ -1951,6 +2013,9 @@ function setServerSyncStatus(message) {
 }
 
 function updateSyncButtonState() {
+  syncRdvButton.textContent = operationalSyncInFlight
+    ? 'Enviando informações do voo…'
+    : 'Enviar informações do voo';
   syncRdvButton.disabled =
     !navigator.onLine ||
     !vault?.isUnlocked() ||
@@ -2335,8 +2400,9 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
         'O pacote do voo mudou desde o início deste rascunho. Resolução de conflito ainda não está habilitada.',
       );
     }
+    const removedDraftIds = new Set(Array.isArray(reconciledValue.removed_stage_draft_ids) ? reconciledValue.removed_stage_draft_ids : []);
     const matchingStages = stageRecords
-      .filter((record) => String(record.value?.source_package_id) === identity.packageId)
+      .filter((record) => String(record.value?.source_package_id) === identity.packageId && !removedDraftIds.has(record.id))
       .sort(
         (left, right) =>
           Number(left.value?.fields?.numero_etapa || 0) -
@@ -2352,6 +2418,8 @@ async function openOrSeedOperationalDraft(packageData, verifiedLease) {
       common: { ...buildCommonFlightFields(packageData), ...(reconciledValue.common || {}) },
       flight_update: reconciledValue.flight_update || {},
       fuelings: Array.isArray(reconciledValue.fuelings) ? reconciledValue.fuelings : [],
+      removed_stages: Array.isArray(reconciledValue.removed_stages) ? reconciledValue.removed_stages : [],
+      removed_stage_draft_ids: Array.isArray(reconciledValue.removed_stage_draft_ids) ? reconciledValue.removed_stage_draft_ids : [],
       justifications: Array.isArray(reconciledValue.justifications)
         ? reconciledValue.justifications
         : (Array.isArray(packageData?.justificativas) ? packageData.justificativas : []).map((item) => ({
@@ -2465,7 +2533,7 @@ function validatePlanningJustifications(packageData, stageDrafts, justifications
   const errors = [];
   const requiredMinutes = requiredJustificationMinutes(packageData, stageDrafts);
   const rows = Array.isArray(justifications) ? justifications : [];
-  if (requiredMinutes <= 0) return errors;
+  if (requiredMinutes <= 0 || rows.length === 0) return errors;
 
   const usedCodes = new Set();
   rows.forEach((item, index) => {
@@ -2482,11 +2550,10 @@ function validatePlanningJustifications(packageData, stageDrafts, justifications
   const assignedMinutes = totalJustificationMinutes(rows);
   if (assignedMinutes !== requiredMinutes) {
     errors.push(
-      'As justificativas devem somar exatamente ' +
-        String(requiredMinutes) +
-        ' minuto(s) de diferença; informado: ' +
-        String(assignedMinutes) +
-        '.',
+      'O tempo total realizado (' + String(realizedTotalMinutes(stageDrafts)) +
+        ' min) excedeu o tempo total programado (' + String(plannedFlightMinutes(packageData)) +
+        ' min). Justifique os ' + String(requiredMinutes) +
+        ' minutos de diferença. Justificativas informadas: ' + String(assignedMinutes) + ' min.',
     );
   }
   return errors;
@@ -2658,11 +2725,13 @@ async function readPersistedOperationalStateForSync() {
   const persistedRdv = await vault.getJson('rdv_drafts', rdvDraftRecordId(identity.flightId));
   if (!persistedRdv) throw new Error('Rascunho do voo não encontrado no tablet.');
 
+  const removedDraftIds = new Set(Array.isArray(persistedRdv.value?.removed_stage_draft_ids) ? persistedRdv.value.removed_stage_draft_ids : []);
   const persistedStages = (await vault.listJson('stage_drafts'))
     .filter(
       (record) =>
         Number(record.value?.flight_id) === identity.flightId &&
-        String(record.value?.source_package_id) === identity.packageId,
+        String(record.value?.source_package_id) === identity.packageId &&
+        !removedDraftIds.has(record.id),
     )
     .sort(
       (left, right) =>
@@ -3017,6 +3086,9 @@ async function rebaseOperationalDraftAfterCoordinationUpdate(previousPackage, fr
     throw new Error('O rascunho local já está baseado em outra versão do voo.');
   }
 
+  if (existingRdv.value?.removed_stage_draft_ids?.length) {
+    throw new Error('Há etapas removidas no rascunho offline. Envie ou revise essa exclusão antes de atualizar o planejamento.');
+  }
   const stageRecords = (await vault.listJson('stage_drafts')).filter(
     (record) => Number(record.value?.flight_id) === freshIdentity.flightId,
   );
@@ -3443,10 +3515,34 @@ async function completeAndSendCanonicalRdv() {
   try {
     setCoordinationMessage('1/3 — Sincronizando os dados do voo…', 'attention');
     await flushOperationalSave();
-    await queueCurrentDraftForSync();
-    await prepareFlightPackage(flightId, { allowDuringFlight: true });
-
     let state = await getCoordinationState();
+    const latestAcceptedSequence = Number(state.latestSync?.value?.command_identity?.local_sequence || 0);
+    const latestLocalSequence = Number(activeRdvDraft?.local_sequence || operationalLocalSequence || 0);
+    const canContinueWithoutNewSync =
+      latestAcceptedSequence >= latestLocalSequence &&
+      (state.canFinalize ||
+        state.rdv?.status === 'preenchimento_finalizado' ||
+        state.rdv?.workflow_status === 'enviado');
+
+    if (!canContinueWithoutNewSync) {
+      const syncConfirmed = await queueCurrentDraftForSync();
+      if (!syncConfirmed) {
+        const syncDetail = String(rdvSyncStatus?.textContent || '').trim();
+        throw new Error(
+          'Etapa 1/3 não concluída: o servidor não confirmou o recebimento. ' +
+            'O voo permanece salvo no tablet.' +
+            (syncDetail ? ' Motivo: ' + syncDetail : ' Use “Enviar informações do voo” para tentar novamente.'),
+        );
+      }
+      const refreshed = await prepareFlightPackage(flightId, { allowDuringFlight: true });
+      if (!refreshed) {
+        throw new Error(
+          'O servidor recebeu o lançamento, mas não foi possível atualizar o status. ' +
+            'Use “Atualizar status” antes de concluir.',
+        );
+      }
+      state = await getCoordinationState();
+    }
     if (state.rdv?.workflow_status === 'enviado') {
       const snapshot = buildHandoffSuccessSnapshot(state.rdv);
       await exitOfflineFlightMode();
@@ -3481,27 +3577,30 @@ async function completeAndSendCanonicalRdv() {
     const sent = await sendCanonicalRdvToCoordination({ skipConfirm: true });
     if (!sent) throw new Error('O servidor não confirmou o recebimento pela Coordenação.');
   } catch (error) {
-    setCoordinationMessage(
-      error instanceof Error ? error.message : 'Não foi possível concluir o envio do voo.',
-      'error',
-    );
+    const detail = error instanceof Error ? error.message : 'Não foi possível concluir o envio do voo.';
+    setCoordinationMessage(detail, 'error');
+    return;
   } finally {
+    const failure = coordinationStatus?.classList.contains('error')
+      ? coordinationStatus.textContent
+      : null;
     completeSendInFlight = false;
     if (!handoffSuccessCard || handoffSuccessCard.classList.contains('hidden')) {
       await refreshCoordinationControls().catch(() => undefined);
+      if (failure) setCoordinationMessage(failure, 'error');
     }
   }
 }
 
 async function queueCurrentDraftForSync() {
-  if (operationalSyncInFlight) return;
+  if (operationalSyncInFlight) return false;
   if (activePackageData()?.contract?.sync_supported !== true) {
     setRdvSyncMessage(
       'Sincronização ainda não foi habilitada para este pacote de voo.',
       'attention',
     );
     updateSyncButtonState();
-    return;
+    return false;
   }
 
   operationalSyncInFlight = true;
@@ -3617,14 +3716,41 @@ async function queueCurrentDraftForSync() {
     operationalSyncInFlight = false;
     updateSyncButtonState();
     if (activeRdvDraft) renderOperationalEditor({ preserveScroll: true });
-    return;
+    return false;
   }
 
   operationalSyncInFlight = false;
   updateSyncButtonState();
-  await drainPilotOutbox({
-    onlyFlightId: activePackageData()?.voo?.id ?? null,
-  });
+  const flightId = Number(activePackageData()?.voo?.id || 0);
+  try {
+    await drainPilotOutbox({ onlyFlightId: flightId });
+    const unresolved = await listOutboxForFlight(flightId);
+    const receipt = await latestAcceptedSyncReceiptForFlight(flightId);
+    const persisted = await vault.getJson('rdv_drafts', rdvDraftRecordId(flightId));
+    const acceptedSequence = Number(receipt?.value?.command_identity?.local_sequence || 0);
+    const persistedSequence = Number(persisted?.value?.local_sequence || 0);
+    if (unresolved.length > 0 || !receipt || acceptedSequence < persistedSequence) {
+      const blocked = unresolved.find((record) => record.value?.status === 'blocked');
+      const error = blocked?.value?.last_error || unresolved.at(-1)?.value?.last_error || {};
+      const detail = String(error.message || '').trim();
+      const code = String(error.code || '').trim();
+      setRdvSyncMessage(
+        'O servidor ainda não confirmou este lançamento. Os dados seguem salvos no tablet.' +
+          (detail ? ' Motivo: ' + detail + (code ? ' [' + code + ']' : '') + '.' : '') +
+          ' Use “Enviar informações do voo” para tentar novamente.',
+        blocked ? 'error' : 'attention',
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    setRdvSyncMessage(
+      'Não foi possível confirmar a transmissão. O lançamento continua salvo no tablet: ' +
+        (error instanceof Error ? error.message : 'erro desconhecido'),
+      'error',
+    );
+    return false;
+  }
 }
 
 function createEditorField({
@@ -3654,6 +3780,14 @@ function createEditorField({
     input.inputMode = inputMode;
   }
   input.value = value ?? '';
+  if (type === 'textarea') {
+    // O teclado do iPad pode sugerir correções em português sem internet
+    // e sem enviar observações operacionais para um serviço externo.
+    input.lang = 'pt-BR';
+    input.spellcheck = true;
+    input.setAttribute('autocorrect', 'on');
+    input.setAttribute('autocapitalize', 'sentences');
+  }
   input.readOnly = readOnly || operationalSyncInFlight;
   input.addEventListener('input', () => {
     if (isDurationField) {
@@ -3664,6 +3798,39 @@ function createEditorField({
   });
   if (onBlur) input.addEventListener('blur', () => onBlur(input.value, input));
   wrapper.append(title, input);
+  if (type === 'textarea' && !readOnly && typeof onInput === 'function') {
+    // Phrases are opt-in; never invent an occurrence or overwrite the pilot's record.
+    // No text is sent to external grammar/AI services.
+    const templates = [
+      ['Retorno antecipado', 'Retorno à base antes de concluir a rota planejada. Motivo: '],
+      ['Interrupção da operação', 'Operação interrompida. Motivo: '],
+      ['Divergência operacional', 'Divergência em relação ao planejamento: '],
+      ['Informação complementar', 'Informação complementar: '],
+    ];
+    const select = document.createElement('select');
+    select.setAttribute('aria-label', 'Inserir observação predefinida em ' + label);
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = 'Inserir texto predefinido (opcional)';
+    select.append(empty);
+    for (const [name, value] of templates) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = name;
+      select.append(option);
+    }
+    select.disabled = operationalSyncInFlight;
+    select.addEventListener('change', () => {
+      if (!select.value) return;
+      input.value = String(input.value || '').trim()
+        ? String(input.value).trimEnd() + '\n' + select.value
+        : select.value;
+      onInput(input.value, input);
+      select.value = '';
+      input.focus();
+    });
+    wrapper.append(select);
+  }
   if (note) {
     const noteEl = document.createElement('span');
     noteEl.className = 'field-note';
@@ -4192,10 +4359,10 @@ function renderRdvFormFields() {
       onBlur: coordFlightNumber ? null : () => void flushOperationalSave(),
     }),
     createEditorField({
-      label: 'Relatório de voo',
+      label: 'Relatório de voo (editável)',
       value: common.numero_db || '',
       type: 'text',
-      note: 'Número do DB / relatório de voo informado pelo piloto.',
+      note: 'Pode corrigir ou completar este número até concluir o voo; as mudanças ficam salvas no tablet.',
       onInput: (value) => { common.numero_db = value; scheduleOperationalSave(); },
       onBlur: () => void flushOperationalSave(),
     }),
@@ -4262,10 +4429,10 @@ function renderRdvFormFields() {
   headingNote.textContent =
     'Planejado ' + minutesToHhMm(plannedMinutes) +
     ' · Tempo total realizado ' + minutesToHhMm(realizedMinutes) +
-    ' · Diferença a justificar ' + String(requiredMinutes) + ' min.';
+    ' · Desvio ' + String(requiredMinutes) + ' min (justificativa opcional).';
   const sourceGuidance = document.createElement('span');
   sourceGuidance.className = 'field-note justification-guidance';
-  sourceGuidance.textContent = 'Busque sempre a causa raiz do motivo do atraso.';
+  sourceGuidance.textContent = 'Opcional. Caso registre um motivo, escolha a causa operacional real do desvio.';
   justificationTitle.append(headingStrong, headingNote, sourceGuidance);
   const addJustification = document.createElement('button');
   addJustification.type = 'button';
@@ -4290,14 +4457,16 @@ function renderRdvFormFields() {
 
   const status = document.createElement('div');
   const remaining = requiredMinutes - assignedMinutes;
-  status.className = 'statusline ' + (requiredMinutes === assignedMinutes ? 'ok' : 'attention');
+  status.className = 'statusline ' + (assignedMinutes === 0 || remaining === 0 ? 'ok' : 'attention');
   status.textContent = requiredMinutes <= 0
     ? 'O tempo realizado não excede o planejado. Nenhuma justificativa é necessária.'
-    : remaining === 0
-      ? 'Justificativas fecham exatamente os ' + String(requiredMinutes) + ' minutos de diferença.'
-      : remaining > 0
-        ? 'Ainda faltam justificar ' + String(remaining) + ' minuto(s).'
-        : 'As justificativas excedem a diferença em ' + String(Math.abs(remaining)) + ' minuto(s).';
+    : assignedMinutes === 0
+      ? 'Justificativa opcional: você pode concluir o voo sem selecionar um motivo.'
+      : remaining === 0
+        ? 'Justificativas fecham exatamente os ' + String(requiredMinutes) + ' minutos de diferença.'
+        : remaining > 0
+          ? 'Justificativas preenchidas: ainda faltam ' + String(remaining) + ' minuto(s).'
+          : 'As justificativas excedem a diferença em ' + String(Math.abs(remaining)) + ' minuto(s).';
   justificationPanel.append(status);
 
   const options = (Array.isArray(packageData?.catalogos?.justificativas_voo)
@@ -4389,14 +4558,16 @@ function refreshStageDerivedTimes(stageDraft) {
     fields.horario_motor_ligado,
     fields.horario_motor_desligado || fields.horario_pouso,
   );
-  fields.starts = String(fields.horario_motor_ligado || '').trim() ? '1' : '';
   const totalWeight = calcStageTotalWeight(fields);
   fields.peso_total = totalWeight === null ? '' : String(totalWeight);
 }
 
 function refreshAllStageDerivedTimes() {
   applyStageContinuity(activeStageDrafts);
-  for (const stageDraft of activeStageDrafts) refreshStageDerivedTimes(stageDraft);
+  for (const stageDraft of activeStageDrafts) {
+    applyStandardPassengerBaggageWeight(stageDraft.fields || {});
+    refreshStageDerivedTimes(stageDraft);
+  }
 }
 
 function applyQuickTiming(stage, field, action) {
@@ -4459,7 +4630,7 @@ function renderStageFields() {
         ? String(fields.origem_icao).trim() + ' → ' + String(fields.destino_icao).trim()
         : 'Etapa ' + String(fields.numero_etapa || index + 1);
     button.textContent = routeLabel;
-    button.disabled = operationalSyncInFlight;
+    // Navegação não é edição: o piloto pode consultar outras etapas mesmo enquanto envia.
     button.addEventListener('click', () => {
       activeStageTabIndex = index;
       renderStageFields();
@@ -4506,6 +4677,28 @@ function renderStageFields() {
   }
   card.append(quick);
 
+  // Opção por etapa, desmarcada por padrão; nunca sobrescrever peso real sem opt-in.
+  const standardWeightOption = document.createElement('label');
+  standardWeightOption.className = 'pilot-standard-weight-toggle';
+  const standardWeightCheck = document.createElement('input');
+  standardWeightCheck.type = 'checkbox';
+  standardWeightCheck.checked = fields.peso_padrao_ativo === true;
+  standardWeightCheck.disabled = operationalSyncInFlight;
+  const standardWeightCaption = document.createElement('span');
+  standardWeightCaption.textContent = 'Utilizar peso padrão (180 lb passageiro + 20 lb bagagem por pessoa)';
+  standardWeightOption.append(standardWeightCheck, standardWeightCaption);
+  standardWeightCheck.addEventListener('change', () => {
+    fields.peso_padrao_ativo = standardWeightCheck.checked;
+    if (standardWeightCheck.checked) applyStandardPassengerBaggageWeight(fields);
+    // Desmarcar preserva valores; editar pesos também desmarca automaticamente.
+    refreshAllStageDerivedTimes();
+    activeRdvDraft.form = applySafeStageAggregates(activeRdvDraft.form, activeStageDrafts);
+    scheduleOperationalSave();
+    renderStageFields();
+    refreshDraftValidationPresentation();
+  });
+  card.append(standardWeightOption);
+
   refreshAllStageDerivedTimes();
   const grid = document.createElement('div');
   grid.className = 'editor-grid';
@@ -4525,11 +4718,14 @@ function renderStageFields() {
     ['Tempo total', 'tempo_total', 'text', null, true, false, 'Calculado: partida → corte; sem corte, partida → pouso'],
     ['IFR (duração)', 'tempo_ifr', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
     ['Noturno (duração)', 'tempo_noturno', 'duration', 'numeric', false, false, 'Digite apenas os números, por exemplo 0130'],
-    ['Partidas', 'starts', 'number', 'numeric', true, false, 'Calculado automaticamente pela hora de partida'],
+    ['Partidas', 'starts', 'number', 'numeric', false, false,
+      index > 0 && stageDraft.starts_auto_derived === true
+        ? 'Calculado automaticamente: 0 significa que não houve novo acionamento dos motores após a etapa anterior. Pode corrigir se necessário.'
+        : 'Quantidade de acionamentos dos motores nesta etapa; 0 quando não houve novo acionamento.'],
     ['Passageiros', 'pax', 'number', 'numeric', false, false, 'Quantidade de passageiros'],
     ['Peso dos passageiros', 'peso_passageiros', 'number', 'decimal', false, false, null],
     ['Peso da bagagem', 'peso_bagagem', 'number', 'decimal', false, false, null],
-    ['Carga', 'payload', 'number', 'decimal', false, false, null],
+    ['Peso da carga', 'payload', 'number', 'decimal', false, false, null],
     ['Peso total', 'peso_total', 'number', 'decimal', true, false, 'Calculado automaticamente'],
     [
       index === 0 ? 'Combustível inicial' : 'Combustível inicial',
@@ -4547,7 +4743,7 @@ function renderStageFields() {
   const dualWeightLabels = {
     peso_passageiros: 'Peso dos passageiros',
     peso_bagagem: 'Peso da bagagem',
-    payload: 'Carga',
+    payload: 'Peso da carga',
     peso_total: 'Peso total da aeronave',
   };
 
@@ -4559,11 +4755,16 @@ function renderStageFields() {
         readOnly,
         note: readOnly
           ? 'Calculado automaticamente e exibido em lb e kg.'
-          : 'Digite em lb ou kg; a outra unidade é calculada automaticamente.',
+          : key === 'peso_passageiros'
+             ? 'Peso padrão ativado: 180 lb por passageiro. Editar desmarca o padrão.'
+             : key === 'peso_bagagem'
+               ? 'Peso padrão ativado: 20 lb de bagagem por passageiro. Editar desmarca o padrão.'
+               : 'Digite em lb ou kg; a outra unidade é calculada automaticamente.',
         onChangeLb: readOnly
           ? null
           : (value) => {
               fields[key] = value;
+              if (key === 'peso_passageiros' || key === 'peso_bagagem') fields.peso_padrao_ativo = false;
               if (key === 'payload') fields.unidade_payload = 'LB';
               else fields.unidade_peso = 'LB';
               refreshAllStageDerivedTimes();
@@ -4596,7 +4797,12 @@ function renderStageFields() {
         ? null
         : (value) => {
             fields[key] = value;
-            if (key === 'horario_motor_ligado') stageDraft.continuity_start_derived = false;
+            if (key === 'horario_motor_ligado') {
+              stageDraft.continuity_start_derived = false;
+              if (index === 0 && value && String(fields.starts ?? '').trim() === '') fields.starts = '1';
+            }
+            if (key === 'starts') stageDraft.starts_auto_derived = false;
+            if (key === 'pax') applyStandardPassengerBaggageWeight(fields);
             if (key === 'combustivel_inicio' && index > 0) {
               const previousFields = activeStageDrafts[index - 1]?.fields || {};
               previousFields.combustivel_fim = value;
@@ -4665,26 +4871,61 @@ function renderStageFields() {
   );
 
   card.append(grid);
-  if (stageDraft.source_stage_id == null && activeStageDrafts.length > 1) {
+  if (activeStageDrafts.length > 1) {
+    const canRemove = canRemoveOperationalStage(index);
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
     removeButton.className = 'secondary stage-delete';
-    removeButton.textContent = 'Excluir esta etapa';
-    removeButton.disabled = operationalSyncInFlight;
+    removeButton.textContent = stageDraft.source_stage_id == null
+      ? 'Excluir etapa do rascunho' : 'Cancelar etapa não realizada';
+    removeButton.disabled = !canRemove;
     removeButton.addEventListener('click', () => void removeOperationalStage(index));
     card.append(removeButton);
+    if (!canRemove && !operationalSyncInFlight) {
+      const explanation = document.createElement('span');
+      explanation.className = 'field-note';
+      explanation.textContent = stageDraft.source_stage_id != null && index !== activeStageDrafts.length - 1
+        ? 'Só é possível cancelar a última etapa planejada.'
+        : 'Esta etapa possui horários, pousos, acionamentos ou abastecimento. Preserve o registro e informe a ocorrência à Coordenação.';
+      card.append(explanation);
+    }
   }
   rdvStageFields.append(card);
+}
+
+function canRemoveOperationalStage(index) {
+  const stage = activeStageDrafts[index];
+  if (!stage || activeStageDrafts.length <= 1 || operationalSyncInFlight) return false;
+  if (stage.source_stage_id == null) return true;
+  if (index !== activeStageDrafts.length - 1 || !stage.source_stage_updated_at) return false;
+  const fields = stage.fields || {};
+  const hasRealizedData = ['horario_motor_ligado', 'horario_decolagem', 'horario_pouso', 'horario_motor_desligado', 'tempo_decolagem_pouso', 'tempo_total']
+    .some((field) => String(fields[field] || '').trim() !== '');
+  const hasOperationalCounters = ['pousos_diurnos', 'pousos_noturnos', 'starts']
+    .some((field) => Number(fields[field] || 0) > 0);
+  const hasFueling = (activeRdvDraft?.fuelings || []).some((fueling) => Number(fueling.etapa_numero) === Number(fields.numero_etapa));
+  return !hasRealizedData && !hasOperationalCounters && !hasFueling;
 }
 
 async function removeOperationalStage(index) {
   if (!activeRdvDraft || operationalSyncInFlight) return;
   const removed = activeStageDrafts[index];
-  if (!removed || removed.source_stage_id != null || activeStageDrafts.length <= 1) return;
+  if (!removed || !canRemoveOperationalStage(index)) return;
+  if (removed.source_stage_id != null && !window.confirm('Cancelar esta etapa planejada não realizada? O cancelamento será enviado à Coordenação quando sincronizar.')) return;
   await flushOperationalSave();
   const removedNumber = Number(removed.fields?.numero_etapa || index + 1);
+  activeRdvDraft.removed_stage_draft_ids = [...new Set([...(activeRdvDraft.removed_stage_draft_ids || []), removed.entity_local_id])];
+  if (removed.source_stage_id != null) {
+    activeRdvDraft.removed_stages = [
+      ...(activeRdvDraft.removed_stages || []),
+      { source_stage_id: removed.source_stage_id,
+        source_stage_updated_at: removed.source_stage_updated_at,
+        numero_etapa: Number(removed.fields.numero_etapa) },
+    ];
+  }
+  // Manter registro original cifrado até recibo do servidor; a lista de
+  // tombstones no RDV é a fonte atômica para ignorá-lo após reiniciar.
   activeStageDrafts.splice(index, 1);
-  await vault.deleteJson('stage_drafts', removed.entity_local_id).catch(() => undefined);
 
   activeRdvDraft.fuelings = (activeRdvDraft.fuelings || [])
     .filter((fueling) => Number(fueling.etapa_numero) !== removedNumber)
@@ -4763,6 +5004,12 @@ function addOperationalFueling() {
 function renderFuelingFields() {
   rdvFuelingFields.replaceChildren();
   const fuelings = Array.isArray(activeRdvDraft.fuelings) ? activeRdvDraft.fuelings : [];
+  if (fuelings.length === 0) {
+    const notice = document.createElement('p');
+    notice.className = 'field-note';
+    notice.textContent = 'Sem abastecimentos. Use “+ Incluir nota” quando houver uma nota de abastecimento.';
+    rdvFuelingFields.append(notice);
+  }
   fuelings.forEach((fueling, index) => {
     const card = document.createElement('section');
     card.className = 'editor-stage';
@@ -4807,6 +5054,20 @@ function renderFuelingFields() {
       }));
     }
     card.append(grid);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'secondary stage-delete';
+    remove.textContent = 'Excluir nota do rascunho';
+    remove.disabled = operationalSyncInFlight;
+    remove.addEventListener('click', () => {
+      if (!fuelingRowIsEmpty(fueling) &&
+        !window.confirm('Excluir esta nota do rascunho local? Notas já recebidas pelo servidor não serão excluídas.')) return;
+      activeRdvDraft.fuelings.splice(index, 1);
+      scheduleOperationalSave();
+      renderFuelingFields();
+      refreshDraftValidationPresentation();
+    });
+    card.append(remove);
     rdvFuelingFields.append(card);
   });
 }

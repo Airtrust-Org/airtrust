@@ -206,7 +206,7 @@ export async function suggestSimulatorTrainingDates(params: {
         continue;
       }
 
-      const participantIds = [...new Set(block.sessions.map((session) => session.employee_id))];
+      const participantIds = [...new Set([...block.sessions, ...(block.support ? [block.support] : [])].map((session) => session.employee_id))];
       const latestConstraints = participantIds
         .map((id) => latestByEmployee.get(id))
         .filter((value): value is string => Boolean(value));
@@ -230,7 +230,7 @@ export async function suggestSimulatorTrainingDates(params: {
 
         const rosterRows: NonNullable<SuggestedSimulatorTrainingBlock['roster']> = [];
         let rosterOk = true;
-        for (const session of block.sessions) {
+        for (const session of [...block.sessions, ...(block.support ? [block.support] : [])]) {
           const roster = await params.checkRoster(session.employee_id, session.employee_name, date);
           rosterRows.push({
             employee_id: session.employee_id,

@@ -99,6 +99,9 @@ export function normalizeTenantRole(role: unknown): TenantContext['role'] {
     case 'gestor':
     case 'compliance':
       return 'manager';
+    // Flight coordinators do not inherit tenant-wide edit privileges.
+    case 'coordenacao_voo':
+      return 'viewer';
     case 'editor':
       return 'editor';
     case 'instructor':
@@ -241,7 +244,11 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
 
     // Buscar dados da empresa e permissões do usuário
 
-    const result = useUsuariosEmpresas
+    // Somente papel de plataforma PERSISTIDO permite selecionar tenant sem
+    // vínculo em usuarios_empresas. O tenant permanece ativo e explicitamente
+    // identificado no JWT; gestores nunca usam este caminho.
+    const platformAdmin = isPlatformAdminAccess(platformAccessState);
+    const result = useUsuariosEmpresas && !platformAdmin
       ? await db
           .prepare(
             `
@@ -280,7 +287,7 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
           WHERE e.id = ? AND e.ativo = 1 AND e.deleted_at IS NULL
         `,
           )
-          .bind(normalizeTenantRole(userRoleFromJwt), empresaIdFromJwt)
+          .bind(platformAdmin ? 'admin' : normalizeTenantRole(userRoleFromJwt), empresaIdFromJwt)
           .first<{
             empresa_id: number;
             codigo: string;

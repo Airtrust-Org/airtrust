@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { verifyReleaseGatePayloads } from './verify-release-gates.mjs';
+import { fetchAllCommitCheckRuns, verifyReleaseGatePayloads } from './verify-release-gates.mjs';
 
 const greenChecks = [
   { name: 'lint', status: 'completed', conclusion: 'success' },
@@ -95,5 +95,44 @@ test('accepts a green classic airtrust-gcb status when present', () => {
       checkRuns: greenChecks,
       statuses: [{ context: 'airtrust-gcb', state: 'success' }],
     }),
+  );
+});
+
+test('paginates beyond 100 unrelated checks before validating all eight required gates', async () => {
+  const noise = Array.from({ length: 110 }, (_, i) => ({
+    name: `optional-${i}`, status: 'completed', conclusion: 'success',
+  }));
+  const all = [...noise, ...greenChecks];
+  const requestedPages = [];
+  const checkRuns = await fetchAllCommitCheckRuns({
+    repository: 'Airtrust-Org/airtrust',
+    sha: 'a'.repeat(40),
+    token: 'test-token',
+    get: async (pathname, token) => {
+      assert.equal(token, 'test-token');
+      requestedPages.push(pathname);
+      const page = Number(new URL(pathname, 'https://api.github.com').searchParams.get('page'));
+      return { total_count: all.length, check_runs: all.slice((page - 1) * 100, page * 100) };
+    },
+  });
+  assert.equal(requestedPages.length, 2);
+  assert.equal(checkRuns.length, 118);
+  assert.doesNotThrow(() => verifyReleaseGatePayloads({ checkRuns, statuses: [] }));
+});
+
+test('fails closed when GitHub claims additional check runs but the next page is empty', async () => {
+  await assert.rejects(
+    fetchAllCommitCheckRuns({
+      repository: 'Airtrust-Org/airtrust',
+      sha: 'b'.repeat(40),
+      token: 'test-token',
+      get: async (pathname) => ({
+        total_count: 118,
+        check_runs: new URL(pathname, 'https://api.github.com').searchParams.get('page') === '1'
+          ? Array.from({ length: 100 }, (_, i) => ({ name: `optional-${i}` }))
+          : [],
+      }),
+    }),
+    /RELEASE_CHECK_RUNS_INCOMPLETE/,
   );
 });

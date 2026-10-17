@@ -710,10 +710,14 @@ router.get(
   safe(async (c) => {
     const db: D1Database = c.env.DB;
     const { empresaId } = getTenantContext(c);
-    const access = await getEmployeeSectorAccess(c, empresaId);
-    const columnsSupport = await loadQualificacoesTiposColumnsSupport(db);
+    // Leituras independentes de escopo RBAC e capacidade do schema podem
+    // ocorrer juntas. Todas precisam concluir antes de montar qualquer filtro SQL.
+    const [access, columnsSupport, hasQualificacoesTiposSetores] = await Promise.all([
+      getEmployeeSectorAccess(c, empresaId),
+      loadQualificacoesTiposColumnsSupport(db),
+      hasQualificacoesTiposSetoresTable(db),
+    ]);
     const hasIsCheck = columnsSupport.hasIsCheck;
-    const hasQualificacoesTiposSetores = await hasQualificacoesTiposSetoresTable(db);
     const limitRaw = c.req.query('limit');
     const limitParsed = parseInt(limitRaw || '200', 10);
     const categoria = String(c.req.query('categoria') || '').trim();

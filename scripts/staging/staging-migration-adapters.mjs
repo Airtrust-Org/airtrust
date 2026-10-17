@@ -235,5 +235,36 @@ WHERE NOT EXISTS (SELECT 1 FROM funcoes WHERE empresa_id=6 AND deleted_at IS NUL
 ${migrationSql}`;
   }
 
+  if (migrationName === '0537_training_catalog_source_backed_metadata.sql') {
+    // The staging snapshot has LGPD_SEG_INFO but not the independent LGPD
+    // canonical qualification model. Never conflate the two identities.
+    // This bootstrap is staging-only, additive, tenant-scoped, without
+    // employee data, LMS course/enrollment, history or certificate writes.
+    // The 0537 preflight requires exactly one safe source when LGPD is missing.
+    const bootstrap = `-- staging-only canonical LGPD reference for 0537
+INSERT INTO qualificacoes_tipos (
+  empresa_id,codigo,nome,descricao,categoria,categoria_id,area_id,
+  validade,carga_horaria,carga_horaria_inicial,carga_horaria_recorrente,
+  ativo,is_check,created_at,updated_at
+)
+SELECT 6,'LGPD','LGPD — Lei Geral de Proteção de Dados Pessoais',
+       'Modelo de referência de treinamento LGPD da Costa do Sol.',
+       src.categoria,src.categoria_id,src.area_id,
+       24,NULL,NULL,NULL,1,0,datetime('now'),datetime('now')
+  FROM qualificacoes_tipos src
+ WHERE src.empresa_id=6 AND src.codigo='LGPD_SEG_INFO'
+   AND src.ativo=1 AND src.deleted_at IS NULL
+   AND src.categoria='EAD' AND src.categoria_id IS NOT NULL
+   AND src.carga_horaria IS NULL
+   AND src.carga_horaria_inicial IS NULL
+   AND src.carga_horaria_recorrente IS NULL
+   AND NOT EXISTS (
+     SELECT 1 FROM qualificacoes_tipos qt
+      WHERE qt.empresa_id=6 AND UPPER(TRIM(qt.codigo))='LGPD'
+   )
+ LIMIT 1;`;
+    return `${bootstrap}\n\n${migrationSql}`;
+  }
+
   return migrationSql;
 }

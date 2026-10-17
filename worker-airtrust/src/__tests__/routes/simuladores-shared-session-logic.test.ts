@@ -6,6 +6,33 @@ import {
 } from '../../routes/simuladores-shared-session-logic';
 
 describe('simuladores shared session logic', () => {
+  it('assigns PF and PM while granting curricular credit only to the trainee, never to support', () => {
+    const normalized = validateAndNormalizeSharedSessionRequest({
+      data: '2027-03-17',
+      hora_inicio: '09:00', hora_fim: '11:00',
+      simulador_id: 4, instrutor_id: 3,
+      participantes: [
+        { funcionario_id: 10, cumpre_treinamento: true, gera_ficha: true, modelo_sessao_id: 101 },
+        { funcionario_id: 20, cumpre_treinamento: false, gera_ficha: false, modelo_sessao_id: null },
+      ],
+      segmentos: [{
+        inicio: '09:00', fim: '11:00',
+        atribuicao_funcionario_ids: [10],
+        finalidade_codigo: 'SOP_NORMAL',
+        participantes: [
+          { funcionario_id: 10, funcao: 'PF', cumpre_treinamento: true,
+            gera_ficha: true, modelo_sessao_id: 101 },
+          { funcionario_id: 20, funcao: 'PM', cumpre_treinamento: false,
+            gera_ficha: false, modelo_sessao_id: null },
+        ],
+      }],
+    });
+    expect(normalized.atribuicoes_planejadas.map((a) => a.funcionario_id)).toEqual([10]);
+    expect(normalized.resumo_participantes.find((p) => p.funcionario_id === 20))
+      .toMatchObject({ curricular_minutos: 0, gera_ficha: false });
+  });
+
+
   it('credits both curricula explicitly when both segments attend both assignments', () => {
     const normalized = validateAndNormalizeSharedSessionRequest({
       data: '2026-06-15',

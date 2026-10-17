@@ -255,6 +255,7 @@ describe('LmsPlayer — matrícula 402 (SCORM_STATUS_INCONSISTENT)', () => {
       completion_diagnostic: { ...SCORM_STATUS_INCONSISTENT_DIAGNOSTIC, status: 'accepted', code: 'SCORM_COMPLETION_ACCEPTED' },
     };
 
+    refetchMatriculaMock.mockResolvedValue({ data: matriculaMock });
     await act(async () => {
       window.dispatchEvent(
         new MessageEvent('message', {

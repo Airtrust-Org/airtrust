@@ -1,3 +1,4 @@
+import { LmsCourseComplianceMetrics, useLmsCourseCompliance } from './LmsCourseComplianceMetrics';
 /**
  * LmsMatriculas — Gestão de matrículas de um curso específico
  * Rota: /lms/matriculas/:cursoId
@@ -43,6 +44,7 @@ import {
   isLmsEnrollmentAlertable,
   LmsEnrollmentAlertModal,
 } from './LmsEnrollmentAlertModal';
+import { shouldShowLmsEnrollmentDeadline } from './lmsEnrollmentDeadline';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -85,7 +87,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
 
   if (diffDays < 0) {
     return {
-      label: `Vencido há ${Math.abs(diffDays)}d`,
+      label: `Prazo da matrícula vencido há ${Math.abs(diffDays)}d`,
       className: 'bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200',
       pulseClassName: '',
       icon: <AlertCircle className="h-3 w-3" />,
@@ -94,7 +96,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
 
   if (diffDays <= 7) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-200',
       pulseClassName: 'animate-pulse',
       icon: <Clock className="h-3 w-3" />,
@@ -103,7 +105,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
 
   if (diffDays <= 30) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200',
       pulseClassName: '',
       icon: <Clock className="h-3 w-3" />,
@@ -111,7 +113,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
   }
 
   return {
-    label: `Vence em ${diffDays}d`,
+    label: `Prazo da matrícula: ${diffDays}d restantes`,
     className: 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200',
     pulseClassName: '',
     icon: <Calendar className="h-3 w-3" />,
@@ -173,7 +175,8 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-function DeadlineBadge({ dataExpiracao }: { dataExpiracao: string | null | undefined }) {
+function DeadlineBadge({ status, dataExpiracao }: { status: MatriculaStatus; dataExpiracao: string | null | undefined }) {
+  if (!shouldShowLmsEnrollmentDeadline(status, dataExpiracao)) return null;
   const meta = getDeadlineMeta(dataExpiracao);
 
   if (!meta) return null;
@@ -495,6 +498,7 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
 export default function LmsMatriculas() {
   const { cursoId: cursoIdParam } = useParams<{ cursoId: string }>();
   const navigate = useNavigate();
+  const { data: complianceRows } = useLmsCourseCompliance();
   const cursoId = Number(cursoIdParam);
 
   const [showModal, setShowModal] = useState(false);
@@ -694,10 +698,8 @@ export default function LmsMatriculas() {
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                           {cursoItem.categoria ?? 'Sem categoria'}
                         </p>
-                        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                          {(cursoItem.total_matriculas ?? 0).toString()} matrícula(s) ·{' '}
-                          {(cursoItem.total_concluidos ?? 0).toString()} concluída(s)
-                        </p>
+
+                        <LmsCourseComplianceMetrics curso={cursoItem} rows={complianceRows} compact />
                       </button>
                     ))}
                   </div>
@@ -713,8 +715,8 @@ export default function LmsMatriculas() {
   const isLoading = loadingCurso || loadingMat;
 
   // Estatísticas rápidas
-  const total = todasMatriculas.length;
-  const concluidos = todasMatriculas.filter((m) => m.status === 'CONCLUIDO').length;
+  const total = matriculasRes?.total ?? todasMatriculas.length;
+  const reprovados = todasMatriculas.filter((m) => m.status === 'REPROVADO').length;
   const emAndamento = todasMatriculas.filter((m) => m.status === 'EM_ANDAMENTO').length;
   const naoIniciados = todasMatriculas.filter((m) => m.status === 'NAO_INICIADO').length;
   const activeFuncionarioIds = new Set(
@@ -726,7 +728,7 @@ export default function LmsMatriculas() {
       <LmsPageShell>
         <PageHeader
           title={loadingCurso ? 'Carregando matrículas...' : (curso?.titulo ?? 'Matrículas')}
-          subtitle={`Gerenciamento de matrículas${curso ? ` · ${total} aluno(s) vinculados` : ''}`}
+          subtitle={`Gerenciamento de matrículas${curso ? ` · ${total} ${statusFilter ? 'registro(s) filtrado(s)' : 'matrícula(s) operacional(is)'}` : ''}`}
           actions={
             <div className="flex gap-2">
               <Button variant="secondary" onClick={() => navigate('/lms/admin/cursos')}>
@@ -748,7 +750,7 @@ export default function LmsMatriculas() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-2xl space-y-2">
                 <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">
-                  Acompanhe distribuição, conclusão e pendências do curso em uma única grade.
+                  Acompanhe as matrículas necessárias e as pendências do curso em uma única grade.
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
                   Consulte o estado das matrículas, identifique atrasos e abra novas atribuições sem
@@ -760,18 +762,25 @@ export default function LmsMatriculas() {
           </div>
         </section>
 
+        {curso ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+            <h3 className="mb-2 font-semibold">Indicadores do treinamento</h3>
+            <LmsCourseComplianceMetrics curso={curso} rows={complianceRows} />
+          </div>
+        ) : null}
+
         <div className="grid gap-4 lg:grid-cols-4">
           <LmsMetricCard
             title="Total"
             value={total}
-            description="Matrículas ativas no curso"
+            description={statusFilter ? 'Registros no filtro selecionado' : 'Pessoas que precisam realizar o curso'}
             icon={<Users className="h-5 w-5" />}
             accent="bg-slate-100 text-slate-700"
           />
           <LmsMetricCard
-            title="Concluídos"
-            value={concluidos}
-            description="Treinamentos finalizados"
+            title="Reprovados"
+            value={reprovados}
+            description="Necessitam nova tentativa"
             icon={<CheckCircle2 className="h-5 w-5" />}
             accent="bg-emerald-100 text-emerald-700"
           />
@@ -923,7 +932,7 @@ export default function LmsMatriculas() {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <StatusBadge status={m.status} />
-                            <DeadlineBadge dataExpiracao={m.data_expiracao} />
+                            <DeadlineBadge status={m.status} dataExpiracao={m.data_expiracao} />
                           </div>
                         </td>
                         <td className="hidden px-4 py-3 md:table-cell">
@@ -951,14 +960,14 @@ export default function LmsMatriculas() {
                             <div className="space-y-1">
                               <span
                                 className={`block text-xs ${
-                                  new Date(m.data_expiracao) < new Date()
+                                  shouldShowLmsEnrollmentDeadline(m.status, m.data_expiracao) && new Date(m.data_expiracao) < new Date()
                                     ? 'font-medium text-red-600'
                                     : 'text-slate-500'
                                 }`}
                               >
                                 {formatDate(m.data_expiracao)}
                               </span>
-                              <DeadlineBadge dataExpiracao={m.data_expiracao} />
+                              <DeadlineBadge status={m.status} dataExpiracao={m.data_expiracao} />
                             </div>
                           ) : (
                             <span className="text-xs text-slate-300 dark:text-slate-600">—</span>

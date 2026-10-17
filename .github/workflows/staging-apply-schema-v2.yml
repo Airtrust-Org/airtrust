@@ -1,0 +1,255 @@
+name: Apply Reviewed Schema V2 (Staging)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_STAGING_SCHEMA_V2
+        required: true
+        type: string
+      pr_number:
+        description: Open same-repository PR containing the reviewed change
+        required: true
+        type: string
+      release_sha:
+        description: Exact reviewed 40-character PR HEAD SHA
+        required: true
+        type: string
+      change_id:
+        description: Explicitly reviewed Schema V2 change
+        required: true
+        type: choice
+        options:
+          - frms-sleep-opportunity-0552
+      release_reason:
+        description: Reason and authorization for the staging schema change
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+# Share the existing staging mutation lock: no overlapping schema, deploy or SCORM QA.
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Verify and apply one reviewed staging Schema V2 change
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 25
+    env:
+      NODE_VERSION: '24'
+      STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
+      STAGING_DB_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+      PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+      REVIEWED_CHANGE_ID: frms-sleep-opportunity-0552
+      BASELINE_ID: production-d1-baseline-v2-20260714
+      REVIEWED_SQL_HASH: c29e5b38d6e1da17b55312b3a1ff470266ebcf3cd7e178eecd4d0664cec7dd31
+      REVIEWED_PLAN_HASH: 8e4eefde2853f3a1adaa9ffac08fba364e277f99728c911a9ea9939cd0fb1b45
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      CHANGE_ID: ${{ inputs.change_id }}
+    steps:
+      - name: Validate manual dispatch on trusted main
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          RELEASE_REASON: ${{ inputs.release_reason }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo 'TRUSTED_MAIN_REQUIRED' >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_SCHEMA_V2' ]] || { echo 'INVALID_CONFIRMATION' >&2; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'INVALID_RELEASE_SHA' >&2; exit 1; }
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'INVALID_PR_NUMBER' >&2; exit 1; }
+          [[ "$CHANGE_ID" == "$REVIEWED_CHANGE_ID" ]] || { echo 'UNAPPROVED_CHANGE_ID' >&2; exit 1; }
+          [[ -n "$RELEASE_REASON" ]] || { echo 'REASON_REQUIRED' >&2; exit 1; }
+          [[ "$STAGING_DB_ID" != "$PRODUCTION_DB_ID" ]] || { echo 'PRODUCTION_TARGET_REJECTED' >&2; exit 1; }
+          node --input-type=module <<'NODE'
+          const token = process.env.GITHUB_TOKEN;
+          const repo = process.env.GITHUB_REPOSITORY;
+          const number = process.env.PR_NUMBER;
+          const sha = process.env.RELEASE_SHA;
+          const actor = process.env.GITHUB_ACTOR;
+          async function github(path) {
+            const response = await fetch('https://api.github.com/repos/' + repo + path, {
+              headers: {
+                authorization: 'Bearer ' + token,
+                accept: 'application/vnd.github+json',
+                'x-github-api-version': '2022-11-28',
+              },
+            });
+            if (!response.ok) throw new Error('GITHUB_GUARD_HTTP_' + response.status);
+            return response.json();
+          }
+          const pr = await github('/pulls/' + number);
+          if (pr.state !== 'open' || pr.base?.ref !== 'main' ||
+              pr.head?.repo?.full_name !== repo || pr.head?.repo?.fork ||
+              pr.head?.sha?.toLowerCase() !== sha) {
+            throw new Error('REVIEWED_PR_HEAD_OR_ORIGIN_MISMATCH');
+          }
+          const permissions = await github('/collaborators/' + encodeURIComponent(actor) + '/permission');
+          if (!['write', 'push', 'maintain', 'admin'].includes(permissions.permission)) {
+            throw new Error('WORKFLOW_ACTOR_NOT_AUTHORIZED');
+          }
+          console.log('REVIEWED_PR_ORIGIN_HEAD_AND_ACTOR=PASS');
+          NODE
+
+      - name: Checkout trusted release gates
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Verify eight required GitHub release gates for exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Checkout exact reviewed candidate separately
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          path: release
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Verify candidate, manifest, and pinned staging database configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git -C release rev-parse HEAD)" == "$RELEASE_SHA" ]] || { echo 'RELEASE_SHA_DRIFT' >&2; exit 1; }
+          test -f "release/worker-airtrust/schema-v2/$CHANGE_ID.json"
+          test ! -L "release/worker-airtrust/schema-v2/$CHANGE_ID.json"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const config = readFileSync('release/worker-airtrust/wrangler.toml', 'utf8');
+          const section = config.split('[[env.staging.d1_databases]]')[1]?.split(/^\[/m)[0];
+          const name = process.env.STAGING_DB_NAME;
+          const id = process.env.STAGING_DB_ID;
+          if (!section || !section.includes('database_name = "' + name + '"') ||
+              !section.includes('database_id = "' + id + '"') ||
+              section.includes(process.env.PRODUCTION_DB_ID)) {
+            throw new Error('STAGING_D1_PIN_MISMATCH');
+          }
+          const manifest = JSON.parse(readFileSync('release/worker-airtrust/schema-v2/' +
+            process.env.CHANGE_ID + '.json', 'utf8'));
+          if (manifest.changeId !== process.env.REVIEWED_CHANGE_ID ||
+              manifest.baselineId !== process.env.BASELINE_ID ||
+              manifest.fileHash !== process.env.REVIEWED_SQL_HASH ||
+              manifest.planHash !== process.env.REVIEWED_PLAN_HASH ||
+              manifest.filePath !== 'worker-airtrust/schema-v2/changes/0552_frms_sleep_opportunity.sql') {
+            throw new Error('REVIEWED_MANIFEST_SCOPE_MISMATCH');
+          }
+          console.log('STAGING_TARGET_AND_MANIFEST_SCOPE=PASS');
+          NODE
+
+      - name: Install trusted main Worker CLI without executing PR dependencies
+        run: npm --prefix worker-airtrust ci
+
+      - name: Build verified SQL and Schema V2 ledger bundle
+        id: bundle
+        working-directory: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          output="$RUNNER_TEMP/staging-reviewed-schema-v2.sql"
+          node ../scripts/schema-v2/build-reviewed-schema-apply.mjs \
+            "worker-airtrust/schema-v2/$CHANGE_ID.json" "$output" "$CHANGE_ID" "$RELEASE_SHA"
+          test -s "$output"
+          echo "combined_sql=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Verify staging credentials and physical preconditions read-only
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] ||
+            { echo 'STAGING_MIGRATION_CREDENTIALS_MISSING' >&2; exit 1; }
+          query_count() {
+            (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 execute "$STAGING_DB_NAME" \
+              --env staging --remote --json --command="$1") |
+              node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{
+                const rows=JSON.parse(s);const entry=Array.isArray(rows)?rows[0]:rows;
+                const count=entry?.results?.[0]?.total;
+                if(entry?.success!==true || !Number.isInteger(count) || count<0)process.exit(1);
+                console.log(count);
+              });'
+          }
+          [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_baselines_v2 WHERE baseline_id = '$BASELINE_ID' AND status = 'ACTIVE'")" == '1' ]] ||
+            { echo 'STAGING_SCHEMA_V2_BASELINE_NOT_ACTIVE' >&2; exit 1; }
+          [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id = '$CHANGE_ID'")" == '0' ]] ||
+            { echo 'CHANGE_ALREADY_APPLIED_OR_LEDGER_DRIFT' >&2; exit 1; }
+          [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('frms_fadiga_checkin') WHERE name='oportunidade_sono_horas_24h'")" == '0' ]] ||
+            { echo 'COLUMN_ALREADY_PRESENT_WITHOUT_LEDGER' >&2; exit 1; }
+          [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='frms_fadiga_checkin'")" == '1' ]] ||
+            { echo 'FRMS_CHECKIN_TABLE_MISSING' >&2; exit 1; }
+          echo 'SCHEMA_V2_STAGING_PREFLIGHT=PASS'
+
+      - name: Capture verified staging D1 Time Travel recovery point
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 time-travel info "$STAGING_DB_NAME" \
+            --timestamp="$timestamp" --json) > "$RUNNER_TEMP/staging-d1-recovery.json"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const data = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/staging-d1-recovery.json', 'utf8'));
+          if (!/bookmark/i.test(JSON.stringify(data))) throw new Error('STAGING_TIME_TRAVEL_BOOKMARK_MISSING');
+          console.log('STAGING_RECOVERY_BOOKMARK_VERIFIED=PASS');
+          NODE
+          echo "STAGING_RECOVERY_TIMESTAMP_UTC=$timestamp" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply exact reviewed bundle to pinned staging D1
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          COMBINED_SQL: ${{ steps.bundle.outputs.combined_sql }}
+        run: |
+          set -euo pipefail
+          test -s "$COMBINED_SQL"
+          (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 execute "$STAGING_DB_NAME" \
+            --env staging --remote --file="$COMBINED_SQL") > "$RUNNER_TEMP/staging-schema-apply.out"
+          echo 'STAGING_SCHEMA_V2_APPLY_RETURNED_SUCCESS=true'
+
+      - name: Verify physical column and exact ledger provenance
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          query_count() {
+            (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 execute "$STAGING_DB_NAME" \
+              --env staging --remote --json --command="$1") |
+              node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{
+                const rows=JSON.parse(s);const entry=Array.isArray(rows)?rows[0]:rows;
+                const count=entry?.results?.[0]?.total;
+                if(entry?.success!==true || !Number.isInteger(count) || count<0)process.exit(1);
+                console.log(count);
+              });'
+          }
+          metadata="$(node -e 'const m=require("./release/worker-airtrust/schema-v2/"+process.env.CHANGE_ID+".json");console.log(m.fileHash+" "+m.planHash)')"
+          read -r file_hash plan_hash <<< "$metadata"
+          [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID' AND baseline_id='$BASELINE_ID' AND file_hash='$file_hash' AND plan_hash='$plan_hash' AND github_sha='$RELEASE_SHA'")" == '1' ]] ||
+            { echo 'SCHEMA_V2_EXACT_LEDGER_POSTCONDITION_FAILED' >&2; exit 1; }
+          [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('frms_fadiga_checkin') WHERE name='oportunidade_sono_horas_24h' AND type='REAL' AND \"notnull\"=0")" == '1' ]] ||
+            { echo 'FRMS_SLEEP_OPPORTUNITY_COLUMN_POSTCONDITION_FAILED' >&2; exit 1; }
+          echo "SCHEMA_V2_STAGING_APPLIED_AND_VERIFIED=$CHANGE_ID" >> "$GITHUB_STEP_SUMMARY"

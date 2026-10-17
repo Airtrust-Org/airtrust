@@ -10,7 +10,7 @@ describe('resolveLmsCatalogRoleView', () => {
       }),
     ).toEqual({
       showAdministrativeFilters: false,
-      title: 'Meus treinamentos',
+      title: 'Cursos matriculados',
     });
   });
 
@@ -22,7 +22,7 @@ describe('resolveLmsCatalogRoleView', () => {
       }),
     ).toEqual({
       showAdministrativeFilters: false,
-      title: 'Meus treinamentos',
+      title: 'Cursos matriculados',
     });
   });
 

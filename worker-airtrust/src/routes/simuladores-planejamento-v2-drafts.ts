@@ -305,6 +305,33 @@ async function normalizePayload(
       : [];
     for (const block of blocks) {
       if (!block || typeof block !== 'object') continue;
+      const item = block as Record<string, unknown>;
+      const rawSupport = item.support;
+      if (rawSupport != null) {
+        const support = rawSupport as Record<string, unknown>;
+        const employeeId = Number(support.employee_id);
+        const sessions = Array.isArray(item.sessions) ? item.sessions : [];
+        const trainee = sessions[0] as Record<string, unknown> | undefined;
+        const validated = needs.find((need) =>
+          need.employee_id === employeeId &&
+          need.equipment === item.equipment &&
+          need.employee_id !== Number(trainee?.employee_id),
+        );
+        if (
+          typeof rawSupport !== 'object' ||
+          Array.isArray(rawSupport) ||
+          !validated ||
+          sessions.length !== 1 ||
+          item.pairing !== 'APOIO_SEM_RENOVACAO'
+        ) return { error: 'Piloto de apoio inválido ou fora do escopo do planejamento.' };
+        item.support = {
+          employee_id: validated.employee_id,
+          employee_name: validated.employee_name,
+          employee_role: validated.employee_role,
+        };
+      } else if (item.pairing === 'APOIO_SEM_RENOVACAO') {
+        return { error: 'Bloco de apoio precisa identificar piloto elegível.' };
+      }
       const minutes = Number((block as Record<string, unknown>).duration_minutes);
       if (Number.isFinite(minutes) && minutes > 0) {
         totalMinutes += minutes;

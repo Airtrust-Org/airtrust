@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSimulatorTrainingClasses,
+  attachSimulatorSupportCrew,
   canManuallyShareSimulatorTrainingSessions,
   canShareSimulatorTrainingSessions,
   pairSimulatorTrainingSessions,
@@ -304,6 +305,53 @@ describe('session-level simulator proposal', () => {
     expect(classes.map((item) => item.blocks.length)).toEqual([1, 1]);
   });
 
+  it('permits two copilots to share an identical simulator session', () => {
+    const a = need('a', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-03-20', 'Copiloto');
+    const b = need('b', 20, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-03-20', 'Copiloto');
+    const [block] = pairSimulatorTrainingSessions([a, b], 90);
+    expect(block.pairing).toBe('MESMO_TREINAMENTO');
+    expect(block.sessions).toHaveLength(2);
+  });
+
+  it('prefers a nearby same-role pilot over a far-ahead complementary role', () => {
+    const a = need('a', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-01-10', 'Comandante');
+    const distant = need('b', 20, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-03-20', 'Copiloto');
+    const nearby = need('c', 30, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-01-20', 'Comandante');
+    const blocks = pairSimulatorTrainingSessions([a, distant, nearby], 90);
+    const pair = blocks.find((block) => block.pairing !== 'SEM_DUPLA');
+    expect(pair?.sessions.map((session) => session.employee_id).sort()).toEqual([10, 30]);
+  });
+
+  it('uses nearby compatible semestral instead of anticipating a periodic by more than 60 days', () => {
+    const annual = need('a', 10, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-01-10', 'Comandante');
+    const distantAnnual = need('b', 20, 1, 'AW139 — Currículo de Voo - Anual (FFS)', 1, '2027-03-20', 'Copiloto');
+    const nearbySemestral = need('c', 30, 2, 'AW139 — Currículo de Voo - Semestral (FFS)', 1, '2027-01-20', 'Copiloto');
+    const blocks = pairSimulatorTrainingSessions([annual, distantAnnual, nearbySemestral], 90);
+    const pair = blocks.find((block) => block.pairing !== 'SEM_DUPLA');
+    expect(pair?.pairing).toBe('TREINAMENTOS_COMPATIVEIS');
+    expect(pair?.sessions.map((session) => session.employee_id).sort()).toEqual([10, 30]);
+    expect(annual.qualification_type_id).toBe(1);
+    expect(nearbySemestral.qualification_type_id).toBe(2);
+  });
+
+  it('repairs a stranded pair into two valid pairs without crossing eligibility restrictions', () => {
+    const needs = [10, 20, 30, 40].map((employeeId, index) =>
+      need(String.fromCharCode(97 + index), employeeId, 1, 'AW139 — Currículo de Voo - Anual (FFS)',
+        1, '2027-03-20', 'Comandante'),
+    );
+    const compatible = new Set(['10:20', '10:30', '20:40']);
+    const blocks = pairSimulatorTrainingSessions(needs, 45, true, (left, right) =>
+      compatible.has([left.employee_id, right.employee_id].sort((a, b) => a - b).join(':')),
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks.every((block) => block.sessions.length === 2)).toBe(true);
+    expect(blocks.flatMap((block) => block.sessions.map((item) => item.need_id)).sort())
+      .toEqual(['a', 'b', 'c', 'd']);
+    expect(blocks.map((block) =>
+      block.sessions.map((item) => item.employee_id).sort((a, b) => a - b).join(':'),
+    ).sort()).toEqual(['10:30', '20:40']);
+  });
+
   it('keeps a cohort connected when the partner changes between sessions', () => {
     const s1 = pairSimulatorTrainingSessions(
       [
@@ -325,4 +373,48 @@ describe('session-level simulator proposal', () => {
     expect(classes[0].class_name).toBe('AW139-2027.06');
     expect(classes[0].blocks).toHaveLength(2);
   });
+  it('rotates three pilots across successive compatible curricular sessions without inventing needs', () => {
+    const people = [10, 20, 30];
+    const needs = [1, 2, 3, 4].flatMap((order) => people.map((employeeId) =>
+      need(`${employeeId}-${order}`, employeeId, 1, 'AW139 — Periódico Anual', order, '2027-03-20', 'Copiloto'),
+    ));
+    const blocks = pairSimulatorTrainingSessions(needs, 60);
+    expect(blocks.flatMap((b) => b.sessions.map((n) => n.need_id)).sort())
+      .toEqual(needs.map((n) => n.need_id).sort());
+    const pairKeys = new Set(blocks.filter((b) => b.sessions.length === 2)
+      .map((b) => b.sessions.map((n) => n.employee_id).sort().join('-')));
+    expect(pairKeys.size).toBeGreaterThan(1);
+    const classes = buildSimulatorTrainingClasses(blocks);
+    expect(classes.some((trainingClass) =>
+      new Set(trainingClass.blocks.flatMap((b) => b.sessions.map((n) => n.employee_id))).size >= 3,
+    )).toBe(true);
+  });
+
+  it('marks an operational support member without crediting a new training need', () => {
+    const solo = need('solo', 10, 1, 'AW139 — Periódico', 1, '2027-03-20', 'Copiloto');
+    const peer = need('peer', 20, 1, 'AW139 — Periódico', 2, '2027-03-20', 'Copiloto');
+    const blocks = pairSimulatorTrainingSessions([solo], 60);
+    const [updated] = attachSimulatorSupportCrew({
+      blocks,
+      needs: [solo, peer],
+      assignments: [{ anchor_need_id: solo.need_id, support_employee_id: 20 }],
+    });
+    expect(updated.pairing).toBe('APOIO_SEM_RENOVACAO');
+    expect(updated.sessions.map((n) => n.employee_id)).toEqual([10]);
+    expect(updated.support).toEqual({
+      employee_id: 20, employee_name: 'Piloto 20', employee_role: 'Copiloto',
+    });
+    // Support connects an operational 3+ cohort without becoming a second training need.
+    const peerBlock = pairSimulatorTrainingSessions([peer], 60)[0];
+    const cohorts = buildSimulatorTrainingClasses([updated, peerBlock]);
+    expect(cohorts).toHaveLength(1);
+    expect(cohorts[0].blocks).toHaveLength(2);
+
+    expect(() => attachSimulatorSupportCrew({
+      blocks,
+      needs: [solo, peer],
+      assignments: [{ anchor_need_id: solo.need_id, support_employee_id: 10 }],
+    })).toThrow(/apoio/i);
+  });
+
 });

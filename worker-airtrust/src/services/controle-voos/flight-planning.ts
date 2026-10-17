@@ -1,10 +1,12 @@
 import { ApiError } from '../../middleware/error-handler';
+import { computeEtapaPesoTotal } from './rdv-etapas';
 
 export type FlightPlanningInput = {
   paxPlanejado: number | null;
   pesoPlanejado: number | null;
   pesoPassageiros: number | null;
   pesoBagagem: number | null;
+  pesoCarga: number | null;
   unidadePesoPlanejado: string;
   combustivelSolicitado: number | null;
   unidadeCombustivelSolicitado: string;
@@ -87,6 +89,7 @@ export function parseFlightPlanningInput(payload: Record<string, unknown>): Flig
     pesoPlanejado: parseOptionalNonNegativeNumber(payload.peso_planejado, 'peso_planejado'),
     pesoPassageiros: parseOptionalNonNegativeNumber(payload.peso_passageiros, 'peso_passageiros'),
     pesoBagagem: parseOptionalNonNegativeNumber(payload.peso_bagagem, 'peso_bagagem'),
+    pesoCarga: parseOptionalNonNegativeNumber(payload.peso_carga, 'peso_carga'),
     unidadePesoPlanejado: normalizeOperationalUnit(
       payload.unidade_peso_planejado,
       'unidade_peso_planejado',
@@ -150,28 +153,53 @@ export async function updateFlightStagePlanningIfSupported(
 
   if (
     planning.pesoPlanejado == null &&
+    planning.paxPlanejado == null &&
     planning.pesoPassageiros == null &&
     planning.pesoBagagem == null &&
+    planning.pesoCarga == null &&
     aircraftWeightInPlanningUnit == null
   ) return;
 
   try {
     await db.prepare(
       `UPDATE cv_voo_etapas
-          SET peso_passageiros = CASE WHEN numero_etapa = 1 THEN ? ELSE peso_passageiros END,
+          SET pax = CASE WHEN numero_etapa = 1 THEN ? ELSE pax END,
+              peso_passageiros = CASE WHEN numero_etapa = 1 THEN ? ELSE peso_passageiros END,
               peso_bagagem = CASE WHEN numero_etapa = 1 THEN ? ELSE peso_bagagem END,
+              payload = CASE WHEN numero_etapa = 1 THEN ? ELSE payload END,
               peso_vazio = ?,
               unidade_peso = ?,
               updated_at = datetime('now')
         WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`,
     ).bind(
+      planning.paxPlanejado,
       planning.pesoPassageiros,
       planning.pesoBagagem,
+      planning.pesoCarga == null ? null : convertWeight(planning.pesoCarga, planningUnit, 'KG'),
       aircraftWeightInPlanningUnit,
       planningUnit,
       empresaId,
       vooId,
     ).run();
+    // Same certified weight formula used by server-side RDV stage edits and Pilot App.
+    // Payload is stored in KG; other values are expressed in unidade_peso.
+    const stages = await db.prepare(`SELECT id, payload, combustivel_inicio, unidade_combustivel,
+      peso_vazio, peso_tripulacao, peso_passageiros, peso_bagagem, unidade_peso
+      FROM cv_voo_etapas WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`)
+      .bind(empresaId, vooId).all<{
+        id: number; payload: number | null; combustivel_inicio: number | null;
+        unidade_combustivel: string | null; peso_vazio: number | null;
+        peso_tripulacao: number | null; peso_passageiros: number | null;
+        peso_bagagem: number | null; unidade_peso: string | null;
+      }>();
+    const updates = (stages.results || []).flatMap(stage => {
+      const total = computeEtapaPesoTotal(stage);
+      return total == null ? [] : [db.prepare(`UPDATE cv_voo_etapas
+        SET peso_total = ?, updated_at = datetime('now')
+        WHERE id = ? AND voo_id = ? AND empresa_id = ? AND deleted_at IS NULL`)
+        .bind(total, stage.id, vooId, empresaId)];
+    });
+    if (updates.length) await db.batch(updates);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!message.includes('no such column')) throw error;

@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-canonical-category-repair-0546",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0546_training_compliance_canonical_category_repair.sql",
+  "fileHash": "6be8d112321f5294447573c760a7fc9a0985b9ff3aaef85a133a929c98651789",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-canonical-category-repair-0546.md",
+  "planHash": "c88bc9c8f4fcab8b1252089bdedea9da4c5475b92621f5ded7461d82adf050ad"
+}

@@ -49,6 +49,40 @@ const slots: any[] = [
 const rosterAllowed = async () => ({ eligible: true, state: 'FOLGA', reason: 'ok' });
 
 describe('session scheduler', () => {
+  it('schedules one training need with a validated second-seat support pilot', async () => {
+    const supported: SimulatorTrainingSessionBlock = {
+      ...block(1),
+      block_id: 'solo-with-support',
+      pairing: 'APOIO_SEM_RENOVACAO',
+      sessions: [session(1, 1)],
+      support: { employee_id: 30, employee_name: 'Piloto 30', employee_role: 'Copiloto' },
+    };
+    const checked: number[] = [];
+    const result = await scheduleSimulatorTrainingBlocks({
+      blocks: [supported],
+      slots,
+      referenceDate: '2027-06-01',
+      preferredSessionsPerDay: 2,
+      checkRoster: async (employeeId) => {
+        checked.push(employeeId);
+        return { eligible: true, state: 'FOLGA', reason: 'ok' };
+      },
+    });
+    expect(result.scheduled[0].schedule_status).toBe('SCHEDULED');
+    expect(result.scheduled[0].sessions).toHaveLength(1);
+    expect(result.scheduled[0].roster.map((row) => row.employee_id)).toEqual([1, 30]);
+    expect(checked).toEqual([1, 30]);
+    const rejected = await scheduleSimulatorTrainingBlocks({
+      blocks: [supported], slots, referenceDate: '2027-06-01',
+      preferredSessionsPerDay: 2,
+      checkRoster: async (employeeId) => ({
+        eligible: employeeId !== 30, state: 'FOLGA', reason: 'restricted',
+      }),
+    });
+    expect(rejected.scheduled[0].schedule_status).toBe('NO_CAE_SLOT');
+  });
+
+
   it('uses one 4h CAE slot as two chronological 2h session blocks', async () => {
     const result = await scheduleSimulatorTrainingBlocks({
       blocks: [block(1), block(2)],

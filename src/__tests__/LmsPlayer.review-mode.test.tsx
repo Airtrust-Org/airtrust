@@ -202,6 +202,7 @@ describe('LmsPlayer — modo de revisão (matrícula concluída, botão "Rever")
     });
     expect(iframe!.getAttribute('src')).not.toContain('review=1');
 
+    refetchMatriculaMock.mockResolvedValue({ data: { ...matriculaMock, status: 'CONCLUIDO' } });
     await dispatchPlayerMessage({
       type: 'lms:progress',
       matriculaId: 42,
@@ -209,7 +210,7 @@ describe('LmsPlayer — modo de revisão (matrícula concluída, botão "Rever")
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain('Curso concluído');
+      expect(toastSuccessMock).toHaveBeenCalled();
     });
   });
 

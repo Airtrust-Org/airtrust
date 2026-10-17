@@ -1,19 +1,21 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import LmsPlayer from '@/react-app/pages/lms/LmsPlayer';
 
 const {
   refetchMatriculaMock,
+  fetchWithAuthMock,
   toastLoadingMock,
   toastSuccessMock,
   toastErrorMock,
   toastDismissMock,
 } = vi.hoisted(() => ({
   refetchMatriculaMock: vi.fn(),
+  fetchWithAuthMock: vi.fn(),
   toastLoadingMock: vi.fn(),
   toastSuccessMock: vi.fn(),
   toastErrorMock: vi.fn(),
@@ -54,6 +56,7 @@ vi.mock('@/react-app/hooks/useLms', () => ({
   }),
   useLmsCurso: () => ({
     data: {
+      scorm_assessment_policy: 'FORMATIVE',
       descricao: 'Curso AW139',
       conteudo_programatico: 'Modulo 1',
       carga_horaria_minutos: 90,
@@ -69,7 +72,7 @@ vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'http://localhost:8787/api',
   AUTH_TOKEN_CHANGED_EVENT: 'airtrust-auth-token-changed',
   ensureValidAccessToken: vi.fn(async () => 'token'),
-  fetchWithAuth: vi.fn(async () => ({ ok: true })),
+  fetchWithAuth: fetchWithAuthMock,
   getAccessToken: () => 'token',
 }));
 
@@ -89,6 +92,7 @@ function renderPlayer() {
       <MemoryRouter initialEntries={['/lms/player/scorm/42']}>
         <Routes>
           <Route path="/lms/player/scorm/:matriculaId" element={<LmsPlayer />} />
+          <Route path="/lms/cursos" element={<div>Catálogo do aluno</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -121,6 +125,11 @@ async function dispatchPlayerMessage(data: Record<string, unknown>) {
 
 describe('LmsPlayer completion flow', () => {
   beforeEach(() => {
+    Object.assign(matriculaMock, { status: 'EM_ANDAMENTO', data_conclusao: null });
+    matriculaMock.scorm_progresso.cmi_json = JSON.stringify({ 'cmi.location': '22/30' });
+    (matriculaMock as typeof matriculaMock & { completion_diagnostic: Record<string, unknown> | null }).completion_diagnostic = null;
+    fetchWithAuthMock.mockReset();
+    fetchWithAuthMock.mockResolvedValue({ ok: true });
     refetchMatriculaMock.mockReset();
     refetchMatriculaMock.mockResolvedValue(undefined);
     toastLoadingMock.mockReset();
@@ -128,6 +137,66 @@ describe('LmsPlayer completion flow', () => {
     toastErrorMock.mockReset();
     toastDismissMock.mockReset();
     vi.restoreAllMocks();
+  });
+
+  it('REPROVADO with data_conclusao is an ended attempt, not a completed enrollment', () => {
+    Object.assign(matriculaMock, {
+      status: 'REPROVADO',
+      data_conclusao: '2026-10-13',
+      progresso_pct: 99,
+    });
+    matriculaMock.scorm_progresso.cmi_json = JSON.stringify({
+      'cmi.core.lesson_location': '3/3',
+      'airtrust.total_slides': 3,
+      'airtrust.viewed_slides': [1, 2, 3],
+    });
+    renderPlayer();
+    const register = screen.getByRole('button', { name: 'Registrar no AirTrust' });
+    expect(register).toBeEnabled();
+    expect(screen.queryByRole('heading', { name: 'Curso concluído' })).not.toBeInTheDocument();
+  });
+
+  it('keeps Concluir curso disabled while slides are missing, even at the final marker', async () => {
+    matriculaMock.scorm_progresso.cmi_json = JSON.stringify({
+      'cmi.location': '30/30',
+      'airtrust.total_slides': 30,
+      'airtrust.viewed_slides': [30],
+    });
+    renderPlayer();
+    expect(screen.queryByRole('button', { name: 'Registrar no AirTrust' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('offers an explicit SCORM registration after complete evidence and allows one-click retry after failure', async () => {
+    matriculaMock.scorm_progresso.cmi_json = JSON.stringify({
+      'cmi.location': '30/30',
+      'airtrust.total_slides': 30,
+      'airtrust.viewed_slides': Array.from({ length: 30 }, (_, i) => i + 1),
+    });
+    renderPlayer();
+    expect(screen.queryByRole('dialog', { name: 'Concluir curso' })).not.toBeInTheDocument();
+    const register = await screen.findByRole('button', { name: 'Registrar no AirTrust' });
+    const frame = await frameWindow();
+    expect(frame).toBeDefined();
+    const postMessage = vi.spyOn(frame!, 'postMessage').mockImplementation(() => {});
+    fireEvent.click(register);
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'lms:request-completion', matriculaId: 42 },
+      'http://localhost:8787',
+    );
+    await dispatchPlayerMessage({
+      type: 'lms:completion-error',
+      matriculaId: 42,
+      code: 'SCORM_FINALIZATION_FAILED',
+    });
+    const retry = await screen.findByRole('button', { name: 'Registrar no AirTrust' });
+    expect(screen.getAllByRole('button', { name: 'Registrar no AirTrust' })).toHaveLength(1);
+    fireEvent.click(retry);
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'lms:request-completion', matriculaId: 42 },
+      'http://localhost:8787',
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('usa toast de saving sem recorrer a window.alert', async () => {
@@ -189,8 +258,35 @@ describe('LmsPlayer completion flow', () => {
     expect(alertSpy).not.toHaveBeenCalled();
   });
 
+  it('reconsulta telas faltantes somente após gravação confirmada pelo servidor', async () => {
+    const scoped = matriculaMock as typeof matriculaMock & {
+      closure_readiness?: { slide_coverage: { total: number; recorded: number; missing_numbers: number[] } } | null;
+    };
+    scoped.closure_readiness = {
+      slide_coverage: { total: 42, recorded: 35, missing_numbers: [1, 2, 3, 4, 5, 6, 7] },
+    };
+    try {
+      renderPlayer();
+      await dispatchPlayerMessage({
+        type: 'lms:progress', matriculaId: 42,
+        location: '42/42', viewed_slide_count: 36, viewed_slide_total: 42,
+      });
+      expect(refetchMatriculaMock).not.toHaveBeenCalled();
+
+      await dispatchPlayerMessage({
+        type: 'lms:progress', matriculaId: 42,
+        location: '42/42', viewed_slide_count: 36, viewed_slide_total: 42,
+        server_saved: true,
+      });
+      await waitFor(() => expect(refetchMatriculaMock).toHaveBeenCalledTimes(1));
+    } finally {
+      scoped.closure_readiness = null;
+    }
+  });
+
   it('confirma a conclusão com toast de sucesso do AirTrust', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    refetchMatriculaMock.mockResolvedValue({ data: { ...matriculaMock, status: 'CONCLUIDO' } });
 
     renderPlayer();
     await dispatchPlayerMessage({
@@ -201,13 +297,72 @@ describe('LmsPlayer completion flow', () => {
 
     await waitFor(() => {
       expect(toastSuccessMock).toHaveBeenCalledWith(
-        'Curso concluído e registrado com sucesso. A qualificacao foi gerada automaticamente.',
+        'Curso concluído e registrado com sucesso.',
         {
           id: 'lms-scorm-completion-42',
         },
       );
     });
     expect(alertSpy).not.toHaveBeenCalled();
+    expect(await screen.findByText('Catálogo do aluno')).toBeInTheDocument();
+  });
+
+  it('não sai nem anuncia aprovação quando a matrícula ainda está EM_ANDAMENTO', async () => {
+    refetchMatriculaMock.mockResolvedValue({ data: { ...matriculaMock, status: 'EM_ANDAMENTO' } });
+    renderPlayer();
+    await dispatchPlayerMessage({
+      type: 'lms:completed',
+      matriculaId: 42,
+    });
+    await waitFor(() => {
+      expect(toastLoadingMock).toHaveBeenCalledWith(
+        'Aprovação recebida. Aguardando confirmação da matrícula pelo AirTrust.',
+        { id: 'lms-scorm-completion-42', duration: Infinity },
+      );
+    });
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('Catálogo do aluno')).not.toBeInTheDocument();
+  });
+
+  it('registra automaticamente no AirTrust um SCORM aprovado sem segundo clique e uma única vez', async () => {
+    (matriculaMock as typeof matriculaMock & { completion_diagnostic: Record<string, unknown> | null }).completion_diagnostic = {
+      status: 'accepted', explicit_completion: true, reached_final_location: true,
+      score_pct: 100, mastery_score: 70,
+    };
+    refetchMatriculaMock.mockResolvedValue({ data: { ...matriculaMock, status: 'CONCLUIDO' } });
+    fetchWithAuthMock.mockImplementation(async (url: string) => (
+      String(url).endsWith('/finalizar')
+        ? { ok: true, json: async () => ({ success: true, data: { novo_status: 'CONCLUIDO' } }) }
+        : { ok: true, json: async () => ({ success: true, data: { diagnostics: null } }) }
+    ));
+    renderPlayer();
+    await waitFor(() => {
+      const posts = fetchWithAuthMock.mock.calls.filter(([url, init]) =>
+        String(url).endsWith('/finalizar') && (init as RequestInit | undefined)?.method === 'POST');
+      expect(posts).toHaveLength(1);
+    });
+    expect(await screen.findByText('Catálogo do aluno')).toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalled();
+  });
+
+  it('não anuncia sucesso quando o backend ainda registra a matrícula em andamento', async () => {
+    (matriculaMock as typeof matriculaMock & { completion_diagnostic: Record<string, unknown> | null }).completion_diagnostic = {
+      status: 'accepted', explicit_completion: true, reached_final_location: true,
+      score_pct: 100, mastery_score: 70,
+    };
+    refetchMatriculaMock.mockResolvedValue({ data: { ...matriculaMock, status: 'EM_ANDAMENTO' } });
+    fetchWithAuthMock.mockImplementation(async (url: string) => (
+      String(url).endsWith('/finalizar')
+        ? { ok: true, json: async () => ({ success: true, data: { novo_status: 'CONCLUIDO' } }) }
+        : { ok: true, json: async () => ({ success: true, data: { diagnostics: null } }) }
+    ));
+    renderPlayer();
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
+    const posts = fetchWithAuthMock.mock.calls.filter(([url, init]) =>
+      String(url).endsWith('/finalizar') && (init as RequestInit | undefined)?.method === 'POST');
+    expect(posts).toHaveLength(1);
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('Catálogo do aluno')).not.toBeInTheDocument();
   });
 
   it('invalida caches LMS ao desmontar o player', () => {

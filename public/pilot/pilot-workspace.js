@@ -236,7 +236,7 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
     .sort((left, right) => Number(right?.id || 0) - Number(left?.id || 0))
     .reduce((map, document) => {
       const type = String(document?.type || '').toUpperCase();
-      if ((type === 'WEATHER_REPORT' || type === 'PLANO_VOO') && !map.has(type)) {
+      if (['WEATHER_REPORT', 'PLANO_VOO', 'MTA_EMBARQUE', 'MTA_DESEMBARQUE'].includes(type) && !map.has(type)) {
         map.set(type, document);
       }
       return map;
@@ -245,13 +245,15 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
   docsSection.append(el('h3', { text: 'Documentos do voo' }));
   appendNotice(
     docsSection,
-    'Weather Report e planejamento atualizado acompanham o pacote quando disponíveis. A ausência de qualquer um deles não bloqueia o voo.',
+    'Weather Report, planejamento, MTAs e outros documentos disponíveis são baixados automaticamente ao preparar ou atualizar o voo. Confira a indicação offline antes da partida.',
     'info',
   );
   const docsList = el('div', { className: 'pilot-workspace-list' });
   for (const definition of [
     { type: 'WEATHER_REPORT', label: 'Weather Report' },
     { type: 'PLANO_VOO', label: 'Planejamento de voo atualizado' },
+    { type: 'MTA_EMBARQUE', label: 'MTA de embarque' },
+    { type: 'MTA_DESEMBARQUE', label: 'MTA de desembarque' },
   ]) {
     const document = currentDocuments.get(definition.type);
     const state = document ? documentAvailability[String(document.id)] : null;
@@ -261,14 +263,14 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
     if (!document) {
       card.append(
         el('span', { text: 'Ainda não recebido pela Coordenação.' }),
-        el('span', { className: 'pilot-workspace-state attention', text: 'Não bloqueia o voo' }),
+        el('span', { className: 'pilot-workspace-state attention', text: 'Não impede abrir o voo no aplicativo' }),
       );
     } else {
       card.append(
         el('span', { text: text(document.file_name) }),
         el('span', {
           className: 'pilot-workspace-state ' + (availableOffline ? 'ok' : 'attention'),
-          text: availableOffline ? 'Disponível offline neste tablet' : 'Não disponível offline neste tablet — não bloqueia o voo',
+          text: availableOffline ? 'Disponível offline neste tablet' : 'Não disponível offline neste tablet — não impede abrir o voo',
         }),
       );
       if (typeof actions.openFlightDocument === 'function') {
@@ -280,6 +282,28 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
         button.addEventListener('click', () => actions.openFlightDocument(document.id));
         card.append(button);
       }
+    }
+    docsList.append(card);
+  }
+  // Every extra document is a separate current attachment, not a replacement by type.
+  const extras = [...documents].filter((document) => String(document?.type).toUpperCase() === 'OUTROS');
+  const extraTitle = el('strong', { text: 'Outros documentos' });
+  docsList.append(extraTitle);
+  if (extras.length === 0) docsList.append(el('span', { text: 'Nenhum documento adicional anexado.' }));
+  for (const document of extras) {
+    const state = documentAvailability[String(document.id)];
+    const available = Boolean(state?.available_offline);
+    const card = el('div', { className: 'pilot-workspace-row-card' });
+    card.append(el('strong', { text: text(document.file_name) }));
+    card.append(el('span', {
+      className: 'pilot-workspace-state ' + (available ? 'ok' : 'attention'),
+      text: available ? 'Disponível offline neste tablet' : 'Não disponível offline neste tablet',
+    }));
+    if (typeof actions.openFlightDocument === 'function') {
+      const button = el('button', { className: 'secondary', text: available ? 'Abrir offline' : 'Abrir documento' });
+      button.type = 'button';
+      button.addEventListener('click', () => actions.openFlightDocument(document.id));
+      card.append(button);
     }
     docsList.append(card);
   }

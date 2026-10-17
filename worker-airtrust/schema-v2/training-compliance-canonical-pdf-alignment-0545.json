@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-canonical-pdf-alignment-0545",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0545_training_compliance_canonical_pdf_alignment.sql",
+  "fileHash": "b9f95d02f919818f05fd72546f7a446fb824060b44de3dc0d92480b0be55641f",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-canonical-pdf-alignment-0545.md",
+  "planHash": "1978b2184d95f16f13a47b45a653e08f57a739274b6871a8dc21cdec2fc78aeb"
+}

@@ -32,7 +32,19 @@ function deniedOriginResponse(origin: string): Response {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const origin = request.headers.get('Origin');
-    if (origin && !isAllowedOrigin(origin, env.CORS_ORIGINS)) {
+    const url = new URL(request.url);
+    // The SCORM iframe is served by this exact Worker origin. Browser POSTs
+    // consequently carry Origin equal to the Worker origin, not the Pages
+    // frontend allowlist. Requiring that frontend Origin stranded legitimate
+    // learner commits at 99% with CORS_ORIGIN_DENIED (HTTP 403).
+    //
+    // Allow ONLY the exact same-origin, POST-only, enrollment-scoped commit.
+    // auth() still requires the signed short-lived asset capability; this
+    // does not relax any tenant, RBAC, CMI or qualification requirement.
+    const sameOriginScormCommit = request.method === 'POST' &&
+      url.pathname === '/api/lms/matriculas/scorm/commit' &&
+      origin === url.origin;
+    if (origin && !isAllowedOrigin(origin, env.CORS_ORIGINS) && !sameOriginScormCommit) {
       return deniedOriginResponse(origin);
     }
 

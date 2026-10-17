@@ -25,6 +25,26 @@ export interface DashboardOperationalScope {
   ignoredRequestedSetorIds: number;
 }
 
+export interface DashboardComplianceSummary {
+  pessoas: number;
+  pessoas_sem_configuracao: number;
+  requisitos_obrigatorios: number;
+  conformes: number;
+  vencendo: number;
+  vencidos: number;
+  nao_realizados: number;
+  compliance_pct: number | null;
+  cobertura: 'COMPLETA' | 'PARCIAL' | 'NAO_CONFIGURADA';
+}
+
+export interface DashboardTrainingComplianceSummary extends DashboardComplianceSummary {
+  em_andamento: number;
+}
+
+export interface DashboardQualificationComplianceSummary extends DashboardComplianceSummary {
+  escopo_modelo: 'MATRIZ_CANONICA';
+}
+
 export interface DashboardOperationalSummary {
   generatedAt: string;
   scope: DashboardOperationalScope;
@@ -34,6 +54,8 @@ export interface DashboardOperationalSummary {
   escalas: EscalaItem[] | null;
   sessoes: SessaoSimulador[] | null;
   simuladoresAlertas: SimuladoresAlertasData | null;
+  trainingCompliance: DashboardTrainingComplianceSummary | null;
+  qualificationCompliance: DashboardQualificationComplianceSummary | null;
   unavailableSources: string[];
 }
 

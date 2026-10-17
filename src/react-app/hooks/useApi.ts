@@ -38,6 +38,9 @@ interface UseApiOptions {
   method?: string;
   staleTime?: number;
   refetchInterval?: number;
+  timeoutMs?: number;
+  /** Keep success/data/total for callers that need backend pagination. */
+  preserveEnvelope?: boolean;
 }
 
 const inMemoryGetCache = new LruTtlCache<string, unknown>(100, 5 * 60 * 1000);
@@ -47,7 +50,7 @@ export function clearApiCacheByPattern(urlFragment: string): void {
   inMemoryGetCache.deleteMatching((key) => key.includes(urlFragment));
 }
 
-function unwrapResponsePayload<T>(result: unknown): T {
+function unwrapResponsePayload<T>(result: unknown, preserveEnvelope = false): T {
   if (result && typeof result === 'object' && !Array.isArray(result)) {
     const envelope = result as {
       success?: boolean;
@@ -65,7 +68,7 @@ function unwrapResponsePayload<T>(result: unknown): T {
         envelope.pagination !== undefined ||
         envelope.stats !== undefined ||
         envelope.meta !== undefined;
-      return (hasExtended ? result : envelope.data) as T;
+      return (hasExtended || preserveEnvelope ? result : envelope.data) as T;
     }
   }
   return result as T;
@@ -82,7 +85,9 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
     skipAuth = false,
     staleTime = 0,
     refetchInterval,
+    timeoutMs,
     method: optionsMethod,
+    preserveEnvelope = false,
   } = options;
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,7 +96,11 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
   const hasFetchedInitialRef = useRef(false);
   const isMountedRef = useRef(true);
   const inFlightRef = useRef(false);
+  // Uma resposta da consulta anterior nunca pode sobrescrever um filtro/URL mais recente.
+  const requestGenerationRef = useRef(0);
   const retryTimeoutRef = useRef<number | null>(null);
+  const activeRequestAbortControllerRef = useRef<AbortController | null>(null);
+  const activeRequestTimeoutRef = useRef<number | null>(null);
 
   const clearRetryTimeout = useCallback(() => {
     if (retryTimeoutRef.current !== null) {
@@ -118,7 +127,12 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
         return;
       }
       if (inFlightRef.current && attemptNumber === 0) return;
+      const requestGeneration = ++requestGenerationRef.current;
       inFlightRef.current = true;
+      let requestTimeoutId: number | null = null;
+      let requestTimedOut = false;
+      const requestAbortController = timeoutMs && timeoutMs > 0 ? new AbortController() : null;
+      activeRequestAbortControllerRef.current = requestAbortController;
 
       try {
         setLoading(true);
@@ -152,11 +166,21 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
           requestUrl = `${fullUrl}${separator}_t=${Date.now()}`;
         }
 
+        if (requestAbortController && timeoutMs) {
+          requestTimeoutId = window.setTimeout(() => {
+            requestTimedOut = true;
+            requestAbortController.abort();
+          }, timeoutMs);
+          activeRequestTimeoutRef.current = requestTimeoutId;
+        }
+
         requestController.recordRequest();
         const response = await (skipAuth ? apiFetch : appFetch)(requestUrl, {
           method,
           headers,
+          ...(requestAbortController ? { signal: requestAbortController.signal } : {}),
         });
+        if (requestGeneration !== requestGenerationRef.current) return;
 
         if (response.status === 401) {
           logout();
@@ -167,6 +191,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
         }
 
         const result = await response.json().catch(() => undefined);
+        if (requestGeneration !== requestGenerationRef.current) return;
         assertTenantDataScope(scope);
         if (!response.ok) {
           const message =
@@ -180,14 +205,21 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
           );
         }
 
-        const nextData = unwrapResponsePayload<T>(result);
+        const nextData = unwrapResponsePayload<T>(result, preserveEnvelope);
         setData(nextData);
         if (method === 'GET' && staleTime > 0) {
           inMemoryGetCache.set(cacheKey, nextData, staleTime);
         }
       } catch (caught) {
-        const classified = classifyFrontendError(caught);
+        if (requestGeneration !== requestGenerationRef.current) return;
+        const classified = requestTimedOut
+          ? new FrontendApiError(
+              'A explicação operacional excedeu o tempo de resposta esperado.',
+              'client',
+            )
+          : classifyFrontendError(caught);
         const canRetry =
+          !requestTimedOut &&
           !['permission', 'session-expired', 'stale-tenant'].includes(classified.kind) &&
           attemptNumber < retry;
         if (canRetry) {
@@ -201,8 +233,17 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
           hasFetchedInitialRef.current = false;
         }
       } finally {
-        inFlightRef.current = false;
-        setLoading(false);
+        if (requestTimeoutId !== null) {
+          window.clearTimeout(requestTimeoutId);
+          if (activeRequestTimeoutRef.current === requestTimeoutId) activeRequestTimeoutRef.current = null;
+        }
+        if (activeRequestAbortControllerRef.current === requestAbortController) {
+          activeRequestAbortControllerRef.current = null;
+        }
+        if (requestGeneration === requestGenerationRef.current) {
+          inFlightRef.current = false;
+          setLoading(false);
+        }
       }
     },
     [
@@ -212,12 +253,14 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
       empresaAtualId,
       logout,
       optionsMethod,
+      preserveEnvelope,
       requireAuth,
       retry,
       retryDelay,
       scheduleRetry,
       skipAuth,
       staleTime,
+      timeoutMs,
       url,
     ],
   );
@@ -234,9 +277,17 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
     }
     void fetchData();
     return () => {
+      // Invalida resultados de promises já iniciadas antes do próximo filtro/tenant.
+      requestGenerationRef.current += 1;
       hasFetchedInitialRef.current = false;
       isMountedRef.current = false;
       clearRetryTimeout();
+      if (activeRequestTimeoutRef.current !== null) {
+        window.clearTimeout(activeRequestTimeoutRef.current);
+        activeRequestTimeoutRef.current = null;
+      }
+      activeRequestAbortControllerRef.current?.abort();
+      activeRequestAbortControllerRef.current = null;
       inFlightRef.current = false;
     };
   }, [authToken, clearRetryTimeout, dedupeInitial, enabled, empresaAtualId, fetchData, url]);

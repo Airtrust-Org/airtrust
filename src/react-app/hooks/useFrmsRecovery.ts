@@ -17,7 +17,7 @@ export interface RecoveryFlightSummary {
   sectorCount: number;
   landingCount: number;
   canonicalFlightMinutes: number;
-  source: 'SIGVOOS' | 'NONE_FOUND';
+  source: 'CONTROLE_VOOS' | 'CONTROLE_VOOS_COM_FALLBACK_SIGVOOS' | 'SIGVOOS' | 'NONE_FOUND';
 }
 
 export interface RecoveryContextData {
@@ -85,6 +85,9 @@ export function recoveryActivityRequiresDutyWindow(type: RecoveryActivityType): 
 }
 
 export function validateRecoveryActivityInput(input: RecoveryActivityInput): string | null {
+  if (input.activity_type === 'ADMIN_TRAINING' && !input.notes?.trim()) {
+    return 'Informe se ontem foi treinamento ou trabalho administrativo.';
+  }
   if (recoveryActivityRequiresDutyWindow(input.activity_type)) {
     if (!input.duty_start_time || !input.duty_end_time) {
       return RECOVERY_ACTIVITY_WINDOW_REQUIRED_MESSAGE;
@@ -178,9 +181,29 @@ export async function submitPendingFrmsRecoveryActivity(
   assessmentDate: string,
 ): Promise<RecoveryActivityResult | null> {
   const referenceDate = previousOperationalDate(assessmentDate);
+  // Confirm the previous-day operational source with the backend immediately before
+  // final check-in submission. A failed/unavailable source never silently skips
+  // the mandatory activity response.
+  const context = await getRecovery<RecoveryContextData>(
+    `/frms/readiness/recovery/context?date=${encodeURIComponent(referenceDate)}`,
+  );
+  if (context?.flight?.detected) {
+    // Real flight activity uses the canonical engine-cut boundary, not a
+    // previous-day no-flight declaration, even on deployments without recovery schema.
+    pendingRecoveryActivities.delete(referenceDate);
+    return null;
+  }
+  if (!context?.schema_ready) {
+    throw new Error('Não foi possível validar a atividade de ontem. Tente novamente antes de concluir o check-in.');
+  }
+  if (context.activity) {
+    pendingRecoveryActivities.delete(referenceDate);
+    return null;
+  }
   const pending = pendingRecoveryActivities.get(referenceDate);
-  if (!pending?.required) return null;
-  if (!pending.input) throw new Error(RECOVERY_ACTIVITY_REQUIRED_MESSAGE);
+  if (!pending?.required || !pending.input) {
+    throw new Error(RECOVERY_ACTIVITY_REQUIRED_MESSAGE);
+  }
   const validationError = validateRecoveryActivityInput(pending.input);
   if (validationError) throw new Error(validationError);
 

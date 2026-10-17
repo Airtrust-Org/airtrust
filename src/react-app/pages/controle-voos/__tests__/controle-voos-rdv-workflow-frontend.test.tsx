@@ -142,6 +142,7 @@ describe('ControleVoosCoordenacaoFila', () => {
             motivo_devolucao: null,
             prefixo: 'ATX-1001',
             aeronave_id: 5,
+            modelo_aeronave: 'S-76',
             data_programacao: '2026-06-14',
             origem_id: 101,
             destino_id: 101,
@@ -162,10 +163,50 @@ describe('ControleVoosCoordenacaoFila', () => {
     renderWithClient(<ControleVoosCoordenacaoFila />);
 
     await waitFor(() => expect(screen.getByText('RDV-0001')).toBeInTheDocument());
+    expect(screen.getByText('S-76')).toBeInTheDocument();
     expect(screen.getByText('Enviado à Coordenação')).toBeInTheDocument();
     expect(screen.getByText('Voo realizado')).toBeInTheDocument();
     expect(screen.getByText('Macaé, RJ (SBME) → Unidade Teste (PAGS · 9PGS)')).toBeInTheDocument();
     expect(screen.getByText('Revisar')).toBeInTheDocument();
+  });
+
+  it('exibe rascunho sincronizado para conferência sem exigir envio do piloto', async () => {
+    getMock.mockImplementation(async (url: string) => {
+      if (url.includes('/rdv/fila')) {
+        return apiOk([{
+          id: 2,
+          voo_id: 602,
+          numero: 'RDV-RASCUNHO',
+          data_voo: '2026-10-14',
+          status: 'rascunho',
+          workflow_status: 'rascunho',
+          versao: 5,
+          updated_at: '2026-10-14T17:30:00Z',
+          enviado_em: null,
+          motivo_devolucao: null,
+          prefixo: 'PS-CDV',
+          aeronave_id: 5,
+          modelo_aeronave: 'AW139',
+          origem_id: 101,
+          destino_id: 101,
+          flight_status: 'liberado_operacionalmente',
+          horario_real_partida: null,
+          horario_real_chegada: null,
+          rota_codigos: ['SBME'],
+          rota_pontos: [],
+        }]);
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    renderWithClient(<ControleVoosCoordenacaoFila />);
+
+    await waitFor(() => expect(screen.getByText('RDV-RASCUNHO')).toBeInTheDocument());
+    expect(screen.getByTestId('coordenacao-status-filter')).toHaveValue('');
+    expect(getMock).toHaveBeenCalledWith(expect.stringMatching(new RegExp('/rdv/fila$')));
+    expect(screen.getByText('Última atualização no servidor')).toBeInTheDocument();
+    expect(screen.getByText('Ainda não enviado')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Visualizar' })).toHaveAttribute('href', '/controle-voos/rdv/602');
   });
 
   it('mostra estado vazio quando nenhum RDV corresponde aos filtros', async () => {

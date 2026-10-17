@@ -116,6 +116,13 @@ describe('deriveCrewDispatchAssessment', () => {
     expect(result.reasons).toContain('CHECKIN_DIARIO_PENDENTE');
   });
 
+  it('check-in NAO_APLICAVEL nunca equivale a preenchido para tripulação de voo', () => {
+    const result = deriveCrewDispatchAssessment(crewMember(), snapshotItem({ checkin_status: 'NAO_APLICAVEL' }));
+    expect(result.frms_status).toBe('NAO_LIBERADO');
+    expect(result.reasons).toContain('CHECKIN_DIARIO_PENDENTE');
+    expect(result.recommended_action).toMatch(/confirmar o check-in de fadiga diária/);
+  });
+
   it('5) CRITICO_VIOLACAO bloqueia mesmo com check-in normal (RECEBIDO)', () => {
     const result = deriveCrewDispatchAssessment(
       crewMember(),
@@ -226,6 +233,14 @@ describe('deriveCrewDispatchAssessment', () => {
     expect(serialized).not.toMatch(/kss|sono|medica|alcool/i);
   });
 
+  it('a causa de quinzena gera uma providência operacional visível, sem dados sensíveis', () => {
+    const result = deriveCrewDispatchAssessment(crewMember(), snapshotItem({
+      fortnight_indicator: { ...snapshotItem().fortnight_indicator!, status_quinzena: 'CRITICO' },
+    }));
+    expect(result.recommended_action).toMatch(/histórico de jornadas e repouso/);
+    expect(result.recommended_action).not.toMatch(/KSS|medicação|álcool/i);
+  });
+
   it('tudo normal + check-in recebido => LIBERAVEL', () => {
     const result = deriveCrewDispatchAssessment(crewMember(), snapshotItem());
     expect(result.frms_status).toBe('LIBERAVEL');
@@ -246,12 +261,13 @@ describe('aggregateFlightDispatchAssessment', () => {
       fadiga_acumulada: 'NORMAL',
       reasons: [],
       primary_reason: null,
+      recommended_action: 'Sem pendência FRMS identificada; seguir verificações operacionais usuais.',
       natureza_dado: null,
       ...overrides,
     };
   }
 
-  it('2) dois tripulantes, um sem check-in => voo NAO_LIBERADO', () => {
+  it('2) dois tripulantes, um sem check-in => alerta alto sem bloquear o voo', () => {
     const result = aggregateFlightDispatchAssessment([
       assessed({ funcionario_id: 1 }),
       assessed({
@@ -262,7 +278,7 @@ describe('aggregateFlightDispatchAssessment', () => {
       }),
     ]);
     expect(result.frms_status).toBe('NAO_LIBERADO');
-    expect(result.can_release).toBe(false);
+    expect(result.can_release).toBe(true);
     expect(result.frms_primary_reason).toBe('CHECKIN_DIARIO_PENDENTE');
   });
 
@@ -286,10 +302,10 @@ describe('aggregateFlightDispatchAssessment', () => {
     expect(result.can_release).toBe(true);
   });
 
-  it('voo sem tripulacao cadastrada falha fechado e nao pode ser liberado', () => {
+  it('voo sem tripulacao gera alerta informativo e FRMS nao decide liberacao', () => {
     const result = aggregateFlightDispatchAssessment([]);
     expect(result.frms_status).toBe('NAO_LIBERADO');
-    expect(result.can_release).toBe(false);
+    expect(result.can_release).toBe(true);
     expect(result.frms_primary_reason).toBe('TRIPULACAO_AUSENTE');
   });
 });
