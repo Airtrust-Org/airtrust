@@ -620,6 +620,26 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
     });
   });
 
+  describe('GESTOR não delega privilégios globais', () => {
+    it('nega GRANT admin.multiempresa a usuário comum da própria empresa', async () => {
+      const response = await adminRequest('PUT', '/200/permissoes', {
+        callerId: 10, callerRole: 'GESTOR', callerEmpresaId: 1,
+        body: { permissoes: [{ permissao: 'admin.multiempresa', tipo: 'GRANT' as const }] },
+        db: createDb({ targetExists: true, targetPerfil: 'ALUNO', targetEmpresaId: 1, targetHasVinculo: true }),
+      });
+      expect(response.status).toBe(403);
+    });
+
+    it('permite atualizar permissões operacionais de aluno na própria empresa', async () => {
+      const response = await adminRequest('PUT', '/200/permissoes', {
+        callerId: 10, callerRole: 'GESTOR', callerEmpresaId: 1,
+        body: { permissoes: [{ permissao: 'frms.view', tipo: 'GRANT' as const }] },
+        db: createDb({ targetExists: true, targetPerfil: 'ALUNO', targetEmpresaId: 1, targetHasVinculo: true }),
+      });
+      expect(response.status).toBe(200);
+    });
+  });
+
   // ────────────────────────────────────────────
   // Platform admin cross-tenant
   // ────────────────────────────────────────────
