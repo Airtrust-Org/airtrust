@@ -137,7 +137,8 @@ describe('SCORM package quality gate', () => {
     const withoutScoredAssessment = [chromium, webkit].map(run => ({
       ...run, cases: run.cases.filter(test =>
         test.name !== 'ASSESSMENT_INSUFFICIENT' &&
-        test.name !== 'ASSESSMENT_APPROVED'),
+        test.name !== 'ASSESSMENT_APPROVED' &&
+        test.name !== 'ASSESSMENT_THRESHOLD'),
     }));
     expect(applyRuntimeConformance(staticResult, formative, 'sha-a', withoutScoredAssessment)
       .publishable).toBe(true);
