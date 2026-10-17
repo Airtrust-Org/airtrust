@@ -1038,8 +1038,18 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       // The question-specific locationKey above resets attempts per question.
       const inlineQuizChoices = items.filter((item) => item.el.matches('[data-quiz-choice]'));
       if (inlineQuizChoices.length) {
-        const inlineNext = items.find((item) => item.el.matches('[data-next]'));
-        if (inlineNext) return markAndClick(inlineNext, 'inline-quiz-next');
+        // Course-authored quiz navigation can use data-quiz-nextq instead of
+        // data-next. Only advance on an already selected learner answer; an
+        // enabled button alone must not allow a test driver to skip a question.
+        const inlineNext = items.find((item) => item.el.matches('[data-next],[data-quiz-nextq]'));
+        const inlineAnswerSelected = inlineQuizChoices.some((item) =>
+          /(^|\\s)(selected|active|checked)(\\s|$)/i.test(item.className) ||
+          item.ariaPressed === 'true' || item.ariaChecked === 'true' ||
+          item.el.getAttribute('data-selected') === 'true'
+        );
+        if (inlineNext && (
+          inlineNext.el.matches('[data-next]') || inlineAnswerSelected
+        )) return markAndClick(inlineNext, 'inline-quiz-next');
         const chosen = new Set(st.inlineChoicesTried?.[locationKey] || []);
         const wanted = (plannedQuestion?.indices || [])[0];
         const candidates = [
