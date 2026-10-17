@@ -61,6 +61,9 @@ LMS_MIGRATIONS=(
   # 0519 adds scalar competency-profile lineage; 0520 normalizes multi-profile qualification evidence.
   "$WORKER_DIR/migrations/0519_training_compliance_evidence_profiles.sql"
   "$WORKER_DIR/migrations/0520_training_compliance_evidence_multi_profiles.sql"
+  # Governed Schema V2 0553 mirror: isolated local smoke D1 only.
+  # Production/staging schema remains governed by its own workflow.
+  "$WORKER_DIR/migrations/0553_lms_cycle_evidence_archive.sql"
 )
 
 error() {
@@ -303,7 +306,7 @@ for migration_file in "${LMS_MIGRATIONS[@]}"; do
   require_migration_recorded "$(basename "$migration_file")"
 done
 
-for table_name in token_blocklist audit_logs lms_cursos lms_matriculas lms_progresso_scorm qualificacoes_tipos_setores qualificacoes_areas lms_cursos_setores lms_scorm_package_versions lms_scorm_package_audit_log lms_completion_diagnostics_snapshots; do
+for table_name in token_blocklist audit_logs lms_cursos lms_matriculas lms_progresso_scorm qualificacoes_tipos_setores qualificacoes_areas lms_cursos_setores lms_scorm_package_versions lms_scorm_package_audit_log lms_completion_diagnostics_snapshots lms_ciclo_evidencias lms_xapi_statements lms_matricula_ciclos; do
   require_sqlite_table "$table_name"
 done
 
@@ -324,6 +327,7 @@ ensure_sqlite_column "lms_cursos" "scorm_assessment_policy" "TEXT NOT NULL DEFAU
 require_sqlite_column "lms_cursos" "scorm_assessment_policy"
 require_sqlite_column "lms_cursos" "conteudo_arquivo_nome"
 require_sqlite_column "lms_cursos" "h5p_conteudo_id"
+require_sqlite_column "lms_xapi_statements" "archived_cycle_id"
 require_sqlite_column "lms_matriculas" "ultimo_slide"
 require_sqlite_column "qualificacoes_historico" "validacao_hash"
 require_sqlite_column "qualificacoes_tipos" "area_id"
