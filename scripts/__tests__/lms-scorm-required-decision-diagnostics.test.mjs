@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {
   collectRequiredDecisionSlideIndices,
+  collectChecklistSlideIndices,
   classifyRequiredDecisionStall,
 } from '../validation/lms-scorm-required-decision-diagnostics.mjs';
 
@@ -65,4 +66,13 @@ test('required decision selection precedes Next in executable preview driver', (
   assert.match(source.slice(guardIndex, nextIndex), /markAndClick\(target, 'required-decision-choice'\)/);
   assert.match(source, /required_decision_diagnostic: requiredDecisionDiagnostic/);
   assert.match(source, /requiredDecisionSlideIndices,/);
+});
+
+
+test('checklist controls are scoped to explicit authored checklist slides', () => {
+  assert.deepEqual(collectChecklistSlideIndices({ slides: [
+    { kind: 'lesson' }, { kind: 'checklist' }, { kind: 'quiz' },
+    { kind: 'checklist' }, { kind: 'scenario', requiredDecision: true }
+  ] }), [2, 4]);
+  assert.deepEqual(collectChecklistSlideIndices({ slides: null }), []);
 });
