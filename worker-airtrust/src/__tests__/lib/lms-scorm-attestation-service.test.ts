@@ -47,7 +47,11 @@ function seal(){
     issuedAt:new Date().toISOString(),
     scope:'GOVERNED_STAGING_SYNTHETIC',requiresAssessment:true,
     browserEvidenceSha256:{CHROMIUM:'1'.repeat(64),WEBKIT:'2'.repeat(64)},
-    certificateDocumentSha256:'3'.repeat(64),runs:[run('CHROMIUM'),run('WEBKIT')],
+    certificateDocuments:{
+      CHROMIUM:{enrollmentId:1001,cycleId:2001,qualificationHistoryId:3001,documentId:'qa-doc-1',sha256:'3'.repeat(64)},
+      WEBKIT:{enrollmentId:1002,cycleId:2002,qualificationHistoryId:3002,documentId:'qa-doc-2',sha256:'4'.repeat(64)},
+    },
+    runs:[run('CHROMIUM'),run('WEBKIT')],
   };
   return {payload:p,signature:createHmac('sha256',secret)
     .update(serializeScormAttestation(p)).digest('hex')};
