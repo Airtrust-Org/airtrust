@@ -1,4 +1,5 @@
 import { normalizeAirtrustRole } from '../utils/role-resolution';
+import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 
 /**
  * Nome do cookie same-site que carrega o perfil ativo escolhido para a sessão.
@@ -125,6 +126,13 @@ export async function resolveAvailableSessionRoles(
     }>();
 
   if (!row) return [];
+
+  // A concessão global persistida prevalece sobre qualquer papel legado,
+  // vínculo setorial ou perfil adicional na empresa. Essa verificação também
+  // protege um administrador que alternou para outra empresa com role ALUNO.
+  if (isPlatformAdminAccess(await resolvePlatformAccessState(db, userId))) {
+    return ['ADMINISTRADOR'];
+  }
 
   // Estrutura explícita de perfis (migration 0473). Quando ela existe, é a
   // AUTORIDADE: um perfil removido pelo administrador não pode reaparecer por
