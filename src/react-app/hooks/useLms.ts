@@ -280,6 +280,11 @@ export interface MatricularLoteResult {
   ignoradas: number;
   erros: number;
   matriculas?: LmsMatricula[];
+  detalhes_erros?: Array<{
+    funcionario_id: number;
+    funcionario_nome: string;
+    codigo: 'NEW_EDITION_REQUIRED' | 'NOT_ELIGIBLE' | 'ESTADO_NAO_CONFIRMADO' | string;
+  }>;
 }
 
 function sanitizeCreateCursoPayload(dto: CreateCursoDTO): CreateCursoDTO {
