@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, Lock, Mail } from 'lucide-react';
 import { clearActiveSessionRole, useAuth } from '../hooks/useAuth';
+import { sessionEntryOptions, type SessionRole } from '../lib/session-entry-options';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useSystemSettings } from '../hooks/useSystemSettings';
@@ -43,13 +44,13 @@ const QUICK_LOGIN_ALUNO_PASSWORD =
 // Perfis de acesso rápido (demo/testes)
 const DEV_PROFILES = [
   {
-    label: 'Administrador Geral',
+    label: 'Administrador',
     email: DEFAULT_LOGIN_EMAIL,
     password: DEFAULT_LOGIN_PASSWORD,
     color: 'bg-purple-100 text-purple-700 hover:bg-purple-200',
   },
   {
-    label: 'Administrador da Empresa',
+    label: 'Gestor',
     email: QUICK_LOGIN_GESTOR_EMAIL,
     password: QUICK_LOGIN_GESTOR_PASSWORD,
     color: 'bg-blue-100 text-blue-700 hover:bg-blue-200',
@@ -67,8 +68,6 @@ const DEV_PROFILES = [
     color: 'bg-green-100 text-green-700 hover:bg-green-200',
   },
 ];
-
-type SessionRole = 'ADMINISTRADOR' | 'GESTOR' | 'COORDENACAO_VOO' | 'INSTRUTOR' | 'ALUNO' | 'USUARIO';
 
 type SessionProfilesResponse = {
   success: boolean;
@@ -89,24 +88,6 @@ type SelectProfileResponse = {
   error?: string;
 };
 
-const PROFILE_LABELS: Record<SessionRole, string> = {
-  ADMINISTRADOR: 'Administrador',
-  GESTOR: 'Gestor',
-  COORDENACAO_VOO: 'Coordenação de Voo',
-  INSTRUTOR: 'Instrutor',
-  ALUNO: 'Aluno',
-  USUARIO: 'Usuário',
-};
-
-const PROFILE_DESCRIPTIONS: Record<SessionRole, string> = {
-  ADMINISTRADOR: 'Administração completa da empresa e do sistema.',
-  GESTOR: 'Administração operacional da empresa nos módulos e setores autorizados.',
-  COORDENACAO_VOO: 'Programação, acompanhamento, revisão e aprovação de voos da sua empresa.',
-  INSTRUTOR: 'Atuação como instrutor, com acesso às ferramentas de instrução.',
-  ALUNO: 'Acesso aos treinamentos e atividades atribuídas a você.',
-  USUARIO: 'Acesso operacional padrão do seu usuário.',
-};
-
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -114,6 +95,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [profileOptions, setProfileOptions] = useState<SessionRole[]>([]);
+  const entryOptions = sessionEntryOptions(profileOptions);
 
   const { login } = useAuth();
   const { logoSrc } = useSystemSettings();
@@ -149,14 +131,18 @@ export default function LoginPage() {
       await login({ email, password });
       const roles = await loadSessionProfiles();
 
-      if (roles.length > 1) {
+      const availableEntries = sessionEntryOptions(roles);
+      if (availableEntries.length > 1) {
         setProfileOptions(roles);
         return;
       }
-      // An exclusively scoped coordinator has a safe legacy USER/ALUNO fallback.
-      // Select the explicit role to receive the actual authorized operations token.
-      if (roles.length === 1 && roles[0] === 'COORDENACAO_VOO') {
-        await handleProfileSelect(roles[0]);
+
+      // Instrutor+Aluno is one operational entry, not two separate login modes.
+      // The platform administrator also has only one mode and goes directly to
+      // the admin dashboard using the backend-issued ADMINISTRADOR token.
+      if (availableEntries.length === 1 &&
+          (roles.length > 1 || availableEntries[0].role === 'COORDENACAO_VOO')) {
+        await handleProfileSelect(availableEntries[0].role);
         return;
       }
       navigate(redirectTo, { replace: true });
@@ -187,7 +173,10 @@ export default function LoginPage() {
       // Troca somente o access token. O refresh token da autenticação original
       // permanece preservado e o backend revalida o perfil ativo em cada request.
       setTokens(payload.data.accessToken);
-      navigate(redirectTo, { replace: true });
+      // Recria o AuthContext com o perfil confirmado pelo backend. Navegar
+      // apenas via React manteria o usuário em memória com a role do login
+      // inicial (por exemplo, GESTOR mesmo após escolher Aluno/Instrutor).
+      window.location.replace(redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível ativar o perfil selecionado.');
       logger.error('Erro ao selecionar perfil de sessão:', err);
@@ -222,11 +211,11 @@ export default function LoginPage() {
         <div className="rounded-2xl border border-slate-200 bg-slate-100 p-5 shadow-sm shadow-slate-200/70">
           <div className="mb-7">
             <h1 className="text-xl font-bold text-slate-900">
-              {profileOptions.length > 1 ? 'Como você quer entrar?' : t('auth.login.title')}
+              {entryOptions.length > 1 ? 'Como você quer entrar?' : t('auth.login.title')}
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              {profileOptions.length > 1
-                ? 'Seu usuário possui mais de um perfil. Escolha o perfil ativo para esta sessão.'
+              {entryOptions.length > 1
+                ? 'Escolha entre a gestão da empresa e suas atividades como aluno ou instrutor.'
                 : IS_STAGING
                   ? 'Ambiente de homologação'
                   : 'Acesse sua conta AirTrust'}
@@ -240,21 +229,21 @@ export default function LoginPage() {
             </div>
           )}
 
-          {profileOptions.length > 1 ? (
+          {entryOptions.length > 1 ? (
             <div className="space-y-3">
-              {profileOptions.map((role) => (
+              {entryOptions.map((option) => (
                 <button
-                  key={role}
+                  key={option.id}
                   type="button"
                   disabled={isLoading}
-                  onClick={() => void handleProfileSelect(role)}
+                  onClick={() => void handleProfileSelect(option.role)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-primary/50 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span className="block text-sm font-semibold text-slate-900">
-                    Entrar como {PROFILE_LABELS[role]}
+                    Entrar como {option.label}
                   </span>
                   <span className="mt-1 block text-xs leading-5 text-slate-500">
-                    {PROFILE_DESCRIPTIONS[role]}
+                    {option.description}
                   </span>
                 </button>
               ))}
