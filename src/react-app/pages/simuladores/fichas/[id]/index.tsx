@@ -79,6 +79,8 @@ interface CheckSessao {
   descricao: string | null;
   aprovado?: boolean | number | null;
   observacoes?: string;
+  estado?: string | null;
+  evidencia_id?: number | null;
 }
 
 interface FichaDetalhada {
@@ -87,6 +89,7 @@ interface FichaDetalhada {
   participante_nome: string;
   participante_funcao: string;
   instrutor_id?: number | null;
+  examinador_id?: number | null;
   instrutor_nome: string;
   simulador_codigo: string;
   simulador_nome?: string;
@@ -230,6 +233,7 @@ export default function FichaDetalhe() {
   // Never initialize personal approvals from a group/session result once
   // the governed individual evidence schema is active in this environment.
   const [modoCheckIndividual, setModoCheckIndividual] = useState(false);
+  const [salvandoChecksIndividuais, setSalvandoChecksIndividuais] = useState(false);
   const [checksResultados, setChecksResultados] = useState<
     Record<number, { aprovado: boolean | null; observacoes: string }>
   >({});
@@ -505,6 +509,7 @@ export default function FichaDetalhe() {
           codigo:check.codigo, nome:check.nome, descricao:null,
           aprovado:check.estado === 'CONFIRMADO' ? check.aprovado : null,
           observacoes:check.observacoes || '',
+          estado:check.estado,
         })));
         setChecksResultados(Object.fromEntries(payload.data.map((check) => [
           check.sessao_check_id,
@@ -1061,6 +1066,45 @@ export default function FichaDetalhe() {
     }
   };
 
+  const confirmarChecksIndividuais = async () => {
+    if (!id || !ficha || !modoCheckIndividual || salvandoChecksIndividuais) return;
+    const toSave = checks.filter((check) => check.estado !== 'CONFIRMADO' &&
+      (checksResultados[check.id]?.aprovado === true ||
+       checksResultados[check.id]?.aprovado === false));
+    if (!toSave.length) {
+      toast.warning('Selecione a aprovação ou reprovação de um check pendente.');
+      return;
+    }
+    setSalvandoChecksIndividuais(true);
+    try {
+      const token = getAccessToken();
+      let saved = 0;
+      for (const check of toSave) {
+        const response = await fetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
+          method:'POST',
+          headers:{
+            'Content-Type':'application/json',
+            ...(token ? { Authorization:`Bearer ${token}` } : {}),
+          },
+          body:JSON.stringify({
+            sessao_check_id:check.id,
+            aprovado:checksResultados[check.id].aprovado,
+            observacoes:checksResultados[check.id].observacoes,
+          }),
+        });
+        if (!response.ok) {
+          toast.error('Um check individual não pôde ser confirmado. Os anteriores permanecem registrados.');
+          break;
+        }
+        saved++;
+      }
+      if (saved) toast.success(`${saved} check(s) individuais confirmados.`);
+      await carregarFicha();
+    } finally {
+      setSalvandoChecksIndividuais(false);
+    }
+  };
+
   // Separar manobras técnicas variáveis do bloco NOTECHS (namespace de
   // ordem reservado >= 1001) — sempre separado, independentemente do modelo.
   const { tecnicas: manobrasTecnicas, notechs: manobrasNotechs } = splitManobrasNotechs(
@@ -1159,6 +1203,58 @@ export default function FichaDetalhe() {
                 Esta ficha já foi finalizada. Alterações diretas ficam bloqueadas; o instrutor deve
                 abrir uma solicitação de edição para aprovação do gestor.
               </div>
+            )}
+            {ficha.is_check === 1 && modoCheckIndividual && fichaFinalizada && (
+              <section className="mb-5 rounded-lg border border-slate-200 bg-white p-4">
+                <h3 className="text-sm font-bold text-slate-900">Evidências individuais dos checks</h3>
+                <p className="mb-3 text-xs text-slate-600">
+                  Somente aprovação individual confirmada produz FAP. A ausência de resultado mantém
+                  pendência e não comprova aprovação.
+                </p>
+                {checks.map((check) => {
+                  const confirmed = check.estado === 'CONFIRMADO';
+                  const chosen = checksResultados[check.id]?.aprovado;
+                  const status = confirmed
+                    ? (check.aprovado === 1 || check.aprovado === true ? 'APROVADO' : 'REPROVADO')
+                    : 'PENDENTE DE AVALIAÇÃO';
+                  const actor = user?.funcionario_id;
+                  const evaluator = !!actor &&
+                    (String(actor) === String(ficha.instrutor_id) ||
+                     (ficha.examinador_id != null &&
+                      String(actor) === String(ficha.examinador_id)));
+                  return (
+                    <div key={check.id} className="flex flex-wrap gap-3 items-center border-t py-2 text-sm">
+                      <span className="font-semibold">{check.codigo} — {check.nome}</span>
+                      <span className={confirmed ? 'text-slate-700' : 'text-amber-700'}>
+                        {status}
+                      </span>
+                      {!confirmed && evaluator && (
+                        <div className="ml-auto flex gap-2">
+                          <button type="button" className={chosen === true ? 'font-bold text-green-700' : 'text-slate-600'}
+                            onClick={() => setChecksResultados((prev) => ({
+                              ...prev, [check.id]: { aprovado:true, observacoes:prev[check.id]?.observacoes || '' },
+                            }))}>Aprovado</button>
+                          <button type="button" className={chosen === false ? 'font-bold text-red-700' : 'text-slate-600'}
+                            onClick={() => setChecksResultados((prev) => ({
+                              ...prev, [check.id]: { aprovado:false, observacoes:prev[check.id]?.observacoes || '' },
+                            }))}>Reprovado</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {checks.some((check) => check.estado !== 'CONFIRMADO') &&
+                  !!user?.funcionario_id &&
+                  (String(user.funcionario_id) === String(ficha.instrutor_id) ||
+                    (ficha.examinador_id != null &&
+                    String(user.funcionario_id) === String(ficha.examinador_id))) && (
+                  <button type="button" onClick={confirmarChecksIndividuais}
+                    disabled={salvandoChecksIndividuais}
+                    className="mt-3 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                    {salvandoChecksIndividuais ? 'Confirmando...' : 'Confirmar resultados individuais'}
+                  </button>
+                )}
+              </section>
             )}
             {/* Cabeçalho da Ficha */}
             <div className="mb-6 rounded-lg border border-slate-200 bg-white p-6">
