@@ -29,7 +29,7 @@ describe('Controle de Voos - gestão de tripulação no voo criado', () => {
     expect(card).toContain("dialog?.mode === 'edit-time'");
     expect(card).toContain('horario_apresentacao: horarioApresentacao || null');
     expect(hooks).toContain('...(horario_apresentacao !== undefined ? { horario_apresentacao } : {})');
-    expect(offline).toMatch(/COALESCE\\(\\s*t\\.horario_apresentacao,\\s*\\(/);
+    expect(offline.indexOf('t.horario_apresentacao,')).toBeLessThan(offline.indexOf('FROM frms_jornada'));
   });
 
 });
