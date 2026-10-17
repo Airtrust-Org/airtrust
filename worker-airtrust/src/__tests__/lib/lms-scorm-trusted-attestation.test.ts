@@ -26,7 +26,10 @@ const payload = (): TrustedScormAttestationPayload => ({
   ...context, harnessSha, issuedAt: '2026-10-17T19:00:00.000Z',
   scope: 'GOVERNED_STAGING_SYNTHETIC',
   browserEvidenceSha256: { CHROMIUM: '1'.repeat(64), WEBKIT: '2'.repeat(64) },
-  certificateDocumentSha256: '3'.repeat(64),
+  certificateDocuments: {
+    CHROMIUM: { enrollmentId: 1001, cycleId: 2001, qualificationHistoryId: 3001, documentId: 'qa-doc-chromium', sha256: '3'.repeat(64) },
+    WEBKIT: { enrollmentId: 1002, cycleId: 2002, qualificationHistoryId: 3002, documentId: 'qa-doc-webkit', sha256: '4'.repeat(64) },
+  },
   runs: [run('CHROMIUM'), run('WEBKIT')],
 });
 const seal = (p: TrustedScormAttestationPayload) => ({
@@ -65,12 +68,23 @@ describe('governed independent SCORM browser attestation', () => {
   it('rejects local fixture, absent PDF provenance and expired claims', async () => {
     const local = payload(); (local as {scope:string}).scope = 'LOCAL_DISPOSABLE';
     expect(await verifyTrustedScormAttestation(seal(local as TrustedScormAttestationPayload), context, secret, now)).toBe(false);
-    const pdf = payload(); pdf.certificateDocumentSha256 = '';
+    const pdf = payload(); pdf.certificateDocuments.WEBKIT.sha256 = '';
     expect(await verifyTrustedScormAttestation(seal(pdf), context, secret, now)).toBe(false);
     const stale = payload(); stale.issuedAt = '2026-08-01T19:00:00.000Z';
     expect(await verifyTrustedScormAttestation(seal(stale), context, secret, now)).toBe(false);
     const future = payload(); future.issuedAt = '2026-10-18T19:00:00.000Z';
     expect(await verifyTrustedScormAttestation(seal(future), context, secret, now)).toBe(false);
+  });
+  it('rejects reuse of enrollment, lifecycle, history or certificate documents across browsers', async () => {
+    const original = payload();
+    for (const field of ['enrollmentId','cycleId','qualificationHistoryId','documentId'] as const) {
+      const altered = structuredClone(original);
+      // The payload is re-signed to prove it is the verifier, not only HMAC,
+      // that rejects an invalidly shared student/document identity.
+      (altered.certificateDocuments.WEBKIT as unknown as Record<string, unknown>)[field] =
+        altered.certificateDocuments.CHROMIUM[field];
+      expect(await verifyTrustedScormAttestation(seal(altered), context, secret, now)).toBe(false);
+    }
   });
   it('rejects unexpected object fields, malicious extra certificate state and malformed evidence', async () => {
     const extended = { ...payload(), publishable: true };
