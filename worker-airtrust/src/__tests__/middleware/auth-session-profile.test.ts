@@ -18,6 +18,7 @@ type Fixture = {
   empresaId: number;
   perfil: string;
   membershipRole: string | null;
+  platformAdmin?: boolean;
   funcionarioId?: number | null;
   funcionarioEmpresaId?: number | null;
   instrutor?: boolean;
@@ -44,6 +45,8 @@ function createDb(fx: Fixture) {
         },
         async first<T>() {
           if (sql.includes("name = 'usuarios_empresas'")) return { found: 1 } as T;
+          if (sql.includes("name = 'user_platform_roles'")) return { found: 1 } as T;
+          if (sql.includes("name = 'support_access_grants'")) return null as T;
           if (sql.includes('PRAGMA table_info')) return null as T;
           if (sql.includes('FROM token_blocklist')) return null as T;
 
@@ -87,6 +90,9 @@ function createDb(fx: Fixture) {
           return { success: true, meta: { changes: 0 } };
         },
         async all<T>() {
+          if (sql.includes('FROM user_platform_roles')) {
+            return { results: fx.platformAdmin ? [{ role_code: 'platform_admin' }] : [] } as unknown as T;
+          }
           if (sql.includes('FROM usuarios_empresas_perfis')) {
             if (fx.explicitQueryThrows) throw new Error('no such table: usuarios_empresas_perfis');
             if (fx.explicitQueryInfraError) throw new Error('database disk image is malformed');
@@ -308,6 +314,23 @@ describe('Coordenação de Voo — perfil canônico por empresa', () => {
     expect(response.status).toBe(401);
   });
 });
+describe('platform admin — vínculo de tenant revalidado', () => {
+  it('sem grant persistido, token ADMINISTRADOR não supera ausência de vínculo', async () => {
+    const db = createDb({ userId: 7, empresaId: 500, perfil: 'admin', membershipRole: null });
+    const { token } = await makeToken(7, 500, 'ADMINISTRADOR');
+    const res = await buildApp(db, 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(401);
+  });
+
+  it('com grant persistido, administrador pode autenticar em tenant sem vínculo', async () => {
+    const db = createDb({ userId: 7, empresaId: 500, perfil: 'admin', membershipRole: null, platformAdmin: true });
+    const { token } = await makeToken(7, 500, 'ADMINISTRADOR');
+    const res = await buildApp(db, 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(200);
+    expect((await res.json() as { userRole: string }).userRole).toBe('ADMINISTRADOR');
+  });
+});
+
 describe('auth() — perfil ativo de sessão (multi-perfil)', () => {
   it('sem cookie de seleção: usa a role canônica sem alteração', async () => {
     const db = createDb({
