@@ -522,7 +522,7 @@ export async function resetMatriculaForNewCycle(
         beforeReset.qualificacao_historico_id,current.id,params.empresaId),
 
     db.prepare(`INSERT INTO lms_ciclo_evidencias
-       (empresa_id,matricula_id,ciclo_id,enrollment_json,scorm_json,course_package_prefix)
+       (empresa_id,matricula_id,ciclo_id,enrollment_json,scorm_json,diagnostics_json,course_package_prefix)
        SELECT m.empresa_id,m.id,?,
          json_object('status',m.status,'progresso_pct',m.progresso_pct,
            'score_final',m.score_final,'tentativas',m.tentativas,
@@ -537,6 +537,9 @@ export async function resetMatriculaForNewCycle(
            'launch_data',p.launch_data,'cmi_json',p.cmi_json,
            'session_count',p.session_count)
           FROM lms_progresso_scorm p WHERE p.matricula_id=m.id AND p.empresa_id=m.empresa_id),
+         (SELECT json_group_array(json_object('tentativa',d.tentativa,'diagnostics_json',d.diagnostics_json))
+            FROM lms_completion_diagnostics_snapshots d
+           WHERE d.matricula_id=m.id AND d.empresa_id=m.empresa_id),
          (SELECT scorm_package_r2_prefix FROM lms_cursos c
           WHERE c.id=m.curso_id AND c.empresa_id=m.empresa_id)
        FROM lms_matriculas m
