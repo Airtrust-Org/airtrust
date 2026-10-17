@@ -117,3 +117,12 @@ BEGIN
        AND fs.aprovado = 1
   ) THEN RAISE(ABORT, 'INDIVIDUAL_CHECK_FICHE_NOT_SIGNED') END;
 END;
+
+-- Confirmed rows are immutable evidence. Re-evaluation requires a new fiche,
+-- never rewriting the original approval, failure or signature provenance.
+CREATE TRIGGER IF NOT EXISTS trg_checks_individuais_confirmed_immutable
+BEFORE UPDATE ON sessoes_checks_resultados_individuais
+WHEN OLD.estado = 'CONFIRMADO'
+BEGIN
+  SELECT RAISE(ABORT, 'INDIVIDUAL_CHECK_CONFIRMED_IMMUTABLE');
+END;
