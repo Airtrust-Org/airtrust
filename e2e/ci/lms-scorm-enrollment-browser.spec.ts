@@ -15,6 +15,7 @@ type Fixture={
   packageSha256:string;zipPath:string;fixtureKind:'LOCAL_DISPOSABLE_ZIP';
   enrollments:Record<string,number>;
   employeeIds:Record<string,number>;
+  passEnrollments:Record<string,number>;
   foreignTenant:{empresaId:number;courseId:number;matriculaId:number};
 };
 test('SCORM wrong answer, resume, pass, explicit completion and qualification',async({page},testInfo)=>{
@@ -25,7 +26,8 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   const localZipDigest=createHash('sha256').update(readFileSync(fixture.zipPath)).digest('hex');
   expect(localZipDigest).toMatch(/^[0-9a-f]{64}$/);
   expect(localZipDigest).toBe(fixture.packageSha256);
-  const id=fixture.enrollments[testInfo.project.name];
+  let id=fixture.enrollments[testInfo.project.name];
+  const failedEnrollmentId=id;
   expect(id).toBeGreaterThan(0);
   const api=fixture.origin+'/api';
   const login=await page.request.post(api+'/auth/login',{data:{email:'admin@airtrust.com',senha:'Admin@123'}});
@@ -134,60 +136,45 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   const reEnrolled=await reEnroll.json().catch(()=>null);
   expect(reEnroll.ok(), 'LOCAL_REMATRICULATE_HTTP_'+reEnroll.status()+'_CODE_'+String(reEnrolled?.code||'none')).toBe(true);
   expect(Number(reEnrolled.data.matricula_id)).toBe(id);
-  const renewedCycle=new DatabaseSync(fixture.dbFile,{readOnly:true});
+  expect(reEnrolled.data.new_edition).toBe(false);
+  expect(reEnrolled.data.preserved_progress).toBe(true);
+  // Rematriculation in the same edition resumes rather than erasing a failed attempt.
+  const resumed=stored();
+  expect(resumed.m.status).toBe('EM_ANDAMENTO');
+  expect(resumed.scorm?.lesson_status).toBe('failed');
+  expect(resumed.scorm?.score_raw).toBe(0);
+  expect(resumed.scorm?.cmi_json).toContain('assessmentEvaluated');
+  expect(resumed.history.n).toBe(0);
+  const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
   let activeCycleId:number;
-  let archivedCycleId:number;
   try {
-    const rows=renewedCycle.prepare(
-      'SELECT id,ciclo_atual FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL ORDER BY id',
-    ).all(id,fixture.companyId) as Array<{id:number;ciclo_atual:number}>;
-    expect(rows).toHaveLength(2);
-    archivedCycleId=rows[0].id;
-    activeCycleId=rows[1].id;
-  } finally {renewedCycle.close();}
-  expect(archivedCycleId).not.toBe(activeCycleId);
-  // Stale SCO from the previous cycle may still be unloading. Even with a
-  // current asset cookie its explicit old-cycle identifier must fail closed.
+    const cycles=db.prepare('SELECT id,ciclo_atual FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL').all(id,fixture.companyId) as Array<{id:number;ciclo_atual:number}>;
+    expect(cycles).toHaveLength(1);
+    expect(cycles[0].ciclo_atual).toBe(1);
+    activeCycleId=cycles[0].id;
+  } finally {db.close();}
   const staleCommit=await page.request.post(api+'/lms/matriculas/scorm/commit',{
-    headers,data:{
-      matricula_id:id,ciclo_id:archivedCycleId,commit_event:'SCORM_COMMIT',
-      lesson_status:'passed',score_raw:100,
-      suspend_data:JSON.stringify({passed:true,c:['qa-slide-1']}),
-    },
+    headers,data:{matricula_id:id,ciclo_id:activeCycleId+100000,commit_event:'SCORM_COMMIT',lesson_status:'passed',score_raw:100},
   });
   expect(staleCommit.status()).toBe(409);
-
-  const fresh=stored();
-  expect(fresh.m.status).toBe('NAO_INICIADO');
-  expect(fresh.m.progresso_pct).toBe(0);
-  expect(fresh.m.qualificacao_historico_id).toBeNull();
-  expect(fresh.scorm?.cmi_json ?? null).toBeNull();
-  expect(fresh.scorm?.score_raw ?? null).toBeNull();
-  expect(fresh.history.n).toBe(0); // rejected cycle minted no qualification
-
-  const dbCycles=new DatabaseSync(fixture.dbFile,{readOnly:true});
-  let cycles: Array<{numero_ciclo:number;ciclo_atual:number;qualificacao_historico_id:number|null}>;
-  try{
-    cycles=dbCycles.prepare(
-      'SELECT numero_ciclo,ciclo_atual,qualificacao_historico_id FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL ORDER BY numero_ciclo',
-    ).all(id,fixture.companyId) as typeof cycles;
-  }finally{dbCycles.close();}
-  expect(cycles).toHaveLength(2);
-  expect(cycles[0].ciclo_atual).toBe(0);
-  expect(cycles[1].numero_ciclo).toBe(cycles[0].numero_ciclo+1);
-  expect(cycles[1].ciclo_atual).toBe(1);
-  expect(cycles[1].qualificacao_historico_id).toBeNull();
-
+  expect(stored()).toEqual(resumed);
+  sco=await open();
+  await expect(sco.locator('#submitAssessment')).toBeDisabled();
+  expect(stored().history.n).toBe(0);
+  // Do not make a failed learner pass by resetting their CMI.
+  // Another synthetic learner follows the passing path independently.
+  id=fixture.passEnrollments[testInfo.project.name];
+  expect(id).toBeGreaterThan(0);
+  expect(id).not.toBe(failedEnrollmentId);
+  expect(stored().m.status).toBe('NAO_INICIADO');
+  expect(stored().history.n).toBe(0);
+  expect(otherEnrollmentSnapshot()).toEqual(otherBefore);
   sco=await open();
   await expect(sco.locator('#submitAssessment')).toBeDisabled();
   await expect(sco.locator('#completeCourse')).toBeHidden();
   expect((await enrollment()).status).not.toBe('CONCLUIDO');
-  expect(stored().m.qualificacao_historico_id).toBeNull();
-  expect(stored().history.n).toBe(0);
-  expect(otherEnrollmentSnapshot()).toEqual(otherBefore);
 
-
-  // The learner now passes in the new authorized, isolated cycle.
+  // A separate learner now passes through genuine DOM interaction.
   sco=await open();
   await sco.locator('button[data-answer="1"]').click();
   await sco.locator('#submitAssessment').click();
@@ -203,6 +190,8 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   },id);
   await expect.poll(()=>enrollment(),{timeout:35000}).toMatchObject({status:'CONCLUIDO'});
   const final=stored();
+  const failedRow=new DatabaseSync(fixture.dbFile,{readOnly:true});
+  try {expect(failedRow.prepare('SELECT status, qualificacao_historico_id FROM lms_matriculas WHERE id=? AND empresa_id=?').get(failedEnrollmentId,fixture.companyId)).toMatchObject({status:'EM_ANDAMENTO',qualificacao_historico_id:null});} finally {failedRow.close();}
   expect(final.m.qualificacao_historico_id).toBeGreaterThan(0);
   expect(final.m.progresso_pct).toBe(100);
   expect(final.history.n).toBe(1);
@@ -240,9 +229,8 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
     'NO_STATUS_DOWNGRADE'];
   const evidence={source:'LOCAL_DISPOSABLE_D1_R2_ONLY',browser,
     packageSha256:localZipDigest,enrollmentIsolation:'SAME_TENANT_ONLY',
-    certificateDocument:'INCONCLUSIVE',crossTenantAccess:'PASS',cycleIsolation:'PASS',
-    cases:[...proven.map(name=>({name,status:'PASS'})),
-      {name:'TENANT_CYCLE_ISOLATION',status:'PASS'}]};
+    certificateDocument:'INCONCLUSIVE',crossTenantAccess:'PASS',cycleIsolation:'INCONCLUSIVE',
+    cases:proven.map(name=>({name,status:'PASS'}))};
   writeFileSync(join('worker-airtrust/.wrangler/scorm-browser-qa',
     'evidence-'+browser.toLowerCase()+'.json'),
     JSON.stringify(evidence,null,2)+'\n',{mode:0o600});
