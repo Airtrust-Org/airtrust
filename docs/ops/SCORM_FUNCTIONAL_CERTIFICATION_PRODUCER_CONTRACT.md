@@ -94,3 +94,13 @@ ciclo isolado. Não utilizar matrículas existentes.
 protocolo Chromium/WebKit não geram prova autenticada de cada ZIP real em
 staging, certificado PDF e witness de navegação/avaliação. Não integrar
 esta PR até existir produtor conectado e homologação do candidato real.
+
+## Produtor independente de ZIPs reais: prova local, sem atestacao de staging
+
+O script `scripts/qa/scorm-independent-zip-producer.mjs` recebe um ZIP e um roteiro de QA externo em JSON, vinculados pelo SHA-256 dos bytes completos. Publica os arquivos apenas em loopback, executa Chromium e WebKit sem credenciais externas e verifica interacoes DOM reais, acesso a conteudo requerido, Commit, suspend_data, retomada apos reabrir a sessao, resultado insuficiente, aprovacao, nota minima e reabertura sem rebaixamento terminal. A selecao de respostas no roteiro depende de revisao instrucional externa: o produtor nao descobre nem inventa gabaritos.
+
+Exemplo de comando: `node scripts/qa/scorm-independent-zip-producer.mjs /qa/pacote.zip /qa/roteiro-revisado.json /qa/relatorio.json`. O roteiro exige `schemaVersion=1`, `packageSha256` exato, `launchFile`, `requiresAssessment`, `requiredContent` e jornadas `resume` e `pass`. Para avaliacao pontuada, exige ainda `masteryScore` e `fail`. As acoes suportadas sao `click`, `fill` e `press`; nenhuma escreve CMI diretamente.
+
+ATENCAO: o executor local usa uma API SCORM emulada, NAO o Worker autenticado e seu D1. Seu relatorio sempre contem `source=AIRTRUST_LOCAL_INDEPENDENT_ZIP_PROBE_V1`, `status=UNCERTIFIED`, `activationAuthorized=false` e lista explicitamente provas ausentes: launch autenticado da edicao candidata antes da ativacao, persistencia backend, ciclos/tenant, dois certificados PDF independentes e assinatura governada. Nenhuma observacao local se transforma em atestacao assinada.
+
+Bloqueio de integracao: para produzir a atestacao confiavel, e necessario um launch de staging autenticado da edicao ZIP imutavel antes de sua ativacao, configuracao de matriculas/ciclos sinteticos governados, roteiro independente por hash, consulta read-only do backend e downloads reais dos dois documentos PDF. O pipeline deve produzir evidencias por navegador desse conjunto antes de usar `sign-scorm-functional-attestation.mjs`, sem atalhos do Player 3.
