@@ -7,7 +7,7 @@ const sha=createHash('sha256').update(zip).digest('hex');
 const run=browser=>({
   source:'LOCAL_DISPOSABLE_D1_R2_ONLY',browser,packageSha256:sha,
   enrollmentIsolation:'SAME_TENANT_ONLY',certificateDocument:'INCONCLUSIVE',
-  crossTenantAccess:'PASS',cycleIsolation:'PASS',
+  crossTenantAccess:'PASS',cycleIsolation:'INCONCLUSIVE',
   cases:LOCAL_CASES.map(name=>({name,status:'PASS'})),
 });
 test('local verdict stays UNCERTIFIED even after all proved steps pass',()=>{
@@ -15,11 +15,12 @@ test('local verdict stays UNCERTIFIED even after all proved steps pass',()=>{
  assert.equal(report.status,'UNCERTIFIED');
  assert.equal(report.activationAuthorized,false);
  assert.equal(report.packageSha256,sha);
- assert.equal(report.passedChecks,16);
+ assert.equal(report.passedChecks,14);
+ assert.ok(report.missing.includes('AUDITED_CYCLE_ROTATION'));
  assert.ok(report.missing.includes('CERTIFICATE_DOCUMENT'));
 });
 test('cannot mislabel tenant/cycle or certificate proof',()=>{
- const a=run('CHROMIUM');a.cases[7].status='INCONCLUSIVE';
+ const a=run('CHROMIUM');a.cases[6].status='INCONCLUSIVE';
  assert.throws(()=>summarizeLocalEvidence(zip,[a,run('WEBKIT')]),/NOT_PROVEN/);
  const b=run('WEBKIT');b.certificateDocument='PASS';
  assert.throws(()=>summarizeLocalEvidence(zip,[run('CHROMIUM'),b]),/SCOPE_INVALID/);
@@ -42,6 +43,6 @@ test('rejects missing backend tenant isolation proof',()=>{
 });
 
 test('rejects missing cycle isolation and old-cycle status laundering',()=>{
- const a=run('WEBKIT');a.cycleIsolation='INCONCLUSIVE';
- assert.throws(()=>summarizeLocalEvidence(zip,[run('CHROMIUM'),a]),/CYCLE_PROOF_MISSING/);
+ const a=run('WEBKIT');a.cycleIsolation='PASS';
+ assert.throws(()=>summarizeLocalEvidence(zip,[run('CHROMIUM'),a]),/CYCLE_SCOPE_OVERCLAIM/);
 });
