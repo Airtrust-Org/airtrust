@@ -639,6 +639,8 @@ export async function reactivateCancelledMatriculaPreservingProgress(
   // Keep the current cycle rather than making a new zero-progress cycle.
   // All runtime SCORM state remains in lms_progresso_scorm untouched.
   await ensureMatriculaCycle(db,{matriculaId:params.matriculaId,empresaId:params.empresaId,
-    origin:'REATIVACAO_SEM_RESET'});
+    // MANUAL is an allowed lms_matricula_ciclos.origem CHECK value.
+    // An optional missing cycle may be created without an invalid origin.
+    origin:'MANUAL'});
   return {status:resumeStatus,progressoPct:originalProgress,scormPreserved:true};
 }
