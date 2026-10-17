@@ -171,13 +171,13 @@ describe('individual evidence for simulator-generated FAP (real SQLite)', () => 
         (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
       VALUES (1,1,70,1002,50,1,'CONFIRMADO');
     `);
-    expect((await generate()).qualificacoes_geradas.map(q => q.codigo)).toEqual([]);
+    await expect(generate()).rejects.toThrow(/Nenhuma qualificação foi gerada/);
     db!.database.exec(`
       INSERT INTO sessoes_checks_resultados_individuais
         (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
       VALUES (2,1,70,1002,52,0,'CONFIRMADO');
     `);
-    expect((await generate()).qualificacoes_geradas.map(q => q.codigo)).toEqual([]);
+    await expect(generate()).rejects.toThrow(/Nenhuma qualificação foi gerada/);
     // Re-evaluation is a new signed fiche; never rewrite the immutable failure.
     db!.database.exec(`
       INSERT INTO fichas_sessao
@@ -213,11 +213,11 @@ describe('individual evidence for simulator-generated FAP (real SQLite)', () => 
             (2,1,71,1001,50,0,'CONFIRMADO');
     `);
     const a = await gerarQualificacaoDaFicha(db!.asD1(),70);
-    const b = await gerarQualificacaoDaFicha(db!.asD1(),71);
-    const c = await gerarQualificacaoDaFicha(db!.asD1(),72);
     expect(a.qualificacoes_geradas.map((q) => q.codigo)).toEqual(['OPS-12','SIX']);
-    expect(b.qualificacoes_geradas.map((q) => q.codigo)).toEqual([]);
-    expect(c.qualificacoes_geradas.map((q) => q.codigo)).toEqual([]);
+    await expect(gerarQualificacaoDaFicha(db!.asD1(),71))
+      .rejects.toThrow(/Nenhuma qualificação foi gerada/);
+    await expect(gerarQualificacaoDaFicha(db!.asD1(),72))
+      .rejects.toThrow(/Nenhuma qualificação foi gerada/);
     // A's explicit check did not approve B or C; the old session pass did not
     // approve anybody lacking a positive individual record.
     expect(mocks.upsert.mock.calls.filter(([,q]) => q.qualificacaoCodigo === 'SIX'))
