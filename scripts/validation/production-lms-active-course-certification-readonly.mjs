@@ -1038,18 +1038,30 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       // The question-specific locationKey above resets attempts per question.
       const inlineQuizChoices = items.filter((item) => item.el.matches('[data-quiz-choice]'));
       if (inlineQuizChoices.length) {
-        // Course-authored quiz navigation can use data-quiz-nextq instead of
-        // data-next. Only advance on an already selected learner answer; an
-        // enabled button alone must not allow a test driver to skip a question.
-        const inlineNext = items.find((item) => item.el.matches('[data-next],[data-quiz-nextq]'));
+        // Course #28 exposes data-quiz-nextq for each authored quiz question.
+        // Respect a selected learner answer before advancing; without one,
+        // require an explicit answer index from package metadata. A missing
+        // mapping or disabled gate is INCONCLUSIVE, never a fabricated PASS.
         const inlineAnswerSelected = inlineQuizChoices.some((item) =>
           /(^|\s)(selected|active|checked)(\s|$)/i.test(item.className) ||
           item.ariaPressed === 'true' || item.ariaChecked === 'true' ||
           item.el.getAttribute('data-selected') === 'true'
         );
-        if (inlineNext && (
-          inlineNext.el.matches('[data-next]') || inlineAnswerSelected
-        )) return markAndClick(inlineNext, 'inline-quiz-next');
+        const nextQuestionControl = document.querySelector('[data-quiz-nextq]');
+        if (nextQuestionControl) {
+          const enabledNextQuestion = items.find((item) => item.el === nextQuestionControl);
+          if (inlineAnswerSelected) {
+            return enabledNextQuestion
+              ? markAndClick(enabledNextQuestion, 'inline-quiz-next-question')
+              : { type: 'inline-quiz-question-gate-blocked' };
+          }
+          const authoredIndex = (plannedQuestion?.indices || plansHere.flatMap((entry) => entry?.indices || []))
+            .find((index) => Number.isInteger(index) && index >= 0 && index < inlineQuizChoices.length);
+          if (!Number.isInteger(authoredIndex)) return { type: 'inline-quiz-authored-answer-missing' };
+          return markAndClick(inlineQuizChoices[authoredIndex], 'inline-quiz-authored-answer');
+        }
+        const inlineNext = items.find((item) => item.el.matches('[data-next]'));
+        if (inlineNext) return markAndClick(inlineNext, 'inline-quiz-next');
         const chosen = new Set(st.inlineChoicesTried?.[locationKey] || []);
         const wanted = (plannedQuestion?.indices || [])[0];
         const candidates = [
@@ -1273,7 +1285,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
     if (action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall') {
       diagnostics.required_decision_block = action.type;
     }
-    if (action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall' ||
+    if (action?.type === 'inline-quiz-authored-answer-missing' || action?.type === 'inline-quiz-question-gate-blocked' ||
+        action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall' ||
         action?.type === 'retry-deferred' || action?.type === 'adaptive-exhausted' ||
         action?.type === 'video-blocked' || action?.type === 'video-error') break;
     if (action?.type === 'frame-error') {
