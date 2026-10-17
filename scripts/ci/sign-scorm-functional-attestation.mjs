@@ -99,7 +99,10 @@ export function signGovernedScormEvidence({
     certificateDocuments.CHROMIUM.qualificationHistoryId!==
     certificateDocuments.WEBKIT.qualificationHistoryId&&
     certificateDocuments.CHROMIUM.documentId!==
-    certificateDocuments.WEBKIT.documentId,
+    certificateDocuments.WEBKIT.documentId&&
+    certificateDocuments.CHROMIUM.sha256!==
+    certificateDocuments.WEBKIT.sha256&&
+    certificatePdfFiles.CHROMIUM!==certificatePdfFiles.WEBKIT,
     'CERTIFICATE_BROWSER_ISOLATION_VIOLATION');
   const p={kind:K,empresaId:candidate.empresaId,cursoId:candidate.cursoId,
     packageId:candidate.packageId,packageSha256:candidate.packageSha256,
