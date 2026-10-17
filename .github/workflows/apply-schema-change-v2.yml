@@ -632,6 +632,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0549-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight empty LGPD model retirement 0553
+        if: ${{ inputs.change_id == 'retire-empty-lgpd-seg-info-model-0553' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0553-production-preflight.sh --target=airtrust-db
+
       - name: Preflight restore coordination role USER 0551
         if: ${{ inputs.change_id == 'coordenacao-role-user-restore-0551' }}
         shell: bash
@@ -780,6 +788,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0549-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate empty LGPD model retirement 0553
+        if: ${{ inputs.change_id == 'retire-empty-lgpd-seg-info-model-0553' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0553-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate restore coordination role USER 0551
         if: ${{ inputs.change_id == 'coordenacao-role-user-restore-0551' }}
