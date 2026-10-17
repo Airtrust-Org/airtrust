@@ -158,6 +158,30 @@ describe('individual evidence for simulator-generated FAP (real SQLite)', () => 
     db!.database.exec('INSERT INTO sessoes_checks_resultados VALUES (2, 50, 1, NULL)');
     expect((await generate()).qualificacoes_geradas.map((row) => row.codigo)).toEqual(['OPS-12']);
   });
+  it('requires every check of a qualification to pass individually', async () => {
+    db!.database.exec(`
+      CREATE TABLE sessoes_checks_resultados_individuais (
+        id INTEGER PRIMARY KEY, empresa_id INTEGER, ficha_id INTEGER,
+        funcionario_id INTEGER, sessao_check_id INTEGER,
+        aprovado INTEGER, estado TEXT, deleted_at TEXT
+      );
+      INSERT INTO sessoes_checks (id,sessao_id,qualificacao_tipo_id)
+      VALUES (52,60,103);
+      INSERT INTO sessoes_checks_resultados_individuais
+        (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
+      VALUES (1,1,70,1002,50,1,'CONFIRMADO');
+    `);
+    expect((await generate()).qualificacoes_geradas.map(q => q.codigo)).toEqual(['OPS-12']);
+    db!.database.exec(`
+      INSERT INTO sessoes_checks_resultados_individuais
+        (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
+      VALUES (2,1,70,1002,52,0,'CONFIRMADO');
+    `);
+    expect((await generate()).qualificacoes_geradas.map(q => q.codigo)).toEqual(['OPS-12']);
+    db!.database.exec("UPDATE sessoes_checks_resultados_individuais SET aprovado=1 WHERE id=2");
+    expect((await generate()).qualificacoes_geradas.map(q => q.codigo)).toEqual(['OPS-12','SIX']);
+  });
+
   it('uses only explicit signed individual evidence after 0554, never a shared-session pass', async () => {
     db!.database.exec(`
       CREATE TABLE sessoes_checks_resultados_individuais (
