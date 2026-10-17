@@ -14,6 +14,13 @@ const spec = readFileSync('e2e/frontend-pr-ui-qa/training-compliance-lifecycle.s
 test('lifecycle workflow is main-only, staging-only, exact-SHA guarded and always cleans up', () => {
   assert.match(workflow, /refs\/heads\/main/);
   assert.match(workflow, /expected_deployed_sha/);
+  assert.match(workflow, /pr_number:/);
+  assert.match(workflow, /OPEN_REVIEWED_PR_REQUIRED/);
+  assert.match(workflow, /OPEN_REVIEWED_PR_SHA_OR_SCOPE_MISMATCH/);
+  assert.match(workflow, /pr\.state !== 'open'/);
+  assert.match(workflow, /pr\.head\?\.repo\?\.full_name !== repo/);
+  assert.match(workflow, /pr\.head\?\.sha\?\.toLowerCase\(\) !== expected/);
+  assert.match(workflow, /group: airtrust-staging-mutations-and-scorm-qa/);
   assert.match(workflow, /verify-release-gates\.mjs/);
   assert.match(workflow, /airtrust-api-staging\.airtrust\.workers\.dev/);
   assert.doesNotMatch(workflow, /api\.airtrust\.online/);
