@@ -64,7 +64,7 @@ async function main(){
  const report={schema_version:1,main_sha:source,production_sha:production,
   tenant:6,enrollment:384,course:34,mode:'read-only',writes:0,
   current:{status:state(c.status),progress:safeInt(c.progresso_pct),
-   slide:safeInt(c.ultimo_slide),location:typeof c.lesson_location==='string'&&/^\\d{1,4}(?:\\/\\d{1,4})?$/.test(c.lesson_location)?c.lesson_location:null,
+   slide:safeInt(c.ultimo_slide),location:typeof c.lesson_location==='string'&&new RegExp('^[0-9]{1,4}(/[0-9]{1,4})?$').test(c.lesson_location)?c.lesson_location:null,
    updated_at:safeStamp(c.updated_at),started_at:safeStamp(c.data_inicio),
    ...summaryScorm(c)},
   cycles:cycles.map(x=>({number:safeInt(x.numero_ciclo),status:state(x.status),
