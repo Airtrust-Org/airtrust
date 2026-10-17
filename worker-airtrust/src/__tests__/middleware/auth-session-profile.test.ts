@@ -6,6 +6,7 @@ import { generateJWT } from '../../utils/security';
 import {
   SESSION_ROLE_COOKIE,
   resolveAvailableSessionRoles,
+  resolveRequestedSessionRole,
 } from '../../services/auth-session-roles';
 import type { Env, Variables } from '../../types';
 import { resetSchemaCache } from '../../utils/db-schema';
@@ -17,6 +18,7 @@ type Fixture = {
   empresaId: number;
   perfil: string;
   membershipRole: string | null;
+  platformAdmin?: boolean;
   funcionarioId?: number | null;
   funcionarioEmpresaId?: number | null;
   instrutor?: boolean;
@@ -43,6 +45,9 @@ function createDb(fx: Fixture) {
         },
         async first<T>() {
           if (sql.includes("name = 'usuarios_empresas'")) return { found: 1 } as T;
+          if (sql.includes('sqlite_master') && sql.includes('name = ?')) {
+            return statement.params[0] === 'user_platform_roles' ? ({ found: 1 } as T) : (null as T);
+          }
           if (sql.includes('PRAGMA table_info')) return null as T;
           if (sql.includes('FROM token_blocklist')) return null as T;
 
@@ -86,6 +91,9 @@ function createDb(fx: Fixture) {
           return { success: true, meta: { changes: 0 } };
         },
         async all<T>() {
+          if (sql.includes('FROM user_platform_roles')) {
+            return { results: fx.platformAdmin ? [{ role_code: 'platform_admin' }] : [] } as unknown as T;
+          }
           if (sql.includes('FROM usuarios_empresas_perfis')) {
             if (fx.explicitQueryThrows) throw new Error('no such table: usuarios_empresas_perfis');
             if (fx.explicitQueryInfraError) throw new Error('database disk image is malformed');
@@ -142,6 +150,27 @@ beforeEach(() => {
 });
 
 describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () => {
+  it('ADMINISTRADOR tem somente modo administrativo mesmo com perfis extras explícitos', async () => {
+    const db = createDb({
+      userId: 10, empresaId: 500, perfil: 'ADMINISTRADOR', membershipRole: 'admin',
+      explicitProfiles: [
+        { perfil: 'ADMINISTRADOR', ativo: 1 },
+        { perfil: 'INSTRUTOR', ativo: 1 },
+        { perfil: 'ALUNO', ativo: 1 },
+      ],
+    });
+    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['ADMINISTRADOR']);
+    expect(await resolveRequestedSessionRole(db, 10, 500, 'ALUNO')).toBeNull();
+  });
+
+  it('ADMINISTRADOR legado tem somente modo administrativo apesar de vínculos de aluno/instrutor', async () => {
+    const db = createDb({
+      userId: 10, empresaId: 500, perfil: 'admin', membershipRole: 'admin',
+      funcionarioId: 77, funcionarioEmpresaId: 500, instrutor: true, aluno: true,
+    });
+    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['ADMINISTRADOR']);
+  });
+
 
   it('GESTOR sempre recebe ALUNO mesmo quando ALUNO explícito está inativo', async () => {
     const db = createDb({
@@ -286,6 +315,23 @@ describe('Coordenação de Voo — perfil canônico por empresa', () => {
     expect(response.status).toBe(401);
   });
 });
+describe('platform admin — vínculo de tenant revalidado', () => {
+  it('sem grant persistido, token ADMINISTRADOR não supera ausência de vínculo', async () => {
+    const db = createDb({ userId: 7, empresaId: 500, perfil: 'admin', membershipRole: null });
+    const { token } = await makeToken(7, 500, 'ADMINISTRADOR');
+    const res = await buildApp(db, 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(401);
+  });
+
+  it('com grant persistido, administrador pode autenticar em tenant sem vínculo', async () => {
+    const db = createDb({ userId: 7, empresaId: 500, perfil: 'admin', membershipRole: null, platformAdmin: true });
+    const { token } = await makeToken(7, 500, 'ADMINISTRADOR');
+    const res = await buildApp(db, 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(200);
+    expect((await res.json() as { userRole: string }).userRole).toBe('ADMINISTRADOR');
+  });
+});
+
 describe('auth() — perfil ativo de sessão (multi-perfil)', () => {
   it('sem cookie de seleção: usa a role canônica sem alteração', async () => {
     const db = createDb({
@@ -519,7 +565,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
     expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
   });
 
-  it('ADMINISTRADOR sempre pode entrar como ALUNO sem matrícula, mesmo com ALUNO explícito inativo', async () => {
+  it('ADMINISTRADOR nunca alterna para ALUNO, mesmo com ALUNO explícito inativo', async () => {
     const db = createDb({
       ...b,
       explicitProfiles: [
@@ -527,7 +573,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
         { perfil: 'ALUNO', ativo: 0 },
       ],
     });
-    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['ADMINISTRADOR', 'ALUNO']);
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['ADMINISTRADOR']);
   });
 
   it('isolamento por empresa_id: perfis explícitos da empresa B não vazam para a empresa A', async () => {
@@ -541,11 +587,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
       },
     });
     expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
-    expect(await resolveAvailableSessionRoles(db, 43, 99)).toEqual([
-      'ADMINISTRADOR',
-      'INSTRUTOR',
-      'ALUNO',
-    ]);
+    expect(await resolveAvailableSessionRoles(db, 43, 99)).toEqual(['ADMINISTRADOR']);
   });
 
   it('ausência da tabela (ambiente sem 0473) → inferência legada de bootstrap', async () => {

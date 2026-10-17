@@ -74,6 +74,7 @@ interface UsuarioRow {
   email: string;
   nome: string;
   perfil: string | null;
+  perfis?: string[];
   active: number;
   funcionario_id: number | null;
   funcionario_nome: string | null;
@@ -853,8 +854,16 @@ function SetoresGerenciadosField({
       ) : setores.length === 0 ? (
         <p className="text-xs text-amber-600">Nenhum setor ativo cadastrado nesta empresa.</p>
       ) : (
-        <div
-          className={`border rounded-lg p-2 max-h-40 overflow-y-auto space-y-1 ${
+        <div>
+          <button
+            type="button"
+            onClick={() => onChange(setores.map((setor) => setor.id))}
+            className="text-xs font-medium text-primary hover:underline mb-2"
+          >
+            Selecionar todos os setores ativos
+          </button>
+          <div
+            className={`border rounded-lg p-2 max-h-40 overflow-y-auto space-y-1 ${
             showError && selectedIds.length === 0 ? 'border-red-400' : 'border-slate-300'
           }`}
         >
@@ -871,6 +880,10 @@ function SetoresGerenciadosField({
               {s.nome}
             </label>
           ))}
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Novos setores precisarão ser vinculados posteriormente.
+          </p>
         </div>
       )}
       {showError && selectedIds.length === 0 && (
@@ -898,6 +911,7 @@ function ModalCriarUsuario({
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [perfil, setPerfil] = useState('ALUNO');
+  const [alunoTambem, setAlunoTambem] = useState(true);
   const [funcionarioId, setFuncionarioId] = useState<number | null>(null);
   const [setorIds, setSetorIds] = useState<number[]>([]);
   const [tentouEnviar, setTentouEnviar] = useState(false);
@@ -933,6 +947,7 @@ function ModalCriarUsuario({
           email,
           perfil,
           funcionario_id: funcionarioId,
+          ...(perfil === 'INSTRUTOR' ? { aluno_tambem: alunoTambem } : {}),
           ...(perfil === 'GESTOR' ? { setor_ids: setorIds } : {}),
         }),
       });
@@ -1015,6 +1030,14 @@ function ModalCriarUsuario({
               {perfil === 'COORDENACAO_VOO' && 'Opera o Controle de Voos e revisa RDVs somente na empresa vinculada.'}
             </p>
           </div>
+
+          {perfil === 'INSTRUTOR' && (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={alunoTambem}
+                onChange={(event) => setAlunoTambem(event.target.checked)} />
+              Também permitir acesso como Aluno
+            </label>
+          )}
 
           {perfil === 'GESTOR' && (
             <SetoresGerenciadosField
@@ -1102,6 +1125,10 @@ function ModalEditarUsuario({
   const [nome, setNome] = useState(usuario.nome);
   const [perfil, setPerfil] = useState(normalizePerfil(usuario.perfil) || 'ALUNO');
   const [perfilAlterado, setPerfilAlterado] = useState(false);
+  const [alunoTambem, setAlunoTambem] = useState(
+    Array.isArray(usuario.perfis) && usuario.perfis.some((p) => normalizePerfil(p) === 'ALUNO'),
+  );
+  const [alunoTambemAlterado, setAlunoTambemAlterado] = useState(false);
   const [funcionarioId, setFuncionarioId] = useState<number | null>(usuario.funcionario_id);
   const [setorIds, setSetorIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
@@ -1142,6 +1169,8 @@ function ModalEditarUsuario({
         body: JSON.stringify({
           nome,
           ...(perfilAlterado ? { perfil } : {}),
+          ...(perfil === 'INSTRUTOR' && alunoTambemAlterado
+            ? { aluno_tambem: alunoTambem } : {}),
           funcionario_id: funcionarioId,
           ...(perfil === 'GESTOR' && setorIds.length > 0 ? { setor_ids: setorIds } : {}),
         }),
@@ -1205,6 +1234,10 @@ function ModalEditarUsuario({
               onChange={(e) => {
                 setPerfil(e.target.value);
                 setPerfilAlterado(true);
+                if (e.target.value === 'INSTRUTOR' && perfil !== 'INSTRUTOR') {
+                  setAlunoTambem(true);
+                  setAlunoTambemAlterado(true);
+                }
               }}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 bg-white"
             >
@@ -1215,6 +1248,17 @@ function ModalEditarUsuario({
               ))}
             </select>
           </div>
+
+          {perfil === 'INSTRUTOR' && (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={alunoTambem}
+                onChange={(event) => {
+                  setAlunoTambem(event.target.checked);
+                  setAlunoTambemAlterado(true);
+                }} />
+              Também permitir acesso como Aluno
+            </label>
+          )}
 
           {perfil === 'GESTOR' && (
             <SetoresGerenciadosField
