@@ -31,6 +31,7 @@ import {
   getTodayIsoSaoPaulo,
   getQualificacoesVencimentoExpr,
 } from '../utils/qualificacoes-alerta-config';
+import { trainingComplianceEffectiveRequirementPredicateSql } from './training-compliance-rule-engine';
 
 const SIMULADORES_OPERATIONAL_TIMEZONE = 'America/Sao_Paulo';
 
@@ -666,14 +667,16 @@ export interface QualificationComplianceSummary {
   nao_realizados: number;
   compliance_pct: number | null;
   cobertura: 'COMPLETA' | 'PARCIAL' | 'NAO_CONFIGURADA';
-  escopo_modelo: 'SETOR_OU_TRANSVERSAL';
+  escopo_modelo: 'MATRIZ_CANONICA';
 }
 
 /**
  * Compliance de Qualificações é independente de Compliance de Treinamentos.
  *
- * Denominador: modelos ativos classificados como DOCUMENTO ou AVALIACAO (ou is_check=1)
- * aplicáveis ao setor do funcionário; modelo sem vínculo setorial é transversal.
+ * Denominador: requisitos OBRIGATORIOS efetivos da matriz canônica
+ * `treinamento_requisitos`, filtrados para modelos DOCUMENTO/AVALIACAO (ou is_check=1).
+ * A mesma SSOT define quem precisa cumprir algo, mas Treinamentos e Qualificações
+ * permanecem indicadores independentes. Vínculos legados de modelo-setor não criam obrigação.
  * Evidência: último histórico operacional da qualificação e, para documentos/licenças,
  * registro em `licencas` com código equivalente. Evidência nunca cria obrigação.
  */
@@ -692,13 +695,16 @@ export async function getQualificationComplianceSummary(
     nao_realizados: 0,
     compliance_pct: null,
     cobertura: 'NAO_CONFIGURADA',
-    escopo_modelo: 'SETOR_OU_TRANSVERSAL',
+    escopo_modelo: 'MATRIZ_CANONICA',
   };
 
   if (
     !(await tableExists(db, 'qualificacoes_tipos')) ||
     !(await tableExists(db, 'qualificacoes_historico')) ||
-    !(await tableExists(db, 'qualificacoes_tipos_setores'))
+    !(await tableExists(db, 'treinamento_requisitos')) ||
+    !(await tableExists(db, 'funcionarios_compliance_condicoes')) ||
+    !(await tableExists(db, 'funcionarios_aeronaves')) ||
+    !(await tableExists(db, 'aeronaves'))
   ) {
     return empty;
   }
@@ -708,6 +714,13 @@ export async function getQualificationComplianceSummary(
   const thresholdDias = await getQualificacoesAlertaDias(db, empresaId);
   const currentQualificationPredicate = buildCurrentOperationalQualificationPredicate('qh');
   const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
+  const qualificationRequirementPredicate = trainingComplianceEffectiveRequirementPredicateSql({
+    ruleAlias: 'tr',
+    employeeAlias: 'e',
+    qualificationExpr: 'qt.id',
+    empresaExpr: 'e.empresa_id',
+    includeNonTrainingCategories: true,
+  });
   const hasLicencas = await tableExists(db, 'licencas');
   const licensesCte = hasLicencas
     ? `current_licenses AS (
@@ -736,7 +749,7 @@ export async function getQualificationComplianceSummary(
   const result = await db
     .prepare(
       `WITH active_employees AS (
-         SELECT f.id, f.setor_id
+         SELECT f.id, f.empresa_id, f.setor_id, f.funcao_id, f.aeronave
          FROM funcionarios f
          WHERE f.empresa_id = ?
            AND f.deleted_at IS NULL
@@ -762,22 +775,7 @@ export async function getQualificationComplianceSummary(
          SELECT e.id AS funcionario_id, qt.id AS qualificacao_id, qt.codigo
          FROM active_employees e
          CROSS JOIN qualification_types qt
-         WHERE
-           NOT EXISTS (
-             SELECT 1
-             FROM qualificacoes_tipos_setores qts_any
-             WHERE qts_any.empresa_id = ?
-               AND qts_any.tipo_id = qt.id
-               AND qts_any.deleted_at IS NULL
-           )
-           OR EXISTS (
-             SELECT 1
-             FROM qualificacoes_tipos_setores qts
-             WHERE qts.empresa_id = ?
-               AND qts.tipo_id = qt.id
-               AND qts.setor_id = e.setor_id
-               AND qts.deleted_at IS NULL
-           )
+         WHERE ${qualificationRequirementPredicate}
        ),
        current_history AS (
          SELECT funcionario_id, qualificacao_id, data_vencimento
@@ -852,8 +850,6 @@ export async function getQualificationComplianceSummary(
       ...employeeScope.bindings,
       empresaId,
       empresaId,
-      empresaId,
-      empresaId,
       ...(hasLicencas ? [empresaId] : []),
       hoje,
       hoje,
@@ -886,7 +882,7 @@ export async function getQualificationComplianceSummary(
     nao_realizados: Number(result?.nao_realizados || 0),
     compliance_pct: requisitos > 0 ? Math.round((conformes / requisitos) * 1000) / 10 : null,
     cobertura,
-    escopo_modelo: 'SETOR_OU_TRANSVERSAL',
+    escopo_modelo: 'MATRIZ_CANONICA',
   };
 }
 

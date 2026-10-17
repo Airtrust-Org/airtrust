@@ -40,7 +40,7 @@ vi.mock('../../services/dashboardService', () => ({
     nao_realizados: 1,
     compliance_pct: 90.9,
     cobertura: 'COMPLETA',
-    escopo_modelo: 'SETOR_OU_TRANSVERSAL',
+    escopo_modelo: 'MATRIZ_CANONICA',
   })),
   getDashboardAlerts: vi.fn(async () => []),
   getAtividadesRecentes: vi.fn(async () => []),

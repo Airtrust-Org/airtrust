@@ -190,6 +190,16 @@ describe('training compliance rule engine', () => {
     }
   });
 
+  it('can reuse the canonical applicability predicate for non-training qualification requirements', () => {
+    const sql = trainingComplianceEffectiveRequirementPredicateSql({
+      includeNonTrainingCategories: true,
+    });
+    expect(sql).toContain("tr.obrigatoriedade='OBRIGATORIA'");
+    expect(sql).toContain('funcionarios_compliance_condicoes');
+    expect(sql).toContain('funcionarios_aeronaves');
+    expect(sql).not.toContain("NOT IN ('CHECK', 'EXAME', 'LICENCA', 'VOO', 'TREINAMENTO DE VOO')");
+  });
+
   it('generates the same condition-aware predicate for renewal and expiry notification paths', () => {
     const sql = trainingComplianceEffectiveRequirementPredicateSql({ requireAutoEnrollment: true });
     expect(sql).toContain('funcionarios_compliance_condicoes');
