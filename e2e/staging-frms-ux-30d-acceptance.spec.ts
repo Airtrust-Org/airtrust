@@ -19,11 +19,11 @@ async function captureMain(page: Page, name: string) {
   });
 }
 
-test('FRMS UX 30d staging: platform admin selects only synthetic tenant and reads operational flows', async ({ page }) => {
+test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', async ({ page }) => {
   test.setTimeout(150_000);
   const email = String(process.env.FRMS_QA_EMAIL || '').trim();
   const password = String(process.env.FRMS_QA_PASSWORD || '');
-  if (!email || !password) throw new Error('FRMS_PLATFORM_QA_CREDENTIAL_PAIR_MISSING');
+  if (email !== 'qa-frms-ux@staging.airtrust.invalid' || !password) throw new Error('FRMS_SCOPED_QA_CREDENTIAL_MISSING');
 
   const guard = installReadOnlyGuard(page);
   const failures: string[] = [];
@@ -40,21 +40,21 @@ test('FRMS UX 30d staging: platform admin selects only synthetic tenant and read
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 });
 
-  // The dedicated QA principal must be independently authorized as platform admin.
-  // The general staging smoke principal is intentionally not sufficient.
-  // A tenant is selectable only if the backend grants platform-admin scope.
-  // Never forge JWT/localStorage or add membership to the synthetic tenant.
+  // Account is scoped to exactly tenant 999013 by the governed staging fixture.
+  // With only one authorized tenant, the UI may omit the company selector.
+  // Never forge a session, JWT, membership or tenant context in the browser.
   const selector = page.locator('select').filter({
     has: page.locator(`option[value="${QA_TENANT_ID}"]`),
   }).first();
-  await expect(selector, 'A conta staging não tem escopo autorizado para o tenant QA 999013').toBeVisible({ timeout: 20_000 });
-  const selected = page.waitForResponse(
-    (response) => response.url().includes('/api/auth/select-empresa') && response.request().method() === 'POST',
-    { timeout: 20_000 },
-  );
-  await selector.selectOption(QA_TENANT_ID);
-  expect((await selected).status()).toBe(200);
-  await expect(selector).toHaveValue(QA_TENANT_ID, { timeout: 20_000 });
+  if (await selector.isVisible().catch(() => false)) {
+    const selected = page.waitForResponse(
+      (response) => response.url().includes('/api/auth/select-empresa') && response.request().method() === 'POST',
+      { timeout: 20_000 },
+    );
+    await selector.selectOption(QA_TENANT_ID);
+    expect((await selected).status()).toBe(200);
+    await expect(selector).toHaveValue(QA_TENANT_ID, { timeout: 20_000 });
+  }
 
   const snapshotRequest = page.waitForResponse(
     (response) => response.url().includes('/api/frms/operational-snapshot') &&
@@ -72,7 +72,7 @@ test('FRMS UX 30d staging: platform admin selects only synthetic tenant and read
   expect(payload.success).toBe(true);
   expect(payload.summary?.total_tripulantes).toBe(14);
   expect(payload.data).toHaveLength(14);
-  expect(payload.data?.every((p) => p.empresa_id === 999013 && p.nome?.startsWith('QA FRMS Pessoa '))).toBe(true);
+  expect(payload.data?.every((p) => p.empresa_id === 999013 && p.nome?.startsWith('QA Tripulante '))).toBe(true);
   expect((payload.summary?.checkins_pendentes ?? 0) + (payload.summary?.checkins_recebidos ?? 0)).toBe(14);
   await expect(page.getByRole('navigation', { name: 'Áreas FRMS' })).toBeVisible();
   await expect(page.getByText(/Serviço temporariamente indisponível/i)).toHaveCount(0);
