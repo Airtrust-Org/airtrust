@@ -4,7 +4,7 @@
   "base_schema": "scripts/schema-local.sql",
   "canonical_bootstrap_command": "npm run setup:lms:local:reset",
   "bootstrap_script": "scripts/setup-local-lms-smoke-db.sh",
-  "reviewed_through_schema_v2_change": "0542_lms_scorm_formative_assessment_policy.sql",
+  "reviewed_through_schema_v2_change": "0553_lms_cycle_evidence_archive.sql",
   "critical_tables": [
     "token_blocklist",
     "audit_logs",
@@ -21,7 +21,10 @@
     "lms_cursos_setores",
     "lms_scorm_package_versions",
     "lms_scorm_package_audit_log",
-    "lms_completion_diagnostics_snapshots"
+    "lms_completion_diagnostics_snapshots",
+    "lms_matricula_ciclos",
+    "lms_xapi_statements",
+    "lms_ciclo_evidencias"
   ],
   "official_consumers": [
     ".github/workflows/heavy-ci.yml",
@@ -34,5 +37,5 @@
     "A Schema V2 change newer than reviewed_through_schema_v2_change that targets a critical table fails closed until this contract/bootstrap is reviewed.",
     "No remote D1 target is permitted by this guard or bootstrap."
   ],
-  "review_note": "Reviewed 2026-10-08: 0542 adds lms_cursos.scorm_assessment_policy with fail-closed SCORED default and a narrow production-only tenant-6 CRM metadata update. Canonical disposable local LMS bootstrap now creates the matching CHECK-constrained column without touching remote D1 or applying tenant-specific metadata. Schema V2 remote apply remains separately governed."
+  "review_note": "Reviewed 2026-10-08: 0542 adds lms_cursos.scorm_assessment_policy with fail-closed SCORED default and a narrow production-only tenant-6 CRM metadata update. Canonical disposable local LMS bootstrap now creates the matching CHECK-constrained column without touching remote D1 or applying tenant-specific metadata. Schema V2 remote apply remains separately governed. Reviewed 2026-10-17: 0553 adds xAPI archived_cycle_id, per-cycle archive table, and append-only/tenant triggers. Disposable local smoke applies the corresponding additive migration and verifies the new table/column, preventing HTTP 500 from missing schema; no remote D1 is modified. Intermediate 0543-0552 changes are independently governed; this review does not assert remote application."
 }
