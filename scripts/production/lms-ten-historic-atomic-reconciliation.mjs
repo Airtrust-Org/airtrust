@@ -12,6 +12,19 @@ const PROD=String(process.env.EXPECTED_PRODUCTION_SHA||'').toLowerCase();
 const TENANT=Number(process.env.TARGET_COMPANY_ID);
 const REASON='AIRTRUST_MANAGER_HISTORICAL_EDITION_CREDIT_20261016: Reconhecimento administrativo autorizado da realizacao do curso na edicao SCORM anterior em 16/10/2026. Gerencia de Treinamento atesta conclusao, sem afirmar aprovacao da nova edicao; gerar qualificacao pelo mecanismo canonico com trilha de auditoria.';
 const PAIRS=new Map([[2106,68],[384,34],[201,28],[608,43],[2139,68],[610,43],[544,7],[624,43],[700,55],[2052,68]]);
+// Only these three have a stored score of 100 against mastery 70.
+// Historical training credit never asserts SCORM PASS for the current edition.
+const SCORE_PROVEN_IDS=new Set([2106,2139,2052]);
+const BLOCKED_EVIDENCE=new Map([
+  [384,{category:'SCORE_BELOW_MASTERY',score:0}],
+  [201,{category:'SCORE_MISSING',score:null}],
+  [608,{category:'SCORE_BELOW_MASTERY',score:68}],
+  [610,{category:'SCORE_BELOW_MASTERY',score:13}],
+  [544,{category:'SCORE_BELOW_MASTERY',score:0}],
+  [624,{category:'SCORE_BELOW_MASTERY',score:13}],
+]);
+const PREVIOUSLY_COMPLETED_ID=700;
+const LIMITED_APPLY_SCOPE='score-proven-three';
 const valid=(v,code)=>{if(!v)throw Error('LMS_HIST_ATOMIC_'+code);};
 const upper=x=>String(x??'').trim().toUpperCase();
 const progress=x=>Number(x?.progresso_bruto??x?.progresso_pct??-1);
@@ -185,6 +198,45 @@ export function classifyHistoricAssessment(row){
     edition_mismatch_required:row?.edition_mismatch?.required===true};
 }
 
+export function assessmentFingerprint(assessmentByOrdinal){
+  return createHash('sha256').update(JSON.stringify(assessmentByOrdinal)).digest('hex');
+}
+export function assertApprovedScoreProvenScope(cohort,ids){
+  const order=[...ids];
+  valid(cohort.pendingReview.length===0 && cohort.rows.length===9 &&
+    cohort.alreadyCompleted.length===1 &&
+    cohort.alreadyCompleted[0].id===PREVIOUSLY_COMPLETED_ID,'SCOPE_TEN_CHANGED');
+  valid(Array.isArray(cohort.assessmentByOrdinal) &&
+    cohort.assessmentByOrdinal.length===10,'ASSESSMENT_COVERAGE_CHANGED');
+  const diagnostic=new Map(cohort.assessmentByOrdinal.map(a=>[order[a.ordinal-1],a]));
+  const selected=cohort.rows.filter(r=>SCORE_PROVEN_IDS.has(r.id));
+  const protectedRows=cohort.rows.filter(r=>BLOCKED_EVIDENCE.has(r.id));
+  valid(selected.length===3 && protectedRows.length===6 &&
+    selected.length+protectedRows.length===cohort.rows.length,'SCOPE_SELECTION_CHANGED');
+  for(const row of selected){
+    const evidence=diagnostic.get(row.id);
+    valid(row.status==='EM_ANDAMENTO'&&row.p===100&&
+      evidence?.curso_id===row.cid &&
+      evidence?.category==='SCORE_AT_OR_ABOVE_MASTERY' &&
+      evidence?.score_pct===100 && evidence?.mastery_score===70 &&
+      evidence?.assessment_required===true &&
+      evidence?.explicit_failure===false &&
+      evidence?.edition_mismatch_required===true &&
+      evidence?.qualification_linked===false,'SCORE_PROVEN_TARGET_DRIFT');
+  }
+  for(const row of protectedRows){
+    const d=diagnostic.get(row.id),expected=BLOCKED_EVIDENCE.get(row.id);
+    valid(row.status==='EM_ANDAMENTO'&&row.p===100 &&
+      d?.category===expected.category && d?.score_pct===expected.score &&
+      d?.mastery_score===70 && d?.explicit_failure===false &&
+      d?.qualification_linked===false &&
+      d?.edition_mismatch_required===true,'BLOCKED_EVIDENCE_DRIFT');
+  }
+  const completed=diagnostic.get(PREVIOUSLY_COMPLETED_ID);
+  valid(completed?.enrollment_status==='CONCLUIDO' &&
+    completed?.qualification_linked===true,'PREVIOUS_COMPLETION_DRIFT');
+  return {selected,protectedRows,diagnostic};
+}
 function report(p,results,ids){
   const by_course={};
   for(const row of p.rows)by_course[row.cid]=(by_course[row.cid]||0)+1;
@@ -195,6 +247,12 @@ function report(p,results,ids){
     raw_99_candidates:p.rows.filter(r=>r.p===99).length,
     candidate_hash:p.hash,authorized_count:ids.size,authorized_ids_hash:authorizedIdsHash(ids),by_course,excluded:p.excluded,
     assessment_by_ordinal:p.assessmentByOrdinal??[],
+    assessment_hash:assessmentFingerprint(p.assessmentByOrdinal??[]),
+    apply_scope:process.env.LMS_HIST_ATOMIC_APPLY_SCOPE||'none',
+    score_proven_pending_count:(p.assessmentByOrdinal??[]).filter(x=>
+      x.enrollment_status==='EM_ANDAMENTO'&&x.category==='SCORE_AT_OR_ABOVE_MASTERY').length,
+    blocked_pending_count:(p.assessmentByOrdinal??[]).filter(x=>
+      x.enrollment_status==='EM_ANDAMENTO'&&x.category!=='SCORE_AT_OR_ABOVE_MASTERY').length,
     writes:results.completed||0,results,scorm_cmi_changed:false,personal_data:false,
     completion_date_rule:'CANONICAL_SERVER_DATE',historical_training_date_not_fabricated:true};
 }
@@ -218,10 +276,17 @@ async function main(){
   const ids=authorizedEnrollmentIds();
   await pin();const token=await authorize();const cohort=await collect(token,ids);
   if(MODE==='dry-run'){process.stdout.write(JSON.stringify(report(cohort,{completed:0},ids),null,2));return;}
+  valid(process.env.LMS_HIST_ATOMIC_APPLY_SCOPE===LIMITED_APPLY_SCOPE,'LIMITED_SCOPE_CONFIRMATION_REQUIRED');
   valid(cohort.pendingReview.length===0 &&
     cohort.rows.length+cohort.alreadyCompleted.length===10,'TEN_PRECONDITIONS_CHANGED');
   valid(cohort.hash===process.env.REVIEWED_COHORT_HASH,'REVIEWED_COHORT_CHANGED');
-  const results={completed:0,already_completed:0,review_required:0,rejected_409:0,rejected_403:0,other_error:0,qualification_linked:0,detail:[]};
+  valid(assessmentFingerprint(cohort.assessmentByOrdinal)===
+    process.env.REVIEWED_ASSESSMENT_HASH,'REVIEWED_ASSESSMENT_CHANGED');
+  // Entire original cohort is read, but six score-unproven rows are NEVER PATCHed.
+  const {selected,protectedRows,diagnostic}=assertApprovedScoreProvenScope(cohort,ids);
+  const results={completed:0,already_completed:0,concurrent_verified:0,selected_verified:0,
+    blocked_preserved:0,review_required:0,rejected_409:0,rejected_403:0,
+    other_error:0,qualification_linked:0,detail:[]};
   const ordinalById=new Map([...ids].map((id,i)=>[id,i+1]));
   for(const row of cohort.alreadyCompleted){
     const response=await get(token,'/api/lms/matriculas/'+row.id);
@@ -233,21 +298,28 @@ async function main(){
     results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,
       outcome:'ALREADY_CONCLUIDO',qualification_linked:true});
   }
-  for(const row of cohort.rows){
+  for(const row of selected){
     await pin();
     const before=await get(token,'/api/lms/matriculas/'+row.id);
     valid(before.status===200,'ROW_READ_FAILED');
     const data=before.json?.data||{};
     if(upper(data.status)==='CONCLUIDO'){
       valid(isVerifiedCompletedCredit(data),'COMPLETED_CONCURRENTLY_INVALID');
-      results.already_completed++;
+      results.concurrent_verified++;
+      results.selected_verified++;
       results.qualification_linked++;
       results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,
-        outcome:'ALREADY_CONCLUIDO',qualification_linked:true});
+        outcome:'CONCURRENTLY_CONCLUIDO',qualification_linked:true});
       continue;
     }
     valid(upper(data.status)===row.status&&Number(data.curso_id)===row.cid&&progress(data)===row.p,'ROW_DRIFT');
     valid(data.edition_mismatch?.required===true,'HISTORIC_EDITION_NOT_PROVEN');
+    const check=classifyHistoricAssessment(data);
+    const reviewed=diagnostic.get(row.id);
+    valid(check.category===reviewed?.category && check.score_pct===reviewed?.score_pct &&
+      check.mastery_score===reviewed?.mastery_score &&
+      check.explicit_failure===false && check.assessment_required===true &&
+      !data.qualificacao_historico_id,'TARGET_ASSESSMENT_DRIFT');
     let res;
     try{
       res=await fetchJson(API+'/api/lms/matriculas/'+row.id+'/status',{
@@ -261,6 +333,7 @@ async function main(){
       if(observed.status===200&&isVerifiedCompletedCredit(current)&&
           String(current.observacoes||'').includes('AIRTRUST_MANAGER_HISTORICAL_EDITION_CREDIT_20261016:')){
         results.completed++;
+        results.selected_verified++;
         results.qualification_linked++;
         results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,
           outcome:'HTTP_UNCERTAIN_VERIFIED_CANONICAL',qualification_linked:true});
@@ -279,8 +352,35 @@ async function main(){
     results.qualification_linked++;
     results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,outcome:'CONCLUIDO',qualification_linked:Boolean(after.json?.data?.qualificacao_historico_id)});
     results.completed++;
+    results.selected_verified++;
+  }
+  // Re-GET the entire finite cohort. The six nonapproved records must remain
+  // unqualified with the same status/progress/score evidence.
+  for(const row of selected){
+    const checked=await get(token,'/api/lms/matriculas/'+row.id);
+    valid(checked.status===200 && isVerifiedCompletedCredit(checked.json?.data),
+      'SELECTED_POSTCHECK_UNQUALIFIED');
+  }
+  for(const row of protectedRows){
+    const checked=await get(token,'/api/lms/matriculas/'+row.id);
+    const data=checked.json?.data;
+    const previous=diagnostic.get(row.id),after=classifyHistoricAssessment(data);
+    valid(checked.status===200 && Number(data?.id)===row.id &&
+      Number(data?.empresa_id)===TENANT && Number(data?.curso_id)===row.cid &&
+      upper(data?.status)===row.status && progress(data)===row.p &&
+      !data?.qualificacao_historico_id && after.category===previous.category &&
+      after.score_pct===previous.score_pct && after.mastery_score===previous.mastery_score &&
+      after.explicit_failure===previous.explicit_failure &&
+      after.edition_mismatch_required===true,'PROTECTED_POSTCHECK_CHANGED');
+    results.blocked_preserved++;
+    results.detail.push({ordinal:ordinalById.get(row.id),course_id:row.cid,
+      outcome:'PROTECTED_NO_APPROVAL_EVIDENCE',qualification_linked:false,
+      reason_code:previous.category});
   }
   process.stdout.write(JSON.stringify(report(cohort,results,ids),null,2));
-  valid(results.other_error===0&&results.rejected_409===0&&results.rejected_403===0,'RECONCILIATION_PARTIAL_REVIEW_REQUIRED');
+  valid(results.other_error===0 && results.rejected_409===0 &&
+    results.rejected_403===0 && results.selected_verified===3 &&
+    results.blocked_preserved===6 && results.qualification_linked===4 &&
+    results.already_completed===1,'LIMITED_SCOPE_POSTCHECK_INCOMPLETE');
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(e=>{console.error('LMS_HIST_ATOMIC_GOVERNED_FAILED:'+String(e.message).slice(0,90));process.exitCode=1;});
