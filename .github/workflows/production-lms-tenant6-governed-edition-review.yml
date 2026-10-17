@@ -13,7 +13,57 @@ on:
 permissions: {contents: read, checks: read, statuses: read, actions: read}
 concurrency: {group: production-lms-tenant6-new-edition-governed, cancel-in-progress: false}
 jobs:
+  d1_recovery:
+    name: D1 production recovery isolated gate
+    if: ${{ inputs.mode == 'apply' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - name: Verify pinned main, scope and production Worker before privileged D1 check
+        shell: bash
+        env:
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          TARGET_HASH: ${{ inputs.target_name_sha256 }}
+          TARGET_IDS: ${{ inputs.target_enrollment_ids }}
+          REVIEWED_PREFLIGHT: ${{ inputs.reviewed_preflight_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_MAIN_SHA" && "$EXPECTED_MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ && "$TARGET_HASH" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$CONFIRMATION" == AIRTRUST_LMS_EDITION_TARGET_APPLY ]]
+          [[ -n "$TARGET_IDS" && "$REVIEWED_PREFLIGHT" =~ ^[1-9][0-9]*$ ]]
+          source_sha="$(curl --silent --show-error --fail --max-time 15 https://api.airtrust.online/api/version | jq -er '.data.sourceSha // .sourceSha')"
+          [[ "${source_sha,,}" == "$EXPECTED_PRODUCTION_SHA" ]]
+      - name: Verify official eight release gates for candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Verify D1 Time Travel recovery before administrative mutation
+        working-directory: worker-airtrust
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+          npm ci --ignore-scripts >/dev/null
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$RUNNER_TEMP/d1-recovery.txt"
+          test -s "$RUNNER_TEMP/d1-recovery.txt"
+          rm -f "$RUNNER_TEMP/d1-recovery.txt"
   govern:
+    needs: [d1_recovery]
+    if: ${{ always() && (inputs.mode == 'preflight' || needs.d1_recovery.result == 'success') }}
     name: Scoped new edition review and audited admin reset
     runs-on: ubuntu-latest
     environment: production
@@ -80,20 +130,6 @@ jobs:
             (.cohort_proof|test("^[0-9a-f]{64}$")) and .blocked_count>0
           ' "$RUNNER_TEMP/reviewed/lms-employee-plan.json" >/dev/null
           echo "REVIEWED_LMS_EDITION_TARGET_PROOF=$(jq -r .cohort_proof "$RUNNER_TEMP/reviewed/lms-employee-plan.json")" >> "$GITHUB_ENV"
-      - name: Require D1 Time Travel recovery before administrative mutation
-        if: ${{ inputs.mode == 'apply' }}
-        working-directory: worker-airtrust
-        shell: bash
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          set -euo pipefail
-          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
-          npm ci --ignore-scripts >/dev/null
-          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$RUNNER_TEMP/d1-recovery.txt"
-          test -s "$RUNNER_TEMP/d1-recovery.txt"
-          rm -f "$RUNNER_TEMP/d1-recovery.txt"
       - name: Read confidential scoped details or execute canonical admin new edition
         shell: bash
         run: |
