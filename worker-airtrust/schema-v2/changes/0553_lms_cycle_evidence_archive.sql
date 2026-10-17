@@ -27,3 +27,36 @@ CREATE TABLE IF NOT EXISTS lms_ciclo_evidencias (
 
 CREATE INDEX IF NOT EXISTS idx_lms_ciclo_evidencias_tenant
   ON lms_ciclo_evidencias(empresa_id,matricula_id,ciclo_id);
+
+-- Historical evidence is append-only. Administrative corrections must append
+-- a compensating audit event rather than alter the original snapshot.
+CREATE TRIGGER IF NOT EXISTS trg_lms_ciclo_evidencias_no_update
+BEFORE UPDATE ON lms_ciclo_evidencias
+BEGIN SELECT RAISE(ABORT, 'LMS_CYCLE_EVIDENCE_IMMUTABLE'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_lms_ciclo_evidencias_no_delete
+BEFORE DELETE ON lms_ciclo_evidencias
+BEGIN SELECT RAISE(ABORT, 'LMS_CYCLE_EVIDENCE_IMMUTABLE'); END;
+
+-- An archived statement cannot be rewritten or deleted; tenant and cycle must
+-- agree at the database layer when the historical attribution is created.
+CREATE TRIGGER IF NOT EXISTS trg_lms_xapi_archive_scope
+BEFORE UPDATE OF archived_cycle_id ON lms_xapi_statements
+WHEN NEW.archived_cycle_id IS NOT NULL
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM lms_matricula_ciclos cy
+    WHERE cy.id = NEW.archived_cycle_id AND cy.empresa_id = NEW.empresa_id
+      AND cy.matricula_id = NEW.matricula_id
+  ) THEN RAISE(ABORT, 'LMS_XAPI_ARCHIVE_TENANT_CYCLE_MISMATCH') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_lms_xapi_archived_no_update
+BEFORE UPDATE ON lms_xapi_statements
+WHEN OLD.archived_cycle_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'LMS_XAPI_HISTORICAL_IMMUTABLE'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_lms_xapi_archived_no_delete
+BEFORE DELETE ON lms_xapi_statements
+WHEN OLD.archived_cycle_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'LMS_XAPI_HISTORICAL_IMMUTABLE'); END;
