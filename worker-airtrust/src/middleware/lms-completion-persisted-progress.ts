@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 import type { Env, Variables } from '../types';
+import { activeXapiFirst } from '../services/lms-active-xapi-read';
 
 type PersistedProgressContext = { Bindings: Env; Variables: Variables };
 type JsonRecord = Record<string, unknown>;
@@ -205,7 +206,7 @@ export async function enforcePersistedLmsProgressEvidence(
   const empresaId = parsePositiveInt(c.get('empresaId'));
   if (!matriculaId || !empresaId) return null;
 
-  const row = await c.env.DB.prepare(
+  const row = await activeXapiFirst<PersistedProgressRow>(c.env.DB,
     `SELECT m.progresso_pct AS matricula_progresso_pct,
               p.matricula_id AS scorm_progress_id,
               p.cmi_json,
@@ -221,10 +222,7 @@ export async function enforcePersistedLmsProgressEvidence(
         WHERE m.id = ?
           AND m.empresa_id = ?
           AND m.deleted_at IS NULL
-        LIMIT 1`,
-  )
-    .bind(matriculaId, empresaId)
-    .first<PersistedProgressRow>();
+        LIMIT 1`, [matriculaId, empresaId]);
 
   // The canonical integrity gate owns not-found and ownership responses.
   if (!row) return null;
