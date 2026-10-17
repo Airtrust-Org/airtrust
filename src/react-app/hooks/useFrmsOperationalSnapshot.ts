@@ -273,7 +273,7 @@ export function useFrmsOperationalSnapshot(
 
   const fetchSnapshot = useCallback(async () => {
     const requestId = ++activeRequest.current;
-    const fetchingKey = enabled ? buildSnapshotUrl(filters) : null;
+    const fetchingKey = requestKey;
     if (!enabled) {
       setData([]);
       setSummary(EMPTY_SUMMARY);
@@ -293,7 +293,7 @@ export function useFrmsOperationalSnapshot(
     setUnauthorized(false);
 
     try {
-      const response = await fetchWithAuth(buildSnapshotUrl(filters), {
+      const response = await fetchWithAuth(fetchingKey!, {
         method: 'GET',
         cache: 'no-store',
       });
@@ -342,16 +342,7 @@ export function useFrmsOperationalSnapshot(
     } finally {
       if (requestId === activeRequest.current) setLoading(false);
     }
-  }, [
-    filters.aeronave,
-    filters.base,
-    filters.data_fim,
-    filters.data_inicio,
-    enabled,
-    filters.funcionario_id,
-    filters.include_inconsistencies,
-    filters.status,
-  ]);
+  }, [enabled, requestKey]);
 
   useEffect(() => {
     void fetchSnapshot();
