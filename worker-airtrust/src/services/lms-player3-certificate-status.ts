@@ -38,11 +38,14 @@ type Row={
   ciclo_status:string|null;
   ciclo_historico_id:number|null;
   curso_gera_qualificacao:number;
+  curso_qualificacao_tipo_id:number|null;
+  historico_qualificacao_id:number|null;
   historico_id:number|null;
   historico_validado_id:number|null;
   historico_status:string|null;
   historico_data_conclusao:string|null;
   documento_id:number|null;
+  documento_empresa_id:number|null;
   documento_r2_key:string|null;
 };
 const positive=(n:unknown):n is number=>
@@ -66,11 +69,14 @@ export async function readPlayer3CertificateStatus(params:{
            cy.id AS ciclo_id,cy.status AS ciclo_status,
            cy.qualificacao_historico_id AS ciclo_historico_id,
            c.gerar_qualificacao_ao_concluir AS curso_gera_qualificacao,
+           c.qualificacao_tipo_id AS curso_qualificacao_tipo_id,
            m.qualificacao_historico_id AS historico_id,
+           qh.qualificacao_id AS historico_qualificacao_id,
            qh.id AS historico_validado_id,
            qh.status AS historico_status,
            qh.data_conclusao AS historico_data_conclusao,
-           d.id AS documento_id,d.r2_key AS documento_r2_key
+           d.id AS documento_id,d.empresa_id AS documento_empresa_id,
+           d.r2_key AS documento_r2_key
       FROM lms_matriculas m
       JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
       LEFT JOIN lms_matricula_ciclos cy
@@ -112,11 +118,16 @@ export async function readPlayer3CertificateStatus(params:{
   }
   if(row.historico_validado_id!==row.historico_id||
      row.historico_status!=='CONCLUIDA'||
+     !positive(row.curso_qualificacao_tipo_id)||
+     row.historico_qualificacao_id!==row.curso_qualificacao_tipo_id||
      !row.historico_data_conclusao){
     return output('HISTORY_INVALID');
   }
   if(!positive(row.documento_id)||!row.documento_r2_key){
     return output('CERTIFICATE_NOT_ARCHIVED');
+  }
+  if(row.documento_empresa_id!==empresaId){
+    return output('CERTIFICATE_PDF_INVALID');
   }
   // Never allow a generic or another-tenant key to be used in the check.
   const prefix=`certificados/empresa-${empresaId}/funcionario-${funcionarioId}/historico-${row.historico_id}/`;

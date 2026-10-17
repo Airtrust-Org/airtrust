@@ -7,10 +7,11 @@ import {
 const r2key='certificados/empresa-6/funcionario-51/historico-333/doc.pdf';
 const row={
   matricula_status:'CONCLUIDO',ciclo_id:1001,ciclo_status:'CONCLUIDO',
-  ciclo_historico_id:333,curso_gera_qualificacao:1,historico_id:333,
+  ciclo_historico_id:333,curso_gera_qualificacao:1,
+  curso_qualificacao_tipo_id:87,historico_qualificacao_id:87,historico_id:333,
   historico_validado_id:333,historico_status:'CONCLUIDA',
   historico_data_conclusao:'2026-10-14',
-  documento_id:44,documento_r2_key:r2key,
+  documento_id:44,documento_empresa_id:6,documento_r2_key:r2key,
 };
 const mocks=vi.hoisted(()=>({first:vi.fn(),get:vi.fn(),bind:vi.fn(),prepare:vi.fn()}));
 function env():Env{
@@ -44,6 +45,8 @@ describe('Player3 readonly certificate archive verification',()=>{
     });
     expect(mocks.bind).toHaveBeenCalledWith(101,6,51);
     expect(mocks.prepare.mock.calls[0][0]).toContain('m.funcionario_id=?');
+    expect(mocks.prepare.mock.calls[0][0]).toContain('qh.qualificacao_id AS historico_qualificacao_id');
+    expect(mocks.prepare.mock.calls[0][0]).toContain('d.empresa_id AS documento_empresa_id');
     expect(mocks.get).toHaveBeenCalledWith(r2key,{
       range:{offset:0,length:5},
     });
@@ -78,6 +81,9 @@ describe('Player3 readonly certificate archive verification',()=>{
       {historico_validado_id:null},
       {historico_status:'PLANEJADA'},
       {historico_data_conclusao:null},
+      {curso_qualificacao_tipo_id:null},
+      {historico_qualificacao_id:88},
+      {historico_qualificacao_id:null},
     ]){
       mocks.first.mockResolvedValueOnce({...row,...change});
       expect((await read(e)).certificate_state).toBe('HISTORY_INVALID');
@@ -97,6 +103,8 @@ describe('Player3 readonly certificate archive verification',()=>{
       mocks.first.mockResolvedValueOnce({...row,documento_r2_key:key});
       expect((await read(e)).certificate_state).toBe('CERTIFICATE_PDF_INVALID');
     }
+    mocks.first.mockResolvedValueOnce({...row,documento_empresa_id:7});
+    expect((await read(e)).certificate_state).toBe('CERTIFICATE_PDF_INVALID');
     mocks.get.mockResolvedValueOnce(null);
     expect((await read(e)).certificate_state).toBe('CERTIFICATE_OBJECT_MISSING');
     mocks.get.mockResolvedValueOnce({
