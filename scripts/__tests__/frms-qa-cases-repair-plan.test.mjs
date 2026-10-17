@@ -89,8 +89,8 @@ test('SQLite: single reviewed batch changes only 8 QA rows; a drift aborts the w
     WHERE a.id IN ('qa-frms-ux-case-1','qa-frms-ux-case-2','qa-frms-ux-case-3','qa-frms-ux-case-4')
     AND j.origem='SIGVOOS' AND j.empresa_id=999013`).get();
   assert.equal(count.n,4);
-  assert.deepEqual(good.db.prepare('SELECT origem,observacao FROM frms_jornada WHERE id=?')
-    .get('other-tenant-j'),{origem:'MANUAL',observacao:'KEEP'});
+  assert.deepEqual({...good.db.prepare('SELECT origem,observacao FROM frms_jornada WHERE id=?')
+    .get('other-tenant-j')},{origem:'MANUAL',observacao:'KEEP'});
   assert.equal(good.db.prepare('SELECT valor_atual_min FROM frms_alerta WHERE id=?')
     .get('other-tenant-case').valor_atual_min,999);
   assert.throws(()=>applyAtomic(good.db,plan),/CAS_ROW_COUNT_BLOCKED/);
