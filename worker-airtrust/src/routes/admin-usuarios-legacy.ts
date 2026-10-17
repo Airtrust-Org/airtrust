@@ -458,8 +458,11 @@ adminUsuariosRoutes.post('/', async (c) => {
     throw badRequest('empresa_id inválido', 'INVALID_EMPRESA_ID');
   }
 
-  if (empresaCodigo !== 'airtrust' && targetEmpresaId !== empresaId) {
-    throw forbidden('Sem permissão para convidar usuários para outra empresa', 'WRONG_TENANT');
+  if (targetEmpresaId !== empresaId) {
+    const state = await resolvePlatformAccessState(db, callerId);
+    if (!isPlatformAdminAccess(state)) {
+      throw forbidden('Sem permissão para convidar usuários para outra empresa', 'WRONG_TENANT');
+    }
   }
 
   // Somente o Administrador Geral pode conceder um perfil administrativo.
