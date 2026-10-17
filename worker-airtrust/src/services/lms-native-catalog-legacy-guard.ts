@@ -1,11 +1,13 @@
 /**
  * Staging-only defensive read barrier for a future immutable Native catalog
  * activation side-table. This is NOT approval to create or activate a course.
- * The flag must be enabled after the governed table exists and BEFORE any row
- * is activated. D1 lookup failures fail closed; physical Native always blocks.
+ * UI activation flags grant Native capabilities, never permission to fall back
+ * to SCORM. Legacy writes must also refuse an already-marked Native course
+ * if a staging flag is disabled later. D1 failures fail closed.
  */
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
+import { hasSchemaTable } from '../utils/db-schema';
 
 function exactTenantAllowed(raw: string | undefined, empresaId: number): boolean {
   return !!raw && !raw.includes('*') &&
@@ -50,11 +52,19 @@ export async function isNativeForLegacyLmsPath(
   if (physical !== 'scorm') return false;
   if (env.ENVIRONMENT !== 'staging' ||
       !Number.isSafeInteger(empresaId) || empresaId <= 0 ||
-      !Number.isSafeInteger(cursoId) || cursoId <= 0 ||
-      !exactTenantAllowed(env.NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS, empresaId)) {
+      !Number.isSafeInteger(cursoId) || cursoId <= 0) {
     return false;
   }
   try {
+    // Preview and catalog display still require an explicit tenant allowlist,
+    // but a disabled display flag cannot reclassify an activated course as
+    // legacy SCORM. Probe only staging and only when the allowlist is absent.
+    // Force a live presence check so a cached pre-migration "missing table"
+    // cannot silently reopen legacy writes after the marker is introduced.
+    if (!canReadNativeCatalogActivation(env, empresaId) &&
+        !(await hasSchemaTable(env.DB, 'lms_native_catalog_activation', { fresh: true }))) {
+      return false;
+    }
     const row = await env.DB.prepare(
       'SELECT curso_id FROM lms_native_catalog_activation ' +
       'WHERE empresa_id = ? AND curso_id = ? LIMIT 1',

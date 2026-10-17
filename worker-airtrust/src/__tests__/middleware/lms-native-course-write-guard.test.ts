@@ -7,8 +7,10 @@ import { errorHandler } from '../../middleware/error-handler';
 function setup(kind: 'native' | 'scorm', activated: boolean, flag = '6') {
   const first = vi.fn(async () => ({ id: 99, tipo_conteudo: kind }));
   const markerFirst = vi.fn(async () => activated ? { curso_id: 99 } : null);
+  const schemaFirst = vi.fn(async () => ({ found: 1 }));
   const prepare = vi.fn((sql: string) => {
-    const fn = sql.includes('lms_native_catalog_activation') ? markerFirst : first;
+    const fn = sql.includes('sqlite_master') ? schemaFirst
+      : sql.includes('lms_native_catalog_activation') ? markerFirst : first;
     return { bind: vi.fn(() => ({ first: fn })) };
   });
   const app = new Hono<{ Bindings: Env }>();
@@ -51,11 +53,12 @@ describe('Native marked courses cannot mutate through legacy admin CRUD / upload
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ reached:true });
   });
-  it('does not query activation without explicit staging tenant enablement', async () => {
+  it('blocks a Native-marked legacy mutation even after staging preview has been disabled', async () => {
     const { app, env, prepare } = setup('scorm', true, '');
     const res = await app.fetch(new Request('http://localhost/99',{ method:'PATCH' }),env,{} as ExecutionContext);
-    expect(res.status).toBe(200);
-    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({code:'NATIVE_LEGACY_COURSE_MUTATION_BLOCKED'});
+    expect(prepare).toHaveBeenCalledTimes(3);
   });
   it('blocks physical Native even with the activation read flag off', async () => {
     const { app, env, prepare } = setup('native', false, '');
