@@ -1,0 +1,96 @@
+name: Staging FRMS QA Cases Readonly Preflight
+
+# Workflow can read the reserved QA tenant, but can never repair/reseed it.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_STAGING_FRMS_CASES_READONLY
+        required: true
+        type: string
+      expected_main_sha:
+        description: Exact reviewed current main SHA
+        required: true
+        type: string
+      aggregate_run_id:
+        description: Reviewed deidentified 30-day aggregate artifact run
+        required: true
+        type: string
+      source_aggregate_sha:
+        description: Exact source SHA for that artifact
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Verify reviewed main and source provenance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject unreviewed SHA or source
+        shell: bash
+        env:
+          EXPECTED_MAIN: ${{ inputs.expected_main_sha }}
+          SOURCE_RUN: ${{ inputs.aggregate_run_id }}
+          SOURCE_SHA: ${{ inputs.source_aggregate_sha }}
+          CONFIRM: ${{ inputs.confirmation }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          [[ "$GITHUB_SHA" == "$EXPECTED_MAIN" ]] || exit 1
+          [[ "$EXPECTED_MAIN" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$SOURCE_RUN" =~ ^[0-9]{8,14}$ ]] || exit 1
+          [[ "$CONFIRM" == AIRTRUST_STAGING_FRMS_CASES_READONLY ]] || exit 1
+          [[ "$(gh api repos/Airtrust-Org/airtrust/branches/main --jq .commit.sha)" == "$EXPECTED_MAIN" ]] || exit 1
+          run="$(gh api repos/Airtrust-Org/airtrust/actions/runs/"$SOURCE_RUN" --jq '[.conclusion,.event,.head_sha,.path] | @tsv')"
+          IFS=$'\t' read -r result event source_sha path <<< "$run"
+          [[ "$result" == success && "$event" == workflow_dispatch && "$source_sha" == "$SOURCE_SHA" ]] || exit 1
+          [[ "$path" == *frms-ux-30d-production-aggregate.yml ]] || exit 1
+          echo FRMS_QA_CASES_SOURCE_PROVENANCE_PASS
+
+  read-only-qa-cases:
+    name: Inspect four QA cases and links (zero writes)
+    needs: guard
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install Worker tooling
+        run: npm --prefix worker-airtrust ci
+      - name: Download reviewed aggregate (never individual records)
+        uses: actions/download-artifact@v7
+        with:
+          name: frms-ux-30d-deidentified-aggregates
+          run-id: ${{ inputs.aggregate_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: _frms_qa_aggregate
+      - name: Unit-test readonly contract before connecting to staging
+        run: node --test scripts/__tests__/inspect-frms-ux-cases.test.mjs
+      - name: Inspect reserved tenant, case joins and canonical simulated source
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+          STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+          CONFIRM_FRMS_QA_CASES_INSPECT: ${{ inputs.confirmation }}
+          SOURCE_AGGREGATE_SHA: ${{ inputs.source_aggregate_sha }}
+          SANITIZED_AGGREGATE_PATH: ${{ github.workspace }}/_frms_qa_aggregate/frms-ux-30d-aggregates.json
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          node scripts/staging/inspect-frms-ux-cases.mjs
