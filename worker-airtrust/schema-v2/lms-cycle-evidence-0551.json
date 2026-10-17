@@ -1,8 +1,0 @@
-{
-  "changeId": "lms-cycle-evidence-0551",
-  "baselineId": "production-d1-baseline-v2-20260714",
-  "filePath": "worker-airtrust/schema-v2/changes/0551_lms_cycle_evidence_archive.sql",
-  "fileHash": "f7fd27f898674f5f24703bd663b654216f8c1899ef969387739d21ffd47fc7ca",
-  "planPath": "worker-airtrust/schema-v2/plans/lms-cycle-evidence-0551.md",
-  "planHash": "bd1f981e3842135d53403bec9599ed2893ce2a78acbf2eda7ce6e5ee4e6f939d"
-}
