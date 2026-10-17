@@ -473,6 +473,14 @@ protectedAdminUsuariosRoutes.put('/:id/permissoes', async (c) => {
   }
 
   const permissions = normalizePermissions(body?.permissoes || []);
+  // Overrides are global per user in the current schema. A tenant GESTOR may
+  // maintain operational permissions but must never delegate platform/admin
+  // capabilities, even to a regular user belonging only to their tenant.
+  if (!['ADMINISTRADOR', 'ADMIN'].includes(callerRole) &&
+      permissions.some(({ permissao, tipo }) =>
+        tipo === 'GRANT' && /^(?:admin[._:]|platform[._:]|sistema[._:]|multiempresa(?:[._:]|$))/i.test(permissao))) {
+    throw forbidden('Gestor não pode conceder privilégios administrativos globais', 'PLATFORM_PERMISSION_GRANT_FORBIDDEN');
+  }
   const statements: D1PreparedStatement[] = [
     db.prepare(`DELETE FROM usuario_permissoes WHERE usuario_id = ?`).bind(targetUserId),
     ...permissions.map((permission) =>
