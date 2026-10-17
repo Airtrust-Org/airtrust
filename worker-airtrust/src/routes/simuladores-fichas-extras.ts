@@ -561,6 +561,37 @@ app.post('/sessoes/:id/checks/resultados', requireOperacoesFicha('create'), asyn
       return c.json({ success: false, error: 'Sessão não é do tipo check' }, 400);
     }
 
+    // Legacy results are session-wide. They cannot safely represent a check
+    // made by just one employee if this session ever had multiple employees.
+    // Include soft-deleted roster/fichas: deleting another participant must not
+    // convert a group result into individual evidence.
+    const roster = await c.env.DB.prepare(
+      `SELECT COUNT(DISTINCT funcionario_id) AS unique_people,
+              SUM(CASE WHEN funcionario_id IS NULL THEN 1 ELSE 0 END) AS missing_identity
+         FROM (
+           SELECT sp.funcionario_id
+             FROM sessoes_participantes sp WHERE sp.sessao_id = ?
+           UNION ALL
+           SELECT fs.colaborador_id_aluno AS funcionario_id
+             FROM fichas_sessao fs
+            WHERE fs.agendamento_slot_id = ? AND fs.empresa_id = ?
+           UNION ALL
+           SELECT sa.funcionario_id AS funcionario_id
+             FROM simulador_agendamentos sa
+            WHERE sa.id = ? AND sa.empresa_id = ? AND sa.funcionario_id IS NOT NULL
+         )`,
+    )
+      .bind(sessao_id, sessao_id, empresaId, sessao_id, empresaId)
+      .first<{ unique_people: number; missing_identity: number }>();
+    if (!roster || Number(roster.unique_people) !== 1 ||
+        Number(roster.missing_identity || 0) !== 0) {
+      return c.json({
+        success: false,
+        code: 'INDIVIDUAL_CHECK_EVIDENCE_REQUIRED',
+        error: 'Sessão compartilhada ou sem participante inequívoco: registre checks por funcionário.',
+      }, 409);
+    }
+
     // A session being scoped is insufficient: a client may submit the ID of a
     // check from another session/tenant. Validate the entire batch BEFORE any
     // write, then keep the same predicate on each write (fail closed).
