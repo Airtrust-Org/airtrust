@@ -75,7 +75,7 @@ jobs:
           NODE
 
   qa-identity:
-    name: Guarded synthetic identity operation
+    name: Staging D1 Guarded Synthetic Identity Operation
     needs: guard
     runs-on: ubuntu-latest
     environment: staging
