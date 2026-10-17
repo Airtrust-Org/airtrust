@@ -29,12 +29,14 @@ import {
 const app = new Hono<{ Bindings: Env }>();
 
 const InitSchema = z.object({
+  // Client-side hints are not a governed Native activation. Reject rather than\n  // silently strip a marker while storing tipo_conteudo='scorm'.\n  native_pilot_format: z.never().optional(),\n  nativePilotFormat: z.never().optional(),\n
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   idempotency_key: z.string().trim().min(1).max(200).optional(),
   skip_purge: z.boolean().optional(),
 });
 
 const CompleteSchema = z.object({
+  // Client-side hints are not a governed Native activation. Reject rather than\n  // silently strip a marker while storing tipo_conteudo='scorm'.\n  native_pilot_format: z.never().optional(),\n  nativePilotFormat: z.never().optional(),\n
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   upload_id: z
     .string()

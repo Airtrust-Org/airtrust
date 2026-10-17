@@ -491,6 +491,7 @@ const setorIdsSchema = z.preprocess((value) => {
 }, z.array(z.number().int().positive()).optional());
 
 const CursoCreateSchema = z.object({
+  // Client-side hints are not a governed Native activation. Reject rather than\n  // silently strip a marker while storing tipo_conteudo='scorm'.\n  native_pilot_format: z.never().optional(),\n  nativePilotFormat: z.never().optional(),\n
   titulo: z.string().min(2).max(255),
   descricao: trimNullableText,
   categoria: trimNullableText,
@@ -521,6 +522,7 @@ const CursoCreateSchema = z.object({
 });
 
 const CursoUpdateSchema = z.object({
+  // Client-side hints are not a governed Native activation. Reject rather than\n  // silently strip a marker while storing tipo_conteudo='scorm'.\n  native_pilot_format: z.never().optional(),\n  nativePilotFormat: z.never().optional(),\n
   titulo: z.string().min(2).max(255).optional(),
   descricao: trimNullableText,
   categoria: trimNullableText,
@@ -552,11 +554,13 @@ const CursoUpdateSchema = z.object({
 });
 
 const StructuredContentInitSchema = z.object({
+  // Client-side hints are not a governed Native activation. Reject rather than\n  // silently strip a marker while storing tipo_conteudo='scorm'.\n  native_pilot_format: z.never().optional(),\n  nativePilotFormat: z.never().optional(),\n
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   skip_purge: z.boolean().optional(),
 });
 
 const StructuredContentCompleteSchema = z.object({
+  // Client-side hints are not a governed Native activation. Reject rather than\n  // silently strip a marker while storing tipo_conteudo='scorm'.\n  native_pilot_format: z.never().optional(),\n  nativePilotFormat: z.never().optional(),\n
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   launch_file: trimNullableText,
   scorm_versao: optionalNullableScormVersion,
@@ -752,6 +756,10 @@ async function parseCursoCreateRequest(c: Context) {
 
   if (contentType.includes('multipart/form-data')) {
     const formData = await c.req.formData();
+    if (formData.has('native_pilot_format') || formData.has('nativePilotFormat')) {
+      throw new ApiError('O formato Native exige ativação governada, não um marcador de cliente.', 400,
+        'NATIVE_PILOT_FORMAT_NOT_AUTHORIZED');
+    }
     const rawSetorIds = formData.get('setor_ids');
     const parsedSetorIds: number[] = [];
     if (typeof rawSetorIds === 'string' && rawSetorIds.trim()) {
