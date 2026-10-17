@@ -67,7 +67,16 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
         (113,1,10,1001,1100,NULL,'AGUARDANDO_ASSINATURA_INSTRUTOR','2026-10-17',NULL,NULL);
     `);
     db.database.exec("UPDATE fichas_sessao SET data_sessao='2026-10-17' WHERE empresa_id=1");
-    if (withSchema) db.database.exec(migration);
+    if (withSchema) {
+      db.database.exec(migration);
+      db.database.exec(`
+        CREATE TABLE airtrust_schema_changes_v2 (
+          change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL
+        );
+        INSERT INTO airtrust_schema_changes_v2(change_id, baseline_id)
+        VALUES ('simulator-individual-check-evidence-0554', 'production-d1-baseline-v2-20260714');
+      `);
+    }
   }
   afterEach(() => { db?.close(); db = null; });
 
@@ -140,6 +149,21 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ code:'SCHEMA_0554_PENDING' });
     expect((await request(111)).status).toBe(503);
+  });
+
+  it('fails closed when the individual table exists without a governed Schema V2 ledger', async () => {
+    setup();
+    db!.database.exec("DELETE FROM airtrust_schema_changes_v2");
+    expect((await request(111, result(true))).status).toBe(503);
+    expect((await request(111)).status).toBe(503);
+    expect(evidence()).toEqual([]);
+  });
+
+  it('fails closed when a required protection trigger is absent', async () => {
+    setup();
+    db!.database.exec("DROP TRIGGER trg_checks_individuais_scope_insert");
+    expect((await request(111, result(true))).status).toBe(503);
+    expect(evidence()).toEqual([]);
   });
 
   it('does not allow revising evidence that belongs to another employee', async () => {
