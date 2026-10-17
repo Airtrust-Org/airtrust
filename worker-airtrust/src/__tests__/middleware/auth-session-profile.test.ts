@@ -6,6 +6,7 @@ import { generateJWT } from '../../utils/security';
 import {
   SESSION_ROLE_COOKIE,
   resolveAvailableSessionRoles,
+  resolveRequestedSessionRole,
 } from '../../services/auth-session-roles';
 import type { Env, Variables } from '../../types';
 import { resetSchemaCache } from '../../utils/db-schema';
