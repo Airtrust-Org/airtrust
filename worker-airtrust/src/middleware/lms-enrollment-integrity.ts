@@ -332,6 +332,271 @@ async function handleRematriculation(
 
   try {
     await c.env.DB.batch([
+      // An inconsistent/missing cycle must abort the *whole* reset, not silently
+      // produce a new cycle without an immutable predecessor.
+      ...(newEdition ? [c.env.DB.prepare(
+        `SELECT CASE WHEN EXISTS(
+          SELECT 1 FROM lms_matricula_ciclos cy
+           WHERE cy.matricula_id=? AND cy.empresa_id=?
+             AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+        ) THEN 1 ELSE json_extract('INVALID_CYCLE_STATE','
+        `UPDATE lms_matriculas
+              SET status = 'NAO_INICIADO',
+                  progresso_pct = 0,
+                  score_final = NULL,
+                  tentativas = 0,
+                  data_inicio = NULL,
+                  data_conclusao = NULL,
+                  data_expiracao = COALESCE(?, data_expiracao),
+                  qualificacao_historico_id = NULL,
+                  observacoes = CASE
+                    WHEN COALESCE(observacoes, '') = '' THEN ? || char(10) || ?
+                    ELSE observacoes || char(10) || ? || char(10) || ?
+                  END,
+                  deleted_at = NULL,
+                  updated_at = datetime('now')
+            WHERE id = ?
+              AND empresa_id = ?
+              AND qualificacao_historico_id IS NULL
+              AND ${newEdition
+                ? `status IN ('NAO_INICIADO','EM_ANDAMENTO','CANCELADO')
+                   AND EXISTS (
+                     SELECT 1 FROM lms_cursos edition_c
+                      WHERE edition_c.id = lms_matriculas.curso_id
+                        AND edition_c.empresa_id = lms_matriculas.empresa_id
+                        AND edition_c.deleted_at IS NULL
+                        AND edition_c.scorm_package_r2_prefix = ?
+                   )
+                   AND EXISTS (
+                     SELECT 1 FROM lms_progresso_scorm old_p
+                      WHERE old_p.matricula_id = lms_matriculas.id
+                        AND old_p.empresa_id = lms_matriculas.empresa_id
+                        AND old_p.cmi_json = ?
+                   )`
+                : "(deleted_at IS NOT NULL OR status = 'CANCELADO')"}`,
+      ).bind(
+        expiration,
+        reasonLine,
+        operationMarker,
+        reasonLine,
+        operationMarker,
+        matriculaId,
+        empresaId,
+        ...(newEdition ? [verifiedActivePrefix, verifiedPreviousCmi] : []),
+      ),
+      // Immutable evidence snapshot and xAPI reclassification are inside the
+      // same D1.batch transaction as the new edition. The current runtime may
+      // be reset only after its previous evidence has been retained.
+      ...(newEdition ? [
+        c.env.DB.prepare(
+          `INSERT INTO lms_ciclo_evidencias
+            (empresa_id,matricula_id,ciclo_id,enrollment_json,scorm_json,diagnostics_json,course_package_prefix)
+           SELECT m.empresa_id,m.id,cy.id,
+             ?,
+             (SELECT json_object(
+               'lesson_status',p.lesson_status,'lesson_location',p.lesson_location,
+               'completion_status',p.completion_status,'success_status',p.success_status,
+               'score_raw',p.score_raw,'score_min',p.score_min,'score_max',p.score_max,
+               'score_scaled',p.score_scaled,'session_time',p.session_time,
+               'total_time',p.total_time,'suspend_data',p.suspend_data,
+               'launch_data',p.launch_data,'cmi_json',p.cmi_json,'session_count',p.session_count)
+               FROM lms_progresso_scorm p WHERE p.empresa_id=m.empresa_id AND p.matricula_id=m.id),
+             (SELECT json_group_array(json_object('tentativa',d.tentativa,'diagnostics_json',d.diagnostics_json))
+               FROM lms_completion_diagnostics_snapshots d WHERE d.empresa_id=m.empresa_id AND d.matricula_id=m.id),
+             c.scorm_package_r2_prefix
+           FROM lms_matriculas m
+           JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+           JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+             AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+           WHERE m.id=? AND m.empresa_id=? AND ${markerExists}`,
+        ).bind(JSON.stringify(existing),matriculaId, empresaId, matriculaId, empresaId, operationMarker),
+        c.env.DB.prepare(
+          `UPDATE lms_xapi_statements
+              SET archived_cycle_id = (
+                SELECT id FROM lms_matricula_ciclos cy
+                 WHERE cy.empresa_id = ? AND cy.matricula_id = ?
+                   AND cy.ciclo_atual = 1 AND cy.deleted_at IS NULL
+              )
+            WHERE empresa_id = ? AND matricula_id = ?
+              AND archived_cycle_id IS NULL AND ${markerExists}`,
+        ).bind(empresaId, matriculaId, empresaId, matriculaId,
+          matriculaId, empresaId, operationMarker),
+      ] : []),
+      c.env.DB.prepare(
+        `UPDATE lms_matricula_ciclos
+              SET ciclo_atual = 0,
+                  status = ${newEdition ? 'status' : "'CANCELADO'"},
+                  updated_at = datetime('now')
+            WHERE matricula_id = ?
+              AND empresa_id = ?
+              AND ciclo_atual = 1
+              AND deleted_at IS NULL
+              AND ${markerExists}`,
+      ).bind(matriculaId, empresaId, matriculaId, empresaId, operationMarker),
+      c.env.DB.prepare(
+        `UPDATE lms_progresso_scorm
+              SET lesson_status = 'not attempted',
+                  completion_status = 'unknown',
+                  success_status = 'unknown',
+                  score_raw = NULL,
+                  score_min = NULL,
+                  score_max = NULL,
+                  score_scaled = NULL,
+                  session_time = NULL,
+                  total_time = NULL,
+                  suspend_data = NULL,
+                  launch_data = NULL,
+                  cmi_json = NULL,
+                  session_count = 0,
+                  updated_at = datetime('now')
+            WHERE matricula_id = ?
+              AND empresa_id = ?
+              AND ${markerExists}`,
+      ).bind(matriculaId, empresaId, matriculaId, empresaId, operationMarker),
+      c.env.DB.prepare(
+        `INSERT INTO lms_matricula_ciclos
+            (empresa_id, matricula_id, curso_id, funcionario_id, numero_ciclo, origem,
+             status, ciclo_atual, observacoes, data_matricula, progresso_pct, tentativas,
+             created_at, updated_at, deleted_at)
+           SELECT m.empresa_id,
+                  m.id,
+                  m.curso_id,
+                  m.funcionario_id,
+                  COALESCE((
+                    SELECT MAX(numero_ciclo)
+                      FROM lms_matricula_ciclos previous_cycle
+                     WHERE previous_cycle.matricula_id = m.id
+                       AND previous_cycle.empresa_id = m.empresa_id
+                  ), 0) + 1,
+                  'MANUAL',
+                  'NAO_INICIADO',
+                  1,
+                  ?,
+                  datetime('now'),
+                  0,
+                  0,
+                  datetime('now'),
+                  datetime('now'),
+                  NULL
+             FROM lms_matriculas m
+            WHERE m.id = ?
+              AND m.empresa_id = ?
+              AND m.deleted_at IS NULL
+              AND instr(COALESCE(m.observacoes, ''), ?) > 0`,
+      ).bind(`Rematrícula autorizada: ${reason}`, matriculaId, empresaId, operationMarker),
+      c.env.DB.prepare(
+        `INSERT INTO audit_logs
+            (user_id, action, entity_type, entity_id, old_values, new_values,
+             ip_address, user_agent, empresa_id, created_at)
+           SELECT ?,
+                  'LMS_REMATRICULATION',
+                  'lms_matriculas',
+                  ?,
+                  ?,
+                  ?,
+                  ?,
+                  ?,
+                  ?,
+                  datetime('now')
+            WHERE ${markerExists}`,
+      ).bind(
+        getUserId(c),
+        matriculaId,
+        JSON.stringify({ ...existing, scorm_progress: progressSnapshot ?? null }),
+        auditNewValues,
+        c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+        c.req.header('user-agent') ?? null,
+        empresaId,
+        matriculaId,
+        empresaId,
+        operationMarker,
+      ),
+      ...(newEdition ? [c.env.DB.prepare(
+        `DELETE FROM lms_completion_diagnostics_snapshots
+          WHERE empresa_id = ? AND matricula_id = ?
+            AND ${markerExists}`,
+      ).bind(empresaId, matriculaId, matriculaId, empresaId, operationMarker)] : []),
+      c.env.DB.prepare(
+        `UPDATE lms_matriculas
+              SET observacoes = TRIM(REPLACE(COALESCE(observacoes, ''), ?, '')),
+                  updated_at = datetime('now')
+            WHERE id = ?
+              AND empresa_id = ?
+              AND instr(COALESCE(observacoes, ''), ?) > 0`,
+      ).bind(operationMarker, matriculaId, empresaId, operationMarker),
+    ]);
+  } catch {
+    return errorResponse(
+      c,
+      409,
+      'LMS_REMATRICULATION_CONFLICT',
+      'A rematrícula concorreu com outra alteração ou violou uma pré-condição.',
+    );
+  }
+
+  const receipt = await c.env.DB.prepare(
+    `SELECT 1 AS ok
+         FROM audit_logs
+        WHERE action = 'LMS_REMATRICULATION'
+          AND entity_type = 'lms_matriculas'
+          AND entity_id = ?
+          AND empresa_id = ?
+          AND instr(COALESCE(new_values, ''), ?) > 0
+        LIMIT 1`,
+  )
+    .bind(matriculaId, empresaId, operationId)
+    .first<{ ok: number }>();
+
+  if (receipt?.ok !== 1) {
+    return errorResponse(
+      c,
+      409,
+      'LMS_REMATRICULATION_CONFLICT',
+      'A matrícula já foi reativada por outra operação.',
+    );
+  }
+
+  return jsonResponse(c, 200, {
+    success: true,
+    data: {
+      matricula_id: matriculaId,
+      status: 'NAO_INICIADO',
+      rematriculated: true,
+      new_edition: newEdition,
+      operation_id: operationId,
+    },
+  });
+}
+
+/**
+ * Canonical pre-handler for self-enrollment policy and rematriculation.
+ * Runs before the legacy LMS route module.
+ */
+export async function enforceLmsEnrollmentIntegrity(
+  c: Context<EnrollmentContext>,
+): Promise<Response | null> {
+  if (c.req.method.toUpperCase() !== 'POST') return null;
+  const empresaId = getEmpresaId(c);
+  if (!empresaId) return null;
+
+  if (c.req.path === '/api/lms/matriculas') {
+    return guardSelfEnrollment(c, empresaId);
+  }
+
+  const rematriculation = c.req.path.match(REMATRICULATION_PATH);
+  const newEdition = c.req.path.match(NEW_EDITION_PATH);
+  if (rematriculation || newEdition) {
+    const matriculaId = parsePositiveInt((rematriculation ?? newEdition)![1]);
+    if (!matriculaId) {
+      return errorResponse(c, 400, 'LMS_ENROLLMENT_ID_INVALID', 'ID inválido.');
+    }
+    return handleRematriculation(c, empresaId, matriculaId, Boolean(newEdition));
+  }
+
+  return null;
+}
+) END`,
+      ).bind(matriculaId,empresaId)] : []),
       c.env.DB.prepare(
         `UPDATE lms_matriculas
               SET status = 'NAO_INICIADO',
