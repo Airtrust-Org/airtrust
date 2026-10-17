@@ -12,6 +12,9 @@ import { createHash } from 'node:crypto';
 import { strToU8, zipSync, unzipSync } from 'fflate';
 import { DatabaseSync } from 'node:sqlite';
 import { buildInteractiveM8QaFiles } from '../staging/lms-scorm-m8-fixture.mjs';
+import { validateIndependentDriver } from './scorm-independent-zip-producer.mjs';
+// External candidate is never published. This isolated QA course exists only
+// in disposable local D1/R2; the original course/edition is untouched.
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const api='http://127.0.0.1:8787/api';
@@ -51,10 +54,27 @@ async function main(){
   const firstId=Number(vals.MATRICULA_ID);
   const firstEmployee=Number(vals.FUNCIONARIO_ID);
   assert([companyId,courseId,firstId,firstEmployee].every(x=>Number.isSafeInteger(x)&&x>0),'LOCAL_IDS_INVALID');
+  const externalZip=process.env.AIRTRUST_SCORM_QA_ZIP_PATH;
+  const externalDriverPath=process.env.AIRTRUST_SCORM_QA_DRIVER_PATH;
+  assert(Boolean(externalZip)===Boolean(externalDriverPath),
+    'EXTERNAL_ZIP_AND_DRIVER_MUST_BE_PAIRED');
+  const externalBytes=externalZip?fs.readFileSync(path.resolve(externalZip)):null;
+  const externalSha=externalBytes?
+    createHash('sha256').update(externalBytes).digest('hex'):null;
+  const externalFiles=externalBytes?unzipSync(new Uint8Array(externalBytes)):null;
+  const externalDriver=externalDriverPath?
+    JSON.parse(fs.readFileSync(path.resolve(externalDriverPath),'utf8')):null;
+  if(externalDriver)validateIndependentDriver(externalDriver,externalSha,externalFiles);
+  const launchFile=externalDriver?.launchFile??'index.html';
+  const masteryScore=externalDriver?.masteryScore??70;
+  assert(typeof launchFile==='string'&&launchFile.length<300,'LAUNCH_FILE_INVALID');
+  assert(externalFiles===null||Object.keys(externalFiles).length<=2500,
+    'EXTERNAL_ZIP_ENTRY_COUNT_EXCEEDED');
+  if(externalBytes)assert(externalBytes.length<=80*1024*1024,'EXTERNAL_ZIP_TOO_LARGE');
   const dbFile=findDb(stateDir);
   const db=new DatabaseSync(dbFile);
   const prefix='local-browser-qa/scorm/'+companyId+'/'+courseId+'/';
-  db.prepare("UPDATE lms_cursos SET titulo='SCORM Browser QA', tipo_conteudo='scorm', scorm_versao='1.2', scorm_mastery_score=70, scorm_package_r2_prefix=?, scorm_launch_file='index.html', gerar_qualificacao_ao_concluir=1, ativo=1, publicado=1 WHERE id=? AND empresa_id=?").run(prefix,courseId,companyId);
+  db.prepare("UPDATE lms_cursos SET titulo='SCORM Browser QA', tipo_conteudo='scorm', scorm_versao='1.2', scorm_mastery_score=?, scorm_package_r2_prefix=?, scorm_launch_file=?, gerar_qualificacao_ao_concluir=1, ativo=1, publicado=1 WHERE id=? AND empresa_id=?").run(masteryScore,prefix,launchFile,courseId,companyId);
   const secondEmployee=Number(db.prepare("INSERT INTO funcionarios (nome, empresa_id, ativo, is_examinador, matricula) VALUES ('QA SCORM WEBKIT SINTETICO', ?, 1, 0, '99051')").run(companyId).lastInsertRowid);
   // Disposable foreign tenant: never share the authenticated operator's company.
   // The API must not resolve this enrollment even for a manager in tenant 6.
@@ -112,11 +132,11 @@ async function main(){
   const content=buildInteractiveM8QaFiles(id,version);
   const xml='<manifest xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2" xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2" identifier="LOCAL-QA"><organizations default="ORG"><organization identifier="ORG"><title>QA</title><item identifier="I" identifierref="R"><title>QA</title></item></organization></organizations><resources><resource identifier="R" type="webcontent" adlcp:scormtype="sco" href="index.html"><file href="index.html"/></resource></resources></manifest>';
   const completion={schemaVersion:1,diagnosticsVersion:'AIRTRUST_COMPLETION_DIAGNOSTICS_V1',scormVersion:'1.2',courseId:id,packageVersion:version,content:{requiredSlides:['qa-slide-1']},assessment:{requiredInteractions:['qa-interaction-1'],masteryScore:70,successStatus:'passed',failureStatus:'failed'},completion:{strategy:'AIRTRUST_COMPLETION_CONTRACT_V1'},diagnostics:{currentSlide:true,slides:true,assessment:true,packageStatus:true,updatedAt:true}};
-  const zipBytes=zipSync({...content,'imsmanifest.xml':strToU8(xml),'airtrust-completion-manifest.json':strToU8(JSON.stringify(completion))},{level:6});
+  const zipBytes=externalBytes??zipSync({...content,'imsmanifest.xml':strToU8(xml),'airtrust-completion-manifest.json':strToU8(JSON.stringify(completion))},{level:6});
   const zipPath=path.join(fixtureRoot,'candidate.zip');
   fs.writeFileSync(zipPath,zipBytes,{mode:0o600});
   const packageSha256=createHash('sha256').update(zipBytes).digest('hex');
-  const files=unzipSync(new Uint8Array(fs.readFileSync(zipPath)));
+  const files=externalFiles??unzipSync(new Uint8Array(fs.readFileSync(zipPath)));
   for(const [filename,bytes] of Object.entries(files)){
     const file=path.resolve(fixtureRoot,filename);
     assert(file.startsWith(fixtureRoot+path.sep),'QA_FILE_PATH_INVALID');
@@ -127,9 +147,12 @@ async function main(){
       'worker-airtrust/wrangler.dev.toml','--persist-to','worker-airtrust/.wrangler/state',
       '--file',file],90000);
   }
+  if(externalDriver)fs.writeFileSync(path.join(fixtureRoot,'driver.json'),
+    JSON.stringify(externalDriver,null,2)+'\n',{mode:0o600});
   fs.writeFileSync(path.join(fixtureRoot,'fixture.json'),JSON.stringify({
     origin:'http://127.0.0.1:8787',companyId,courseId,dbFile,
-    packageSha256,zipPath,fixtureKind:'LOCAL_DISPOSABLE_ZIP',
+    packageSha256,zipPath,fixtureKind:externalDriver?'LOCAL_DISPOSABLE_REAL_ZIP':'LOCAL_DISPOSABLE_ZIP',
+    ...(externalDriver?{driverPath:path.join(fixtureRoot,'driver.json')}:{}),
     enrollments:{chromium:firstId,'webkit-ipad':secondId},
     employeeIds:{chromium:firstEmployee,'webkit-ipad':secondEmployee},
     passEnrollments,
