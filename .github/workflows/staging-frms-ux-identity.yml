@@ -44,6 +44,14 @@ jobs:
           [[ "$CONFIRMATION" == AIRTRUST_STAGING_FRMS_UX_IDENTITY ]] || exit 1
           [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
           [[ "$EXPECTED_SHA" == "$GITHUB_EVENT_SHA" ]] || exit 1
+      - name: Require current live main before touching staging
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          LIVE_MAIN=$(gh api repos/Airtrust-Org/airtrust/branches/main --jq .commit.sha)
+          [[ "$LIVE_MAIN" == "$EXPECTED_SHA" ]] || { echo STAGING_FRMS_MAIN_CHANGED; exit 1; }
       - uses: actions/checkout@v7
       - name: Require reviewed release gates
         env:
