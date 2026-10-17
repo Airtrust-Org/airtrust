@@ -21,7 +21,10 @@
     "lms_cursos_setores",
     "lms_scorm_package_versions",
     "lms_scorm_package_audit_log",
-    "lms_completion_diagnostics_snapshots"
+    "lms_completion_diagnostics_snapshots",
+    "lms_matricula_ciclos",
+    "lms_xapi_statements",
+    "lms_ciclo_evidencias"
   ],
   "official_consumers": [
     ".github/workflows/heavy-ci.yml",
@@ -32,7 +35,11 @@
     "Official CI consumers must call the canonical bootstrap command instead of replaying arbitrary migrations.",
     "Every migration referenced by the bootstrap must exist in worker-airtrust/migrations.",
     "A Schema V2 change newer than reviewed_through_schema_v2_change that targets a critical table fails closed until this contract/bootstrap is reviewed.",
-    "No remote D1 target is permitted by this guard or bootstrap."
+    "No remote D1 target is permitted by this guard or bootstrap.",
+    "Reviewed critical Schema V2 changes newer than the base marker must be hash-pinned by filename; a later lower-numbered migration is not implicitly reviewed."
   ],
-  "review_note": "Reviewed 2026-10-08: 0542 adds lms_cursos.scorm_assessment_policy with fail-closed SCORED default and a narrow production-only tenant-6 CRM metadata update. Canonical disposable local LMS bootstrap now creates the matching CHECK-constrained column without touching remote D1 or applying tenant-specific metadata. Schema V2 remote apply remains separately governed."
+  "review_note": "Reviewed 2026-10-08: 0542 adds lms_cursos.scorm_assessment_policy with fail-closed SCORED default and a narrow production-only tenant-6 CRM metadata update. Canonical disposable local LMS bootstrap now creates the matching CHECK-constrained column without touching remote D1 or applying tenant-specific metadata. Schema V2 remote apply remains separately governed. Reviewed 2026-10-17: 0557 adds xAPI archived_cycle_id, per-cycle archive table, and append-only/tenant triggers. Disposable local smoke applies the corresponding additive migration and verifies the new table/column, preventing HTTP 500 from missing schema; no remote D1 is modified. Intermediate 0543-0552 changes are independently governed; this review does not assert remote application. CI guard now uses exact reviewed-critical hash allowlist past 0542, so subsequent Player 3 0553/0554 arrivals fail closed until their impact is explicitly reviewed, regardless of numeric order.",
+  "reviewed_critical_schema_v2_changes": {
+    "0557_lms_cycle_evidence_archive.sql": "6df04a3d9fa5f3975a914d978600ac00f492438c02655deb211893f208a32b8e"
+  }
 }
