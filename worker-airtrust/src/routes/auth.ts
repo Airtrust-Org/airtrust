@@ -328,6 +328,13 @@ async function resolveAuthRoleForUser(
 ): Promise<string> {
   const fallback = normalizeAuthRole(fallbackRole);
 
+  // A role efetiva do administrador global não depende da role da empresa
+  // atualmente selecionada. A concessão de plataforma deve estar persistida,
+  // ativa e não revogada; nunca derivar esse poder de e-mail ou JWT.
+  if (isPlatformAdminAccess(await resolvePlatformAccessState(db, userId))) {
+    return 'ADMINISTRADOR';
+  }
+
   if (!(await hasUsuariosEmpresasTable(db))) {
     return fallback;
   }
