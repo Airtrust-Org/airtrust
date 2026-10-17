@@ -7,6 +7,7 @@ const {
   ensureMatriculaCycleMock,
   syncMatriculaCycleFromMatriculaMock,
   resetMatriculaForNewCycleMock,
+  reactivateCancelledMatriculaMock,
   completeLmsMatriculaMock,
   logAuditMock,
   sendEmailMock,
@@ -15,6 +16,7 @@ const {
   ensureMatriculaCycleMock: vi.fn(),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
   resetMatriculaForNewCycleMock: vi.fn(),
+  reactivateCancelledMatriculaMock: vi.fn(),
   completeLmsMatriculaMock: vi.fn(),
   logAuditMock: vi.fn(),
   sendEmailMock: vi.fn(),
@@ -65,6 +67,7 @@ vi.mock('../../services/lms-matricula-cycle', () => ({
       ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(record.status)),
     ),
   resetMatriculaForNewCycle: resetMatriculaForNewCycleMock,
+  reactivateCancelledMatriculaPreservingProgress: reactivateCancelledMatriculaMock,
   syncMatriculaCycleFromMatricula: syncMatriculaCycleFromMatriculaMock,
 }));
 
@@ -141,6 +144,7 @@ describe('lms matriculas progress integrity', () => {
     ensureMatriculaCycleMock.mockResolvedValue(undefined);
     syncMatriculaCycleFromMatriculaMock.mockResolvedValue(undefined);
     resetMatriculaForNewCycleMock.mockResolvedValue(9001);
+    reactivateCancelledMatriculaMock.mockResolvedValue({status:'EM_ANDAMENTO',progressoPct:85,scormPreserved:true});
     completeLmsMatriculaMock.mockResolvedValue({
       outcome: 'qualification_not_required',
       qualificacaoHistoricoId: null,
@@ -313,10 +317,11 @@ describe('lms matriculas progress integrity', () => {
     );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ success: true, data: { criadas: 1, ignoradas: 0, erros: 0 } });
-    expect(resetMatriculaForNewCycleMock).toHaveBeenCalledWith(
+    expect(reactivateCancelledMatriculaMock).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ matriculaId: 501, origin: 'MANUAL', empresaId: 1 }),
+      expect.objectContaining({ matriculaId: 501, empresaId: 1 }),
     );
+    expect(resetMatriculaForNewCycleMock).not.toHaveBeenCalled();
     expect(sendEmailMock).not.toHaveBeenCalled();
     expect(calls.some((call) => call.query.includes('INSERT INTO lms_matriculas'))).toBe(false);
   });

@@ -461,6 +461,23 @@ export async function resetMatriculaForNewCycle(
 ) {
   const beforeReset = await readMatriculaSnapshot(db, params.matriculaId, params.empresaId);
 
+  // System-wide fail-safe: Compliance, roster and automatic EAD renewals must
+  // never destroy surviving progress merely because a matrícula was cancelled.
+  // An explicitly authorized new edition uses /nova-edicao, not this routine.
+  if (beforeReset && (beforeReset.deleted_at ||
+      normalizeStatus(beforeReset.status) === 'CANCELADO')) {
+    const resumed = await reactivateCancelledMatriculaPreservingProgress(db, {
+      empresaId: params.empresaId, matriculaId: params.matriculaId,
+      dataExpiracao: params.dataExpiracao, observacoes: params.observacoes,
+      matriculadoPor: params.matriculadoPor, bucket: undefined,
+    });
+    if (typeof resumed !== 'object') {
+      throw new Error('LMS_CANCELLED_PROGRESS_PRESERVATION_REQUIRED');
+    }
+    const current = await readCurrentMatriculaCycleId(db, params.matriculaId);
+    return current?.id ?? null;
+  }
+
   if (beforeReset) {
     await upsertCurrentMatriculaCycle(db, beforeReset, params.origin ?? 'AUTO_RENOVACAO');
     await db
@@ -555,4 +572,73 @@ export async function resetMatriculaForNewCycle(
     origin: params.origin ?? 'AUTO_RENOVACAO',
     empresaId: params.empresaId,
   });
+}
+
+
+/**
+ * Resume a cancelled enrollment in the SAME SCORM edition without losing
+ * progress/CMI. A new edition is an explicit, separately authorized operation.
+ * Never revive a qualification-bearing enrollment or change the learner/course.
+ */
+export async function reactivateCancelledMatriculaPreservingProgress(
+  db: D1Database,
+  params: { empresaId: number; matriculaId: number; dataExpiracao?: string | null;
+    observacoes?: string | null; matriculadoPor?: number | null; bucket: R2Bucket | null | undefined },
+): Promise<{status: 'EM_ANDAMENTO' | 'NAO_INICIADO'; progressoPct: number; scormPreserved: boolean} | 'NOT_ELIGIBLE' | 'NEW_EDITION_REQUIRED'> {
+  const row = await db.prepare(
+    `SELECT m.id, m.empresa_id, m.curso_id, m.funcionario_id,
+            m.status, m.deleted_at, m.qualificacao_historico_id,
+            m.progresso_pct, m.ultimo_slide, m.data_inicio,
+            c.tipo_conteudo, c.scorm_package_r2_prefix,
+            p.cmi_json, p.suspend_data, p.lesson_status, p.lesson_location
+       FROM lms_matriculas m
+       JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+       LEFT JOIN lms_progresso_scorm p
+         ON p.matricula_id=m.id AND p.empresa_id=m.empresa_id
+      WHERE m.id=? AND m.empresa_id=? AND c.deleted_at IS NULL
+      LIMIT 1`,
+  ).bind(params.matriculaId,params.empresaId).first<{
+    id:number;empresa_id:number;curso_id:number;funcionario_id:number;
+    status:string;deleted_at:string|null;qualificacao_historico_id:number|null;
+    progresso_pct:number|null;ultimo_slide:number|null;data_inicio:string|null;tipo_conteudo:string|null;
+    scorm_package_r2_prefix:string|null;cmi_json:string|null;suspend_data:string|null;
+    lesson_status:string|null;lesson_location:string|null;
+  }>();
+  if(!row || (!row.deleted_at && String(row.status).toUpperCase()!=='CANCELADO') ||
+      row.qualificacao_historico_id != null) return 'NOT_ELIGIBLE';
+  // Import lazily? No: the detector is deterministic and never changes D1/R2.
+  const { detectLmsEditionMismatch } = await import('./lms-edition-mismatch');
+  const edition=await detectLmsEditionMismatch({
+    bucket:params.bucket,db,empresaId:params.empresaId,cursoId:row.curso_id,
+    contentType:row.tipo_conteudo,activePrefix:row.scorm_package_r2_prefix,
+    cmiJson:row.cmi_json,suspendData:row.suspend_data,
+    enrollmentStartedAt:row.data_inicio,
+  });
+  if(edition) return 'NEW_EDITION_REQUIRED';
+  const originalProgress=Number(row.progresso_pct ?? 0);
+  const hasProgress=originalProgress>0 || Number(row.ultimo_slide||0)>0 ||
+    Boolean(row.lesson_location || row.cmi_json || row.suspend_data ||
+      (row.lesson_status && !['not attempted','not_attempted','unknown'].includes(row.lesson_status.toLowerCase())));
+  const resumeStatus=hasProgress?'EM_ANDAMENTO':'NAO_INICIADO';
+  const update=await db.prepare(
+    `UPDATE lms_matriculas
+        SET status=?, deleted_at=NULL, data_conclusao=NULL,
+            data_expiracao=COALESCE(?,data_expiracao),
+            matriculado_por=COALESCE(?,matriculado_por),
+            observacoes=CASE WHEN ? IS NULL OR ?='' THEN observacoes
+              WHEN COALESCE(observacoes,'')='' THEN ?
+              ELSE observacoes || char(10) || ? END,
+            updated_at=datetime('now')
+      WHERE id=? AND empresa_id=?
+        AND (status='CANCELADO' OR deleted_at IS NOT NULL)
+        AND qualificacao_historico_id IS NULL`,
+  ).bind(resumeStatus,params.dataExpiracao??null,params.matriculadoPor??null,
+    params.observacoes??null,params.observacoes??null,params.observacoes??null,
+    params.observacoes??null,params.matriculaId,params.empresaId).run();
+  if(Number(update.meta?.changes)!==1) return 'NOT_ELIGIBLE';
+  // Keep the current cycle rather than making a new zero-progress cycle.
+  // All runtime SCORM state remains in lms_progresso_scorm untouched.
+  await ensureMatriculaCycle(db,{matriculaId:params.matriculaId,empresaId:params.empresaId,
+    origin:'REATIVACAO_SEM_RESET'});
+  return {status:resumeStatus,progressoPct:originalProgress,scormPreserved:true};
 }
