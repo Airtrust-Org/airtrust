@@ -105,6 +105,13 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
       // Invalid data grants no progress, result or finalization.
     }
   }
+  // A failed terminal assessment must survive even when the host preserved
+  // lesson_status but a concurrent unload supplied older suspend_data.
+  if (api.LMSGetValue('cmi.core.lesson_status') === 'failed' && !modelState.passed) {
+    modelState.failed = true;
+    modelState.assessmentEvaluated = true;
+    modelState.best = 0;
+  }
   var apiAdapter = window.AirTrustSCORM;
   var submit = document.createElement('button');
   submit.id = 'submitAssessment';
