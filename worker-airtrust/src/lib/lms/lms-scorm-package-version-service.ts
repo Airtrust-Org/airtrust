@@ -4,6 +4,10 @@ import { canActivateCertifiedScormPackage, validateScormPackageQuality, type Sco
 import { applyRuntimeConformance } from './lms-scorm-quality-gate';
 import { runScormBrowserConformance } from './lms-scorm-browser-run';
 import {
+  verifyTrustedScormAttestation,
+  type TrustedScormAttestation,
+} from './lms-scorm-trusted-attestation';
+import {
   normalizeScormUploadFilename,
   parseStoredScormValidation,
   readScormUploadFilename,
@@ -185,7 +189,7 @@ export async function listScormPackageVersions(db: D1Database, empresaId: number
   return (rows.results ?? []).map(packageReadModel);
 }
 
-export async function activateScormPackageVersion(params: { db: D1Database; empresaId: number; cursoId: number; packageId: string; userId: number | null }) {
+export async function activateScormPackageVersion(params: { db: D1Database; empresaId: number; cursoId: number; packageId: string; userId: number | null; attestationSecret?: string; runtimeSha?: string }) {
   const candidate = await params.db.prepare(
     `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json
        FROM lms_scorm_package_versions WHERE id = ? AND empresa_id = ? AND curso_id = ?`,
@@ -194,7 +198,16 @@ export async function activateScormPackageVersion(params: { db: D1Database; empr
   const quality = parseStoredScormValidation<ScormQualityGateResult>(candidate.validation_result_json);
   // Legacy validation JSON can contain publishable=true from a protocol-only
   // browser run. Never promote it without a complete SHA-bound functional gate.
-  if (candidate.status !== 'VALIDATED' ||
+  const storedAttestation = (quality as (ScormQualityGateResult & {
+    trustedAttestation?: TrustedScormAttestation;
+  }) | null)?.trustedAttestation;
+  const provenanceVerified = await verifyTrustedScormAttestation(storedAttestation, {
+    empresaId: params.empresaId, cursoId: params.cursoId,
+    packageId: candidate.id, packageSha256: candidate.package_sha256,
+    runtimeSha: params.runtimeSha ?? '',
+    requiresAssessment: quality?.functionalCertification?.requiresAssessment ?? true,
+  }, params.attestationSecret);
+  if (candidate.status !== 'VALIDATED' || !provenanceVerified ||
       !canActivateCertifiedScormPackage(quality, candidate.package_sha256)) {
     throw new ApiError('Pacote não pode ser ativado: todos os gates obrigatórios devem passar', 409);
   }
@@ -274,4 +287,60 @@ export async function runScormPackageConformance(params: {
     params.db.prepare(`INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`).bind(crypto.randomUUID(), params.empresaId, params.cursoId, candidate.id, result.publishable ? 'VALIDATION_PASSED' : 'VALIDATION_FAILED', params.userId, runtime.errors.join('; ')),
   ]);
   return { ...result, runtime };
+}
+
+/**
+ * Import a separately signed, staging-proven QA result for an immutable ZIP
+ * edition. The actor cannot set "CERTIFIED" or the course pointer directly.
+ * Only this verifier can reconstruct a publishable stored gate verdict.
+ */
+export async function importScormFunctionalAttestation(params: {
+  db: D1Database; empresaId: number; cursoId: number; packageId: string;
+  userId: number | null; attestation: unknown;
+  attestationSecret?: string; runtimeSha?: string;
+}) {
+  const candidate = await params.db.prepare(
+    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json
+       FROM lms_scorm_package_versions WHERE id = ? AND empresa_id = ? AND curso_id = ?`,
+  ).bind(params.packageId, params.empresaId, params.cursoId).first<PackageRow>();
+  if (!candidate) throw new ApiError('Versão candidata não encontrada', 404);
+  const quality = parseStoredScormValidation<ScormQualityGateResult>(candidate.validation_result_json);
+  const runtime = (quality as (ScormQualityGateResult & { runtime?: import('./lms-scorm-quality-gate').ScormRuntimeConformance }) | null)?.runtime;
+  if (candidate.status !== 'VALIDATED' || !runtime ||
+      runtime.status !== 'PASS' || runtime.candidateSha256 !== candidate.package_sha256 ||
+      !quality || quality.conformance?.status !== 'PASS') {
+    throw new ApiError('Conformidade técnica persistida não aprovada para esta edição', 409);
+  }
+  const envelope = params.attestation as TrustedScormAttestation | null;
+  const expectedPolicy = runtime.requiresAssessmentEvidence !== false;
+  const verified = await verifyTrustedScormAttestation(envelope, {
+    empresaId: params.empresaId, cursoId: params.cursoId,
+    packageId: candidate.id, packageSha256: candidate.package_sha256,
+    runtimeSha: params.runtimeSha ?? '', requiresAssessment: expectedPolicy,
+  }, params.attestationSecret);
+  if (!verified || !envelope) {
+    throw new ApiError('Atestação funcional independente inválida ou sem proveniência', 409);
+  }
+  const result = applyRuntimeConformance(quality, runtime,
+    candidate.package_sha256, envelope.payload.runs);
+  if (!result.publishable || !canActivateCertifiedScormPackage(result, candidate.package_sha256)) {
+    throw new ApiError('Cenários funcionais incompletos; ativação não autorizada', 409);
+  }
+  const stored = { ...result, runtime, trustedAttestation: envelope };
+  await params.db.batch([
+    params.db.prepare(
+      `UPDATE lms_scorm_package_versions
+         SET validation_result_json = ?, validation_finished_at = datetime('now')
+       WHERE id = ? AND empresa_id = ? AND curso_id = ? AND package_sha256 = ? AND status = 'VALIDATED'`,
+    ).bind(JSON.stringify(stored), candidate.id, params.empresaId, params.cursoId,
+      candidate.package_sha256),
+    params.db.prepare(
+      `INSERT INTO lms_scorm_package_audit_log
+         (id, empresa_id, curso_id, package_id, action, actor_id, reason, created_at)
+       VALUES (?, ?, ?, ?, 'VALIDATION_PASSED', ?, ?, datetime('now'))`,
+    ).bind(crypto.randomUUID(), params.empresaId, params.cursoId,
+      candidate.id, params.userId, 'SIGNED_FUNCTIONAL_ATTESTATION'),
+  ]);
+  return { packageId: candidate.id, packageSha256: candidate.package_sha256,
+    status: result.functionalCertification.status, publishable: result.publishable };
 }
