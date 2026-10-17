@@ -429,6 +429,7 @@ adminUsuariosRoutes.post('/', async (c) => {
     funcionario_id?: number | null;
     empresa_id?: number;
     setor_ids?: number[];
+    aluno_tambem?: boolean;
   }>();
 
   const email = String(body?.email || '')
@@ -444,6 +445,10 @@ adminUsuariosRoutes.post('/', async (c) => {
   // Store coordination exclusively in the tenant-scoped, session-authoritative profile table.
   const storedUserPerfil = coordinator ? 'ALUNO' : perfil;
   const storedCompanyRole = coordinator ? 'USER' : perfil;
+  if (body?.aluno_tambem !== undefined &&
+      (typeof body.aluno_tambem !== 'boolean' || perfil !== 'INSTRUTOR')) {
+    throw badRequest('Perfil adicional Aluno exige Instrutor', 'INVALID_ADDITIONAL_PROFILE');
+  }
 
   if (!email || !nome) {
     throw badRequest('email e nome são obrigatórios', 'MISSING_FIELDS');
@@ -551,6 +556,19 @@ adminUsuariosRoutes.post('/', async (c) => {
       .run();
   }
 
+  if (body?.aluno_tambem === true) {
+    // Both session roles must be persisted: one explicit ALUNO row alone
+    // would suppress the legacy INSTRUTOR role in the authoritative resolver.
+    await db.batch(['INSTRUTOR', 'ALUNO'].map((sessionRole) =>
+      db.prepare(`INSERT INTO usuarios_empresas_perfis
+        (usuario_id, empresa_id, perfil, ativo, created_at, updated_at)
+        VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+        ON CONFLICT(usuario_id, empresa_id, perfil)
+        DO UPDATE SET ativo = 1, updated_at = datetime('now')`)
+        .bind(novoUsuarioId, targetEmpresaId, sessionRole),
+    ));
+  }
+
   if (coordinator) {
     // 0473/0475 profile membership is the authority for selecting this role in-session.
     await db.prepare(`INSERT INTO usuarios_empresas_perfis
@@ -638,6 +656,7 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     funcionario_id?: number | null;
     active?: boolean;
     setor_ids?: number[];
+    aluno_tambem?: boolean;
   }>();
 
   // Verificar que usuário existe
@@ -660,6 +679,19 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     WHERE usuario_id = ? AND empresa_id = ? AND perfil = 'COORDENACAO_VOO' AND ativo = 1 LIMIT 1`)
     .bind(id, empresaId).first<{active: number}>();
   const targetPerfil = body?.perfil?.toUpperCase() || (existingCoordinator ? 'COORDENACAO_VOO' : existente.perfil.toUpperCase());
+  if (body?.aluno_tambem !== undefined) {
+    if (typeof body.aluno_tambem !== 'boolean') {
+      throw badRequest('Opção Aluno deve ser booleana', 'INVALID_ADDITIONAL_PROFILE');
+    }
+    const instructorRole = await db.prepare(`SELECT 1 AS active
+        FROM usuarios_empresas_perfis
+        WHERE usuario_id = ? AND empresa_id = ? AND perfil = 'INSTRUTOR' AND ativo = 1
+        LIMIT 1`)
+      .bind(id, empresaId).first<{ active: number }>();
+    if (targetPerfil !== 'INSTRUTOR' && !instructorRole) {
+      throw badRequest('Perfil adicional Aluno exige Instrutor no tenant', 'INVALID_ADDITIONAL_PROFILE');
+    }
+  }
   const targetPrivilegiado =
     existente.perfil.toUpperCase() === 'ADMINISTRADOR' ||
     existente.perfil.toUpperCase() === 'ADMIN' ||
@@ -745,6 +777,26 @@ adminUsuariosRoutes.put('/:id', async (c) => {
         WHERE usuario_id = ? AND empresa_id = ? AND perfil = 'COORDENACAO_VOO'`).bind(id, empresaId));
     }
   }
+  if (body?.aluno_tambem !== undefined) {
+    if (body.aluno_tambem) {
+      // Retain every existing role and make the two requested session modes
+      // explicit for this tenant. Never overwrite unrelated tenant records.
+      for (const sessionRole of ['INSTRUTOR', 'ALUNO']) {
+        statementsAdicionais.push(db.prepare(`INSERT INTO usuarios_empresas_perfis
+          (usuario_id, empresa_id, perfil, ativo, created_at, updated_at)
+          VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+          ON CONFLICT(usuario_id, empresa_id, perfil)
+          DO UPDATE SET ativo = 1, updated_at = datetime('now')`)
+          .bind(id, empresaId, sessionRole));
+      }
+    } else {
+      statementsAdicionais.push(db.prepare(`UPDATE usuarios_empresas_perfis
+        SET ativo = 0, updated_at = datetime('now')
+        WHERE usuario_id = ? AND empresa_id = ? AND perfil = 'ALUNO'`)
+        .bind(id, empresaId));
+    }
+  }
+
   if (body?.funcionario_id !== undefined) {
     updates.push('funcionario_id = ?');
     binds.push(body.funcionario_id);
