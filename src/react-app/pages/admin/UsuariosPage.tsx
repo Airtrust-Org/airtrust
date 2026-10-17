@@ -854,8 +854,16 @@ function SetoresGerenciadosField({
       ) : setores.length === 0 ? (
         <p className="text-xs text-amber-600">Nenhum setor ativo cadastrado nesta empresa.</p>
       ) : (
-        <div
-          className={`border rounded-lg p-2 max-h-40 overflow-y-auto space-y-1 ${
+        <div>
+          <button
+            type="button"
+            onClick={() => onChange(setores.map((setor) => setor.id))}
+            className="text-xs font-medium text-primary hover:underline mb-2"
+          >
+            Selecionar todos os setores ativos
+          </button>
+          <div
+            className={`border rounded-lg p-2 max-h-40 overflow-y-auto space-y-1 ${
             showError && selectedIds.length === 0 ? 'border-red-400' : 'border-slate-300'
           }`}
         >
@@ -872,6 +880,10 @@ function SetoresGerenciadosField({
               {s.nome}
             </label>
           ))}
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Novos setores precisarão ser vinculados posteriormente.
+          </p>
         </div>
       )}
       {showError && selectedIds.length === 0 && (
