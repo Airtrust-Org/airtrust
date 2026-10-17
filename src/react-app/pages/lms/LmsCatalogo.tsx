@@ -83,6 +83,11 @@ import {
   supportsAdminCoursePreview as supportsContentPreview,
 } from './lmsAdminPreview';
 import { shouldShowLmsEnrollmentDeadline } from './lmsEnrollmentDeadline';
+import {
+  LmsCourseMandatoryPill,
+  useLmsCourseCompliance,
+  type ComplianceRow,
+} from './LmsCourseComplianceMetrics';
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
@@ -1411,6 +1416,7 @@ function CourseCardSkeleton() {
 function CourseCard({
   curso,
   matricula,
+  complianceRows,
   canManage,
   canUpdateCourse,
   canDeleteCourse,
@@ -1426,6 +1432,7 @@ function CourseCard({
 }: {
   curso: LmsCurso;
   matricula?: LmsMatricula;
+  complianceRows?: ComplianceRow[];
   canManage: boolean;
   canUpdateCourse: boolean;
   canDeleteCourse: boolean;
@@ -1558,6 +1565,7 @@ function CourseCard({
           ) : null}
           {canManage ? (
             <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+              <LmsCourseMandatoryPill curso={curso} rows={complianceRows} />
               <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {curso.total_matriculas ?? 0} matrícula(s)
               </span>
@@ -1699,6 +1707,8 @@ export default function LmsCatalogo() {
   // fluxo de aluno (iniciar/continuar/concluir), mantendo a gestão na aba "Catálogo".
   const gestorStudentMode = isGestor && tab === 'meus';
   const studentMode = restrictToEnrolledCourses || gestorStudentMode;
+  // Reuse the canonical training-compliance query once for the whole admin catalog.
+  const { data: complianceRows } = useLmsCourseCompliance(canManage && !studentMode);
   const [search, setSearch] = useState('');
   const [areaFilter, setAreaFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<TipoConteudo[]>([]);
@@ -2264,6 +2274,7 @@ export default function LmsCatalogo() {
                         key={curso.id}
                         curso={curso}
                         matricula={matriculasByCurso.get(curso.id)}
+                        complianceRows={courseManagementEnabled ? complianceRows : undefined}
                         canManage={courseManagementEnabled}
                         canUpdateCourse={canUpdateCourse}
                         canDeleteCourse={canDeleteCourse}

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchWithAuth } from '@/react-app/config/api';
 import type { LmsCurso } from '@/react-app/hooks/useLms';
 
-type ComplianceRow = {
+export type ComplianceRow = {
   qualificacao_tipo_id: number;
   pessoas: number;
   conformes: number;
@@ -12,7 +12,7 @@ type ComplianceRow = {
   compliance_pct: number;
 };
 
-export function useLmsCourseCompliance() {
+export function useLmsCourseCompliance(enabled = true) {
   return useQuery({
     queryKey: ['training-compliance', 'trainings', null, null, ''],
     queryFn: async (): Promise<ComplianceRow[]> => {
@@ -25,6 +25,7 @@ export function useLmsCourseCompliance() {
       return json.data;
     },
     staleTime: 60_000,
+    enabled,
   });
 }
 
@@ -63,5 +64,22 @@ export function LmsCourseComplianceMetrics({
       <span> · Concluídos: {metrics.concluidos}</span>
       <span> · Compliance: {metrics.compliance.toLocaleString('pt-BR')}%</span>
     </div>
+  );
+}
+
+/** Shows the canonical required-person count only when the course has a matching compliance row. */
+export function LmsCourseMandatoryPill({
+  curso,
+  rows,
+}: {
+  curso: Pick<LmsCurso, 'qualificacao_tipo_id'>;
+  rows: ComplianceRow[] | undefined;
+}) {
+  const count = getLmsCourseCompliance(curso, rows)?.obrigatorios;
+  if (count == null || !Number.isFinite(count) || count < 0) return null;
+  return (
+    <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+      Obrigatórios: {count}
+    </span>
   );
 }

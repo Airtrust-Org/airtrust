@@ -23,6 +23,7 @@ type UserListRow = {
   email: string;
   nome: string;
   perfil: string;
+  perfis: string;
   active: number;
   funcionario_id: number | null;
   funcionario_nome: string | null;
@@ -204,7 +205,7 @@ function assertManagerMayManageTarget(callerRole: string, targetRole: string): v
   );
   if (privilegedTarget && !['ADMINISTRADOR', 'ADMIN'].includes(callerRole)) {
     throw forbidden(
-      'Apenas ADMINISTRADOR pode gerenciar Administradores da Empresa ou Administradores Gerais',
+      'Gestor não pode administrar outros Gestores ou Administradores',
       'INSUFFICIENT_ROLE',
     );
   }
@@ -261,6 +262,11 @@ protectedAdminUsuariosRoutes.get('/', async (c) => {
            ue.role,
            'ALUNO'
          ) AS perfil,
+         (SELECT COALESCE(json_group_array(uep.perfil), '[]')
+            FROM usuarios_empresas_perfis uep
+           WHERE uep.usuario_id = u.id
+             AND uep.empresa_id = ue.empresa_id
+             AND uep.ativo = 1) AS perfis,
          u.active,
          u.funcionario_id,
          f.nome AS funcionario_nome,
@@ -286,7 +292,19 @@ protectedAdminUsuariosRoutes.get('/', async (c) => {
     .bind(empresaId)
     .all<UserListRow>();
 
-  return c.json({ success: true, data: result.results || [] });
+  return c.json({
+    success: true,
+    data: (result.results || []).map((user) => {
+      let perfis: string[] = [];
+      try {
+        const decoded: unknown = JSON.parse(user.perfis || '[]');
+        if (Array.isArray(decoded)) perfis = decoded.filter((value): value is string => typeof value === 'string');
+      } catch {
+        // Do not infer or grant any role from a malformed profile list.
+      }
+      return { ...user, perfis };
+    }),
+  });
 });
 
 // DELETE /api/admin/usuarios/:id
@@ -473,6 +491,14 @@ protectedAdminUsuariosRoutes.put('/:id/permissoes', async (c) => {
   }
 
   const permissions = normalizePermissions(body?.permissoes || []);
+  // Overrides are global per user in the current schema. A tenant GESTOR may
+  // maintain operational permissions but must never delegate platform/admin
+  // capabilities, even to a regular user belonging only to their tenant.
+  if (!['ADMINISTRADOR', 'ADMIN'].includes(callerRole) &&
+      permissions.some(({ permissao, tipo }) =>
+        tipo === 'GRANT' && /^(?:admin[._:]|platform[._:]|sistema[._:]|multiempresa(?:[._:]|$))/i.test(permissao))) {
+    throw forbidden('Gestor não pode conceder privilégios administrativos globais', 'PLATFORM_PERMISSION_GRANT_FORBIDDEN');
+  }
   const statements: D1PreparedStatement[] = [
     db.prepare(`DELETE FROM usuario_permissoes WHERE usuario_id = ?`).bind(targetUserId),
     ...permissions.map((permission) =>
@@ -522,6 +548,15 @@ protectedAdminUsuariosRoutes.patch('/:id/reset-senha', async (c) => {
   const target = await findTargetInTenant(db, targetUserId, empresaId);
   if (!target) {
     throw forbidden('Usuário não pertence à sua empresa', 'WRONG_TENANT');
+  }
+
+  // Credential recovery must not become a tenant-admin route for takeover of
+  // the persisted platform administrator, even if both share a membership.
+  if (targetUserId === callerId) {
+    throw forbidden('Use o fluxo pessoal para redefinir sua senha', 'SELF_PASSWORD_RESET_FORBIDDEN');
+  }
+  if (await hasPlatformAdminAccess(db, targetUserId)) {
+    throw forbidden('Conta administrativa de plataforma exige recuperação própria', 'PLATFORM_ADMIN_CREDENTIAL_PROTECTED');
   }
 
   const novoHash = await hashPassword(novaSenha);
