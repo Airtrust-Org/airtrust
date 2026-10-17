@@ -32,6 +32,7 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
     db = new SqliteD1Database();
     db.database.exec(`
       ALTER TABLE qualificacoes_tipos ADD COLUMN ativo INTEGER DEFAULT 1;
+      ALTER TABLE qualificacoes_tipos ADD COLUMN nome TEXT;
       CREATE TABLE usuarios (id INTEGER PRIMARY KEY, funcionario_id INTEGER, deleted_at TEXT);
       CREATE TABLE simulador_agendamentos (
         id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL,
