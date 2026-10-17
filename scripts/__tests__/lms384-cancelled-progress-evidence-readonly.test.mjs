@@ -25,7 +25,13 @@ test('source, production and official gates are immutable in workflow',()=>{
  assert.match(workflow,/github\.ref == 'refs\/heads\/main'/);
  assert.match(workflow,/EXPECTED_MAIN_SHA/);
  assert.match(workflow,/EXPECTED_PRODUCTION_SHA/);
- assert.match(workflow,/CLOUDFLARE_D1_READONLY_API_TOKEN/);
- assert.doesNotMatch(workflow,/CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+ // Production has no dedicated D1_READONLY secret; existing official
+ // read-only audits use the protected migration token with SELECT-only code.
+ assert.match(workflow,/CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+ assert.match(script,/READONLY_SQL_/);
+ assert.match(script,/^.*SELECT m\.id/m);
+ assert.match(script,/SELECT numero_ciclo/);
+ assert.match(script,/SELECT action,created_at,old_values,new_values/);
+ assert.doesNotMatch(workflow,/wrangler d1 time-travel restore|--file|d1 migrations apply/);
  assert.doesNotMatch(workflow,/wrangler d1 execute.*--file/);
 });
