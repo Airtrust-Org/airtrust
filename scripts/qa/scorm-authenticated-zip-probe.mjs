@@ -68,6 +68,7 @@ async function run(name,type){
   for(const entry of driver.requiredContent)await sco.locator(entry.selector)
    .waitFor({state:'visible',timeout:20000});
   result.requiredContent='PASS';
+  const baselineSuspend=readState(enrollment)?.suspend_data??null;
   for(const action of driver.resume.actions){
    const e=sco.locator(action.selector);
    if(action.op==='click')await e.click({timeout:20000});
@@ -77,10 +78,12 @@ async function run(name,type){
   let previous;
   for(let i=0;i<35;i++){
    previous=readState(enrollment);
-   if(previous?.cmi_json&&previous.suspend_data)break;
+   if(previous?.cmi_json&&previous.suspend_data&&
+     previous.suspend_data!==baselineSuspend)break;
    await page.waitForTimeout(400);
   }
-  requireCondition(!!previous?.cmi_json&&!!previous?.suspend_data,'PERSISTED_CMI_MISSING');
+  requireCondition(!!previous?.cmi_json&&!!previous?.suspend_data&&
+    previous.suspend_data!==baselineSuspend,'ACTION_NOT_PERSISTED_TO_CMI');
   result.persistedCmi='PASS';
   result.cmiSha256=hash(Buffer.from(previous.cmi_json));
   result.suspendBytes=Buffer.byteLength(previous.suspend_data,'utf8');
