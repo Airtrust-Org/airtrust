@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-14",
-    "last_reconciled_against": "0553 empty LGPD model retirement queued; production remote apply pending",
-    "schema_v2_digest": "a2bb90bd7fa41c50bfe449e1a71941c20eff20bc920fe9a521a476bfb0634e89",
+    "last_reconciled_against": "0554 simulator individual check evidence schema reviewed, remote apply pending",
+    "schema_v2_digest": "311c9d1eb1b9eeff923c2e49a6dccb2ee28789fc82b095de8059a96e34762dfe",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1578,6 +1578,20 @@
       "reviewed_manifest": "retire-empty-lgpd-seg-info-model-0553.json",
       "evidence": "worker-airtrust/schema-v2/plans/retire-empty-lgpd-seg-info-model-0553.md",
       "note": "Data-only retirement permitted only when all checked active references are zero. Governed apply soft-deletes LGPD_SEG_INFO without transfers, enrolments or notifications."
+    },
+    {
+      "change_file": "0554_simulator_individual_check_evidence.sql",
+      "change_id": "simulator-individual-check-evidence-0554",
+      "sha256": "bcbdcf8bd78c3a3d6393624e62ae70e691190e3ae2d35c0951c0bc56470b4bf5",
+      "targets": [
+        "sessoes_checks_resultados_individuais"
+      ],
+      "domain": "Simuladores: individual signed check evidence with tenant and per-fiche scope",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "simulator-individual-check-evidence-0554.json",
+      "evidence": "worker-airtrust/schema-v2/plans/simulator-individual-check-evidence-0554.md",
+      "note": "Additive table/indexes/triggers only. Never synthesizes per-employee approvals from legacy session-level results. Runtime rollout is separately gated after governed schema apply."
     }
   ]
 }
