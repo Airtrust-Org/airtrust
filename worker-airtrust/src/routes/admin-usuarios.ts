@@ -23,6 +23,7 @@ type UserListRow = {
   email: string;
   nome: string;
   perfil: string;
+  perfis: string;
   active: number;
   funcionario_id: number | null;
   funcionario_nome: string | null;
@@ -261,6 +262,11 @@ protectedAdminUsuariosRoutes.get('/', async (c) => {
            ue.role,
            'ALUNO'
          ) AS perfil,
+         (SELECT COALESCE(json_group_array(uep.perfil), '[]')
+            FROM usuarios_empresas_perfis uep
+           WHERE uep.usuario_id = u.id
+             AND uep.empresa_id = ue.empresa_id
+             AND uep.ativo = 1) AS perfis,
          u.active,
          u.funcionario_id,
          f.nome AS funcionario_nome,
@@ -286,7 +292,19 @@ protectedAdminUsuariosRoutes.get('/', async (c) => {
     .bind(empresaId)
     .all<UserListRow>();
 
-  return c.json({ success: true, data: result.results || [] });
+  return c.json({
+    success: true,
+    data: (result.results || []).map((user) => {
+      let perfis: string[] = [];
+      try {
+        const decoded: unknown = JSON.parse(user.perfis || '[]');
+        if (Array.isArray(decoded)) perfis = decoded.filter((value): value is string => typeof value === 'string');
+      } catch {
+        // Do not infer or grant any role from a malformed profile list.
+      }
+      return { ...user, perfis };
+    }),
+  });
 });
 
 // DELETE /api/admin/usuarios/:id
