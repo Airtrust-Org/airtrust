@@ -7,8 +7,8 @@ import { JSDOM } from 'jsdom';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const source = fs.readFileSync(path.join(root, 'scripts/validation/production-lms-active-course-certification-readonly.mjs'), 'utf8');
-const startMarker = 'frame.evaluate(({ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices }) => {';
-const endMarker = '}, { plan: answerPlan, location: currentLocation, allowAdaptiveRetry, requiredDecisionSlideIndices }).catch';
+const startMarker = 'frame.evaluate(({ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices, checklistSlideIndices }) => {';
+const endMarker = '}, { plan: answerPlan, location: currentLocation, allowAdaptiveRetry, requiredDecisionSlideIndices, checklistSlideIndices }).catch';
 const start = source.indexOf(startMarker);
 const end = source.indexOf(endMarker, start);
 assert.ok(start >= 0 && end > start, 'real in-frame callback is required');
@@ -23,7 +23,7 @@ function fixture() {
   dom.window.Element.prototype.getBoundingClientRect = () =>
     ({ width: 140, height: 28, top: 10, left: 10, right: 150, bottom: 38 });
   const cb = dom.window.eval(`(${callback})`);
-  const step = () => cb({ plan: [], location: '3/55', allowAdaptiveRetry: false, requiredDecisionSlideIndices: [] });
+  const step = () => cb({ plan: [], location: '3/55', allowAdaptiveRetry: false, requiredDecisionSlideIndices: [], checklistSlideIndices: [] });
   const clickTrusted = (action) => {
     assert.equal(action.type, 'accordion-read-summary');
     assert.ok(action.trusted_click_token);
