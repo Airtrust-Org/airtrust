@@ -149,7 +149,65 @@ beforeEach(() => {
   resetSchemaCache();
 });
 
+describe('perfil no JWT assinado — sem cookie SameSite', () => {
+  it('mantém modo INSTRUTOR escolhido por Gestor, sem cookie, somente com vínculo válido', async () => {
+    const db = createDb({
+      userId: 17, empresaId: 500, perfil: 'GESTOR', membershipRole: 'manager',
+      explicitProfiles: [{ perfil: 'GESTOR', ativo: 1 }, { perfil: 'INSTRUTOR', ativo: 1 }],
+    });
+    const { token } = await makeToken(17, 500, 'INSTRUTOR');
+    const res = await buildApp(db, 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { userRole: string }).toMatchObject({ userRole: 'INSTRUTOR' });
+  });
+
+  it('token assinado com perfil revogado NÃO reativa INSTRUTOR', async () => {
+    const db = createDb({
+      userId: 17, empresaId: 500, perfil: 'GESTOR', membershipRole: 'manager',
+      explicitProfiles: [{ perfil: 'GESTOR', ativo: 1 }, { perfil: 'INSTRUTOR', ativo: 0 }],
+    });
+    const { token } = await makeToken(17, 500, 'INSTRUTOR');
+    const res = await buildApp(db, 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(401);
+  });
+
+  it('administrador global não aceita token antigo com modo ALUNO', async () => {
+    const db = createDb({
+      userId: 19, empresaId: 500, perfil: 'ADMIN', membershipRole: 'admin',
+      platformAdmin: true,
+      explicitProfiles: [{ perfil: 'ALUNO', ativo: 1 }],
+    });
+    const { token } = await makeToken(19, 500, 'ALUNO');
+    const res = await buildApp(db, 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () => {
+  it('platform_admin persistido é exclusivo mesmo que os perfis do tenant sejam Aluno e Instrutor', async () => {
+    const db = createDb({
+      userId: 10, empresaId: 500, perfil: 'ALUNO', membershipRole: 'student',
+      platformAdmin: true,
+      explicitProfiles: [
+        { perfil: 'ALUNO', ativo: 1 },
+        { perfil: 'INSTRUTOR', ativo: 1 },
+      ],
+    });
+    expect(await resolveAvailableSessionRoles(db, 10, 500)).toEqual(['ADMINISTRADOR']);
+    expect(await resolveRequestedSessionRole(db, 10, 500, 'ALUNO')).toBeNull();
+    expect(await resolveRequestedSessionRole(db, 10, 500, 'INSTRUTOR')).toBeNull();
+  });
+
+  it('outro usuário com perfis Aluno/Instrutor não adquire administração global', async () => {
+    const db = createDb({
+      userId: 11, empresaId: 500, perfil: 'ALUNO', membershipRole: 'student',
+      platformAdmin: false,
+      explicitProfiles: [{ perfil: 'ALUNO', ativo: 1 }, { perfil: 'INSTRUTOR', ativo: 1 }],
+    });
+    expect(await resolveAvailableSessionRoles(db, 11, 500)).toEqual(['INSTRUTOR', 'ALUNO']);
+    expect(await resolveRequestedSessionRole(db, 11, 500, 'ADMINISTRADOR')).toBeNull();
+  });
+
   it('ADMINISTRADOR tem somente modo administrativo mesmo com perfis extras explícitos', async () => {
     const db = createDb({
       userId: 10, empresaId: 500, perfil: 'ADMINISTRADOR', membershipRole: 'admin',
