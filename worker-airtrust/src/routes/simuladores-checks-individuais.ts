@@ -9,6 +9,7 @@ import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { requireOperationalAccess } from '../services/operational-domain-access';
 import { gerarQualificacaoDaFicha } from './simuladores-fichas-helpers';
+import { normalizeValidityMonths, calculateQualificationExpiry } from '../services/qualification-history-atomic';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 app.use('*', auth());
@@ -23,6 +24,7 @@ type FichaCheckScope = {
   status: string;
   assinatura_aluno_timestamp: string | null;
   assinatura_instrutor_timestamp: string | null;
+  data_sessao: string | null;
 };
 type EvidenceRow = {
   id: number;
@@ -48,7 +50,7 @@ async function fichaScope(db: D1Database, empresaId: number, id: number): Promis
   return db.prepare(`
     SELECT fs.id AS ficha_id, fs.colaborador_id_aluno AS funcionario_id,
            fs.instrutor_id, sa.examinador_id, sa.id AS sessao_id,
-           fs.aprovado, fs.status,
+           fs.aprovado, fs.status, COALESCE(fs.data_sessao, sa.data) AS data_sessao,
            fs.assinatura_aluno_timestamp, fs.assinatura_instrutor_timestamp
       FROM fichas_sessao fs
       JOIN simulador_agendamentos sa ON sa.id=fs.agendamento_slot_id
@@ -121,13 +123,23 @@ app.get('/fichas/:id/checks-individuais', async (c) => {
     ORDER BY qt.codigo, sc.id
   `).bind(empresaId, fid, ficha.funcionario_id, empresaId, ficha.sessao_id).all();
   return c.json({
-    success:true, data:(rows.results || []).map((row: Record<string, unknown>) => ({
-      ...row,
-      aprovado_comprovado: row.estado === 'CONFIRMADO' && Number(row.aprovado) === 1,
-      situacao: row.estado === 'CONFIRMADO'
-        ? (Number(row.aprovado) === 1 ? 'APROVADO' : 'REPROVADO')
-        : 'PENDENTE_AVALIACAO',
-    })),
+    success:true, data:(rows.results || []).map((row: Record<string, unknown>) => {
+      const approved = row.estado === 'CONFIRMADO' && Number(row.aprovado) === 1;
+      const completionDate = String(ficha.data_sessao || '').slice(0, 10);
+      const expiration = approved && /^\\d{4}-\\d{2}-\\d{2}$/.test(completionDate)
+        ? calculateQualificationExpiry({
+            completionDate,
+            validityMonths:normalizeValidityMonths(row.validade as number | string | null),
+          })
+        : null;
+      return {
+        ...row, aprovado_comprovado:approved,
+        situacao: row.estado === 'CONFIRMADO'
+          ? (approved ? 'APROVADO' : 'REPROVADO') : 'PENDENTE_AVALIACAO',
+        data_conclusao:approved ? completionDate : null,
+        data_vencimento:expiration,
+      };
+    }),
   });
 });
 
