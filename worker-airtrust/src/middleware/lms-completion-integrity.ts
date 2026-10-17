@@ -944,10 +944,11 @@ async function handleRematriculation(
     );
   }
   const existing = await c.env.DB.prepare(
-    `SELECT id, curso_id, funcionario_id, status, deleted_at, qualificacao_historico_id,
-              progresso_pct, score_final, data_inicio, data_conclusao
-         FROM lms_matriculas
-        WHERE id = ? AND empresa_id = ?
+    `SELECT m.id, m.curso_id, m.funcionario_id, m.status, m.deleted_at, m.qualificacao_historico_id,
+              m.progresso_pct, m.score_final, m.data_inicio, m.data_conclusao, c.tipo_conteudo
+         FROM lms_matriculas m
+         JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id AND c.deleted_at IS NULL
+        WHERE m.id = ? AND m.empresa_id = ?
         LIMIT 1`,
   )
     .bind(matriculaId, empresaId)
@@ -955,6 +956,7 @@ async function handleRematriculation(
       id: number;
       curso_id: number;
       funcionario_id: number;
+      tipo_conteudo: string | null;
       status: string;
       deleted_at: string | null;
       qualificacao_historico_id: number | null;
@@ -965,6 +967,10 @@ async function handleRematriculation(
     }>();
   if (!existing)
     return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, existing.curso_id, existing.tipo_conteudo)) {
+    return errorResponse(c, 409, 'NATIVE_LEGACY_LIFECYCLE_DENIED',
+      'Rematrícula Native requer o fluxo de ciclo e evidências próprio.');
+  }
   if (!existing.deleted_at && String(existing.status).toUpperCase() !== 'CANCELADO') {
     return errorResponse(
       c,
@@ -1089,9 +1095,10 @@ async function handleCompletionReversal(
   }
   const existing = await c.env.DB.prepare(
     `SELECT m.id, m.status, m.progresso_pct, m.score_final, m.funcionario_id,
-              m.qualificacao_historico_id,
+              m.qualificacao_historico_id, c.id AS curso_id, c.tipo_conteudo,
               qh.status AS qualificacao_status, qh.certificado_arquivo_id
          FROM lms_matriculas m
+         JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id AND c.deleted_at IS NULL
          LEFT JOIN qualificacoes_historico qh
            ON qh.id = m.qualificacao_historico_id
           AND qh.empresa_id = m.empresa_id
@@ -1105,12 +1112,18 @@ async function handleCompletionReversal(
       progresso_pct: number | null;
       score_final: number | null;
       funcionario_id: number;
+      curso_id: number;
+      tipo_conteudo: string | null;
       qualificacao_historico_id: number | null;
       qualificacao_status: string | null;
       certificado_arquivo_id: number | null;
     }>();
   if (!existing)
     return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, existing.curso_id, existing.tipo_conteudo)) {
+    return errorResponse(c, 409, 'NATIVE_LEGACY_LIFECYCLE_DENIED',
+      'Reversão Native exige análise auditada do ledger, qualificação e certificado.');
+  }
   if (String(existing.status).toUpperCase() !== 'CONCLUIDO') {
     return errorResponse(
       c,

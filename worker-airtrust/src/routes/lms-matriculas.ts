@@ -2554,6 +2554,9 @@ app.post('/:id/progresso-recuperacao/dry-run', requireRole('admin'), async (c) =
   const enrollment = await loadProgressRecoveryEnrollment(db, matriculaId, empresaId);
 
   if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, enrollment.curso_id, enrollment.tipo_conteudo)) {
+    throw new ApiError('Recuperação SCORM não pode alterar evidências Native.', 409, 'NATIVE_SCORM_RECOVERY_DENIED');
+  }
   const evaluation = evaluateProgressRecovery({
     enrollment,
     targetLessonLocation: target_lesson_location,
@@ -2632,6 +2635,9 @@ app.post('/:id/progresso-recuperacao/apply', requireRole('admin'), async (c) => 
 
   const enrollment = await loadProgressRecoveryEnrollment(db, matriculaId, empresaId);
   if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, enrollment.curso_id, enrollment.tipo_conteudo)) {
+    throw new ApiError('Recuperação SCORM não pode alterar evidências Native.', 409, 'NATIVE_SCORM_RECOVERY_DENIED');
+  }
 
   const evaluation = evaluateProgressRecovery({
     enrollment,
@@ -2783,6 +2789,9 @@ app.post('/:id/progresso-recuperacao/rollback', requireRole('admin'), async (c) 
 
   const enrollment = await loadProgressRecoveryEnrollment(db, matriculaId, empresaId);
   if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, enrollment.curso_id, enrollment.tipo_conteudo)) {
+    throw new ApiError('Recuperação SCORM não pode alterar evidências Native.', 409, 'NATIVE_SCORM_RECOVERY_DENIED');
+  }
 
   const auditLog = await db
     .prepare(

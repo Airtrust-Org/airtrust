@@ -36,10 +36,10 @@ const nativeEnrollment = {
   xapi_count: 0,
 };
 
-function mockDatabase() {
+function mockDatabase(overrides: Partial<typeof nativeEnrollment> = {}) {
   return {
     prepare: vi.fn(() => {
-      const result = { first: async () => nativeEnrollment };
+      const result = { first: async () => ({ ...nativeEnrollment, ...overrides }) };
       return { ...result, bind: () => result };
     }),
     batch: vi.fn(() => {
@@ -59,15 +59,17 @@ function testApp() {
     await next();
   });
   for (const path of ['/api/lms/matriculas/:id/finalizar', '/api/lms/matriculas/scorm/commit',
-    '/api/lms/xapi/statements']) app.post(path, (c) => c.json({ success: true, bypassed: true }));
+    '/api/lms/xapi/statements', '/api/lms/matriculas/:id/rematricular',
+    '/api/lms/matriculas/:id/reverter']) app.post(path, (c) => c.json({ success: true, bypassed: true }));
   for (const path of ['/api/lms/matriculas/:id/status', '/api/lms/matriculas/:id/progresso']) {
     app.patch(path, (c) => c.json({ success: true, bypassed: true }));
   }
   return app;
 }
 
-async function exercise(path: string, method: 'POST' | 'PATCH', body: Record<string, unknown>) {
-  const db = mockDatabase();
+async function exercise(path: string, method: 'POST' | 'PATCH', body: Record<string, unknown>,
+  overrides: Partial<typeof nativeEnrollment> = {}) {
+  const db = mockDatabase(overrides);
   const response = await testApp().fetch(
     new Request('http://localhost' + path, {
       method, headers: { 'content-type': 'application/json' },
@@ -82,11 +84,11 @@ async function exercise(path: string, method: 'POST' | 'PATCH', body: Record<str
 
 describe('Native catalog activation marker blocks old endpoints even while physical type is SCORM', () => {
   const physicalScorm = { ...nativeEnrollment, tipo_conteudo: 'scorm' };
-  const markedDb = () => {
+  const markedDb = (status = 'EM_ANDAMENTO') => {
     const prepare = vi.fn((sql: string) => {
       const first = vi.fn(async () => sql.includes('lms_native_catalog_activation')
         ? { curso_id: 39 }
-        : physicalScorm);
+        : { ...physicalScorm, status });
       const bind = vi.fn(() => ({ first }));
       return { bind, first };
     });
@@ -96,6 +98,24 @@ describe('Native catalog activation marker blocks old endpoints even while physi
     return { db, prepare };
   };
 
+
+  it.each([
+    ['/api/lms/matriculas/696/rematricular', 'CANCELADO',
+      { reason: 'Rematrícula Native não usa SCORM.' }],
+    ['/api/lms/matriculas/696/reverter', 'CONCLUIDO',
+      { reason: 'Reversão Native exige trilha auditável própria.', classification: 'CORRECAO' }],
+  ] as const)('blocks activated Native lifecycle mutation at %s', async (path, status, body) => {
+    const { db, prepare } = markedDb(status);
+    const response = await testApp().fetch(new Request('http://localhost' + path, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    }), {
+      DB: db, ENVIRONMENT: 'staging', NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6',
+    } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'NATIVE_LEGACY_LIFECYCLE_DENIED' });
+    expect(prepare.mock.calls.some(([sql]) => String(sql).includes('lms_native_catalog_activation'))).toBe(true);
+    expect(db.batch).not.toHaveBeenCalled();
+  });
   it.each([
     ['/api/lms/matriculas/696/finalizar', 'POST', {}],
     ['/api/lms/matriculas/scorm/commit', 'POST',
@@ -162,6 +182,18 @@ describe('Native LMS must never enter an old completion/progress endpoint', () =
     expect(await response.json()).toMatchObject({ code: 'NATIVE_CANONICAL_EVIDENCE_REQUIRED' });
   });
 
+
+  it.each([
+    ['/api/lms/matriculas/696/rematricular', 'CANCELADO',
+      { reason: 'Rematrícula somente pelo contrato Native.' }],
+    ['/api/lms/matriculas/696/reverter', 'CONCLUIDO',
+      { reason: 'Invalidação precisa preservar evidências Native.', classification: 'CORRECAO' }],
+  ] as const)('blocks physical Native lifecycle mutation at %s', async (path, status, body) => {
+    const { response, db } = await exercise(path, 'POST', body, { status });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'NATIVE_LEGACY_LIFECYCLE_DENIED' });
+    expect(db.batch).not.toHaveBeenCalled();
+  });
   it('rejects browser-authored 100 percent legacy progress without DB writes', async () => {
     const { response, db } = await exercise('/api/lms/matriculas/696/progresso', 'PATCH', {
       progresso_pct: 100, ultimo_slide: 20,
@@ -169,5 +201,27 @@ describe('Native LMS must never enter an old completion/progress endpoint', () =
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code: 'NATIVE_CHECKPOINT_REQUIRED' });
     expect(db.batch).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('administrative SCORM recovery never reinterprets Native evidence', () => {
+  it('checks effective course type on dry-run, apply and rollback before mutation', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-matriculas.ts'), 'utf8');
+    for (const endpoint of ['dry-run', 'apply', 'rollback']) {
+      const start = source.indexOf("app.post('/:id/progresso-recuperacao/" + endpoint + "'");
+      const end = source.indexOf("\napp.", start + 10);
+      const body = source.slice(start, end < 0 ? undefined : end);
+      const loadAt = body.indexOf('loadProgressRecoveryEnrollment(db, matriculaId, empresaId)');
+      const nativeAt = body.indexOf('isNativeForLegacyLmsPath(c.env, empresaId, enrollment.curso_id, enrollment.tipo_conteudo)');
+      expect(loadAt).toBeGreaterThan(0);
+      expect(nativeAt).toBeGreaterThan(loadAt);
+      expect(body).toContain('NATIVE_SCORM_RECOVERY_DENIED');
+      expect(nativeAt).toBeLessThan(body.indexOf("if (!enrollment)") + 370);
+      if (endpoint === 'apply') expect(nativeAt).toBeLessThan(body.indexOf("action: 'LMS_PROGRESS_RECOVERY_APPLY'"));
+      if (endpoint === 'rollback') expect(nativeAt).toBeLessThan(body.indexOf('const auditLog = await db'));
+    }
   });
 });
