@@ -137,6 +137,25 @@ describe('LMS immutable cycle evidence, D1 SQLite transaction',()=>{
     expect(one(db,"SELECT COUNT(*) AS n FROM lms_matricula_ciclos")).toEqual({n:2});
     await expect(reset(db)).rejects.toThrow('LMS_CYCLE_ACTIVE_OR_UNKNOWN_STATUS');
   });
+  it('preserves xAPI-only H5P history without inventing current cycle progress',async()=>{
+    const db=fixture();
+    db.database.exec("DELETE FROM lms_progresso_scorm WHERE matricula_id=384");
+    await reset(db);
+    expect(one(db,"SELECT scorm_json FROM lms_ciclo_evidencias WHERE ciclo_id=99"))
+      .toEqual({scorm_json:null});
+    expect(one(db,"SELECT archived_cycle_id FROM lms_xapi_statements WHERE id=500"))
+      .toEqual({archived_cycle_id:99});
+    expect(one(db,"SELECT COUNT(*) AS n FROM lms_xapi_statements WHERE archived_cycle_id IS NULL"))
+      .toEqual({n:0});
+  });
+  it('fails closed on active enrollment without archiving or resetting',async()=>{
+    const db=fixture();
+    db.database.exec("UPDATE lms_matriculas SET status='EM_ANDAMENTO' WHERE id=384");
+    await expect(reset(db)).rejects.toThrow('LMS_CYCLE_ACTIVE_OR_UNKNOWN_STATUS');
+    expect(one(db,"SELECT COUNT(*) AS n FROM lms_ciclo_evidencias")).toEqual({n:0});
+    expect(one(db,"SELECT archived_cycle_id FROM lms_xapi_statements WHERE id=500"))
+      .toEqual({archived_cycle_id:null});
+  });
   it('retains old terminal cycle/score after renewal and does not promote 99% to conclusion',async()=>{
     const db=fixture();
     await reset(db);
