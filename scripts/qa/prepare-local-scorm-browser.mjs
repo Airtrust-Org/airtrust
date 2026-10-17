@@ -138,6 +138,7 @@ async function main(){
   const packageSha256=createHash('sha256').update(zipBytes).digest('hex');
   const files=externalFiles??unzipSync(new Uint8Array(fs.readFileSync(zipPath)));
   for(const [filename,bytes] of Object.entries(files)){
+    if(filename.endsWith('/'))continue; // ZIP directory entries are not R2 objects.
     const file=path.resolve(fixtureRoot,filename);
     assert(file.startsWith(fixtureRoot+path.sep),'QA_FILE_PATH_INVALID');
     fs.mkdirSync(path.dirname(file),{recursive:true});
