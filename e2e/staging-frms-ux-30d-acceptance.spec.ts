@@ -159,6 +159,14 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
   await expect(page.getByText('Carregando prioridades e evidências.')).toHaveCount(0, { timeout: 30_000 });
   await captureMain(page, '01-operacao-frms-qa', 'Operação');
 
+  // Receipt must be informational, never a green "normal fatigue" signal.
+  const receivedCount = payload.data?.filter((row) => row.checkin_status === 'RECEBIDO').length ?? 0;
+  if (receivedCount > 0) {
+    await expect(page.locator('main [aria-label="Check-in diário: Recebido — informativo"]').first())
+      .toBeVisible();
+  }
+  await expect(page.locator('main [aria-label^="Check-in diário: Recebido — normal"]')).toHaveCount(0);
+
   // A green UI test that accepts "Nenhum caso" cannot prove case management.
   // Require the four QA fixture cases to be returned by the REAL authenticated
   // tenant-scoped endpoint; capture the actual UI even if the contract fails.
