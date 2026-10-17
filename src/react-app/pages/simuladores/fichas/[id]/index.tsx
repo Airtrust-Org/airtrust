@@ -836,8 +836,12 @@ export default function FichaDetalhe() {
           );
           if (!resChecks.ok) {
             const e = await resChecks.json();
-            toast.error(e.error || 'Erro ao salvar checks');
-            return;
+            if (resChecks.status === 409 && e.code === 'INDIVIDUAL_CHECK_EVIDENCE_REQUIRED') {
+              toast.warning('Sessão compartilhada: a ficha será assinada sem aprovar checks coletivos. Avaliação individual pendente.');
+            } else {
+              toast.error(e.error || 'Erro ao salvar checks');
+              return;
+            }
           }
         } else {
           toast.warning('Nenhuma FAP foi marcada. A assinatura será salva sem atualizar checks.');
@@ -939,14 +943,19 @@ export default function FichaDetalhe() {
 
           if (!responseChecks.ok) {
             const error = await responseChecks.json();
-            console.error('[CHECKS] Erro ao salvar:', error);
-            toast.error(error.error || 'Erro ao salvar resultados dos checks');
-            return;
+            if (responseChecks.status === 409 &&
+                error.code === 'INDIVIDUAL_CHECK_EVIDENCE_REQUIRED') {
+              toast.warning('Sessão compartilhada: assinatura permitida, mas a FAP exige avaliação individual.');
+            } else {
+              console.error('[CHECKS] Erro ao salvar:', error);
+              toast.error(error.error || 'Erro ao salvar resultados dos checks');
+              return;
+            }
+          } else {
+            const dataChecks = await responseChecks.json();
+            console.log('[CHECKS] Salvamento bem-sucedido:', dataChecks);
+            toast.success('Resultados dos checks salvos com sucesso!');
           }
-
-          const dataChecks = await responseChecks.json();
-          console.log('[CHECKS] Salvamento bem-sucedido:', dataChecks);
-          toast.success('Resultados dos checks salvos com sucesso!');
         } else {
           toast.warning('Nenhuma FAP foi marcada. A assinatura será salva sem atualizar checks.');
         }
@@ -2008,8 +2017,9 @@ export default function FichaDetalhe() {
                   {papelParam === 'INSTRUTOR' && ficha?.is_check === 1 && checks.length > 0 && (
                     <div className="border-t border-blue-200 pt-4">
                       <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        Avalie todos os checks abaixo antes de concluir a assinatura e gerar a
-                        qualificação.
+                        A aprovação de cada check exige evidência individual. Em sessões
+                        compartilhadas, a ficha pode ser assinada, mas a FAP permanece
+                        pendente de avaliação individual.
                       </div>
 
                       <div className="space-y-4">
@@ -2515,8 +2525,9 @@ export default function FichaDetalhe() {
                   Avaliação de Checks
                 </h3>
                 <p className="text-xs text-amber-800">
-                  Esta sessão está vinculada a um examinador. Avalie se o aluno foi{' '}
-                  <strong>aprovado ou reprovado</strong> em cada check abaixo.
+                  O resultado registrado deve corresponder ao tripulante desta ficha.
+                  Em sessões compartilhadas, os checks da sessão não geram FAP
+                  individual automaticamente; a ficha poderá ser assinada com pendência.
                 </p>
               </div>
 
