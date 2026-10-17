@@ -22,6 +22,7 @@ import { requireOperacoesCurso } from './lms-cursos-rbac';
 import {
   activateScormPackageVersion,
   createScormPackageCandidate,
+  importScormFunctionalAttestation,
   listScormPackageVersions,
   runScormPackageConformance,
 } from '../lib/lms/lms-scorm-package-version-service';
@@ -261,9 +262,36 @@ app.post('/:id/scorm-package-versions/:packageId/activate', requirePermission('l
   if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
   const data = await activateScormPackageVersion({
     db: c.env.DB, empresaId: getEmpresaIdSafe(c), cursoId, packageId: c.req.param('packageId'), userId: Number((c.get as (key: string) => unknown)('userId')) || null,
+    attestationSecret: c.env.SCORM_QA_ATTESTATION_SECRET,
+    runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
   });
   return c.json({ success: true, data });
 });
+
+// This endpoint is never used by a learner or a SCORM package. Admin RBAC and
+// a private CI signing secret are both required; unsigned JSON cannot certify.
+app.post('/:id/scorm-package-versions/:packageId/functional-attestation',
+  requirePermission('lms', 'editar', 'admin'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const cursoId = Number(c.req.param('id'));
+    if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
+    assertContentLengthWithinLimit(c.req.raw, 24_576, 'Atestação SCORM');
+    const raw = await c.req.text();
+    if (raw.length > 24_576) throw new ApiError('Atestação muito extensa', 413);
+    let document: unknown;
+    try { document = JSON.parse(raw); } catch {
+      throw new ApiError('Atestação inválida', 400);
+    }
+    const data = await importScormFunctionalAttestation({
+      db: c.env.DB, empresaId: getEmpresaIdSafe(c), cursoId,
+      packageId: c.req.param('packageId'),
+      userId: Number((c.get as (key: string) => unknown)('userId')) || null,
+      attestation: document, attestationSecret: c.env.SCORM_QA_ATTESTATION_SECRET,
+      runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
+    });
+    return c.json({ success: true, data });
+  });
 
 app.post('/:id/scorm-package-versions/:packageId/conformance', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const cursoId = Number(c.req.param('id'));

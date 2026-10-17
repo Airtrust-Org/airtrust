@@ -66,6 +66,52 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
     assessmentPassed: false, passed: false, failed: false, assessmentEvaluated: false,
   };
   var selected = null;
+  // Resumption must read the persisted CMI of THIS enrollment/cycle. Merely
+  // opening the same ZIP again is not evidence of SUSPEND_RESUME.
+  var savedCmi = api.LMSGetValue('cmi.suspend_data');
+  if (typeof savedCmi === 'string' && savedCmi) {
+    try {
+      var savedModel = JSON.parse(savedCmi);
+      if (savedModel && typeof savedModel === 'object') {
+        var savedAnswer = savedModel.q && savedModel.q['qa-interaction-1'];
+        if (savedAnswer === 0 || savedAnswer === 1) {
+          modelState.q['qa-interaction-1'] = savedAnswer;
+          selected = savedAnswer;
+        }
+        if (savedModel.failed === true && savedModel.assessmentEvaluated === true) {
+          modelState.failed = true;
+          modelState.assessmentEvaluated = true;
+          modelState.best = 0;
+        }
+        if (savedModel.assessmentPassed === true && savedModel.assessmentEvaluated === true) {
+          modelState.assessmentPassed = true;
+          modelState.assessmentEvaluated = true;
+          modelState.best = 100;
+        }
+        if (savedModel.passed === true && Array.isArray(savedModel.c) &&
+            savedModel.c.includes('qa-slide-1')) {
+          modelState.passed = true;
+          modelState.c = ['qa-slide-1'];
+          modelState.assessmentPassed = true;
+          modelState.assessmentEvaluated = true;
+          modelState.best = 100;
+          state.done = [0];
+          state.completed = true;
+          state.ended = true;
+          state.mode = 'review';
+        }
+      }
+    } catch (_invalidSavedCmi) {
+      // Invalid data grants no progress, result or finalization.
+    }
+  }
+  // A failed terminal assessment must survive even when the host preserved
+  // lesson_status but a concurrent unload supplied older suspend_data.
+  if (api.LMSGetValue('cmi.core.lesson_status') === 'failed' && !modelState.passed) {
+    modelState.failed = true;
+    modelState.assessmentEvaluated = true;
+    modelState.best = 0;
+  }
   var apiAdapter = window.AirTrustSCORM;
   var submit = document.createElement('button');
   submit.id = 'submitAssessment';
@@ -89,8 +135,18 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
     getModelState: function () { return JSON.parse(JSON.stringify(modelState)); },
   };
   if (!apiAdapter || typeof apiAdapter.get !== 'function') throw Error('QA_SCORM_ADAPTER_NOT_INITIALIZED');
-  api.LMSSetValue('cmi.core.lesson_status', 'incomplete');
+  // A reopened approved course cannot be downgraded by initialization.
+  // A failed attempt can be retried only by a fresh learner interaction.
+  if (!modelState.assessmentPassed && !modelState.failed) {
+    api.LMSSetValue('cmi.core.lesson_status', 'incomplete');
+  }
   api.LMSSetValue('cmi.core.lesson_location', '1/1');
+  if (selected !== null && !modelState.assessmentEvaluated) {
+    submit.disabled = false;
+    document.querySelector('#next').disabled = false;
+  }
+  if (modelState.assessmentPassed && !modelState.passed) complete.hidden = false;
+  if (modelState.passed) document.querySelector('#next').disabled = true;
   persistModelState();
   api.LMSGetLastError();
   api.LMSGetErrorString('0');
