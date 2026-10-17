@@ -1,3 +1,7 @@
+// source_reference: issue #1426, synthetic FRMS QA 999013 and PR #1550.
+// operational_decision: verify only read-only preflight invariants; no operational approval.
+// dry_run_required: pure Node tests with inert mock rows and no remote database access.
+// rollback_plan_required: not applicable; this test never persists data.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {expectedQaCases,evaluateQaCases,CASE_IDS} from '../staging/inspect-frms-ux-cases.mjs';
