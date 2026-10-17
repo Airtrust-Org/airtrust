@@ -17,6 +17,16 @@ const CASE_CONFIG = [
   { n: 4, crew: 2, kind: 'REPOUSO', daySlot: 0 },
 ];
 const pad = (value) => String(value).padStart(2, '0');
+// Historical SHA e4bc968e: fixture rows were bound to these FICTIONAL users,
+// were unlinked to journeys and could not appear in the canonical cases API.
+// These are historical EXPECTATIONS for read-only diagnosis, not a repair.
+export const LEGACY_CASE_BASELINE = [
+  {id: 'qa-frms-ux-case-1', owner: 'QA-FRMS-UX-07', day: '2026-10-13', kind: 'REPOUSO', level: 'CRITICO'},
+  {id: 'qa-frms-ux-case-2', owner: 'QA-FRMS-UX-05', day: '2026-10-12', kind: 'FDP_DIARIO', level: 'ATENCAO'},
+  {id: 'qa-frms-ux-case-3', owner: 'QA-FRMS-UX-04', day: '2026-10-10', kind: 'HV_7D', level: 'AVISO'},
+  {id: 'qa-frms-ux-case-4', owner: 'QA-FRMS-UX-14', day: '2026-10-09', kind: 'REPOUSO', level: 'CRITICO'},
+];
+
 
 export function expectedQaCases(days) {
   if (!Array.isArray(days) || days.length !== 30) throw new Error('QA_30D_SOURCE_REQUIRED');
@@ -64,6 +74,61 @@ export function evaluateQaCases(rows, expected) {
   };
 }
 
+
+/**
+ * A SECOND READONLY diagnostic, after the initial four-case assessment.
+ * Returns statuses only; NEVER prints DB rows or employee personal fields.
+ * A successful diagnosis is NOT an authorization to mutate any QA row.
+ */
+export function diagnoseLegacyRepairPreflight(caseRows, targetJourneys, expected) {
+  if (!Array.isArray(caseRows) || !Array.isArray(targetJourneys) ||
+      !Array.isArray(expected) || expected.length !== 4)
+    throw new Error('QA_REPAIR_DIAGNOSTIC_INPUT_INVALID');
+  const foundCases = new Map(caseRows.map(row => [String(row.id), row]));
+  const foundJourneys = new Map(targetJourneys.map(row => [String(row.id), row]));
+  const cases = LEGACY_CASE_BASELINE.map((old, index) => {
+    const row = foundCases.get(old.id);
+    const want = expected[index];
+    const journeyId = 'qa-frms-ux-j-'+want.date+'-'+want.matricula;
+    const target = foundJourneys.get(journeyId);
+    const legacyStatus = !row ? 'MISSING_OR_TENANT_REJECTED'
+      : row.matricula !== old.owner || row.tipo_limite !== old.kind ||
+        row.nivel !== old.level || String(row.created_at ?? '').slice(0, 10) !== old.day
+          ? 'LEGACY_IDENTITY_OR_DATE_DRIFT'
+        : row.jornada_id !== null || Number(row.resolvido) !== 0 ||
+          Number(row.valor_atual_min) !== 620 || Number(row.valor_limite_min) !== 540 ||
+          row.mensagem !== 'QA SINTETICO: revisar contexto e registrar providencia'
+            ? 'LEGACY_CASE_STATE_DRIFT'
+        : 'LEGACY_CASE_MATCH';
+    const targetStatus = !target ? 'TARGET_JOURNEY_MISSING_OR_TENANT_REJECTED'
+      : target.matricula !== want.matricula || target.data !== want.date ||
+        target.registrado_por !== 'QA_FRMS_UX' ||
+        Number(target.duracao_jornada_minutos) <= 0
+          ? 'TARGET_JOURNEY_PROVENANCE_DRIFT'
+        : target.origem === 'MANUAL' &&
+          target.observacao === 'CENARIO SINTETICO - SEM VALIDADE OPERACIONAL'
+            ? 'TARGET_JOURNEY_LEGACY_MANUAL'
+        : target.origem === 'SIGVOOS' &&
+          target.observacao === 'CENARIO SINTETICO - FONTE SIMULADA SEM VALIDADE OPERACIONAL'
+            ? 'TARGET_JOURNEY_ALREADY_SIMULATED'
+        : 'TARGET_JOURNEY_SOURCE_DRIFT';
+    return {case_id: old.id, legacy_case: legacyStatus, target_journey: targetStatus};
+  });
+  return {
+    tenant_id: TENANT_ID,
+    reviewed: 4,
+    legacy_case_matches: cases.filter(x => x.legacy_case === 'LEGACY_CASE_MATCH').length,
+    target_journeys_ready: cases.filter(x => x.target_journey === 'TARGET_JOURNEY_LEGACY_MANUAL' ||
+      x.target_journey === 'TARGET_JOURNEY_ALREADY_SIMULATED').length,
+    verdict: cases.every(x => x.legacy_case === 'LEGACY_CASE_MATCH' &&
+      x.target_journey === 'TARGET_JOURNEY_LEGACY_MANUAL')
+        ? 'LEGACY_FIXTURE_PROVEN_READY_FOR_REVIEW'
+        : 'BLOCK_ON_UNEXPECTED_PREIMAGE',
+    cases,
+    writes: 0,
+  };
+}
+
 function queryReadOnly(sql) {
   if (!/^SELECT\s/i.test(sql) || /;|\b(?:UPDATE|DELETE|INSERT|ALTER|DROP|ATTACH|PRAGMA|REPLACE)\b/i.test(sql))
     throw new Error('READONLY_QUERY_REJECTED');
@@ -98,7 +163,7 @@ export async function main() {
   const expected=expectedQaCases(source);
   const ids=CASE_IDS.map(id => "'"+id+"'").join(',');
   // Only fixed synthetic identifiers, a hard-coded tenant, and QA-only columns.
-  const sql=`SELECT a.id,a.tipo_limite,a.valor_atual_min,a.jornada_id,a.resolvido,
+  const sql=`SELECT a.id,a.tipo_limite,a.nivel,a.created_at,a.mensagem,a.valor_limite_min,a.valor_atual_min,a.jornada_id,a.resolvido,
       f.matricula,j.id AS link_id,j.data AS jornada_date,j.origem,
       j.registrado_por,j.observacao,j.duracao_jornada_minutos
     FROM frms_alerta a
@@ -112,7 +177,21 @@ export async function main() {
   const rows=queryReadOnly(sql);
   const result=evaluateQaCases(rows,expected);
   console.log('FRMS_QA_CASES_READONLY_PREFLIGHT='+JSON.stringify(result));
-  if(result.verdict!=='READONLY_ACCEPTANCE_READY')process.exitCode=2;
+  if(result.verdict!=='READONLY_ACCEPTANCE_READY') {
+    const ids=expected.map(want =>
+      "'qa-frms-ux-j-"+want.date+"-"+want.matricula+"'").join(',');
+    const targetSql=`SELECT j.id,j.data,j.origem,j.registrado_por,j.observacao,
+      j.duracao_jornada_minutos,f.matricula
+      FROM frms_jornada j
+      INNER JOIN funcionarios f ON f.id=j.tripulante_id AND f.empresa_id=${TENANT_ID}
+        AND f.deleted_at IS NULL AND f.matricula LIKE 'QA-FRMS-UX-%'
+      WHERE j.empresa_id=${TENANT_ID} AND j.deleted_at IS NULL
+        AND j.id IN (${ids})`;
+    const targetJourneys=queryReadOnly(targetSql);
+    const diagnostic=diagnoseLegacyRepairPreflight(rows,targetJourneys,expected);
+    console.log('FRMS_QA_LEGACY_REPAIR_READONLY_DIAGNOSTIC='+JSON.stringify(diagnostic));
+    process.exitCode=2;
+  }
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {

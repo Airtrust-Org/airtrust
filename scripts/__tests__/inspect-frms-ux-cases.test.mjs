@@ -43,3 +43,28 @@ test('only fixed QA table, tenant and SELECT statements are used',()=>{
   assert.match(src,/READONLY_QUERY_REJECTED/);
   assert.doesNotMatch(src,/--apply|--rollback|--file|DELETE FROM frms_|UPDATE frms_/);
 });
+
+test('diagnoses four legacy synthetic owners and four untouched target journeys without exposing raw rows', async()=>{
+  const {diagnoseLegacyRepairPreflight,LEGACY_CASE_BASELINE}=await import('../staging/inspect-frms-ux-cases.mjs');
+  const oldRows=LEGACY_CASE_BASELINE.map(x=>({
+    id:x.id,matricula:x.owner,tipo_limite:x.kind,nivel:x.level,created_at:x.day+' 10:00:00',
+    jornada_id:null,resolvido:0,valor_atual_min:620,valor_limite_min:540,
+    mensagem:'QA SINTETICO: revisar contexto e registrar providencia',
+  }));
+  const journeys=expected.map(x=>({
+    id:'qa-frms-ux-j-'+x.date+'-'+x.matricula,matricula:x.matricula,
+    data:x.date,origem:'MANUAL',registrado_por:'QA_FRMS_UX',
+    observacao:'CENARIO SINTETICO - SEM VALIDADE OPERACIONAL',
+    duracao_jornada_minutos:540,
+  }));
+  const result=diagnoseLegacyRepairPreflight(oldRows,journeys,expected);
+  assert.equal(result.verdict,'LEGACY_FIXTURE_PROVEN_READY_FOR_REVIEW');
+  assert.equal(result.legacy_case_matches,4);
+  assert.equal(result.target_journeys_ready,4);
+  assert.equal(result.writes,0);
+  assert.equal(JSON.stringify(result).includes('matricula'),false);
+  assert.equal(JSON.stringify(result).includes('observacao'),false);
+  assert.equal(diagnoseLegacyRepairPreflight(oldRows,journeys.slice(0,3),expected).verdict,'BLOCK_ON_UNEXPECTED_PREIMAGE');
+  assert.equal(diagnoseLegacyRepairPreflight(oldRows.map((r,i)=>i===0?{...r,jornada_id:'already-linked'}:r),journeys,expected).cases[0].legacy_case,'LEGACY_CASE_STATE_DRIFT');
+  assert.equal(diagnoseLegacyRepairPreflight(oldRows,journeys.map((r,i)=>i===0?{...r,origem:'REAL'}:r),expected).cases[0].target_journey,'TARGET_JOURNEY_SOURCE_DRIFT');
+});
