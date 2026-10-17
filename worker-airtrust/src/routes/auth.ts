@@ -1438,9 +1438,6 @@ authRoutes.get('/me', auth(), async (c) => {
       throw unauthorized('Usuário não encontrado', 'USER_NOT_FOUND');
     }
 
-    const empresaIdRaw = c.get('empresaId');
-    const empresaId =
-      typeof empresaIdRaw === 'string' ? Number(empresaIdRaw) : Number(empresaIdRaw || 0);
     // auth() já revalidou contra D1 a role ativa da sessão (incluindo
     // Aluno/Instrutor ou Gestor). Não sobrescrever essa escolha ao restaurar
     // o contexto React após o login ou o refresh de página.
