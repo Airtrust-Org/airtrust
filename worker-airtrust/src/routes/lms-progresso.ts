@@ -538,7 +538,7 @@ app.get('/xapi/statements/:matriculaId', async (c) => {
   const limit = Math.min(Number(c.req.query('limit') ?? '100'), 500);
   const rows = await db
     .prepare(
-      'SELECT id, verb_id, verb_display, object_id, result_json, timestamp, created_at FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? ORDER BY created_at DESC LIMIT ?',
+      'SELECT id, verb_id, verb_display, object_id, result_json, timestamp, created_at FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? AND archived_cycle_id IS NULL ORDER BY created_at DESC LIMIT ?',
     )
     .bind(matriculaId, empresaId, limit)
     .all<Record<string, unknown>>();
