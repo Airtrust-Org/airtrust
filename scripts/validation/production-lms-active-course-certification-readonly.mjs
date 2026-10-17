@@ -1081,13 +1081,12 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (!priorDecision) {
           const authoredIndex = plansHere.flatMap((entry) => entry?.indices || [])
             .find((index) => Number.isInteger(index) && index >= 0 && index < choices.length);
-          const target = Number.isInteger(authoredIndex) ? choices[authoredIndex] : choices[0];
-          if (target) {
-            // Without an authored index, the first visible choice is merely one
-            // simulated learner decision; no correctness or score is inferred.
-            return markAndClick(target, 'required-decision-choice');
-          }
-          return { type: 'required-decision-unresolved', reason: 'no-visible-choice' };
+          const target = Number.isInteger(authoredIndex) ? choices[authoredIndex] : null;
+          if (target) return markAndClick(target, 'required-decision-choice');
+          // Do not guess a learner response merely because a button is visible.
+          // Explicit authored mapping is required for this diagnostic preview.
+          return { type: 'required-decision-unresolved',
+            reason: choices.length ? 'authored-decision-mapping-missing' : 'no-visible-choice' };
         }
         const repeatedNext = st.actionLog.filter((entry) =>
           entry.location === locationKey && entry.type === 'next'

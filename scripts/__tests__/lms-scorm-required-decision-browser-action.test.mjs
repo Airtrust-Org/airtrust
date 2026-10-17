@@ -30,8 +30,8 @@ function fixture(withChoice = true) {
     element.addEventListener('click', () => clicked.push(element.id || element.dataset.scenario));
   });
   const action = dom.window.eval(`(${callback})`);
-  const step = (requiredDecisionSlideIndices = [9]) =>
-    action({ plan: [], location: '9/126', allowAdaptiveRetry: false, requiredDecisionSlideIndices });
+  const step = (requiredDecisionSlideIndices = [9], plan = [{ slideIndex: 9, indices: [0] }]) =>
+    action({ plan, location: '9/126', allowAdaptiveRetry: false, requiredDecisionSlideIndices });
   return { step, clicked, close: () => dom.window.close() };
 }
 
@@ -50,6 +50,14 @@ test('non-required slide preserves navigation-first behavior', () => {
   try {
     assert.equal(f.step([]).type, 'next');
     assert.deepEqual(f.clicked, ['next']);
+  } finally { f.close(); }
+});
+
+test('visible scenario without an authored answer mapping does not guess', () => {
+  const f = fixture();
+  try {
+    assert.equal(f.step([9], []).type, 'required-decision-unresolved');
+    assert.deepEqual(f.clicked, []);
   } finally { f.close(); }
 });
 
