@@ -21,7 +21,7 @@ const assert=(condition,reason)=>{if(!condition)throw Error('SCORM_ATTESTATION_'
 const read=path=>JSON.parse(readFileSync(path,'utf8'));
 
 export function signGovernedScormEvidence({
-  candidate, chromiumFile, webkitFile, certificatePdfFile, secret,
+  candidate, chromiumFile, webkitFile, certificatePdfFiles, secret,
   runtimeSha, harnessSha,
 }){
   assert(typeof secret==='string'&&secret.length>=32,'SECRET_MISSING');
@@ -39,7 +39,7 @@ export function signGovernedScormEvidence({
   const browserInputs=[
     ['CHROMIUM',chromiumFile],['WEBKIT',webkitFile],
   ];
-  const runs=[],browserEvidenceSha256={};
+  const runs=[],browserEvidenceSha256={},certificateDocuments={};
   for(const [browser,file] of browserInputs){
     const bytes=readFileSync(file);
     const row=JSON.parse(bytes.toString('utf8'));
@@ -68,18 +68,43 @@ export function signGovernedScormEvidence({
     runs.push({harness:'AIRTRUST_SCORM_FUNCTIONAL_HARNESS_V2',
       browser,packageSha256:candidate.packageSha256,
       cases:row.cases.map(c=>({name:c.name,status:c.status}))});
+    const doc=row.certificateDocument;
+    assert(doc&&Number.isSafeInteger(doc.enrollmentId)&&doc.enrollmentId>0&&
+      Number.isSafeInteger(doc.cycleId)&&doc.cycleId>0&&
+      Number.isSafeInteger(doc.qualificationHistoryId)&&doc.qualificationHistoryId>0&&
+      typeof doc.documentId==='string'&&doc.documentId.length>0&&
+      doc.documentId.length<=128&&sha.test(doc.sha256)&&
+      row.certificateDownloadHttpStatus===200,
+      'CERTIFICATE_BACKEND_WITNESS_MISSING_'+browser);
+    const file=certificatePdfFiles?.[browser];
+    assert(typeof file==='string'&&file,'CERTIFICATE_FILE_MISSING_'+browser);
+    const pdf=readFileSync(file);
+    assert(pdf.length>150&&pdf.subarray(0,5).toString()==='%PDF-'&&
+      pdf.includes(Buffer.from('%%EOF'))&&
+      digest(pdf)===doc.sha256,'CERTIFICATE_DOCUMENT_UNVERIFIED_'+browser);
+    certificateDocuments[browser]={
+      enrollmentId:doc.enrollmentId,cycleId:doc.cycleId,
+      qualificationHistoryId:doc.qualificationHistoryId,
+      documentId:doc.documentId,sha256:doc.sha256,
+    };
     browserEvidenceSha256[browser]=digest(bytes);
   }
   assert(browserEvidenceSha256.CHROMIUM!==browserEvidenceSha256.WEBKIT,
     'BROWSER_PROOF_COLLISION');
-  const pdf=readFileSync(certificatePdfFile);
-  assert(pdf.length>150&&pdf.subarray(0,5).toString()==='%PDF-'&&
-    pdf.includes(Buffer.from('%%EOF')),'CERTIFICATE_DOCUMENT_UNVERIFIED');
+  assert(certificateDocuments.CHROMIUM.enrollmentId!==
+    certificateDocuments.WEBKIT.enrollmentId&&
+    certificateDocuments.CHROMIUM.cycleId!==
+    certificateDocuments.WEBKIT.cycleId&&
+    certificateDocuments.CHROMIUM.qualificationHistoryId!==
+    certificateDocuments.WEBKIT.qualificationHistoryId&&
+    certificateDocuments.CHROMIUM.documentId!==
+    certificateDocuments.WEBKIT.documentId,
+    'CERTIFICATE_BROWSER_ISOLATION_VIOLATION');
   const p={kind:K,empresaId:candidate.empresaId,cursoId:candidate.cursoId,
     packageId:candidate.packageId,packageSha256:candidate.packageSha256,
     runtimeSha,harnessSha,issuedAt:new Date().toISOString(),
     scope:'GOVERNED_STAGING_SYNTHETIC',requiresAssessment:candidate.requiresAssessment,
-    browserEvidenceSha256,certificateDocumentSha256:digest(pdf),runs};
+    browserEvidenceSha256,certificateDocuments,runs};
   // Same exact canonical projection/order as the Worker WebCrypto verifier.
   const canonical=JSON.stringify(p);
   return {payload:p,signature:createHmac('sha256',secret)
@@ -97,7 +122,7 @@ function main(){
   const result=signGovernedScormEvidence({
     candidate:args.candidate,
     chromiumFile:args.chromiumFile,webkitFile:args.webkitFile,
-    certificatePdfFile:args.certificatePdfFile,
+    certificatePdfFiles:args.certificatePdfFiles,
     secret:process.env.SCORM_QA_ATTESTATION_SECRET,
     runtimeSha:process.env.SCORM_QA_RUNTIME_SHA,
     harnessSha:process.env.GITHUB_SHA,
