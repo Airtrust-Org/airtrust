@@ -426,6 +426,10 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
       ['FROM lms_progresso_scorm', { first: () => finalizingScorm({
         cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '3/3' }),
       }) }],
+      ['SELECT * FROM lms_matriculas WHERE id', { first: () => ({
+        ...MATRICULA_EM_ANDAMENTO_BASE, curso_id: 10, tipo_conteudo: 'scorm',
+        status: 'CONCLUIDO', progresso_pct: 100, qualificacao_historico_id: 777,
+      }) }],
     ]);
     const response = await app.fetch(
       makePatchStatus(1, { status: 'CONCLUIDO' }),
