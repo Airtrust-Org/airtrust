@@ -70,10 +70,14 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     summary?: { total_tripulantes?: number; checkins_pendentes?: number; checkins_recebidos?: number };
   };
   expect(payload.success).toBe(true);
-  expect(payload.summary?.total_tripulantes).toBe(14);
-  expect(payload.data).toHaveLength(14);
+  // The 30-day fixture provisions 14 distinct crew in the tenant, but the
+  // operational snapshot is date-scoped. For 2026-10-13 the governed daily
+  // count band yields 7 crew with recorded activity, not all 14 employees.
+  const expectedDailyCrew = 7;
+  expect(payload.summary?.total_tripulantes).toBe(expectedDailyCrew);
+  expect(payload.data).toHaveLength(expectedDailyCrew);
   expect(payload.data?.every((p) => p.empresa_id === 999013 && p.nome?.startsWith('QA Tripulante '))).toBe(true);
-  expect((payload.summary?.checkins_pendentes ?? 0) + (payload.summary?.checkins_recebidos ?? 0)).toBe(14);
+  expect((payload.summary?.checkins_pendentes ?? 0) + (payload.summary?.checkins_recebidos ?? 0)).toBe(expectedDailyCrew);
   await expect(page.getByRole('navigation', { name: 'Áreas FRMS' })).toBeVisible();
   await expect(page.getByText(/Serviço temporariamente indisponível/i)).toHaveCount(0);
   await captureMain(page, '01-operacao-frms-qa');
