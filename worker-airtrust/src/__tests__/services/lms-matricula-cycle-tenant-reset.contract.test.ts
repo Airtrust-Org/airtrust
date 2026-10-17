@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('LMS cycle reset tenant scope', () => {
-  it('requires the tenant for enrollment, runtime and xAPI reset statements', () => {
+  it('requires tenant scope, transaction, archived SCORM and non-destructive xAPI attribution', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/services/lms-matricula-cycle.ts'),
       'utf8',
@@ -11,9 +11,12 @@ describe('LMS cycle reset tenant scope', () => {
 
     expect(source).toContain('empresaId: number;');
     expect(source).toContain('AND empresa_id = ?');
-    expect(source).toContain('m.id = lms_progresso_scorm.matricula_id');
-    expect(source).toContain('m.empresa_id = ?');
-    expect(source).toContain('m.id = lms_xapi_statements.matricula_id');
+    expect(source).toContain('p.matricula_id=m.id AND p.empresa_id=m.empresa_id');
+    expect(source).toContain('archived_cycle_id IS NULL');
+    expect(source).toContain('UPDATE lms_xapi_statements SET archived_cycle_id');
+    expect(source).not.toContain('DELETE FROM lms_xapi_statements');
+    expect(source).toContain('INSERT INTO lms_ciclo_evidencias');
+    expect(source).toContain('await db.batch([');
     expect(source).toContain('empresaId: params.empresaId');
   });
 
