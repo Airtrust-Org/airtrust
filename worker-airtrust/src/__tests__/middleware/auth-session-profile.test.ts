@@ -541,7 +541,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
     expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
   });
 
-  it('ADMINISTRADOR sempre pode entrar como ALUNO sem matrícula, mesmo com ALUNO explícito inativo', async () => {
+  it('ADMINISTRADOR nunca alterna para ALUNO, mesmo com ALUNO explícito inativo', async () => {
     const db = createDb({
       ...b,
       explicitProfiles: [
@@ -549,7 +549,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
         { perfil: 'ALUNO', ativo: 0 },
       ],
     });
-    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['ADMINISTRADOR', 'ALUNO']);
+    expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['ADMINISTRADOR']);
   });
 
   it('isolamento por empresa_id: perfis explícitos da empresa B não vazam para a empresa A', async () => {
@@ -563,11 +563,7 @@ describe('autoridade da tabela explícita usuarios_empresas_perfis (migration 04
       },
     });
     expect(await resolveAvailableSessionRoles(db, 43, 6)).toEqual(['GESTOR', 'ALUNO']);
-    expect(await resolveAvailableSessionRoles(db, 43, 99)).toEqual([
-      'ADMINISTRADOR',
-      'INSTRUTOR',
-      'ALUNO',
-    ]);
+    expect(await resolveAvailableSessionRoles(db, 43, 99)).toEqual(['ADMINISTRADOR']);
   });
 
   it('ausência da tabela (ambiente sem 0473) → inferência legada de bootstrap', async () => {
