@@ -79,6 +79,10 @@ interface CheckSessao {
   descricao: string | null;
   aprovado?: boolean | number | null;
   observacoes?: string;
+  estado?: string | null;
+  evidencia_id?: number | null;
+  data_vencimento?: string | null;
+  confirmado_em?: string | null;
 }
 
 interface FichaDetalhada {
@@ -87,6 +91,7 @@ interface FichaDetalhada {
   participante_nome: string;
   participante_funcao: string;
   instrutor_id?: number | null;
+  examinador_id?: number | null;
   instrutor_nome: string;
   simulador_codigo: string;
   simulador_nome?: string;
@@ -227,6 +232,10 @@ export default function FichaDetalhe() {
 
   // Estados para sistema de checks
   const [checks, setChecks] = useState<CheckSessao[]>([]);
+  // Never initialize personal approvals from a group/session result once
+  // the governed individual evidence schema is active in this environment.
+  const [modoCheckIndividual, setModoCheckIndividual] = useState(false);
+  const [salvandoChecksIndividuais, setSalvandoChecksIndividuais] = useState(false);
   const [checksResultados, setChecksResultados] = useState<
     Record<number, { aprovado: boolean | null; observacoes: string }>
   >({});
@@ -483,6 +492,51 @@ export default function FichaDetalhe() {
 
     try {
       const token = getAccessToken();
+      const individual = await fetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (individual.ok) {
+        const payload = await individual.json() as {
+          success:boolean; data:Array<{
+            sessao_check_id:number; qualificacao_tipo_id:number; codigo:string;
+            nome:string; observacoes:string | null; aprovado:number | null;
+            estado:string | null;
+            data_vencimento:string | null;
+            evidencia_id:number | null;
+            confirmado_em:string | null;
+          }>;
+        };
+        if (!payload.success) throw new Error('Falha no retorno individual');
+        setModoCheckIndividual(true);
+        setChecks(payload.data.map((check) => ({
+          id:check.sessao_check_id,
+          qualificacao_tipo_id:check.qualificacao_tipo_id,
+          codigo:check.codigo, nome:check.nome, descricao:null,
+          aprovado:check.estado === 'CONFIRMADO' ? check.aprovado : null,
+          observacoes:check.observacoes || '',
+          estado:check.estado,
+          data_vencimento:check.data_vencimento,
+          evidencia_id:check.evidencia_id,
+          confirmado_em:check.confirmado_em,
+        })));
+        setChecksResultados(Object.fromEntries(payload.data.map((check) => [
+          check.sessao_check_id,
+          {
+            aprovado:check.estado === 'CONFIRMADO' ? check.aprovado === 1 : null,
+            observacoes:check.observacoes || '',
+          },
+        ])));
+        return;
+      }
+      // Only known "migration pending" may fall back to the legacy single-
+      // employee display. Never treat a 403/network error as proof of approval.
+      if (individual.status !== 503) {
+        setModoCheckIndividual(true);
+        setChecks([]);
+        setChecksResultados({});
+        throw new Error('Evidência individual indisponível');
+      }
+      setModoCheckIndividual(false);
       const response = await fetch(`${API_BASE_URL}/simuladores/sessoes/${sessaoId}/checks`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -836,8 +890,12 @@ export default function FichaDetalhe() {
           );
           if (!resChecks.ok) {
             const e = await resChecks.json();
-            toast.error(e.error || 'Erro ao salvar checks');
-            return;
+            if (resChecks.status === 409 && e.code === 'INDIVIDUAL_CHECK_EVIDENCE_REQUIRED') {
+              toast.warning('Sessão compartilhada: a ficha será assinada sem aprovar checks coletivos. Avaliação individual pendente.');
+            } else {
+              toast.error(e.error || 'Erro ao salvar checks');
+              return;
+            }
           }
         } else {
           toast.warning('Nenhuma FAP foi marcada. A assinatura será salva sem atualizar checks.');
@@ -922,7 +980,7 @@ export default function FichaDetalhe() {
           return;
         }
 
-        if (resultados.length > 0) {
+        if (resultados.length > 0 && !modoCheckIndividual) {
           console.log('[CHECKS] Enviando resultados:', resultados);
 
           const responseChecks = await fetch(
@@ -939,15 +997,20 @@ export default function FichaDetalhe() {
 
           if (!responseChecks.ok) {
             const error = await responseChecks.json();
-            console.error('[CHECKS] Erro ao salvar:', error);
-            toast.error(error.error || 'Erro ao salvar resultados dos checks');
-            return;
+            if (responseChecks.status === 409 &&
+                error.code === 'INDIVIDUAL_CHECK_EVIDENCE_REQUIRED') {
+              toast.warning('Sessão compartilhada: assinatura permitida, mas a FAP exige avaliação individual.');
+            } else {
+              console.error('[CHECKS] Erro ao salvar:', error);
+              toast.error(error.error || 'Erro ao salvar resultados dos checks');
+              return;
+            }
+          } else {
+            const dataChecks = await responseChecks.json();
+            console.log('[CHECKS] Salvamento bem-sucedido:', dataChecks);
+            toast.success('Resultados dos checks salvos com sucesso!');
           }
-
-          const dataChecks = await responseChecks.json();
-          console.log('[CHECKS] Salvamento bem-sucedido:', dataChecks);
-          toast.success('Resultados dos checks salvos com sucesso!');
-        } else {
+        } else if (resultados.length === 0) {
           toast.warning('Nenhuma FAP foi marcada. A assinatura será salva sem atualizar checks.');
         }
       }
@@ -974,6 +1037,30 @@ export default function FichaDetalhe() {
       });
 
       if (response.ok) {
+        if (tipo === 'INSTRUTOR' && modoCheckIndividual && ficha?.is_check === 1) {
+          const resultados = buildChecksPayload();
+          let saved = 0;
+          for (const resultado of resultados) {
+            const r = await fetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
+              method:'POST',
+              headers: {
+                'Content-Type':'application/json',
+                ...(_sigToken ? { Authorization:`Bearer ${_sigToken}` } : {}),
+              },
+              body:JSON.stringify(resultado),
+            });
+            if (r.ok) saved++;
+            else {
+              // The signature is already committed. Preserve that fact and
+              // make any incomplete individual-check action explicit.
+              toast.error(`Assinatura salva, mas ${resultados.length-saved} check(s) exigem revisão individual.`);
+              break;
+            }
+          }
+          if (saved === resultados.length && saved > 0) {
+            toast.success(`${saved} resultado(s) individuais confirmados.`);
+          }
+        }
         toast.success('Assinatura registrada com sucesso!');
         setModalAssinatura({ isOpen: false, papel: 'TRIPULANTE' });
         carregarFicha();
@@ -984,6 +1071,45 @@ export default function FichaDetalhe() {
     } catch (error) {
       console.error('Erro ao salvar assinatura:', error);
       toast.error('Erro ao salvar assinatura');
+    }
+  };
+
+  const confirmarChecksIndividuais = async () => {
+    if (!id || !ficha || !modoCheckIndividual || salvandoChecksIndividuais) return;
+    const toSave = checks.filter((check) => check.estado !== 'CONFIRMADO' &&
+      (checksResultados[check.id]?.aprovado === true ||
+       checksResultados[check.id]?.aprovado === false));
+    if (!toSave.length) {
+      toast.warning('Selecione a aprovação ou reprovação de um check pendente.');
+      return;
+    }
+    setSalvandoChecksIndividuais(true);
+    try {
+      const token = getAccessToken();
+      let saved = 0;
+      for (const check of toSave) {
+        const response = await fetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
+          method:'POST',
+          headers:{
+            'Content-Type':'application/json',
+            ...(token ? { Authorization:`Bearer ${token}` } : {}),
+          },
+          body:JSON.stringify({
+            sessao_check_id:check.id,
+            aprovado:checksResultados[check.id].aprovado,
+            observacoes:checksResultados[check.id].observacoes,
+          }),
+        });
+        if (!response.ok) {
+          toast.error('Um check individual não pôde ser confirmado. Os anteriores permanecem registrados.');
+          break;
+        }
+        saved++;
+      }
+      if (saved) toast.success(`${saved} check(s) individuais confirmados.`);
+      await carregarFicha();
+    } finally {
+      setSalvandoChecksIndividuais(false);
     }
   };
 
@@ -1085,6 +1211,60 @@ export default function FichaDetalhe() {
                 Esta ficha já foi finalizada. Alterações diretas ficam bloqueadas; o instrutor deve
                 abrir uma solicitação de edição para aprovação do gestor.
               </div>
+            )}
+            {ficha.is_check === 1 && modoCheckIndividual && fichaFinalizada && (
+              <section className="mb-5 rounded-lg border border-slate-200 bg-white p-4">
+                <h3 className="text-sm font-bold text-slate-900">Evidências individuais dos checks</h3>
+                <p className="mb-3 text-xs text-slate-600">
+                  Somente aprovação individual confirmada produz FAP. A ausência de resultado mantém
+                  pendência e não comprova aprovação.
+                </p>
+                {checks.map((check) => {
+                  const confirmed = check.estado === 'CONFIRMADO';
+                  const chosen = checksResultados[check.id]?.aprovado;
+                  const status = confirmed
+                    ? (check.aprovado === 1 || check.aprovado === true ? 'APROVADO' : 'REPROVADO')
+                    : 'PENDENTE DE AVALIAÇÃO';
+                  const actor = user?.funcionario_id;
+                  const evaluator = !!actor &&
+                    (String(actor) === String(ficha.instrutor_id) ||
+                     (ficha.examinador_id != null &&
+                      String(actor) === String(ficha.examinador_id)));
+                  return (
+                    <div key={check.id} className="flex flex-wrap gap-3 items-center border-t py-2 text-sm">
+                      <span className="font-semibold">{check.codigo} — {check.nome}</span>
+                      <span className={confirmed ? 'text-slate-700' : 'text-amber-700'}>
+                        {status}
+                        {confirmed && (check.aprovado === 1 || check.aprovado === true) &&
+                          check.data_vencimento ? ` · Válido até ${formatarDataLocalSemUTC(check.data_vencimento)}` : ''}
+                      </span>
+                      {!confirmed && evaluator && (
+                        <div className="ml-auto flex gap-2">
+                          <button type="button" className={chosen === true ? 'font-bold text-green-700' : 'text-slate-600'}
+                            onClick={() => setChecksResultados((prev) => ({
+                              ...prev, [check.id]: { aprovado:true, observacoes:prev[check.id]?.observacoes || '' },
+                            }))}>Aprovado</button>
+                          <button type="button" className={chosen === false ? 'font-bold text-red-700' : 'text-slate-600'}
+                            onClick={() => setChecksResultados((prev) => ({
+                              ...prev, [check.id]: { aprovado:false, observacoes:prev[check.id]?.observacoes || '' },
+                            }))}>Reprovado</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {checks.some((check) => check.estado !== 'CONFIRMADO') &&
+                  !!user?.funcionario_id &&
+                  (String(user.funcionario_id) === String(ficha.instrutor_id) ||
+                    (ficha.examinador_id != null &&
+                    String(user.funcionario_id) === String(ficha.examinador_id))) && (
+                  <button type="button" onClick={confirmarChecksIndividuais}
+                    disabled={salvandoChecksIndividuais}
+                    className="mt-3 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                    {salvandoChecksIndividuais ? 'Confirmando...' : 'Confirmar resultados individuais'}
+                  </button>
+                )}
+              </section>
             )}
             {/* Cabeçalho da Ficha */}
             <div className="mb-6 rounded-lg border border-slate-200 bg-white p-6">
@@ -2008,8 +2188,9 @@ export default function FichaDetalhe() {
                   {papelParam === 'INSTRUTOR' && ficha?.is_check === 1 && checks.length > 0 && (
                     <div className="border-t border-blue-200 pt-4">
                       <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        Avalie todos os checks abaixo antes de concluir a assinatura e gerar a
-                        qualificação.
+                        A aprovação de cada check exige evidência individual. Em sessões
+                        compartilhadas, a ficha pode ser assinada, mas a FAP permanece
+                        pendente de avaliação individual.
                       </div>
 
                       <div className="space-y-4">
@@ -2286,6 +2467,17 @@ export default function FichaDetalhe() {
                         // Fichas anteriores preservam template legado.
                         templateVersion:
                           ficha.created_at && ficha.created_at >= '2026-07-01' ? 'v6' : 'legacy',
+                        checksIndividuais:modoCheckIndividual ? checks.map((check) => ({
+                          codigo:check.codigo,
+                          nome:check.nome,
+                          situacao:check.estado === 'CONFIRMADO'
+                            ? (check.aprovado === 1 || check.aprovado === true
+                              ? 'APROVADO' as const : 'REPROVADO' as const)
+                            : 'PENDENTE_AVALIACAO' as const,
+                          evidenciaId:check.evidencia_id,
+                          confirmadoEm:check.confirmado_em,
+                          dataVencimento:check.data_vencimento,
+                        })) : undefined,
                         manobras: ficha.manobras.map((m) => ({
                           ordem: m.ordem,
                           nome: m.nome, // nome curto da manobra (nunca usar descricao aqui)
@@ -2515,8 +2707,9 @@ export default function FichaDetalhe() {
                   Avaliação de Checks
                 </h3>
                 <p className="text-xs text-amber-800">
-                  Esta sessão está vinculada a um examinador. Avalie se o aluno foi{' '}
-                  <strong>aprovado ou reprovado</strong> em cada check abaixo.
+                  O resultado registrado deve corresponder ao tripulante desta ficha.
+                  Em sessões compartilhadas, os checks da sessão não geram FAP
+                  individual automaticamente; a ficha poderá ser assinada com pendência.
                 </p>
               </div>
 
