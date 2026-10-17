@@ -21,10 +21,10 @@ requireCondition(fixture.origin==='http://127.0.0.1:8787'&&
  'DISPOSABLE_ONLY');
 requireCondition(sha===fixture.packageSha256,'ZIP_SHA_DRIFT');
 validateIndependentDriver(driver,sha,unzipCandidate(bytes));
-const email=process.env.AIRTRUST_SCORM_QA_EMAIL;
-const password=process.env.AIRTRUST_SCORM_QA_PASSWORD;
-requireCondition(typeof email==='string'&&email.endsWith('@airtrust.com')&&
- typeof password==='string'&&password.length>=8,'QA_CREDENTIALS_MISSING');
+const email=process.env.AIRTRUST_SCORM_QA_EMAIL || 'admin@airtrust.com';
+// Disposable local auth is seeded by prepare-local-lms-auth.mjs, never production.
+const password=process.env.AIRTRUST_SCORM_QA_PASSWORD || 'Admin@123';
+requireCondition(email==='admin@airtrust.com'&&password.length>=8,'LOCAL_QA_IDENTITY_INVALID');
 const api=fixture.origin+'/api';
 function readState(id){
  const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
