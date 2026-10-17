@@ -78,6 +78,11 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
           modelState.q['qa-interaction-1'] = savedAnswer;
           selected = savedAnswer;
         }
+        if (savedModel.failed === true && savedModel.assessmentEvaluated === true) {
+          modelState.failed = true;
+          modelState.assessmentEvaluated = true;
+          modelState.best = 0;
+        }
         if (savedModel.assessmentPassed === true && savedModel.assessmentEvaluated === true) {
           modelState.assessmentPassed = true;
           modelState.assessmentEvaluated = true;
@@ -125,7 +130,7 @@ export function buildInteractiveM8QaFiles(courseId, packageVersion) {
   if (!apiAdapter || typeof apiAdapter.get !== 'function') throw Error('QA_SCORM_ADAPTER_NOT_INITIALIZED');
   // A reopened approved course cannot be downgraded by initialization.
   // A failed attempt can be retried only by a fresh learner interaction.
-  if (!modelState.assessmentPassed) {
+  if (!modelState.assessmentPassed && !modelState.failed) {
     api.LMSSetValue('cmi.core.lesson_status', 'incomplete');
   }
   api.LMSSetValue('cmi.core.lesson_location', '1/1');
