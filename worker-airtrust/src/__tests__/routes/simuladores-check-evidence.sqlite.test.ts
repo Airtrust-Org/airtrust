@@ -129,6 +129,28 @@ describe('individual evidence for simulator-generated FAP (real SQLite)', () => 
     expect(result.qualificacoes_geradas.map((row) => row.codigo)).toEqual(['OPS-12']);
   });
 
+  it('does not promote a formerly shared session after the other participant is soft-deleted', async () => {
+    db!.database.exec(`
+      INSERT INTO sessoes_checks_resultados VALUES (1, 50, 1, NULL);
+      INSERT INTO sessoes_participantes (id, sessao_id, funcionario_id, deleted_at)
+        VALUES (2, 60, 1001, datetime('now'));
+    `);
+    const result = await generate();
+    expect(result.qualificacoes_geradas.map((row) => row.codigo)).toEqual(['OPS-12']);
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not promote a formerly shared session after the other fiche is soft-deleted', async () => {
+    db!.database.exec(`
+      INSERT INTO sessoes_checks_resultados VALUES (1, 50, 1, NULL);
+      INSERT INTO fichas_sessao (id, empresa_id, colaborador_id_aluno,
+        agendamento_slot_id, tipo_sessao, status, aprovado, deleted_at)
+      VALUES (71, 1, 1001, 60, 'PER', 'APROVADO', 1, datetime('now'));
+    `);
+    const result = await generate();
+    expect(result.qualificacoes_geradas.map((row) => row.codigo)).toEqual(['OPS-12']);
+  });
+
   it('rejects an explicit failure and contradictory active check results', async () => {
     db!.database.exec('INSERT INTO sessoes_checks_resultados VALUES (1, 50, 0, NULL)');
     expect((await generate()).qualificacoes_geradas.map((row) => row.codigo)).toEqual(['OPS-12']);
