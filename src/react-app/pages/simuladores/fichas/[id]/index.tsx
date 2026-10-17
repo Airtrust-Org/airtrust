@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { appFetch } from '@/react-app/lib/app-fetch';
 import { confirmDialog } from '@/react-app/utils/confirmDialog';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import {
@@ -492,7 +493,7 @@ export default function FichaDetalhe() {
 
     try {
       const token = getAccessToken();
-      const individual = await fetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
+      const individual = await appFetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (individual.ok) {
@@ -1041,7 +1042,7 @@ export default function FichaDetalhe() {
           const resultados = buildChecksPayload();
           let saved = 0;
           for (const resultado of resultados) {
-            const r = await fetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
+            const r = await appFetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
               method:'POST',
               headers: {
                 'Content-Type':'application/json',
@@ -1088,7 +1089,7 @@ export default function FichaDetalhe() {
       const token = getAccessToken();
       let saved = 0;
       for (const check of toSave) {
-        const response = await fetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
+        const response = await appFetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
           method:'POST',
           headers:{
             'Content-Type':'application/json',
