@@ -9,6 +9,7 @@ import { trainingComplianceNeedsEnrollment } from '../services/training-complian
 import { readTrainingRosterPlan, applyTrainingRosterPlan } from '../services/training-compliance-roster-sync';
 import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle, syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
+import { canUseLegacyAutomatedLmsCourse } from '../services/training-compliance-native-lms-evidence';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import type { TrainingComplianceSnapshot } from './compliance-treinamentos';
 
@@ -143,6 +144,7 @@ router.post('/matricular-pendentes', requireRole('admin'), async (c) => {
   const activeKeys = new Set(active.filter(row => row.qualificacao_tipo_id != null)
     .map(row => `${row.funcionario_id}:${row.qualificacao_tipo_id}`));
   const pendentes: Array<{ funcionarioId: number; qualificacaoTipoId: number; cursoId: number }> = [];
+  const legacyEligibility = new Map<number, boolean>();
   let semCursoUnico = 0;
   for (const person of snapshot.people) {
     for (const req of person.requisitos) {
@@ -154,6 +156,10 @@ router.post('/matricular-pendentes', requireRole('admin'), async (c) => {
           activeKeys.has(`${person.id}:${req.qualificacao_tipo_id}`)) continue;
       const mapped = byType.get(Number(req.qualificacao_tipo_id)) || [];
       if (mapped.length !== 1) { semCursoUnico++; continue; }
+      if (!legacyEligibility.has(mapped[0])) {
+        legacyEligibility.set(mapped[0], await canUseLegacyAutomatedLmsCourse(db,empresaId,mapped[0]));
+      }
+      if (!legacyEligibility.get(mapped[0])) { semCursoUnico++; continue; }
       pendentes.push({ funcionarioId: person.id, qualificacaoTipoId: req.qualificacao_tipo_id, cursoId: mapped[0] });
     }
   }
@@ -173,6 +179,11 @@ router.post('/matricular-pendentes', requireRole('admin'), async (c) => {
   const audit = extrairUsuarioAuditoria(c);
   for (const pending of pendentes.slice(0, limit)) {
     try {
+      // Recheck just before writing; a preview is never permission to
+      // recreate a Native enrollment if its immutable marker changed.
+      if (!(await canUseLegacyAutomatedLmsCourse(db,empresaId,pending.cursoId))) {
+        preservadas++;continue;
+      }
       const existing = await db.prepare(
         `SELECT id,status,deleted_at FROM lms_matriculas WHERE empresa_id=? AND curso_id=? AND funcionario_id=?
          ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END,id DESC LIMIT 1`,

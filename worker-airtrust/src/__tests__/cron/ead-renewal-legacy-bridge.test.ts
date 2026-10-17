@@ -11,6 +11,10 @@ vi.mock('../../services/lms-matricula-cycle', () => ({
   resetMatriculaForNewCycle: vi.fn(async () => 92),
 }));
 
+import { canUseLegacyAutomatedLmsCourse } from '../../services/training-compliance-native-lms-evidence';
+vi.mock('../../services/training-compliance-native-lms-evidence',()=>({
+  canUseLegacyAutomatedLmsCourse: vi.fn(async()=>true),
+}));
 import {
   ensureMatriculaCycle,
   resetMatriculaForNewCycle,
@@ -46,6 +50,7 @@ describe('EAD renewal in legacy scheduler fallback', () => {
     }));
     expect(ensureMatriculaCycle).not.toHaveBeenCalled();
     expect(prepare).toHaveBeenCalledTimes(1);
+    expect(canUseLegacyAutomatedLmsCourse).toHaveBeenCalledWith(db,6,22);
   });
 
   it('preserves an enrollment already underway instead of resetting SCORM progress', async () => {
@@ -59,6 +64,14 @@ describe('EAD renewal in legacy scheduler fallback', () => {
     expect(resetMatriculaForNewCycle).not.toHaveBeenCalled();
   });
 
+  it('denies Native-marked renewal before opening an old SCORM cycle',async()=>{
+    vi.mocked(canUseLegacyAutomatedLmsCourse).mockResolvedValueOnce(false);
+    const {db,prepare}=dbWithEnrollment('CONCLUIDO');
+    await expect(ensureEadRenewalMatriculaForRow(db,renewal))
+      .rejects.toThrow('NATIVE_LEGACY_AUTO_ENROLLMENT_DENIED');
+    expect(resetMatriculaForNewCycle).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+  });
   it('uses the same cycle repair in the legacy scheduler instead of skipping existing enrollments', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/cron/scheduled-handler.ts'), 'utf8');
     expect(source).toContain('ensureEadRenewalMatriculaForRow(env.DB, row)');

@@ -23,5 +23,6 @@ describe('Compliance designation auto-enrollment contract', () => {
     expect(source).toContain("date(qh.data_vencimento)>=date('now')");
     expect(source).toContain('hasActiveMatriculaCycle(existing)');
     expect(source).toContain("origin:'AUTO_DESIGNACAO'");
+    expect(source).toContain('canUseLegacyAutomatedLmsCourse(db,empresaId,row.course_id)');
   });
 });

@@ -104,3 +104,21 @@ export async function loadVerifiedComplianceLmsEnrollments(
   }
   return result.results;
 }
+
+/**
+ * A legacy automatic enrollment must not create, reactivate or cancel a
+ * Native course. Check physical type AND the immutable staging marker without
+ * depending on UI flags; unknown/missing course is never eligible. The probe
+ * is read-only and a D1 failure propagates (no SCORM fallback).
+ */
+export async function canUseLegacyAutomatedLmsCourse(
+  db: D1Database, empresaId: number, cursoId: number,
+): Promise<boolean> {
+  if (!Number.isSafeInteger(empresaId) || empresaId <= 0 ||
+      !Number.isSafeInteger(cursoId) || cursoId <= 0) return false;
+  const row = await db.prepare(
+    'SELECT tipo_conteudo FROM lms_cursos WHERE id=? AND empresa_id=? AND deleted_at IS NULL LIMIT 1',
+  ).bind(cursoId, empresaId).first<{tipo_conteudo: string | null}>();
+  if (!row) return false;
+  return !(await isNativeLmsComplianceCourse(db, empresaId, cursoId, row.tipo_conteudo));
+}

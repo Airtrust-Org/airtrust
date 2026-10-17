@@ -15,6 +15,7 @@ import {
   resetMatriculaForNewCycle,
 } from '../services/lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
+import { canUseLegacyAutomatedLmsCourse } from '../services/training-compliance-native-lms-evidence';
 import { trainingComplianceEffectiveRequirementPredicateSql } from '../services/training-compliance-rule-engine';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -82,6 +83,9 @@ async function autoEnrollAssignedConditionRequirements(db:D1Database,empresaId:n
     GROUP BY qt.id,qt.validade ORDER BY qt.id`).bind(funcionarioId,empresaId,condicaoId).all<{qualificacao_tipo_id:number;validade:number|null;course_id:number|null;course_count:number}>();
   for(const row of results||[]){
     if(Number(row.course_count)!==1||!row.course_id){summary.unavailable_course+=1;continue;}
+    if (!(await canUseLegacyAutomatedLmsCourse(db,empresaId,row.course_id))) {
+      summary.unavailable_course+=1;continue;
+    }
     const valid=await db.prepare(`SELECT 1 ok FROM qualificacoes_historico qh JOIN qualificacoes_tipos qt ON qt.id=? AND qt.empresa_id=? WHERE qh.empresa_id=? AND qh.funcionario_id=? AND qh.deleted_at IS NULL AND (qh.qualificacao_id=qt.id OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))=UPPER(TRIM(qt.codigo))) AND UPPER(COALESCE(qh.status,'')) NOT IN ('CANCELADO','CANCELADA','PLANEJADO','PLANEJADA') AND ((qh.data_vencimento IS NOT NULL AND date(qh.data_vencimento)>=date('now')) OR (qh.data_vencimento IS NULL AND qt.validade IS NULL AND qh.data_conclusao IS NOT NULL) OR (qh.data_vencimento IS NULL AND qt.validade IS NOT NULL AND qh.data_conclusao IS NOT NULL AND date(qh.data_conclusao,'+'||qt.validade||' months')>=date('now'))) LIMIT 1`).bind(row.qualificacao_tipo_id,empresaId,empresaId,funcionarioId).first<{ok:number}>();
     if(valid?.ok){summary.skipped_valid_evidence+=1;continue;}
     const existing=await db.prepare(`SELECT id,status,deleted_at FROM lms_matriculas WHERE empresa_id=? AND curso_id=? AND funcionario_id=? ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END,id DESC LIMIT 1`).bind(empresaId,row.course_id,funcionarioId).first<{id:number;status:string;deleted_at:string|null}>();
