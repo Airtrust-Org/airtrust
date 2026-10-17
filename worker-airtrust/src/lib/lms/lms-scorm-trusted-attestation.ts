@@ -131,7 +131,8 @@ export async function verifyTrustedScormAttestation(
   if (docs.CHROMIUM.enrollmentId === docs.WEBKIT.enrollmentId ||
       docs.CHROMIUM.cycleId === docs.WEBKIT.cycleId ||
       docs.CHROMIUM.qualificationHistoryId === docs.WEBKIT.qualificationHistoryId ||
-      docs.CHROMIUM.documentId === docs.WEBKIT.documentId) return false;
+      docs.CHROMIUM.documentId === docs.WEBKIT.documentId ||
+      docs.CHROMIUM.sha256 === docs.WEBKIT.sha256) return false;
   if (!Array.isArray(p.runs) || p.runs.length !== 2 ||
       p.runs.some(run => !exactKeys(run,
         ['harness','browser','packageSha256','cases']) ||
