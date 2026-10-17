@@ -23,8 +23,9 @@ describe('untrusted native_pilot_format must never turn a legacy course into Nat
   it('also rejects legacy multipart course creation marker before payload normalization',()=>{
     const start=legacy.indexOf('async function parseCursoCreateRequest');
     const end=legacy.indexOf('const payload =',start);
-    expect(legacy.slice(start,end)).toContain("formData.has('native_pilot_format')");
-    expect(legacy.slice(start,end)).toContain("NATIVE_PILOT_FORMAT_NOT_AUTHORIZED");
+    const payload=legacy.slice(end,legacy.indexOf("const parsed = CursoCreateSchema",end));
+    expect(payload).toContain("formData.get('native_pilot_format')");
+    expect(payload).toContain("formData.get('nativePilotFormat')");
   });
   it('guards Native staging catalog activation independently of a disabled UI feature flag',()=>{
     expect(guard).toContain("hasSchemaTable(env.DB, 'lms_native_catalog_activation', { fresh: true })");

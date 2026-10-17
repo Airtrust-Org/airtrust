@@ -490,8 +490,7 @@ const setorIdsSchema = z.preprocess((value) => {
   return value;
 }, z.array(z.number().int().positive()).optional());
 
-const CursoCreateSchema = z.object({
-  // Client-side hints are not a governed Native activation. Reject rather than\n  // silently strip a marker while storing tipo_conteudo='scorm'.\n  native_pilot_format: z.never().optional(),\n  nativePilotFormat: z.never().optional(),\n
+const CursoCreateSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   titulo: z.string().min(2).max(255),
   descricao: trimNullableText,
   categoria: trimNullableText,
@@ -521,8 +520,7 @@ const CursoCreateSchema = z.object({
   dominio_codigo: z.string().trim().min(1).optional().nullable(),
 });
 
-const CursoUpdateSchema = z.object({
-  // Client-side hints are not a governed Native activation. Reject rather than\n  // silently strip a marker while storing tipo_conteudo='scorm'.\n  native_pilot_format: z.never().optional(),\n  nativePilotFormat: z.never().optional(),\n
+const CursoUpdateSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   titulo: z.string().min(2).max(255).optional(),
   descricao: trimNullableText,
   categoria: trimNullableText,
@@ -553,14 +551,12 @@ const CursoUpdateSchema = z.object({
   formato_id: z.number().int().positive().nullable().optional(),
 });
 
-const StructuredContentInitSchema = z.object({
-  // Client-side hints are not a governed Native activation. Reject rather than\n  // silently strip a marker while storing tipo_conteudo='scorm'.\n  native_pilot_format: z.never().optional(),\n  nativePilotFormat: z.never().optional(),\n
+const StructuredContentInitSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   skip_purge: z.boolean().optional(),
 });
 
-const StructuredContentCompleteSchema = z.object({
-  // Client-side hints are not a governed Native activation. Reject rather than\n  // silently strip a marker while storing tipo_conteudo='scorm'.\n  native_pilot_format: z.never().optional(),\n  nativePilotFormat: z.never().optional(),\n
+const StructuredContentCompleteSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   launch_file: trimNullableText,
   scorm_versao: optionalNullableScormVersion,
@@ -756,10 +752,6 @@ async function parseCursoCreateRequest(c: Context) {
 
   if (contentType.includes('multipart/form-data')) {
     const formData = await c.req.formData();
-    if (formData.has('native_pilot_format') || formData.has('nativePilotFormat')) {
-      throw new ApiError('O formato Native exige ativação governada, não um marcador de cliente.', 400,
-        'NATIVE_PILOT_FORMAT_NOT_AUTHORIZED');
-    }
     const rawSetorIds = formData.get('setor_ids');
     const parsedSetorIds: number[] = [];
     if (typeof rawSetorIds === 'string' && rawSetorIds.trim()) {
@@ -768,7 +760,7 @@ async function parseCursoCreateRequest(c: Context) {
         if (Number.isFinite(n) && n > 0) parsedSetorIds.push(n);
       }
     }
-    const payload = {
+    const payload = { native_pilot_format: formData.get('native_pilot_format') ?? undefined, nativePilotFormat: formData.get('nativePilotFormat') ?? undefined,
       titulo: String(formData.get('titulo') ?? '').trim(),
       descricao: parseNullableText(formText(formData.get('descricao'))),
       categoria: parseNullableText(formText(formData.get('categoria'))),
