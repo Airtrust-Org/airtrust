@@ -287,7 +287,7 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
           WHERE e.id = ? AND e.ativo = 1 AND e.deleted_at IS NULL
         `,
           )
-          .bind(normalizeTenantRole(userRoleFromJwt), empresaIdFromJwt)
+          .bind(platformAdmin ? 'admin' : normalizeTenantRole(userRoleFromJwt), empresaIdFromJwt)
           .first<{
             empresa_id: number;
             codigo: string;
