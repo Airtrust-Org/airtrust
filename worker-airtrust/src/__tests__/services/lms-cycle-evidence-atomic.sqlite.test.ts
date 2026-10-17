@@ -62,9 +62,9 @@ function fixture(withMigration=true) {
        origem,status,ciclo_atual,progresso_pct,tentativas)
       VALUES(99,1,384,34,77,1,'LMS','CONCLUIDO',1,100,2);
     INSERT INTO lms_progresso_scorm
-      (matricula_id,empresa_id,lesson_status,lesson_location,completion_status,
+      (matricula_id,empresa_id,lesson_status,completion_status,
        success_status,score_raw,suspend_data,cmi_json,session_count)
-      VALUES(384,1,'passed','41/41','completed','passed',93,'opaque-old-state',
+      VALUES(384,1,'passed','completed','passed',93,'opaque-old-state',
         '{"cmi.core.lesson_location":"41/41"}',2);
     INSERT INTO lms_xapi_statements
       (id,empresa_id,matricula_id,actor_json,verb_id,object_id,created_at)
