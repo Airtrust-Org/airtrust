@@ -82,6 +82,7 @@ interface CheckSessao {
   estado?: string | null;
   evidencia_id?: number | null;
   data_vencimento?: string | null;
+  confirmado_em?: string | null;
 }
 
 interface FichaDetalhada {
@@ -501,6 +502,8 @@ export default function FichaDetalhe() {
             nome:string; observacoes:string | null; aprovado:number | null;
             estado:string | null;
             data_vencimento:string | null;
+            evidencia_id:number | null;
+            confirmado_em:string | null;
           }>;
         };
         if (!payload.success) throw new Error('Falha no retorno individual');
@@ -513,6 +516,8 @@ export default function FichaDetalhe() {
           observacoes:check.observacoes || '',
           estado:check.estado,
           data_vencimento:check.data_vencimento,
+          evidencia_id:check.evidencia_id,
+          confirmado_em:check.confirmado_em,
         })));
         setChecksResultados(Object.fromEntries(payload.data.map((check) => [
           check.sessao_check_id,
@@ -2462,6 +2467,17 @@ export default function FichaDetalhe() {
                         // Fichas anteriores preservam template legado.
                         templateVersion:
                           ficha.created_at && ficha.created_at >= '2026-07-01' ? 'v6' : 'legacy',
+                        checksIndividuais:modoCheckIndividual ? checks.map((check) => ({
+                          codigo:check.codigo,
+                          nome:check.nome,
+                          situacao:check.estado === 'CONFIRMADO'
+                            ? (check.aprovado === 1 || check.aprovado === true
+                              ? 'APROVADO' as const : 'REPROVADO' as const)
+                            : 'PENDENTE_AVALIACAO' as const,
+                          evidenciaId:check.evidencia_id,
+                          confirmadoEm:check.confirmado_em,
+                          dataVencimento:check.data_vencimento,
+                        })) : undefined,
                         manobras: ficha.manobras.map((m) => ({
                           ordem: m.ordem,
                           nome: m.nome, // nome curto da manobra (nunca usar descricao aqui)
