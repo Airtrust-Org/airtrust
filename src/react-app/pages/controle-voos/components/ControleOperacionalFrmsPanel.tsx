@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, XCircle } from 'lucide-react';
 import { cn } from '@/react-app/lib/utils';
 import ControleVoosStatCards from './ControleVoosStatCards';
+import { frmsBrazilOperationalTodayIso } from '@/react-app/pages/frms/frmsOperationalDate';
 import {
   useFrmsOperacionalPainel,
   type CvFrmsCrewDispatchAssessment,
@@ -12,7 +13,7 @@ import {
 
 /**
  * Painel operacional compacto (Controle Operacional FRMS / Gate de
- * Despacho V1). Traduz o snapshot FRMS ja calculado no backend
+ * Despacho V1), agora consultivo. Traduz o snapshot FRMS do backend
  * (LIBERAVEL/ATENCAO_COORDENACAO/NAO_LIBERADO) — nao mostra KSS, WOCL,
  * rolling ou thresholds aqui; detalhe tecnico fica no drill-down por
  * tripulante (expandir a linha).
@@ -24,7 +25,7 @@ const REASON_LABELS: Record<FrmsDispatchGateReasonCode, string> = {
   CHECKIN_INCONSISTENTE: 'Check-in inconsistente',
   DECISAO_FRMS_CRITICA: 'Violação crítica de FRMS',
   DECISAO_FRMS_MITIGACAO_NECESSARIA: 'Mitigação necessária',
-  DECISAO_FRMS_NAO_AVALIADO: 'Ainda não avaliado',
+  DECISAO_FRMS_NAO_AVALIADO: 'Análise operacional FRMS inconclusiva (não significa check-in pendente)',
   FADIGA_ACUMULADA_CRITICA: 'Fadiga acumulada crítica',
   SNAPSHOT_FRMS_AUSENTE: 'Dado FRMS ausente',
   SNAPSHOT_FRMS_INCONSISTENTE: 'Dado FRMS inconsistente',
@@ -34,9 +35,9 @@ const REASON_LABELS: Record<FrmsDispatchGateReasonCode, string> = {
 };
 
 const SITUACAO_LABELS: Record<FrmsDispatchReadinessStatus, string> = {
-  LIBERAVEL: 'LIBERADO',
-  ATENCAO_COORDENACAO: 'ATENÇÃO',
-  NAO_LIBERADO: 'NÃO LIBERADO',
+  LIBERAVEL: 'SEM ALERTAS',
+  ATENCAO_COORDENACAO: 'ATENÇÃO FRMS',
+  NAO_LIBERADO: 'ALERTA FRMS',
 };
 
 const SITUACAO_STYLES: Record<FrmsDispatchReadinessStatus, string> = {
@@ -49,16 +50,35 @@ const FADIGA_LABELS: Record<string, string> = {
   NORMAL: 'Normal',
   ATENCAO: 'Atenção',
   CRITICO: 'Crítico',
-  INDISPONIVEL: '—',
+  INDISPONIVEL: 'Sem conclusão',
 };
 
 const CHECKIN_LABELS: Record<string, string> = {
   RECEBIDO: 'Recebido',
   PENDENTE: 'Pendente',
   AUSENTE: 'Ausente',
-  NAO_APLICAVEL: 'N/A',
-  INDISPONIVEL: '—',
+  NAO_APLICAVEL: 'Não confirmado',
+  INDISPONIVEL: 'Indisponível',
 };
+
+/**
+ * O backend transmite instante ISO com UTC/offset. Na fila operacional
+ * mostramos a hora de Brasília, nunca o valor ISO cru. Se o fuso não vier,
+ * não presumimos conversão para evitar horário operacional incorreto.
+ */
+function formatDepartureTime(value: string | null | undefined): string {
+  if (!value) return 'Horário não informado';
+  const raw = value.trim();
+  if (!/(?:Z|[+-]\\d{2}:\\d{2})$/i.test(raw)) return `${raw} (fuso não informado)`;
+  const parsed = new Date(raw);
+  if (!Number.isFinite(parsed.getTime())) return 'Horário inválido — conferir programação';
+  const local = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit', month: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(parsed);
+  return `${local} (Brasília)`;
+}
 
 function fadigaClass(nivel: string): string {
   if (nivel === 'CRITICO') return 'text-red-600 dark:text-red-400 font-semibold';
@@ -97,8 +117,17 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
           )}
         </td>
         <td className="px-3 py-2 text-slate-600 dark:text-slate-400"><span className="block font-semibold">{voo.prefixo}</span><span className="block text-xs">{voo.modelo_aeronave || 'Modelo não informado'}</span></td>
-        <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-          {CHECKIN_LABELS[membro.checkin_status] ?? membro.checkin_status}
+        <td className="px-3 py-2">
+          <span
+            className={cn(
+              'inline-flex rounded-md px-2 py-1 text-xs font-bold',
+              membro.checkin_status === 'RECEBIDO'
+                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
+            )}
+          >
+            {CHECKIN_LABELS[membro.checkin_status] ?? membro.checkin_status}
+          </span>
         </td>
         <td className={cn('px-3 py-2', fadigaClass(membro.fadiga_diaria))}>
           {FADIGA_LABELS[membro.fadiga_diaria] ?? membro.fadiga_diaria}
@@ -116,10 +145,13 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
             {SITUACAO_LABELS[membro.frms_status]}
           </span>
         </td>
+        <td className="max-w-sm px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200">
+          {membro.recommended_action || 'Consultar decisão FRMS.'}
+        </td>
       </tr>
       {expanded && (
         <tr className="bg-slate-50 dark:bg-slate-800/40">
-          <td colSpan={7} className="px-6 py-3 text-xs text-slate-600 dark:text-slate-300">
+          <td colSpan={8} className="px-6 py-3 text-xs text-slate-600 dark:text-slate-300">
             {membro.reasons.length === 0 ? (
               <span className="text-slate-400 dark:text-slate-500">
                 Sem pendências — dados normais recebidos.
@@ -147,7 +179,7 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
 }
 
 export default function ControleOperacionalFrmsPanel() {
-  const [data, setData] = useState(() => new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(() => frmsBrazilOperationalTodayIso());
   const { data: painel, isLoading, error } = useFrmsOperacionalPainel(data);
 
   const resumo = painel?.resumo;
@@ -158,11 +190,10 @@ export default function ControleOperacionalFrmsPanel() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-            Controle operacional — este tripulante e este voo podem ser liberados agora?
+            Controle operacional — alertas consultivos de fadiga
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Check-in diário pendente no dia da operação bloqueia a liberação. Ausência de check-in
-            futuro nunca bloqueia o planejamento.
+            Os check-ins realizados e as condições do FRMS aparecem separadamente. Os alertas não impedem automaticamente a liberação pela Coordenação; siga os procedimentos operacionais aplicáveis.
           </p>
         </div>
         <label className="space-y-1 text-xs">
@@ -183,7 +214,7 @@ export default function ControleOperacionalFrmsPanel() {
         <ControleVoosStatCards
           cards={[
             {
-              label: 'Voos não liberados',
+              label: 'Voos com alerta FRMS',
               value: resumo.voos_nao_liberados,
               icon: <XCircle className="h-5 w-5" />,
               variant: resumo.voos_nao_liberados > 0 ? 'danger' : 'default',
@@ -201,7 +232,7 @@ export default function ControleOperacionalFrmsPanel() {
               variant: resumo.voos_requerem_revisao > 0 ? 'warning' : 'default',
             },
             {
-              label: 'Liberáveis',
+              label: 'Sem alertas FRMS',
               value: resumo.voos_liberaveis,
               icon: <CheckCircle2 className="h-5 w-5" />,
               variant: 'success',
@@ -246,16 +277,19 @@ export default function ControleOperacionalFrmsPanel() {
                     Voo
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
-                    Check-in
+                    Check-in diário
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
-                    Fadiga diária
+                    Avaliação FRMS diária
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
                     Fadiga acumulada
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
-                    Situação
+                    Alerta consultivo FRMS
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
+                    Providência recomendada
                   </th>
                 </tr>
               </thead>
@@ -267,10 +301,10 @@ export default function ControleOperacionalFrmsPanel() {
                         <VooStatusIcon status={voo.frms_status} />
                       </td>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400"
                       >
-                        {voo.prefixo}{voo.modelo_aeronave ? ` · ${voo.modelo_aeronave}` : ''} — {voo.horario_previsto_partida}
+                        {voo.prefixo}{voo.modelo_aeronave ? ` · ${voo.modelo_aeronave}` : ''} — {formatDepartureTime(voo.horario_previsto_partida)}
                         {voo.frms_primary_reason && (
                           <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">
                             {REASON_LABELS[voo.frms_primary_reason]}
@@ -280,7 +314,7 @@ export default function ControleOperacionalFrmsPanel() {
                     </tr>
                     {voo.tripulacao.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-2 text-xs text-slate-400 dark:text-slate-500">
+                        <td colSpan={8} className="px-6 py-2 text-xs text-slate-400 dark:text-slate-500">
                           Sem tripulação cadastrada para este voo.
                         </td>
                       </tr>

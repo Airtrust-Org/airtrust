@@ -4,11 +4,14 @@ import type { Env, Variables } from '../types';
 import { assetSessionMatchesEnrollment, readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 import {
   evaluateLmsCompletionEvidence,
+  resolveLmsCompletionScorePct,
   type LmsCompletionDecision,
   type LmsCompletionSource,
 } from '../services/lms-completion-evidence';
-import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish, scormStatusIndicatesCompletion } from '../services/lms-progress-guardrails';
+import { extractScormLocationFromCmiJson, mergeMonotonicNumber, mergeScormRuntimeState } from '../services/lms-progress-guardrails';
+import { evaluateScormClosureReadiness } from '../services/lms-matricula-runtime-domain';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
+import { isEligibleForHistoricEditionCredit } from '../lib/lms/lms-historical-edition-admin-credit';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
 
@@ -152,21 +155,10 @@ async function readEnrollmentEvidence(
     .first<EnrollmentEvidenceRow>();
 }
 
-function scorePctFromValues(raw: unknown, max: unknown, scaled: unknown): number | null {
-  if (typeof scaled === 'number' && Number.isFinite(scaled) && scaled >= 0 && scaled <= 1) {
-    return scaled * 100;
-  }
-  if (
-    typeof raw === 'number' &&
-    Number.isFinite(raw) &&
-    typeof max === 'number' &&
-    Number.isFinite(max) &&
-    max > 0
-  ) {
-    return Math.max(0, Math.min(100, (raw / max) * 100));
-  }
-  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 100) return raw;
-  return null;
+function scorePctFromValues(raw: unknown, max: unknown, scaled: unknown, min?: unknown): number | null {
+  return resolveLmsCompletionScorePct({
+    scoreRaw: raw, scoreMin: min, scoreMax: max, scoreScaled: scaled,
+  });
 }
 
 function progressFromCmiJson(value: unknown): number | null {
@@ -195,8 +187,9 @@ function resolveProgressPct(row: EnrollmentEvidenceRow, incoming: JsonRecord): n
     incoming.score_raw,
     incoming.score_max,
     incoming.score_scaled,
+    incoming.score_min,
   );
-  const storedScore = scorePctFromValues(row.score_raw, row.score_max, row.score_scaled);
+  const storedScore = scorePctFromValues(row.score_raw, row.score_max, row.score_scaled, row.score_min);
   return Math.max(
     existing,
     incomingLocation ?? 0,
@@ -258,31 +251,6 @@ function contentEvidenceValidated(row: EnrollmentEvidenceRow, source: LmsComplet
     return type === 'scorm';
   }
   return false;
-}
-
-function hasTerminalFormativeScormStatus(row: EnrollmentEvidenceRow, incoming: JsonRecord): boolean {
-  // Formative completion requires a real SCORM terminal signal. Client-side
-  // completion_candidate, slide count and generic PATCH progress do not count.
-  return [incoming.lesson_status, incoming.completion_status,
-    row.lesson_status, row.completion_status]
-    .some((value) => ['complete', 'completed', 'passed'].includes(normalizeStatus(value))) ||
-    isTrustedScorm12Finish({
-      lesson_status: incoming.lesson_status as string | null,
-      commit_event: incoming.commit_event as string | null,
-      completion_candidate: incoming.completion_candidate === true,
-      completion_observed_at: incoming.completion_observed_at as string | null,
-      cmi_json: incoming.cmi_json as string | null,
-    });
-}
-
-function formativeTerminalMissing(): LmsCompletionDecision {
-  return {
-    accepted: false,
-    code: 'COMPLETION_EVIDENCE_INSUFFICIENT',
-    scorePct: null,
-    masteryScore: null,
-    failurePrecedence: false,
-  };
 }
 
 function packageBound(row: EnrollmentEvidenceRow): boolean {
@@ -404,6 +372,14 @@ async function guardScormCommit(
   if (!row) return errorResponse(c, 404, 'LMS_ENROLLMENT_NOT_FOUND', 'Matrícula não encontrada.');
   const ownershipError = await enforceOwnership(c, row);
   if (ownershipError) return ownershipError;
+  // A cancelled enrollment cannot accept even passive terminal reports.
+  // Separating persistence from approval is never a permission to resurrect it.
+  if (String(row.status).toUpperCase() === 'CANCELADO') {
+    return decisionRejection(c, matriculaId, {
+      accepted: false, code: 'ENROLLMENT_INACTIVE',
+      scorePct: null, masteryScore: row.scorm_mastery_score, failurePrecedence: false,
+    });
+  }
   const edition = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
     activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
@@ -414,18 +390,86 @@ async function guardScormCommit(
     'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
     { matricula_id: matriculaId, edition_mismatch: edition });
   const assetSessionValid = await hasValidAssetSession(c, row);
-  if (incoming.commit_event === 'SCORM_USER_FINALIZE' &&
-      !hasCompleteScormSlideCoverage(
-        typeof incoming.cmi_json === 'string' ? incoming.cmi_json : null
-      )) {
+  // Passive terminal claims still require the same short-lived, tenant-bound
+  // asset capability as explicit finalization. Separating evidence collection
+  // from completion must never open an unauthenticated status-injection path.
+  if (!assetSessionValid) {
     return decisionRejection(c, matriculaId, {
-      accepted: false, code: 'PROGRESS_EVIDENCE_MISSING',
-      scorePct: null, masteryScore: null, failurePrecedence: false,
+      accepted: false, code: 'ASSET_SESSION_INVALID',
+      scorePct: null, masteryScore: row.scorm_mastery_score, failurePrecedence: false,
     });
   }
-  if (row.scorm_assessment_policy === 'FORMATIVE' &&
-      !failureSignal && !hasTerminalFormativeScormStatus(row, incoming)) {
-    return decisionRejection(c, matriculaId, formativeTerminalMissing());
+  // Player 2.0 separation of concerns: passive SCORM status/score reports
+  // must be *stored* as evidence, not prematurely evaluated as a learner's
+  // request to mint a qualification. Only the explicit USER_FINALIZE event
+  // may request the canonical closing transaction below. Rejected intermediate
+  // status commits used to strand learners at 99% with no persisted evidence.
+  if (incoming.commit_event !== 'SCORM_USER_FINALIZE') return null;
+
+  // Fewer learning-completion gates must never permit carrying a passed score
+  // across two different authored slide-count editions in a single commit.
+  // This checks package identity drift, NOT whether every page was visited.
+  const savedEditionLocation = extractScormLocationFromCmiJson(row.cmi_json);
+  const incomingEditionLocation = extractScormLocationFromCmiJson(
+    typeof incoming.cmi_json === 'string' ? incoming.cmi_json : null,
+  );
+  if (savedEditionLocation?.total != null && incomingEditionLocation?.total != null &&
+      savedEditionLocation.total !== incomingEditionLocation.total) {
+    return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
+      'Os registros de conteúdo pertencem a edições diferentes do treinamento.',
+      { matricula_id: matriculaId });
+  }
+
+  // Evaluate exactly the CMI that the canonical commit route will persist:
+  // previously observed slide coverage and the new authenticated autosave are
+  // merged for THIS enrollment after ownership, edition and asset-session
+  // checks. A final [3] delta cannot erase valid saved [1,2], and a bare
+  // 3/3 marker still cannot invent visits.
+  const cmiJson = mergeScormRuntimeState({
+    currentCmiJson: row.cmi_json,
+    incomingCmiJson: typeof incoming.cmi_json === 'string' ? incoming.cmi_json : null,
+    currentSuspendData: row.suspend_data,
+    incomingSuspendData: typeof incoming.suspend_data === 'string' ? incoming.suspend_data : null,
+  }).cmiJson;
+  const mergedScore = (key: 'score_raw' | 'score_min' | 'score_max' | 'score_scaled') =>
+    mergeMonotonicNumber(row[key],
+      typeof incoming[key] === 'number' ? incoming[key] as number : null);
+  const closure = evaluateScormClosureReadiness({
+    mode: 'commit',
+    commit: {
+      lesson_status: (incoming.lesson_status ?? row.lesson_status) as string | null,
+      completion_status: (incoming.completion_status ?? row.completion_status) as string | null,
+      success_status: (incoming.success_status ?? row.success_status) as string | null,
+      commit_event: 'SCORM_USER_FINALIZE',
+      completion_candidate: incoming.completion_candidate === true,
+      completion_observed_at: incoming.completion_observed_at as string | null,
+      cmi_json: cmiJson,
+    },
+    wasCompleted: row.status === 'CONCLUIDO',
+    cmiJson,
+    location: extractScormLocationFromCmiJson(cmiJson),
+    policy: row.scorm_assessment_policy,
+    masteryScore: row.scorm_mastery_score,
+    scorePct: scorePctFromValues(
+      mergedScore('score_raw'),
+      mergedScore('score_max'),
+      mergedScore('score_scaled'),
+      mergedScore('score_min'),
+    ),
+  });
+  if (!closure.eligible_for_server_verification) {
+    const code = closure.code === 'SCORM_ASSESSMENT_POLICY_INVALID'
+      ? 'MASTERY_SCORE_MISSING'
+      : closure.code === 'SCORM_USER_CONFIRMATION_REQUIRED' ||
+        closure.code === 'SCORM_ALREADY_COMPLETED'
+        ? 'COMPLETION_EVIDENCE_INSUFFICIENT'
+        : closure.code === 'SCORM_READY_FOR_SERVER_VERIFICATION'
+          ? 'COMPLETION_EVIDENCE_INSUFFICIENT'
+          : closure.code;
+    return decisionRejection(c, matriculaId, {
+      accepted: false, code,
+      scorePct: null, masteryScore: row.scorm_mastery_score, failurePrecedence: code === 'EXPLICIT_FAILURE',
+    });
   }
   const decision = buildDecision(row, 'scorm', incoming, assetSessionValid, {
     explicitCompletion:
@@ -507,33 +551,41 @@ async function guardManualFinalize(
     'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
     { matricula_id: matriculaId, edition_mismatch: edition });
   const assetSessionValid = await hasValidAssetSession(c, row);
-  if (row.scorm_assessment_policy === 'FORMATIVE' &&
-      row.tipo_conteudo === 'scorm' && !hasTerminalFormativeScormStatus(row, {})) {
-    return decisionRejection(c, matriculaId, formativeTerminalMissing());
+  const isScorm = normalizeStatus(row.tipo_conteudo) === 'scorm';
+  if (isScorm) {
+    const closure = evaluateScormClosureReadiness({
+      mode: 'reconcile',
+      commit: {
+        lesson_status: row.lesson_status,
+        completion_status: row.completion_status,
+        success_status: row.success_status,
+        cmi_json: row.cmi_json,
+      },
+      wasCompleted: false,
+      cmiJson: row.cmi_json,
+      location: extractScormLocationFromCmiJson(row.cmi_json),
+      policy: row.scorm_assessment_policy,
+      masteryScore: row.scorm_mastery_score,
+      scorePct: scorePctFromValues(row.score_raw, row.score_max, row.score_scaled, row.score_min),
+    });
+    if (!closure.eligible_for_server_verification) {
+      const code = closure.code === 'SCORM_ASSESSMENT_POLICY_INVALID'
+        ? 'MASTERY_SCORE_MISSING'
+        : closure.code === 'SCORM_USER_CONFIRMATION_REQUIRED' ||
+          closure.code === 'SCORM_ALREADY_COMPLETED'
+          ? 'COMPLETION_EVIDENCE_INSUFFICIENT'
+          : closure.code === 'SCORM_READY_FOR_SERVER_VERIFICATION'
+          ? 'COMPLETION_EVIDENCE_INSUFFICIENT'
+          : closure.code;
+      return decisionRejection(c, matriculaId, {
+        accepted: false, code,
+        scorePct: null, masteryScore: row.scorm_mastery_score, failurePrecedence: code === 'EXPLICIT_FAILURE',
+      });
+    }
   }
   const storedCompletion =
     ['completed', 'complete'].includes(normalizeStatus(row.completion_status)) ||
     Number(row.progresso_pct ?? 0) >= 100;
-  const isScorm = normalizeStatus(row.tipo_conteudo) === 'scorm';
-  if (isScorm) {
-    // A user-confirmed /finalizar call may reconcile an ALREADY persisted SCORM
-    // pass, but must not turn a progress percentage or final slide alone into
-    // a qualification. Every slide must have been recorded by this enrollment.
-    const terminal = scormStatusIndicatesCompletion({
-      lessonStatus: row.lesson_status,
-      completionStatus: row.completion_status,
-      successStatus: row.success_status,
-    });
-    if (!terminal || !hasCompleteScormSlideCoverage(row.cmi_json)) {
-      return decisionRejection(c, matriculaId, {
-        accepted: false,
-        code: terminal ? 'PROGRESS_EVIDENCE_MISSING' : 'COMPLETION_EVIDENCE_INSUFFICIENT',
-        scorePct: null,
-        masteryScore: row.scorm_mastery_score,
-        failurePrecedence: false,
-      });
-    }
-  }
   // Only persisted, complete SCORM runtime evidence is evaluated as SCORM.
   // Other manual finalizations remain in the non-SCORM, fail-closed policy.
   const decision = buildDecision(row, isScorm ? 'scorm' : 'manual', {}, assetSessionValid, {
@@ -577,9 +629,30 @@ async function guardAdministrativeStatus(
       cmiJson: row.cmi_json,
     suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
     });
-    if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
-      'A conclusão administrativa não pode usar evidências de outra edição.',
-      { matricula_id: matriculaId, edition_mismatch: edition });
+    if (edition) {
+      // Managerial attestation is historical training credit, NOT a SCORM pass
+      // for the new edition. Finite tenant-6 enrollment/course allowlist,
+      // admin RBAC, saved evidence, no previous qualification or explicit fail.
+      // The canonical PATCH route remains responsible for atomic qualification
+      // creation and recording its administrative override audit event.
+      const historicCredit = isEligibleForHistoricEditionCredit({
+        empresaId, matriculaId, cursoId: row.curso_id, isAdmin: hasRole(c, 'admin'),
+        reason: incoming.observacoes, status: row.status, progressoPct: row.progresso_pct,
+        qualificationId: row.qualificacao_historico_id,
+        isScorm: normalizeStatus(row.tipo_conteudo) === 'scorm',
+        currentCourseActive: row.ativo === 1 && row.publicado === 1,
+        hasScormEvidence: hasStoredRuntimeEvidence(row),
+        lessonStatus: row.lesson_status, successStatus: row.success_status,
+      });
+      if (!historicCredit) {
+        return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
+          'A conclusão administrativa não pode usar evidências de outra edição.',
+          { matricula_id: matriculaId, edition_mismatch: edition });
+      }
+      // Edition mismatch is the only waived condition. Continue through the
+      // canonical administrative decision below: score/mastery, failure
+      // precedence, authorization and content evidence MUST still pass.
+    }
   }
 
   const administrativeAuthorized =

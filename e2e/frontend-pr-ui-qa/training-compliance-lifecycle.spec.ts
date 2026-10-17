@@ -84,22 +84,34 @@ async function completeViaXapi(page: Page, matriculaId: number, suffix: string) 
   expect(session.ok, JSON.stringify(session.json)).toBe(true);
   expect(session.json.data).toMatchObject({ active: true, matriculaId });
 
+  const terminalStatement = {
+    matricula_id: matriculaId,
+    actor: { name: `QA lifecycle ${CODE}` },
+    verb: {
+      id: 'http://adlnet.gov/expapi/verbs/completed',
+      display: { 'pt-BR': 'concluiu' },
+    },
+    object: { id: `urn:airtrust:qa:${CODE}:${suffix}`, objectType: 'Activity' },
+    result: {
+      success: true,
+      completion: true,
+      score: { raw: 85, max: 100, min: 0, scaled: 0.85 },
+    },
+  };
+  // A passive terminal signal must NOT mint a qualification: the learner's
+  // explicit confirmation from the H5P "Concluir curso" dialog is mandatory.
+  // Unit tests separately click that dialog; this isolated lifecycle fixture
+  // exercises the same authenticated command payload and its rejection gate.
+  const passive = await api(page, '/api/lms/xapi/statements', {
+    method: 'POST',
+    body: terminalStatement,
+  });
+  expect(passive.status).toBe(409);
+  expect(passive.json).toMatchObject({ code: 'USER_COMPLETION_REQUIRED' });
+
   return api(page, '/api/lms/xapi/statements', {
     method: 'POST',
-    body: {
-      matricula_id: matriculaId,
-      actor: { name: `QA lifecycle ${CODE}` },
-      verb: {
-        id: 'http://adlnet.gov/expapi/verbs/completed',
-        display: { 'pt-BR': 'concluiu' },
-      },
-      object: { id: `urn:airtrust:qa:${CODE}:${suffix}`, objectType: 'Activity' },
-      result: {
-        success: true,
-        completion: true,
-        score: { raw: 85, max: 100, min: 0, scaled: 0.85 },
-      },
-    },
+    body: { ...terminalStatement, completion_intent: 'USER_CONFIRMED' },
   });
 }
 
@@ -279,33 +291,32 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   });
   expect(invalidPair.status).toBe(400);
 
-  // 3) Reconciliation finds both mandatory gaps and bulk-enrolls them only on explicit click.
+  // 3) A mandatory role rule automatically creates the two LMS enrollments without e-mail.
+  // No explicit "Matricular gaps" click is required after the matrix rule is saved.
   await page.getByRole('button', { name: 'Matrículas', exact: true }).click();
-  let recon = await reconciliation(page, sector.id, fn.id);
-  let gap = recon.gaps_matricula.find((item: any) => item.qualificacao_tipo_codigo === requiredTypeCode);
-  expect(gap).toBeTruthy();
-  expect(gap.pessoas).toBe(2);
-  expect(gap.nunca_realizados).toBe(2);
-  expect(gap.cursos_ead).toHaveLength(1);
-  const requiredCourseId = Number(gap.cursos_ead[0].id);
+  const courseList = await api(page, `/api/lms/cursos?q=${encodeURIComponent(requiredCourseTitle)}&limit=20`);
+  expect(courseList.ok, JSON.stringify(courseList.json)).toBe(true);
+  const matchingCourses = courseList.json.data.filter((row: any) => row.titulo === requiredCourseTitle);
+  expect(matchingCourses).toHaveLength(1);
+  const requiredCourseId = Number(matchingCourses[0].id);
 
-  const gapRow = page.locator('tbody tr').filter({ hasText: requiredTypeCode }).first();
-  await expect(gapRow).toBeVisible();
-  const enrollResponseP = waitResponse(page, '/api/lms/matriculas/lote', 'POST');
-  await gapRow.getByRole('button', { name: 'Matricular gaps (sem e-mail)' }).click();
-  const enrollResponse = await enrollResponseP;
-  expect(enrollResponse.ok()).toBe(true);
-  const enrollPayload = await enrollResponse.json();
-  expect(enrollPayload.data).toMatchObject({ criadas: 2, ignoradas: 0, erros: 0 });
-  expect(enrollResponse.request().postDataJSON()).toMatchObject({
-    funcionario_ids: expect.arrayContaining(employeeIds),
-    curso_id: requiredCourseId,
-    enviar_convite_email: false,
-  });
   await expect.poll(async () => {
-    const current = await reconciliation(page, sector.id, fn.id);
-    return current.gaps_matricula.some((item: any) => item.qualificacao_tipo_codigo === requiredTypeCode);
-  }).toBe(false);
+    const response = await api(page, `/api/lms/matriculas/curso/${requiredCourseId}?limit=20`);
+    if (!response.ok) return -1;
+    return response.json.data.filter((row: any) => employeeIds.includes(Number(row.funcionario_id))).length;
+  }, { timeout: 15_000 }).toBe(2);
+  const enrolledAutomatically = await api(page, `/api/lms/matriculas/curso/${requiredCourseId}?limit=20`);
+  expect(enrolledAutomatically.ok).toBe(true);
+  const automaticRows = enrolledAutomatically.json.data.filter((row: any) =>
+    employeeIds.includes(Number(row.funcionario_id)),
+  );
+  expect(automaticRows).toHaveLength(2);
+  for (const row of automaticRows) {
+    expect(String(row.observacoes || '')).toContain('sem e-mail');
+    expect(row.status).toBe('NAO_INICIADO');
+  }
+  let recon = await reconciliation(page, sector.id, fn.id);
+  expect(recon.gaps_matricula.some((item: any) => item.qualificacao_tipo_codigo === requiredTypeCode)).toBe(false);
 
   // Invitation is a separate explicit step. Synthetic employees have no e-mail, so no external mail is emitted.
   await page.getByRole('button', { name: /Convites/ }).click();
@@ -408,11 +419,15 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   await changeMatrixRule(page, requiredTypeCode, 'NAO_APLICA', 'POST');
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).requisitos_obrigatorios).toBe(0);
   recon = await reconciliation(page, sector.id, fn.id);
+  // A completed enrollment is historical qualification evidence, not an
+  // actionable N/A enrollment to review or cancel. The roster intentionally
+  // omits completed cycles; restoring inheritance below proves evidence remains.
   expect(
     recon.matriculas_revisao.filter(
-      (row: any) => row.qualificacao_tipo_codigo === requiredTypeCode && row.situacao === 'NAO_APLICA_MATRICULADO',
+      (row: any) => row.qualificacao_tipo_codigo === requiredTypeCode,
     ),
-  ).toHaveLength(2);
+  ).toHaveLength(0);
+  expect(recon.resumo.nao_aplica_matriculados).toBe(0);
   await changeMatrixRule(page, requiredTypeCode, 'HERDAR', 'DELETE');
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).compliance_pct).toBe(100);
 
@@ -468,25 +483,29 @@ test('full training compliance lifecycle recalculates organization, enrollments 
     const current = await reconciliation(page, sector.id, fn.id);
     return current.matriculas_revisao.some((row: any) => row.qualificacao_tipo_codigo === orphanTypeCode);
   }).toBe(false);
-  recon = await reconciliation(page, sector.id, fn.id);
-  gap = recon.gaps_matricula.find((item: any) => item.qualificacao_tipo_codigo === orphanTypeCode);
-  expect(gap).toBeTruthy();
-  expect(gap.pessoas).toBe(1);
-  expect(gap.funcionarios[0].nome).toBe(employee2Name);
-  expect(gap.cursos_ead).toHaveLength(1);
-
-  // Enroll the newly exposed peer gap. Historical enrollment is preserved and not duplicated.
-  await page.getByRole('button', { name: /A matricular/ }).click();
-  const orphanGapRow = page.locator('tbody tr').filter({ hasText: orphanTypeCode }).first();
-  const enrollPeerP = waitResponse(page, '/api/lms/matriculas/lote', 'POST');
-  await orphanGapRow.getByRole('button', { name: 'Matricular gaps (sem e-mail)' }).click();
-  const enrollPeer = await enrollPeerP;
-  expect(enrollPeer.ok()).toBe(true);
-  expect((await enrollPeer.json()).data).toMatchObject({ criadas: 1, ignoradas: 0, erros: 0 });
+  // The Setor+Cargo designation enrolls the previously missing peer automatically,
+  // while preserving the existing historical/standalone enrollment record.
+  const orphanCatalog = await api(page, `/api/lms/cursos?q=${encodeURIComponent(orphanCourseTitle)}&limit=20`);
+  expect(orphanCatalog.ok).toBe(true);
+  const orphanCourses = orphanCatalog.json.data.filter((row: any) => row.titulo === orphanCourseTitle);
+  expect(orphanCourses).toHaveLength(1);
+  const orphanCourseId = Number(orphanCourses[0].id);
   await expect.poll(async () => {
-    const current = await reconciliation(page, sector.id, fn.id);
-    return current.gaps_matricula.some((item: any) => item.qualificacao_tipo_codigo === orphanTypeCode);
-  }).toBe(false);
+    const response = await api(page, `/api/lms/matriculas/curso/${orphanCourseId}?limit=20`);
+    if (!response.ok) return -1;
+    return response.json.data.filter((row: any) => employeeIds.includes(Number(row.funcionario_id))).length;
+  }, { timeout: 15_000 }).toBe(2);
+  const peerEnrollments = await api(page, `/api/lms/matriculas/curso/${orphanCourseId}?limit=20`);
+  expect(peerEnrollments.ok).toBe(true);
+  const peerRows = peerEnrollments.json.data.filter((row: any) =>
+    employeeIds.includes(Number(row.funcionario_id)),
+  );
+  expect(peerRows.filter((row: any) => Number(row.id) === Number(orphanReview.matricula_id))).toHaveLength(1);
+  const newPeer = peerRows.find((row: any) => Number(row.funcionario_id) === employeeIds[1]);
+  expect(newPeer).toBeTruthy();
+  expect(String(newPeer.observacoes || '')).toContain('sem e-mail');
+  recon = await reconciliation(page, sector.id, fn.id);
+  expect(recon.gaps_matricula.some((item: any) => item.qualificacao_tipo_codigo === orphanTypeCode)).toBe(false);
 
   const finalRecon = await reconciliation(page, sector.id, fn.id);
   expect(finalRecon.resumo.gaps_matricula_acionaveis).toBe(0);

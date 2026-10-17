@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 
 export type FrmsOperationalSnapshotAlertCode =
@@ -100,6 +100,8 @@ export interface FrmsOperationalSnapshotItem {
   aeronave: string | null;
 
   escalado: boolean;
+  /** Escala vigente confirmou presenca na quinzena, ainda que faltasse fatorizacao. */
+  na_quinzena_ativa?: boolean;
   /** Indica se existe operação ou declaração de atividade que exige decisão no dia. */
   operacao_requer_decisao?: boolean;
   escala_source: 'SIGVOOS' | 'MANUAL' | 'EVD' | 'AUSENTE';
@@ -120,6 +122,8 @@ export interface FrmsOperationalSnapshotItem {
 
   checkin_status: 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
   checkin_horario: string | null;
+  /** Instante UTC de envio; hora_checkin legada permanece para compatibilidade. */
+  checkin_submitted_at?: string | null;
   kss_score: number | null;
   horas_sono: number | null;
   qualidade_sono: number | null;
@@ -259,9 +263,17 @@ export function useFrmsOperationalSnapshot(
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [dataKey, setDataKey] = useState<string | null>(null);
+  const [errorKey, setErrorKey] = useState<string | null>(null);
+  const activeRequest = useRef(0);
   const enabled = options.enabled ?? true;
+  // This URL identifies the entire operational recorte. A previous date,
+  // person or filter must never be displayed under the current selection.
+  const requestKey = enabled ? buildSnapshotUrl(filters) : null;
 
   const fetchSnapshot = useCallback(async () => {
+    const requestId = ++activeRequest.current;
+    const fetchingKey = requestKey;
     if (!enabled) {
       setData([]);
       setSummary(EMPTY_SUMMARY);
@@ -270,25 +282,36 @@ export function useFrmsOperationalSnapshot(
       setError(null);
       setUnauthorized(false);
       setLastUpdatedAt(null);
+      setDataKey(null);
+      setErrorKey(null);
       return;
     }
 
     setLoading(true);
     setError(null);
+    setErrorKey(null);
     setUnauthorized(false);
 
     try {
-      const response = await fetchWithAuth(buildSnapshotUrl(filters), {
+      const response = await fetchWithAuth(fetchingKey!, {
         method: 'GET',
         cache: 'no-store',
       });
 
       const payload = (await response.json()) as SnapshotApiResponse;
+      // A slower response for an earlier filter must not overwrite this one.
+      if (requestId !== activeRequest.current) return;
 
       if (!response.ok || !payload?.success) {
         const errorMessage = payload?.error || `Erro ao carregar snapshot (HTTP ${response.status})`;
         if (response.status === 401 || response.status === 403) {
           setUnauthorized(true);
+          // Authorization loss invalidates even same-filter cached evidence.
+          setData([]);
+          setSummary(EMPTY_SUMMARY);
+          setMeta(null);
+          setLastUpdatedAt(null);
+          setDataKey(null);
         }
         throw new Error(errorMessage);
       }
@@ -302,7 +325,9 @@ export function useFrmsOperationalSnapshot(
       });
       setMeta(finalPayload.meta || null);
       setLastUpdatedAt(new Date().toISOString());
+      setDataKey(fetchingKey);
     } catch (err) {
+      if (requestId !== activeRequest.current) return;
       const message = err instanceof Error ? err.message : 'Erro ao carregar snapshot operacional';
       if (
         /session expired|auth|unauthorized|token|sessão expirada/i.test(message) ||
@@ -313,32 +338,26 @@ export function useFrmsOperationalSnapshot(
       // Preserve the last valid snapshot. Operational users must never see a
       // previous valid state disappear merely because the refresh request failed.
       setError(message);
+      setErrorKey(fetchingKey);
     } finally {
-      setLoading(false);
+      if (requestId === activeRequest.current) setLoading(false);
     }
-  }, [
-    filters.aeronave,
-    filters.base,
-    filters.data_fim,
-    filters.data_inicio,
-    enabled,
-    filters.funcionario_id,
-    filters.include_inconsistencies,
-    filters.status,
-  ]);
+  }, [enabled, requestKey]);
 
   useEffect(() => {
     void fetchSnapshot();
   }, [fetchSnapshot]);
 
+  const hasCurrentData = enabled && dataKey === requestKey;
+  const hasCurrentError = enabled && errorKey === requestKey;
   return {
-    data,
-    summary,
-    meta,
-    loading,
-    error,
-    unauthorized,
-    lastUpdatedAt,
+    data: hasCurrentData ? data : [],
+    summary: hasCurrentData ? summary : EMPTY_SUMMARY,
+    meta: hasCurrentData ? meta : null,
+    loading: enabled && (loading || (!hasCurrentData && !hasCurrentError)),
+    error: hasCurrentError ? error : null,
+    unauthorized: hasCurrentError ? unauthorized : false,
+    lastUpdatedAt: hasCurrentData ? lastUpdatedAt : null,
     refetch: fetchSnapshot,
   };
 }

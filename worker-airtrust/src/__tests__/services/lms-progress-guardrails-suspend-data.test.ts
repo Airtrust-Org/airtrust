@@ -71,6 +71,68 @@ describe('mergeScormRuntimeState — never overwrite terminal evidence on SCORM 
     expect(result.location?.current).toBe(53);
   });
 
+  it('recovers missing observed slides after a terminal SCO reopens as incomplete', () => {
+    const old = {
+      'cmi.core.lesson_status': 'passed',
+      'cmi.core.score.raw': '100',
+      'cmi.core.lesson_location': '4/4',
+      'airtrust.total_slides': 4,
+      'airtrust.viewed_slides': [1, 4],
+    };
+    const resumed = {
+      'cmi.core.lesson_status': 'incomplete',
+      'cmi.core.score.raw': '0',
+      'cmi.core.lesson_location': '3/4',
+      'airtrust.total_slides': 4,
+      'airtrust.viewed_slides': [2, 3],
+    };
+    const result = mergeScormRuntimeState({
+      currentCmiJson: JSON.stringify(old), incomingCmiJson: JSON.stringify(resumed),
+    });
+    const merged = JSON.parse(result.cmiJson!);
+    expect(result.decisions.blockedTerminalRegression).toBe(true);
+    expect(merged['cmi.core.lesson_status']).toBe('passed');
+    expect(merged['cmi.core.score.raw']).toBe('100');
+    expect(merged['cmi.core.lesson_location']).toBe('4/4');
+    expect(merged['airtrust.viewed_slides']).toEqual([1, 2, 3, 4]);
+  });
+
+  it('preserves new visits when an old terminal CMI lacked the visit map', () => {
+    const result = mergeScormRuntimeState({
+      currentCmiJson: JSON.stringify({
+        'cmi.core.lesson_status': 'passed', 'cmi.core.lesson_location': '4/4',
+      }),
+      incomingCmiJson: JSON.stringify({
+        'cmi.core.lesson_status': 'incomplete', 'cmi.core.lesson_location': '2/4',
+        'airtrust.total_slides': 4, 'airtrust.viewed_slides': [2],
+      }),
+    });
+    const merged = JSON.parse(result.cmiJson!);
+    expect(merged['cmi.core.lesson_status']).toBe('passed');
+    expect(merged['airtrust.viewed_slides']).toEqual([2]);
+  });
+
+  it('does not launder mismatched slide totals or fabricated invalid arrays', () => {
+    for (const bad of [
+      { 'airtrust.total_slides': 5, 'airtrust.viewed_slides': [2] },
+      { 'airtrust.total_slides': 4, 'airtrust.viewed_slides': [2, 2] },
+      { 'airtrust.total_slides': 4, 'airtrust.viewed_slides': [0, 2] },
+    ]) {
+      const result = mergeScormRuntimeState({
+        currentCmiJson: JSON.stringify({
+          'cmi.core.lesson_status': 'passed', 'cmi.core.lesson_location': '4/4',
+          'airtrust.total_slides': 4, 'airtrust.viewed_slides': [1, 4],
+        }),
+        incomingCmiJson: JSON.stringify({
+          'cmi.core.lesson_status': 'incomplete', 'cmi.core.lesson_location': '2/4',
+          ...bad,
+        }),
+      });
+      const merged = JSON.parse(result.cmiJson!);
+      expect(merged['airtrust.viewed_slides']).toEqual([1, 4]);
+    }
+  });
+
   it('retains ordinary incomplete-course progress updates', () => {
     const result = mergeScormRuntimeState({
       currentCmiJson: JSON.stringify({

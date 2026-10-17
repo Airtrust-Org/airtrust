@@ -45,7 +45,6 @@ import {
   lmsKeys,
   type LmsCurso,
   type LmsMatricula,
-  type MatriculaStatus,
   type TipoConteudo,
   useLmsCurso,
   useCreateCurso,
@@ -83,6 +82,12 @@ import {
   getAdminCoursePreviewPath,
   supportsAdminCoursePreview as supportsContentPreview,
 } from './lmsAdminPreview';
+import { shouldShowLmsEnrollmentDeadline } from './lmsEnrollmentDeadline';
+import {
+  LmsCourseMandatoryPill,
+  useLmsCourseCompliance,
+  type ComplianceRow,
+} from './LmsCourseComplianceMetrics';
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
@@ -382,7 +387,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays < 0) {
     return {
-      label: `Vencido há ${Math.abs(diffDays)}d`,
+      label: `Prazo da matrícula vencido há ${Math.abs(diffDays)}d`,
       className: 'border-rose-200 bg-rose-50 text-rose-700',
       pulseClassName: '',
       icon: <AlertCircle className="h-3 w-3" />,
@@ -391,7 +396,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays <= 7) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'border-orange-200 bg-orange-50 text-orange-700',
       pulseClassName: 'animate-pulse',
       icon: <Clock className="h-3 w-3" />,
@@ -400,7 +405,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays <= 30) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'border-amber-200 bg-amber-50 text-amber-700',
       pulseClassName: '',
       icon: <Clock className="h-3 w-3" />,
@@ -408,7 +413,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
   }
 
   return {
-    label: `Vence em ${diffDays}d`,
+    label: `Prazo da matrícula: ${diffDays}d restantes`,
     className: 'border-slate-200 bg-slate-50 text-slate-600',
     pulseClassName: '',
     icon: <Clock className="h-3 w-3" />,
@@ -1411,6 +1416,7 @@ function CourseCardSkeleton() {
 function CourseCard({
   curso,
   matricula,
+  complianceRows,
   canManage,
   canUpdateCourse,
   canDeleteCourse,
@@ -1426,6 +1432,7 @@ function CourseCard({
 }: {
   curso: LmsCurso;
   matricula?: LmsMatricula;
+  complianceRows?: ComplianceRow[];
   canManage: boolean;
   canUpdateCourse: boolean;
   canDeleteCourse: boolean;
@@ -1443,7 +1450,9 @@ function CourseCard({
   const typeMeta = getTypeMeta(curso.tipo_conteudo);
   const previewPath = canManage ? getAdminCoursePreviewPath(curso) : null;
   const enrollmentProgress = getEnrollmentProgress(matricula);
-  const deadlineMeta = !canManage ? getEnrollmentDeadlineMeta(matricula?.data_expiracao) : null;
+  const deadlineMeta = !canManage && shouldShowLmsEnrollmentDeadline(matricula?.status, matricula?.data_expiracao)
+    ? getEnrollmentDeadlineMeta(matricula?.data_expiracao)
+    : null;
   const statusMeta = canManage
     ? getMatriculaStatusMeta(curso.publicado ? 'PUBLICADO' : 'RASCUNHO')
     : !matricula || matricula.status === 'CANCELADO'
@@ -1556,6 +1565,7 @@ function CourseCard({
           ) : null}
           {canManage ? (
             <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+              <LmsCourseMandatoryPill curso={curso} rows={complianceRows} />
               <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {curso.total_matriculas ?? 0} matrícula(s)
               </span>
@@ -1697,6 +1707,8 @@ export default function LmsCatalogo() {
   // fluxo de aluno (iniciar/continuar/concluir), mantendo a gestão na aba "Catálogo".
   const gestorStudentMode = isGestor && tab === 'meus';
   const studentMode = restrictToEnrolledCourses || gestorStudentMode;
+  // Reuse the canonical training-compliance query once for the whole admin catalog.
+  const { data: complianceRows } = useLmsCourseCompliance(canManage && !studentMode);
   const [search, setSearch] = useState('');
   const [areaFilter, setAreaFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<TipoConteudo[]>([]);
@@ -2024,6 +2036,12 @@ export default function LmsCatalogo() {
 
   const managementActions = (
     <>
+      {window.location.hostname === 'staging.airtrust.pages.dev' && (
+        <Link to="/lms/native/revisao"
+          className="inline-flex min-h-10 items-center rounded-lg border border-[#dfb58a] bg-[#fff4e8] px-3 text-sm font-bold text-[#9c490f] hover:bg-[#ffe3c8]">
+          Homologar Native (9 cursos)
+        </Link>
+      )}
       <Button
         variant="secondary"
         onClick={() =>
@@ -2256,6 +2274,7 @@ export default function LmsCatalogo() {
                         key={curso.id}
                         curso={curso}
                         matricula={matriculasByCurso.get(curso.id)}
+                        complianceRows={courseManagementEnabled ? complianceRows : undefined}
                         canManage={courseManagementEnabled}
                         canUpdateCourse={canUpdateCourse}
                         canDeleteCourse={canDeleteCourse}

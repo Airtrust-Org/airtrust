@@ -248,6 +248,7 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
   qualificationExpr?: string;
   empresaExpr?: string;
   requireAutoEnrollment?: boolean;
+  includeNonTrainingCategories?: boolean;
 }): string {
   const tr = options?.ruleAlias || 'tr';
   const f = options?.employeeAlias || 'f';
@@ -256,6 +257,9 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
   const auto = options?.requireAutoEnrollment
     ? ` AND COALESCE(${tr}.auto_matricular_ead, 0) = 1`
     : '';
+  const categoryFilter = options?.includeNonTrainingCategories
+    ? ''
+    : ` AND ${trainingComplianceEligibleCategorySql('qt.categoria')}`;
   // Manter a régua de notificações coerente com resolveTrainingComplianceRules.
   // Evidência antiga não é convertida entre D1 e AVSEC_CONSC.
   const special = 'tr_avsec_special';
@@ -296,7 +300,7 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
     FROM treinamento_requisitos ${tr}
    WHERE ${tr}.empresa_id=${empresa} AND ${tr}.qualificacao_tipo_id=${qualification}
      AND ${tr}.ativo=1 AND ${tr}.deleted_at IS NULL
-      AND ${trainingComplianceEligibleCategorySql('qt.categoria')}
+      ${categoryFilter}
      AND ${corporateNotSuperseded}
      AND (${tr}.vigencia_inicio IS NULL OR date(${tr}.vigencia_inicio)<=date('now'))
      AND (${tr}.vigencia_fim IS NULL OR date(${tr}.vigencia_fim)>=date('now'))

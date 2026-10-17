@@ -1,4 +1,4 @@
-# Schema V2 0550 — Retire empty LGPD placeholder model
+# Schema V2 0553 — Retire empty LGPD placeholder model
 
 ## Scope
 

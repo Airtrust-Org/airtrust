@@ -341,6 +341,55 @@ function isRegressiveScormLocation(
   return true;
 }
 
+/**
+ * Resume/SCORM autosave may send a delta CMI snapshot without the old slide
+ * array. Only union slide IDs *actually reported* by the package for the same
+ * declared total. Never infer visited pages from location (3/3 is not proof
+ * of 1/3 or 2/3), and never carry coverage between different slide totals.
+ * Enrollment, tenant and edition checks are enforced by the calling route.
+ */
+/**
+ * Merge ONLY visits actually reported by a wrapper in the same slide-total
+ * lineage, even when a reopened SCO downgrades its lesson status.
+ * The terminal status/score/suspend_data remain protected separately.
+ * A last-page bookmark alone never becomes evidence for prior visits.
+ */
+function preserveObservedScormSlides(
+  previous: Record<string, unknown> | null,
+  incoming: Record<string, unknown> | null,
+  merged: Record<string, unknown> | null,
+): void {
+  if (!previous || !incoming || !merged) return;
+  const previousMarker = parseScormLocationMarker(readScormLocationValue(previous));
+  const incomingMarker = parseScormLocationMarker(readScormLocationValue(incoming));
+  const oldDeclared = previous['airtrust.total_slides'];
+  const newDeclared = incoming['airtrust.total_slides'];
+  const oldTotal = oldDeclared == null ? previousMarker?.total : oldDeclared;
+  const newTotal = newDeclared == null ? incomingMarker?.total : newDeclared;
+  if (typeof oldTotal !== 'number' || !Number.isSafeInteger(oldTotal) ||
+    oldTotal < 1 || oldTotal > 1000 || newTotal !== oldTotal) return;
+  if (previousMarker?.total != null && previousMarker.total !== oldTotal) return;
+  if (incomingMarker?.total != null && incomingMarker.total !== oldTotal) return;
+
+  const oldSlides = previous['airtrust.viewed_slides'];
+  const newSlides = incoming['airtrust.viewed_slides'];
+  if (oldSlides == null && newSlides == null) return;
+  if (oldSlides != null && !Array.isArray(oldSlides)) return;
+  if (newSlides != null && !Array.isArray(newSlides)) return;
+  const valid = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) &&
+    value >= 1 && value <= oldTotal;
+  const oldList = (oldSlides ?? []) as unknown[];
+  const newList = (newSlides ?? []) as unknown[];
+  if (!oldList.every(valid) || !newList.every(valid) ||
+    new Set(oldList).size !== oldList.length ||
+    new Set(newList).size !== newList.length) return;
+
+  merged['airtrust.total_slides'] = oldTotal;
+  merged['airtrust.viewed_slides'] =
+    [...new Set([...oldList, ...newList])].sort((x, y) => (x as number) - (y as number));
+}
+
 export function mergeScormRuntimeState(params: {
   currentCmiJson?: Nullable<string>;
   incomingCmiJson?: Nullable<string>;
@@ -402,6 +451,9 @@ export function mergeScormRuntimeState(params: {
     return incomingSuspendData ?? currentSuspendData ?? null;
   })();
 
+  // Even a reopened, regressive SCO may report newly visited missing slides.
+  // Preserve only the visit union, NEVER its downgraded status or score.
+  preserveObservedScormSlides(currentCmi, incomingCmi, mergedCmi);
   if (mergedCmi && mergedLocationValue) {
     writeScormLocationValue(mergedCmi, mergedLocationValue);
   }

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrmsAlertasPainel from '../FrmsAlertasPainel';
 import type { FrmsAlertaRow } from '@/react-app/hooks/useFrms';
 
-const useFrmsAlertasMock = vi.fn();
+const useFrmsAlertasPageMock = vi.fn();
 const mutateMock = vi.fn();
 const refetchMock = vi.fn();
 
@@ -21,7 +21,7 @@ vi.mock('@/react-app/hooks/useFrms', async () => {
   const actual = await vi.importActual<typeof import('@/react-app/hooks/useFrms')>('@/react-app/hooks/useFrms');
   return {
     ...actual,
-    useFrmsAlertas: (...args: unknown[]) => useFrmsAlertasMock(...args),
+    useFrmsAlertasPage: (...args: unknown[]) => useFrmsAlertasPageMock(...args),
     useFrmsMutation: () => ({ mutate: mutateMock }),
   };
 });
@@ -52,9 +52,9 @@ function caseRow(overrides: Partial<FrmsAlertaRow> = {}): FrmsAlertaRow {
   };
 }
 
-function mockCases(data: FrmsAlertaRow[]) {
-  useFrmsAlertasMock.mockReturnValue({
-    data,
+function mockCases(data: FrmsAlertaRow[], total = data.length) {
+  useFrmsAlertasPageMock.mockReturnValue({
+    data: { success: true, data, total },
     loading: false,
     error: null,
     refetch: refetchMock,
@@ -71,12 +71,33 @@ function renderPage(path = '/frms/alertas') {
 
 describe('FrmsAlertasPainel', () => {
   beforeEach(() => {
-    useFrmsAlertasMock.mockReset();
+    useFrmsAlertasPageMock.mockReset();
     mutateMock.mockReset();
     refetchMock.mockReset();
     mutateMock.mockResolvedValue({});
     refetchMock.mockResolvedValue(undefined);
     mockCases([caseRow()]);
+  });
+
+  it('agrupa os casos apenas na página atual sem inferir recorrência global', () => {
+    mockCases([
+      caseRow({ id: 'a', tripulante_id: '30', nome_tripulante: 'Ana', data_fato: '2026-08-26' }),
+      caseRow({ id: 'b', tripulante_id: '30', nome_tripulante: 'Ana', data_fato: '2026-08-27' }),
+      caseRow({ id: 'c', tripulante_id: '31', nome_tripulante: 'Bia', data_fato: '2026-08-25' }),
+    ]);
+    renderPage();
+    expect(screen.getAllByText(/2 casos desta pessoa nesta página/i)).toHaveLength(2);
+    expect(screen.getByText(/O total filtrado do servidor também abrange todas as páginas/i)).toBeInTheDocument();
+    const groupButton = screen.getByRole('button', { name: 'Agrupar por pessoa nesta página' });
+    fireEvent.click(groupButton);
+    expect(screen.getByRole('button', { name: 'Agrupado por pessoa nesta página' })).toHaveAttribute('aria-pressed', 'true');
+    expect(mutateMock).not.toHaveBeenCalled();
+  });
+
+  it('mostra recorrência agregada entre páginas sem extrapolar o filtro atual', () => {
+    mockCases([caseRow({ id: 'a', recorrencias_no_filtro: 5 })], 5);
+    renderPage();
+    expect(screen.getByText(/5 casos desta pessoa nos filtros atuais, incluindo outras páginas/i)).toBeInTheDocument();
   });
 
   it('usa a mesma linguagem operacional da fila sem alterar os níveis persistidos', () => {
@@ -87,15 +108,12 @@ describe('FrmsAlertasPainel', () => {
     expect(screen.queryByText('CRÍTICO')).not.toBeInTheDocument();
   });
 
-  it('exige governança completa antes de resolver um caso', async () => {
+  it('registra medida e mantém caso aberto até avaliação de eficácia', async () => {
     renderPage();
-
     fireEvent.click(screen.getByRole('button', { name: 'Registrar tratamento' }));
-
-    const confirmButton = screen.getByRole('button', { name: 'Confirmar e resolver' });
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(confirmButton).toBeDisabled();
-    expect(mutateMock).not.toHaveBeenCalled();
+    const confirm = screen.getByRole('button', { name: 'Registrar sem encerrar' });
+    expect(confirm).toBeDisabled();
+    expect(screen.queryByLabelText('Avaliação de eficácia')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Responsável pelo tratamento'), {
       target: { value: 'Coordenação de Operações' },
@@ -103,37 +121,61 @@ describe('FrmsAlertasPainel', () => {
     fireEvent.change(screen.getByLabelText('Prazo'), {
       target: { value: '2026-09-30' },
     });
-    fireEvent.change(screen.getByLabelText('Mitigação aplicada'), {
-      target: { value: 'Tripulante substituído e jornada reconfirmada pela coordenação.' },
+    fireEvent.change(screen.getByLabelText('Medida de mitigação'), {
+      target: { value: 'Reprogramar tripulante e confirmar intervalo de repouso.' },
     });
     fireEvent.change(screen.getByLabelText('Justificativa da decisão'), {
-      target: { value: 'A jornada foi replanejada e os limites foram novamente verificados.' },
+      target: { value: 'A operação ainda depende da mitigação e revisão da escala.' },
     });
-    fireEvent.change(screen.getByLabelText('Evidência ou referência'), {
-      target: { value: 'FRAT-2026-091' },
-    });
-    fireEvent.change(screen.getByLabelText('Avaliação de eficácia'), {
-      target: { value: 'A nova tripulação operou dentro dos limites e sem novo alerta.' },
-    });
-    expect(confirmButton).toBeEnabled();
-
-    fireEvent.click(confirmButton);
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
 
     await waitFor(() => {
-      expect(mutateMock).toHaveBeenCalledWith('/api/frms/alertas/case-1/resolver', {
+      expect(mutateMock).toHaveBeenCalledWith('/api/frms/alertas/case-1/tratamento', {
         method: 'PUT',
         body: JSON.stringify({
-          responsavel: 'Coordenação de Operações',
-          prazo: '2026-09-30',
-          acao_mitigacao: 'Tripulante substituído e jornada reconfirmada pela coordenação.',
-          justificativa: 'A jornada foi replanejada e os limites foram novamente verificados.',
-          evidencia_referencia: 'FRAT-2026-091',
-          avaliacao_eficacia: 'A nova tripulação operou dentro dos limites e sem novo alerta.',
+          responsavel: 'Coordenação de Operações', prazo: '2026-09-30',
+          acao_mitigacao: 'Reprogramar tripulante e confirmar intervalo de repouso.',
+          justificativa: 'A operação ainda depende da mitigação e revisão da escala.',
+          evidencia_referencia: null,
         }),
       });
     });
     expect(refetchMock).toHaveBeenCalled();
   });
+
+  it('exige registro prévio de tratamento e eficácia para encerrar', async () => {
+    mockCases([caseRow({
+      notas_resolucao: JSON.stringify({
+        schema: 'FRMS_CASE_TREATMENT_V1',
+        responsavel: 'Coordenação de Operações',
+        prazo: '2099-09-30',
+        acao_mitigacao: 'Reprogramar tripulante e confirmar intervalo de repouso.',
+        justificativa: 'A operação depende de nova avaliação do risco.',
+        evidencia_referencia: 'FRAT-2026-091',
+      }),
+    })]);
+    renderPage();
+    expect(screen.getByText(/Tratamento em andamento — caso ainda aberto/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar eficácia e encerrar' }));
+    const confirm = screen.getByRole('button', { name: 'Confirmar e resolver' });
+    expect(confirm).toBeDisabled();
+    expect(screen.getByLabelText('Responsável pelo tratamento')).toHaveAttribute('readonly');
+    fireEvent.change(screen.getByLabelText('Avaliação de eficácia'), {
+      target: { value: 'Escala revisada e risco recalculado, sem pendências remanescentes.' },
+    });
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+    await waitFor(() => {
+      expect(mutateMock).toHaveBeenCalledWith('/api/frms/alertas/case-1/resolver', {
+        method: 'PUT',
+        body: JSON.stringify({
+          avaliacao_eficacia: 'Escala revisada e risco recalculado, sem pendências remanescentes.',
+        }),
+      });
+    });
+  });
+
   it('mostra a trilha de auditoria de casos já resolvidos', () => {
     mockCases([
       caseRow({
@@ -150,4 +192,78 @@ describe('FrmsAlertasPainel', () => {
     expect(screen.getByText(/Registro: Jornada corrigida após validação com a escala/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Registrar tratamento' })).not.toBeInTheDocument();
   });
+  it('destaca prazo vencido e separa casos sem medida dos tratamentos em andamento', () => {
+    mockCases([
+      caseRow({ id: 'sem-plano', tripulante_id: '11', nome_tripulante: 'Sem plano', nivel: 'VIOLACAO', notas_resolucao: null }),
+      caseRow({
+        id: 'vencido', tripulante_id: '12', nome_tripulante: 'Prazo expirado', nivel: 'ATENCAO',
+        notas_resolucao: JSON.stringify({
+          schema: 'FRMS_CASE_TREATMENT_V1', responsavel: 'Coordenação', prazo: '2000-01-01',
+          acao_mitigacao: 'Reprogramar a atividade', justificativa: 'Aguardar recuperação',
+        }),
+      }),
+      caseRow({
+        id: 'andamento', tripulante_id: '13', nome_tripulante: 'Dentro do prazo', nivel: 'CRITICO',
+        notas_resolucao: JSON.stringify({
+          schema: 'FRMS_CASE_TREATMENT_V1', responsavel: 'Coordenação', prazo: '2099-01-01',
+          acao_mitigacao: 'Ajustar a escala operacional', justificativa: 'Reavaliar repouso',
+        }),
+      }),
+    ]);
+    renderPage();
+    const artigos = screen.getAllByRole('article');
+    expect(artigos[0]).toHaveTextContent('Prazo expirado');
+    expect(artigos[0]).toHaveTextContent('Prazo vencido — caso ainda aberto');
+    expect(artigos[1]).toHaveTextContent('Sem plano');
+    expect(artigos[1]).toHaveTextContent('Próxima ação: registrar responsável');
+    expect(artigos[2]).toHaveTextContent('Dentro do prazo');
+    expect(screen.getByRole('button', { name: /Prazo vencido.*1/i })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('filtra casos pela etapa e alterna o filtro por cartão', () => {
+    mockCases([
+      caseRow({ id: 'pendente', nome_tripulante: 'Sem plano' }),
+      caseRow({
+        id: 'tratado', nome_tripulante: 'Com plano',
+        notas_resolucao: JSON.stringify({
+          schema: 'FRMS_CASE_TREATMENT_V1', responsavel: 'Coordenação', prazo: '2000-01-01',
+          acao_mitigacao: 'Ajustar a escala operacional', justificativa: 'Reavaliar repouso',
+        }),
+      }),
+    ]);
+    renderPage();
+    const card = screen.getByRole('button', { name: /Prazo vencido.*1/i });
+    fireEvent.click(card);
+    expect(card).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByRole('article')).toHaveLength(1);
+    expect(screen.getByText('Com plano')).toBeInTheDocument();
+    fireEvent.click(card);
+    expect(screen.getAllByRole('article')).toHaveLength(2);
+  });
+
+  it('mostra total restrito à página e permite navegar além dos primeiros 100 casos', () => {
+    mockCases(Array.from({ length: 100 }, (_, index) => caseRow({ id: `caso-${index}` })), 120);
+    renderPage();
+    expect(screen.getByText(/Até 100 casos por página. Total do filtro: 120/i)).toBeInTheDocument();
+    expect(screen.getByText(/Há mais registros/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Próxima página' }));
+    expect(screen.getByText(/Página 2/i)).toBeInTheDocument();
+    expect(useFrmsAlertasPageMock).toHaveBeenCalledWith(expect.objectContaining({ page: '2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Anterior' }));
+    expect(useFrmsAlertasPageMock).toHaveBeenCalledWith(expect.objectContaining({ page: '1' }));
+  });
+
+  it('bloqueia próxima página quando a consulta tem exatamente 100 casos', () => {
+    mockCases(Array.from({ length: 100 }, (_, index) => caseRow({ id: `caso-${index}` })), 100);
+    renderPage();
+    expect(screen.getByRole('button', { name: 'Próxima página' })).toBeDisabled();
+  });
+
+  it('não confunde um registro desconhecido com tratamento ou conclusão', () => {
+    mockCases([caseRow({ notas_resolucao: '{"schema":"OUTRO_CONTRATO"}' })]);
+    renderPage();
+    expect(screen.getAllByText('Sem medida registrada').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Tratamento em andamento — caso ainda aberto')).not.toBeInTheDocument();
+  });
+
 });

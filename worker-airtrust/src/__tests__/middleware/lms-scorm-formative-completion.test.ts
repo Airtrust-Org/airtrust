@@ -9,6 +9,12 @@ vi.mock('../../lib/lms/lms-asset-session', () => ({
   assetSessionMatchesEnrollment: sessionMock,
 }));
 
+const verifiedCoverage = JSON.stringify({
+  'cmi.core.lesson_location': '45/45',
+  'airtrust.total_slides': 45,
+  'airtrust.viewed_slides': Array.from({ length: 45 }, (_, i) => i + 1),
+});
+
 const baseRow = {
   id: 863,
   empresa_id: 6,
@@ -103,17 +109,13 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
     expect(response.status).toBe(200);
   });
 
-  it('accepts a user-confirmed final commit only with complete slide coverage', async () => {
+  it('accepts a user-confirmed final commit only with complete slide coverage in its own edition', async () => {
     const response = await commit(baseRow, {
       lesson_status: 'incomplete',
       commit_event: 'SCORM_USER_FINALIZE',
       completion_candidate: true,
       completion_observed_at: '2026-10-08T15:00:00.000Z',
-      cmi_json: JSON.stringify({
-        'cmi.core.lesson_location': '3/3',
-        'airtrust.total_slides': 3,
-        'airtrust.viewed_slides': [1, 2, 3],
-      }),
+      cmi_json: verifiedCoverage,
     });
     expect(response.status).toBe(200);
   });
@@ -125,25 +127,32 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
       completion_candidate: true,
       completion_observed_at: '2026-10-08T15:00:00.000Z',
       cmi_json: JSON.stringify({
-        'cmi.core.lesson_location': '3/3',
-        'airtrust.total_slides': 3,
-        'airtrust.viewed_slides': [3],
+        'cmi.core.lesson_location': '45/45',
+        'airtrust.total_slides': 45,
+        'airtrust.viewed_slides': [45],
       }),
     });
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({ code: 'PROGRESS_EVIDENCE_MISSING' });
   });
 
-  it('rejects a spoofed candidate lacking a trusted SCORM Finish', async () => {
-    const response = await commit(baseRow, {
+  it('stores a passive completion candidate but rejects an unproven explicit finalization', async () => {
+    const passive = await commit(baseRow, {
       lesson_status: 'incomplete',
       commit_event: 'SCORM_BEFORE_UNLOAD_COMMIT',
       completion_candidate: true,
       completion_observed_at: '2026-10-08T15:00:00.000Z',
-      cmi_json: '{"cmi.core.lesson_location":"45/45"}',
+      cmi_json: verifiedCoverage,
     });
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toMatchObject({
+    expect(passive.status).toBe(200); // Saved evidence; no enrollment completion.
+    const explicit = await commit(baseRow, {
+      lesson_status: 'incomplete',
+      commit_event: 'SCORM_USER_FINALIZE',
+      completion_candidate: true,
+      cmi_json: verifiedCoverage,
+    });
+    expect(explicit.status).toBe(409);
+    await expect(explicit.json()).resolves.toMatchObject({
       code: 'COMPLETION_EVIDENCE_INSUFFICIENT',
     });
   });
@@ -151,7 +160,8 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
   it('keeps a graded qualifying course fail-closed without a score', async () => {
     const response = await commit({
       ...baseRow, scorm_assessment_policy: 'SCORED', scorm_mastery_score: 70,
-    }, { lesson_status: 'completed', completion_candidate: true });
+    }, { lesson_status: 'completed', completion_candidate: true,
+      commit_event: 'SCORM_USER_FINALIZE', cmi_json: verifiedCoverage });
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({ code: 'SCORE_MISSING' });
   });
@@ -159,16 +169,18 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
   it('keeps legacy/unknown assessment policy fail-closed', async () => {
     const response = await commit({
       ...baseRow, scorm_assessment_policy: undefined as never, scorm_mastery_score: 70,
-    }, { lesson_status: 'completed', completion_candidate: true });
+    }, { lesson_status: 'completed', completion_candidate: true,
+      commit_event: 'SCORM_USER_FINALIZE', cmi_json: verifiedCoverage });
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({ code: 'SCORE_MISSING' });
   });
 
-  it('rejects a fake completion_candidate without terminal SCORM status', async () => {
+  it('rejects an explicit completion_candidate without terminal SCORM status', async () => {
     const response = await commit(baseRow, {
       lesson_status: 'incomplete',
+      commit_event: 'SCORM_USER_FINALIZE',
       completion_candidate: true,
-      cmi_json: '{"cmi.core.lesson_location":"45/45"}',
+      cmi_json: verifiedCoverage,
     });
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({
@@ -180,6 +192,7 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
     const response = await commit(baseRow, {
       lesson_status: 'failed',
       completion_status: 'completed',
+      commit_event: 'SCORM_USER_FINALIZE',
       completion_candidate: true,
     });
     expect(response.status).toBe(409);
@@ -226,7 +239,7 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
     );
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({
-      code: 'COMPLETION_EVIDENCE_INSUFFICIENT',
+      code: 'PROGRESS_EVIDENCE_MISSING',
     });
   });
 });

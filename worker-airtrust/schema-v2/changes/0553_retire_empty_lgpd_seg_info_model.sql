@@ -1,6 +1,6 @@
--- Schema V2 0550: retire the empty tenant-6 LGPD placeholder model.
+-- Schema V2 0553: retire the empty tenant-6 LGPD placeholder model.
 -- dry_run_required: true
--- rollback_plan_required: worker-airtrust/schema-v2/plans/retire-empty-lgpd-seg-info-model-0550.md
+-- rollback_plan_required: worker-airtrust/schema-v2/plans/retire-empty-lgpd-seg-info-model-0553.md
 
 SELECT json(CASE WHEN
   (SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=6 AND codigo='LGPD_SEG_INFO' AND ativo=1 AND deleted_at IS NULL)=1
@@ -10,7 +10,7 @@ SELECT json(CASE WHEN
   AND (SELECT COUNT(*) FROM matriz_treinamento_funcao m JOIN qualificacoes_tipos q ON q.id=m.qualificacao_tipo_id AND q.empresa_id=m.empresa_id WHERE m.empresa_id=6 AND m.deleted_at IS NULL AND q.codigo='LGPD_SEG_INFO')=0
   AND (SELECT COUNT(*) FROM treinamentos_planejados p JOIN qualificacoes_tipos q ON q.id=p.qualificacao_tipo_id AND q.empresa_id=p.empresa_id WHERE p.empresa_id=6 AND p.deleted_at IS NULL AND q.codigo='LGPD_SEG_INFO')=0
   AND (SELECT COUNT(*) FROM qualificacoes_tipos_setores s JOIN qualificacoes_tipos q ON q.id=s.tipo_id AND q.empresa_id=s.empresa_id WHERE s.empresa_id=6 AND s.deleted_at IS NULL AND q.codigo='LGPD_SEG_INFO')=0
-THEN 'null' ELSE 'RETIRE_EMPTY_LGPD_SEG_INFO_0550_PREFLIGHT_REJECTED' END);
+THEN 'null' ELSE 'RETIRE_EMPTY_LGPD_SEG_INFO_0553_PREFLIGHT_REJECTED' END);
 
 UPDATE qualificacoes_tipos
    SET ativo=0,

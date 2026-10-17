@@ -25,7 +25,7 @@ const STATUS_OPTIONS: { value: CvRdvWorkflowStatus | ''; label: string }[] = [
 ];
 
 export default function ControleVoosCoordenacaoFila() {
-  const [status, setStatus] = useState<CvRdvWorkflowStatus | ''>('enviado');
+  const [status, setStatus] = useState<CvRdvWorkflowStatus | ''>('');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [xmlDate, setXmlDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -50,10 +50,19 @@ export default function ControleVoosCoordenacaoFila() {
         <ControleVoosPageShell>
           <ControleVoosPageHeader
             title="Fila da Coordenação"
-            description="Relatórios de Voo enviados pelos pilotos — filtre por devolvido, reaberto, enviado, em revisão, aprovado, finalizado ou cancelado"
+            description="Acompanhe os lançamentos do piloto desde o primeiro rascunho sincronizado até a revisão e aprovação. Dados ainda somente no tablet não aparecem aqui."
           />
 
           <ControleOperacionalFrmsPanel />
+
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/20 dark:text-sky-200">
+            <p>
+              Exibindo os RDVs existentes, inclusive rascunhos já sincronizados. Um voo sem RDV criado ainda não aparece nesta fila. A liberação operacional não significa que o piloto enviou seus lançamentos.
+            </p>
+            <Link to="/controle-voos/voos" className="shrink-0 font-semibold underline underline-offset-2">
+              Ver todos os voos e status operacionais
+            </Link>
+          </div>
 
           <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900/50 dark:bg-cyan-950/20">
             <div className="mr-auto">
@@ -136,7 +145,7 @@ export default function ControleVoosCoordenacaoFila() {
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center dark:border-slate-700 dark:bg-slate-900">
               <ClipboardList className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
               <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                Nenhum RDV encontrado para os filtros selecionados.
+                Nenhum RDV encontrado para os filtros selecionados. Voos ainda sem RDV podem ser consultados em “Todos os voos”.
               </p>
             </div>
           )}
@@ -167,6 +176,9 @@ export default function ControleVoosCoordenacaoFila() {
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Enviado em
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                        Última atualização no servidor
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Justificativa
@@ -207,7 +219,10 @@ export default function ControleVoosCoordenacaoFila() {
                           />
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
-                          {item.enviado_em ? formatDateTime(item.enviado_em) : '—'}
+                          {item.enviado_em ? formatDateTime(item.enviado_em) : 'Ainda não enviado'}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+                          {item.updated_at ? formatDateTime(item.updated_at) : '—'}
                         </td>
                         <td className="max-w-[14rem] truncate px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
                           {item.motivo_devolucao || '—'}
@@ -217,7 +232,7 @@ export default function ControleVoosCoordenacaoFila() {
                             to={`/controle-voos/rdv/${item.voo_id}`}
                             className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline dark:text-purple-400"
                           >
-                            <FileSearch className="h-3.5 w-3.5" /> Revisar
+                            <FileSearch className="h-3.5 w-3.5" /> {item.workflow_status === 'rascunho' ? 'Visualizar' : 'Revisar'}
                           </Link>
                         </td>
                       </tr>

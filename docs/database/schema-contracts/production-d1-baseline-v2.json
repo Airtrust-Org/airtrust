@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-11",
-    "last_reconciled_against": "0550 empty LGPD model retirement queued; production remote apply pending",
-    "schema_v2_digest": "303a4b6eec479785e8a914de3bc7819592247b05fe23fec003854b23b315405d",
+    "last_reconciled_at": "2026-10-14",
+    "last_reconciled_against": "0553 empty LGPD model retirement queued; production remote apply pending",
+    "schema_v2_digest": "a2bb90bd7fa41c50bfe449e1a71941c20eff20bc920fe9a521a476bfb0634e89",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1530,16 +1530,54 @@
       "note": "Data-only consolidation: preserves published course 71, its nine completed and two open enrolments, nine historical completions and two function requirements while retiring FDM-TRIPULACAO. Governed production application requires the exact reviewed manifest, D1 recovery point and postconditions."
     },
     {
-      "change_file": "0550_retire_empty_lgpd_seg_info_model.sql",
-      "change_id": "retire-empty-lgpd-seg-info-model-0550",
-      "sha256": "1860c065f007b2249717249772c3ab433b6ad967b8c2c76d88543ceba07f98d8",
+      "change_file": "0550_usuarios_costa_do_sol_viewer_aluno.sql",
+      "change_id": "usuarios-costa-do-sol-viewer-aluno-0550",
+      "sha256": "6b01667b60ee8893ce7ed65064644dd9caa7df7100e930415caf66ee5feecf64",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 user-profile authority reconciliation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "usuarios-costa-do-sol-viewer-aluno-0550.json",
+      "evidence": "worker-airtrust/schema-v2/plans/usuarios-costa-do-sol-viewer-aluno-0550.md",
+      "note": "Read-only production audit 2026-10-13: 26 student users have VIEWER default/explicit roles; separate single coordination identity retains COORDENACAO_VOO. Reviewed SQL updates only tenant 6 with guards, and awaits governed Schema V2 apply with recovery point and exact authorization. No production D1 write claimed. D1 TEMP transport removed after SQLITE_AUTH. New authorized apply pending."
+    },
+    {
+      "change_file": "0551_coordenacao_role_user_restore.sql",
+      "change_id": "coordenacao-role-user-restore-0551",
+      "sha256": "8a77552a043d5ed08625c938790f583de13d0cbf2ad4040dea1970556c95489f",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 coordination-only restoration of USER profile",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "coordenacao-role-user-restore-0551.json",
+      "evidence": "worker-airtrust/schema-v2/plans/coordenacao-role-user-restore-0551.md",
+      "note": "Data-only compensation to restore the sole coordination account to USER while preserving all 26 students converted by 0550. D1 write requires separate governed authorization."
+    },
+    {
+      "change_file": "0552_frms_sleep_opportunity.sql",
+      "change_id": "frms-sleep-opportunity-0552",
+      "sha256": "c29e5b38d6e1da17b55312b3a1ff470266ebcf3cd7e178eecd4d0664cec7dd31",
+      "targets": [
+        "frms_fadiga_checkin"
+      ],
+      "domain": "FRMS ANAC RBAC 117 separation of sleep opportunity and effective sleep",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-sleep-opportunity-0552.json",
+      "evidence": "worker-airtrust/schema-v2/plans/frms-sleep-opportunity-0552.md",
+      "note": "0552 is a nullable additive field for reported sleep opportunity. It does not backfill or change historical sleep, policy, coefficients, fatigue thresholds, tenant or RBAC. Runtime Worker must not be deployed until the governed migration has been applied and verified in the target environment. This is repo-reviewed only, not a production schema claim."
+    },
+    {
+      "change_file": "0553_retire_empty_lgpd_seg_info_model.sql",
+      "change_id": "retire-empty-lgpd-seg-info-model-0553",
+      "sha256": "63528601b365117d1f7d0aeaa46eb2ffffc912a091c4591001167dd1b4690610",
       "targets": [],
       "domain": "Costa do Sol tenant-6 empty LGPD qualification model retirement",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "retire-empty-lgpd-seg-info-model-0550.json",
-      "evidence": "worker-airtrust/schema-v2/plans/retire-empty-lgpd-seg-info-model-0550.md",
-      "note": "Data-only retirement permitted only when all checked active references are zero. The governed apply soft-deletes LGPD_SEG_INFO without generating transfers, enrolments or notifications."
+      "reviewed_manifest": "retire-empty-lgpd-seg-info-model-0553.json",
+      "evidence": "worker-airtrust/schema-v2/plans/retire-empty-lgpd-seg-info-model-0553.md",
+      "note": "Data-only retirement permitted only when all checked active references are zero. Governed apply soft-deletes LGPD_SEG_INFO without transfers, enrolments or notifications."
     }
   ]
 }

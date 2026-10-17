@@ -29,9 +29,13 @@ WITH base AS (
  LOWER(TRIM(COALESCE(ps.lesson_status,''))) lesson_status,
  LOWER(TRIM(COALESCE(ps.completion_status,''))) completion_status,
  LOWER(TRIM(COALESCE(ps.success_status,''))) success_status,
- CASE WHEN ps.score_scaled IS NOT NULL THEN ps.score_scaled*100.0
-      WHEN ps.score_raw IS NOT NULL AND ps.score_max>0 THEN ps.score_raw*100.0/ps.score_max
-      ELSE ps.score_raw END score_pct,
+ CASE WHEN ps.score_scaled BETWEEN 0 AND 1 THEN ps.score_scaled*100.0
+      WHEN ps.score_scaled IS NOT NULL THEN NULL
+      WHEN ps.score_raw IS NOT NULL AND ps.score_max>COALESCE(ps.score_min,0)
+        AND ps.score_raw BETWEEN COALESCE(ps.score_min,0) AND ps.score_max
+        THEN (ps.score_raw-COALESCE(ps.score_min,0))*100.0/(ps.score_max-COALESCE(ps.score_min,0))
+      WHEN ps.score_raw BETWEEN 0 AND 100 AND ps.score_max IS NULL THEN ps.score_raw
+      ELSE NULL END score_pct,
  NULLIF(c.scorm_mastery_score,0) mastery,
  CASE WHEN ps.last_commit_at IS NOT NULL THEN 1 ELSE 0 END committed
  FROM lms_matriculas m
@@ -64,6 +68,8 @@ SELECT curso_id,audience,COUNT(*) enrolled,
  SUM(CASE WHEN matricula_status!='CONCLUIDO' AND raw_pct>=99 AND explicit_complete=0 AND explicit_failed=1 THEN 1 ELSE 0 END) failed,
  SUM(CASE WHEN matricula_status!='CONCLUIDO' AND raw_pct>=99 AND explicit_complete=0 AND explicit_failed=0 AND mastery_met=1 THEN 1 ELSE 0 END) mastery_met_missing_final,
  SUM(CASE WHEN matricula_status!='CONCLUIDO' AND raw_pct>=99 AND explicit_complete=0 AND explicit_failed=0 AND mastery_met=0 THEN 1 ELSE 0 END) mastery_unproven,
+ SUM(CASE WHEN matricula_status!='CONCLUIDO' AND raw_pct>=99 AND explicit_complete=0 AND explicit_failed=0 AND mastery_met=0 AND score_pct IS NULL THEN 1 ELSE 0 END) score_missing_or_invalid,
+ SUM(CASE WHEN matricula_status!='CONCLUIDO' AND raw_pct>=99 AND explicit_complete=0 AND explicit_failed=0 AND mastery_met=0 AND score_pct IS NOT NULL THEN 1 ELSE 0 END) score_below_mastery,
  SUM(CASE WHEN matricula_status!='CONCLUIDO' AND raw_pct>=99 AND committed=0 THEN 1 ELSE 0 END) no_commit,
  SUM(CASE WHEN matricula_status!='CONCLUIDO' AND raw_pct>=99 AND employee_active=0 THEN 1 ELSE 0 END) inactive_employee_99
 FROM flagged GROUP BY curso_id,audience ORDER BY curso_id,audience`;
@@ -239,7 +245,7 @@ export function validate(rows){
  fail(Array.isArray(rows)&&rows.length<=300,'PROOF_ROWS_INVALID');
  const keys=['enrolled','employee_active_enrollments','concluded','incomplete_99','incomplete_raw100',
  'no_runtime','has_runtime','explicit_but_pending','failed','mastery_met_missing_final',
- 'mastery_unproven','no_commit','inactive_employee_99'];
+ 'mastery_unproven','score_missing_or_invalid','score_below_mastery','no_commit','inactive_employee_99'];
  const seen=new Set();
  for(const row of rows){
   fail(Number.isInteger(row.curso_id)&&row.curso_id>0,'COURSE_ID_INVALID');
@@ -251,12 +257,13 @@ export function validate(rows){
   fail(row.incomplete_raw100<=row.incomplete_99,'RAW100_INVALID');
   fail(row.no_runtime+row.has_runtime===row.incomplete_99,'RUNTIME_COUNTS_INVALID');
   fail(row.explicit_but_pending+row.failed+row.mastery_met_missing_final+row.mastery_unproven===row.incomplete_99,'STATUS_PARTITION_INVALID');
+  fail(row.score_missing_or_invalid+row.score_below_mastery===row.mastery_unproven,'MASTERY_SUBCLASS_PARTITION_INVALID');
   fail(row.concluded+row.incomplete_99<=row.enrolled,'TOTAL_INVALID');
  }
  return rows;
 }
 export function summarize(rows){
- const totals={enrolled:0,incomplete_99:0,incomplete_raw100:0,explicit_but_pending:0,mastery_met_missing_final:0,mastery_unproven:0};
+ const totals={enrolled:0,incomplete_99:0,incomplete_raw100:0,explicit_but_pending:0,mastery_met_missing_final:0,mastery_unproven:0,score_missing_or_invalid:0,score_below_mastery:0};
  for(const row of rows)for(const key of Object.keys(totals))totals[key]+=row[key];
  return {totals,fdm13:rows.filter(r=>r.curso_id===13)};
 }

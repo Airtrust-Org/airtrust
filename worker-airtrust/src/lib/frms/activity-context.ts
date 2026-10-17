@@ -264,13 +264,21 @@ export async function loadFrmsActivityRows(
   const reportedActivityDays = await db.prepare(
     `SELECT rd.reference_date AS data_operacional,
             CAST(rd.funcionario_id AS INTEGER) AS funcionario_id,
-            CASE WHEN rd.activity_type = 'ADMIN_TRAINING' THEN 'TREINAMENTO' ELSE 'ATIVIDADE' END AS activity_type,
+            CASE
+              WHEN rd.activity_type = 'ADMIN_TRAINING' AND trim(COALESCE(rd.notes,'')) = 'Trabalho administrativo'
+                THEN 'ATIVIDADE'
+              WHEN rd.activity_type = 'ADMIN_TRAINING' THEN 'TREINAMENTO'
+              ELSE 'ATIVIDADE'
+            END AS activity_type,
             rd.duty_start_time AS hora_inicio,
             rd.duty_end_time AS hora_fim,
             CASE rd.activity_type
               WHEN 'STANDBY_HOME_HOTEL' THEN 'Standby hotel/residência'
               WHEN 'STANDBY_ONSITE' THEN 'Standby base/aeroporto'
-              WHEN 'ADMIN_TRAINING' THEN 'Treinamento/administrativo informado no check-in'
+              WHEN 'ADMIN_TRAINING' THEN
+                CASE WHEN trim(COALESCE(rd.notes,'')) = 'Trabalho administrativo'
+                  THEN 'Trabalho administrativo informado no check-in'
+                  ELSE 'Treinamento informado no check-in' END
               WHEN 'DUTY_TRAVEL' THEN 'Deslocamento a serviço'
               ELSE 'Atividade informada no check-in'
             END AS titulo,

@@ -156,7 +156,7 @@ export default function ControleVoosVooDetalhe() {
         if (!response.success) throw new Error(response.error || 'Falha ao anexar ' + file.name);
         uploaded++;
       }
-      toast.success(`${uploaded} documento(s) anexado(s). A tripulação receberá aviso para atualizar o pacote offline.`);
+      toast.success(`${uploaded} documento(s) anexado(s). Oriente a tripulação a atualizar o voo no Pilot App para receber os arquivos offline.`);
     } catch (uploadError) {
       toast.error(`${uploaded} arquivo(s) enviado(s). ` +
         (uploadError instanceof Error ? uploadError.message : 'Falha ao anexar documento'));
@@ -436,6 +436,14 @@ export default function ControleVoosVooDetalhe() {
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <h2 className="mb-4 text-base font-semibold text-slate-800 dark:text-slate-100">Status do voo</h2>
                 <StatusTimeline status={voo.status} />
+                {flightPresentationStatus(voo) === 'realizado' && voo.status !== 'concluido_operacionalmente' && (
+                  <p className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium text-sky-900 dark:border-sky-900 dark:bg-sky-950/20 dark:text-sky-200">
+                    O RDV enviado indica voo realizado. A linha operacional acima ainda não foi concluída: confira o registro e atualize o status pela Coordenação, conforme o procedimento operacional.
+                  </p>
+                )}
+                <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                  Esta linha mostra as etapas operacionais do voo, registradas pela Coordenação. O piloto preenche e sincroniza o RDV separadamente; consulte a fila da Coordenação para acompanhar os lançamentos recebidos.
+                </p>
               </div>
 
               <ControleVoosTripulacaoCard
@@ -479,7 +487,7 @@ export default function ControleVoosVooDetalhe() {
                   <FileText className="h-4 w-4 text-cyan-600" /> Preparação para saída
                 </h2>
                 <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
-                  Anexe Weather Report, planejamento de voo, MTAs de embarque e desembarque e outros documentos. Todos os arquivos disponíveis são baixados automaticamente quando a tripulação prepara ou atualiza o voo para uso offline.
+                  Anexe Weather Report, planejamento atualizado (inclusive pesos de embarque e desembarque por etapa), MTAs e outros documentos. A tripulação precisa preparar ou atualizar o voo no Pilot App para baixar esses arquivos e confirmar a disponibilidade offline.
                 </p>
                 <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
                   Dados do voo · versão {voo.versao} · atualizados em {formatDateTime(voo.updated_at)}

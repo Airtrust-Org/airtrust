@@ -18,7 +18,9 @@ import {
   isManagerRole,
   resolveEmployeeSectorAccess,
 } from '../services/employee-sector-access';
-import { resolveFrmsWorkforceProfile } from '../lib/frms/workforce-profile';
+import { needsFirefighterAviationProfile, resolveFrmsWorkforceProfile } from '../lib/frms/workforce-profile';
+import { FRMS_FIREFIGHTER_AVIATION_PROFILE } from '../lib/frms/parameter-governance';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { assessMaintenanceFatigue } from '../lib/frms/maintenance-fatigue';
 import {
   SESSION_ROLE_COOKIE,
@@ -300,7 +302,24 @@ router.get('/', async (c) => {
     resolveMaintenanceManagerScope(c, access),
     getUserPermissionOverride(c, 'frms.checkin'),
   ]);
-  const frmsProfile = resolveFrmsWorkforceProfile(employee?.cargo, employee?.funcao);
+
+  let tenantFrmsProfile: string | null = null;
+  if (needsFirefighterAviationProfile(employee?.cargo, employee?.funcao)) {
+    const referenceDate = getTodayIsoSaoPaulo();
+    const assignments = await db.prepare(`SELECT profile_code FROM frms_profile_assignments
+       WHERE empresa_id = ? AND status = 'ACTIVE' AND effective_from <= ?
+       AND (effective_to IS NULL OR effective_to >= ?)`)
+      .bind(empresaId, referenceDate, referenceDate)
+      .all<{ profile_code: string }>();
+    // Missing or ambiguous active profile never grants specialised role mapping.
+    if (assignments.results?.length === 1) {
+      tenantFrmsProfile = assignments.results[0].profile_code;
+    }
+  }
+  const frmsProfile = resolveFrmsWorkforceProfile(
+    employee?.cargo, employee?.funcao,
+    tenantFrmsProfile === FRMS_FIREFIGHTER_AVIATION_PROFILE ? tenantFrmsProfile : null,
+  );
 
   return c.json({
     success: true,
@@ -359,6 +378,7 @@ router.get('/frms-maintenance-team', async (c) => {
           s.nome AS setor_nome,
           ch.id AS checkin_id,
           ch.hora_checkin,
+          ch.submitted_at AS checkin_submitted_at,
           ch.horas_sono,
           ch.qualidade_sono,
           ch.kss_score,

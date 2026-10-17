@@ -101,12 +101,58 @@ setup('real staging login', async ({ page }) => {
     if ((await rememberMe.count()) > 0) await rememberMe.check();
 
     await page.getByRole('button', { name: /entrar|sign in/i }).click();
+
+    // Login may now stay on /login intentionally while the user chooses one
+    // of multiple authorized session profiles. Wait for either the historical
+    // redirect or the real profile chooser rendered by LoginSimple.
+    try {
+      await page.waitForFunction(
+        () => {
+          if (!window.location.pathname.startsWith('/login')) return true;
+          return Array.from(document.querySelectorAll('button')).some((button) =>
+            /^Entrar como /i.test((button.textContent || '').trim()),
+          );
+        },
+        undefined,
+        { timeout: timeoutMs },
+      );
+    } catch {
+      return false;
+    }
+
+    if (!new URL(page.url()).pathname.startsWith('/login')) {
+      return true;
+    }
+
+    // The QA admin credentials belong to the isolated examiner *tenant*.
+    // Under persisted platform RBAC, this is not automatically a global
+    // ADMINISTRADOR grant: the real UI may offer Gestor + Aluno/Instrutor.
+    // Select only a visible operational manager/administrator option from
+    // the server-authorized chooser; never select learner as a substitute.
+    if (profile !== 'admin') {
+      throw new Error('QA_SESSION_PROFILE_SELECTION_REQUIRED_FOR_NON_ADMIN_PAIR');
+    }
+
+    const qaOperationalRole = page
+      .getByRole('button', {
+        name: /entrar como (administrador(?: geral| da empresa)?|gestor)/i,
+      })
+      .first();
+
+    if ((await qaOperationalRole.count()) === 0 || !(await qaOperationalRole.isVisible())) {
+      throw new Error('QA_SCOPED_ADMIN_OPERATIONAL_PROFILE_NOT_AVAILABLE');
+    }
+
+    await qaOperationalRole.click();
     try {
       await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
-        timeout: timeoutMs, waitUntil: 'domcontentloaded',
+        timeout: timeoutMs,
+        waitUntil: 'domcontentloaded',
       });
       return true;
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   }
 
   let loginSucceeded = await submitRealLogin(25_000);

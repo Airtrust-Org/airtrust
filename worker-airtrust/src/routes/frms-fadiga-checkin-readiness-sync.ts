@@ -35,9 +35,11 @@ export async function persistReadinessAndSyncFrms(input: {
   presentationTime: string | null;
   readiness?: EmbeddedReadiness;
   isNewCheckin: boolean;
+  /** Check-in route commits readiness alongside check-in and event in a single D1 batch. */
+  readinessAlreadyPersisted?: boolean;
   now: string;
 }): Promise<{ sync: SyncResult }> {
-  if (input.readiness) {
+  if (input.readiness && !input.readinessAlreadyPersisted) {
     try {
       await persistReadinessAssessment(input.db, {
         empresaId: input.empresaId,
@@ -69,6 +71,9 @@ export async function persistReadinessAndSyncFrms(input: {
       throw error;
     }
 
+  }
+
+  if (input.readiness) {
     const previous = new Date(`${input.dataCheckin}T12:00:00Z`);
     previous.setUTCDate(previous.getUTCDate() - 1);
     await refreshRecoveryAssessmentForActivityDate({

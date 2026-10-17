@@ -1,0 +1,89 @@
+name: FRMS CV 2026-10-13 Readonly Coherence
+
+# Production data verification only. No migration, deploy, seed or operational write.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact reviewed main SHA
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_FRMS_CV_READONLY_20261013
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frms-cv-20261013-production-readonly
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: FRMS CV Readonly Scope Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify exact current main and fixed audit scope
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "MAIN_ONLY"; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "SHA_INVALID"; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo "SHA_MISMATCH"; exit 1; }
+          [[ "$CONFIRMATION" == "AIRTRUST_FRMS_CV_READONLY_20261013" ]] || { echo "CONFIRMATION_INVALID"; exit 1; }
+          echo "FRMS_CV_READONLY_GUARD_PASS"
+
+  audit:
+    name: FRMS CV D1 Readonly Evidence
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Test read-only and privacy contracts
+        run: node --test scripts/__tests__/frms-cv-20261013-readonly-coherence.test.mjs
+      - name: Query exact production tenant and date (SELECT only)
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          PRODUCTION_D1_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+          CONFIRM_READONLY: ${{ inputs.confirmation }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          AUDIT_REPORT_PATH: ${{ runner.temp }}/frms-cv-20261013-evidence.json
+        run: |
+          set -euo pipefail
+          node scripts/production/frms-cv-20261013-readonly-coherence.mjs
+          test -s "$AUDIT_REPORT_PATH"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const p = JSON.parse(fs.readFileSync(process.env.AUDIT_REPORT_PATH, 'utf8'));
+          if (p.readOnly !== true || p.writes !== 0 || p.date !== '2026-10-13') throw new Error('READ_ONLY_RESULT_INVALID');
+          if (!p.evidence || !p.alerts) throw new Error('AUDIT_EVIDENCE_INVALID');
+          const o = {
+            date: p.date, sourceSha: p.auditSourceSha, verdict: p.verdict,
+            activeQuinzena: p.evidence.unionActiveFortnightEmployees,
+            checkinPending: p.evidence.activeFortnightCheckinPending,
+            flights: p.evidence.controleVoosFlights,
+            crewCheckinPending: p.evidence.controleVoosCrewCheckinPending,
+            anomalyCounts: p.alerts, writes: 0,
+          };
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            '## FRMS x Controle de Voos - production read-only\n\n' + JSON.stringify(o, null, 2) + '\n');
+          NODE
+      - name: Upload sanitized counts (no employee identifiers)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frms-cv-coherence-20261013
+          path: ${{ runner.temp }}/frms-cv-20261013-evidence.json
+          if-no-files-found: ignore
+          retention-days: 14

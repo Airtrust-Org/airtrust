@@ -16,7 +16,7 @@ test.describe('staging FRMS maintenance release QA', () => {
     await page.goto('/');
 
     await expect(page.getByRole('button', { name: /Fadiga Diária/i })).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole('button', { name: /Minha Pasta 360/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Minha Pasta Virtual/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /Trocar Senha/i })).toBeVisible();
     await expect(page.getByText(/Meus Treinamentos EAD/i)).toBeVisible();
 

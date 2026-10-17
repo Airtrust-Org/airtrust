@@ -18,6 +18,7 @@ type CrewFatigue = {
   acao_recomendada: string | null;
   alertas: string[];
   dados_disponiveis: boolean;
+  motivo_pendencia_operacional?: string | null;
 };
 type FatigueResponse = { success: boolean; data?: { date: string; tripulantes: CrewFatigue[] }; error?: string };
 
@@ -81,14 +82,14 @@ export default function ControleVoosFadigaCard({ vooId, versao }: { vooId: numbe
         rows.length === 0 ? <p className="text-sm text-slate-500">Nenhum tripulante disponível para avaliação.</p> :
         <div className="space-y-3">
           {attention.length > 0 && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
-            {attention.length} tripulante(s) com pendência, atenção ou dados insuficientes. Verifique antes da decisão operacional.
+            {attention.length} tripulante(s) com alerta ou análise FRMS inconclusiva. Informação consultiva: a liberação do voo permanece sob responsabilidade da Coordenação.
           </p>}
           {rows.map((row) => (
             <div key={row.funcionario_id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{row.funcao} · {row.nome}</p>
                 <span className={`rounded-md px-2 py-1 text-xs font-medium ${COLOR[row.estado] || COLOR.NAO_AVALIADO}`}>
-                  {label(row.estado)}
+                  {row.estado === 'NAO_AVALIADO' ? 'Análise operacional inconclusiva' : label(row.estado)}
                 </span>
               </div>
               <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
@@ -102,12 +103,19 @@ export default function ControleVoosFadigaCard({ vooId, versao }: { vooId: numbe
                 <div><dt className="text-slate-500">Tendência</dt><dd>{label(row.tendencia)}</dd></div>
                 <div><dt className="text-slate-500">Fonte da jornada</dt><dd>{label(row.fonte)}</dd></div>
               </dl>
-              {row.acao_recomendada && <p className="mt-2 text-xs text-slate-700 dark:text-slate-300"><strong>Ação:</strong> {row.acao_recomendada}</p>}
+              {row.checkin === 'RECEBIDO' && row.estado === 'NAO_AVALIADO' && (
+                <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
+                  <strong>Check-in de fadiga realizado.</strong> A análise operacional do FRMS está inconclusiva por outras evidências.
+                  {row.motivo_pendencia_operacional ? ` Motivo: ${row.motivo_pendencia_operacional}.` : ''}
+                  {' '}Isso não impede a Coordenação de liberar o voo conforme o procedimento operacional.
+                </p>
+              )}
+              {row.acao_recomendada && <p className="mt-2 text-xs text-slate-700 dark:text-slate-300"><strong>Ação recomendada pelo FRMS:</strong> {row.acao_recomendada}</p>}
               {row.alertas.length > 0 && <p className="mt-2 text-xs text-amber-700">Alertas: {row.alertas.map(label).join(' · ')}</p>}
               {!row.dados_disponiveis && <p className="mt-2 text-xs text-amber-700">Sem dados suficientes no FRMS; não interpretar como condição normal.</p>}
             </div>
           ))}
-          <p className="text-xs text-slate-500">Resumo informativo do FRMS, não substitui a decisão da Coordenação ou o procedimento operacional.</p>
+          <p className="text-xs text-slate-500">Resumo informativo do FRMS, sem bloqueio automático de liberação. Não substitui a decisão da Coordenação ou o procedimento operacional.</p>
         </div>}
     </section>
   );

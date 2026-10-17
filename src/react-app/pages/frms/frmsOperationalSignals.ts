@@ -1,3 +1,4 @@
+import { formatFrmsCheckinTime } from './frmsCheckinTime';
 /**
  * FRMS — Sinais operacionais compartilhados
  *
@@ -69,16 +70,25 @@ function formatPercent(value: number): string {
   })}%`;
 }
 
+function effectivenessBandTone(nivel: string | null): FrmsSignalTone {
+  const normalized = nivel?.trim().toLocaleLowerCase('pt-BR') ?? '';
+  if (['vermelho', 'critico', 'crítico', 'baixa'].includes(normalized)) return 'critical';
+  if (['amarelo', 'atencao', 'atenção', 'transicao', 'transição', 'degradada'].includes(normalized)) return 'warning';
+  if (['verde', 'normal', 'alta', 'baixo'].includes(normalized)) return 'ok';
+  return 'unknown';
+}
+
 /** Sinal 1 — Fadiga diária (check-in subjetivo). */
 export function resolveDailyFatigueSignal(
   item: FrmsOperationalSnapshotItem,
 ): FrmsOperationalSignal {
   const base = { key: 'daily-fatigue' as const, label: 'Check-in diário' };
 
-  const horario = item.checkin_horario?.trim();
+  const horario = formatFrmsCheckinTime(item.checkin_submitted_at);
   const kss = item.kss_score;
   const detailParts: string[] = [];
   if (horario) detailParts.push(`Check-in às ${horario}`);
+  else if (item.checkin_horario) detailParts.push('Horário local do check-in não confirmado');
   if (kss != null && Number.isFinite(kss)) detailParts.push(`KSS ${kss}`);
   const detail = detailParts.length > 0 ? detailParts.join(' · ') : undefined;
 
@@ -164,23 +174,27 @@ export function resolveEffectivenessSignal(
       : item.effectiveness_source === 'PROJETADA_APRESENTACAO'
         ? 'Projetada para a hora de apresentação com base no check-in; carga operacional futura ainda não incorporada.'
         : undefined;
+  const bandTone = effectivenessBandTone(item.nivel_fadiga_calculado);
+  const bandDetail =
+    bandTone === 'unknown'
+      ? 'Faixa de efetividade não informada pelo snapshot.'
+      : `Faixa de efetividade informada pelo motor: ${item.nivel_fadiga_calculado}.`;
+  const detail = [projectionDetail, bandDetail].filter(Boolean).join(' ');
 
-  if (item.estado_operacional === 'CRITICO_VIOLACAO' || item.snapshot_status === 'CRITICO') {
-    return { ...base, value, tone: 'critical', detail: projectionDetail };
+  if (item.estado_operacional === 'CRITICO_VIOLACAO' || item.snapshot_status === 'CRITICO' || bandTone === 'critical') {
+    return { ...base, value, tone: 'critical', detail };
   }
 
-  if (hasLowAlert) {
+  if (hasLowAlert || bandTone === 'warning') {
     return {
       ...base,
       value,
       tone: 'warning',
-      detail: projectionDetail
-        ? `Efetividade cognitiva reduzida. ${projectionDetail}`
-        : 'Efetividade cognitiva reduzida',
+      detail: [hasLowAlert ? 'Efetividade cognitiva reduzida.' : '', detail].filter(Boolean).join(' '),
     };
   }
 
-  return { ...base, value, tone: 'ok', detail: projectionDetail };
+  return { ...base, value, tone: bandTone, detail };
 }
 
 /** Sinal 4 — Prontidão (classificação autoritativa opcional). */

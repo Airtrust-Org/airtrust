@@ -125,6 +125,7 @@ async function dispatchPlayerMessage(data: Record<string, unknown>) {
 
 describe('LmsPlayer completion flow', () => {
   beforeEach(() => {
+    Object.assign(matriculaMock, { status: 'EM_ANDAMENTO', data_conclusao: null });
     matriculaMock.scorm_progresso.cmi_json = JSON.stringify({ 'cmi.location': '22/30' });
     (matriculaMock as typeof matriculaMock & { completion_diagnostic: Record<string, unknown> | null }).completion_diagnostic = null;
     fetchWithAuthMock.mockReset();
@@ -136,6 +137,23 @@ describe('LmsPlayer completion flow', () => {
     toastErrorMock.mockReset();
     toastDismissMock.mockReset();
     vi.restoreAllMocks();
+  });
+
+  it('REPROVADO with data_conclusao is an ended attempt, not a completed enrollment', () => {
+    Object.assign(matriculaMock, {
+      status: 'REPROVADO',
+      data_conclusao: '2026-10-13',
+      progresso_pct: 99,
+    });
+    matriculaMock.scorm_progresso.cmi_json = JSON.stringify({
+      'cmi.core.lesson_location': '3/3',
+      'airtrust.total_slides': 3,
+      'airtrust.viewed_slides': [1, 2, 3],
+    });
+    renderPlayer();
+    const register = screen.getByRole('button', { name: 'Registrar no AirTrust' });
+    expect(register).toBeEnabled();
+    expect(screen.queryByRole('heading', { name: 'Curso concluído' })).not.toBeInTheDocument();
   });
 
   it('keeps Concluir curso disabled while slides are missing, even at the final marker', async () => {
@@ -238,6 +256,32 @@ describe('LmsPlayer completion flow', () => {
       );
     });
     expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('reconsulta telas faltantes somente após gravação confirmada pelo servidor', async () => {
+    const scoped = matriculaMock as typeof matriculaMock & {
+      closure_readiness?: { slide_coverage: { total: number; recorded: number; missing_numbers: number[] } } | null;
+    };
+    scoped.closure_readiness = {
+      slide_coverage: { total: 42, recorded: 35, missing_numbers: [1, 2, 3, 4, 5, 6, 7] },
+    };
+    try {
+      renderPlayer();
+      await dispatchPlayerMessage({
+        type: 'lms:progress', matriculaId: 42,
+        location: '42/42', viewed_slide_count: 36, viewed_slide_total: 42,
+      });
+      expect(refetchMatriculaMock).not.toHaveBeenCalled();
+
+      await dispatchPlayerMessage({
+        type: 'lms:progress', matriculaId: 42,
+        location: '42/42', viewed_slide_count: 36, viewed_slide_total: 42,
+        server_saved: true,
+      });
+      await waitFor(() => expect(refetchMatriculaMock).toHaveBeenCalledTimes(1));
+    } finally {
+      scoped.closure_readiness = null;
+    }
   });
 
   it('confirma a conclusão com toast de sucesso do AirTrust', async () => {

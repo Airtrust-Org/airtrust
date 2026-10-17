@@ -4,9 +4,8 @@
  * em um estado único por tripulante/voo que a Coordenação consegue agir sem
  * interpretar métricas técnicas.
  *
- * Reutilizado tanto pelo endpoint de leitura (`routes/controle-voos-frms-dispatch-gate.ts`)
- * quanto pelo guard de transição `planejado -> liberado_operacionalmente`
- * (mesmo arquivo de rota), para que a UI e o bloqueio backend nunca divirjam.
+ * Utilizado no painel consultivo de FRMS; seus alertas nunca impedem a
+ * transição de voo. A Coordenação decide conforme os procedimentos aplicáveis.
  *
  * Deliberadamente um serviço separado de `routes/controle-voos.ts`, que
  * mantém um guard de arquitetura proibindo referências a FRMS/MRO/etc — ver
@@ -42,11 +41,8 @@ export type DispatchGateReasonCode =
   | 'DADO_ESTIMADO';
 
 /**
- * Ordem de severidade: também define qual motivo vira o "primary reason"
- * quando há mais de um. Os primeiros 8 são hard block (ver
- * `DISPATCH_GATE_HARD_BLOCK_REASONS`); nao criar novo threshold/formula —
- * mapeia 1:1 os estados que `frms-operational-decision.ts` e
- * `fortnight-indicator.ts` já produzem.
+ * Ordem de severidade do alerta consultivo. Nao criar novos limites;
+ * reutiliza os estados de `frms-operational-decision.ts` e `fortnight-indicator.ts`.
  */
 const REASON_PRIORITY: DispatchGateReasonCode[] = [
   'TRIPULACAO_AUSENTE',
@@ -62,6 +58,22 @@ const REASON_PRIORITY: DispatchGateReasonCode[] = [
   'FADIGA_ACUMULADA_ATENCAO',
   'DADO_ESTIMADO',
 ];
+
+/** Ações de coordenação baseadas na causa canônica, sem expor respostas sensíveis. */
+const RECOMMENDED_ACTIONS: Readonly<Record<DispatchGateReasonCode, string>> = {
+  TRIPULACAO_AUSENTE: 'Cadastrar e confirmar a tripulação na programação do voo.',
+  CHECKIN_DIARIO_PENDENTE: 'Solicitar e confirmar o check-in de fadiga diária de cada tripulante.',
+  CHECKIN_INCONSISTENTE: 'Conferir a inconsistência do FRMS e registrar a revisão.',
+  DECISAO_FRMS_CRITICA: 'Encaminhar o alerta crítico à gestão operacional responsável e seguir o procedimento aplicável.',
+  DECISAO_FRMS_MITIGACAO_NECESSARIA: 'Avaliar repouso, redução de demanda ou substituição e registrar a providência.',
+  DECISAO_FRMS_NAO_AVALIADO: 'Completar as informações necessárias à análise operacional FRMS.',
+  FADIGA_ACUMULADA_CRITICA: 'Revisar o histórico de jornadas e repouso; avaliar recuperação ou substituição.',
+  SNAPSHOT_FRMS_AUSENTE: 'Verificar se a avaliação FRMS da tripulação está disponível.',
+  SNAPSHOT_FRMS_INCONSISTENTE: 'Confirmar os dados inconsistentes do FRMS.',
+  DECISAO_FRMS_ATENCAO: 'Revisar a condição pré-missão e registrar a providência da coordenação.',
+  FADIGA_ACUMULADA_ATENCAO: 'Revisar a sequência de jornadas e períodos de recuperação antes da missão.',
+  DADO_ESTIMADO: 'Confirmar na fonte os dados estimados antes da decisão operacional.',
+};
 
 export const DISPATCH_GATE_HARD_BLOCK_REASONS: ReadonlySet<DispatchGateReasonCode> = new Set([
   'TRIPULACAO_AUSENTE',
@@ -94,6 +106,7 @@ export interface CrewDispatchAssessment extends DispatchGateCrewMember {
   fadiga_acumulada: DispatchFadigaNivel;
   reasons: DispatchGateReasonCode[];
   primary_reason: DispatchGateReasonCode | null;
+  recommended_action: string;
   natureza_dado: string | null;
 }
 
@@ -160,7 +173,9 @@ export function deriveCrewDispatchAssessment(
   if (!item) {
     reasons.add('SNAPSHOT_FRMS_AUSENTE');
   } else {
-    if (item.checkin_status === 'PENDENTE' || item.checkin_status === 'AUSENTE') {
+    // Toda tripulação designada para um voo exige check-in RECEBIDO na data operacional.
+    // NAO_APLICAVEL e estados desconhecidos não equivalem a avaliação preenchida.
+    if (item.checkin_status !== 'RECEBIDO') {
       reasons.add('CHECKIN_DIARIO_PENDENTE');
     }
     if (item.alertas.includes('DADO_INCONSISTENTE') || item.jornada_data_source === 'INCONSISTENTE') {
@@ -207,14 +222,14 @@ export function deriveCrewDispatchAssessment(
     fadiga_acumulada: mapQuinzenaToFadigaNivel(item?.fortnight_indicator?.status_quinzena),
     reasons: reasonList,
     primary_reason: pickPrimaryReason(reasonList),
+    recommended_action: RECOMMENDED_ACTIONS[pickPrimaryReason(reasonList)!] ?? 'Sem pendência FRMS identificada; seguir verificações operacionais usuais.',
     natureza_dado: item?.natureza_dado ?? null,
   };
 }
 
 /**
- * Pura: agrega a tripulação inteira em um único estado do voo. Atenção
- * nunca bloqueia (`can_release` só é `false` quando há NAO_LIBERADO) — só
- * hard block muda a transição de status.
+ * Pura: agrega os alertas da tripulacao. `can_release` preserva o contrato
+ * legado, mas o FRMS nao interfere na transicao operacional.
  */
 export function aggregateFlightDispatchAssessment(
   crew: CrewDispatchAssessment[],
@@ -223,7 +238,7 @@ export function aggregateFlightDispatchAssessment(
     return {
       frms_status: 'NAO_LIBERADO',
       frms_primary_reason: 'TRIPULACAO_AUSENTE',
-      can_release: false,
+      can_release: true,
     };
   }
 
@@ -246,7 +261,9 @@ export function aggregateFlightDispatchAssessment(
     relevantMembers.flatMap((member) => member.reasons),
   );
 
-  return { frms_status, frms_primary_reason, can_release: frms_status !== 'NAO_LIBERADO' };
+  // FRMS e consultivo: o estado alerta nao veta a operacao. Outras regras
+  // de liberacao permanecem sob o handler canonico de Controle de Voos.
+  return { frms_status, frms_primary_reason, can_release: true };
 }
 
 /** Tripulação real do voo (Controle de Voos), tenant-scoped. */
@@ -325,25 +342,4 @@ export async function assessFlightDispatchGate(
     crew: crewAssessments,
     ...aggregate,
   };
-}
-
-/**
- * Guard reutilizável pelo middleware de rota: só avalia o gate quando a
- * transição candidata é exatamente `planejado -> liberado_operacionalmente`
- * (item 13 da spec: outras transições nao sofrem bloqueio novo).
- */
-export async function evaluateDispatchGateForTransition(
-  db: D1Database,
-  empresaId: number,
-  vooId: number,
-  currentStatus: string,
-  targetStatus: string,
-  dataOperacional: string,
-): Promise<{ blocked: boolean; assessment: FlightDispatchAssessment | null }> {
-  if (currentStatus !== 'planejado' || targetStatus !== 'liberado_operacionalmente') {
-    return { blocked: false, assessment: null };
-  }
-
-  const assessment = await assessFlightDispatchGate(db, empresaId, vooId, dataOperacional);
-  return { blocked: !assessment.can_release, assessment };
 }

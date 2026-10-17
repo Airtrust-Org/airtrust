@@ -36,6 +36,9 @@ export const AUTH_POST_ALLOWLIST = Object.freeze([
   '/api/auth/logout',
   '/api/auth/empresas/select',
   '/api/auth/select-empresa',
+  // Authentication/session-scoped role activation. This changes only the
+  // current access token/session profile; it does not mutate operational data.
+  '/api/me/operational-access/session-profile',
 ]);
 
 export const SAFE_METHODS = Object.freeze(['GET', 'HEAD', 'OPTIONS']);
