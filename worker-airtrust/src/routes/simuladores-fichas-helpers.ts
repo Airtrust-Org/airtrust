@@ -45,6 +45,7 @@ type QualificationGenerationFichaRow = {
   aluno_nome: string;
   empresa_id: number;
   agendamento_slot_id: number | null;
+  is_check?: number | null;
   tipo_curricular_codigo: string | null;
   tipo_curricular_nome: string | null;
   modelo_id: number | null;
@@ -197,9 +198,13 @@ export async function gerarQualificacaoDaFicha(
        WHERE sc.sessao_id=? AND sc.deleted_at IS NULL
     `).bind(f.empresa_id, fid, colaboradorId, f.empresa_id, f.agendamento_slot_id)
       .first<{ total: number; confirmed: number | null }>();
+    // A signed CHECK fiche with no configured checks must never generate a
+    // principal qualification by vacuous truth (zero checks == zero passes).
+    // Non-check sessions preserve their ordinary principal qualification flow.
+    const configured = Number(coverage?.total || 0);
     principalHasIndividualEvidence =
-      Number(coverage?.total || 0) === 0 ||
-      Number(coverage?.confirmed || 0) === Number(coverage?.total || 0);
+      (configured > 0 || Number(f.is_check) !== 1) &&
+      Number(coverage?.confirmed || 0) === configured;
   }
 
   let qid: number | null = null;

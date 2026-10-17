@@ -158,6 +158,21 @@ describe('individual evidence for simulator-generated FAP (real SQLite)', () => 
     db!.database.exec('INSERT INTO sessoes_checks_resultados VALUES (2, 50, 1, NULL)');
     expect((await generate()).qualificacoes_geradas.map((row) => row.codigo)).toEqual(['OPS-12']);
   });
+  it('never grants principal qualification for a signed check fiche with zero configured checks', async () => {
+    db!.database.exec(`
+      ALTER TABLE fichas_sessao ADD COLUMN is_check INTEGER NOT NULL DEFAULT 0;
+      UPDATE fichas_sessao SET is_check=1 WHERE id=70;
+      DELETE FROM sessoes_checks WHERE sessao_id=60;
+      CREATE TABLE sessoes_checks_resultados_individuais (
+        id INTEGER PRIMARY KEY, empresa_id INTEGER, ficha_id INTEGER,
+        funcionario_id INTEGER, sessao_check_id INTEGER,
+        aprovado INTEGER, estado TEXT, deleted_at TEXT
+      );
+    `);
+    await expect(generate()).rejects.toThrow(/Nenhuma qualificação foi gerada/);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
   it('requires every check of a qualification to pass individually', async () => {
     db!.database.exec(`
       CREATE TABLE sessoes_checks_resultados_individuais (
