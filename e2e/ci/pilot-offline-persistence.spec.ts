@@ -328,9 +328,17 @@ test('blocks legacy recovery when V2 already contains different unsynced data', 
 
 test('reports denied persistence without claiming permanent local retention', async ({ page }) => {
   await page.addInitScript(() => {
-    Object.defineProperty(navigator.storage, 'persist', {
+    // WebKit may not expose navigator.storage at all. Provide the API itself
+    // so this tests an explicit denial, not the separate "unavailable" state.
+    const storage = navigator.storage;
+    Object.defineProperty(navigator, 'storage', {
       configurable: true,
-      value: async () => false,
+      value: {
+        persist: async () => false,
+        estimate: async () => storage?.estimate
+          ? storage.estimate()
+          : { usage: 0, quota: 0 },
+      },
     });
   });
   await page.goto('/pilot/');
