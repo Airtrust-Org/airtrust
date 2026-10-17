@@ -329,13 +329,18 @@ export default function LmsPlayer() {
   const legacyAssessmentEvidence = curso?.scorm_assessment_policy === 'FORMATIVE' ||
     (curso?.scorm_assessment_policy === 'SCORED' &&
       (matricula?.score_final != null || completionDiagnostic?.score_pct != null));
+  const isScoredScorm = curso?.scorm_assessment_policy !== 'FORMATIVE';
+  // A SCORED course has one learning verdict: the backend-verified SCORM pass
+  // and mastery score. Never demand a second, proprietary per-page checklist
+  // in the player. FORMATIVE retains its real coverage requirement.
   const canRequestScormCompletion =
     isScormContent && !newEditionRequired && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
-    allSlidesVisited &&
-    (granularDiagnostic
-      ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
-        granularDiagnostic.assessment.passed !== false)
-      : Boolean(legacyFinalSlide && legacyAssessmentEvidence));
+    (isScoredScorm
+      ? closureReadiness?.eligible_for_server_verification === true
+      : allSlidesVisited && (granularDiagnostic
+        ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
+          granularDiagnostic.assessment.passed !== false)
+        : Boolean(legacyFinalSlide && legacyAssessmentEvidence)));
   const canRequestCompletion = !newEditionRequired &&
     (canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm);
 
