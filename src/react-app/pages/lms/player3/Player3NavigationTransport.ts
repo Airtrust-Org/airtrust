@@ -56,7 +56,7 @@ export function makePlayer3NavigationRecorder(
        new Set(row.seen_lesson_ids).size!==row.seen_lesson_ids.length||
        row.next_sequence!==row.seen_lesson_ids.length+1||
        row.last_visited_unit_id!==
-         (row.seen_lesson_ids.at(-1)??null)){
+         (row.seen_lesson_ids[row.seen_lesson_ids.length-1]??null)){
       throw Error('PLAYER3_NAV_LEDGER_SCOPE_CONFLICT');
     }
     return row;
@@ -100,7 +100,7 @@ export function makePlayer3NavigationRecorder(
     const after=await session();
     if(after.next_sequence!==before.next_sequence+1||
        after.seen_lesson_ids.length!==before.seen_lesson_ids.length+1||
-       after.seen_lesson_ids.at(-1)!==unitId||
+       after.seen_lesson_ids[after.seen_lesson_ids.length-1]!==unitId||
        after.last_visited_unit_id!==unitId){
       throw Error('PLAYER3_NAV_RECHECK_FAILED');
     }
