@@ -145,6 +145,21 @@ describe('daily check-in atomic commit', () => {
     expect(syncMock).toHaveBeenCalledWith(expect.objectContaining({ readinessAlreadyPersisted: true }));
   });
 
+  it('updates only the active check-in for the same tenant, crew and day, with its event', async () => {
+    const { db, batch } = fakeDb({ existing: true });
+    const response = await router.fetch(request(), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    const statements = batch.mock.calls[0][0];
+    expect(statements).toHaveLength(2);
+    expect(statements[0].sql).toContain('UPDATE frms_fadiga_checkin');
+    expect(statements[0].sql).toContain(
+      'WHERE id = ? AND empresa_id = ? AND funcionario_id = ? AND data_checkin = ? AND deleted_at IS NULL',
+    );
+    expect(statements[0].binds.slice(-4)).toEqual(['checkin-present', 7, 70, '2026-10-16']);
+    expect(statements[1].sql).toContain('INSERT INTO frms_fadiga_evento');
+    expect(statements[1].binds[3]).toBe('CHECKIN_ATUALIZADO');
+  });
+
   it('prevalidates malformed trial timing without mutating an existing check-in', async () => {
     const { db, batch } = fakeDb({ existing: true });
     const broken = trials();
