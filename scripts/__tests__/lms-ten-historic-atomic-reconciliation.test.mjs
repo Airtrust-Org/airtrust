@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import {strict as assert} from 'node:assert';
 import {readFileSync} from 'node:fs';
-import {plan,authorizedEnrollmentIds,administrativeObservations,isVerifiedCompletedCredit,classifyHistoricAssessment} from
+import {plan,authorizedEnrollmentIds,administrativeObservations,isVerifiedCompletedCredit,classifyHistoricAssessment,assertApprovedScoreProvenScope,assessmentFingerprint} from
  '../production/lms-ten-historic-atomic-reconciliation.mjs';
 const targets=[[2106,68],[384,34],[201,28],[608,43],[2139,68],
  [610,43],[544,7],[624,43],[700,55],[2052,68]];
@@ -37,10 +37,10 @@ test('history is explicitly attributed to manager, not new SCORM edition',()=>{
  assert.match(note,/existing notes/);
  assert.ok(note.startsWith('AIRTRUST_MANAGER_HISTORICAL_EDITION_CREDIT_20261016:'),'manager marker must be first');
 });
-test('workflow pins SHA and safeguards 10 qualification-linked writes',()=>{
+test('workflow pins SHA and safeguards four qualification links for three approved writes',()=>{
  const wf=readFileSync(new URL('../../.github/workflows/production-lms-ten-historic-atomic-qualification.yml',import.meta.url),'utf8');
  for(const s of ['verify-release-gates.mjs','reviewed_dry_run_run_id','time-travel info',
-  'environment: production','.results.qualification_linked==10'])assert.ok(wf.includes(s),s);
+  'environment: production','.results.qualification_linked==4'])assert.ok(wf.includes(s),s);
 });
 
 
@@ -64,12 +64,14 @@ test('one already completed credit resumes only when qualification is linked',()
    {progresso_bruto:99},
  ])assert.equal(isVerifiedCompletedCredit({...base,...change}),false);
 });
-test('workflow validates ten total linked qualifications, not ten repeat PATCH operations',()=>{
+test('workflow validates three score-proven credits and six protected enrollments',()=>{
  const wf=readFileSync(new URL('../../.github/workflows/production-lms-ten-historic-atomic-qualification.yml',import.meta.url),'utf8');
  const script=readFileSync(new URL('../production/lms-ten-historic-atomic-reconciliation.mjs',import.meta.url),'utf8');
  assert.match(wf,/\.candidates\+\.already_completed/);
- assert.match(wf,/\.writes==\.candidates/);
- assert.match(wf,/\.results\.qualification_linked==10/);
+ assert.match(wf,/\.writes==\.results.completed/);
+ assert.match(wf,/\.results.selected_verified==3/);
+ assert.match(wf,/\.results.blocked_preserved==6/);
+ assert.match(wf,/\.results\.qualification_linked==4/);
  assert.match(script,/COMPLETED_WITHOUT_LINKED_QUALIFICATION/);
  assert.match(script,/PATCH_UNCERTAIN_NO_SAFE_RETRY/);
  assert.match(script,/HTTP_UNCERTAIN_VERIFIED_CANONICAL/);
@@ -105,4 +107,44 @@ test('workflow remains strictly bounded to exact ten IDs and read-only triage ne
  assert.match(script,/qualification_linked:Boolean/);
  assert.match(script,/const assessmentByOrdinal=\[\]/);
  assert.match(script,/candidate_hash:p.hash/);
+});
+
+test('score-proven three can be selected only from the complete protected ten-person cohort',()=>{
+ const ids=new Set(targets.map(t=>t[0]));
+ const rows=targets.map(([id,course],i)=>({id:course,enrollments:[{
+   id,status:id===700?'CONCLUIDO':'EM_ANDAMENTO',progresso_bruto:100}]}));
+ const cohort=plan(rows,ids);
+ const evidence=new Map([[384,0],[201,null],[608,68],[610,13],[544,0],[624,13]]);
+ const assessmentByOrdinal=targets.map(([id,course],i)=>({
+   ordinal:i+1,curso_id:course,enrollment_status:id===700?'CONCLUIDO':'EM_ANDAMENTO',
+   qualification_linked:id===700,
+   category:id===201?'SCORE_MISSING':evidence.has(id)?'SCORE_BELOW_MASTERY':'SCORE_AT_OR_ABOVE_MASTERY',
+   score_pct:evidence.has(id)?evidence.get(id):100,
+   mastery_score:70,assessment_required:true,terminal_status_present:false,
+   explicit_failure:false,edition_mismatch_required:id!==700
+ }));
+ const candidate={...cohort,assessmentByOrdinal};
+ const selection=assertApprovedScoreProvenScope(candidate,ids);
+ assert.deepEqual(selection.selected.map(x=>x.id),[2106,2139,2052]);
+ assert.equal(selection.protectedRows.length,6);
+ assert.equal(assessmentFingerprint(assessmentByOrdinal).length,64);
+ assert.throws(()=>assertApprovedScoreProvenScope({
+   ...candidate,assessmentByOrdinal:assessmentByOrdinal.map((a,i)=>i===6?{...a,score_pct:100,category:'SCORE_AT_OR_ABOVE_MASTERY'}:a),
+ },ids),/BLOCKED_EVIDENCE_DRIFT/);
+ assert.throws(()=>assertApprovedScoreProvenScope({
+   ...candidate,assessmentByOrdinal:assessmentByOrdinal.map((a,i)=>i===0?{...a,score_pct:0,category:'SCORE_BELOW_MASTERY'}:a),
+ },ids),/SCORE_PROVEN_TARGET_DRIFT/);
+});
+test('production apply is hard-limited to three immutable IDs and reviewed score evidence',()=>{
+ const script=readFileSync(new URL('../production/lms-ten-historic-atomic-reconciliation.mjs',import.meta.url),'utf8');
+ const wf=readFileSync(new URL('../../.github/workflows/production-lms-ten-historic-atomic-qualification.yml',import.meta.url),'utf8');
+ for(const x of ['score-proven-three','REVIEWED_ASSESSMENT_HASH','BLOCKED_EVIDENCE_DRIFT',
+   'TARGET_ASSESSMENT_DRIFT','PROTECTED_POSTCHECK_CHANGED','SELECTED_POSTCHECK_UNQUALIFIED'])
+   assert.ok((script+wf).includes(x),x);
+ assert.match(wf,/\.score_proven_pending_count==3/);
+ assert.match(wf,/\.blocked_pending_count==6/);
+ assert.match(wf,/\.assessment_hash\|test/);
+ assert.match(wf,/\.results\.qualification_linked==4/);
+ assert.match(script,/for\(const row of selected\)/);
+ assert.doesNotMatch(script,/for\(const row of cohort.rows\)\{\s*await pin/);
 });
