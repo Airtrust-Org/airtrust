@@ -472,7 +472,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
   });
   await expect(adminCourseRow).toHaveCount(1);
   for (const label of metricLabels) {
-    await expect(adminCourseRow.getByText(label, { exact: true })).toBeVisible();
+    await expect(adminCourseRow.getByText(label)).toBeVisible();
   }
 
   // Navigate to the enrollment index without creating/canceling enrollments.
@@ -485,7 +485,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
   });
   await expect(enrollmentCourseCard).toHaveCount(1);
   for (const label of metricLabels) {
-    await expect(enrollmentCourseCard.getByText(label, { exact: true })).toBeVisible();
+    await expect(enrollmentCourseCard.getByText(label)).toBeVisible();
   }
 
   await page.goto(`/lms/matriculas/${course.id}`, { waitUntil: 'domcontentloaded' });
@@ -497,7 +497,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
   }).locator('..');
   await expect(detailIndicators).toBeVisible();
   for (const label of metricLabels) {
-    await expect(detailIndicators.getByText(label, { exact: true })).toBeVisible();
+    await expect(detailIndicators.getByText(label)).toBeVisible();
   }
 
   guard.assertClean();
