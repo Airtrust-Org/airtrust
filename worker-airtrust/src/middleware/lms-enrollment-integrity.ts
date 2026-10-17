@@ -345,6 +345,8 @@ async function handleRematriculation(
         `UPDATE lms_matriculas
               SET status = 'NAO_INICIADO',
                   progresso_pct = 0,
+                  ultimo_slide = 0,
+                  ultima_pagina = 0,
                   score_final = NULL,
                   tentativas = 0,
                   data_inicio = NULL,
