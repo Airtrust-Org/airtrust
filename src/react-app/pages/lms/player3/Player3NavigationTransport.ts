@@ -51,11 +51,12 @@ export function makePlayer3NavigationRecorder(
        !Number.isSafeInteger(row.next_sequence)||row.next_sequence<1||
        row.next_sequence>10001||!Array.isArray(row.seen_lesson_ids)||
        row.seen_lesson_ids.length>s.checkpointUnitIds.length||
-       row.seen_lesson_ids.some(id=>!s.checkpointUnitIds.includes(id))||
+       row.seen_lesson_ids.some((id,index)=>
+         id!==s.checkpointUnitIds[index])||
        new Set(row.seen_lesson_ids).size!==row.seen_lesson_ids.length||
-       (row.last_visited_unit_id!==null&&
-         (!s.checkpointUnitIds.includes(row.last_visited_unit_id)||
-          !row.seen_lesson_ids.includes(row.last_visited_unit_id)))){
+       row.next_sequence!==row.seen_lesson_ids.length+1||
+       row.last_visited_unit_id!==
+         (row.seen_lesson_ids.at(-1)??null)){
       throw Error('PLAYER3_NAV_LEDGER_SCOPE_CONFLICT');
     }
     return row;
@@ -98,8 +99,9 @@ export function makePlayer3NavigationRecorder(
     }
     const after=await session();
     if(after.next_sequence!==before.next_sequence+1||
-       after.last_visited_unit_id!==unitId||
-       !after.seen_lesson_ids.includes(unitId)){
+       after.seen_lesson_ids.length!==before.seen_lesson_ids.length+1||
+       after.seen_lesson_ids.at(-1)!==unitId||
+       after.last_visited_unit_id!==unitId){
       throw Error('PLAYER3_NAV_RECHECK_FAILED');
     }
     locked=false;return true;

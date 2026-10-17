@@ -89,6 +89,33 @@ describe('Player3 authenticated navigation checkpoint, never certification',()=>
     expect(JSON.parse(req.mock.calls[4][1].body as string).sequence).toBe(3);
   });
 
+  it('rejects non-prefix ledger, sequence mismatch and stale bookmark before writing',async()=>{
+    const failures=[
+      {...before,seen_lesson_ids:['unit22'],last_visited_unit_id:'unit22'},
+      {...before,seen_lesson_ids:[],last_visited_unit_id:null},
+      {...before,last_visited_unit_id:null},
+      {...before,next_sequence:3},
+    ];
+    for(const bad of failures){
+      const req=vi.fn().mockResolvedValue(payload(bad));
+      const recorder=makePlayer3NavigationRecorder(scope,req,'/api');
+      await expect(recorder('unit22')).rejects.toThrow('LEDGER_SCOPE_CONFLICT');
+      expect(req.mock.calls.map(x=>x[1].method)).toEqual(['GET']);
+    }
+  });
+  it('rejects a post-commit readback with an extra credited lesson',async()=>{
+    const scope3={...scope,checkpointUnitIds:['unit21','unit22','unit23']};
+    const req=vi.fn().mockResolvedValueOnce(payload(before))
+      .mockResolvedValueOnce(payload(applied,201))
+      .mockResolvedValueOnce(payload({...after,next_sequence:4,
+        seen_lesson_ids:['unit21','unit22','unit23'],
+        last_visited_unit_id:'unit23'}));
+    const recorder=makePlayer3NavigationRecorder(scope3,req,'/api');
+    await expect(recorder('unit22')).rejects.toThrow('RECHECK_FAILED');
+    await expect(recorder('unit22')).rejects.toThrow('REOPEN_TO_RECONCILE');
+    expect(req.mock.calls.map(x=>x[1].method)).toEqual(['GET','POST','GET']);
+  });
+
   it('lost POST response locks the session and never repeats the evidence write',async()=>{
     const req=vi.fn().mockResolvedValueOnce(payload(before))
       .mockRejectedValueOnce(new Error('response dropped after commit'));
