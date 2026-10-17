@@ -165,17 +165,25 @@ export async function resolveAvailableSessionRoles(
   }
 
   const roles = new Set<SessionRole>();
+  // A conta com admin local pertence ao tenant, NÃO à plataforma. O modo
+  // ADMINISTRADOR só pode vir da concessão platform_admin persistida,
+  // verificada acima. Papéis legados 'admin' continuam tendo seu vínculo
+  // administrativo no banco, mas selecionam a experiência de GESTOR.
+  const tenantSessionRole = (value: unknown): SessionRole => {
+    const role = normalizeSessionRole(value);
+    return role === 'ADMINISTRADOR' ? 'GESTOR' : role;
+  };
 
   if (explicitProfiles.length > 0) {
     // AUTHORITATIVE EXPLICIT PROFILES
     for (const p of explicitProfiles) {
       if (p.ativo === 1 && p.perfil) {
-        roles.add(normalizeSessionRole(p.perfil));
+        roles.add(tenantSessionRole(p.perfil));
       }
     }
   } else {
     // LEGACY INFERENCE FALLBACK
-    roles.add(normalizeSessionRole(row.empresa_role || row.perfil || fallbackRole));
+    roles.add(tenantSessionRole(row.empresa_role || row.perfil || fallbackRole));
 
     const funcionarioId = Number(row.funcionario_id || 0);
     const funcionarioEmpresaId = Number(row.funcionario_empresa_id || 0);
@@ -195,10 +203,8 @@ export async function resolveAvailableSessionRoles(
     }
   }
 
-  // ADMINISTRADOR é um modo exclusivo: não oferecemos nem aceitamos seleção
-  // de ALUNO, INSTRUTOR ou GESTOR em uma conta com papel administrativo.
-  // A validação do cookie usa este mesmo resolver em cada request.
-  if (roles.has('ADMINISTRADOR')) return ['ADMINISTRADOR'];
+  // O único retorno ADMINISTRADOR ocorre na verificação de plataforma acima.
+  // O modo GESTOR local é distinto e pode coexistir com o modo de aprendizado.
 
   // GESTOR pode entrar como ALUNO mesmo sem matrícula LMS.
   if (roles.has('GESTOR')) roles.add('ALUNO');
