@@ -413,8 +413,16 @@ async function authenticateLmsAssetRequest(
   // QA tokens are exclusively for immutable candidate previews, never
   // normal learner, active-course or legacy asset routes.
   const qaClaims = payload as JwtPayload & { asset_qa_candidate_id?: string };
-  if (qaClaims.asset_qa_candidate_id && !new URL(request.url).pathname.startsWith('/api/lms/scorm/qa-')) {
-    throw new ApiError('Token QA limitado à edição candidata', 403);
+  if (qaClaims.asset_qa_candidate_id) {
+    if (!new URL(request.url).pathname.startsWith('/api/lms/scorm/qa-')) {
+      throw new ApiError('Token QA limitado à edição candidata', 403);
+    }
+    // An asset JWT is not an access token. Revalidate the underlying user's
+    // *current* membership, revocation and role without promoting its scope.
+    const current = await validateAccessTokenSecurityState(env.DB,
+      { ...qaClaims, token_type: 'access' });
+    if (!isPreviewAllowedRole(current.role)) throw new ApiError('Papel QA revogado', 403);
+    return { ...qaClaims, role: current.role };
   }
 
   if (resolved.source !== 'authorization') {
