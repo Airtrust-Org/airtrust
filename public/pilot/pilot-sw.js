@@ -1,4 +1,4 @@
-const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v35';
+const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v36';
 const PILOT_SCOPE_PATH = '/pilot/';
 const PILOT_NETWORK_TIMEOUT_MS = 4_000;
 
