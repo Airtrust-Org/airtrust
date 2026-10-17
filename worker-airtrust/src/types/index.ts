@@ -118,6 +118,9 @@ export interface Env {
   // Browser Run binding. It is intentionally separate from the PDF API token:
   // SCORM conformance launches a clean Chromium with no AirTrust credentials.
   SCORM_BROWSER?: unknown;
+  // Shared only between governed staging QA attestation signer and Worker;
+  // missing secret fails closed; never inject in browser/frontend.
+  SCORM_QA_ATTESTATION_SECRET?: string;
 
   // Maintenance routes secret (wrangler secret put MAINTENANCE_SECRET)
   MAINTENANCE_SECRET?: string;
