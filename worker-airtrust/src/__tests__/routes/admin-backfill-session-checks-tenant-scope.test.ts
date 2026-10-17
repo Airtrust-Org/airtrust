@@ -243,32 +243,30 @@ function createBackfillDb(state: MockState): D1Database {
             return { results: rows as T[] };
           }
 
-          if (sql.includes('SELECT DISTINCT sc.id as check_id')) {
+
+          return { results: [] as T[] };
+        },
+
+        async first<T = unknown>() {
+          if (sql.includes('SELECT COUNT(DISTINCT sc.id) AS total')) {
             expect(sql).toContain('sa.empresa_id = ?');
             expect(sql).toContain('f.empresa_id = ?');
             const [agendamentoEmpresaId, fichaEmpresaId] = binds.map(Number);
-            const rows = state.sessaoChecks
+            const total = state.sessaoChecks
               .filter((check) => check.deleted_at === null && !state.resultados.has(check.id))
-              .flatMap((check) => {
+              .filter((check) => {
                 const agendamento = state.agendamentos.find(
                   (item) =>
                     item.id === check.sessao_id &&
                     item.deleted_at === null &&
                     item.empresa_id === agendamentoEmpresaId,
                 );
-                if (!agendamento) return [];
-                return approvedFichaForAgendamento(agendamento.id, fichaEmpresaId)
-                  ? [{ check_id: check.id }]
-                  : [];
-              });
-
-            return { results: rows as T[] };
+                return Boolean(
+                  agendamento && approvedFichaForAgendamento(agendamento.id, fichaEmpresaId),
+                );
+              }).length;
+            return { total } as T;
           }
-
-          return { results: [] as T[] };
-        },
-
-        async first<T = unknown>() {
           if (sql.includes('FROM modelos_sessao_checks msc') && sql.includes('msc.qualificacao_tipo_id = ?')) {
             expect(sql).toContain('ms.empresa_id = ?');
             const [modeloId, qualificacaoTipoId, empresaId] = binds.map(Number);
@@ -383,7 +381,8 @@ describe('admin backfill-session-checks tenant scope', () => {
         modelos_checks_inseridos: 1,
         agendamentos_linkados: 1,
         checks_criados: 1,
-        resultados_criados: 2,
+        resultados_criados: 0,
+        resultados_pendentes_revisao: 2,
         erros: [],
       },
     });
@@ -396,7 +395,7 @@ describe('admin backfill-session-checks tenant scope', () => {
       expect.arrayContaining([{ id: 3, sessao_id: 300, qualificacao_tipo_id: 501, deleted_at: null }]),
     );
     expect(state.sessaoChecks.some((item) => item.sessao_id === 301)).toBe(false);
-    expect(Array.from(state.resultados).sort()).toEqual([1, 3]);
+    expect(Array.from(state.resultados).sort()).toEqual([]);
 
     const businessWrites = state.writes.filter((write) => {
       const normalizedWriteSql = write.sql.toUpperCase();
@@ -418,7 +417,8 @@ describe('admin backfill-session-checks tenant scope', () => {
       modelos_checks_inseridos: 1,
       agendamentos_associados: 1,
       checks_criados: 1,
-      resultados_criados: 2,
+      resultados_criados: 0,
+      resultados_pendentes_revisao: 2,
       error_count: 0,
     });
 
@@ -434,7 +434,7 @@ describe('admin backfill-session-checks tenant scope', () => {
     expect(canonicalMetadata).toMatchObject({
       operation: 'BACKFILL_SESSION_CHECKS',
       scope: 'tenant',
-      count: 5,
+      count: 3,
     });
   });
 
@@ -462,6 +462,7 @@ describe('admin backfill-session-checks tenant scope', () => {
         agendamentos_linkados: 0,
         checks_criados: 0,
         resultados_criados: 0,
+        resultados_pendentes_revisao: 2,
         erros: [],
       },
     });
