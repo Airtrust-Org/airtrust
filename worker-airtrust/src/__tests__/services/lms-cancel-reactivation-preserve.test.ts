@@ -1,7 +1,7 @@
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 const {editionMismatchMock}=vi.hoisted(()=>({editionMismatchMock:vi.fn()}));
 vi.mock('../../services/lms-edition-mismatch',()=>({detectLmsEditionMismatch:editionMismatchMock}));
-import {reactivateCancelledMatriculaPreservingProgress} from '../../services/lms-matricula-cycle';
+import {reactivateCancelledMatriculaPreservingProgress,resetMatriculaForNewCycle} from '../../services/lms-matricula-cycle';
 
 function fixture(overrides:Record<string,unknown>={}){
  const original={id:384,empresa_id:6,curso_id:34,funcionario_id:77,
@@ -70,5 +70,25 @@ describe('reactivar matrícula cancelada sem destruir SCORM',()=>{
    empresaId:6,matriculaId:384,bucket:null});
   expect(result).toEqual({status:'NAO_INICIADO',progressoPct:0,scormPreserved:true});
   expect(x.writes.some(s=>s.includes('lms_progresso_scorm'))).toBe(false);
+ });
+});
+
+describe('central reset protection across Compliance, bulk and cron',()=>{
+ beforeEach(()=>{vi.clearAllMocks();editionMismatchMock.mockResolvedValue(null);});
+ it('automatic reset of CANCELADO routes through preservation, never clears existing SCORM',async()=>{
+  const x=fixture();
+  const id=await resetMatriculaForNewCycle(x.db,{empresaId:6,matriculaId:384,
+   origin:'AUTO_RENOVACAO',observacoes:'Renovação da matriz'});
+  expect(id).toBe(99);
+  expect(x.writes.some(q=>q.includes('UPDATE lms_progresso_scorm')||
+    q.includes('DELETE FROM lms_xapi_statements'))).toBe(false);
+  expect(x.writes.join('\n')).not.toMatch(/progresso_pct\s*=\s*0/);
+  expect(x.writes.some(q=>q.includes('UPDATE lms_matriculas'))).toBe(true);
+ });
+ it('central reset fails closed if cancelled matrícula already has qualification',async()=>{
+  const x=fixture({qualificacao_historico_id:99});
+  await expect(resetMatriculaForNewCycle(x.db,{empresaId:6,matriculaId:384}))
+   .rejects.toThrow('LMS_CANCELLED_PROGRESS_PRESERVATION_REQUIRED');
+  expect(x.writes).toHaveLength(0);
  });
 });
