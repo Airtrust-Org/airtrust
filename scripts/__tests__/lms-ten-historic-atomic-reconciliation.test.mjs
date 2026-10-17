@@ -125,7 +125,7 @@ test('score-proven three can be selected only from the complete protected ten-pe
  }));
  const candidate={...cohort,assessmentByOrdinal};
  const selection=assertApprovedScoreProvenScope(candidate,ids);
- assert.deepEqual(selection.selected.map(x=>x.id),[2106,2139,2052]);
+ assert.deepEqual(selection.selected.map(x=>x.id),[2052,2106,2139]);
  assert.equal(selection.protectedRows.length,6);
  assert.equal(assessmentFingerprint(assessmentByOrdinal).length,64);
  assert.throws(()=>assertApprovedScoreProvenScope({
