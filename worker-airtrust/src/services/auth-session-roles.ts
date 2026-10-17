@@ -87,8 +87,8 @@ async function hasLmsStudentLink(
  * - INSTRUTOR: cadastro ativo em instrutores_simulador;
  * - ALUNO: matrícula LMS ativa/não removida no tenant no fallback legado.
  *
- * Invariante de negócio: todo GESTOR ou ADMINISTRADOR também pode atuar como ALUNO, mesmo sem
- * matrícula LMS e mesmo quando a estrutura explícita de perfis já existe.
+ * Invariante de negócio: GESTOR também pode atuar como ALUNO; ADMINISTRADOR
+ * tem exclusivamente modo administrativo, mesmo com vínculos legados adicionais.
  *
  * Nenhum perfil é criado por simples pedido do cliente; o backend sempre valida
  * a evidência no D1 antes de permitir a troca de role no JWT.
@@ -187,12 +187,13 @@ export async function resolveAvailableSessionRoles(
     }
   }
 
-  // Regra de negócio: todo GESTOR ou ADMINISTRADOR também pode atuar como ALUNO.
-  // A derivação em tempo de autorização cobre gestores já existentes sem
-  // migration/backfill e mantém ADMINISTRADOR como perfil independente.
-  if (roles.has('GESTOR') || roles.has('ADMINISTRADOR')) {
-    roles.add('ALUNO');
-  }
+  // ADMINISTRADOR é um modo exclusivo: não oferecemos nem aceitamos seleção
+  // de ALUNO, INSTRUTOR ou GESTOR em uma conta com papel administrativo.
+  // A validação do cookie usa este mesmo resolver em cada request.
+  if (roles.has('ADMINISTRADOR')) return ['ADMINISTRADOR'];
+
+  // GESTOR pode entrar como ALUNO mesmo sem matrícula LMS.
+  if (roles.has('GESTOR')) roles.add('ALUNO');
 
   return ROLE_ORDER.filter((role) => roles.has(role));
 }
