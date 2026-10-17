@@ -109,7 +109,7 @@ app.get('/fichas/:id/checks-individuais', async (c) => {
     success:false, code:'SCHEMA_0554_PENDING', error:'Evidência individual indisponível neste ambiente',
   }, 503);
   const rows = await c.env.DB.prepare(`
-    SELECT sc.id AS sessao_check_id, qt.codigo, qt.nome, qt.validade,
+    SELECT sc.id AS sessao_check_id, sc.qualificacao_tipo_id, qt.codigo, qt.nome, qt.validade,
            ri.id AS evidencia_id, ri.aprovado, ri.estado, ri.observacoes,
            ri.registrado_em, ri.confirmado_em, ri.avaliador_funcionario_id,
            ri.revisao_numero, ri.revisao_de_id
