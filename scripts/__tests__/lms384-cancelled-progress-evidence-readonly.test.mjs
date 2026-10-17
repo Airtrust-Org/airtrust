@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 const script=readFileSync(new URL('../production/lms384-cancelled-progress-evidence-readonly.mjs',import.meta.url),'utf8');
 const workflow=readFileSync(new URL('../../.github/workflows/production-lms384-archived-evidence-readonly.yml',import.meta.url),'utf8');
 test('limited D1 SELECT-only, tenant/course/enrollment 6/34/384',()=>{
- assert.match(script,/SELECT m\\.id/);
+ assert.ok(script.includes('SELECT m.id'));
  assert.match(script,/WHERE m\.empresa_id=6 AND m\.id=384 AND m\.curso_id=34/);
  assert.match(script,/WHERE empresa_id=6 AND matricula_id=384 AND curso_id=34/);
  assert.match(script,/WHERE empresa_id=6 AND entity_type='lms_matriculas' AND entity_id=384/);
