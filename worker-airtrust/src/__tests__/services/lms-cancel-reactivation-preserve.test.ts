@@ -63,6 +63,15 @@ describe('reactivar matrícula cancelada sem destruir SCORM',()=>{
    expect(x.writes).toHaveLength(0);
   }
  });
+ it('preserva posição SCORM forte mesmo com porcentagem cadastral zerada',async()=>{
+  const x=fixture({progresso_pct:0,ultimo_slide:40,lesson_location:'40/121',
+   cmi_json:null,suspend_data:null,lesson_status:'not attempted'});
+  const resumed=await reactivateCancelledMatriculaPreservingProgress(x.db,{
+   empresaId:6,matriculaId:384,bucket:null,
+  });
+  expect(resumed).toEqual({status:'EM_ANDAMENTO',progressoPct:0,scormPreserved:true});
+  expect(x.writes.some(q=>q.includes('UPDATE lms_progresso_scorm'))).toBe(false);
+ });
  it('sem progresso continua NAO_INICIADO mas sem apagar dados',async()=>{
   const x=fixture({progresso_pct:0,cmi_json:null,suspend_data:null,
    lesson_status:'not attempted'});
