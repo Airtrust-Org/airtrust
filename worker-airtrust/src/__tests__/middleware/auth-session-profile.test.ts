@@ -149,6 +149,40 @@ beforeEach(() => {
   resetSchemaCache();
 });
 
+describe('perfil no JWT assinado — sem cookie SameSite', () => {
+  it('mantém modo INSTRUTOR escolhido por Gestor, sem cookie, somente com vínculo válido', async () => {
+    const db = createDb({
+      userId: 17, empresaId: 500, perfil: 'GESTOR', membershipRole: 'manager',
+      explicitProfiles: [{ perfil: 'GESTOR', ativo: 1 }, { perfil: 'INSTRUTOR', ativo: 1 }],
+    });
+    const { token } = await makeToken(17, 500, 'INSTRUTOR');
+    const res = await buildApp(db, 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { userRole: string }).toMatchObject({ userRole: 'INSTRUTOR' });
+  });
+
+  it('token assinado com perfil revogado NÃO reativa INSTRUTOR', async () => {
+    const db = createDb({
+      userId: 17, empresaId: 500, perfil: 'GESTOR', membershipRole: 'manager',
+      explicitProfiles: [{ perfil: 'GESTOR', ativo: 1 }, { perfil: 'INSTRUTOR', ativo: 0 }],
+    });
+    const { token } = await makeToken(17, 500, 'INSTRUTOR');
+    const res = await buildApp(db, 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(401);
+  });
+
+  it('administrador global não aceita token antigo com modo ALUNO', async () => {
+    const db = createDb({
+      userId: 19, empresaId: 500, perfil: 'ADMIN', membershipRole: 'admin',
+      platformAdmin: true,
+      explicitProfiles: [{ perfil: 'ALUNO', ativo: 1 }],
+    });
+    const { token } = await makeToken(19, 500, 'ALUNO');
+    const res = await buildApp(db, 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () => {
   it('platform_admin persistido é exclusivo mesmo que os perfis do tenant sejam Aluno e Instrutor', async () => {
     const db = createDb({
