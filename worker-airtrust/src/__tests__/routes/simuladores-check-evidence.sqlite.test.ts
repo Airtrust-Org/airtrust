@@ -178,8 +178,19 @@ describe('individual evidence for simulator-generated FAP (real SQLite)', () => 
       VALUES (2,1,70,1002,52,0,'CONFIRMADO');
     `);
     expect((await generate()).qualificacoes_geradas.map(q => q.codigo)).toEqual(['OPS-12']);
-    db!.database.exec("UPDATE sessoes_checks_resultados_individuais SET aprovado=1 WHERE id=2");
-    expect((await generate()).qualificacoes_geradas.map(q => q.codigo)).toEqual(['OPS-12','SIX']);
+    // Re-evaluation is a new signed fiche; never rewrite the immutable failure.
+    db!.database.exec(`
+      INSERT INTO fichas_sessao
+        (id,empresa_id,colaborador_id_aluno,agendamento_slot_id,
+         tipo_sessao,data_sessao,status,aprovado)
+      VALUES(73,1,1002,60,'PER','2026-07-22','APROVADO',1);
+      INSERT INTO sessoes_checks_resultados_individuais
+        (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
+      VALUES (3,1,73,1002,50,1,'CONFIRMADO'),
+             (4,1,73,1002,52,1,'CONFIRMADO');
+    `);
+    const revised = await gerarQualificacaoDaFicha(db!.asD1(),73);
+    expect(revised.qualificacoes_geradas.map(q => q.codigo)).toEqual(['OPS-12','SIX']);
   });
 
   it('uses only explicit signed individual evidence after 0554, never a shared-session pass', async () => {
