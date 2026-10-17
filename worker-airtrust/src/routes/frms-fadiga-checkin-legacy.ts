@@ -918,6 +918,8 @@ router.post('/daily-fatigue', requireFatigueCheckinAccess, async (c) => {
 });
 
 router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
+  // A falha após DB.batch() não pode ser apresentada como se o check-in não tivesse sido salvo.
+  let committedCheckinId: string | null = null;
   try {
     const empresaId = getEmpresaId(c);
     const userId = Number(c.get('userId') || 0);
@@ -1225,6 +1227,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
     // daily-key conflict rolls back the entire submission, not only one table.
     try {
       await c.env.DB.batch([checkinWrite, ...readinessStatements, provenanceEvent]);
+      committedCheckinId = checkinId;
     } catch (error) {
       if (!existing?.id) {
         // Another concurrent first submission may have won the active daily key.
@@ -1399,6 +1402,18 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       },
     });
   } catch {
+    if (committedCheckinId) {
+      // A transação canônica já confirmou check-in/readiness/KSS. Não induzir reenvio
+      // quando sync, alertas, auditoria ou contexto operacional falharam depois.
+      return c.json({
+        success: false,
+        error: 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED',
+        checkin_committed: true,
+        checkin_id: committedCheckinId,
+        retry_submission: false,
+        requires_operational_review: true,
+      }, 500);
+    }
     return c.json({ success: false, error: 'Erro ao registrar check-in de fadiga' }, 500);
   }
 });
