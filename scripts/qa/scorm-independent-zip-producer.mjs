@@ -41,6 +41,8 @@ export function validateIndependentDriver(driver,sha,files){
   check(driver&&driver.schemaVersion===1,'DRIVER_SCHEMA_INVALID');
   check(SHA.test(driver.packageSha256)&&driver.packageSha256===sha,'DRIVER_ZIP_SHA_MISMATCH');
   check(safeName(driver.launchFile)&&files[driver.launchFile],'LAUNCH_FILE_NOT_IN_ZIP');
+  check(driver.scormVersion===undefined||['1.2','2004'].includes(driver.scormVersion),
+    'SCORM_VERSION_UNSUPPORTED');
   check(typeof driver.requiresAssessment==='boolean','ASSESSMENT_PROFILE_MISSING');
   check(Array.isArray(driver.requiredContent)&&driver.requiredContent.length>0,
     'REQUIRED_CONTENT_INVENTORY_MISSING');
