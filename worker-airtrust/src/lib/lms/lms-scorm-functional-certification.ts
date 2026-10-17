@@ -7,12 +7,16 @@
  * harness may supply these attestations; ZIP metadata and client payloads
  * must never be used as inputs to this evaluator.
  */
-export const SCORM_FUNCTIONAL_HARNESS = 'AIRTRUST_SCORM_FUNCTIONAL_HARNESS_V1' as const;
+export const SCORM_FUNCTIONAL_HARNESS = 'AIRTRUST_SCORM_FUNCTIONAL_HARNESS_V2' as const;
 export const REQUIRED_SCORM_FUNCTIONAL_CASES = [
   'FIRST_ACCESS',
+  'REQUIRED_CONTENT_COVERAGE',
+  'REQUIRED_INTERACTIONS',
+  'PERSISTENCE_VERIFIED',
   'SUSPEND_RESUME',
   'ASSESSMENT_INSUFFICIENT',
   'ASSESSMENT_APPROVED',
+  'ASSESSMENT_THRESHOLD',
   'EXPLICIT_FINALIZATION',
   'REOPEN_COMPLETED',
   'NO_STATUS_DOWNGRADE',
@@ -52,7 +56,8 @@ export function evaluateScormFunctionalCertification(
   // validated course policy determines whether these two tests apply.
   const requiredCases = REQUIRED_SCORM_FUNCTIONAL_CASES.filter(name =>
     policy.requiresAssessment ||
-    (name !== 'ASSESSMENT_INSUFFICIENT' && name !== 'ASSESSMENT_APPROVED'));
+    (name !== 'ASSESSMENT_INSUFFICIENT' && name !== 'ASSESSMENT_APPROVED' &&
+      name !== 'ASSESSMENT_THRESHOLD'));
 
   for (const browser of ['CHROMIUM', 'WEBKIT'] as const) {
     const runs = Array.isArray(trustedRuns) ? trustedRuns.filter(run => run?.browser === browser) : [];
