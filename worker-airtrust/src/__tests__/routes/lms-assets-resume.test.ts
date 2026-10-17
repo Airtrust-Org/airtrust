@@ -65,12 +65,29 @@ describe('SCORM asset admission uses a single physical and activated Native guar
       .rejects.toMatchObject({ statusCode: 503 });
   });
 
-  it('does not query Native activation while the per-tenant gate is disabled', async () => {
-    const prepare = vi.fn();
+  it('keeps ordinary SCORM allowed with the UI flag OFF only after verifying no Native marker schema', async () => {
+    const first = vi.fn().mockResolvedValue(null);
+    const bind = vi.fn().mockReturnValue({ first });
+    const prepare = vi.fn().mockReturnValue({ bind });
     const env = { ENVIRONMENT: 'staging', DB: { prepare } } as unknown as Env;
     await expect(assertScormAssetRouteAllowed(env, 6, 39, 'scorm', 'No SCORM'))
       .resolves.toBeUndefined();
-    expect(prepare).not.toHaveBeenCalled();
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(prepare.mock.calls[0][0]).toContain('sqlite_master');
+    expect(bind).toHaveBeenCalledWith('lms_native_catalog_activation');
+  });
+
+  it('rejects an activated Native edition after the catalog display flag was turned OFF', async () => {
+    const prepare = vi.fn((sql: string) => ({
+      bind: vi.fn(() => ({
+        first: vi.fn(async () => sql.includes('sqlite_master')
+          ? { found: 1 } : { curso_id: 39 }),
+      })),
+    }));
+    const env = { ENVIRONMENT: 'staging', DB: { prepare } } as unknown as Env;
+    await expect(assertScormAssetRouteAllowed(env, 6, 39, 'scorm', 'No SCORM'))
+      .rejects.toMatchObject({ statusCode: 409 });
+    expect(prepare).toHaveBeenCalledTimes(2);
   });
 });
 
