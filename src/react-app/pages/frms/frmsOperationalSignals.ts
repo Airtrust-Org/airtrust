@@ -4,7 +4,7 @@ import { formatFrmsCheckinTime } from './frmsCheckinTime';
  *
  * Quatro sinais fixos que explicam, em segundos, a condição operacional de um
  * tripulante no dia:
- *   1. Fadiga diária   — deriva de `checkin_status` (dado real do snapshot)
+ *   1. Recebimento do check-in — coleta, não classificação de fadiga
  *   2. Compliance       — deriva de `fortnight_indicator.status_quinzena`
  *   3. Efetividade      — deriva de `trustedEffectiveness()` + alertas/estado
  *   4. Prontidão        — deriva de um adapter opcional (frente da PR #68)
@@ -13,6 +13,7 @@ import { formatFrmsCheckinTime } from './frmsCheckinTime';
  * A apresentação vive em `components/FrmsOperationalSignals.tsx`.
  *
  * Regras de segurança respeitadas aqui:
+ *   - recebimento do check-in é informativo, não comprova baixa fadiga;
  *   - ausência de check-in NUNCA vira verde;
  *   - não fabricamos `0%` de compliance nem de efetividade;
  *   - não inventamos thresholds novos de efetividade — usamos o estado já
@@ -78,7 +79,7 @@ function effectivenessBandTone(nivel: string | null): FrmsSignalTone {
   return 'unknown';
 }
 
-/** Sinal 1 — Fadiga diária (check-in subjetivo). */
+/** Sinal 1 — coleta recebida, independente do risco de fadiga. */
 export function resolveDailyFatigueSignal(
   item: FrmsOperationalSnapshotItem,
 ): FrmsOperationalSignal {
@@ -94,7 +95,12 @@ export function resolveDailyFatigueSignal(
 
   switch (item.checkin_status) {
     case 'RECEBIDO':
-      return { ...base, value: 'Realizada', tone: 'ok', detail };
+      return {
+        ...base,
+        value: 'Recebido',
+        tone: 'info',
+        detail: [detail, 'Recebimento não comprova baixa fadiga nem autoriza liberação.'].filter(Boolean).join(' · '),
+      };
     case 'PENDENTE':
       return { ...base, value: 'Pendente', tone: 'critical', detail };
     case 'AUSENTE':
