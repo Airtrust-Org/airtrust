@@ -436,7 +436,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           'aside,[class*="sidebar" i],[class*="drawer" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
         ));
       };
-      const items = Array.from(document.querySelectorAll('button,[role=button],input[type=button],input[type=submit],a,[data-scenario]'))
+      const items = Array.from(document.querySelectorAll('button,[role=button],input[type=button],input[type=submit],a,[data-scenario],details > summary'))
         .filter(visible)
         .map((el, index) => {
           const text = clean(el.innerText || el.value || el.getAttribute('aria-label') || el.title);
@@ -1160,6 +1160,18 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       );
       if (textNext) return markAndClick(textNext, 'next');
 
+      // A native <details><summary> is a real learner reading action.
+      // Never synthesize a completed-read flag or navigate around nextUnit
+      // when an authored accordion is the only remaining visible gate.
+      const unreadSummary = items.find((item) =>
+        item.el.matches('details:not([open]) > summary') &&
+        !item.el.closest('nav,aside,header,footer') && !alreadyClicked(item)
+      );
+      if (unreadSummary) return requestTrustedClick(unreadSummary, 'accordion-read-summary');
+      if (document.querySelector('details') && document.querySelector('#nextUnit:disabled')) {
+        return { type: 'accordion-gate-unresolved' };
+      }
+
       const fallbackChoices = items.filter((item) =>
         item.el.tagName.toLowerCase() !== 'a' &&
         !isChoiceButton(item) &&
@@ -1285,7 +1297,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
     if (action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall') {
       diagnostics.required_decision_block = action.type;
     }
-    if (action?.type === 'inline-quiz-authored-answer-missing' || action?.type === 'inline-quiz-question-gate-blocked' ||
+    if (action?.type === 'accordion-gate-unresolved' ||
+        action?.type === 'inline-quiz-authored-answer-missing' || action?.type === 'inline-quiz-question-gate-blocked' ||
         action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall' ||
         action?.type === 'retry-deferred' || action?.type === 'adaptive-exhausted' ||
         action?.type === 'video-blocked' || action?.type === 'video-error') break;
