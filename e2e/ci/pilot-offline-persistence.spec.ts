@@ -216,6 +216,7 @@ test('recovers encrypted legacy draft and outbox only after PIN, with verified V
     await vault.putJson('rdv_drafts', 'phase1-synthetic-rdv-draft', { observacoes: value }, 1);
     await vault.putJson('rdv_drafts', 'rdv:legacy:123', { voo_id: 123, note: value }, 2);
     await vault.putJson('outbox', operationId, { client_operation_id: operationId, status: 'pending' }, 3);
+    await vault.putBytes('attachments', 'attachment:legacy', new Uint8Array([10, 20, 30]), 4);
   }, { pin: legacyPin, value: marker, operationId: outboxId });
 
   await page.goto('/pilot/');
@@ -258,7 +259,13 @@ test('recovers encrypted legacy draft and outbox only after PIN, with verified V
     const v2Draft = await get(current, 'rdv_drafts', 'phase1-synthetic-rdv-draft');
     const v2Outbox = await get(current, 'outbox', operationId);
     const recovery = await get(current, 'meta', 'legacy-pin-v1-recovery-proof');
+    const { PilotVault } = await import('/pilot/pilot-vault.js');
+    const verifiedVault = await PilotVault.open();
+    const ready = await verifiedVault.openAutomatically();
+    const attachment = await verifiedVault.getBytes('attachments', 'attachment:legacy');
     return {
+      recoveryReady: ready.status === 'ready',
+      attachmentRestored: attachment?.bytes.join(',') === '10,20,30',
       v1Version: v1.version, v2Version: v2.version,
       v1PlaintextLeak: JSON.stringify(legacyDraft).includes(value),
       v1Ciphertext: legacyDraft.ciphertext,
@@ -275,6 +282,8 @@ test('recovers encrypted legacy draft and outbox only after PIN, with verified V
   expect(proof.v2Ciphertext).toBeTruthy();
   expect(proof.v2Ciphertext).not.toBe(proof.v1Ciphertext);
   expect(proof.v2Outbox).toBe(true);
+  expect(proof.recoveryReady).toBe(true);
+  expect(proof.attachmentRestored).toBe(true);
   expect(proof.proof).toBe(true);
 
   await page.reload();
