@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env, Variables } from '../../types';
 import { tenantMiddleware } from '../../middleware/tenant';
+import { errorHandler } from '../../middleware/error-handler';
 import { resetSchemaCache } from '../../utils/db-schema';
 
 let platformAdmin = false;
@@ -38,6 +39,7 @@ function fixtureDb(options: Fixture = {}): D1Database {
 
 async function request(options: Fixture, role: string) {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+  app.onError(errorHandler);
   app.use('*', async (c, next) => {
     c.set('userId', 42);
     c.set('empresaId', options.empresaId ?? 7);
