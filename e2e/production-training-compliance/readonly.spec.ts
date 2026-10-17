@@ -419,5 +419,86 @@ test('production intelligent training compliance UI and APIs are coherent and re
   const rules = await rulesP.then(payload);
   expect(Array.isArray(rules.data)).toBe(true);
 
+
+  // PR #1507: compare the four LMS course indicators with the very same
+  // canonical training rows validated above. Exercise real production UI
+  // on both the course administration and enrollment screens, with no writes.
+  const publishedCoursesP = waitApi(
+    page, '/api/lms/cursos',
+    (url) => url.searchParams.get('publicados') === '1',
+  );
+  const draftCoursesP = waitApi(
+    page, '/api/lms/cursos',
+    (url) => url.searchParams.get('publicados') === '0',
+  );
+  await page.goto('/lms/admin/cursos', { waitUntil: 'domcontentloaded' });
+  await assertProductionFrontendShaFromPage(
+    page, EXPECTED_PAGES_SHA.slice(0, 7), 'production-lms-admin-courses',
+  );
+  const [publishedCourses, draftCourses] = await Promise.all([
+    publishedCoursesP.then(payload),
+    draftCoursesP.then(payload),
+  ]);
+  expect(Array.isArray(publishedCourses.data)).toBe(true);
+  expect(Array.isArray(draftCourses.data)).toBe(true);
+
+  // The index must contain an actually obligated, published course, not an
+  // unrelated informative course with a placeholder indicator.
+  const byType = new Map<number, any>(
+    trainings.data.map((row: any) => [Number(row.qualificacao_tipo_id), row]),
+  );
+  const course = publishedCourses.data.find(
+    (item: any) => Number.isInteger(item.id) &&
+      Number(item.qualificacao_tipo_id) > 0 &&
+      Number(byType.get(Number(item.qualificacao_tipo_id))?.pessoas) > 0,
+  );
+  expect(course, 'No published LMS course with a canonical mandatory requirement').toBeTruthy();
+  if (!course) throw new Error('PRODUCTION_LMS_MANDATORY_COURSE_NOT_FOUND');
+  const metric = byType.get(Number(course.qualificacao_tipo_id));
+  for (const field of ['pessoas', 'matriculados', 'concluidos']) {
+    expectCount(metric[field], `lms-metrics.${field}`);
+  }
+  expect(metric.matriculados).toBeLessThanOrEqual(metric.pessoas);
+  expect(metric.concluidos).toBe(metric.conformes - metric.vencendo);
+
+  const metricLabels = [
+    `Obrigatórios: ${metric.pessoas}`,
+    `Matriculados: ${metric.matriculados}`,
+    `Concluídos: ${metric.concluidos}`,
+    `Compliance: ${Number(metric.compliance_pct).toLocaleString('pt-BR')}%`,
+  ];
+  const adminCourseRow = page.getByRole('row').filter({
+    has: page.getByText(course.titulo, { exact: true }),
+  });
+  await expect(adminCourseRow).toHaveCount(1);
+  for (const label of metricLabels) {
+    await expect(adminCourseRow.getByText(label, { exact: true })).toBeVisible();
+  }
+
+  // Navigate to the enrollment index without creating/canceling enrollments.
+  await page.goto('/lms/matriculas', { waitUntil: 'domcontentloaded' });
+  await assertProductionFrontendShaFromPage(
+    page, EXPECTED_PAGES_SHA.slice(0, 7), 'production-lms-enrollment-index',
+  );
+  const enrollmentCourseCard = page.getByRole('button').filter({
+    has: page.getByText(course.titulo, { exact: true }),
+  });
+  await expect(enrollmentCourseCard).toHaveCount(1);
+  for (const label of metricLabels) {
+    await expect(enrollmentCourseCard.getByText(label, { exact: true })).toBeVisible();
+  }
+
+  await page.goto(`/lms/matriculas/${course.id}`, { waitUntil: 'domcontentloaded' });
+  await assertProductionFrontendShaFromPage(
+    page, EXPECTED_PAGES_SHA.slice(0, 7), 'production-lms-enrollment-detail',
+  );
+  const detailIndicators = page.getByRole('heading', {
+    name: 'Indicadores do treinamento',
+  }).locator('..');
+  await expect(detailIndicators).toBeVisible();
+  for (const label of metricLabels) {
+    await expect(detailIndicators.getByText(label, { exact: true })).toBeVisible();
+  }
+
   guard.assertClean();
 });
