@@ -5,8 +5,8 @@
  * backend continuam sendo a autoridade de autorização por empresa.
  */
 export const PERFIS_USUARIOS = [
-  { value: 'ADMINISTRADOR', label: 'Administrador Geral', color: 'bg-red-100 text-red-800' },
-  { value: 'GESTOR', label: 'Administrador da Empresa', color: 'bg-blue-100 text-blue-700' },
+  { value: 'ADMINISTRADOR', label: 'Administrador', color: 'bg-red-100 text-red-800' },
+  { value: 'GESTOR', label: 'Gestor', color: 'bg-blue-100 text-blue-700' },
   { value: 'COORDENACAO_VOO', label: 'Coordenação de Voo', color: 'bg-cyan-100 text-cyan-800' },
   { value: 'INSTRUTOR', label: 'Instrutor', color: 'bg-green-100 text-green-800' },
   { value: 'ALUNO', label: 'Aluno', color: 'bg-gray-100 text-gray-600' },
