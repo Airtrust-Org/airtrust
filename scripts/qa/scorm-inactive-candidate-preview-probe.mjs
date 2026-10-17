@@ -54,7 +54,7 @@ try{
   body:bytes});
  const data=await upload.json().catch(()=>({}));
  output.uploadHttp=upload.status;
- if(!upload.ok())throw Error('CANDIDATE_UPLOAD_HTTP_'+upload.status+'_CODE_'+String(data.code||'unknown'));
+ if(!upload.ok)throw Error('CANDIDATE_UPLOAD_HTTP_'+upload.status+'_CODE_'+String(data.code||'unknown'));
  const v=data.data||{};
  output.packageId=v.packageId;
  output.candidateStatus=v.status;
