@@ -36,3 +36,15 @@ test('production compliance browser coverage is read-only and exercises canonica
   assert.match(guard, /mutation-method/);
   assert.doesNotMatch(spec, /request\.(post|put|patch|delete)\(/i);
 });
+
+test('production LMS course metrics match canonical compliance in admin and enrollment views', () => {
+  assert.match(spec, /\\/lms\\/admin\\/cursos/);
+  assert.match(spec, /\\/lms\\/matriculas/);
+  assert.match(spec, /Indicadores do treinamento/);
+  assert.match(spec, /Obrigatórios:/);
+  assert.match(spec, /Matriculados:/);
+  assert.match(spec, /Concluídos:/);
+  assert.match(spec, /Compliance:/);
+  assert.match(spec, /publishedCoursesP\\.then\\(payload\\)/);
+  assert.match(spec, /guard\\.assertClean\\(\\)/);
+});
