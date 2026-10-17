@@ -13,7 +13,7 @@ import {
   type FadigaScoreInput,
 } from '../lib/frms/fadiga-score';
 import { FrmsParameterResolutionError, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
-import { EmbeddedReadinessValidationError, persistReadinessAndSyncFrms } from './frms-fadiga-checkin-readiness-sync';
+import { persistReadinessAndSyncFrms } from './frms-fadiga-checkin-readiness-sync';
 import { buildFratSuggestion } from '../lib/frms/fadiga-frat-bridge';
 import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import {
@@ -1221,20 +1221,14 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       }
       throw error;
     }
-    let sync;
-    try {
-      ({ sync } = await persistReadinessAndSyncFrms({
-        db: c.env.DB, empresaId, funcionarioId, userId: userId || null, checkinId, dataCheckin,
-        kssScore: input.kssScore, sleepHours: input.horasSono24h, wakeTime: input.horaAcordou,
-        presentationTime: input.jornadaInicioPrevista, readiness: parsed.data.readiness,
-        isNewCheckin: !existing?.id, readinessAlreadyPersisted: Boolean(parsed.data.readiness), now,
-      }));
-    } catch (error) {
-      if (error instanceof EmbeddedReadinessValidationError) {
-        return c.json({ success: false, error: error.code }, 400);
-      }
-      throw error;
-    }
+    // All validation errors must be returned before DB.batch. From this point
+    // on even a typed downstream error cannot undo the committed submission.
+    const { sync } = await persistReadinessAndSyncFrms({
+      db: c.env.DB, empresaId, funcionarioId, userId: userId || null, checkinId, dataCheckin,
+      kssScore: input.kssScore, sleepHours: input.horasSono24h, wakeTime: input.horaAcordou,
+      presentationTime: input.jornadaInicioPrevista, readiness: parsed.data.readiness,
+      isNewCheckin: !existing?.id, readinessAlreadyPersisted: Boolean(parsed.data.readiness), now,
+    });
     await createDailyFatigueAlert({
       db: c.env.DB,
       empresaId,

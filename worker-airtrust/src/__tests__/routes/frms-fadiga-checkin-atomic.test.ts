@@ -56,6 +56,7 @@ vi.mock('../../routes/frms-fadiga-checkin-readiness-sync', () => ({
 vi.mock('../../utils/auditoria', () => ({ registrarAuditoria: async () => {} }));
 
 import router from '../../routes/frms-fadiga-checkin-legacy';
+import { EmbeddedReadinessValidationError } from '../../routes/frms-fadiga-checkin-readiness-sync';
 
 type MockStatement = {
   sql: string;
@@ -196,6 +197,22 @@ describe('daily check-in atomic commit', () => {
       requires_operational_review: true,
     });
     expect(typeof body.checkin_id).toBe('string');
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][0]).toHaveLength(13);
+  });
+
+  it('never reports HTTP 400 for typed validation errors thrown after an atomic commit', async () => {
+    const { db, batch } = fakeDb();
+    syncMock.mockRejectedValueOnce(new EmbeddedReadinessValidationError('invalid_trial_timing'));
+    const response = await router.fetch(request({ duration_ms: 60000, trials: trials() }),
+      { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED',
+      checkin_committed: true,
+      retry_submission: false,
+      requires_operational_review: true,
+    });
     expect(batch).toHaveBeenCalledTimes(1);
     expect(batch.mock.calls[0][0]).toHaveLength(13);
   });
