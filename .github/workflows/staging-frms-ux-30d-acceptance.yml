@@ -96,8 +96,11 @@ jobs:
     timeout-minutes: 20
     env:
       BASE_URL: https://staging.airtrust.pages.dev
-      FRMS_QA_EMAIL: ${{ secrets.FRMS_QA_EMAIL }}
-      FRMS_QA_PASSWORD: ${{ secrets.FRMS_QA_PASSWORD }}
+      # QA identity is provisioned only in tenant 999013 by the separate
+      # staging-frms-ux-identity.yml workflow. Reuse the central staging
+      # password, never create an agent-local or redundant QA secret.
+      FRMS_QA_EMAIL: qa-frms-ux@staging.airtrust.invalid
+      FRMS_QA_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
