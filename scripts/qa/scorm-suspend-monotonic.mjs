@@ -16,11 +16,28 @@ export function observeMonotonicSuspend(beforeRaw,afterRaw){
       before.s!==after.s||before.s<0)
     return {ok:false,reason:'RESUME_CURSOR_DRIFT'};
   if(before.v!==after.v)return {ok:false,reason:'SUSPEND_VERSION_DRIFT'};
-  for(const key of ['d','sc']){
+  // Real ZIPs differ in on-wire serialization: course #15 uses an array
+  // for scenario IDs; CFIT #41 uses an object keyed by scenario identity.
+  // Enforce inclusion in BOTH forms rather than accepting a dropped entry.
+  for(const key of ['d','sc','g']){
     const old=before[key]??[],now=after[key]??[];
-    if(!Array.isArray(old)||!Array.isArray(now)||
-      old.some(id=>!now.includes(id)))
-      return {ok:false,reason:'COMPLETION_LOST_'+key.toUpperCase()};
+    if(Array.isArray(old)&&Array.isArray(now)){
+      if(old.some(id=>!now.some(current=>JSON.stringify(current)===JSON.stringify(id))))
+        return {ok:false,reason:'COMPLETION_LOST_'+key.toUpperCase()};
+    }else if(old&&now&&typeof old==='object'&&typeof now==='object'&&
+      !Array.isArray(old)&&!Array.isArray(now)){
+      for(const [id,value] of Object.entries(old)){
+        if(!(id in now)||value===true&&now[id]!==true||
+          value!==false&&JSON.stringify(value)!==JSON.stringify(now[id]))
+          return {ok:false,reason:'COMPLETION_LOST_'+key.toUpperCase()};
+      }
+    }else return {ok:false,reason:'COMPLETION_TYPE_CHANGED_'+key.toUpperCase()};
+  }
+  if(before.c===true&&after.c!==true)
+    return {ok:false,reason:'COMPLETION_FLAG_DOWNGRADE'};
+  for(const key of ['p','cv']){
+    if(typeof before[key]==='string'&&before[key]!==after[key])
+      return {ok:false,reason:'PACKAGE_VERSION_DRIFT_'+key.toUpperCase()};
   }
   const oldQuizzes=before.mq??{},newQuizzes=after.mq??{};
   if(!oldQuizzes||!newQuizzes||typeof oldQuizzes!=='object'||
