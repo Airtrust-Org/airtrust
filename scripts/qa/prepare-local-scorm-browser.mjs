@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { strToU8, zipSync, unzipSync } from 'fflate';
 import { DatabaseSync } from 'node:sqlite';
 import { buildInteractiveM8QaFiles } from '../staging/lms-scorm-m8-fixture.mjs';
-import { validateIndependentDriver } from './scorm-independent-zip-producer.mjs';
+import { validateIndependentDriver, unzipCandidate } from './scorm-independent-zip-producer.mjs';
 // External candidate is never published. This isolated QA course exists only
 // in disposable local D1/R2; the original course/edition is untouched.
 
@@ -61,7 +61,7 @@ async function main(){
   const externalBytes=externalZip?fs.readFileSync(path.resolve(externalZip)):null;
   const externalSha=externalBytes?
     createHash('sha256').update(externalBytes).digest('hex'):null;
-  const externalFiles=externalBytes?unzipSync(new Uint8Array(externalBytes)):null;
+  const externalFiles=externalBytes?unzipCandidate(externalBytes):null;
   const externalDriver=externalDriverPath?
     JSON.parse(fs.readFileSync(path.resolve(externalDriverPath),'utf8')):null;
   if(externalDriver)validateIndependentDriver(externalDriver,externalSha,externalFiles);
