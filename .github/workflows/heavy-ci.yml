@@ -352,7 +352,8 @@ jobs:
             --config=e2e/ci/lms-scorm-enrollment-browser.config.ts
           node --test scripts/__tests__/lms-scorm-local-precertification.test.mjs \
             scripts/__tests__/lms-scorm-sign-attestation.test.mjs \
-            scripts/__tests__/lms-scorm-qa-failure-classifier.test.mjs
+            scripts/__tests__/lms-scorm-qa-failure-classifier.test.mjs \
+            scripts/__tests__/scorm-independent-zip-producer.test.mjs
           node scripts/ci/lms-scorm-local-precertification.mjs
       - name: Upload sanitized SCORM local precertification evidence
         if: always()
