@@ -97,7 +97,7 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
     const b = await (await request(112)).json() as any;
     const c = await (await request(113)).json() as any;
     expect(a.data[0]).toMatchObject({
-      situacao:'APROVADO', aprovado_comprovado:true, data_conclusao:'2026-10-17',
+      qualificacao_tipo_id:101, situacao:'APROVADO', aprovado_comprovado:true, data_conclusao:'2026-10-17',
       data_vencimento:'2027-10-17',
     });
     expect(b.data[0]).toMatchObject({ situacao:'REPROVADO', aprovado_comprovado:false });
