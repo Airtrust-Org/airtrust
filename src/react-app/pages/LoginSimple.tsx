@@ -173,7 +173,10 @@ export default function LoginPage() {
       // Troca somente o access token. O refresh token da autenticação original
       // permanece preservado e o backend revalida o perfil ativo em cada request.
       setTokens(payload.data.accessToken);
-      navigate(redirectTo, { replace: true });
+      // Recria o AuthContext com o perfil confirmado pelo backend. Navegar
+      // apenas via React manteria o usuário em memória com a role do login
+      // inicial (por exemplo, GESTOR mesmo após escolher Aluno/Instrutor).
+      window.location.replace(redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível ativar o perfil selecionado.');
       logger.error('Erro ao selecionar perfil de sessão:', err);
