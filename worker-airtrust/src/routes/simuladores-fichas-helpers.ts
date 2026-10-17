@@ -247,16 +247,18 @@ export async function gerarQualificacaoDaFicha(
            -- Results are currently session-wide, not participant-specific.
            -- Only an unambiguous single-employee session may automatically
            -- generate an individual FAP. Shared sessions need individual proof.
+           -- A former participant/ficha is still evidence that this was a
+           -- shared session. Soft deletion must never promote a group check
+           -- into an individual approval retroactively.
            AND NOT EXISTS (
              SELECT 1 FROM sessoes_participantes sp
-             WHERE sp.sessao_id = sc.sessao_id AND sp.deleted_at IS NULL
+             WHERE sp.sessao_id = sc.sessao_id
                AND (sp.funcionario_id IS NULL OR sp.funcionario_id <> ?)
            )
            AND NOT EXISTS (
              SELECT 1 FROM fichas_sessao f2
              WHERE f2.agendamento_slot_id = sc.sessao_id
                AND f2.empresa_id = ?
-               AND f2.deleted_at IS NULL
                AND (f2.colaborador_id_aluno IS NULL OR f2.colaborador_id_aluno <> ?)
            )`
       )
