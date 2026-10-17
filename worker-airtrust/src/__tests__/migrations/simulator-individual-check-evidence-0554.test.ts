@@ -83,7 +83,7 @@ describe('Schema V2 0554 — simulator check evidence belongs to a person', () =
 
   it('stores distinct approved/rejected results for two people in the same session', () => {
     db = fixture();
-    insert(db);
+    insert(db!);
     // The second fiche gets its own signature, without inheriting first result.
     db!.exec(`UPDATE fichas_sessao SET
       assinatura_instrutor_timestamp='2026-10-12',
@@ -115,8 +115,8 @@ describe('Schema V2 0554 — simulator check evidence belongs to a person', () =
 
   it('keeps confirmed results immutable and unique per fiche/check', () => {
     db = fixture();
-    insert(db);
-    expect(() => insert(db)).toThrow(/UNIQUE constraint failed/);
+    insert(db!);
+    expect(() => insert(db!)).toThrow(/UNIQUE constraint failed/);
     expect(() => db!.exec(
       "UPDATE sessoes_checks_resultados_individuais SET aprovado=0 WHERE ficha_id=101",
     )).toThrow(/INDIVIDUAL_CHECK_CONFIRMED_IMMUTABLE/);
