@@ -3,7 +3,7 @@ const {editionMismatchMock}=vi.hoisted(()=>({editionMismatchMock:vi.fn()}));
 vi.mock('../../services/lms-edition-mismatch',()=>({detectLmsEditionMismatch:editionMismatchMock}));
 import {reactivateCancelledMatriculaPreservingProgress,resetMatriculaForNewCycle} from '../../services/lms-matricula-cycle';
 
-function fixture(overrides:Record<string,unknown>={}){
+function fixture(overrides:Record<string,unknown>={}, withoutCurrentCycle=false){
  const original={id:384,empresa_id:6,curso_id:34,funcionario_id:77,
   status:'CANCELADO',deleted_at:null,qualificacao_historico_id:null,
   progresso_pct:87,data_inicio:'2026-10-01',tipo_conteudo:'scorm',
@@ -13,23 +13,26 @@ function fixture(overrides:Record<string,unknown>={}){
  const snapshot={...original,observacoes:null,data_matricula:null,
   data_conclusao:null,data_expiracao:null,score_final:null,tentativas:0};
  const writes:string[]=[];
+ const recordedBinds:Array<{sql:string,args:unknown[]}>=[];
  const db={
   prepare:vi.fn((sql:string)=>({
-   bind:(..._args:unknown[])=>({
+   bind:(...args:unknown[])=>({
     first:async()=>{
      if(sql.includes('FROM lms_matriculas m')&&sql.includes('JOIN lms_cursos'))return original;
      if(sql.includes('FROM lms_matriculas')&&sql.includes('SELECT id,'))return snapshot;
-     if(sql.includes('FROM lms_matricula_ciclos')&&sql.includes('SELECT id'))return {id:99};
+     if(sql.includes('FROM lms_matricula_ciclos')&&sql.includes('SELECT id'))return withoutCurrentCycle?null:{id:99};
+     if(sql.includes('FROM lms_matricula_ciclos')&&sql.includes('MAX(numero_ciclo)'))return {max_numero:1};
      throw Error('UNEXPECTED_SELECT:'+sql.slice(0,80));
     },
     run:async()=>{
      writes.push(sql);
-     return {meta:{changes:1,last_row_id:0}};
+     recordedBinds.push({sql,args});
+     return {meta:{changes:1,last_row_id:101}};
     },
    }),
   })),
  } as unknown as D1Database;
- return {db,original,writes};
+ return {db,original,writes,recordedBinds};
 }
 describe('reactivar matrícula cancelada sem destruir SCORM',()=>{
  beforeEach(()=>{vi.clearAllMocks();editionMismatchMock.mockResolvedValue(null);});
@@ -46,6 +49,18 @@ describe('reactivar matrícula cancelada sem destruir SCORM',()=>{
   expect(editionMismatchMock).toHaveBeenCalledWith(expect.objectContaining({
    cursoId:34,empresaId:6,cmiJson:x.original.cmi_json,
   }));
+ });
+ it('recria ciclo ausente somente com origem aceita pelo CHECK do esquema',async()=>{
+  const x=fixture({},true);
+  const result=await reactivateCancelledMatriculaPreservingProgress(x.db,{
+   empresaId:6,matriculaId:384,bucket:null,
+  });
+  expect(result).toEqual({status:'EM_ANDAMENTO',progressoPct:87,scormPreserved:true});
+  const insert=x.recordedBinds.find(x=>x.sql.includes('INSERT INTO lms_matricula_ciclos'));
+  expect(insert).toBeDefined();
+  expect(insert?.args).toContain('MANUAL');
+  expect(insert?.args).not.toContain('REATIVACAO_SEM_RESET');
+  expect(x.writes.some(q=>q.includes('UPDATE lms_progresso_scorm'))).toBe(false);
  });
  it('bloqueia edição incompatível antes de qualquer escrita',async()=>{
   editionMismatchMock.mockResolvedValue({required:true,previous_total:41,active_total:37});
