@@ -8,6 +8,7 @@ import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { requireOperationalAccess } from '../services/operational-domain-access';
+import { gerarQualificacaoDaFicha } from './simuladores-fichas-helpers';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 app.use('*', auth());
@@ -64,6 +65,24 @@ async function actorFuncionario(db: D1Database, empresaId: number, userId: numbe
   return row ? Number(row.id) : null;
 }
 const privilegedReaders = new Set(['ADMIN', 'ADMINISTRADOR', 'COMPLIANCE', 'GESTOR']);
+/**
+ * Qualification history is derived only AFTER immutable, confirmed proof exists.
+ * A failed downstream refresh is visible as pending and can be retried safely;
+ * never roll back the signed evidence or fabricate success.
+ */
+async function refreshQualification(db: D1Database, fichaId: number, approved: boolean, fichaApproved: boolean) {
+  if (!approved || !fichaApproved) return { estado:'SEM_APROVACAO_DE_CHECK' };
+  try {
+    const result = await gerarQualificacaoDaFicha(db, fichaId);
+    return {
+      estado:'SINCRONIZADA',
+      qualificacoes_geradas:result.qualificacoes_geradas,
+    };
+  } catch {
+    return { estado:'PENDENTE_RECONCILIACAO', mensagem:'Evidência confirmada; histórico exige revisão' };
+  }
+}
+
 const sameEvaluator = (f: FichaCheckScope, id: number | null) =>
   id !== null && (id === Number(f.instrutor_id) || id === Number(f.examinador_id));
 
@@ -172,7 +191,9 @@ app.post(
           existing.aprovado === Number(approved) &&
           (existing.observacoes || '') === obs && existing.avaliador_funcionario_id === actor &&
           (existing.revisao_de_id === revisionId)) {
-        return c.json({ success:true, data:{ id:existing.id, idempotente:true, estado:'CONFIRMADO' } });
+        const qualificacao = await refreshQualification(c.env.DB, fid,
+          approved, Number(ficha.aprovado) === 1);
+        return c.json({ success:true, data:{ id:existing.id, idempotente:true, estado:'CONFIRMADO' }, qualificacao });
       }
       return c.json({ success:false, code:'CHECK_INDIVIDUAL_JA_REGISTRADO', error:'Evidência existente e imutável' }, 409);
     }
@@ -226,7 +247,9 @@ app.post(
       WHERE empresa_id=? AND ficha_id=? AND sessao_check_id=?
         AND estado='CONFIRMADO' AND deleted_at IS NULL
     `).bind(empresaId, fid, checkId).first();
-    return c.json({ success:true, data:written, qualificacao:'PENDENTE_SINCRONIZACAO_COMPLIANCE' }, 201);
+    const qualificacao = await refreshQualification(c.env.DB, fid,
+      approved, Number(ficha.aprovado) === 1);
+    return c.json({ success:true, data:written, qualificacao }, 201);
   },
 );
 
