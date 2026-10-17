@@ -9,6 +9,19 @@ test('release SHA gates, admin RBAC, preflight proof, recovery and canonical mut
  for(const term of ['ADMIN_REQUIRED','TENANT_CONTEXT','/nova-edicao','ROW_CHANGED','POSTCHECK','REVIEWED_LMS_EDITION_TARGET_PROOF'])assert.ok((wf+source).includes(term),term);
  assert.doesNotMatch(source,/(UPDATE|DELETE|INSERT)\s+.*lms_(matriculas|progresso_scorm)/i);
 });
+test('production apply requires a separate authorized human from the reviewed preflight',()=>{
+ const privileged = wf.split('  govern:')[1] ?? '';
+ assert.match(privileged,/\.event <<< "\$run"\) == workflow_dispatch/);
+ assert.match(privileged,/\.head_branch <<< "\$run"\) == main/);
+ assert.match(privileged,/\.actor\.type <<< "\$run"\) == User/);
+ assert.match(privileged,/preflight_actor=/);
+ assert.match(privileged,/preflight_trigger=/);
+ assert.match(privileged,/caller" != "\$preflight_actor"/);
+ assert.match(privileged,/caller" != "\$preflight_trigger"/);
+ assert.match(privileged,/collaborators\/\$reviewer\/permission/);
+ assert.match(privileged,/permission" == write/);
+ assert.match(privileged,/needs\.d1_recovery\.result == 'success'/);
+});
 test('private individual progress is encrypted with public key and no names in source',()=>{
  assert.ok(source.includes('createCipheriv')&&source.includes('publicEncrypt')&&source.includes('createHmac'));
  assert.doesNotMatch(wf+source,/\bFilipe\b|\bDaumas\b/i);

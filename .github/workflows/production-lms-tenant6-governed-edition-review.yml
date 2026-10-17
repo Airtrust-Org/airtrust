@@ -121,6 +121,20 @@ jobs:
           run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
           [[ "$(jq -r .name <<< "$run")" == "Production LMS Tenant6 Governed Edition Review" ]]
           [[ "$(jq -r .conclusion <<< "$run")" == success && "$(jq -r .head_sha <<< "$run")" == "$GITHUB_SHA" ]]
+          # A different authorized human must initiate apply, not the operator
+          # who submitted or re-ran the confidential preflight.
+          [[ "$(jq -r .event <<< "$run")" == workflow_dispatch ]]
+          [[ "$(jq -r .head_branch <<< "$run")" == main ]]
+          [[ "$(jq -r .actor.type <<< "$run")" == User ]]
+          caller="${GITHUB_ACTOR,,}"
+          preflight_actor="$(jq -er '.actor.login | ascii_downcase' <<< "$run")"
+          preflight_trigger="$(jq -er '(.triggering_actor.login // .actor.login) | ascii_downcase' <<< "$run")"
+          [[ -n "$caller" && "$caller" != *'[bot]' ]]
+          [[ "$caller" != "$preflight_actor" && "$caller" != "$preflight_trigger" ]]
+          for reviewer in "$caller" "$preflight_actor"; do
+            permission="$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$reviewer/permission" --jq '.permission')"
+            [[ "$permission" == write || "$permission" == maintain || "$permission" == admin ]]
+          done
           mkdir -p "$RUNNER_TEMP/reviewed"
           gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" --name "lms-target-edition-preflight-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
           jq -e --arg sha "$GITHUB_SHA" --arg prod "$EXPECTED_PRODUCTION_SHA" '
