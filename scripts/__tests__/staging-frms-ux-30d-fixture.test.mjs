@@ -51,6 +51,19 @@ test('creates only fictional crew under reserved staging tenant with governed pr
   assert.equal(approximation('1-4'),2);
   assert.throws(()=>approximation('3'),/BAND_INVALID/);
 });
+test('four QA cases have matching synthetic canonical journeys, not unlinked manual or shadow rows',()=>{
+  const sql=buildSeedSql(validateSource(payload,SHA));
+  assert.match(sql,/CASE WHEN CAST\(substr\(f\.matricula,-2\) AS INTEGER\)<=2 THEN 'SIGVOOS' ELSE 'MANUAL' END/);
+  for(let n=1;n<=4;n++){
+    assert.match(sql,new RegExp("qa-frms-ux-case-"+n));
+  }
+  assert.match(sql,/SELECT 'qa-frms-ux-case-1',f\.id,j\.id/);
+  assert.match(sql,/JOIN frms_jornada j ON j\.empresa_id=f\.empresa_id AND j\.tripulante_id=f\.id/);
+  assert.match(sql,/j\.deleted_at IS NULL AND UPPER\(j\.origem\)='SIGVOOS'/);
+  assert.doesNotMatch(sql,/qa-frms-ux-case-1',f\.id,NULL/);
+  assert.match(sql,/j\.duracao_jornada_minutos,540/);
+});
+
 test('QA baseline is tenant-scoped, exact 128 reviewed keys, and never global',()=>{
   const source=buildTenantScopedBaselineSql();
   assert.equal(source.length,2);
