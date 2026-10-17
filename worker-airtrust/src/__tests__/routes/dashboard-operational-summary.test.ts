@@ -131,7 +131,7 @@ function primeSources() {
     nao_realizados: 0,
     compliance_pct: 100,
     cobertura: 'COMPLETA',
-    escopo_modelo: 'SETOR_OU_TRANSVERSAL',
+    escopo_modelo: 'MATRIZ_CANONICA',
   });
 }
 
