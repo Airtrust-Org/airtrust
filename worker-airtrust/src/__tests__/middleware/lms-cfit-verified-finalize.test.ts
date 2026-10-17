@@ -115,13 +115,10 @@ describe('CFIT: confirmação de SCORM aprovado e persistido', () => {
     );
   });
 
-  it('não reaproveita badge de progresso sem cobertura de todas as unidades', async () => {
+  it('usa o resultado SCORM aprovado e a nota mínima sem exigir mapa proprietário de telas', async () => {
     const { response, downstreamCalled } = await submitFinalize({ cmi_json: cmi(37, false) });
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toMatchObject({
-      code: 'PROGRESS_EVIDENCE_MISSING',
-    });
-    expect(downstreamCalled).toBe(false);
+    expect(response.status).toBe(200);
+    expect(downstreamCalled).toBe(true);
   });
 
   it('não transforma 37/37 e nota 100 em aprovação quando SCORM ainda é incomplete', async () => {

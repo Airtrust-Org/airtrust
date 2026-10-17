@@ -406,6 +406,20 @@ async function guardScormCommit(
   // status commits used to strand learners at 99% with no persisted evidence.
   if (incoming.commit_event !== 'SCORM_USER_FINALIZE') return null;
 
+  // Fewer learning-completion gates must never permit carrying a passed score
+  // across two different authored slide-count editions in a single commit.
+  // This checks package identity drift, NOT whether every page was visited.
+  const savedEditionLocation = extractScormLocationFromCmiJson(row.cmi_json);
+  const incomingEditionLocation = extractScormLocationFromCmiJson(
+    typeof incoming.cmi_json === 'string' ? incoming.cmi_json : null,
+  );
+  if (savedEditionLocation?.total != null && incomingEditionLocation?.total != null &&
+      savedEditionLocation.total !== incomingEditionLocation.total) {
+    return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
+      'Os registros de conteúdo pertencem a edições diferentes do treinamento.',
+      { matricula_id: matriculaId });
+  }
+
   // Evaluate exactly the CMI that the canonical commit route will persist:
   // previously observed slide coverage and the new authenticated autosave are
   // merged for THIS enrollment after ownership, edition and asset-session
