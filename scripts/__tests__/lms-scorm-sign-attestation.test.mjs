@@ -119,5 +119,10 @@ test('signer refuses to reuse a different learner certificate in the second brow
     webkit.certificateDocument.sha256=chromium.certificateDocument.sha256;
     writeFileSync(f.webkitFile,JSON.stringify(webkit));
     assert.throws(()=>f.sign(),/CERTIFICATE_DOCUMENT_UNVERIFIED_WEBKIT/);
+    const valid=f.browserRow('WEBKIT');
+    writeFileSync(f.pdfPaths.WEBKIT,readFileSync(f.pdfPaths.CHROMIUM));
+    valid.certificateDocument.sha256=chromium.certificateDocument.sha256;
+    writeFileSync(f.webkitFile,JSON.stringify(valid));
+    assert.throws(()=>f.sign(),/CERTIFICATE_BROWSER_ISOLATION_VIOLATION/);
   }finally{rmSync(f.dir,{recursive:true,force:true});}
 });
