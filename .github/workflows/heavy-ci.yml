@@ -350,7 +350,9 @@ jobs:
           node scripts/qa/prepare-local-scorm-browser.mjs
           CI=true timeout --signal=TERM 8m npx playwright test \
             --config=e2e/ci/lms-scorm-enrollment-browser.config.ts
-          node --test scripts/__tests__/lms-scorm-local-precertification.test.mjs
+          node --test scripts/__tests__/lms-scorm-local-precertification.test.mjs \
+            scripts/__tests__/lms-scorm-sign-attestation.test.mjs \
+            scripts/__tests__/lms-scorm-qa-failure-classifier.test.mjs
           node scripts/ci/lms-scorm-local-precertification.mjs
       - name: Upload sanitized SCORM local precertification evidence
         if: always()
