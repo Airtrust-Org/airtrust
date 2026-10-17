@@ -82,7 +82,7 @@ describe('Player 2.0 structural split: evidence persistence versus approval', ()
     expect(saved).toBe(true);
   });
 
-  it('refuses actual finalization when 42/42 lacks the required per-slide evidence', async () => {
+  it('refuses contradictory SCORM statuses even when score passes and 42/42 is recorded', async () => {
     const { response, saved } = await submitCommit({
       lesson_status: 'passed', score_raw: 100, score_max: 100,
       commit_event: 'SCORM_USER_FINALIZE',
@@ -91,7 +91,7 @@ describe('Player 2.0 structural split: evidence persistence versus approval', ()
     });
     expect(response.status).toBe(409);
     expect(saved).toBe(false);
-    expect(await response.json()).toMatchObject({ code: 'PROGRESS_EVIDENCE_MISSING' });
+    expect(await response.json()).toMatchObject({ code: 'STATE_INCONSISTENT' });
   });
 
   it('never accepts forged passive completion status without a tenant-bound asset session', async () => {
@@ -123,7 +123,7 @@ describe('Player 2.0 structural split: evidence persistence versus approval', ()
     expect(saved).toBe(true);
   });
 
-  it('does not fabricate historical slide visits for an isolated last-slide commit', async () => {
+  it('permits scored learning evidence from the assessment without inventing visits', async () => {
     const { response, saved } = await submitCommit({
       lesson_status: 'passed', completion_status: 'completed', success_status: 'passed',
       score_raw: 90, score_max: 100,
@@ -133,6 +133,19 @@ describe('Player 2.0 structural split: evidence persistence versus approval', ()
         'airtrust.total_slides': 3, 'airtrust.viewed_slides': [3],
       }),
     });
+    expect(response.status).toBe(200);
+    expect(saved).toBe(true);
+  });
+
+  it('formative content without a scored assessment still rejects an isolated final slide', async () => {
+    const { response, saved } = await submitCommit({
+      lesson_status: 'completed', completion_status: 'completed',
+      commit_event: 'SCORM_USER_FINALIZE', completion_candidate: true,
+      cmi_json: JSON.stringify({
+        'cmi.core.lesson_location': '3/3',
+        'airtrust.total_slides': 3, 'airtrust.viewed_slides': [3],
+      }),
+    }, { scorm_assessment_policy: 'FORMATIVE' });
     expect(response.status).toBe(409);
     expect(saved).toBe(false);
     expect(await response.json()).toMatchObject({ code: 'PROGRESS_EVIDENCE_MISSING' });
