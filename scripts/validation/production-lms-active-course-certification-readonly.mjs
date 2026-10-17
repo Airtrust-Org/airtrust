@@ -6,7 +6,7 @@ import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
 import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
 import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
-import { collectRequiredDecisionSlideIndices, classifyRequiredDecisionStall } from './lms-scorm-required-decision-diagnostics.mjs';
+import { collectRequiredDecisionSlideIndices, collectChecklistSlideIndices, classifyRequiredDecisionStall } from './lms-scorm-required-decision-diagnostics.mjs';
 import { readVisibleVideo, startRealVisibleVideo } from './lms-scorm-video-playback-readonly.mjs';
 import { classifyPptxAssetProbe, classifyReadOnlyContentAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage } from './lms-format-certification-verdict.mjs';
 import {
@@ -249,7 +249,7 @@ async function getTrace(page) {
   return page.evaluate(() => window.__AIRTRUST_COMPLETION_CERT?.getState?.() || null);
 }
 
-async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS, allowAdaptiveRetry = true, requiredDecisionSlideIndices = []) {
+async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS, allowAdaptiveRetry = true, requiredDecisionSlideIndices = [], checklistSlideIndices = []) {
   const started = Date.now();
   let steps = 0;
   let idle = 0;
@@ -278,7 +278,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       state?.values?.['cmi.core.lesson_location'] ??
       state?.values?.['cmi.location'] ??
       '';
-    let action = await frame.evaluate(({ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices }) => {
+    let action = await frame.evaluate(({ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices, checklistSlideIndices }) => {
       const w = window;
       w.__AIRTRUST_CERT_DRIVER ??= {
         questionOrder: [],
@@ -322,6 +322,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       const slideMatch = locationBase.match(/^(\d+)/);
       const slideIndex = slideMatch ? Number(slideMatch[1]) : null;
       const requiresAuthoredDecision = Number.isInteger(slideIndex) && requiredDecisionSlideIndices.includes(slideIndex);
+      const requiresAuthoredChecklist = Number.isInteger(slideIndex) && checklistSlideIndices.includes(slideIndex);
       const plansHere = Array.isArray(plan)
         ? plan.filter((item) => item?.slideIndex === slideIndex)
         : [];
@@ -407,8 +408,12 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         }
       }
 
-      for (const input of Array.from(document.querySelectorAll('input[type=checkbox]')).filter(visible)) {
-        if (!input.checked) input.click();
+      // Preserve the legacy path on non-checklist content. Authored checklist
+      // slides instead use a trusted click on the learner-facing control below.
+      if (!requiresAuthoredChecklist) {
+        for (const input of Array.from(document.querySelectorAll('input[type=checkbox]')).filter(visible)) {
+          if (!input.checked) input.click();
+        }
       }
 
       // The SCORM root uses `app-shell menu-collapsed`. A generic
@@ -494,6 +499,33 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           signature: item.signature,
         };
       };
+
+      // Native checklist inputs can be visually hidden behind their labels.
+      // Drive only explicitly authored checklist slides, using a real browser
+      // click on the input or its visible label, never setting checked=true.
+      if (requiresAuthoredChecklist) {
+        const nativeCheckboxes = Array.from(document.querySelectorAll('input[type=checkbox]'))
+          .filter((input) => !input.closest('aside,nav,header,footer,[class*="sidebar" i]'));
+        const uncheckedIndex = nativeCheckboxes.findIndex((input) => !input.checked);
+        if (uncheckedIndex >= 0) {
+          const input = nativeCheckboxes[uncheckedIndex];
+          const visibleLabel = Array.from(input.labels || []).find(visible) ||
+            (input.closest('label') && visible(input.closest('label')) ? input.closest('label') : null);
+          const target = visibleLabel || (visible(input) ? input : null);
+          if (!target) return { type: 'checklist-control-unresolved' };
+          const item = {
+            el: target, index: uncheckedIndex, id: input.id || null,
+            role: 'checkbox', text: clean(target.textContent || 'checkbox'),
+            signature: 'authored-checklist:' + uncheckedIndex + ':' + String(input.id || ''),
+          };
+          if (alreadyClicked(item)) return { type: 'checklist-control-unresolved' };
+          return requestTrustedClick(item, 'checklist-native-click');
+        }
+        if (nativeCheckboxes.length > 0 &&
+            (document.querySelector('#next:disabled,#nextUnit:disabled,[data-next]:disabled'))) {
+          return { type: 'checklist-gate-unresolved' };
+        }
+      }
 
       // Some course templates use clickable cards instead of semantic buttons for
       // explicitly required interactions (for example "Interação obrigatória 0/4").
@@ -1047,12 +1079,16 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           item.ariaPressed === 'true' || item.ariaChecked === 'true' ||
           item.el.getAttribute('data-selected') === 'true'
         );
-        const nextQuestionControl = document.querySelector('[data-quiz-nextq]');
+        // Both M8 control variants need a real selected answer before
+        // navigation. In particular, an enabled data-next button alone did
+        // not advance courses #25/#26 and previously caused 3600 fake steps.
+        const nextQuestionControl = document.querySelector('[data-quiz-nextq],[data-next]');
         if (nextQuestionControl) {
           const enabledNextQuestion = items.find((item) => item.el === nextQuestionControl);
           if (inlineAnswerSelected) {
             return enabledNextQuestion
-              ? markAndClick(enabledNextQuestion, 'inline-quiz-next-question')
+              ? markAndClick(enabledNextQuestion, nextQuestionControl.matches('[data-quiz-nextq]')
+                ? 'inline-quiz-next-question' : 'inline-quiz-next')
               : { type: 'inline-quiz-question-gate-blocked' };
           }
           const authoredIndex = (plannedQuestion?.indices || plansHere.flatMap((entry) => entry?.indices || []))
@@ -1060,8 +1096,6 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           if (!Number.isInteger(authoredIndex)) return { type: 'inline-quiz-authored-answer-missing' };
           return markAndClick(inlineQuizChoices[authoredIndex], 'inline-quiz-authored-answer');
         }
-        const inlineNext = items.find((item) => item.el.matches('[data-next]'));
-        if (inlineNext) return markAndClick(inlineNext, 'inline-quiz-next');
         const chosen = new Set(st.inlineChoicesTried?.[locationKey] || []);
         const wanted = (plannedQuestion?.indices || [])[0];
         const candidates = [
@@ -1217,7 +1251,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       if (safe) return markAndClick(safe, 'safe');
 
       return { type: 'none' };
-    }, { plan: answerPlan, location: currentLocation, allowAdaptiveRetry, requiredDecisionSlideIndices }).catch((error) => ({
+    }, { plan: answerPlan, location: currentLocation, allowAdaptiveRetry, requiredDecisionSlideIndices, checklistSlideIndices }).catch((error) => ({
       type: 'frame-error',
       message: safe(error?.message || String(error)),
     }));
@@ -1297,7 +1331,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
     if (action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall') {
       diagnostics.required_decision_block = action.type;
     }
-    if (action?.type === 'accordion-gate-unresolved' ||
+    if (action?.type === 'checklist-control-unresolved' || action?.type === 'checklist-gate-unresolved' ||
+        action?.type === 'accordion-gate-unresolved' ||
         action?.type === 'inline-quiz-authored-answer-missing' || action?.type === 'inline-quiz-question-gate-blocked' ||
         action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall' ||
         action?.type === 'retry-deferred' || action?.type === 'adaptive-exhausted' ||
@@ -1672,6 +1707,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   const model = loaded.model;
   const answerPlan = extractAnswerPlan(loaded.runtime ?? model);
   const requiredDecisionSlideIndices = collectRequiredDecisionSlideIndices(model);
+  const checklistSlideIndices = collectChecklistSlideIndices(model);
   const modelMeta = model && typeof model === 'object'
     ? {
         schema: typeof model.schema === 'string' ? model.schema : null,
@@ -1706,6 +1742,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
       stepLimit,
       phase !== 'suspend',
       requiredDecisionSlideIndices,
+      checklistSlideIndices,
     );
     steps = drive.steps;
     driveDiagnostics = drive.diagnostics;
