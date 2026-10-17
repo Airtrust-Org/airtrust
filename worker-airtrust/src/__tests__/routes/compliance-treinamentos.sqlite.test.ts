@@ -148,6 +148,7 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
       empresa_id INTEGER NOT NULL,
       titulo TEXT NOT NULL,
       qualificacao_tipo_id INTEGER,
+      tipo_conteudo TEXT NOT NULL DEFAULT 'scorm',
       deleted_at TEXT
     );
     CREATE TABLE lms_matriculas (
@@ -632,6 +633,38 @@ describe('training compliance engine', () => {
       evidencia_origem: 'LMS',
       curso_ead_titulo: 'PBN EAD',
     });
+  });
+
+  it('não aceita matrícula SCORM-physical marcada Native como conclusão sem histórico vinculado', async () => {
+    sqlite.database.exec(`
+      CREATE TABLE lms_native_catalog_activation(empresa_id INTEGER, curso_id INTEGER);
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 101, 'SETOR_FUNCAO', 11, 2, 'OBRIGATORIA', 'REGULATORIO');
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id, tipo_conteudo)
+      VALUES (500, 1, 'PBN Native', 101, 'scorm');
+      INSERT INTO lms_native_catalog_activation VALUES (1, 500);
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, data_conclusao, created_at, updated_at)
+      VALUES (700, 1, 500, 1002, 'CONCLUIDO', '2026-09-01', '2026-08-20', '2026-09-01');
+    `);
+    const app = createApp(sqlite.asD1());
+    const denied = await app.request('/funcionarios/1002');
+    const deniedBody = (await denied.json()) as any;
+    expect(denied.status).toBe(200);
+    expect(deniedBody.data.requisitos[0].status_compliance).toBe('NAO_REALIZADO');
+
+    sqlite.database.exec(`
+      INSERT INTO qualificacoes_historico
+        (id, funcionario_id, qualificacao_id, qualificacao_codigo, categoria,
+         data_conclusao, data_vencimento, status, empresa_id)
+      VALUES (801, 1002, 101, 'PBN', 'Teórico', '2026-09-01', '2027-09-01', 'CONCLUIDA', 1);
+      UPDATE lms_matriculas SET qualificacao_historico_id=801 WHERE id=700 AND empresa_id=1;
+    `);
+    const verified = await app.request('/funcionarios/1002');
+    const verifiedBody = (await verified.json()) as any;
+    expect(verified.status).toBe(200);
+    expect(verifiedBody.data.requisitos[0].status_compliance).toBe('CONFORME');
   });
 
   it('mantém matrícula EAD não iniciada como não realizada, sem inflar em andamento', async () => {
