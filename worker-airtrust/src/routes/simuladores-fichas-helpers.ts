@@ -230,37 +230,39 @@ export async function gerarQualificacaoDaFicha(
           AND qt.deleted_at IS NULL
          WHERE sc.sessao_id = ? AND sc.deleted_at IS NULL
            AND sc.qualificacao_tipo_id IS NOT NULL
-           AND NOT EXISTS (
-             SELECT 1 FROM sessoes_checks_resultados scr2
-             WHERE scr2.sessao_check_id = sc.id
-               AND scr2.aprovado = 0
-               AND scr2.deleted_at IS NULL
+           -- A check with no explicit result is not evidence of approval.
+           -- Any conflicting/rejected result also blocks issuance.
+           AND EXISTS (
+             SELECT 1 FROM sessoes_checks_resultados scr_pass
+             WHERE scr_pass.sessao_check_id = sc.id
+               AND scr_pass.aprovado = 1
+               AND scr_pass.deleted_at IS NULL
            )
-           AND (
-             EXISTS (
-               SELECT 1 FROM sessoes_checks_resultados scr3
-               WHERE scr3.sessao_check_id = sc.id
-                 AND scr3.aprovado = 1
-                 AND scr3.deleted_at IS NULL
-             )
-             OR NOT EXISTS (
-               SELECT 1 FROM sessoes_checks_resultados scr4
-               WHERE scr4.sessao_check_id = sc.id
-                 AND scr4.deleted_at IS NULL
-             )
+           AND NOT EXISTS (
+             SELECT 1 FROM sessoes_checks_resultados scr_fail
+             WHERE scr_fail.sessao_check_id = sc.id
+               AND (scr_fail.aprovado IS NULL OR scr_fail.aprovado <> 1)
+               AND scr_fail.deleted_at IS NULL
+           )
+           -- Results are currently session-wide, not participant-specific.
+           -- Only an unambiguous single-employee session may automatically
+           -- generate an individual FAP. Shared sessions need individual proof.
+           -- A former participant/ficha is still evidence that this was a
+           -- shared session. Soft deletion must never promote a group check
+           -- into an individual approval retroactively.
+           AND NOT EXISTS (
+             SELECT 1 FROM sessoes_participantes sp
+             WHERE sp.sessao_id = sc.sessao_id
+               AND (sp.funcionario_id IS NULL OR sp.funcionario_id <> ?)
            )
            AND NOT EXISTS (
              SELECT 1 FROM fichas_sessao f2
              WHERE f2.agendamento_slot_id = sc.sessao_id
-               AND f2.colaborador_id_aluno != ?
-               AND f2.deleted_at IS NULL
-               AND (
-                 (qt.codigo LIKE 'FAP13%' AND f2.tipo_sessao = 'CRED-EXA')
-                 OR (qt.codigo LIKE 'FAP07%' AND f2.tipo_sessao = 'TRE-INST')
-               )
-           )`,
+               AND f2.empresa_id = ?
+               AND (f2.colaborador_id_aluno IS NULL OR f2.colaborador_id_aluno <> ?)
+           )`
       )
-      .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, colaboradorId)
+      .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, colaboradorId, f.empresa_id, colaboradorId)
       .all<QualificationCheckRow>();
 
     for (const check of checksMarcados.results || []) {
