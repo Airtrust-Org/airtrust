@@ -71,6 +71,9 @@ describe('EAD renewal in legacy scheduler fallback', () => {
       .rejects.toThrow('NATIVE_LEGACY_AUTO_ENROLLMENT_DENIED');
     expect(resetMatriculaForNewCycle).not.toHaveBeenCalled();
     expect(prepare).not.toHaveBeenCalled();
+    const source=readFileSync(resolve(process.cwd(),'src/cron/resilient/ead-renewal.ts'),'utf8');
+    expect(source).toContain("stage: 'NATIVE_PLAYER_RENEWAL_DEFERRED'");
+    expect(source).toContain("error.message === 'NATIVE_LEGACY_AUTO_ENROLLMENT_DENIED'");
   });
   it('uses the same cycle repair in the legacy scheduler instead of skipping existing enrollments', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/cron/scheduled-handler.ts'), 'utf8');

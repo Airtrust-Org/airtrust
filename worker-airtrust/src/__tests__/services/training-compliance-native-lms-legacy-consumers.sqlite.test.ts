@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
-import { loadVerifiedComplianceLmsEnrollments } from '../../services/training-compliance-native-lms-evidence';
+import { canUseLegacyAutomatedLmsCourse, loadVerifiedComplianceLmsEnrollments } from '../../services/training-compliance-native-lms-evidence';
 
 const Database = createRequire(import.meta.url)('node:sqlite').DatabaseSync as {
   new (filename: string): DatabaseSync;
@@ -49,6 +49,23 @@ function makeDb(withMarker = true, withHistory = true) {
   } as unknown as D1Database;
   return {sqlite,db};
 }
+describe('legacy automatic enrollment eligibility is a D1 tenant-owned decision',()=>{
+  it('blocks physically Native, marker-activated SCORM and cross-tenant courses', async()=>{
+    const {sqlite,db}=makeDb(true);
+    expect(await canUseLegacyAutomatedLmsCourse(db,1,10)).toBe(false);
+    expect(await canUseLegacyAutomatedLmsCourse(db,1,11)).toBe(false);
+    expect(await canUseLegacyAutomatedLmsCourse(db,1,12)).toBe(true);
+    expect(await canUseLegacyAutomatedLmsCourse(db,1,20)).toBe(false);
+    expect(await canUseLegacyAutomatedLmsCourse(db,1,-1)).toBe(false);
+    sqlite.close();
+  });
+  it('preserves ordinary SCORM without activation table',async()=>{
+    const {sqlite,db}=makeDb(false);
+    expect(await canUseLegacyAutomatedLmsCourse(db,1,10)).toBe(false);
+    expect(await canUseLegacyAutomatedLmsCourse(db,1,11)).toBe(true);
+    sqlite.close();
+  });
+});
 describe('both legacy Compliance LMS readers refuse forged Native completion',()=>{
   it('keeps valid Native qualification and external SCORM while denying forged Native statuses',async()=>{
     const {sqlite,db}=makeDb();

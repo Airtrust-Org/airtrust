@@ -3,7 +3,7 @@ import { buildTrainingComplianceRosterPlan, type RosterPlan, type RosterEnrollme
 import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from './training-compliance-evidence-profile';
 import { registrarAuditoria } from '../utils/auditoria';
-import { canUseLegacyAutomatedLmsCourse } from './training-compliance-native-lms-evidence';
+import { canUseLegacyAutomatedLmsCourse, hasLiveNativeLmsActivationTable } from './training-compliance-native-lms-evidence';
 import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
 
 export const ROSTER_RECONCILIATION_TENANT = 6;
@@ -20,11 +20,17 @@ export async function readTrainingRosterPlan(
   db: D1Database, empresaId: number, buildSnapshot: BuildRosterSnapshot,
 ) {
   if (empresaId !== ROSTER_RECONCILIATION_TENANT) throw new Error('ROSTER_TENANT_NOT_AUTHORIZED');
+  const activationTable = await hasLiveNativeLmsActivationTable(db);
+  const nativeMarkerExclusion = activationTable
+    ? 'AND NOT EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id)'
+    : '';
   const [snapshot, courses, enrollments] = await Promise.all([
     buildSnapshot(db, empresaId, ALL_ACCESS),
     db.prepare(`SELECT c.id,c.qualificacao_tipo_id,c.ativo,c.publicado FROM lms_cursos c
       JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id
       WHERE c.empresa_id=? AND c.deleted_at IS NULL
+        AND LOWER(TRIM(COALESCE(c.tipo_conteudo,''))) <> 'native'
+        ${nativeMarkerExclusion}
         AND qt.ativo=1 AND qt.deleted_at IS NULL
         AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')`)
       .bind(empresaId).all<RosterCourse>(),

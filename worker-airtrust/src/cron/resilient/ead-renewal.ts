@@ -341,6 +341,15 @@ export async function runEadRenewalJob(db: D1Database, logger: CronJobLogger) {
           if (result.created) created++;
           else repaired++;
         } catch (error) {
+          if (error instanceof Error && error.message === 'NATIVE_LEGACY_AUTO_ENROLLMENT_DENIED') {
+            // A Native course is not eligible for repeated SCORM renewal retries.
+            await markCronJobItemSucceeded(db, {
+              jobName: JOB_NAME, scopeKey: SCOPE_KEY,
+              itemKey: item.item_key, stage: 'NATIVE_PLAYER_RENEWAL_DEFERRED',
+            });
+            processed++;
+            continue;
+          }
           failed++;
           await markCronJobItemFailed(db, {
             jobName: JOB_NAME,
