@@ -7,10 +7,15 @@ const courses = [
   { id: 9, titulo: 'Curso Native novo', tipo_conteudo: 'scorm' },
   { id: 10, titulo: 'Curso PDF', tipo_conteudo: 'pdf' },
 ];
-function setup(marked: unknown, flag = '6', environment: Env['ENVIRONMENT'] = 'staging') {
+function setup(marked: unknown, flag = '6', environment: Env['ENVIRONMENT'] = 'staging', tableExists = true) {
   const all = vi.fn(async () => ({ results: marked }));
   const bind = vi.fn(() => ({ all }));
-  const prepare = vi.fn(() => ({ bind }));
+  const schemaBind = vi.fn(() => ({
+    first: async () => tableExists ? { found: 1 } : null,
+  }));
+  const prepare = vi.fn((sql: string) => ({
+    bind: sql.includes('sqlite_master') ? schemaBind : bind,
+  }));
   const env = {
     ENVIRONMENT: environment,
     NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: flag,
@@ -26,10 +31,14 @@ describe('Native catalog API effective type projection', () => {
     expect(courses[1].tipo_conteudo).toBe('scorm');
     expect(bind).toHaveBeenCalledWith(6, 8, 9, 10);
   });
-  it('does not consult marker table without exact staging opt-in or with empty results', async () => {
+  it('never mislabels a marked Native course as SCORM when preview is turned off', async () => {
     const inactive = setup([{ curso_id: 9 }], '');
-    expect(await projectNativeCatalogCourses(inactive.env, 6, courses)).toEqual(courses);
-    expect(inactive.prepare).not.toHaveBeenCalled();
+    const projected = await projectNativeCatalogCourses(inactive.env, 6, courses);
+    expect(projected.map(c => c.tipo_conteudo)).toEqual(['scorm','native','pdf']);
+    expect(inactive.prepare).toHaveBeenCalledTimes(2);
+    const absent = setup([{ curso_id: 9 }], '', 'staging', false);
+    expect(await projectNativeCatalogCourses(absent.env, 6, courses)).toEqual(courses);
+    expect(absent.prepare).toHaveBeenCalledTimes(1);
     const production = setup([{ curso_id: 9 }], '6', 'production');
     expect(await projectNativeCatalogCourses(production.env, 6, courses)).toEqual(courses);
     expect(production.prepare).not.toHaveBeenCalled();
@@ -85,13 +94,14 @@ describe('Native enrollment effective-type projection uses curso_id', () => {
     expect(bind).toHaveBeenCalledWith(6,9,8);
     expect(rows[0].tipo_conteudo).toBe('scorm');
   });
-  it('keeps SCORM unchanged without flag or on production', async () => {
+  it('keeps marked staging Native visible when the preview flag is OFF, not in production', async () => {
     const rows=[{id:101,curso_id:9,tipo_conteudo:'scorm'}];
-    for (const [flag,envType] of [['','staging'],['6','production']] as const) {
-      const {env,prepare}=setup([{curso_id:9}],flag,envType);
-      expect(await projectNativeCatalogEnrollments(env,6,rows)).toEqual(rows);
-      expect(prepare).not.toHaveBeenCalled();
-    }
+    const off=setup([{curso_id:9}],'');
+    expect((await projectNativeCatalogEnrollments(off.env,6,rows))[0].tipo_conteudo).toBe('native');
+    expect(off.prepare).toHaveBeenCalledTimes(2);
+    const prod=setup([{curso_id:9}],'6','production');
+    expect(await projectNativeCatalogEnrollments(prod.env,6,rows)).toEqual(rows);
+    expect(prod.prepare).not.toHaveBeenCalled();
   });
   it('fails closed for invalid course IDs or conflicting course types', async () => {
     const {env,prepare}=setup([]);

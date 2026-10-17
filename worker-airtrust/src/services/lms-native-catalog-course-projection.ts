@@ -9,11 +9,24 @@
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
 import { canReadNativeCatalogActivation } from './lms-native-catalog-legacy-guard';
+import { hasSchemaTable } from '../utils/db-schema';
 
 export async function projectNativeCatalogCourses<T extends Record<string, unknown>>(
   env: Env, empresaId: number, rows: readonly T[],
 ): Promise<T[]> {
-  if (!rows.length || !canReadNativeCatalogActivation(env, empresaId)) return [...rows];
+  if (!rows.length || env.ENVIRONMENT !== 'staging') return [...rows];
+  // The catalog flag only permits Native execution. After a marker has been
+  // recorded, disabling that flag must not display the course as legacy SCORM.
+  if (!canReadNativeCatalogActivation(env, empresaId)) {
+    try {
+      if (!(await hasSchemaTable(env.DB, 'lms_native_catalog_activation', { fresh: true }))) {
+        return [...rows];
+      }
+    } catch {
+      throw new ApiError('Identidade do catálogo Native indisponível.', 503,
+        'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED');
+    }
+  }
   const courseIds = rows.map((row) => Number(row.id));
   if (courseIds.some((id) => !Number.isSafeInteger(id) || id <= 0) ||
       new Set(courseIds).size !== courseIds.length) {
@@ -59,7 +72,7 @@ export async function projectNativeCatalogCourses<T extends Record<string, unkno
 export async function projectNativeCatalogEnrollments<T extends Record<string, unknown>>(
   env: Env, empresaId: number, rows: readonly T[],
 ): Promise<T[]> {
-  if (!rows.length || !canReadNativeCatalogActivation(env, empresaId)) return [...rows];
+  if (!rows.length || env.ENVIRONMENT !== 'staging') return [...rows];
   const courses = new Map<number, string>();
   for (const row of rows) {
     const id = Number(row.curso_id);

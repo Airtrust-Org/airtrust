@@ -37,6 +37,7 @@ function state(flag = '6', environment = 'staging', marked = true) {
           calls.push({ sql, values });
           return {
             first: async () => {
+              if (sql.includes('sqlite_master')) return { found: 1 };
               if (sql.includes('COUNT(*) AS n')) return { n: list.length };
               if (sql.includes('FROM lms_matriculas m')) return { ...list[0] };
               throw Error('UNEXPECTED_READ');
@@ -86,14 +87,15 @@ describe('Effective Native enrollment identity for authenticated learner lists',
       .toEqual([6,9]);
   });
 
-  it('does not query a non-existent activation table when flag is disabled', async () => {
+  it('does not disguise an already activated Native enrollment as SCORM after disabling preview', async () => {
     const { env, calls } = state('');
     const res = await testApp().fetch(new Request(
       'http://localhost/api/lms/matriculas/minhas'), env, {} as ExecutionContext);
     expect(res.status).toBe(200);
     const json = await res.json() as { data: { tipo_conteudo: string }[] };
-    expect(json.data.map(x => x.tipo_conteudo)).toEqual(['scorm','scorm']);
-    expect(calls.some(x => x.sql.includes('lms_native_catalog_activation'))).toBe(false);
+    expect(json.data.map(x => x.tipo_conteudo)).toEqual(['native','scorm']);
+    expect(calls.some(x => x.sql.includes('sqlite_master'))).toBe(true);
+    expect(calls.some(x => x.sql.includes('FROM lms_native_catalog_activation'))).toBe(true);
   });
   it('does not leak staging marker identity through the production environment', async () => {
     const { env, calls } = state('6','production');
