@@ -17,7 +17,7 @@ type EligibleCrewMember = {
 };
 
 function displayPresentationTime(value: string | null | undefined): string {
-  const match = String(value || '').match(/(?:^|T)([01]\\d|2[0-3]):([0-5]\\d)/);
+  const match = String(value || '').match(/(?:^|T)([01]\d|2[0-3]):([0-5]\d)/);
   return match ? `${match[1]}:${match[2]}` : '';
 }
 
