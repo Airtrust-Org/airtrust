@@ -59,7 +59,7 @@ jobs:
           NODE
 
   synthetic-lifecycle:
-    name: Authenticated synthetic daily check-in, readiness and KSS
+    name: Staging D1 Authenticated Synthetic Check-in, Readiness and KSS
     needs: guard
     environment: staging
     runs-on: ubuntu-latest
