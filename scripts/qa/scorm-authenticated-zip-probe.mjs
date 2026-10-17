@@ -21,7 +21,27 @@ requireCondition(fixture.origin==='http://127.0.0.1:8787'&&
  fixture.dbFile.includes('.wrangler/state/')&&resolve(fixture.driverPath).includes('/.wrangler/'),
  'DISPOSABLE_ONLY');
 requireCondition(sha===fixture.packageSha256,'ZIP_SHA_DRIFT');
-validateIndependentDriver(driver,sha,unzipCandidate(bytes));
+const files=unzipCandidate(bytes);
+if(driver.kind==='LOCAL_NAVIGATION_DIAGNOSTIC_ONLY'){
+  requireCondition(driver.packageSha256===sha&&driver.launchFile==='index.html'&&
+    files[driver.launchFile]&&driver.activationAuthorized===false,
+    'DIAGNOSTIC_EXACT_ZIP_OR_SCOPE_INVALID');
+  requireCondition(!driver.pass&&!driver.fail&&!('requiresAssessment' in driver),
+    'DIAGNOSTIC_CANNOT_SUPPLY_ASSESSMENT_VERDICTS');
+  requireCondition(Array.isArray(driver.requiredContent)&&
+    driver.requiredContent.length>0&&driver.requiredContent.length<=8&&
+    driver.requiredContent.every(x=>typeof x.selector==='string'&&
+      x.selector.length>0&&x.selector.length<240),'DIAGNOSTIC_CONTENT_INVALID');
+  requireCondition(Array.isArray(driver.resume?.actions)&&
+    driver.resume.actions.length>0&&driver.resume.actions.length<=5&&
+    driver.resume.actions.every(x=>x.op==='click'&&
+      typeof x.selector==='string'&&x.selector.length>0&&x.selector.length<240)&&
+    driver.resume?.assertion?.state==='visible'&&
+    typeof driver.resume.assertion.selector==='string',
+    'DIAGNOSTIC_NAVIGATION_ONLY');
+}else{
+  validateIndependentDriver(driver,sha,files);
+}
 const email=process.env.AIRTRUST_SCORM_QA_EMAIL || 'admin@airtrust.com';
 // Disposable local auth is seeded by prepare-local-lms-auth.mjs, never production.
 const password=process.env.AIRTRUST_SCORM_QA_PASSWORD || 'Admin@123';
