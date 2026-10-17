@@ -461,6 +461,23 @@ export async function resetMatriculaForNewCycle(
 ) {
   const beforeReset = await readMatriculaSnapshot(db, params.matriculaId, params.empresaId);
 
+  // System-wide fail-safe: Compliance, roster and automatic EAD renewals must
+  // never destroy surviving progress merely because a matrícula was cancelled.
+  // An explicitly authorized new edition uses /nova-edicao, not this routine.
+  if (beforeReset && (beforeReset.deleted_at ||
+      normalizeStatus(beforeReset.status) === 'CANCELADO')) {
+    const resumed = await reactivateCancelledMatriculaPreservingProgress(db, {
+      empresaId: params.empresaId, matriculaId: params.matriculaId,
+      dataExpiracao: params.dataExpiracao, observacoes: params.observacoes,
+      matriculadoPor: params.matriculadoPor, bucket: undefined,
+    });
+    if (typeof resumed !== 'object') {
+      throw new Error('LMS_CANCELLED_PROGRESS_PRESERVATION_REQUIRED');
+    }
+    const current = await readCurrentMatriculaCycleId(db, params.matriculaId);
+    return current?.id ?? null;
+  }
+
   if (beforeReset) {
     await upsertCurrentMatriculaCycle(db, beforeReset, params.origin ?? 'AUTO_RENOVACAO');
     await db
