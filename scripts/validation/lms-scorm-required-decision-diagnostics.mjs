@@ -6,6 +6,13 @@ export function collectRequiredDecisionSlideIndices(model) {
   );
 }
 
+export function collectChecklistSlideIndices(model) {
+  if (!Array.isArray(model?.slides)) return [];
+  return model.slides.flatMap((slide, index) =>
+    slide?.kind === 'checklist' ? [index + 1] : []
+  );
+}
+
 export function classifyRequiredDecisionStall({
   stalledSlide,
   driverState,
