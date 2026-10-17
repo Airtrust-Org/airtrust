@@ -8,6 +8,9 @@ import { Hono } from 'hono';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { ApiError } from '../middleware/error-handler';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
+import { registerScormCandidateQaRoutes } from './lms-scorm-candidate-qa';
+import { guessMime, normalizeR2Path, appendCacheBusterToRelativeAssetRefs } from './lms-scorm-asset-paths';
+export { guessMime } from './lms-scorm-asset-paths';
 import { assertCandidateQaScope, assertScormCandidateQaEnvironment, readScormQaCandidate } from '../lib/lms/lms-scorm-candidate-preview';
 import { auth, validateAccessTokenSecurityState } from '../middleware/auth';
 import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
@@ -161,87 +164,6 @@ export function resolveProbedScormLocation(params: {
 }
 
 // ── Helpers MIME ──────────────────────────────────────────────────────────────
-
-export function guessMime(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-  const map: Record<string, string> = {
-    html: 'text/html; charset=utf-8',
-    htm: 'text/html; charset=utf-8',
-    js: 'application/javascript',
-    mjs: 'application/javascript',
-    css: 'text/css',
-    xml: 'application/xml',
-    json: 'application/json',
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    gif: 'image/gif',
-    webp: 'image/webp',
-    svg: 'image/svg+xml',
-    mp4: 'video/mp4',
-    webm: 'video/webm',
-    mp3: 'audio/mpeg',
-    ogg: 'audio/ogg',
-    pdf: 'application/pdf',
-    swf: 'application/x-shockwave-flash',
-    flv: 'video/x-flv',
-    woff: 'font/woff',
-    woff2: 'font/woff2',
-    ttf: 'font/ttf',
-    otf: 'font/otf',
-    ico: 'image/x-icon',
-    txt: 'text/plain',
-  };
-  return map[ext] ?? 'application/octet-stream';
-}
-
-function normalizeR2Path(path: string): string {
-  let decodedPath = path;
-  try {
-    decodedPath = decodeURIComponent(path);
-  } catch {
-    throw new ApiError('Caminho inválido', 400);
-  }
-
-  const normalized = decodedPath.replace(/^\/+/, '').replace(/\\/g, '/');
-  const segments = normalized.split('/').filter(Boolean);
-
-  if (segments.some((segment) => segment === '.' || segment === '..')) {
-    throw new ApiError('Caminho inválido', 400);
-  }
-
-  return segments.join('/');
-}
-
-function appendQueryParamPreservingHash(url: string, key: string, value: string): string {
-  const hashIndex = url.indexOf('#');
-  const base = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
-  const hash = hashIndex >= 0 ? url.slice(hashIndex) : '';
-  const separator = base.includes('?') ? '&' : '?';
-  return `${base}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}${hash}`;
-}
-
-function appendCacheBusterToRelativeAssetRefs(html: string, cacheBuster: string): string {
-  return html.replace(
-    /(\b(?:src|href|poster)=)(["'])([^"']+)(\2)/gi,
-    (full, prefix, quote, rawUrl, suffix) => {
-      const value = String(rawUrl || '').trim();
-      if (!value) return full;
-      if (
-        value.startsWith('#') ||
-        value.startsWith('data:') ||
-        value.startsWith('blob:') ||
-        value.startsWith('javascript:') ||
-        /^[a-z][a-z0-9+.-]*:/i.test(value) ||
-        value.startsWith('//')
-      ) {
-        return full;
-      }
-
-      return `${prefix}${quote}${appendQueryParamPreservingHash(value, 'airtrust_scorm', cacheBuster)}${suffix}`;
-    },
-  );
-}
 
 function extractAssetPathFromRequest(pathname: string, routePrefix: string): string {
   const normalizedPrefix = routePrefix.endsWith('/') ? routePrefix : `${routePrefix}/`;
@@ -865,32 +787,6 @@ function buildProtectedLaunchHeaders(
 }
 
 // ── Servir arquivos estáticos SCORM do R2 ─────────────────────────────────────
-// QA-only, read-only access to one validated INACTIVE edition. Never falls
-// back to the active course prefix, and never grants learner/CMS write access.
-app.get('/scorm/qa-assets/:empresa_id/:curso_id/:candidate_id/*', async (c) => {
-  assertScormCandidateQaEnvironment(c.env.ENVIRONMENT);
-  const payload = (await authenticateLmsAssetRequest(c.env, c.req.raw)) as JwtPayload & {
-    asset_qa_candidate_id?: string;
-    asset_qa_candidate_sha256?: string;
-  };
-  const empresaId = Number(c.req.param('empresa_id'));
-  const cursoId = Number(c.req.param('curso_id'));
-  if (!isPreviewAllowedRole(payload.role)) throw new ApiError('QA negado', 403);
-  const candidate = await readScormQaCandidate(c.env.DB, {
-    empresaId, cursoId, packageId: c.req.param('candidate_id'),
-  });
-  assertCandidateQaScope(payload, { empresaId, cursoId, candidate });
-  await ensureCourseAssetAccess(c.env.DB, payload, empresaId, cursoId);
-  const wildcard = extractAssetPathFromRequest(new URL(c.req.url).pathname,
-    `/api/lms/scorm/qa-assets/${empresaId}/${cursoId}/${candidate.id}`);
-  const { object } = await resolveScormObject(c.env.BUCKET, empresaId, cursoId, wildcard,
-    { activePrefix: candidate.r2_prefix });
-  if (!object) return c.text('Not found', 404);
-  const headers = buildAssetHeaders(c.env.CORS_ORIGINS, c.req.header('Origin'), guessMime(wildcard));
-  headers.set('Cache-Control', 'private, no-store');
-  return new Response(object.body, { status: 200, headers });
-});
-
 app.get('/scorm/assets/:empresa_id/:curso_id/*', async (c) => {
   const payload = await authenticateLmsAssetRequest(c.env, c.req.raw);
   const empresaId = c.req.param('empresa_id');
@@ -1217,37 +1113,6 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   return new Response(html, {
     status: 200,
     headers,
-  });
-});
-
-// Immutable inactive edition inspection is deliberately *not* the learner
-// launch. No matrícula, ciclo, commit endpoint or fabricated CMI evidence.
-app.get('/scorm/qa-preview/:curso_id/:candidate_id', async (c) => {
-  assertScormCandidateQaEnvironment(c.env.ENVIRONMENT);
-  const payload = (await authenticateLmsAssetRequest(c.env, c.req.raw)) as JwtPayload & {
-    asset_qa_candidate_id?: string;
-    asset_qa_candidate_sha256?: string;
-  };
-  const empresaId = Number(payload.empresa_id ?? 0);
-  const cursoId = Number(c.req.param('curso_id'));
-  if (!isPreviewAllowedRole(payload.role)) throw new ApiError('QA negado', 403);
-  const candidate = await readScormQaCandidate(c.env.DB, {
-    empresaId, cursoId, packageId: c.req.param('candidate_id'),
-  });
-  assertCandidateQaScope(payload, { empresaId, cursoId, candidate });
-  await ensureCourseAssetAccess(c.env.DB, payload, empresaId, cursoId);
-  const launchFile = await resolveScormLaunchFile(c.env.BUCKET, empresaId, cursoId,
-    candidate.launch_file, { activePrefix: candidate.r2_prefix });
-  if (!launchFile) throw new ApiError('Launch da edição candidata não encontrado', 404);
-  const launchUrl = `/api/lms/scorm/qa-assets/${empresaId}/${cursoId}/${candidate.id}/${launchFile}`;
-  const html = buildLaunchPage({
-    matriculaId: null, titulo: 'QA · edição candidata inativa',
-    launchUrl, commitUrl: null, token: '',
-    isScorm2004: candidate.scorm_versao === '2004', previewMode: true,
-    assetCacheBuster: candidate.package_sha256.slice(0, 16),
-  });
-  return new Response(html, {
-    status: 200, headers: buildProtectedLaunchHeaders(c.env.CORS_ORIGINS, c.req.header('Origin')),
   });
 });
 
@@ -2819,6 +2684,12 @@ app.get('/pptx/asset/:cursoId', async (c) => {
   headers.set('X-Pptx-Slide-Count', String(curso.pptx_slide_count ?? 0));
 
   return new Response(object.body, { status: 200, headers });
+});
+
+registerScormCandidateQaRoutes(app, {
+  authenticateLmsAssetRequest, isPreviewAllowedRole, ensureCourseAssetAccess,
+  extractAssetPathFromRequest, resolveScormObject, guessMime, buildAssetHeaders,
+  resolveScormLaunchFile, buildLaunchPage, buildProtectedLaunchHeaders,
 });
 
 export default app;
