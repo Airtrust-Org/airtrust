@@ -1,0 +1,127 @@
+name: Staging FRMS UX Scoped Identity
+
+# This is an explicitly mutating, synthetic-only D1 provisioning workflow.
+# It is separate from the read-only browser acceptance workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_STAGING_FRMS_UX_IDENTITY
+        required: true
+        type: string
+      expected_main_sha:
+        description: Exact current main SHA already published in staging
+        required: true
+        type: string
+      mode:
+        description: Inspect only, provision, or disable the one scoped QA identity
+        required: true
+        type: choice
+        options: [inspect, apply, rollback]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Verify exact staging provenance and release
+    runs-on: ubuntu-latest
+    env:
+      CONFIRMATION: ${{ inputs.confirmation }}
+      EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+      GITHUB_EVENT_SHA: ${{ github.sha }}
+      GITHUB_EVENT_REF: ${{ github.ref }}
+    steps:
+      - name: Fail closed outside current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_REF" == refs/heads/main ]] || exit 1
+          [[ "$CONFIRMATION" == AIRTRUST_STAGING_FRMS_UX_IDENTITY ]] || exit 1
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$EXPECTED_SHA" == "$GITHUB_EVENT_SHA" ]] || exit 1
+      - uses: actions/checkout@v7
+      - name: Require reviewed release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.expected_main_sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Require Worker and Pages to serve the exact staging SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const sha=process.env.EXPECTED_SHA;
+          const r=await fetch('https://airtrust-api-staging.airtrust.workers.dev/api/version');
+          if(!r.ok)throw Error('STAGING_VERSION_UNAVAILABLE');
+          const data=(await r.json()).data||{};
+          if(data.sourceSha!==sha||data.environment!=='staging')throw Error('STAGING_WORKER_SHA_MISMATCH');
+          const p=await fetch('https://staging.airtrust.pages.dev/');
+          if(!p.ok||!(await p.text()).includes(sha.slice(0,7)))throw Error('STAGING_PAGES_SHA_MISMATCH');
+          console.log('FRMS_UX_IDENTITY_STAGING_PROVENANCE_PASS');
+          NODE
+
+  qa-identity:
+    name: Guarded synthetic identity operation
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+      STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+      CONFIRM_STAGING_FRMS_UX_IDENTITY: ${{ inputs.confirmation }}
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install scoped D1 tooling
+        run: npm --prefix worker-airtrust ci
+      - name: Verify synthetic-only provisioner tests
+        run: node --test scripts/__tests__/provision-frms-ux-identity.test.mjs
+      - name: Inspect tenant, assignment, scoped QA identity and schema (SELECT only)
+        run: node scripts/staging/provision-frms-ux-identity.mjs --inspect
+      - name: Verify exact D1 target and capture recovery bookmark
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || exit 1
+          cd worker-airtrust
+          npx wrangler d1 info airtrust-db-staging-baseline-20260701 --json > "$RUNNER_TEMP/frms-d1-info.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const d=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/frms-d1-info.json','utf8'));
+          const id=String(d.uuid??d.database_id??d.id??d.result?.uuid??'');
+          if(id!=='bf9963f4-eb12-439b-a830-20bbf577ac22')throw Error('STAGING_D1_TARGET_MISMATCH');
+          NODE
+          npx wrangler d1 time-travel info airtrust-db-staging-baseline-20260701 --json > "$RUNNER_TEMP/frms-recovery.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const d=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/frms-recovery.json','utf8'));
+          const bookmark=String(d.bookmark??d.result?.bookmark??'');
+          if(bookmark.length<8)throw Error('STAGING_RECOVERY_BOOKMARK_MISSING');
+          console.log('STAGING_D1_FRMS_RECOVERY_BOOKMARK_VERIFIED');
+          NODE
+      - name: Apply or disable only the fixed QA user
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          STAGING_QA_RECOVERY_VERIFIED: 'true'
+        run: |
+          set -euo pipefail
+          node scripts/staging/provision-frms-ux-identity.mjs --"$MODE"
+      - name: Read-only postcondition
+        if: ${{ inputs.mode == 'apply' }}
+        run: node scripts/staging/provision-frms-ux-identity.mjs --inspect
