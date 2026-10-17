@@ -192,7 +192,11 @@ export function buildScormProgressParsersScript(): string {
     // "Tela 54 de 69". Ler o contador do pacote é mais confiável do que varrer o
     // body inteiro, onde números de formulário ("FORM-MNT-005/123") ou referências
     // regulatórias ("operadores 121/135") poderiam ser lidos como progresso.
-    var counterNode = doc.querySelector('#counterText, #counter, #progressText, #lesson-counter, [data-slide-counter]');
+    // Legacy packages may use #count in their footer (confirmed in the
+    // deployed 42-slide Doutrinamento ZIP). Unlike a body-wide fraction,
+    // this is an explicit package navigation counter, not quiz/form text.
+    var counterNode = doc.querySelector('#counterText, #counter, #progressText, #lesson-counter, [data-slide-counter]') ||
+      doc.querySelector('.bottomnav #count, .footer-center #count');
     var counterText = counterNode ? String(counterNode.textContent || '') : '';
     var counterMatch = counterText.match(/(\\d+)\\s*(?:\\/|de|of)\\s*(\\d+)/i);
     if (counterMatch) {
@@ -341,19 +345,11 @@ export function buildScormSessionCloseRuntimeScript(): string {
       return;
     }
     try { probeFrameProgress(); } catch (_ignored) { /* do not infer completion */ }
-    var location = parseScormLocationPair(getScormLocation());
-    var status = String(cmi['cmi.core.lesson_status'] || cmi['cmi.success_status'] || '').toLowerCase();
-    var visited = Array.isArray(cmi['airtrust.viewed_slides']) ? cmi['airtrust.viewed_slides'] : [];
-    var fullyVisited = location && location.total <= 1000 &&
-      Number(cmi['airtrust.total_slides']) === location.total &&
-      visited.length === location.total &&
-      visited.every(function(n, index) { return n === index + 1; });
-    if (!fullyVisited || status === 'failed') {
-      postToParent({ type: 'lms:completion-error', matriculaId: MATRICULA_ID,
-        code: 'SCORM_REQUIREMENTS_PENDING',
-        message: 'Ainda faltam requisitos do conteúdo ou da avaliação.' });
-      return;
-    }
+    // Submit the learner's explicit request exactly once. The backend's shared
+    // canonical SCORM readiness gate decides whether terminal assessment OR
+    // (for FORMATIVE) coverage is sufficient. A second wrapper-specific
+    // visited-slide check would contradict that server verdict and strand
+    // legitimately approved SCORED courses at 99%.
     notifyCompletionPending('saving', 'user-confirmed-finish');
     void commit(buildPayload(), 0, 'SCORM_USER_FINALIZE');
   }

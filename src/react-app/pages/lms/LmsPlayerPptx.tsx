@@ -12,6 +12,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { fetchLmsCourseAsset } from './lmsProtectedCourseAsset';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import {
   useFinalizarMatricula,
@@ -58,11 +59,7 @@ export default function LmsPlayerPptx() {
 
   const loadRenderedSlides = useCallback(
     async (cursoId: number) => {
-      const activeToken = getAccessToken() ?? token ?? '';
-      const url = `${API_BASE_URL}/lms/pptx/asset/${cursoId}`;
-      const resp = await fetch(url, {
-        headers: { Authorization: `Bearer ${activeToken}` },
-      });
+      const resp = await fetchLmsCourseAsset('pptx', cursoId);
       if (!resp.ok) throw new Error(`Falha ao carregar apresentação (${resp.status})`);
       const arrayBuffer = await resp.arrayBuffer();
       return pptxToHtml(arrayBuffer, {

@@ -31,6 +31,7 @@ import {
 } from './frmsOperationalDecision';
 import { formatFrmsReason, formatSnapshotSource } from './frmsPresentation';
 import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
+import { frmsAttentionFacts, isFrmsRoutineDutyClosurePending } from './frmsEvidenceContext';
 
 const ACTION_LANES: { key: FrmsActionLane; title: string; explanation: string }[] = [
   { key: 'REVISAO', title: 'Revisão operacional', explanation: 'Sinais de atenção ou risco: avaliar antes da decisão.' },
@@ -642,7 +643,7 @@ export default function FrmsFlightDashboard() {
           ) : null}
         </div>
 
-        {!firstLoad && !snapshotUnavailable ? <FrmsOverview queue={queue} checkinPendingCount={checkinPendingCount} activeFilter={overviewFilter} onFilterChange={changeOverviewFilter} /> : null}
+        {!firstLoad && !snapshotUnavailable ? <FrmsOverview queue={queue} checkinPendingCount={checkinPendingCount} activeFilter={overviewFilter} onFilterChange={changeOverviewFilter} todayIso={todayIso} /> : null}
 
         <section className="space-y-3" aria-label="Resumo operacional">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -801,7 +802,13 @@ export default function FrmsFlightDashboard() {
                     <div className="min-w-0">
                       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Por quê?</p>
                       <p className="line-clamp-2 text-sm text-slate-700 dark:text-slate-200" title={guidance.reason}>{guidance.reason}</p>
-                      <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200">Dados: confiança {confidence.toLowerCase()}</p>
+                      {frmsAttentionFacts(item).length > 0 ?
+                        <p className="mt-1 line-clamp-2 text-xs font-semibold text-amber-800 dark:text-amber-200" title={frmsAttentionFacts(item).join(' · ')}>
+                          {frmsAttentionFacts(item).slice(0, 2).join(' · ')}
+                        </p> : null}
+                      <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200" title={'Confiança oficial: ' + confidence.toLowerCase()}>
+                        {isFrmsRoutineDutyClosurePending(item, todayIso) ? 'Jornada aguardando fechamento' : 'Dados: confiança ' + confidence.toLowerCase()}
+                      </p>
                       <p className="mt-1 text-[11px] text-slate-500">{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</p>
                     </div>
                     <div className="min-w-0">

@@ -280,6 +280,11 @@ export interface MatricularLoteResult {
   ignoradas: number;
   erros: number;
   matriculas?: LmsMatricula[];
+  detalhes_erros?: Array<{
+    funcionario_id: number;
+    funcionario_nome: string;
+    codigo: 'NEW_EDITION_REQUIRED' | 'NOT_ELIGIBLE' | 'ESTADO_NAO_CONFIRMADO' | string;
+  }>;
 }
 
 function sanitizeCreateCursoPayload(dto: CreateCursoDTO): CreateCursoDTO {
@@ -754,7 +759,7 @@ export function useMatriculasCurso(
   opts: { status?: string; page?: number; limit?: number } = {},
 ) {
   return useQuery({
-    queryKey: lmsKeys.matriculaCurso(cursoId),
+    queryKey: [...lmsKeys.matriculaCurso(cursoId), opts.status ?? '', opts.page ?? 1, opts.limit ?? 50],
     queryFn: () => {
       const params = new URLSearchParams();
       if (opts.status) params.set('status', opts.status);

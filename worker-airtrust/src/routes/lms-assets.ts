@@ -1878,9 +1878,10 @@ ${buildScormNativeResumeOwnershipScript()}
       // when a resume bookmark is pinned at the highest slide. Never infer
       // visits from body text, unrelated fractions or a changed slide total.
       var header = parseProgressFromHeader(doc);
-      if (existingParsed && existingParsed.total != null && header &&
-          header.total === existingParsed.total && header.current >= 1 &&
-          header.current <= header.total &&
+      var trustedVisiblePage = !!(existingParsed && existingParsed.total != null && header &&
+        header.total === existingParsed.total && header.current >= 1 &&
+        header.current <= header.total);
+      if (trustedVisiblePage &&
           updateMaxVisitedFromLocation(String(header.current) + '/' + String(header.total))) {
         scheduleCommit(800);
         emitProgress({ location: existingLocation });
@@ -1902,7 +1903,12 @@ ${buildScormNativeResumeOwnershipScript()}
       if (!probeDecision.persist) {
         diag(' PROBE_LOCATION_KEPT reason=' + probeDecision.reason + ' loc=' + (existingLocation || 'null'));
         if (existingParsed) {
-          var canonicalProbeKey = String(existingLocation) + '|' + String(parsed.total);
+          // The server bookmark is a high-water mark, NOT the page currently
+          // visible in the content. Only the trusted package counter may report
+          // a revisited page while retaining the persisted 42/42 bookmark.
+          var visibleLocation = trustedVisiblePage
+            ? String(header.current) + '/' + String(header.total) : existingLocation;
+          var canonicalProbeKey = String(existingLocation) + '|' + String(parsed.total) + '|' + String(visibleLocation);
           if (canonicalProbeKey === lastCanonicalProbeLocation) return;
           lastCanonicalProbeLocation = canonicalProbeKey;
           var keptTotal = existingParsed.total != null ? existingParsed.total : parsed.total;
@@ -1910,10 +1916,12 @@ ${buildScormNativeResumeOwnershipScript()}
             progresso_pct: keptTotal
               ? Math.round((existingParsed.current / keptTotal) * 100)
               : undefined,
-            location: existingLocation,
-            slide_current: existingParsed.current,
-            slide_total: existingParsed.total != null ? existingParsed.total : undefined,
-            reached_end: existingParsed.total != null && existingParsed.current >= existingParsed.total,
+            location: visibleLocation,
+            slide_current: trustedVisiblePage ? header.current : existingParsed.current,
+            slide_total: trustedVisiblePage ? header.total : existingParsed.total,
+            reached_end: trustedVisiblePage
+              ? header.current >= header.total
+              : existingParsed.total != null && existingParsed.current >= existingParsed.total,
           });
         }
         return;

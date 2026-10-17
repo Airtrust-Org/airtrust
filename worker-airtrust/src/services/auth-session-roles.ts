@@ -1,4 +1,5 @@
 import { normalizeAirtrustRole } from '../utils/role-resolution';
+import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 
 /**
  * Nome do cookie same-site que carrega o perfil ativo escolhido para a sessão.
@@ -87,8 +88,8 @@ async function hasLmsStudentLink(
  * - INSTRUTOR: cadastro ativo em instrutores_simulador;
  * - ALUNO: matrícula LMS ativa/não removida no tenant no fallback legado.
  *
- * Invariante de negócio: todo GESTOR também pode atuar como ALUNO, mesmo sem
- * matrícula LMS e mesmo quando a estrutura explícita de perfis já existe.
+ * Invariante de negócio: GESTOR também pode atuar como ALUNO; ADMINISTRADOR
+ * tem exclusivamente modo administrativo, mesmo com vínculos legados adicionais.
  *
  * Nenhum perfil é criado por simples pedido do cliente; o backend sempre valida
  * a evidência no D1 antes de permitir a troca de role no JWT.
@@ -126,6 +127,13 @@ export async function resolveAvailableSessionRoles(
 
   if (!row) return [];
 
+  // A concessão global persistida prevalece sobre qualquer papel legado,
+  // vínculo setorial ou perfil adicional na empresa. Essa verificação também
+  // protege um administrador que alternou para outra empresa com role ALUNO.
+  if (isPlatformAdminAccess(await resolvePlatformAccessState(db, userId))) {
+    return ['ADMINISTRADOR'];
+  }
+
   // Estrutura explícita de perfis (migration 0473). Quando ela existe, é a
   // AUTORIDADE: um perfil removido pelo administrador não pode reaparecer por
   // inferência das tabelas legadas.
@@ -157,17 +165,25 @@ export async function resolveAvailableSessionRoles(
   }
 
   const roles = new Set<SessionRole>();
+  // A conta com admin local pertence ao tenant, NÃO à plataforma. O modo
+  // ADMINISTRADOR só pode vir da concessão platform_admin persistida,
+  // verificada acima. Papéis legados 'admin' continuam tendo seu vínculo
+  // administrativo no banco, mas selecionam a experiência de GESTOR.
+  const tenantSessionRole = (value: unknown): SessionRole => {
+    const role = normalizeSessionRole(value);
+    return role === 'ADMINISTRADOR' ? 'GESTOR' : role;
+  };
 
   if (explicitProfiles.length > 0) {
     // AUTHORITATIVE EXPLICIT PROFILES
     for (const p of explicitProfiles) {
       if (p.ativo === 1 && p.perfil) {
-        roles.add(normalizeSessionRole(p.perfil));
+        roles.add(tenantSessionRole(p.perfil));
       }
     }
   } else {
     // LEGACY INFERENCE FALLBACK
-    roles.add(normalizeSessionRole(row.empresa_role || row.perfil || fallbackRole));
+    roles.add(tenantSessionRole(row.empresa_role || row.perfil || fallbackRole));
 
     const funcionarioId = Number(row.funcionario_id || 0);
     const funcionarioEmpresaId = Number(row.funcionario_empresa_id || 0);
@@ -187,12 +203,11 @@ export async function resolveAvailableSessionRoles(
     }
   }
 
-  // Regra de negócio: todo GESTOR também precisa poder atuar como ALUNO.
-  // A derivação em tempo de autorização cobre gestores já existentes sem
-  // migration/backfill e mantém ADMINISTRADOR como perfil independente.
-  if (roles.has('GESTOR')) {
-    roles.add('ALUNO');
-  }
+  // O único retorno ADMINISTRADOR ocorre na verificação de plataforma acima.
+  // O modo GESTOR local é distinto e pode coexistir com o modo de aprendizado.
+
+  // GESTOR pode entrar como ALUNO mesmo sem matrícula LMS.
+  if (roles.has('GESTOR')) roles.add('ALUNO');
 
   return ROLE_ORDER.filter((role) => roles.has(role));
 }

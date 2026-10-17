@@ -11,6 +11,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { fetchLmsCourseAsset } from './lmsProtectedCourseAsset';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import {
   useFinalizarMatricula,
@@ -55,11 +56,7 @@ export default function LmsPlayerPdf() {
 
     async function loadPdf() {
       try {
-        const tkn = getAccessToken() ?? token ?? '';
-        const url = `${API_BASE_URL}/lms/pdf/asset/${matricula!.curso_id}`;
-        const resp = await fetch(url, {
-          headers: { Authorization: `Bearer ${tkn}` },
-        });
+        const resp = await fetchLmsCourseAsset('pdf', matricula!.curso_id);
         if (!resp.ok) throw new Error(`Falha ao carregar PDF (${resp.status})`);
         const blob = await resp.blob();
         if (cancelled) return;

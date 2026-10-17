@@ -40,6 +40,11 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /CERT_COURSE_IDS/);
   assert.match(source, /summarizeStalledSlide/);
   assert.match(source, /captureVisibleControls/);
+  assert.ok(source.includes('readVisibleVideo(frame)'));
+  assert.ok(source.includes('startRealVisibleVideo(frame)'));
+  assert.match(source, /video_duration_seconds/);
+  assert.match(source, /video_gate_seen/);
+  assert.match(source, /video-blocked/);
   assert.match(source, /visible_controls/);
   assert.match(source, /drive_diagnostics/);
   assert.match(source, /frame_error_count/);
@@ -140,7 +145,18 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /content_buttons/);
   assert.match(source, /rect\.bottom > 0/);
   assert.match(source, /action\?\.type === 'none'/);
-  assert.match(source, /PPTX_QUALIFYING_COMPLETION_EVIDENCE_REQUIRED/);
+  assert.match(source, /classifyPptxAssetProbe\(/);
+  assert.ok(source.includes('classifyUncoveredContentType(type)'));
+  assert.ok(source.includes('certifyPdfAsset(browser, token, course)'));
+  assert.ok(source.includes('certifyH5pAssets(browser, token, course)'));
+  assert.ok(source.includes('/api/lms/pdf/asset/'));
+  assert.ok(source.includes('/api/lms/h5p/assets/'));
+  assert.ok(source.includes('classifyReadOnlyContentAssetProbe('));
+  assert.match(source, /format_coverage: summarizeCourseFormatCoverage\(results\)/);
+  assert.match(source, /browser_preview_lifecycle_pass: classification.status === 'PASS'/);
+  assert.match(source, /enrolled_learner_end_to_end_tested: false/);
+  assert.match(source, /functional_completion_certified: verdict\.functionalCompletionCertified/);
+  assert.doesNotMatch(source, /status: pass \? 'PASS' : 'FAIL'/);
   assert.match(source, /generates_qualification/);
   assert.match(source, /forwardId/);
   assert.match(source, /qnext/);
@@ -238,7 +254,13 @@ test('production certification workflow is governed, online-triggerable, SHA-pin
   assert.match(workflow, /if:\s*always\(\)/);
   assert.match(workflow, /actions\/upload-artifact@v7/);
   assert.match(workflow, /lms-active-certification-diagnostics/);
+  assert.match(workflow, /format_coverage\?\.formats/);
+  assert.match(workflow, /INCONCLUSIVE:/);
   assert.match(workflow, /Enforce zero certification failures/);
+  assert.match(workflow, /pull-requests:\s*write/);
+  assert.match(workflow, /AIRTRUST_LMS_CERTIFICATION_RESULT/);
+  assert.match(workflow, /context\.runId/);
+  assert.match(workflow, /github\.rest\.issues\.createComment/);
 
   assert.match(resolver, /COMMENT_ACTOR_MISMATCH/);
   assert.match(resolver, /COMMENT_COMMAND_MUST_BE_SINGLE_LINE/);
