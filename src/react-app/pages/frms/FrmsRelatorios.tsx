@@ -263,7 +263,7 @@ export default function FrmsRelatorios() {
     let csvContent = metadataRows.map((row) => row.map(csvCell).join(',')).join('\n') + '\n\n';
 
     if (tipo === 'compliance') {
-      csvContent += ['Tripulante', 'Dias avaliados', 'Conformes', 'Violações', 'Não avaliados', 'Mitigação', 'Atenção', 'Fontes normativas'].map(csvCell).join(',') + '\n';
+      csvContent += ['Tripulante', 'Dias no recorte', 'Conformes', 'Violações', 'Não avaliados', 'Mitigação', 'Atenção', 'Fontes normativas'].map(csvCell).join(',') + '\n';
       for (const row of orderedData ?? []) {
         csvContent += [
           row.nome || row.tripulante_id,
@@ -484,7 +484,7 @@ function ComplianceTable({ data }: { data: FrmsReportRow[] }) {
         <thead>
           <tr className="border-b border-gray-100 bg-gray-50/50">
             <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">Tripulante</th>
-            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Avaliados</th>
+            <th title="Total de dias com registro no recorte, inclusive os dias cuja conformidade não pôde ser avaliada." className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Dias no recorte</th>
             <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Conformes</th>
             <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Violações</th>
             <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Não avaliados</th>
@@ -515,7 +515,7 @@ function ComplianceTable({ data }: { data: FrmsReportRow[] }) {
         </tbody>
       </table>
       <p className="border-t border-gray-100 px-4 py-3 text-xs text-slate-500">
-        Violações e não avaliados vêm do motor regulatório canônico. Mitigação e atenção são estados preventivos do FRMS e não equivalem a infração normativa.
+        Dias no recorte incluem os dias sem avaliação de conformidade. Violações e não avaliados vêm do motor regulatório canônico; mitigação e atenção são estados preventivos do FRMS, não infrações normativas.
       </p>
     </div>
   );
