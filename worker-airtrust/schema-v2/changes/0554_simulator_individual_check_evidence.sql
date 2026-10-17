@@ -73,6 +73,24 @@ BEGIN
        AND sc.id = NEW.sessao_check_id
        AND (avaliador.id = fs.instrutor_id OR avaliador.id = sa.examinador_id)
   ) THEN RAISE(ABORT, 'INDIVIDUAL_CHECK_SCOPE_INVALID') END;
+  -- Revisions must not link evidence across tenants, employees or unrelated
+  -- qualification types. A re-evaluation is a new fiche, not rewritten proof.
+  SELECT CASE WHEN
+    (NEW.revisao_de_id IS NULL AND NEW.revisao_numero <> 1)
+    OR (NEW.revisao_de_id IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM sessoes_checks_resultados_individuais prior
+      JOIN sessoes_checks old_check ON old_check.id = prior.sessao_check_id
+      JOIN sessoes_checks new_check ON new_check.id = NEW.sessao_check_id
+      WHERE prior.id = NEW.revisao_de_id
+        AND prior.empresa_id = NEW.empresa_id
+        AND prior.funcionario_id = NEW.funcionario_id
+        AND prior.ficha_id <> NEW.ficha_id
+        AND old_check.qualificacao_tipo_id IS NOT NULL
+        AND old_check.qualificacao_tipo_id = new_check.qualificacao_tipo_id
+        AND prior.estado IN ('CONFIRMADO','ANULADO')
+        AND NEW.revisao_numero = prior.revisao_numero + 1
+    ))
+    THEN RAISE(ABORT, 'INDIVIDUAL_CHECK_REVISION_SCOPE_INVALID') END;
 END;
 
 -- Prevent swapping a proven identity onto a different employee or check.

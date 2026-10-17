@@ -33,7 +33,7 @@ function fixture() {
       status TEXT, aprovado INTEGER, deleted_at TEXT
     );
     CREATE TABLE sessoes_checks (
-      id INTEGER PRIMARY KEY, sessao_id INTEGER NOT NULL, deleted_at TEXT
+      id INTEGER PRIMARY KEY, sessao_id INTEGER NOT NULL, deleted_at TEXT, qualificacao_tipo_id INTEGER
     );
     INSERT INTO funcionarios VALUES
       (201, 6, NULL),(202, 6, NULL),(301, 6, NULL),
@@ -45,7 +45,7 @@ function fixture() {
       (101, 6, 10, 201, 301, '2026-10-10', '2026-10-11','APROVADO',1,NULL),
       (102, 6, 10, 202, 301, '2026-10-10', NULL,'AGUARDANDO_ASSINATURA_INSTRUTOR',0,NULL),
       (201, 7, 20, 501, 601, '2026-10-10', '2026-10-11','APROVADO',1,NULL);
-    INSERT INTO sessoes_checks VALUES (900,10,NULL),(901,10,NULL),(999,20,NULL);
+    INSERT INTO sessoes_checks VALUES (900,10,NULL,33),(901,10,NULL,33),(999,20,NULL,44);
   `);
   db!.exec(migration);
   return db;
@@ -54,15 +54,15 @@ function fixture() {
 function insert(db: DatabaseSync, props: {
   empresa?: number; fiche?: number; check?: number; employee?: number;
   evaluator?: number; approved?: number | null;
-  state?: string; signed?: boolean;
+  state?: string; signed?: boolean; revisionOf?: number; revisionNumber?: number;
 } = {}) {
   const state = props.state ?? 'CONFIRMADO';
   return db!.prepare(`
     INSERT INTO sessoes_checks_resultados_individuais
       (empresa_id, sessao_check_id, ficha_id, funcionario_id,
        avaliador_funcionario_id, aprovado, estado, confirmado_em,
-       confirmado_por_usuario_id, observacoes)
-    VALUES (?,?,?,?,?,?,?,?,?,?)
+       confirmado_por_usuario_id, observacoes, revisao_numero, revisao_de_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     props.empresa ?? 6,
     props.check ?? 900,
@@ -74,6 +74,8 @@ function insert(db: DatabaseSync, props: {
     props.signed === false ? null : '2026-10-11T16:00:00Z',
     props.signed === false ? null : 35,
     'Revisado individualmente',
+    props.revisionNumber ?? 1,
+    props.revisionOf ?? null,
   );
 }
 
@@ -105,6 +107,32 @@ describe('Schema V2 0554 — simulator check evidence belongs to a person', () =
     const item = db!.prepare('SELECT funcionario_id, aprovado, estado FROM sessoes_checks_resultados_individuais').get();
     expect(item).toEqual({ funcionario_id:202, aprovado:0, estado:'CONFIRMADO' });
     expect(() => insert(db!, { fiche:102, employee:202, approved:1 })).toThrow(/UNIQUE constraint failed/);
+  });
+
+  it('only links sequential revisions for the same employee and qualification type', () => {
+    db = fixture();
+    const first = Number(insert(db!).lastInsertRowid);
+    db!.exec(`INSERT INTO fichas_sessao VALUES
+      (103,6,10,201,301,'2026-10-12','2026-10-12','APROVADO',1,NULL);`);
+    insert(db!, { fiche:103, employee:201, check:901, revisionOf:first, revisionNumber:2 });
+    expect(db!.prepare('SELECT COUNT(*) AS n FROM sessoes_checks_resultados_individuais').get())
+      .toEqual({ n:2 });
+    expect(() => insert(db!, { fiche:103, employee:201, check:901, revisionOf:first, revisionNumber:4 }))
+      .toThrow(/INDIVIDUAL_CHECK_REVISION_SCOPE_INVALID/);
+  });
+
+  it('rejects linking a revision to evidence from another tenant or employee', () => {
+    db = fixture();
+    const first = Number(insert(db!).lastInsertRowid);
+    expect(() => insert(db!, {
+      empresa:7, fiche:201, employee:501, evaluator:601, check:999,
+      revisionOf:first, revisionNumber:2,
+    })).toThrow(/INDIVIDUAL_CHECK_REVISION_SCOPE_INVALID/);
+    db!.exec(`INSERT INTO fichas_sessao VALUES
+      (103,6,10,202,301,'2026-10-12','2026-10-12','APROVADO',1,NULL);`);
+    expect(() => insert(db!, {
+      fiche:103, employee:202, check:901, revisionOf:first, revisionNumber:2,
+    })).toThrow(/INDIVIDUAL_CHECK_REVISION_SCOPE_INVALID/);
   });
 
   it('cannot insert approval for a different employee or fiche/session', () => {
