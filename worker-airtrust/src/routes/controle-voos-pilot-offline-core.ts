@@ -434,6 +434,7 @@ pilotOffline.get(
             SELECT
               t.id, t.funcionario_id, t.etapa_id, t.funcao,
               COALESCE(
+                t.horario_apresentacao,
                 (
                   SELECT fj.hora_apresentacao
                   FROM frms_jornada fj
@@ -442,8 +443,7 @@ pilotOffline.get(
                     AND fj.deleted_at IS NULL
                   ORDER BY fj.updated_at DESC, fj.created_at DESC
                   LIMIT 1
-                ),
-                t.horario_apresentacao
+                )
               ) AS horario_apresentacao,
               t.horario_dispensa, t.observacoes,
               f.nome, f.guerra AS nome_guerra, f.codigo_anac, t.updated_at
