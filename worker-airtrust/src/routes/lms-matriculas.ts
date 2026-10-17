@@ -35,7 +35,7 @@ import {
   resolveLmsEffectiveProgress,
   shouldPreferIncomingScormState,
 } from '../services/lms-progress-guardrails';
-import { logAudit } from '../utils/db';
+import { getCallerUserId, logLmsMatriculaAudit } from './lms-matriculas-audit';
 import type { Env } from '../types';
 import {
   assertFuncionarioInScope,
@@ -109,42 +109,6 @@ async function resolveCallerFuncionarioId(c: Context, db: D1Database): Promise<n
 
   const parsed = row?.funcionario_id;
   return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : null;
-}
-
-function getCallerUserId(c: Context): number | undefined {
-  const raw = c.get('userId' as never) as unknown;
-  const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
-  return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : undefined;
-}
-
-async function logLmsMatriculaAudit(
-  db: D1Database,
-  c: Context,
-  params: {
-    action: string;
-    matriculaId: number;
-    oldValues?: Record<string, unknown>;
-    newValues?: Record<string, unknown>;
-  },
-) {
-  try {
-    await logAudit(db, {
-      userId: getCallerUserId(c),
-      action: params.action,
-      entityType: 'lms_matriculas',
-      entityId: params.matriculaId,
-      oldValues: params.oldValues,
-      newValues: params.newValues,
-      empresaId: getEmpresaIdSafe(c),
-      ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
-      userAgent: c.req.header('user-agent') ?? undefined,
-    });
-  } catch (error) {
-    createLogger(c, 'LmsMatriculas.audit').error('lms_matricula_audit_failed', toError(error), {
-      matriculaId: params.matriculaId,
-      action: params.action,
-    });
-  }
 }
 
 async function createLmsInAppNotification(
@@ -1048,12 +1012,22 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
 
   const results = { criadas: 0, ignoradas: 0, erros: 0 };
   const matriculasCriadas: Record<string, unknown>[] = [];
+  const detalhesErros: Array<{ funcionario_id: number; funcionario_nome: string; codigo: string }> = [];
+  const recordError = (funcionarioId: number, codigo: string) => {
+    results.erros++;
+    detalhesErros.push({
+      funcionario_id: funcionarioId,
+      funcionario_nome: funcionariosPorId.get(funcionarioId)?.nome ?? `Funcionário ${funcionarioId}`,
+      codigo,
+    });
+  };
 
   for (const funcionarioId of funcionarioIdsUnicos) {
+    let etapa = 'consulta';
     try {
       const funcionario = funcionariosPorId.get(funcionarioId);
       if (!funcionario) {
-        results.erros++;
+        recordError(funcionarioId, 'ESTADO_NAO_CONFIRMADO');
         continue;
       }
 
@@ -1071,6 +1045,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           results.ignoradas++;
           continue;
         }
+        etapa = 'reativacao';
         const resume = await reactivateCancelledMatriculaPreservingProgress(db, {
           matriculaId: existente.id,
           dataExpiracao: data_expiracao ?? null,
@@ -1081,15 +1056,17 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         if (resume === 'NEW_EDITION_REQUIRED' || resume === 'NOT_ELIGIBLE') {
           // Batch is per learner: do not erase the old SCORM state and do not
           // count an incompatible course as successfully re-enrolled.
-          results.erros++;
+          recordError(funcionarioId, resume);
           continue;
         }
+        etapa = 'perfil_evidencia';
         await stampLmsEnrollmentEvidenceProfile(db, {
           empresaId,
           matriculaId: existente.id,
           funcionarioId,
           qualificacaoTipoId: curso.qualificacao_tipo_id,
         });
+        etapa = 'notificacao';
         await createLmsInAppNotification(db, {
           funcionarioId,
           empresaId,
@@ -1111,6 +1088,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
             resumed_status: resume.status, resumed_progress_pct: resume.progressoPct,
           },
         });
+        etapa = 'convite';
         if (enviar_convite_email)
           await sendMatriculaEmail(c, c.env, db, {
             funcionarioId,
@@ -1120,6 +1098,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
             dataExpiracao: data_expiracao ?? null,
             isNovoCiclo: false,
           });
+        etapa = 'leitura';
         const matriculaReativada = await readMatriculaForCourseList(db, {
           matriculaId: existente.id,
           empresaId,
@@ -1128,6 +1107,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         results.criadas++;
         continue;
       }
+      etapa = 'insercao';
       const insertResult = await db
         .prepare(
           'INSERT INTO lms_matriculas (empresa_id, curso_id, funcionario_id, data_expiracao, observacoes, matriculado_por) VALUES (?,?,?,?,?,?)',
@@ -1142,17 +1122,20 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         )
         .run();
       const matriculaId = Number(insertResult.meta.last_row_id);
+      etapa = 'perfil_evidencia';
       await stampLmsEnrollmentEvidenceProfile(db, {
         empresaId,
         matriculaId,
         funcionarioId,
         qualificacaoTipoId: curso.qualificacao_tipo_id,
       });
+      etapa = 'ciclo';
       await ensureMatriculaCycle(db, {
         matriculaId,
         origin: 'MANUAL',
         empresaId,
       });
+      etapa = 'notificacao';
       await createLmsInAppNotification(db, {
         funcionarioId,
         empresaId,
@@ -1174,6 +1157,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           observacoes: observacoes ?? null,
         },
       });
+      etapa = 'convite';
       if (enviar_convite_email)
         await sendMatriculaEmail(c, c.env, db, {
           funcionarioId,
@@ -1184,6 +1168,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           isNovoCiclo: false,
         });
 
+      etapa = 'leitura';
       const matriculaCriada = await readMatriculaForCourseList(db, {
         matriculaId,
         empresaId,
@@ -1193,8 +1178,11 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
       }
       results.criadas++;
     } catch (error) {
-      if (!isMatriculaUniqueConstraintError(error)) {
-        results.erros++;
+      if (etapa !== 'insercao' || !isMatriculaUniqueConstraintError(error)) {
+        createLogger(c, 'LmsMatriculas.lote').error('lms_matricula_lote_failed', undefined, {
+          cursoId: curso_id, funcionarioId, etapa,
+        });
+        recordError(funcionarioId, 'ESTADO_NAO_CONFIRMADO');
         continue;
       }
 
@@ -1208,11 +1196,11 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         results.ignoradas++;
         continue;
       }
-      results.erros++;
+      recordError(funcionarioId, 'ESTADO_NAO_CONFIRMADO');
     }
   }
 
-  return c.json({ success: true, data: { ...results, matriculas: matriculasCriadas } });
+  return c.json({ success: true, data: { ...results, matriculas: matriculasCriadas, detalhes_erros: detalhesErros } });
 });
 
 // ── Cancelar matrícula ────────────────────────────────────────────────────────
