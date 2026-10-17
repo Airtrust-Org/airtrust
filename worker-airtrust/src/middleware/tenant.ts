@@ -244,7 +244,11 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
 
     // Buscar dados da empresa e permissões do usuário
 
-    const result = useUsuariosEmpresas
+    // Somente papel de plataforma PERSISTIDO permite selecionar tenant sem
+    // vínculo em usuarios_empresas. O tenant permanece ativo e explicitamente
+    // identificado no JWT; gestores nunca usam este caminho.
+    const platformAdmin = isPlatformAdminAccess(platformAccessState);
+    const result = useUsuariosEmpresas && !platformAdmin
       ? await db
           .prepare(
             `
