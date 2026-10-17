@@ -1,4 +1,13 @@
 #!/usr/bin/env node
+// source_reference: reviewed synthetic FRMS UX 30d tenant fixture #1426/#1430,
+//   applied through staging run 38475335321; current FRMS QA blocked by missing
+//   dedicated identity, not missing production data.
+// operational_decision: stage a new isolated QA account only for tenant 999013;
+//   require exact staging UUID/main/provenance, no user overwrite or cross-tenant grant.
+// dry_run_required: default --inspect is SELECT-only; --apply requires the
+//   governed staging workflow, confirmation and verified D1 recovery bookmark.
+// rollback_plan_required: --rollback only disables the fixed QA account after
+//   staging recovery bookmark; no production SQL, user, or tenant changes.
 // Staging-only, exact synthetic FRMS tenant 999013. Never writes production,
 // changes an existing identity, or prints credentials/SQL. Run only via the
 // reviewed GitHub Actions workflow with D1 recovery bookmark first.
