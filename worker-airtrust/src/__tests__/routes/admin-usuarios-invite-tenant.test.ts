@@ -67,9 +67,76 @@ function createDb() {
   return { db, queries };
 }
 
+function createInstructorDb() {
+  const writes: Array<{ sql: string; args: unknown[] }> = [];
+  const db = {
+    prepare(sql: string) {
+      const statement = {
+        args: [] as unknown[],
+        bind(...args: unknown[]) { statement.args = args; return statement; },
+        async first() { return null; },
+        async all() { return { results: [] }; },
+        async run() {
+          writes.push({ sql, args: statement.args });
+          if (sql.includes('INSERT INTO usuarios (')) return { meta: { last_row_id: 101, changes: 1 } };
+          return { meta: { changes: 1 } };
+        },
+      };
+      return statement;
+    },
+    async batch(statements: Array<{ run: () => Promise<unknown> }>) {
+      return Promise.all(statements.map((statement) => statement.run()));
+    },
+  } as unknown as D1Database;
+  return { db, writes };
+}
+
 describe('admin usuarios invite tenant boundary', () => {
   beforeEach(() => {
     tenantContext = { empresaId: 6, empresaCodigo: 'costa-do-sol' };
+  });
+
+  it('persists Instrutor and Aluno explicitly in the same tenant when requested', async () => {
+    const { db, writes } = createInstructorDb();
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/admin/usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test' },
+        body: JSON.stringify({
+          email: 'instrutor@tenant.test', nome: 'Instrutor de Teste',
+          perfil: 'INSTRUTOR', aluno_tambem: true, funcionario_id: 44,
+        }),
+      }),
+      { DB: db, JWT_SECRET: 'test-secret', ENVIRONMENT: 'test' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(201);
+    const explicit = writes.filter((row) => row.sql.includes('INSERT INTO usuarios_empresas_perfis'));
+    expect(explicit).toHaveLength(2);
+    expect(explicit.map((row) => row.args)).toEqual([
+      [101, 6, 'INSTRUTOR'],
+      [101, 6, 'ALUNO'],
+    ]);
+    expect(writes.some((row) => row.sql.includes('INSERT OR IGNORE INTO usuarios_empresas') &&
+      row.args[1] === 6)).toBe(true);
+  });
+
+  it('rejects an additional student flag when the selected role is not Instrutor', async () => {
+    const { db, writes } = createInstructorDb();
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/admin/usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test' },
+        body: JSON.stringify({
+          email: 'aluno@tenant.test', nome: 'Aluno de Teste',
+          perfil: 'ALUNO', aluno_tambem: true, funcionario_id: 44,
+        }),
+      }),
+      { DB: db, JWT_SECRET: 'test-secret', ENVIRONMENT: 'test' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(400);
+    expect(writes).toHaveLength(0);
   });
 
   it('blocks tenant admins/managers from inviting users into a different empresa_id', async () => {
