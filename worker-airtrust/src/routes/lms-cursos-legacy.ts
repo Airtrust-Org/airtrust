@@ -1876,8 +1876,7 @@ app.get('/:id{[0-9]+}', async (c) => {
   await assertLmsCursoDetailDomainAccess({ db, empresaId, c, cursoId });
 
   const setoresJson = curso.setores_json as string | null;
-  const [projectedCourse] = await projectNativeCatalogCourses(c.env, empresaId, [curso]);
-  const { setores_json: _, ...cursoRest } = projectedCourse;
+  const [{ setores_json: _, ...cursoRest }] = await projectNativeCatalogCourses(c.env, empresaId, [curso]);
   const data = {
     ...cursoRest,
     setores: setoresJson ? (JSON.parse(setoresJson) as { id: number; nome: string }[]) : [],
