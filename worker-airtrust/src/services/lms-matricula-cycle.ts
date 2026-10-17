@@ -562,15 +562,15 @@ export async function resetMatriculaForNewCycle(
     db.prepare(`UPDATE lms_progresso_scorm
        SET lesson_status=NULL,lesson_location=NULL,completion_status=NULL,
            success_status=NULL,score_raw=NULL,score_min=NULL,score_max=NULL,
-           score_scaled=NULL,session_time=NULL,total_time=NULL,session_count=0,
-           suspend_data=NULL,launch_data=NULL,cmi_json=NULL,
-           last_commit_at=datetime('now'),updated_at=datetime('now')
+           score_scaled=NULL,session_time=NULL,total_time=NULL,session_count = 0,
+           suspend_data = NULL,launch_data=NULL,cmi_json = NULL,
+           last_commit_at = datetime('now'),updated_at=datetime('now')
        WHERE matricula_id=? AND empresa_id=? AND ${markerExists}`)
       .bind(params.matriculaId,params.empresaId,...guarded),
 
     db.prepare(`UPDATE lms_matriculas
-       SET status='NAO_INICIADO',deleted_at=NULL,progresso_pct=0,
-           ultimo_slide=0,ultima_pagina=0,score_final=NULL,tentativas=0,
+       SET status = 'NAO_INICIADO',deleted_at=NULL,progresso_pct = 0,
+           ultimo_slide = 0,ultima_pagina = 0,score_final=NULL,tentativas=0,
            data_inicio=NULL,data_conclusao=NULL,data_expiracao=?,
            data_matricula=datetime('now'),qualificacao_historico_id=NULL,
            matriculado_por=?,updated_at=datetime('now')
