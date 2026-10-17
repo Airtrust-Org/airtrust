@@ -54,9 +54,14 @@ export function signGovernedScormEvidence({
       row.verifiedIndependentCycle===true&&
       row.qualificationHistoryVerified===true&&
       row.certificateDocumentVerified===true,'E2E_INCOMPLETE_'+browser);
-    assert(Array.isArray(row.cases)&&row.cases.length===cases.length&&
-      row.cases.every(v=>cases.includes(v.name)&&v.status==='PASS')&&
-      new Set(row.cases.map(v=>v.name)).size===cases.length,
+    // Formative courses legitimately have no scored pass/fail quiz. Only the
+    // authoritatively declared profile removes those two case requirements.
+    const required=candidate.requiresAssessment?cases:
+      cases.filter(name=>name!=='ASSESSMENT_INSUFFICIENT'&&
+        name!=='ASSESSMENT_APPROVED');
+    assert(Array.isArray(row.cases)&&row.cases.length===required.length&&
+      row.cases.every(v=>required.includes(v.name)&&v.status==='PASS')&&
+      new Set(row.cases.map(v=>v.name)).size===required.length,
       'CASES_INCOMPLETE_'+browser);
     runs.push({harness:'AIRTRUST_SCORM_FUNCTIONAL_HARNESS_V1',
       browser,packageSha256:candidate.packageSha256,
