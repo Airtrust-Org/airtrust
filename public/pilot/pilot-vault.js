@@ -341,24 +341,9 @@ export class PilotVault {
   }
 
   async migrateLegacyPin(pin) {
-    const config = await this.getVaultConfig();
-    if (!config || Number(config.version) !== 1) {
-      throw new Error('Armazenamento antigo não encontrado.');
-    }
-    await this.unlock(pin);
-    const transaction = this.database.transaction('meta', 'readwrite');
-    transaction.objectStore('meta').put({
-      id: VAULT_CONFIG_ID,
-      version: DEVICE_CONFIG_VERSION,
-      cipher: 'AES-GCM-256',
-      key_protection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY',
-      device_key: this.masterKey,
-      migrated_from: 'PBKDF2_PIN_V1',
-      migrated_at: new Date().toISOString(),
-      created_at: config.created_at || new Date().toISOString(),
-    });
-    await transactionDone(transaction);
-    return { status: 'ready', migrated: true };
+    // Compatibility entrypoint: never rewrite the original PIN vault in place.
+    // The only permitted migration is a verified copy into V2.
+    return this.recoverLegacyPin(pin);
   }
 
   async getOrCreateDeviceId() {
