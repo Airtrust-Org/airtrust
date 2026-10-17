@@ -74,7 +74,7 @@ export function validateIndependentDriver(driver,sha,files){
   return true;
 }
 
-function unzipCandidate(bytes){
+export function unzipCandidate(bytes){
   check(bytes.length>0&&bytes.length<=80*1024*1024,'ZIP_SIZE_INVALID');
   let count=0,total=0;
   const files=unzipSync(new Uint8Array(bytes),{filter:info=>{
