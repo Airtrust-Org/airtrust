@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 
 export const LOCAL_CASES=['FIRST_ACCESS','SUSPEND_RESUME',
   'ASSESSMENT_INSUFFICIENT','ASSESSMENT_APPROVED','EXPLICIT_FINALIZATION',
-  'REOPEN_COMPLETED','NO_STATUS_DOWNGRADE','TENANT_CYCLE_ISOLATION'];
+  'REOPEN_COMPLETED','NO_STATUS_DOWNGRADE'];
 
 export function summarizeLocalEvidence(zipBytes,runs){
   const sha=createHash('sha256').update(zipBytes).digest('hex');
@@ -19,12 +19,13 @@ export function summarizeLocalEvidence(zipBytes,runs){
     if(row.source!=='LOCAL_DISPOSABLE_D1_R2_ONLY'||
        row.packageSha256!==sha)throw Error('ZIP_PROVENANCE_MISMATCH:'+browser);
     if(row.crossTenantAccess!=='PASS')throw Error('TENANT_PROBE_MISSING:'+browser);
-    if(row.cycleIsolation!=='PASS')throw Error('CYCLE_PROOF_MISSING:'+browser);
+    // No audited old-cycle rotation was exercised; never claim cycle isolation.
+    if(row.cycleIsolation!=='INCONCLUSIVE')throw Error('CYCLE_SCOPE_OVERCLAIM:'+browser);
     if(row.enrollmentIsolation!=='SAME_TENANT_ONLY'||
        row.certificateDocument!=='INCONCLUSIVE')throw Error('SCOPE_INVALID:'+browser);
     const cases=row.cases;
-    if(!Array.isArray(cases)||cases.length!==8||
-       new Set(cases.map(c=>c?.name)).size!==8)throw Error('CASE_SET_INVALID:'+browser);
+    if(!Array.isArray(cases)||cases.length!==LOCAL_CASES.length||
+       new Set(cases.map(c=>c?.name)).size!==LOCAL_CASES.length)throw Error('CASE_SET_INVALID:'+browser);
     for(const name of LOCAL_CASES){
       if(cases.find(c=>c?.name===name)?.status!=='PASS')
         throw Error('NOT_PROVEN:'+browser+':'+name);
@@ -33,8 +34,8 @@ export function summarizeLocalEvidence(zipBytes,runs){
   }
   return {schemaVersion:1,source:'LOCAL_DISPOSABLE_ZIP_ONLY',
     packageSha256:sha,status:'UNCERTIFIED',activationAuthorized:false,
-    checkedBrowsers:['CHROMIUM','WEBKIT'],passedChecks:16,
-    missing:['REAL_STAGING_CANDIDATE',
+    checkedBrowsers:['CHROMIUM','WEBKIT'],passedChecks:14,
+    missing:['REAL_STAGING_CANDIDATE','AUDITED_CYCLE_ROTATION',
       'CERTIFICATE_DOCUMENT','TRUSTED_HARNESS_PROVENANCE']};
 }
 
