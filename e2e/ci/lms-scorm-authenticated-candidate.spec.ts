@@ -108,6 +108,11 @@ test('external ZIP: learner UI -> authenticated Worker -> D1 -> qualification an
     expect(done.history).toHaveLength(1);
     expect(done.enrollment.qualificacao_historico_id).toBe(done.history[0].id);
     await open();
+    await page.evaluate(enrollmentId=>{
+      const iframe=document.getElementById('outer') as HTMLIFrameElement;
+      iframe.contentWindow!.postMessage({type:'lms:request-completion',
+        matriculaId:enrollmentId},location.origin);
+    },success);
     expect(state(success).enrollment.status).toBe('CONCLUIDO');
     expect(state(success).history).toHaveLength(1);
     expect(state(first).history).toHaveLength(0);
