@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
+import type { DatabaseSync } from 'node:sqlite';
+const SqliteDatabase = createRequire(import.meta.url)('node:sqlite').DatabaseSync as {
+  new (location: string): DatabaseSync;
+};
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -9,7 +13,7 @@ const migration = readFileSync(
 );
 
 function fixture() {
-  const db = new DatabaseSync(':memory:');
+  const db = new SqliteDatabase(':memory:');
   db.exec(`
     PRAGMA foreign_keys = ON;
     CREATE TABLE funcionarios (
