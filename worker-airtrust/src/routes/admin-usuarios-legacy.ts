@@ -697,10 +697,14 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     }
     const instructorRole = await db.prepare(`SELECT 1 AS active
         FROM usuarios_empresas_perfis
-        WHERE usuario_id = ? AND empresa_id = ? AND perfil = 'INSTRUTOR' AND ativo = 1
+        WHERE usuario_id = ? AND empresa_id = ?
+          AND UPPER(perfil) IN ('INSTRUCTOR', 'INSTRUTOR') AND ativo = 1
         LIMIT 1`)
       .bind(id, empresaId).first<{ active: number }>();
-    if (targetPerfil !== 'INSTRUTOR' && !instructorRole) {
+    // Historic memberships use the English alias 'instructor'. Do not force a
+    // global identity-role rewrite merely to add this user's Aluno mode.
+    const tenantInstructor = targetPerfil === 'INSTRUTOR' || targetPerfil === 'INSTRUCTOR';
+    if (!tenantInstructor && !instructorRole) {
       throw badRequest('Perfil adicional Aluno exige Instrutor no tenant', 'INVALID_ADDITIONAL_PROFILE');
     }
   }

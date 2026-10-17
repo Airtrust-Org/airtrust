@@ -67,7 +67,7 @@ function createDb() {
   return { db, queries };
 }
 
-function createInstructorDb(options: { existing?: boolean } = {}) {
+function createInstructorDb(options: { existing?: boolean; legacyInstructorAlias?: boolean } = {}) {
   const writes: Array<{ sql: string; args: unknown[] }> = [];
   const db = {
     prepare(sql: string) {
@@ -76,6 +76,9 @@ function createInstructorDb(options: { existing?: boolean } = {}) {
         bind(...args: unknown[]) { statement.args = args; return statement; },
         async first() {
           if (!options.existing) return null;
+          if (sql.includes('SELECT role FROM usuarios_empresas')) {
+            return options.legacyInstructorAlias ? { role: 'instructor' } : null;
+          }
           if (sql.includes('FROM usuarios u') && sql.includes('WHERE u.id = ?')) {
             return { id: 101, email: 'instrutor@tenant.test', nome: 'Instrutor de Teste',
               perfil: 'INSTRUTOR', active: 1, funcionario_id: 44,
@@ -86,7 +89,9 @@ function createInstructorDb(options: { existing?: boolean } = {}) {
             return { id: 101, perfil: 'INSTRUTOR' };
           }
           if (sql.includes('SELECT 1 FROM usuarios_empresas')) return { active: 1 };
-          if (sql.includes("perfil = 'INSTRUTOR'")) return { active: 1 };
+          if (sql.includes("perfil = 'INSTRUTOR'")) {
+            return options.legacyInstructorAlias ? null : { active: 1 };
+          }
           return null;
         },
         async all() { return { results: [] }; },
@@ -152,6 +157,23 @@ describe('admin usuarios invite tenant boundary', () => {
       [101, 6, 'INSTRUTOR'], [101, 6, 'ALUNO'],
     ]);
     expect(writes.some((row) => row.sql.includes('DELETE FROM usuarios_empresas_perfis'))).toBe(false);
+  });
+
+  it('existing legacy instructor membership can add ALUNO without rewriting company or global identity role', async () => {
+    const { db, writes } = createInstructorDb({ existing: true, legacyInstructorAlias: true });
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/admin/usuarios/101', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test' },
+        body: JSON.stringify({ aluno_tambem: true }),
+      }),
+      { DB: db, JWT_SECRET: 'test-secret', ENVIRONMENT: 'test' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    expect(writes.filter((row) => row.sql.includes('INSERT INTO usuarios_empresas_perfis')).map((row) => row.args))
+      .toEqual([[101, 6, 'INSTRUTOR'], [101, 6, 'ALUNO']]);
+    expect(writes.some((row) => /UPDATE usuarios_empresas SET role/.test(row.sql))).toBe(false);
   });
 
   it('disables only student mode in the current tenant when Instructor option is unchecked', async () => {
