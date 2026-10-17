@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { Env } from '../../types';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 
@@ -78,8 +80,6 @@ function fixture(withMigration = true) {
   if (withMigration) {
     // Use the actual additive DDL and integrity triggers, not a mocked schema.
     // The canonical 0337 SCORM table has no physical lesson_location column.
-    const { readFileSync } = require('node:fs') as typeof import('node:fs');
-    const { resolve } = require('node:path') as typeof import('node:path');
     db.database.exec(readFileSync(resolve(process.cwd(),
       'migrations/0557_lms_cycle_evidence_archive.sql'), 'utf8'));
   }
