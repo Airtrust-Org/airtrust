@@ -1043,7 +1043,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         // enabled button alone must not allow a test driver to skip a question.
         const inlineNext = items.find((item) => item.el.matches('[data-next],[data-quiz-nextq]'));
         const inlineAnswerSelected = inlineQuizChoices.some((item) =>
-          /(^|\\s)(selected|active|checked)(\\s|$)/i.test(item.className) ||
+          /(^|\s)(selected|active|checked)(\s|$)/i.test(item.className) ||
           item.ariaPressed === 'true' || item.ariaChecked === 'true' ||
           item.el.getAttribute('data-selected') === 'true'
         );
