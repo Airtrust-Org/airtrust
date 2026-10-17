@@ -81,6 +81,7 @@ interface CheckSessao {
   observacoes?: string;
   estado?: string | null;
   evidencia_id?: number | null;
+  data_vencimento?: string | null;
 }
 
 interface FichaDetalhada {
@@ -499,6 +500,7 @@ export default function FichaDetalhe() {
             sessao_check_id:number; qualificacao_tipo_id:number; codigo:string;
             nome:string; observacoes:string | null; aprovado:number | null;
             estado:string | null;
+            data_vencimento:string | null;
           }>;
         };
         if (!payload.success) throw new Error('Falha no retorno individual');
@@ -510,6 +512,7 @@ export default function FichaDetalhe() {
           aprovado:check.estado === 'CONFIRMADO' ? check.aprovado : null,
           observacoes:check.observacoes || '',
           estado:check.estado,
+          data_vencimento:check.data_vencimento,
         })));
         setChecksResultados(Object.fromEntries(payload.data.map((check) => [
           check.sessao_check_id,
@@ -1227,6 +1230,8 @@ export default function FichaDetalhe() {
                       <span className="font-semibold">{check.codigo} — {check.nome}</span>
                       <span className={confirmed ? 'text-slate-700' : 'text-amber-700'}>
                         {status}
+                        {confirmed && (check.aprovado === 1 || check.aprovado === true) &&
+                          check.data_vencimento ? ` · Válido até ${formatarDataLocalSemUTC(check.data_vencimento)}` : ''}
                       </span>
                       {!confirmed && evaluator && (
                         <div className="ml-auto flex gap-2">
