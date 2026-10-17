@@ -10,9 +10,14 @@ const DAY = '2026-10-13';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-async function captureMain(page: Page, name: string) {
-  const main = page.locator('main').first();
-  await expect(main).toBeVisible({ timeout: 20_000 });
+async function captureMain(page: Page, name: string, heading: string) {
+  // The static boot fallback is itself a <main>. Never accept it as an
+  // operational page or use mere URL presence as evidence of rendering.
+  await expect(page.locator('#airtrust-boot-fallback')).toHaveCount(0);
+  const title = page.getByRole('heading', { name: heading, exact: true }).first();
+  await expect(title).toBeVisible({ timeout: 30_000 });
+  const main = page.locator('main').filter({ has: title }).first();
+  await expect(main).toBeVisible();
   await test.info().attach(name, {
     body: await main.screenshot({ animations: 'disabled' }),
     contentType: 'image/png',
@@ -151,22 +156,45 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
   expect((payload.summary?.checkins_pendentes ?? 0) + (payload.summary?.checkins_recebidos ?? 0)).toBe(expectedDailyCrew);
   await expect(page.getByRole('navigation', { name: 'Áreas FRMS' })).toBeVisible();
   await expect(page.getByText(/Serviço temporariamente indisponível/i)).toHaveCount(0);
-  await captureMain(page, '01-operacao-frms-qa');
+  await expect(page.getByText('Carregando prioridades e evidências.')).toHaveCount(0, { timeout: 30_000 });
+  await captureMain(page, '01-operacao-frms-qa', 'Operação');
 
   await page.getByRole('link', { name: 'Casos', exact: true }).click();
-  await expect(page).toHaveURL(/\/frms\/alertas/);
+  await expect(page).toHaveURL(/\\/frms\\/alertas/);
+  await expect(page.locator('[aria-label="Carregando casos"]')).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByText('Casos nesta página')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/Serviço temporariamente indisponível/i)).toHaveCount(0);
-  await captureMain(page, '02-casos-frms-qa');
+  await captureMain(page, '02-casos-frms-qa', 'Casos');
 
-  await page.goto(BASE + '/frms?area=manutencao', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('navigation', { name: 'Áreas FRMS' })).toBeVisible();
-  await captureMain(page, '03-manutencao-frms-qa');
+  // Management of maintenance personnel requires an explicit backend grant.
+  // The synthetic flight-operations account may have no such grant; never
+  // label an Operation fallback screenshot as Maintenance acceptance.
+  const maintenanceLink = page.getByRole('navigation', { name: 'Áreas FRMS' })
+    .getByRole('link', { name: 'Manutenção', exact: true });
+  if (await maintenanceLink.count()) {
+    await maintenanceLink.click();
+    await expect(page).toHaveURL(/area=manutencao/);
+    await captureMain(page, '03-manutencao-frms-qa', 'Fadiga da Manutenção');
+  } else {
+    test.info().annotations.push({
+      type: 'coverage-gap',
+      description: 'Manutenção exige identidade de QA com can_manage_maintenance=true; fora do escopo deste teste',
+    });
+    console.log('FRMS_QA_MAINTENANCE_NOT_AUTHORIZED; no positive maintenance coverage claimed');
+  }
 
-  await page.goto(BASE + '/frms/relatorios', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByText(/Serviço temporariamente indisponível/i)).toHaveCount(0);
-  await captureMain(page, '04-relatorios-frms-qa');
+  // Use real navigation, then verify a full reload of the Reports deep link.
+  // Both paths must render Reports rather than the static boot-failure page.
+  await page.getByRole('link', { name: 'Administração', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Administração FRMS' })
+    .getByRole('link', { name: 'Relatórios', exact: true }).click();
+  await expect(page).toHaveURL(/\\/frms\\/relatorios/);
+  await expect(page.getByText('Carregando relatório...')).toHaveCount(0, { timeout: 30_000 });
+  await captureMain(page, '04-relatorios-frms-qa', 'Relatórios FRMS');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await captureMain(page, '05-relatorios-deeplink-frms-qa', 'Relatórios FRMS');
 
   expect(failures, 'Erros 5xx no escopo QA autenticado').toEqual([]);
   guard.assertClean();
-  console.log('FRMS_UX_30D_SYNTHETIC_BROWSER_QA_PASS; tenant=999013; routes=operacao,casos,manutencao,relatorios; production_writes=none');
+  console.log('FRMS_UX_30D_SYNTHETIC_BROWSER_QA_PASS; tenant=999013; routes=operacao,casos,relatorios; maintenance_conditional=true; production_writes=none');
 });
