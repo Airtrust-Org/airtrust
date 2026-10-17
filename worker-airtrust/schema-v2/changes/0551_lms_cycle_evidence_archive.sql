@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS lms_ciclo_evidencias (
   ciclo_id INTEGER NOT NULL,
   enrollment_json TEXT NOT NULL,
   scorm_json TEXT,
+  diagnostics_json TEXT,
   course_package_prefix TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (matricula_id) REFERENCES lms_matriculas(id),
