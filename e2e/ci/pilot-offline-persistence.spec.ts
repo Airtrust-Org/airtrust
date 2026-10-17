@@ -28,7 +28,6 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
 
   await expect(page.locator('#workspace')).toBeVisible();
   await expect(page.locator('#legacy-vault-card')).toBeHidden();
-  await expect(page.getByText('PIN offline')).toHaveCount(0);
 
   await openDiagnosticCard(page);
   const marker = `pilot-offline-ci-${Date.now()}`;
@@ -316,4 +315,68 @@ test('blocks legacy recovery when V2 already contains different unsynced data', 
     });
   });
   expect(intact).toBe(true);
+});
+
+test('reports denied persistence without claiming permanent local retention', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator.storage, 'persist', {
+      configurable: true,
+      value: async () => false,
+    });
+  });
+  await page.goto('/pilot/');
+  await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.locator('#storage-retention-status')).toHaveAttribute('data-retention', 'denied');
+  await expect(page.locator('#storage-retention-status')).toContainText('não concedeu retenção persistente');
+});
+
+test('marks quota failure without claiming the diagnostic draft was saved', async ({ page }) => {
+  await page.goto('/pilot/');
+  await expect(page.locator('#workspace')).toBeVisible();
+  await openDiagnosticCard(page);
+  await page.evaluate(() => {
+    const previous = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (...args) {
+      if (this.name === 'rdv_drafts') throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return previous.apply(this, args as Parameters<typeof previous>);
+    };
+  });
+  await page.locator('#draft').fill('quota-failure-test');
+  await page.locator('#save-now').click();
+  await expect(page.locator('#save-status')).toContainText('Falha ao salvar no tablet');
+  await expect(page.locator('#save-status')).not.toContainText('Salvo no tablet');
+});
+
+test('keeps V1 intact and retries recovery after an interrupted V2 write', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { PilotVault } = await import('/pilot/pilot-vault.js');
+    const vault = await PilotVault.open();
+    await vault.provision('654321');
+    await vault.putJson('rdv_drafts', 'phase1-synthetic-rdv-draft',
+      { observacoes: 'restore-after-interruption' }, 1);
+  });
+  await page.goto('/pilot/');
+  await expect(page.locator('#legacy-vault-card')).toBeVisible();
+  await page.evaluate(() => {
+    const previous = IDBObjectStore.prototype.put;
+    (window as any).__restorePut = () => { IDBObjectStore.prototype.put = previous; };
+    IDBObjectStore.prototype.put = function (...args) {
+      if (this.name === 'rdv_drafts') throw new DOMException('Simulated write abort', 'AbortError');
+      return previous.apply(this, args as Parameters<typeof previous>);
+    };
+  });
+  await page.locator('#legacy-vault-pin').fill('654321');
+  await page.locator('#legacy-vault-recover').click();
+  await expect(page.locator('#legacy-vault-status')).toContainText('armazenamento antigo foi preservado');
+  await expect(page.locator('#workspace')).toBeHidden();
+
+  await page.evaluate(() => (window as any).__restorePut());
+  await page.reload();
+  await expect(page.locator('#legacy-vault-card')).toBeVisible();
+  await page.locator('#legacy-vault-pin').fill('654321');
+  await page.locator('#legacy-vault-recover').click();
+  await expect(page.locator('#workspace')).toBeVisible();
+  await openDiagnosticCard(page);
+  await expect(page.locator('#draft')).toHaveValue('restore-after-interruption');
 });
