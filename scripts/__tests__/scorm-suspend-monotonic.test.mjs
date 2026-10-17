@@ -40,3 +40,21 @@ test('rejects corrupted, invalid or incompatible suspend state',()=>{
  assert.equal(observeMonotonicSuspend(state(),state({v:3})).ok,false);
  assert.equal(observeMonotonicSuspend(state({d:[0]}),state({d:'0'})).ok,false);
 });
+
+test('preserves CFIT keyed scenario state and rejects missing entries',()=>{
+ const first=state({p:'course41',cv:'RC8',sc:{s7:true},g:[1],c:false});
+ const advanced=state({p:'course41',cv:'RC8',sc:{s7:true,s8:false},g:[1,2],c:false});
+ assert.equal(observeMonotonicSuspend(first,advanced).ok,true);
+ for(const bad of [
+  state({p:'course41',cv:'RC8',sc:{},g:[1],c:false}),
+  state({p:'course41',cv:'RC8',sc:{s7:false},g:[1],c:false}),
+  state({p:'course41',cv:'RC8',sc:{s7:true},g:[],c:false}),
+  state({p:'course41',cv:'RC7',sc:{s7:true},g:[1],c:false}),
+ ]){
+  assert.equal(observeMonotonicSuspend(first,bad).ok,false);
+ }
+});
+test('never downgrades the CFIT completed flag',()=>{
+ const first=state({sc:{scenario7:true},c:true});
+ assert.equal(observeMonotonicSuspend(first,state({sc:{scenario7:true},c:false})).ok,false);
+});
