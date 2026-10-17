@@ -97,6 +97,23 @@ async function qaToken() {
   return token;
 }
 
+// This synthetic tenant already has a governed manager-to-sector grant.
+// Its UI session may legitimately enter as Gestor rather than a platform
+// ADMINISTRADOR. An unassigned draft is therefore invisible to the manager
+// under the canonical sector read filter. Scope only the disposable course
+// to the existing, dedicated synthetic sector; never widen RBAC.
+async function qaSyntheticSectorId(token) {
+  const response = await authJson(token, '/api/setores');
+  assert(response.status === 200 && response.json?.success === true,
+    'QA_SCORM_SYNTHETIC_SECTORS_UNAVAILABLE');
+  const sectors = Array.isArray(response.json?.data) ? response.json.data : [];
+  const matches = sectors.filter((row) => row?.codigo === 'QA-SETOR-EXA');
+  assert(matches.length === 1, 'QA_SCORM_SYNTHETIC_SECTOR_NOT_AUTHORIZED');
+  const id = Number(matches[0].id);
+  assert(Number.isInteger(id) && id > 0, 'QA_SCORM_SYNTHETIC_SECTOR_INVALID');
+  return id;
+}
+
 function manifest(id) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <manifest identifier="${id}" version="1.0"
@@ -220,7 +237,7 @@ function makeZip(kind) {
   return zipSync(files, { level: 6 });
 }
 
-async function createCourse(token, key, label) {
+async function createCourse(token, key, label, setorId) {
   const title = `QA SCORM ${label} ${RUN_MARKER}`;
   const result = await authJson(token, '/api/lms/cursos', {
     method: 'POST',
@@ -230,6 +247,7 @@ async function createCourse(token, key, label) {
       categoria: 'QA Synthetic',
       carga_horaria_minutos: 1,
       tipo_conteudo: 'scorm',
+      setor_ids: [setorId],
       publicado: 0,
       scorm_mastery_score: 70,
       scorm_versao: '1.2',
@@ -251,12 +269,13 @@ async function prepare() {
   fs.mkdirSync(ROOT, { recursive: true });
   await assertPinnedStagingRelease();
   const token = await qaToken();
+  const setorId = await qaSyntheticSectorId(token);
   const created = [];
 
   try {
-    created.push(await createCourse(token, 'success', 'Success'));
-    created.push(await createCourse(token, 'reject', 'Reject'));
-    created.push(await createCourse(token, 'timeout', 'Timeout'));
+    created.push(await createCourse(token, 'success', 'Success', setorId));
+    created.push(await createCourse(token, 'reject', 'Reject', setorId));
+    created.push(await createCourse(token, 'timeout', 'Timeout', setorId));
 
     const state = {
       schema_version: 1,
