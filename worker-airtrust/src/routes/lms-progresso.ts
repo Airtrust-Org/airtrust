@@ -14,6 +14,7 @@ import { getEmpresaIdSafe } from './escalas-shared';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import { syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
+import { activeXapiAll } from '../services/lms-active-xapi-read';
 import {
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
@@ -536,12 +537,9 @@ app.get('/xapi/statements/:matriculaId', async (c) => {
   }
 
   const limit = Math.min(Number(c.req.query('limit') ?? '100'), 500);
-  const rows = await db
-    .prepare(
-      'SELECT id, verb_id, verb_display, object_id, result_json, timestamp, created_at FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? ORDER BY created_at DESC LIMIT ?',
-    )
-    .bind(matriculaId, empresaId, limit)
-    .all<Record<string, unknown>>();
+  const rows = await activeXapiAll<Record<string, unknown>>(db,
+    'SELECT id, verb_id, verb_display, object_id, result_json, timestamp, created_at FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? AND archived_cycle_id IS NULL ORDER BY created_at DESC LIMIT ?',
+    [matriculaId, empresaId, limit]);
 
   return c.json({ success: true, data: rows.results });
 });

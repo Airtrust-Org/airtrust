@@ -91,10 +91,18 @@ describe('CFIT 842 — rematrícula auditada de edição ativa incompatível', (
     expect(sql).toContain('INSERT INTO lms_matricula_ciclos');
     expect(sql).toContain('lms_progresso_scorm');
     expect(sql).toContain('INSERT INTO audit_logs');
+    expect(sql).toContain('INSERT INTO lms_ciclo_evidencias');
+    expect(sql).not.toContain('p.lesson_location');
+    expect(writes.some(w => w.bindings.some(value => String(value).includes('HISTORICAL_PACKAGE_PREFIX_UNVERIFIED')))).toBe(true);
+    expect(sql).toContain('UPDATE lms_xapi_statements');
+    expect(sql).toContain('archived_cycle_id');
+    expect(sql).not.toContain('DELETE FROM lms_xapi_statements');
     expect(sql).toContain('DELETE FROM lms_completion_diagnostics_snapshots');
     // A second concurrent reset or changed package must not reuse old evidence.
     const reset = writes.find(w => w.sql.includes('UPDATE lms_matriculas'));
     expect(reset?.sql).toContain('old_p.cmi_json = ?');
+    expect(reset?.sql).toContain('ultimo_slide = 0');
+    expect(reset?.sql).toContain('ultima_pagina = 0');
     expect(reset?.bindings.some(v => String(v).includes('41/41'))).toBe(true);
     const diagnosticsDelete = writes.find(w => w.sql.includes('DELETE FROM lms_completion_diagnostics_snapshots'));
     expect(diagnosticsDelete?.sql).toContain('instr(COALESCE(marker_m.observacoes');
