@@ -69,7 +69,7 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     const ready = await page.waitForFunction(() =>
       !window.location.pathname.startsWith('/login') ||
       Array.from(document.querySelectorAll('button')).some((button) =>
-        /^Entrar como (Administrador(?: Geral| da Empresa)?|Gestor)\b/i.test(
+       /^Entrar como (Administrador(?: Geral| da Empresa)?|Gestor)/i.test(
           (button.textContent || '').trim(),
         )),
     undefined, { timeout: timeoutMs }).then(() => true).catch(() => false);
