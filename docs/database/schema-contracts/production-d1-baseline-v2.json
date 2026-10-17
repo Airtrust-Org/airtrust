@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-14",
     "last_reconciled_against": "0554 simulator individual check evidence schema reviewed, remote apply pending",
-    "schema_v2_digest": "a2bb90bd7fa41c50bfe449e1a71941c20eff20bc920fe9a521a476bfb0634e89",
+    "schema_v2_digest": "c4e840b28ea5631f10af57b962690b3cfd55755df1c9dcc2c32a240601605cd8",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
