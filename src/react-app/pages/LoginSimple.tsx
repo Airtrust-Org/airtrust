@@ -44,13 +44,13 @@ const QUICK_LOGIN_ALUNO_PASSWORD =
 // Perfis de acesso rápido (demo/testes)
 const DEV_PROFILES = [
   {
-    label: 'Administrador Geral',
+    label: 'Administrador',
     email: DEFAULT_LOGIN_EMAIL,
     password: DEFAULT_LOGIN_PASSWORD,
     color: 'bg-purple-100 text-purple-700 hover:bg-purple-200',
   },
   {
-    label: 'Administrador da Empresa',
+    label: 'Gestor',
     email: QUICK_LOGIN_GESTOR_EMAIL,
     password: QUICK_LOGIN_GESTOR_PASSWORD,
     color: 'bg-blue-100 text-blue-700 hover:bg-blue-200',
