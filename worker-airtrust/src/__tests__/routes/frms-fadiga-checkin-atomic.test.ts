@@ -187,7 +187,7 @@ describe('daily check-in atomic commit', () => {
     const response = await router.fetch(request({ duration_ms: 60000, trials: trials() }),
       { DB: db } as Env, {} as ExecutionContext);
     expect(response.status).toBe(500);
-    const body = await response.json();
+    const body = (await response.json()) as Record<string, unknown>;
     expect(body).toMatchObject({
       success: false,
       error: 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED',
