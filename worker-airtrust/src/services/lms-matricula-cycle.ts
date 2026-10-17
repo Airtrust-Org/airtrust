@@ -448,6 +448,14 @@ export async function upsertImportedEdappCycle(
   return cycleId;
 }
 
+/**
+ * A new renewal cycle is ONE D1 transaction. Previous SCORM evidence is copied
+ * to the immutable per-cycle archive and all xAPI rows remain physically intact,
+ * marked as historical. Completion guards query only unarchived xAPI rows.
+ *
+ * Requires Schema V2 lms-cycle-evidence-0551. If it is missing, D1.batch fails
+ * closed and rolls back; never fall back to destructive legacy reset.
+ */
 export async function resetMatriculaForNewCycle(
   db: D1Database,
   params: {
@@ -460,12 +468,10 @@ export async function resetMatriculaForNewCycle(
   },
 ) {
   const beforeReset = await readMatriculaSnapshot(db, params.matriculaId, params.empresaId);
+  if (!beforeReset) throw new Error('LMS_CYCLE_ENROLLMENT_NOT_FOUND');
 
-  // System-wide fail-safe: Compliance, roster and automatic EAD renewals must
-  // never destroy surviving progress merely because a matrícula was cancelled.
-  // An explicitly authorized new edition uses /nova-edicao, not this routine.
-  if (beforeReset && (beforeReset.deleted_at ||
-      normalizeStatus(beforeReset.status) === 'CANCELADO')) {
+  // Cancellation is suspension, not permission to erase runtime state.
+  if (beforeReset.deleted_at || normalizeStatus(beforeReset.status) === 'CANCELADO') {
     const resumed = await reactivateCancelledMatriculaPreservingProgress(db, {
       empresaId: params.empresaId, matriculaId: params.matriculaId,
       dataExpiracao: params.dataExpiracao, observacoes: params.observacoes,
@@ -478,100 +484,136 @@ export async function resetMatriculaForNewCycle(
     return current?.id ?? null;
   }
 
-  if (beforeReset) {
-    await upsertCurrentMatriculaCycle(db, beforeReset, params.origin ?? 'AUTO_RENOVACAO');
-    await db
-      .prepare(
-        `UPDATE lms_matricula_ciclos
-            SET ciclo_atual = 0,
-                updated_at = datetime('now')
-          WHERE matricula_id = ?
-            AND empresa_id = ?
-            AND ciclo_atual = 1
-            AND deleted_at IS NULL`,
-      )
-      .bind(params.matriculaId, params.empresaId)
-      .run();
+  // Only terminal cycles may renew. The course must not be reset behind an
+  // active learner or concurrent completion.
+  const status = normalizeStatus(beforeReset.status);
+  if (!['CONCLUIDO', 'REPROVADO'].includes(status)) {
+    throw new Error('LMS_CYCLE_ACTIVE_OR_UNKNOWN_STATUS');
   }
+  const current = await db.prepare(
+    `SELECT id FROM lms_matricula_ciclos
+       WHERE matricula_id = ? AND empresa_id = ? AND ciclo_atual = 1
+         AND deleted_at IS NULL LIMIT 1`,
+  ).bind(params.matriculaId, params.empresaId).first<{id: number}>();
+  if (!current?.id) throw new Error('LMS_CYCLE_CURRENT_MISSING');
 
-  await db
-    .prepare(
-      `UPDATE lms_matriculas
-          SET status = 'NAO_INICIADO',
-              deleted_at = NULL,
-              progresso_pct = 0,
-              ultimo_slide = 0,
-              ultima_pagina = 0,
-              score_final = NULL,
-              tentativas = 0,
-              data_inicio = NULL,
-              data_conclusao = NULL,
-              data_expiracao = ?,
-              data_matricula = datetime('now'),
-              qualificacao_historico_id = NULL,
-              matriculado_por = ?,
-              observacoes = ?,
-              updated_at = datetime('now')
-        WHERE id = ?
-          AND empresa_id = ?`,
-    )
-    .bind(
-      params.dataExpiracao ?? null,
-      params.matriculadoPor ?? null,
-      params.observacoes ?? null,
-      params.matriculaId,
-      params.empresaId,
-    )
-    .run();
+  const operationId = crypto.randomUUID();
+  const marker = `[[LMS_CYCLE_RESET:${operationId}]]`;
+  const origin = ['MANUAL', 'AUTO_RENOVACAO', 'LMS'].includes(params.origin || '')
+    ? params.origin! : 'AUTO_RENOVACAO';
+  const markerExists = `EXISTS (
+    SELECT 1 FROM lms_matriculas marker_m
+     WHERE marker_m.id = ? AND marker_m.empresa_id = ?
+       AND instr(COALESCE(marker_m.observacoes,''), ?) > 0
+  )`;
+  const guarded = [params.matriculaId, params.empresaId, marker] as const;
 
-  await db
-    .prepare(
-      `UPDATE lms_progresso_scorm
-          SET lesson_status = NULL,
-              completion_status = NULL,
-              success_status = NULL,
-              score_raw = NULL,
-              score_max = NULL,
-              score_min = NULL,
-              score_scaled = NULL,
-              session_time = NULL,
-              total_time = NULL,
-              session_count = 0,
-              suspend_data = NULL,
-              launch_data = NULL,
-              cmi_json = NULL,
-              last_commit_at = datetime('now'),
-              updated_at = datetime('now')
-        WHERE matricula_id = ?
-          AND EXISTS (
-            SELECT 1
-              FROM lms_matriculas m
-             WHERE m.id = lms_progresso_scorm.matricula_id
-               AND m.empresa_id = ?
-          )`,
-    )
-    .bind(params.matriculaId, params.empresaId)
-    .run();
+  // D1.batch is transactional. The first statement is a compare-and-swap:
+  // every write below is conditioned on its unique marker.
+  await db.batch([
+    db.prepare(`UPDATE lms_matriculas
+       SET observacoes = COALESCE(observacoes,'') || char(10) || ?
+       WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
+         AND status = ? AND qualificacao_historico_id IS ?
+         AND EXISTS(SELECT 1 FROM lms_matricula_ciclos cy
+           WHERE cy.id = ? AND cy.empresa_id = ? AND cy.matricula_id = lms_matriculas.id
+             AND cy.ciclo_atual = 1 AND cy.deleted_at IS NULL)`)
+      .bind(marker,params.matriculaId,params.empresaId,status,
+        beforeReset.qualificacao_historico_id,current.id,params.empresaId),
 
-  await db
-    .prepare(
-      `DELETE FROM lms_xapi_statements
-        WHERE matricula_id = ?
-          AND EXISTS (
-            SELECT 1
-              FROM lms_matriculas m
-             WHERE m.id = lms_xapi_statements.matricula_id
-               AND m.empresa_id = ?
-          )`,
-    )
-    .bind(params.matriculaId, params.empresaId)
-    .run();
+    db.prepare(`INSERT INTO lms_ciclo_evidencias
+       (empresa_id,matricula_id,ciclo_id,enrollment_json,scorm_json,course_package_prefix)
+       SELECT m.empresa_id,m.id,?,
+         json_object('status',m.status,'progresso_pct',m.progresso_pct,
+           'score_final',m.score_final,'tentativas',m.tentativas,
+           'data_inicio',m.data_inicio,'data_conclusao',m.data_conclusao,
+           'qualificacao_historico_id',m.qualificacao_historico_id),
+         (SELECT json_object(
+           'lesson_status',p.lesson_status,'lesson_location',p.lesson_location,
+           'completion_status',p.completion_status,'success_status',p.success_status,
+           'score_raw',p.score_raw,'score_min',p.score_min,'score_max',p.score_max,
+           'score_scaled',p.score_scaled,'session_time',p.session_time,
+           'total_time',p.total_time,'suspend_data',p.suspend_data,
+           'launch_data',p.launch_data,'cmi_json',p.cmi_json,
+           'session_count',p.session_count)
+          FROM lms_progresso_scorm p WHERE p.matricula_id=m.id AND p.empresa_id=m.empresa_id),
+         (SELECT scorm_package_r2_prefix FROM lms_cursos c
+          WHERE c.id=m.curso_id AND c.empresa_id=m.empresa_id)
+       FROM lms_matriculas m
+       WHERE m.id=? AND m.empresa_id=? AND ${markerExists}`)
+      .bind(current.id,params.matriculaId,params.empresaId,...guarded),
 
-  return ensureMatriculaCycle(db, {
-    matriculaId: params.matriculaId,
-    origin: params.origin ?? 'AUTO_RENOVACAO',
-    empresaId: params.empresaId,
-  });
+    // No DELETE: original xAPI records stay in their own table for audit,
+    // permanently attributed to the previous enrollment cycle.
+    db.prepare(`UPDATE lms_xapi_statements SET archived_cycle_id = ?
+       WHERE empresa_id = ? AND matricula_id = ? AND archived_cycle_id IS NULL
+         AND ${markerExists}`)
+      .bind(current.id,params.empresaId,params.matriculaId,...guarded),
+
+    db.prepare(`UPDATE lms_matricula_ciclos
+       SET ciclo_atual=0,updated_at=datetime('now')
+       WHERE id=? AND empresa_id=? AND matricula_id=? AND ciclo_atual=1
+         AND deleted_at IS NULL AND ${markerExists}`)
+      .bind(current.id,params.empresaId,params.matriculaId,...guarded),
+
+    db.prepare(`UPDATE lms_progresso_scorm
+       SET lesson_status=NULL,lesson_location=NULL,completion_status=NULL,
+           success_status=NULL,score_raw=NULL,score_min=NULL,score_max=NULL,
+           score_scaled=NULL,session_time=NULL,total_time=NULL,session_count=0,
+           suspend_data=NULL,launch_data=NULL,cmi_json=NULL,
+           last_commit_at=datetime('now'),updated_at=datetime('now')
+       WHERE matricula_id=? AND empresa_id=? AND ${markerExists}`)
+      .bind(params.matriculaId,params.empresaId,...guarded),
+
+    db.prepare(`UPDATE lms_matriculas
+       SET status='NAO_INICIADO',deleted_at=NULL,progresso_pct=0,
+           ultimo_slide=0,ultima_pagina=0,score_final=NULL,tentativas=0,
+           data_inicio=NULL,data_conclusao=NULL,data_expiracao=?,
+           data_matricula=datetime('now'),qualificacao_historico_id=NULL,
+           matriculado_por=?,updated_at=datetime('now')
+       WHERE id=? AND empresa_id=? AND ${markerExists}`)
+      .bind(params.dataExpiracao ?? null,params.matriculadoPor ?? null,
+        params.matriculaId,params.empresaId,...guarded),
+
+    db.prepare(`INSERT INTO lms_matricula_ciclos
+       (empresa_id,matricula_id,curso_id,funcionario_id,numero_ciclo,origem,
+        status,ciclo_atual,observacoes,data_matricula,progresso_pct,tentativas,
+        created_at,updated_at,deleted_at)
+       SELECT m.empresa_id,m.id,m.curso_id,m.funcionario_id,
+         (SELECT MAX(numero_ciclo)+1 FROM lms_matricula_ciclos cy
+           WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id),
+         ?,'NAO_INICIADO',1,?,datetime('now'),0,0,datetime('now'),datetime('now'),NULL
+       FROM lms_matriculas m
+       WHERE m.id=? AND m.empresa_id=? AND ${markerExists}`)
+      .bind(origin,params.observacoes??null,params.matriculaId,params.empresaId,...guarded),
+
+    db.prepare(`INSERT INTO audit_logs
+       (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
+       SELECT NULL,'LMS_CYCLE_ATOMIC_RENEWAL','lms_matriculas',?,
+         ?,?, ?,datetime('now')
+       WHERE ${markerExists}`)
+      .bind(params.matriculaId,
+        JSON.stringify({status:beforeReset.status,cycle_id:current.id}),
+        JSON.stringify({status:'NAO_INICIADO',operation_id:operationId,archive:true}),
+        params.empresaId,...guarded),
+
+    db.prepare(`UPDATE lms_matriculas
+       SET observacoes=TRIM(REPLACE(COALESCE(observacoes,''),?,'')),
+           updated_at=datetime('now')
+       WHERE id=? AND empresa_id=? AND ${markerExists}`)
+      .bind(marker,params.matriculaId,params.empresaId,...guarded),
+  ]);
+
+  const receipt = await db.prepare(`SELECT 1 AS ok FROM audit_logs
+    WHERE action='LMS_CYCLE_ATOMIC_RENEWAL' AND empresa_id=? AND entity_id=?
+      AND instr(COALESCE(new_values,''),?)>0 LIMIT 1`)
+    .bind(params.empresaId,params.matriculaId,operationId).first<{ok:number}>();
+  if (receipt?.ok !== 1) throw new Error('LMS_CYCLE_CONCURRENT_CHANGE');
+  const newCycle = await readCurrentMatriculaCycleId(db,params.matriculaId);
+  if (!newCycle?.id || newCycle.id===current.id) {
+    throw new Error('LMS_CYCLE_POSTCHECK_REQUIRED');
+  }
+  return newCycle.id;
 }
 
 
