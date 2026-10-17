@@ -103,6 +103,28 @@ describe('LMS immutable cycle evidence, D1 SQLite transaction',()=>{
     expect(one(db,"SELECT COUNT(*) AS n FROM audit_logs WHERE action='LMS_CYCLE_ATOMIC_RENEWAL'"))
       .toEqual({n:1});
   });
+  it('prevents mutation/deletion of archived xAPI and immutable snapshots',async()=>{
+    const db=fixture();
+    await reset(db);
+    expect(()=>db.database.exec("UPDATE lms_ciclo_evidencias SET scorm_json='{}' WHERE ciclo_id=99"))
+      .toThrow('LMS_CYCLE_EVIDENCE_IMMUTABLE');
+    expect(()=>db.database.exec("DELETE FROM lms_ciclo_evidencias WHERE ciclo_id=99"))
+      .toThrow('LMS_CYCLE_EVIDENCE_IMMUTABLE');
+    expect(()=>db.database.exec("UPDATE lms_xapi_statements SET archived_cycle_id=NULL WHERE id=500"))
+      .toThrow('LMS_XAPI_HISTORICAL_IMMUTABLE');
+    expect(()=>db.database.exec("DELETE FROM lms_xapi_statements WHERE id=500"))
+      .toThrow('LMS_XAPI_HISTORICAL_IMMUTABLE');
+    expect(one(db,"SELECT COUNT(*) AS n FROM lms_xapi_statements WHERE id=500"))
+      .toEqual({n:1});
+  });
+  it('enforces xAPI archived cycle tenant and matrícula match in D1',async()=>{
+    const db=fixture();
+    db.database.exec("INSERT INTO lms_matricula_ciclos (id,empresa_id,matricula_id,numero_ciclo,origem,status,ciclo_atual) VALUES(200,2,888,1,'LMS','CONCLUIDO',1)");
+    expect(()=>db.database.exec("UPDATE lms_xapi_statements SET archived_cycle_id=200 WHERE id=500"))
+      .toThrow('LMS_XAPI_ARCHIVE_TENANT_CYCLE_MISMATCH');
+    expect(one(db,"SELECT archived_cycle_id FROM lms_xapi_statements WHERE id=500"))
+      .toEqual({archived_cycle_id:null});
+  });
   it('rejects missing Schema V2 and rolls back every operation',async()=>{
     const db=fixture(false);
     await expect(reset(db)).rejects.toThrow();
