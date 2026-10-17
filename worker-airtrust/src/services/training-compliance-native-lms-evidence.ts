@@ -1,5 +1,3 @@
-import { hasSchemaTable } from '../utils/db-schema';
-
 /**
  * Training Compliance must never treat a Native player percentage, legacy
  * SCORM completion marker or bare enrollment status as canonical evidence.
@@ -9,6 +7,19 @@ import { hasSchemaTable } from '../utils/db-schema';
  * of feature flags: hiding the Native UI cannot make forged evidence valid.
  * Ordinary legacy SCORM rows retain their existing historical contract.
  */
+/**
+ * The activation table may be introduced by a governed migration while this
+ * Worker isolate is alive. A cached absence would reclassify marked Native
+ * SCORM rows as legacy Compliance evidence. Probe live (read-only), and let
+ * D1 errors fail closed instead of silently trusting the physical format.
+ */
+export async function hasLiveNativeLmsActivationTable(db: D1Database): Promise<boolean> {
+  const row = await db.prepare(
+    "SELECT 1 AS found FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+  ).bind('lms_native_catalog_activation').first<{ found: number }>();
+  return Boolean(row?.found);
+}
+
 export function nativeLmsComplianceEvidencePredicate(
   activationTableExists: boolean,
   qualificationHistoryExists: boolean,
@@ -53,7 +64,7 @@ export async function isNativeLmsComplianceCourse(
   const physical = String(physicalType ?? '').trim().toLowerCase();
   if (physical === 'native') return true;
   if (physical !== 'scorm') return false;
-  if (!(await hasSchemaTable(db, 'lms_native_catalog_activation'))) return false;
+  if (!(await hasLiveNativeLmsActivationTable(db))) return false;
   const row = await db.prepare(
     'SELECT curso_id FROM lms_native_catalog_activation ' +
     'WHERE empresa_id=? AND curso_id=? LIMIT 1',

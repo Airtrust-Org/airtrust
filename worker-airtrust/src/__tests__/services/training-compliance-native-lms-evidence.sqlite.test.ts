@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import {
   nativeLmsComplianceEvidencePredicate,
   isNativeLmsComplianceCourse,
+  hasLiveNativeLmsActivationTable,
 } from '../../services/training-compliance-native-lms-evidence';
 import { reconcileTrainingComplianceRuleEnrollment } from '../../services/training-compliance-rule-enrollment';
 
@@ -140,6 +141,17 @@ describe('Native course admission for automatic Compliance enrollment', () => {
     expect(result.auto_enrollment_warning).toBe('LMS_COURSE_MAPPING_UNAVAILABLE');
     expect(result.auto_enrollment?.unavailable_course).toBe(1);
     expect(writes).toEqual([]);
+    db.close();
+  });
+
+  it('rechecks marker schema live after migration instead of caching a false SCORM classification', async () => {
+    const db = new NodeDatabaseSync(':memory:');
+    const { wrapper } = adapter(db);
+    expect(await hasLiveNativeLmsActivationTable(wrapper)).toBe(false);
+    db.exec('CREATE TABLE lms_native_catalog_activation (empresa_id INTEGER, curso_id INTEGER)');
+    db.exec('INSERT INTO lms_native_catalog_activation VALUES(6,39)');
+    expect(await hasLiveNativeLmsActivationTable(wrapper)).toBe(true);
+    expect(await isNativeLmsComplianceCourse(wrapper,6,39,'scorm')).toBe(true);
     db.close();
   });
 
