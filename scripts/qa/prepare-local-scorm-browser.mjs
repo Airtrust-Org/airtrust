@@ -72,6 +72,14 @@ async function main(){
   ).run(foreignCompany,foreignCourse,foreignEmployee).lastInsertRowid);
   assert([foreignCompany,foreignCourse,foreignEmployee,foreignEnrollment].every(Number.isSafeInteger),
     'CROSS_TENANT_FIXTURE_INVALID');
+  // A failed assessment cannot be silently erased by rematriculation. Use
+  // independent synthetic learners for the eventual passing journey.
+  const passEmployees={};
+  for(const browser of ['chromium','webkit-ipad']){
+    passEmployees[browser]=Number(db.prepare(
+      "INSERT INTO funcionarios (nome, empresa_id, ativo, is_examinador, matricula) VALUES (?, ?, 1, 0, ?)",
+    ).run('QA SCORM PASS '+browser,companyId,'QA-PASS-'+browser).lastInsertRowid);
+  }
   db.close();
 
   const login=await fetch(api+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -85,6 +93,18 @@ async function main(){
   assert(enrollment.ok,'LOCAL_ENROLLMENT_HTTP_'+enrollment.status);
   const secondId=Number((await enrollment.json())?.data?.id);
   assert(Number.isSafeInteger(secondId)&&secondId>0&&secondId!==firstId,'LOCAL_SECOND_ENROLLMENT_INVALID');
+  const passEnrollments={};
+  for(const browser of ['chromium','webkit-ipad']){
+    const response=await fetch(api+'/lms/matriculas',{method:'POST',headers:{
+      Authorization:'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({curso_id:courseId,funcionario_id:passEmployees[browser],
+        observacoes:'QA SCORM passing journey separado da tentativa reprovada'})});
+    assert(response.ok,'LOCAL_PASS_ENROLLMENT_HTTP_'+browser+'_'+response.status);
+    const id=Number((await response.json())?.data?.id);
+    assert(Number.isSafeInteger(id)&&id>0&&!Object.values(passEnrollments).includes(id)&&
+      id!==firstId&&id!==secondId,'LOCAL_PASS_ENROLLMENT_INVALID_'+browser);
+    passEnrollments[browser]=id;
+  }
 
   fs.mkdirSync(fixtureRoot,{recursive:true});
   // SHA is calculated on the exact ZIP from which R2 browser assets are extracted.
@@ -112,6 +132,7 @@ async function main(){
     packageSha256,zipPath,fixtureKind:'LOCAL_DISPOSABLE_ZIP',
     enrollments:{chromium:firstId,'webkit-ipad':secondId},
     employeeIds:{chromium:firstEmployee,'webkit-ipad':secondEmployee},
+    passEnrollments,
     foreignTenant:{empresaId:foreignCompany,courseId:foreignCourse,matriculaId:foreignEnrollment},
   },null,2)+'\n',{mode:0o600});
   console.log('LOCAL_SCORM_BROWSER_FIXTURE_READY=2');
