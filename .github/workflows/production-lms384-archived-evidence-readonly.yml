@@ -51,7 +51,11 @@ jobs:
         run: npm --prefix worker-airtrust ci --ignore-scripts
       - name: Run fixed tenant and enrollment SELECT-only investigation
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}
+          # Production's dedicated D1_READONLY secret is not provisioned.
+          # Follow the existing governed D1 SELECT-only audit contract used by
+          # production-lms-scorm99-proof-readonly.yml. This token is scoped to
+          # this single fixed-script step; script rejects non-SELECT SQL.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
           EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
