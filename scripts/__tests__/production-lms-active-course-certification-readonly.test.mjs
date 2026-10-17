@@ -92,7 +92,7 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /retry-deferred/);
   assert.match(source, /assessmentBackfillByLocation/);
   assert.match(source, /shouldStartAssessmentBackfill/);
-  assert.match(source, /frame\.evaluate\(\(\{ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices \}\)/);
+  assert.match(source, /frame\.evaluate\(\(\{ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices, checklistSlideIndices \}\)/);
   assert.equal((source.match(/resetAssessmentRetryState\(\)/g) || []).length, 3);
   assert.match(source, /answeredMatch/);
   assert.match(source, /assessment-prev-backfill/);
@@ -104,7 +104,7 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /data-correct/);
   assert.match(source, /prepareAdaptiveProbe/);
   assert.match(source, /adaptive-retry/);
-  assert.match(source, /frame\.evaluate\(\(\{ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices \}\)/);
+  assert.match(source, /frame\.evaluate\(\(\{ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices, checklistSlideIndices \}\)/);
   assert.match(source, /requestTrustedClick/);
   assert.match(source, /trusted_click_token/);
   assert.match(source, /answerAcceptedByLocation/);
