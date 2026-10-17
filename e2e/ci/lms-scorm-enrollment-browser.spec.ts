@@ -191,7 +191,7 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   await expect.poll(()=>enrollment(),{timeout:35000}).toMatchObject({status:'CONCLUIDO'});
   const final=stored();
   const failedRow=new DatabaseSync(fixture.dbFile,{readOnly:true});
-  try {expect(failedRow.prepare('SELECT status, qualificacao_historico_id FROM lms_matriculas WHERE id=? AND empresa_id=?').get(failedEnrollmentId,fixture.companyId)).toMatchObject({status:'EM_ANDAMENTO',qualificacao_historico_id:null});} finally {failedRow.close();}
+  try {expect(failedRow.prepare('SELECT status, qualificacao_historico_id FROM lms_matriculas WHERE id=? AND empresa_id=?').get(failedEnrollmentId,fixture.companyId)).toMatchObject({status:'REPROVADO',qualificacao_historico_id:null});} finally {failedRow.close();}
   expect(final.m.qualificacao_historico_id).toBeGreaterThan(0);
   expect(final.m.progresso_pct).toBe(100);
   expect(final.history.n).toBe(1);
