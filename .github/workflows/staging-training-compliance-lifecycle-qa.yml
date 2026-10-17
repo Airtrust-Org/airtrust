@@ -113,6 +113,7 @@ jobs:
       - run: npm --prefix worker-airtrust ci
       - name: Validate schemas and seed lifecycle fixture
         env:
+          QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA: AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA
@@ -171,6 +172,7 @@ jobs:
       - run: npm --prefix worker-airtrust ci
       - name: Soft-delete only this run's synthetic artifacts
         env:
+          QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA: AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA
