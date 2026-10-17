@@ -148,7 +148,7 @@ case "$FAILED_DB_ROW" in
   *) echo "Failed attempt must record its date without minting a qualification" >&2; exit 1 ;;
 esac
 
-echo "[smoke:lms:scorm] Proving that apparent 100%/passed without individual slide coverage cannot complete"
+echo "[smoke:lms:scorm] Proving a passive reported pass cannot finalize without an explicit action"
 # All writes below are restricted to the disposable LOCAL D1 prepared by the
 # parent smoke. A passive SCO report can arrive before learner finalization.
 # Its status/score should persist, but never mint a qualification by itself.
@@ -170,23 +170,19 @@ UNCERTIFIED_COMMIT_HTTP="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKI
   exit 1
 }
 
-# Attempting learner finalization with only a last-position marker must
-# be rejected even though the stored package status already says PASSED.
-UNCERTIFIED_FINALIZE_HTTP="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR" \
-  -X POST "$API_BASE/lms/matriculas/$MATRICULA_ID/finalizar" \
-  -H "Authorization: Bearer $TOKEN")"
-[[ "$UNCERTIFIED_FINALIZE_HTTP" == "409" ]] || {
-  echo "Finalization without slide evidence did not fail closed: HTTP $UNCERTIFIED_FINALIZE_HTTP" >&2
-  exit 1
-}
+# The prior SCORM_COMMIT is passive, so it must not itself mint a
+# qualification even though its persisted terminal status and scored result
+# are sufficient evidence for a *later*, explicit learner confirmation.
+# For SCORED, requiring a second proprietary per-slide proof duplicates the
+# learning verdict and strands legitimately approved employees at 99%.
 
 UNCERTIFIED_DB_STATUS="$(sql "SELECT status || '|' ||
   COALESCE(CAST(qualificacao_historico_id AS TEXT), '') || '|' ||
   COALESCE(data_conclusao, '')
   FROM lms_matriculas WHERE id=$MATRICULA_ID AND empresa_id=$EMPRESA_ID;")"
 # A failed attempt may transition between nonterminal states when new
-# evidence is persisted. Neither a passive "passed" report nor a rejected
-# finalization may mark the enrollment completed or link a qualification.
+# evidence is persisted. A passive "passed" report alone must never
+# mark the enrollment completed or link a qualification.
 UNCERTIFIED_STATUS="${UNCERTIFIED_DB_STATUS%%|*}"
 UNCERTIFIED_REST="${UNCERTIFIED_DB_STATUS#*|}"
 UNCERTIFIED_HISTORY="${UNCERTIFIED_REST%%|*}"

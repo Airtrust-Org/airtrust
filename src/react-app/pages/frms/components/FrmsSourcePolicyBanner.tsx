@@ -103,6 +103,11 @@ export function resolveSigvoosOperationalHealth({
     return { ...base, status: 'FAILURE' };
   }
 
+  // A covered date without a recorded sync timestamp is not proof of fresh data.
+  if (!lastSyncMs || !config.last_sync_to) {
+    return { ...base, status: 'UNAVAILABLE' };
+  }
+
   const todayUtc = now.toISOString().slice(0, 10);
   if (config.last_sync_to && config.last_sync_to >= todayUtc) {
     return { ...base, status: 'HEALTHY' };
@@ -134,7 +139,8 @@ function formatDateTime(value?: string | null): string {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  });
+    timeZone: 'America/Sao_Paulo',
+  }) + ' (Brasília)';
 }
 
 function formatIsoDate(value?: string | null): string {
@@ -143,7 +149,7 @@ function formatIsoDate(value?: string | null): string {
   return `${day}/${month}/${year}`;
 }
 
-function buildBannerCopy(health: SigvoosOperationalHealth): {
+export function buildBannerCopy(health: SigvoosOperationalHealth): {
   title: string;
   message: string;
   tone: 'green' | 'blue' | 'amber' | 'red' | 'slate';
@@ -159,13 +165,13 @@ function buildBannerCopy(health: SigvoosOperationalHealth): {
   switch (health.status) {
     case 'HEALTHY':
       return {
-        title: 'Dados SIGVOOS disponíveis',
-        message: `Fonte operacional canônica ativa · Última sincronização: ${lastSync} · Dados até ${lastDay}${importsLabel}.`,
-        tone: 'green',
+        title: 'Sincronização SIGVOOS atualizada (fonte alternativa)',
+        message: `SIGVOOS é fallback do Controle de Voos · Última sincronização: ${lastSync} · Dados até ${lastDay}${importsLabel}. Este status não confirma que SIGVOOS foi usado no cálculo FRMS deste profissional.`,
+        tone: 'blue',
       };
     case 'WAITING_WINDOW':
       return {
-        title: 'Dados SIGVOOS disponíveis · aguardando janela',
+        title: 'SIGVOOS: aguardando próxima janela de sincronização',
         message: `Última sincronização: ${lastSync} · Dados até ${lastDay} · Próxima janela automática: ${String(
           health.autoSyncHourUtc,
         ).padStart(2, '0')}:00 UTC.`,
@@ -207,7 +213,7 @@ function buildBannerCopy(health: SigvoosOperationalHealth): {
     default:
       return {
         title: 'Status SIGVOOS indisponível',
-        message: 'Não foi possível consultar agora a saúde da integração. O FRMS não deve inferir descanso ou folga pela ausência de jornada.',
+        message: 'Não há confirmação suficiente de sincronização recente ou não foi possível consultar a integração. O SIGVOOS não comprova jornada, descanso ou a fonte usada na avaliação FRMS.',
         tone: 'slate',
       };
   }

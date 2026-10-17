@@ -304,11 +304,14 @@
         };
 
         const isCriticalAssetTarget = (target) => {
+          // Only a failed first-party SCRIPT prevents the application from
+          // booting. A stylesheet load event can fire during a normal cache
+          // recovery/navigation even when the resource returned HTTP 200.
+          // Treating that as a boot failure repeatedly reloads the login
+          // page and can abort its real POST /api/auth/login mid-flight.
+          // Explicit JS/CSS chunk failures remain covered by BOOT_ERROR_PATTERN.
           if (target instanceof HTMLScriptElement && target.src) {
             return new URL(target.src, window.location.href).origin === window.location.origin;
-          }
-          if (target instanceof HTMLLinkElement && target.rel === 'stylesheet' && target.href) {
-            return new URL(target.href, window.location.href).origin === window.location.origin;
           }
           return false;
         };

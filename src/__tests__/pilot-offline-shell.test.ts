@@ -91,6 +91,13 @@ describe('Partidas entre etapas', () => {
 });
 
 describe('Pilot Offline shell', () => {
+  it('abre visualização do anexo no gesto original e oferece link manual quando o navegador bloqueia janela', () => {
+    expect(pilotApp).toContain("window.open('about:blank', '_blank')");
+    expect(pilotApp).toContain('previewWindow.location.replace(url)');
+    expect(pilotApp).toContain("link.rel = 'noopener noreferrer'");
+    expect(pilotApp).toContain('await verifyCachedFlightDocument(state, document)');
+  });
+
   it('mantem os scripts estaticos do Pilot App sintaticamente validos como ESM moderno', () => {
     const assertParses = (source: string) => {
       const result = ts.transpileModule(source, {
@@ -284,7 +291,9 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v34'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v35'");
+    expect(pilotSw).toContain('PILOT_NETWORK_TIMEOUT_MS = 4_000');
+    expect(pilotSw).toContain('controller.abort()');
     expect(pilotSw).not.toContain("'/pilot/index.html'");
     expect(pilotSw).toContain("'/pilot/pilot-bootstrap.js'");
     expect(pilotSw).toContain("'/pilot/pilot-workspace.js'");
@@ -293,11 +302,11 @@ describe('Pilot Offline shell', () => {
     expect(pilotSw).toContain("'/pilot/pilot-lease.js'");
     expect(pilotSw).toContain("'/pilot/pilot-lease-trust.js'");
     expect(pilotSw).toContain('url.pathname.startsWith(PILOT_SCOPE_PATH)');
-    expect(pilotSw).toContain("fetch(PILOT_SCOPE_PATH, { cache: 'no-store', redirect: 'error' })");
+    expect(pilotSw).toContain("fetchPilotShellResource(PILOT_SCOPE_PATH, { cache: 'no-store', redirect: 'error' })");
     expect(pilotSw).toContain('const cached = await caches.match(PILOT_SCOPE_PATH)');
     expect(pilotSw).toContain('if (cached) return cached');
     expect(pilotSw).toContain("if (url.pathname.startsWith('/api/')) return;");
-    expect(pilotSw).toContain("fetch(request, { cache: 'no-store' })");
+    expect(pilotSw).toContain("fetchPilotShellResource(request, { cache: 'no-store' })");
   });
 
   it('recupera shell antigo sem deixar a tela presa em Verificando conexao', () => {
@@ -369,7 +378,7 @@ describe('Pilot Offline shell', () => {
     expect(controleVoosVooDetalhe).toContain('Planejamento de voo');
     expect(controleVoosVooDetalhe).toContain("current ? 'Substituir' : 'Anexar'");
     expect(controleVoosVooDetalhe).toContain('Histórico de documentos');
-    expect(controleVoosVooDetalhe).toContain('A tripulação receberá aviso para atualizar o pacote offline.');
+    expect(controleVoosVooDetalhe).toContain('Oriente a tripulação a atualizar o voo no Pilot App para receber os arquivos offline.');
   });
 
   it('so confirma consulta offline depois do write cifrado e do read-back', () => {
@@ -586,7 +595,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('fields.peso_padrao_ativo = false;');
     expect(pilotApp).toContain('applyStandardPassengerBaggageWeight(fields)');
     expect(pilotIndex).toContain('.pilot-standard-weight-toggle');
-    expect(pilotSw).toContain('airtrust-pilot-shell-v34');
+    expect(pilotSw).toContain('airtrust-pilot-shell-v35');
     expect(pilotApp).not.toContain("['Hora', 'hora', 'time'");
     expect(pilotApp).not.toContain("['Nota do combustível', 'nota'");
     expect(pilotSync).not.toContain('nota: optionalText(fueling?.nota)');
@@ -613,7 +622,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('+ Nova etapa');
     expect(pilotIndex).toContain('Resumo automático do voo');
     expect(pilotIndex).toContain('expandable-panel');
-    expect(pilotApp).toContain('Excluir esta etapa');
+    expect(pilotApp).toContain('Cancelar etapa não realizada');
     expect(pilotApp).toContain("label: 'Relatório de voo (editável)'");
     expect(pilotApp).toContain("['Tempo de voo', activeRdvDraft.form.tempo_voo_total_hhmm");
     expect(pilotApp).toContain("['Tempo total', activeRdvDraft.form.tempo_total_hhmm");
@@ -671,6 +680,31 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain("input.inputMode = 'numeric'");
     expect(pilotApp).toContain("['IFR (duração)', 'tempo_ifr', 'duration'");
     expect(pilotApp).toContain("['Noturno (duração)', 'tempo_noturno', 'duration'");
+  });
+
+  it('habilita revisão nativa pt-BR sem atribuir atualização do servidor automaticamente à Coordenação', () => {
+    expect(pilotApp).toContain("if (type === 'textarea') {");
+    expect(pilotApp).toContain("input.lang = 'pt-BR'");
+    expect(pilotApp).toContain('input.spellcheck = true');
+    expect(pilotApp).toContain("input.setAttribute('autocorrect', 'on')");
+    expect(pilotApp).toContain('O pacote local está desatualizado em relação ao servidor');
+    expect(pilotApp).not.toContain('A Coordenação alterou este voo. Atualize o voo antes de sincronizar');
+  });
+
+  it('preserva exclusão da etapa planejada não realizada na outbox e após reinício', () => {
+    expect(pilotRdvDraft).toContain('removed_stages: []');
+    expect(pilotRdvDraft).toContain('removed_stage_draft_ids: []');
+    expect(pilotSync).toContain('removed_stages: (Array.isArray(rdvDraft.removed_stages)');
+    expect(pilotSync).toContain('source_stage_updated_at: String(stage.source_stage_updated_at)');
+    expect(pilotApp).toContain('function canRemoveOperationalStage(index)');
+    expect(pilotApp).toContain('Cancelar etapa não realizada');
+    expect(pilotApp).toContain('Só é possível cancelar a última etapa planejada.');
+    expect(pilotApp).toContain('Preserve o registro e informe a ocorrência à Coordenação.');
+    expect(pilotApp).toContain('index !== activeStageDrafts.length - 1');
+    expect(pilotApp).toContain('activeRdvDraft.removed_stages = [');
+    expect(pilotApp).toContain('activeRdvDraft.removed_stage_draft_ids = [');
+    expect(pilotApp).toContain('!removedDraftIds.has(record.id)');
+    expect(pilotApp).toContain('Enviar ou revise essa exclusão'.replace('Enviar', 'Envie'));
   });
 
   it('expõe tempos derivados, unidades e erro real da transmissão bloqueada', () => {

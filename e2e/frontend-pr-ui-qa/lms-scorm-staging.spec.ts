@@ -72,7 +72,37 @@ async function delayedRealResponse(
 }
 
 async function openCourseEditor(page: Page, course: QaCourse) {
+  // The catalog fetches draft courses asynchronously after the page mounts.
+  // A visible searchbox is NOT proof of a completed catalog query. Record the
+  // real tenant-scoped draft API verdict before assessing the synthetic card.
+  // Never fake or fulfill auth, tenant context or course responses.
+  const draftQuery = page.waitForResponse((response) => {
+    if (response.request().method() !== 'GET') return false;
+    const url = new URL(response.url());
+    return url.pathname === '/api/lms/cursos' && url.searchParams.get('publicados') === '0';
+  }, { timeout: 45_000 });
   await page.goto('/lms/cursos', { waitUntil: 'domcontentloaded' });
+  const draftResponse = await draftQuery;
+  if (draftResponse.status() !== 200) {
+    throw new Error('QA_SCORM_DRAFT_CATALOG_API_HTTP_' + draftResponse.status());
+  }
+  const draftPayload = await draftResponse.json().catch(() => null) as {
+    success?: boolean;
+    data?: Array<{ id: number }>;
+    pagination?: { total?: number };
+  } | null;
+  if (!draftPayload?.success || !Array.isArray(draftPayload.data)) {
+    throw new Error('QA_SCORM_DRAFT_CATALOG_API_INVALID');
+  }
+  if (!draftPayload.data.some((item) => Number(item.id) === Number(course.id))) {
+    // Only sanitized aggregate dimensions and a reason code; no employee or
+    // course PII, tokens, request headers, or raw backend response data.
+    throw new Error(
+      'QA_SCORM_SYNTHETIC_COURSE_ABSENT_FROM_DRAFT_CATALOG:' +
+      'page_rows=' + draftPayload.data.length +
+      ';pagination_total=' + (draftPayload.pagination?.total ?? 'unknown'),
+    );
+  }
 
   const releaseShortSha = String(process.env.RELEASE_SHA || '').slice(0, 7);
   if (releaseShortSha) {
@@ -86,7 +116,7 @@ async function openCourseEditor(page: Page, course: QaCourse) {
   await search.fill(course.title);
 
   const card = page.locator('article').filter({ hasText: course.title });
-  await expect(card).toHaveCount(1);
+  await expect(card).toHaveCount(1, { timeout: 30_000 });
   await expect(card).toBeVisible();
   await card.getByRole('button', { name: 'Editar' }).click();
 

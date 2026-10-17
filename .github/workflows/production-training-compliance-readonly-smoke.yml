@@ -106,7 +106,11 @@ jobs:
           ledger_json="$(cd worker-airtrust && npx wrangler d1 execute airtrust-db --env production --remote --json --command "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='training-compliance-regras-ouro-corporate-0547' AND baseline_id='production-d1-baseline-v2-20260714'")"
           applied_0547="$(LEDGER_JSON="$ledger_json" node -e "const j=JSON.parse(process.env.LEDGER_JSON||'[]');const n=Number(j[0]?.results?.[0]?.count);if(!Number.isInteger(n)||n<0||n>1)process.exit(1);process.stdout.write(String(n))")"
           if [[ "$applied_0547" == 1 ]]; then
-            bash scripts/schema-v2/validate-0547-production-postconditions.sh --target=airtrust-db
+            # The Schema V2 0547 postcondition checks the historical model code.
+            # 0534 subsequently consolidated the active evidence-bearing model
+            # under OURO; current production checks must verify that canonical
+            # model without weakening the immutable migration-time validator.
+            bash scripts/production/validate-training-compliance-regras-ouro-current-readonly.sh --target=airtrust-db
           else
             bash scripts/schema-v2/validate-0546-production-postconditions.sh --target=airtrust-db
           fi

@@ -109,17 +109,13 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
     expect(response.status).toBe(200);
   });
 
-  it('accepts a user-confirmed final commit only with complete slide coverage', async () => {
+  it('accepts a user-confirmed final commit only with complete slide coverage in its own edition', async () => {
     const response = await commit(baseRow, {
       lesson_status: 'incomplete',
       commit_event: 'SCORM_USER_FINALIZE',
       completion_candidate: true,
       completion_observed_at: '2026-10-08T15:00:00.000Z',
-      cmi_json: JSON.stringify({
-        'cmi.core.lesson_location': '3/3',
-        'airtrust.total_slides': 3,
-        'airtrust.viewed_slides': [1, 2, 3],
-      }),
+      cmi_json: verifiedCoverage,
     });
     expect(response.status).toBe(200);
   });
@@ -131,9 +127,9 @@ describe('LMS SCORM explicit formative completion (incident 863)', () => {
       completion_candidate: true,
       completion_observed_at: '2026-10-08T15:00:00.000Z',
       cmi_json: JSON.stringify({
-        'cmi.core.lesson_location': '3/3',
-        'airtrust.total_slides': 3,
-        'airtrust.viewed_slides': [3],
+        'cmi.core.lesson_location': '45/45',
+        'airtrust.total_slides': 45,
+        'airtrust.viewed_slides': [45],
       }),
     });
     expect(response.status).toBe(409);

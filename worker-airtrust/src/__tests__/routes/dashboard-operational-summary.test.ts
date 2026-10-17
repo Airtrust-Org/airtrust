@@ -10,6 +10,8 @@ const getDashboardFrmsAlertsMock = vi.fn();
 const getDashboardEscalasResumoMock = vi.fn();
 const getDashboardUpcomingSessionsMock = vi.fn();
 const getDashboardSimuladoresAlertasMock = vi.fn();
+const getQualificationComplianceSummaryMock = vi.fn();
+const buildTrainingComplianceSnapshotMock = vi.fn();
 
 vi.mock('../../middleware/auth', () => ({
   auth:
@@ -56,11 +58,17 @@ vi.mock('../../services/dashboardService', () => ({
   getDashboardSimuladoresAlertas: (...args: unknown[]) =>
     getDashboardSimuladoresAlertasMock(...args),
   getComplianceScore: vi.fn(async () => ({})),
+  getQualificationComplianceSummary: (...args: unknown[]) =>
+    getQualificationComplianceSummaryMock(...args),
   getDemandaTreinamento: vi.fn(async () => ({})),
   getAtividadesRecentes: vi.fn(async () => []),
   getTaxaConclusaoMensal: vi.fn(async () => ({})),
   getUtilizacaoSimuladores: vi.fn(async () => ({})),
   getSystemHealth: vi.fn(async () => ({})),
+}));
+
+vi.mock('../../routes/compliance-treinamentos', () => ({
+  buildSnapshot: (...args: unknown[]) => buildTrainingComplianceSnapshotMock(...args),
 }));
 
 import dashboardRoutes from '../../routes/dashboard';
@@ -96,6 +104,34 @@ function primeSources() {
     sessoes_proximas_sem_ficha_completa: 0,
     edicoes_pendentes: 0,
     janela_sessoes_proximas_horas: 24,
+  });
+  buildTrainingComplianceSnapshotMock.mockResolvedValue({
+    employees: [],
+    rules: [],
+    people: [
+      {
+        id: 1,
+        configurado: true,
+        total_obrigatorios: 2,
+        conformes: 1,
+        vencendo: 0,
+        vencidos: 1,
+        nao_realizados: 0,
+        em_andamento: 0,
+      },
+    ],
+  });
+  getQualificationComplianceSummaryMock.mockResolvedValue({
+    pessoas: 1,
+    pessoas_sem_configuracao: 0,
+    requisitos_obrigatorios: 2,
+    conformes: 2,
+    vencendo: 0,
+    vencidos: 0,
+    nao_realizados: 0,
+    compliance_pct: 100,
+    cobertura: 'COMPLETA',
+    escopo_modelo: 'MATRIZ_CANONICA',
   });
 }
 

@@ -122,6 +122,7 @@ export interface LmsMatricula {
     every_slide_verified: boolean;
     terminal_status_verified: boolean;
     assessment_verified: boolean;
+    slide_coverage?: { total: number; recorded: number; missing_numbers: number[] } | null;
   } | null;
   completion_diagnostic?: LmsCompletionDiagnostic | null;
   /** Progresso efetivo (resolveLmsEffectiveProgress) — só 100 quando status é CONCLUIDO. Preferir sobre progresso_pct bruto para exibição. */
@@ -279,6 +280,11 @@ export interface MatricularLoteResult {
   ignoradas: number;
   erros: number;
   matriculas?: LmsMatricula[];
+  detalhes_erros?: Array<{
+    funcionario_id: number;
+    funcionario_nome: string;
+    codigo: 'NEW_EDITION_REQUIRED' | 'NOT_ELIGIBLE' | 'ESTADO_NAO_CONFIRMADO' | string;
+  }>;
 }
 
 function sanitizeCreateCursoPayload(dto: CreateCursoDTO): CreateCursoDTO {
@@ -753,7 +759,7 @@ export function useMatriculasCurso(
   opts: { status?: string; page?: number; limit?: number } = {},
 ) {
   return useQuery({
-    queryKey: lmsKeys.matriculaCurso(cursoId),
+    queryKey: [...lmsKeys.matriculaCurso(cursoId), opts.status ?? '', opts.page ?? 1, opts.limit ?? 50],
     queryFn: () => {
       const params = new URLSearchParams();
       if (opts.status) params.set('status', opts.status);

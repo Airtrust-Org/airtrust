@@ -86,6 +86,64 @@ function resolveProbedScormLocation(authored, explicitLocation, domLocation) {
 }
 
 /**
+ * Fingerprint de autosave por evidência: considera somente os campos SCORM
+ * canônicos e o mapa de visitas, sem o ruído de session_time/total_time do CMI.
+ * O fingerprint é extraído do snapshot enviado (e não do CMI mutável atual),
+ * para uma resposta HTTP atrasada não suprimir um commit subsequente.
+ */
+export function buildScormPayloadFingerprintScript(): string {
+  return `
+  function fingerprintPayload(data) {
+    try {
+      var d = data || {};
+      var saved = null;
+      try { saved = typeof d.cmi_json === 'string' ? JSON.parse(d.cmi_json) : null; }
+      catch (_cmiParseError) { saved = null; }
+      var total = saved && Number.isSafeInteger(saved['airtrust.total_slides'])
+        ? saved['airtrust.total_slides'] : null;
+      var seen = saved && Array.isArray(saved['airtrust.viewed_slides'])
+        ? saved['airtrust.viewed_slides'] : null;
+      return JSON.stringify([d.lesson_status, d.completion_status, d.success_status,
+        d.score_raw, d.suspend_data, getScormLocation(), total, seen]);
+    } catch (_error) { return ''; }
+  }
+`;
+}
+
+/**
+ * Observação de telas SCORM independente da posição máxima persistida.
+ * Deve executar no mesmo escopo do wrapper; a tela revisitada é registrada
+ * antes do guard que protege o bookmark e apenas no total de slides da edição.
+ */
+export function buildScormVisitTrackingScript(): string {
+  return `
+  // A visit and the last saved bookmark are independent facts. Record the
+  // actual package-authored page BEFORE protecting a regressive bookmark.
+  // Returns true only when this session observed a previously absent page.
+  function updateMaxVisitedFromLocation(location) {
+    var parsed = parseLocationPair(location);
+    if (!parsed || parsed.total <= 0 || parsed.total > 1000 ||
+        parsed.current < 1 || parsed.current > parsed.total) return false;
+    // A different slide total is a different edition, not a missing visit.
+    var persistedTotal = cmi['airtrust.total_slides'];
+    if (persistedTotal != null && Number(persistedTotal) !== parsed.total) return false;
+    if (parsed.current > maxVisitedSlide) maxVisitedSlide = parsed.current;
+    var previous = Array.isArray(cmi['airtrust.viewed_slides'])
+      ? cmi['airtrust.viewed_slides'] : [];
+    var seen = previous.filter(function(n) {
+      return Number.isInteger(n) && n >= 1 && n <= parsed.total;
+    });
+    if (seen.indexOf(parsed.current) >= 0) return false;
+    seen.push(parsed.current);
+    seen.sort(function(a, b) { return a - b; });
+    cmi['airtrust.viewed_slides'] = seen;
+    cmi['airtrust.total_slides'] = parsed.total;
+    return true;
+  }
+`;
+}
+
+/**
  * Parsers de progresso a partir do DOM do frame do pacote. Puros: dependem
  * apenas dos argumentos (`text` / `doc`).
  */
@@ -134,7 +192,11 @@ export function buildScormProgressParsersScript(): string {
     // "Tela 54 de 69". Ler o contador do pacote é mais confiável do que varrer o
     // body inteiro, onde números de formulário ("FORM-MNT-005/123") ou referências
     // regulatórias ("operadores 121/135") poderiam ser lidos como progresso.
-    var counterNode = doc.querySelector('#counterText, #counter, #progressText, #lesson-counter, [data-slide-counter]');
+    // Legacy packages may use #count in their footer (confirmed in the
+    // deployed 42-slide Doutrinamento ZIP). Unlike a body-wide fraction,
+    // this is an explicit package navigation counter, not quiz/form text.
+    var counterNode = doc.querySelector('#counterText, #counter, #progressText, #lesson-counter, [data-slide-counter]') ||
+      doc.querySelector('.bottomnav #count, .footer-center #count');
     var counterText = counterNode ? String(counterNode.textContent || '') : '';
     var counterMatch = counterText.match(/(\\d+)\\s*(?:\\/|de|of)\\s*(\\d+)/i);
     if (counterMatch) {
@@ -283,19 +345,11 @@ export function buildScormSessionCloseRuntimeScript(): string {
       return;
     }
     try { probeFrameProgress(); } catch (_ignored) { /* do not infer completion */ }
-    var location = parseScormLocationPair(getScormLocation());
-    var status = String(cmi['cmi.core.lesson_status'] || cmi['cmi.success_status'] || '').toLowerCase();
-    var visited = Array.isArray(cmi['airtrust.viewed_slides']) ? cmi['airtrust.viewed_slides'] : [];
-    var fullyVisited = location && location.total <= 1000 &&
-      Number(cmi['airtrust.total_slides']) === location.total &&
-      visited.length === location.total &&
-      visited.every(function(n, index) { return n === index + 1; });
-    if (!fullyVisited || status === 'failed') {
-      postToParent({ type: 'lms:completion-error', matriculaId: MATRICULA_ID,
-        code: 'SCORM_REQUIREMENTS_PENDING',
-        message: 'Ainda faltam requisitos do conteúdo ou da avaliação.' });
-      return;
-    }
+    // Submit the learner's explicit request exactly once. The backend's shared
+    // canonical SCORM readiness gate decides whether terminal assessment OR
+    // (for FORMATIVE) coverage is sufficient. A second wrapper-specific
+    // visited-slide check would contradict that server verdict and strand
+    // legitimately approved SCORED courses at 99%.
     notifyCompletionPending('saving', 'user-confirmed-finish');
     void commit(buildPayload(), 0, 'SCORM_USER_FINALIZE');
   }

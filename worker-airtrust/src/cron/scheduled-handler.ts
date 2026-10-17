@@ -29,7 +29,7 @@ import { isControleVoosShadowModeEnabledForEmpresa } from '../lib/frms/controle-
 import { cleanupExpiredRefreshTokens } from '../services/auth-refresh-token';
 import { getModuleAlertSettings, renderAlertTemplate } from '../services/module-alert-settings';
 
-export const LMS_RENOVACAO_EAD_JANELA_DIAS = 30;
+export const LMS_RENOVACAO_EAD_JANELA_DIAS = 0;
 
 export function buildQualificacoesEadRenovacaoAutomaticaQuery() {
   const vencExpr = getQualificacoesVencimentoExpr();

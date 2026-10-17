@@ -44,3 +44,12 @@ test('failed launch preserves only a sanitized blocked-state report for the arti
   assert.match(script, /writeReport\(/);
   assert.match(script, /mode:\s*0o600/);
 });
+
+test('production read-only workflow distinguishes untouched and resumed learning state', () => {
+  assert.match(workflow, /expected_review_mode/);
+  assert.match(workflow, /EXPECTED_REVIEW_MODE/);
+  assert.match(script, /evaluateReadOnlyReviewState/);
+  assert.match(script, /summarizeClosureReadiness\(enrollment.closure_readiness\)/);
+  assert.match(script, /READ_ONLY_LAUNCH_AND_PERSISTED_STATE_NOT_TRAINING_COMPLETION/);
+  assert.match(workflow, /missing slides:/);
+});

@@ -661,6 +661,33 @@ describe('training compliance engine', () => {
     });
   });
 
+  it('expõe matrícula ativa real e não confunde pendência com conclusão em dia', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 101, 'SETOR_FUNCAO', 11, 2, 'OBRIGATORIA', 'REGULATORIO');
+
+      INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
+      VALUES (500, 1, 'PBN EAD', 101);
+      INSERT INTO lms_matriculas
+        (id, empresa_id, curso_id, funcionario_id, status, data_conclusao, created_at, updated_at)
+      VALUES (700, 1, 500, 1002, 'NAO_INICIADO', NULL, '2026-09-10', '2026-09-10');
+    `);
+
+    const response = await createApp(sqlite.asD1()).request('/treinamentos');
+    const body = (await response.json()) as any;
+    const row = body.data.find((item: any) => item.qualificacao_tipo_id === 101);
+
+    expect(response.status).toBe(200);
+    expect(row).toMatchObject({
+      pessoas: 1,
+      matriculados: 1,
+      concluidos: 0,
+      nao_realizados: 1,
+      compliance_pct: 0,
+    });
+  });
+
   it('preserva conclusão EAD válida quando existe matrícula mais recente ainda em andamento', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
@@ -1376,7 +1403,7 @@ describe('training compliance engine', () => {
     expect(gap).toMatchObject({ pessoas: 2, nunca_realizados: 2 });
   });
 
-  it('abre renovação antecipada em 60 dias sem alterar o status global de compliance', async () => {
+  it('não abre renovação fora da janela de 30 dias e mantém Compliance conforme', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
         (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
@@ -1398,9 +1425,9 @@ describe('training compliance engine', () => {
     const reconciliation = (await (await app.request('/reconciliacao')).json()) as any;
     const gap = reconciliation.data.gaps_matricula.find((item: any) => item.qualificacao_tipo_id === 100);
     expect(gap).toMatchObject({
-      pessoas: 2,
-      renovacao_antecipada: 1,
-      janela_renovacao_dias: 60,
+      pessoas: 1,
+      renovacao_antecipada: 0,
+      janela_renovacao_dias: 30,
     });
   });
 

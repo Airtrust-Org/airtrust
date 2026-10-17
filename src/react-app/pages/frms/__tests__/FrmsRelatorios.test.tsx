@@ -45,6 +45,38 @@ describe('FrmsRelatorios', () => {
     expect(refetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('explica conclusões, providências e limitações usando apenas os registros da consulta', () => {
+    useApiMock.mockReturnValue({
+      data: {
+        success: true,
+        data: [
+          { tripulante_id: 1, nome: 'QA Um', dias_avaliados: 10, dias_violacao: 1, dias_nao_avaliados: 0 },
+          { tripulante_id: 2, nome: 'QA Dois', dias_avaliados: 9, dias_violacao: 0, dias_nao_avaliados: 1 },
+        ],
+        meta: { policy_version: 'QA', revision_id: 'rev', source: 'fixture', limitations: ['Dados sintéticos'] },
+      },
+      loading: false, error: null, refetch: refetchMock,
+    });
+    render(<FrmsRelatorios />);
+    expect(screen.getByRole('region', { name: /Conclusões e próximas ações/i })).toBeInTheDocument();
+    expect(screen.getByText(/1 profissional\(is\) com dias de violação/i)).toBeInTheDocument();
+    expect(screen.getByText(/Limitações da fonte: Dados sintéticos/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'CSV' })).toBeEnabled();
+  });
+
+  it('não apresenta campos ausentes como zero ou nível verde no consolidado', () => {
+    useApiMock.mockReturnValue({
+      data: {
+        success: true, data: [{ tripulante_id: 1, nome: 'QA Sem Dados', nivel_max: null, repouso_suficiente: null }],
+        meta: { policy_version: 'QA', revision_id: 'rev', source: 'fixture', limitations: [] },
+      }, loading: false, error: null, refetch: refetchMock,
+    });
+    render(<FrmsRelatorios />);
+    fireEvent.click(screen.getByRole('button', { name: /Resumo de consumo de limites/i }));
+    expect(screen.getAllByText('Não avaliado').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/nível ou repouso desconhecido/i)).toBeInTheDocument();
+  });
+
   it('não habilita exportação quando a resposta não traz metadados de governança', () => {
     useApiMock.mockReturnValue({
       data: [{ tripulante_id: 1, nome: 'Tripulante Teste', dias_avaliados: 1 }],
@@ -57,5 +89,30 @@ describe('FrmsRelatorios', () => {
 
     expect(screen.getByRole('button', { name: 'CSV' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'PDF' })).toBeDisabled();
+  });
+
+  it('prioriza gravidade no histórico e mostra a mensagem completa', () => {
+    useApiMock.mockReturnValue({
+      data: {
+        success: true,
+        data: [
+          { id: 1, nivel: 'AVISO', created_at: '2026-10-13T12:00:00Z', mensagem: 'Aviso longo que precisa ficar completamente visível.' },
+          { id: 2, nivel: 'CRITICO', created_at: '2026-10-13T11:00:00Z', mensagem: 'Alerta crítico.' },
+          { id: 3, nivel: 'VIOLACAO', created_at: '2026-10-13T10:00:00Z', mensagem: 'Violação.' },
+        ],
+        meta: { policy_version: 'QA', revision_id: 'rev', source: 'fixture', limitations: [] },
+      },
+      loading: false, error: null, refetch: refetchMock,
+    });
+    render(<FrmsRelatorios />);
+    fireEvent.click(screen.getByRole('button', { name: /Histórico de Alertas/ }));
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining('VIOLACAO'),
+      expect.stringContaining('CRITICO'),
+      expect.stringContaining('AVISO'),
+    ]);
+    expect(screen.getByText('Aviso longo que precisa ficar completamente visível.')).toBeInTheDocument();
+    expect(screen.getByText(/Ordenado por gravidade/)).toBeInTheDocument();
   });
 });

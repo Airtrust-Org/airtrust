@@ -13,7 +13,7 @@ import {
 
 /**
  * Painel operacional compacto (Controle Operacional FRMS / Gate de
- * Despacho V1). Traduz o snapshot FRMS ja calculado no backend
+ * Despacho V1), agora consultivo. Traduz o snapshot FRMS do backend
  * (LIBERAVEL/ATENCAO_COORDENACAO/NAO_LIBERADO) — nao mostra KSS, WOCL,
  * rolling ou thresholds aqui; detalhe tecnico fica no drill-down por
  * tripulante (expandir a linha).
@@ -25,7 +25,7 @@ const REASON_LABELS: Record<FrmsDispatchGateReasonCode, string> = {
   CHECKIN_INCONSISTENTE: 'Check-in inconsistente',
   DECISAO_FRMS_CRITICA: 'Violação crítica de FRMS',
   DECISAO_FRMS_MITIGACAO_NECESSARIA: 'Mitigação necessária',
-  DECISAO_FRMS_NAO_AVALIADO: 'Ainda não avaliado',
+  DECISAO_FRMS_NAO_AVALIADO: 'Análise operacional FRMS inconclusiva (não significa check-in pendente)',
   FADIGA_ACUMULADA_CRITICA: 'Fadiga acumulada crítica',
   SNAPSHOT_FRMS_AUSENTE: 'Dado FRMS ausente',
   SNAPSHOT_FRMS_INCONSISTENTE: 'Dado FRMS inconsistente',
@@ -35,9 +35,9 @@ const REASON_LABELS: Record<FrmsDispatchGateReasonCode, string> = {
 };
 
 const SITUACAO_LABELS: Record<FrmsDispatchReadinessStatus, string> = {
-  LIBERAVEL: 'LIBERÁVEL',
-  ATENCAO_COORDENACAO: 'ATENÇÃO',
-  NAO_LIBERADO: 'NÃO LIBERADO',
+  LIBERAVEL: 'SEM ALERTAS',
+  ATENCAO_COORDENACAO: 'ATENÇÃO FRMS',
+  NAO_LIBERADO: 'ALERTA FRMS',
 };
 
 const SITUACAO_STYLES: Record<FrmsDispatchReadinessStatus, string> = {
@@ -190,11 +190,10 @@ export default function ControleOperacionalFrmsPanel() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-            Controle operacional — este tripulante e este voo podem ser liberados agora?
+            Controle operacional — alertas consultivos de fadiga
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            O check-in diário de todos os tripulantes é obrigatório antes da liberação operacional.
-            Um voo futuro pode ser planejado, mas não liberado sem os check-ins recebidos para sua data.
+            Os check-ins realizados e as condições do FRMS aparecem separadamente. Os alertas não impedem automaticamente a liberação pela Coordenação; siga os procedimentos operacionais aplicáveis.
           </p>
         </div>
         <label className="space-y-1 text-xs">
@@ -215,7 +214,7 @@ export default function ControleOperacionalFrmsPanel() {
         <ControleVoosStatCards
           cards={[
             {
-              label: 'Voos não liberados',
+              label: 'Voos com alerta FRMS',
               value: resumo.voos_nao_liberados,
               icon: <XCircle className="h-5 w-5" />,
               variant: resumo.voos_nao_liberados > 0 ? 'danger' : 'default',
@@ -233,7 +232,7 @@ export default function ControleOperacionalFrmsPanel() {
               variant: resumo.voos_requerem_revisao > 0 ? 'warning' : 'default',
             },
             {
-              label: 'Liberáveis',
+              label: 'Sem alertas FRMS',
               value: resumo.voos_liberaveis,
               icon: <CheckCircle2 className="h-5 w-5" />,
               variant: 'success',
@@ -278,7 +277,7 @@ export default function ControleOperacionalFrmsPanel() {
                     Voo
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
-                    Check-in diário (obrigatório)
+                    Check-in diário
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
                     Avaliação FRMS diária
@@ -287,7 +286,7 @@ export default function ControleOperacionalFrmsPanel() {
                     Fadiga acumulada
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
-                    Situação FRMS
+                    Alerta consultivo FRMS
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300">
                     Providência recomendada

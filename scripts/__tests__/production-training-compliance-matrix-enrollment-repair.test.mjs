@@ -13,6 +13,13 @@ test('repair derives only mandatory EAD requirements from the current matrix', (
 });
 
 
+test('active course mapping ignores an unpublished parallel draft', () => {
+  const match = script.match(/active_courses AS \(([^]*?)\n  \)/);
+  assert.ok(match, 'active_courses CTE absent');
+  assert.match(match[1], /deleted_at IS NULL AND COALESCE\(ativo,1\)=1\s+AND publicado=1\s+AND qualificacao_tipo_id IS NOT NULL/);
+  assert.match(match[1], /COUNT\(\*\) n_courses,MIN\(id\) course_id/);
+});
+
 test('missing enrollment target is organizational-role only and defers designation-specific training', () => {
   assert.match(script, /enrollment_target AS/);
   assert.match(script, /condicao_id IS NULL/);
@@ -26,8 +33,8 @@ test('missing enrollment target is organizational-role only and defers designati
 });
 
 
-test('repair uses canonical compliance evidence and a 60-day renewal window before enrolling', () => {
-  assert.match(script, /RENEWAL_WINDOW_DAYS = 60/);
+test('repair uses canonical compliance evidence and expiry-only enrollment before enrolling', () => {
+  assert.match(script, /RENEWAL_WINDOW_DAYS = 0/);
   assert.match(script, /\/api\/compliance-treinamentos\/funcionarios\/\$\{funcionarioId\}/);
   assert.match(script, /status === 'CONFORME'/);
   assert.match(script, /parsed <= RENEWAL_WINDOW_DAYS/);

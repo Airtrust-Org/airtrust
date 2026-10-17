@@ -769,7 +769,7 @@ rdvWorkflow.get(
     const { results } = await c.env.DB.prepare(
       `
       SELECT
-        r.id, r.voo_id, r.numero, r.data_voo, r.status, r.workflow_status, r.versao,
+        r.id, r.voo_id, r.numero, r.data_voo, r.status, r.workflow_status, r.versao, r.updated_at,
         r.responsavel_preenchimento_id, r.enviado_em, r.devolvido_em, r.aprovado_coordenacao_em,
         r.finalizado_workflow_em, r.reaberto_em, r.motivo_devolucao,
         v.prefixo, v.aeronave_id, a.modelo AS modelo_aeronave,

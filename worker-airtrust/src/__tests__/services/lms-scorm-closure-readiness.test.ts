@@ -3,6 +3,7 @@ import { resolveLmsCompletionScorePct } from '../../services/lms-completion-evid
 import {
   evaluateScormClosureReadiness,
   canFinalizeScormEnrollment,
+  describeScormSlideCoverage,
   type ScormCommitLike,
 } from '../../services/lms-matricula-runtime-domain';
 
@@ -29,6 +30,24 @@ const base = (mode: 'commit' | 'reconcile' = 'commit') => ({
 });
 
 describe('Player 2.0: one SCORM completion readiness contract', () => {
+  it('preserves visit diagnostics without making them a redundant requirement for passed SCORED courses', () => {
+    const input = JSON.stringify({
+      'cmi.core.lesson_location': '42/42', 'airtrust.total_slides': 42,
+      'airtrust.viewed_slides': [1, 3, 42],
+    });
+    const result = evaluateScormClosureReadiness({ ...base(), cmiJson: input });
+    expect(result.eligible_for_server_verification).toBe(true);
+    expect(result.slide_coverage).toMatchObject({ total: 42, recorded: 3 });
+    expect(result.slide_coverage?.missing_numbers).toContain(2);
+    expect(result.slide_coverage?.missing_numbers).not.toContain(42);
+    expect(describeScormSlideCoverage(JSON.stringify({
+      'airtrust.total_slides': 42, 'airtrust.viewed_slides': [1, 1],
+    }), { current: 42, total: 42 })).toBeNull();
+    expect(describeScormSlideCoverage('invalid', { current: 42, total: 42 })).toBeNull();
+    expect(describeScormSlideCoverage('{}', { current: 42, total: 42 }))
+      .toMatchObject({total:42,recorded:0,missing_numbers:Array.from({length:42},(_,i)=>i+1)});
+  });
+
   it('42/42 with 0/10 questions answered is not equivalent to training completion', () => {
     const pending = evaluateScormClosureReadiness({
       ...base(),
@@ -43,13 +62,41 @@ describe('Player 2.0: one SCORM completion readiness contract', () => {
     expect(pending.missing).toContain('assessment_pass');
   });
 
-  it('a 100% badge and 42/42 position never fabricate missing distinct-slide coverage', () => {
-    const invalid = evaluateScormClosureReadiness({
+  it('accepts an approved scored SCORM course without the proprietary slide-visit ledger', () => {
+    const ready = evaluateScormClosureReadiness({
       ...base(),
       cmiJson: JSON.stringify({ 'cmi.core.lesson_location': '42/42' }),
     });
-    expect(invalid.code).toBe('PROGRESS_EVIDENCE_MISSING');
-    expect(invalid.missing).toContain('distinct_slide_coverage');
+    expect(ready).toMatchObject({
+      code: 'SCORM_READY_FOR_SERVER_VERIFICATION',
+      eligible_for_server_verification: true,
+      assessment_verified: true,
+      every_slide_verified: false,
+      missing: [],
+    });
+  });
+
+  it('never turns a 100% page badge into a pass without valid exam and terminal status', () => {
+    const noCoverage = JSON.stringify({ 'cmi.core.lesson_location': '42/42' });
+    expect(evaluateScormClosureReadiness({
+      ...base(), cmiJson: noCoverage, scorePct: 30,
+    }).code).toBe('SCORE_BELOW_MASTERY');
+    expect(evaluateScormClosureReadiness({
+      ...base(), cmiJson: noCoverage, scorePct: null,
+    }).code).toBe('SCORE_MISSING');
+    expect(evaluateScormClosureReadiness({
+      ...base(), cmiJson: noCoverage,
+      commit: { lesson_status: 'incomplete', commit_event: 'SCORM_USER_FINALIZE' },
+    }).code).toBe('COMPLETION_EVIDENCE_INSUFFICIENT');
+  });
+
+  it('formative courses without assessment still require complete, real slide coverage', () => {
+    const missing = evaluateScormClosureReadiness({
+      ...base(), policy: 'FORMATIVE', masteryScore: null, scorePct: null,
+      cmiJson: JSON.stringify({ 'cmi.core.lesson_location': '42/42' }),
+    });
+    expect(missing.code).toBe('PROGRESS_EVIDENCE_MISSING');
+    expect(missing.missing).toContain('distinct_slide_coverage');
   });
 
   it('the final location and a high score cannot synthesize terminal SCORM passed status', () => {
@@ -120,14 +167,15 @@ describe('Player 2.0: one SCORM completion readiness contract', () => {
     expect(result.eligible_for_server_verification).toBe(false);
   });
 
-  it('does not accept the final page with a spoofed/incomplete per-slide map', () => {
+  it('does not accept the final page with a spoofed/incomplete per-slide map on formative content', () => {
     const cmiJson = JSON.stringify({
       'cmi.core.lesson_location': '42/42',
       'airtrust.total_slides': 42,
       'airtrust.viewed_slides': [1, 42],
     });
-    expect(evaluateScormClosureReadiness({ ...base(), cmiJson })
-      .eligible_for_server_verification).toBe(false);
+    expect(evaluateScormClosureReadiness({
+      ...base(), policy: 'FORMATIVE', masteryScore: null, scorePct: null, cmiJson,
+    }).eligible_for_server_verification).toBe(false);
   });
   it('one score normalizer prevents raw 90/min 60/max 100 from being misread as a passing 90%', () => {
     const normalized = resolveLmsCompletionScorePct({

@@ -127,9 +127,19 @@ describe('CFIT 842 — rematrícula auditada de edição ativa incompatível', (
     expect(db.batch).not.toHaveBeenCalled();
   });
 
-  it('não repete rematrícula após ciclo novo sem evidência antiga', async () => {
+  it('permite reinício auditado de matrícula cancelada somente com edição incompatível comprovada', async () => {
     const { post, db } = setup({ status: 'CANCELADO' });
     const response = await post();
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success:true,data:{new_edition:true,status:'NAO_INICIADO'},
+    });
+    expect(db.batch).toHaveBeenCalledTimes(1);
+  });
+
+  it('bloqueia reinício de matrícula cancelada sem evidência de nova edição', async () => {
+    const {post,db}=setup({status:'CANCELADO'},41);
+    const response=await post();
     expect(response.status).toBe(409);
     expect(db.batch).not.toHaveBeenCalled();
   });

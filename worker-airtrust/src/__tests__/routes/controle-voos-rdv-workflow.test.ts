@@ -1089,6 +1089,21 @@ describe('RDV — fluxo Piloto -> Coordenação (migration 0438)', () => {
     expect(filaVaziaBody.data.length).toBe(0);
   });
 
+  it('fila sem status mostra rascunho sincronizado com updated_at antes do envio', async () => {
+    const db = createSqliteD1();
+    await preencherRdvCompleto(db);
+
+    const res = await request(db, '/api/controle-voos/rdv/fila', {}, COORDENACAO);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: Array<{ workflow_status: string; updated_at: string | null; enviado_em: string | null }>;
+    };
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].workflow_status).toBe('rascunho');
+    expect(body.data[0].updated_at).toBeTruthy();
+    expect(body.data[0].enviado_em).toBeNull();
+  });
+
   it('fila da Coordenacao exige capability de Coordenacao (student sem default falha)', async () => {
     const db = createSqliteD1();
     const res = await request(db, '/api/controle-voos/rdv/fila', {}, PILOTO);

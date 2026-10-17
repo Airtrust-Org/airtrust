@@ -258,6 +258,32 @@ describe('LmsPlayer completion flow', () => {
     expect(alertSpy).not.toHaveBeenCalled();
   });
 
+  it('reconsulta telas faltantes somente após gravação confirmada pelo servidor', async () => {
+    const scoped = matriculaMock as typeof matriculaMock & {
+      closure_readiness?: { slide_coverage: { total: number; recorded: number; missing_numbers: number[] } } | null;
+    };
+    scoped.closure_readiness = {
+      slide_coverage: { total: 42, recorded: 35, missing_numbers: [1, 2, 3, 4, 5, 6, 7] },
+    };
+    try {
+      renderPlayer();
+      await dispatchPlayerMessage({
+        type: 'lms:progress', matriculaId: 42,
+        location: '42/42', viewed_slide_count: 36, viewed_slide_total: 42,
+      });
+      expect(refetchMatriculaMock).not.toHaveBeenCalled();
+
+      await dispatchPlayerMessage({
+        type: 'lms:progress', matriculaId: 42,
+        location: '42/42', viewed_slide_count: 36, viewed_slide_total: 42,
+        server_saved: true,
+      });
+      await waitFor(() => expect(refetchMatriculaMock).toHaveBeenCalledTimes(1));
+    } finally {
+      scoped.closure_readiness = null;
+    }
+  });
+
   it('confirma a conclusão com toast de sucesso do AirTrust', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     refetchMatriculaMock.mockResolvedValue({ data: { ...matriculaMock, status: 'CONCLUIDO' } });

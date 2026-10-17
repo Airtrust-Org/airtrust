@@ -13,7 +13,7 @@ import {
   type FadigaScoreInput,
 } from '../lib/frms/fadiga-score';
 import { FrmsParameterResolutionError, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
-import { EmbeddedReadinessValidationError, persistReadinessAndSyncFrms } from './frms-fadiga-checkin-readiness-sync';
+import { persistReadinessAndSyncFrms } from './frms-fadiga-checkin-readiness-sync';
 import { buildFratSuggestion } from '../lib/frms/fadiga-frat-bridge';
 import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
 import {
@@ -26,8 +26,11 @@ import {
   type CheckinCreateInput,
 } from './frms-fadiga-checkin.schema';
 import { validateCheckinPayloadCompleteness } from './frms-fadiga-checkin-validation';
+import { normalizeFitForDutyPayload, normalizeOptionalBinary } from './frms-fadiga-checkin-normalization';
 import { getFadigaConfig as getConfig, updateFadigaDutyConfig } from './frms-fadiga-config';
 import { loadDailyFatigueTeamRoster } from '../lib/frms/daily-fatigue-team-roster';
+import { resolveCheckinKssProvenance, kssProvenanceEventFields } from '../lib/frms/kss-checkin-provenance';
+import { prepareReadinessAssessmentWrites } from '../lib/frms/readiness-persistence';
 const router = new Hono<AppEnv>();
 router.use('*', auth());
 type FrmsContext = Context<AppEnv>;
@@ -39,9 +42,11 @@ type NormalizedCheckinInput = {
   horaDormiu: string | null;
   horaAcordou: string;
   horasSono24h: number;
+  oportunidadeSonoHoras24h: number | null;
   horasSono48h: number | null;
   qualidadeSono: number | null;
   kssScore: number;
+  kssProvenance: ReturnType<typeof resolveCheckinKssProvenance>;
   subjectiveFatigueLevel: number | null;
   sleepinessLevel: number | null;
   apto: 0 | 1;
@@ -58,12 +63,6 @@ type NormalizedCheckinInput = {
 
 function nowSql(): string {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);
-}
-
-function normalizeOptionalBinary(value: boolean | number | null | undefined): 0 | 1 | null {
-  if (value === true || value === 1) return 1;
-  if (value === false || value === 0) return 0;
-  return null;
 }
 
 function todayIso(): string {
@@ -85,13 +84,6 @@ function parseTimeToMinutes(value: string): number | null {
   if (!Number.isInteger(h) || !Number.isInteger(m)) return null;
   if (h < 0 || h > 23 || m < 0 || m > 59) return null;
   return h * 60 + m;
-}
-
-function minutesToTime(minutes: number): string {
-  const normalized = ((minutes % 1440) + 1440) % 1440;
-  const h = Math.floor(normalized / 60);
-  const m = normalized % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 async function isManagerPlus(c: FrmsContext): Promise<boolean> {
@@ -200,25 +192,6 @@ function mapNivelToLegacy(
   return 'CRITICO';
 }
 
-/**
- * Resolves the canonical fit-for-duty value from the two accepted fields.
- * Returns { conflict: true } if both fields are present with contradictory values.
- * fit_for_duty is the canonical field; apto is accepted as legacy compatibility only.
- */
-function normalizeFitForDutyPayload(
-  input: Pick<CheckinCreateInput, 'fit_for_duty' | 'apto'>,
-): { apto: 0 | 1 } | { conflict: true } | { missing: true } {
-  const hasApto = typeof input.apto === 'number';
-  const hasFitForDuty = typeof input.fit_for_duty === 'boolean';
-  if (hasApto && hasFitForDuty) {
-    if ((input.apto === 1) !== input.fit_for_duty) return { conflict: true };
-    return { apto: input.fit_for_duty ? 1 : 0 };
-  }
-  if (hasFitForDuty) return { apto: input.fit_for_duty ? 1 : 0 };
-  if (hasApto) return { apto: input.apto === 0 ? 0 : 1 };
-  return { missing: true };
-}
-
 function normalizeCheckinInput(
   input: CheckinCreateInput,
   aptoNormalizado: 0 | 1,
@@ -253,11 +226,13 @@ function normalizeCheckinInput(
     horaDormiu,
     horaAcordou,
     horasSono24h,
+    oportunidadeSonoHoras24h: input.oportunidade_sono_horas_24h ?? null,
     horasSono48h:
       typeof input.horas_sono_48h === 'number' ? clamp(input.horas_sono_48h, 0, 48) : null,
     qualidadeSono:
       typeof input.qualidade_sono === 'number' ? clamp(input.qualidade_sono, 1, 5) : null,
     kssScore,
+    kssProvenance: resolveCheckinKssProvenance(input),
     subjectiveFatigueLevel,
     sleepinessLevel,
     apto: aptoNormalizado,
@@ -919,6 +894,8 @@ router.post('/daily-fatigue', requireFatigueCheckinAccess, async (c) => {
 });
 
 router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
+  // A falha após DB.batch() não pode ser apresentada como se o check-in não tivesse sido salvo.
+  let committedCheckinId: string | null = null;
   try {
     const empresaId = getEmpresaId(c);
     const userId = Number(c.get('userId') || 0);
@@ -1037,12 +1014,36 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
     const medsUlt12hDb = input.medsUlt12h ?? 0;
     const alcoolUlt12hDb = input.alcoolUlt12h ?? 0;
 
-    if (existing?.id) {
-      await c.env.DB.prepare(
+    // Prepare and validate optional readiness before mutating a check-in.
+    // Standalone readiness requests continue through persistReadinessAssessment().
+    let readinessStatements: D1PreparedStatement[] = [];
+    if (parsed.data.readiness) {
+      try {
+        const prepared = await prepareReadinessAssessmentWrites(c.env.DB, {
+          empresaId, funcionarioId, userId: userId || null, checkinId,
+          referenceDate: dataCheckin, kssScore: input.kssScore,
+          sleepHours: input.horasSono24h,
+          durationMs: parsed.data.readiness.duration_ms,
+          trials: parsed.data.readiness.trials,
+          protocolVersion: parsed.data.readiness.protocol_version,
+        });
+        readinessStatements = prepared.statements;
+      } catch (error) {
+        const code = error instanceof Error ? error.message : 'readiness_preparation_failed';
+        if (code === 'invalid_trial_sequence' || code === 'invalid_trial_timing') {
+          return c.json({ success: false, error: code }, 400);
+        }
+        throw error;
+      }
+    }
+
+    const checkinWrite = existing?.id
+      ? c.env.DB.prepare(
         `UPDATE frms_fadiga_checkin
            SET hora_checkin = ?,
                kss_score = ?,
                horas_sono = ?,
+               oportunidade_sono_horas_24h = ?,
                qualidade_sono = ?,
                sintomas_json = ?,
                observacoes = ?,
@@ -1071,12 +1072,13 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
                submitted_at = ?,
                origem_registro = 'TRIPULANTE',
                updated_at = ?
-           WHERE id = ?`,
+           WHERE id = ? AND empresa_id = ? AND funcionario_id = ? AND data_checkin = ? AND deleted_at IS NULL`,
       )
         .bind(
           horaCheckin,
           input.kssScore,
           input.horasSono24h,
+          input.oportunidadeSonoHoras24h,
           input.qualidadeSono ?? 3,
           sintomasJson,
           input.observacoes,
@@ -1107,13 +1109,14 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           now,
           now,
           checkinId,
+          empresaId,
+          funcionarioId,
+          dataCheckin,
         )
-        .run();
-    } else {
-      const insertResult = await c.env.DB.prepare(
-        `INSERT OR IGNORE INTO frms_fadiga_checkin (
+      : c.env.DB.prepare(
+        `INSERT INTO frms_fadiga_checkin (
              id, empresa_id, funcionario_id, data_checkin, hora_checkin,
-             kss_score, horas_sono, qualidade_sono,
+             kss_score, horas_sono, oportunidade_sono_horas_24h, qualidade_sono,
              sintomas_json, observacoes,
              score_fadiga, nivel_fadiga, status_operacional, recomendacao,
              apto, requires_frat_review, frat_sugerido_nivel, associado_frat_avaliacao_id,
@@ -1123,7 +1126,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
              fit_for_duty, computed_risk_level, requires_operational_review, report_source,
              regulatory_profile_id, profile_code, config_revision_id, model_version, submitted_at,
              origem_registro, created_by, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
         .bind(
           checkinId,
@@ -1133,6 +1136,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           horaCheckin,
           input.kssScore,
           input.horasSono24h,
+          input.oportunidadeSonoHoras24h,
           input.qualidadeSono ?? 3,
           sintomasJson,
           input.observacoes,
@@ -1167,39 +1171,10 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           userId || null,
           now,
           now,
-        )
-        .run();
-
-      // The daily partial UNIQUE index is the durable idempotency boundary.
-      // A simultaneous first submission must stop before FRMS synchronisation,
-      // notifications and audit side effects instead of falling through with a
-      // generated id that was never persisted.
-      if (insertResult.meta.changes !== 1) {
-        return c.json(
-          {
-            success: false,
-            error: 'Já existe um check-in para esta data. Atualize a página antes de enviar novamente.',
-          },
-          409,
         );
-      }
-    }
-    let sync;
-    try {
-      ({ sync } = await persistReadinessAndSyncFrms({
-        db: c.env.DB, empresaId, funcionarioId, userId: userId || null, checkinId, dataCheckin,
-        kssScore: input.kssScore, sleepHours: input.horasSono24h, wakeTime: input.horaAcordou,
-        presentationTime: input.jornadaInicioPrevista, readiness: parsed.data.readiness,
-        isNewCheckin: !existing?.id, now,
-      }));
-    } catch (error) {
-      if (error instanceof EmbeddedReadinessValidationError) {
-        return c.json({ success: false, error: error.code }, 400);
-      }
-      throw error;
-    }
+
     const eventType = existing?.id ? 'CHECKIN_ATUALIZADO' : 'CHECKIN_CRIADO';
-    await c.env.DB.prepare(
+    const provenanceEvent = c.env.DB.prepare(
       `INSERT INTO frms_fadiga_evento (id, empresa_id, checkin_id, tipo, payload_json, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
     )
@@ -1212,16 +1187,48 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           score_fadiga: scoreBase.score_fadiga,
           nivel_fadiga: finalNivel,
           status_operacional: finalStatusOperacional,
+          oportunidade_sono_horas_24h: input.oportunidadeSonoHoras24h,
           computed_risk_level: dailyRiskLevel,
           requires_operational_review: requiresOperationalReview,
           hora_apresentacao: input.jornadaInicioPrevista,
           presentation_time_source: 'CREW_REPORTED',
           componentes: scoreBase.componentes,
+          ...kssProvenanceEventFields(input.kssProvenance),
         }),
         now,
-      )
-      .run();
+      );
 
+    // One D1 transaction keeps the check-in, optional PVT-B trials, and
+    // immutable KSS provenance event coherent. A rejected trial or unique
+    // daily-key conflict rolls back the entire submission, not only one table.
+    try {
+      await c.env.DB.batch([checkinWrite, ...readinessStatements, provenanceEvent]);
+      committedCheckinId = checkinId;
+    } catch (error) {
+      if (!existing?.id) {
+        // Another concurrent first submission may have won the active daily key.
+        const concurrent = await c.env.DB.prepare(
+          `SELECT id FROM frms_fadiga_checkin
+            WHERE empresa_id = ? AND funcionario_id = ? AND data_checkin = ? AND deleted_at IS NULL
+            LIMIT 1`,
+        ).bind(empresaId, funcionarioId, dataCheckin).first<{ id: string }>();
+        if (concurrent?.id) {
+          return c.json({
+            success: false,
+            error: 'Já existe um check-in para esta data. Atualize a página antes de enviar novamente.',
+          }, 409);
+        }
+      }
+      throw error;
+    }
+    // All validation errors must be returned before DB.batch. From this point
+    // on even a typed downstream error cannot undo the committed submission.
+    const { sync } = await persistReadinessAndSyncFrms({
+      db: c.env.DB, empresaId, funcionarioId, userId: userId || null, checkinId, dataCheckin,
+      kssScore: input.kssScore, sleepHours: input.horasSono24h, wakeTime: input.horaAcordou,
+      presentationTime: input.jornadaInicioPrevista, readiness: parsed.data.readiness,
+      isNewCheckin: !existing?.id, readinessAlreadyPersisted: Boolean(parsed.data.readiness), now,
+    });
     await createDailyFatigueAlert({
       db: c.env.DB,
       empresaId,
@@ -1288,6 +1295,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         requires_operational_review: requiresOperationalReview,
         hora_apresentacao: input.jornadaInicioPrevista,
         presentation_time_source: 'CREW_REPORTED',
+        ...kssProvenanceEventFields(input.kssProvenance),
       },
       ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
       user_agent: c.req.header('user-agent'),
@@ -1325,7 +1333,9 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           data_checkin: dataCheckin,
           hora_checkin: horaCheckin,
           kss_score: input.kssScore,
+          ...kssProvenanceEventFields(input.kssProvenance),
           horas_sono: input.horasSono24h,
+          oportunidade_sono_horas_24h: input.oportunidadeSonoHoras24h,
           horas_sono_48h: input.horasSono48h,
           wake_time: wakeTime,
           qualidade_sono: input.qualidadeSono ?? 3,
@@ -1362,6 +1372,18 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       },
     });
   } catch {
+    if (committedCheckinId) {
+      // A transação canônica já confirmou check-in/readiness/KSS. Não induzir reenvio
+      // quando sync, alertas, auditoria ou contexto operacional falharam depois.
+      return c.json({
+        success: false,
+        error: 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED',
+        checkin_committed: true,
+        checkin_id: committedCheckinId,
+        retry_submission: false,
+        requires_operational_review: true,
+      }, 500);
+    }
     return c.json({ success: false, error: 'Erro ao registrar check-in de fadiga' }, 500);
   }
 });

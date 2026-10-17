@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrmsAlertasPainel from '../FrmsAlertasPainel';
 import type { FrmsAlertaRow } from '@/react-app/hooks/useFrms';
 
-const useFrmsAlertasMock = vi.fn();
+const useFrmsAlertasPageMock = vi.fn();
 const mutateMock = vi.fn();
 const refetchMock = vi.fn();
 
@@ -21,7 +21,7 @@ vi.mock('@/react-app/hooks/useFrms', async () => {
   const actual = await vi.importActual<typeof import('@/react-app/hooks/useFrms')>('@/react-app/hooks/useFrms');
   return {
     ...actual,
-    useFrmsAlertas: (...args: unknown[]) => useFrmsAlertasMock(...args),
+    useFrmsAlertasPage: (...args: unknown[]) => useFrmsAlertasPageMock(...args),
     useFrmsMutation: () => ({ mutate: mutateMock }),
   };
 });
@@ -52,9 +52,9 @@ function caseRow(overrides: Partial<FrmsAlertaRow> = {}): FrmsAlertaRow {
   };
 }
 
-function mockCases(data: FrmsAlertaRow[]) {
-  useFrmsAlertasMock.mockReturnValue({
-    data,
+function mockCases(data: FrmsAlertaRow[], total = data.length) {
+  useFrmsAlertasPageMock.mockReturnValue({
+    data: { success: true, data, total },
     loading: false,
     error: null,
     refetch: refetchMock,
@@ -71,7 +71,7 @@ function renderPage(path = '/frms/alertas') {
 
 describe('FrmsAlertasPainel', () => {
   beforeEach(() => {
-    useFrmsAlertasMock.mockReset();
+    useFrmsAlertasPageMock.mockReset();
     mutateMock.mockReset();
     refetchMock.mockReset();
     mutateMock.mockResolvedValue({});
@@ -87,11 +87,17 @@ describe('FrmsAlertasPainel', () => {
     ]);
     renderPage();
     expect(screen.getAllByText(/2 casos desta pessoa nesta página/i)).toHaveLength(2);
-    expect(screen.getByText(/não informa o total geral/i)).toBeInTheDocument();
+    expect(screen.getByText(/O total filtrado do servidor também abrange todas as páginas/i)).toBeInTheDocument();
     const groupButton = screen.getByRole('button', { name: 'Agrupar por pessoa nesta página' });
     fireEvent.click(groupButton);
     expect(screen.getByRole('button', { name: 'Agrupado por pessoa nesta página' })).toHaveAttribute('aria-pressed', 'true');
     expect(mutateMock).not.toHaveBeenCalled();
+  });
+
+  it('mostra recorrência agregada entre páginas sem extrapolar o filtro atual', () => {
+    mockCases([caseRow({ id: 'a', recorrencias_no_filtro: 5 })], 5);
+    renderPage();
+    expect(screen.getByText(/5 casos desta pessoa nos filtros atuais, incluindo outras páginas/i)).toBeInTheDocument();
   });
 
   it('usa a mesma linguagem operacional da fila sem alterar os níveis persistidos', () => {
@@ -236,15 +242,21 @@ describe('FrmsAlertasPainel', () => {
   });
 
   it('mostra total restrito à página e permite navegar além dos primeiros 100 casos', () => {
-    mockCases(Array.from({ length: 100 }, (_, index) => caseRow({ id: `caso-${index}` })));
+    mockCases(Array.from({ length: 100 }, (_, index) => caseRow({ id: `caso-${index}` })), 120);
     renderPage();
-    expect(screen.getByText(/até 100 casos por página/i)).toBeInTheDocument();
-    expect(screen.getByText(/Pode haver mais registros/i)).toBeInTheDocument();
+    expect(screen.getByText(/Até 100 casos por página. Total do filtro: 120/i)).toBeInTheDocument();
+    expect(screen.getByText(/Há mais registros/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Próxima página' }));
     expect(screen.getByText(/Página 2/i)).toBeInTheDocument();
-    expect(useFrmsAlertasMock).toHaveBeenCalledWith(expect.objectContaining({ page: '2' }));
+    expect(useFrmsAlertasPageMock).toHaveBeenCalledWith(expect.objectContaining({ page: '2' }));
     fireEvent.click(screen.getByRole('button', { name: 'Anterior' }));
-    expect(useFrmsAlertasMock).toHaveBeenCalledWith(expect.objectContaining({ page: '1' }));
+    expect(useFrmsAlertasPageMock).toHaveBeenCalledWith(expect.objectContaining({ page: '1' }));
+  });
+
+  it('bloqueia próxima página quando a consulta tem exatamente 100 casos', () => {
+    mockCases(Array.from({ length: 100 }, (_, index) => caseRow({ id: `caso-${index}` })), 100);
+    renderPage();
+    expect(screen.getByRole('button', { name: 'Próxima página' })).toBeDisabled();
   });
 
   it('não confunde um registro desconhecido com tratamento ou conclusão', () => {

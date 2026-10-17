@@ -19,7 +19,9 @@ export const CONFIRM = 'AIRTRUST_STAGING_FRMS_UX_30D';
 export const FROM = '2026-09-14';
 export const TO = '2026-10-13';
 const PREFIX = 'QA-FRMS-UX-';
-const DRY_RUN_REVISION = 'QA_DRY_RUN_UNRESOLVED_REVISION';
+export const QA_REVISION_ID = 'qa-frms-ux-999013-helicopter-offshore-v1';
+const CANONICAL_REVISION_ID = 'frms-helicopter-offshore-baseline-v1';
+const BASELINE_SOURCE_URL = new URL('../frms-seeds/frms_helicopter_offshore_baseline_v1.sql', import.meta.url);
 const SAFE_BANDS = new Set(['0','1-4','5-9','10-19','20-49','50+']);
 const quote = (x) => "'" + String(x).replaceAll("'", "''") + "'";
 const pad = (n) => String(n).padStart(2,'0');
@@ -50,9 +52,39 @@ export function approximation(band) {
   return result;
 }
 
-export function buildSeedSql(days, governedRevisionId = DRY_RUN_REVISION) {
+export function buildTenantScopedBaselineSql(sqlSource = readFileSync(BASELINE_SOURCE_URL, 'utf8')) {
+  // Baseline values come from the reviewed versioned 128-key source. Do not
+  // copy tenant data, hand-author thresholds, or create a global revision.
+  const stripped = sqlSource.replace(/^(?:\s*--[^\n]*\n)+/, '').trim();
+  const statements = stripped.split(/;\s*(?:\n|$)/).map(x=>x.trim()).filter(Boolean);
+  if(statements.length!==2 ||
+     !/^INSERT INTO frms_config_revisions\s*\(/.test(statements[0]) ||
+     !/^INSERT INTO frms_config_parameters\s*\(/.test(statements[1])) {
+    throw new Error('BASELINE_SOURCE_STATEMENTS_CHANGED');
+  }
+  const marker = "'" + CANONICAL_REVISION_ID + "', NULL, 'HELICOPTER_OFFSHORE', 1, 'ACTIVE'";
+  if (statements[0].split(marker).length !== 2) throw new Error('BASELINE_SOURCE_SCOPE_CHANGED');
+  const matches=[...statements[1].matchAll(new RegExp(
+    "'" + CANONICAL_REVISION_ID + "-([A-Z][A-Z0-9_]*)',\\s*'" + CANONICAL_REVISION_ID + "',\\s*'([A-Z][A-Z0-9_]*)'", 'g'
+  ))];
+  if(matches.length!==128 ||
+     new Set(matches.map(match=>match[1])).size!==128 ||
+     matches.some(match=>match[1]!==match[2])) throw new Error('BASELINE_SOURCE_128_KEYS_INVALID');
+  const revision = statements[0].replace(marker,
+    "'" + QA_REVISION_ID + "', " + TENANT_ID + ", 'HELICOPTER_OFFSHORE', 1, 'ACTIVE'");
+  // The global reviewed source is unchanged. Only the QA revision's IDs and
+  // tenant scope differ; "INTERNAL_POLICY" is not operational approval.
+  const paramSql = statements[1].replaceAll(CANONICAL_REVISION_ID, QA_REVISION_ID);
+  const revisionSql = revision.replaceAll(CANONICAL_REVISION_ID, QA_REVISION_ID);
+  if (/\b(CREATE|ALTER|DROP|UPDATE|DELETE|PRAGMA|ATTACH)\b/i.test(
+    revisionSql.replace(/'[^']*'/g,"''")+' '+paramSql.replace(/'[^']*'/g,"''")
+  )) throw new Error('BASELINE_SOURCE_MUTATION_REJECTED');
+  return [stmt(revisionSql),stmt(paramSql)];
+}
+
+export function buildSeedSql(days, governedRevisionId = QA_REVISION_ID) {
   if (!Array.isArray(days) || days.length !== 30) throw new Error('DAYS_REQUIRED');
-  if (!/^[a-zA-Z0-9:_-]{6,150}$/.test(governedRevisionId)) throw new Error('GOVERNED_REVISION_ID_INVALID');
+  if (governedRevisionId !== QA_REVISION_ID) throw new Error('QA_TENANT_SCOPED_REVISION_REQUIRED');
   const dataRows=days.map((d)=>"("+quote(d.day)+","+Math.min(14,approximation(d.jornadas))+","+
     Math.min(14,approximation(d.checkins))+")").join(',\n');
   const fields=['empresas','setores','funcionarios','frms_regulatory_profiles','frms_profile_assignments',
@@ -61,6 +93,7 @@ export function buildSeedSql(days, governedRevisionId = DRY_RUN_REVISION) {
   sql.push('-- QA only: '+fields.join(', ') + '. Derived from broad daily count bands, not individual production records.');
   sql.push(stmt("INSERT INTO empresas (id,nome,razao_social,ativo,created_at,updated_at,deleted_at,codigo,plano,max_funcionarios,max_storage_mb) "+
     "VALUES ("+TENANT_ID+",'QA FRMS UX - Dados Ficticios','QA FRMS UX - Dados Ficticios',1,datetime('now'),datetime('now'),NULL,"+quote(TENANT_CODE)+",'basic',30,256)"));
+  sql.push(...buildTenantScopedBaselineSql());
   sql.push(stmt("INSERT INTO setores (codigo,nome,descricao,responsavel,ativo,created_at,updated_at,deleted_at,empresa_id,dominio_codigo) "+
     "VALUES ('QA-FRMS-UX-SETOR','Setor Operacional QA','Dados ficticios FRMS','QA AirTrust',1,datetime('now'),datetime('now'),NULL,"+TENANT_ID+",'OPERACOES')"));
   for(let i=1;i<=14;i++){
@@ -126,6 +159,8 @@ export function buildRollbackSql(){
     "DELETE FROM frms_escala_quinzenal WHERE id LIKE 'qa-frms-ux-ciclo-%' AND tripulante_id IN (SELECT id FROM funcionarios WHERE empresa_id="+TENANT_ID+" AND matricula LIKE 'QA-FRMS-UX-%')",
     "DELETE FROM frms_profile_assignments WHERE id="+quote(ASSIGNMENT_ID)+" AND empresa_id="+TENANT_ID,
     "DELETE FROM frms_regulatory_profiles WHERE id="+quote(PROFILE_ID)+" AND empresa_id="+TENANT_ID,
+    "DELETE FROM frms_config_parameters WHERE revision_id="+quote(QA_REVISION_ID)+" AND id LIKE "+quote(QA_REVISION_ID+'-%'),
+    "DELETE FROM frms_config_revisions WHERE id="+quote(QA_REVISION_ID)+" AND empresa_id="+TENANT_ID,
     "UPDATE funcionarios SET deleted_at=datetime('now'),ativo=0 WHERE empresa_id="+TENANT_ID+" AND matricula LIKE 'QA-FRMS-UX-%'",
     "UPDATE setores SET deleted_at=datetime('now'),ativo=0 WHERE empresa_id="+TENANT_ID+" AND codigo='QA-FRMS-UX-SETOR'",
     "UPDATE empresas SET ativo=0,deleted_at=datetime('now') WHERE id="+TENANT_ID+" AND codigo="+quote(TENANT_CODE)
@@ -133,7 +168,8 @@ export function buildRollbackSql(){
 }
 
 function query(db,sql){
-  if(!/^SELECT\s/i.test(sql)||sql.includes(';')) throw new Error('READONLY_PREFLIGHT_REJECTED');
+  if(!(/^(?:SELECT\s|PRAGMA table_info\([a-z][a-z0-9_]*\)$)/i.test(sql))||sql.includes(';'))
+    throw new Error('READONLY_PREFLIGHT_REJECTED');
   const x=spawnSync('npx',['wrangler','d1','execute',db,'--remote','--json','--command',sql],
     {cwd:join(process.cwd(),'worker-airtrust'),encoding:'utf8'});
   if(x.status!==0)throw new Error('STAGING_D1_PREFLIGHT_FAILED');
@@ -143,44 +179,66 @@ function query(db,sql){
 function assertTarget(){
   if(process.env.STAGING_D1_NAME!==DB_NAME||process.env.STAGING_D1_ID!==DB_ID)throw new Error('STAGING_D1_TARGET_REJECTED');
 }
-export function chooseGovernedRevision(revisions, parameterCount) {
-  if (!Array.isArray(revisions) || revisions.length === 0) throw new Error('FRMS_GLOBAL_REVISION_30D_MISSING');
-  const ranked = revisions.filter((row) =>
-    row.empresa_id === null && row.profile_code === 'HELICOPTER_OFFSHORE' &&
-    ['ACTIVE','SUPERSEDED'].includes(row.status) &&
-    row.effective_from <= FROM && (row.effective_to == null || row.effective_to >= TO) &&
-    Number.isInteger(Number(row.revision_number))
-  ).sort((a,b)=> Number(b.revision_number)-Number(a.revision_number) ||
-    String(b.effective_from).localeCompare(String(a.effective_from)));
-  if (!ranked.length) throw new Error('FRMS_GLOBAL_REVISION_30D_MISSING');
-  const tied=ranked.filter(row=>Number(row.revision_number)===Number(ranked[0].revision_number) &&
-    row.effective_from===ranked[0].effective_from);
-  if (tied.length!==1) throw new Error('FRMS_GLOBAL_REVISION_AMBIGUOUS');
-  if (!/^[a-zA-Z0-9:_-]{6,150}$/.test(String(ranked[0].id))) throw new Error('FRMS_REVISION_ID_INVALID');
-  if (!Number.isInteger(parameterCount)||parameterCount<128) throw new Error('FRMS_GLOBAL_REVISION_INCOMPLETE');
-  return ranked[0].id;
+export function extractFixtureInsertColumns(sql) {
+  const permitted=new Set([
+    'empresas','setores','funcionarios','frms_config_revisions','frms_config_parameters',
+    'frms_regulatory_profiles','frms_profile_assignments','frms_escala_quinzenal',
+    'frms_jornada','frms_fadiga_checkin','frms_alerta'
+  ]);
+  const fields=new Map();
+  for(const match of sql.matchAll(/\bINSERT\s+INTO\s+([a-z][a-z0-9_]*)\s*\(([^)]+)\)/gi)){
+    const table=match[1].toLowerCase();
+    if(!permitted.has(table))throw new Error('QA_UNEXPECTED_TABLE_INSERT');
+    const cols=match[2].split(',').map(x=>x.trim().toLowerCase());
+    if(cols.some(x=>!/^[a-z][a-z0-9_]*$/.test(x)))throw new Error('QA_INVALID_INSERT_COLUMN');
+    if(fields.has(table)){
+      if(fields.get(table).join(',')!==cols.join(','))throw new Error('QA_INCONSISTENT_INSERT_COLUMNS');
+      continue; // Multiple individual crew/case rows use the same reviewed column contract.
+    }
+    fields.set(table,cols);
+  }
+  if(fields.size!==permitted.size || [...permitted].some(table=>!fields.has(table)))
+    throw new Error('QA_INSERT_TABLE_CONTRACT_CHANGED');
+  return fields;
 }
 
-function inspectGovernedRevision() {
-  const revisions=query(DB_NAME,
-    "SELECT id,empresa_id,profile_code,status,revision_number,effective_from,effective_to "+
-    "FROM frms_config_revisions WHERE profile_code='HELICOPTER_OFFSHORE' "+
-    "AND empresa_id IS NULL AND status IN ('ACTIVE','SUPERSEDED') "+
-    "AND effective_from<="+quote(FROM)+" AND (effective_to IS NULL OR effective_to>="+quote(TO)+") "+
-    "ORDER BY revision_number DESC,effective_from DESC");
-  if (!revisions.length) {
-    console.log('STAGING_FRMS_GLOBAL_REVISION_30D_MISSING; no D1 write allowed');
-    throw new Error('FRMS_GLOBAL_REVISION_30D_MISSING');
+function inspectFixtureSchema() {
+  // Use only SELECTs and table-valued PRAGMAs. Missing columns are detected
+  // before the first staging D1 write, not halfway through a multi-table seed.
+  const dryDays=Array.from({length:30},(_,i)=>({
+    day:new Date(Date.parse(FROM+'T00:00:00Z')+i*86400000).toISOString().slice(0,10),
+    jornadas:'0',checkins:'0',casos:'0',voos:'0'
+  }));
+  const expected=extractFixtureInsertColumns(buildSeedSql(dryDays));
+  // Matches the proven staging FRMS schema-doctor: PRAGMA table_info()
+  // individually, not a UNION of table-valued PRAGMAs that D1 rejected.
+  for(const [table,required] of expected){
+    if(!/^[a-z][a-z0-9_]*$/.test(table))throw new Error('QA_UNSAFE_TABLE_IDENTIFIER');
+    const rows=query(DB_NAME,"PRAGMA table_info("+table+")");
+    const available=new Set(rows.map(row=>String(row.name).toLowerCase()));
+    if(!available.size || required.some(column=>!available.has(column))){
+      throw new Error('STAGING_FRMS_QA_SCHEMA_COLUMNS_MISSING:'+table);
+    }
   }
-  const preferred=revisions[0];
-  const counts=query(DB_NAME,
-    "SELECT COUNT(DISTINCT parameter_key) AS n FROM frms_config_parameters "+
-    "WHERE revision_id="+quote(preferred.id)+" AND numeric_value IS NOT NULL");
-  const total=Number(counts[0]?.n);
-  const revisionId=chooseGovernedRevision(revisions,total);
-  console.log('STAGING_FRMS_GLOBAL_REVISION_READY id='+revisionId+
-    ' parameters='+total+' scope=global window='+FROM+'..'+TO);
-  return revisionId;
+  console.log('STAGING_FRMS_QA_TABLE_COLUMNS_READY tables='+expected.size);
+}
+
+function inspectQaScopedBaseline() {
+  // This is a QA-local revision only. Absence of the production/global
+  // revision must not block a synthetic tenant or modify other tenants.
+  const sourceStatements=buildTenantScopedBaselineSql();
+  if(sourceStatements.length!==2)throw new Error('QA_BASELINE_NOT_REVIEWED');
+  inspectFixtureSchema();
+  const collisions=query(DB_NAME,
+    "SELECT id FROM frms_config_revisions WHERE id="+quote(QA_REVISION_ID)+
+    " OR (empresa_id="+TENANT_ID+" AND profile_code='HELICOPTER_OFFSHORE')");
+  if(collisions.length)throw new Error('QA_FRMS_REVISION_COLLISION');
+  const params=query(DB_NAME,
+    "SELECT COUNT(*) AS n FROM frms_config_parameters WHERE revision_id="+quote(QA_REVISION_ID));
+  if(Number(params[0]?.n)!==0)throw new Error('QA_FRMS_PARAMETERS_COLLISION');
+  console.log('STAGING_FRMS_QA_SCOPED_BASELINE_READY tenant='+TENANT_ID+
+    ' parameterKeys=128 globalRevisionCreated=false');
+  return QA_REVISION_ID;
 }
 
 function assertEmptyTenant(){
@@ -207,7 +265,8 @@ async function main(){
   if(inspect){
     assertTarget();
     if(process.env.GITHUB_ACTIONS!=='true')throw new Error('OFFICIAL_STAGING_WORKFLOW_ONLY');
-    inspectGovernedRevision();
+    assertEmptyTenant();
+    inspectQaScopedBaseline();
     return;
   }
   const expectedSha=String(process.env.SOURCE_AGGREGATE_SHA||'');
@@ -224,7 +283,7 @@ async function main(){
   let revisionId=null;
   if(!rollback){
     assertEmptyTenant();
-    revisionId=inspectGovernedRevision();
+    revisionId=inspectQaScopedBaseline();
   }else{
     const rows=query(DB_NAME,"SELECT id,codigo FROM empresas WHERE id="+TENANT_ID);
     if(rows.length!==1||rows[0].codigo!==TENANT_CODE)throw new Error('ROLLBACK_TENANT_NOT_EXACT');

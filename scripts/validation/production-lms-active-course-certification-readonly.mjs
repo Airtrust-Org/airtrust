@@ -6,6 +6,8 @@ import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
 import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
 import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
+import { readVisibleVideo, startRealVisibleVideo } from './lms-scorm-video-playback-readonly.mjs';
+import { classifyPptxAssetProbe, classifyReadOnlyContentAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage } from './lms-format-certification-verdict.mjs';
 import {
   assert,
   assertAllowedProductionBaseUrl,
@@ -259,7 +261,12 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
     last_action: null,
     error_examples: [],
     halted_due_to_repeated_error: false,
+    video_gate_seen: false,
+    video_duration_seconds: null,
+    video_started_observed: false,
+    video_ended_observed: false,
   };
+  const videoAttemptsByLocation=new Map();
   while (Date.now() - started < untilMs && steps < maxSteps) {
     const state = await getTrace(page).catch(() => null);
     if (state?.values && terminalState(state.values)) break;
@@ -1181,7 +1188,37 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       }
     }
 
-    // Fallback only when the package exposes no usable visible control.
+    // If Next is disabled by a required native video, use genuine browser
+    // playback instead of a generic DOM/button heuristic. Do not set media
+    // currentTime, forge ended events, or invoke LMS completion.
+    if(action?.type==='none'){
+      const video=await readVisibleVideo(frame);
+      if(video.kind!=='absent' && video.kind!=='unavailable'){
+        diagnostics.video_gate_seen=true;
+        if(Number.isFinite(video.duration)&&video.duration>0){
+          diagnostics.video_duration_seconds=video.duration;
+        }
+        if(video.kind==='ended')diagnostics.video_ended_observed=true;
+        if(video.kind==='playing')diagnostics.video_started_observed=true;
+        if(video.kind==='paused'){
+          const key=String(currentLocation||'unknown');
+          const attempts=videoAttemptsByLocation.get(key)||0;
+          if(attempts<2){
+            videoAttemptsByLocation.set(key,attempts+1);
+            const played=await startRealVisibleVideo(frame);
+            if(played.kind==='started')diagnostics.video_started_observed=true;
+            action={type:'video-'+played.kind};
+          }else{
+            action={type:'video-blocked'};
+          }
+        }else{
+          action={type:'video-'+video.kind};
+        }
+      }
+    }
+
+    // Fallback only when the package exposes no usable visible control AND
+    // no authored media gate. Never bypass a watched-video requirement.
     if (action?.type === 'none') {
       await page.evaluate(() => {
         const f = document.getElementById('scorm-frame');
@@ -1191,7 +1228,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
     diagnostics.last_location = String(currentLocation || '').slice(0, 100);
     diagnostics.last_action = action?.type || null;
-    if (action?.type === 'retry-deferred' || action?.type === 'adaptive-exhausted') break;
+    if (action?.type === 'retry-deferred' || action?.type === 'adaptive-exhausted' ||
+        action?.type === 'video-blocked' || action?.type === 'video-error') break;
     if (action?.type === 'frame-error') {
       diagnostics.frame_error_count += 1;
       const signature = diagnostics.last_location + ':' + String(action.message || '');
@@ -1219,7 +1257,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       idle = 0;
     }
     steps += 1;
-    await page.waitForTimeout(idle > 5 ? 180 : 90);
+    await page.waitForTimeout(String(action?.type||'').startsWith('video-')
+      ? 750 : (idle > 5 ? 180 : 90));
   }
   return { steps, diagnostics };
 }
@@ -1725,12 +1764,17 @@ async function certifyScormCourse(browser, token, listed) {
     Number(manifest.requiredSlides || 0),
     Number(suspend.model?.slide_count || 0),
   );
+  // Focused, read-only certification must allow actual authored video time,
+  // plus room for the remaining lessons and assessments. NEVER seek or skip.
+  const observedVideoSeconds=Number(suspend.drive_diagnostics?.video_duration_seconds||0);
   const focusedCompletionBudgetMs = COURSE_IDS.size > 0
     ? Math.min(
         420_000,
         Math.max(
           180_000,
           slideCount * 4_000 + Number(manifest.requiredInteractions || 0) * 50_000,
+          Number.isFinite(observedVideoSeconds) && observedVideoSeconds>0
+            ? observedVideoSeconds * 1000 + 180_000 : 0,
         ),
       )
     : 0;
@@ -1764,6 +1808,8 @@ async function certifyScormCourse(browser, token, listed) {
     status: classification.status,
     reason: functional.reason,
     certification_evidence: classification.evidence,
+    browser_preview_lifecycle_pass: classification.status === 'PASS',
+    enrolled_learner_end_to_end_tested: false,
     package_sha256: pkg?.sha256 ?? null,
     legacy_unversioned: legacyUnversioned,
     stored_gate: pkg ? {
@@ -1792,26 +1838,106 @@ async function certifyPptxCourse(browser, token, listed) {
     Number(detail?.gerar_qualificacao_ao_concluir ?? listed?.gerar_qualificacao_ao_concluir ?? 0) === 1 ||
     detail?.gerar_qualificacao_ao_concluir === true ||
     listed?.gerar_qualificacao_ao_concluir === true;
-  const completionCertifiable = !generatesQualification;
-  const pass = assetPass && completionCertifiable;
-  const reason = !assetPass
-    ? `PPTX_ASSET_HTTP_${response.status()}`
-    : generatesQualification
-      ? 'PPTX_QUALIFYING_COMPLETION_EVIDENCE_REQUIRED'
-      : null;
+  // Asset availability is not proof of a complete learner cycle,
+  // including nonqualifying courses: never set PASS without an E2E path.
+  const verdict = classifyPptxAssetProbe({
+    httpStatus: response.status(), assetBytes: bytes.byteLength, generatesQualification,
+  });
   return {
     course_id: id,
     titulo: String(listed.titulo || detail.titulo || ''),
     tipo_conteudo: 'pptx',
-    status: pass ? 'PASS' : 'FAIL',
-    reason,
+    status: verdict.status,
+    reason: verdict.reason,
     asset_bytes: bytes.byteLength,
+    asset_load_pass: assetPass,
+    functional_completion_certified: verdict.functionalCompletionCertified,
+    enrolled_learner_end_to_end_tested: false,
     generates_qualification: generatesQualification,
     version_tag: detail?.version_tag ? String(detail.version_tag) : null,
     note: generatesQualification
       ? 'Asset load passed, but the current backend intentionally blocks qualifying PPTX completion until server-validated evidence exists.'
-      : 'Exact PPTX asset load certified; this course does not mint a qualification.',
+      : 'PPTX asset availability was checked; the enrollment completion lifecycle was NOT certified.',
   };
+}
+
+
+/**
+ * Verify protected PDF/H5P assets used by the learner player with read-only GET.
+ * Even a valid payload NEVER proves a complete enrolled learner journey.
+ */
+async function certifyPdfAsset(browser,token,listed){
+  const id=Number(listed.id);
+  const context=await browser.newContext();
+  try {
+    const response=await context.request.get(`${API}/api/lms/pdf/asset/${id}`,{
+      headers:{Authorization:`Bearer ${token}`},timeout:15_000,
+    });
+    const status=response.status();
+    const bytes=status===200?await response.body():Buffer.alloc(0);
+    const valid=status===200 && bytes.byteLength>100 &&
+      bytes.subarray(0,5).toString('ascii')==='%PDF-' &&
+      String(response.headers()['content-type']||'').split(';')[0].trim().toLowerCase()==='application/pdf';
+    const verdict=classifyReadOnlyContentAssetProbe({
+      format:'pdf',samples:[{status,valid}],
+    });
+    return {course_id:id,titulo:String(listed.titulo||''),tipo_conteudo:'pdf',
+      status:verdict.status,reason:verdict.reason,
+      asset_bytes:bytes.byteLength,asset_load_pass:verdict.assetLoadPass,
+      functional_completion_certified:false,enrolled_learner_end_to_end_tested:false};
+  }catch{
+    // Network timeout is not proof of defective PDF content.
+    return {course_id:id,titulo:String(listed.titulo||''),tipo_conteudo:'pdf',
+      status:'INCONCLUSIVE',reason:'PDF_ASSET_PROBE_UNAVAILABLE',
+      asset_load_pass:false,functional_completion_certified:false,
+      enrolled_learner_end_to_end_tested:false};
+  }finally{await context.close();}
+}
+
+async function certifyH5pAssets(browser,token,listed){
+  const id=Number(listed.id);
+  const detail=await courseDetail(token,id);
+  const h5pId=Number(detail?.h5p_conteudo_id??0);
+  if(!Number.isSafeInteger(h5pId)||h5pId<=0){
+    return {course_id:id,titulo:String(listed.titulo||detail?.titulo||''),
+      tipo_conteudo:'h5p',status:'FAIL',reason:'H5P_CONTENT_LINKAGE_MISSING',
+      asset_load_pass:false,functional_completion_certified:false,
+      enrolled_learner_end_to_end_tested:false};
+  }
+  const context=await browser.newContext();
+  try {
+    const samples=[];
+    for(const asset of ['h5p.json','content/content.json']){
+      const response=await context.request.get(
+        `${API}/api/lms/h5p/assets/${h5pId}/${asset}`,{
+          headers:{Authorization:`Bearer ${token}`},timeout:15_000,
+        });
+      // Null = inspection budget exceeded, not proof of corrupt media.
+      let valid=null;
+      if(response.status()===200){
+        const bytes=await response.body();
+        if(bytes.byteLength<=2){valid=false;}
+        else if(bytes.byteLength<=2_000_000){
+          try{
+            const parsed=JSON.parse(bytes.toString('utf8'));
+            valid=parsed!==null&&typeof parsed==='object'&&!Array.isArray(parsed);
+          }catch{valid=false;/* Invalid JSON with HTTP 200 = corrupt content. */}
+        }
+      }
+      samples.push({status:response.status(),valid});
+    }
+    const verdict=classifyReadOnlyContentAssetProbe({format:'h5p',samples});
+    return {course_id:id,titulo:String(listed.titulo||detail?.titulo||''),
+      tipo_conteudo:'h5p',status:verdict.status,reason:verdict.reason,
+      asset_load_pass:verdict.assetLoadPass,
+      functional_completion_certified:false,enrolled_learner_end_to_end_tested:false};
+  }catch{
+    // Transport outages do not establish that either authored H5P asset is bad.
+    return {course_id:id,titulo:String(listed.titulo||detail?.titulo||''),
+      tipo_conteudo:'h5p',status:'INCONCLUSIVE',
+      reason:'H5P_ASSET_PROBE_UNAVAILABLE',asset_load_pass:false,
+      functional_completion_certified:false,enrolled_learner_end_to_end_tested:false};
+  }finally{await context.close();}
 }
 
 async function main() {
@@ -1841,7 +1967,12 @@ async function main() {
       try {
         if (type === 'scorm') results.push(await certifyScormCourse(browser, token, course));
         else if (type === 'pptx') results.push(await certifyPptxCourse(browser, token, course));
-        else results.push({ course_id: Number(course.id), titulo: String(course.titulo || ''), tipo_conteudo: type, status: 'FAIL', reason: 'UNSUPPORTED_CONTENT_TYPE' });
+        else if (type === 'pdf') results.push(await certifyPdfAsset(browser, token, course));
+        else if (type === 'h5p') results.push(await certifyH5pAssets(browser, token, course));
+        else results.push({
+          course_id: Number(course.id), titulo: String(course.titulo || ''),
+          ...classifyUncoveredContentType(type),
+        });
       } catch (error) {
         results.push({ course_id: Number(course.id), titulo: String(course.titulo || ''), tipo_conteudo: type, status: 'FAIL', reason: safe(error?.message || error) });
       }
@@ -1864,12 +1995,13 @@ async function main() {
     inconclusive_count: results.filter((r) => r.status === 'INCONCLUSIVE').length,
     scorm_count: results.filter((r) => r.tipo_conteudo === 'scorm').length,
     pptx_count: results.filter((r) => r.tipo_conteudo === 'pptx').length,
+    format_coverage: summarizeCourseFormatCoverage(results),
     writes: 'none (authentication/company-selection/asset-session POSTs only; no LMS progress/enrollment/certificate/course mutations)',
     results,
   };
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, inconclusive_count: report.inconclusive_count, course_count: report.course_count })}\n`);
+  process.stdout.write(`${JSON.stringify({ production_sha: report.production_sha, browser: report.browser, pass_count: report.pass_count, fail_count: report.fail_count, inconclusive_count: report.inconclusive_count, course_count: report.course_count, scorm_preview_pass_count: report.format_coverage.scorm_preview_pass_count, enrolled_learner_end_to_end_tested: false, formats: report.format_coverage.formats })}\n`);
   // Both explicit failures and inconclusive runs block certification/release.
   if (report.fail_count + report.inconclusive_count > 0) process.exitCode = 2;
 }

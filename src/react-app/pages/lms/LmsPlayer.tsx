@@ -25,6 +25,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/useLms';
 import { formatMinutes } from './lmsUi';
+import { describeScormClosureMissing } from './lmsScormClosureReasons';
 import {
   parseGranularDiagnostic,
   type LmsGranularDiagnostic,
@@ -116,6 +117,24 @@ const SCORM_CANDIDATE_RECHECK_DELAY_MS = 1_000;
 
 const SCORM_UNRESOLVED_MESSAGE =
   'O conteúdo chegou ao fim, mas não enviou a confirmação SCORM. Seu progresso foi preservado.';
+
+/**
+ * The server closure checklist describes what is still required to CERTIFY,
+ * not errors in the current slide's autosave. Never present future/unvisited
+ * slides and not-yet-taken assessments as failure during ordinary playback.
+ * Keep all guards and server evidence intact for actual finalization.
+ */
+export function shouldShowScormClosureDetails(input: {
+  completed: boolean;
+  atFinalSlide: boolean;
+  finalizationFailed: boolean;
+  readyToVerify: boolean;
+  /** Server proved a prior visit to the final screen, even if learner is revisiting. */
+  lastStepReached?: boolean;
+}): boolean {
+  return input.completed || input.atFinalSlide || input.lastStepReached === true ||
+    input.finalizationFailed || input.readyToVerify;
+}
 
 // Only enables an authenticated attempt at the existing server-side qualification
 // and completion gate; this predicate never marks a course as passed.
@@ -300,16 +319,28 @@ export default function LmsPlayer() {
   const legacyFinalSlide = parsedCurrentLocation != null &&
     parsedCurrentLocation.total > 0 &&
     parsedCurrentLocation.current >= parsedCurrentLocation.total;
+  const showScormClosureDetails = shouldShowScormClosureDetails({
+    completed: isCompletedState,
+    atFinalSlide: legacyFinalSlide,
+    finalizationFailed: completionState === 'error',
+    readyToVerify: closureReadiness?.eligible_for_server_verification === true,
+    lastStepReached: closureReadiness?.last_step_reached === true,
+  });
   const legacyAssessmentEvidence = curso?.scorm_assessment_policy === 'FORMATIVE' ||
     (curso?.scorm_assessment_policy === 'SCORED' &&
       (matricula?.score_final != null || completionDiagnostic?.score_pct != null));
+  const isScoredScorm = curso?.scorm_assessment_policy !== 'FORMATIVE';
+  // A SCORED course has one learning verdict: the backend-verified SCORM pass
+  // and mastery score. Never demand a second, proprietary per-page checklist
+  // in the player. FORMATIVE retains its real coverage requirement.
   const canRequestScormCompletion =
     isScormContent && !newEditionRequired && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
-    allSlidesVisited &&
-    (granularDiagnostic
-      ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
-        granularDiagnostic.assessment.passed !== false)
-      : Boolean(legacyFinalSlide && legacyAssessmentEvidence));
+    (isScoredScorm
+      ? closureReadiness?.eligible_for_server_verification === true
+      : allSlidesVisited && (granularDiagnostic
+        ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
+          granularDiagnostic.assessment.passed !== false)
+        : Boolean(legacyFinalSlide && legacyAssessmentEvidence)));
   const canRequestCompletion = !newEditionRequired &&
     (canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm);
 
@@ -816,6 +847,13 @@ export default function LmsPlayer() {
           verifyCanonicalAndReturn();
           return;
         }
+        // Only refresh server-authoritative missing slides after an acknowledged
+        // commit. A local counter/probe alone is not proof that D1 saved it.
+        if (event.data.server_saved === true && !effectiveReviewMode &&
+            typeof event.data.viewed_slide_count === 'number' &&
+            event.data.viewed_slide_count > (closureReadiness?.slide_coverage?.recorded ?? 0)) {
+          void refetchMatricula();
+        }
         return;
       }
 
@@ -834,7 +872,7 @@ export default function LmsPlayer() {
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, queryClient]);
+  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, queryClient, closureReadiness?.slide_coverage?.recorded]);
 
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
@@ -1284,7 +1322,13 @@ export default function LmsPlayer() {
                 </p>
                 {matricula.score_final != null ? <p>Nota: {matricula.score_final}%</p> : null}
                 {isScormContent && closureReadiness ? (
-                  <p role="status">
+                  !showScormClosureDetails
+                    ? <p role="status">
+                        Treinamento em andamento. Os requisitos de conclusão serão
+                        apresentados ao chegar à última tela.
+                      </p>
+                    : <>
+                    <p role="status">
                     Fechamento: {closureReadiness.code === 'SCORM_ALREADY_COMPLETED'
                       ? 'confirmado pelo AirTrust'
                       : closureReadiness.eligible_for_server_verification
@@ -1300,7 +1344,24 @@ export default function LmsPlayer() {
                           } as Record<string, string>)[closureReadiness.code] ??
                           'evidências pendentes de confirmação'}
                     {' '}({closureReadiness.code})
-                  </p>
+                    </p>
+                    {!isCompletedState && Array.isArray(closureReadiness.missing) &&
+                      closureReadiness.missing.length > 0 ? (
+                      <p className="text-xs text-amber-200/90">
+                        Pendências no último registro do servidor: {' '}
+                        {describeScormClosureMissing(closureReadiness.missing).join('; ')}.
+                      </p>
+                    ) : null}
+                    {!isCompletedState && closureReadiness?.missing?.includes('distinct_slide_coverage') &&
+                      closureReadiness.slide_coverage?.missing_numbers?.length ? (
+                      <p className="text-xs text-amber-200/90" data-testid="lms-missing-slide-numbers">
+                        Telas sem registro: {closureReadiness.slide_coverage.missing_numbers.slice(0, 12).join(', ')}
+                        {closureReadiness.slide_coverage.missing_numbers.length > 12
+                          ? ` e mais ${closureReadiness.slide_coverage.missing_numbers.length - 12}` : ''}.
+                        Volte a essas telas no conteúdo para registrar a visita antes de solicitar a conclusão.
+                      </p>
+                    ) : null}
+                  </>
                 ) : completionDiagnostic?.code && completionDiagnostic.code !== 'SCORM_NONE' ? (
                   <p>Diagnóstico de progresso: {completionDiagnostic.code}</p>
                 ) : null}
