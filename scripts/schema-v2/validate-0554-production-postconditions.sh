@@ -22,6 +22,6 @@ assert_count(){
 assert_count ledger 1 "SELECT COUNT(*) count FROM airtrust_schema_changes_v2 WHERE change_id='simulator-individual-check-evidence-0554' AND baseline_id='production-d1-baseline-v2-20260714';"
 assert_count new-table 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name='sessoes_checks_resultados_individuais';"
 assert_count indexes 3 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND tbl_name='sessoes_checks_resultados_individuais' AND name LIKE 'idx_checks_individuais_%';"
-assert_count triggers 5 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND tbl_name='sessoes_checks_resultados_individuais' AND name LIKE 'trg_checks_individuais_%';"
+assert_count triggers 6 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND tbl_name='sessoes_checks_resultados_individuais' AND name LIKE 'trg_checks_individuais_%';"
 assert_count no-fabricated-evidence 0 "SELECT COUNT(*) count FROM sessoes_checks_resultados_individuais;"
 echo SIMULATOR_INDIVIDUAL_CHECK_EVIDENCE_0554_POSTCONDITIONS=PASS

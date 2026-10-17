@@ -134,6 +134,17 @@ describe('Schema V2 0554 — simulator check evidence belongs to a person', () =
     )).toThrow(/INDIVIDUAL_CHECK_SCOPE_IMMUTABLE|INDIVIDUAL_CHECK_CONFIRMED_IMMUTABLE/);
   });
 
+  it('cannot resurrect an annulled result into an approved result', () => {
+    db = fixture();
+    insert(db!, { state:'ANULADO', approved:0, signed:false });
+    expect(() => db!.exec(`UPDATE sessoes_checks_resultados_individuais
+      SET estado='CONFIRMADO', aprovado=1,
+          confirmado_em='2026-10-12', confirmado_por_usuario_id=35
+      WHERE ficha_id=101`)).toThrow(/INDIVIDUAL_CHECK_ANNULLED_IMMUTABLE/);
+    const item = db!.prepare('SELECT estado, aprovado FROM sessoes_checks_resultados_individuais').get();
+    expect(item).toEqual({ estado:'ANULADO', aprovado:0 });
+  });
+
   it('never backfills or infers approvals from legacy session checks', () => {
     db = fixture();
     expect(db!.prepare('SELECT COUNT(*) as total FROM sessoes_checks_resultados_individuais').get())

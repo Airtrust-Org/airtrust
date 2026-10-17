@@ -118,6 +118,15 @@ BEGIN
   ) THEN RAISE(ABORT, 'INDIVIDUAL_CHECK_FICHE_NOT_SIGNED') END;
 END;
 
+-- Annulled records cannot be resurrected into approvals or reassigned.
+-- A new independently signed fiche is required for a reevaluation.
+CREATE TRIGGER IF NOT EXISTS trg_checks_individuais_annulled_immutable
+BEFORE UPDATE ON sessoes_checks_resultados_individuais
+WHEN OLD.estado = 'ANULADO'
+BEGIN
+  SELECT RAISE(ABORT, 'INDIVIDUAL_CHECK_ANNULLED_IMMUTABLE');
+END;
+
 -- Confirmed rows are immutable evidence. Re-evaluation requires a new fiche,
 -- never rewriting the original approval, failure or signature provenance.
 CREATE TRIGGER IF NOT EXISTS trg_checks_individuais_confirmed_immutable
