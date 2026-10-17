@@ -14,7 +14,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { AppError } from '../utils/errors';
-import { getTenantContext, requireTenantRole } from '../middleware/tenant';
+import { getTenantContext, isPlatformAdminContext, requireTenantRole } from '../middleware/tenant';
 import { generateRefreshToken } from '../utils/security';
 import {
   assertSetoresValidosParaEmpresa,
@@ -131,8 +131,9 @@ async function findUsuarioAcessosPermitido(
   db: Env['DB'],
   usuarioId: number,
   tenantCtx: ReturnType<typeof getTenantContext>,
+  platformAdmin: boolean,
 ): Promise<{ id: number; nome: string; email: string; is_primary: number } | null> {
-  if (tenantCtx.empresaCodigo === 'airtrust') {
+  if (platformAdmin) {
     return db
       .prepare('SELECT id, nome, email, 0 AS is_primary FROM usuarios WHERE id = ? AND deleted_at IS NULL')
       .bind(usuarioId)
@@ -250,7 +251,7 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   const tenantCtx = getTenantContext(c);
 
-  if (tenantCtx.empresaCodigo !== 'airtrust' && tenantCtx.empresaId !== id) {
+  if (!isPlatformAdminContext(c) && tenantCtx.empresaId !== id) {
     throw new AppError('Sem permissão para adicionar usuários a esta empresa', 403);
   }
 
@@ -292,7 +293,7 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
     throw new AppError('Selecione ao menos uma empresa', 400);
   }
 
-  if (tenantCtx.empresaCodigo !== 'airtrust') {
+  if (!isPlatformAdminContext(c)) {
     const invalidEmpresa = targetEmpresaIds.find((empresaId) => empresaId !== tenantCtx.empresaId);
     if (invalidEmpresa) {
       throw new AppError('Sem permissão para adicionar usuários em múltiplas empresas', 403);
@@ -322,7 +323,7 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
       }
     }
 
-    if (tenantCtx.empresaCodigo !== 'airtrust') {
+    if (!isPlatformAdminContext(c)) {
       const count = await db
         .prepare('SELECT COUNT(*) as total FROM usuarios_empresas WHERE empresa_id = ?')
         .bind(empresaId)
@@ -517,7 +518,7 @@ app.get('/:id/usuarios', requireTenantRole('admin'), async (c) => {
   const tenantCtx = getTenantContext(c);
   const { hasModulosAtivos } = await getUsuariosEmpresasFeatures(db);
 
-  if (tenantCtx.empresaCodigo !== 'airtrust' && tenantCtx.empresaId !== id) {
+  if (!isPlatformAdminContext(c) && tenantCtx.empresaId !== id) {
     throw new AppError('Sem permissão para ver usuários desta empresa', 403);
   }
 
@@ -564,10 +565,10 @@ app.get('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
   const db = c.env.DB;
   const usuarioId = parseInt(c.req.param('usuarioId'), 10);
   const tenantCtx = getTenantContext(c);
-  const usuario = await findUsuarioAcessosPermitido(db, usuarioId, tenantCtx);
+  const usuario = await findUsuarioAcessosPermitido(db, usuarioId, tenantCtx, isPlatformAdminContext(c));
 
   if (!usuario) {
-    if (tenantCtx.empresaCodigo !== 'airtrust') {
+    if (!isPlatformAdminContext(c)) {
       throw new AppError('Sem permissão para acessar usuário de outra empresa', 403);
     }
     throw new AppError('Usuário não encontrado', 404);
@@ -591,7 +592,7 @@ app.get('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
       ORDER BY e.nome ASC
     `,
     )
-    .bind(usuarioId, tenantCtx.empresaCodigo === 'airtrust' ? 1 : 0, tenantCtx.empresaId)
+    .bind(usuarioId, isPlatformAdminContext(c) ? 1 : 0, tenantCtx.empresaId)
     .all<{
       empresa_id: number;
       role: string;
@@ -602,7 +603,7 @@ app.get('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
     }>();
 
   const resultados = (acessos.results || []).filter((item) => {
-    if (tenantCtx.empresaCodigo === 'airtrust') return true;
+    if (isPlatformAdminContext(c)) return true;
     return item.empresa_id === tenantCtx.empresaId;
   });
 
@@ -647,10 +648,10 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
   const db = c.env.DB;
   const usuarioId = parseInt(c.req.param('usuarioId'), 10);
   const tenantCtx = getTenantContext(c);
-  const usuario = await findUsuarioAcessosPermitido(db, usuarioId, tenantCtx);
+  const usuario = await findUsuarioAcessosPermitido(db, usuarioId, tenantCtx, isPlatformAdminContext(c));
 
   if (!usuario) {
-    if (tenantCtx.empresaCodigo !== 'airtrust') {
+    if (!isPlatformAdminContext(c)) {
       throw new AppError('Sem permissão para editar acessos de usuário de outra empresa', 403);
     }
     throw new AppError('Usuário não encontrado', 404);
@@ -680,7 +681,7 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
     throw new AppError('Informe ao menos um acesso de empresa', 400);
   }
 
-  if (tenantCtx.empresaCodigo !== 'airtrust') {
+  if (!isPlatformAdminContext(c)) {
     const invalid = acessos.find((item) => item.empresaId !== tenantCtx.empresaId);
     if (invalid) {
       throw new AppError('Sem permissão para editar acessos de outras empresas', 403);
@@ -711,12 +712,12 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
 
   await db
     .prepare(
-      tenantCtx.empresaCodigo === 'airtrust'
+      isPlatformAdminContext(c)
         ? 'DELETE FROM usuarios_empresas WHERE usuario_id = ?'
         : 'DELETE FROM usuarios_empresas WHERE usuario_id = ? AND empresa_id = ?',
     )
     .bind(
-      ...(tenantCtx.empresaCodigo === 'airtrust' ? [usuarioId] : [usuarioId, tenantCtx.empresaId]),
+      ...(isPlatformAdminContext(c) ? [usuarioId] : [usuarioId, tenantCtx.empresaId]),
     )
     .run();
 
@@ -725,20 +726,20 @@ app.put('/usuarios/:usuarioId/acessos', requireTenantRole('admin'), async (c) =>
   // removido pelo admin deixa de existir na estrutura autoritativa.
   await db
     .prepare(
-      tenantCtx.empresaCodigo === 'airtrust'
+      isPlatformAdminContext(c)
         ? 'DELETE FROM usuarios_empresas_perfis WHERE usuario_id = ?'
         : 'DELETE FROM usuarios_empresas_perfis WHERE usuario_id = ? AND empresa_id = ?',
     )
-    .bind(...(tenantCtx.empresaCodigo === 'airtrust' ? [usuarioId] : [usuarioId, tenantCtx.empresaId]))
+    .bind(...(isPlatformAdminContext(c) ? [usuarioId] : [usuarioId, tenantCtx.empresaId]))
     .run();
 
   let isPrimarySet = false;
   for (const acesso of acessos) {
     const isPrimary =
-      tenantCtx.empresaCodigo === 'airtrust'
+      isPlatformAdminContext(c)
         ? (!isPrimarySet ? 1 : 0)
         : Number(usuario.is_primary ?? 0);
-    if (tenantCtx.empresaCodigo === 'airtrust') isPrimarySet = true;
+    if (isPlatformAdminContext(c)) isPrimarySet = true;
 
     if (hasModulosAtivos) {
       await db
@@ -794,7 +795,7 @@ app.post('/:id/usuarios', requireTenantRole('admin'), async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   const tenantCtx = getTenantContext(c);
 
-  if (tenantCtx.empresaCodigo !== 'airtrust' && tenantCtx.empresaId !== id) {
+  if (!isPlatformAdminContext(c) && tenantCtx.empresaId !== id) {
     throw new AppError('Sem permissão para adicionar usuários a esta empresa', 403);
   }
 
@@ -831,7 +832,7 @@ app.post('/:id/usuarios', requireTenantRole('admin'), async (c) => {
   }
 
   // Verificar limite de funcionários (se não for super-admin)
-  if (tenantCtx.empresaCodigo !== 'airtrust') {
+  if (!isPlatformAdminContext(c)) {
     const empresa = await db
       .prepare('SELECT max_funcionarios FROM empresas WHERE id = ? AND deleted_at IS NULL')
       .bind(id)
@@ -897,7 +898,7 @@ app.delete('/:id/usuarios/:usuarioId', requireTenantRole('admin'), async (c) => 
   const usuarioId = parseInt(c.req.param('usuarioId'), 10);
   const tenantCtx = getTenantContext(c);
 
-  if (tenantCtx.empresaCodigo !== 'airtrust' && tenantCtx.empresaId !== id) {
+  if (!isPlatformAdminContext(c) && tenantCtx.empresaId !== id) {
     throw new AppError('Sem permissão para remover usuários desta empresa', 403);
   }
 
