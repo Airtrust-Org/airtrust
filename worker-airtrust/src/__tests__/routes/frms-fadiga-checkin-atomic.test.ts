@@ -4,7 +4,7 @@ import type { Env } from '../../types';
 const { syncMock } = vi.hoisted(() => ({ syncMock: vi.fn() }));
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (c: any, next: () => Promise<void>) => {
+  auth: () => async (c: { set: (name: string, value: number | string) => void }, next: () => Promise<void>) => {
     c.set('userId', 9);
     c.set('userRole', 'tripulante');
     c.set('empresaId', 7);
@@ -14,7 +14,7 @@ vi.mock('../../middleware/auth', () => ({
 }));
 vi.mock('../../middleware/tenant', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../middleware/tenant')>()),
-  getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
+  getEmpresaId: (c: { get: (name: string) => unknown }) => Number(c.get('empresaId') || 0),
 }));
 vi.mock('../../middleware/frms-fatigue-checkin-access', () => ({
   requireFatigueCheckinAccess: async (_c: unknown, next: () => Promise<void>) => next(),
