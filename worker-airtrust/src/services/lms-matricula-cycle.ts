@@ -635,7 +635,10 @@ export async function reactivateCancelledMatriculaPreservingProgress(
   ).bind(resumeStatus,params.dataExpiracao??null,params.matriculadoPor??null,
     params.observacoes??null,params.observacoes??null,params.observacoes??null,
     params.observacoes??null,params.matriculaId,params.empresaId).run();
-  if(Number(update.meta?.changes)!==1) return 'NOT_ELIGIBLE';
+  // D1 may include trigger side effects in changes; >=1 still proves the
+  // guarded UPDATE wrote a row. Never interpret zero/missing as success.
+  if(!Number.isFinite(Number(update.meta?.changes)) || Number(update.meta?.changes)<1)
+    return 'NOT_ELIGIBLE';
   // Keep the current cycle rather than making a new zero-progress cycle.
   // All runtime SCORM state remains in lms_progresso_scorm untouched.
   await ensureMatriculaCycle(db,{matriculaId:params.matriculaId,empresaId:params.empresaId,
