@@ -12,6 +12,7 @@ import { extractScormLocationFromCmiJson, mergeMonotonicNumber, mergeScormRuntim
 import { evaluateScormClosureReadiness } from '../services/lms-matricula-runtime-domain';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-guard';
+import { activeXapiFirst } from '../services/lms-active-xapi-read';
 import { isEligibleForHistoricEditionCredit } from '../lib/lms/lms-historical-edition-admin-credit';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
@@ -127,8 +128,7 @@ async function readEnrollmentEvidence(
   empresaId: number,
   matriculaId: number,
 ): Promise<EnrollmentEvidenceRow | null> {
-  return db
-    .prepare(
+  return activeXapiFirst<EnrollmentEvidenceRow>(db,
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.data_inicio,
               m.qualificacao_historico_id,
               c.id AS curso_id, c.tipo_conteudo, c.ativo, c.publicado,
@@ -138,7 +138,8 @@ async function readEnrollmentEvidence(
               p.score_raw, p.score_min, p.score_max, p.score_scaled,
               p.session_time, p.total_time, p.suspend_data, p.cmi_json,
               (SELECT COUNT(*) FROM lms_xapi_statements x
-                WHERE x.matricula_id = m.id AND x.empresa_id = m.empresa_id) AS xapi_count
+                WHERE x.matricula_id = m.id AND x.empresa_id = m.empresa_id
+                  AND x.archived_cycle_id IS NULL) AS xapi_count
          FROM lms_matriculas m
          JOIN lms_cursos c
            ON c.id = m.curso_id
@@ -150,10 +151,7 @@ async function readEnrollmentEvidence(
         WHERE m.id = ?
           AND m.empresa_id = ?
           AND m.deleted_at IS NULL
-        LIMIT 1`,
-    )
-    .bind(matriculaId, empresaId)
-    .first<EnrollmentEvidenceRow>();
+        LIMIT 1`, [matriculaId, empresaId]);
 }
 
 function scorePctFromValues(raw: unknown, max: unknown, scaled: unknown, min?: unknown): number | null {

@@ -332,10 +332,21 @@ async function handleRematriculation(
 
   try {
     await c.env.DB.batch([
+      // An inconsistent/missing cycle must abort the *whole* reset, not silently
+      // produce a new cycle without an immutable predecessor.
+      ...(newEdition ? [c.env.DB.prepare(
+        `SELECT CASE WHEN EXISTS(
+          SELECT 1 FROM lms_matricula_ciclos cy
+           WHERE cy.matricula_id=? AND cy.empresa_id=?
+             AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+        ) THEN 1 ELSE json_extract('INVALID_CYCLE_STATE','$') END`,
+      ).bind(matriculaId,empresaId)] : []),
       c.env.DB.prepare(
         `UPDATE lms_matriculas
               SET status = 'NAO_INICIADO',
                   progresso_pct = 0,
+                  ultimo_slide = 0,
+                  ultima_pagina = 0,
                   score_final = NULL,
                   tentativas = 0,
                   data_inicio = NULL,
@@ -377,6 +388,52 @@ async function handleRematriculation(
         empresaId,
         ...(newEdition ? [verifiedActivePrefix, verifiedPreviousCmi] : []),
       ),
+      // Immutable evidence snapshot and xAPI reclassification are inside the
+      // same D1.batch transaction as the new edition. The current runtime may
+      // be reset only after its previous evidence has been retained.
+      ...(newEdition ? [
+        c.env.DB.prepare(
+          `INSERT INTO lms_ciclo_evidencias
+            (empresa_id,matricula_id,ciclo_id,enrollment_json,scorm_json,diagnostics_json,course_package_prefix)
+           SELECT m.empresa_id,m.id,cy.id,
+             ?,
+             (SELECT json_object(
+               'lesson_status',p.lesson_status,
+               'completion_status',p.completion_status,'success_status',p.success_status,
+               'score_raw',p.score_raw,'score_min',p.score_min,'score_max',p.score_max,
+               'score_scaled',p.score_scaled,'session_time',p.session_time,
+               'total_time',p.total_time,'suspend_data',p.suspend_data,
+               'launch_data',p.launch_data,'cmi_json',p.cmi_json,'session_count',p.session_count)
+               FROM lms_progresso_scorm p WHERE p.empresa_id=m.empresa_id AND p.matricula_id=m.id),
+             (SELECT json_group_array(json_object('tentativa',d.tentativa,'diagnostics_json',d.diagnostics_json))
+               FROM lms_completion_diagnostics_snapshots d WHERE d.empresa_id=m.empresa_id AND d.matricula_id=m.id),
+             NULL /* previous active package prefix is unverified after edition activation */
+           FROM lms_matriculas m
+           JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+           JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+             AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+           WHERE m.id=? AND m.empresa_id=? AND ${markerExists}`,
+        ).bind(JSON.stringify({
+          ...existing,
+          historical_edition_provenance: {
+            previous_package_prefix: null,
+            previous_package_version: editionMismatch?.previous_version ?? null,
+            active_package_prefix_at_reset: verifiedActivePrefix,
+            status: 'HISTORICAL_PACKAGE_PREFIX_UNVERIFIED',
+          },
+        }),matriculaId, empresaId, matriculaId, empresaId, operationMarker),
+        c.env.DB.prepare(
+          `UPDATE lms_xapi_statements
+              SET archived_cycle_id = (
+                SELECT id FROM lms_matricula_ciclos cy
+                 WHERE cy.empresa_id = ? AND cy.matricula_id = ?
+                   AND cy.ciclo_atual = 1 AND cy.deleted_at IS NULL
+              )
+            WHERE empresa_id = ? AND matricula_id = ?
+              AND archived_cycle_id IS NULL AND ${markerExists}`,
+        ).bind(empresaId, matriculaId, empresaId, matriculaId,
+          matriculaId, empresaId, operationMarker),
+      ] : []),
       c.env.DB.prepare(
         `UPDATE lms_matricula_ciclos
               SET ciclo_atual = 0,

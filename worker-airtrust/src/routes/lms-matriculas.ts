@@ -81,6 +81,7 @@ import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matricula
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard';
 import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
+import { activeXapiFirst } from '../services/lms-active-xapi-read';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
@@ -578,18 +579,14 @@ app.get('/:id', async (c) => {
         .first<Record<string, unknown>>()) ?? null;
   } else if (tipoConteudo === 'h5p') {
     // Para H5P: retornar resumo de statements xAPI
-    const xapiRows = await db
-      .prepare(
+    const xapiRows = await activeXapiFirst<{ total_statements: number; last_verb: string; last_timestamp: string }>(db,
         `
         SELECT COUNT(*) AS total_statements,
-          (SELECT verb_id FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? ORDER BY created_at DESC LIMIT 1) AS last_verb,
-          (SELECT timestamp FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? ORDER BY created_at DESC LIMIT 1) AS last_timestamp
+          (SELECT verb_id FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? AND archived_cycle_id IS NULL ORDER BY created_at DESC LIMIT 1) AS last_verb,
+          (SELECT timestamp FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? AND archived_cycle_id IS NULL ORDER BY created_at DESC LIMIT 1) AS last_timestamp
         FROM lms_xapi_statements
-        WHERE matricula_id = ? AND empresa_id = ?
-      `,
-      )
-      .bind(matriculaId, empresaId, matriculaId, empresaId, matriculaId, empresaId)
-      .first<{ total_statements: number; last_verb: string; last_timestamp: string }>();
+        WHERE matricula_id = ? AND empresa_id = ? AND archived_cycle_id IS NULL
+      `, [matriculaId, empresaId, matriculaId, empresaId, matriculaId, empresaId]);
     xapiSummary = xapiRows ?? { total_statements: 0 };
   }
 
