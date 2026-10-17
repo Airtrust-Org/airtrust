@@ -11,9 +11,9 @@ test('release SHA gates, admin RBAC, preflight proof, recovery and canonical mut
 });
 test('production apply requires a separate authorized human from the reviewed preflight',()=>{
  const privileged = wf.split('  govern:')[1] ?? '';
- assert.match(privileged,/\.event <<< "\$run"\) == workflow_dispatch/);
- assert.match(privileged,/\.head_branch <<< "\$run"\) == main/);
- assert.match(privileged,/\.actor\.type <<< "\$run"\) == User/);
+ assert.ok(privileged.includes('.event <<< "$run")" == workflow_dispatch'));
+ assert.ok(privileged.includes('.head_branch <<< "$run")" == main'));
+ assert.ok(privileged.includes('.actor.type <<< "$run")" == User'));
  assert.match(privileged,/preflight_actor=/);
  assert.match(privileged,/preflight_trigger=/);
  assert.match(privileged,/caller" != "\$preflight_actor"/);
