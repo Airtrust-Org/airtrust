@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { assertScormAssetRouteAllowed } from '../../lib/lms/lms-scorm-asset-eligibility';
+import type { Env } from '../../types';
 import {
   parseScormLocationMarker,
   parseScormLocationPair,
@@ -18,10 +20,57 @@ describe('legacy SCORM launch must not open Native evidence courses', () => {
     const launch = source.slice(begin, end);
     expect(launch).toContain('c.tipo_conteudo');
     expect(launch).toContain('c.empresa_id = m.empresa_id');
-    const nativeGuard = "assertScormAssetEligibility(matricula.tipo_conteudo, 'Curso nativo exige o player próprio.');";
+    const nativeGuard = "await assertScormAssetRouteAllowed(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo, 'Curso nativo exige o player próprio.');";
     expect(launch).toContain(nativeGuard);
     expect(launch.indexOf(nativeGuard)).toBeLessThan(launch.indexOf('resolveScormLaunchFile('));
     expect(launch.indexOf(nativeGuard)).toBeLessThan(launch.indexOf('FROM lms_progresso_scorm'));
+  });
+});
+
+describe('SCORM asset admission uses a single physical and activated Native guard', () => {
+  it('denies physical Native before querying staging activation', async () => {
+    const prepare = vi.fn();
+    const env = { DB: { prepare } } as unknown as Env;
+    await expect(assertScormAssetRouteAllowed(env, 6, 39, 'native', 'No SCORM'))
+      .rejects.toMatchObject({ statusCode: 409 });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('denies staged Native catalog activation, including for physical SCORM', async () => {
+    const first = vi.fn().mockResolvedValue({ curso_id: 39 });
+    const bind = vi.fn().mockReturnValue({ first });
+    const prepare = vi.fn().mockReturnValue({ bind });
+    const env = {
+      ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6',
+      DB: { prepare },
+    } as unknown as Env;
+    await expect(assertScormAssetRouteAllowed(env, 6, 39, 'scorm', 'No SCORM'))
+      .rejects.toMatchObject({ statusCode: 409 });
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(prepare.mock.calls[0][0]).toContain('lms_native_catalog_activation');
+    expect(bind).toHaveBeenCalledWith(6, 39);
+  });
+
+  it('fails closed if the staging activation lookup cannot be verified', async () => {
+    const first = vi.fn().mockRejectedValue(new Error('D1 temporarily unavailable'));
+    const env = {
+      ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6',
+      DB: { prepare: vi.fn().mockReturnValue({
+        bind: vi.fn().mockReturnValue({ first }),
+      }) },
+    } as unknown as Env;
+    await expect(assertScormAssetRouteAllowed(env, 6, 39, 'scorm', 'No SCORM'))
+      .rejects.toMatchObject({ statusCode: 503 });
+  });
+
+  it('does not query Native activation while the per-tenant gate is disabled', async () => {
+    const prepare = vi.fn();
+    const env = { ENVIRONMENT: 'staging', DB: { prepare } } as unknown as Env;
+    await expect(assertScormAssetRouteAllowed(env, 6, 39, 'scorm', 'No SCORM'))
+      .resolves.toBeUndefined();
+    expect(prepare).not.toHaveBeenCalled();
   });
 });
 
