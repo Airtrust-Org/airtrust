@@ -26,6 +26,7 @@ import {
   type CheckinCreateInput,
 } from './frms-fadiga-checkin.schema';
 import { validateCheckinPayloadCompleteness } from './frms-fadiga-checkin-validation';
+import { normalizeFitForDutyPayload, normalizeOptionalBinary } from './frms-fadiga-checkin-normalization';
 import { getFadigaConfig as getConfig, updateFadigaDutyConfig } from './frms-fadiga-config';
 import { loadDailyFatigueTeamRoster } from '../lib/frms/daily-fatigue-team-roster';
 import { resolveCheckinKssProvenance, kssProvenanceEventFields } from '../lib/frms/kss-checkin-provenance';
@@ -62,12 +63,6 @@ type NormalizedCheckinInput = {
 
 function nowSql(): string {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);
-}
-
-function normalizeOptionalBinary(value: boolean | number | null | undefined): 0 | 1 | null {
-  if (value === true || value === 1) return 1;
-  if (value === false || value === 0) return 0;
-  return null;
 }
 
 function todayIso(): string {
@@ -195,25 +190,6 @@ function mapNivelToLegacy(
   if (nivel === 'AMARELO') return 'MODERADO';
   if (nivel === 'LARANJA') return 'ALTO';
   return 'CRITICO';
-}
-
-/**
- * Resolves the canonical fit-for-duty value from the two accepted fields.
- * Returns { conflict: true } if both fields are present with contradictory values.
- * fit_for_duty is the canonical field; apto is accepted as legacy compatibility only.
- */
-function normalizeFitForDutyPayload(
-  input: Pick<CheckinCreateInput, 'fit_for_duty' | 'apto'>,
-): { apto: 0 | 1 } | { conflict: true } | { missing: true } {
-  const hasApto = typeof input.apto === 'number';
-  const hasFitForDuty = typeof input.fit_for_duty === 'boolean';
-  if (hasApto && hasFitForDuty) {
-    if ((input.apto === 1) !== input.fit_for_duty) return { conflict: true };
-    return { apto: input.fit_for_duty ? 1 : 0 };
-  }
-  if (hasFitForDuty) return { apto: input.fit_for_duty ? 1 : 0 };
-  if (hasApto) return { apto: input.apto === 0 ? 0 : 1 };
-  return { missing: true };
 }
 
 function normalizeCheckinInput(
@@ -918,6 +894,8 @@ router.post('/daily-fatigue', requireFatigueCheckinAccess, async (c) => {
 });
 
 router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
+  // A falha após DB.batch() não pode ser apresentada como se o check-in não tivesse sido salvo.
+  let committedCheckinId: string | null = null;
   try {
     const empresaId = getEmpresaId(c);
     const userId = Number(c.get('userId') || 0);
@@ -1225,6 +1203,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
     // daily-key conflict rolls back the entire submission, not only one table.
     try {
       await c.env.DB.batch([checkinWrite, ...readinessStatements, provenanceEvent]);
+      committedCheckinId = checkinId;
     } catch (error) {
       if (!existing?.id) {
         // Another concurrent first submission may have won the active daily key.
@@ -1399,6 +1378,18 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       },
     });
   } catch {
+    if (committedCheckinId) {
+      // A transação canônica já confirmou check-in/readiness/KSS. Não induzir reenvio
+      // quando sync, alertas, auditoria ou contexto operacional falharam depois.
+      return c.json({
+        success: false,
+        error: 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED',
+        checkin_committed: true,
+        checkin_id: committedCheckinId,
+        retry_submission: false,
+        requires_operational_review: true,
+      }, 500);
+    }
     return c.json({ success: false, error: 'Erro ao registrar check-in de fadiga' }, 500);
   }
 });

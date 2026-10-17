@@ -176,8 +176,28 @@ describe('daily check-in atomic commit', () => {
     const { db, batch } = fakeDb({ batchReject: true });
     const response = await router.fetch(request(), { DB: db } as Env, {} as ExecutionContext);
     expect(response.status).toBe(500);
+    expect(await response.json()).not.toHaveProperty('checkin_committed');
     expect(batch).toHaveBeenCalledTimes(1);
     expect(syncMock).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes post-commit sync failure from an unsaved submission', async () => {
+    const { db, batch } = fakeDb();
+    syncMock.mockRejectedValueOnce(new Error('synthetic downstream outage'));
+    const response = await router.fetch(request({ duration_ms: 60000, trials: trials() }),
+      { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(500);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      success: false,
+      error: 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED',
+      checkin_committed: true,
+      retry_submission: false,
+      requires_operational_review: true,
+    });
+    expect(typeof body.checkin_id).toBe('string');
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][0]).toHaveLength(13);
   });
 
   it('returns 409 if competing same-day insert wins, without syncing', async () => {
