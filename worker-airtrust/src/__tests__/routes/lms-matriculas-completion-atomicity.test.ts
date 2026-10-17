@@ -290,7 +290,10 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
     ...overrides,
   });
 
-  it('SCORM finalize: passed/95 without distinct-slide evidence returns 409 and does not issue a qualification', async () => {
+  it('SCORM finalize: passed/95 without proprietary slide ledger still uses the canonical qualification transaction', async () => {
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created', matriculaId: 1, qualificacaoHistoricoId: 777,
+    });
     const { app, db } = makeTestEnv([
       ['FROM lms_matriculas m', { first: () => ({ ...MATRICULA_EM_ANDAMENTO_BASE, tipo_conteudo: 'scorm' }) }],
       ['FROM lms_progresso_scorm', { first: () => finalizingScorm({
@@ -298,12 +301,8 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
       }) }],
     ]);
     const response = await app.fetch(makeFinalizar(1), { DB: db } as Env, {} as ExecutionContext);
-    expect(response.status).toBe(409);
-    const json = await response.json() as { code: string; data: { closure_readiness: { code: string; missing: string[] } } };
-    expect(json.code).toBe('SCORM_COMPLETION_REJECTED');
-    expect(json.data.closure_readiness.code).toBe('PROGRESS_EVIDENCE_MISSING');
-    expect(json.data.closure_readiness.missing).toContain('distinct_slide_coverage');
-    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
   });
 
   it('SCORM finalize: full coverage with failed score or nonterminal package stays blocked', async () => {
@@ -416,7 +415,10 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
     expect(json.data.novo_status).not.toBe('CONCLUIDO');
   });
 
-  it('PATCH status SCORM: ordinary admin path cannot bypass coverage using passed/95', async () => {
+  it('PATCH status SCORM: ordinary admin path delegates passed/95 to the same canonical transaction', async () => {
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created', matriculaId: 1, qualificacaoHistoricoId: 777,
+    });
     const { app, db } = makeTestEnv([
       ['FROM lms_matriculas m', { first: () => ({
         ...MATRICULA_EM_ANDAMENTO_BASE, curso_id: 10, tipo_conteudo: 'scorm',
@@ -429,11 +431,8 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
       makePatchStatus(1, { status: 'CONCLUIDO' }),
       { DB: db } as Env, {} as ExecutionContext,
     );
-    expect(response.status).toBe(409);
-    const json = await response.json() as { data: { closure_readiness: { code: string; missing: string[] } } };
-    expect(json.data.closure_readiness.code).toBe('PROGRESS_EVIDENCE_MISSING');
-    expect(json.data.closure_readiness.missing).toContain('distinct_slide_coverage');
-    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
   });
 
   it('PATCH status SCORM: explicit admin override remains separately audited, never treated as learner PASS', async () => {
@@ -445,6 +444,7 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
         ...MATRICULA_EM_ANDAMENTO_BASE, curso_id: 10, tipo_conteudo: 'scorm',
       }) }],
       ['FROM lms_progresso_scorm', { first: () => finalizingScorm({
+        score_raw: 30,
         cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '3/3' }),
       }) }],
       ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
