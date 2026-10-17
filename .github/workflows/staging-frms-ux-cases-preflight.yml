@@ -57,8 +57,8 @@ jobs:
           [[ "$path" == *frms-ux-30d-production-aggregate.yml ]] || exit 1
           echo FRMS_QA_CASES_SOURCE_PROVENANCE_PASS
 
-  read-only-qa-cases:
-    name: Inspect four QA cases and links (zero writes)
+  d1-qa-cases-readonly-preflight:
+    name: Staging D1 QA readonly preflight of four case links
     needs: guard
     environment: staging
     runs-on: ubuntu-latest
