@@ -159,6 +159,28 @@ function renderDashboard(initialEntry = '/frms') {
 }
 
 describe('FrmsDashboard simplificado', () => {
+  it('não sugere baixa fadiga na fila ao receber um check-in com KSS alto', () => {
+    useFrmsOperationalSnapshotMock.mockReturnValue(state({
+      data: [item({
+        checkin_status: 'RECEBIDO',
+        kss_score: 8,
+        snapshot_status: 'ATENCAO',
+        estado_operacional: 'ATENCAO',
+        alertas: ['KSS_ALTO'],
+        status_operacional_checkin: 'NAO_APTO',
+      })],
+    }));
+    renderDashboard('/frms?data=2026-08-27');
+    const badge = screen.getByLabelText('Check-in diário: Recebido — informativo');
+    expect(badge).toHaveClass('bg-sky-100');
+    expect(badge).not.toHaveClass('bg-emerald-100');
+    expect(badge).toHaveAttribute('title', expect.stringMatching(/não comprova baixa fadiga nem autoriza liberação/i));
+    fireEvent.click(badge.closest('button')!);
+    const drawer = within(screen.getByRole('dialog'));
+    expect(drawer.getByLabelText('Check-in diário: Recebido — informativo')).toHaveClass('bg-sky-50');
+    expect(drawer.getByText(/não comprova baixa fadiga nem autoriza liberação/i)).toBeInTheDocument();
+  });
+
   it('mostra o início declarado no check-in sem fabricar término para dia sem voo', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue(state({ data: [item({
       hora_apresentacao: '07:15',
