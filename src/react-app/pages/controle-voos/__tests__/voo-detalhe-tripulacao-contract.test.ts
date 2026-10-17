@@ -19,4 +19,17 @@ describe('Controle de Voos - gestão de tripulação no voo criado', () => {
     expect(card).toContain('useCriarTripulante');
     expect(card).toContain('useAtualizarTripulante');
   });
+  it('permite informar e alterar a apresentação manual sem substituir tripulante', () => {
+    const card = source('src/react-app/pages/controle-voos/components/ControleVoosTripulacaoCard.tsx');
+    const hooks = source('src/react-app/hooks/useControleVoos.ts');
+    const offline = source('worker-airtrust/src/routes/controle-voos-pilot-offline-core.ts');
+
+    expect(card).toContain('Hora de apresentação (manual)');
+    expect(card).toContain('Editar apresentação');
+    expect(card).toContain("dialog?.mode === 'edit-time'");
+    expect(card).toContain('horario_apresentacao: horarioApresentacao || null');
+    expect(hooks).toContain('...(horario_apresentacao !== undefined ? { horario_apresentacao } : {})');
+    expect(offline).toMatch(/COALESCE\\(\\s*t\\.horario_apresentacao,\\s*\\(/);
+  });
+
 });
