@@ -69,7 +69,7 @@ const {
   isPilotOfflineSyncEnabled: vi.fn(() => false),
   assertOfflineSyncCommandHash: vi.fn(async () => undefined),
   parseOfflineSyncBatch: vi.fn(),
-  applyPilotOfflineSnapshotCommand: vi.fn(async ({ command }: any) => ({
+  applyPilotOfflineSnapshotCommand: vi.fn(async ({ command }: any): Promise<import('../../services/controle-voos/pilot-offline-sync').PilotOfflineSyncCommandResult> => ({
     client_operation_id: command.client_operation_id,
     status: 'accepted',
     server_received_at: '2026-09-09T20:00:00.000Z',
