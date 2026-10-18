@@ -26,6 +26,10 @@ test('line-level CAS refuses wrong owner, date, source, missing journey or previ
     assert.doesNotMatch(op.sql,/\b(?:DELETE|INSERT|DROP|ALTER|REPLACE)\b/i);
     if(op.table==='frms_alerta'){
       assert.match(op.sql,/jornada_id IS NULL AND resolvido=0/);
+      assert.match(op.sql,/created_at='2026-10-(09|10|12|13) 10:00:00'/);
+      assert.match(op.sql,/resolvido_em IS NULL AND resolvido_por IS NULL/);
+      assert.match(op.sql,/visualizado=0 AND visualizado_em IS NULL AND visualizado_por IS NULL/);
+      assert.match(op.sql,/percentual_atingido=112/);
       assert.match(op.sql,/COALESCE\(TRIM\(notas_resolucao\),' '\)=''|COALESCE\(TRIM\(notas_resolucao\),'\)=''|COALESCE\(TRIM\(notas_resolucao\),''\)=''/);
       assert.match(op.sql,/AND .*IS NOT NULL AND .* > 0/s);
       assert.match(op.sql,/tripulante_id=.*FROM funcionarios/s);
@@ -50,7 +54,10 @@ test('SQLite: single reviewed batch changes only 8 QA rows; a drift aborts the w
     const db=new DatabaseSync(':memory:');
     db.exec(`CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, matricula TEXT NOT NULL, ativo INTEGER, deleted_at TEXT);
       CREATE TABLE frms_jornada (id TEXT PRIMARY KEY, empresa_id INTEGER NOT NULL, tripulante_id INTEGER NOT NULL, data TEXT NOT NULL, registrado_por TEXT, origem TEXT, observacao TEXT, duracao_jornada_minutos INTEGER, updated_at TEXT, deleted_at TEXT);
-      CREATE TABLE frms_alerta (id TEXT PRIMARY KEY, tripulante_id INTEGER, jornada_id TEXT, tipo_limite TEXT, nivel TEXT, created_at TEXT, mensagem TEXT, resolvido INTEGER, valor_atual_min INTEGER, valor_limite_min INTEGER, notas_resolucao TEXT, updated_at TEXT, deleted_at TEXT);`);
+      CREATE TABLE frms_alerta (id TEXT PRIMARY KEY, tripulante_id INTEGER, jornada_id TEXT, tipo_limite TEXT, nivel TEXT, created_at TEXT, mensagem TEXT, resolvido INTEGER, resolvido_em TEXT, resolvido_por TEXT,
+      visualizado INTEGER DEFAULT 0, visualizado_em TEXT, visualizado_por TEXT,
+      percentual_atingido REAL DEFAULT 112,
+      valor_atual_min INTEGER, valor_limite_min INTEGER, notas_resolucao TEXT, updated_at TEXT, deleted_at TEXT);`);
     for(let i=1;i<=14;i++)db.prepare('INSERT INTO funcionarios(id,empresa_id,matricula,ativo) VALUES(?,?,?,1)')
       .run(i,999013,'QA-FRMS-UX-'+String(i).padStart(2,'0'));
     db.prepare('INSERT INTO funcionarios(id,empresa_id,matricula,ativo) VALUES(100,7,?,1)')
