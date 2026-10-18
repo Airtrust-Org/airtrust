@@ -43,7 +43,9 @@ function fixture(){
   const driverSha256=sha(readFileSync(driverFile));
   const {privateKey,publicKey}=generateKeyPairSync('ed25519');
   const reviewerKeyId='reviewer-test-key-01';
-  const trustedReviewerKeys={[reviewerKeyId]:publicKey.export({type:'spki',format:'pem'})};
+  const trustedReviewerKeys={[reviewerKeyId]:{
+    reviewerReference:'reviewer-test-01',role:'INDEPENDENT_PEDAGOGICAL_REVIEWER',
+    publicKeyPem:publicKey.export({type:'spki',format:'pem'})}};
   const approvalFile=join(dir,'reviewer-detached-approval.json');
   const approval={kind:'AIRTRUST_SCORM_PEDAGOGICAL_APPROVAL_ED25519_V1',
     reviewerKeyId,packageSha256:candidate.packageSha256,
@@ -203,6 +205,9 @@ test('signer rejects self-asserted identity with absent, untrusted or tampered E
   const f=fixture();try{
     assert.throws(()=>f.sign({approvalFile:undefined}),/TRUSTED_REVIEW_AUTHORITY_MISSING/);
     assert.throws(()=>f.sign({trustedReviewerKeys:{}}),/REVIEW_SIGNATURE_SCOPE_INVALID/);
+    const swapped=structuredClone(f.trustedReviewerKeys);
+    swapped['reviewer-test-key-01'].reviewerReference='different-reviewer';
+    assert.throws(()=>f.sign({trustedReviewerKeys:swapped}),/REVIEWER_IDENTITY_NOT_IN_TRUSTED_REGISTRY/);
     const approval=JSON.parse(readFileSync(f.approvalFile,'utf8'));
     approval.signature=approval.signature.replace(/^./,approval.signature[0]==='A'?'B':'A');
     writeFileSync(f.approvalFile,JSON.stringify(approval));

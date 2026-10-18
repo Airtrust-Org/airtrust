@@ -71,7 +71,15 @@ export function validatePedagogicalReview({reviewFile,driverFile,candidate,
     typeof signed.signature==='string'&&
     /^[A-Za-z0-9+/]{86}==$/.test(signed.signature),
     'REVIEW_SIGNATURE_SCOPE_INVALID');
-  const publicKey=trustedReviewerKeys[signed.reviewerKeyId];
+  const trustedIdentity=trustedReviewerKeys[signed.reviewerKeyId];
+  assert(trustedIdentity&&typeof trustedIdentity==='object'&&
+    Object.keys(trustedIdentity).length===3&&
+    trustedIdentity.reviewerReference===r.reviewerReference&&
+    trustedIdentity.role==='INDEPENDENT_PEDAGOGICAL_REVIEWER'&&
+    typeof trustedIdentity.publicKeyPem==='string'&&
+    trustedIdentity.publicKeyPem.includes('BEGIN PUBLIC KEY'),
+    'REVIEWER_IDENTITY_NOT_IN_TRUSTED_REGISTRY');
+  const publicKey=trustedIdentity.publicKeyPem;
   let key,valid=false,signature;
   const approvalMessage=[
     signed.kind,signed.reviewerKeyId,signed.packageSha256,

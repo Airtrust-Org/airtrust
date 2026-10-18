@@ -256,3 +256,15 @@ Não fazer dispatch, importação, mudança de PR para ready, merge, publicaçã
 em staging de ZIP real ou D1 write remoto enquanto esses insumos/autorização
 não estiverem disponíveis. Um workflow de upload sintético verde não prova
 que a homologação funcional foi executada.
+
+
+### Cadastro de chave e identidade (fail-closed)
+
+O registro protegido `SCORM_QA_REVIEWER_PUBLIC_KEYS_JSON` não é apenas um
+mapa de PEM: cada `reviewerKeyId` deve apontar para um objeto
+`{"reviewerReference":"<id-governado>","role":"INDEPENDENT_PEDAGOGICAL_REVIEWER","publicKeyPem":"<SPKI PEM>"}`.
+A identidade declarada no inventário e na assinatura destacada **precisa
+coincidir** com a identidade registrada, não basta possuir qualquer chave
+confiável. A autorização e a independência do avaliador devem ser aferidas
+por quem administra o registro protegido. Se o cadastro não existir, estiver
+incompleto ou não corresponder ao autor da assinatura, o gate recusa o pacote.
