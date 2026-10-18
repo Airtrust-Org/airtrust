@@ -162,12 +162,22 @@ export function parseEtapaInstant(value: string): Date | null {
   return new Date(Date.UTC(1970, 0, 1, hours, minutes, seconds));
 }
 
-function minutesBetween(start: Date, end: Date): number {
+function isClockOnlyEtapaTime(value: string): boolean {
+  return /^\d{1,2}:\d{2}(?::\d{2})?$/.test(value.trim());
+}
+
+function minutesBetween(
+  start: Date,
+  end: Date,
+  startClockOnly: boolean,
+  endClockOnly: boolean,
+): number | null {
+  // Comparing a synthetic 1970 clock time against an actual ISO instant can
+  // create decades-long durations or a silently clamped 00:00 time.
+  if (startClockOnly !== endClockOnly) return null;
   let diffMs = end.getTime() - start.getTime();
-  // Clock-only HH:MM crossing midnight (same synthetic day).
-  if (diffMs < 0 && start.getUTCFullYear() === 1970 && end.getUTCFullYear() === 1970) {
-    diffMs += 24 * 60 * 60 * 1000;
-  }
+  if (diffMs < 0 && startClockOnly) diffMs += 24 * 60 * 60 * 1000;
+  if (diffMs < 0) return null;
   return Math.round(diffMs / 60_000);
 }
 
@@ -198,7 +208,10 @@ export function computeEtapaTempos(
     const start = parseEtapaInstant(decolagem);
     const end = parseEtapaInstant(pouso);
     if (start && end) {
-      tempoDecolagemPouso = formatMinutesAsHhMm(minutesBetween(start, end));
+      const duration = minutesBetween(
+        start, end, isClockOnlyEtapaTime(decolagem), isClockOnlyEtapaTime(pouso),
+      );
+      if (duration !== null) tempoDecolagemPouso = formatMinutesAsHhMm(duration);
     }
   }
 
@@ -207,7 +220,10 @@ export function computeEtapaTempos(
     const start = parseEtapaInstant(motorLigado);
     const end = parseEtapaInstant(totalEnd);
     if (start && end) {
-      tempoTotal = formatMinutesAsHhMm(minutesBetween(start, end));
+      const duration = minutesBetween(
+        start, end, isClockOnlyEtapaTime(motorLigado), isClockOnlyEtapaTime(totalEnd),
+      );
+      if (duration !== null) tempoTotal = formatMinutesAsHhMm(duration);
     }
   } else if (tempoDecolagemPouso) {
     tempoTotal = tempoDecolagemPouso;
@@ -362,6 +378,23 @@ export function validateEtapaInput(input: EtapaInput): void {
     }
   }
 
+  // A single leg may be entirely clock-only (legacy) or entirely dated ISO.
+  // Mixing domains fabricates years of flight time; reject before SQL writes.
+  const populatedTimes = [
+    input.horario_motor_ligado,
+    input.horario_decolagem,
+    input.horario_pouso,
+    input.horario_motor_desligado,
+  ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+  if (populatedTimes.some(isClockOnlyEtapaTime) &&
+      populatedTimes.some((value) => !isClockOnlyEtapaTime(value))) {
+    throw new ApiError(
+      'Horarios da etapa devem usar o mesmo formato (HH:MM ou data/hora completa)',
+      400,
+      'CONTROLE_VOOS_ETAPA_HORARIO_FORMATOS_INCOMPATIVEIS',
+    );
+  }
+
   assertTimeOrder(
     input.horario_decolagem,
     input.horario_pouso,
@@ -506,8 +539,16 @@ export function computeFlightTotalsFromEtapas(
       const start = parseEtapaInstant(etapa.horario_decolagem);
       const end = parseEtapaInstant(etapa.horario_pouso);
       if (start && end) {
-        totalMinutes += minutesBetween(start, end);
-        hasTempo = true;
+        const duration = minutesBetween(
+          start, end,
+          isClockOnlyEtapaTime(etapa.horario_decolagem),
+          isClockOnlyEtapaTime(etapa.horario_pouso),
+        );
+        // Invalid/mixed historical instants cannot become fictitious flight hours.
+        if (duration !== null) {
+          totalMinutes += duration;
+          hasTempo = true;
+        }
       }
     }
 
