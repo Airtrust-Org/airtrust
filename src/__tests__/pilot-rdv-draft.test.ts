@@ -191,6 +191,8 @@ describe('Pilot RDV operational calculations', () => {
     };
     expect(calcStageTotalWeight({ ...safe, unidade_peso: 'STONE' })).toBeNull();
     expect(calcStageTotalWeight({ ...safe, combustivel_inicio: '800', unidade_combustivel: 'STONE' })).toBeNull();
+    expect(calcStageTotalWeight({ ...safe, combustivel_inicio: '800', unidade_combustivel: '' })).toBeNull();
+    expect(calcStageTotalWeight({ ...safe, combustivel_inicio: '800' })).toBeNull();
     expect(calcStageTotalWeight({ ...safe, payload: '100', unidade_payload: 'STONE' })).toBeNull();
     expect(calcStageTotalWeight({ ...safe, payload: '100', unidade_payload: 'KG' }))
       .toBeCloseTo(11070.462, 3);

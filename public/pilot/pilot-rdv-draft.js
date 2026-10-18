@@ -240,8 +240,13 @@ export function calcStageTotalWeight(fields) {
   if (parseNumber(fields?.payload) !== null && payload === null) return null;
   if (payload !== null) total += payload;
 
-  const fuel = convertWeight(fields?.combustivel_inicio, fields?.unidade_combustivel, unit);
-  if (parseNumber(fields?.combustivel_inicio) !== null && fuel === null) return null;
+  const fuelAmount = parseNumber(fields?.combustivel_inicio);
+  const fuelUnit = String(fields?.unidade_combustivel || '').trim().toUpperCase();
+  // Fuel has its own unit and cannot inherit the cargo/aircraft unit: an
+  // absent unit might mean LB or KG and must not change a flight's total.
+  if (fuelAmount !== null && !['KG', 'LB'].includes(fuelUnit)) return null;
+  const fuel = convertWeight(fuelAmount, fuelUnit, unit);
+  if (fuelAmount !== null && fuel === null) return null;
   if (fuel !== null) total += fuel;
 
   return Number(total.toFixed(3));
