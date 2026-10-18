@@ -169,6 +169,7 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
   if (!Array.isArray(fuelingsRaw) || fuelingsRaw.length > 16) {
     throw new ApiError('Abastecimentos offline invalidos', 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELINGS_INVALID');
   }
+  const seenFuelingIds = new Set<string>();
   const fuelings = fuelingsRaw.map((entry, index): SnapshotFuelingPayload => {
     if (!isPlainObject(entry)) {
       throw new ApiError(`Abastecimento offline invalido no indice ${index}`, 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_INVALID');
@@ -193,6 +194,12 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     ) {
       throw new ApiError(`Abastecimento offline incompleto no indice ${index}`, 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_INVALID');
     }
+    // Each physical fueling has one stable client identity within a snapshot.
+    // Never collapse different IDs by supplier, timestamp, amount or stage.
+    if (seenFuelingIds.has(localId)) {
+      throw new ApiError('Abastecimento com identidade local duplicada no snapshot', 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_LOCAL_ID_DUPLICATE');
+    }
+    seenFuelingIds.add(localId);
     return {
       client_local_id: localId,
       data_hora: dataHora,
