@@ -24,3 +24,19 @@ test('preexisting FRMS 0552 workflow remains governed', () => {
     'FRMS_SLEEP_OPPORTUNITY_COLUMN_POSTCONDITION_FAILED', 'FRMS_CHECKIN_TABLE_MISSING',
   ]) assert.ok(workflow.includes(requirement), requirement);
 });
+
+test('0560 has separate governed stage authorization and preserves evidence', () => {
+  for (const guard of [
+    'simulator-individual-check-delete-guard-0560',
+    '0560_simulator_individual_check_delete_guard.sql',
+    '5fe67c81dda03681d9a73eec4cc51989bd92270e4eca6b41b1eb1028b58b9e56',
+    'b00948f0821692fb322cd18dc795769d8f03b057db7af9c9b729747d9d2b1463',
+    'SIMULATOR_0554_DEPENDENCY_LEDGER_MISMATCH',
+    'SIMULATOR_0560_DELETE_TRIGGER_ALREADY_PRESENT',
+    'SIMULATOR_0560_TRIGGERS_POSTCONDITION_FAILED',
+    'trg_checks_individuais_confirmed_immutable',
+    'trg_checks_individuais_delete_guard',
+    'SIMULATOR_0560_EVIDENCE_COUNT_CHANGED',
+    'steps.preflight.outputs.evidence_count',
+  ]) assert.ok(workflow.includes(guard), guard);
+});
