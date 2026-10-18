@@ -386,6 +386,95 @@ export async function gerarQualificacaoDaFicha(
         tipo: 'fap',
       });
     }
+
+    if (individualSchema && alunoEmpresaId) {
+      const approvedQualifIds = new Set<number>(
+        (checksMarcados.results || []).map((c) => Number(c.qualificacao_tipo_id)),
+      );
+      if (qid && tipoQualifId) {
+        approvedQualifIds.add(Number(tipoQualifId));
+      }
+      const existingFromFicha = await db
+        .prepare(
+          `SELECT id, qualificacao_id, qualificacao_codigo, observacoes
+             FROM qualificacoes_historico
+            WHERE funcionario_id = ?
+              AND empresa_id = ?
+              AND deleted_at IS NULL
+              AND (
+                observacoes = ?
+                OR observacoes LIKE ?
+                OR observacoes LIKE ?
+                OR observacoes LIKE ?
+              )`,
+        )
+        .bind(
+          colaboradorId,
+          alunoEmpresaId,
+          `Gerado da ficha #${fid}`,
+          `Gerado da ficha #${fid} |%`,
+          `FAP da ficha #${fid} —%`,
+          `FAP gerada da ficha #${fid}%`,
+        )
+        .all<{
+          id: number;
+          qualificacao_id: number | null;
+          qualificacao_codigo: string | null;
+          observacoes: string | null;
+        }>();
+
+      for (const row of existingFromFicha.results || []) {
+        if (!approvedQualifIds.has(Number(row.qualificacao_id || 0))) {
+          const obsRevogada = `${row.observacoes || ''} | Revogada após revisão de evidência individual da ficha #${fid}`;
+          await db
+            .prepare(
+              `UPDATE qualificacoes_historico
+                  SET deleted_at = datetime('now'),
+                      status = 'CANCELADA',
+                      observacoes = ?,
+                      updated_at = datetime('now')
+                WHERE id = ? AND empresa_id = ?`,
+            )
+            .bind(obsRevogada, row.id, alunoEmpresaId)
+            .run();
+          if (row.qualificacao_id != null) {
+            await db
+              .prepare(
+                `UPDATE qualificacoes_historico
+                    SET renovada = 0,
+                        status = 'CONCLUIDA',
+                        updated_at = datetime('now')
+                  WHERE funcionario_id = ?
+                    AND empresa_id = ?
+                    AND qualificacao_id = ?
+                    AND deleted_at IS NULL
+                    AND renovada = 1
+                    AND observacoes LIKE ?`,
+              )
+              .bind(
+                colaboradorId,
+                alunoEmpresaId,
+                row.qualificacao_id,
+                `%Renovada via ficha #${fid}%`,
+              )
+              .run();
+          }
+          await audit(db, {
+            tabela: 'qualificacoes_historico',
+            acao: 'DELETE',
+            registro_id: row.id,
+            dados_anteriores: row,
+            dados_novos: {
+              id: row.id,
+              qualificacao_id: row.qualificacao_id,
+              qualificacao_codigo: row.qualificacao_codigo,
+              status: 'CANCELADA',
+              motivo: `Evidência individual não aprovada na ficha #${fid}`,
+            },
+          });
+        }
+      }
+    }
   }
 
   const tipoCurricularResolvido = isTipoCurricularSemestral(

@@ -239,4 +239,42 @@ describe('individual evidence for simulator-generated FAP (real SQLite)', () => 
       .toHaveLength(1);
   });
 
+  it('revokes any premature qualification history row from a ficha whose individual check is rejected or pending', async () => {
+    db!.database.exec(`
+      CREATE TABLE sessoes_checks_resultados_individuais (
+        id INTEGER PRIMARY KEY, empresa_id INTEGER, ficha_id INTEGER,
+        funcionario_id INTEGER, sessao_check_id INTEGER,
+        aprovado INTEGER, estado TEXT, deleted_at TEXT
+      );
+      INSERT INTO fichas_sessao
+        (id,empresa_id,colaborador_id_aluno,agendamento_slot_id,tipo_sessao,data_sessao,status,aprovado)
+      VALUES(71,1,1001,60,'PER','2026-07-21','APROVADO',1);
+      INSERT INTO sessoes_checks_resultados_individuais
+        (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
+      VALUES(2,1,71,1001,50,0,'CONFIRMADO');
+      INSERT INTO qualificacoes_historico
+        (id,funcionario_id,qualificacao_id,qualificacao_codigo,categoria,data_conclusao,data_vencimento,validade_meses,observacoes,status,renovada,empresa_id,created_at,updated_at)
+      VALUES
+        (501,1001,103,'SIX','MANUTENCAO','2026-07-21','2027-01-21',6,'FAP gerada da ficha #71 (check legado inequívoco)','CONCLUIDA',0,1,datetime('now'),datetime('now'));
+    `);
+
+    await expect(gerarQualificacaoDaFicha(db!.asD1(), 71))
+      .rejects.toThrow(/Nenhuma qualificação foi gerada/);
+
+    const revoked = db!.database
+      .prepare('SELECT status, deleted_at, observacoes FROM qualificacoes_historico WHERE id = 501')
+      .get() as { status: string; deleted_at: string | null; observacoes: string };
+    expect(revoked.status).toBe('CANCELADA');
+    expect(revoked.deleted_at).not.toBeNull();
+    expect(revoked.observacoes).toContain('Revogada após revisão de evidência individual da ficha #71');
+    expect(mocks.audit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        tabela: 'qualificacoes_historico',
+        acao: 'DELETE',
+        registro_id: 501,
+      }),
+    );
+  });
+
 });

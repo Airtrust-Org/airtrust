@@ -82,6 +82,7 @@ interface CheckSessao {
   observacoes?: string;
   estado?: string | null;
   evidencia_id?: number | null;
+  revisao_numero?: number | null;
   data_vencimento?: string | null;
   confirmado_em?: string | null;
 }
@@ -504,6 +505,7 @@ export default function FichaDetalhe() {
             estado:string | null;
             data_vencimento:string | null;
             evidencia_id:number | null;
+            revisao_numero?:number | null;
             confirmado_em:string | null;
           }>;
         };
@@ -518,6 +520,7 @@ export default function FichaDetalhe() {
           estado:check.estado,
           data_vencimento:check.data_vencimento,
           evidencia_id:check.evidencia_id,
+          revisao_numero:check.revisao_numero ?? null,
           confirmado_em:check.confirmado_em,
         })));
         setChecksResultados(Object.fromEntries(payload.data.map((check) => [
@@ -850,6 +853,70 @@ export default function FichaDetalhe() {
   };
   // ────────────────────────────────────────────────────────────────────────────
 
+  const salvarChecksIndividuaisAoAssinar = async () => {
+    const resultados = buildChecksPayload();
+    const sigToken = getAccessToken();
+    let saved = 0;
+    let qualificacoesGeradas: Array<{
+      codigo?: string;
+      nome: string;
+      valida_ate: string;
+      tipo?: string;
+    }> = [];
+
+    for (const resultado of resultados) {
+      const r = await appFetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sigToken ? { Authorization: `Bearer ${sigToken}` } : {}),
+        },
+        body: JSON.stringify(resultado),
+      });
+      if (r.ok) {
+        saved++;
+        const payload = (await r.json().catch(() => null)) as {
+          qualificacao?: {
+            ok?: boolean;
+            qualificacoes_geradas?: Array<{
+              codigo?: string;
+              nome: string;
+              valida_ate: string;
+              tipo?: string;
+            }>;
+            data?: {
+              qualificacoes_geradas?: Array<{
+                codigo?: string;
+                nome: string;
+                valida_ate: string;
+                tipo?: string;
+              }>;
+            };
+          };
+        } | null;
+        const geradasPayload =
+          payload?.qualificacao?.qualificacoes_geradas ||
+          payload?.qualificacao?.data?.qualificacoes_geradas;
+        if (geradasPayload?.length) {
+          qualificacoesGeradas = geradasPayload;
+        }
+      } else {
+        // The signature is already committed. Preserve that fact and
+        // make any incomplete individual-check action explicit.
+        toast.error(
+          `Assinatura salva, mas ${resultados.length - saved} check(s) exigem revisão individual.`,
+        );
+        break;
+      }
+    }
+
+    if (saved === resultados.length && saved > 0) {
+      toast.success(`${saved} resultado(s) individuais confirmados.`);
+    }
+
+    return { saved, total: resultados.length, qualificacoesGeradas };
+  };
+
   const handleAssinarInline = async () => {
     if (!id) return;
     if (!assinado) {
@@ -877,7 +944,7 @@ export default function FichaDetalhe() {
         }
 
         const resultados = buildChecksPayload();
-        if (resultados.length > 0) {
+        if (resultados.length > 0 && !modoCheckIndividual) {
           const resChecks = await fetch(
             `${API_BASE_URL}/simuladores/sessoes/${ficha.sessao_id}/checks/resultados`,
             {
@@ -892,13 +959,15 @@ export default function FichaDetalhe() {
           if (!resChecks.ok) {
             const e = await resChecks.json();
             if (resChecks.status === 409 && e.code === 'INDIVIDUAL_CHECK_EVIDENCE_REQUIRED') {
-              toast.warning('Sessão compartilhada: a ficha será assinada sem aprovar checks coletivos. Avaliação individual pendente.');
+              toast.warning(
+                'Sessão compartilhada: a ficha será assinada sem aprovar checks coletivos. Avaliação individual pendente.',
+              );
             } else {
               toast.error(e.error || 'Erro ao salvar checks');
               return;
             }
           }
-        } else {
+        } else if (resultados.length === 0) {
           toast.warning('Nenhuma FAP foi marcada. A assinatura será salva sem atualizar checks.');
         }
       }
@@ -907,7 +976,10 @@ export default function FichaDetalhe() {
       const payload: Record<string, unknown> = { tipo };
       if (tipo === 'INSTRUTOR') {
         payload.aprovado = aprovadoInline;
-        if (deveGerarQualificacaoAoAssinar(ficha, aprovadoInline)) {
+        if (
+          deveGerarQualificacaoAoAssinar(ficha, aprovadoInline) &&
+          !(modoCheckIndividual && ficha?.is_check === 1)
+        ) {
           payload.gerar_qualificacao = true;
         }
       }
@@ -935,7 +1007,13 @@ export default function FichaDetalhe() {
           };
           error?: string;
         };
-        const geradas = data.data?.qualificacoes_geradas || [];
+        let geradas = data.data?.qualificacoes_geradas || [];
+        if (tipo === 'INSTRUTOR' && modoCheckIndividual && ficha?.is_check === 1) {
+          const indivRes = await salvarChecksIndividuaisAoAssinar();
+          if (indivRes.qualificacoesGeradas.length > 0) {
+            geradas = indivRes.qualificacoesGeradas;
+          }
+        }
         if (tipo === 'INSTRUTOR' && aprovadoInline === true && geradas.length > 0) {
           exibirResumoQualificacoesGeradas(
             geradas,
@@ -998,9 +1076,13 @@ export default function FichaDetalhe() {
 
           if (!responseChecks.ok) {
             const error = await responseChecks.json();
-            if (responseChecks.status === 409 &&
-                error.code === 'INDIVIDUAL_CHECK_EVIDENCE_REQUIRED') {
-              toast.warning('Sessão compartilhada: assinatura permitida, mas a FAP exige avaliação individual.');
+            if (
+              responseChecks.status === 409 &&
+              error.code === 'INDIVIDUAL_CHECK_EVIDENCE_REQUIRED'
+            ) {
+              toast.warning(
+                'Sessão compartilhada: assinatura permitida, mas a FAP exige avaliação individual.',
+              );
             } else {
               console.error('[CHECKS] Erro ao salvar:', error);
               toast.error(error.error || 'Erro ao salvar resultados dos checks');
@@ -1031,38 +1113,39 @@ export default function FichaDetalhe() {
             ? { aprovado: aprovadoInstrutor }
             : {}),
           ...(tipo === 'INSTRUTOR' &&
-          deveGerarQualificacaoAoAssinar(ficha, aprovadoInstrutor ?? null)
+          deveGerarQualificacaoAoAssinar(ficha, aprovadoInstrutor ?? null) &&
+          !(modoCheckIndividual && ficha?.is_check === 1)
             ? { gerar_qualificacao: true }
             : {}),
         }),
       });
 
       if (response.ok) {
+        const data = (await response.json().catch(() => null)) as {
+          data?: {
+            qualificacoes_geradas?: Array<{
+              codigo?: string;
+              nome: string;
+              valida_ate: string;
+              tipo?: string;
+            }>;
+          };
+        } | null;
+        let geradas = data?.data?.qualificacoes_geradas || [];
         if (tipo === 'INSTRUTOR' && modoCheckIndividual && ficha?.is_check === 1) {
-          const resultados = buildChecksPayload();
-          let saved = 0;
-          for (const resultado of resultados) {
-            const r = await appFetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
-              method:'POST',
-              headers: {
-                'Content-Type':'application/json',
-                ...(_sigToken ? { Authorization:`Bearer ${_sigToken}` } : {}),
-              },
-              body:JSON.stringify(resultado),
-            });
-            if (r.ok) saved++;
-            else {
-              // The signature is already committed. Preserve that fact and
-              // make any incomplete individual-check action explicit.
-              toast.error(`Assinatura salva, mas ${resultados.length-saved} check(s) exigem revisão individual.`);
-              break;
-            }
-          }
-          if (saved === resultados.length && saved > 0) {
-            toast.success(`${saved} resultado(s) individuais confirmados.`);
+          const indivRes = await salvarChecksIndividuaisAoAssinar();
+          if (indivRes.qualificacoesGeradas.length > 0) {
+            geradas = indivRes.qualificacoesGeradas;
           }
         }
-        toast.success('Assinatura registrada com sucesso!');
+        if (tipo === 'INSTRUTOR' && aprovadoInstrutor === true && geradas.length > 0) {
+          exibirResumoQualificacoesGeradas(
+            geradas,
+            `Assinatura registrada e ${geradas.length} qualificação(ões) gerada(s).`,
+          );
+        } else {
+          toast.success('Assinatura registrada com sucesso!');
+        }
         setModalAssinatura({ isOpen: false, papel: 'TRIPULANTE' });
         carregarFicha();
       } else {
@@ -1077,9 +1160,12 @@ export default function FichaDetalhe() {
 
   const confirmarChecksIndividuais = async () => {
     if (!id || !ficha || !modoCheckIndividual || salvandoChecksIndividuais) return;
-    const toSave = checks.filter((check) => check.estado !== 'CONFIRMADO' &&
-      (checksResultados[check.id]?.aprovado === true ||
-       checksResultados[check.id]?.aprovado === false));
+    const toSave = checks.filter(
+      (check) =>
+        check.estado !== 'CONFIRMADO' &&
+        (checksResultados[check.id]?.aprovado === true ||
+          checksResultados[check.id]?.aprovado === false),
+    );
     if (!toSave.length) {
       toast.warning('Selecione a aprovação ou reprovação de um check pendente.');
       return;
@@ -1088,26 +1174,70 @@ export default function FichaDetalhe() {
     try {
       const token = getAccessToken();
       let saved = 0;
+      let qualificacoesGeradas: Array<{
+        codigo?: string;
+        nome: string;
+        valida_ate: string;
+        tipo?: string;
+      }> = [];
       for (const check of toSave) {
-        const response = await appFetch(`${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`, {
-          method:'POST',
-          headers:{
-            'Content-Type':'application/json',
-            ...(token ? { Authorization:`Bearer ${token}` } : {}),
+        const response = await appFetch(
+          `${API_BASE_URL}/simuladores/fichas/${id}/checks-individuais`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              sessao_check_id: check.id,
+              aprovado: checksResultados[check.id].aprovado,
+              observacoes: checksResultados[check.id].observacoes,
+            }),
           },
-          body:JSON.stringify({
-            sessao_check_id:check.id,
-            aprovado:checksResultados[check.id].aprovado,
-            observacoes:checksResultados[check.id].observacoes,
-          }),
-        });
+        );
         if (!response.ok) {
-          toast.error('Um check individual não pôde ser confirmado. Os anteriores permanecem registrados.');
+          toast.error(
+            'Um check individual não pôde ser confirmado. Os anteriores permanecem registrados.',
+          );
           break;
         }
         saved++;
+        const payload = (await response.json().catch(() => null)) as {
+          qualificacao?: {
+            qualificacoes_geradas?: Array<{
+              codigo?: string;
+              nome: string;
+              valida_ate: string;
+              tipo?: string;
+            }>;
+            data?: {
+              qualificacoes_geradas?: Array<{
+                codigo?: string;
+                nome: string;
+                valida_ate: string;
+                tipo?: string;
+              }>;
+            };
+          };
+        } | null;
+        const geradasPayload =
+          payload?.qualificacao?.qualificacoes_geradas ||
+          payload?.qualificacao?.data?.qualificacoes_geradas;
+        if (geradasPayload?.length) {
+          qualificacoesGeradas = geradasPayload;
+        }
       }
-      if (saved) toast.success(`${saved} check(s) individuais confirmados.`);
+      if (saved > 0) {
+        if (qualificacoesGeradas.length > 0) {
+          exibirResumoQualificacoesGeradas(
+            qualificacoesGeradas,
+            `${saved} check(s) individuais confirmados e ${qualificacoesGeradas.length} qualificação(ões) gerada(s).`,
+          );
+        } else {
+          toast.success(`${saved} check(s) individuais confirmados.`);
+        }
+      }
       await carregarFicha();
     } finally {
       setSalvandoChecksIndividuais(false);
@@ -1222,34 +1352,116 @@ export default function FichaDetalhe() {
                 </p>
                 {checks.map((check) => {
                   const confirmed = check.estado === 'CONFIRMADO';
+                  const isApproved =
+                    confirmed && (check.aprovado === 1 || check.aprovado === true);
                   const chosen = checksResultados[check.id]?.aprovado;
                   const status = confirmed
-                    ? (check.aprovado === 1 || check.aprovado === true ? 'APROVADO' : 'REPROVADO')
+                    ? isApproved
+                      ? 'APROVADO'
+                      : 'REPROVADO'
                     : 'PENDENTE DE AVALIAÇÃO';
+                  const badgeClass = confirmed
+                    ? isApproved
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                      : 'bg-rose-100 text-rose-800 border-rose-200'
+                    : 'bg-amber-100 text-amber-800 border-amber-200';
                   const actor = user?.funcionario_id;
-                  const evaluator = !!actor &&
+                  const evaluator =
+                    !!actor &&
                     (String(actor) === String(ficha.instrutor_id) ||
-                     (ficha.examinador_id != null &&
-                      String(actor) === String(ficha.examinador_id)));
+                      (ficha.examinador_id != null &&
+                        String(actor) === String(ficha.examinador_id)));
                   return (
-                    <div key={check.id} className="flex flex-wrap gap-3 items-center border-t py-2 text-sm">
-                      <span className="font-semibold">{check.codigo} — {check.nome}</span>
-                      <span className={confirmed ? 'text-slate-700' : 'text-amber-700'}>
-                        {status}
-                        {confirmed && (check.aprovado === 1 || check.aprovado === true) &&
-                          check.data_vencimento ? ` · Válido até ${formatarDataLocalSemUTC(check.data_vencimento)}` : ''}
-                      </span>
+                    <div key={check.id} className="border-t py-3 text-sm space-y-2">
+                      <div className="flex flex-wrap gap-3 items-center">
+                        <span className="font-semibold text-slate-900">
+                          {check.codigo} — {check.nome}
+                        </span>
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badgeClass}`}
+                        >
+                          {status}
+                        </span>
+                        <span className="text-xs text-slate-600">
+                          {confirmed && check.evidencia_id ? `Evidência #${check.evidencia_id}` : ''}
+                          {confirmed && Number(check.revisao_numero || 1) > 1
+                            ? ` · Revisão #${check.revisao_numero}`
+                            : ''}
+                          {confirmed && check.confirmado_em
+                            ? ` · Confirmado em ${formatarDataLocalSemUTC(check.confirmado_em)}`
+                            : ''}
+                          {isApproved && check.data_vencimento
+                            ? ` · Válido até ${formatarDataLocalSemUTC(check.data_vencimento)}`
+                            : ''}
+                          {!confirmed && !evaluator
+                            ? 'Sem evidência individual registrada — FAP não emitida até avaliação individual pelo instrutor/examinador da ficha.'
+                            : ''}
+                        </span>
+                        {confirmed && (
+                          <span className="ml-auto inline-flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                            Evidência imutável
+                          </span>
+                        )}
+                        {!confirmed && evaluator && (
+                          <div className="ml-auto flex gap-2">
+                            <button
+                              type="button"
+                              className={
+                                chosen === true ? 'font-bold text-green-700' : 'text-slate-600'
+                              }
+                              onClick={() =>
+                                setChecksResultados((prev) => ({
+                                  ...prev,
+                                  [check.id]: {
+                                    aprovado: true,
+                                    observacoes: prev[check.id]?.observacoes || '',
+                                  },
+                                }))
+                              }
+                            >
+                              Aprovado
+                            </button>
+                            <button
+                              type="button"
+                              className={
+                                chosen === false ? 'font-bold text-red-700' : 'text-slate-600'
+                              }
+                              onClick={() =>
+                                setChecksResultados((prev) => ({
+                                  ...prev,
+                                  [check.id]: {
+                                    aprovado: false,
+                                    observacoes: prev[check.id]?.observacoes || '',
+                                  },
+                                }))
+                              }
+                            >
+                              Reprovado
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {confirmed && check.observacoes && (
+                        <p className="text-xs text-slate-600">
+                          <strong>Observações:</strong> {check.observacoes}
+                        </p>
+                      )}
                       {!confirmed && evaluator && (
-                        <div className="ml-auto flex gap-2">
-                          <button type="button" className={chosen === true ? 'font-bold text-green-700' : 'text-slate-600'}
-                            onClick={() => setChecksResultados((prev) => ({
-                              ...prev, [check.id]: { aprovado:true, observacoes:prev[check.id]?.observacoes || '' },
-                            }))}>Aprovado</button>
-                          <button type="button" className={chosen === false ? 'font-bold text-red-700' : 'text-slate-600'}
-                            onClick={() => setChecksResultados((prev) => ({
-                              ...prev, [check.id]: { aprovado:false, observacoes:prev[check.id]?.observacoes || '' },
-                            }))}>Reprovado</button>
-                        </div>
+                        <input
+                          type="text"
+                          value={checksResultados[check.id]?.observacoes || ''}
+                          onChange={(e) =>
+                            setChecksResultados((prev) => ({
+                              ...prev,
+                              [check.id]: {
+                                aprovado: prev[check.id]?.aprovado ?? null,
+                                observacoes: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder={`Observações individuais para ${check.codigo} (opcional)`}
+                          className="w-full rounded border border-slate-300 px-2.5 py-1.5 text-xs"
+                        />
                       )}
                     </div>
                   );
@@ -1258,13 +1470,18 @@ export default function FichaDetalhe() {
                   !!user?.funcionario_id &&
                   (String(user.funcionario_id) === String(ficha.instrutor_id) ||
                     (ficha.examinador_id != null &&
-                    String(user.funcionario_id) === String(ficha.examinador_id))) && (
-                  <button type="button" onClick={confirmarChecksIndividuais}
-                    disabled={salvandoChecksIndividuais}
-                    className="mt-3 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
-                    {salvandoChecksIndividuais ? 'Confirmando...' : 'Confirmar resultados individuais'}
-                  </button>
-                )}
+                      String(user.funcionario_id) === String(ficha.examinador_id))) && (
+                    <button
+                      type="button"
+                      onClick={confirmarChecksIndividuais}
+                      disabled={salvandoChecksIndividuais}
+                      className="mt-3 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      {salvandoChecksIndividuais
+                        ? 'Confirmando...'
+                        : 'Confirmar resultados individuais'}
+                    </button>
+                  )}
               </section>
             )}
             {/* Cabeçalho da Ficha */}
@@ -2516,7 +2733,13 @@ export default function FichaDetalhe() {
                 {/* Botão Gerar Qualificação — fichas do fluxo de check aprovadas pelo instrutor */}
                 {ficha.aprovado === 1 &&
                   fichaGeraQualificacao &&
-                  ficha.assinatura_instrutor_timestamp && (
+                  ficha.assinatura_instrutor_timestamp &&
+                  (!(modoCheckIndividual && ficha.is_check === 1) ||
+                    checks.some(
+                      (check) =>
+                        check.estado === 'CONFIRMADO' &&
+                        (check.aprovado === 1 || check.aprovado === true),
+                    )) && (
                     <button
                       onClick={async () => {
                         try {

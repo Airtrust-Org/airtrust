@@ -238,4 +238,41 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
     expect((await request(112, payload)).status).toBe(409);
     expect(evidence()).toHaveLength(1);
   });
+
+  it('blocks physical DELETE and UPDATE of confirmed evidence while allowing governed re-evaluation on a new signed ficha', async () => {
+    setup();
+    expect((await request(112, result(false))).status).toBe(201);
+    const prior = db!.database
+      .prepare('SELECT id, revisao_numero FROM sessoes_checks_resultados_individuais WHERE funcionario_id = 1000')
+      .get() as { id: number; revisao_numero: number };
+    expect(prior.revisao_numero).toBe(1);
+
+    expect(() =>
+      db!.database
+        .prepare('DELETE FROM sessoes_checks_resultados_individuais WHERE id = ?')
+        .run(prior.id),
+    ).toThrow(/INDIVIDUAL_CHECK_DELETE_FORBIDDEN/);
+
+    expect(() =>
+      db!.database
+        .prepare('UPDATE sessoes_checks_resultados_individuais SET aprovado = 1 WHERE id = ?')
+        .run(prior.id),
+    ).toThrow(/INDIVIDUAL_CHECK_CONFIRMED_IMMUTABLE/);
+
+    db!.database.exec(`
+      INSERT INTO fichas_sessao (
+        id, empresa_id, agendamento_slot_id, colaborador_id_aluno, instrutor_id,
+        aprovado, status, assinatura_aluno_timestamp, assinatura_instrutor_timestamp, data_sessao, deleted_at
+      ) VALUES (114, 1, 10, 1000, 1100, 1, 'APROVADO', '2026-10-18', '2026-10-18', '2026-10-18', NULL);
+    `);
+
+    const reevalRes = await request(114, { ...result(true), revisao_de_id: prior.id });
+    expect(reevalRes.status).toBe(201);
+    const reevalJson = (await reevalRes.json()) as any;
+    expect(reevalJson.data).toMatchObject({
+      aprovado: 1,
+      estado: 'CONFIRMADO',
+      revisao_numero: 2,
+    });
+  });
 });

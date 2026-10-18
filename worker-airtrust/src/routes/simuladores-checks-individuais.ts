@@ -106,7 +106,12 @@ const privilegedReaders = new Set(['ADMIN', 'ADMINISTRADOR', 'COMPLIANCE', 'GEST
  * never roll back the signed evidence or fabricate success.
  */
 async function refreshQualification(db: D1Database, fichaId: number, approved: boolean, fichaApproved: boolean) {
-  if (!approved || !fichaApproved) return { estado:'SEM_APROVACAO_DE_CHECK' };
+  if (!approved || !fichaApproved) {
+    if (fichaApproved) {
+      await gerarQualificacaoDaFicha(db, fichaId).catch(() => null);
+    }
+    return { estado:'SEM_APROVACAO_DE_CHECK' };
+  }
   try {
     const result = await gerarQualificacaoDaFicha(db, fichaId);
     return {
