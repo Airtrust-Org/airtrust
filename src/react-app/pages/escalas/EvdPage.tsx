@@ -1838,9 +1838,6 @@ export default function EvdPage() {
                               title={buildFrmsTooltipLabel(picSignal, picFortnight)}
                             >
                               {picFrms.short}
-                              {picFrms.isEstimated && (
-                                <span className="font-normal opacity-70">Est.</span>
-                              )}
                               <ExternalLink className="h-2 w-2 opacity-50" />
                             </Link>
                             {picFrmsSummary ? (
@@ -1875,9 +1872,6 @@ export default function EvdPage() {
                               title={buildFrmsTooltipLabel(sicSignal, sicFortnight)}
                             >
                               {sicFrms.short}
-                              {sicFrms.isEstimated && (
-                                <span className="font-normal opacity-70">Est.</span>
-                              )}
                               <ExternalLink className="h-2 w-2 opacity-50" />
                             </Link>
                             {sicFrmsSummary ? (
