@@ -53,6 +53,8 @@ export interface Env {
   NATIVE_COMPLETION_WRITE_ENABLED_TENANTS?: string;
   // Independent staging-only gate for module-scoped Player3 grading; default OFF.
   PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS?: string;
+  /** Optional staging-only, exact-tenant read-only evidence projection for QA. */
+  PLAYER3_QA_READ_ENABLED_TENANTS?: string;
   // Extra terminal gate; not equal to grading access. Staging only, default OFF.
   PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS?: string;
   // Independent authored HTML5 staging launch gate; absent means OFF.

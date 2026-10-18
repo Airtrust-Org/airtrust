@@ -98,18 +98,31 @@ export function canWritePlayer3Stage(env:Env,tenant:number):boolean{
     allowed(env.NATIVE_LEARNER_WRITE_ENABLED_TENANTS,tenant)&&
     allowed(env.PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS,tenant);
 }
+/** Independent, exact-tenant, staging-only QA read gate. Does not enable writes. */
+export function canReadPlayer3QaEvidence(env:Env,tenant:number):boolean{
+  return env.ENVIRONMENT==='staging'&&positive(tenant)&&
+    allowed(env.NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS,tenant)&&
+    allowed(env.PLAYER3_QA_READ_ENABLED_TENANTS,tenant);
+}
 
 export async function loadApprovedPlayer3StageContext(input:{
   env:Env;db:D1Database;bucket:R2Bucket;actorUserId:number;
-  empresaId:number;matriculaId:number;
+  empresaId:number;matriculaId:number;readOnlyQa?:boolean;
 }){
   const {env,db,bucket,actorUserId,empresaId,matriculaId}=input;
-  if(!canWritePlayer3Stage(env,empresaId) || !positive(actorUserId) || !positive(matriculaId)){
+  const qaRead=input.readOnlyQa===true;
+  if(!(qaRead?canReadPlayer3QaEvidence(env,empresaId):canWritePlayer3Stage(env,empresaId)) ||
+     !positive(actorUserId) || !positive(matriculaId)){
     throw new Player3StageWriteError('STAGE_CONTEXT_DISABLED_OR_INVALID');
   }
   const course=await loadNativePrivateCourse({env,db,bucket,empresaId,matriculaId,actorUserId});
-  if(course.mode!=='LEARN')deny('STAGE_REVIEW_READ_ONLY');
-  const binding=await db.prepare(nativeScopedSql(BINDING,env,empresaId)).bind(
+  if(course.mode!=='LEARN'&&!qaRead)deny('STAGE_REVIEW_READ_ONLY');
+  // The write context retains its original EM_ANDAMENTO-only predicate.
+  // Only the independently gated QA read can inspect initial/completed cycles.
+  const bindingSql=qaRead?BINDING
+    .replace("m.status='EM_ANDAMENTO'", "m.status IN ('NAO_INICIADO','EM_ANDAMENTO','CONCLUIDO')")
+    .replace("cy.status='EM_ANDAMENTO'", 'cy.status=m.status'):BINDING;
+  const binding=await db.prepare(nativeScopedSql(bindingSql,env,empresaId)).bind(
     actorUserId,empresaId,matriculaId,course.cicloId,course.cursoId,
     course.editionHash).first<Binding>();
   const prefix='lms/native/'+empresaId+'/'+course.cursoId+'/'+course.editionHash+'/';
