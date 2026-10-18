@@ -24,10 +24,14 @@ test('inactive candidate QA: SHA, role, tenant, scoped cookie, active isolation'
     const indexBytes=unzipSync(new Uint8Array(bytes))['index.html'];
     expect(indexBytes).toBeTruthy();
     const root=fixture.origin+'/api';
-    const login=await page.request.post(root+'/auth/login',
-      {data:{email:'admin@airtrust.com',senha:'Admin@123'}});
-    expect(login.ok()).toBe(true);
-    const accessToken=(await login.json()).data.accessToken;
+    // Prepared through the *real* login endpoint when the disposable fixture
+    // was seeded. Reuse rather than trigger the 5/min production auth throttle.
+    const auth=JSON.parse(readFileSync(
+      'worker-airtrust/.wrangler/scorm-browser-qa/local-auth.json','utf8'));
+    expect(auth.origin).toBe(fixture.origin);
+    expect(auth.packageSha256).toBe(sha);
+    const accessToken=auth.accessToken;
+    expect(accessToken).toMatch(/^[^.]+\.[^.]+\.[^.]+$/);
     const headers={Authorization:'Bearer '+accessToken};
     const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
     function snapshot(){
