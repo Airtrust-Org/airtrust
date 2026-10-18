@@ -1070,9 +1070,26 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (nextQuestionControl) {
           const enabledNextQuestion = items.find((item) => item.el === nextQuestionControl);
           if (inlineAnswerSelected) {
-            return enabledNextQuestion
-              ? markAndClick(enabledNextQuestion, 'inline-quiz-next-question')
-              : { type: 'inline-quiz-question-gate-blocked' };
+            if (enabledNextQuestion) {
+              return markAndClick(enabledNextQuestion, 'inline-quiz-next-question');
+            }
+            // The authored last quiz question disables NextQ and exposes a
+            // separate "Concluir avaliação" action. Only use this visible
+            // submit when the page itself reports every answer registered.
+            const finishAssessment = items.find((item) =>
+              !isChoiceButton(item) &&
+              /concluir\s+(?:a\s+)?avalia[cç][aã]o|finalizar\s+(?:a\s+)?avalia[cç][aã]o/i.test(item.key)
+            );
+            if (finishAssessment &&
+                questionNumber && questionTotal && questionNumber === questionTotal &&
+                answeredCount === questionTotal) {
+              const priorSubmits = st.actionLog.filter((entry) =>
+                entry.location === locationKey && entry.type === 'inline-quiz-finish'
+              ).length;
+              if (priorSubmits >= 3) return { type: 'inline-quiz-finish-no-progress' };
+              return markAndClick(finishAssessment, 'inline-quiz-finish');
+            }
+            return { type: 'inline-quiz-question-gate-blocked' };
           }
           const authoredIndex = (plannedQuestion?.indices || plansHere.flatMap((entry) => entry?.indices || []))
             .find((index) => Number.isInteger(index) && index >= 0 && index < inlineQuizChoices.length);
@@ -1332,6 +1349,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       diagnostics.required_decision_block = action.type;
     }
     if (action?.type === 'accordion-gate-unresolved' ||
+        action?.type === 'inline-quiz-finish-no-progress' ||
         action?.type === 'inline-quiz-no-progress-after-answer' ||
         action?.type === 'inline-quiz-authored-answer-missing' || action?.type === 'inline-quiz-question-gate-blocked' ||
         action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall' ||
