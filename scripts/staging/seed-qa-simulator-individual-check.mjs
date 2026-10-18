@@ -70,6 +70,22 @@ SELECT CASE WHEN ${LEDGER_OK}
   AND NOT EXISTS (SELECT 1 FROM funcionarios WHERE empresa_id=${tenantId} AND matricula LIKE ${esc(`${code}-%`)} AND deleted_at IS NULL)
 THEN 1 ELSE json('FAIL_PREFLIGHT_GUARD_OR_LEDGER_MISSING') END;
 
+-- Setor padrão exigido pelo trigger trg_funcionarios_setor_required_insert no D1 de staging
+INSERT INTO setores (codigo, nome, descricao, responsavel, ativo, created_at, updated_at, deleted_at, empresa_id)
+SELECT ${esc(`${code}-OPS`)}, 'operacoes', 'Setor operacional padrao QA', 'QA Admin', 1, datetime('now'), datetime('now'), NULL, id
+FROM empresas
+WHERE id = ${tenantId}
+  AND NOT EXISTS (
+    SELECT 1 FROM setores
+    WHERE empresa_id = ${tenantId}
+      AND deleted_at IS NULL
+      AND ativo = 1
+      AND (
+        LOWER(TRIM(nome)) IN ('geral', 'operacoes', 'operacao', 'treinamento', 'instrucao')
+        OR LOWER(TRIM(codigo)) IN ('geral', 'ops', 'treinamento', 'inst')
+      )
+  );
+
 INSERT INTO funcionarios(nome,matricula,cargo,funcao,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
 VALUES (${esc(`${code} Instrutor`)},${esc(n.instrutor)},'QA','QA','ATIVO',1,1,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
 ${['a', 'b', 'c', 'd'].map((k) => `INSERT INTO funcionarios(nome,matricula,cargo,funcao,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
@@ -129,6 +145,8 @@ UPDATE qualificacoes_tipos SET ativo=0, deleted_at=COALESCE(deleted_at,datetime(
 WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
 UPDATE funcionarios SET ativo=0, status='INATIVO', deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
+UPDATE setores SET deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now')
+WHERE empresa_id=${tenantId} AND codigo=${esc(`${code}-OPS`)};
 
 SELECT CASE WHEN
   (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
