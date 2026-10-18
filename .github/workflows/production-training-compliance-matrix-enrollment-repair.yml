@@ -126,6 +126,7 @@ jobs:
           echo "REVIEWED_WRONG_WITH_EVIDENCE_COUNT=$evidenced_wrong_count" >> "$GITHUB_STEP_SUMMARY"
           echo "REVIEWED_REDUNDANT_MANUAL_REVIEW_COUNT=$redundant_review_count" >> "$GITHUB_STEP_SUMMARY"
           [[ "$(jq -r .ambiguous_course_count "$evidence")" == 0 ]] || { echo REVIEWED_AMBIGUOUS_COURSES_NOT_ZERO >&2; exit 1; }
+          [[ "$(jq -r .no_course_count "$evidence")" == 0 ]] || { echo REVIEWED_PUBLISHED_EAD_CONTENT_MISSING >&2; exit 1; }
           echo "REVIEWED_DRY_RUN_VERIFIED=$REVIEWED_RUN" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Capture D1 Time Travel recovery point
@@ -159,7 +160,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s "$RUNNER_TEMP/result.json" || exit 0
-          jq '{mode,source_sha,empresa_id,expected_pairs,renewal_window_days,renewal_window_count,suppressed_by_valid_evidence_count,missing_count,missing_hash,wrong_count,wrong_hash,unsafe_wrong_count,wrong_with_evidence_count,redundant_count,redundant_hash,redundant_manual_review_count,modality_manual_review_count,historical_evidence_preserved,no_course_count,no_course_hash,no_course_codes,ambiguous_course_count,email_disabled,invitation_endpoint_called,mutation_executed,created_courses,created_enrollments,ignored_existing,cancelled_wrong_enrollments,cancelled_wrong_with_evidence_enrollments,cancelled_redundant_valid_evidence_enrollments,post_expected_pairs,post_missing_count,post_wrong_count,post_redundant_count,post_no_course_count,postconditions_verified,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+          jq '{mode,source_sha,empresa_id,expected_pairs,renewal_window_days,renewal_window_count,suppressed_by_valid_evidence_count,missing_count,missing_hash,wrong_count,wrong_hash,unsafe_wrong_count,wrong_with_evidence_count,redundant_count,redundant_hash,redundant_manual_review_count,modality_manual_review_count,policy_manual_review_count,historical_evidence_preserved,no_course_count,no_course_hash,no_course_codes,ambiguous_course_count,email_disabled,invitation_endpoint_called,mutation_executed,created_courses,created_enrollments,ignored_existing,cancelled_wrong_enrollments,cancelled_wrong_with_evidence_enrollments,cancelled_redundant_valid_evidence_enrollments,post_expected_pairs,post_missing_count,post_wrong_count,post_redundant_count,post_no_course_count,postconditions_verified,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload sanitized evidence
         uses: actions/upload-artifact@v7

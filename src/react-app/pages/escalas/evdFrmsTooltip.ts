@@ -17,12 +17,30 @@ export function getFrmsVerboseLabel(signal: FrmsTripulanteSignalLike): string {
   if (!signal) return 'Sem dado FRMS';
   if (signal.status === 'no_duty') return 'Sem jornada FRMS';
   if (signal.status === 'not_submitted') return 'Check-in pendente';
+  if (signal.status === 'incomplete_checkin') return 'Check-in incompleto';
   if (signal.status === 'critical' || signal.status === 'unfit_for_duty') return 'Revisar com gestor';
   if (signal.requiresReview || signal.hasAlert) return 'Revisar com gestor';
   if (signal.status === 'attention') return 'Atenção';
   if (signal.dataSource === 'default_estimate') return 'Dado estimado';
   if (signal.dataSource === 'crew_reported') return 'Check-in recebido';
-  return 'FRMS OK';
+  return 'Sem avaliação FRMS confirmada';
+}
+
+/** EVD badge is a data-state cue, NEVER a duty-release decision. */
+export function getFrmsRosterBadge(signal: FrmsTripulanteSignalLike): {short: string; long: string} {
+  if (!signal) return {short: '—', long: 'Sem referência FRMS'};
+  if (signal.status === 'no_duty') return {short: '—', long: 'Sem jornada FRMS'};
+  if (signal.status === 'critical' || signal.status === 'unfit_for_duty' ||
+      signal.requiresReview || signal.hasAlert)
+    return {short: 'REV', long: 'Revisão operacional'};
+  if (signal.status === 'attention') return {short: 'ATN', long: 'Atenção'};
+  if (signal.status === 'not_submitted') return {short: 'SC', long: 'Check-in pendente'};
+  if (signal.status === 'incomplete_checkin') return {short: 'SC', long: 'Check-in incompleto'};
+  if (signal.dataSource === 'default_estimate')
+    return {short: 'EST', long: 'Dado estimado — não comprova baixa fadiga'};
+  if (signal.dataSource === 'crew_reported')
+    return {short: 'REC', long: 'Check-in recebido — não é liberação operacional'};
+  return {short: '?', long: 'Fonte/avaliação FRMS não confirmada'};
 }
 
 export function buildFrmsLink(data: string, funcionarioId?: number | string | null): string {

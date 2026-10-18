@@ -4,6 +4,7 @@ import {
   buildFrmsLink,
   buildFrmsTooltipLabel,
   getFrmsVerboseLabel,
+  getFrmsRosterBadge,
 } from '../evdFrmsTooltip';
 
 type Signal = Parameters<typeof getFrmsVerboseLabel>[0];
@@ -64,8 +65,14 @@ describe('getFrmsVerboseLabel', () => {
     expect(getFrmsVerboseLabel(makeSignal({ status: 'no_duty' }))).toBe('Sem jornada FRMS');
   });
 
-  it('retorna "FRMS OK" para status normal sem fonte especial', () => {
-    expect(getFrmsVerboseLabel(makeSignal({ status: 'normal', dataSource: 'not_applicable' }))).toBe('FRMS OK');
+  it('não interpreta fonte não aplicável como FRMS OK', () => {
+    expect(getFrmsVerboseLabel(makeSignal({ status: 'normal', dataSource: 'not_applicable' })))
+      .toBe('Sem avaliação FRMS confirmada');
+  });
+
+  it('distingue check-in incompleto do recebido', () => {
+    expect(getFrmsVerboseLabel(makeSignal({ status: 'incomplete_checkin', dataSource: 'crew_reported' })))
+      .toBe('Check-in incompleto');
   });
 
   it('prioriza status critical sobre dataSource estimado', () => {
@@ -203,6 +210,30 @@ describe('buildFrmsInlineSummary', () => {
   });
 
   it('não retorna resumo extra para estado ok sem quinzena', () => {
-    expect(buildFrmsInlineSummary(makeSignal({ status: 'normal' }), null)).toBeNull();
+    expect(buildFrmsInlineSummary(makeSignal({ status: 'normal' }), null))
+      .toBe('Sem avaliação FRMS confirmada');
+  });
+});
+
+describe('getFrmsRosterBadge — ausência e recebimento não significam aptidão', () => {
+  it('mostra dados estimados sem selo verde', () => {
+    expect(getFrmsRosterBadge(makeSignal({ dataSource: 'default_estimate' }))).toEqual({
+      short: 'EST', long: 'Dado estimado — não comprova baixa fadiga',
+    });
+  });
+  it('mostra check-in recebido como informativo, não FRMS OK', () => {
+    expect(getFrmsRosterBadge(makeSignal({ dataSource: 'crew_reported' }))).toEqual({
+      short: 'REC', long: 'Check-in recebido — não é liberação operacional',
+    });
+  });
+  it('recusa aprovar fonte desconhecida ou ausente', () => {
+    expect(getFrmsRosterBadge(makeSignal({ dataSource: 'not_applicable' })).short).toBe('?');
+    expect(getFrmsRosterBadge(null).long).toBe('Sem referência FRMS');
+  });
+  it('alertas críticos e check-in incompleto mantêm precedência', () => {
+    expect(getFrmsRosterBadge(makeSignal({ status: 'critical', dataSource: 'crew_reported' })).short)
+      .toBe('REV');
+    expect(getFrmsRosterBadge(makeSignal({ status: 'incomplete_checkin', dataSource: 'crew_reported' })).short)
+      .toBe('SC');
   });
 });
