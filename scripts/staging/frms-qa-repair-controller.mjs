@@ -48,7 +48,8 @@ const verifyReceiptScope=(receipt,plan,now)=>{
 const requireAdapters=(a,names)=>{for(const n of names)if(typeof a?.[n]!=='function')fail('QA_ADAPTER_REQUIRED_'+n);};
 const planGuard=plan=>{
   assertReviewPlan(plan);
-  if(plan.sql_sha256!==SHA_PLAN||plan.operations.length!==8||plan.target.db_id!==TARGET.db_id)
+  const actualDigest=digest(plan.operations.map(op=>op.sql.trim()).join(';\n')+';\n');
+  if(actualDigest!==SHA_PLAN||plan.sql_sha256!==SHA_PLAN||plan.operations.length!==8||plan.target.db_id!==TARGET.db_id)
     fail('QA_REVIEW_DIGEST_MISMATCH');
 };
 const assertRows=(plan,rows)=>{
@@ -172,6 +173,12 @@ export async function executeApprovedQaStagingRepair({plan,receipt,manifest,
   const lock=await adapters.acquireLock(LOCK);
   if(!lock?.held)fail('QA_EXCLUSIVE_LOCK_REQUIRED');
   let applied=false;
+  // Once an atomic D1 batch has been submitted, a lost response does not
+  // distinguish a rollback from a committed write. Never audit it as no-write.
+  let applyStarted=false;
+  // Keep the private repair gate closed when D1 may have committed but the
+  // controller cannot prove the resulting state. Recovery is a separate grant.
+  let keepLockForReconciliation=false;
   try{
     const scoped=await adapters.readScope({tenantId:999013,ids:ids(plan)});
     verifyIdentity(scoped);
@@ -198,6 +205,7 @@ export async function executeApprovedQaStagingRepair({plan,receipt,manifest,
         sha256:receipt.artifactSha256},
     };
     const db=await adapters.getDb(TARGET.db_id);
+    applyStarted=true;
     await executeQaAtomicRepair({db,plan,preimage:rows,context});
     applied=true;
     const after=await adapters.postcheck({tenantId:999013,ids:ids(plan)});
@@ -214,9 +222,20 @@ export async function executeApprovedQaStagingRepair({plan,receipt,manifest,
     // After a successful batch, never pretend a failed postcheck rolled it back.
     const raw=String(error?.message??'');
     const safeReason=/^QA_[A-Z0-9_]+$/.test(raw)?raw:'QA_EXECUTION_FAILED';
-    try{await adapters.audit({event:applied?'FRMS_QA_POSTCHECK_FAILED_REQUIRES_COMPENSATION':
-      'FRMS_QA_BLOCKED_BEFORE_APPLY',sha,planSha256:SHA_PLAN,reason:safeReason});}
+    // A rejected/lost batch response is an indeterminate apply outcome, not
+    // proof that no D1 rows changed. Reconcile remotely under the same lock
+    // before considering a compensating action; never auto-retry this nonce.
+    // Do not permit a second signed grant while committed state is uncertain
+    // or a successful batch has failed its postchecks.
+    if(applyStarted)keepLockForReconciliation=true;
+    const event=applied?'FRMS_QA_POSTCHECK_FAILED_REQUIRES_COMPENSATION':
+      applyStarted?'FRMS_QA_APPLY_OUTCOME_UNKNOWN_RECONCILIATION_REQUIRED':
+        'FRMS_QA_BLOCKED_BEFORE_APPLY';
+    try{await adapters.audit({event,sha,planSha256:SHA_PLAN,reason:safeReason});}
     catch{/* retain original failure; persistent controller must alert separately */}
     throw error;
-  }finally{await adapters.releaseLock(lock);}
+  }finally{
+    // The DO lock has no TTL. Only supervised recovery may release it.
+    if(!keepLockForReconciliation)await adapters.releaseLock(lock);
+  }
 }
