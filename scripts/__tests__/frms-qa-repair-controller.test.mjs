@@ -154,6 +154,10 @@ test('a correctly signed manifesto cannot authorize wrong-tenant or malformed QA
     assert.throws(()=>verifyQaApproval({...grant,receipt:bad,plan,sha,now}),
       /QA_RECEIPT_SCOPE_OR_INTEGRITY_REJECTED/);
   }
+  const boundedSkew={...receipt,
+    recoveryCapturedAt:'2026-10-17T19:57:00.000Z',
+    artifactExpiresAt:'2026-10-18T19:59:00.000Z'};
+  assert.equal(verifyQaApproval({...signed(boundedSkew),receipt:boundedSkew,plan,sha,now}),true);
   assert.equal(st.batchCount,0);
   st.sqlite.close();
 });
