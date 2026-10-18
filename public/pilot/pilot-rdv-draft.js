@@ -206,6 +206,20 @@ export function applyStandardPassengerBaggageWeight(fields) {
   if (fields?.peso_padrao_ativo !== true) return false;
   const pax = parseNumber(fields.pax);
   if (!Number.isInteger(pax) || pax < 0) return false;
+  const oldUnit = String(fields.unidade_peso || '').trim().toUpperCase();
+  const emptyWeight = parseNumber(fields.peso_vazio);
+  const crewWeight = parseNumber(fields.peso_tripulacao);
+  // Standard passenger weights are LB; converting only the unit label would
+  // silently reinterpret an existing aircraft/crew weight in KG as LB.
+  if ((emptyWeight !== null || crewWeight !== null) &&
+      oldUnit !== 'KG' && oldUnit !== 'LB') {
+    fields.peso_padrao_ativo = false;
+    return false;
+  }
+  if (oldUnit === 'KG') {
+    if (emptyWeight !== null) fields.peso_vazio = String(convertWeight(emptyWeight, 'KG', 'LB'));
+    if (crewWeight !== null) fields.peso_tripulacao = String(convertWeight(crewWeight, 'KG', 'LB'));
+  }
   fields.peso_passageiros = String(pax * 180);
   fields.peso_bagagem = String(pax * 20);
   fields.unidade_peso = 'LB';
