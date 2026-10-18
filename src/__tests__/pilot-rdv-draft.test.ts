@@ -206,6 +206,23 @@ describe('Pilot RDV operational calculations', () => {
   });
 
 
+  it('não mostra peso total se massa informada for negativa ou não numérica', () => {
+    const valid = {
+      unidade_peso: 'LB', peso_vazio: '9000', peso_tripulacao: '400',
+      peso_passageiros: '1200', peso_bagagem: '250',
+      payload: '100', unidade_payload: 'KG',
+      combustivel_inicio: '800', unidade_combustivel: 'LB',
+    };
+    for (const field of ['peso_vazio', 'peso_tripulacao', 'peso_passageiros', 'peso_bagagem', 'payload', 'combustivel_inicio']) {
+      expect(calcStageTotalWeight({ ...valid, [field]: '-1' })).toBeNull();
+      expect(calcStageTotalWeight({ ...valid, [field]: 'invalid' })).toBeNull();
+    }
+    expect(calcStageTotalWeight({ ...valid, combustivel_inicio: '0' }))
+      .toBeCloseTo(11070.462, 3);
+    expect(calcStageTotalWeight({ ...valid, payload: '', combustivel_inicio: '' }))
+      .toBe(10850);
+  });
+
   it('converte peso básico e de tripulação KG antes de ativar peso padrão em LB', () => {
     const fields = {
       pax: '2', peso_padrao_ativo: true,
