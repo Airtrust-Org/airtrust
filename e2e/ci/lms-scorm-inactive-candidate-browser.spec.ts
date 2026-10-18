@@ -49,6 +49,18 @@ test('inactive candidate QA: SHA, role, tenant, scoped cookie, active isolation'
       expect(candidate.status).toBe('VALIDATED');
       expect(candidate.packageSha256).toBe(sha);
       expect(candidate.packageId).toMatch(/^[a-f0-9-]{36}$/);
+      // A structurally valid candidate without independent signed functional
+      // evidence must never be promoted into the active course pointer.
+      const unsafeActivation=await page.request.post(
+        root+'/lms/cursos/'+fixture.courseId+'/scorm-package-versions/'+
+          candidate.packageId+'/activate',{headers});
+      expect(unsafeActivation.status()).toBe(409);
+      const incompleteAttestation=await page.request.post(
+        root+'/lms/cursos/'+fixture.courseId+'/scorm-package-versions/'+
+          candidate.packageId+'/functional-attestation',
+        {headers,data:{status:'PASS',packageSha256:sha}});
+      expect(incompleteAttestation.status()).toBe(409);
+      expect(snapshot()).toEqual(prior);
       const asset='/lms/scorm/qa-assets/'+fixture.companyId+'/'+fixture.courseId+
         '/'+candidate.packageId+'/index.html';
       const preview='/lms/scorm/qa-preview/'+fixture.courseId+'/'+candidate.packageId;
