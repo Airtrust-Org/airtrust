@@ -8,7 +8,7 @@ const courses = [
   { id: 10, titulo: 'Curso PDF', tipo_conteudo: 'pdf' },
 ];
 function setup(marked: unknown, flag = '6', environment: Env['ENVIRONMENT'] = 'staging', tableExists = true) {
-  const all = vi.fn(async () => ({ results: marked }));
+  const all = vi.fn(async () => ({ success: true, results: marked }));
   const bind = vi.fn(() => ({ all }));
   const schemaBind = vi.fn(() => ({
     first: async () => tableExists ? { found: 1 } : null,
@@ -71,6 +71,15 @@ describe('Native catalog API effective type projection', () => {
       statusCode: 503, code: 'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED',
     });
   });
+  it.each(['6', ''])('rejects unsuccessful D1 projection with read flag %s rather than exposing activated SCORM', async (flag) => {
+    for (const rows of [[], [{ curso_id: 9 }]]) {
+      const { env, all } = setup([{ curso_id: 9 }], flag);
+      all.mockResolvedValueOnce({ success: false, results: rows });
+      await expect(projectNativeCatalogCourses(env, 6, courses)).rejects.toMatchObject({
+        statusCode: 503, code: 'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED',
+      });
+    }
+  });
   it('rejects malformed course identities before SQL generation', async () => {
     const { env, prepare } = setup([]);
     await expect(projectNativeCatalogCourses(env, 6, [
@@ -102,6 +111,15 @@ describe('Native enrollment effective-type projection uses curso_id', () => {
     const prod=setup([{curso_id:9}],'6','production');
     expect(await projectNativeCatalogEnrollments(prod.env,6,rows)).toEqual(rows);
     expect(prod.prepare).not.toHaveBeenCalled();
+  });
+  it('rejects an unsuccessful activation read before exposing enrollment as legacy SCORM', async () => {
+    const { env, all } = setup([{ curso_id: 9 }], '');
+    all.mockResolvedValueOnce({ success: false, results: [] });
+    await expect(projectNativeCatalogEnrollments(env, 6, [
+      { id: 101, curso_id: 9, tipo_conteudo: 'scorm' },
+    ])).rejects.toMatchObject({
+      statusCode: 503, code: 'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED',
+    });
   });
   it('fails closed for invalid course IDs or conflicting course types', async () => {
     const {env,prepare}=setup([]);

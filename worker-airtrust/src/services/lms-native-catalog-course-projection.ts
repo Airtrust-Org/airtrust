@@ -35,7 +35,7 @@ export async function projectNativeCatalogCourses<T extends Record<string, unkno
   }
   // IDs are strictly validated integers; all values remain bound parameters.
   const placeholders = courseIds.map(() => '?').join(',');
-  let marked: { results?: { curso_id: number }[] } | null;
+  let marked: { success?: boolean; results?: { curso_id: number }[] } | null;
   try {
     marked = await env.DB.prepare(
       'SELECT curso_id FROM lms_native_catalog_activation ' +
@@ -45,7 +45,7 @@ export async function projectNativeCatalogCourses<T extends Record<string, unkno
     throw new ApiError('Catálogo Native indisponível para identificação dos cursos.',
       503, 'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED');
   }
-  if (!marked || !Array.isArray(marked.results)) {
+  if (!marked || marked.success !== true || !Array.isArray(marked.results)) {
     throw new ApiError('Resultado inválido na projeção do catálogo Native.',
       503, 'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED');
   }
