@@ -56,7 +56,7 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
   page.on('requestfailed', (request) => {
     const url = new URL(request.url());
     if (url.hostname === API_HOST && url.pathname === '/api/auth/login' &&
-        request.method() === 'POST' && request.failure() === 'net::ERR_ABORTED') {
+        request.method() === 'POST' && request.failure()?.errorText === 'net::ERR_ABORTED') {
       loginAborted.push('ABORTED');
     }
   });
@@ -163,14 +163,19 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
   // badge there first, then open a REAL row to inspect the independent signals.
   const receivedCount = payload.data?.filter((row) => row.checkin_status === 'RECEBIDO').length ?? 0;
   if (receivedCount > 0) {
-    const receipt = page.locator('main [aria-label="Check-in diário: Recebido — informativo"]').first();
+    // Search within the decision queue, not the overview's separate signal grid.
+    // An unscoped .first() can select a badge outside the clickable crew row.
+    const crewRow = page.locator('#frms-decision-queue button').filter({
+      has: page.locator('[aria-label="Check-in diário: Recebido — informativo"]'),
+    }).first();
+    const receipt = crewRow.getByLabel('Check-in diário: Recebido — informativo');
+    await expect(crewRow).toBeVisible();
     await expect(receipt).toBeVisible();
     await expect(receipt).toHaveClass(/bg-sky-100/);
     await expect(receipt).toHaveAttribute('title', /Não comprova baixa fadiga nem autoriza liberação/);
-    const crewRow = page.locator('main button').filter({ has: receipt }).first();
     await crewRow.click();
     const detail = page.getByRole('dialog');
-    await expect(detail.getByLabelText('Check-in diário: Recebido — informativo')).toBeVisible();
+    await expect(detail.getByLabel('Check-in diário: Recebido — informativo')).toBeVisible();
     await test.info().attach('01b-frms-checkin-recebido-nao-libera', {
       body: await detail.screenshot({ animations: 'disabled' }),
       contentType: 'image/png',

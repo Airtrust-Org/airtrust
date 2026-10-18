@@ -40,3 +40,16 @@ test('0560 has separate governed stage authorization and preserves evidence', ()
     'steps.preflight.outputs.evidence_count',
   ]) assert.ok(workflow.includes(guard), guard);
 });
+
+test('0560 postcheck keeps preflight evidence count and Cloudflare credentials in one env mapping', () => {
+  const step = workflow.split('      - name: Verify physical column and exact ledger provenance\n')[1];
+  assert.ok(step, 'postcheck step must exist');
+  const header = step.split('        run: |')[0];
+  assert.equal((header.match(/^        env:$/gm) || []).length, 1,
+    'duplicate env mappings can drop the preservation witness');
+  for (const key of ['EVIDENCE_COUNT_BEFORE:', 'CLOUDFLARE_API_TOKEN:', 'CLOUDFLARE_ACCOUNT_ID:']) {
+    assert.ok(header.includes(key), key + ' must be in the same step environment');
+  }
+  assert.ok(step.includes('== "$EVIDENCE_COUNT_BEFORE"'),
+    '0560 must compare row counts before and after the apply');
+});
