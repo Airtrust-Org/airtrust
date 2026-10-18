@@ -21,6 +21,8 @@ on:
         type: choice
         options:
           - frms-sleep-opportunity-0552
+          - simulator-individual-check-evidence-0554
+          - simulator-individual-check-delete-guard-0560
       release_reason:
         description: Reason and authorization for the staging schema change
         required: true
@@ -48,10 +50,10 @@ jobs:
       STAGING_DB_NAME: airtrust-db-staging-baseline-20260701
       STAGING_DB_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
       PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
-      REVIEWED_CHANGE_ID: frms-sleep-opportunity-0552
+      REVIEWED_CHANGE_ID: ${{ inputs.change_id }}
       BASELINE_ID: production-d1-baseline-v2-20260714
-      REVIEWED_SQL_HASH: c29e5b38d6e1da17b55312b3a1ff470266ebcf3cd7e178eecd4d0664cec7dd31
-      REVIEWED_PLAN_HASH: 8e4eefde2853f3a1adaa9ffac08fba364e277f99728c911a9ea9939cd0fb1b45
+      REVIEWED_SQL_HASH: ${{ inputs.change_id == 'simulator-individual-check-delete-guard-0560' && '5fe67c81dda03681d9a73eec4cc51989bd92270e4eca6b41b1eb1028b58b9e56' || inputs.change_id == 'simulator-individual-check-evidence-0554' && 'bcbdcf8bd78c3a3d6393624e62ae70e691190e3ae2d35c0951c0bc56470b4bf5' || 'c29e5b38d6e1da17b55312b3a1ff470266ebcf3cd7e178eecd4d0664cec7dd31' }}
+      REVIEWED_PLAN_HASH: ${{ inputs.change_id == 'simulator-individual-check-delete-guard-0560' && 'b00948f0821692fb322cd18dc795769d8f03b057db7af9c9b729747d9d2b1463' || inputs.change_id == 'simulator-individual-check-evidence-0554' && '47b79c542348749d865425a5487f72689444f30553187778f51366b89bbcd0b6' || '8e4eefde2853f3a1adaa9ffac08fba364e277f99728c911a9ea9939cd0fb1b45' }}
       RELEASE_SHA: ${{ inputs.release_sha }}
       CHANGE_ID: ${{ inputs.change_id }}
     steps:
@@ -68,7 +70,9 @@ jobs:
           [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_SCHEMA_V2' ]] || { echo 'INVALID_CONFIRMATION' >&2; exit 1; }
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'INVALID_RELEASE_SHA' >&2; exit 1; }
           [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'INVALID_PR_NUMBER' >&2; exit 1; }
-          [[ "$CHANGE_ID" == "$REVIEWED_CHANGE_ID" ]] || { echo 'UNAPPROVED_CHANGE_ID' >&2; exit 1; }
+          [[ "$CHANGE_ID" == 'frms-sleep-opportunity-0552' ||
+             "$CHANGE_ID" == 'simulator-individual-check-evidence-0554' ||
+             "$CHANGE_ID" == 'simulator-individual-check-delete-guard-0560' ]] || { echo 'UNAPPROVED_CHANGE_ID' >&2; exit 1; }
           [[ -n "$RELEASE_REASON" ]] || { echo 'REASON_REQUIRED' >&2; exit 1; }
           [[ "$STAGING_DB_ID" != "$PRODUCTION_DB_ID" ]] || { echo 'PRODUCTION_TARGET_REJECTED' >&2; exit 1; }
           node --input-type=module <<'NODE'
@@ -142,11 +146,16 @@ jobs:
           }
           const manifest = JSON.parse(readFileSync('release/worker-airtrust/schema-v2/' +
             process.env.CHANGE_ID + '.json', 'utf8'));
+          const expectedPath = process.env.CHANGE_ID === 'simulator-individual-check-evidence-0554'
+            ? 'worker-airtrust/schema-v2/changes/0554_simulator_individual_check_evidence.sql'
+            : process.env.CHANGE_ID === 'simulator-individual-check-delete-guard-0560'
+              ? 'worker-airtrust/schema-v2/changes/0560_simulator_individual_check_delete_guard.sql'
+              : 'worker-airtrust/schema-v2/changes/0552_frms_sleep_opportunity.sql';
           if (manifest.changeId !== process.env.REVIEWED_CHANGE_ID ||
               manifest.baselineId !== process.env.BASELINE_ID ||
               manifest.fileHash !== process.env.REVIEWED_SQL_HASH ||
               manifest.planHash !== process.env.REVIEWED_PLAN_HASH ||
-              manifest.filePath !== 'worker-airtrust/schema-v2/changes/0552_frms_sleep_opportunity.sql') {
+              manifest.filePath !== expectedPath) {
             throw new Error('REVIEWED_MANIFEST_SCOPE_MISMATCH');
           }
           console.log('STAGING_TARGET_AND_MANIFEST_SCOPE=PASS');
@@ -169,6 +178,7 @@ jobs:
           echo "combined_sql=$output" >> "$GITHUB_OUTPUT"
 
       - name: Verify staging credentials and physical preconditions read-only
+        id: preflight
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
@@ -191,10 +201,22 @@ jobs:
             { echo 'STAGING_SCHEMA_V2_BASELINE_NOT_ACTIVE' >&2; exit 1; }
           [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id = '$CHANGE_ID'")" == '0' ]] ||
             { echo 'CHANGE_ALREADY_APPLIED_OR_LEDGER_DRIFT' >&2; exit 1; }
-          [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('frms_fadiga_checkin') WHERE name='oportunidade_sono_horas_24h'")" == '0' ]] ||
-            { echo 'COLUMN_ALREADY_PRESENT_WITHOUT_LEDGER' >&2; exit 1; }
-          [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='frms_fadiga_checkin'")" == '1' ]] ||
-            { echo 'FRMS_CHECKIN_TABLE_MISSING' >&2; exit 1; }
+          if [[ "$CHANGE_ID" == 'simulator-individual-check-delete-guard-0560' ]]; then
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='simulator-individual-check-evidence-0554' AND baseline_id='$BASELINE_ID' AND file_hash='bcbdcf8bd78c3a3d6393624e62ae70e691190e3ae2d35c0951c0bc56470b4bf5' AND plan_hash='47b79c542348749d865425a5487f72689444f30553187778f51366b89bbcd0b6'")" == '1' ]] || { echo 'SIMULATOR_0554_DEPENDENCY_LEDGER_MISMATCH' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='sessoes_checks_resultados_individuais'")" == '1' ]] || { echo 'SIMULATOR_INDIVIDUAL_TABLE_MISSING' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='index' AND tbl_name='sessoes_checks_resultados_individuais' AND name LIKE 'idx_checks_individuais_%'")" == '3' ]] || { echo 'SIMULATOR_0554_INDEXES_MISMATCH' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND tbl_name='sessoes_checks_resultados_individuais' AND name IN ('trg_checks_individuais_scope_insert','trg_checks_individuais_immutable_scope','trg_checks_individuais_confirm_insert','trg_checks_individuais_confirm_update','trg_checks_individuais_annulled_immutable','trg_checks_individuais_confirmed_immutable')")" == '6' ]] || { echo 'SIMULATOR_0554_TRIGGERS_MISMATCH' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name='trg_checks_individuais_delete_guard'")" == '0' ]] || { echo 'SIMULATOR_0560_DELETE_TRIGGER_ALREADY_PRESENT' >&2; exit 1; }
+            echo "evidence_count=$(query_count "SELECT COUNT(*) AS total FROM sessoes_checks_resultados_individuais")" >> "$GITHUB_OUTPUT"
+          elif [[ "$CHANGE_ID" == 'simulator-individual-check-evidence-0554' ]]; then
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('sessoes_checks','fichas_sessao','simulador_agendamentos','funcionarios')")" == '4' ]] || { echo 'SIMULATOR_SOURCE_TABLES_MISSING' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='sessoes_checks_resultados_individuais'")" == '0' ]] || { echo 'SIMULATOR_INDIVIDUAL_TABLE_ALREADY_PRESENT' >&2; exit 1; }
+          else
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('frms_fadiga_checkin') WHERE name='oportunidade_sono_horas_24h'")" == '0' ]] ||
+              { echo 'COLUMN_ALREADY_PRESENT_WITHOUT_LEDGER' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='frms_fadiga_checkin'")" == '1' ]] ||
+              { echo 'FRMS_CHECKIN_TABLE_MISSING' >&2; exit 1; }
+          fi
           echo 'SCHEMA_V2_STAGING_PREFLIGHT=PASS'
 
       - name: Capture verified staging D1 Time Travel recovery point
@@ -207,7 +229,7 @@ jobs:
           umask 077
           timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           (cd release/worker-airtrust && ../../worker-airtrust/node_modules/.bin/wrangler d1 time-travel info "$STAGING_DB_NAME" \
-            --timestamp="$timestamp" --json) > "$RUNNER_TEMP/staging-d1-recovery.json"
+            --env staging --timestamp="$timestamp" --json) > "$RUNNER_TEMP/staging-d1-recovery.json"
           node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs';
           const data = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/staging-d1-recovery.json', 'utf8'));
@@ -232,6 +254,8 @@ jobs:
       - name: Verify physical column and exact ledger provenance
         shell: bash
         env:
+          EVIDENCE_COUNT_BEFORE: ${{ steps.preflight.outputs.evidence_count }}
+        env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
@@ -250,6 +274,20 @@ jobs:
           read -r file_hash plan_hash <<< "$metadata"
           [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID' AND baseline_id='$BASELINE_ID' AND file_hash='$file_hash' AND plan_hash='$plan_hash' AND github_sha='$RELEASE_SHA'")" == '1' ]] ||
             { echo 'SCHEMA_V2_EXACT_LEDGER_POSTCONDITION_FAILED' >&2; exit 1; }
-          [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('frms_fadiga_checkin') WHERE name='oportunidade_sono_horas_24h' AND type='REAL' AND \"notnull\"=0")" == '1' ]] ||
-            { echo 'FRMS_SLEEP_OPPORTUNITY_COLUMN_POSTCONDITION_FAILED' >&2; exit 1; }
+          if [[ "$CHANGE_ID" == 'simulator-individual-check-delete-guard-0560' ]]; then
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='simulator-individual-check-evidence-0554' AND baseline_id='$BASELINE_ID' AND file_hash='bcbdcf8bd78c3a3d6393624e62ae70e691190e3ae2d35c0951c0bc56470b4bf5' AND plan_hash='47b79c542348749d865425a5487f72689444f30553187778f51366b89bbcd0b6'")" == '1' ]] || { echo 'SIMULATOR_0554_LEDGER_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='sessoes_checks_resultados_individuais'")" == '1' ]] || { echo 'SIMULATOR_0560_TABLE_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='index' AND tbl_name='sessoes_checks_resultados_individuais' AND name LIKE 'idx_checks_individuais_%'")" == '3' ]] || { echo 'SIMULATOR_0560_INDEXES_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND tbl_name='sessoes_checks_resultados_individuais' AND name IN ('trg_checks_individuais_scope_insert','trg_checks_individuais_immutable_scope','trg_checks_individuais_confirm_insert','trg_checks_individuais_confirm_update','trg_checks_individuais_annulled_immutable','trg_checks_individuais_confirmed_immutable','trg_checks_individuais_delete_guard')")" == '7' ]] || { echo 'SIMULATOR_0560_TRIGGERS_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name='trg_checks_individuais_delete_guard'")" == '1' ]] || { echo 'SIMULATOR_0560_DELETE_TRIGGER_MISSING' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sessoes_checks_resultados_individuais")" == "$EVIDENCE_COUNT_BEFORE" ]] || { echo 'SIMULATOR_0560_EVIDENCE_COUNT_CHANGED' >&2; exit 1; }
+          elif [[ "$CHANGE_ID" == 'simulator-individual-check-evidence-0554' ]]; then
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='sessoes_checks_resultados_individuais'")" == '1' ]] || { echo 'SIMULATOR_INDIVIDUAL_TABLE_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='index' AND tbl_name='sessoes_checks_resultados_individuais' AND name LIKE 'idx_checks_individuais_%'")" == '3' ]] || { echo 'SIMULATOR_INDIVIDUAL_INDEXES_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND tbl_name='sessoes_checks_resultados_individuais' AND name IN ('trg_checks_individuais_scope_insert','trg_checks_individuais_immutable_scope','trg_checks_individuais_confirm_insert','trg_checks_individuais_confirm_update','trg_checks_individuais_annulled_immutable','trg_checks_individuais_confirmed_immutable')")" == '6' ]] || { echo 'SIMULATOR_INDIVIDUAL_TRIGGERS_POSTCONDITION_FAILED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sessoes_checks_resultados_individuais")" == '0' ]] || { echo 'SIMULATOR_INDIVIDUAL_SYNTHETIC_EVIDENCE_REJECTED' >&2; exit 1; }
+          else
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('frms_fadiga_checkin') WHERE name='oportunidade_sono_horas_24h' AND type='REAL' AND \"notnull\"=0")" == '1' ]] ||
+              { echo 'FRMS_SLEEP_OPPORTUNITY_COLUMN_POSTCONDITION_FAILED' >&2; exit 1; }
+          fi
           echo "SCHEMA_V2_STAGING_APPLIED_AND_VERIFIED=$CHANGE_ID" >> "$GITHUB_STEP_SUMMARY"

@@ -12,7 +12,10 @@ export function extractAnswerPlan(model) {
     }
     const obj = value;
     let options = null;
-    for (const key of ['options', 'alternatives', 'choices', 'answers', 'alternativas', 'opcoes', 'respostas']) {
+    for (const key of [
+      ...(obj.requiredDecision === true ? ['scenarioOptions'] : []),
+      'options', 'alternatives', 'choices', 'answers', 'alternativas', 'opcoes', 'respostas'
+    ]) {
       if (Array.isArray(obj[key]) && obj[key].length) {
         options = obj[key];
         break;
@@ -20,10 +23,16 @@ export function extractAnswerPlan(model) {
     }
     if (options?.length) {
       let indices = [];
-      for (const key of ['correctIndex', 'answerIndex', 'correctOptionIndex', 'correctAnswerIndex']) {
+      for (const key of [
+        ...(obj.requiredDecision === true ? ['scenarioCorrect'] : []),
+        'correctIndex', 'answerIndex', 'correctOptionIndex', 'correctAnswerIndex'
+      ]) {
         if (Number.isInteger(obj[key])) indices = [Number(obj[key])];
       }
-      for (const key of ['correctAnswer', 'answer', 'correctOption', 'correct', 'correctLetter', 'rightAnswer', 'respostaCorreta', 'gabarito']) {
+      for (const key of [
+        ...(obj.requiredDecision === true ? ['scenarioCorrect'] : []),
+        'correctAnswer', 'answer', 'correctOption', 'correct', 'correctLetter', 'rightAnswer', 'respostaCorreta', 'gabarito'
+      ]) {
         const raw = obj[key];
         if (typeof raw === 'number' && Number.isInteger(raw)) indices = [raw];
         if (Array.isArray(raw) && raw.every((item) => Number.isInteger(item))) indices = raw.map(Number);

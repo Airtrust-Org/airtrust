@@ -38,6 +38,17 @@ test('lifecycle fixture is reserved to the canonical synthetic tenant and fails 
   execFileSync('node', ['--check', 'scripts/staging/seed-qa-training-compliance-lifecycle.mjs']);
 });
 
+test('staging fixture binds both QA courses to manager-visible sector and cleans them up', () => {
+  // The catalog must stay scoped by RBAC. The fixture, not the LMS handler,
+  // supplies the two course-sector links for the synthetic Gestor identity.
+  assert.match(seed, /INSERT INTO lms_cursos_setores\(curso_id,setor_id,empresa_id/);
+  assert.match(seed, /course_sector_count INTEGER NOT NULL CHECK\(course_sector_count=2\)/);
+  assert.match(seed, /SELECT COUNT\(\*\) FROM lms_cursos_setores lcs JOIN lms_cursos c/);
+  assert.match(seed, /UPDATE lms_cursos_setores\s+SET deleted_at=COALESCE/);
+  assert.match(seed, /AND curso_id IN \(\s+SELECT id FROM lms_cursos WHERE empresa_id=/);
+  assert.match(seed, /AND c\.observacoes=\$\{esc\(marker\)\} AND lcs\.deleted_at IS NULL/);
+});
+
 test('browser simulation covers organization, enrollment, progress, completion and reconciliation transitions', () => {
   for (const token of [
     'OBRIGATORIA',

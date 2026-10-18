@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-17",
-    "last_reconciled_against": "0553 LGPD, 0554 simulator individual evidence, and 0557 LMS cycle evidence queued; no remote Schema V2 application asserted",
-    "schema_v2_digest": "a25a237ac1d215003624bb90a531108a421d679cfeb435c9468af8b5eb99483a",
+    "last_reconciled_against": "0554 individual simulator evidence, 0557 LMS cycle and 0560 immutable simulator DELETE protection queued; no remote 0560 application asserted",
+    "schema_v2_digest": "da646ac76bfec8519d429c842669e7014af9a213e1235634861c07e7a259a421",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1595,6 +1595,20 @@
       "reviewed_manifest": "lms-cycle-evidence-0557.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-cycle-evidence-0557.md",
       "note": "Additive DDL only. Runtime atomic enrollment/cycle reset is gated on migration 0557 and consumes only active-cycle xAPI. No production D1 data write or production schema application claimed; requires SHA-specific governance and recovery. Immutable audit storage is enforced by D1 triggers: archive snapshots and attributed xAPI cannot be updated/deleted, and tenant/cycle mismatch aborts attribution."
+    },
+    {
+      "change_file": "0560_simulator_individual_check_delete_guard.sql",
+      "change_id": "simulator-individual-check-delete-guard-0560",
+      "sha256": "5fe67c81dda03681d9a73eec4cc51989bd92270e4eca6b41b1eb1028b58b9e56",
+      "targets": [
+        "sessoes_checks_resultados_individuais"
+      ],
+      "domain": "Simulator individual check evidence: physical DELETE protection",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "simulator-individual-check-delete-guard-0560.json",
+      "evidence": "worker-airtrust/schema-v2/plans/simulator-individual-check-delete-guard-0560.md",
+      "note": "Additive trigger; no D1/Compliance/history modifications. Apply separately after 0554; blocks all physical deletion of individual check evidence."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

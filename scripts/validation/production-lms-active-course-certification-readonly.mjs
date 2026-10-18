@@ -6,6 +6,7 @@ import process from 'node:process';
 import { chromium, webkit } from '@playwright/test';
 import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
 import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
+import { collectRequiredDecisionSlideIndices, classifyRequiredDecisionStall } from './lms-scorm-required-decision-diagnostics.mjs';
 import { readVisibleVideo, startRealVisibleVideo } from './lms-scorm-video-playback-readonly.mjs';
 import { classifyPptxAssetProbe, classifyReadOnlyContentAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage } from './lms-format-certification-verdict.mjs';
 import {
@@ -248,7 +249,7 @@ async function getTrace(page) {
   return page.evaluate(() => window.__AIRTRUST_COMPLETION_CERT?.getState?.() || null);
 }
 
-async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS, allowAdaptiveRetry = true) {
+async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS, allowAdaptiveRetry = true, requiredDecisionSlideIndices = []) {
   const started = Date.now();
   let steps = 0;
   let idle = 0;
@@ -265,6 +266,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
     video_duration_seconds: null,
     video_started_observed: false,
     video_ended_observed: false,
+    required_decision_choice_attempts: 0,
+    required_decision_block: null,
   };
   const videoAttemptsByLocation=new Map();
   while (Date.now() - started < untilMs && steps < maxSteps) {
@@ -275,7 +278,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       state?.values?.['cmi.core.lesson_location'] ??
       state?.values?.['cmi.location'] ??
       '';
-    let action = await frame.evaluate(({ plan, location, allowAdaptiveRetry }) => {
+    let action = await frame.evaluate(({ plan, location, allowAdaptiveRetry, requiredDecisionSlideIndices }) => {
       const w = window;
       w.__AIRTRUST_CERT_DRIVER ??= {
         questionOrder: [],
@@ -318,6 +321,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       );
       const slideMatch = locationBase.match(/^(\d+)/);
       const slideIndex = slideMatch ? Number(slideMatch[1]) : null;
+      const requiresAuthoredDecision = Number.isInteger(slideIndex) && requiredDecisionSlideIndices.includes(slideIndex);
       const plansHere = Array.isArray(plan)
         ? plan.filter((item) => item?.slideIndex === slideIndex)
         : [];
@@ -403,8 +407,27 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         }
       }
 
-      for (const input of Array.from(document.querySelectorAll('input[type=checkbox]')).filter(visible)) {
-        if (!input.checked) input.click();
+      // Native checklist inputs may lie below the iframe viewport. Scroll to
+      // each enabled, rendered control and issue an actual click; never set
+      // .checked or synthesize completion data. Hidden course/navigation
+      // checkboxes are not learner actions.
+      const pendingCheckbox = Array.from(document.querySelectorAll('input[type=checkbox]'))
+        .find((input) => {
+          if (input.checked || input.disabled || input.closest('nav,aside,header,footer,[hidden],[aria-hidden="true"]')) return false;
+          const rect = input.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return false;
+          for (let ancestor = input; ancestor; ancestor = ancestor.parentElement) {
+            const style = getComputedStyle(ancestor);
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+            if (ancestor === document.body) break;
+          }
+          return true;
+        });
+      if (pendingCheckbox) {
+        pendingCheckbox.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+        pendingCheckbox.click();
+        logAction('checklist-checkbox');
+        return { type: 'checklist-checkbox' };
       }
 
       // The SCORM root uses `app-shell menu-collapsed`. A generic
@@ -419,7 +442,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           forwardId.test(id) ||
           /^(start|finish|submit|retry|iniciar|come[cç]ar|refazer|finalizar|concluir)/i.test(id);
         const certifiableChoice = el.matches(
-          'button.choice,button.answer,button.option,[data-quiz-choice],[data-module-quiz]',
+          'button.choice,button.answer,button.option,[data-quiz-choice],[data-module-quiz],[data-scenario]',
         );
         // Learner answers remain course controls even when their visible text contains
         // words such as "anterior" or they live under a menu-named layout wrapper.
@@ -432,7 +455,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           'aside,[class*="sidebar" i],[class*="drawer" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]',
         ));
       };
-      const items = Array.from(document.querySelectorAll('button,[role=button],input[type=button],input[type=submit],a'))
+      const items = Array.from(document.querySelectorAll('button,[role=button],input[type=button],input[type=submit],a,[data-scenario],details > summary'))
         .filter(visible)
         .map((el, index) => {
           const text = clean(el.innerText || el.value || el.getAttribute('aria-label') || el.title);
@@ -775,7 +798,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       };
 
       const isChoiceButton = (item) =>
-        /(^|\s)(choice|option|answer)(\s|$)/i.test(item.className);
+        /(^|\s)(choice|option|answer)(\s|$)/i.test(item.className) ||
+        item.el.matches('[data-scenario]');
 
       // Quiz templates reveal the correct option to the learner after an answer
       // by visibly marking a disabled option as ".correct". This is learner-visible
@@ -1033,8 +1057,62 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       // The question-specific locationKey above resets attempts per question.
       const inlineQuizChoices = items.filter((item) => item.el.matches('[data-quiz-choice]'));
       if (inlineQuizChoices.length) {
+        // Course #28 exposes data-quiz-nextq for each authored quiz question.
+        // Respect a selected learner answer before advancing; without one,
+        // require an explicit answer index from package metadata. A missing
+        // mapping or disabled gate is INCONCLUSIVE, never a fabricated PASS.
+        const inlineAnswerSelected = inlineQuizChoices.some((item) =>
+          /(^|\s)(selected|active|checked)(\s|$)/i.test(item.className) ||
+          item.ariaPressed === 'true' || item.ariaChecked === 'true' ||
+          item.el.getAttribute('data-selected') === 'true'
+        );
+        const nextQuestionControl = document.querySelector('[data-quiz-nextq]');
+        if (nextQuestionControl) {
+          const enabledNextQuestion = items.find((item) => item.el === nextQuestionControl);
+          if (inlineAnswerSelected) {
+            if (enabledNextQuestion) {
+              return markAndClick(enabledNextQuestion, 'inline-quiz-next-question');
+            }
+            // The authored last quiz question disables NextQ and exposes a
+            // separate "Concluir avaliação" action. Only use this visible
+            // submit when the page itself reports every answer registered.
+            const finishAssessment = items.find((item) =>
+              !isChoiceButton(item) &&
+              /concluir\s+(?:a\s+)?avalia[cç][aã]o|finalizar\s+(?:a\s+)?avalia[cç][aã]o/i.test(item.key)
+            );
+            if (finishAssessment &&
+                questionNumber && questionTotal && questionNumber === questionTotal &&
+                answeredCount === questionTotal) {
+              const priorSubmits = st.actionLog.filter((entry) =>
+                entry.location === locationKey && entry.type === 'inline-quiz-finish'
+              ).length;
+              if (priorSubmits >= 3) return { type: 'inline-quiz-finish-no-progress' };
+              return markAndClick(finishAssessment, 'inline-quiz-finish');
+            }
+            return { type: 'inline-quiz-question-gate-blocked' };
+          }
+          const authoredIndex = (plannedQuestion?.indices || plansHere.flatMap((entry) => entry?.indices || []))
+            .find((index) => Number.isInteger(index) && index >= 0 && index < inlineQuizChoices.length);
+          if (!Number.isInteger(authoredIndex)) return { type: 'inline-quiz-authored-answer-missing' };
+          return markAndClick(inlineQuizChoices[authoredIndex], 'inline-quiz-authored-answer');
+        }
         const inlineNext = items.find((item) => item.el.matches('[data-next]'));
-        if (inlineNext) return markAndClick(inlineNext, 'inline-quiz-next');
+        if (inlineNext) {
+          // #25/#26: data-next was clicked indefinitely before a response was
+          // selected. Only use a package-authored answer mapping or a genuine
+          // learner selection, never pick the first choice by assumption.
+          if (inlineAnswerSelected) {
+            const repeatedNext = st.actionLog.filter((entry) =>
+              entry.location === locationKey && entry.type === 'inline-quiz-next'
+            ).length;
+            if (repeatedNext >= 4) return { type: 'inline-quiz-no-progress-after-answer' };
+            return markAndClick(inlineNext, 'inline-quiz-next');
+          }
+          const authoredIndex = (plannedQuestion?.indices || plansHere.flatMap((entry) => entry?.indices || []))
+            .find((index) => Number.isInteger(index) && index >= 0 && index < inlineQuizChoices.length);
+          if (!Number.isInteger(authoredIndex)) return { type: 'inline-quiz-authored-answer-missing' };
+          return markAndClick(inlineQuizChoices[authoredIndex], 'inline-quiz-authored-answer');
+        }
         const chosen = new Set(st.inlineChoicesTried?.[locationKey] || []);
         const wanted = (plannedQuestion?.indices || [])[0];
         const candidates = [
@@ -1062,6 +1140,43 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
       const toggle = items.find((item) => item.multiToggle && !alreadyClicked(item));
       if (toggle) return markAndClick(toggle, 'content-toggle');
+
+      // A declared required decision must be answered BEFORE any Next/Continue
+      // action. This is a learner action in preview, never a claim of a correct
+      // answer or authenticated certification. Other slides keep their old flow.
+      if (requiresAuthoredDecision) {
+        const choices = items.filter((item) =>
+          isChoiceButton(item) && !forwardId.test(item.id) && !backwardId.test(item.id)
+        );
+        const priorDecision = st.actionLog.some((entry) =>
+          entry.location === locationKey && entry.type === 'required-decision-choice'
+        );
+        if (!priorDecision) {
+          const authoredIndex = plansHere.flatMap((entry) => entry?.indices || [])
+            .find((index) => Number.isInteger(index) && index >= 0 && index < choices.length);
+          const target = Number.isInteger(authoredIndex) ? choices[authoredIndex] : null;
+          if (target) return markAndClick(target, 'required-decision-choice');
+          // Do not guess a learner response merely because a button is visible.
+          // Explicit authored mapping is required for this diagnostic preview.
+          return { type: 'required-decision-unresolved',
+            reason: choices.length ? 'authored-decision-mapping-missing' : 'no-visible-choice' };
+        }
+        const repeatedNext = st.actionLog.filter((entry) =>
+          entry.location === locationKey && entry.type === 'next'
+        ).length;
+        if (repeatedNext >= 4) return { type: 'required-decision-navigation-stall' };
+      }
+
+      // A repeated click on the SAME question/slide without a location
+      // change cannot certify any additional learner progress. Stop the
+      // read-only driver instead of generating thousands of "Next" clicks
+      // against an authored gate (observed on #25/#26/#29).
+      const repeatedForward = st.actionLog.filter((entry) =>
+        entry.location === locationKey && entry.type === 'next'
+      ).length;
+      if (repeatedForward >= 6) {
+        return { type: 'navigation-stall-no-progress', repeated_next: repeatedForward };
+      }
 
       const exactNext = items.find((item) => forwardId.test(item.id));
       if (exactNext) return markAndClick(exactNext, 'next');
@@ -1106,6 +1221,18 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         /(^|\s)(next|pr[oó]xim[oa]|avan[cç]ar|continuar|prosseguir)(\s|$)/i.test(item.key)
       );
       if (textNext) return markAndClick(textNext, 'next');
+
+      // A native <details><summary> is a real learner reading action.
+      // Never synthesize a completed-read flag or navigate around nextUnit
+      // when an authored accordion is the only remaining visible gate.
+      const unreadSummary = items.find((item) =>
+        item.el.matches('details:not([open]) > summary') &&
+        !item.el.closest('nav,aside,header,footer') && !alreadyClicked(item)
+      );
+      if (unreadSummary) return requestTrustedClick(unreadSummary, 'accordion-read-summary');
+      if (document.querySelector('details') && document.querySelector('#nextUnit:disabled')) {
+        return { type: 'accordion-gate-unresolved' };
+      }
 
       const fallbackChoices = items.filter((item) =>
         item.el.tagName.toLowerCase() !== 'a' &&
@@ -1152,7 +1279,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       if (safe) return markAndClick(safe, 'safe');
 
       return { type: 'none' };
-    }, { plan: answerPlan, location: currentLocation, allowAdaptiveRetry }).catch((error) => ({
+    }, { plan: answerPlan, location: currentLocation, allowAdaptiveRetry, requiredDecisionSlideIndices }).catch((error) => ({
       type: 'frame-error',
       message: safe(error?.message || String(error)),
     }));
@@ -1228,7 +1355,17 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
 
     diagnostics.last_location = String(currentLocation || '').slice(0, 100);
     diagnostics.last_action = action?.type || null;
-    if (action?.type === 'retry-deferred' || action?.type === 'adaptive-exhausted' ||
+    if (action?.type === 'required-decision-choice') diagnostics.required_decision_choice_attempts += 1;
+    if (action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall') {
+      diagnostics.required_decision_block = action.type;
+    }
+    if (action?.type === 'navigation-stall-no-progress' ||
+        action?.type === 'accordion-gate-unresolved' ||
+        action?.type === 'inline-quiz-finish-no-progress' ||
+        action?.type === 'inline-quiz-no-progress-after-answer' ||
+        action?.type === 'inline-quiz-authored-answer-missing' || action?.type === 'inline-quiz-question-gate-blocked' ||
+        action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall' ||
+        action?.type === 'retry-deferred' || action?.type === 'adaptive-exhausted' ||
         action?.type === 'video-blocked' || action?.type === 'video-error') break;
     if (action?.type === 'frame-error') {
       diagnostics.frame_error_count += 1;
@@ -1599,6 +1736,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   })).catch(() => ({ model: null, runtime: null }));
   const model = loaded.model;
   const answerPlan = extractAnswerPlan(loaded.runtime ?? model);
+  const requiredDecisionSlideIndices = collectRequiredDecisionSlideIndices(model);
   const modelMeta = model && typeof model === 'object'
     ? {
         schema: typeof model.schema === 'string' ? model.schema : null,
@@ -1632,6 +1770,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
       maxDriveMs,
       stepLimit,
       phase !== 'suspend',
+      requiredDecisionSlideIndices,
     );
     steps = drive.steps;
     driveDiagnostics = drive.diagnostics;
@@ -1649,6 +1788,12 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     ? await captureRequiredInteractionStructure(frame)
     : null;
   const driverState = await captureDriverState(frame);
+  const requiredDecisionDiagnostic = classifyRequiredDecisionStall({
+    stalledSlide,
+    driverState,
+    driveDiagnostics,
+    completionReached: terminalState(preUnloadTrace?.values || {}),
+  });
   let diagnosticScreenshot = null;
   const focusedDiagnostics = COURSE_IDS.size > 0 && COURSE_IDS.size <= 6;
   if (
@@ -1699,6 +1844,7 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     visible_controls: visibleControls,
     required_interaction_structure: requiredInteractionStructure,
     driver_state: driverState,
+    required_decision_diagnostic: requiredDecisionDiagnostic,
     diagnostic_screenshot: diagnosticScreenshot,
     asset_failures: assetFailures.slice(0, 20),
     page_errors: pageErrors.slice(0, 10),
