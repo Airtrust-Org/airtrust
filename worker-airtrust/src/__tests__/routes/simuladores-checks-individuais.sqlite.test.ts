@@ -25,10 +25,16 @@ const migration = readFileSync(
   resolve(process.cwd(), 'schema-v2/changes/0554_simulator_individual_check_evidence.sql'),
   'utf8',
 );
-const immutableDeleteMigration = readFileSync(
-  resolve(process.cwd(), 'schema-v2/changes/0560_simulator_individual_check_delete_guard.sql'),
-  'utf8',
-);
+// 0560 is reviewed in its own dependent PR (#1577). Keep this runtime
+// fixture independent of an unmerged SQL file; 0560 migration tests verify
+// the exact on-disk SQL and its hash separately.
+const immutableDeleteMigration = `
+  CREATE TRIGGER IF NOT EXISTS trg_checks_individuais_delete_guard
+  BEFORE DELETE ON sessoes_checks_resultados_individuais
+  BEGIN
+    SELECT RAISE(ABORT, 'INDIVIDUAL_CHECK_DELETE_FORBIDDEN');
+  END;
+`;
 describe('individual simulator checks — A approved, B rejected, C pending', () => {
   let db: SqliteD1Database | null = null;
 
