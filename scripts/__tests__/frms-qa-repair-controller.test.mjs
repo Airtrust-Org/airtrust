@@ -132,6 +132,31 @@ test('cryptographic trust anchor rejects forged, changed, expired and mismatched
   assert.equal(st.batchCount,0);
   st.sqlite.close();
 });
+test('a correctly signed manifesto cannot authorize wrong-tenant or malformed QA preimage receipt',async()=>{
+  const st=setup();
+  const receipt=await prepareQaEvidence({plan,adapters:st.adapters,key:encryptionKey,now});
+  const invalid=[
+    {...receipt,tenantId:6},
+    {...receipt,dbId:'wrong-staging-database'},
+    {...receipt,planSha256:'f'.repeat(64)},
+    {...receipt,authorizedIds:receipt.authorizedIds.slice(1)},
+    {...receipt,writes:1},
+    {...receipt,preimageSha256:'not-a-sha'},
+    {...receipt,artifactSha256:'not-a-sha'},
+    {...receipt,artifactReference:''},
+    {...receipt,recoveryBookmark:''},
+    {...receipt,recoveryCapturedAt:'bad-date'},
+    {...receipt,artifactExpiresAt:'bad-date'},
+    {...receipt,artifactExpiresAt:'2026-10-18T21:00:00.000Z'},
+  ];
+  for(const bad of invalid){
+    const grant=signed(bad);
+    assert.throws(()=>verifyQaApproval({...grant,receipt:bad,plan,sha,now}),
+      /QA_RECEIPT_SCOPE_OR_INTEGRITY_REJECTED/);
+  }
+  assert.equal(st.batchCount,0);
+  st.sqlite.close();
+});
 test('under signed grant, stage-only binding executes eight rows once and validates four cases',async()=>{
   const st=setup(),receipt=await prepareQaEvidence({plan,adapters:st.adapters,key:encryptionKey,now});
   const args=command(receipt,st.adapters);
