@@ -52,6 +52,22 @@ describe('Player3 joint readiness (never a terminal write)',()=>{
     expect(result).not.toHaveProperty('certificate');
     expect(result).not.toHaveProperty('status');
   });
+  it('recognizes an empty read-only review ledger without treating it as fake certification',()=>{
+    // The read-only joint preflight intentionally supplies no module rows for
+    // completed/review-mode enrollments; [] must not be treated as a passed exam.
+    const noStages={...modules,stages:[],allOfficialStagesPassed:false};
+    const review=fixture({mode:'REVIEW',recordedLessonIds:[],moduleSession:noStages});
+    expect(review).toMatchObject({
+      readyForAtomicTerminalPreflight:false,reason:'REVIEW_READ_ONLY',
+      officialStageCount:0,officialStagesPassed:0,completionSupported:false,
+    });
+    expect(fixture({mode:'LEARN',recordedLessonIds:[],moduleSession:noStages}))
+      .toMatchObject({reason:'INVALID_EVIDENCE',readyForAtomicTerminalPreflight:false});
+    expect(fixture({mode:'REVIEW',moduleSession:{...noStages,allOfficialStagesPassed:true}}))
+      .toMatchObject({reason:'INVALID_EVIDENCE',readyForAtomicTerminalPreflight:false});
+    expect(fixture({mode:'REVIEW',moduleSession:{...noStages,cycleId:1001}}))
+      .toMatchObject({reason:'EDITION_OR_CYCLE_MISMATCH',readyForAtomicTerminalPreflight:false});
+  });
   it('refuses forged, duplicate or unexpected content IDs',()=>{
     for(const recordedLessonIds of [
       ['intro','intro','safety','conclusion'],
