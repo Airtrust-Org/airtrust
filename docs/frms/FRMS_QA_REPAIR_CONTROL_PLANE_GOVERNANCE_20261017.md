@@ -17,3 +17,30 @@ Não tratar SIGVOOS sintético como voo real. Não alterar usuários, check-in, 
 ## Camadas de interpretação operacional (sem novos pesos)
 
 Conforme #1476, tratar **risco estimado**, **conformidade de coleta**, **completude/confiabilidade** e **avaliação humana** como dimensões diferentes. Check-in pendente e PVT ausente são pendências de informação e de processo: não comprovam fisiologicamente fadiga, nem significam normalidade. KSS é autorrelato de sonolência, PVT-B é tarefa de vigilância, oportunidade de repouso não equivale a sono medido. O adicional histórico de **+10 por qualquer check-in pendente em uma quinzena** é regra interna da baseline, não um coeficiente validado cientificamente; não usar isoladamente para negar ou liberar tripulante. Preservar obrigatoriedade de PVT diário e revisão científica humana de pesos e limiares.
+
+## Matriz de interpretação para aceite humano (referência #1476)
+
+A estrutura abaixo é **contrato de verificação**, não afirmação de telas já homologadas.
+
+| Situação sintética | Informação comprovável | Informação que falta/limitação | Conduta que deve ficar clara |
+|---|---|---|---|
+| Check-in recebido | Formulário recebido e registrado | Não comprova sonolência baixa ou aptidão | Examinar KSS, PVT-B, jornada e alerta; decisão humana |
+| Check-in pendente | Coleta não realizada no prazo | Estado fisiológico desconhecido | Cobrar/coletar e avaliar exposição; não considerar «normal» |
+| PVT-B diário pendente | Não há medida daquele dia | Não interpretar ausência como desempenho normal | Solicitar aplicação obrigatória e registrar pendência |
+| KSS elevado | Autorrelato de sonolência na escala KSS | Não substitui investigação nem mede causa isoladamente | Investigar sono, jornadas, condições e medidas imediatas |
+| Repouso entre jornadas | Intervalo temporal derivado das jornadas | Oportunidade de repouso não comprova horas efetivamente dormidas | Confirmar contexto e documentação necessária |
+| Alerta recorrente | Histórico de casos ligados ao tripulante | Contagens por página/filtro podem não representar o total global | Consultar histórico completo e eficácia das ações anteriores |
+| Dados incompletos/desatualizados | Origem, momento, pendência e extensão conhecidos | Estimativas ou ausência de sincronização criam incerteza | Priorizar reconciliação antes de concluir risco ou liberar operação |
+| Registro SIGVOOS **simulado** | Fixture QA com origem explícita e IDs sintéticos | Não é voo real nem serve para decisão sobre pessoas reais | Somente demonstrar tratamento e auditoria no tenant 999013 |
+
+A Coordenação deve conseguir percorrer **Operação → tripulante/jornada → fonte/data → motivo e regra → situação de incerteza → Caso → responsável/ação/prazo → acompanhamento/eficácia/encerramento → Relatório**. Exigir screenshots saneados de cada decisão e do que **não** é possível concluir. Manutenção, relatórios/exportações e EVD→FRMS permanecem **não homologados visualmente** até haver 4/4 casos íntegros no staging.
+
+### Separação metodológica sem alterar pesos
+
+A issue #1476 documenta uma fórmula histórica de índice acumulado e o acréscimo **+10 por ao menos um check-in pendente** na quinzena. Esse +10 é critério interno de conformidade/coleta; **não foi cientificamente demonstrado como equivalente a agravamento fisiológico de fadiga**. Também podem ocorrer somas e classificações redundantes por pendência, inconsistência e dia incompleto. Não interpretar o índice bruto como diagnóstico clínico ou autorização operacional.
+
+Manter cinco camadas discerníveis: **limites/regra aplicável**, **fatores de risco estimados**, **qualidade/completude**, **conformidade da coleta**, **decisão humana e evidência de eficácia**. Os coeficientes/limiares exatos requerem calibração e parecer FRMS/GAGEF independente com revisão das fontes e dados anonimizados; não presumir homologação por ICAO/ANAC. O PVT diário obrigatório deve permanecer exigível. O IMA V3 shadow não pode ser promovido enquanto a issue #1476 estiver pendente de validação humana.
+
+### Prova ainda necessária
+
+Após governança e autorização específica, a atualização deverá passar no preflight somente leitura com **4/4** casos íntegros, mesmo tenant e jornadas vinculadas. O QA de navegador precisa produzir evidência de leitura de Operação, Casos, Manutenção, Relatórios, EVD→FRMS e registro/auditoria de um ciclo sintético separado e autorizado. Sem essa prova, a Frente 6 continua aberta; não confundir UI renderizada com operação validada.
