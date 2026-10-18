@@ -268,3 +268,46 @@ coincidir** com a identidade registrada, não basta possuir qualquer chave
 confiável. A autorização e a independência do avaliador devem ser aferidas
 por quem administra o registro protegido. Se o cadastro não existir, estiver
 incompleto ou não corresponder ao autor da assinatura, o gate recusa o pacote.
+
+## Ação real de conclusão na jornada opt-in
+
+A suíte local `e2e/ci/lms-scorm-authenticated-candidate.spec.ts`, quando
+recebe um ZIP real e um driver externo, **não** pode fabricar conclusão com
+`page.evaluate`, `postMessage`, escrita de CMI ou chamadas diretas à
+API de finalização. O driver deve declarar:
+
+```json
+{
+  "completion": {
+    "actions": [
+      {"op": "click", "surface": "sco", "selector": "<seletor da ação visível de conclusão>"}
+    ]
+  },
+  "replayCompletion": {
+    "actions": [
+      {"op": "click", "surface": "host", "selector": "<seletor de conclusão repetível, quando existir>"}
+    ]
+  }
+}
+```
+
+As ações possíveis nessa etapa são **somente cliques em seletores DOM** do
+SCO ou do host de lançamento, verificadas por
+`scripts/qa/scorm-real-learner-completion.mjs`. A lista de
+`replayCompletion` é opcional para diagnóstico local; quando ausente o
+relatório inclui `EXPLICIT_COMPLETION_REPLAY_NOT_OBSERVED` e nenhuma
+evidência de replay é declarada. O signer protegido continua exigindo
+prova específica e independente de replay/qualificação. A retomada usa
+`observeMonotonicSuspend` para garantir que curso, avaliação e cursor não
+regrediram, sem confundir um checkpoint reserializado com perda de CMI.
+
+O token do ensaio é o obtido no **login legítimo da fixture sintética**,
+guardado com permissões 0600 em `worker-airtrust/.wrangler/scorm-browser-qa/local-auth.json`,
+restrito a origem e ZIP SHA, e removido com o restante das credenciais
+efêmeras. Isso evita o limite legítimo de 5 logins/min sem bypassar
+autenticação ou registrar senhas. Não copiar esse arquivo para CI artifacts.
+
+Estas correções tornam o produtor local mais fiel à jornada real; **não**
+transformam seu resultado em `GOVERNED_STAGING_AUTHENTICATED_QA_V1` nem
+autorizam ativação. Não existem ainda respostas independentes aprovadas,
+matrículas/ciclos staging e PDFs de backend para #15/#41.
