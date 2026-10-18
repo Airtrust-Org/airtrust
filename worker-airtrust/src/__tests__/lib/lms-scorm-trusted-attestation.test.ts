@@ -25,6 +25,9 @@ const payload = (): TrustedScormAttestationPayload => ({
   kind: TRUSTED_SCORM_ATTESTATION_KIND,
   ...context, harnessSha, issuedAt: '2026-10-17T19:00:00.000Z',
   scope: 'GOVERNED_STAGING_SYNTHETIC',
+  pedagogicalReview: {artifactSha256:'5'.repeat(64),driverSha256:'6'.repeat(64),
+    reviewerReference:'reviewer-test-01',approvalReference:'approval-test-only-01',
+    approvedAt:'2026-10-17T18:00:00.000Z',itemCount:2},
   browserEvidenceSha256: { CHROMIUM: '1'.repeat(64), WEBKIT: '2'.repeat(64) },
   certificateDocuments: {
     CHROMIUM: { enrollmentId: 1001, cycleId: 2001, qualificationHistoryId: 3001, documentId: 'qa-doc-chromium', sha256: '3'.repeat(64) },
@@ -89,6 +92,15 @@ describe('governed independent SCORM browser attestation', () => {
     reusedPdf.certificateDocuments.WEBKIT.sha256 =
       reusedPdf.certificateDocuments.CHROMIUM.sha256;
     expect(await verifyTrustedScormAttestation(seal(reusedPdf), context, secret, now)).toBe(false);
+  });
+  it('rejects missing, altered or unreconciled pedagogical review even when re-signed', async () => {
+    const missing=structuredClone(payload());
+    delete (missing as Partial<TrustedScormAttestationPayload>).pedagogicalReview;
+    expect(await verifyTrustedScormAttestation(seal(missing),context,secret,now)).toBe(false);
+    const bogus=structuredClone(payload());bogus.pedagogicalReview.itemCount=0;
+    expect(await verifyTrustedScormAttestation(seal(bogus),context,secret,now)).toBe(false);
+    const drift=structuredClone(payload());drift.pedagogicalReview.artifactSha256='';
+    expect(await verifyTrustedScormAttestation(seal(drift),context,secret,now)).toBe(false);
   });
   it('rejects unexpected object fields, malicious extra certificate state and malformed evidence', async () => {
     const extended = { ...payload(), publishable: true };

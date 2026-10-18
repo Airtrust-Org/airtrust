@@ -8,6 +8,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validatePedagogicalReview } from './scorm-pedagogical-review-gate.mjs';
 
 const K='AIRTRUST_SCORM_STAGING_ATTESTATION_V1';
 const cases=['FIRST_ACCESS','REQUIRED_CONTENT_COVERAGE',
@@ -22,7 +23,7 @@ const read=path=>JSON.parse(readFileSync(path,'utf8'));
 
 export function signGovernedScormEvidence({
   candidate, chromiumFile, webkitFile, certificatePdfFiles, secret,
-  runtimeSha, harnessSha,
+  runtimeSha, harnessSha, reviewFile, driverFile,
 }){
   assert(typeof secret==='string'&&secret.length>=32,'SECRET_MISSING');
   assert(commit.test(runtimeSha)&&commit.test(harnessSha),'COMMIT_INVALID');
@@ -36,6 +37,7 @@ export function signGovernedScormEvidence({
   assert(digest(readFileSync(candidate.zipPath))===candidate.packageSha256,
     'ZIP_SHA_DRIFT');
   assert(candidate.stagingRuntimeSha===runtimeSha,'RUNTIME_SHA_DRIFT');
+  const pedagogicalReview=validatePedagogicalReview({reviewFile,driverFile,candidate});
   const browserInputs=[
     ['CHROMIUM',chromiumFile],['WEBKIT',webkitFile],
   ];
@@ -48,7 +50,8 @@ export function signGovernedScormEvidence({
       row.browser===browser&&row.packageId===candidate.packageId&&
       row.packageSha256===candidate.packageSha256&&
       row.empresaId===candidate.empresaId&&row.cursoId===candidate.cursoId&&
-      row.runtimeSha===runtimeSha&&row.harnessSha===harnessSha,
+      row.runtimeSha===runtimeSha&&row.harnessSha===harnessSha&&
+      row.driverSha256===pedagogicalReview.driverSha256,
       'UNTRUSTED_BROWSER_'+browser);
     assert(row.syntheticEnrollment===true&&
       row.persistedBackendEvidence===true&&
@@ -108,7 +111,7 @@ export function signGovernedScormEvidence({
     packageId:candidate.packageId,packageSha256:candidate.packageSha256,
     runtimeSha,harnessSha,issuedAt:new Date().toISOString(),
     scope:'GOVERNED_STAGING_SYNTHETIC',requiresAssessment:candidate.requiresAssessment,
-    browserEvidenceSha256,certificateDocuments,runs};
+    pedagogicalReview,browserEvidenceSha256,certificateDocuments,runs};
   // Same exact canonical projection/order as the Worker WebCrypto verifier.
   const canonical=JSON.stringify(p);
   return {payload:p,signature:createHmac('sha256',secret)
@@ -124,7 +127,7 @@ function main(){
   assert(input&&output,'ARGUMENTS_REQUIRED');
   const args=read(input);
   const result=signGovernedScormEvidence({
-    candidate:args.candidate,
+    candidate:args.candidate,reviewFile:args.reviewFile,driverFile:args.driverFile,
     chromiumFile:args.chromiumFile,webkitFile:args.webkitFile,
     certificatePdfFiles:args.certificatePdfFiles,
     secret:process.env.SCORM_QA_ATTESTATION_SECRET,

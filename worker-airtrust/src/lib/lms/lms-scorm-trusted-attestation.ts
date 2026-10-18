@@ -20,6 +20,9 @@ export type TrustedScormAttestationPayload = {
   issuedAt: string;
   scope: 'GOVERNED_STAGING_SYNTHETIC';
   requiresAssessment: boolean;
+  /** Digest and governance identity of the outside-ZIP, independently approved review. */
+  pedagogicalReview: { artifactSha256: string; driverSha256: string;
+    reviewerReference: string; approvalReference: string; approvedAt: string; itemCount: number };
   /** Hashes of sanitized independent browser traces. */
   browserEvidenceSha256: { CHROMIUM: string; WEBKIT: string };
   /** One independently downloaded certificate per isolated browser enrollment. */
@@ -54,6 +57,7 @@ export function serializeScormAttestation(payload: TrustedScormAttestationPayloa
     runtimeSha: payload.runtimeSha, harnessSha: payload.harnessSha,
     issuedAt: payload.issuedAt, scope: payload.scope,
     requiresAssessment: payload.requiresAssessment,
+    pedagogicalReview: { ...payload.pedagogicalReview },
     browserEvidenceSha256: {
       CHROMIUM: payload.browserEvidenceSha256.CHROMIUM,
       WEBKIT: payload.browserEvidenceSha256.WEBKIT,
@@ -91,7 +95,7 @@ export async function verifyTrustedScormAttestation(
   const p = envelope.payload;
   if (!exactKeys(p, [
     'kind','empresaId','cursoId','packageId','packageSha256','runtimeSha',
-    'harnessSha','issuedAt','scope','requiresAssessment','browserEvidenceSha256',
+    'harnessSha','issuedAt','scope','requiresAssessment','pedagogicalReview','browserEvidenceSha256',
     'certificateDocuments','runs',
   ])) return false;
   if (p.kind !== TRUSTED_SCORM_ATTESTATION_KIND ||
@@ -115,6 +119,23 @@ export async function verifyTrustedScormAttestation(
       Date.parse(p.issuedAt) > now + 60_000 ||
       now - Date.parse(p.issuedAt) > 30 * 86400_000 ||
       !HEX_SIGNATURE.test(envelope.signature)) return false;
+  const review=p.pedagogicalReview;
+  const expectedReviewCount=p.packageSha256===
+    'cdc5a3cf30e4d37697c1f411977d87e16538bc75a6c03379252bbc2c8c06f6d2' ? 80 :
+    p.packageSha256==='8c15a73984591fcea71a4957e306dc8676c40d937537058f2440e52a3748baa7' ? 45 : null;
+  if (!exactKeys(review, ['artifactSha256','driverSha256','reviewerReference',
+    'approvalReference','approvedAt','itemCount']) ||
+    !SHA256.test(review.artifactSha256) || !SHA256.test(review.driverSha256) ||
+    !/^[a-zA-Z0-9._:-]{6,128}$/.test(review.reviewerReference) ||
+    typeof review.approvalReference!=='string' ||
+    review.approvalReference.trim().length<10 || review.approvalReference.length>128 ||
+    !Number.isSafeInteger(review.itemCount) || review.itemCount<=0 ||
+    review.itemCount>2500 ||
+    expectedReviewCount!==null && review.itemCount!==expectedReviewCount ||
+    !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(review.approvedAt) ||
+    !Number.isFinite(Date.parse(review.approvedAt)) ||
+    Date.parse(review.approvedAt)>now+60000 ||
+    now-Date.parse(review.approvedAt)>365*86400_000) return false;
   const docs = p.certificateDocuments;
   for (const browser of ['CHROMIUM','WEBKIT'] as const) {
     const document = docs[browser];

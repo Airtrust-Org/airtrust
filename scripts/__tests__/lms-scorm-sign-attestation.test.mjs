@@ -26,7 +26,23 @@ function fixture(){
   const candidate={scope:'GOVERNED_STAGING_SYNTHETIC',
     empresaId:6,cursoId:23,packageId:'123e4567-e89b-42d3-a456-426614174000',
     packageSha256:sha(zip),zipPath,stagingRuntimeSha:runtimeSha,requiresAssessment:true};
+  const reviewFile=join(dir,'independent-approved-review.json');
+  const review={kind:'AIRTRUST_SCORM_INDEPENDENT_PEDAGOGICAL_REVIEW_V1',
+    packageSha256:candidate.packageSha256,approved:true,independentOfPackageAuthor:true,
+    reviewerReference:'reviewer-test-01',approvalReference:'approval-test-only-01',
+    approvedAt:new Date().toISOString(),items:[0,1].map(i=>({
+      itemId:'question-'+i,status:'APPROVED',selectedIndex:i,
+      rationale:'Reviewed for synthetic test with sufficient independent justification',
+      reviewerReference:'reviewer-test-01',
+    }))};
+  candidate.reviewItemCount=2;
+  writeFileSync(reviewFile,JSON.stringify(review));
+  const driverFile=join(dir,'reviewed-driver.json');
+  writeFileSync(driverFile,JSON.stringify({schemaVersion:1,packageSha256:candidate.packageSha256,
+    authorReviewed:true,reviewArtifactSha256:sha(readFileSync(reviewFile))}));
+  const driverSha256=sha(readFileSync(driverFile));
   const browserRow=browser=>({
+    driverSha256,
     source:'GOVERNED_STAGING_AUTHENTICATED_QA_V1',
     scope:'GOVERNED_STAGING_SYNTHETIC',
     browser,packageId:candidate.packageId,
@@ -50,8 +66,10 @@ function fixture(){
   save('CHROMIUM',chromiumFile);save('WEBKIT',webkitFile);
   const sign=(overrides={})=>signGovernedScormEvidence({
     candidate,chromiumFile,webkitFile,certificatePdfFiles:pdfPaths,
+    reviewFile,driverFile,
     secret,runtimeSha,harnessSha,...overrides});
-  return {dir,candidate,sign,chromiumFile,webkitFile,pdfPaths,browserRow};
+  return {dir,candidate,sign,chromiumFile,webkitFile,pdfPaths,browserRow,
+    reviewFile,driverFile};
 }
 test('signer produces separate SHA-bound browser artifact hashes for complete synthetic QA',()=>{
   const f=fixture();try{
@@ -124,5 +142,23 @@ test('signer refuses to reuse a different learner certificate in the second brow
     valid.certificateDocument.sha256=chromium.certificateDocument.sha256;
     writeFileSync(f.webkitFile,JSON.stringify(valid));
     assert.throws(()=>f.sign(),/CERTIFICATE_BROWSER_ISOLATION_VIOLATION/);
+  }finally{rmSync(f.dir,{recursive:true,force:true});}
+});
+
+test('signer rejects absent or unreviewed pedagogical approval and driver mismatch',()=>{
+  const f=fixture();try{
+    assert.throws(()=>f.sign({reviewFile:undefined}),/PRIVATE_DOCUMENTS_REQUIRED/);
+    const row=JSON.parse(readFileSync(f.reviewFile,'utf8'));
+    row.approved=false;writeFileSync(f.reviewFile,JSON.stringify(row));
+    assert.throws(()=>f.sign(),/APPROVAL_MISSING_OR_ZIP_DRIFT/);
+    row.approved=true;row.items[0].selectedIndex=null;
+    writeFileSync(f.reviewFile,JSON.stringify(row));
+    assert.throws(()=>f.sign(),/REVIEW_ITEM_UNAPPROVED/);
+    row.items[0].selectedIndex=0;
+    row.items[1].rationale='';writeFileSync(f.reviewFile,JSON.stringify(row));
+    assert.throws(()=>f.sign(),/REVIEW_ITEM_UNAPPROVED/);
+    row.items[1].rationale='Reviewed independently with adequate support';
+    writeFileSync(f.reviewFile,JSON.stringify(row));
+    assert.throws(()=>f.sign(),/DRIVER_NOT_APPROVED_BY_REVIEW/);
   }finally{rmSync(f.dir,{recursive:true,force:true});}
 });
