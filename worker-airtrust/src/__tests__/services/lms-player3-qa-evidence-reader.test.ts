@@ -52,7 +52,7 @@ const call=()=>readPlayer3QaSnapshot({
 });
 describe('Native Player3 read-only QA evidence reconciliation',()=>{
   beforeEach(()=>{
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     rows=[attempt(1,'wrong'),attempt(2,'correct')];
     metadata={
       status:'EM_ANDAMENTO',progresso_pct:45,

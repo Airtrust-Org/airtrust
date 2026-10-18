@@ -49,6 +49,8 @@ const META_SQL=[
   'AND cy.empresa_id=m.empresa_id AND cy.curso_id=m.curso_id',
   'AND cy.funcionario_id=m.funcionario_id AND cy.ciclo_atual=1',
   'AND cy.deleted_at IS NULL',
+  'JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id',
+  "AND c.tipo_conteudo='native' AND c.deleted_at IS NULL",
   'JOIN usuarios u ON u.id=? AND u.funcionario_id=m.funcionario_id',
   'AND u.deleted_at IS NULL',NATIVE_ACTIVE_USER_CONDITION,
   NATIVE_ACTIVE_EMPLOYEE_JOIN,
