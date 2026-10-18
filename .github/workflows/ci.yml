@@ -77,6 +77,8 @@ jobs:
         run: |
           node --test scripts/__tests__/schema-contract-staleness.test.mjs
           npm run guard:schema-contract-staleness
+      - name: prevent obsolete Player 3 staging schema pins
+        run: node --test scripts/__tests__/staging-player3-schema-v2-pins.test.mjs
       - name: validate CI schema bootstrap provenance / staleness
         run: |
           node --test scripts/ci/check-ci-schema-bootstrap.test.mjs

@@ -122,3 +122,26 @@ test('workflow is exact-SHA, dry-run-first and recovery guarded', () => {
   assert.match(workflow, /APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_AND_REDUNDANT_VALID_EVIDENCE_NO_EMAIL/);
   assert.doesNotMatch(workflow, /REVIEWED_UNSAFE_WRONG_NOT_ZERO/);
 });
+
+test('automatic enrollment requires explicit per-rule auto_matricular_ead opt-in', () => {
+  assert.match(script, /COALESCE\(tr\.auto_matricular_ead, 0\) auto_matricular_ead/);
+  assert.match(script, /e\.auto_matricular_ead/);
+  assert.match(script, /Number\(row\.auto_matricular_ead\) !== 1/);
+  assert.match(script, /policy_manual_review_count/);
+  assert.match(script, /policyManualReviewCount \+= 1/);
+});
+
+test('production repair never creates a placeholder or silently enrolls when no published course exists', () => {
+  assert.doesNotMatch(script, /ensureRequiredEadCourses/);
+  assert.doesNotMatch(script, /placeholder criado/i);
+  assert.doesNotMatch(script, /Placeholder EAD criado/);
+  assert.match(script, /if \(before\.no_course_count !== 0\) fail\('PUBLISHED_EAD_CONTENT_MISSING_MANUAL_REVIEW'\)/);
+  const noContentGuardIndex = script.indexOf("if (before.no_course_count !== 0) fail('PUBLISHED_EAD_CONTENT_MISSING_MANUAL_REVIEW')");
+  const mutationIndex = script.indexOf('const enrollmentResult = await enrollMissingPairs(token)');
+  assert.ok(noContentGuardIndex > 0 && noContentGuardIndex < mutationIndex);
+});
+
+
+test('pending independent validation is always reviewed manually without enrollment', () => {
+  assert.match(script, /status === 'EM_ANDAMENTO' \|\| status === 'PENDENTE_VALIDACAO'/);
+});
