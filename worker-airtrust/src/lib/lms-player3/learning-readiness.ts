@@ -35,7 +35,10 @@ export function assessPlayer3JointReadiness(input:{
     Array.isArray(moduleSession?.stages)&&
     requiredLessonIds.length>0&&requiredLessonIds.length<=500&&
     recordedLessonIds.length<=10000&&
-    moduleSession.stages.length>0&&moduleSession.stages.length<=100&&
+    // REVIEW is read-only and may deliberately omit the module ledger.
+    // LEARN still requires at least one actual official stage.
+    (moduleSession.stages.length>0||mode==='REVIEW')&&
+    moduleSession.stages.length<=100&&
     [requiredLessonIds,recordedLessonIds].every(items=>items.every(id=>typeof id==='string'&&ID.test(id)))&&
     requiredLessonIds.length===new Set(requiredLessonIds).size&&
     recordedLessonIds.length===new Set(recordedLessonIds).size&&
@@ -46,7 +49,8 @@ export function assessPlayer3JointReadiness(input:{
       (s.lastScorePct===null||Number.isInteger(s.lastScorePct)&&
        s.lastScorePct>=0&&s.lastScorePct<=100))&&
     new Set(moduleSession.stages.map(s=>s.stageId)).size===moduleSession.stages.length&&
-    moduleSession.allOfficialStagesPassed===moduleSession.stages.every(s=>s.passed)&&
+    moduleSession.allOfficialStagesPassed===
+      (moduleSession.stages.length>0&&moduleSession.stages.every(s=>s.passed))&&
     moduleSession.completionSupported===false;
   const verifiedLessons=recordedLessonIds.filter(x=>requiredLessonIds.includes(x)).length;
   const passes=moduleSession.stages.filter(x=>x?.passed).length;
