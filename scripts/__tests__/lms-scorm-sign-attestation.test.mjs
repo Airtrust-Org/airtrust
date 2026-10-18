@@ -51,7 +51,7 @@ function fixture(){
     reviewerReference:review.reviewerReference,approvedAt:review.approvedAt};
   const message=[approval.kind,approval.reviewerKeyId,approval.packageSha256,
     approval.reviewSha256,approval.driverSha256,approval.reviewerReference,
-    review.approvalReference,approval.approvedAt].join('\\n');
+    review.approvalReference,approval.approvedAt].join('\n');
   writeFileSync(approvalFile,JSON.stringify({...approval,
     signature:edSign(null,Buffer.from(message),privateKey).toString('base64')}));
   const browserRow=browser=>({
