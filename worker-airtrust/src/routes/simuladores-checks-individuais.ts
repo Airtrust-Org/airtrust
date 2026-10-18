@@ -48,6 +48,7 @@ const REQUIRED_CHECK_TRIGGERS = [
   'trg_checks_individuais_confirm_update',
   'trg_checks_individuais_annulled_immutable',
   'trg_checks_individuais_confirmed_immutable',
+  'trg_checks_individuais_delete_guard',
 ] as const;
 
 async function schemaReady(db: D1Database): Promise<boolean> {
@@ -58,11 +59,16 @@ async function schemaReady(db: D1Database): Promise<boolean> {
     if (!(await hasSchemaTable(db, 'sessoes_checks_resultados_individuais'))) return false;
     const triggers = await getSchemaTriggerNames(db, 'sessoes_checks_resultados_individuais');
     if (!REQUIRED_CHECK_TRIGGERS.every((name) => triggers.has(name))) return false;
+    // Both reviewed schema changes are mandatory before any check evidence
+    // API is available. A table with only 0554 lacks physical DELETE safety.
     const applied = await db.prepare(
-      "SELECT 1 AS applied FROM airtrust_schema_changes_v2 WHERE change_id=? AND baseline_id=? LIMIT 1",
-    ).bind('simulator-individual-check-evidence-0554', 'production-d1-baseline-v2-20260714')
-      .first();
-    return !!applied;
+      "SELECT COUNT(DISTINCT change_id) AS total FROM airtrust_schema_changes_v2 " +
+      "WHERE change_id IN (?, ?) AND baseline_id=?",
+    ).bind('simulator-individual-check-evidence-0554',
+      'simulator-individual-check-delete-guard-0560',
+      'production-d1-baseline-v2-20260714')
+      .first<{ total: number }>();
+    return Number(applied?.total) === 2;
   } catch {
     return false;
   }

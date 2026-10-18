@@ -25,6 +25,10 @@ const migration = readFileSync(
   resolve(process.cwd(), 'schema-v2/changes/0554_simulator_individual_check_evidence.sql'),
   'utf8',
 );
+const immutableDeleteMigration = readFileSync(
+  resolve(process.cwd(), 'schema-v2/changes/0560_simulator_individual_check_delete_guard.sql'),
+  'utf8',
+);
 describe('individual simulator checks — A approved, B rejected, C pending', () => {
   let db: SqliteD1Database | null = null;
 
@@ -69,12 +73,15 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
     db.database.exec("UPDATE fichas_sessao SET data_sessao='2026-10-17' WHERE empresa_id=1");
     if (withSchema) {
       db.database.exec(migration);
+      db.database.exec(immutableDeleteMigration);
       db.database.exec(`
         CREATE TABLE airtrust_schema_changes_v2 (
           change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL
         );
         INSERT INTO airtrust_schema_changes_v2(change_id, baseline_id)
-        VALUES ('simulator-individual-check-evidence-0554', 'production-d1-baseline-v2-20260714');
+        VALUES
+          ('simulator-individual-check-evidence-0554', 'production-d1-baseline-v2-20260714'),
+          ('simulator-individual-check-delete-guard-0560', 'production-d1-baseline-v2-20260714');
       `);
     }
   }
@@ -162,6 +169,21 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
   it('fails closed when a required protection trigger is absent', async () => {
     setup();
     db!.database.exec("DROP TRIGGER trg_checks_individuais_scope_insert");
+    expect((await request(111, result(true))).status).toBe(503);
+    expect(evidence()).toEqual([]);
+  });
+
+  it('fails closed when 0554 exists but the immutable DELETE guard 0560 is missing', async () => {
+    setup();
+    db!.database.exec("DROP TRIGGER trg_checks_individuais_delete_guard");
+    expect((await request(111, result(true))).status).toBe(503);
+    expect((await request(111)).status).toBe(503);
+    expect(evidence()).toEqual([]);
+  });
+
+  it('fails closed when the 0560 ledger is missing despite the trigger existing', async () => {
+    setup();
+    db!.database.exec("DELETE FROM airtrust_schema_changes_v2 WHERE change_id='simulator-individual-check-delete-guard-0560'");
     expect((await request(111, result(true))).status).toBe(503);
     expect(evidence()).toEqual([]);
   });
