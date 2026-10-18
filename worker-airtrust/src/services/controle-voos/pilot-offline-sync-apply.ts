@@ -1390,6 +1390,23 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     );
     if (racedReceipt) return replayReceipt(racedReceipt, input.command);
 
+    // The accepted-receipt insert deliberately violates its NOT NULL
+    // constraint when the preceding CAS changed no row. D1 rolls back the
+    // entire batch before reporting this guard, so no child write can escape.
+    if (String(error).includes('NOT NULL constraint failed: cv_offline_sync_receipts.result_status')) {
+      return recordOfflineSyncConflict(input.db, {
+        empresaId: input.empresaId,
+        command: input.command,
+        funcionarioId: input.funcionarioId,
+        code: 'CONTROLE_VOOS_PILOT_SYNC_CAS_CONFLICT',
+        detail: conflictDetail({
+          type: 'cas',
+          entity: 'cv_rdv_operacional',
+          expected: input.command.base_server_version,
+        }),
+      });
+    }
+
     const refreshedRdv = await getActiveRdvByFlight(input.db, input.flight.id, input.empresaId);
     if (
       refreshedRdv &&
