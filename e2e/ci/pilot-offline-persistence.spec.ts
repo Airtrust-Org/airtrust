@@ -397,3 +397,79 @@ test('keeps V1 intact and retries recovery after an interrupted V2 write', async
   await openDiagnosticCard(page);
   await expect(page.locator('#draft')).toHaveValue('restore-after-interruption');
 });
+
+test('lost acknowledgement retains encrypted outbox until draft confirmation is durable', async ({ page }) => {
+  await page.goto('/pilot/');
+  await expect(page.locator('#workspace')).toBeVisible();
+
+  const outcome = await page.evaluate(async () => {
+    const { PilotVault } = await import('/pilot/pilot-vault.js');
+    const { persistPilotFinalSyncResult } = await import('/pilot/pilot-sync-receipt.js');
+    const vault = await PilotVault.open();
+    const ready = await vault.openAutomatically();
+    if (ready.status !== 'ready') throw new Error('Pilot vault unavailable for acceptance test');
+    const operationId = crypto.randomUUID();
+    const outboxId = 'operation:qa:' + operationId;
+    const receiptId = 'receipt:qa:' + operationId;
+    const command = {
+      client_operation_id: operationId,
+      flight_id: 101,
+      local_sequence: 2,
+      payload_hash: 'a'.repeat(64),
+    };
+    await vault.putJson('outbox', outboxId, { status: 'pending', command }, 1);
+    const pendingRecord = await vault.getJson('outbox', outboxId);
+    const accepted = {
+      client_operation_id: operationId,
+      status: 'accepted',
+      canonical_entity_id: '202',
+      server_entity_version: 3,
+      server_received_at: '2026-10-17T19:00:00Z',
+    };
+
+    let rejected = false;
+    try {
+      await persistPilotFinalSyncResult({
+        vault, outboxRecord: pendingRecord, result: accepted, receiptId,
+        markAccepted: async () => {
+          throw new DOMException('Simulated draft write interruption', 'QuotaExceededError');
+        },
+      });
+    } catch (error) {
+      rejected = error?.name === 'QuotaExceededError';
+    }
+    const outboxRetained = Boolean(await vault.getJson('outbox', outboxId));
+    const receiptRetained = await vault.getJson('sync_receipts', receiptId);
+    let acknowledged = 0;
+
+    // A subsequent delivery reuses the same operation and server receipt.
+    await persistPilotFinalSyncResult({
+      vault, outboxRecord: await vault.getJson('outbox', outboxId),
+      result: { ...accepted, status: 'already_accepted' },
+      receiptId,
+      markAccepted: async (retryCommand, retryResult) => {
+        if (retryCommand.client_operation_id !== operationId ||
+            retryResult.status !== 'already_accepted') {
+          throw new Error('Lost original operation identity');
+        }
+        acknowledged += 1;
+      },
+    });
+
+    return {
+      rejected,
+      outboxRetained,
+      receiptPersisted: receiptRetained?.value?.command_identity?.payload_hash === 'a'.repeat(64),
+      localAckCount: acknowledged,
+      outboxRemovedAfterAck: !(await vault.getJson('outbox', outboxId)),
+    };
+  });
+
+  expect(outcome).toEqual({
+    rejected: true,
+    outboxRetained: true,
+    receiptPersisted: true,
+    localAckCount: 1,
+    outboxRemovedAfterAck: true,
+  });
+});
