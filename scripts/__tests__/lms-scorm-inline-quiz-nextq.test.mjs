@@ -69,8 +69,8 @@ test('native disabled gate cannot be bypassed even with a selected response', ()
   } finally { f.close(); }
 });
 
-test('existing data-next navigation is preserved', () => {
-  const f = fixture({ legacy: true });
+test('existing data-next navigation is preserved after actual answer selection', () => {
+  const f = fixture({ legacy: true, initialSelection: true });
   try {
     assert.equal(f.step().type, 'inline-quiz-next');
     assert.deepEqual(f.clicked, ['next']);
