@@ -112,6 +112,68 @@ describe('Petrobras RVE daily export', () => {
     expect(result.decolagem).toEqual({ data: '29/02/2028', hora: '06:50:30' });
   });
 
+  it('atribui o dia seguinte a voo HH:MM que atravessa meia-noite sem alterar a ordem Petrobras', () => {
+    const legs: PetrobrasRveStageRow[] = [
+      { numero_etapa: 1, origem_icao: 'SBME', destino_icao: 'SKNT',
+        horario_motor_ligado: '23:40', horario_decolagem: '23:50',
+        horario_pouso: '00:20', horario_motor_desligado: '00:22' },
+      { numero_etapa: 2, origem_icao: 'SKNT', destino_icao: 'SBME',
+        horario_motor_ligado: '00:22', horario_decolagem: '00:25',
+        horario_pouso: '01:05', horario_motor_desligado: '01:10' },
+    ];
+    const attendance = buildPetrobrasRveAttendanceFromFlight(flight(), legs);
+    expect(attendance.acionamento).toEqual({ data: '19/09/2026', hora: '23:40:00' });
+    expect(attendance.etapas[0].inicio.data).toBe('19/09/2026');
+    expect(attendance.etapas[0].fim.data).toBe('20/09/2026');
+    expect(attendance.etapas[1].inicio.data).toBe('20/09/2026');
+    expect(attendance.pouso).toEqual({ data: '20/09/2026', hora: '01:05:00' });
+    expect(attendance.corte).toEqual({ data: '20/09/2026', hora: '01:10:00' });
+    const built = buildDailyPetrobrasRveXml([{ flight: flight(), stages: legs }]);
+    expect(built.records).toHaveLength(6);
+    expect(built.records.map((r) => r.CODIGO_OPERACAO))
+      .toEqual(['OA30', 'PA01', 'OA08', 'OA08', 'PA03', 'OA31']);
+    expect(built.records[2]).toMatchObject({ MIN_VOADOS: '30', DATA_FINAL: '20/09/2026' });
+    expect(built.records[3]).toMatchObject({ MIN_VOADOS: '40', DATA_INICIAL: '20/09/2026' });
+  });
+
+  it('respeita a data explicita ISO nas etapas e cruza fevereiro bissexto sem normalizacao silenciosa', () => {
+    const explicit = [{
+      ...stages[0],
+      horario_motor_ligado: '2028-02-29T23:40:00Z',
+      horario_decolagem: '2028-02-29T23:50:00Z',
+      horario_pouso: '2028-03-01T00:30:00Z',
+      horario_motor_desligado: '2028-03-01T00:40:00Z',
+    }];
+    const result = buildPetrobrasRveAttendanceFromFlight(flight({ data_voo: '2028-02-29' }), explicit);
+    expect(result.etapas[0].fim.data).toBe('01/03/2028');
+    expect(result.corte.data).toBe('01/03/2028');
+    const legacy = explicit.map((v) => ({
+      ...v, horario_motor_ligado: '23:40', horario_decolagem: '23:50',
+      horario_pouso: '00:30', horario_motor_desligado: '00:40',
+    }));
+    const legacyResult = buildPetrobrasRveAttendanceFromFlight(flight({ data_voo: '2028-02-29' }), legacy);
+    expect(legacyResult.corte.data).toBe('01/03/2028');
+  });
+
+  it('rejeita mistura HH:MM/ISO e reversao ambigua em vez de fabricar datas de voo', () => {
+    const mixed = [{ ...stages[0], horario_motor_ligado: '23:40',
+      horario_decolagem: '2026-09-19T23:50:00Z' }];
+    expect(() => buildPetrobrasRveAttendanceFromFlight(flight(), mixed))
+      .toThrow(/Formatos de horario misturados/);
+    const reversed = [{ ...stages[0],
+      horario_motor_ligado: '10:00', horario_decolagem: '09:59',
+      horario_pouso: '11:00', horario_motor_desligado: '11:10' }];
+    expect(() => buildPetrobrasRveAttendanceFromFlight(flight(), reversed))
+      .toThrow(/Sequencia de horarios ambigua/);
+    const reversedIso = [{ ...stages[0],
+      horario_motor_ligado: '2026-09-19T10:00:00Z',
+      horario_decolagem: '2026-09-19T09:59:00Z',
+      horario_pouso: '2026-09-19T11:00:00Z',
+      horario_motor_desligado: '2026-09-19T11:10:00Z' }];
+    expect(() => buildPetrobrasRveAttendanceFromFlight(flight(), reversedIso))
+      .toThrow(/Sequencia de horarios ambigua/);
+  });
+
   it('falha fechado quando uma etapa final não tem horários completos', () => {
     expect(() =>
       buildPetrobrasRveAttendanceFromFlight(

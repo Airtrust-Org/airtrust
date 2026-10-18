@@ -62,6 +62,72 @@ function clock(value: string | null, fallbackDate: string): PetrobrasRveClockPoi
   throw new ApiError('Horario operacional invalido para XML Petrobras', 409, 'CONTROLE_VOOS_RVE_XML_INVALID_CLOCK');
 }
 
+
+/**
+ * Resolve a finalized flight's events in true operational order:
+ * engine start, each departure/landing pair, then final engine stop.
+ * Legacy HH:MM has no calendar date; assign at most one provable
+ * midnight rollover. A backwards clock without a plausible overnight
+ * transition is ambiguous and must not be invented in a Petrobras report.
+ */
+function chronologicalRveClocks(
+  events: Array<string | null>,
+  fallbackDate: string,
+): PetrobrasRveClockPoint[] {
+  const points = events.map((value) => clock(value, fallbackDate));
+  const isWallClock = events.map((value) => /^\d{2}:\d{2}(?::\d{2})?$/.test(String(value || '').trim()));
+  if (isWallClock.some(Boolean) && isWallClock.some((wall) => !wall)) {
+    throw new ApiError(
+      'Formatos de horario misturados sem data explicita para XML Petrobras',
+      409, 'CONTROLE_VOOS_RVE_XML_MIXED_CLOCK_FORMATS',
+    );
+  }
+
+  const hasLegacyClocks = isWallClock[0];
+  const base = String(fallbackDate || '').trim().slice(0, 10);
+  ddmmyyyy(base); // Reject an invalid operational flight date before computing offsets.
+  const match = base.match(/^(\d{4})-(\d{2})-(\d{2})$/)!;
+  const addDays = (dayOffset: number): string => {
+    // setUTCFullYear also handles 0001–0099 without Date.UTC's 1900 offset.
+    const date = new Date(0);
+    date.setUTCFullYear(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + dayOffset);
+    date.setUTCHours(0, 0, 0, 0);
+    return `${String(date.getUTCDate()).padStart(2, '0')}/${String(date.getUTCMonth() + 1).padStart(2, '0')}/${String(date.getUTCFullYear()).padStart(4, '0')}`;
+  };
+  const badOrder = () => new ApiError(
+    'Sequencia de horarios ambigua para XML Petrobras; informe data e hora completas',
+    409, 'CONTROLE_VOOS_RVE_XML_CLOCK_ORDER_AMBIGUOUS',
+  );
+
+  let previousSecond: number | null = null;
+  let previousInstant: number | null = null;
+  let dayOffset = 0;
+  return points.map((point) => {
+    const [hours, minutes, seconds] = point.hora.split(':').map(Number);
+    const secondOfDay = hours * 3600 + minutes * 60 + seconds;
+    if (hasLegacyClocks) {
+      if (previousSecond !== null && secondOfDay < previousSecond) {
+        const impliedGap = 86400 - previousSecond + secondOfDay;
+        // Never infer an overnight flight from a random reversed clock:
+        // require a later-day time followed by an early-day time, with a
+        // plausible <=12-hour forward interval; only one rollover per flight.
+        if (dayOffset !== 0 || previousSecond < 12 * 3600 ||
+            secondOfDay > 12 * 3600 || impliedGap > 12 * 3600) throw badOrder();
+        dayOffset += 1;
+      }
+      previousSecond = secondOfDay;
+      return { data: addDays(dayOffset), hora: point.hora };
+    }
+    const dated = point.data.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)!;
+    const date = new Date(0);
+    date.setUTCFullYear(Number(dated[3]), Number(dated[2]) - 1, Number(dated[1]));
+    date.setUTCHours(hours, minutes, seconds, 0);
+    if (previousInstant !== null && date.getTime() < previousInstant) throw badOrder();
+    previousInstant = date.getTime();
+    return point;
+  });
+}
+
 export function resolvePetrobrasRveExternalIdentity(flight: PetrobrasRveFlightRow): {
   equipamento: string;
   atendimento: string;
@@ -104,14 +170,19 @@ export function buildPetrobrasRveAttendanceFromFlight(
     throw new ApiError(`Voo ${flight.voo_id} sem origem ICAO`, 409, 'CONTROLE_VOOS_RVE_XML_BASE_REQUIRED');
   }
 
+  const timeline = chronologicalRveClocks([
+    first.horario_motor_ligado,
+    ...ordered.flatMap((stage) => [stage.horario_decolagem, stage.horario_pouso]),
+    last.horario_motor_desligado,
+  ], flight.data_voo);
   return {
     ...identity,
     escalaBase,
-    acionamento: clock(first.horario_motor_ligado, flight.data_voo),
-    decolagem: clock(first.horario_decolagem, flight.data_voo),
-    pouso: clock(last.horario_pouso, flight.data_voo),
-    corte: clock(last.horario_motor_desligado, flight.data_voo),
-    etapas: ordered.map((stage) => {
+    acionamento: timeline[0],
+    decolagem: timeline[1],
+    pouso: timeline[ordered.length * 2],
+    corte: timeline[ordered.length * 2 + 1],
+    etapas: ordered.map((stage, index) => {
       const escala = String(stage.destino_icao || '').trim().toUpperCase();
       if (!escala) {
         throw new ApiError(
@@ -122,8 +193,8 @@ export function buildPetrobrasRveAttendanceFromFlight(
       }
       return {
         escala,
-        inicio: clock(stage.horario_decolagem, flight.data_voo),
-        fim: clock(stage.horario_pouso, flight.data_voo),
+        inicio: timeline[index * 2 + 1],
+        fim: timeline[index * 2 + 2],
       };
     }),
   };
