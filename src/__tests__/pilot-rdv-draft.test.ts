@@ -5,6 +5,7 @@ import {
   applyStageContinuity,
   buildCommonFlightFields,
   buildStageDraftsFromPackage,
+  convertWeight,
   calcClockDurationHhMm,
   calcTotalBlockTimeHhMm,
   calcStageTotalWeight,
@@ -161,6 +162,37 @@ describe('Pilot RDV operational calculations', () => {
     applyStageContinuity(stages);
     expect(stages[1].fields.combustivel_inicio).toBe('1900');
     expect(stages[1].fields.unidade_combustivel).toBe('LB');
+  });
+
+
+  it('não trata peso sem unidade comprovada como LB ou transforma unidade desconhecida em KG', () => {
+    const common = buildCommonFlightFields({
+      voo: { numero_voo: 'P001' },
+      aeronave: { peso_vazio: 4300, unidade_peso: null },
+      etapas: [{ peso_tripulacao: 200, unidade_peso: null }],
+    });
+    expect(common.peso_vazio).toBe('');
+    expect(common.peso_tripulacao).toBe('');
+    expect(common.unidade_peso).toBe('LB');
+    expect(buildCommonFlightFields({
+      aeronave: { peso_vazio: 4300, unidade_peso: 'STONE' },
+      etapas: [{ peso_tripulacao: 200, unidade_peso: 'STONE' }],
+    })).toMatchObject({ peso_vazio: '', peso_tripulacao: '' });
+    expect(convertWeight('200', 'STONE', 'STONE')).toBeNull();
+    expect(payloadToKg('200', 'STONE')).toBeNull();
+    expect(convertWeight('100', 'KG', 'LB')).toBeCloseTo(220.462, 3);
+  });
+
+  it('bloqueia total da etapa quando combustível ou carga possuem unidade inválida', () => {
+    const safe = {
+      unidade_peso: 'LB', peso_vazio: '9000', peso_tripulacao: '400',
+      peso_passageiros: '1200', peso_bagagem: '250',
+    };
+    expect(calcStageTotalWeight({ ...safe, unidade_peso: 'STONE' })).toBeNull();
+    expect(calcStageTotalWeight({ ...safe, combustivel_inicio: '800', unidade_combustivel: 'STONE' })).toBeNull();
+    expect(calcStageTotalWeight({ ...safe, payload: '100', unidade_payload: 'STONE' })).toBeNull();
+    expect(calcStageTotalWeight({ ...safe, payload: '100', unidade_payload: 'KG' }))
+      .toBeCloseTo(11070.462, 3);
   });
 
   it('calcula peso total na unidade operacional da perna', () => {

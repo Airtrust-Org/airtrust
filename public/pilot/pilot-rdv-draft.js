@@ -156,16 +156,20 @@ export function calcTotalBlockTimeHhMm(stageDrafts) {
 }
 
 export function buildCommonFlightFields(packageData) {
-  const sourceUnit = String(packageData?.aeronave?.unidade_peso || 'LB').trim().toUpperCase() || 'LB';
+  // Never invent LB provenance for a stored aircraft weight whose unit is
+  // missing or unsupported. A blank weight is safer than a wrong total.
+  const sourceUnit = String(packageData?.aeronave?.unidade_peso || '').trim().toUpperCase();
   const emptyRaw = parseNumber(packageData?.aeronave?.peso_vazio);
-  const emptyLb = emptyRaw === null ? '' : String(convertWeight(emptyRaw, sourceUnit, 'LB') ?? emptyRaw);
+  const convertedEmpty = ['KG', 'LB'].includes(sourceUnit)
+    ? convertWeight(emptyRaw, sourceUnit, 'LB') : null;
+  const emptyLb = convertedEmpty === null ? '' : String(convertedEmpty);
   const crewStage = (Array.isArray(packageData?.etapas) ? packageData.etapas : [])
     .find((stage) => parseNumber(stage?.peso_tripulacao) !== null);
   const firstCrewWeight = parseNumber(crewStage?.peso_tripulacao);
-  const crewSourceUnit = String(crewStage?.unidade_peso || sourceUnit).trim().toUpperCase() || sourceUnit;
-  const crewLb = firstCrewWeight === null
-    ? ''
-    : String(convertWeight(firstCrewWeight, crewSourceUnit, 'LB') ?? firstCrewWeight);
+  const crewSourceUnit = String(crewStage?.unidade_peso || sourceUnit).trim().toUpperCase();
+  const convertedCrew = ['KG', 'LB'].includes(crewSourceUnit)
+    ? convertWeight(firstCrewWeight, crewSourceUnit, 'LB') : null;
+  const crewLb = convertedCrew === null ? '' : String(convertedCrew);
   return {
     numero_voo: String(packageData?.voo?.numero_voo || ''),
     numero_db: String(packageData?.voo?.numero_db || ''),
@@ -181,6 +185,7 @@ export function payloadToKg(value, unit) {
   const normalizedUnit = String(unit || 'KG')
     .trim()
     .toUpperCase();
+  if (!['KG', 'LB'].includes(normalizedUnit)) return null;
   return Number((normalizedUnit === 'LB' ? numeric / 2.2046226218 : numeric).toFixed(3));
 }
 
@@ -189,6 +194,7 @@ export function convertWeight(value, fromUnit, toUnit) {
   if (numeric === null) return null;
   const source = String(fromUnit || 'KG').trim().toUpperCase();
   const target = String(toUnit || source).trim().toUpperCase();
+  if (!['KG', 'LB'].includes(source) || !['KG', 'LB'].includes(target)) return null;
   if (source === target) return numeric;
   if (source === 'LB' && target === 'KG') return Number((numeric / 2.2046226218).toFixed(3));
   if (source === 'KG' && target === 'LB') return Number((numeric * 2.2046226218).toFixed(3));
@@ -209,7 +215,7 @@ export function applyStandardPassengerBaggageWeight(fields) {
 export function calcStageTotalWeight(fields) {
   const unit = String(fields?.unidade_peso || '').trim().toUpperCase();
   const emptyWeight = parseNumber(fields?.peso_vazio);
-  if (!unit || emptyWeight === null) return null;
+  if (!['KG', 'LB'].includes(unit) || emptyWeight === null) return null;
 
   let total = emptyWeight;
   for (const key of ['peso_tripulacao', 'peso_passageiros', 'peso_bagagem']) {
@@ -217,9 +223,11 @@ export function calcStageTotalWeight(fields) {
   }
 
   const payload = convertWeight(fields?.payload, fields?.unidade_payload || 'KG', unit);
+  if (parseNumber(fields?.payload) !== null && payload === null) return null;
   if (payload !== null) total += payload;
 
   const fuel = convertWeight(fields?.combustivel_inicio, fields?.unidade_combustivel, unit);
+  if (parseNumber(fields?.combustivel_inicio) !== null && fuel === null) return null;
   if (fuel !== null) total += fuel;
 
   return Number(total.toFixed(3));
