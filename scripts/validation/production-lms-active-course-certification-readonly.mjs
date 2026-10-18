@@ -407,8 +407,27 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         }
       }
 
-      for (const input of Array.from(document.querySelectorAll('input[type=checkbox]')).filter(visible)) {
-        if (!input.checked) input.click();
+      // Native checklist inputs may lie below the iframe viewport. Scroll to
+      // each enabled, rendered control and issue an actual click; never set
+      // .checked or synthesize completion data. Hidden course/navigation
+      // checkboxes are not learner actions.
+      const pendingCheckbox = Array.from(document.querySelectorAll('input[type=checkbox]'))
+        .find((input) => {
+          if (input.checked || input.disabled || input.closest('nav,aside,header,footer,[hidden],[aria-hidden="true"]')) return false;
+          const rect = input.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return false;
+          for (let ancestor = input; ancestor; ancestor = ancestor.parentElement) {
+            const style = getComputedStyle(ancestor);
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+            if (ancestor === document.body) break;
+          }
+          return true;
+        });
+      if (pendingCheckbox) {
+        pendingCheckbox.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+        pendingCheckbox.click();
+        logAction('checklist-checkbox');
+        return { type: 'checklist-checkbox' };
       }
 
       // The SCORM root uses `app-shell menu-collapsed`. A generic
@@ -1061,7 +1080,22 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           return markAndClick(inlineQuizChoices[authoredIndex], 'inline-quiz-authored-answer');
         }
         const inlineNext = items.find((item) => item.el.matches('[data-next]'));
-        if (inlineNext) return markAndClick(inlineNext, 'inline-quiz-next');
+        if (inlineNext) {
+          // #25/#26: data-next was clicked indefinitely before a response was
+          // selected. Only use a package-authored answer mapping or a genuine
+          // learner selection, never pick the first choice by assumption.
+          if (inlineAnswerSelected) {
+            const repeatedNext = st.actionLog.filter((entry) =>
+              entry.location === locationKey && entry.type === 'inline-quiz-next'
+            ).length;
+            if (repeatedNext >= 4) return { type: 'inline-quiz-no-progress-after-answer' };
+            return markAndClick(inlineNext, 'inline-quiz-next');
+          }
+          const authoredIndex = (plannedQuestion?.indices || plansHere.flatMap((entry) => entry?.indices || []))
+            .find((index) => Number.isInteger(index) && index >= 0 && index < inlineQuizChoices.length);
+          if (!Number.isInteger(authoredIndex)) return { type: 'inline-quiz-authored-answer-missing' };
+          return markAndClick(inlineQuizChoices[authoredIndex], 'inline-quiz-authored-answer');
+        }
         const chosen = new Set(st.inlineChoicesTried?.[locationKey] || []);
         const wanted = (plannedQuestion?.indices || [])[0];
         const candidates = [
@@ -1298,6 +1332,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       diagnostics.required_decision_block = action.type;
     }
     if (action?.type === 'accordion-gate-unresolved' ||
+        action?.type === 'inline-quiz-no-progress-after-answer' ||
         action?.type === 'inline-quiz-authored-answer-missing' || action?.type === 'inline-quiz-question-gate-blocked' ||
         action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall' ||
         action?.type === 'retry-deferred' || action?.type === 'adaptive-exhausted' ||
