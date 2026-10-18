@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   applySafeStageAggregates,
   applyStageContinuity,
+  applyStandardPassengerBaggageWeight,
   buildCommonFlightFields,
   buildStageDraftsFromPackage,
+  convertWeight,
   calcClockDurationHhMm,
   calcTotalBlockTimeHhMm,
   calcStageTotalWeight,
@@ -161,6 +163,74 @@ describe('Pilot RDV operational calculations', () => {
     applyStageContinuity(stages);
     expect(stages[1].fields.combustivel_inicio).toBe('1900');
     expect(stages[1].fields.unidade_combustivel).toBe('LB');
+  });
+
+
+  it('não trata peso sem unidade comprovada como LB ou transforma unidade desconhecida em KG', () => {
+    const common = buildCommonFlightFields({
+      voo: { numero_voo: 'P001' },
+      aeronave: { peso_vazio: 4300, unidade_peso: null },
+      etapas: [{ peso_tripulacao: 200, unidade_peso: null }],
+    });
+    expect(common.peso_vazio).toBe('');
+    expect(common.peso_tripulacao).toBe('');
+    expect(common.unidade_peso).toBe('LB');
+    // Aircraft has a valid unit, but the crew stage does not: no guessed LB.
+    const mixed = buildCommonFlightFields({
+      aeronave: { peso_vazio: 4300, unidade_peso: 'LB' },
+      etapas: [{ peso_tripulacao: 200, unidade_peso: null }],
+    });
+    expect(mixed.peso_vazio).toBe('4300');
+    expect(mixed.peso_tripulacao).toBe('');
+    expect(buildCommonFlightFields({
+      aeronave: { peso_vazio: 4300, unidade_peso: 'STONE' },
+      etapas: [{ peso_tripulacao: 200, unidade_peso: 'STONE' }],
+    })).toMatchObject({ peso_vazio: '', peso_tripulacao: '' });
+    expect(convertWeight('200', 'STONE', 'STONE')).toBeNull();
+    expect(payloadToKg('200', 'STONE')).toBeNull();
+    expect(convertWeight('100', 'KG', 'LB')).toBeCloseTo(220.462, 3);
+  });
+
+  it('bloqueia total da etapa quando combustível ou carga possuem unidade inválida', () => {
+    const safe = {
+      unidade_peso: 'LB', peso_vazio: '9000', peso_tripulacao: '400',
+      peso_passageiros: '1200', peso_bagagem: '250',
+    };
+    expect(calcStageTotalWeight({ ...safe, unidade_peso: 'STONE' })).toBeNull();
+    expect(calcStageTotalWeight({ ...safe, combustivel_inicio: '800', unidade_combustivel: 'STONE' })).toBeNull();
+    expect(calcStageTotalWeight({ ...safe, combustivel_inicio: '800', unidade_combustivel: '' })).toBeNull();
+    expect(calcStageTotalWeight({ ...safe, combustivel_inicio: '800' })).toBeNull();
+    expect(calcStageTotalWeight({ ...safe, payload: '100', unidade_payload: 'STONE' })).toBeNull();
+    expect(calcStageTotalWeight({ ...safe, payload: '100', unidade_payload: 'KG' }))
+      .toBeCloseTo(11070.462, 3);
+  });
+
+
+  it('converte peso básico e de tripulação KG antes de ativar peso padrão em LB', () => {
+    const fields = {
+      pax: '2', peso_padrao_ativo: true,
+      unidade_peso: 'KG', peso_vazio: '4000', peso_tripulacao: '200',
+      peso_passageiros: '400', peso_bagagem: '50',
+    };
+    expect(applyStandardPassengerBaggageWeight(fields)).toBe(true);
+    expect(fields.unidade_peso).toBe('LB');
+    expect(Number(fields.peso_vazio)).toBeCloseTo(8818.49, 2);
+    expect(Number(fields.peso_tripulacao)).toBeCloseTo(440.925, 3);
+    expect(fields.peso_passageiros).toBe('360');
+    expect(fields.peso_bagagem).toBe('40');
+  });
+
+  it('não ativa peso padrão se o peso certificado tem unidade desconhecida', () => {
+    const fields = {
+      pax: '2', peso_padrao_ativo: true, unidade_peso: 'STONE',
+      peso_vazio: '4000', peso_tripulacao: '200',
+      peso_passageiros: '400', peso_bagagem: '50',
+    };
+    expect(applyStandardPassengerBaggageWeight(fields)).toBe(false);
+    expect(fields.peso_padrao_ativo).toBe(false);
+    expect(fields.unidade_peso).toBe('STONE');
+    expect(fields.peso_vazio).toBe('4000');
+    expect(fields.peso_passageiros).toBe('400');
   });
 
   it('calcula peso total na unidade operacional da perna', () => {
