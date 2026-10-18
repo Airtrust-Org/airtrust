@@ -26,7 +26,9 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: production-lms-active-course-certification-readonly
+  # Non-command issue comments must never displace a queued governed QA run.
+  # Actual read-only requests (dispatch or authorized PR command) still serialize.
+  group: ${{ github.event_name == 'issue_comment' && !startsWith(github.event.comment.body, 'AIRTRUST_PRODUCTION_LMS_ACTIVE_CERTIFICATION_READONLY ') && format('production-lms-readonly-ignored-{0}', github.run_id) || 'production-lms-active-course-certification-readonly' }}
   cancel-in-progress: false
 
 env:
