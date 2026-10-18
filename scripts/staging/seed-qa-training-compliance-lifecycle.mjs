@@ -130,6 +130,15 @@ VALUES (${tenantId},${esc(requiredCourseTitle)},${esc(marker)},'QA',60,${require
 INSERT INTO lms_cursos(empresa_id,titulo,descricao,categoria,carga_horaria_minutos,qualificacao_tipo_id,gerar_qualificacao_ao_concluir,ativo,publicado,version_tag,tipo_conteudo,scorm_package_r2_prefix,observacoes,created_at,updated_at,deleted_at)
 VALUES (${tenantId},${esc(orphanCourseTitle)},${esc(marker)},'QA',60,${orphanTypeId},1,1,1,${esc(code)},'h5p',${esc(orphanPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
 
+-- The scoped QA Gestor only sees courses linked to the permitted synthetic
+-- sector. Do not relax product RBAC or grant global course visibility.
+INSERT INTO lms_cursos_setores(curso_id,setor_id,empresa_id,created_at,updated_at,deleted_at)
+SELECT c.id,${sectorId},c.empresa_id,datetime('now'),datetime('now'),NULL
+FROM lms_cursos c
+WHERE c.empresa_id=${tenantId}
+  AND c.titulo IN (${esc(requiredCourseTitle)},${esc(orphanCourseTitle)})
+  AND c.observacoes=${esc(marker)} AND c.deleted_at IS NULL;
+
 -- Historical enrollment with no requirement: deliberately creates the reconciliation case.
 INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id,status,progresso_pct,tentativas,observacoes,created_at,updated_at,deleted_at)
 VALUES (${tenantId},${orphanCourseId},${employee1Id},'NAO_INICIADO',0,0,${esc(marker)},datetime('now'),datetime('now'),NULL);
@@ -142,6 +151,7 @@ CREATE TABLE IF NOT EXISTS _qa_compliance_lifecycle_post(
   employee_count INTEGER NOT NULL CHECK(employee_count=2),
   type_count INTEGER NOT NULL CHECK(type_count=2),
   course_count INTEGER NOT NULL CHECK(course_count=2),
+  course_sector_count INTEGER NOT NULL CHECK(course_sector_count=2),
   orphan_enrollment_count INTEGER NOT NULL CHECK(orphan_enrollment_count=1),
   rules_count INTEGER NOT NULL CHECK(rules_count=0)
 );
@@ -158,6 +168,11 @@ SELECT
  (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM lms_cursos WHERE empresa_id=${tenantId} AND titulo IN (${esc(requiredCourseTitle)},${esc(orphanCourseTitle)}) AND deleted_at IS NULL),
+ (SELECT COUNT(*) FROM lms_cursos_setores lcs JOIN lms_cursos c ON c.id=lcs.curso_id AND c.empresa_id=lcs.empresa_id
+   WHERE lcs.empresa_id=${tenantId} AND lcs.setor_id=${sectorId}
+     AND c.observacoes=${esc(marker)}
+     AND c.titulo IN (${esc(requiredCourseTitle)},${esc(orphanCourseTitle)})
+     AND lcs.deleted_at IS NULL),
  (SELECT COUNT(*) FROM lms_matriculas WHERE empresa_id=${tenantId} AND curso_id=${orphanCourseId} AND funcionario_id=${employee1Id} AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM treinamento_requisitos WHERE empresa_id=${tenantId} AND qualificacao_tipo_id IN (${requiredTypeId},${orphanTypeId}) AND deleted_at IS NULL);
 DROP TABLE _qa_compliance_lifecycle_post;
@@ -206,6 +221,15 @@ WHERE empresa_id=${tenantId} AND curso_id IN (
 ) AND funcionario_id IN (
   SELECT id FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)})
 );
+-- Retire exactly this run's two course-sector links before retiring courses.
+UPDATE lms_cursos_setores
+SET deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
+WHERE empresa_id=${tenantId} AND setor_id=${sectorId} AND deleted_at IS NULL
+  AND curso_id IN (
+    SELECT id FROM lms_cursos WHERE empresa_id=${tenantId}
+      AND titulo IN (${esc(requiredCourseTitle)},${esc(orphanCourseTitle)})
+      AND observacoes=${esc(marker)}
+  );
 UPDATE lms_cursos SET ativo=0,publicado=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
 UPDATE funcionarios SET ativo=0,status='INATIVO',deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
@@ -235,6 +259,9 @@ SELECT
  +(SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM lms_cursos WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM lms_cursos_setores lcs JOIN lms_cursos c ON c.id=lcs.curso_id AND c.empresa_id=lcs.empresa_id
+     WHERE lcs.empresa_id=${tenantId} AND lcs.setor_id=${sectorId}
+       AND c.observacoes=${esc(marker)} AND lcs.deleted_at IS NULL)
  +(SELECT COUNT(*) FROM treinamento_requisitos WHERE empresa_id=${tenantId} AND qualificacao_tipo_id IN (
     SELECT id FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)})
   ) AND deleted_at IS NULL)
