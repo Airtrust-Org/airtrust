@@ -8,6 +8,8 @@ import {DatabaseSync} from 'node:sqlite';
 import {createHash} from 'node:crypto';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {validateScormLearnerCompletionPlan} from '../../scripts/qa/scorm-real-learner-completion.mjs';
+import {observeMonotonicSuspend} from '../../scripts/qa/scorm-suspend-monotonic.mjs';
 
 const digest=(x:Uint8Array)=>createHash('sha256').update(x).digest('hex');
 test('external ZIP: learner UI -> authenticated Worker -> D1 -> qualification and PDF',
@@ -21,6 +23,7 @@ test('external ZIP: learner UI -> authenticated Worker -> D1 -> qualification an
     const sha=digest(readFileSync(fixture.zipPath));
     expect(sha).toBe(driver.packageSha256);
     expect(sha).toBe(fixture.packageSha256);
+    validateScormLearnerCompletionPlan(driver);
     expect(fixture.origin).toBe('http://127.0.0.1:8787');
     const token=process.env.AIRTRUST_SCORM_QA_ACCESS_TOKEN||'';
     expect(token.length,'Short-lived authenticated QA token required').toBeGreaterThan(20);
@@ -81,7 +84,8 @@ test('external ZIP: learner UI -> authenticated Worker -> D1 -> qualification an
     else if(check.state==='enabled')await expect(loc).toBeEnabled();
     else if(check.state==='text')await expect(loc).toContainText(check.value);
     else throw Error('UNSUPPORTED_RESUME_ASSERTION');
-    expect(state(first).scorm?.suspend_data).toBe(prior);
+    expect(observeMonotonicSuspend(prior,state(first).scorm?.suspend_data).ok)
+      .toBe(true);
     expect(state(first).history).toHaveLength(0);
     if(driver.requiresAssessment){
       await steps(sco,driver.fail.actions);
@@ -97,34 +101,42 @@ test('external ZIP: learner UI -> authenticated Worker -> D1 -> qualification an
     if(driver.requiresAssessment)
       expect(state(success).scorm!.score_raw).toBeGreaterThanOrEqual(driver.masteryScore);
     expect(state(success).history).toHaveLength(0);
-    await page.evaluate(enrollmentId=>{
-      const iframe=document.getElementById('outer') as HTMLIFrameElement;
-      iframe.contentWindow!.postMessage({type:'lms:request-completion',
-        matriculaId:enrollmentId},location.origin);
-    },success);
+    // Complete through the same visible UI as a learner, never through an
+    // injected postMessage, direct CMI write or backend completion shortcut.
+    async function learnerCompletion(stage:{
+      actions:Array<{op:'click';surface:'host'|'sco';selector:string}>
+    },currentSco:typeof sco){
+      for(const action of stage.actions){
+        const surface=action.surface==='host'?
+          page.frameLocator('#outer'):currentSco;
+        await surface.locator(action.selector).click({timeout:25000});
+      }
+    }
+    await learnerCompletion(driver.completion,sco);
     await expect.poll(()=>state(success).enrollment.status,{timeout:45000})
       .toBe('CONCLUIDO');
     const done=state(success);
     expect(done.history).toHaveLength(1);
     expect(done.enrollment.qualificacao_historico_id).toBe(done.history[0].id);
-    await open();
-    await page.evaluate(enrollmentId=>{
-      const iframe=document.getElementById('outer') as HTMLIFrameElement;
-      iframe.contentWindow!.postMessage({type:'lms:request-completion',
-        matriculaId:enrollmentId},location.origin);
-    },success);
-    expect(state(success).enrollment.status).toBe('CONCLUIDO');
+    sco=await open();
+    if(driver.replayCompletion){
+      await learnerCompletion(driver.replayCompletion,sco);
+    }
+    await expect.poll(()=>state(success).enrollment.status,{timeout:20000})
+      .toBe('CONCLUIDO');
     expect(state(success).history).toHaveLength(1);
     expect(state(first).history).toHaveLength(0);
     const report={
       source:'LOCAL_AUTHENTICATED_EXACT_ZIP_BACKEND_PROBE_V1',
       status:'UNCERTIFIED',activationAuthorized:false,
       packageSha256:sha,browser:info.project.name,
-      observations:['TENANT_DENIAL','SUSPEND_RESUME','ASSESSMENT','EXPLICIT_CLOSURE',
-        'QUALIFICATION_IDEMPOTENCE','REOPEN'],
+      observations:['TENANT_DENIAL','SUSPEND_RESUME','ASSESSMENT',
+        'LEARNER_UI_CLOSURE','REOPEN',
+        ...(driver.replayCompletion?['QUALIFICATION_IDEMPOTENCE_REPLAY']:[])],
       pdfSha256:null as string|null,
       missing:['GOVERNED_STAGING_CANDIDATE_ID','AUDITED_CYCLE_ROTATION',
-        'TRUSTED_STAGING_ATTESTATION'],
+        'TRUSTED_STAGING_ATTESTATION',
+        ...(driver.replayCompletion?[]:['EXPLICIT_COMPLETION_REPLAY_NOT_OBSERVED'])],
     };
     const doc=state(success).history[0].certificado_arquivo_id;
     if(doc){
