@@ -25,8 +25,13 @@ test('external ZIP: learner UI -> authenticated Worker -> D1 -> qualification an
     expect(sha).toBe(fixture.packageSha256);
     validateScormLearnerCompletionPlan(driver);
     expect(fixture.origin).toBe('http://127.0.0.1:8787');
-    const token=process.env.AIRTRUST_SCORM_QA_ACCESS_TOKEN||'';
-    expect(token.length,'Short-lived authenticated QA token required').toBeGreaterThan(20);
+    // Token obtained through the real login during disposable fixture creation;
+    // do not hit the production 5/min auth throttle for each browser.
+    const auth=JSON.parse(readFileSync(join(root,'local-auth.json'),'utf8'));
+    expect(auth.origin).toBe(fixture.origin);
+    expect(auth.packageSha256).toBe(sha);
+    const token=auth.accessToken as string;
+    expect(token).toMatch(/^[^.]+\\.[^.]+\\.[^.]+$/);
     const headers={Authorization:'Bearer '+token};
     const api=fixture.origin+'/api';
     await page.route('**/*',r=>r.request().url().startsWith(fixture.origin+'/')?

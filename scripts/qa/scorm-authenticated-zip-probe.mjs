@@ -26,10 +26,12 @@ const files=unzipCandidate(bytes);
 if(driver.kind==='LOCAL_NAVIGATION_DIAGNOSTIC_ONLY')
  validateNavigationDiagnostic(driver,sha,files);
 else validateIndependentDriver(driver,sha,files);
-const email=process.env.AIRTRUST_SCORM_QA_EMAIL || 'admin@airtrust.com';
-// Disposable local auth is seeded by prepare-local-lms-auth.mjs, never production.
-const password=process.env.AIRTRUST_SCORM_QA_PASSWORD || 'Admin@123';
-requireCondition(email==='admin@airtrust.com'&&password.length>=8,'LOCAL_QA_IDENTITY_INVALID');
+// Fixture seeding uses a real authenticated session. Reuse its scoped token
+// rather than repeatedly logging in and triggering production login throttling.
+const auth=JSON.parse(readFileSync(join(root,'local-auth.json'),'utf8'));
+requireCondition(auth.origin===fixture.origin&&auth.packageSha256===sha&&
+  typeof auth.accessToken==='string'&&auth.accessToken.length>20,
+  'SEEDED_LOCAL_AUTH_SCOPE_MISSING');
 const api=fixture.origin+'/api';
 function readState(id){
  const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
@@ -49,10 +51,7 @@ async function run(name,type){
   await context.route('**/*',r=>r.request().url().startsWith(fixture.origin+'/')?
    r.continue():r.abort('blockedbyclient'));
   const page=await context.newPage();
-  const login=await page.request.post(api+'/auth/login',{data:{email,senha:password}});
-  requireCondition(login.ok(),'AUTH_HTTP_'+login.status());
-  const token=(await login.json()).data.accessToken;
-  const headers={Authorization:'Bearer '+token};
+  const headers={Authorization:'Bearer '+auth.accessToken};
   const foreign=await page.request.post(api+'/lms/assets/session',{
    headers,data:{matricula_id:fixture.foreignTenant.matriculaId}});
   result.tenantIsolation=foreign.status()===404?'PASS':'FAIL';
