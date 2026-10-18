@@ -1,5 +1,13 @@
 # Frente D — Homologação operacional independente do Player 3
 
+> **Decisão de escopo de 18/10/2026:** este documento preserva o contrato
+> específico da edição original RC8.1, **adiado para depois de o player estar
+> tecnicamente funcional**. A homologação técnica atual, sem necessidade de
+> revisar treinamentos, está em
+> [PLAYER3_TECHNICAL_FIRST_ACCEPTANCE.md](PLAYER3_TECHNICAL_FIRST_ACCEPTANCE.md).
+> Nenhum conteúdo original nem autorização de produção foi modificado.
+
+
 **Status: contrato automatizado preparado; homologação real PENDENTE.** Incidente [#1325](https://github.com/Airtrust-Org/airtrust/issues/1325), reconstrução [PR #1389](https://github.com/Airtrust-Org/airtrust/pull/1389). Esta frente NÃO implementa o motor, o writer, certificados, RBAC, Schema V2 nem a Factory.
 
 ## Escopo e autoridade

@@ -46,7 +46,8 @@ function load(projectName: string) {
     process.env.PLAYER3_QA_STAGING_ORIGIN ?? '',
     process.env.PLAYER3_QA_API_ORIGIN ?? '',
     process.env.PLAYER3_QA_SYNTHETIC_TENANT_ID ?? '',
-    process.env.PLAYER3_QA_CONTENT_ORIGIN ?? '');
+    process.env.PLAYER3_QA_CONTENT_ORIGIN ?? '',
+    process.env.PLAYER3_QA_SYNTHETIC_SOURCE_SHA256 ?? '');
 }
 async function openLearner(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const state = process.env.PLAYER3_QA_STORAGE_STATE;
@@ -158,7 +159,7 @@ function auditContentAssets(page: Page, contentOrigin: string, problems: string[
 }
 
 
-test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable completion, qualification and PDF', async ({ browser }, testInfo) => {
+test('Player3 Native: UI, formative gates, fail/retry, durable completion, qualification and PDF', async ({ browser }, testInfo) => {
   const { profile, fixture } = load(testInfo.project.name);
   const d = fixture.doutrinamento;
   let { context, page } = await openLearner(browser);
@@ -185,7 +186,8 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
       await expect(frame).toHaveCount(1);
       const src = await frame.getAttribute('src');
       validateQaAuthoredContentUrl(src ?? '', profile.contentOrigin,
-        profile.empresaId, d);
+        profile.empresaId, d, profile.qaContentMode??'AUTHORED_RC81',
+        process.env.PLAYER3_QA_SYNTHETIC_SOURCE_SHA256??'');
       await expect(page.getByText(profile.courseTitle, {exact:false}).first()).toBeVisible();
       await evidence(page, testInfo, 'doutrinamento-start');
     });
@@ -310,7 +312,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
           try{
             await frame.locator('#next').click();
             // Navigation may occur in HTML5 memory while D1 is unavailable.
-            await expect(frame.locator('#count')).toHaveText(`${index+2}/42`);
+            await expect(frame.locator('#count')).toHaveText(`${index+2}/${d.units.length}`);
             const during=await snapshot(context,profile,d);
             expect(during.completed_unit_ids).toEqual(before.completed_unit_ids);
             expect(during.attempts).toEqual(before.attempts);
@@ -328,7 +330,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
         }
         if(index===d.units.length-1){
           // RC8.1's last author button is a content-end hint, not a terminal.
-          await expect(frame.locator('#count')).toHaveText('42/42');
+          await expect(frame.locator('#count')).toHaveText(`${d.units.length}/${d.units.length}`);
           expect((await snapshot(context,profile,d)).status).not.toBe('CONCLUIDO');
         }else{
           await expectAuthoredRc81Unit(page,d.units[index+1],index+1,d.units.length);
@@ -343,7 +345,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
             .find(s=>s.stageId===unit.official!.stageId)?.passed).toBe(true);
         }
       });
-      if (index === 20) {
+      if (index === Math.floor(d.units.length/2)-1) {
         const before = await snapshot(context, profile, d);
         const beforeStages = await moduleSession(context,profile,d);
         await evidence(page, testInfo, 'doutrinamento-midpoint');
@@ -393,7 +395,7 @@ test('Doutrinamento RC8.1: 42 units, formative gates, failed/retry, durable comp
     demand(failureTested, 'OFFICIAL_FAILURE_RETRY_NOT_EXERCISED');
     demand(observedOfficialEventIds.size===9,
       'EIGHT_MODULE_PASSES_PLUS_ONE_REAL_FAILED_ATTEMPT');
-    await test.step('PLAYER3-JOINT-READINESS / no certificate from 42/42 and 8/8',async()=>{
+    await test.step('PLAYER3-JOINT-READINESS / complete lesson+stage ledger is not a certificate',async()=>{
       const ready=await jointReadiness(context,profile,d);
       expect(ready).toMatchObject({
         totalRequiredLessons:d.requiredLessonIds.length,

@@ -167,6 +167,53 @@ describe('Front D QA contract — no network, no real students',()=>{
     expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin))
       .toThrow('EXTERNAL_SCORM_PERSISTED_CMI_ROUTE');
   });
+  it('runs a content-independent technical QA profile without the original RC8.1 ZIP',()=>{
+    const p=fixture();
+    const technicalZipSha='d'.repeat(64);
+    p.qaContentMode='SYNTHETIC_TECHNICAL';
+    p.courseTitle='Player 3 — synthetic technical test only';
+    for(const fixture of Object.values(p.projects)){
+      const d=fixture.doutrinamento;
+      d.sourceZipSha256=technicalZipSha;
+      d.units=[d.units[0],d.units[1],d.units[8],d.units[9],d.units[10]];
+      d.requiredLessonIds=d.units.flatMap(u=>u.lessonId?[u.lessonId]:[]);
+    }
+    const d=p.projects.chromium.doutrinamento;
+    expect(d.units).toHaveLength(5);
+    expect(validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin,
+      technicalZipSha).fixture.doutrinamento.units).toHaveLength(5);
+    expect(validateQaProfile(p,'webkit',staging,apiOrigin,'6001',contentOrigin,
+      technicalZipSha).fixture.doutrinamento.units).toHaveLength(5);
+    const target=contentOrigin+'/player3/6001/55/'+edition+'/'+'c'.repeat(64)+'/index.html';
+    expect(validateQaAuthoredContentUrl(target,contentOrigin,6001,d,
+      'SYNTHETIC_TECHNICAL',technicalZipSha)).toBe(target);
+    // Profile ownership is not authorization to attest a synthetic source.
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',
+      contentOrigin)).toThrow('SYNTHETIC_SOURCE_SEPARATE_ALLOWLIST');
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',
+      contentOrigin,'e'.repeat(64))).toThrow('SYNTHETIC_SOURCE_SEPARATE_ALLOWLIST');
+    expect(()=>validateQaAuthoredContentUrl(target,contentOrigin,6001,d))
+      .toThrow('RC81_SOURCE_AND_IMMUTABLE_RELEASE');
+    d.sourceZipSha256=RC81_SOURCE_SHA256;
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',
+      contentOrigin,RC81_SOURCE_SHA256)).toThrow('SYNTHETIC_SOURCE_SEPARATE_ALLOWLIST');
+    d.sourceZipSha256=technicalZipSha;
+    d.units=d.units.slice(0,3);
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',
+      contentOrigin,technicalZipSha)).toThrow('SYNTHETIC_TECHNICAL_UNIT_COUNT');
+  });
+  it('rejects silent promotion of a technical-only QA fixture to RC8.1 authored acceptance',()=>{
+    const p=fixture();
+    p.qaContentMode='SYNTHETIC_TECHNICAL';
+    p.projects.chromium.doutrinamento.sourceZipSha256='d'.repeat(64);
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',
+      contentOrigin)).toThrow('SYNTHETIC_SOURCE_SEPARATE_ALLOWLIST');
+    // RC8.1 original acceptance still requires exact 42 units and eight exams.
+    p.qaContentMode='AUTHORED_RC81';
+    p.projects.chromium.doutrinamento.units.pop();
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',
+      contentOrigin)).toThrow('RC81_SOURCE_AND_IMMUTABLE_RELEASE');
+  });
   it('rejects mismatched or duplicate enrollment identities across Chromium and WebKit',()=>{
     const p=fixture();
     p.projects.webkit.external.enrollmentId=p.projects.chromium.external.enrollmentId;

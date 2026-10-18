@@ -32,7 +32,10 @@ export type QaExternal = QaEnrollment & {
 export type QaProjectFixture = {
   doutrinamento: QaDoutrinamento; resume80: QaResume80; external: QaExternal;
 };
+export type QaContentMode = 'AUTHORED_RC81'|'SYNTHETIC_TECHNICAL';
 export type QaProfile = {
+  /** Technical QA does not attest the editorial content of real courses. */
+  qaContentMode?: QaContentMode;
   baseUrl: string; apiBaseUrl: string; contentOrigin: string;
   expectedSourceSha: string; empresaId: number;
   courseTitle: string; projects: Record<string, QaProjectFixture>;
@@ -44,14 +47,38 @@ const originPattern = /^https:\/\//;
 export const RC81_SOURCE_SHA256 =
   'a0a9e955368a8e7f4dd3072b7bd98eb8e5d7cab47d31cbd9335f4282dbba18a2';
 
+/**
+ * QA-only source attestation: a disposable synthetic ZIP needs its own,
+ * independent environment allowlist. Never impersonate the RC8.1 original.
+ */
+export function validateQaContentSource(
+  course:QaDoutrinamento,mode:QaContentMode,
+  approvedSyntheticSourceSha256:string,
+):void{
+  if(mode==='AUTHORED_RC81'){
+    requireQa(course.sourceZipSha256===RC81_SOURCE_SHA256 &&
+      hex.test(course.contentSha256),'RC81_SOURCE_AND_IMMUTABLE_RELEASE');
+  }else{
+    requireQa(mode==='SYNTHETIC_TECHNICAL','QA_CONTENT_MODE');
+    requireQa(hex.test(course.sourceZipSha256)&&hex.test(course.contentSha256),
+      'QA_IMMUTABLE_SOURCE_HASHES');
+    requireQa(hex.test(approvedSyntheticSourceSha256) &&
+      approvedSyntheticSourceSha256!==RC81_SOURCE_SHA256 &&
+      course.sourceZipSha256===approvedSyntheticSourceSha256,
+      'SYNTHETIC_SOURCE_SEPARATE_ALLOWLIST');
+  }
+}
+
 /** Front B authored-launch-contract.ts renders exactly this immutable path. */
 export function validateQaAuthoredContentUrl(
   raw:string, origin:string, tenantId:number, course:QaDoutrinamento,
+  mode:QaContentMode='AUTHORED_RC81',
+  approvedSyntheticSourceSha256='',
 ):string {
   requireQa(Number.isSafeInteger(tenantId)&&tenantId>0 &&
-    Number.isSafeInteger(course.courseId)&&course.courseId>0 &&
-    course.sourceZipSha256===RC81_SOURCE_SHA256 && hex.test(course.contentSha256),
-    'RC81_SOURCE_AND_IMMUTABLE_RELEASE');
+    Number.isSafeInteger(course.courseId)&&course.courseId>0,
+    'QA_IMMUTABLE_LAUNCH_IDENTITY');
+  validateQaContentSource(course,mode,approvedSyntheticSourceSha256);
   const expected=origin+'/player3/'+tenantId+'/'+course.courseId+'/'+
     course.editionSha256+'/'+course.contentSha256+'/index.html';
   requireQa(typeof raw==='string'&&raw===expected,
@@ -90,7 +117,8 @@ function qaEnrollment(x: QaEnrollment, appOrigin: string, apiOrigin: string): bo
 }
 export function validateQaProfile(raw: unknown, projectName: string,
   approvedStagingOrigin: string, approvedApiOrigin: string,
-  approvedSyntheticTenantId: string, approvedContentOrigin: string): {
+  approvedSyntheticTenantId: string, approvedContentOrigin: string,
+  approvedSyntheticSourceSha256=''): {
     profile: QaProfile; fixture: QaProjectFixture;
   } {
   const data = raw as QaProfile;
@@ -121,7 +149,10 @@ export function validateQaProfile(raw: unknown, projectName: string,
     String(data.empresaId)===approvedSyntheticTenantId,
     'SYNTHETIC_TENANT_ALLOWLIST');
   requireQa(typeof data.courseTitle === 'string' && data.courseTitle.trim().length > 0,
-    'ORIGINAL_COURSE_TITLE');
+    'QA_COURSE_TITLE');
+  const contentMode=data.qaContentMode??'AUTHORED_RC81';
+  requireQa(contentMode==='AUTHORED_RC81' ||
+    contentMode==='SYNTHETIC_TECHNICAL','QA_CONTENT_MODE');
   let assetOrigin: URL;
   try { assetOrigin = new URL(data.contentOrigin); }
   catch { throw Error('PLAYER3_CONTRACT_MISSING:ISOLATED_HTML5_CONTENT_ORIGIN'); }
@@ -146,11 +177,15 @@ export function validateQaProfile(raw: unknown, projectName: string,
       enrollmentIds.push(x.enrollmentId);
     }
     const d = f.doutrinamento;
-    requireQa(Number.isSafeInteger(d.courseId)&&d.courseId>0 &&
-      d.sourceZipSha256===RC81_SOURCE_SHA256 && hex.test(d.contentSha256),
-      'RC81_SOURCE_AND_IMMUTABLE_RELEASE');
-    requireQa(Array.isArray(d.units) && d.units.length === 42 &&
-      new Set(d.units.map(u => u?.id)).size === 42, 'DOU_RC81_42_UNITS');
+    requireQa(Number.isSafeInteger(d.courseId)&&d.courseId>0,
+      'QA_IMMUTABLE_COURSE_ID');
+    validateQaContentSource(d,contentMode,approvedSyntheticSourceSha256);
+    requireQa(Array.isArray(d.units) &&
+      (contentMode==='AUTHORED_RC81'
+        ? d.units.length===42
+        : d.units.length>=4&&d.units.length<=100) &&
+      new Set(d.units.map(u => u?.id)).size===d.units.length,
+      contentMode==='AUTHORED_RC81'?'DOU_RC81_42_UNITS':'SYNTHETIC_TECHNICAL_UNIT_COUNT');
     requireQa(d.units.every(u => !!u && id.test(u.id) &&
       (u.kind==='lesson'||u.kind==='assessment') &&
       typeof u.visualCue === 'string' && u.visualCue.trim().length > 0 &&
@@ -161,8 +196,14 @@ export function validateQaProfile(raw: unknown, projectName: string,
         u.official.questions.every(qaChoice)))),
     'AUTHOR_UNIT_AND_EXAM_MAP');
     const official = d.units.flatMap(u => u.official ? [u.official.stageId] : []);
-    requireQa(official.length === 8 && new Set(official).size === 8,
-      'DOU_RC81_EIGHT_MODULAR_ASSESSMENTS');
+    requireQa(
+      (contentMode==='AUTHORED_RC81'
+        ? official.length===8
+        : official.length>=1&&official.length<=8) &&
+      new Set(official).size===official.length,
+      contentMode==='AUTHORED_RC81'
+        ? 'DOU_RC81_EIGHT_MODULAR_ASSESSMENTS'
+        : 'SYNTHETIC_TECHNICAL_OFFICIAL_STAGES');
     const mappedLessons=d.units.flatMap(u=>u.lessonId?[u.lessonId]:[]);
     requireQa(Array.isArray(d.requiredLessonIds) &&
       d.requiredLessonIds.length>0 && d.requiredLessonIds.length<=500 &&
