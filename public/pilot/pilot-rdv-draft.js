@@ -232,6 +232,14 @@ export function calcStageTotalWeight(fields) {
   const unit = String(fields?.unidade_peso || '').trim().toUpperCase();
   const emptyWeight = parseNumber(fields?.peso_vazio);
   if (!['KG', 'LB'].includes(unit) || emptyWeight === null) return null;
+  // An entered negative or malformed mass must not become a seemingly valid
+  // total. Optional blank fields are distinct from invalid supplied values.
+  for (const field of ['peso_vazio', 'peso_tripulacao', 'peso_passageiros', 'peso_bagagem', 'payload', 'combustivel_inicio']) {
+    const raw = fields?.[field];
+    if (raw === null || raw === undefined || String(raw).trim() === '') continue;
+    const value = parseNumber(raw);
+    if (value === null || value < 0) return null;
+  }
 
   let total = emptyWeight;
   for (const key of ['peso_tripulacao', 'peso_passageiros', 'peso_bagagem']) {
@@ -565,9 +573,16 @@ export function validateStageDrafts(stageDrafts) {
       ['peso_bagagem', 'peso da bagagem'],
       ['peso_tripulacao', 'peso da tripulação'],
       ['peso_vazio', 'peso vazio'],
+      ['payload', 'peso da carga'],
+      ['combustivel_inicio', 'combustível inicial'],
+      ['combustivel_fim', 'combustível final'],
     ]) {
-      const value = parseNumber(stage[field]);
-      if (value !== null && value < 0) {
+      const raw = stage[field];
+      if (raw === null || raw === undefined || String(raw).trim() === '') continue;
+      const value = parseNumber(raw);
+      if (value === null) {
+        errors.push('Etapa ' + (index + 1) + ': ' + label + ' deve ser numérico.');
+      } else if (value < 0) {
         errors.push('Etapa ' + (index + 1) + ': ' + label + ' não pode ser negativo.');
       }
     }
