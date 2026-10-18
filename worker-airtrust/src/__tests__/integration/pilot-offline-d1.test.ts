@@ -93,7 +93,7 @@ afterEach(async () => { await miniflare?.dispose(); });
 describe('Pilot offline sync with a disposable local D1 Worker', () => {
   it('rejects duplicate client_local_id within the same fueling snapshot before any D1 write', async () => {
     const base = await command();
-    const fueling = base.payload.fuelings[0];
+    const fueling = (base.payload.fuelings as Array<Record<string, unknown>>)[0];
     const invalid = await command({
       payload: { ...base.payload, fuelings: [fueling, { ...fueling, litros_abastecidos: 180, numero_nota: 'TEST-2' }] },
     });
@@ -105,7 +105,7 @@ describe('Pilot offline sync with a disposable local D1 Worker', () => {
   });
   it('accepts distinct physical fuelings with equal attributes but different local IDs', async () => {
     const base = await command();
-    const fueling = base.payload.fuelings[0];
+    const fueling = (base.payload.fuelings as Array<Record<string, unknown>>)[0];
     const valid = await command({
       payload: { ...base.payload, fuelings: [fueling, { ...fueling, client_local_id: 'fuel-2' }] },
     });
