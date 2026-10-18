@@ -237,10 +237,11 @@ function convertWeightValue(
   fromUnit: string | null | undefined,
   toUnit: string | null | undefined,
 ): number | null {
-  if (value == null) return null;
+  if (value == null || !Number.isFinite(value) || value < 0) return null;
   const source = String(fromUnit || '').trim().toUpperCase();
   const target = String(toUnit || '').trim().toUpperCase();
-  if (!source || !target) return null;
+  // Equal labels are not proof of a valid mass unit (e.g. 'L' or 'STONE').
+  if (!['KG', 'LB'].includes(source) || !['KG', 'LB'].includes(target)) return null;
   if (source === target) return value;
   if (source === 'KG' && target === 'LB') return Number((value * 2.2046226218).toFixed(3));
   if (source === 'LB' && target === 'KG') return Number((value / 2.2046226218).toFixed(3));
@@ -249,17 +250,26 @@ function convertWeightValue(
 
 export function computeEtapaPesoTotal(input: EtapaInput): number | null {
   const unit = String(input.unidade_peso || '').trim().toUpperCase();
-  if (!unit || input.peso_vazio == null) return null;
+  if (!['KG', 'LB'].includes(unit) || input.peso_vazio == null) return null;
+  const masses = [input.peso_vazio, input.peso_tripulacao,
+    input.peso_passageiros, input.peso_bagagem];
+  if (masses.some((value) => value != null && (!Number.isFinite(value) || value < 0))) return null;
 
   let total = input.peso_vazio;
   total += input.peso_tripulacao ?? 0;
   total += input.peso_passageiros ?? 0;
   total += input.peso_bagagem ?? 0;
 
+  // Payload is canonically stored in KG; a numeric payload must never
+  // disappear from total just because it could not be converted.
   const payload = convertWeightValue(input.payload, 'KG', unit);
+  if (input.payload != null && payload == null) return null;
   if (payload != null) total += payload;
 
+  // Fuel is a separate measured mass. Missing, volume-only or unsupported
+  // units cannot be silently omitted from a supposedly certified total.
   const fuel = convertWeightValue(input.combustivel_inicio, input.unidade_combustivel, unit);
+  if (input.combustivel_inicio != null && fuel == null) return null;
   if (fuel != null) total += fuel;
 
   return Number(total.toFixed(3));
