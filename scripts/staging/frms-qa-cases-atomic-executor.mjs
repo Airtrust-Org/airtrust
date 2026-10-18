@@ -102,3 +102,62 @@ export async function executeQaAtomicRepair({db,plan,preimage,context}){
   return {status:'QA_CASES_REPAIRED',updatedRows:8,dbId:TARGET.db_id,
     tenantId:999013,planSha256:plan.sql_sha256,sha:context.sha};
 }
+
+
+/** Compensating rollback, without D1 Time Travel global restore.
+ * Requires independently approved compensation + exact encrypted preimage.
+ * The caller must fetch a live postimage before each attempt; drift is fatal.
+ * No CLI or route invokes this function. */
+export function buildQaCompensationStatements({plan,preimage,postimage,context}){
+  assertQaAuthorization({plan,preimage,context});
+  if(!context.compensationApproval || context.compensationApproval.approved!==true ||
+     context.compensationApproval.sha!==context.sha ||
+     context.compensationApproval.planSha256!==plan.sql_sha256 ||
+     context.compensationApproval.scope!=='FRMS_QA_999013_SELECTIVE_COMPENSATION')
+    die('QA_COMPENSATION_AUTHORIZATION_REQUIRED');
+  if(!Array.isArray(postimage) || postimage.length!==8 ||
+     postimage.some((r,i)=>r.id!==plan.operations[i].id ||
+       r.table!==plan.operations[i].table || !r.original || !Object.hasOwn(r.original,'updated_at')))
+    die('QA_COMPENSATION_POSTIMAGE_SCOPE_MISMATCH');
+  const statements=[{sql:guard("(SELECT COUNT(*) FROM funcionarios WHERE empresa_id=999013 "+
+    "AND matricula LIKE 'QA-FRMS-UX-%' AND deleted_at IS NULL AND ativo=1)=14",'QA_ROLLBACK_SCOPE'),params:[]}];
+  for(const [i,op] of plan.operations.entries()){
+    const was=preimage[i].original,now=postimage[i].original;
+    let sql,params;
+    if(op.table==='frms_jornada'){
+      if(was.origem!=='MANUAL' || now.origem!=='SIGVOOS' ||
+         was.observacao!=='CENARIO SINTETICO - SEM VALIDADE OPERACIONAL' ||
+         now.observacao!=='CENARIO SINTETICO - FONTE SIMULADA SEM VALIDADE OPERACIONAL')
+        die('QA_COMPENSATION_SOURCE_DRIFT');
+      sql="UPDATE frms_jornada SET origem=?,observacao=?,updated_at=? "+
+        "WHERE id=? AND empresa_id=999013 AND registrado_por='QA_FRMS_UX' "+
+        "AND deleted_at IS NULL AND origem=? AND observacao=? AND updated_at IS ?";
+      params=[was.origem,was.observacao,was.updated_at,op.id,
+        now.origem,now.observacao,now.updated_at];
+    }else if(op.table==='frms_alerta'){
+      if(was.jornada_id!==null || now.jornada_id===null ||
+         was.tripulante_id===now.tripulante_id ||
+         was.resolvido!==0 || now.resolvido!==0)
+        die('QA_COMPENSATION_CASE_DRIFT');
+      sql="UPDATE frms_alerta SET tripulante_id=?,jornada_id=?,valor_atual_min=?,updated_at=? "+
+        "WHERE id=? AND deleted_at IS NULL AND resolvido=0 "+
+        "AND tripulante_id=? AND jornada_id=? AND valor_atual_min=? AND updated_at IS ?";
+      params=[was.tripulante_id,was.jornada_id,was.valor_atual_min,was.updated_at,op.id,
+        now.tripulante_id,now.jornada_id,now.valor_atual_min,now.updated_at];
+    }else die('QA_COMPENSATION_TABLE_REJECTED');
+    statements.push({sql,params});
+    statements.push({sql:guard('changes()=1','QA_ROLLBACK_ONE_ROW'),params:[]});
+  }
+  return statements;
+}
+
+export async function compensateQaAtomicRepair({db,plan,preimage,postimage,context}){
+  if(typeof db?.prepare!=='function'||typeof db?.batch!=='function')die('QA_D1_BINDING_REQUIRED');
+  const steps=buildQaCompensationStatements({plan,preimage,postimage,context});
+  await db.batch(steps.map(s=>{
+    const stmt=db.prepare(s.sql);
+    return s.params.length?stmt.bind(...s.params):stmt;
+  }));
+  return {status:'QA_SYNTHETIC_COMPENSATED',updatedRows:8,
+    dbId:TARGET.db_id,tenantId:999013,planSha256:plan.sql_sha256,sha:context.sha};
+}
