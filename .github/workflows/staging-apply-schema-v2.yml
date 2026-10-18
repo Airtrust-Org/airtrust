@@ -73,8 +73,8 @@ jobs:
           [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'INVALID_PR_NUMBER' >&2; exit 1; }
           [[ "$CHANGE_ID" == 'frms-sleep-opportunity-0552' ||
              "$CHANGE_ID" == 'simulator-individual-check-evidence-0554' ||
-             "$CHANGE_ID" == 'simulator-individual-check-delete-guard-0560' || { echo 'UNAPPROVED_CHANGE_ID' >&2; exit 1; }
-             "$CHANGE_ID" == 'controle-voos-pilot-fueling-identity-0563' ]] ||
+             "$CHANGE_ID" == 'simulator-individual-check-delete-guard-0560' ||
+             "$CHANGE_ID" == 'controle-voos-pilot-fueling-identity-0563' ]] || { echo 'UNAPPROVED_CHANGE_ID' >&2; exit 1; }
           [[ -n "$RELEASE_REASON" ]] || { echo 'REASON_REQUIRED' >&2; exit 1; }
           [[ "$STAGING_DB_ID" != "$PRODUCTION_DB_ID" ]] || { echo 'PRODUCTION_TARGET_REJECTED' >&2; exit 1; }
           node --input-type=module <<'NODE'
