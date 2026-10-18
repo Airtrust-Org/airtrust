@@ -31,7 +31,7 @@ test('external ZIP: learner UI -> authenticated Worker -> D1 -> qualification an
     expect(auth.origin).toBe(fixture.origin);
     expect(auth.packageSha256).toBe(sha);
     const token=auth.accessToken as string;
-    expect(token).toMatch(/^[^.]+\\.[^.]+\\.[^.]+$/);
+    expect(token).toMatch(/^[^.]+\.[^.]+\.[^.]+$/);
     const headers={Authorization:'Bearer '+token};
     const api=fixture.origin+'/api';
     await page.route('**/*',r=>r.request().url().startsWith(fixture.origin+'/')?
