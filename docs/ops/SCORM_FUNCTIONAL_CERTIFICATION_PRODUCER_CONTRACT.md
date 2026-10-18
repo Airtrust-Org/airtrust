@@ -311,3 +311,15 @@ Estas correções tornam o produtor local mais fiel à jornada real; **não**
 transformam seu resultado em `GOVERNED_STAGING_AUTHENTICATED_QA_V1` nem
 autorizam ativação. Não existem ainda respostas independentes aprovadas,
 matrículas/ciclos staging e PDFs de backend para #15/#41.
+
+### Persistência no emulador local
+
+O probe independente conserva separadamente os valores temporários do SCO e
+o último estado confirmado por `Commit` ou `Finish`. A prova de suspensão
+exige uma alteração confirmada depois da interação do roteiro e a reabertura
+usa esse estado confirmado; nota e status terminais também precisam constar
+no estado confirmado. Sem isso o resultado é `INCONCLUSIVE`, com diagnóstico
+`SUSPEND_ACTION_NOT_COMMITTED_OR_TIMEOUT` quando o checkpoint não é observado
+no prazo. Esse diagnóstico não identifica automaticamente defeito do ZIP:
+pode refletir timeout ou inadequação do roteiro. O emulador continua local e
+não demonstra persistência no Worker/D1, nem concede certificação.
