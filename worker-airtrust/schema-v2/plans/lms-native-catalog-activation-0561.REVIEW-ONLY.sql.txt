@@ -1,4 +1,4 @@
--- Schema V2 0560 CANDIDATE. DO NOT APPLY without explicit staging authorization.
+-- Schema V2 0561 CANDIDATE. DO NOT APPLY without explicit staging authorization.
 -- Depends on reviewed 0558 + 0559, physical snapshot, and trusted-main workflow.
 -- Historical review-only SQL was rehearsed on synthetic SQLite; no real D1 validation.
 SELECT json(CASE WHEN
@@ -20,7 +20,7 @@ SELECT json(CASE WHEN
   AND (SELECT COUNT(*) FROM lms_native_matricula_edicoes)=0
   AND (SELECT COUNT(*) FROM lms_native_eventos)=0
   AND (SELECT COUNT(*) FROM lms_native_tentativas)=0
-THEN 'null' ELSE 'NATIVE_0560_CANDIDATE_PREFLIGHT_DENIED' END);
+THEN 'null' ELSE 'NATIVE_0561_CANDIDATE_PREFLIGHT_DENIED' END);
 
 CREATE TABLE lms_native_catalog_activation (
   curso_id INTEGER PRIMARY KEY REFERENCES lms_cursos(id) ON DELETE RESTRICT,

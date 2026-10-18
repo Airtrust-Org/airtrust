@@ -64,10 +64,10 @@ test('0559 staging apply requires exact reviewed 0558 ledger evidence',()=>{
 });
 
 
-test('0560/0561 remain hashed NON-deployable reviewer artifacts until bootstrap and staging review',()=>{
+test('0561/0562 remain hashed NON-deployable reviewer artifacts until bootstrap and staging review',()=>{
   const candidates = [
-    ['0560','lms-native-catalog-activation-0560'],
-    ['0561','lms-player3-canonical-terminal-0561'],
+    ['0561','lms-native-catalog-activation-0561'],
+    ['0562','lms-player3-canonical-terminal-0562'],
   ];
   for (const [n,id] of candidates) {
     const meta=JSON.parse(contents('worker-airtrust/schema-v2/plans/'+id+'.REVIEW-ONLY.json'));

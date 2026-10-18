@@ -1,12 +1,12 @@
-# Schema V2 0561 — Native/Player3 terminal intents (CANDIDATE, NO APPLY)
+# Schema V2 0562 — Native/Player3 terminal intents (CANDIDATE, NO APPLY)
 
 ## Scope and authorization
 **Non-deployable** review candidate from historical 0556 REVIEW-ONLY terminal rehearsal. The change provides mutually isolated one-transaction intents for Native single-assessment and Player3 module-assessment completion. It **does not** conclude an existing enrollment, create a qualification, generate a certificate or enable a feature flag. Existing SCORM completions remain governed by the legacy canonical writer.
 
 ## Prerequisites / STOP conditions
-- Before any application, prove that the official 0558 → 0559 → 0560 ledger entries exist for the **same staging DB and baseline**, with approved exact SQL/plan hashes and matching physical schema, triggers, FKs, course CHECK and recovery point. A GitHub merge or green test is insufficient.
-- Specifically verify the marker/enrollment intent tables and immutable trigger names created by 0560, the 0559 policy/official attempt tables and canonical LMS history, category and employee columns used by the SQL. Snapshot D1 tables/indexes/triggers and foreign_key_check. Schema drift or data anomalies prohibit application.
-- Review with approvers exact `change_id`, SHA, fileHash, planHash, target staging DB, recovery and postcheck. **No official 0561 dispatch choice exists on trusted main.** Do not improvise remote SQL or switch on tenant flags.
+- Before any application, prove that the official 0558 → 0559 → 0561 ledger entries exist for the **same staging DB and baseline**, with approved exact SQL/plan hashes and matching physical schema, triggers, FKs, course CHECK and recovery point. A GitHub merge or green test is insufficient.
+- Specifically verify the marker/enrollment intent tables and immutable trigger names created by 0561, the 0559 policy/official attempt tables and canonical LMS history, category and employee columns used by the SQL. Snapshot D1 tables/indexes/triggers and foreign_key_check. Schema drift or data anomalies prohibit application.
+- Review with approvers exact `change_id`, SHA, fileHash, planHash, target staging DB, recovery and postcheck. **No official 0562 dispatch choice exists on trusted main.** Do not improvise remote SQL or switch on tenant flags.
 - Private authored RC8.1 answers, policy and artifact SHA must be reviewed by training/pedagogy; no original course may be published or certified until its own approval. All 22 course editions remain pending.
 
 ## Terminal integrity contract

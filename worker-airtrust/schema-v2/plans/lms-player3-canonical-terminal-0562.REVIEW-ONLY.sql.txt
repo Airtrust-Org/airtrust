@@ -1,5 +1,5 @@
--- Schema V2 0561 CANDIDATE. DO NOT APPLY without explicit staging authorization.
--- Depends on governed 0558 + 0559 + 0560, verified exact target schema.
+-- Schema V2 0562 CANDIDATE. DO NOT APPLY without explicit staging authorization.
+-- Depends on governed 0558 + 0559 + 0561, verified exact target schema.
 -- Native/Player3 terminal intents are distinct; no canonical completion is executed.
 SELECT json(CASE WHEN
  (SELECT foreign_keys FROM pragma_foreign_keys)=1
@@ -13,7 +13,7 @@ SELECT json(CASE WHEN
  AND (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('lms_player3_politicas','lms_player3_tentativas_modulares'))=2
  AND (SELECT COUNT(*) FROM pragma_table_info('qualificacoes_categorias')
       WHERE name='lms_integrada')=1
-THEN 'null' ELSE 'NATIVE_0561_CANDIDATE_PREFLIGHT_DENIED' END);
+THEN 'null' ELSE 'NATIVE_0562_CANDIDATE_PREFLIGHT_DENIED' END);
 
 -- A matching one-transaction intent is required by both terminal UPDATE
 -- triggers below. The deferred FK to an unfillable sentinel enforces
