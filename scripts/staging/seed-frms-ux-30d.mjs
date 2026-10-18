@@ -21,7 +21,7 @@ export const TO = '2026-10-13';
 const PREFIX = 'QA-FRMS-UX-';
 export const QA_REVISION_ID = 'qa-frms-ux-999013-helicopter-offshore-v1';
 const CANONICAL_REVISION_ID = 'frms-helicopter-offshore-baseline-v1';
-const BASELINE_SOURCE_URL = new URL('../frms-seeds/frms_helicopter_offshore_baseline_v1.sql', import.meta.url);
+const baselineSourceUrl = () => new URL('../frms-seeds/frms_helicopter_offshore_baseline_v1.sql', import.meta.url);
 const SAFE_BANDS = new Set(['0','1-4','5-9','10-19','20-49','50+']);
 const quote = (x) => "'" + String(x).replaceAll("'", "''") + "'";
 const pad = (n) => String(n).padStart(2,'0');
@@ -52,7 +52,7 @@ export function approximation(band) {
   return result;
 }
 
-export function buildTenantScopedBaselineSql(sqlSource = readFileSync(BASELINE_SOURCE_URL, 'utf8')) {
+export function buildTenantScopedBaselineSql(sqlSource = readFileSync(baselineSourceUrl(), 'utf8')) {
   // Baseline values come from the reviewed versioned 128-key source. Do not
   // copy tenant data, hand-author thresholds, or create a global revision.
   const stripped = sqlSource.replace(/^(?:\s*--[^\n]*\n)+/, '').trim();

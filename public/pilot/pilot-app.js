@@ -34,6 +34,7 @@ import {
   buildOfflineSyncCommand,
   verifyOfflineSyncCommandHash,
 } from '/pilot/pilot-sync.js';
+import { persistPilotFinalSyncResult } from '/pilot/pilot-sync-receipt.js';
 
 const DRAFT_ID = 'phase1-synthetic-rdv-draft';
 const SAVE_DELAY_MS = 180;
@@ -2821,24 +2822,24 @@ async function storeOutboxAttempt(record, patch) {
 async function markDraftAcceptedByServer(command, result) {
   const draftId = rdvDraftRecordId(command.flight_id);
   const stored = await vault.getJson('rdv_drafts', draftId);
-  if (!stored) return;
+  if (!stored) throw new Error('Rascunho offline ausente durante confirmação de sync. Outbox preservada.');
 
   const currentSequence = Number(stored.value?.local_sequence || 0);
   if (currentSequence !== Number(command.local_sequence)) {
     // O servidor aceitou exatamente o snapshot enfileirado, mas existem
     // mudanças locais posteriores. Preservamos tudo e exigimos refresh/rebase.
-    await vault.putJson(
-      'conflicts',
-      syncReceiptRecordId(command.client_operation_id) + ':local-ahead',
-      {
-        type: 'local_revision_ahead_after_server_accept',
-        command_sequence: command.local_sequence,
-        current_local_sequence: currentSequence,
-        server_entity_version: result.server_entity_version ?? null,
-        created_at: new Date().toISOString(),
-      },
-      1,
-    );
+    const conflictId = syncReceiptRecordId(command.client_operation_id) + ':local-ahead';
+    await vault.putJson('conflicts', conflictId, {
+      type: 'local_revision_ahead_after_server_accept',
+      command_sequence: command.local_sequence,
+      current_local_sequence: currentSequence,
+      server_entity_version: result.server_entity_version ?? null,
+      created_at: new Date().toISOString(),
+    }, 1);
+    const verifiedConflict = await vault.getJson('conflicts', conflictId);
+    if (verifiedConflict?.value?.command_sequence !== command.local_sequence) {
+      throw new Error('Conflito de revisão local não confirmado no tablet. Outbox preservada.');
+    }
     return;
   }
 
@@ -2855,6 +2856,12 @@ async function markDraftAcceptedByServer(command, result) {
     stored.localRevision,
   );
 
+  const verifiedDraft = await vault.getJson('rdv_drafts', draftId);
+  if (verifiedDraft?.value?.sync_state !== 'accepted_requires_refresh' ||
+      verifiedDraft.value?.sync_operation_id !== command.client_operation_id) {
+    throw new Error('Confirmação local do RDV não foi persistida. Outbox preservada.');
+  }
+
   if (activeRdvDraft && Number(activeRdvDraft.flight_id) === Number(command.flight_id)) {
     activeRdvDraft = {
       ...activeRdvDraft,
@@ -2867,55 +2874,13 @@ async function markDraftAcceptedByServer(command, result) {
 }
 
 async function persistFinalSyncResult(outboxRecord, result) {
-  const command = outboxRecord.value.command;
-  const receiptValue = {
-    schema_version: 1,
-    command_identity: {
-      client_operation_id: command.client_operation_id,
-      flight_id: command.flight_id,
-      local_sequence: command.local_sequence,
-      payload_hash: command.payload_hash,
-    },
-    server_result: structuredClone(result),
-    received_at_local: new Date().toISOString(),
-  };
-  const entries = [
-    {
-      storeName: 'sync_receipts',
-      id: syncReceiptRecordId(command.client_operation_id),
-      value: receiptValue,
-      localRevision: 1,
-    },
-  ];
-  if (result.status === 'conflict') {
-    entries.push({
-      storeName: 'conflicts',
-      id: syncReceiptRecordId(command.client_operation_id),
-      value: {
-        ...receiptValue,
-        conflict: result.conflict || null,
-      },
-      localRevision: 1,
-    });
-  }
-
-  await vault.putJsonBatch(entries);
-  const persistedReceipt = await vault.getJson(
-    'sync_receipts',
-    syncReceiptRecordId(command.client_operation_id),
-  );
-  if (
-    !persistedReceipt ||
-    persistedReceipt.value?.command_identity?.payload_hash !== command.payload_hash
-  ) {
-    throw new Error('Receipt do servidor não foi confirmado no armazenamento local.');
-  }
-
-  await vault.deleteJson('outbox', outboxRecord.id);
-
-  if (result.status === 'accepted' || result.status === 'already_accepted') {
-    await markDraftAcceptedByServer(command, result);
-  }
+  await persistPilotFinalSyncResult({
+    vault,
+    outboxRecord,
+    result,
+    receiptId: syncReceiptRecordId(outboxRecord.value.command.client_operation_id),
+    markAccepted: markDraftAcceptedByServer,
+  });
 }
 
 function isRecoverableAuthenticationSyncError(errorLike) {

@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-17",
-    "last_reconciled_against": "0553 LGPD, 0554 simulator, 0557 LMS, 0558 Native, 0559 Player3, 0560 simulator immutable evidence (all versioned; D1 apply separately governed)",
-    "schema_v2_digest": "4fb9564ab4844f30c5fb1a37d622b265b88aa21813e81f9ae46fad0d91f8039e",
+    "last_reconciled_at": "2026-10-18",
+    "last_reconciled_against": "0558 Native, 0559 Player3, 0560 Simulator, 0563 Pilot — repo-classified; 0558/0559/0563 staging applied, production apply NOT claimed",
+    "schema_v2_digest": "68307bba1fee8f3400c97b792de94db3d1a7a352a21c65dae123681bd386a1ff",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -440,18 +440,6 @@
       "reviewed_manifest": null
     },
     {
-      "change_file": "0454_qualificacoes_tipos_dominio_override.sql",
-      "change_id": null,
-      "sha256": "6aef100bbff18241eae3c067b5c9aadc647a17145fcd136f300cb57244b2b2f6",
-      "targets": [
-        "qualificacoes_tipos"
-      ],
-      "domain": "qualificacoes_tipos operational-domain override (base statement)",
-      "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REPO_EXPECTED",
-      "reviewed_manifest": null
-    },
-    {
       "change_file": "0454_qualificacoes_tipos_dominio_override_reconcile_existing.sql",
       "change_id": "qualificacoes-tipos-dominio-override-0454",
       "sha256": "ca185d203fc0cc11b26be9fb829057c618c6d5f471adadfdba3c67f9526521a3",
@@ -462,6 +450,18 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
       "reviewed_manifest": "qualificacoes-tipos-dominio-override-0454.json"
+    },
+    {
+      "change_file": "0454_qualificacoes_tipos_dominio_override.sql",
+      "change_id": null,
+      "sha256": "6aef100bbff18241eae3c067b5c9aadc647a17145fcd136f300cb57244b2b2f6",
+      "targets": [
+        "qualificacoes_tipos"
+      ],
+      "domain": "qualificacoes_tipos operational-domain override (base statement)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
     },
     {
       "change_file": "0456_lms_h5p_course_binding.sql",
@@ -1641,6 +1641,20 @@
       "reviewed_manifest": "simulator-individual-check-delete-guard-0560.json",
       "evidence": "worker-airtrust/schema-v2/plans/simulator-individual-check-delete-guard-0560.md",
       "note": "Additive trigger; no D1/Compliance/history modifications. Apply separately after 0554; blocks all physical deletion of individual check evidence."
+    },
+    {
+      "change_file": "0563_controle_voos_pilot_fueling_identity.sql",
+      "change_id": "controle-voos-pilot-fueling-identity-0563",
+      "sha256": "f920e8b75faab568c7abeaace086606d19904bc1a4b16fc010238d63fd572456",
+      "targets": [
+        "cv_voo_abastecimentos"
+      ],
+      "domain": "Pilot App offline: durable physical fueling event identity across independently versioned snapshots",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-pilot-fueling-identity-0563.json",
+      "evidence": "worker-airtrust/schema-v2/plans/controle-voos-pilot-fueling-identity-0563.md",
+      "note": "Additive nullable event identity, tenant-flight unique index and immutable guards; legacy/manual fuelings left NULL. Candidate review-only until explicitly authorized trusted-main workflow, D1 recovery, staging postchecks and separate Worker rollout. No staging or production apply asserted."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
