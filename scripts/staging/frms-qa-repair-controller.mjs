@@ -176,6 +176,9 @@ export async function executeApprovedQaStagingRepair({plan,receipt,manifest,
   // Once an atomic D1 batch has been submitted, a lost response does not
   // distinguish a rollback from a committed write. Never audit it as no-write.
   let applyStarted=false;
+  // Keep the private repair gate closed when D1 may have committed but the
+  // controller cannot prove the resulting state. Recovery is a separate grant.
+  let keepLockForReconciliation=false;
   try{
     const scoped=await adapters.readScope({tenantId:999013,ids:ids(plan)});
     verifyIdentity(scoped);
@@ -222,11 +225,17 @@ export async function executeApprovedQaStagingRepair({plan,receipt,manifest,
     // A rejected/lost batch response is an indeterminate apply outcome, not
     // proof that no D1 rows changed. Reconcile remotely under the same lock
     // before considering a compensating action; never auto-retry this nonce.
+    // Do not permit a second signed grant while committed state is uncertain
+    // or a successful batch has failed its postchecks.
+    if(applyStarted)keepLockForReconciliation=true;
     const event=applied?'FRMS_QA_POSTCHECK_FAILED_REQUIRES_COMPENSATION':
       applyStarted?'FRMS_QA_APPLY_OUTCOME_UNKNOWN_RECONCILIATION_REQUIRED':
         'FRMS_QA_BLOCKED_BEFORE_APPLY';
     try{await adapters.audit({event,sha,planSha256:SHA_PLAN,reason:safeReason});}
     catch{/* retain original failure; persistent controller must alert separately */}
     throw error;
-  }finally{await adapters.releaseLock(lock);}
+  }finally{
+    // The DO lock has no TTL. Only supervised recovery may release it.
+    if(!keepLockForReconciliation)await adapters.releaseLock(lock);
+  }
 }

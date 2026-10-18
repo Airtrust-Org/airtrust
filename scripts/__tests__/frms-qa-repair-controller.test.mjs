@@ -182,6 +182,7 @@ test('read drift after approval blocks mutation before touching D1',async()=>{
     /PREIMAGE_DRIFT_SINCE_REVIEW/);
   assert.equal(st.batchCount,0);
   assert.equal(st.events.at(-1).event,'FRMS_QA_BLOCKED_BEFORE_APPLY');
+  assert.equal((await st.adapters.acquireLock('airtrust-staging-mutations-and-scorm-qa')).held,true);
   st.sqlite.close();
 });
 test('mid-transaction CAS drift makes entire staged batch roll back',async()=>{
@@ -206,6 +207,23 @@ test('lost D1 batch response is indeterminate, never falsely audited as no apply
     'FRMS_QA_APPLY_OUTCOME_UNKNOWN_RECONCILIATION_REQUIRED');
   assert.equal(st.events.at(-1).reason,'QA_EXECUTION_FAILED');
   assert.equal(st.events.some(e=>e.event==='FRMS_QA_REPAIR_VALIDATED'),false);
+  // A different grant cannot run before a supervised reconciliation.
+  assert.equal((await st.adapters.acquireLock('airtrust-staging-mutations-and-scorm-qa')).held,false);
+  st.sqlite.close();
+});
+test('audit transport failure after uncertain D1 commit cannot unlock repair',async()=>{
+  const st=setup({dropBatchReply:true});
+  const receipt=await prepareQaEvidence({plan,adapters:st.adapters,key:encryptionKey,now});
+  const audit=st.adapters.audit;
+  st.adapters.audit=async event=>{
+    if(event.event==='FRMS_QA_APPLY_OUTCOME_UNKNOWN_RECONCILIATION_REQUIRED')
+      throw new Error('synthetic audit service unavailable');
+    return audit(event);
+  };
+  await assert.rejects(()=>executeApprovedQaStagingRepair(command(receipt,st.adapters)),
+    /synthetic D1 batch committed but response lost/);
+  assert.equal(st.batchCount,1);
+  assert.equal((await st.adapters.acquireLock('airtrust-staging-mutations-and-scorm-qa')).held,false);
   st.sqlite.close();
 });
 test('postcheck failure never pretends batch was rolled back or approved',async()=>{
@@ -215,6 +233,7 @@ test('postcheck failure never pretends batch was rolled back or approved',async(
     /POSTCONDITION_FAILED_RECOVERY_REQUIRED/);
   assert.equal(st.batchCount,1);
   assert.equal(st.events.at(-1).event,'FRMS_QA_POSTCHECK_FAILED_REQUIRES_COMPENSATION');
+  assert.equal((await st.adapters.acquireLock('airtrust-staging-mutations-and-scorm-qa')).held,false);
   st.sqlite.close();
 });
 test('reused nonce is rejected by persistent-reservation adapter before batch',async()=>{
