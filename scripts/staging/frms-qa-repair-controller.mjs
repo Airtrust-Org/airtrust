@@ -195,8 +195,10 @@ export async function executeApprovedQaStagingRepair({plan,receipt,manifest,
       planSha256:SHA_PLAN,sha};
   }catch(error){
     // After a successful batch, never pretend a failed postcheck rolled it back.
+    const raw=String(error?.message??'');
+    const safeReason=/^QA_[A-Z0-9_]+$/.test(raw)?raw:'QA_EXECUTION_FAILED';
     try{await adapters.audit({event:applied?'FRMS_QA_POSTCHECK_FAILED_REQUIRES_COMPENSATION':
-      'FRMS_QA_BLOCKED_BEFORE_APPLY',sha,planSha256:SHA_PLAN,reason:String(error.message)});}
+      'FRMS_QA_BLOCKED_BEFORE_APPLY',sha,planSha256:SHA_PLAN,reason:safeReason});}
     catch{/* retain original failure; persistent controller must alert separately */}
     throw error;
   }finally{await adapters.releaseLock(lock);}
