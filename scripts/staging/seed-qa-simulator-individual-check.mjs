@@ -64,15 +64,11 @@ VALUES (${esc(`${code}-${suffix}`)},${agId},${emp(who)},${emp(n.instrutor)},${es
   ${aprovado ? 1 : 0},${esc(marker)},${tenantId},'CHECK',date('now'),datetime('now'),
   ${instrSigned ? "datetime('now')" : 'NULL'},datetime('now'),datetime('now'),NULL);`;
   return `
-CREATE TABLE IF NOT EXISTS _qa_sim_ind_guard(ok INTEGER NOT NULL CHECK(ok=1));
-DELETE FROM _qa_sim_ind_guard;
-INSERT INTO _qa_sim_ind_guard(ok)
 SELECT CASE WHEN ${LEDGER_OK}
   AND (SELECT COUNT(*) FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)=1
   AND (SELECT COUNT(*) FROM usuarios u WHERE u.id=${qaUserId} AND u.funcionario_id IS NULL)=1
   AND NOT EXISTS (SELECT 1 FROM funcionarios WHERE empresa_id=${tenantId} AND matricula LIKE ${esc(`${code}-%`)} AND deleted_at IS NULL)
-THEN 1 ELSE 0 END;
-DROP TABLE _qa_sim_ind_guard;
+THEN 1 ELSE json('FAIL_PREFLIGHT_GUARD_OR_LEDGER_MISSING') END;
 
 INSERT INTO funcionarios(nome,matricula,cargo,funcao,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
 VALUES (${esc(`${code} Instrutor`)},${esc(n.instrutor)},'QA','QA','ATIVO',1,1,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
@@ -106,17 +102,12 @@ VALUES (${emp(n.b)},${tipoId},${esc(n.tipo)},${esc(n.tipo)},
   'Gerado da ficha #'||(SELECT id FROM fichas_sessao WHERE uuid=${esc(`${code}-B`)} AND empresa_id=${tenantId}),
   date('now'),date('now','+12 months'),'CONCLUIDA',${tenantId},datetime('now'),datetime('now'),NULL);
 
-CREATE TABLE IF NOT EXISTS _qa_sim_ind_post(
-  employees INTEGER NOT NULL CHECK(employees=5), fichas INTEGER NOT NULL CHECK(fichas=4),
-  checks INTEGER NOT NULL CHECK(checks=1), premature INTEGER NOT NULL CHECK(premature=1)
-);
-DELETE FROM _qa_sim_ind_post;
-INSERT INTO _qa_sim_ind_post SELECT
- (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL),
- (SELECT COUNT(*) FROM fichas_sessao WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL),
- (SELECT COUNT(*) FROM sessoes_checks WHERE sessao_id=${agId} AND deleted_at IS NULL),
- (SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${tenantId} AND qualificacao_id=${tipoId} AND funcionario_id=${emp(n.b)} AND deleted_at IS NULL);
-DROP TABLE _qa_sim_ind_post;
+SELECT CASE WHEN
+  (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)=5
+  AND (SELECT COUNT(*) FROM fichas_sessao WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)=4
+  AND (SELECT COUNT(*) FROM sessoes_checks WHERE sessao_id=${agId} AND deleted_at IS NULL)=1
+  AND (SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${tenantId} AND qualificacao_id=${tipoId} AND funcionario_id=${emp(n.b)} AND deleted_at IS NULL)=1
+THEN 1 ELSE json('FAIL_POST_SEED_COUNT_MISMATCH') END;
 `;
 }
 
@@ -139,14 +130,12 @@ WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
 UPDATE funcionarios SET ativo=0, status='INATIVO', deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
 
-CREATE TABLE IF NOT EXISTS _qa_sim_ind_cleanup(active_count INTEGER NOT NULL CHECK(active_count=0));
-DELETE FROM _qa_sim_ind_cleanup;
-INSERT INTO _qa_sim_ind_cleanup SELECT
- (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
-+(SELECT COUNT(*) FROM fichas_sessao WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
-+(SELECT COUNT(*) FROM simulador_agendamentos WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
-+(SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${tenantId} AND qualificacao_id=${tipoId} AND deleted_at IS NULL);
-DROP TABLE _qa_sim_ind_cleanup;
+SELECT CASE WHEN
+  (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM fichas_sessao WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM simulador_agendamentos WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${tenantId} AND qualificacao_id=${tipoId} AND deleted_at IS NULL)=0
+THEN 1 ELSE json('FAIL_CLEANUP_ACTIVE_RECORDS_REMAIN') END;
 `;
 }
 
@@ -160,7 +149,7 @@ FROM fichas_sessao WHERE empresa_id=${tenantId} AND uuid IN
 }
 
 function runWrangler(db, args) {
-  const r = spawnSync('npx', ['wrangler', 'd1', 'execute', db, '--remote', ...args], {
+  const r = spawnSync('npx', ['wrangler', 'd1', 'execute', db, '--env', 'staging', '--remote', '--yes', ...args], {
     cwd: join(process.cwd(), 'worker-airtrust'), encoding: 'utf8', env: process.env,
   });
   if (r.status !== 0) {
