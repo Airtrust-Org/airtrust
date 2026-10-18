@@ -188,6 +188,13 @@ export function validateQaProfile(raw: unknown, projectName: string,
       [e.visualLastPageButton,e.wrongAnswerButton,e.correctAnswerButton,
         e.submitButton,e.finishButton,e.learnerCompletionButton].every(s => typeof s === 'string' && s.trim().length > 0),
       'SCORM_EXTERNAL_CONTROLS');
+    // SCORM is not Native: a Native-only ledger can never prove legacy CMI.
+    requireQa(e.snapshotPath===
+      '/api/lms/native/scorm/matriculas/'+e.enrollmentId+'/qa-evidencias',
+      'EXTERNAL_SCORM_READONLY_SNAPSHOT_ROUTE');
+    requireQa(e.scormSnapshotPath===
+      '/api/lms/progresso/scorm/state/'+e.enrollmentId,
+      'EXTERNAL_SCORM_PERSISTED_CMI_ROUTE');
     qaPath(api.origin, e.scormSnapshotPath);
   }
   requireQa(new Set(enrollmentIds).size === 6, 'DEDICATED_PER_BROWSER_ENROLLMENTS');

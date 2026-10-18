@@ -1,7 +1,7 @@
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {Hono} from 'hono';
 import type {Env} from '../../types';
-const mock=vi.hoisted(()=>({read:vi.fn()}));
+const mock=vi.hoisted(()=>({read:vi.fn(),scorm:vi.fn()}));
 vi.mock('../../middleware/auth',()=>({
   auth:()=>async(c:{
     req:{header(name:string):string|undefined};
@@ -17,10 +17,13 @@ vi.mock('../../middleware/auth',()=>({
 vi.mock('../../services/lms-player3-qa-evidence-reader',()=>({
   readPlayer3QaSnapshot:mock.read,
 }));
+vi.mock('../../services/lms-player3-scorm-qa-evidence-reader',()=>({
+  readPlayer3ScormQaSnapshot:mock.scorm,
+}));
 import nativeRoutes from '../../routes/lms-native';
 const get=(opts:{
   env?:'staging'|'production';tenant?:number;user?:number;anonymous?:boolean;
-  qa?:string;preview?:string;id?:string;
+  qa?:string;preview?:string;id?:string;scorm?:boolean;
 }={})=>{
   const app=new Hono<{Bindings:Env}>();
   app.route('/api/lms/native',nativeRoutes);
@@ -30,8 +33,8 @@ const get=(opts:{
     headers['x-test-tenant']=String(opts.tenant??6);
   }
   return app.fetch(new Request(
-    'http://localhost/api/lms/native/matriculas/'+(opts.id??'911')+
-    '/etapas/qa-evidencias',{headers}),{
+    'http://localhost/api/lms/native/'+(opts.scorm?'scorm/':'')+'matriculas/'+(opts.id??'911')+
+    (opts.scorm?'/qa-evidencias':'/etapas/qa-evidencias'),{headers}),{
     ENVIRONMENT:opts.env??'staging',
     NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS:opts.preview??'6',
     PLAYER3_QA_READ_ENABLED_TENANTS:opts.qa??'6',
@@ -74,6 +77,37 @@ describe('Player3 QA snapshot isolation and fail-closed routing',()=>{
     expect(mock.read).toHaveBeenCalledWith(expect.objectContaining({
       actorUserId:44,empresaId:6,matriculaId:911,
     }));
+  });
+  it('segregates SCORM QA from Native and never invokes a Native snapshot',async()=>{
+    mock.scorm.mockResolvedValue({
+      empresa_id:6,matricula_id:911,ciclo_id:1000,
+      status:'EM_ANDAMENTO',progresso_pct:75,lesson_status:'failed',
+      qualificacao_historico_id:null,certificate_id:null,
+    });
+    const response=await get({scorm:true});
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    const body=await response.json() as {data:{lesson_status:string}};
+    expect(body.data).toMatchObject({lesson_status:'failed'});
+    expect(mock.scorm).toHaveBeenCalledWith(expect.objectContaining({
+      empresaId:6,matriculaId:911,actorUserId:44,
+    }));
+    expect(mock.read).not.toHaveBeenCalled();
+  });
+  it('blocks SCORM QA without tenant permission, authentication or valid learner',async()=>{
+    expect((await get({scorm:true,anonymous:true})).status).toBe(401);
+    expect((await get({scorm:true,qa:''})).status).toBe(404);
+    expect((await get({scorm:true,tenant:7})).status).toBe(404);
+    expect((await get({scorm:true,id:'bad'})).status).toBe(400);
+    expect((await get({scorm:true,user:0})).status).toBe(403);
+    expect(mock.scorm).not.toHaveBeenCalled();
+  });
+  it('does not disclose SCORM QA backend errors',async()=>{
+    mock.scorm.mockRejectedValueOnce(new Error('private CMI data'));
+    const response=await get({scorm:true});
+    expect(response.status).toBe(409);
+    expect(JSON.stringify(await response.json())).not.toContain('private');
+    expect(mock.read).not.toHaveBeenCalled();
   });
   it('does not leak backend failure reasons',async()=>{
     mock.read.mockRejectedValueOnce(new Error('secret R2 path'));

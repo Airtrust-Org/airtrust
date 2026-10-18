@@ -585,27 +585,66 @@ test('Legacy 80%: resume navigation only, without invented examination, grade or
   } finally { await context.close(); }
 });
 
+/**
+ * External SCORM has no Native edition/lesson/attempt ledger. Its separate
+ * staging QA reader reports authoritative D1 cycle, CMI, history and document.
+ * Do not reinterpret Native-only evidence as legacy SCORM completion.
+ */
+type QaScormEvidence={
+  empresa_id:number;matricula_id:number;ciclo_id:number;
+  status:string;progresso_pct:number;lesson_status:string|null;
+  qualificacao_historico_id:number|null;certificate_id:number|null;
+};
+type QaPersistedScormState={
+  matricula_id:number;status:string;
+  progresso:{lesson_status:string|null}|null;
+};
+
 test('External SCORM 1.2: actual adapter, no fake completion from visual slides, fail/resume/pass/finish', async ({browser},info) => {
   const {profile,fixture}=load(info.project.name);
   const e=fixture.external;
   let {context,page}=await openLearner(browser);
+  const state=async()=>{
+    const value=await apiData<QaScormEvidence>(context,profile.apiBaseUrl,e.snapshotPath);
+    demand(value.empresa_id===profile.empresaId &&
+      value.matricula_id===e.enrollmentId && value.ciclo_id===e.cycleId &&
+      allowedStatuses.has(value.status) &&
+      Number.isFinite(value.progresso_pct) &&
+      value.progresso_pct>=0 && value.progresso_pct<=100,
+      'EXTERNAL_SCORM_PINNED_TENANT_CYCLE_LEDGER');
+    return value;
+  };
+  const cmi=async()=>{
+    const value=await apiData<QaPersistedScormState>(
+      context,profile.apiBaseUrl,e.scormSnapshotPath);
+    demand(value.matricula_id===e.enrollmentId &&
+      allowedStatuses.has(value.status) &&
+      (value.progresso===null ||
+        typeof value.progresso?.lesson_status==='string' ||
+        value.progresso?.lesson_status===null),
+      'EXTERNAL_SCORM_PERSISTED_CMI_SCOPE');
+    return value.progresso?.lesson_status??null;
+  };
   try {
     await checkStagingProvenance(context,profile);
+    const original=await state();
+    demand(original.status!=='CONCLUIDO' &&
+      original.certificate_id===null &&
+      original.qualificacao_historico_id===null,
+      'EXTERNAL_SCORM_FRESH_SYNTHETIC_ENROLLMENT');
     await page.goto(pathOn(profile.baseUrl,e.launchPath));
     await expect(page.getByTestId('scorm-compat-root')).toBeVisible();
     let sco: Page | ReturnType<Page['frameLocator']> = page;
     for (const selector of e.frameSelectors) sco=sco.frameLocator(selector);
     await sco.getByRole('button',{name:e.visualLastPageButton}).click();
     // A visible last slide is not completion, even at 100% visual progress.
-    let stored=await snapshot(context,profile,e);
+    let stored=await state();
     expect(stored.status).not.toBe('CONCLUIDO');
     expect(stored.certificate_id).toBeNull();
     await sco.getByRole('button',{name:e.wrongAnswerButton}).click();
     await sco.getByRole('button',{name:e.submitButton}).click();
-    await expect.poll(async ()=>
-      (await apiData<{lesson_status:string}>(context,profile.apiBaseUrl,e.scormSnapshotPath)).lesson_status
-    ).toBe('failed');
-    expect((await snapshot(context,profile,e)).status).not.toBe('CONCLUIDO');
+    await expect.poll(cmi).toBe('failed');
+    expect((await state()).status).not.toBe('CONCLUIDO');
     await context.close();
     ({context,page}=await openLearner(browser));
     await page.goto(pathOn(profile.baseUrl,e.launchPath));
@@ -615,23 +654,32 @@ test('External SCORM 1.2: actual adapter, no fake completion from visual slides,
     await sco.getByRole('button',{name:e.correctAnswerButton}).click();
     await sco.getByRole('button',{name:e.submitButton}).click();
     await sco.getByRole('button',{name:e.finishButton}).click();
-    await expect.poll(async ()=>
-      (await apiData<{lesson_status:string}>(context,profile.apiBaseUrl,e.scormSnapshotPath)).lesson_status
-    ).toBe('passed');
+    await expect.poll(cmi).toBe('passed');
     // The package's LMSFinish alone is not certification; the learner must
     // explicitly confirm the wrapper-owned, server-validated closeout.
-    expect((await snapshot(context,profile,e)).status).not.toBe('CONCLUIDO');
+    expect((await state()).status).not.toBe('CONCLUIDO');
     await page.getByRole('button',{name:e.learnerCompletionButton,exact:true}).click();
-    await expect.poll(async ()=>(await snapshot(context,profile,e)).status,
+    await expect.poll(async ()=>(await state()).status,
       {timeout:45_000}).toBe('CONCLUIDO');
-    stored=await snapshot(context,profile,e);
+    stored=await state();
     expect(stored.qualificacao_historico_id).toBeGreaterThan(0);
     expect(stored.certificate_id).toBeGreaterThan(0);
+    // Verify a complete authenticated PDF, not a D1 document ID alone.
+    const certificateUrl='/api/pasta-virtual/stream/'+stored.certificate_id;
+    const token=process.env.PLAYER3_QA_READONLY_BEARER_TOKEN;
+    const pdf=await context.request.get(
+      pathOn(profile.apiBaseUrl,certificateUrl),{
+        headers:token?{Authorization:'Bearer '+token}:{},
+      });
+    expect(pdf.ok()).toBe(true);
+    validateQaCertificatePdf(await pdf.body(),pdf.headers()['content-type']??'');
     await context.close();
     ({context,page}=await openLearner(browser));
     await page.goto(pathOn(profile.baseUrl,e.launchPath));
-    const persisted=await snapshot(context,profile,e);
+    const persisted=await state();
     expect(persisted.status).toBe('CONCLUIDO');
+    expect(persisted.qualificacao_historico_id).toBe(stored.qualificacao_historico_id);
     expect(persisted.certificate_id).toBe(stored.certificate_id);
+    expect(await cmi()).toBe('passed');
   } finally {await context.close();}
 });

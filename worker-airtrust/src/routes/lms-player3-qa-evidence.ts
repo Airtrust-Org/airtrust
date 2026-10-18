@@ -8,6 +8,7 @@ import type {Env} from '../types';
 import {getEmpresaIdSafe} from './escalas-shared';
 import {canReadPlayer3QaEvidence} from '../services/lms-player3-module-attempt-writer';
 import {readPlayer3QaSnapshot} from '../services/lms-player3-qa-evidence-reader';
+import {readPlayer3ScormQaSnapshot} from '../services/lms-player3-scorm-qa-evidence-reader';
 
 const app=new Hono<{Bindings:Env}>();
 app.get('/matriculas/:matriculaId/etapas/qa-evidencias',async c=>{
@@ -39,6 +40,39 @@ app.get('/matriculas/:matriculaId/etapas/qa-evidencias',async c=>{
     // Do not turn a missing edition, broken evidence ledger or cross-tenant
     // lookup into a partial/optimistic snapshot; never echo secrets/answers.
     return c.json({success:false,code:'PLAYER3_QA_SNAPSHOT_UNAVAILABLE'},409);
+  }
+});
+
+/**
+ * SCORM fixture evidence is independent of Native Player3's module ledger.
+ * Auth is inherited; the reader uses scoped SELECTs and never repairs documents.
+ */
+app.get('/scorm/matriculas/:matriculaId/qa-evidencias',async c=>{
+  c.header('Cache-Control','private, no-store');
+  c.header('X-Content-Type-Options','nosniff');
+  const empresaId=getEmpresaIdSafe(c);
+  if(!canReadPlayer3QaEvidence(c.env,empresaId)){
+    return c.json({success:false,code:'PLAYER3_SCORM_QA_NOT_ENABLED'},404);
+  }
+  const rawId=c.req.param('matriculaId');
+  if(!/^[1-9][0-9]{0,15}$/.test(rawId)||
+     !Number.isSafeInteger(Number(rawId))){
+    return c.json({success:false,code:'PLAYER3_SCORM_QA_INVALID_ID'},400);
+  }
+  const rawActor=c.get('userId' as never) as unknown;
+  const actorUserId=typeof rawActor==='number'?rawActor:
+    typeof rawActor==='string'?Number(rawActor):NaN;
+  if(!Number.isSafeInteger(actorUserId)||actorUserId<=0){
+    return c.json({success:false,code:'PLAYER3_SCORM_QA_ACCESS_DENIED'},403);
+  }
+  try{
+    const data=await readPlayer3ScormQaSnapshot({
+      env:c.env,db:c.env.DB,empresaId,
+      matriculaId:Number(rawId),actorUserId,
+    });
+    return c.json({success:true,data},200);
+  }catch{
+    return c.json({success:false,code:'PLAYER3_SCORM_QA_UNAVAILABLE'},409);
   }
 });
 export default app;

@@ -37,11 +37,13 @@ function project(offset:number):QaProjectFixture {
       certificatePath:'/qa/certificate/'+offset},
     resume80:{...enrollment(2),expectedResumeUnitId:'unit-34',
       creditedNavigationIds:['unit-1','unit-2'],minPreviousPct:80},
-    external:{...enrollment(3),frameSelectors:['#outer','#scorm-frame'],
+    external:{...enrollment(3),
+      snapshotPath:'/api/lms/native/scorm/matriculas/'+(offset+3)+'/qa-evidencias',
+      frameSelectors:['#outer','#scorm-frame'],
       visualLastPageButton:'Last page',wrongAnswerButton:'Incorrect',
       correctAnswerButton:'Correct',submitButton:'Submit',finishButton:'Finish',
       learnerCompletionButton:'Confirmar conclusão',
-      scormSnapshotPath:'/qa/scorm-state/'+offset},
+      scormSnapshotPath:'/api/lms/progresso/scorm/state/'+(offset+3)},
   };
 }
 function fixture():QaProfile {
@@ -154,9 +156,25 @@ describe('Front D QA contract — no network, no real students',()=>{
     p3.projects.chromium.doutrinamento.units[8].practice=undefined;
     expect(()=>validateQaProfile(p3,'chromium',staging,apiOrigin,'6001',contentOrigin)).toThrow('FORMATIVE_GATE_REQUIRED');
   });
+  it('refuses Native-only QA snapshots or invented SCORM CMI sources for an external SCO',()=>{
+    const p=fixture();
+    const e=p.projects.chromium.external;
+    e.snapshotPath='/api/lms/native/matriculas/'+e.enrollmentId+'/etapas/qa-evidencias';
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin))
+      .toThrow('EXTERNAL_SCORM_READONLY_SNAPSHOT_ROUTE');
+    e.snapshotPath='/api/lms/native/scorm/matriculas/'+e.enrollmentId+'/qa-evidencias';
+    e.scormSnapshotPath='/qa/mocked-success';
+    expect(()=>validateQaProfile(p,'chromium',staging,apiOrigin,'6001',contentOrigin))
+      .toThrow('EXTERNAL_SCORM_PERSISTED_CMI_ROUTE');
+  });
   it('rejects mismatched or duplicate enrollment identities across Chromium and WebKit',()=>{
     const p=fixture();
     p.projects.webkit.external.enrollmentId=p.projects.chromium.external.enrollmentId;
+    const duplicateId=p.projects.webkit.external.enrollmentId;
+    p.projects.webkit.external.snapshotPath=
+      '/api/lms/native/scorm/matriculas/'+duplicateId+'/qa-evidencias';
+    p.projects.webkit.external.scormSnapshotPath=
+      '/api/lms/progresso/scorm/state/'+duplicateId;
     expect(()=>validateQaProfile(p,'webkit',staging,apiOrigin,'6001',contentOrigin)).toThrow('DEDICATED_PER_BROWSER_ENROLLMENTS');
     const p2=fixture();
     p2.projects.chromium.resume80.editionSha256='wrong';
