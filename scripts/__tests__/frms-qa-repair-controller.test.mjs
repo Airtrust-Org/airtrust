@@ -11,7 +11,7 @@ import {prepareQaEvidence,verifyQaApproval,executeApprovedQaStagingRepair}
   from '../staging/frms-qa-repair-controller.mjs';
 
 const days=Array.from({length:30},(_,i)=>({day:new Date(
-  Date.parse('2026-09-14T00:00:00Z')+i*86400000).toISOString().slice(0,10),jornadas:'5-9'}));
+  Date.parse('2026-09-14T00:00:00Z')+i*86400000).toISOString().slice(0,10),jornadas:i===29?'0':'5-9'}));
 const plan=buildReviewPlan(days),sha='c'.repeat(40);
 const now=new Date('2026-10-17T20:00:00.000Z');
 const {privateKey,publicKey}=generateKeyPairSync('ed25519');
