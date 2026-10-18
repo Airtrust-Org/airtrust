@@ -48,7 +48,8 @@ const verifyReceiptScope=(receipt,plan,now)=>{
 const requireAdapters=(a,names)=>{for(const n of names)if(typeof a?.[n]!=='function')fail('QA_ADAPTER_REQUIRED_'+n);};
 const planGuard=plan=>{
   assertReviewPlan(plan);
-  if(plan.sql_sha256!==SHA_PLAN||plan.operations.length!==8||plan.target.db_id!==TARGET.db_id)
+  const actualDigest=digest(plan.operations.map(op=>op.sql.trim()).join(';\n')+';\n');
+  if(actualDigest!==SHA_PLAN||plan.sql_sha256!==SHA_PLAN||plan.operations.length!==8||plan.target.db_id!==TARGET.db_id)
     fail('QA_REVIEW_DIGEST_MISMATCH');
 };
 const assertRows=(plan,rows)=>{
