@@ -27,7 +27,9 @@ const payload = (): TrustedScormAttestationPayload => ({
   scope: 'GOVERNED_STAGING_SYNTHETIC',
   pedagogicalReview: {artifactSha256:'5'.repeat(64),driverSha256:'6'.repeat(64),
     reviewerReference:'reviewer-test-01',approvalReference:'approval-test-only-01',
-    approvedAt:'2026-10-17T18:00:00.000Z',itemCount:2},
+    approvedAt:'2026-10-17T18:00:00.000Z',itemCount:2,
+    reviewerKeyId:'reviewer-test-key-01',reviewerPublicKeySha256:'7'.repeat(64),
+    approvalSignatureSha256:'8'.repeat(64)},
   browserEvidenceSha256: { CHROMIUM: '1'.repeat(64), WEBKIT: '2'.repeat(64) },
   certificateDocuments: {
     CHROMIUM: { enrollmentId: 1001, cycleId: 2001, qualificationHistoryId: 3001, documentId: 'qa-doc-chromium', sha256: '3'.repeat(64) },

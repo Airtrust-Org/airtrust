@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -41,6 +41,19 @@ function fixture(){
   writeFileSync(driverFile,JSON.stringify({schemaVersion:1,packageSha256:candidate.packageSha256,
     authorReviewed:true,reviewArtifactSha256:sha(readFileSync(reviewFile))}));
   const driverSha256=sha(readFileSync(driverFile));
+  const {privateKey,publicKey}=generateKeyPairSync('ed25519');
+  const reviewerKeyId='reviewer-test-key-01';
+  const trustedReviewerKeys={[reviewerKeyId]:publicKey.export({type:'spki',format:'pem'})};
+  const approvalFile=join(dir,'reviewer-detached-approval.json');
+  const approval={kind:'AIRTRUST_SCORM_PEDAGOGICAL_APPROVAL_ED25519_V1',
+    reviewerKeyId,packageSha256:candidate.packageSha256,
+    reviewSha256:sha(readFileSync(reviewFile)),driverSha256,
+    reviewerReference:review.reviewerReference,approvedAt:review.approvedAt};
+  const message=[approval.kind,approval.reviewerKeyId,approval.packageSha256,
+    approval.reviewSha256,approval.driverSha256,approval.reviewerReference,
+    review.approvalReference,approval.approvedAt].join('\\n');
+  writeFileSync(approvalFile,JSON.stringify({...approval,
+    signature:edSign(null,Buffer.from(message),privateKey).toString('base64')}));
   const browserRow=browser=>({
     driverSha256,
     source:'GOVERNED_STAGING_AUTHENTICATED_QA_V1',
@@ -66,10 +79,10 @@ function fixture(){
   save('CHROMIUM',chromiumFile);save('WEBKIT',webkitFile);
   const sign=(overrides={})=>signGovernedScormEvidence({
     candidate,chromiumFile,webkitFile,certificatePdfFiles:pdfPaths,
-    reviewFile,driverFile,
+    reviewFile,driverFile,approvalFile,trustedReviewerKeys,
     secret,runtimeSha,harnessSha,...overrides});
   return {dir,candidate,sign,chromiumFile,webkitFile,pdfPaths,browserRow,
-    reviewFile,driverFile};
+    reviewFile,driverFile,approvalFile,trustedReviewerKeys};
 }
 test('signer produces separate SHA-bound browser artifact hashes for complete synthetic QA',()=>{
   const f=fixture();try{
@@ -160,5 +173,18 @@ test('signer rejects absent or unreviewed pedagogical approval and driver mismat
     row.items[1].rationale='Reviewed independently with adequate support';
     writeFileSync(f.reviewFile,JSON.stringify(row));
     assert.throws(()=>f.sign(),/DRIVER_NOT_APPROVED_BY_REVIEW/);
+  }finally{rmSync(f.dir,{recursive:true,force:true});}
+});
+
+test('signer rejects self-asserted identity with absent, untrusted or tampered Ed25519 proof',()=>{
+  const f=fixture();try{
+    assert.throws(()=>f.sign({approvalFile:undefined}),/TRUSTED_REVIEW_AUTHORITY_MISSING/);
+    assert.throws(()=>f.sign({trustedReviewerKeys:{}}),/REVIEW_SIGNATURE_SCOPE_INVALID/);
+    const approval=JSON.parse(readFileSync(f.approvalFile,'utf8'));
+    approval.signature=approval.signature.replace(/^./,approval.signature[0]==='A'?'B':'A');
+    writeFileSync(f.approvalFile,JSON.stringify(approval));
+    assert.throws(()=>f.sign(),/INDEPENDENT_REVIEW_SIGNATURE_INVALID/);
+    approval.signature='invalid';writeFileSync(f.approvalFile,JSON.stringify(approval));
+    assert.throws(()=>f.sign(),/REVIEW_SIGNATURE_SCOPE_INVALID/);
   }finally{rmSync(f.dir,{recursive:true,force:true});}
 });

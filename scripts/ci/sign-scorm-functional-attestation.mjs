@@ -23,7 +23,7 @@ const read=path=>JSON.parse(readFileSync(path,'utf8'));
 
 export function signGovernedScormEvidence({
   candidate, chromiumFile, webkitFile, certificatePdfFiles, secret,
-  runtimeSha, harnessSha, reviewFile, driverFile,
+  runtimeSha, harnessSha, reviewFile, driverFile,approvalFile,trustedReviewerKeys,
 }){
   assert(typeof secret==='string'&&secret.length>=32,'SECRET_MISSING');
   assert(commit.test(runtimeSha)&&commit.test(harnessSha),'COMMIT_INVALID');
@@ -37,7 +37,8 @@ export function signGovernedScormEvidence({
   assert(digest(readFileSync(candidate.zipPath))===candidate.packageSha256,
     'ZIP_SHA_DRIFT');
   assert(candidate.stagingRuntimeSha===runtimeSha,'RUNTIME_SHA_DRIFT');
-  const pedagogicalReview=validatePedagogicalReview({reviewFile,driverFile,candidate});
+  const pedagogicalReview=validatePedagogicalReview({
+    reviewFile,driverFile,candidate,approvalFile,trustedReviewerKeys});
   const browserInputs=[
     ['CHROMIUM',chromiumFile],['WEBKIT',webkitFile],
   ];
@@ -128,6 +129,8 @@ function main(){
   const args=read(input);
   const result=signGovernedScormEvidence({
     candidate:args.candidate,reviewFile:args.reviewFile,driverFile:args.driverFile,
+    approvalFile:args.approvalFile,
+    trustedReviewerKeys:JSON.parse(process.env.SCORM_QA_REVIEWER_PUBLIC_KEYS_JSON||'{}'),
     chromiumFile:args.chromiumFile,webkitFile:args.webkitFile,
     certificatePdfFiles:args.certificatePdfFiles,
     secret:process.env.SCORM_QA_ATTESTATION_SECRET,

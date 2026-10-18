@@ -158,3 +158,45 @@ tinha 0/125 itens revisados e permanece bloqueado.
 A aprovação pedagógica é **necessária, mas não suficiente**: sem os demais
 cenários do Worker/D1, ciclo de edição candidata, PDF real por navegador,
 proveniência staging e assinatura em CI governada, estado = `UNCERTIFIED`.
+
+
+## Prova criptográfica da aprovação por avaliador independente
+
+O preenchimento de `reviewerReference` e `approvalReference` em JSON **não prova
+identidade**. Antes de emitir qualquer atestação, o executor protegido exige
+`approvalFile` privado de assinatura **Ed25519** destacada sobre SHA-256 do
+ZIP exato, SHA-256 do inventário humano, SHA-256 do roteiro revisado, ID da
+chave autorizada, referência do avaliador, referência da aprovação e UTC.
+As chaves **públicas** autorizadas são carregadas somente da configuração
+protegida `SCORM_QA_REVIEWER_PUBLIC_KEYS_JSON` (mapa de keyId→PEM SPKI); não
+são aceitas chaves fornecidas pelo ZIP, driver ou arquivo assinado. A chave
+**privada** fica exclusivamente com o avaliador credenciado, fora do
+repositório, do runner e dos dados do aluno.
+
+O arquivo de aprovação deve conter exatamente:
+
+```json
+{
+  "kind": "AIRTRUST_SCORM_PEDAGOGICAL_APPROVAL_ED25519_V1",
+  "reviewerKeyId": "id-governado-da-chave",
+  "packageSha256": "<64 caracteres hex>",
+  "reviewSha256": "<64 caracteres hex>",
+  "driverSha256": "<64 caracteres hex>",
+  "reviewerReference": "id-governado-do-avaliador",
+  "approvedAt": "<UTC_ISO8601>",
+  "signature": "<Ed25519-base64>"
+}
+```
+
+O texto assinado, em UTF-8, é formado pelo nome do contrato, IDs, hashes,
+referência do avaliador, **referência de aprovação registrada no JSON de revisão**,
+e data, unidos por newline simples na ordem acima (sem a assinatura). O
+executor compara essas referências com os arquivos privados antes de verificar
+a assinatura. No envelope HMAC ficam apenas identificadores/fingerprints,
+nunca as respostas ou a chave privada. O verificador Worker valida que tais
+fingerprints estejam no envelope assinado; a chave pública confiável e a
+assinatura Ed25519 foram checadas pelo emissor governado na etapa anterior.
+
+A emissão da chave e a aprovação/revogação do cadastro de avaliadores exigem
+governança externa independente. Enquanto ela não existir, estado obrigatoriamente
+`UNCERTIFIED`; testes positivos com chaves sintéticas não são homologação.

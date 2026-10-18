@@ -22,7 +22,9 @@ export type TrustedScormAttestationPayload = {
   requiresAssessment: boolean;
   /** Digest and governance identity of the outside-ZIP, independently approved review. */
   pedagogicalReview: { artifactSha256: string; driverSha256: string;
-    reviewerReference: string; approvalReference: string; approvedAt: string; itemCount: number };
+    reviewerReference: string; approvalReference: string; approvedAt: string; itemCount: number;
+    reviewerKeyId: string; reviewerPublicKeySha256: string;
+    approvalSignatureSha256: string };
   /** Hashes of sanitized independent browser traces. */
   browserEvidenceSha256: { CHROMIUM: string; WEBKIT: string };
   /** One independently downloaded certificate per isolated browser enrollment. */
@@ -124,8 +126,12 @@ export async function verifyTrustedScormAttestation(
     'cdc5a3cf30e4d37697c1f411977d87e16538bc75a6c03379252bbc2c8c06f6d2' ? 80 :
     p.packageSha256==='8c15a73984591fcea71a4957e306dc8676c40d937537058f2440e52a3748baa7' ? 45 : null;
   if (!exactKeys(review, ['artifactSha256','driverSha256','reviewerReference',
-    'approvalReference','approvedAt','itemCount']) ||
+    'approvalReference','approvedAt','itemCount','reviewerKeyId',
+    'reviewerPublicKeySha256','approvalSignatureSha256']) ||
     !SHA256.test(review.artifactSha256) || !SHA256.test(review.driverSha256) ||
+    !/^[a-zA-Z0-9._:-]{6,128}$/.test(review.reviewerKeyId) ||
+    !SHA256.test(review.reviewerPublicKeySha256) ||
+    !SHA256.test(review.approvalSignatureSha256) ||
     !/^[a-zA-Z0-9._:-]{6,128}$/.test(review.reviewerReference) ||
     typeof review.approvalReference!=='string' ||
     review.approvalReference.trim().length<10 || review.approvalReference.length>128 ||
