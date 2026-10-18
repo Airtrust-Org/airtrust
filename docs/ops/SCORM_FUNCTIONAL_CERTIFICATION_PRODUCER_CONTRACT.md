@@ -118,3 +118,43 @@ O preview marca `previewMode=true`, usa `commitUrl=null` e não aceita matrícul
 **Fronteira de integração ainda faltante:** a jornada completa exige tenant/cursos/funcionários e ciclos *sintéticos* autorizados em staging, lançamento de learner que persista CMI da **mesma edição candidata** sem usar o ponteiro ativo, qualificação e PDF baixado do backend com hash. A rota preview NÃO deve ser reutilizada como substituto desta jornada. A assinatura para ativação continua bloqueada até o conjunto de provas real dos dois navegadores.
 
 **Entrada da Frente 3 (não recebida por bytes nesta PR):** ZIP corrigido #15 SHA-256 `cdc5a3cf30e4d37697c1f411977d87e16538bc75a6c03379252bbc2c8c06f6d2` + ZIP original exato #41/CFIT com hash independente; roteiros externos revisados e proveniência segura. O ZIP histórico corrigido #15 `381ef573...` registrado no issue #1311 **não** é intercambiável. Sem acesso verificável aos arquivos, estado `INCONCLUSIVE / CONTENT_NOT_DELIVERED`, nunca `CERTIFIED`.
+
+## Gate humano independente obrigatório (pré-assinatura)
+
+O assinador `scripts/ci/sign-scorm-functional-attestation.mjs` **agora exige**
+`reviewFile` e `driverFile`, além de evidências de cada navegador e os dois PDFs
+baixados do backend. Recusa, sem assinatura: revisão ausente, não aprovada,
+sem revisor identificável por referência governada, sem referência externa de
+aprovação, com justificativas insuficientes, itens incompletos/duplicados,
+resposta não selecionada, ZIP diferente, ou driver que não declara o SHA-256
+exato do artefato aprovado. Cada relatório de navegador deve trazer
+`driverSha256` idêntico ao roteiro aprovado. A atestação contém apenas
+`pedagogicalReview` (SHA do arquivo de revisão, SHA do driver, referência
+do revisor e aprovação, data e quantidade). **Nunca contém gabaritos.**
+O verificador do Worker rejeita objeto de revisão ausente, alterado,
+fora do prazo ou quantidade incompatível com os ZIPs #15 (80) e #41 (45).
+Atestações antigas, antes deste novo campo, não passam pelo verificador.
+
+Após **revisão humana** do CSV privado de 125 itens, a ferramenta
+`scripts/qa/scorm-pedagogical-review-from-csv.py` gera um JSON privado,
+somente para o SHA alvo e sem inferir respostas:
+```text
+python3 scripts/qa/scorm-pedagogical-review-from-csv.py \
+  --csv /private/FR3_PEDAGOGICAL_INDEPENDENT_REVIEW_APPROVED.csv \
+  --package-sha <SHA_EXATO_15_OU_41> \
+  --reviewer-reference <IDENTIFICADOR_VERIFICAVEL> \
+  --approval-reference <REGISTRO_DE_APROVACAO> \
+  --approved-at <ISO8601_UTC> \
+  --output /private/review-approved.json
+```
+Se um único item não foi aprovado pelo revisor e justificado, o utilitário
+falha, sem produzir evidência assinável. Ele não lê os ZIPs e não calcula
+as respostas a partir do runtime. As referências precisam ser verificadas
+contra a aprovação real pelo executor protegido; **string arbitrária não prova
+identidade do revisor**. O CSV de 17/10/2026, SHA
+`fe8a471262eebe4208fc9571c2125b6fc269eb760dba18584a51e0f7c3ebed4b`,
+tinha 0/125 itens revisados e permanece bloqueado.
+
+A aprovação pedagógica é **necessária, mas não suficiente**: sem os demais
+cenários do Worker/D1, ciclo de edição candidata, PDF real por navegador,
+proveniência staging e assinatura em CI governada, estado = `UNCERTIFIED`.
