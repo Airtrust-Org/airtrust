@@ -40,7 +40,7 @@ test('legacy data-next requires a real authored answer selection before navigati
     assert.equal(f.step().type,'inline-quiz-authored-answer');
     assert.deepEqual(f.clicks,['answer-1']);
     assert.equal(f.step().type,'inline-quiz-next');
-    assert.deepEqual(f.clicks,['answer-1','button']);
+    assert.deepEqual(f.clicks,['answer-1','submit']);
   }finally{f.close();}
 });
 test('legacy data-next cannot invent an answer when no authored mapping exists',()=>{
