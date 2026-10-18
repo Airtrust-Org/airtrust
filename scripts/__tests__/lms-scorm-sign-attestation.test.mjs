@@ -54,7 +54,28 @@ function fixture(){
     review.approvalReference,approval.approvedAt].join('\n');
   writeFileSync(approvalFile,JSON.stringify({...approval,
     signature:edSign(null,Buffer.from(message),privateKey).toString('base64')}));
+  const backendWitness=browser=>{
+    const enrollmentId=browser==='CHROMIUM'?1001:1002;
+    const cycleId=browser==='CHROMIUM'?2001:2002;
+    const qualificationHistoryId=browser==='CHROMIUM'?3001:3002;
+    const documentId=browser==='CHROMIUM'?'qa-doc-chromium':'qa-doc-webkit';
+    return {
+      source:'WORKER_D1_STAGING_READBACK',
+      empresaId:6,cursoId:23,packageId:candidate.packageId,
+      enrollmentId,cycleId,qualificationHistoryId,documentId,
+      completionStatus:'CONCLUIDO',persistedCmiSha256:'1'.repeat(64),
+      staleAttempt:{cycleId:cycleId-10,commitHttpStatus:409,
+        progressBeforeSha256:'2'.repeat(64),progressAfterSha256:'2'.repeat(64),
+        activeCycleBeforeSha256:'3'.repeat(64),activeCycleAfterSha256:'3'.repeat(64)},
+      replay:{completionHttpStatus:200,qualificationHistoryCountBefore:1,
+        qualificationHistoryCountAfter:1,qualificationHistoryId},
+      authorization:{anonymousHttpStatus:401,foreignTenantHttpStatus:404,
+        mismatchedShaHttpStatus:409,incompatibleEditionHttpStatus:409},
+      validity:{status:'VALID',validFrom:'2026-10-17T00:00:00.000Z',validUntil:null},
+    };
+  };
   const browserRow=browser=>({
+    backendWitness:backendWitness(browser),
     driverSha256,
     source:'GOVERNED_STAGING_AUTHENTICATED_QA_V1',
     scope:'GOVERNED_STAGING_SYNTHETIC',
@@ -186,5 +207,25 @@ test('signer rejects self-asserted identity with absent, untrusted or tampered E
     assert.throws(()=>f.sign(),/INDEPENDENT_REVIEW_SIGNATURE_INVALID/);
     approval.signature='invalid';writeFileSync(f.approvalFile,JSON.stringify(approval));
     assert.throws(()=>f.sign(),/REVIEW_SIGNATURE_SCOPE_INVALID/);
+  }finally{rmSync(f.dir,{recursive:true,force:true});}
+});
+
+test('signer refuses fake cycle isolation, replayed qualification, wrong tenant and missing validity',()=>{
+  const f=fixture();try{
+    const baseline=f.browserRow('CHROMIUM');
+    for(const corrupt of [
+      w=>{delete w.backendWitness;},
+      w=>{w.backendWitness.staleAttempt.commitHttpStatus=200;},
+      w=>{w.backendWitness.staleAttempt.progressAfterSha256='0'.repeat(64);},
+      w=>{w.backendWitness.replay.qualificationHistoryCountAfter=2;},
+      w=>{w.backendWitness.empresaId=999;},
+      w=>{w.backendWitness.authorization.foreignTenantHttpStatus=200;},
+      w=>{w.backendWitness.validity.status='UNKNOWN';},
+      w=>{w.backendWitness.cycleId=99999;},
+    ]){
+      const row=structuredClone(baseline);corrupt(row);
+      writeFileSync(f.chromiumFile,JSON.stringify(row));
+      assert.throws(()=>f.sign(),/BACKEND_WITNESS/);
+    }
   }finally{rmSync(f.dir,{recursive:true,force:true});}
 });

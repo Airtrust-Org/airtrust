@@ -10,6 +10,55 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validatePedagogicalReview } from './scorm-pedagogical-review-gate.mjs';
 
+/**
+ * These are observations of backend state by the protected staging harness,
+ * not fields emitted by the ZIP or by the learner. Missing observations block
+ * signing, even when each test case happens to say PASS.
+ */
+export function validateScormBackendWitness(row,doc,candidate){
+  const assert=(ok,reason)=>{if(!ok)throw Error('SCORM_BACKEND_WITNESS_'+reason);};
+  const h=/^[a-f0-9]{64}$/;
+  const w=row.backendWitness;
+  assert(w&&w.source==='WORKER_D1_STAGING_READBACK'&&
+    w.empresaId===candidate.empresaId&&w.cursoId===candidate.cursoId&&
+    w.packageId===candidate.packageId&&
+    w.enrollmentId===doc.enrollmentId&&w.cycleId===doc.cycleId&&
+    w.qualificationHistoryId===doc.qualificationHistoryId&&
+    w.documentId===doc.documentId&&w.completionStatus==='CONCLUIDO'&&
+    h.test(w.persistedCmiSha256),'BACKEND_READBACK_MISSING');
+  const old=w.staleAttempt;
+  assert(old&&Number.isSafeInteger(old.cycleId)&&old.cycleId>0&&
+    old.cycleId!==w.cycleId&&
+    [403,409].includes(old.commitHttpStatus)&&
+    h.test(old.progressBeforeSha256)&&
+    old.progressBeforeSha256===old.progressAfterSha256&&
+    h.test(old.activeCycleBeforeSha256)&&
+    old.activeCycleBeforeSha256===old.activeCycleAfterSha256,
+    'OLD_CYCLE_COMMIT_NOT_PROVEN_REJECTED');
+  const replay=w.replay;
+  assert(replay&&[200,204,409].includes(replay.completionHttpStatus)&&
+    replay.qualificationHistoryCountBefore===1&&
+    replay.qualificationHistoryCountAfter===1&&
+    replay.qualificationHistoryId===doc.qualificationHistoryId,
+    'REPLAY_QUALIFICATION_NOT_IDEMPOTENT');
+  const auth=w.authorization;
+  assert(auth&&auth.anonymousHttpStatus===401&&
+    [403,404].includes(auth.foreignTenantHttpStatus)&&
+    [400,409].includes(auth.mismatchedShaHttpStatus)&&
+    [403,409].includes(auth.incompatibleEditionHttpStatus),
+    'NEGATIVE_AUTHORIZATION_NOT_PROVEN');
+  const validity=w.validity;
+  assert(validity&&validity.status==='VALID'&&
+    typeof validity.validFrom==='string'&&
+    Number.isFinite(Date.parse(validity.validFrom))&&
+    (validity.validUntil===null||
+      typeof validity.validUntil==='string'&&
+      Number.isFinite(Date.parse(validity.validUntil))&&
+      Date.parse(validity.validUntil)>Date.parse(validity.validFrom)),
+    'QUALIFICATION_VALIDITY_UNPROVEN');
+  return true;
+}
+
 const K='AIRTRUST_SCORM_STAGING_ATTESTATION_V1';
 const cases=['FIRST_ACCESS','REQUIRED_CONTENT_COVERAGE',
   'REQUIRED_INTERACTIONS','PERSISTENCE_VERIFIED','SUSPEND_RESUME',
@@ -80,6 +129,7 @@ export function signGovernedScormEvidence({
       doc.documentId.length<=128&&sha.test(doc.sha256)&&
       row.certificateDownloadHttpStatus===200,
       'CERTIFICATE_BACKEND_WITNESS_MISSING_'+browser);
+    validateScormBackendWitness(row,doc,candidate);
     const certificatePath=certificatePdfFiles?.[browser];
     assert(typeof certificatePath==='string'&&certificatePath,
       'CERTIFICATE_FILE_MISSING_'+browser);
