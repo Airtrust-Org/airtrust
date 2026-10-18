@@ -77,7 +77,7 @@ export function validatePedagogicalReview({reviewFile,driverFile,candidate,
     signed.kind,signed.reviewerKeyId,signed.packageSha256,
     signed.reviewSha256,signed.driverSha256,signed.reviewerReference,
     r.approvalReference,signed.approvedAt,
-  ].join('\\n');
+  ].join('\n');
   try {
     key=createPublicKey(publicKey);
     signature=Buffer.from(signed.signature,'base64');
@@ -91,5 +91,4 @@ export function validatePedagogicalReview({reviewFile,driverFile,candidate,
     reviewerKeyId:signed.reviewerKeyId,
     reviewerPublicKeySha256:hash(key.export({type:'spki',format:'der'})),
     approvalSignatureSha256:hash(signature)};
-}
 }
