@@ -200,3 +200,59 @@ assinatura Ed25519 foram checadas pelo emissor governado na etapa anterior.
 A emissão da chave e a aprovação/revogação do cadastro de avaliadores exigem
 governança externa independente. Enquanto ela não existir, estado obrigatoriamente
 `UNCERTIFIED`; testes positivos com chaves sintéticas não são homologação.
+
+
+## Backend witness obrigatório por navegador (nova fronteira)
+
+O signer só aceita `GOVERNED_STAGING_AUTHENTICATED_QA_V1` quando **cada**
+relatório de Chromium/WebKit inclui `backendWitness` vinculado à mesma
+empresa, curso, edição UUID, matrícula, ciclo, histórico de qualificação e
+identificador de documento do certificado. Uma matriz de `cases: PASS`
+sem prova de leitura posterior do banco **não é suficiente**.
+
+Os campos vêm de leituras **read-only do Worker/D1 no staging autorizado**:
+`source=WORKER_D1_STAGING_READBACK`, `persistedCmiSha256`,
+`completionStatus=CONCLUIDO`, `qualificationHistoryId` e `documentId`.
+O bloco `staleAttempt` precisa comprovar ciclo antigo distinto, resposta
+HTTP 403/409 ao commit antigo e digest da evidência CMI idêntico antes/depois
+tanto no ciclo antigo como no ativo. `replay` exige uma única qualificação
+antes e depois da repetição. `authorization` registra quatro respostas
+negativas efetivamente observadas (anônimo, cross-tenant, SHA divergente,
+edição incompatível). `validity` confirma a validade da qualificação com
+início ISO e fim ISO ou nulo quando legalmente indeterminado.
+
+O emissor apenas **valida esses testemunhos do runner governado**: não pode
+fabricá-los nem produzi-los lendo o ZIP. O artifact JSON original de cada
+browser é preservado e seu SHA-256 integra a atestação. O verificador do
+Worker valida a assinatura HMAC do resumo, os digests por navegador,
+os documentos e a revisão pedagógica. Nenhum booleano de `verifiedCycle`
+sozinho substitui os campos concretos.
+
+### Preflight e bloqueios operacionais de staging
+
+O workflow atual `.github/workflows/staging-lms-scorm-qa.yml` executa QA
+sintética de upload e Chromium; **não** gera a homologação funcional
+Chromium+WebKit de ZIP real, histórico e PDFs. Para habilitar o producer completo
+sem contornar a governança, seu executor de staging precisará:
+
+1. Ser acionado a partir da `main` vigente com `release_sha` exato; para
+   candidato não integrado, PR aberta, mesma organização, **revisada e não
+   draft**; oito gates oficiais do SHA e provenance Worker+Pages idêntica.
+2. Receber o ZIP privado por meio autorizado, verificar SHA dos **bytes** e
+   registrar UUID de edição `VALIDATED` e **inativa** no tenant/cursos QA,
+   sem trocar ponteiro da edição ativa de produção.
+3. Obter autorização governada para criação/remoção de usuários, cursos,
+   matrículas e ciclos **sintéticos em staging**, sem usar estudantes reais.
+   O preview read-only já implementado **não** cria esse ciclo.
+4. Executar o driver pedagógico autoral de ambos os navegadores, registrar
+   D1/CMI/qualificação/histórico e baixar os dois PDFs do backend; guardar
+   testemunhos originais com proveniência antes da limpeza das fixtures.
+5. Verificar arquivo de revisão independente assinado com chave Ed25519
+   **previamente autorizada no ambiente protegido**. Passar os 2 relatórios,
+   2 PDFs, ZIP exato, driver, revisão e assinatura de avaliador ao signer
+   main-only `sign-scorm-functional-attestation.mjs`.
+
+Não fazer dispatch, importação, mudança de PR para ready, merge, publicação
+em staging de ZIP real ou D1 write remoto enquanto esses insumos/autorização
+não estiverem disponíveis. Um workflow de upload sintético verde não prova
+que a homologação funcional foi executada.
