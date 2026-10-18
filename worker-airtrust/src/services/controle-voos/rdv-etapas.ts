@@ -539,8 +539,16 @@ export function computeFlightTotalsFromEtapas(
       const start = parseEtapaInstant(etapa.horario_decolagem);
       const end = parseEtapaInstant(etapa.horario_pouso);
       if (start && end) {
-        totalMinutes += minutesBetween(start, end);
-        hasTempo = true;
+        const duration = minutesBetween(
+          start, end,
+          isClockOnlyEtapaTime(etapa.horario_decolagem),
+          isClockOnlyEtapaTime(etapa.horario_pouso),
+        );
+        // Invalid/mixed historical instants cannot become fictitious flight hours.
+        if (duration !== null) {
+          totalMinutes += duration;
+          hasTempo = true;
+        }
       }
     }
 
