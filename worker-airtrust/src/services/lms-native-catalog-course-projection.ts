@@ -33,30 +33,37 @@ export async function projectNativeCatalogCourses<T extends Record<string, unkno
     throw new ApiError('Identificadores inválidos no catálogo LMS.', 503,
       'NATIVE_CATALOG_INVALID_COURSE_IDS');
   }
-  // IDs are strictly validated integers; all values remain bound parameters.
-  const placeholders = courseIds.map(() => '?').join(',');
-  let marked: { success?: boolean; results?: { curso_id: number }[] } | null;
-  try {
-    marked = await env.DB.prepare(
-      'SELECT curso_id FROM lms_native_catalog_activation ' +
-      'WHERE empresa_id = ? AND curso_id IN (' + placeholders + ')',
-    ).bind(empresaId, ...courseIds).all<{ curso_id: number }>();
-  } catch {
-    throw new ApiError('Catálogo Native indisponível para identificação dos cursos.',
-      503, 'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED');
-  }
-  if (!marked || marked.success !== true || !Array.isArray(marked.results)) {
-    throw new ApiError('Resultado inválido na projeção do catálogo Native.',
-      503, 'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED');
-  }
+  // Cloudflare D1 can impose a substantially lower bind-variable limit than
+  // local SQLite. Batch tenant-scoped reads rather than failing on larger
+  // catalogs. Never project a partial result: any failed batch rejects ALL.
+  const MAX_COURSE_IDS_PER_QUERY = 90;
   const markedIds = new Set<number>();
-  const knownIds = new Set(courseIds);
-  for (const { curso_id } of marked.results) {
-    if (!Number.isSafeInteger(curso_id) || !knownIds.has(curso_id) || markedIds.has(curso_id)) {
-      throw new ApiError('Inconsistência na classificação de cursos Native.', 503,
-        'NATIVE_CATALOG_ACTIVATION_CONFLICT');
+  for (let offset = 0; offset < courseIds.length; offset += MAX_COURSE_IDS_PER_QUERY) {
+    const ids = courseIds.slice(offset, offset + MAX_COURSE_IDS_PER_QUERY);
+    const allowedIds = new Set(ids);
+    const placeholders = ids.map(() => '?').join(',');
+    let marked: { success?: boolean; results?: { curso_id: number }[] } | null;
+    try {
+      marked = await env.DB.prepare(
+        'SELECT curso_id FROM lms_native_catalog_activation ' +
+        'WHERE empresa_id = ? AND curso_id IN (' + placeholders + ')',
+      ).bind(empresaId, ...ids).all<{ curso_id: number }>();
+    } catch {
+      throw new ApiError('Catálogo Native indisponível para identificação dos cursos.',
+        503, 'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED');
     }
-    markedIds.add(curso_id);
+    if (!marked || marked.success !== true || !Array.isArray(marked.results)) {
+      throw new ApiError('Resultado inválido na projeção do catálogo Native.',
+        503, 'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED');
+    }
+    for (const entry of marked.results) {
+      const id = entry?.curso_id;
+      if (!Number.isSafeInteger(id) || !allowedIds.has(id) || markedIds.has(id)) {
+        throw new ApiError('Inconsistência na classificação de cursos Native.', 503,
+          'NATIVE_CATALOG_ACTIVATION_CONFLICT');
+      }
+      markedIds.add(id);
+    }
   }
   return rows.map((row) => {
     if (!markedIds.has(Number(row.id))) return row;

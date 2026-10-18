@@ -80,6 +80,61 @@ describe('Native catalog API effective type projection', () => {
       });
     }
   });
+  it('classifies large catalogs in bounded, tenant-scoped D1 batches', async () => {
+    const markedIds = new Set([10, 101, 205]);
+    const { env, bind } = setup([]);
+    bind.mockImplementation((tenant: number, ...ids: number[]) => ({
+      all: async () => ({
+        success: true,
+        results: ids.filter(id => markedIds.has(id)).map(curso_id => ({ curso_id })),
+      }),
+    }));
+    const rows = Array.from({ length: 205 }, (_, index) => ({
+      id: index + 1, tipo_conteudo: 'scorm',
+    }));
+    const projected = await projectNativeCatalogCourses(env, 6, rows);
+    expect(projected.filter(row => row.tipo_conteudo === 'native').map(row => row.id))
+      .toEqual([10, 101, 205]);
+    expect(bind).toHaveBeenCalledTimes(3);
+    for (const [tenant, ...ids] of bind.mock.calls) {
+      expect(tenant).toBe(6);
+      expect(ids.length).toBeLessThanOrEqual(90);
+      expect(ids.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('fails the full large-catalog projection when a later D1 batch fails', async () => {
+    const { env, bind } = setup([]);
+    let reads = 0;
+    bind.mockImplementation((_tenant: number, ...ids: number[]) => ({
+      all: async () => {
+        reads += 1;
+        if (reads === 2) return { success: false, results: [] };
+        return { success: true, results: [{ curso_id: ids[0] }] };
+      },
+    }));
+    const rows = Array.from({ length: 190 }, (_, index) => ({
+      id: index + 1, tipo_conteudo: 'scorm',
+    }));
+    await expect(projectNativeCatalogCourses(env, 6, rows)).rejects.toMatchObject({
+      statusCode: 503, code: 'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED',
+    });
+    expect(reads).toBe(2);
+  });
+
+  it('rejects markers outside the exact requested batch', async () => {
+    const { env, bind } = setup([]);
+    bind.mockImplementation((_tenant: number, ...ids: number[]) => ({
+      all: async () => ({ success: true, results: [{ curso_id: ids[0] + 90 }] }),
+    }));
+    const rows = Array.from({ length: 180 }, (_, index) => ({
+      id: index + 1, tipo_conteudo: 'scorm',
+    }));
+    await expect(projectNativeCatalogCourses(env, 6, rows)).rejects.toMatchObject({
+      code: 'NATIVE_CATALOG_ACTIVATION_CONFLICT',
+    });
+    expect(bind).toHaveBeenCalledTimes(1);
+  });
   it('rejects malformed course identities before SQL generation', async () => {
     const { env, prepare } = setup([]);
     await expect(projectNativeCatalogCourses(env, 6, [
