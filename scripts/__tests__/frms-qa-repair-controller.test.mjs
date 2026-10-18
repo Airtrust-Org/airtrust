@@ -191,3 +191,15 @@ test('missing protected storage, bookmark, or approval cannot be bypassed',async
   assert.equal(st.batchCount,0);
   st.sqlite.close();
 });
+
+test('audit failure reason is sanitized and does not expose database error details',async()=>{
+  const st=setup();
+  const receipt=await prepareQaEvidence({plan,adapters:st.adapters,key:encryptionKey,now});
+  st.adapters.postcheck=async()=>{throw new Error('Sensitive row details: should never appear in audit');};
+  await assert.rejects(()=>executeApprovedQaStagingRepair(command(receipt,st.adapters)),
+    /Sensitive row details/);
+  assert.equal(st.events.at(-1).event,'FRMS_QA_POSTCHECK_FAILED_REQUIRES_COMPENSATION');
+  assert.equal(st.events.at(-1).reason,'QA_EXECUTION_FAILED');
+  assert.equal(st.batchCount,1);
+  st.sqlite.close();
+});
