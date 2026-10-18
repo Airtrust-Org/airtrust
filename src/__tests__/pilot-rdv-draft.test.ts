@@ -328,6 +328,20 @@ describe('Pilot RDV operational calculations', () => {
     expect(result.tempo_total_hhmm).toBe('01:25');
   });
 
+  it('explica massa inválida e combustível negativo antes de transmitir o RDV', () => {
+    const errors = validateStageDrafts([{
+      origem_icao: 'SBME', destino_icao: 'SBCB',
+      peso_vazio: 'invalid', peso_tripulacao: '-1',
+      payload: '-5', combustivel_inicio: 'bad',
+      combustivel_fim: '-10', unidade_combustivel: 'LB',
+    }]);
+    expect(errors).toContain('Etapa 1: peso vazio deve ser numérico.');
+    expect(errors).toContain('Etapa 1: peso da tripulação não pode ser negativo.');
+    expect(errors).toContain('Etapa 1: peso da carga não pode ser negativo.');
+    expect(errors).toContain('Etapa 1: combustível inicial deve ser numérico.');
+    expect(errors).toContain('Etapa 1: combustível final não pode ser negativo.');
+  });
+
   it('mostra validações específicas para duração e unidade de combustível', () => {
     const errors = validateStageDrafts([
       {
