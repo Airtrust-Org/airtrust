@@ -12,6 +12,12 @@ import { spawnSync } from 'node:child_process';
 const ALLOWED_D1 = 'airtrust-db-staging-baseline-20260701';
 const CONFIRM = 'AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA';
 const TENANT = 'qa_examiner_training';
+const qaAdminEmail = String(
+  process.env.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid',
+).trim().toLowerCase();
+if (!/^[a-z0-9._+-]+@staging\.airtrust\.invalid$/.test(qaAdminEmail)) {
+  throw new Error('QA_ADMIN_STAGING_IDENTITY_REQUIRED');
+}
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
 const rollback = args.includes('--rollback');
@@ -49,6 +55,12 @@ const orphanCourseTitle = `${code} EAD legado`;
 const requiredPackagePrefix = `qa/h5p/${code}/required/`;
 const orphanPackagePrefix = `qa/h5p/${code}/orphan/`;
 const tenantId = `(SELECT id FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)`;
+const qaUserScope = `FROM usuarios u
+  INNER JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=${tenantId}
+  WHERE LOWER(TRIM(u.email))=${esc(qaAdminEmail)} AND u.deleted_at IS NULL
+    AND COALESCE(u.active,1)=1
+    AND LOWER(TRIM(ue.role)) IN ('admin','administrador','gestor','manager')`;
+const qaUserId = `(SELECT u.id ${qaUserScope} LIMIT 1)`;
 const sectorId = `(SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(sectorCode)} AND deleted_at IS NULL LIMIT 1)`;
 const invalidSectorId = `(SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(invalidSectorCode)} AND deleted_at IS NULL LIMIT 1)`;
 const functionId = `(SELECT id FROM funcoes WHERE empresa_id=${tenantId} AND codigo=${esc(functionCode)} AND deleted_at IS NULL LIMIT 1)`;
@@ -63,6 +75,7 @@ CREATE TABLE IF NOT EXISTS _qa_compliance_lifecycle_guard(ok INTEGER NOT NULL CH
 DELETE FROM _qa_compliance_lifecycle_guard;
 INSERT INTO _qa_compliance_lifecycle_guard(ok)
 SELECT CASE WHEN (SELECT COUNT(*) FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)=1
+ AND (SELECT COUNT(DISTINCT u.id) ${qaUserScope})=1
  AND NOT EXISTS (SELECT 1 FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(sectorCode)} AND deleted_at IS NULL)
  AND NOT EXISTS (SELECT 1 FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL)
  AND NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL)
@@ -75,6 +88,17 @@ FROM empresas WHERE id=${tenantId};
 INSERT INTO setores(codigo,nome,descricao,responsavel,ativo,empresa_id,created_at,updated_at,deleted_at)
 SELECT ${esc(invalidSectorCode)},${esc(invalidSectorName)},${esc(marker)},'QA',1,id,datetime('now'),datetime('now'),NULL
 FROM empresas WHERE id=${tenantId};
+
+-- Temporary manager grants: the QA login may select the scoped Gestor
+-- profile, whose catalogue correctly hides sectors without a manager link.
+-- Both synthetic sectors are needed for the negative unmapped-function case.
+INSERT INTO setores_gestores
+  (setor_id,usuario_id,gestor_id,empresa_id,role,ativo,created_at,updated_at,deleted_at)
+SELECT s.id,${qaUserId},NULL,s.empresa_id,'manager',1,datetime('now'),datetime('now'),NULL
+FROM setores s
+WHERE s.empresa_id=${tenantId}
+  AND s.codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)})
+  AND s.descricao=${esc(marker)} AND s.ativo=1 AND s.deleted_at IS NULL;
 
 INSERT INTO funcoes(codigo,nome,descricao,categoria,ativo,empresa_id,created_at,updated_at,deleted_at)
 SELECT ${esc(functionCode)},${esc(functionName)},${esc(marker)},'QA',1,id,datetime('now'),datetime('now'),NULL FROM empresas WHERE id=${tenantId};
@@ -114,6 +138,7 @@ CREATE TABLE IF NOT EXISTS _qa_compliance_lifecycle_post(
   sector_count INTEGER NOT NULL CHECK(sector_count=2),
   function_count INTEGER NOT NULL CHECK(function_count=2),
   pair_count INTEGER NOT NULL CHECK(pair_count=1),
+  manager_grants_count INTEGER NOT NULL CHECK(manager_grants_count=2),
   employee_count INTEGER NOT NULL CHECK(employee_count=2),
   type_count INTEGER NOT NULL CHECK(type_count=2),
   course_count INTEGER NOT NULL CHECK(course_count=2),
@@ -126,6 +151,10 @@ SELECT
  (SELECT COUNT(*) FROM setores WHERE empresa_id=${tenantId} AND codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM funcoes WHERE empresa_id=${tenantId} AND codigo IN (${esc(functionCode)},${esc(invalidFunctionCode)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM setores_funcoes WHERE empresa_id=${tenantId} AND setor_id=${sectorId} AND funcao_id=${functionId} AND ativo=1 AND deleted_at IS NULL),
+ (SELECT COUNT(*) FROM setores_gestores sg JOIN setores s ON s.id=sg.setor_id AND s.empresa_id=sg.empresa_id
+   WHERE sg.empresa_id=${tenantId} AND sg.usuario_id=${qaUserId}
+     AND s.codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)})
+     AND s.descricao=${esc(marker)} AND sg.ativo=1 AND sg.deleted_at IS NULL),
  (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM lms_cursos WHERE empresa_id=${tenantId} AND titulo IN (${esc(requiredCourseTitle)},${esc(orphanCourseTitle)}) AND deleted_at IS NULL),
@@ -135,6 +164,14 @@ DROP TABLE _qa_compliance_lifecycle_post;
 `;
 
 const rollbackSql = `
+-- Revoke only the two per-run manager grants before retiring the synthetic sectors.
+UPDATE setores_gestores
+SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
+WHERE empresa_id=${tenantId} AND usuario_id=${qaUserId}
+  AND setor_id IN (SELECT id FROM setores WHERE empresa_id=${tenantId}
+    AND codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)})
+    AND descricao=${esc(marker)}) AND deleted_at IS NULL;
+
 UPDATE treinamento_matricula_reconciliacoes
 SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND matricula_id IN (
@@ -190,6 +227,10 @@ DELETE FROM _qa_compliance_lifecycle_cleanup;
 INSERT INTO _qa_compliance_lifecycle_cleanup(active_count)
 SELECT
  (SELECT COUNT(*) FROM setores WHERE empresa_id=${tenantId} AND codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)}) AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM setores_gestores sg JOIN setores s ON s.id=sg.setor_id AND s.empresa_id=sg.empresa_id
+     WHERE sg.empresa_id=${tenantId} AND sg.usuario_id=${qaUserId}
+       AND s.codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)})
+       AND s.descricao=${esc(marker)} AND sg.ativo=1 AND sg.deleted_at IS NULL)
  +(SELECT COUNT(*) FROM funcoes WHERE empresa_id=${tenantId} AND codigo IN (${esc(functionCode)},${esc(invalidFunctionCode)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL)
