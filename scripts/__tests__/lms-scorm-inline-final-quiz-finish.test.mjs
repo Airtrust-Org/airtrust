@@ -20,7 +20,10 @@ function fixture({question='4',answered='4',finish=true}={}) {
  dom.window.document.body.innerText=`Questão ${question} de 4 Respondidas ${answered}/4`;
  dom.window.Element.prototype.getBoundingClientRect=()=>({width:140,height:28,left:5,right:145,top:10,bottom:38});
  const clicked=[];
- dom.window.document.querySelectorAll('button').forEach(x=>x.addEventListener('click',()=>clicked.push(x.id||x.className)));
+ dom.window.document.querySelectorAll('button').forEach(x=>{
+   x.innerText=x.textContent;
+   x.addEventListener('click',()=>clicked.push(x.id||x.className));
+ });
  const action=dom.window.eval('('+callback+')');
  const step=()=>action({plan:[{slideIndex:10,indices:[3]}],location:'10/42',allowAdaptiveRetry:false,requiredDecisionSlideIndices:[]});
  return {step,clicked,close:()=>dom.window.close()};
