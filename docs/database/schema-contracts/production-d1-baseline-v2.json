@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-17",
-    "last_reconciled_against": "0554 individual simulator evidence, 0557 LMS cycle and 0560 immutable simulator DELETE protection queued; no remote 0560 application asserted",
-    "schema_v2_digest": "da646ac76bfec8519d429c842669e7014af9a213e1235634861c07e7a259a421",
+    "last_reconciled_at": "2026-10-18",
+    "last_reconciled_against": "0554 simulator, 0557 LMS, 0560 simulator pending; 0563 Pilot fueling identity review-only, not applied",
+    "schema_v2_digest": "7b52728b60189df7ed887ca6806e384ea5902d28fa8bc1b3f953f7611c7f379e",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1609,6 +1609,20 @@
       "reviewed_manifest": "simulator-individual-check-delete-guard-0560.json",
       "evidence": "worker-airtrust/schema-v2/plans/simulator-individual-check-delete-guard-0560.md",
       "note": "Additive trigger; no D1/Compliance/history modifications. Apply separately after 0554; blocks all physical deletion of individual check evidence."
+    },
+    {
+      "change_file": "0563_controle_voos_pilot_fueling_identity.sql",
+      "change_id": "controle-voos-pilot-fueling-identity-0563",
+      "sha256": "f920e8b75faab568c7abeaace086606d19904bc1a4b16fc010238d63fd572456",
+      "targets": [
+        "cv_voo_abastecimentos"
+      ],
+      "domain": "Pilot App offline: durable physical fueling event identity across independently versioned snapshots",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-pilot-fueling-identity-0563.json",
+      "evidence": "worker-airtrust/schema-v2/plans/controle-voos-pilot-fueling-identity-0563.md",
+      "note": "Additive nullable event identity, tenant-flight unique index and immutable guards; legacy/manual fuelings left NULL. Candidate review-only until explicitly authorized trusted-main workflow, D1 recovery, staging postchecks and separate Worker rollout. No staging or production apply asserted."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
