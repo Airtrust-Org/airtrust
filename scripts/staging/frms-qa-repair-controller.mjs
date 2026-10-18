@@ -106,6 +106,7 @@ export function verifyQaApproval({manifest,signatureBase64,publicKeyPem,
   if(!verified)fail('QA_APPROVAL_SIGNATURE_INVALID');
   if(!validTime(manifest.issuedAt)||!validTime(manifest.expiresAt)||
      +now<Date.parse(manifest.issuedAt)-60000||+now>Date.parse(manifest.expiresAt)||
+     Date.parse(manifest.expiresAt)<Date.parse(manifest.issuedAt)||
      Date.parse(manifest.expiresAt)-Date.parse(manifest.issuedAt)>900000||
      !HEX64.test(String(manifest.nonce||''))||
      manifest.authority!=='AIRTRUST_RELEASE_COORDINATION'||
@@ -114,6 +115,7 @@ export function verifyQaApproval({manifest,signatureBase64,publicKeyPem,
      manifest.dbId!==TARGET.db_id||manifest.tenantId!==999013||
      manifest.planSha256!==SHA_PLAN||
      !exact(manifest.authorizedIds,ids(plan))||
+     manifest.receiptSha256!==digest(JSON.stringify(receipt))||
      manifest.preimageSha256!==receipt?.preimageSha256||
      manifest.artifactSha256!==receipt.artifactSha256||
      manifest.recoveryBookmark!==receipt.recoveryBookmark||
