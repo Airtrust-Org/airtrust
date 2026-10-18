@@ -573,9 +573,16 @@ export function validateStageDrafts(stageDrafts) {
       ['peso_bagagem', 'peso da bagagem'],
       ['peso_tripulacao', 'peso da tripulação'],
       ['peso_vazio', 'peso vazio'],
+      ['payload', 'peso da carga'],
+      ['combustivel_inicio', 'combustível inicial'],
+      ['combustivel_fim', 'combustível final'],
     ]) {
-      const value = parseNumber(stage[field]);
-      if (value !== null && value < 0) {
+      const raw = stage[field];
+      if (raw === null || raw === undefined || String(raw).trim() === '') continue;
+      const value = parseNumber(raw);
+      if (value === null) {
+        errors.push('Etapa ' + (index + 1) + ': ' + label + ' deve ser numérico.');
+      } else if (value < 0) {
         errors.push('Etapa ' + (index + 1) + ': ' + label + ' não pode ser negativo.');
       }
     }
