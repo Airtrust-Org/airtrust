@@ -149,6 +149,22 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
     expect(evidence()).toHaveLength(1);
   });
 
+  it('serializes simultaneous confirmation attempts without duplicate evidence or audit', async () => {
+    setup();
+    const replies = await Promise.all([
+      request(111, result(true)),
+      request(111, result(true)),
+    ]);
+    expect(replies.map(r => r.status).sort()).toEqual(expect.arrayContaining([201]));
+    expect(replies.every(r => [200, 201, 409].includes(r.status))).toBe(true);
+    expect(evidence()).toEqual([
+      { funcionario_id:1002, aprovado:1, estado:'CONFIRMADO' },
+    ]);
+    expect(db!.database.prepare(
+      "SELECT COUNT(*) AS total FROM auditoria_avancada_v2 WHERE tabela='sessoes_checks_resultados_individuais'",
+    ).get()).toEqual({ total:1 });
+  });
+
   it('rolls back confirmed proof if the audit write fails', async () => {
     setup();
     db!.database.exec('DROP TABLE auditoria_avancada_v2');
