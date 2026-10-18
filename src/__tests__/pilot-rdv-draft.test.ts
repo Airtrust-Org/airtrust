@@ -175,6 +175,13 @@ describe('Pilot RDV operational calculations', () => {
     expect(common.peso_vazio).toBe('');
     expect(common.peso_tripulacao).toBe('');
     expect(common.unidade_peso).toBe('LB');
+    // Aircraft has a valid unit, but the crew stage does not: no guessed LB.
+    const mixed = buildCommonFlightFields({
+      aeronave: { peso_vazio: 4300, unidade_peso: 'LB' },
+      etapas: [{ peso_tripulacao: 200, unidade_peso: null }],
+    });
+    expect(mixed.peso_vazio).toBe('4300');
+    expect(mixed.peso_tripulacao).toBe('');
     expect(buildCommonFlightFields({
       aeronave: { peso_vazio: 4300, unidade_peso: 'STONE' },
       etapas: [{ peso_tripulacao: 200, unidade_peso: 'STONE' }],

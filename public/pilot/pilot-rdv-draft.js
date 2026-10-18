@@ -166,7 +166,9 @@ export function buildCommonFlightFields(packageData) {
   const crewStage = (Array.isArray(packageData?.etapas) ? packageData.etapas : [])
     .find((stage) => parseNumber(stage?.peso_tripulacao) !== null);
   const firstCrewWeight = parseNumber(crewStage?.peso_tripulacao);
-  const crewSourceUnit = String(crewStage?.unidade_peso || sourceUnit).trim().toUpperCase();
+  // Crew weight belongs to the stage, not the aircraft registration record.
+  // An aircraft unit does not prove a crew weight unit for an older stage.
+  const crewSourceUnit = String(crewStage?.unidade_peso || '').trim().toUpperCase();
   const convertedCrew = ['KG', 'LB'].includes(crewSourceUnit)
     ? convertWeight(firstCrewWeight, crewSourceUnit, 'LB') : null;
   const crewLb = convertedCrew === null ? '' : String(convertedCrew);
