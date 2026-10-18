@@ -153,6 +153,13 @@ async function main(){
   }
   if(externalDriver)fs.writeFileSync(path.join(fixtureRoot,'driver.json'),
     JSON.stringify(externalDriver,null,2)+'\n',{mode:0o600});
+  // One real login was already performed to provision QA enrollments. Reuse
+  // its short-lived token across browser cases: the production 5/min login
+  // limiter must remain enforced, not disabled for synthetic certification.
+  // This ignored .wrangler file is local-only and cleaned by the CI trap.
+  fs.writeFileSync(path.join(fixtureRoot,'local-auth.json'),JSON.stringify({
+    origin:'http://127.0.0.1:8787',packageSha256,accessToken:token,
+  }),{mode:0o600});
   fs.writeFileSync(path.join(fixtureRoot,'fixture.json'),JSON.stringify({
     origin:'http://127.0.0.1:8787',companyId,courseId,dbFile,
     packageSha256,zipPath,fixtureKind:externalDriver?'LOCAL_DISPOSABLE_REAL_ZIP':'LOCAL_DISPOSABLE_ZIP',
