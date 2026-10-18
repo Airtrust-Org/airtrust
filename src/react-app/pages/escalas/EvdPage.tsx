@@ -44,6 +44,7 @@ import {
   buildFrmsLink as buildFrmsLinkFromModule,
   buildFrmsTooltipLabel,
   getFrmsVerboseLabel as getFrmsVerboseLabelFromModule,
+  getFrmsRosterBadge,
 } from './evdFrmsTooltip';
 import type { FrmsFortnightIndicator } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 
@@ -499,41 +500,8 @@ function isAeronaveAtiva(statusRaw: string | null | undefined): boolean {
   return meta.code !== 'I';
 }
 
-function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined): {
-  short: string;
-  long:
-    | 'FRMS OK'
-    | 'Atenção'
-    | 'Revisão operacional'
-    | 'Sem check-in'
-    | 'Check-in incompleto'
-    | 'Sem jornada'
-    | 'Sem referência'
-    | 'Indisponível';
-  isEstimated?: boolean;
-} {
-  if (!signal) {
-    return { short: '—', long: 'Sem referência' };
-  }
-  if (signal.status === 'no_duty') {
-    return { short: '—', long: 'Sem jornada' };
-  }
-  if (signal.status === 'critical' || signal.status === 'unfit_for_duty') {
-    return { short: 'REV', long: 'Revisão operacional' };
-  }
-  if (signal.status === 'attention') {
-    return { short: 'ATN', long: 'Atenção' };
-  }
-  if (signal.status === 'not_submitted') {
-    return { short: 'SC', long: 'Sem check-in' };
-  }
-  if (signal.status === 'incomplete_checkin') {
-    return { short: 'SC', long: 'Check-in incompleto' };
-  }
-  if (signal.requiresReview || signal.hasAlert) {
-    return { short: 'REV', long: 'Revisão operacional' };
-  }
-  return { short: 'OK', long: 'FRMS OK' };
+function getFrmsRosterLabel(signal: FrmsTripulanteSignal | null | undefined) {
+  return getFrmsRosterBadge(signal);
 }
 
 function getFrmsBadgeTone(short: string): string {
