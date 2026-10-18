@@ -56,8 +56,11 @@ export function buildReviewPlan(days) {
       valor_atual_min=${durationSelect}, updated_at=datetime('now')
       WHERE id=${q(old.id)} AND tripulante_id=${oldCrew}
       AND tipo_limite=${q(old.kind)} AND nivel=${q(old.level)}
-      AND date(created_at)=${q(old.day)}
+      AND created_at=${q(old.day+' 10:00:00')}
       AND jornada_id IS NULL AND resolvido=0 AND deleted_at IS NULL
+      AND resolvido_em IS NULL AND resolvido_por IS NULL
+      AND visualizado=0 AND visualizado_em IS NULL AND visualizado_por IS NULL
+      AND percentual_atingido=112
       AND valor_atual_min=620 AND valor_limite_min=540
       AND mensagem=${q(MSG)}
       AND COALESCE(TRIM(notas_resolucao),'')=''
