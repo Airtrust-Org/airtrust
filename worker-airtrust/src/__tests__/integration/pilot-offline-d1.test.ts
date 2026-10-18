@@ -91,6 +91,29 @@ beforeEach(async () => {
 afterEach(async () => { await miniflare?.dispose(); });
 
 describe('Pilot offline sync with a disposable local D1 Worker', () => {
+  it('rejects duplicate client_local_id within the same fueling snapshot before any D1 write', async () => {
+    const base = await command();
+    const fueling = (base.payload.fuelings as Array<Record<string, unknown>>)[0];
+    const invalid = await command({
+      payload: { ...base.payload, fuelings: [fueling, { ...fueling, litros_abastecidos: 180, numero_nota: 'TEST-2' }] },
+    });
+    const before = await state();
+    const response = await send(invalid);
+    expect(response.status).toBe(400);
+    expect((await responseBody(response)).code).toBe('CONTROLE_VOOS_PILOT_SYNC_FUELING_LOCAL_ID_DUPLICATE');
+    expect(await state()).toEqual(before);
+  });
+  it('accepts distinct physical fuelings with equal attributes but different local IDs', async () => {
+    const base = await command();
+    const fueling = (base.payload.fuelings as Array<Record<string, unknown>>)[0];
+    const valid = await command({
+      payload: { ...base.payload, fuelings: [fueling, { ...fueling, client_local_id: 'fuel-2' }] },
+    });
+    const response = await send(valid);
+    expect(response.status).toBe(200);
+    expect((await responseBody(response)).data.results[0].status).toBe('accepted');
+    expect((await state()).cv_voo_abastecimentos).toHaveLength(2);
+  });
   it('replays the exact operation after the HTTP response is lost, preserving all committed data', async () => {
     const cmd = await command();
     const committed = await commitThenDisconnect(cmd);
