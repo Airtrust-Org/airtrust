@@ -96,6 +96,23 @@ export type PetrobrasRveAttendance = {
   etapas: PetrobrasRveLeg[];
 };
 
+/** Reject impossible calendar dates and times instead of letting Date.UTC
+ * normalize an invalid operational timestamp into a different day. */
+export function isValidRveGregorianDay(year: number, month: number, day: number): boolean {
+  if (!Number.isInteger(year) || year < 1 || year > 9999 ||
+      !Number.isInteger(month) || month < 1 || month > 12 ||
+      !Number.isInteger(day) || day < 1) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= days[month - 1];
+}
+
+export function isValidRveWallClock(hour: number, minute: number, second: number): boolean {
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23 &&
+    Number.isInteger(minute) && minute >= 0 && minute <= 59 &&
+    Number.isInteger(second) && second >= 0 && second <= 59;
+}
+
 function parseClock(point: PetrobrasRveClockPoint): number {
   const dateMatch = point.data.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   const timeMatch = point.hora.match(/^(\d{2}):(\d{2}):(\d{2})$/);
@@ -104,6 +121,10 @@ function parseClock(point: PetrobrasRveClockPoint): number {
   }
   const [, dd, mm, yyyy] = dateMatch;
   const [, hh, min, ss] = timeMatch;
+  if (!isValidRveGregorianDay(Number(yyyy), Number(mm), Number(dd)) ||
+      !isValidRveWallClock(Number(hh), Number(min), Number(ss))) {
+    throw new Error('PETROBRAS_RVE_INVALID_CLOCK');
+  }
   const millis = Date.UTC(
     Number(yyyy),
     Number(mm) - 1,
