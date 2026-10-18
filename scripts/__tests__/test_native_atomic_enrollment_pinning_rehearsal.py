@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0558_lms_native_v1_evidence.sql'
-CANDIDATE = ROOT / 'worker-airtrust/schema-v2/changes/0560_lms_native_catalog_activation.sql'
+CANDIDATE = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0560.REVIEW-ONLY.sql.txt'
 OLD_NATIVE = "c.tipo_conteudo='native'"
 EFFECTIVE_NATIVE = """(c.tipo_conteudo='native' OR (
   c.tipo_conteudo='scorm' AND EXISTS (

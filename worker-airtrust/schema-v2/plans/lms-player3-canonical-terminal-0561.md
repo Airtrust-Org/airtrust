@@ -1,7 +1,7 @@
 # Schema V2 0561 — Native/Player3 terminal intents (CANDIDATE, NO APPLY)
 
 ## Scope and authorization
-Review candidate from historical 0556 REVIEW-ONLY terminal rehearsal. The change provides mutually isolated one-transaction intents for Native single-assessment and Player3 module-assessment completion. It **does not** conclude an existing enrollment, create a qualification, generate a certificate or enable a feature flag. Existing SCORM completions remain governed by the legacy canonical writer.
+**Non-deployable** review candidate from historical 0556 REVIEW-ONLY terminal rehearsal. The change provides mutually isolated one-transaction intents for Native single-assessment and Player3 module-assessment completion. It **does not** conclude an existing enrollment, create a qualification, generate a certificate or enable a feature flag. Existing SCORM completions remain governed by the legacy canonical writer.
 
 ## Prerequisites / STOP conditions
 - Before any application, prove that the official 0558 → 0559 → 0560 ledger entries exist for the **same staging DB and baseline**, with approved exact SQL/plan hashes and matching physical schema, triggers, FKs, course CHECK and recovery point. A GitHub merge or green test is insufficient.
@@ -18,4 +18,4 @@ Review candidate from historical 0556 REVIEW-ONLY terminal rehearsal. The change
 ## Rehearsal / future postcheck
 Run the existing SQLite candidate tests `test_native_completion_intent_rehearsal.py` and `test_player3_terminal_intent_rehearsal.py` including full 42-unit/8-stage flow, failed stage, forged tenant/actor/receipt and rollback on orphan intent. After an approved apply, confirm exact ledger, new objects and trigger modifications, zero completion intent rows, no SCORM mutation, and six authenticated Chromium/WebKit journeys in staging (including qualification, Compliance and full PDF). No staging evidence has yet been collected.
 
-**Current disposition: REVIEW PENDING / DO NOT APPLY.**
+**Current disposition: REVIEW-ONLY / DO NOT APPLY.**

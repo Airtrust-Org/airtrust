@@ -1,8 +1,0 @@
-{
-  "changeId": "lms-native-catalog-activation-0560",
-  "baselineId": "production-d1-baseline-v2-20260714",
-  "filePath": "worker-airtrust/schema-v2/changes/0560_lms_native_catalog_activation.sql",
-  "fileHash": "a89d4f2c7f2b74205d9a02cad6382c27176e327169afb6a8504a83e8416a991f",
-  "planPath": "worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0560.md",
-  "planHash": "511e96340f372acfd4947ae263c4a01dc3d656145967933ee9ef167feda4eeae"
-}
