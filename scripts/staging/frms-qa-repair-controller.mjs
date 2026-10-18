@@ -39,8 +39,9 @@ const verifyReceiptScope=(receipt,plan,now)=>{
     fail('QA_RECEIPT_SCOPE_OR_INTEGRITY_REJECTED');
   const preparedAt=Date.parse(receipt.recoveryCapturedAt);
   const expiresAt=Date.parse(receipt.artifactExpiresAt);
-  if(preparedAt>+now+60000||expiresAt<=+now||
-     expiresAt<=preparedAt||expiresAt>preparedAt+86400000)
+  // The independently captured recovery bookmark may precede receipt storage by up to 5 minutes.
+  if(preparedAt>+now+300000||expiresAt<=+now||
+     expiresAt<=preparedAt||expiresAt>preparedAt+86400000+300000)
     fail('QA_RECEIPT_SCOPE_OR_INTEGRITY_REJECTED');
   verifyIdentity(receipt.identity);
 };
