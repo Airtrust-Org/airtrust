@@ -173,6 +173,9 @@ export async function executeApprovedQaStagingRepair({plan,receipt,manifest,
   const lock=await adapters.acquireLock(LOCK);
   if(!lock?.held)fail('QA_EXCLUSIVE_LOCK_REQUIRED');
   let applied=false;
+  // Once an atomic D1 batch has been submitted, a lost response does not
+  // distinguish a rollback from a committed write. Never audit it as no-write.
+  let applyStarted=false;
   try{
     const scoped=await adapters.readScope({tenantId:999013,ids:ids(plan)});
     verifyIdentity(scoped);
@@ -199,6 +202,7 @@ export async function executeApprovedQaStagingRepair({plan,receipt,manifest,
         sha256:receipt.artifactSha256},
     };
     const db=await adapters.getDb(TARGET.db_id);
+    applyStarted=true;
     await executeQaAtomicRepair({db,plan,preimage:rows,context});
     applied=true;
     const after=await adapters.postcheck({tenantId:999013,ids:ids(plan)});
@@ -215,8 +219,13 @@ export async function executeApprovedQaStagingRepair({plan,receipt,manifest,
     // After a successful batch, never pretend a failed postcheck rolled it back.
     const raw=String(error?.message??'');
     const safeReason=/^QA_[A-Z0-9_]+$/.test(raw)?raw:'QA_EXECUTION_FAILED';
-    try{await adapters.audit({event:applied?'FRMS_QA_POSTCHECK_FAILED_REQUIRES_COMPENSATION':
-      'FRMS_QA_BLOCKED_BEFORE_APPLY',sha,planSha256:SHA_PLAN,reason:safeReason});}
+    // A rejected/lost batch response is an indeterminate apply outcome, not
+    // proof that no D1 rows changed. Reconcile remotely under the same lock
+    // before considering a compensating action; never auto-retry this nonce.
+    const event=applied?'FRMS_QA_POSTCHECK_FAILED_REQUIRES_COMPENSATION':
+      applyStarted?'FRMS_QA_APPLY_OUTCOME_UNKNOWN_RECONCILIATION_REQUIRED':
+        'FRMS_QA_BLOCKED_BEFORE_APPLY';
+    try{await adapters.audit({event,sha,planSha256:SHA_PLAN,reason:safeReason});}
     catch{/* retain original failure; persistent controller must alert separately */}
     throw error;
   }finally{await adapters.releaseLock(lock);}
