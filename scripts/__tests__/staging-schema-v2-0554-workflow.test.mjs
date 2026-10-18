@@ -34,6 +34,8 @@ test('0560 has separate governed stage authorization and preserves evidence', ()
     'SIMULATOR_0554_DEPENDENCY_LEDGER_MISMATCH',
     'SIMULATOR_0560_DELETE_TRIGGER_ALREADY_PRESENT',
     'SIMULATOR_0560_TRIGGERS_POSTCONDITION_FAILED',
+    'trg_checks_individuais_confirmed_immutable',
+    'trg_checks_individuais_delete_guard',
     'SIMULATOR_0560_EVIDENCE_COUNT_CHANGED',
     'steps.preflight.outputs.evidence_count',
   ]) assert.ok(workflow.includes(guard), guard);

@@ -26,5 +26,6 @@ assert_count unapplied-0560 0 "SELECT COUNT(*) count FROM airtrust_schema_change
 assert_count source-table 1 "SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name='sessoes_checks_resultados_individuais';"
 assert_count indexes-0554 3 "SELECT COUNT(*) count FROM sqlite_master WHERE type='index' AND tbl_name='sessoes_checks_resultados_individuais' AND name LIKE 'idx_checks_individuais_%';"
 assert_count triggers-0554 6 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND tbl_name='sessoes_checks_resultados_individuais' AND name LIKE 'trg_checks_individuais_%';"
+assert_count required-0554-trigger-names 6 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND tbl_name='sessoes_checks_resultados_individuais' AND name IN ('trg_checks_individuais_scope_insert','trg_checks_individuais_immutable_scope','trg_checks_individuais_confirm_insert','trg_checks_individuais_confirm_update','trg_checks_individuais_annulled_immutable','trg_checks_individuais_confirmed_immutable');"
 assert_count delete-guard-absent 0 "SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name='trg_checks_individuais_delete_guard';"
 echo SIMULATOR_CHECK_DELETE_GUARD_0560_PREFLIGHT=PASS
