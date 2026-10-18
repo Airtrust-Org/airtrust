@@ -1,4 +1,4 @@
-const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v36';
+const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v37';
 const PILOT_SCOPE_PATH = '/pilot/';
 const PILOT_NETWORK_TIMEOUT_MS = 4_000;
 
@@ -24,6 +24,7 @@ const PRECACHE_URLS = [
   '/pilot/pilot-vault.js',
   '/pilot/pilot-rdv-draft.js',
   '/pilot/pilot-sync.js',
+  '/pilot/pilot-sync-receipt.js',
   '/pilot/pilot-lease.js',
   '/pilot/pilot-lease-trust.js',
   '/pilot/pilot.webmanifest',
