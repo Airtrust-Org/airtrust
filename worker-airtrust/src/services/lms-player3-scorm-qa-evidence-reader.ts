@@ -88,6 +88,12 @@ export async function readPlayer3ScormQaSnapshot(input:{
     fail('SCORM_QA_CMI_INVALID');
   }
   const qualified=row.status==='CONCLUIDO';
+  // This QA reader is specific to the examined external SCORM 1.2 package:
+  // a D1 completion record cannot certify it if the persisted LMS CMI is
+  // failed, missing, merely visually completed or shows 99% progress.
+  if(qualified&&(row.lesson_status!=='passed'||row.progresso_pct!==100)){
+    fail('SCORM_QA_TERMINAL_CMI_INCONSISTENT');
+  }
   if(qualified&&(!positive(row.qualificacao_historico_id)||
      row.ciclo_historico_id!==row.qualificacao_historico_id||
      row.historico_validado_id!==row.qualificacao_historico_id||

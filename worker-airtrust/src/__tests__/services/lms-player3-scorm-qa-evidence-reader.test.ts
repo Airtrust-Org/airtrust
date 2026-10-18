@@ -72,6 +72,21 @@ describe('Player3 staging SCORM QA read-only projection',()=>{
     row.documento_id=null;
     await expect(read()).rejects.toThrow('SCORM_QA_TERMINAL_EVIDENCE_MISSING');
   });
+  it('never certifies a failed, stale or incomplete SCORM attempt despite D1 CONCLUIDO',async()=>{
+    const passed={...row!,status:'CONCLUIDO',ciclo_status:'CONCLUIDO',
+      progresso_pct:100,lesson_status:'passed',
+      qualificacao_historico_id:77,ciclo_historico_id:77,
+      historico_validado_id:77,historico_status:'CONCLUIDA',documento_id:90};
+    for(const forged of [
+      {...passed,lesson_status:'failed'},
+      {...passed,lesson_status:null},
+      {...passed,lesson_status:'completed'},
+      {...passed,progresso_pct:99},
+    ]){
+      row=forged;
+      await expect(read()).rejects.toThrow('SCORM_QA_TERMINAL_CMI_INCONSISTENT');
+    }
+  });
   it('fails closed on missing or other-tenant enrollments and Native-marker courses',async()=>{
     row=null;
     await expect(read()).rejects.toThrow('SCORM_QA_SCOPE_OR_CYCLE_INVALID');

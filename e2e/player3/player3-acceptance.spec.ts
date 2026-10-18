@@ -630,8 +630,11 @@ test('External SCORM 1.2: actual adapter, no fake completion from visual slides,
     const original=await state();
     demand(original.status!=='CONCLUIDO' &&
       original.certificate_id===null &&
-      original.qualificacao_historico_id===null,
+      original.qualificacao_historico_id===null &&
+      original.lesson_status!=='passed',
       'EXTERNAL_SCORM_FRESH_SYNTHETIC_ENROLLMENT');
+    // Reject stale CMI from a previous cycle before touching any SCO button.
+    demand((await cmi())!=='passed','EXTERNAL_SCORM_STALE_CMI_PREEXISTING_PASS');
     await page.goto(pathOn(profile.baseUrl,e.launchPath));
     await expect(page.getByTestId('scorm-compat-root')).toBeVisible();
     let sco: Page | ReturnType<Page['frameLocator']> = page;
