@@ -29,3 +29,9 @@ O diretório não pode existir. O gerador cria um ZIP contendo apenas index.html
 Esta PR contém somente o gerador, testes e instruções de QA, independente dos arquivos do motor na PR #1389 e de Simuladores na PR #1558. Não mesclar os três escopos numa publicação acidental.
 
 Homologação real exige um runtime integrado com schemas governados, seis matrículas sintéticas independentes (três Chromium e três WebKit), CI oficial do SHA, Worker + Pages em staging, origem de assets isolada, D1/R2 verificáveis e execução das seis jornadas. **Playwright --list, testes unitários e geração do pacote não equivalem a homologação.**
+
+## Browser smoke reproduzível (somente offline)
+
+    node scripts/learning-factory/test_player3_technical_browser.cjs
+
+Executa Chromium e WebKit com interceptação integral das requisições (sem tráfego Cloudflare), verificando troca de mensagens iframe, retomada, fixação, falha/reteste e rejeição de veredicto não persistido. Exige Playwright instalado localmente. **Não é E2E do Worker**, não cria matrícula, nota ou certificado em D1 e não substitui as seis jornadas reais de staging.
