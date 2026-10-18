@@ -9,7 +9,9 @@ const courses = [
 ];
 function setup(marked: unknown, flag = '6', environment: Env['ENVIRONMENT'] = 'staging', tableExists = true) {
   const all = vi.fn(async () => ({ success: true, results: marked }));
-  const bind = vi.fn((..._values: number[]) => ({ all }));
+  const bind = vi.fn((..._values: number[]): {
+    all: () => Promise<{ success: boolean; results: unknown }>
+  } => ({ all }));
   const schemaBind = vi.fn(() => ({
     first: async () => tableExists ? { found: 1 } : null,
   }));
