@@ -1,0 +1,28 @@
+name: FRMS private QA adapter integration
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ops/frms-qa-repair/**'
+      - 'scripts/staging/frms-qa-*.mjs'
+      - 'scripts/staging/seed-frms-ux-30d.mjs'
+      - 'scripts/__tests__/frms-qa-*.test.mjs'
+      - '.github/workflows/frms-qa-private-adapter-tests.yml'
+permissions:
+  contents: read
+concurrency:
+  group: frms-private-adapter-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  frms-private-d1-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+      - run: npm ci
+      - name: Disposable Workerd, D1, R2 and Durable Object integration
+        run: node --test scripts/__tests__/frms-qa-private-adapter.test.mjs scripts/__tests__/frms-qa-repair-controller.test.mjs scripts/__tests__/frms-qa-cases-atomic-executor.test.mjs scripts/__tests__/frms-qa-cases-repair-plan.test.mjs

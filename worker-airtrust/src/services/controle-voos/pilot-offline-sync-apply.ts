@@ -169,6 +169,7 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
   if (!Array.isArray(fuelingsRaw) || fuelingsRaw.length > 16) {
     throw new ApiError('Abastecimentos offline invalidos', 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELINGS_INVALID');
   }
+  const seenFuelingIds = new Set<string>();
   const fuelings = fuelingsRaw.map((entry, index): SnapshotFuelingPayload => {
     if (!isPlainObject(entry)) {
       throw new ApiError(`Abastecimento offline invalido no indice ${index}`, 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_INVALID');
@@ -193,6 +194,12 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     ) {
       throw new ApiError(`Abastecimento offline incompleto no indice ${index}`, 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_INVALID');
     }
+    // Each physical fueling has one stable client identity within a snapshot.
+    // Never collapse different IDs by supplier, timestamp, amount or stage.
+    if (seenFuelingIds.has(localId)) {
+      throw new ApiError('Abastecimento com identidade local duplicada no snapshot', 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_LOCAL_ID_DUPLICATE');
+    }
+    seenFuelingIds.add(localId);
     return {
       client_local_id: localId,
       data_hora: dataHora,
@@ -1389,6 +1396,23 @@ export async function applyPilotOfflineSnapshotCommand(input: {
       input.command.client_operation_id,
     );
     if (racedReceipt) return replayReceipt(racedReceipt, input.command);
+
+    // The accepted-receipt insert deliberately violates its NOT NULL
+    // constraint when the preceding CAS changed no row. D1 rolls back the
+    // entire batch before reporting this guard, so no child write can escape.
+    if (String(error).includes('NOT NULL constraint failed: cv_offline_sync_receipts.result_status')) {
+      return recordOfflineSyncConflict(input.db, {
+        empresaId: input.empresaId,
+        command: input.command,
+        funcionarioId: input.funcionarioId,
+        code: 'CONTROLE_VOOS_PILOT_SYNC_CAS_CONFLICT',
+        detail: conflictDetail({
+          type: 'cas',
+          entity: 'cv_rdv_operacional',
+          expected: input.command.base_server_version,
+        }),
+      });
+    }
 
     const refreshedRdv = await getActiveRdvByFlight(input.db, input.flight.id, input.empresaId);
     if (
