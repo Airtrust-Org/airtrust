@@ -30,10 +30,14 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   const failedEnrollmentId=id;
   expect(id).toBeGreaterThan(0);
   const api=fixture.origin+'/api';
-  const login=await page.request.post(api+'/auth/login',{data:{email:'admin@airtrust.com',senha:'Admin@123'}});
-  expect(login.ok()).toBe(true);
-  const token=(await login.json()).data.accessToken as string;
-  expect(token.length).toBeGreaterThan(20);
+  // Reuse the short-lived token from the *authenticated* fixture seeding.
+  // Repeated test logins otherwise hit the real 5/min auth rate limit.
+  const auth=JSON.parse(readFileSync(
+    'worker-airtrust/.wrangler/scorm-browser-qa/local-auth.json','utf8'));
+  expect(auth.origin).toBe(fixture.origin);
+  expect(auth.packageSha256).toBe(localZipDigest);
+  const token=auth.accessToken as string;
+  expect(token).toMatch(/^[^.]+\.[^.]+\.[^.]+$/);
   const headers={Authorization:'Bearer '+token};
 
   // Exercise backend tenant isolation, not merely a direct SQL predicate.
