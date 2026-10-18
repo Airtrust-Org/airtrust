@@ -79,6 +79,39 @@ describe('Petrobras RVE daily export', () => {
     ).toThrow(/EQUIPAMENTO, ATENDIMENTO/);
   });
 
+  it('bloqueia datas impossiveis, minutos/segundos invalidos e sufixos ambiguos', () => {
+    const bad = [
+      { horario_motor_ligado: '25:10' },
+      { horario_motor_ligado: '06:60' },
+      { horario_motor_ligado: '06:40:60' },
+      { horario_motor_ligado: '2026-09-19T06:40:00BAD' },
+      { horario_motor_ligado: '2026-09-19T06:40:00-03:00' },
+      { horario_motor_ligado: '2026-02-31T06:40:00' },
+    ];
+    for (const override of bad) {
+      expect(() => buildPetrobrasRveAttendanceFromFlight(flight(), [
+        { ...stages[0], ...override },
+      ])).toThrow();
+    }
+    expect(() => buildPetrobrasRveAttendanceFromFlight(
+      flight({ data_voo: '2026-02-29' }), stages,
+    )).toThrow('Data operacional invalida para XML Petrobras');
+  });
+
+  it('mantem timestamp operacional valido com segundos/fracao e ano bissexto', () => {
+    const result = buildPetrobrasRveAttendanceFromFlight(
+      flight({ data_voo: '2028-02-29' }),
+      [{ ...stages[0],
+        horario_motor_ligado: '2028-02-29T06:40:00.000Z',
+        horario_decolagem: '2028-02-29 06:50:30',
+        horario_pouso: '2028-02-29 07:34',
+        horario_motor_desligado: '2028-02-29T07:39:00.000Z',
+      }],
+    );
+    expect(result.acionamento).toEqual({ data: '29/02/2028', hora: '06:40:00' });
+    expect(result.decolagem).toEqual({ data: '29/02/2028', hora: '06:50:30' });
+  });
+
   it('falha fechado quando uma etapa final não tem horários completos', () => {
     expect(() =>
       buildPetrobrasRveAttendanceFromFlight(

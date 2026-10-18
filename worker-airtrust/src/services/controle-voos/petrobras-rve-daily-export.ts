@@ -1,6 +1,8 @@
 import { ApiError } from '../../middleware/error-handler';
 import {
   buildPetrobrasRveXml,
+  isValidRveGregorianDay,
+  isValidRveWallClock,
   type PetrobrasRveAttendance,
   type PetrobrasRveClockPoint,
 } from './petrobras-rve-xml';
@@ -28,7 +30,10 @@ export type PetrobrasRveFlightRow = {
 function ddmmyyyy(value: string): string {
   const date = String(value || '').trim().slice(0, 10);
   const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) throw new ApiError('Data operacional invalida para XML Petrobras', 409, 'CONTROLE_VOOS_RVE_XML_INVALID_DATE');
+  if (!match ||
+      !isValidRveGregorianDay(Number(match[1]), Number(match[2]), Number(match[3]))) {
+    throw new ApiError('Data operacional invalida para XML Petrobras', 409, 'CONTROLE_VOOS_RVE_XML_INVALID_DATE');
+  }
   return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
@@ -38,11 +43,19 @@ function clock(value: string | null, fallbackDate: string): PetrobrasRveClockPoi
 
   const simple = raw.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (simple) {
+    if (!isValidRveWallClock(Number(simple[1]), Number(simple[2]), Number(simple[3] || '00'))) {
+      throw new ApiError('Horario operacional invalido para XML Petrobras', 409, 'CONTROLE_VOOS_RVE_XML_INVALID_CLOCK');
+    }
     return { data: ddmmyyyy(fallbackDate), hora: `${simple[1]}:${simple[2]}:${simple[3] || '00'}` };
   }
 
-  const timestamp = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  // Accept only fully specified local/UTC textual timestamps. Offsets cannot be
+  // silently ignored: these output fields are operational wall-clock times.
+  const timestamp = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d{1,3})?Z?$/);
   if (timestamp) {
+    if (!isValidRveWallClock(Number(timestamp[2]), Number(timestamp[3]), Number(timestamp[4] || '00'))) {
+      throw new ApiError('Horario operacional invalido para XML Petrobras', 409, 'CONTROLE_VOOS_RVE_XML_INVALID_CLOCK');
+    }
     return { data: ddmmyyyy(timestamp[1]), hora: `${timestamp[2]}:${timestamp[3]}:${timestamp[4] || '00'}` };
   }
 
