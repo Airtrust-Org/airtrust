@@ -8,7 +8,7 @@ import {randomBytes,createDecipheriv} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {buildReviewPlan} from '../staging/frms-qa-cases-repair-plan.mjs';
 import {
-  validateQaPreimage,encryptQaPreimage,buildQaAtomicStatements,executeQaAtomicRepair,
+  validateQaPreimage,encryptQaPreimage,buildQaAtomicStatements,executeQaAtomicRepair, compensateQaAtomicRepair,
 } from '../staging/frms-qa-cases-atomic-executor.mjs';
 
 const days=Array.from({length:30},(_,i)=>({
@@ -106,5 +106,50 @@ test('mid-batch drift forces rollback of every change without partial commit',as
   await assert.rejects(()=>executeQaAtomicRepair({db:fakeD1(db),plan,preimage,context:approval()}),/malformed JSON/);
   assert.equal(db.prepare("SELECT COUNT(*) n FROM frms_jornada WHERE origem='SIGVOOS' AND empresa_id=999013").get().n,0);
   assert.equal(db.prepare("SELECT COUNT(*) n FROM frms_alerta WHERE jornada_id IS NOT NULL").get().n,0);
+  db.close();
+});
+
+test('separate approval enables selective atomic inverse CAS with verified pre/postimages',async()=>{
+  const db=setup(),binding=fakeD1(db);
+  const load=()=>plan.operations.map(op=>{
+    const row=db.prepare("SELECT * FROM "+op.table+" WHERE id=?").get(op.id);
+    return {table:op.table,id:op.id,updated_at:row.updated_at,original:row};
+  });
+  const before=load(),context=approval();
+  context.approval.preimageSha256=validateQaPreimage(plan,before);
+  await executeQaAtomicRepair({db:binding,plan,preimage:before,context});
+  const after=load();
+  await assert.rejects(()=>compensateQaAtomicRepair({
+    db:binding,plan,preimage:before,postimage:after,context,
+  }),/COMPENSATION_AUTHORIZATION_REQUIRED/);
+  context.compensationApproval={approved:true,sha:context.sha,
+    planSha256:plan.sql_sha256,scope:'FRMS_QA_999013_SELECTIVE_COMPENSATION'};
+  const res=await compensateQaAtomicRepair({
+    db:binding,plan,preimage:before,postimage:after,context,
+  });
+  assert.equal(res.updatedRows,8);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM frms_alerta WHERE jornada_id IS NULL").get().n,4);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM frms_jornada WHERE origem='MANUAL'").get().n,4);
+  assert.equal(db.prepare("SELECT origem FROM frms_jornada WHERE id='other-tenant'").get().origem,'SIGVOOS');
+  db.close();
+});
+test('inverse CAS refuses changed post-state without partially restoring rows',async()=>{
+  const db=setup(),binding=fakeD1(db);
+  const load=()=>plan.operations.map(op=>{
+    const original=db.prepare("SELECT * FROM "+op.table+" WHERE id=?").get(op.id);
+    return {table:op.table,id:op.id,updated_at:original.updated_at,original};
+  });
+  const before=load(),context=approval();
+  context.approval.preimageSha256=validateQaPreimage(plan,before);
+  await executeQaAtomicRepair({db:binding,plan,preimage:before,context});
+  const after=load();
+  context.compensationApproval={approved:true,sha:context.sha,
+    planSha256:plan.sql_sha256,scope:'FRMS_QA_999013_SELECTIVE_COMPENSATION'};
+  db.prepare("UPDATE frms_jornada SET observacao='UNEXPECTED' WHERE id=?").run(plan.operations[2].id);
+  await assert.rejects(()=>compensateQaAtomicRepair({
+    db:binding,plan,preimage:before,postimage:after,context,
+  }),/malformed JSON/);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM frms_alerta WHERE jornada_id IS NOT NULL").get().n,4);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM frms_jornada WHERE origem='SIGVOOS'").get().n,4);
   db.close();
 });
