@@ -145,6 +145,29 @@ export async function applyAircraftBasicWeightToFlightStages(
   const planningUnit: 'KG' | 'LB' = unidadePesoPlanejado === 'KG' ? 'KG' : 'LB';
   const pesoVazio = convertWeight(aircraftWeight.pesoVazio, aircraftWeight.unidadePeso, planningUnit);
   try {
+    // Bulk relabelling a stage's unit without converting existing component
+    // numbers would silently change the meaning of crew/pax/baggage weights.
+    const currentStages = await db.prepare(`SELECT unidade_peso, peso_tripulacao,
+        peso_passageiros, peso_bagagem
+        FROM cv_voo_etapas
+        WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`)
+      .bind(empresaId, vooId).all<{
+        unidade_peso: string | null;
+        peso_tripulacao: number | null;
+        peso_passageiros: number | null;
+        peso_bagagem: number | null;
+      }>();
+    for (const stage of currentStages.results || []) {
+      const unit = String(stage.unidade_peso || '').trim().toUpperCase();
+      const hasComponents = [stage.peso_tripulacao, stage.peso_passageiros,
+        stage.peso_bagagem].some(value => value != null);
+      if (hasComponents && unit !== planningUnit) {
+        throw new ApiError(
+          'Unidade de peso da etapa incompatível com a propagação do peso básico',
+          409, 'CONTROLE_VOOS_WEIGHT_UNIT_MISMATCH',
+        );
+      }
+    }
     await db.prepare(
       `UPDATE cv_voo_etapas
           SET peso_vazio = ?, unidade_peso = ?, updated_at = datetime('now')

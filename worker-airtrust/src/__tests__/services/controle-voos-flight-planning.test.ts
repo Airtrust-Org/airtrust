@@ -84,9 +84,10 @@ describe('controle de voos — planejamento de peso', () => {
     await applyAircraftBasicWeightToFlightStages(db, 6, 42, 99);
 
     expect(String(prepare.mock.calls[0][0])).toContain('FROM aeronaves');
-    expect(String(prepare.mock.calls[1][0])).toContain('SET peso_vazio = ?');
+    expect(String(prepare.mock.calls[1][0])).toContain('SELECT unidade_peso, peso_tripulacao');
+    expect(String(prepare.mock.calls[2][0])).toContain('SET peso_vazio = ?');
     expect(bind).toHaveBeenCalledWith(9259.415, 'LB', 6, 42);
-    expect(String(prepare.mock.calls[2][0])).toContain('FROM cv_voo_etapas');
+    expect(String(prepare.mock.calls[3][0])).toContain('FROM cv_voo_etapas');
     expect(bind).toHaveBeenCalledWith(6, 42);
     expect(bind).toHaveBeenCalledWith(11259.877, 101, 42, 6);
     expect(bind).toHaveBeenCalledWith(9259.415, 102, 42, 6);
@@ -155,7 +156,25 @@ describe('controle de voos — planejamento de peso', () => {
     expect(sql).toContain('THEN ? ELSE unidade_peso');
   });
 
-  it('não bloqueia ambiente legado sem colunas de peso da aeronave', async () {
+
+  it('bloqueia propagação em LB se tripulação e passageiros estão registrados em KG', async () => {
+    const run = vi.fn();
+    const first = vi.fn().mockResolvedValue({ peso_vazio: 4200, unidade_peso: 'KG' });
+    const all = vi.fn().mockResolvedValue({ results: [{
+      unidade_peso: 'KG', peso_tripulacao: 220,
+      peso_passageiros: 500, peso_bagagem: 80,
+    }] });
+    const prepare = vi.fn((_sql: string) => ({ bind: vi.fn(() => ({ first, all, run })) }));
+    const db = { prepare } as unknown as D1Database;
+    await expect(applyAircraftBasicWeightToFlightStages(db, 6, 42, 99))
+      .rejects.toMatchObject({
+        statusCode: 409, code: 'CONTROLE_VOOS_WEIGHT_UNIT_MISMATCH',
+      });
+    expect(run).not.toHaveBeenCalled();
+    expect(prepare).toHaveBeenCalledTimes(2);
+  });
+
+  it('não bloqueia ambiente legado sem colunas de peso da aeronave', async () => {
     const legacyError = new Error('D1_ERROR: no such column: peso_vazio');
     const first = vi.fn().mockRejectedValue(legacyError);
     const run = vi.fn().mockResolvedValue({ meta: { changes: 1 } });
