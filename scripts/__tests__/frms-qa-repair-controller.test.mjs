@@ -92,6 +92,7 @@ function signed(receipt,overrides={}){
     scope:'FRMS_QA_999013_4_CASES_4_JOURNEYS',sha,environment:'staging',
     dbId:'bf9963f4-eb12-439b-a830-20bbf577ac22',tenantId:999013,
     planSha256:plan.sql_sha256,authorizedIds:plan.operations.map(x=>x.id),
+    receiptSha256:createHash('sha256').update(JSON.stringify(receipt)).digest('hex'),
     preimageSha256:receipt.preimageSha256,artifactSha256:receipt.artifactSha256,
     recoveryBookmark:receipt.recoveryBookmark,
     nonce:'e'.repeat(64),issuedAt:'2026-10-17T19:55:00.000Z',
@@ -121,6 +122,11 @@ test('cryptographic trust anchor rejects forged, changed, expired and mismatched
     receipt,plan,sha,now}),/UNTRUSTED_APPROVAL_KEY/);
   const expired=signed(receipt,{expiresAt:'2026-10-17T19:57:00.000Z'});
   assert.throws(()=>verifyQaApproval({...expired,receipt,plan,sha,now}),/SCOPE_OR_TTL/);
+  const unbound=signed(receipt,{receiptSha256:'f'.repeat(64)});
+  assert.throws(()=>verifyQaApproval({...unbound,receipt,plan,sha,now}),/SCOPE_OR_TTL/);
+  const inverted=signed(receipt,{issuedAt:'2026-10-17T20:01:00.000Z',
+    expiresAt:'2026-10-17T20:00:00.000Z'});
+  assert.throws(()=>verifyQaApproval({...inverted,receipt,plan,sha,now}),/SCOPE_OR_TTL/);
   const wrong=signed(receipt,{sha:'d'.repeat(40)});
   assert.throws(()=>verifyQaApproval({...wrong,receipt,plan,sha,now}),/SCOPE_OR_TTL/);
   assert.equal(st.batchCount,0);
