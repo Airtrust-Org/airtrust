@@ -99,7 +99,7 @@ export async function readPlayer3QaSnapshot(input:{
         !positive(row.qualificacao_historico_id))){
       fail('QA_SNAPSHOT_METADATA_INVALID');
     }
-    return row;
+    return row as Metadata;
   }
   const before=await metadata();
   const [session,rowsResult,certificate]=await Promise.all([
@@ -144,7 +144,7 @@ export async function readPlayer3QaSnapshot(input:{
         stageId:row.etapa_id,
         answers:answers as {questionId:string;optionId:string}[],
       });
-    }catch{fail('QA_SNAPSHOT_GRADE_INVALID');}
+    }catch{throw new Player3QaEvidenceError('QA_SNAPSHOT_GRADE_INVALID');}
     if(graded.scorePct!==row.score_pct||
        Number(graded.stagePassed)!==row.passed){
       fail('QA_SNAPSHOT_GRADE_CONFLICT');
