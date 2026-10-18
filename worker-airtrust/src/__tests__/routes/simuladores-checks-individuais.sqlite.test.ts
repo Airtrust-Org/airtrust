@@ -275,4 +275,63 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
       revisao_numero: 2,
     });
   });
+
+  describe('resilience and security regressions', () => {
+    it('rejects malformed payloads and ids without writing evidence', async () => {
+      setup();
+      expect((await request(111, { sessao_check_id: 11 })).status).toBe(400);
+      expect((await request(111, { sessao_check_id: 11, aprovado: 'sim' })).status).toBe(400);
+      expect((await request(0, result(true))).status).toBe(400);
+      expect(evidence()).toEqual([]);
+    });
+
+    it('does not expose or accept a ficha of another tenant (GET and POST)', async () => {
+      setup();
+      expect((await request(111, undefined, 91, 2)).status).toBe(404);
+      expect((await request(111, result(true), 91, 2)).status).toBe(404);
+      expect(evidence()).toEqual([]);
+    });
+
+    it('treats a soft-deleted ficha as nonexistent', async () => {
+      setup();
+      db!.database.exec("UPDATE fichas_sessao SET deleted_at='2026-10-17' WHERE id=111");
+      expect((await request(111, result(true))).status).toBe(404);
+      expect(evidence()).toEqual([]);
+    });
+
+    it('never produces two contradictory confirmed proofs under concurrent approve/reject', async () => {
+      setup();
+      const replies = await Promise.all([
+        request(111, result(true)),
+        request(111, result(false)),
+        request(111, result(true)),
+      ]);
+      expect(replies.every(r => [200, 201, 409].includes(r.status))).toBe(true);
+      expect(replies.filter(r => r.status === 201)).toHaveLength(1);
+      expect(evidence()).toHaveLength(1);
+      expect(db!.database.prepare(
+        "SELECT COUNT(*) AS total FROM auditoria_avancada_v2 WHERE tabela='sessoes_checks_resultados_individuais'",
+      ).get()).toEqual({ total: 1 });
+    });
+
+    it('is safe to retry after a lost response (network error): same proof, no second audit, same read model', async () => {
+      setup();
+      expect((await request(112, result(false), 92)).status).toBe(201);
+      const retry = await request(112, result(false), 92);
+      expect([200, 409]).toContain(retry.status);
+      expect(evidence()).toEqual([{ funcionario_id: 1000, aprovado: 0, estado: 'CONFIRMADO' }]);
+      const read = (await (await request(112)).json()) as any;
+      expect(read.data[0]).toMatchObject({ situacao: 'REPROVADO', aprovado_comprovado: false });
+    });
+
+    it('keeps each ficha isolated: a rejected proof stays rejected when another ficha is approved', async () => {
+      setup();
+      expect((await request(112, result(false), 92)).status).toBe(201);
+      expect((await request(111, result(true))).status).toBe(201);
+      const rejected = (await (await request(112)).json()) as any;
+      const approved = (await (await request(111)).json()) as any;
+      expect(rejected.data[0].situacao).toBe('REPROVADO');
+      expect(approved.data[0].situacao).toBe('APROVADO');
+    });
+  });
 });
