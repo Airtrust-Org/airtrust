@@ -1167,6 +1167,17 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (repeatedNext >= 4) return { type: 'required-decision-navigation-stall' };
       }
 
+      // A repeated click on the SAME question/slide without a location
+      // change cannot certify any additional learner progress. Stop the
+      // read-only driver instead of generating thousands of "Next" clicks
+      // against an authored gate (observed on #25/#26/#29).
+      const repeatedForward = st.actionLog.filter((entry) =>
+        entry.location === locationKey && entry.type === 'next'
+      ).length;
+      if (repeatedForward >= 6) {
+        return { type: 'navigation-stall-no-progress', repeated_next: repeatedForward };
+      }
+
       const exactNext = items.find((item) => forwardId.test(item.id));
       if (exactNext) return markAndClick(exactNext, 'next');
 
@@ -1348,7 +1359,8 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
     if (action?.type === 'required-decision-unresolved' || action?.type === 'required-decision-navigation-stall') {
       diagnostics.required_decision_block = action.type;
     }
-    if (action?.type === 'accordion-gate-unresolved' ||
+    if (action?.type === 'navigation-stall-no-progress' ||
+        action?.type === 'accordion-gate-unresolved' ||
         action?.type === 'inline-quiz-finish-no-progress' ||
         action?.type === 'inline-quiz-no-progress-after-answer' ||
         action?.type === 'inline-quiz-authored-answer-missing' || action?.type === 'inline-quiz-question-gate-blocked' ||
