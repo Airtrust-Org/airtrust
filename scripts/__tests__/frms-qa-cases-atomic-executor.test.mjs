@@ -150,6 +150,6 @@ test('inverse CAS refuses changed post-state without partially restoring rows',a
     db:binding,plan,preimage:before,postimage:after,context,
   }),/malformed JSON/);
   assert.equal(db.prepare("SELECT COUNT(*) n FROM frms_alerta WHERE jornada_id IS NOT NULL").get().n,4);
-  assert.equal(db.prepare("SELECT COUNT(*) n FROM frms_jornada WHERE origem='SIGVOOS'").get().n,4);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM frms_jornada WHERE origem='SIGVOOS' AND empresa_id=999013").get().n,4);
   db.close();
 });
