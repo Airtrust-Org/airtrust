@@ -428,28 +428,14 @@ export async function gerarQualificacaoDaFicha(
           const obsRevogada = `${row.observacoes || ''} | Revogada após revisão de evidência individual da ficha #${fid}`;
           await db
             .prepare(
-              `UPDATE qualificacoes_historico
-                  SET deleted_at = datetime('now'),
-                      status = 'CANCELADA',
-                      observacoes = ?,
-                      updated_at = datetime('now')
-                WHERE id = ? AND empresa_id = ?`,
+              `UPDATE qualificacoes_historico SET deleted_at = datetime('now'), status = 'CANCELADA', observacoes = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`,
             )
             .bind(obsRevogada, row.id, alunoEmpresaId)
             .run();
           if (row.qualificacao_id != null) {
             await db
               .prepare(
-                `UPDATE qualificacoes_historico
-                    SET renovada = 0,
-                        status = 'CONCLUIDA',
-                        updated_at = datetime('now')
-                  WHERE funcionario_id = ?
-                    AND empresa_id = ?
-                    AND qualificacao_id = ?
-                    AND deleted_at IS NULL
-                    AND renovada = 1
-                    AND observacoes LIKE ?`,
+                `UPDATE qualificacoes_historico SET renovada = 0, status = 'CONCLUIDA', updated_at = datetime('now') WHERE funcionario_id = ? AND empresa_id = ? AND qualificacao_id = ? AND deleted_at IS NULL AND renovada = 1 AND observacoes LIKE ?`,
               )
               .bind(
                 colaboradorId,
