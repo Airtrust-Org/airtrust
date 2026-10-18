@@ -22,7 +22,7 @@ function testApp() {
   app.route('/api/lms/matriculas', matriculas);
   return app;
 }
-function state(flag = '6', environment = 'staging', marked = true) {
+function state(flag = '6', environment = 'staging', marked = true, markerReadSuccess = true) {
   const calls: { sql: string; values: unknown[] }[] = [];
   const list = [
     { id: 101, curso_id: 9, funcionario_id: 69, empresa_id: 6,
@@ -44,7 +44,7 @@ function state(flag = '6', environment = 'staging', marked = true) {
             },
             all: async () => {
               if (sql.includes('FROM lms_native_catalog_activation')) {
-                return { success: true, results: marked ? [{ curso_id: 9 }] : [] };
+                return { success: markerReadSuccess, results: marked ? [{ curso_id: 9 }] : [] };
               }
               if (sql.includes('FROM lms_matriculas m')) return { results: list };
               throw Error('UNEXPECTED_LIST_QUERY');
@@ -98,20 +98,7 @@ describe('Effective Native enrollment identity for authenticated learner lists',
     expect(calls.some(x => x.sql.includes('FROM lms_native_catalog_activation'))).toBe(true);
   });
   it.each(['6', ''])('refuses unsuccessful D1 marker classification on learner list (read flag %s)', async (flag) => {
-    const { env, db } = state(flag);
-    const originalPrepare = db.prepare.bind(db);
-    vi.spyOn(db, 'prepare').mockImplementation((sql: string) => {
-      const statement = originalPrepare(sql);
-      if (!sql.includes('FROM lms_native_catalog_activation')) return statement;
-      return {
-        bind: (...values: unknown[]) => {
-          const prepared = statement.bind(...values);
-          return { ...prepared, all: async () => ({
-            success: false, results: [],
-          }) };
-        },
-      } as ReturnType<D1Database['prepare']>;
-    });
+    const { env } = state(flag, 'staging', true, false);
     const result = await testApp().fetch(new Request(
       'http://localhost/api/lms/matriculas/minhas'), env, {} as ExecutionContext);
     expect(result.status).not.toBe(200);
