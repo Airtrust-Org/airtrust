@@ -26,6 +26,25 @@ const verifyIdentity=x=>{
   return identity(x);
 };
 const snapshotMatch=(x,y)=>JSON.stringify(identity(x))===JSON.stringify(identity(y));
+const verifyReceiptScope=(receipt,plan,now)=>{
+  if(receipt?.environment!=='staging'||receipt.dbId!==TARGET.db_id||
+     receipt.tenantId!==999013||receipt.planSha256!==SHA_PLAN||
+     !exact(receipt.authorizedIds,ids(plan))||receipt.writes!==0||
+     !HEX64.test(String(receipt.preimageSha256||''))||
+     !HEX64.test(String(receipt.artifactSha256||''))||
+     !String(receipt.artifactReference||'').trim()||
+     !String(receipt.recoveryBookmark||'').trim()||
+     !validTime(receipt.recoveryCapturedAt)||
+     !validTime(receipt.artifactExpiresAt))
+    fail('QA_RECEIPT_SCOPE_OR_INTEGRITY_REJECTED');
+  const preparedAt=Date.parse(receipt.recoveryCapturedAt);
+  const expiresAt=Date.parse(receipt.artifactExpiresAt);
+  // The independently captured recovery bookmark may precede receipt storage by up to 5 minutes.
+  if(preparedAt>+now+300000||expiresAt<=+now||
+     expiresAt<=preparedAt||expiresAt>preparedAt+86400000+300000)
+    fail('QA_RECEIPT_SCOPE_OR_INTEGRITY_REJECTED');
+  verifyIdentity(receipt.identity);
+};
 const requireAdapters=(a,names)=>{for(const n of names)if(typeof a?.[n]!=='function')fail('QA_ADAPTER_REQUIRED_'+n);};
 const planGuard=plan=>{
   assertReviewPlan(plan);
@@ -97,6 +116,7 @@ export async function prepareQaEvidence({plan,adapters,key,now=new Date()}){
 export function verifyQaApproval({manifest,signatureBase64,publicKeyPem,
   trustedPublicKeySha256,receipt,plan,sha,now=new Date()}){
   planGuard(plan);
+  verifyReceiptScope(receipt,plan,now);
   if(!HEX40.test(String(sha||''))||!HEX64.test(String(trustedPublicKeySha256||''))||
      !publicKeyPem||!signatureBase64||!manifest)fail('QA_TRUST_ANCHOR_REQUIRED');
   const key=createPublicKey(publicKeyPem).export({type:'spki',format:'der'});
@@ -118,11 +138,8 @@ export function verifyQaApproval({manifest,signatureBase64,publicKeyPem,
      manifest.receiptSha256!==digest(JSON.stringify(receipt))||
      manifest.preimageSha256!==receipt?.preimageSha256||
      manifest.artifactSha256!==receipt.artifactSha256||
-     manifest.recoveryBookmark!==receipt.recoveryBookmark||
-     receipt.artifactExpiresAt&&Date.parse(receipt.artifactExpiresAt)<=+now)
+     manifest.recoveryBookmark!==receipt.recoveryBookmark)
     fail('QA_APPROVAL_SCOPE_OR_TTL_REJECTED');
-  if(!snapshotMatch(receipt.identity,verifyIdentity(receipt.identity)))
-    fail('QA_IDENTITY_RECEIPT_INVALID');
   return true;
 }
 
