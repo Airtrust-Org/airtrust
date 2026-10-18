@@ -165,9 +165,11 @@ test('signer refuses to reuse a different learner certificate in the second brow
     const webkit=f.browserRow('WEBKIT');
     const chromium=f.browserRow('CHROMIUM');
     webkit.certificateDocument.documentId=chromium.certificateDocument.documentId;
+    webkit.backendWitness.documentId=chromium.certificateDocument.documentId;
     writeFileSync(f.webkitFile,JSON.stringify(webkit));
     assert.throws(()=>f.sign(),/CERTIFICATE_BROWSER_ISOLATION_VIOLATION/);
     webkit.certificateDocument.documentId='qa-doc-webkit';
+    webkit.backendWitness.documentId='qa-doc-webkit';
     webkit.certificateDocument.sha256=chromium.certificateDocument.sha256;
     writeFileSync(f.webkitFile,JSON.stringify(webkit));
     assert.throws(()=>f.sign(),/CERTIFICATE_DOCUMENT_UNVERIFIED_WEBKIT/);
