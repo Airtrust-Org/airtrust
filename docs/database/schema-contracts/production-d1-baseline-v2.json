@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-17",
     "last_reconciled_against": "0553 LGPD + 0554 Simuladores + 0557 LMS cycle (main), 0558 Native + 0559 Player3 (PR #1389)",
-    "schema_v2_digest": "b4e6cb8a4ea1ddf0491cea68c71f9080b200f9b88b935e4a5321df95497332d9",
+    "schema_v2_digest": "761826e89b09837f59aa3065491ce8c846a7231f5f9ff8b02887fdcdf5234fdd",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1627,6 +1627,47 @@
       "reviewed_manifest": "lms-player3-module-attempts-0559.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0559.md",
       "note": "Additive staged candidate dependent on 0558; no D1/production mutation or certificate issued. Requires governed schema workflow and actual staging E2E."
+    },
+    {
+      "change_file": "0560_lms_native_catalog_activation.sql",
+      "change_id": "lms-native-catalog-activation-0560",
+      "sha256": "a89d4f2c7f2b74205d9a02cad6382c27176e327169afb6a8504a83e8416a991f",
+      "targets": [
+        "lms_cursos",
+        "lms_matricula_ciclos",
+        "lms_matriculas",
+        "lms_native_catalog_activation",
+        "lms_native_edicoes",
+        "lms_native_enrollment_intents",
+        "lms_native_eventos",
+        "lms_native_matricula_edicoes",
+        "lms_native_tentativas",
+        "lms_player3_tentativas_modulares",
+        "lms_scorm_package_versions"
+      ],
+      "domain": "Player3 Native: catalog activation and atomic enrollment pin",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-native-catalog-activation-0560.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0560.md",
+      "note": "Review candidate only; no official staging workflow choice, D1 apply, course activation, qualification or certificate. Requires separate SHA/change_id/target authorization."
+    },
+    {
+      "change_file": "0561_lms_player3_canonical_terminal.sql",
+      "change_id": "lms-player3-canonical-terminal-0561",
+      "sha256": "90f3adff5afb2de0d0861f17b39c41a0753a357f34823089d604da579de321ef",
+      "targets": [
+        "lms_matricula_ciclos",
+        "lms_matriculas",
+        "lms_native_completion_intents",
+        "lms_player3_completion_intents"
+      ],
+      "domain": "Player3 Native: atomic terminal completion intents for Native V1 and Player3",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-player3-canonical-terminal-0561.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-player3-canonical-terminal-0561.md",
+      "note": "Review candidate only; no official staging workflow choice, D1 apply, course activation, qualification or certificate. Requires separate SHA/change_id/target authorization."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",

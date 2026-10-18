@@ -1,6 +1,6 @@
 """OFFLINE ONLY — Native completion-intent Schema V2 review concept.
 
-Reuses the real versioned 0550 and the two review-only 0551/0553 candidates
+Reuses the versioned 0558/0559 foundations and the unapproved 0560/0561 candidates
 in SQLite memory. Does not touch D1, R2, users, certificates or production.
 """
 import sqlite3
@@ -10,7 +10,7 @@ from scripts.__tests__.test_native_atomic_enrollment_pinning_rehearsal import fi
 from scripts.__tests__.test_native_atomic_terminal_state_guard import sql_from_source
 
 ROOT=Path(__file__).resolve().parents[2]
-CANDIDATE=ROOT/'worker-airtrust/schema-v2/plans/lms-native-canonical-completion-0556.REVIEW-ONLY.sql.txt'
+CANDIDATE=ROOT/'worker-airtrust/schema-v2/changes/0561_lms_player3_canonical_terminal.sql'
 NONCE='d'*64
 
 def setup():

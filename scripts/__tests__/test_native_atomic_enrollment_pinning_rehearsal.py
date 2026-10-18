@@ -1,6 +1,6 @@
 """Offline-only: atomic Native enrollment + cycle + immutable edition pin.
 
-Reuses the versioned 0550 contract with the additive marker predicate ONLY in
+Reuses the versioned 0558/0559 and 0560 candidate contracts with the additive marker predicate ONLY in
 memory. Tests a transient enrollment intent visible within one transaction but
 never left committed; legacy enrollment is denied without such an intent.
 Not a Schema V2 migration, remote apply, or production-ready enrollment API.
@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CHANGE = ROOT / 'worker-airtrust/schema-v2/changes/0558_lms_native_v1_evidence.sql'
-CANDIDATE = ROOT / 'worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0555.REVIEW-ONLY.sql.txt'
+CANDIDATE = ROOT / 'worker-airtrust/schema-v2/changes/0560_lms_native_catalog_activation.sql'
 OLD_NATIVE = "c.tipo_conteudo='native'"
 EFFECTIVE_NATIVE = """(c.tipo_conteudo='native' OR (
   c.tipo_conteudo='scorm' AND EXISTS (

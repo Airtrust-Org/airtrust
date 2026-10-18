@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-player3-canonical-terminal-0561",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0561_lms_player3_canonical_terminal.sql",
+  "fileHash": "90f3adff5afb2de0d0861f17b39c41a0753a357f34823089d604da579de321ef",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-player3-canonical-terminal-0561.md",
+  "planHash": "69ef487a51a4a3294b382d5dd59d6dafb2b4bcff75f3b69c2731d938c63a8a72"
+}
