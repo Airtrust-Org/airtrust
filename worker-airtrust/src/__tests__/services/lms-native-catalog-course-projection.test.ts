@@ -9,7 +9,7 @@ const courses = [
 ];
 function setup(marked: unknown, flag = '6', environment: Env['ENVIRONMENT'] = 'staging', tableExists = true) {
   const all = vi.fn(async () => ({ success: true, results: marked }));
-  const bind = vi.fn(() => ({ all }));
+  const bind = vi.fn((..._values: number[]) => ({ all }));
   const schemaBind = vi.fn(() => ({
     first: async () => tableExists ? { found: 1 } : null,
   }));
@@ -83,10 +83,10 @@ describe('Native catalog API effective type projection', () => {
   it('classifies large catalogs in bounded, tenant-scoped D1 batches', async () => {
     const markedIds = new Set([10, 101, 205]);
     const { env, bind } = setup([]);
-    bind.mockImplementation((tenant: number, ...ids: number[]) => ({
+    bind.mockImplementation((...values: number[]) => ({
       all: async () => ({
         success: true,
-        results: ids.filter(id => markedIds.has(id)).map(curso_id => ({ curso_id })),
+        results: values.slice(1).filter(id => markedIds.has(id)).map(curso_id => ({ curso_id })),
       }),
     }));
     const rows = Array.from({ length: 205 }, (_, index) => ({
@@ -106,8 +106,9 @@ describe('Native catalog API effective type projection', () => {
   it('fails the full large-catalog projection when a later D1 batch fails', async () => {
     const { env, bind } = setup([]);
     let reads = 0;
-    bind.mockImplementation((_tenant: number, ...ids: number[]) => ({
+    bind.mockImplementation((...values: number[]) => ({
       all: async () => {
+        const ids = values.slice(1);
         reads += 1;
         if (reads === 2) return { success: false, results: [] };
         return { success: true, results: [{ curso_id: ids[0] }] };
@@ -124,8 +125,8 @@ describe('Native catalog API effective type projection', () => {
 
   it('rejects markers outside the exact requested batch', async () => {
     const { env, bind } = setup([]);
-    bind.mockImplementation((_tenant: number, ...ids: number[]) => ({
-      all: async () => ({ success: true, results: [{ curso_id: ids[0] + 90 }] }),
+    bind.mockImplementation((...values: number[]) => ({
+      all: async () => ({ success: true, results: [{ curso_id: values[1] + 90 }] }),
     }));
     const rows = Array.from({ length: 180 }, (_, index) => ({
       id: index + 1, tipo_conteudo: 'scorm',
