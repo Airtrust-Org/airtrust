@@ -21,8 +21,15 @@ const driverFor=packageSha256=>({
     {op:'click',selector:'#submitAssessment'},
     {op:'click',selector:'#completeCourse'}],expectedStatus:'passed'},
 });
-function fixture(){
+function fixture({uncommittedResume=false}={}){
   const content=buildInteractiveM8QaFiles('qa-browser','probe-v1');
+  if(uncommittedResume){
+    const original=new TextDecoder().decode(content['app.js']);
+    const committed="modelState.q['qa-interaction-1'] = selected;\n      persistModelState();";
+    assert.ok(original.includes(committed));
+    content['app.js']=strToU8(original.replace(committed,
+      "modelState.q['qa-interaction-1'] = selected;\n      api.LMSSetValue('cmi.suspend_data', JSON.stringify(modelState));"));
+  }
   const manifest='<manifest xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2" '+
     'xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"><organizations/><resources>'+
     '<resource identifier="R" type="webcontent" adlcp:scormtype="sco" href="index.html"/>'+
@@ -39,6 +46,22 @@ test('driver is tied to immutable ZIP SHA and reviewed DOM script',()=>{
     sha(zip),{'index.html':Buffer.from('ok')}),/FAIL_DRIVER_MISSING/);
   assert.throws(()=>validateIndependentDriver({...driver,resume:{actions:[],assertion:{selector:'#x',state:'visible'}}},
     sha(zip),{'index.html':Buffer.from('ok')}),/RESUME_DRIVER_MISSING/);
+});
+test('uncommitted suspend changes cannot be reported as persisted or resumed',async()=>{
+  const {zip,driver}=fixture({uncommittedResume:true});
+  const dir=mkdtempSync(join(tmpdir(),'scorm-uncommitted-probe-'));
+  try{
+    const z=join(dir,'candidate.zip'),d=join(dir,'driver.json'),o=join(dir,'report.json');
+    writeFileSync(z,zip);writeFileSync(d,JSON.stringify(driver));
+    const report=await runIndependentZipProbe({zipPath:z,driverPath:d,outputPath:o});
+    assert.equal(report.status,'UNCERTIFIED');
+    assert.equal(report.activationAuthorized,false);
+    for(const run of report.browsers){
+      assert.equal(run.outcome,'INCONCLUSIVE');
+      assert.match(run.diagnostic,/SUSPEND_ACTION_NOT_COMMITTED/);
+      assert.equal(run.checks?.suspendResume,undefined);
+    }
+  }finally{rmSync(dir,{recursive:true,force:true});}
 });
 test('real ZIP bytes yield browser observations without a forged staging certificate',async()=>{
   const {zip,driver}=fixture();

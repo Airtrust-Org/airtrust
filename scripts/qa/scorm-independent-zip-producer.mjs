@@ -98,15 +98,16 @@ function htmlFor(seed,launch){
     'const values=Object.assign({"cmi.core.lesson_status":"not attempted",',
     '"cmi.completion_status":"unknown","cmi.success_status":"unknown",',
     '"cmi.core.score.raw":"","cmi.score.raw":"","cmi.suspend_data":""},',
-    JSON.stringify(seed),');',
+    JSON.stringify(seed).replace(/</g,'\\u003c'),');',
+    'let committed=Object.assign({},values);',
     'const events=[];let initialized=false;',
     'function log(type,k,v){events.push({type,key:k||"",value:v===undefined?"":String(v)});}',
     'function init(){initialized=true;log("Initialize");return "true";}',
     'function get(k){log("GetValue",k);return String(values[k]??"");}',
     'function set(k,v){values[k]=String(v);log("SetValue",k,v);return "true";}',
-    'function commit(){log("Commit");return "true";}',
-    'function finish(){log("Finish");initialized=false;return "true";}',
-    'window.__QA_SCORM__={values,events};',
+    'function commit(){if(!initialized)return "false";committed=Object.assign({},values);log("Commit");return "true";}',
+    'function finish(){if(!initialized)return "false";committed=Object.assign({},values);log("Finish");initialized=false;return "true";}',
+    'window.__QA_SCORM__={values,events,get committed(){return committed;}};',
     'window.API={LMSInitialize:init,LMSGetValue:get,LMSSetValue:set,',
     'LMSCommit:commit,LMSFinish:finish,LMSGetLastError:()=>"0",',
     'LMSGetErrorString:()=>"No error",LMSGetDiagnostic:()=>""};',
@@ -181,14 +182,24 @@ async function exercise(browserName,browserType,driver,host){
     let frame=await open({});
     for(const item of driver.requiredContent)
       await expect(frame.locator(item.selector)).toBeVisible({timeout:20000});
+    const initial=await snapshot();
+    check(initial.events.some(e=>e.type==='Initialize'),'INITIALIZE_MISSING');
+    const baseline=String(initial.committed['cmi.suspend_data']||'');
     await actions(frame,driver.resume.actions);
-    await expect.poll(async()=>String((await snapshot()).values['cmi.suspend_data']||''),
-      {timeout:20000}).not.toBe('');
+    try{
+      await expect.poll(async()=>{
+        const value=String((await snapshot()).committed['cmi.suspend_data']||'');
+        return value!==''&&value!==baseline;
+      },{timeout:20000}).toBe(true);
+    }catch{
+      fail('SUSPEND_ACTION_NOT_COMMITTED_OR_TIMEOUT');
+    }
     const before=await snapshot();
-    const suspend=before.values['cmi.suspend_data'];
+    const suspend=before.committed['cmi.suspend_data'];
     check(before.events.some(e=>e.type==='Commit'),'SUSPEND_COMMIT_MISSING');
+    check(suspend!==baseline,'SUSPEND_ACTION_NOT_COMMITTED');
     await page.close();
-    frame=await open(before.values);
+    frame=await open(before.committed);
     const assertion=driver.resume.assertion;
     const node=frame.locator(assertion.selector);
     if(assertion.state==='visible')await expect(node).toBeVisible();
@@ -218,9 +229,13 @@ async function exercise(browserName,browserType,driver,host){
     if(driver.requiresAssessment)
       check(Number.isFinite(scoreOf(passed.values))&&
         scoreOf(passed.values)>=driver.masteryScore,'PASS_THRESHOLD_NOT_PROVEN');
+    check(passed.events.some(e=>e.type==='Initialize'),'PASS_INITIALIZE_MISSING');
     check(passed.events.some(e=>e.type==='Commit'),'PASS_COMMIT_MISSING');
+    check(statusOf(passed.committed)===terminal,'PASS_STATUS_NOT_COMMITTED');
+    if(driver.requiresAssessment)
+      check(scoreOf(passed.committed)===scoreOf(passed.values),'PASS_SCORE_NOT_COMMITTED');
     await page.close();
-    frame=await open(passed.values);
+    frame=await open(passed.committed);
     await frame.locator('body').waitFor({state:'attached'});
     const reopened=await snapshot();
     check(statusOf(reopened.values)===terminal,'TERMINAL_STATUS_DOWNGRADE');
