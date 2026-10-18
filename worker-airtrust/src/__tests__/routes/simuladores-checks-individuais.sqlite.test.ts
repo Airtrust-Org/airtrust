@@ -82,12 +82,17 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
       db.database.exec(immutableDeleteMigration);
       db.database.exec(`
         CREATE TABLE airtrust_schema_changes_v2 (
-          change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL
+          change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL,
+          file_hash TEXT NOT NULL, plan_hash TEXT NOT NULL
         );
-        INSERT INTO airtrust_schema_changes_v2(change_id, baseline_id)
+        INSERT INTO airtrust_schema_changes_v2(change_id, baseline_id, file_hash, plan_hash)
         VALUES
-          ('simulator-individual-check-evidence-0554', 'production-d1-baseline-v2-20260714'),
-          ('simulator-individual-check-delete-guard-0560', 'production-d1-baseline-v2-20260714');
+          ('simulator-individual-check-evidence-0554', 'production-d1-baseline-v2-20260714',
+           'bcbdcf8bd78c3a3d6393624e62ae70e691190e3ae2d35c0951c0bc56470b4bf5',
+           '47b79c542348749d865425a5487f72689444f30553187778f51366b89bbcd0b6'),
+          ('simulator-individual-check-delete-guard-0560', 'production-d1-baseline-v2-20260714',
+           '5fe67c81dda03681d9a73eec4cc51989bd92270e4eca6b41b1eb1028b58b9e56',
+           'b00948f0821692fb322cd18dc795769d8f03b057db7af9c9b729747d9d2b1463');
       `);
     }
   }
@@ -201,6 +206,21 @@ describe('individual simulator checks — A approved, B rejected, C pending', ()
     expect((await request(111, result(true))).status).toBe(503);
     expect((await request(111)).status).toBe(503);
     expect(evidence()).toEqual([]);
+  });
+
+  it('fails closed if any reviewed Schema V2 hash differs from the applied ledger', async () => {
+    for (const change of [
+      'simulator-individual-check-evidence-0554',
+      'simulator-individual-check-delete-guard-0560',
+    ]) {
+      setup();
+      db!.database.prepare("UPDATE airtrust_schema_changes_v2 SET file_hash='tampered' WHERE change_id=?").run(change);
+      expect((await request(111, result(true))).status).toBe(503);
+      expect((await request(111)).status).toBe(503);
+      expect(evidence()).toEqual([]);
+      db!.close();
+      db = null;
+    }
   });
 
   it('fails closed when the 0560 ledger is missing despite the trigger existing', async () => {

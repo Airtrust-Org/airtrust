@@ -63,10 +63,16 @@ async function schemaReady(db: D1Database): Promise<boolean> {
     // API is available. A table with only 0554 lacks physical DELETE safety.
     const applied = await db.prepare(
       "SELECT COUNT(DISTINCT change_id) AS total FROM airtrust_schema_changes_v2 " +
-      "WHERE change_id IN (?, ?) AND baseline_id=?",
-    ).bind('simulator-individual-check-evidence-0554',
+      "WHERE baseline_id=? AND " +
+      "((change_id=? AND file_hash=? AND plan_hash=?) OR " +
+      "(change_id=? AND file_hash=? AND plan_hash=?))",
+    ).bind('production-d1-baseline-v2-20260714',
+      'simulator-individual-check-evidence-0554',
+      'bcbdcf8bd78c3a3d6393624e62ae70e691190e3ae2d35c0951c0bc56470b4bf5',
+      '47b79c542348749d865425a5487f72689444f30553187778f51366b89bbcd0b6',
       'simulator-individual-check-delete-guard-0560',
-      'production-d1-baseline-v2-20260714')
+      '5fe67c81dda03681d9a73eec4cc51989bd92270e4eca6b41b1eb1028b58b9e56',
+      'b00948f0821692fb322cd18dc795769d8f03b057db7af9c9b729747d9d2b1463')
       .first<{ total: number }>();
     return Number(applied?.total) === 2;
   } catch {
