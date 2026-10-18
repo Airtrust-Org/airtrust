@@ -43,7 +43,7 @@ function project(offset:number):QaProjectFixture {
       visualLastPageButton:'Last page',wrongAnswerButton:'Incorrect',
       correctAnswerButton:'Correct',submitButton:'Submit',finishButton:'Finish',
       learnerCompletionButton:'Confirmar conclusão',
-      scormSnapshotPath:'/api/lms/progresso/scorm/state/'+(offset+3)},
+      scormSnapshotPath:'/api/lms/scorm/state/'+(offset+3)},
   };
 }
 function fixture():QaProfile {
@@ -174,7 +174,7 @@ describe('Front D QA contract — no network, no real students',()=>{
     p.projects.webkit.external.snapshotPath=
       '/api/lms/native/scorm/matriculas/'+duplicateId+'/qa-evidencias';
     p.projects.webkit.external.scormSnapshotPath=
-      '/api/lms/progresso/scorm/state/'+duplicateId;
+      '/api/lms/scorm/state/'+duplicateId;
     expect(()=>validateQaProfile(p,'webkit',staging,apiOrigin,'6001',contentOrigin)).toThrow('DEDICATED_PER_BROWSER_ENROLLMENTS');
     const p2=fixture();
     p2.projects.chromium.resume80.editionSha256='wrong';

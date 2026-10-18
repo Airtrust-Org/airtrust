@@ -193,7 +193,7 @@ export function validateQaProfile(raw: unknown, projectName: string,
       '/api/lms/native/scorm/matriculas/'+e.enrollmentId+'/qa-evidencias',
       'EXTERNAL_SCORM_READONLY_SNAPSHOT_ROUTE');
     requireQa(e.scormSnapshotPath===
-      '/api/lms/progresso/scorm/state/'+e.enrollmentId,
+      '/api/lms/scorm/state/'+e.enrollmentId,
       'EXTERNAL_SCORM_PERSISTED_CMI_ROUTE');
     qaPath(api.origin, e.scormSnapshotPath);
   }
