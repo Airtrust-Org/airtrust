@@ -150,7 +150,8 @@ router.post('/matricular-pendentes', requireRole('admin'), async (c) => {
       if (req.obrigatoriedade !== 'OBRIGATORIA' ||
           req.evidencia_pendente_validacao ||
           !trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer) ||
-          (req.modalidade_requerida && req.modalidade_requerida !== 'EAD') ||
+          req.auto_matricular_ead !== 1 ||
+          req.modalidade_requerida !== 'EAD' ||
           activeKeys.has(`${person.id}:${req.qualificacao_tipo_id}`)) continue;
       const mapped = byType.get(Number(req.qualificacao_tipo_id)) || [];
       if (mapped.length !== 1) { semCursoUnico++; continue; }

@@ -29,8 +29,11 @@ describe('Compliance requirement save enrollment synchronization', () => {
     expect(body).toContain('req.regra_id === ruleId');
     expect(body).toContain("rule.obrigatoriedade !== 'OBRIGATORIA'");
     expect(body).toContain("rule.modalidade_requerida !== 'EAD'");
+    expect(body).toContain('rule.auto_matricular_ead !== 1');
+    expect(body).toContain('req.auto_matricular_ead === 1');
+    expect(body).toContain('!req.evidencia_pendente_validacao');
     expect(body).toContain('trainingComplianceNeedsImmediateEnrollmentOnRuleSave');
-    expect(body).toContain('qualificacao_tipo_id=? AND ativo=1 AND publicado=1');
+    expect(body).toContain('c.qualificacao_tipo_id=? AND c.ativo=1 AND c.publicado=1');
     expect(body).toContain("(courses.results || []).length !== 1");
   });
 

@@ -47,6 +47,7 @@ export type RosterPlan = {
   skippedAmbiguousCourses: number;
   skippedPendingEvidence: number;
   skippedManualModality: number;
+  skippedPolicyOptOut: number;
 };
 
 export function rosterEnrollmentHasEvidence(row: RosterEnrollment): boolean {
@@ -63,7 +64,7 @@ export function buildTrainingComplianceRosterPlan(
 ): RosterPlan {
   const byType = new Map<number, number[]>();
   for (const course of courses) {
-    if (course.ativo === 0 || course.publicado === 0) continue;
+    if (course.ativo !== 1 || course.publicado !== 1) continue;
     const typeId = Number(course.qualificacao_tipo_id);
     byType.set(typeId, [...(byType.get(typeId) || []), Number(course.id)]);
   }
@@ -90,6 +91,7 @@ export function buildTrainingComplianceRosterPlan(
   const plan: RosterPlan = {
     enroll: [], remove: [], protectedCount: 0,
     skippedAmbiguousCourses: 0, skippedPendingEvidence: 0, skippedManualModality: 0,
+    skippedPolicyOptOut: 0,
   };
 
   for (const person of snapshot.people) {
@@ -103,8 +105,12 @@ export function buildTrainingComplianceRosterPlan(
         plan.skippedPendingEvidence++;
         continue;
       }
-      if (req.modalidade_requerida && req.modalidade_requerida !== 'EAD') {
+      if (req.modalidade_requerida !== 'EAD') {
         plan.skippedManualModality++;
+        continue;
+      }
+      if (req.auto_matricular_ead !== 1) {
+        plan.skippedPolicyOptOut++;
         continue;
       }
       if (!trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;
