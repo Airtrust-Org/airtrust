@@ -8,8 +8,6 @@
 //   permanecem como evidência órfã e sintética por desenho; o relatório identifica-as apenas por IDs numéricos.
 //
 // O seed recusa executar se Schema V2 0554 e 0560 não estiverem fisicamente aplicados no ledger.
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -207,15 +205,11 @@ function main() {
     console.log(JSON.stringify({ mode: 'DRY_RUN', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker }));
     return;
   }
-  const dir = mkdtempSync(join(tmpdir(), 'airtrust-sim-ind-'));
-  const file = join(dir, 'fixture.sql');
-  try {
-    writeFileSync(file, sql, { encoding: 'utf8', mode: 0o600 });
-    runWrangler(db, [`--file=${file}`]);
-    console.log(JSON.stringify({ mode: 'APPLY', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker, status: 'PASS' }));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  // Remote --file invoca o caminho de bulk-import/reset do D1 e falha com D1_RESET_DO.
+  // Usa o transporte normal de queries com --command, padronizado nos demais seeders de staging.
+  const cleanSql = sql.replace(/--.*$/gm, '').trim();
+  runWrangler(db, ['--json', '--command', cleanSql]);
+  console.log(JSON.stringify({ mode: 'APPLY', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker, status: 'PASS' }));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();
