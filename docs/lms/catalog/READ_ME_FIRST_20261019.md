@@ -39,6 +39,8 @@ Os `version_tag` observados no dia 06/10 estão no JSON com data e SHA comparado
 ## Contrato antes de declarar "certificado e publicável"
 Para cada `(tenant, course_id, published_edition, published_package_version, ZIP_SHA256)`, exigir: autor/titular e fonte íntegra versionada; crosswalk editorial original→edição; manifesto/conclusão válida; aprovação humana assinada; teste técnico de pacote; certificação funcional **independente** por hash, Chromium+WebKit, matrícula/ciclo/CMI, avaliação legítima, retomada, reabertura, qualificação/PDF; CI, staging, autorização específica de eventual publicação e pós-validação. **Nenhuma linha deste inventário atende hoje a todos esses requisitos.**
 
+**Precedência das decisões no JSON:** fonte original com identidade SHA comprovada + assinatura pendente permanece `SOURCE_OR_PEDAGOGICAL_APPROVAL_REQUIRED`, mesmo que a prévia seja PASS. #47 Resíduos e #67 CRM são somente candidatos a crosswalk editorial (sem identidade provada); #22 PPTX exige contrato pedagógico de evidência. As demais inconclusões técnicas não autorizam declarar aprovação editorial inexistente.
+
 Estados finais aceitos: `CERTIFIED_AND_PUBLISHABLE`, `TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED`, `SOURCE_OR_PEDAGOGICAL_APPROVAL_REQUIRED`, `GOVERNED_RETIREMENT`. Os dois estados de bloqueio são decisões de triagem; não implicam que um ZIP esteja defeituoso. Remoção exige decisão governada expressa; **nenhuma exclusão foi proposta**.
 
 ## Preservação de escopo e próximo gate

@@ -24,5 +24,7 @@ test('baseline EAD conserva universo e classes sem fabricar certificacao', () =>
  assert.ok(manifest.audited_courses.every(c=>c.functional_certification==='NOT_CERTIFIED'));
  assert.ok(manifest.original_sources_22.every(c=>c.authorial_approval==='PENDING'));
  assert.ok(manifest.audited_courses.every(c=>!c.active_zip_sha256||/^[a-f0-9]{64}$/.test(c.active_zip_sha256)));
- assert.deepEqual(manifest.audited_courses.filter(c=>c.final_decision==='SOURCE_OR_PEDAGOGICAL_APPROVAL_REQUIRED').map(c=>c.course_id),[23,49,69]);
+ assert.equal(manifest.audited_courses.filter(c=>c.final_decision==='SOURCE_OR_PEDAGOGICAL_APPROVAL_REQUIRED').length,25);
+ assert.ok(manifest.audited_courses.filter(c=>c.original_source_sha_match==='EXACT_MATCH_CONFIRMED_IN_PRIOR_RECONCILIATION').every(c=>c.final_decision==='SOURCE_OR_PEDAGOGICAL_APPROVAL_REQUIRED'));
+ for (const id of [22,23,47,49,67,69]) assert.equal(manifest.audited_courses.find(c=>c.course_id===id).final_decision,'SOURCE_OR_PEDAGOGICAL_APPROVAL_REQUIRED');
 });
