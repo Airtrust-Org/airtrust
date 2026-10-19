@@ -1,3 +1,15 @@
+/**
+ * source_reference: worker-airtrust/schema-v2/{lms-native-catalog-activation-0561,
+ *   lms-player3-canonical-terminal-0562}.json and pinned, reviewed SQL/plan hashes.
+ * operational_decision: assert only an APPROVED_FOR_STAGING manifest may generate
+ *   an offline SQL bundle; a REVIEW_ONLY manifest must fail before output creation.
+ * dry_run_required: this test builds bundles in an isolated local temp directory,
+ *   verifies provenance/ledger text, and never connects to a remote D1 database.
+ * rollback_plan_required: no remote data is mutated here; dispose of temp files.
+ *   A future physical apply must use the authorized staging workflow, D1 Time
+ *   Travel recovery point, ledger checks and approved compensation plan.
+ */
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
