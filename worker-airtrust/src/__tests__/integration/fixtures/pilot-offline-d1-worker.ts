@@ -19,8 +19,9 @@ const schema = [
   `CREATE TABLE cv_voo_etapas (id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER, voo_id INTEGER, numero_etapa INTEGER, sigvoos_leg_number INTEGER, origem_icao TEXT, destino_icao TEXT, horario_motor_ligado TEXT, horario_decolagem TEXT, horario_pouso TEXT, horario_motor_desligado TEXT, tempo_decolagem_pouso TEXT, tempo_total TEXT, tempo_navegacao TEXT, tempo_ifr TEXT, tempo_noturno TEXT, pousos_diurnos INTEGER, pousos_noturnos INTEGER, starts INTEGER, pax INTEGER, payload REAL, combustivel_inicio REAL, combustivel_fim REAL, unidade_combustivel TEXT, peso_passageiros REAL, peso_bagagem REAL, peso_tripulacao REAL, peso_vazio REAL, peso_total REAL, unidade_peso TEXT, observacoes TEXT, origem_dados TEXT, created_by INTEGER, updated_by INTEGER, created_at TEXT, updated_at TEXT, deleted_at TEXT)`,
   `CREATE UNIQUE INDEX fixture_active_stage ON cv_voo_etapas(empresa_id, voo_id, numero_etapa) WHERE deleted_at IS NULL`,
   `CREATE TABLE cv_voo_tripulantes (id INTEGER PRIMARY KEY, empresa_id INTEGER, voo_id INTEGER, funcionario_id INTEGER, deleted_at TEXT)`,
-  `CREATE TABLE cv_voo_abastecimentos (id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER, voo_id INTEGER, etapa_id INTEGER, fornecedor TEXT, localidade TEXT, combustivel_solicitado REAL, unidade TEXT, combustivel_abastecido REAL, numero_ce TEXT, anexo_r2_key TEXT, responsavel_id INTEGER, data_hora TEXT, observacoes TEXT, client_local_id TEXT, created_by INTEGER, updated_by INTEGER, created_at TEXT, updated_at TEXT, deleted_at TEXT)`,
+  `CREATE TABLE cv_voo_abastecimentos (id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER, voo_id INTEGER, etapa_id INTEGER, fornecedor TEXT, localidade TEXT, combustivel_solicitado REAL, unidade TEXT, combustivel_abastecido REAL, numero_ce TEXT, anexo_r2_key TEXT, responsavel_id INTEGER, data_hora TEXT, observacoes TEXT, client_local_id TEXT, supplier_code_at_acceptance TEXT, created_by INTEGER, updated_by INTEGER, created_at TEXT, updated_at TEXT, deleted_at TEXT)`,
   `CREATE UNIQUE INDEX uq_cv_voo_abastecimentos_client_event ON cv_voo_abastecimentos (empresa_id, voo_id, client_local_id) WHERE client_local_id IS NOT NULL`,
+  `CREATE TRIGGER fixture_supplier_immutable BEFORE UPDATE OF supplier_code_at_acceptance ON cv_voo_abastecimentos WHEN NEW.supplier_code_at_acceptance IS NOT OLD.supplier_code_at_acceptance BEGIN SELECT RAISE(ABORT, 'PILOT_FUELING_SUPPLIER_CODE_IMMUTABLE'); END`,
   `CREATE TABLE cv_empresas_abastecimento (id INTEGER PRIMARY KEY, empresa_id INTEGER, codigo TEXT, nome TEXT, ativo INTEGER, deleted_at TEXT)`,
   `CREATE TABLE cv_justificativas_voo (id INTEGER PRIMARY KEY, empresa_id INTEGER, codigo TEXT, ativo INTEGER, deleted_at TEXT)`,
   `CREATE TABLE cv_voo_justificativas (id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER, voo_id INTEGER, justificativa_id INTEGER, minutos INTEGER, observacao TEXT, created_by INTEGER, updated_by INTEGER, created_at TEXT, updated_at TEXT, deleted_at TEXT, UNIQUE(empresa_id, voo_id, justificativa_id))`,
@@ -35,8 +36,8 @@ const seed = [
   `INSERT INTO cv_rdv_operacional (id,empresa_id,voo_id,numero,data_voo,ocorrencias,status,workflow_status,versao,created_at,updated_at) VALUES (90,7,42,'RDV-TEST','2026-09-09','original','rascunho','rascunho',3,'before','before')`,
   `INSERT INTO cv_voo_etapas (id,empresa_id,voo_id,numero_etapa,origem_icao,destino_icao,pax,peso_vazio,origem_dados,created_at,updated_at) VALUES (10,7,42,1,'SBME','9PCP',1,9000,'MANUAL','before','revision-1')`,
   `INSERT INTO cv_voo_tripulantes VALUES (1,7,42,77,NULL),(2,7,42,78,NULL)`,
-  `INSERT INTO cv_empresas_abastecimento VALUES (1,7,'TEST','Synthetic supplier',1,NULL)`,
-  `INSERT INTO cv_justificativas_voo VALUES (1,7,'TEST',1,NULL)`,
+  `INSERT INTO cv_empresas_abastecimento VALUES (1,7,'TEST','Synthetic supplier',1,NULL),(2,7,'OTHER','Other supplier',1,NULL)`,
+  `INSERT INTO cv_justificativas_voo VALUES (1,7,'TEST',1,NULL),(2,7,'OTHER',0,NULL)`,
   `INSERT INTO cv_voo_justificativas (empresa_id,voo_id,justificativa_id,minutos,observacao,created_at,updated_at) VALUES (7,42,1,5,'before','before','before')`,
 ];
 
@@ -57,6 +58,18 @@ export default {
       const state: Record<string, unknown> = {};
       for (const table of tables) state[table] = (await env.DB.prepare(`SELECT * FROM ${table} ORDER BY id`).all()).results;
       return Response.json(state);
+    }
+    if (url.pathname === '/__fixture/catalog') {
+      const action = url.searchParams.get('action');
+      const updates: Record<string, string> = {
+        'rename-supplier': "UPDATE cv_empresas_abastecimento SET nome='Renamed supplier' WHERE empresa_id=7 AND codigo='TEST'",
+        'disable-supplier': "UPDATE cv_empresas_abastecimento SET ativo=0 WHERE empresa_id=7 AND codigo='TEST'",
+        'disable-justification': "UPDATE cv_justificativas_voo SET ativo=0 WHERE empresa_id=7 AND codigo='TEST'",
+        'legacy-fueling': "UPDATE cv_voo_abastecimentos SET supplier_code_at_acceptance=NULL WHERE empresa_id=7 AND client_local_id='fuel-1'",
+      };
+      if (!action || !updates[action]) return Response.json({ error: 'unknown synthetic action' }, { status: 400 });
+      await env.DB.prepare(updates[action]).run();
+      return Response.json({ ok: true });
     }
     if (url.pathname === '/__fixture/no-rdv') {
       await env.DB.prepare('DELETE FROM cv_rdv_operacional WHERE id = 90').run();

@@ -839,12 +839,12 @@ async function previouslyAppliedFuelingIds(input: {
   empresaId: number;
   flight: FlightRow;
   fuelings: SnapshotFuelingPayload[];
-  supplierNamesByCode: Map<string, string>;
+  // Catalogs may be renamed/deactivated after the original acceptance.
 }): Promise<Set<string>> {
   const applied = new Set<string>();
   for (const item of input.fuelings) {
     const row = await input.db.prepare(`
-      SELECT f.fornecedor, f.combustivel_abastecido, f.numero_ce,
+      SELECT f.fornecedor, f.supplier_code_at_acceptance, f.combustivel_abastecido, f.numero_ce,
              f.data_hora, f.observacoes, e.numero_etapa
       FROM cv_voo_abastecimentos f
       LEFT JOIN cv_voo_etapas e ON e.id=f.etapa_id
@@ -852,13 +852,31 @@ async function previouslyAppliedFuelingIds(input: {
       WHERE f.empresa_id=? AND f.voo_id=? AND f.client_local_id=?
       LIMIT 1
     `).bind(input.empresaId,input.flight.id,item.client_local_id).first<{
-      fornecedor: string|null; combustivel_abastecido: number|null;
+      fornecedor: string|null; supplier_code_at_acceptance: string|null;
+      combustivel_abastecido: number|null;
       numero_ce: string|null; data_hora: string|null;
       observacoes: string|null; numero_etapa: number|null;
     }>();
     if (!row) continue;
+    let supplierMatches = row.supplier_code_at_acceptance === item.empresa_abastecimento_codigo;
+    if (row.supplier_code_at_acceptance === null) {
+      // Legacy identities accepted before 0564 have no original supplier code.
+      // Only the unambiguous original name may be matched; a renamed legacy
+      // supplier requires Coordination review, never a guessed backfill.
+      const legacySupplier = await input.db.prepare(`
+        SELECT nome FROM cv_empresas_abastecimento
+        WHERE empresa_id = ? AND codigo = ? LIMIT 1
+      `).bind(input.empresaId, item.empresa_abastecimento_codigo).first<{ nome: string }>();
+      if (legacySupplier && row.fornecedor === legacySupplier.nome) {
+        const sameName = await input.db.prepare(`
+          SELECT COUNT(*) AS total FROM cv_empresas_abastecimento
+          WHERE empresa_id = ? AND nome = ?
+        `).bind(input.empresaId, legacySupplier.nome).first<{ total: number }>();
+        supplierMatches = Number(sameName?.total) === 1;
+      }
+    }
     const unchanged =
-      String(row.fornecedor??'') === String(input.supplierNamesByCode.get(item.empresa_abastecimento_codigo)??'') &&
+      supplierMatches &&
       Number(row.combustivel_abastecido) === item.litros_abastecidos &&
       (row.numero_ce??null) === item.numero_nota &&
       row.data_hora === item.data_hora &&
@@ -887,13 +905,13 @@ function buildFuelingStatements(input: {
       INSERT INTO cv_voo_abastecimentos (
         empresa_id, voo_id, etapa_id, fornecedor, localidade, combustivel_solicitado, unidade,
         combustivel_abastecido, numero_ce, anexo_r2_key, responsavel_id, data_hora, observacoes,
-        client_local_id, created_by, updated_by, created_at, updated_at
+        client_local_id, supplier_code_at_acceptance, created_by, updated_by, created_at, updated_at
       )
       SELECT ?, ?, (
         SELECT id FROM cv_voo_etapas
         WHERE empresa_id = ? AND voo_id = ? AND numero_etapa = ? AND deleted_at IS NULL
         LIMIT 1
-      ), ?, NULL, NULL, 'L', ?, ?, NULL, NULL, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
+      ), ?, NULL, NULL, 'L', ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
       WHERE EXISTS (
         SELECT 1 FROM cv_rdv_operacional
         WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
@@ -911,6 +929,7 @@ function buildFuelingStatements(input: {
       fueling.data_hora,
       fueling.nota,
       fueling.client_local_id,
+      fueling.empresa_abastecimento_codigo,
       input.userId,
       input.userId,
       input.flight.id, input.empresaId, input.newVersion,
@@ -1291,8 +1310,15 @@ export async function applyPilotOfflineSnapshotCommand(input: {
     }
     selectedNaturezaId = Number(natureza.id);
   }
+  // An already-accepted physical event is historical evidence, not a new
+  // enrollment in the current active supplier catalog.
+  const acceptedFuelingIds = await previouslyAppliedFuelingIds({
+    db: input.db, empresaId: input.empresaId, flight: input.flight,
+    fuelings: snapshot.fuelings,
+  });
+  const newFuelings = snapshot.fuelings.filter((item) => !acceptedFuelingIds.has(item.client_local_id));
   const supplierNamesByCode = new Map<string, string>();
-  for (const fueling of snapshot.fuelings) {
+  for (const fueling of newFuelings) {
     if (supplierNamesByCode.has(fueling.empresa_abastecimento_codigo)) continue;
     const supplier = await input.db
       .prepare(
@@ -1313,14 +1339,31 @@ export async function applyPilotOfflineSnapshotCommand(input: {
   const justificationIdsByCode = new Map<string, number>();
   for (const item of snapshot.justifications) {
     const row = await input.db
-      .prepare(
-        'SELECT id FROM cv_justificativas_voo WHERE empresa_id = ? AND codigo = ? AND ativo = 1 AND deleted_at IS NULL LIMIT 1',
-      )
-      .bind(input.empresaId, item.justificativa_codigo)
-      .first<{ id: number }>();
-    if (!row) {
+      .prepare(`
+        SELECT j.id, j.ativo, j.deleted_at,
+               vj.id AS accepted_id, vj.minutos AS accepted_minutes,
+               vj.observacao AS accepted_observation
+        FROM cv_justificativas_voo j
+        LEFT JOIN cv_voo_justificativas vj
+          ON vj.justificativa_id = j.id
+         AND vj.empresa_id = j.empresa_id
+         AND vj.voo_id = ? AND vj.deleted_at IS NULL
+        WHERE j.empresa_id = ? AND j.codigo = ?
+        LIMIT 1
+      `)
+      .bind(input.flight.id, input.empresaId, item.justificativa_codigo)
+      .first<{
+        id: number; ativo: number; deleted_at: string | null;
+        accepted_id: number | null; accepted_minutes: number | null;
+        accepted_observation: string | null;
+      }>();
+    const active = row && Number(row.ativo) === 1 && row.deleted_at === null;
+    const unchangedHistorical = row && row.accepted_id !== null &&
+      Number(row.accepted_minutes) === item.minutos &&
+      (row.accepted_observation ?? null) === item.observacao;
+    if (!row || (!active && !unchangedHistorical)) {
       throw new ApiError(
-        `Justificativa ${item.justificativa_codigo} nao cadastrada ou inativa neste tenant`,
+        `Justificativa ${item.justificativa_codigo} inativa, desconhecida ou alterada apos desativacao`,
         409,
         'CONTROLE_VOOS_PILOT_SYNC_JUSTIFICATION_NOT_CONFIGURED',
       );
@@ -1364,14 +1407,10 @@ export async function applyPilotOfflineSnapshotCommand(input: {
   const removedStageStatements = buildRemovedStageStatements({
     ...input, newVersion, removedStages: snapshot.removed_stages,
   });
-  const acceptedFuelingIds = await previouslyAppliedFuelingIds({
-    db: input.db, empresaId: input.empresaId, flight: input.flight,
-    fuelings: snapshot.fuelings, supplierNamesByCode,
-  });
   const fuelingStatements = buildFuelingStatements({
     ...input,
     newVersion,
-    fuelings: snapshot.fuelings.filter((item) => !acceptedFuelingIds.has(item.client_local_id)),
+    fuelings: newFuelings,
     supplierNamesByCode,
   });
   const justificationStatements = buildJustificationStatements({

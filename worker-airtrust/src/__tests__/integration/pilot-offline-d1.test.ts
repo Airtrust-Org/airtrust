@@ -129,6 +129,89 @@ describe('Pilot offline sync with a disposable local D1 Worker', () => {
     expect(saved.cv_voo_abastecimentos[0].client_local_id).toBe('fuel-1');
     expect(saved.cv_offline_sync_receipts).toHaveLength(2);
   });
+  it('keeps original supplier identity and immutable displayed name after a catalog rename', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const accepted = (await state()).cv_voo_abastecimentos[0];
+    expect(accepted).toMatchObject({ fornecedor: 'Synthetic supplier', supplier_code_at_acceptance: 'TEST' });
+    expect((await request('/__fixture/catalog?action=rename-supplier', { method: 'POST' })).status).toBe(200);
+    const next = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+    expect((await send(next)).status).toBe(200);
+    const current = await state();
+    expect(current.cv_voo_abastecimentos).toHaveLength(1);
+    expect(current.cv_voo_abastecimentos[0]).toEqual(accepted);
+    expect(current.cv_offline_sync_receipts).toHaveLength(2);
+  });
+  it('accepts a previously recorded supplier after deactivation but rejects a newly recorded one', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    expect((await request('/__fixture/catalog?action=disable-supplier', { method: 'POST' })).status).toBe(200);
+    const same = first.payload.fuelings as Record<string, unknown>[];
+    const next = await nextSnapshot(first, same);
+    expect((await send(next)).status).toBe(200);
+    const saved = await state();
+    expect(saved.cv_voo_abastecimentos).toHaveLength(1);
+    const third = await nextSnapshot(next, [...same, { ...same[0], client_local_id: 'fuel-new' }]);
+    const before = await state();
+    const response = await send(third);
+    expect(response.status).toBe(409);
+    expect((await responseBody(response)).code).toBe('CONTROLE_VOOS_PILOT_SYNC_FUEL_SUPPLIER_NOT_CONFIGURED');
+    expect(await state()).toEqual(before);
+  });
+  it('rejects changing the supplier code on an accepted physical fueling', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const fueling = (first.payload.fuelings as Record<string, unknown>[])[0];
+    const next = await nextSnapshot(first, [{ ...fueling, empresa_abastecimento_codigo: 'OTHER' }]);
+    const before = await state();
+    const response = await send(next);
+    expect(response.status).toBe(409);
+    expect((await responseBody(response)).code).toBe('CONTROLE_VOOS_PILOT_SYNC_FUELING_ALREADY_RECORDED_CHANGED');
+    expect(await state()).toEqual(before);
+  });
+  it('does not guess the original supplier for pre-0564 events after a rename', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    expect((await request('/__fixture/catalog?action=legacy-fueling', { method: 'POST' })).status).toBe(200);
+    expect((await request('/__fixture/catalog?action=rename-supplier', { method: 'POST' })).status).toBe(200);
+    const next = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+    const before = await state();
+    const response = await send(next);
+    expect(response.status).toBe(409);
+    expect((await responseBody(response)).code).toBe('CONTROLE_VOOS_PILOT_SYNC_FUELING_ALREADY_RECORDED_CHANGED');
+    expect(await state()).toEqual(before);
+  });
+  it('preserves an unchanged accepted administrative justification after deactivation', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    expect((await request('/__fixture/catalog?action=disable-justification', { method: 'POST' })).status).toBe(200);
+    const next = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+    expect((await send(next)).status).toBe(200);
+    const saved = await state();
+    expect(saved.cv_voo_justificativas).toHaveLength(1);
+    expect(saved.cv_voo_justificativas[0]).toMatchObject({ minutos: 20, observacao: 'reason', deleted_at: null });
+  });
+  it('rejects new or changed inactive justifications without altering the accepted evidence', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    expect((await request('/__fixture/catalog?action=disable-justification', { method: 'POST' })).status).toBe(200);
+    const current = await state();
+    for (const justifications of [
+      [{ justificativa_codigo: 'TEST', minutos: 21, observacao: 'reason' }],
+      [{ justificativa_codigo: 'OTHER', minutos: 20, observacao: 'reason' }],
+    ]) {
+      const nextBase = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+      const invalid = await command({
+        ...nextBase,
+        client_operation_id: crypto.randomUUID(),
+        payload: { ...nextBase.payload, justifications },
+      });
+      const response = await send(invalid);
+      expect(response.status).toBe(409);
+      expect((await responseBody(response)).code).toBe('CONTROLE_VOOS_PILOT_SYNC_JUSTIFICATION_NOT_CONFIGURED');
+      expect(await state()).toEqual(current);
+    }
+  });
   it('accepts two equal-valued fuelings that have different physical identities', async () => {
     const first = await command();
     expect((await send(first)).status).toBe(200);
