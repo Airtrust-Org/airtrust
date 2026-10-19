@@ -59,3 +59,27 @@ O output deliberadamente contém apenas nomes de gates ausentes, booleans e cont
 **Dependências materiais ainda não supridas pelo gerador offline:** tenant sintético exclusivo autorizado, usuário autenticado sem acesso cross-tenant, curso criado pela API sob governança, marker Native, edição publicada com bytes/hash pinados, banco e política privados no R2, conteúdo HTML5 isolado, seis matrículas/ciclos distintos, perfil QA privado com credenciais adequadas, uma matrícula de continuidade 80% e um pacote SCORM 1.2 externo autorizado. Aplicações 0561/0562 de staging são infraestrutura necessária, mas não provisionam esses dados nem ativam flags. As matrículas devem ser criadas pelo writer transacional do Worker, não por INSERT improvisado.
 
 A janela de mutações de staging utiliza o lock compartilhado `airtrust-staging-mutations-and-scorm-qa`; consultar issue #776 antes de qualquer seed, upload, deploy ou E2E. Restauração e limpeza dos dados descartáveis devem ser verificadas por recibos reais, sem apagar cursos ou matrículas preexistentes. Somente depois de executar e evidenciar 6/6 jornadas Chromium/WebKit, certificado PDF real e regressão SCORM é permitido avaliar saída de draft, merge protegido e release específico.
+
+## Composição do perfil privado após provisionamento real
+
+`scripts/learning-factory/build_player3_technical_qa_profile.py` prepara **offline** o arquivo `PLAYER3_QA_PROFILE_FILE` consumido pela suíte. Primeiro, a etapa governada de provisionamento deve entregar, em JSON privado com `schema: "AIRTRUST_PLAYER3_QA_IDENTITIES_V1"`, `tenantCode: "qa_examiner_training"`, `tenantId`, `releaseSha`, `baseUrl`, `apiBaseUrl`, `contentOrigin` e `projects.chromium`/`projects.webkit`. Em cada browser, fornecer três objetos separados:
+
+- `doutrinamento`: `courseId`, `enrollmentId`, `cycleId`, `launchPath`, `qualificationPath`, `certificatePath` reais;
+- `resume80`: `enrollmentId`, `cycleId`, `editionSha256`, `launchPath`, `minPreviousPct`, `expectedResumeUnitId`, `creditedNavigationIds` de evidência histórica QA legítima;
+- `external`: `enrollmentId`, `cycleId`, `editionSha256`, `launchPath`, `frameSelectors` e seletores textuais `visualLastPageButton`, `wrongAnswerButton`, `correctAnswerButton`, `submitButton`, `finishButton`, `learnerCompletionButton` do SCORM 1.2 externo real.
+
+Esses valores **não são inventados** pelo gerador. O utilitário valida bytes SHA-256 da edição Native e do ZIP sintético, 6 IDs de matrícula/ciclo distintos, host e tenant QA, crosswalk de cinco unidades/uma avaliação e saída privada sem sobrescrita (0600 fora do repositório). Ele deriva URLs de leitura QA apenas do ID real e nunca envia gabaritos ao navegador.
+
+```bash
+python3 scripts/learning-factory/prepare_player3_technical_candidate.py \
+  --out /tmp/player3-qa-candidate-001 \
+  --parent-origin https://staging.airtrust.pages.dev \
+  --course-id qa-player3-synthetic
+python3 scripts/learning-factory/build_player3_technical_qa_profile.py \
+  --candidate /tmp/player3-qa-candidate-001 \
+  --assignments /caminho/privado/identidades-staging.json \
+  --out /caminho/privado/player3-qa-profile.json
+python3 -m unittest scripts/learning-factory/test_build_player3_technical_qa_profile.py
+```
+
+**Nenhuma dessas ações provisiona ou limpa D1/R2, publica a edição, concede permissões, autentica alunos, gera certificados ou equivale a 6/6 E2E.** As identidades sintéticas reais precisam ser comprovadas e o perfil deve ser destruído ao final da homologação. Não copiar para Git, Drive, logs, artefatos públicos nem usar dados de clientes.
