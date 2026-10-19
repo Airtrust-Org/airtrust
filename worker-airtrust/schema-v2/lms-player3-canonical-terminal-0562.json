@@ -1,0 +1,14 @@
+{
+  "changeId": "lms-player3-canonical-terminal-0562",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0562_player3_canonical_terminal.sql",
+  "fileHash": "b460d410788ae1f9eb2090ffcf7806ba3ed96f3facbc9bfb0a7c0e8a069a7ccd",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-player3-canonical-terminal-0562.md",
+  "planHash": "2eddb3a11a29220e0969eaa56c2e564f8b82a15d3fe452c08aeada70da242cec",
+  "reviewStatus": "REVIEW_ONLY_NO_REMOTE_APPLY",
+  "prerequisites": [
+    "lms-native-v1-evidence-0558",
+    "lms-player3-module-attempts-0559",
+    "lms-native-catalog-activation-0561"
+  ]
+}

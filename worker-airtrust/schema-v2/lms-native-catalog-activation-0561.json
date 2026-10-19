@@ -1,0 +1,13 @@
+{
+  "changeId": "lms-native-catalog-activation-0561",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0561_native_catalog_activation.sql",
+  "fileHash": "7eda46951e34b2a7552948e7dec07d1473f0ed96cdf7e0b0fea4e40a1cc8e8a6",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0561.md",
+  "planHash": "3101fa0b7d90a5547c04d382e7e6b91441bf18eb4f4ee8274e596a6591acd209",
+  "reviewStatus": "REVIEW_ONLY_NO_REMOTE_APPLY",
+  "prerequisites": [
+    "lms-native-v1-evidence-0558",
+    "lms-player3-module-attempts-0559"
+  ]
+}
