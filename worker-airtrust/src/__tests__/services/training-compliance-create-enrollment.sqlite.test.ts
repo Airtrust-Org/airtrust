@@ -99,7 +99,37 @@ describe('Compliance atomic enrollment, policy and tenant guards (SQLite D1)', (
     expect(count(db,'audit_logs')).toBe(0);
   });
 
-  it('never guesses a course when two published editions match a qualification',async()=>{
+  it('enrolls only when the designated condition is active and confirmed',async()=>{
+    const db=setup();
+    db.database.exec(`
+      CREATE TABLE funcionarios_compliance_condicoes (
+        empresa_id INTEGER,funcionario_id INTEGER,condicao_id INTEGER,ativo INTEGER,
+        deleted_at TEXT,data_inicio TEXT,data_fim TEXT
+      );
+      UPDATE treinamento_requisitos SET condicao_id=10 WHERE id=91;
+    `);
+    expect(await createComplianceEnrollmentAtomic(db.asD1(),request())).toBeNull();
+    db.database.exec("INSERT INTO funcionarios_compliance_condicoes VALUES(1,1000,10,1,NULL,NULL,NULL)");
+    expect(await createComplianceEnrollmentAtomic(db.asD1(),request())).toBeGreaterThan(0);
+  });
+
+  it('enrolls only with an active explicitly assigned matching aircraft',async()=>{
+    const db=setup();
+    db.database.exec(`
+      CREATE TABLE funcionarios_aeronaves (
+        empresa_id INTEGER,funcionario_id INTEGER,aeronave_id INTEGER,ativo INTEGER,
+        deleted_at TEXT,data_inicio TEXT,data_fim TEXT
+      );
+      CREATE TABLE aeronaves (id INTEGER,empresa_id INTEGER,modelo TEXT,deleted_at TEXT);
+      UPDATE treinamento_requisitos SET aeronave_modelo='S-92' WHERE id=91;
+      INSERT INTO aeronaves VALUES (30,1,'S-92',NULL);
+    `);
+    expect(await createComplianceEnrollmentAtomic(db.asD1(),request())).toBeNull();
+    db.database.exec("INSERT INTO funcionarios_aeronaves VALUES (1,1000,30,1,NULL,NULL,NULL)");
+    expect(await createComplianceEnrollmentAtomic(db.asD1(),request())).toBeGreaterThan(0);
+  });
+
+    it('never guesses a course when two published editions match a qualification',async()=>{
     const db=setup();
     db.database.exec("INSERT INTO lms_cursos VALUES (57,1,100,1,1,NULL)");
     expect(await createComplianceEnrollmentAtomic(db.asD1(),request())).toBeNull();
