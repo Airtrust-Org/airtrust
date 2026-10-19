@@ -70,15 +70,15 @@ test('training compliance intelligent staging flow is live and read-only', async
   expect(Array.isArray(catalogs.data.setores)).toBe(true);
   expect(Array.isArray(catalogs.data.funcoes)).toBe(true);
   const managedSector = catalogs.data.setores.find(
-    (sector: any) => sector.codigo === 'QA-SETOR-EXA',
+    (sector: { id: number; codigo: string }) => sector.codigo === 'QA-SETOR-EXA',
   );
   expect(managedSector, 'QA manager must have its actual synthetic sector grant').toBeTruthy();
   expect(Array.isArray(catalogs.data.funcionarios)).toBe(true);
   expect(catalogs.data.funcionarios.length).toBeGreaterThan(0);
   const accessibleSectorIds = new Set(
-    catalogs.data.setores.map((sector: any) => Number(sector.id)),
+    catalogs.data.setores.map((sector: { id: number }) => Number(sector.id)),
   );
-  expect(catalogs.data.funcionarios.some((person: any) =>
+  expect(catalogs.data.funcionarios.some((person: { setor_id: number | null }) =>
     Number(person.setor_id) === Number(managedSector.id)),
   ).toBe(true);
   for (const person of catalogs.data.funcionarios) {
@@ -99,7 +99,7 @@ test('training compliance intelligent staging flow is live and read-only', async
     expect(s.compliance_pct).toBeNull();
   }
 
-  const qaPending = pendings.data.find((row: any) => row.qualificacao_tipo_codigo === QA_CODE);
+  const qaPending = pendings.data.find((row: { qualificacao_tipo_codigo: string }) => row.qualificacao_tipo_codigo === QA_CODE);
   expect(qaPending, 'synthetic never-realized requirement must be in Pendências').toBeTruthy();
   expect(qaPending.status_compliance).toBe('NAO_REALIZADO');
   expect(Number(qaPending.setor_id)).toBe(Number(managedSector.id));
@@ -119,7 +119,7 @@ test('training compliance intelligent staging flow is live and read-only', async
   const trainingsP = waitApi(page, '/api/compliance-treinamentos/treinamentos');
   await page.getByRole('main').getByRole('button', { name: 'Treinamentos', exact: true }).click();
   const trainings = await trainingsP.then(payload);
-  const qaTraining = trainings.data.find((row: any) => row.qualificacao_tipo_codigo === QA_CODE);
+  const qaTraining = trainings.data.find((row: { qualificacao_tipo_codigo: string }) => row.qualificacao_tipo_codigo === QA_CODE);
   expect(qaTraining, 'synthetic never-realized training must be visible').toBeTruthy();
   expect(qaTraining.pessoas).toBeGreaterThan(0);
   expect(qaTraining.nao_realizados).toBe(qaTraining.pessoas);
