@@ -16,6 +16,8 @@ test('Player 3 inventory runs only on trusted main and fixed staging D1', () => 
   assert.match(workflow, /bf9963f4-eb12-439b-a830-20bbf577ac22/);
   assert.match(workflow, /7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae/);
   assert.match(workflow, /PRODUCTION_TARGET_REJECTED/);
+  assert.match(workflow, /STAGING_WRANGLER_D1_PIN_MISMATCH/);
+  assert.match(workflow, /STAGING_WRANGLER_D1_BINDING_VERIFIED/);
   assert.match(workflow, /secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
 });
 

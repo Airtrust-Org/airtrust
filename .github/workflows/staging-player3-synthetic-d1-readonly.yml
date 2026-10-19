@@ -45,6 +45,23 @@ jobs:
           node-version: '24'
       - name: Install Wrangler from reviewed dependency lock
         run: npm --prefix worker-airtrust ci
+      - name: Verify actual Wrangler staging D1 binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const text=readFileSync('worker-airtrust/wrangler.toml','utf8');
+          const section=text.match(/\[\[env\.staging\.d1_databases\]\]([\s\S]*?)(?=\n\[|$)/)?.[1] ?? '';
+          const name=section.match(/^database_name\s*=\s*"([^"]+)"\s*$/m)?.[1];
+          const id=section.match(/^database_id\s*=\s*"([^"]+)"\s*$/m)?.[1];
+          if(name!==process.env.EXPECTED_STAGING_DB ||
+             id!==process.env.EXPECTED_STAGING_DB_UUID ||
+             id===process.env.BLOCKED_PRODUCTION_DB_UUID){
+            throw Error('STAGING_WRANGLER_D1_PIN_MISMATCH');
+          }
+          console.log('STAGING_WRANGLER_D1_BINDING_VERIFIED');
+          NODE
       - name: Query only the staging QA tenant and Native catalog
         shell: bash
         run: |
