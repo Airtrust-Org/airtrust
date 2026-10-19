@@ -51,6 +51,7 @@ test('staging fixture binds both QA courses to manager-visible sector and cleans
 
 test('EAD lifecycle explicitly opts in after proving defaults and NULL modality do not enroll', () => {
   assert.equal((seed.match(/qc\.id,'EAD',1,12/g) || []).length, 2);
+  assert.equal((seed.match(/,'EAD',60,/g) || []).length, 2);
   assert.match(spec, /mandatory alone cannot auto-enroll/);
   assert.match(spec, /NULL modality must fail closed/);
   assert.match(spec, /opt-in=0 must fail closed/);
