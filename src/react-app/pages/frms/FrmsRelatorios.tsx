@@ -43,7 +43,9 @@ interface FrmsReportRow {
   pct_mes?: number;
   pct_365d?: number;
   nivel_max?: string | null;
-  repouso_suficiente?: number;
+  repouso_suficiente?: number | null;
+  repouso_estado?: 'SUFICIENTE' | 'INSUFICIENTE' | 'DESCONHECIDO';
+  repouso_referencia?: string | null;
   created_at?: string | null;
   nivel?: string | null;
   tipo_limite?: string | null;
@@ -66,6 +68,8 @@ interface FrmsReportMeta {
   effective_from: string;
   effective_to: string | null;
   limitations: string[];
+  scope?: 'all' | 'restricted' | 'self';
+  coverage?: { authorized_crew: number; rows_returned: number; total_matching?: number; state: 'NOT_DETERMINED' | 'PARTIAL' };
 }
 
 interface FrmsReportEnvelope {
@@ -186,7 +190,7 @@ export default function FrmsRelatorios() {
     tipo === 'compliance'
       ? `Mês de referência: ${formatMonthLabel(mesReferencia)}`
       : tipo === 'mapa-fadiga'
-        ? 'Recorte: janelas consolidadas disponíveis no relatório'
+        ? 'Recorte: exposição rolling dos últimos 30 dias; repouso na última referência disponível do mesmo intervalo'
         : `Período: ${periodoInicio} a ${periodoFim}`;
 
   const handleExportPDF = () => {
@@ -203,6 +207,8 @@ export default function FrmsRelatorios() {
           ['Perfil', reportMeta.profile_code],
           ['Fonte', reportMeta.source],
           ['Referência', reportMeta.source_reference || 'não informada'],
+          ['Escopo de acesso', reportMeta.scope ?? 'não informado'],
+          ['Cobertura', reportMeta.coverage ? `${reportMeta.coverage.rows_returned} linhas; ${reportMeta.coverage.authorized_crew} profissionais no escopo; completude não comprovada` : 'não informada'],
           ['Limitações', reportMeta.limitations.join(' | ')],
         ]
           .map(([label, value]) => `<div><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</div>`)
@@ -258,6 +264,8 @@ export default function FrmsRelatorios() {
       ['Perfil', reportMeta?.profile_code ?? 'não informado'],
       ['Fonte', reportMeta?.source ?? 'não informada'],
       ['Referência da fonte', reportMeta?.source_reference ?? 'não informada'],
+      ['Escopo de acesso', reportMeta?.scope ?? 'não informado'],
+      ['Cobertura', reportMeta?.coverage ? `${reportMeta.coverage.rows_returned} linhas; ${reportMeta.coverage.authorized_crew} profissionais no escopo; completude não comprovada` : 'não informada'],
       ['Limitações', reportMeta?.limitations?.join(' | ') ?? 'Metadados de limitações indisponíveis'],
     ];
     let csvContent = metadataRows.map((row) => row.map(csvCell).join(',')).join('\n') + '\n\n';
@@ -277,7 +285,7 @@ export default function FrmsRelatorios() {
         ].map(csvCell).join(',') + '\n';
       }
     } else if (tipo === 'mapa-fadiga') {
-      csvContent += ['Tripulante', 'HV 7d%', 'HV Mês%', 'HV 365d%', 'Nível Max', 'Repouso OK'].map(csvCell).join(',') + '\n';
+      csvContent += ['Tripulante', 'HV 7d%', 'HV Mês%', 'HV 365d%', 'Nível Max', 'Repouso', 'Fonte/data do repouso'].map(csvCell).join(',') + '\n';
       for (const row of orderedData ?? []) {
         csvContent += [
           row.nome || row.tripulante_id,
@@ -285,7 +293,8 @@ export default function FrmsRelatorios() {
           row.pct_mes ?? '',
           row.pct_365d ?? '',
           row.nivel_max ?? '',
-          row.repouso_suficiente == null ? '' : row.repouso_suficiente ? 'Sim' : 'Não',
+          row.repouso_estado === 'DESCONHECIDO' || row.repouso_suficiente == null ? 'Não avaliado' : row.repouso_suficiente ? 'Suficiente' : 'Insuficiente',
+          row.repouso_referencia ? `FRMS rolling — ${row.repouso_referencia}` : 'Sem registro de repouso na janela',
         ].map(csvCell).join(',') + '\n';
       }
     } else {
@@ -417,6 +426,12 @@ export default function FrmsRelatorios() {
               Política vigente em {reportMeta.policy_reference_date ?? 'data não informada'}: {reportMeta.policy_version} · revisão {reportMeta.revision_id} · fonte {reportMeta.source}
             </span>
           ) : null}
+          {reportMeta?.coverage ? (
+            <span>
+              Escopo: {reportMeta.scope === 'all' ? 'empresa' : reportMeta.scope === 'self' ? 'acesso próprio' : 'setores autorizados'} ·
+              {' '}{reportMeta.coverage.rows_returned} linhas retornadas · {reportMeta.coverage.authorized_crew} profissionais autorizados · cobertura dos dados não comprovada
+            </span>
+          ) : null}
         </div>
 
         <div id="frms-report-content" className="overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -462,7 +477,8 @@ export default function FrmsRelatorios() {
           ) : !orderedData || orderedData.length === 0 ? (
             <div className="flex flex-col items-center gap-2 p-12 text-center text-gray-400">
               <FileText className="h-8 w-8" />
-              Nenhum dado encontrado para o recorte deste relatório
+              <p>Nenhum dado encontrado para o recorte deste relatório</p>
+              <p className="max-w-xl text-xs text-slate-500">Isso não confirma ausência de risco. Confira permissões, período e disponibilidade da fonte.</p>
             </div>
           ) : tipo === 'compliance' ? (
             <ComplianceTable data={orderedData} />
@@ -560,13 +576,16 @@ function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
                 </span>
               </td>
               <td className="px-4 py-2.5 text-center">
-                {r.repouso_suficiente == null ? (
+                {r.repouso_estado === 'DESCONHECIDO' || r.repouso_suficiente == null ? (
                   <span className="text-xs font-bold text-slate-500">Não avaliado</span>
                 ) : r.repouso_suficiente ? (
                   <span className="text-xs font-bold text-emerald-600">Sim</span>
                 ) : (
                   <span className="text-xs font-bold text-red-600">Insuficiente</span>
                 )}
+                <div className="mt-1 text-[10px] text-slate-500">
+                  {r.repouso_referencia ? `FRMS rolling: ${r.repouso_referencia}` : 'Sem registro de repouso no recorte'}
+                </div>
               </td>
             </tr>
           );
