@@ -4,6 +4,10 @@ import { readFileSync } from 'node:fs';
 const manifest = JSON.parse(readFileSync(new URL('../../docs/lms/catalog/CATALOG_READONLY_BASELINE_20261017.json', import.meta.url),'utf8'));
 test('baseline EAD conserva universo e classes sem fabricar certificacao', () => {
  assert.equal(manifest.audited_courses.length, 50);
+ assert.ok(manifest.audited_courses.every(c=>typeof c.catalog_title==='string' && c.catalog_title.trim().length>0));
+ assert.equal(manifest.audited_courses.find(c=>c.course_id===22).content_type,'pptx');
+ assert.equal(manifest.audited_courses.find(c=>c.course_id===23).completion_manifest_validated_in_preview,false);
+ assert.equal(manifest.audited_courses.filter(c=>c.completion_manifest_validated_in_preview===true).length,46);
  assert.equal(manifest.workflow_target_company_id,6);
  assert.ok(manifest.audited_courses.every(c=>c.tenant_id===6));
  assert.equal(manifest.original_sources_22.length, 22);

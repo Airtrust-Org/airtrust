@@ -13,7 +13,8 @@
     "Published edition ID/version, source owner, actual R2 object digest and approval signatures are not in the sanitized GitHub evidence",
     "A source SHA match does not independently attest source name-to-course-ID or pedagogical approval",
     "PASS is read-only SCORM preview; never a functional certification",
-    "No per-learner CMI, exam answers or other personal data are included"
+    "No per-learner CMI, exam answers or other personal data are included",
+    "Course catalog_title and content_type are observed historical catalog metadata, not identification of pedagogical source authorship."
   ],
   "package_candidates_for_independent_certification": [
     {
@@ -66,7 +67,10 @@
       "causal_group": "percurso/avaliação",
       "next_action": "módulos+reabertura",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Conhecimentos Gerais da Aeronave",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 4,
@@ -87,7 +91,10 @@
       "causal_group": "prova em andamento",
       "next_action": "concluir avaliação real",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "EFB – Electronic Flight Bag",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 5,
@@ -108,7 +115,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Emergências Gerais",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 6,
@@ -129,7 +139,10 @@
       "causal_group": "percurso/avaliação",
       "next_action": "checkpoints reais",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Operação Aeromédica",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 7,
@@ -150,7 +163,10 @@
       "causal_group": "prova final",
       "next_action": "prova e CMI terminal",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Operações Offshore",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 8,
@@ -171,7 +187,10 @@
       "causal_group": "quiz/feedback",
       "next_action": "gate e retake",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "PBN – Navegação Baseada em Performance",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 9,
@@ -192,7 +211,10 @@
       "causal_group": "percurso",
       "next_action": "concluir ciclo",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Operações em Terrenos Desabitados",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 15,
@@ -213,7 +235,10 @@
       "causal_group": "overflow suspend_data; candidato corrigido",
       "next_action": "Frente 2: candidato SHA cdc5a3cf…",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Doutrinamento Básico",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 19,
@@ -234,7 +259,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Instrutor de Voo — Solo",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 21,
@@ -255,7 +283,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "MGO - Manual Geral de Operações",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 22,
@@ -276,7 +307,10 @@
       "causal_group": "PPTX sem evidência qualificante",
       "next_action": "contrato pedagógico",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Regras de Ouro - Petrobras",
+      "content_type": "pptx",
+      "completion_manifest_validated_in_preview": null
     },
     {
       "course_id": 23,
@@ -297,7 +331,10 @@
       "causal_group": "SCORM legado sem manifesto/edição",
       "next_action": "Gerência: ZIP+autoria+aprovação",
       "final_decision": "SOURCE_OR_PEDAGOGICAL_APPROVAL_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Regulação ANAC",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": false
     },
     {
       "course_id": 25,
@@ -318,7 +355,10 @@
       "causal_group": "driver requiredDecision",
       "next_action": "reteste ZIP real c/ HEAD #1563",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "HUMS-VXP",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 26,
@@ -339,7 +379,10 @@
       "causal_group": "driver requiredDecision",
       "next_action": "reteste ZIP real c/ HEAD #1563",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "MGM - Manual Geral de Manutenção",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 27,
@@ -360,7 +403,10 @@
       "causal_group": "checkbox nativo",
       "next_action": "validar handler/gate",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "MCQ - Manual de Controle de Qualidade",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 28,
@@ -381,7 +427,10 @@
       "causal_group": "quiz data-quiz-nextq",
       "next_action": "driver semântico focado",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "SGSO — Segurança Operacional e Gestão de Riscos",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 29,
@@ -402,7 +451,10 @@
       "causal_group": "driver requiredDecision",
       "next_action": "reteste ZIP real c/ HEAD #1563",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "MOM - Manual da Organização de Manutenção",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 30,
@@ -423,7 +475,10 @@
       "causal_group": "checkbox nativo",
       "next_action": "handler/gate",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Integração / Doutrinação de Manutenção",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 31,
@@ -444,7 +499,10 @@
       "causal_group": "checkbox nativo",
       "next_action": "handler/gate",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Inspeção IIO & APRS",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 32,
@@ -465,7 +523,10 @@
       "causal_group": "percurso longo",
       "next_action": "segmentar e validar terminal",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "AW139 - Manutenção",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 33,
@@ -486,7 +547,10 @@
       "causal_group": "toggle customizado",
       "next_action": "mapear interação",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "HUMS - Heliwise",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 34,
@@ -507,7 +571,10 @@
       "causal_group": "toggle customizado",
       "next_action": "mapear interação",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "PT6C-67C - Manutenção",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 39,
@@ -528,7 +595,10 @@
       "causal_group": "accordion/gate",
       "next_action": "validar interactionSpec",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "SK76 — Padronização Operacional (SOP)",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 41,
@@ -549,7 +619,10 @@
       "causal_group": "ZIP original passou QA local",
       "next_action": "Frente 2: mesmo SHA em staging",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "CFIT - Controlled Flight Into Terrain",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 43,
@@ -570,7 +643,10 @@
       "causal_group": "checkbox nativo",
       "next_action": "handler/gate",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "MEL - Lista de Equipamentos Mínimos",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 44,
@@ -591,7 +667,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Gestão de Mudanças",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 47,
@@ -612,7 +691,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Gerenciamento de Resíduos e Coleta Seletiva",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 49,
@@ -633,7 +715,10 @@
       "causal_group": "sem pacote Designados",
       "next_action": "QSMS/Gerência: fonte+avaliação",
       "final_decision": "SOURCE_OR_PEDAGOGICAL_APPROVAL_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Auditoria Comportamental — Designados",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": null
     },
     {
       "course_id": 51,
@@ -654,7 +739,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "NR-20 - Iniciação sobre Inflamáveis e Combustíveis",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 52,
@@ -675,7 +763,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "NR-26 - Produtos Químicos, Rotulagem e FDS",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 53,
@@ -696,7 +787,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "NR-11 - Transporte, Movimentação, Armazenagem e Manuseio de Materiais",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 54,
@@ -717,7 +811,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "NR-35 - Trabalho em Altura",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 55,
@@ -738,7 +835,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "AW139 — Padronização Operacional (SOP)",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 56,
@@ -759,7 +859,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "NR-06 - Equipamento de Proteção Individual",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 57,
@@ -780,7 +883,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Doutrinamento em Segurança e Qualidade",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 58,
@@ -801,7 +907,10 @@
       "causal_group": "vídeo 118,592s",
       "next_action": "playback natural e reteste",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Integração Corporativa",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 59,
@@ -822,7 +931,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Stop Work — Autoridade para Interromper Atividades Inseguras",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 60,
@@ -843,7 +955,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Cultura Justa — Reporte, Erros e Responsabilização",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 61,
@@ -864,7 +979,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "FOD — Prevenção de Danos por Objetos Estranhos",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 62,
@@ -885,7 +1003,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "PPSP — Prevenção do Risco Associado ao Uso Indevido de Substâncias Psicoativas",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 63,
@@ -906,7 +1027,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "PPSP para Supervisores ARSO",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 64,
@@ -927,7 +1051,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "LOSA — Line Operations Safety Audit",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 65,
@@ -948,7 +1075,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "PRE - Plano de Resposta à Emergências",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 67,
@@ -969,7 +1099,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "CRM — Gestores — Cargos de Direção Requeridos (RBAC 119)",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 68,
@@ -990,7 +1123,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "Código de Ética e Conduta",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 69,
@@ -1011,7 +1147,10 @@
       "causal_group": "sem curso geral LGPD",
       "next_action": "DPO/Gerência: autoria+avaliação",
       "final_decision": "SOURCE_OR_PEDAGOGICAL_APPROVAL_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "LGPD - Lei Geral de Proteção de Dados",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": null
     },
     {
       "course_id": 70,
@@ -1032,7 +1171,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "NR-05 — CIPA",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 71,
@@ -1053,7 +1195,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "FDM - Tripulação",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 72,
@@ -1074,7 +1219,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "FDM — Manutenção",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     },
     {
       "course_id": 73,
@@ -1095,7 +1243,10 @@
       "causal_group": "PASS somente prévia",
       "next_action": "sem certificação de matrícula nesta frente",
       "final_decision": "TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED",
-      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483"
+      "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
+      "catalog_title": "FDM — Comitê e Gatekeeper",
+      "content_type": "scorm",
+      "completion_manifest_validated_in_preview": true
     }
   ],
   "original_sources_22": [
@@ -1453,5 +1604,6 @@
     }
   ],
   "workflow_target_company_id": 6,
-  "tenant_evidence": "https://github.com/Airtrust-Org/airtrust/blob/83c821cea8f25c8a4edffec8d7cf0d20c86989aa/.github/workflows/production-lms-active-course-certification-readonly.yml"
+  "tenant_evidence": "https://github.com/Airtrust-Org/airtrust/blob/83c821cea8f25c8a4edffec8d7cf0d20c86989aa/.github/workflows/production-lms-active-course-certification-readonly.yml",
+  "derived_from_binary_artifact": "lms-active-certification-chromium.json (artifact ID 12109071205)"
 }
