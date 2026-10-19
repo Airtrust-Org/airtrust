@@ -46,6 +46,7 @@ interface FrmsReportRow {
   repouso_suficiente?: number | null;
   repouso_estado?: 'SUFICIENTE' | 'INSUFICIENTE' | 'DESCONHECIDO';
   repouso_referencia?: string | null;
+  repouso_atualidade?: 'ATUAL' | 'DESATUALIZADO' | 'AUSENTE';
   exposicao_referencia?: string | null;
   created_at?: string | null;
   nivel?: string | null;
@@ -195,7 +196,7 @@ export default function FrmsRelatorios() {
     tipo === 'compliance'
       ? `Mês de referência: ${formatMonthLabel(mesReferencia)}`
       : tipo === 'mapa-fadiga'
-        ? 'Recorte: exposição rolling dos últimos 30 dias; repouso na última referência disponível do mesmo intervalo'
+        ? 'Recorte: exposição rolling dos últimos 30 dias; repouso só é considerado atual quando há evidência do dia operacional de referência'
         : `Período: ${periodoInicio} a ${periodoFim}`;
 
   const handleExportPDF = () => {
@@ -300,7 +301,7 @@ export default function FrmsRelatorios() {
           row.nivel_max ?? '',
           row.exposicao_referencia ?? 'Sem exposição HV registrada',
           row.repouso_estado === 'DESCONHECIDO' || row.repouso_suficiente == null ? 'Não avaliado' : row.repouso_suficiente ? 'Suficiente' : 'Insuficiente',
-          row.repouso_referencia ? `FRMS rolling — ${row.repouso_referencia}` : 'Sem registro de repouso na janela',
+          row.repouso_referencia ? `FRMS rolling — ${row.repouso_referencia} (${row.repouso_atualidade === 'ATUAL' ? 'referência atual' : 'não comprova repouso atual'})` : 'Sem registro de repouso na janela',
         ].map(csvCell).join(',') + '\n';
       }
     } else {
@@ -590,7 +591,7 @@ function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
                   <span className="text-xs font-bold text-red-600">Insuficiente</span>
                 )}
                 <div className="mt-1 text-[10px] text-slate-500">
-                  {r.repouso_referencia ? `FRMS rolling: ${r.repouso_referencia}` : 'Sem registro de repouso no recorte'}
+                  {r.repouso_referencia ? `FRMS rolling: ${r.repouso_referencia} · ${r.repouso_atualidade === 'ATUAL' ? 'atual' : 'histórico, não comprova repouso atual'}` : 'Sem registro de repouso no recorte'}
                 </div>
               </td>
             </tr>
