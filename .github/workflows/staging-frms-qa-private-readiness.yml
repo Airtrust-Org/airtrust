@@ -1,0 +1,72 @@
+name: FRMS Private Staging Resources Readiness (No Writes)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_FRMS_QA_PRIVATE_READONLY
+        required: true
+        type: string
+      expected_main_sha:
+        description: Exact reviewed current main SHA (40 hex)
+        required: true
+        type: string
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+jobs:
+  guard:
+    name: Read-only FRMS staging resource contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pin reviewed main and reject non-readonly invocation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          [[ "$CONFIRMATION" == AIRTRUST_FRMS_QA_PRIVATE_READONLY ]] || exit 1
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]] || exit 1
+          [[ "$(gh api repos/Airtrust-Org/airtrust/branches/main --jq .commit.sha)" == "$EXPECTED_SHA" ]] || exit 1
+          echo FRMS_QA_READONLY_MAIN_PIN_PASS
+  check-private-bindings:
+    name: Read-only Cloudflare D1 R2 access and lifecycle proof
+    needs: guard
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Disposable negative and integration tests (no remote Cloudflare)
+        run: >-
+          node --test
+          scripts/__tests__/frms-qa-private-readiness.test.mjs
+          scripts/__tests__/frms-qa-private-adapter.test.mjs
+          scripts/__tests__/frms-qa-repair-controller.test.mjs
+      - name: Compile private Worker without deploying
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --config ops/frms-qa-repair/wrangler.staging.toml --outdir "$RUNNER_TEMP/frms-qa-bundle"
+      - name: Verify actual staging D1 UUID and private R2 domain and lifecycle using GET only
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_FRMS_QA_READ_API_TOKEN: ${{ secrets.CLOUDFLARE_FRMS_QA_READ_API_TOKEN }}
+        run: node ops/frms-qa-repair/verify-readiness.mjs
+      - name: Record strictly read-only evidence
+        if: success()
+        run: |
+          echo 'FRMS PRIVATE READINESS GET-ONLY PASS; writes=0; no deploy; no apply; no authorization granted' >> "$GITHUB_STEP_SUMMARY"
+          echo "Main SHA: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
