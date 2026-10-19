@@ -38,7 +38,23 @@
       "os_version": "REPLACE",
       "browser_version": "REPLACE",
       "result": "PENDING",
-      "scenario_results": {},
+      "scenario_results": {
+        "1_vault_unlock": "PENDING",
+        "2_download_authorized_package": "PENDING",
+        "3_local_package_readiness": "PENDING",
+        "4_rdv_saved_on_tablet": "PENDING",
+        "5_airplane_offline": "PENDING",
+        "6_refresh_reopen_offline": "PENDING",
+        "7_restore_exact_saved_value": "PENDING",
+        "8_continue_offline_revision": "PENDING",
+        "9_reconnect_transmit": "PENDING",
+        "10_idempotent_receipt_no_duplicate": "PENDING",
+        "11_explicit_conflict_handling": "PENDING",
+        "12_finalize_separate_from_sync": "PENDING",
+        "13_coordination_handoff_receipt": "PENDING",
+        "14_service_worker_scope_isolated": "PENDING",
+        "15_touch_scroll_no_critical_overflow": "PENDING"
+      },
       "evidence_ref": "REPLACE_WITH_SANITIZED_PHYSICAL_EVIDENCE_REFERENCE"
     },
     {
@@ -49,7 +65,23 @@
       "os_version": "REPLACE",
       "browser_version": "installed-home-screen",
       "result": "PENDING",
-      "scenario_results": {},
+      "scenario_results": {
+        "1_vault_unlock": "PENDING",
+        "2_download_authorized_package": "PENDING",
+        "3_local_package_readiness": "PENDING",
+        "4_rdv_saved_on_tablet": "PENDING",
+        "5_airplane_offline": "PENDING",
+        "6_refresh_reopen_offline": "PENDING",
+        "7_restore_exact_saved_value": "PENDING",
+        "8_continue_offline_revision": "PENDING",
+        "9_reconnect_transmit": "PENDING",
+        "10_idempotent_receipt_no_duplicate": "PENDING",
+        "11_explicit_conflict_handling": "PENDING",
+        "12_finalize_separate_from_sync": "PENDING",
+        "13_coordination_handoff_receipt": "PENDING",
+        "14_service_worker_scope_isolated": "PENDING",
+        "15_touch_scroll_no_critical_overflow": "PENDING"
+      },
       "evidence_ref": "REPLACE_WITH_SANITIZED_PHYSICAL_EVIDENCE_REFERENCE"
     },
     {
@@ -60,7 +92,23 @@
       "os_version": "REPLACE",
       "browser_version": "REPLACE",
       "result": "PENDING",
-      "scenario_results": {},
+      "scenario_results": {
+        "1_vault_unlock": "PENDING",
+        "2_download_authorized_package": "PENDING",
+        "3_local_package_readiness": "PENDING",
+        "4_rdv_saved_on_tablet": "PENDING",
+        "5_airplane_offline": "PENDING",
+        "6_refresh_reopen_offline": "PENDING",
+        "7_restore_exact_saved_value": "PENDING",
+        "8_continue_offline_revision": "PENDING",
+        "9_reconnect_transmit": "PENDING",
+        "10_idempotent_receipt_no_duplicate": "PENDING",
+        "11_explicit_conflict_handling": "PENDING",
+        "12_finalize_separate_from_sync": "PENDING",
+        "13_coordination_handoff_receipt": "PENDING",
+        "14_service_worker_scope_isolated": "PENDING",
+        "15_touch_scroll_no_critical_overflow": "PENDING"
+      },
       "evidence_ref": "REPLACE_WITH_SANITIZED_PHYSICAL_EVIDENCE_REFERENCE"
     },
     {
@@ -71,7 +119,23 @@
       "os_version": "REPLACE",
       "browser_version": "REPLACE",
       "result": "PENDING",
-      "scenario_results": {},
+      "scenario_results": {
+        "1_vault_unlock": "PENDING",
+        "2_download_authorized_package": "PENDING",
+        "3_local_package_readiness": "PENDING",
+        "4_rdv_saved_on_tablet": "PENDING",
+        "5_airplane_offline": "PENDING",
+        "6_refresh_reopen_offline": "PENDING",
+        "7_restore_exact_saved_value": "PENDING",
+        "8_continue_offline_revision": "PENDING",
+        "9_reconnect_transmit": "PENDING",
+        "10_idempotent_receipt_no_duplicate": "PENDING",
+        "11_explicit_conflict_handling": "PENDING",
+        "12_finalize_separate_from_sync": "PENDING",
+        "13_coordination_handoff_receipt": "PENDING",
+        "14_service_worker_scope_isolated": "PENDING",
+        "15_touch_scroll_no_critical_overflow": "PENDING"
+      },
       "evidence_ref": "REPLACE_WITH_SANITIZED_PHYSICAL_EVIDENCE_REFERENCE"
     },
     {
@@ -82,7 +146,23 @@
       "os_version": "REPLACE",
       "browser_version": "installed-pwa",
       "result": "PENDING",
-      "scenario_results": {},
+      "scenario_results": {
+        "1_vault_unlock": "PENDING",
+        "2_download_authorized_package": "PENDING",
+        "3_local_package_readiness": "PENDING",
+        "4_rdv_saved_on_tablet": "PENDING",
+        "5_airplane_offline": "PENDING",
+        "6_refresh_reopen_offline": "PENDING",
+        "7_restore_exact_saved_value": "PENDING",
+        "8_continue_offline_revision": "PENDING",
+        "9_reconnect_transmit": "PENDING",
+        "10_idempotent_receipt_no_duplicate": "PENDING",
+        "11_explicit_conflict_handling": "PENDING",
+        "12_finalize_separate_from_sync": "PENDING",
+        "13_coordination_handoff_receipt": "PENDING",
+        "14_service_worker_scope_isolated": "PENDING",
+        "15_touch_scroll_no_critical_overflow": "PENDING"
+      },
       "evidence_ref": "REPLACE_WITH_SANITIZED_PHYSICAL_EVIDENCE_REFERENCE"
     }
   ],

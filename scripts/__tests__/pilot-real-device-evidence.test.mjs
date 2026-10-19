@@ -40,3 +40,16 @@ test('official read-only device gate checks evidence at the exact reviewed PR SH
  assert.match(workflow,/PILOT_STAGING_WORKER_AND_PAGES_PROVENANCE_PASS/);
  assert.doesNotMatch(workflow,/pull_request_target:/);
 });
+
+test('real-device evidence example keeps all six rows and all fifteen cases PENDING',()=>{
+ const example=JSON.parse(readFileSync('docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.example.json','utf8'));
+ assert.equal(example.status,'PENDING');
+ assert.equal(example.rows.length,requiredRows.length);
+ for(let i=0;i<requiredRows.length;i++){
+  const row=example.rows[i];
+  assert.deepEqual([row.platform,row.mode,row.orientation],requiredRows[i]);
+  assert.equal(row.result,'PENDING');
+  assert.deepEqual(Object.keys(row.scenario_results).sort(),[...requiredScenarios].sort());
+  assert.ok(Object.values(row.scenario_results).every(result=>result==='PENDING'));
+ }
+});
