@@ -81,6 +81,9 @@ def main_profile(candidate: Path, assignments: dict) -> dict:
     require(archive.is_file() and artifact.is_file() and
             sha256(archive) == source and sha256(artifact) == edition,
             "QA_BYTES_NOT_PINNED")
+    require({entry.name for entry in (candidate / "browser").iterdir()} ==
+            {"player3-technical-only.zip", "manifest.json"},
+            "QA_BROWSER_TREE_CONTAINS_PRIVATE_FILES")
     with ZipFile(archive) as bundle:
         require(sorted(bundle.namelist()) == ["app.js", "index.html"],
                 "QA_PUBLIC_CONTENT_CONTAINS_UNEXPECTED_ASSETS")
@@ -158,6 +161,7 @@ def main_profile(candidate: Path, assignments: dict) -> dict:
                     "wrongAnswerButton", "correctAnswerButton", "submitButton",
                     "finishButton", "learnerCompletionButton")
                 require(isinstance(data.get("frameSelectors"), list) and
+                    len(data["frameSelectors"]) > 0 and
                     all(isinstance(x, str) and x for x in data["frameSelectors"]) and
                     all(isinstance(data.get(k), str) and data[k] for k in required[1:]),
                     "QA_EXTERNAL_SCORM_SELECTORS_REQUIRED")
@@ -185,6 +189,8 @@ def write_private(candidate: Path, assignments: Path, output: Path) -> None:
             "QA_PROFILE_MUST_BE_OUTSIDE_REPO_AND_PUBLIC_ASSETS")
     require(not output.exists() and not output.is_symlink(),
             "QA_PROFILE_FILE_ALREADY_EXISTS")
+    require(not assignments.resolve().is_relative_to(PROJECT_ROOT),
+            "QA_PRIVATE_ASSIGNMENTS_MUST_BE_OUTSIDE_REPO")
     data = json.loads(assignments.read_text())
     profile = main_profile(candidate, data)
     output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
