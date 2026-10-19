@@ -1,8 +1,9 @@
 import { hasSchemaTable } from '../utils/db-schema';
 import { buildTrainingComplianceRosterPlan, type RosterPlan, type RosterEnrollment, type RosterCourse } from './training-compliance-roster-plan';
-import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
+import { canReuseMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from './training-compliance-evidence-profile';
 import { registrarAuditoria } from '../utils/auditoria';
+import { createComplianceEnrollmentAtomic } from './training-compliance-create-enrollment';
 import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
 
 export const ROSTER_RECONCILIATION_TENANT = 6;
@@ -135,14 +136,13 @@ async function ensureRequiredEnrollment(
     if (!cycle) throw new Error('ROSTER_REACTIVATION_CYCLE_MISSING');
     id=existing.id;
   } else {
-    const inserted = await db.prepare(`INSERT INTO lms_matriculas
-      (empresa_id,funcionario_id,curso_id,observacoes)
-      VALUES (?,?,?,'Matrícula necessária conforme cargo/matriz e evidência do Compliance (sem e-mail)')`)
-      .bind(empresaId,action.funcionarioId,action.cursoId).run();
-    id=Number(inserted.meta.last_row_id || 0);
-    if (!id || !(await ensureMatriculaCycle(db,{empresaId,matriculaId:id,origin:'AUTO_RENOVACAO'}))) {
-      throw new Error('ROSTER_ENROLLMENT_CYCLE_MISSING');
-    }
+    const created=await createComplianceEnrollmentAtomic(db,{
+      empresaId,funcionarioId:action.funcionarioId,cursoId:action.cursoId,
+      qualificacaoTipoId:action.tipoId,regraId:action.regraId,
+      observacoes:'Matrícula necessária conforme cargo/matriz e evidência do Compliance (sem e-mail)',
+      origin:'CARGO_COMPLIANCE',
+    });
+    return created!==null;
   }
   await stampLmsEnrollmentEvidenceProfile(db,{
     empresaId,matriculaId:id,funcionarioId:action.funcionarioId,
