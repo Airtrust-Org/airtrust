@@ -5,6 +5,7 @@ import { prepareQaEvidence, executeApprovedQaStagingRepair } from '../../scripts
 import { buildReviewPlan, TARGET } from '../../scripts/staging/frms-qa-cases-repair-plan.mjs';
 import { expectedQaCases } from '../../scripts/staging/inspect-frms-ux-cases.mjs';
 import { durableCoordinator, privateR2Store, d1ScopeAdapter, timeTravelReader, LOCK } from './adapters.mjs';
+import { authorizePrivateCaller } from './caller-auth.mjs';
 
 const DAYS = Array.from({ length: 30 }, (_, i) => ({
   day: new Date(Date.parse('2026-09-14T00:00:00Z') + i * 86400000).toISOString().slice(0, 10),
@@ -24,8 +25,20 @@ export class FrmsQaCoordinator extends DurableObject {
       !/^[a-f0-9]{40}$/.test(env.RELEASE_SHA ?? '') ||
       !/^[a-f0-9]{64}$/.test(env.APPROVAL_KEY_SHA256 ?? '') ||
       !/^[a-f0-9]{64}$/.test(env.PREIMAGE_KEY_HEX ?? '') ||
+      !env.DB?.prepare || !env.DB?.batch ||
+      !env.PREIMAGES?.put || !env.PREIMAGES?.get ||
+      !env.COORDINATOR?.get || !env.COORDINATOR?.idFromName ||
       env.PRIVATE_STORAGE_VERIFIED !== 'restricted-r2-lifecycle-1d') throw new Error('QA_DEPLOYMENT_NOT_READY');
     if (!['prepare', 'apply'].includes(operation)) throw new Error('QA_OPERATION_REJECTED');
+    // Input never chooses an ID, SQL statement, binding or authorization anchor.
+    const fields = operation === 'prepare' ? ['callerAuth'] :
+      ['callerAuth', 'manifest', 'receiptId', 'signatureBase64'];
+    if (!input || typeof input !== 'object' || Array.isArray(input) ||
+      Object.keys(input).some(key => !fields.includes(key)))
+      throw new Error('QA_CALLER_INPUT_REJECTED');
+    const caller = await authorizePrivateCaller({
+      auth: input.callerAuth, operation, env, storage: this.ctx.storage,
+    });
     const plan = reviewedPlan();
     const adapters = {
       ...durableCoordinator(this.ctx.storage),
@@ -36,11 +49,15 @@ export class FrmsQaCoordinator extends DurableObject {
     const key = Buffer.from(env.PREIMAGE_KEY_HEX, 'hex');
     try {
       if (operation === 'prepare') {
+        await adapters.audit({event:'FRMS_QA_PRIVATE_CALLER_ACCEPTED',
+          operation, runId:caller.runId, runAttempt:caller.runAttempt, writes:0});
         const receipt = await prepareQaEvidence({ plan, adapters, key });
         const receiptId = createHash('sha256').update(JSON.stringify(receipt)).digest('hex');
         await this.ctx.storage.put('receipt:' + receiptId, receipt);
         return { receiptId, receipt };
       }
+      await adapters.audit({event:'FRMS_QA_PRIVATE_CALLER_ACCEPTED',
+        operation, runId:caller.runId, runAttempt:caller.runAttempt, writes:0});
       if (!/^[a-f0-9]{64}$/.test(input.receiptId ?? '')) throw new Error('QA_RECEIPT_REQUIRED');
       const receipt = await this.ctx.storage.get('receipt:' + input.receiptId);
       if (!receipt) throw new Error('QA_RECEIPT_REQUIRED');
@@ -57,6 +74,6 @@ export class FrmsQaCoordinator extends DurableObject {
 }
 export default class FrmsQaService extends WorkerEntrypoint {
   fetch() { return new Response('Not found', { status: 404 }); }
-  prepare() { return this.env.COORDINATOR.get(this.env.COORDINATOR.idFromName(LOCK)).run('prepare'); }
+  prepare(input) { return this.env.COORDINATOR.get(this.env.COORDINATOR.idFromName(LOCK)).run('prepare', input); }
   apply(input) { return this.env.COORDINATOR.get(this.env.COORDINATOR.idFromName(LOCK)).run('apply', input); }
 }
