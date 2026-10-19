@@ -94,8 +94,8 @@ test('trusted workflow separates D1 credential from Pages/R2 credential',()=>{
  assert.match(s,/environment:\s*staging/);
  assert.match(s,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
  assert.match(s,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
- assert.match(s,/if:\s*inputs\.phase == 'publish'/);
- assert.match(s,/if:\s*inputs\.phase == 'bootstrap' \|\| inputs\.phase == 'edition'/);
+ assert.match(s,/inputs\.phase == 'publish' &&/);
+ assert.match(s,/inputs\.phase == 'bootstrap' \|\| inputs\.phase == 'edition'/);
  assert.doesNotMatch(s,/pull_request_target:|secrets\.CLOUDFLARE_WORKER_API_TOKEN|secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
 });
 
