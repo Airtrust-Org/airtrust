@@ -424,6 +424,19 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   const complete2 = await completeViaXapi(page, Number(e2EnrollmentId), 'completion-2');
   expect(complete2.ok, JSON.stringify(complete2.json)).toBe(true);
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).compliance_pct).toBe(100);
+  // A completed EAD course is compatible evidence and computes a real
+  // twelve-month validity period; never manufacture qualification status.
+  for (const id of employeeIds) {
+    const req = requirement(await employeeSnapshot(page, id), requiredTypeCode);
+    expect(req.modalidade_requerida).toBe('EAD');
+    expect(req.auto_matricular_ead).toBe(1);
+    expect(req.evidencia_modalidade).toBe('EAD');
+    expect(req.evidencia_origem).toBeTruthy();
+    expect(req.ultima_data).toMatch(/^\d{4}-\d{2}-\d{2}/);
+    expect(req.data_validade).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(req.dias_para_vencer).toBeGreaterThan(30);
+    expect(req.status_compliance).toBe('CONFORME');
+  }
 
   const trainings = await api(
     page,
@@ -531,8 +544,16 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   expect(beforePeer.ok).toBe(true);
   expect(beforePeer.json.data.filter((row: any) =>
     employeeIds.includes(Number(row.funcionario_id)))).toHaveLength(1);
+  const orphanMatrix = await api(
+    page, `/api/compliance-treinamentos/matriz-organizacao?setor_id=${sector.id}&funcao_id=${fn.id}`,
+  );
+  expect(orphanMatrix.ok).toBe(true);
+  const orphanRequirement = orphanMatrix.json.data.find(
+    (row: any) => row.qualificacao_tipo_codigo === orphanTypeCode,
+  );
+  expect(orphanRequirement).toBeTruthy();
   const linkedRules = await api(
-    page, `/api/compliance-treinamentos/regras?qualificacao_tipo_id=${orphanCourses[0].qualificacao_tipo_id}`,
+    page, `/api/compliance-treinamentos/regras?qualificacao_tipo_id=${orphanRequirement.qualificacao_tipo_id}`,
   );
   expect(linkedRules.ok).toBe(true);
   const linkedRule = linkedRules.json.data.find((rule: any) =>
