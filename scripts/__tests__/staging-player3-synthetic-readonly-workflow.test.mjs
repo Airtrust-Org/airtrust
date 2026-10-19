@@ -32,6 +32,8 @@ test('Read-only SQL is a single SELECT restricted to the synthetic QA company', 
   assert.match(sql, /QA-PARTICIPANTE-BRAVO/);
   assert.match(sql, /qa-player3-chromium@staging\.airtrust\.invalid/);
   assert.match(sql, /qa-player3-webkit@staging\.airtrust\.invalid/);
+  assert.match(sql, /COUNT\(DISTINCT f\.id\)/);
+  assert.match(sql, /JOIN lms_native_catalog_activation a ON a\.curso_id=ed\.curso_id/);
   assert.doesNotMatch(sql, /empresa_id\s*=\s*6\b/i);
   assert.match(workflow, /wrangler d1 execute "\$EXPECTED_STAGING_DB" --env staging --remote --json --file "\$QUERY_FILE"/);
 });

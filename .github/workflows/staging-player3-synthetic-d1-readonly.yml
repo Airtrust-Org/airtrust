@@ -61,12 +61,13 @@ jobs:
              WHERE e.codigo='qa_examiner_training' AND e.ativo=1 AND e.deleted_at IS NULL
                AND f.ativo=1 AND f.deleted_at IS NULL
                AND f.matricula IN ('QA-PARTICIPANTE-ALFA','QA-PARTICIPANTE-BRAVO')) AS qa_employee_count,
-            (SELECT COUNT(DISTINCT u.id) FROM usuarios u
+            (SELECT COUNT(DISTINCT f.id) FROM usuarios u
                JOIN funcionarios f ON f.id=u.funcionario_id
                JOIN empresas e ON e.id=f.empresa_id
                JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=e.id
              WHERE e.codigo='qa_examiner_training' AND e.ativo=1 AND e.deleted_at IS NULL
                AND f.ativo=1 AND f.deleted_at IS NULL
+               AND f.matricula IN ('QA-PARTICIPANTE-ALFA','QA-PARTICIPANTE-BRAVO')
                AND u.active=1 AND u.deleted_at IS NULL
                AND LOWER(u.email) IN ('qa-player3-chromium@staging.airtrust.invalid',
                                      'qa-player3-webkit@staging.airtrust.invalid')
@@ -78,6 +79,8 @@ jobs:
                JOIN empresas e ON e.id=a.empresa_id
              WHERE e.codigo='qa_examiner_training' AND e.ativo=1 AND e.deleted_at IS NULL) AS qa_native_activated_course_count,
             (SELECT COUNT(*) FROM lms_native_edicoes ed
+               JOIN lms_native_catalog_activation a ON a.curso_id=ed.curso_id
+                 AND a.empresa_id=ed.empresa_id
                JOIN empresas e ON e.id=ed.empresa_id
              WHERE e.codigo='qa_examiner_training' AND e.ativo=1 AND e.deleted_at IS NULL
                AND ed.status='PUBLISHED') AS qa_native_published_edition_count;
