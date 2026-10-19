@@ -107,7 +107,8 @@ test('0561/0562 exact versioned candidate manifests remain non-deployable withou
       outputPath:'/tmp/airtrust-review-only-must-not-create-'+n,
       expectedChangeId:id,githubSha:'a'.repeat(40),
     }),/SCHEMA_V2_REVIEW_ONLY_CANDIDATE_NOT_APPROVED/);
-    assert.ok(!byPrefix.has(n), 'cannot insert reviewed-only into versioned schema release manifest');
+    assert.equal(byPrefix.get(n)?.governance_state,'REMOTE_APPLY_PENDING');
+    assert.match(byPrefix.get(n)?.note??'',/REVIEW_ONLY_NO_REMOTE_APPLY/);
     assert.ok(!workflow.includes('          - '+id));
   }
 });
