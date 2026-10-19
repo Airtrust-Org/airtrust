@@ -8,9 +8,11 @@ const access=()=>({
   secret,providedSecret:secret,runtimeSha:'b'.repeat(40),
 });
 const qsha='c'.repeat(64),pkg='123e4567-e89b-42d3-a456-426614174001';
-function dbMock({binding=true,history=[],candidate=true,table=true}:{
+function dbMock({binding=true,history=[],candidate=true,table=true,
+  launchedSha=qsha,committedSha=qsha}:{
   binding?:boolean;history?:Array<{id:number;certificado_arquivo_id:number|null}>;
   candidate?:boolean;table?:boolean;
+  launchedSha?:string|null;committedSha?:string|null;
 }={}){
   const statements:{sql:string;args:unknown[]}[]=[];
   const fake={
@@ -27,7 +29,10 @@ function dbMock({binding=true,history=[],candidate=true,table=true}:{
           if(sql.includes('FROM lms_scorm_qa_evidence_bindings b'))
             return binding?{ciclo_id:555,staging_runtime_sha:'b'.repeat(40),
               approval_receipt_sha256:'f'.repeat(64),run_id:pkg,
-              expires_at:'2999-01-01',matricula_status:'EM_ANDAMENTO',numero_ciclo:1}:null;
+              expires_at:'2999-01-01',
+              launched_package_sha256:launchedSha,
+              last_committed_package_sha256:committedSha,
+              matricula_status:'EM_ANDAMENTO',numero_ciclo:1}:null;
           if(sql.includes('FROM lms_progresso_scorm'))
             return {cmi_json:'{"cmi":"real"}',suspend_data:'resume-01',lesson_status:'incomplete',
               completion_status:null,success_status:null,score_raw:null,
@@ -50,7 +55,8 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
     ])expect(()=>assertScormQaReadbackAccess({...access(),...bad})).toThrow();
   });
   it('fails closed without governed Schema V2 binding table or exact binding',async()=>{
-    for(const cfg of [{table:false},{binding:false},{candidate:false}]){
+    for(const cfg of [{table:false},{binding:false},{candidate:false},
+      {launchedSha:null},{committedSha:'0'.repeat(64)}]){
       const {db}=dbMock(cfg);
       await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
         packageId:pkg,packageSha256:qsha,matriculaId:88,
@@ -65,6 +71,8 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
     });
     expect(result.source).toBe('WORKER_D1_STAGING_READBACK');
     expect(result.cycleId).toBe(555);
+    expect(result.servedPackageSha256).toBe(qsha);
+    expect(result.committedPackageSha256).toBe(qsha);
     expect(result.qualificationHistoryId).toBe(700);
     expect(result.certificateDocument?.documentId).toBe('900');
     expect(result.certificateDocument?.sha256).toBeNull();

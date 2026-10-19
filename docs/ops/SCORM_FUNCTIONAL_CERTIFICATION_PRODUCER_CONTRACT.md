@@ -452,3 +452,16 @@ ver o CMI não prova que este ZIP candidato foi executado. Não marcar
 enquanto F0 não entregar o executor de staging versionado, provas negativas,
 assinatura independente, autorização e limpeza; o readiness workflow segue
 fail-closed. Não adicionar um endpoint alternativo em produção.
+
+**Gate físico adicional de não-autodeclaração:** a tabela QA de F0 também
+precisa registrar `launched_package_sha256` e
+`last_committed_package_sha256`, produzidos **pelo Worker** somente após
+entrega de assets QA da edição e commit real autorizado no ciclo.
+Ao existir CMI ou sessão persistida, o readback exige ambos iguais ao
+SHA-256 da edição candidata; um vínculo administrativo de matrícula sem
+prova de launch/commit recebe HTTP 409
+`SCORM_QA_COMMIT_EDITION_UNPROVEN`. Antes do primeiro commit, um
+`launched_package_sha256` divergente também bloqueia. A futura
+estrutura de Schema V2/QA writer deverá garantir atomicidade/custódia
+dessas duas colunas, sem permitir preenchimento pelo aluno, pacote,
+driver ou script de atestação. Não há migration ou seed aplicada.

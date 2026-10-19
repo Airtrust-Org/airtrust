@@ -58,7 +58,9 @@ export async function readScormQaBackendEvidence(params: {
 
   const bind = await db.prepare(
     `SELECT b.ciclo_id, b.staging_runtime_sha, b.approval_receipt_sha256,
-            b.run_id, b.expires_at, m.status AS matricula_status,
+            b.run_id, b.expires_at, b.launched_package_sha256,
+            b.last_committed_package_sha256,
+            m.status AS matricula_status,
             cy.numero_ciclo
        FROM lms_scorm_qa_evidence_bindings b
        JOIN lms_matriculas m
@@ -78,6 +80,8 @@ export async function readScormQaBackendEvidence(params: {
     matriculaId, runtimeSha).first<{
     ciclo_id:number; staging_runtime_sha:string;
     approval_receipt_sha256:string; run_id:string; expires_at:string;
+    launched_package_sha256:string|null;
+    last_committed_package_sha256:string|null;
     matricula_status:string; numero_ciclo:number;
   }>();
   if (!bind || !Number.isSafeInteger(bind.ciclo_id) ||
@@ -96,6 +100,18 @@ export async function readScormQaBackendEvidence(params: {
     success_status:string|null; score_raw:number|null;
     session_count:number|null; last_commit_at:string|null;
   }>();
+  // F0's QA runtime, not a plan supplied by the test driver, must record
+  // which candidate ZIP was actually served and committed to D1. Merely
+  // attaching an existing enrollment to this package is not evidence.
+  if (state?.cmi_json || state?.suspend_data || state?.session_count) {
+    if (bind.launched_package_sha256 !== candidate.package_sha256 ||
+        bind.last_committed_package_sha256 !== candidate.package_sha256) {
+      throw new ApiError('SCORM_QA_COMMIT_EDITION_UNPROVEN', 409);
+    }
+  } else if (bind.launched_package_sha256 !== null &&
+             bind.launched_package_sha256 !== candidate.package_sha256) {
+    throw new ApiError('SCORM_QA_LAUNCH_EDITION_DRIFT', 409);
+  }
   const histories = await db.prepare(
     `SELECT id, certificado_arquivo_id
        FROM qualificacoes_historico
@@ -120,6 +136,8 @@ export async function readScormQaBackendEvidence(params: {
     enrollmentId:matriculaId, cycleId:bind.ciclo_id,
     cycleNumber:bind.numero_ciclo,
     runId:bind.run_id, approvalReceiptSha256:bind.approval_receipt_sha256,
+    servedPackageSha256:bind.launched_package_sha256,
+    committedPackageSha256:bind.last_committed_package_sha256,
     synthetic:true, observedAt:new Date().toISOString(),
     completionStatus:bind.matricula_status,
     cmiSha256:await hex(state?.cmi_json),
