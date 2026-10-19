@@ -20,8 +20,8 @@ import type { Env } from '../types';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { resolveFrmsRegulatoryProfileEvidence } from '../lib/frms/parameter-governance';
 import { requireRole } from '../middleware/rbac';
-import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../services/employee-sector-access';
-import type { EmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
 import {
   relatorioIndividual,
   relatorioCompliance,
@@ -65,13 +65,9 @@ frmsRelatoriosConfig.use('/relatorios/*', async (c, next) => {
 });
 
 async function resolveReportCrewScope(c: FrmsAppContext, empresaId: number) {
-  const access: EmployeeSectorAccess = await getEmployeeSectorAccess(c, empresaId);
-  const scope = buildFuncionarioScopeWhere(access, 'f');
-  const rows = await c.env.DB.prepare(
-    `SELECT f.id FROM funcionarios f
-      WHERE f.empresa_id = ? AND f.deleted_at IS NULL AND ${scope.clause}`,
-  ).bind(empresaId, ...scope.bindings).all<{ id: number }>();
-  return { access, scope, ids: new Set((rows.results ?? []).map((r) => Number(r.id))) };
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const { scope, ids } = await loadFrmsReportCrewScope(c.env.DB, empresaId, access);
+  return { access, scope, ids };
 }
 
 const GOVERNED_SOURCE_TYPES = [
