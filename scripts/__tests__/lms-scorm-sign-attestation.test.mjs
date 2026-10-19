@@ -15,7 +15,7 @@ const checks=['FIRST_ACCESS','REQUIRED_CONTENT_COVERAGE',
   'EXPLICIT_FINALIZATION','REOPEN_COMPLETED','NO_STATUS_DOWNGRADE',
   'TENANT_CYCLE_ISOLATION'];
 const secret='qa-secret-only-for-tests-with-length-over-32';
-function fixture(){
+function fixture({requiresAssessment=true}={}){
   const dir=mkdtempSync(join(tmpdir(),'airtrust-scorm-sign-test-'));
   const zip=Buffer.from(zipSync({
     'imsmanifest.xml':strToU8('<manifest><resources><resource href="index.html"/></resources></manifest>'),
@@ -30,7 +30,7 @@ function fixture(){
   const runtimeSha='a'.repeat(40),harnessSha='b'.repeat(40);
   const candidate={scope:'GOVERNED_STAGING_SYNTHETIC',
     empresaId:6,cursoId:23,packageId:'123e4567-e89b-42d3-a456-426614174000',
-    packageSha256:sha(zip),zipPath,stagingRuntimeSha:runtimeSha,requiresAssessment:true};
+    packageSha256:sha(zip),zipPath,stagingRuntimeSha:runtimeSha,requiresAssessment};
   const reviewFile=join(dir,'independent-approved-review.json');
   const review={kind:'AIRTRUST_SCORM_INDEPENDENT_PEDAGOGICAL_REVIEW_V1',
     packageSha256:candidate.packageSha256,approved:true,independentOfPackageAuthor:true,
@@ -45,7 +45,7 @@ function fixture(){
   const driverFile=join(dir,'reviewed-driver.json');
   writeFileSync(driverFile,JSON.stringify({schemaVersion:1,packageSha256:candidate.packageSha256,
     authorReviewed:true,reviewArtifactSha256:sha(readFileSync(reviewFile)),
-    launchFile:'index.html',requiresAssessment:true,masteryScore:70,
+    launchFile:'index.html',requiresAssessment,...(requiresAssessment?{masteryScore:70}:{}),
     requiredContent:[{selector:'h1'}],
     resume:{actions:[{op:'click',selector:'#resume'}],
       assertion:{selector:'#resume',state:'visible'}},
@@ -108,7 +108,9 @@ function fixture(){
       documentId:browser==='CHROMIUM'?'qa-doc-chromium':'qa-doc-webkit',
       sha256:sha(readFileSync(pdfPaths[browser])),
     },
-    cases:checks.map(name=>({name,status:'PASS'})),
+    cases:checks.filter(name=>requiresAssessment||!['ASSESSMENT_INSUFFICIENT',
+      'ASSESSMENT_APPROVED','ASSESSMENT_THRESHOLD'].includes(name))
+      .map(name=>({name,status:'PASS'})),
   });
   const chromiumFile=join(dir,'chromium.json');
   const webkitFile=join(dir,'webkit.json');
@@ -162,27 +164,16 @@ test('signer rejects ZIP drift, runtime mismatch, incomplete PDF and missing sec
   }finally{rmSync(f.dir,{recursive:true,force:true});}
 });
 
-test('legitimate formative ZIP requires both browsers without fabricated scored quiz',()=>{
-  const f=fixture();try{
-    f.candidate.requiresAssessment=false;
+test('legitimate formative ZIP requires two browsers but no fabricated scored quiz',()=>{
+  const f=fixture({requiresAssessment:false});try{
+    const signed=f.sign();
+    assert.equal(signed.payload.requiresAssessment,false);
+    assert.equal(signed.payload.runs[0].cases.length,9);
+    assert.equal(signed.payload.runs[1].cases.length,9);
     const driver=JSON.parse(readFileSync(f.driverFile,'utf8'));
-    driver.requiresAssessment=false;
-    delete driver.masteryScore;delete driver.fail;
+    driver.requiresAssessment=true;
     writeFileSync(f.driverFile,JSON.stringify(driver));
-    // The detached Ed25519 review must be re-bound to the modified driver.
-    // This test asserts the validator independently, not a counterfeit review.
-    assert.equal(validateGovernedScormZipDriver(
-      readFileSync(f.candidate.zipPath),driver,f.candidate),true);
-    for(const [name,path] of [['CHROMIUM',f.chromiumFile],['WEBKIT',f.webkitFile]]){
-      const row=f.browserRow(name);
-      row.cases=row.cases.filter(item=>
-        item.name!=='ASSESSMENT_INSUFFICIENT'&&item.name!=='ASSESSMENT_APPROVED'&&
-        item.name!=='ASSESSMENT_THRESHOLD');
-      writeFileSync(path,JSON.stringify(row));
-    }
-    assert.throws(()=>f.sign(),/REVIEW_SIGNATURE_SCOPE_INVALID/);
-    // An altered assessment policy invalidates the signed driver. It requires
-    // a NEW independent review and signature before governed signing.
+    assert.throws(()=>f.sign(),/PACKAGE_OR_ASSESSMENT_PROFILE_MISMATCH/);
   }finally{rmSync(f.dir,{recursive:true,force:true});}
 });
 
