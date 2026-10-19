@@ -34,7 +34,7 @@ const exact = (lines,key,value) =>
   lines.some(line=>line===key+' = '+value);
 const only = (map, key) => {
   const val=map.get(key);
-  if(!val||val.length!==1)fail('QA_PRIVATE_CONFIG_BINDINGS_INVALID');
+  if(!val||(key!=='root'&&val.length!==1))fail('QA_PRIVATE_CONFIG_BINDINGS_INVALID');
   return key==='root'?val:val[0];
 };
 
