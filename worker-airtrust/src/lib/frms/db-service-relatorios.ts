@@ -144,6 +144,13 @@ export function aggregateCanonicalComplianceReport(
   );
 }
 
+export function aggregateAuthorizedComplianceReport(
+  items: readonly FrmsOperationalSnapshotItem[],
+  authorizedCrewIds: ReadonlySet<number>,
+): FrmsComplianceReportRow[] {
+  return aggregateCanonicalComplianceReport(items.filter((item) => authorizedCrewIds.has(item.funcionario_id)));
+}
+
 export async function relatorioCompliance(
   db: D1Database,
   mes: string,
@@ -167,10 +174,29 @@ export async function relatorioCompliance(
   });
   // Filtering is applied BEFORE aggregation: a manager must not receive even
   // derived counts or normative details about an out-of-scope employee.
-  const authorizedItems = authorizedCrewIds
-    ? snapshot.items.filter((item) => authorizedCrewIds.has(item.funcionario_id))
-    : snapshot.items;
-  return aggregateCanonicalComplianceReport(authorizedItems);
+  return authorizedCrewIds
+    ? aggregateAuthorizedComplianceReport(snapshot.items, authorizedCrewIds)
+    : aggregateCanonicalComplianceReport(snapshot.items);
+}
+
+export function summarizeReportRestEvidence(rest?: {
+  repouso_suficiente: number | null;
+  repouso_anterior_min: number | null;
+  data_referencia: string;
+}): {
+  repouso_suficiente: number | null;
+  repouso_estado: 'SUFICIENTE' | 'INSUFICIENTE' | 'DESCONHECIDO';
+  repouso_referencia: string | null;
+} {
+  const known = rest != null
+    && rest.repouso_anterior_min != null
+    && rest.repouso_anterior_min >= 0
+    && (rest.repouso_suficiente === 0 || rest.repouso_suficiente === 1);
+  return {
+    repouso_suficiente: known ? rest!.repouso_suficiente : null,
+    repouso_estado: !known ? 'DESCONHECIDO' : rest!.repouso_suficiente === 1 ? 'SUFICIENTE' : 'INSUFICIENTE',
+    repouso_referencia: rest?.data_referencia ?? null,
+  };
 }
 
 export async function relatorioMapaFadiga(
@@ -219,10 +245,7 @@ export async function relatorioMapaFadiga(
   const frota = await buscarAcumuloFrota(db, undefined, empresaId, 30, undefined, sectorScope);
   return frota.map((f) => {
     const rest = repousoMap.get(String(f.tripulante_id));
-    const known = rest != null
-      && rest.repouso_anterior_min != null
-      && rest.repouso_anterior_min >= 0
-      && (rest.repouso_suficiente === 0 || rest.repouso_suficiente === 1);
+
     return {
       tripulante_id: f.tripulante_id,
       nome: f.nome,
@@ -231,9 +254,7 @@ export async function relatorioMapaFadiga(
       pct_mes: f.pct_mes,
       pct_365d: f.pct_365d,
       nivel_max: f.nivel_max,
-      repouso_suficiente: known ? rest!.repouso_suficiente : null,
-      repouso_estado: !known ? 'DESCONHECIDO' : rest!.repouso_suficiente === 1 ? 'SUFICIENTE' : 'INSUFICIENTE',
-      repouso_referencia: rest?.data_referencia ?? null,
+      ...summarizeReportRestEvidence(rest),
     };
   });
 }
