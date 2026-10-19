@@ -17,6 +17,7 @@ import {assertReadOnlyQuery,validateStagingConfig,summarize,SQL,
 
 const seeded={
  qa_tenants:1,qa_active_employees:10,qa_learner_users:5,
+ qa_lms_eligible_qualification_types:0,
  qa_courses:0,qa_markers:0,qa_published_editions:0,qa_approved_policies:0,
  qa_pinned_enrollments:0,qa_all_active_enrollments:6,
  applied_0561:1,applied_0562:1,
@@ -47,7 +48,8 @@ test('target is exact live staging D1 binding and rejects other environment/buck
 test('report actual known absence without pretending deployed Native QA',()=>{
   const x=summarize(result());
   assert.equal(x.ok,false);
-  for(const item of ['NO_SYNTHETIC_COURSE','NO_NATIVE_ACTIVATION',
+  for(const item of ['QA_LMS_INTEGRATED_QUALIFICATION_MISSING',
+    'NO_SYNTHETIC_COURSE','NO_NATIVE_ACTIVATION',
     'NO_PUBLISHED_NATIVE_EDITION','NO_APPROVED_PRIVATE_GRADING_POLICY',
     'NO_INDEPENDENT_NATIVE_ENROLLMENTS']){
     assert.ok(x.blockers.includes(item),item);
@@ -57,7 +59,8 @@ test('report actual known absence without pretending deployed Native QA',()=>{
   assert.equal(x.sixBrowserJourneysVerified,false);
 });
 test('even populated D1 never implies content origins, tenant flags or E2E PASS',()=>{
-  const row={...seeded,qa_courses:1,qa_markers:1,qa_published_editions:1,
+  const row={...seeded,qa_lms_eligible_qualification_types:1,
+    qa_courses:1,qa_markers:1,qa_published_editions:1,
     qa_approved_policies:1,qa_pinned_enrollments:2};
   const x=summarize(result(row));
   assert.equal(x.ok,true);
