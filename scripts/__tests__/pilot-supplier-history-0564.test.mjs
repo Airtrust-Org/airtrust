@@ -16,7 +16,7 @@ test('0564 manifest integrity, additive DDL, historical preservation and immutab
  db.exec('CREATE TABLE cv_voo_abastecimentos (id INTEGER PRIMARY KEY, empresa_id INTEGER, voo_id INTEGER, client_local_id TEXT, fornecedor TEXT)');
  db.exec("INSERT INTO cv_voo_abastecimentos VALUES(1,7,42,'old','Original')");
  db.exec(sql);
- assert.deepEqual(db.prepare('SELECT fornecedor,supplier_code_at_acceptance FROM cv_voo_abastecimentos').get(),{fornecedor:'Original',supplier_code_at_acceptance:null});
+ assert.deepEqual({ ...db.prepare('SELECT fornecedor,supplier_code_at_acceptance FROM cv_voo_abastecimentos').get() },{fornecedor:'Original',supplier_code_at_acceptance:null});
  assert.throws(()=>db.exec("INSERT INTO cv_voo_abastecimentos (id,empresa_id,voo_id,client_local_id) VALUES(2,7,42,'new')"),/PILOT_FUELING_SUPPLIER_CODE_REQUIRED/);
  db.exec("INSERT INTO cv_voo_abastecimentos(id,empresa_id,voo_id,client_local_id,supplier_code_at_acceptance) VALUES(2,7,42,'new','TEST')");
  assert.throws(()=>db.exec("UPDATE cv_voo_abastecimentos SET supplier_code_at_acceptance='OTHER' WHERE id=2"),/PILOT_FUELING_SUPPLIER_CODE_IMMUTABLE/);
