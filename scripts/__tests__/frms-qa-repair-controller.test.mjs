@@ -18,7 +18,8 @@ const {privateKey,publicKey}=generateKeyPairSync('ed25519');
 const pub=publicKey.export({type:'spki',format:'pem'});
 const pin=createHash('sha256').update(publicKey.export({type:'spki',format:'der'})).digest('hex');
 const encryptionKey=randomBytes(32);
-function setup({dryPostcheck=false,scopeDrift=false,driftBeforeWrite=false}={}){
+function setup({dryPostcheck=false,scopeDrift=false,driftBeforeWrite=false,
+  dropBatchReply=false}={}){
   const sqlite=new DatabaseSync(':memory:');
   sqlite.exec("CREATE TABLE funcionarios (id INTEGER PRIMARY KEY,empresa_id INTEGER,matricula TEXT,deleted_at TEXT,ativo INTEGER)");
   sqlite.exec("CREATE TABLE frms_jornada (id TEXT PRIMARY KEY,empresa_id INTEGER,tripulante_id INTEGER,data TEXT,deleted_at TEXT,registrado_por TEXT,origem TEXT,observacao TEXT,duracao_jornada_minutos INTEGER,updated_at TEXT)");
@@ -51,6 +52,8 @@ function setup({dryPostcheck=false,scopeDrift=false,driftBeforeWrite=false}={}){
         }
         sqlite.exec('COMMIT');
       }catch(e){sqlite.exec('ROLLBACK');throw e;}
+      // The remote database committed, but the transport lost the ACK.
+      if(dropBatchReply)throw new Error('synthetic D1 batch committed but response lost');
       return [];
     },
   };
@@ -178,6 +181,8 @@ test('read drift after approval blocks mutation before touching D1',async()=>{
   await assert.rejects(()=>executeApprovedQaStagingRepair(command(receipt,st.adapters)),
     /PREIMAGE_DRIFT_SINCE_REVIEW/);
   assert.equal(st.batchCount,0);
+  assert.equal(st.events.at(-1).event,'FRMS_QA_BLOCKED_BEFORE_APPLY');
+  assert.equal((await st.adapters.acquireLock('airtrust-staging-mutations-and-scorm-qa')).held,true);
   st.sqlite.close();
 });
 test('mid-transaction CAS drift makes entire staged batch roll back',async()=>{
@@ -189,6 +194,38 @@ test('mid-transaction CAS drift makes entire staged batch roll back',async()=>{
   assert.equal(st.sqlite.prepare("SELECT COUNT(*) n FROM frms_alerta WHERE jornada_id IS NOT NULL").get().n,0);
   st.sqlite.close();
 });
+test('lost D1 batch response is indeterminate, never falsely audited as no apply',async()=>{
+  const st=setup({dropBatchReply:true});
+  const receipt=await prepareQaEvidence({plan,adapters:st.adapters,key:encryptionKey,now});
+  await assert.rejects(()=>executeApprovedQaStagingRepair(command(receipt,st.adapters)),
+    /synthetic D1 batch committed but response lost/);
+  assert.equal(st.batchCount,1);
+  // Regression fixture models the dangerous case: the commit did happen.
+  assert.equal(st.sqlite.prepare("SELECT COUNT(*) n FROM frms_alerta WHERE jornada_id IS NOT NULL").get().n,4);
+  assert.equal(st.sqlite.prepare("SELECT COUNT(*) n FROM frms_jornada WHERE origem='SIGVOOS'").get().n,4);
+  assert.equal(st.events.at(-1).event,
+    'FRMS_QA_APPLY_OUTCOME_UNKNOWN_RECONCILIATION_REQUIRED');
+  assert.equal(st.events.at(-1).reason,'QA_EXECUTION_FAILED');
+  assert.equal(st.events.some(e=>e.event==='FRMS_QA_REPAIR_VALIDATED'),false);
+  // A different grant cannot run before a supervised reconciliation.
+  assert.equal((await st.adapters.acquireLock('airtrust-staging-mutations-and-scorm-qa')).held,false);
+  st.sqlite.close();
+});
+test('audit transport failure after uncertain D1 commit cannot unlock repair',async()=>{
+  const st=setup({dropBatchReply:true});
+  const receipt=await prepareQaEvidence({plan,adapters:st.adapters,key:encryptionKey,now});
+  const audit=st.adapters.audit;
+  st.adapters.audit=async event=>{
+    if(event.event==='FRMS_QA_APPLY_OUTCOME_UNKNOWN_RECONCILIATION_REQUIRED')
+      throw new Error('synthetic audit service unavailable');
+    return audit(event);
+  };
+  await assert.rejects(()=>executeApprovedQaStagingRepair(command(receipt,st.adapters)),
+    /synthetic D1 batch committed but response lost/);
+  assert.equal(st.batchCount,1);
+  assert.equal((await st.adapters.acquireLock('airtrust-staging-mutations-and-scorm-qa')).held,false);
+  st.sqlite.close();
+});
 test('postcheck failure never pretends batch was rolled back or approved',async()=>{
   const st=setup({dryPostcheck:true});
   const receipt=await prepareQaEvidence({plan,adapters:st.adapters,key:encryptionKey,now});
@@ -196,6 +233,7 @@ test('postcheck failure never pretends batch was rolled back or approved',async(
     /POSTCONDITION_FAILED_RECOVERY_REQUIRED/);
   assert.equal(st.batchCount,1);
   assert.equal(st.events.at(-1).event,'FRMS_QA_POSTCHECK_FAILED_REQUIRES_COMPENSATION');
+  assert.equal((await st.adapters.acquireLock('airtrust-staging-mutations-and-scorm-qa')).held,false);
   st.sqlite.close();
 });
 test('reused nonce is rejected by persistent-reservation adapter before batch',async()=>{
