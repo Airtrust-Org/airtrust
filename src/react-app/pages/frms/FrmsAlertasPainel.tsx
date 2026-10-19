@@ -403,7 +403,7 @@ export default function FrmsAlertasPainel() {
               <EmptyState
                 icon={<BellOff size={44} className="text-slate-300" />}
                 title="Nenhum caso neste filtro"
-                description="Não há casos nesta página com os filtros selecionados. Revise a etapa ou navegue entre as páginas."
+                description="Nenhum caso retornado pela consulta atual. Isso não comprova ausência de risco nem cobertura completa: confira a Operação, a origem dos dados e os demais filtros."
               />
             </div>
           ) : (
