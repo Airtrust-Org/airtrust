@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
-import { selectQaStorageState } from './qa-storage-state';
+import { selectQaStorageState,selectQaApiBearerToken } from './qa-storage-state';
 
 const separate = {
   PLAYER3_QA_STORAGE_STATE_CHROMIUM: '/private/qa-chromium.json',
@@ -34,5 +34,33 @@ describe('Player 3 per-browser synthetic QA authentication', () => {
     expect(selectQaStorageState('webkit', 'AUTHORED_RC81', {
       PLAYER3_QA_STORAGE_STATE: '/private/legacy.json',
     })).toBe(resolve('/private/legacy.json'));
+  });
+});
+
+describe('Player3 QA read-only API must use the matching learner, not a shared admin bearer',()=>{
+  const tokens={
+    PLAYER3_QA_READONLY_BEARER_TOKEN_CHROMIUM:'qa-chromium-private-token',
+    PLAYER3_QA_READONLY_BEARER_TOKEN_WEBKIT:'qa-webkit-private-token',
+  };
+  it('uses the exact independent private token for each browser',()=>{
+    expect(selectQaApiBearerToken('chromium','SYNTHETIC_TECHNICAL',tokens))
+      .toBe(tokens.PLAYER3_QA_READONLY_BEARER_TOKEN_CHROMIUM);
+    expect(selectQaApiBearerToken('webkit','SYNTHETIC_TECHNICAL',tokens))
+      .toBe(tokens.PLAYER3_QA_READONLY_BEARER_TOKEN_WEBKIT);
+  });
+  it('does not fall back to global admin or another browser identity',()=>{
+    const shared={PLAYER3_QA_READONLY_BEARER_TOKEN:'admin-is-not-learner'};
+    expect(()=>selectQaApiBearerToken('chromium','SYNTHETIC_TECHNICAL',shared))
+      .toThrow('SYNTHETIC_QA_TWO_BEARER_TOKENS_REQUIRED');
+    expect(()=>selectQaApiBearerToken('webkit','SYNTHETIC_TECHNICAL',{
+      ...tokens,PLAYER3_QA_READONLY_BEARER_TOKEN_WEBKIT:tokens.PLAYER3_QA_READONLY_BEARER_TOKEN_CHROMIUM,
+    })).toThrow('SYNTHETIC_QA_SHARED_BEARER_FORBIDDEN');
+  });
+  it('allows legacy reviewed QA bearer contract without widening ownership',()=>{
+    expect(selectQaApiBearerToken('chromium','AUTHORED_RC81',{
+      PLAYER3_QA_READONLY_BEARER_TOKEN:'legacy-reviewed-token',
+    })).toBe('legacy-reviewed-token');
+    expect(()=>selectQaApiBearerToken('chromium','AUTHORED_RC81',{}))
+      .toThrow('AUTHORIZED_LEARNER_READONLY_BEARER');
   });
 });
