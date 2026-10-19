@@ -1,3 +1,13 @@
+/**
+ * source_reference: scripts/staging/player3-qa-readonly-inventory.mjs
+ *   and Schema V2 staging ledger 0561/0562.
+ * operational_decision: prove the read-only inventory refuses any SQL DML
+ *   and never treats a staging count as proof of six browser journeys.
+ * dry_run_required: pure node:test with fabricated aggregate counts; the
+ *   modifying SQL fragments below are NEGATIVE test strings, never executed.
+ * rollback_plan_required: this test never connects to D1 or writes state;
+ *   therefore there are no remote mutations to reverse.
+ */
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
