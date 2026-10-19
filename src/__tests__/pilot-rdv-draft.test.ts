@@ -16,10 +16,37 @@ import {
   realizedFlightMinutes,
   realizedTotalMinutes,
   requiredJustificationMinutes,
+  requireStableFuelingIdentity,
   totalJustificationMinutes,
   toDurationInput,
   validateStageDrafts,
 } from '../../public/pilot/pilot-rdv-draft.js';
+
+describe('Identidade e horário de abastecimento offline', () => {
+  it('preserva o mesmo identificador e horário ao serializar snapshots sucessivos', () => {
+    const fueling = { local_id: 'fuel-fixed-1', hora: '09:35' };
+    expect(requireStableFuelingIdentity(fueling, '2026-10-18')).toEqual({
+      client_local_id: 'fuel-fixed-1', data_hora: '2026-10-18T09:35:00',
+    });
+    expect(requireStableFuelingIdentity(fueling, '2026-10-18')).toEqual(
+      requireStableFuelingIdentity(fueling, '2026-10-18'),
+    );
+  });
+
+  it('recusa rascunho legado sem identidade em vez de gerar UUID novo a cada envio', () => {
+    expect(() => requireStableFuelingIdentity({ hora: '09:35' }, '2026-10-18'))
+      .toThrow('identidade persistida');
+    expect(() => requireStableFuelingIdentity({ local_id: 'x'.repeat(241), hora: '09:35' }, '2026-10-18'))
+      .toThrow('identidade persistida');
+  });
+
+  it('não inventa horário de abastecimento ausente ou inválido', () => {
+    expect(() => requireStableFuelingIdentity({ local_id: 'fuel-fixed-1' }, '2026-10-18'))
+      .toThrow('hora real');
+    expect(() => requireStableFuelingIdentity({ local_id: 'fuel-fixed-1', hora: 'invalid' }, '2026-10-18'))
+      .toThrow('hora real');
+  });
+});
 
 describe('Pilot RDV operational calculations', () => {
   it('calcula tempo de voo e total em HH:MM inclusive cruzando meia-noite', () => {
