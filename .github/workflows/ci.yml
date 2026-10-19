@@ -132,7 +132,7 @@ jobs:
           node --test scripts/__tests__/player3-technical-qa-activation-preflight.test.mjs
           node --test scripts/__tests__/player3-qa-readonly-inventory.test.mjs
           npx vitest run --config e2e/player3/vitest.qa-contract.config.mts
-          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/learning-factory/test_prepare_player3_technical_candidate.py scripts/learning-factory/test_build_player3_technical_qa_profile.py scripts/learning-factory/test_build_player3_qa_publication_plan.py scripts/staging/test_player3_qa_governed_publisher.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/learning-factory/test_prepare_player3_technical_candidate.py scripts/learning-factory/test_build_player3_technical_qa_profile.py scripts/learning-factory/test_build_player3_qa_publication_plan.py scripts/staging/test_player3_qa_governed_publisher.py scripts/staging/test_build_player3_qa_catalog_sql_plan.py -v
       - name: enforce unique Player3 Schema V2 numbering and pinned manifests
         run: node --test scripts/__tests__/player3-schema-numbering-contract.test.mjs
       - name: validate Native V1 Schema V2 evidence safely in SQLite
