@@ -31,7 +31,7 @@ import {
 } from './frmsOperationalDecision';
 import { formatFrmsReason, formatSnapshotSource } from './frmsPresentation';
 import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
-import { frmsAttentionFacts, frmsOperationalEvidenceLabel, isFrmsRoutineDutyClosurePending } from './frmsEvidenceContext';
+import { frmsAttentionFacts, frmsOperationalEvidenceLabel } from './frmsEvidenceContext';
 
 const ACTION_LANES: { key: FrmsActionLane; title: string; explanation: string }[] = [
   { key: 'REVISAO', title: 'Revisão operacional', explanation: 'Sinais de atenção ou risco: avaliar antes da decisão.' },
