@@ -33,6 +33,12 @@ export const SQL=`SELECT
   JOIN funcionarios f ON f.id=u.funcionario_id AND f.empresa_id=e.id
   WHERE e.codigo='qa_examiner_training' AND u.deleted_at IS NULL
   AND f.deleted_at IS NULL AND f.ativo=1) AS qa_learner_users,
+(SELECT COUNT(*) FROM qualificacoes_tipos qt
+  JOIN qualificacoes_categorias qc ON qc.id=qt.categoria_id AND qc.empresa_id=qt.empresa_id
+  JOIN empresas e ON e.id=qt.empresa_id
+  WHERE e.codigo='qa_examiner_training' AND qt.ativo=1 AND qt.deleted_at IS NULL
+  AND qc.ativo=1 AND qc.deleted_at IS NULL AND qc.lms_integrada=1)
+ AS qa_lms_eligible_qualification_types,
 (SELECT COUNT(*) FROM lms_cursos c JOIN empresas e ON e.id=c.empresa_id
   WHERE e.codigo='qa_examiner_training' AND c.deleted_at IS NULL) AS qa_courses,
 (SELECT COUNT(*) FROM lms_native_catalog_activation a
@@ -58,7 +64,7 @@ export const SQL=`SELECT
   WHERE change_id='lms-player3-canonical-terminal-0562') AS applied_0562;`;
 
 const expected = Object.freeze([
- 'qa_tenants','qa_active_employees','qa_learner_users','qa_courses',
+ 'qa_tenants','qa_active_employees','qa_learner_users','qa_lms_eligible_qualification_types','qa_courses',
  'qa_markers','qa_published_editions','qa_approved_policies',
  'qa_pinned_enrollments','qa_all_active_enrollments','applied_0561','applied_0562',
 ]);
@@ -99,6 +105,8 @@ export function summarize(result){
   if(row.applied_0561!==1 || row.applied_0562!==1)
     blockers.push('STAGING_SCHEMAS_NOT_APPLIED_ONCE');
   if(row.qa_learner_users<2)blockers.push('QA_LEARNERS_INSUFFICIENT');
+  if(row.qa_lms_eligible_qualification_types<1)
+    blockers.push('QA_LMS_INTEGRATED_QUALIFICATION_MISSING');
   if(row.qa_courses<1)blockers.push('NO_SYNTHETIC_COURSE');
   if(row.qa_markers<1)blockers.push('NO_NATIVE_ACTIVATION');
   if(row.qa_published_editions<1)blockers.push('NO_PUBLISHED_NATIVE_EDITION');
