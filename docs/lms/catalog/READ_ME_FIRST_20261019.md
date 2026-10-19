@@ -11,6 +11,18 @@
 
 Os 50 títulos de catálogo e tipos foram confrontados 1:1 por ID, status e ZIP SHA com o artefato original Chromium do workflow; a existência do `manifest.ok` nesse resultado reflete **somente a prévia**, nunca atesta a edição publicada atual.
 
+## Delta de versão e publicação — 06/10 vs 17/10 (somente leitura)
+
+O [inventário de catálogo de 06/10, run #37529233842](https://github.com/Airtrust-Org/airtrust/actions/runs/37529233842) identificou **45 cursos publicados e ativos** no tenant 6 e registrou `version_tag`, versão SCORM, flag de publicação, launch e ZIP ativo. No [run de prévia de 17/10](https://github.com/Airtrust-Org/airtrust/actions/runs/39052399708) foram auditados **50 cursos**. A comparação **por ID e SHA**, nunca por nomes próximos, encontrou:
+
+- **38** com SHA ativo igual nos dois snapshots — `version_tag` de 06/10 preservado apenas como metadado **histórico**;
+- **2 com ZIP alterado:** **#21 MGO** de `69dd17e3...` para `1672bfb2...` e **#41 CFIT** de `e2920a81...` para `8c15a739...`; nenhum deles herda automaticamente a identificação editorial da versão anterior;
+- **3 sem SHA comparável:** #22 PPTX, #23 SCORM legado e #69 LGPD;
+- **7 presentes no run de 17/10 e ausentes da lista antiga de 45:** #49, #60, #61, #64, #71, #72 e #73;
+- **2 ativos/publicados no run de 06/10, mas ausentes da lista de 50 auditada em 17/10:** **#13 e #14**. **A ausência na auditoria posterior não comprova retirada, exclusão, arquivamento ou perda de ZIP**; conferir catálogo/edição live por leitura autorizada.
+
+Os `version_tag` observados no dia 06/10 estão no JSON com data e SHA comparador. São metadados técnicos, **não comprovação de revisão editorial, edição atual publicada ou autorização de certificação**. Para #21/#41, a mudança de pacote exige recuperar decisão de versão/crosswalk antes de creditar continuidade. Nenhum mapeamento do catálogo foi modificado.
+
 ## Decisão operacional por caso
 | Casos | Evidência atual | Decisão | Responsável/ação |
 | --- | --- | --- | --- |

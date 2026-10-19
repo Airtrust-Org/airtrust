@@ -4,6 +4,10 @@ import { readFileSync } from 'node:fs';
 const manifest = JSON.parse(readFileSync(new URL('../../docs/lms/catalog/CATALOG_READONLY_BASELINE_20261017.json', import.meta.url),'utf8'));
 test('baseline EAD conserva universo e classes sem fabricar certificacao', () => {
  assert.equal(manifest.audited_courses.length, 50);
+ assert.equal(manifest.previous_catalog_snapshot.audited_course_count,45);
+ for(const [kind,n] of [['EXACT_SAME_ZIP_SHA',38],['ZIP_SHA_CHANGED',2],['NOT_COMPARABLE_NO_HASH',3],['ABSENT_IN_OLDER_45',7]]) assert.equal(manifest.audited_courses.filter(c=>c.previous_catalog_sha_comparison===kind).length,n);
+ assert.deepEqual(manifest.audited_courses.filter(c=>c.previous_catalog_sha_comparison==='ZIP_SHA_CHANGED').map(c=>c.course_id),[21,41]);
+ assert.deepEqual(manifest.previous_catalog_snapshot.entries_in_older_catalog_not_in_later_active_audit.map(c=>c.course_id),[13,14]);
  assert.ok(manifest.audited_courses.every(c=>typeof c.catalog_title==='string' && c.catalog_title.trim().length>0));
  assert.equal(manifest.audited_courses.find(c=>c.course_id===22).content_type,'pptx');
  assert.equal(manifest.audited_courses.find(c=>c.course_id===23).completion_manifest_validated_in_preview,false);

@@ -14,7 +14,8 @@
     "A source SHA match does not independently attest source name-to-course-ID or pedagogical approval",
     "PASS is read-only SCORM preview; never a functional certification",
     "No per-learner CMI, exam answers or other personal data are included",
-    "Course catalog_title and content_type are observed historical catalog metadata, not identification of pedagogical source authorship."
+    "Course catalog_title and content_type are observed historical catalog metadata, not identification of pedagogical source authorship.",
+    "Historical version_tag comes from October 6 catalog audit. It is not proof of the editorial revision or an October 17/current active version. When ZIP SHA changed, the earlier tag MUST NOT be assigned to the later ZIP."
   ],
   "package_candidates_for_independent_certification": [
     {
@@ -70,7 +71,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Conhecimentos Gerais da Aeronave",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T23:54:50.915Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "62b448ceaa1ebf0da3dc624931c868539e58ae9822f4b1c7f3e434669aec0c03"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 4,
@@ -94,7 +105,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "EFB – Electronic Flight Bag",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T23:56:51.891Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "d2ef1f2bd7f1f1bb2d37e8b90c2b0e28bb6d824659f21c1641c54fb1fb806efd"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 5,
@@ -118,7 +139,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Emergências Gerais",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T23:04:49.769Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "efe51a5f8b4845d982f4f322f6520a73f8c0a71e0c2095f7a912b857b5560d69"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 6,
@@ -142,7 +173,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Operação Aeromédica",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-06T00:20:14.331Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "3928d47b2b482753ad1e681b1e0fb9ece0237a36d7ca363edec022b872674846"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 7,
@@ -166,7 +207,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Operações Offshore",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T23:06:51.900Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "1186a186ec652cccd463f1d27e8e34cfd55cfd0aa7782d55a394c3cd898367b7"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 8,
@@ -190,7 +241,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "PBN – Navegação Baseada em Performance",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T23:52:41.593Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "119a0f7ce96624f57d885b798a748c7144c99da60e0aa5f4ef544989bccb6cca"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 9,
@@ -214,7 +275,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Operações em Terrenos Desabitados",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T23:56:16.401Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "97a19d48c9f52475a3adce4fadd82610cf7a01880290a0ce0f369102ba1741c7"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 15,
@@ -238,7 +309,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Doutrinamento Básico",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-06T00:21:48.443Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "3edf2bdfc191abc46fab274158b8fe44fcb31286932e128b52771efc6c2a2bf2"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 19,
@@ -262,7 +343,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Instrutor de Voo — Solo",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-07-28T01:45:43.756Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "4beed41a85749792b2fdab323184ee691820486de991efa09bac62dae4c71565"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 21,
@@ -286,7 +377,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "MGO - Manual Geral de Operações",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-06T00:20:46.172Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "69dd17e3576f4d52f51d9c8912f96d9824dfc2cf822c933e83860680d5df9d94"
+      },
+      "previous_catalog_sha_comparison": "ZIP_SHA_CHANGED"
     },
     {
       "course_id": 22,
@@ -310,7 +411,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Regras de Ouro - Petrobras",
       "content_type": "pptx",
-      "completion_manifest_validated_in_preview": null
+      "completion_manifest_validated_in_preview": null,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-08-30T20:31:35.741Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": false,
+        "has_scorm_launch": false,
+        "active_zip_sha256": null
+      },
+      "previous_catalog_sha_comparison": "NOT_COMPARABLE_NO_HASH"
     },
     {
       "course_id": 23,
@@ -334,7 +445,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Regulação ANAC",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": false
+      "completion_manifest_validated_in_preview": false,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-08-01T15:57:24.669Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": null
+      },
+      "previous_catalog_sha_comparison": "NOT_COMPARABLE_NO_HASH"
     },
     {
       "course_id": 25,
@@ -358,7 +479,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "HUMS-VXP",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-07-28T21:50:29.300Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "7d0977610d025fdfa5cfb4f4257b52862dfad7161f43ddc0ba40ac8ef441adb6"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 26,
@@ -382,7 +513,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "MGM - Manual Geral de Manutenção",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-07-28T20:49:52.798Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "d74c4a9ebe7e09dc3975446fa6825f024a02c331f85cfe8e5a2227116418b9ad"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 27,
@@ -406,7 +547,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "MCQ - Manual de Controle de Qualidade",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-07-28T20:55:58.161Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "a1112bd78f131f366622931c2c4da7cb13f06d472ac30a17da6b8925693f76e3"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 28,
@@ -430,7 +581,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "SGSO — Segurança Operacional e Gestão de Riscos",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-08-30T20:28:29.566Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "f35ae32e01d99bd2fa78bbd1144758fba048c7bb36c8249fd1a731729e338d64"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 29,
@@ -454,7 +615,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "MOM - Manual da Organização de Manutenção",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-07-28T20:25:34.421Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "80e228eb321dd19a3ca1887c06d0224674fbaaf5963ac9245877f2b8e41a54f6"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 30,
@@ -478,7 +649,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Integração / Doutrinação de Manutenção",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-07-28T20:59:29.234Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "28c94fbc9fab50bd48e972cfbf0a53ff2dd0e9b81ec90cf879e2495804132f6b"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 31,
@@ -502,7 +683,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Inspeção IIO & APRS",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-07-28T21:16:18.903Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "21ef5a543e530d856b947040bac4c9918e1856499cede99c9495657cea78ff83"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 32,
@@ -526,7 +717,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "AW139 - Manutenção",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-08-13T14:56:03.702Z-f05c5036-7077-4305-9ca2-b967d363df1b",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "f734b83d3eefba2b19114b909088b1f890bf089aca42c36efc1f7cd5d5e859e8"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 33,
@@ -550,7 +751,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "HUMS - Heliwise",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-07-28T21:43:55.304Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "01101a90956d16aecaa029941b11baf91b755119498f82a26039b8d7b152f3fa"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 34,
@@ -574,7 +785,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "PT6C-67C - Manutenção",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-08-23T23:00:50.466Z-1fe77860-58ff-47d9-9593-64b00e07d36b",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "e78b4b79061b39e5d6dde8f190e394d7c41e9f6525ef8cc499e0d85548d5296d"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 39,
@@ -598,7 +819,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "SK76 — Padronização Operacional (SOP)",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T23:54:01.200Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "be03f5ce7af57edeaab749a67d1b73e2139659568367c25c394c3781c87dc7ff"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 41,
@@ -622,7 +853,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "CFIT - Controlled Flight Into Terrain",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-07-28T01:36:20.941Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "e2920a81ef99a33a74deab75423b27ba2bc46483afb580db65dff248c2e87b4a"
+      },
+      "previous_catalog_sha_comparison": "ZIP_SHA_CHANGED"
     },
     {
       "course_id": 43,
@@ -646,7 +887,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "MEL - Lista de Equipamentos Mínimos",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-08-30T19:56:54.266Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "93d55388630adc7b809cc9a51d20e86a02ddc63443c1dfdd42b24dafeadc6207"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 44,
@@ -670,7 +921,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Gestão de Mudanças",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-09-01T19:27:18.513Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "8fb5405489f878de2420dfd189e97e2f1856888bed981f1ae68e6e5bc53e4899"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 47,
@@ -694,7 +955,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Gerenciamento de Resíduos e Coleta Seletiva",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-09-01T19:26:50.767Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "fbf6feba2a54a464eadb3bef4e123c61132280b13688406779c3108a1ae7958e"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 49,
@@ -718,7 +989,9 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Auditoria Comportamental — Designados",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": null
+      "completion_manifest_validated_in_preview": null,
+      "previous_catalog_2026_10_06": null,
+      "previous_catalog_sha_comparison": "ABSENT_IN_OLDER_45"
     },
     {
       "course_id": 51,
@@ -742,7 +1015,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "NR-20 - Iniciação sobre Inflamáveis e Combustíveis",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:51:53.351Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "20788e75c81e95b9af09b946bf867cc2e1d3306a380369d5a58978850e0c8800"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 52,
@@ -766,7 +1049,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "NR-26 - Produtos Químicos, Rotulagem e FDS",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:57:47.947Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "9ecf7a13cff4cc70c77869072a25a02527f1816b66cdd20cb88550a1ad18c793"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 53,
@@ -790,7 +1083,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "NR-11 - Transporte, Movimentação, Armazenagem e Manuseio de Materiais",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:49:19.554Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "402f1c40b4e79b344cd2c1a60b81b932828f0bf7da6b5e04d0228d20ad5d0560"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 54,
@@ -814,7 +1117,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "NR-35 - Trabalho em Altura",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:52:33.288Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "8145d6c28f3f1b1e1029e38ce3feb69f1dde2833f9f3ec7be98321bd782181bf"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 55,
@@ -838,7 +1151,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "AW139 — Padronização Operacional (SOP)",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T23:53:19.741Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "b4c5d8b3719e13ec5ec2d08404152540bf4a6b966e33412a8d98b4012980d0e1"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 56,
@@ -862,7 +1185,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "NR-06 - Equipamento de Proteção Individual",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:52:58.972Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "17dc02353c30db05ca92d187191f59ee2e98993183a169bf67c213ef1fcec4a3"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 57,
@@ -886,7 +1219,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Doutrinamento em Segurança e Qualidade",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:56:14.424Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "a0a9e955368a8e7f4dd3072b7bd98eb8e5d7cab47d31cbd9335f4282dbba18a2"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 58,
@@ -910,7 +1253,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Integração Corporativa",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:46:45.276Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "5edde2c875e272e563f3f5849f766e185dfc2d61c3074657b52937dbf0319600"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 59,
@@ -934,7 +1287,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Stop Work — Autoridade para Interromper Atividades Inseguras",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:43:25.459Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "f6f5979a6e457ee05c6c6eff8d7941865957486ee74eb2a7615b731378fde1c4"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 60,
@@ -958,7 +1321,9 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Cultura Justa — Reporte, Erros e Responsabilização",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": null,
+      "previous_catalog_sha_comparison": "ABSENT_IN_OLDER_45"
     },
     {
       "course_id": 61,
@@ -982,7 +1347,9 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "FOD — Prevenção de Danos por Objetos Estranhos",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": null,
+      "previous_catalog_sha_comparison": "ABSENT_IN_OLDER_45"
     },
     {
       "course_id": 62,
@@ -1006,7 +1373,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "PPSP — Prevenção do Risco Associado ao Uso Indevido de Substâncias Psicoativas",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:45:49.198Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "67e1e768c65dc5ad140da4b0ec5bb61739c80f8f5131a367be22f8e2760f5481"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 63,
@@ -1030,7 +1407,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "PPSP para Supervisores ARSO",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:45:17.924Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "33ce7f1a473b2c6280bf3ba3a5413ebd6b56e47ac61140838b9840ec0fa55909"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 64,
@@ -1054,7 +1441,9 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "LOSA — Line Operations Safety Audit",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": null,
+      "previous_catalog_sha_comparison": "ABSENT_IN_OLDER_45"
     },
     {
       "course_id": 65,
@@ -1078,7 +1467,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "PRE - Plano de Resposta à Emergências",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:43:01.815Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "44e83ecbd97d386db5276ba90b348de5e1af364251dbd1d7e5d7993f5798fc43"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 67,
@@ -1102,7 +1501,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "CRM — Gestores — Cargos de Direção Requeridos (RBAC 119)",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T18:58:28.132Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "564538387b9f66f366e91c52c666b5596755ca69b20d2214c976c4f2e1aa1f0e"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 68,
@@ -1126,7 +1535,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "Código de Ética e Conduta",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T19:46:14.756Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "01fe31d01690d3a25f350a6a831dd0fd27e3a8265ba81e7d4c8581858e0a3902"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 69,
@@ -1150,7 +1569,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "LGPD - Lei Geral de Proteção de Dados",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": null
+      "completion_manifest_validated_in_preview": null,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T18:48:17.404Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": false,
+        "has_scorm_launch": false,
+        "active_zip_sha256": null
+      },
+      "previous_catalog_sha_comparison": "NOT_COMPARABLE_NO_HASH"
     },
     {
       "course_id": 70,
@@ -1174,7 +1603,17 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "NR-05 — CIPA",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": {
+        "version_tag": "2026-10-05T18:25:29.641Z",
+        "scorm_version": "1.2",
+        "published": true,
+        "active": true,
+        "has_scorm_package": true,
+        "has_scorm_launch": true,
+        "active_zip_sha256": "96b63fcdc76a9dc8fe258dbfedbd6ee2bfea623e99b8312dfbcb0b0ddb15335b"
+      },
+      "previous_catalog_sha_comparison": "EXACT_SAME_ZIP_SHA"
     },
     {
       "course_id": 71,
@@ -1198,7 +1637,9 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "FDM - Tripulação",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": null,
+      "previous_catalog_sha_comparison": "ABSENT_IN_OLDER_45"
     },
     {
       "course_id": 72,
@@ -1222,7 +1663,9 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "FDM — Manutenção",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": null,
+      "previous_catalog_sha_comparison": "ABSENT_IN_OLDER_45"
     },
     {
       "course_id": 73,
@@ -1246,7 +1689,9 @@
       "evidence": "https://github.com/Airtrust-Org/airtrust/issues/1325#issuecomment-6242874483",
       "catalog_title": "FDM — Comitê e Gatekeeper",
       "content_type": "scorm",
-      "completion_manifest_validated_in_preview": true
+      "completion_manifest_validated_in_preview": true,
+      "previous_catalog_2026_10_06": null,
+      "previous_catalog_sha_comparison": "ABSENT_IN_OLDER_45"
     }
   ],
   "original_sources_22": [
@@ -1605,5 +2050,36 @@
   ],
   "workflow_target_company_id": 6,
   "tenant_evidence": "https://github.com/Airtrust-Org/airtrust/blob/83c821cea8f25c8a4edffec8d7cf0d20c86989aa/.github/workflows/production-lms-active-course-certification-readonly.yml",
-  "derived_from_binary_artifact": "lms-active-certification-chromium.json (artifact ID 12109071205)"
+  "derived_from_binary_artifact": "lms-active-certification-chromium.json (artifact ID 12109071205)",
+  "previous_catalog_snapshot": {
+    "workflow": "https://github.com/Airtrust-Org/airtrust/actions/runs/37529233842",
+    "artifact_id": 11443093951,
+    "date": "2026-10-06T20:48:29Z",
+    "tenant_id": 6,
+    "audited_course_count": 45,
+    "exact_same_zip_sha_count": 38,
+    "changed_zip_sha_count": 2,
+    "not_comparable_no_hash_count": 3,
+    "absent_in_older_catalog_count": 7,
+    "entries_in_older_catalog_not_in_later_active_audit": [
+      {
+        "course_id": 13,
+        "title": "FDM - Flight Data Monitoring",
+        "version_tag": "2026-10-05T23:39:39.926Z",
+        "published_2026_10_06": true,
+        "active_2026_10_06": true,
+        "zip_sha256": "9045fd87f0300123099905c6f03c6ecdeba0049e1033438ba665639bf9603221",
+        "reason": "ABSENT_FROM_2026_10_17_ACTIVE_COURSE_AUDIT_NOT_RETIREMENT_PROOF"
+      },
+      {
+        "course_id": 14,
+        "title": "Gatekeeper",
+        "version_tag": "2026-10-06T00:19:38.627Z",
+        "published_2026_10_06": true,
+        "active_2026_10_06": true,
+        "zip_sha256": null,
+        "reason": "ABSENT_FROM_2026_10_17_ACTIVE_COURSE_AUDIT_NOT_RETIREMENT_PROOF"
+      }
+    ]
+  }
 }
