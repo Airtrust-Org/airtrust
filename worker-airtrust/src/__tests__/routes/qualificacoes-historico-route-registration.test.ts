@@ -35,4 +35,16 @@ describe('qualification history route registration', () => {
     expect(matchingPostRoutes(legacyHistoricoRouter.routes, '/')).toHaveLength(0);
     expect(matchingPostRoutes(legacyHistoricoRouter.routes, '/:id/renovar')).toHaveLength(0);
   });
+
+  it('registers GET /funcionario/:id on qualificacoes and historico routers', () => {
+    const aggregateGet = qualificacoesRouter.routes.filter(
+      (r) => r.method === 'GET' && r.path === '/funcionario/:id',
+    );
+    expect(aggregateGet.length).toBeGreaterThan(0);
+
+    const historicoGet = legacyHistoricoRouter.routes.filter(
+      (r) => r.method === 'GET' && r.path === '/funcionario/:id',
+    );
+    expect(historicoGet.length).toBeGreaterThan(0);
+  });
 });
