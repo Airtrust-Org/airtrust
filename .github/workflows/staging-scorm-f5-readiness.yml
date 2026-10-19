@@ -1,0 +1,79 @@
+name: F5 SCORM Staging Evidence - F0 Readiness Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_F5_STAGING_EVIDENCE'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact already deployed Worker/Pages SHA'
+        required: true
+        type: string
+
+# Shared global staging mutation/QA lock. Never overlap other releases.
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  checks: read
+  actions: read
+  statuses: read
+  pull-requests: read
+
+jobs:
+  guard:
+    name: Fail closed until F0 proves synthetic staging prerequisites
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Require explicit trusted-main invocation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$CONFIRMATION" == AIRTRUST_F5_STAGING_EVIDENCE ]]
+          [[ "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Verify main ancestry and eight canonical release gates
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git cat-file -e "$RELEASE_SHA^{commit}"
+          git merge-base --is-ancestor "$RELEASE_SHA" HEAD
+          node scripts/ci/verify-release-gates.mjs
+      - name: Compare live staging Worker and Pages provenance
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          STAGING_FRONTEND_BASE_URL: https://staging.airtrust.pages.dev
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const response=await fetch('https://airtrust-api-staging.airtrust.workers.dev/api/version');
+          if(!response.ok)throw Error('F5_STAGING_WORKER_VERSION_MISSING');
+          const v=await response.json();
+          if((v.sourceSha??v.data?.sourceSha)!==process.env.RELEASE_SHA)
+            throw Error('F5_STAGING_WORKER_RELEASE_SHA_MISMATCH');
+          const {assertLiveFrontendShaFromOrigin}=await import('./e2e/lib/live-sha-guard.mjs');
+          await assertLiveFrontendShaFromOrigin(process.env.STAGING_FRONTEND_BASE_URL,
+            process.env.RELEASE_SHA.slice(0,7));
+          NODE
+      - name: Block until F0 provisions protected candidate enrollment and cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '::error::F5_INCONCLUSIVE: protected candidate-bound D1 readback, approved external reviewer, synthetic staging enrollment, recovery and cleanup are not yet integrated.'
+          exit 2
