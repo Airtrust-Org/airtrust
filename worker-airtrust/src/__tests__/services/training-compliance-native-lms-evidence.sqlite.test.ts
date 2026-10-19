@@ -138,6 +138,11 @@ describe('Native course admission for automatic Compliance enrollment', () => {
         tipo_conteudo TEXT, ativo INTEGER, publicado INTEGER, deleted_at TEXT
       );
       CREATE TABLE lms_native_catalog_activation(empresa_id INTEGER, curso_id INTEGER);
+      CREATE TABLE qualificacoes_tipos(
+        id INTEGER PRIMARY KEY, empresa_id INTEGER, ativo INTEGER,
+        deleted_at TEXT, categoria TEXT
+      );
+      INSERT INTO qualificacoes_tipos VALUES(100,6,1,NULL,'EAD');
     `);
     db.prepare('INSERT INTO lms_cursos VALUES(?,?,?,?,1,1,NULL)').run(39,6,100,type);
     if (activated) db.exec('INSERT INTO lms_native_catalog_activation VALUES(6,39)');
@@ -145,8 +150,11 @@ describe('Native course admission for automatic Compliance enrollment', () => {
     const result = await reconcileTrainingComplianceRuleEnrollment(
       wrapper,6,200,{} as never,{} as never,
       async () => ({
-        rules: [{id:200,qualificacao_tipo_id:100,obrigatoriedade:'OBRIGATORIA',modalidade_requerida:'EAD'}],
-        people: [{id:69,requisitos:[{regra_id:200,obrigatoriedade:'OBRIGATORIA',status_compliance:'NAO_REALIZADO'}]}],
+        rules: [{id:200,qualificacao_tipo_id:100,obrigatoriedade:'OBRIGATORIA',
+          modalidade_requerida:'EAD',auto_matricular_ead:1}],
+        people: [{id:69,requisitos:[{regra_id:200,obrigatoriedade:'OBRIGATORIA',
+          status_compliance:'NAO_REALIZADO',modalidade_requerida:'EAD',
+          auto_matricular_ead:1,evidencia_pendente_validacao:false}]}],
       }),
     );
     expect(result.auto_enrollment_warning).toBe('LMS_COURSE_MAPPING_UNAVAILABLE');

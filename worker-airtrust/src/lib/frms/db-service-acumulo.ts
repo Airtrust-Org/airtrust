@@ -706,6 +706,7 @@ export async function buscarAcumuloFrota(
   Array<{
     tripulante_id: string;
     nome: string;
+    data_referencia?: string | null;
     nome_guerra?: string;
     aeronave_id?: string | null;
     aeronave_prefixo?: string | null;
@@ -868,6 +869,7 @@ export async function buscarAcumuloFrota(
     .prepare(
       `WITH ranked AS (
          SELECT ar.tripulante_id,
+                ar.data_referencia,
                 COALESCE(p.nome, 'Tripulante #' || ar.tripulante_id) as nome,
                 NULLIF(p.guerra, '') as nome_guerra,
                 ar.hv_mes_calendario_min as hv_mes_min,
@@ -908,6 +910,7 @@ export async function buscarAcumuloFrota(
            AND ${sectorScope?.clause ?? '1 = 1'}
        )
        SELECT tripulante_id,
+              data_referencia,
               nome,
               nome_guerra,
               hv_mes_min,
@@ -946,6 +949,7 @@ export async function buscarAcumuloFrota(
 
     return {
       tripulante_id: row.tripulante_id as string,
+      data_referencia: (row.data_referencia as string | null) ?? null,
       nome: row.nome as string,
       nome_guerra: (row.nome_guerra as string | null) ?? undefined,
       hv_mes_min: (row.hv_mes_min as number) || 0,

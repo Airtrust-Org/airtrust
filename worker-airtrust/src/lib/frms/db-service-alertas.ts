@@ -20,6 +20,7 @@ export async function buscarAlertas(
   db: D1Database,
   filtro: BuscarAlertasFiltro,
   empresaId?: number,
+  sectorScope?: { clause: string; bindings: number[] },
 ): Promise<{ alertas: FrmsAlerta[]; total: number }> {
   const conditions: string[] = ['a.deleted_at IS NULL'];
   const binds: (string | number)[] = [];
@@ -37,6 +38,11 @@ export async function buscarAlertas(
     conditions.push('f.deleted_at IS NULL');
     conditions.push('f.empresa_id = ?');
     binds.push(empresaId);
+  }
+
+  if (sectorScope) {
+    conditions.push(sectorScope.clause);
+    binds.push(...sectorScope.bindings);
   }
 
   if (filtro.tripulante_id) {

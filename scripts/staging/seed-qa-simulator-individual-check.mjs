@@ -61,7 +61,7 @@ export function buildSeedSql(code, marker, qaAdminEmail) {
 INSERT INTO fichas_sessao(uuid,agendamento_slot_id,colaborador_id_aluno,instrutor_id,status,resultado_final,aprovado,observacoes,
   empresa_id,tipo_sessao,data_sessao,assinatura_aluno_timestamp,assinatura_instrutor_timestamp,created_at,updated_at,deleted_at)
 VALUES (${esc(`${code}-${suffix}`)},${agId},${emp(who)},${emp(n.instrutor)},${esc(status)},${esc(aprovado ? 'APROVADO' : 'PENDENTE')},
-  ${aprovado ? 1 : 0},${esc(marker)},${tenantId},'CHECK',date('now'),datetime('now'),
+  ${aprovado ? 1 : 0},${esc(marker)},${tenantId},'CHECK',date('now', '-1 day'),datetime('now'),
   ${instrSigned ? "datetime('now')" : 'NULL'},datetime('now'),datetime('now'),NULL);`;
   return `
 SELECT CASE WHEN ${LEDGER_OK}
@@ -104,7 +104,7 @@ VALUES (${esc(n.simulador)},'QA','QA','ATIVO',${esc(marker)},datetime('now'),dat
 
 INSERT INTO simulador_agendamentos(uuid,simulador_id,funcionario_id,instrutor_id,examinador_id,data,hora_inicio,hora_fim,status,tipo_sessao,
   observacoes,nome,is_check,empresa_id,created_at,updated_at,deleted_at)
-VALUES (${esc(`${code}-AG`)},${simId},${emp(n.a)},${emp(n.instrutor)},${emp(n.instrutor)},date('now'),'08:00','10:00','EM_ANDAMENTO','CHECK',
+VALUES (${esc(`${code}-AG`)},${simId},${emp(n.a)},${emp(n.instrutor)},${emp(n.instrutor)},date('now', '-1 day'),'08:00','10:00','EM_ANDAMENTO','CHECK',
   ${esc(marker)},${esc(n.sessao)},1,${tenantId},datetime('now'),datetime('now'),NULL);
 
 INSERT INTO sessoes_checks(sessao_id,qualificacao_tipo_id,created_at,updated_at,deleted_at)
@@ -113,6 +113,11 @@ ${ficha('A', n.a, 'AGUARDANDO_ASSINATURA_INSTRUTOR', false, false)}
 ${ficha('B', n.b, 'AGUARDANDO_ASSINATURA_INSTRUTOR', false, false)}
 ${ficha('C', n.c, 'APROVADO', true, true)}
 ${ficha('D', n.d, 'APROVADO', true, true)}
+
+-- Materializa manobra padrão exigida pelo guard de avaliação/assinatura (FICHA_SEM_MANOBRAS)
+INSERT INTO fichas_sessao_manobras (ficha_id, codigo, descricao, categoria, ordem, resultado, observacoes, created_at, updated_at, deleted_at)
+SELECT id, 'MAN-01', 'Briefing e Preparacao QA', 'NORMAL', 1, 'APROVADO', ${esc(marker)}, datetime('now'), datetime('now'), NULL
+FROM fichas_sessao WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
 
 -- Cenário B: FAP prematura/indevida da ficha B que a reprovação individual deve revogar com auditoria.
 INSERT INTO qualificacoes_historico(funcionario_id,qualificacao_id,tipo_codigo,codigo,observacoes,data_conclusao,data_vencimento,status,empresa_id,created_at,updated_at,deleted_at)
@@ -123,6 +128,7 @@ VALUES (${emp(n.b)},${tipoId},${esc(n.tipo)},${esc(n.tipo)},
 SELECT CASE WHEN
   (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)=5
   AND (SELECT COUNT(*) FROM fichas_sessao WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)=4
+  AND (SELECT COUNT(*) FROM fichas_sessao_manobras WHERE observacoes=${esc(marker)} AND deleted_at IS NULL)=4
   AND (SELECT COUNT(*) FROM sessoes_checks WHERE sessao_id=${agId} AND deleted_at IS NULL)=1
   AND (SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${tenantId} AND qualificacao_id=${tipoId} AND funcionario_id=${emp(n.b)} AND deleted_at IS NULL)=1
 THEN 1 ELSE json('FAIL_POST_SEED_COUNT_MISMATCH') END;
@@ -137,6 +143,8 @@ UPDATE usuarios SET funcionario_id=NULL, updated_at=datetime('now')
 WHERE id=${qaUserId} AND funcionario_id=${emp(n.instrutor)};
 UPDATE fichas_sessao SET deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
+UPDATE fichas_sessao_manobras SET deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now')
+WHERE observacoes=${esc(marker)};
 UPDATE qualificacoes_historico SET deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND qualificacao_id=${tipoId};
 UPDATE sessoes_checks SET deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now') WHERE sessao_id=${agId};
@@ -155,6 +163,7 @@ WHERE empresa_id=${tenantId} AND codigo=${esc(`${code}-OPS`)};
 SELECT CASE WHEN
   (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM fichas_sessao WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM fichas_sessao_manobras WHERE observacoes=${esc(marker)} AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM simulador_agendamentos WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${tenantId} AND qualificacao_id=${tipoId} AND deleted_at IS NULL)=0
 THEN 1 ELSE json('FAIL_CLEANUP_ACTIVE_RECORDS_REMAIN') END;
