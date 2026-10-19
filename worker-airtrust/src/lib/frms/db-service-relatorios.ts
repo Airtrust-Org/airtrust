@@ -7,6 +7,7 @@ import { buscarJornadas } from './db-service-jornadas';
 import { buscarAcumuloFrota } from './db-service-acumulo';
 import { listFrmsOperationalSnapshot, type FrmsOperationalSnapshotItem } from './operational-snapshot';
 import { getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
+import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../services/employee-sector-access';
 
 export async function relatorioIndividual(
   db: D1Database,
@@ -144,10 +145,18 @@ export function aggregateCanonicalComplianceReport(
   );
 }
 
+export function aggregateAuthorizedComplianceReport(
+  items: readonly FrmsOperationalSnapshotItem[],
+  authorizedCrewIds: ReadonlySet<number>,
+): FrmsComplianceReportRow[] {
+  return aggregateCanonicalComplianceReport(items.filter((item) => authorizedCrewIds.has(item.funcionario_id)));
+}
+
 export async function relatorioCompliance(
   db: D1Database,
   mes: string,
   empresaId?: number,
+  authorizedCrewIds?: ReadonlySet<number>,
 ): Promise<FrmsComplianceReportRow[]> {
   if (!empresaId || !Number.isInteger(empresaId) || empresaId <= 0) {
     throw new Error('FRMS_COMPLIANCE_REPORT_TENANT_REQUIRED');
@@ -164,12 +173,37 @@ export async function relatorioCompliance(
     dataFim,
     hoje: dataFim,
   });
-  return aggregateCanonicalComplianceReport(snapshot.items);
+  // Filtering is applied BEFORE aggregation: a manager must not receive even
+  // derived counts or normative details about an out-of-scope employee.
+  return authorizedCrewIds
+    ? aggregateAuthorizedComplianceReport(snapshot.items, authorizedCrewIds)
+    : aggregateCanonicalComplianceReport(snapshot.items);
+}
+
+export function summarizeReportRestEvidence(rest?: {
+  repouso_suficiente: number | null;
+  repouso_anterior_min: number | null;
+  data_referencia: string;
+}): {
+  repouso_suficiente: number | null;
+  repouso_estado: 'SUFICIENTE' | 'INSUFICIENTE' | 'DESCONHECIDO';
+  repouso_referencia: string | null;
+} {
+  const known = rest != null
+    && rest.repouso_anterior_min != null
+    && rest.repouso_anterior_min >= 0
+    && (rest.repouso_suficiente === 0 || rest.repouso_suficiente === 1);
+  return {
+    repouso_suficiente: known ? rest!.repouso_suficiente : null,
+    repouso_estado: !known ? 'DESCONHECIDO' : rest!.repouso_suficiente === 1 ? 'SUFICIENTE' : 'INSUFICIENTE',
+    repouso_referencia: rest?.data_referencia ?? null,
+  };
 }
 
 export async function relatorioMapaFadiga(
   db: D1Database,
   empresaId: number,
+  access: EmployeeSectorAccess,
 ): Promise<
   Array<{
     tripulante_id: string;
@@ -179,29 +213,44 @@ export async function relatorioMapaFadiga(
     pct_mes: number;
     pct_365d: number;
     nivel_max: string;
-    repouso_suficiente: number;
+    repouso_suficiente: number | null;
+    repouso_estado: 'SUFICIENTE' | 'INSUFICIENTE' | 'DESCONHECIDO';
+    repouso_referencia: string | null;
+    exposicao_referencia: string | null;
   }>
 > {
-  // Buscar repouso_suficiente da última entrada de acumulo_rolling por tripulante
+  const restScope = buildFuncionarioScopeWhere(access, 'f');
+  const frotaScope = buildFuncionarioScopeWhere(access, 'p');
+  // Repouso pertence à própria série rolling e pode ter referência temporal
+  // distinta da pior exposição HV exibida no mapa. Evidência ausente ou
+  // repouso anterior negativo nunca vira repouso suficiente por default.
   const repousoRows = await db
     .prepare(
-      `SELECT ar.tripulante_id, ar.repouso_suficiente
+      `SELECT ar.tripulante_id, ar.repouso_suficiente, ar.repouso_anterior_min, ar.data_referencia
        FROM frms_acumulo_rolling ar
-       WHERE ar.deleted_at IS NULL
-         AND ar.data_referencia = (
-           SELECT MAX(ar2.data_referencia)
-           FROM frms_acumulo_rolling ar2
+       JOIN funcionarios f ON f.id = CAST(ar.tripulante_id AS INTEGER)
+       WHERE f.empresa_id = ? AND f.deleted_at IS NULL
+         AND ${restScope.clause}
+         AND ar.deleted_at IS NULL
+         AND ar.data_referencia >= date('now', '-30 days')
+         AND ar.data_referencia <= date('now')
+         AND ar.id = (
+           SELECT ar2.id FROM frms_acumulo_rolling ar2
            WHERE ar2.tripulante_id = ar.tripulante_id AND ar2.deleted_at IS NULL
+             AND ar2.data_referencia >= date('now', '-30 days')
+             AND ar2.data_referencia <= date('now')
+           ORDER BY ar2.data_referencia DESC, ar2.id DESC LIMIT 1
          )`,
     )
-    .all<{ tripulante_id: string; repouso_suficiente: number }>();
-  const repousoMap = new Map<string, number>();
-  for (const r of repousoRows.results || []) {
-    repousoMap.set(String(r.tripulante_id), r.repouso_suficiente);
-  }
+    .bind(empresaId, ...restScope.bindings)
+    .all<{ tripulante_id: string; repouso_suficiente: number | null; repouso_anterior_min: number | null; data_referencia: string }>();
+  const repousoMap = new Map((repousoRows.results ?? []).map((r) => [String(r.tripulante_id), r]));
 
-  return buscarAcumuloFrota(db, undefined, empresaId).then((frota) =>
-    frota.map((f) => ({
+  const frota = await buscarAcumuloFrota(db, undefined, empresaId, 30, undefined, frotaScope);
+  return frota.map((f) => {
+    const rest = repousoMap.get(String(f.tripulante_id));
+
+    return {
       tripulante_id: f.tripulante_id,
       nome: f.nome,
       pct_dia: f.pct_dia,
@@ -209,7 +258,8 @@ export async function relatorioMapaFadiga(
       pct_mes: f.pct_mes,
       pct_365d: f.pct_365d,
       nivel_max: f.nivel_max,
-      repouso_suficiente: repousoMap.get(String(f.tripulante_id)) ?? 1,
-    })),
-  );
+      ...summarizeReportRestEvidence(rest),
+      exposicao_referencia: f.data_referencia ?? null,
+    };
+  });
 }
