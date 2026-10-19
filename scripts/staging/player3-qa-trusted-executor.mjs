@@ -185,13 +185,22 @@ function doPreflight(){
  save(REC,JSON.stringify(data));
  console.log('PLAYER3_D1_RECOVERY_TIMESTAMP_UTC='+stamp);
  console.log('PLAYER3_D1_RECOVERY_RECEIPT_SHA256='+hash(Buffer.from(JSON.stringify(data))));
+ if(PH==='publish'){
+  demand(E.GITHUB_OUTPUT,'PLAYER3_TRUSTED_WORKFLOW_OUTPUT_REQUIRED');
+  const proof=hash(Buffer.from(JSON.stringify({
+    sha:E.QA_RELEASE_SHA,phase:PH,courseId:CID,planSha:E.QA_PLAN_SHA,
+    snapshot:row,bookmarkSha:hash(Buffer.from(JSON.stringify(data)))
+  })));
+  fs.appendFileSync(E.GITHUB_OUTPUT,'d1_ready='+proof+'\n');
+ }
  console.log('PLAYER3_D1_READONLY_PREIMAGE_AND_PRIVATE_TIME_TRAVEL_RECEIPT');
 }
 async function doVerify(){
- validateLocal();cloudflare();prepared();
+ validateLocal();cloudflare();
  demand(PH==='edition','PLAYER3_PRIVATE_VERIFY_EDITION_ONLY');
  await verifyBytes(publication());
- save(VERIFIED,JSON.stringify({plan:E.QA_PLAN_SHA,edition:AR}));
+ demand(E.GITHUB_OUTPUT,'PLAYER3_TRUSTED_WORKFLOW_OUTPUT_REQUIRED');
+ fs.appendFileSync(E.GITHUB_OUTPUT,'verified_plan_sha='+E.QA_PLAN_SHA+'\n');
  console.log('PLAYER3_PRIVATE_R2_AND_THIRD_ORIGIN_VERIFIED');
 }
 function postD1(){
@@ -210,8 +219,9 @@ function postD1(){
 }
 async function doApply(){
  validateLocal();cloudflare();
- const before=prepared();
  if(PH==='publish'){
+  demand(/^[a-f0-9]{64}$/.test(E.QA_D1_PREFLIGHT_OK||''),
+         'PLAYER3_TRUSTED_D1_PREFLIGHT_JOB_PROOF_REQUIRED');
   const doc=publication();
   const res=await fetch('https://api.cloudflare.com/client/v4/accounts/'+
     E.CLOUDFLARE_ACCOUNT_ID+'/pages/projects/'+PROJECT,{
@@ -226,15 +236,15 @@ async function doApply(){
   console.log('PLAYER3_PRIVATE_R2_AND_HTTPS_STAGING_PUBLICATION_VERIFIED');
   return;
  }
+ const before=prepared();
  demand(fs.existsSync(SQL)&&fileHash(SQL)===E.QA_SQL_SHA,
         'PLAYER3_SQL_PLAN_TAMPERED');
  demand(JSON.stringify(snapshot())===JSON.stringify(before),
         'PLAYER3_D1_CHANGED_SINCE_TIME_TRAVEL_PREIMAGE');
  if(PH==='edition'){
-  demand(fs.existsSync(VERIFIED)&&
-    JSON.stringify(JSON.parse(fs.readFileSync(VERIFIED,'utf8')))===
-    JSON.stringify({plan:E.QA_PLAN_SHA,edition:AR}),
-    'PLAYER3_R2_HTTPS_PREPUBLICATION_PROOF_MISSING');
+  demand(/^[a-f0-9]{64}$/.test(E.QA_R2_VERIFIED_PLAN_SHA||'') &&
+         E.QA_R2_VERIFIED_PLAN_SHA===E.QA_PLAN_SHA,
+         'PLAYER3_R2_HTTPS_PREPUBLICATION_PROOF_MISSING');
  }
  cleanRun(WR,['d1','execute',DB,'--env','staging','--remote','--json',
    '--file='+SQL],path.join(RELEASE,'worker-airtrust'));
