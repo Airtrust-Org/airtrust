@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 const manifest = JSON.parse(readFileSync(new URL('../../docs/lms/catalog/CATALOG_READONLY_BASELINE_20261017.json', import.meta.url),'utf8'));
 test('baseline EAD conserva universo e classes sem fabricar certificacao', () => {
  assert.equal(manifest.audited_courses.length, 50);
+ assert.equal(manifest.workflow_target_company_id,6);
+ assert.ok(manifest.audited_courses.every(c=>c.tenant_id===6));
  assert.equal(manifest.original_sources_22.length, 22);
  assert.equal(new Set(manifest.audited_courses.map(c=>c.course_id)).size,50);
  for (const [s,n] of [['PASS',25],['INCONCLUSIVE',22],['FAIL',3]]) {

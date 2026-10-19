@@ -1,13 +1,13 @@
 # EAD — inventário de custódia e decisões (Frente 6)
 
-**Compilado em:** 19/10/2026, `main=83c821cea8f25c8a4edffec8d7cf0d20c86989aa`. **Natureza:** consolidação versionada de evidência histórica *read-only*, **não** uma leitura atual de D1/R2 nem atestado de publicação.
+**Compilado em:** 19/10/2026, `main=83c821cea8f25c8a4edffec8d7cf0d20c86989aa`. **Natureza:** consolidação versionada de evidência histórica *read-only*, **não** uma leitura atual de D1/R2 nem atestado de publicação. **Escopo físico do run: tenant `empresa_id=6`**, fixado no workflow e validado no contexto autenticado pela API.
 
 ## Evidência, fronteira e classificação
 - Baseline física: [workflow 39052399708](https://github.com/Airtrust-Org/airtrust/actions/runs/39052399708), runtime de produção então `c3ea9b69e7f38d379a404fa85ca13e9615253f3e`, artefatos Chromium `12109071205` e WebKit `12108709121`; **50 cursos, 25 PASS de prévia / 22 INCONCLUSIVE / 3 FAIL**, idênticos nos browsers. Não repetir a rodada inteira sem delta de ZIP/runtime/runner.
 - **22 fontes originais:** 674 unidades, 63 avaliações, 570 questões e 90 cenários no relatório de autoria. **19/22 SHA idênticos ao pacote ativo auditado** (17 PASS de prévia, 2 INCONCLUSIVE: #28 e #58). **3 sem identidade exata** na amostra (#02 Gerenciamento de Resíduos RC4.1, #09 SGSO M10.4, #10 CRM Gestores). **0/22 com assinatura pedagógica** e 0 novas edições publicadas/homologadas.
 - Evidência incremental NÃO reescreve a baseline: #7 Offshore e #28 SGSO M10.7 chegaram a `PASS` de prévia em ambos browsers posteriormente; #8 PBN segue inconclusivo. PASS de prévia não constitui QA de matrícula, qualificação ou PDF.
 - Há 22 cursos antigos na matriz de fontes e 50 IDs de cursos no inventário de navegador: **universos diferentes**. Não fazer merge de registros por título aproximado nem inferir que um número da lista 01–22 é o ID LMS.
-- O arquivo [CATALOG_READONLY_BASELINE_20261017.json](./CATALOG_READONLY_BASELINE_20261017.json) registra um objeto por ID auditado e 22 fontes, sem gabaritos, ZIP privado, CMI ou PII. `NOT_VERIFIED` é uma pendência factual deliberada (tenant, versão/edição publicada, proprietário da fonte, hash R2 atual, assinatura, crosswalk de fonte nominal).
+- O arquivo [CATALOG_READONLY_BASELINE_20261017.json](./CATALOG_READONLY_BASELINE_20261017.json) registra um objeto por ID auditado e 22 fontes, sem gabaritos, ZIP privado, CMI ou PII. `NOT_VERIFIED` é uma pendência factual deliberada (versão/edição publicada, proprietário da fonte, hash R2 atual, assinatura, crosswalk de fonte nominal). O tenant histórico **6** foi confirmado pelo workflow, mas não prova qual seja o pacote ativo em produção hoje.
 
 ## Decisão operacional por caso
 | Casos | Evidência atual | Decisão | Responsável/ação |
@@ -28,7 +28,7 @@ Para cada `(tenant, course_id, published_edition, published_package_version, ZIP
 Estados finais aceitos: `CERTIFIED_AND_PUBLISHABLE`, `TECHNICAL_EVIDENCE_OR_REPAIR_REQUIRED`, `SOURCE_OR_PEDAGOGICAL_APPROVAL_REQUIRED`, `GOVERNED_RETIREMENT`. Os dois estados de bloqueio são decisões de triagem; não implicam que um ZIP esteja defeituoso. Remoção exige decisão governada expressa; **nenhuma exclusão foi proposta**.
 
 ## Preservação de escopo e próximo gate
-1. Confirmar tenant, edição, versão, fonte/titular e SHA do ZIP em consulta atual de catálogo/D1/R2 **somente leitura** autorizada. O run histórico não resolve essas colunas; registrar divergência por SHA, sem substituir automaticamente.
+1. Confirmar tenant atual, edição, versão, fonte/titular e SHA do ZIP em consulta atual de catálogo/D1/R2 **somente leitura** autorizada. O run histórico não resolve essas colunas; registrar divergência por SHA, sem substituir automaticamente.
 2. Receber do titular editorial os 22 pareceres, inclusive gabarito em custódia privada e decisões LOSA/CRM; obter os originais oficiais #23/#49/#69 e os 3 desencontros de SHA.
 3. Para as correções de catálogo comprovadas, abrir PR técnico **separado** desta matriz, com teste focado e proteção tenant/RBAC. Nunca corrigir mapeamento baseado apenas em similaridade de nome.
 4. Encaminhar **somente ZIPs aprovados e SHA dos bytes** à [Frente certificadora #1422](https://github.com/Airtrust-Org/airtrust/pull/1422). Neste snapshot são **zero aprovados**. #15 `cdc5a3cf...` é candidato *review-only*; #41 `8c15a739...` é original verificado, ambos UNCERTIFIED.
