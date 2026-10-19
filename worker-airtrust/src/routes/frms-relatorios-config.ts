@@ -20,6 +20,8 @@ import type { Env } from '../types';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { resolveFrmsRegulatoryProfileEvidence } from '../lib/frms/parameter-governance';
 import { requireRole } from '../middleware/rbac';
+import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../services/employee-sector-access';
+import type { EmployeeSectorAccess } from '../services/employee-sector-access';
 import {
   relatorioIndividual,
   relatorioCompliance,
@@ -53,6 +55,24 @@ import {
 } from './frms-shared';
 
 const frmsRelatoriosConfig = new Hono<{ Bindings: Env; Variables: { userId?: string } }>();
+
+// All report requests re-evaluate the existing sector policy against the current
+// session. No report/response cache may outlive a permission or tenant change.
+frmsRelatoriosConfig.use('/relatorios/*', async (c, next) => {
+  c.header('Cache-Control', 'private, no-store, max-age=0');
+  c.header('Vary', 'Authorization, Cookie');
+  await next();
+});
+
+async function resolveReportCrewScope(c: FrmsAppContext, empresaId: number) {
+  const access: EmployeeSectorAccess = await getEmployeeSectorAccess(c, empresaId);
+  const scope = buildFuncionarioScopeWhere(access, 'f');
+  const rows = await c.env.DB.prepare(
+    `SELECT f.id FROM funcionarios f
+      WHERE f.empresa_id = ? AND f.deleted_at IS NULL AND ${scope.clause}`,
+  ).bind(empresaId, ...scope.bindings).all<{ id: number }>();
+  return { access, scope, ids: new Set((rows.results ?? []).map((r) => Number(r.id))) };
+}
 
 const GOVERNED_SOURCE_TYPES = [
   'REGULATORY',
@@ -144,6 +164,10 @@ frmsRelatoriosConfig.get(
     if (denied) return denied;
 
     const empresaId = getEmpresaIdSafe(c);
+    const crewScope = await resolveReportCrewScope(c, empresaId!);
+    if (!Number.isSafeInteger(Number(tripulanteId)) || !crewScope.ids.has(Number(tripulanteId))) {
+      return c.json({ success: false, code: 'FRMS_EMPLOYEE_SCOPE_DENIED', error: 'Acesso ao tripulante não autorizado.' }, 403);
+    }
     const mes = reportMonth(c.req.query('mes'));
     if (!mes) return c.json({ success: false, code: 'FRMS_INVALID_REPORT_MONTH', error: 'Período deve estar em AAAA-MM.' }, 400);
     const result = await relatorioIndividual(c.env.DB, tripulanteId, mes, empresaId);
@@ -168,8 +192,12 @@ frmsRelatoriosConfig.get(
     } catch (error) {
       return frmsConfigurationUnavailable(c, error);
     }
-    const result = await relatorioCompliance(c.env.DB, mes, empresaId);
-    return c.json({ success: true, data: result, meta });
+    const crewScope = await resolveReportCrewScope(c, empresaId);
+    const result = await relatorioCompliance(c.env.DB, mes, empresaId, crewScope.ids);
+    return c.json({ success: true, data: result, meta: {
+      ...meta, scope: crewScope.access.mode,
+      coverage: { authorized_crew: crewScope.ids.size, rows_returned: result.length, state: 'NOT_DETERMINED' },
+    } });
   }),
 );
 
@@ -183,16 +211,18 @@ frmsRelatoriosConfig.get(
     if (!empresaId) {
       return c.json({ success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' }, 403);
     }
-    c.header('Cache-Control', 'private, max-age=3600');
-    c.header('Vary', 'Authorization');
     let meta;
     try {
       meta = await buildFrmsReportMeta(c.env.DB, empresaId, 'rolling/current', 'FRMS_MAPA_FADIGA');
     } catch (error) {
       return frmsConfigurationUnavailable(c, error);
     }
-    const result = await relatorioMapaFadiga(c.env.DB, empresaId);
-    return c.json({ success: true, data: result, meta });
+    const crewScope = await resolveReportCrewScope(c, empresaId);
+    const result = await relatorioMapaFadiga(c.env.DB, empresaId, crewScope.scope);
+    return c.json({ success: true, data: result, meta: {
+      ...meta, scope: crewScope.access.mode,
+      coverage: { authorized_crew: crewScope.ids.size, rows_returned: result.length, state: 'NOT_DETERMINED' },
+    } });
   }),
 );
 
@@ -218,12 +248,18 @@ frmsRelatoriosConfig.get(
     } catch (error) {
       return frmsConfigurationUnavailable(c, error);
     }
+    const crewScope = await resolveReportCrewScope(c, empresaId);
     const result = await buscarAlertas(
       c.env.DB,
       { data_inicio: dataInicio, data_fim: dataFim, limit: 500 },
       empresaId,
+      crewScope.scope,
     );
-    return c.json({ success: true, data: result.alertas, total: result.total, meta });
+    return c.json({ success: true, data: result.alertas, total: result.total, meta: {
+      ...meta, scope: crewScope.access.mode,
+      coverage: { authorized_crew: crewScope.ids.size, rows_returned: result.alertas.length,
+        total_matching: result.total, state: result.total > result.alertas.length ? 'PARTIAL' : 'NOT_DETERMINED' },
+    } });
   }),
 );
 
