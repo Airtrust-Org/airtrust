@@ -171,6 +171,16 @@ async function changeMatrixRule(page: Page, code: string, value: string, method:
   return row;
 }
 
+async function setExplicitEadEnrollment(page: Page, ruleId: number, enabled: boolean, modality: string | null) {
+  const result = await api(page, `/api/compliance-treinamentos/regras/${ruleId}`, {
+    method: 'PUT',
+    body: { auto_matricular_ead: enabled, modalidade_requerida: modality },
+  });
+  expect(result.ok, JSON.stringify(result.json)).toBe(true);
+  expect(result.json.data?.auto_enrollment_warning).toBeNull();
+  return result;
+}
+
 test('full training compliance lifecycle recalculates organization, enrollments and evidence', async ({
   page,
 }) => {
@@ -291,14 +301,38 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   });
   expect(invalidPair.status).toBe(400);
 
-  // 3) A mandatory role rule automatically creates the two LMS enrollments without e-mail.
-  // No explicit "Matricular gaps" click is required after the matrix rule is saved.
+  // 3) Mandatory status alone must never enroll. A published EAD model,
+  // explicit modality AND opt-in are all required before automatic enrollment.
   await page.getByRole('button', { name: 'Matrículas', exact: true }).click();
   const courseList = await api(page, `/api/lms/cursos?q=${encodeURIComponent(requiredCourseTitle)}&limit=20`);
   expect(courseList.ok, JSON.stringify(courseList.json)).toBe(true);
   const matchingCourses = courseList.json.data.filter((row: any) => row.titulo === requiredCourseTitle);
   expect(matchingCourses).toHaveLength(1);
   const requiredCourseId = Number(matchingCourses[0].id);
+  const sectorMatrix = await api(
+    page, `/api/compliance-treinamentos/matriz-organizacao?setor_id=${sector.id}`,
+  );
+  expect(sectorMatrix.ok).toBe(true);
+  const sectorRequirement = sectorMatrix.json.data.find(
+    (row: any) => row.qualificacao_tipo_codigo === requiredTypeCode,
+  );
+  expect(sectorRequirement.direta).toBeTruthy();
+  const sectorRuleId = Number(sectorRequirement.direta.id);
+  const enrolledCount = async () => {
+    const result = await api(page, `/api/lms/matriculas/curso/${requiredCourseId}?limit=20`);
+    expect(result.ok, JSON.stringify(result.json)).toBe(true);
+    return result.json.data.filter((row: any) =>
+      employeeIds.includes(Number(row.funcionario_id))).length;
+  };
+  expect(await enrolledCount(), 'mandatory alone cannot auto-enroll').toBe(0);
+  const onlyOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, null);
+  expect(onlyOptIn.json.data.auto_enrollment.created).toBe(0);
+  expect(await enrolledCount(), 'NULL modality must fail closed').toBe(0);
+  const onlyModality = await setExplicitEadEnrollment(page, sectorRuleId, false, 'EAD');
+  expect(onlyModality.json.data.auto_enrollment.created).toBe(0);
+  expect(await enrolledCount(), 'opt-in=0 must fail closed').toBe(0);
+  const authorized = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD');
+  expect(authorized.json.data.auto_enrollment.created).toBe(2);
 
   await expect.poll(async () => {
     const response = await api(page, `/api/lms/matriculas/curso/${requiredCourseId}?limit=20`);
@@ -311,6 +345,9 @@ test('full training compliance lifecycle recalculates organization, enrollments 
     employeeIds.includes(Number(row.funcionario_id)),
   );
   expect(automaticRows).toHaveLength(2);
+  const repeatedOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD');
+  expect(repeatedOptIn.json.data.auto_enrollment.created).toBe(0);
+  expect(await enrolledCount(), 'repeated eligible rule must not duplicate').toBe(2);
   for (const row of automaticRows) {
     expect(String(row.observacoes || '')).toContain('sem e-mail');
     expect(row.status).toBe('NAO_INICIADO');
@@ -483,13 +520,27 @@ test('full training compliance lifecycle recalculates organization, enrollments 
     const current = await reconciliation(page, sector.id, fn.id);
     return current.matriculas_revisao.some((row: any) => row.qualificacao_tipo_codigo === orphanTypeCode);
   }).toBe(false);
-  // The Setor+Cargo designation enrolls the previously missing peer automatically,
-  // while preserving the existing historical/standalone enrollment record.
+  // Linking a historical enrollment to an obligation must NOT silently enroll
+  // the missing peer; this decision alone does not opt into automatic EAD.
   const orphanCatalog = await api(page, `/api/lms/cursos?q=${encodeURIComponent(orphanCourseTitle)}&limit=20`);
   expect(orphanCatalog.ok).toBe(true);
   const orphanCourses = orphanCatalog.json.data.filter((row: any) => row.titulo === orphanCourseTitle);
   expect(orphanCourses).toHaveLength(1);
   const orphanCourseId = Number(orphanCourses[0].id);
+  const beforePeer = await api(page, `/api/lms/matriculas/curso/${orphanCourseId}?limit=20`);
+  expect(beforePeer.ok).toBe(true);
+  expect(beforePeer.json.data.filter((row: any) =>
+    employeeIds.includes(Number(row.funcionario_id)))).toHaveLength(1);
+  const linkedRules = await api(
+    page, `/api/compliance-treinamentos/regras?qualificacao_tipo_id=${orphanCourses[0].qualificacao_tipo_id}`,
+  );
+  expect(linkedRules.ok).toBe(true);
+  const linkedRule = linkedRules.json.data.find((rule: any) =>
+    rule.escopo === 'SETOR_FUNCAO' && Number(rule.setor_id) === sector.id
+      && Number(rule.funcao_id) === fn.id);
+  expect(linkedRule).toBeTruthy();
+  const orphanOptIn = await setExplicitEadEnrollment(page, Number(linkedRule.id), true, 'EAD');
+  expect(orphanOptIn.json.data.auto_enrollment.created).toBe(1);
   await expect.poll(async () => {
     const response = await api(page, `/api/lms/matriculas/curso/${orphanCourseId}?limit=20`);
     if (!response.ok) return -1;
