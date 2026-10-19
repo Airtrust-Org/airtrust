@@ -94,11 +94,17 @@ function snapshot(){
  }
  return r;
 }
+function hasVerifiedBookmark(value){
+ if(!value || typeof value!=='object')return false;
+ return Object.entries(value).some(([key,item])=>
+  (/bookmark/i.test(key) && typeof item==='string' && item.trim().length>0) ||
+  (item && typeof item==='object' && hasVerifiedBookmark(item)));
+}
 function prepared(){
  demand(fs.existsSync(CAND)&&fs.existsSync(PRE)&&fs.existsSync(REC),
         'PLAYER3_PREPARE_AND_D1_RECOVERY_REQUIRED');
  const rec=JSON.parse(fs.readFileSync(REC,'utf8'));
- demand(JSON.stringify(rec).toLowerCase().includes('bookmark'),
+ demand(hasVerifiedBookmark(rec),
         'PLAYER3_RECOVERY_POINT_INVALID');
  return JSON.parse(fs.readFileSync(PRE,'utf8'));
 }
@@ -174,7 +180,7 @@ function doPreflight(){
  const raw=cleanRun(WR,['d1','time-travel','info',DB,'--env','staging',
                        '--timestamp='+stamp,'--json'],path.join(RELEASE,'worker-airtrust'));
  const data=JSON.parse(raw);
- demand(JSON.stringify(data).toLowerCase().includes('bookmark'),
+ demand(hasVerifiedBookmark(data),
         'PLAYER3_TIME_TRAVEL_BOOKMARK_MISSING');
  save(REC,JSON.stringify(data));
  console.log('PLAYER3_D1_READONLY_PREIMAGE_AND_PRIVATE_TIME_TRAVEL_RECEIPT');
