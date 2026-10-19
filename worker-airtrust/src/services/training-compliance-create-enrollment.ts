@@ -4,7 +4,7 @@ import { resolveEffectiveTrainingComplianceProfile } from './training-compliance
 /** One D1 transaction: policy-guarded enrollment, first cycle, evidence profile and audit. */
 export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
   empresaId:number; funcionarioId:number; cursoId:number; qualificacaoTipoId:number;
-  regraId:number; observacoes:string;
+  regraId:number; observacoes:string; usuarioId?:string;
   origin:'CARGO_COMPLIANCE'|'COMPLIANCE_RULE_SAVE'|'REQUISITO_PENDENTE_QSMS';
 }):Promise<number|null> {
   if (!(await hasSchemaTable(db,'audit_logs')) || !(await hasSchemaTable(db,'lms_matricula_ciclos')))
@@ -39,7 +39,7 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
             WHERE c2.empresa_id=c.empresa_id AND c2.qualificacao_tipo_id=c.qualificacao_tipo_id
               AND c2.ativo=1 AND c2.publicado=1 AND c2.deleted_at IS NULL)
           AND f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL
-          AND UPPER(COALESCE(f.status,'ATIVO'))='ATIVO' AND COALESCE(f.ativo,1)=1
+          AND UPPER(TRIM(f.status))='ATIVO' AND f.ativo=1
           AND (tr.escopo='EMPRESA'
             OR (tr.escopo='SETOR' AND tr.setor_id=f.setor_id)
             OR (tr.escopo='FUNCAO' AND tr.funcao_id=f.funcao_id)
@@ -63,11 +63,12 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
       .bind(p.empresaId,p.cursoId,p.funcionarioId),
     db.prepare(`INSERT INTO audit_logs
       (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
-      SELECT NULL,'LMS_COMPLIANCE_ATOMIC_ENROLLMENT','lms_matriculas',cy.matricula_id,
+      SELECT ?,'LMS_COMPLIANCE_ATOMIC_ENROLLMENT','lms_matriculas',cy.matricula_id,
         NULL,?,?,datetime('now') FROM lms_matricula_ciclos cy
       WHERE changes()=1 AND cy.id=last_insert_rowid() AND cy.empresa_id=?
         AND cy.curso_id=? AND cy.funcionario_id=?`)
-      .bind(JSON.stringify({origin:p.origin,curso_id:p.cursoId,email_enviado:false}),
+      .bind(p.usuarioId && /^[0-9]+$/.test(p.usuarioId) ? Number(p.usuarioId) : null,
+        JSON.stringify({origin:p.origin,curso_id:p.cursoId,email_enviado:false}),
         p.empresaId,p.empresaId,p.cursoId,p.funcionarioId),
   ]);
   if (Number(enrollment?.meta?.changes||0)===0) return null;
