@@ -129,6 +129,9 @@ export interface Env {
   // Shared only between governed staging QA attestation signer and Worker;
   // missing secret fails closed; never inject in browser/frontend.
   SCORM_QA_ATTESTATION_SECRET?: string;
+  // Dedicated F5 staging readback; never share with signer or client.
+  SCORM_QA_READBACK_SECRET?: string;
+  SCORM_QA_SYNTHETIC_TENANT_ID?: string;
 
   // Maintenance routes secret (wrangler secret put MAINTENANCE_SECRET)
   MAINTENANCE_SECRET?: string;

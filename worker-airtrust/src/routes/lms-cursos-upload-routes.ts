@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import {assertScormQaReadbackAccess, readScormQaBackendEvidence} from '../lib/lms/lms-scorm-staging-readback';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
@@ -256,6 +257,33 @@ app.get('/:id/scorm-package-versions', requirePermission('lms', 'editar', 'admin
   if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
   return c.json({ success: true, data: await listScormPackageVersions(c.env.DB, getEmpresaIdSafe(c), cursoId) });
 });
+
+// Only protected staging QA administrators with a dedicated F0-provisioned
+// readback secret. No public learner or candidate preview route obtains this.
+app.get('/:id/scorm-package-versions/:packageId/qa-evidence/:enrollmentId',
+  requirePermission('lms', 'editar', 'admin'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const empresaId=getEmpresaIdSafe(c),cursoId=Number(c.req.param('id'));
+    assertScormQaReadbackAccess({
+      environment:c.env.ENVIRONMENT, tenantId:empresaId,
+      authorizedTenant:c.env.SCORM_QA_SYNTHETIC_TENANT_ID,
+      secret:c.env.SCORM_QA_READBACK_SECRET,
+      providedSecret:c.req.header('X-Airtrust-F5-QA-Readback'),
+      runtimeSha:c.env.AIRTRUST_SOURCE_SHA,
+    });
+    if(!Number.isSafeInteger(cursoId)||cursoId<=0)throw new ApiError('Curso inválido',400);
+    const data=await readScormQaBackendEvidence({
+      db:c.env.DB,empresaId,cursoId,
+      packageId:c.req.param('packageId'),
+      packageSha256:c.req.query('sha256')??'',
+      matriculaId:Number(c.req.param('enrollmentId')),
+      runtimeSha:c.env.AIRTRUST_SOURCE_SHA!,
+    });
+    c.header('Cache-Control','private, no-store');
+    return c.json({success:true,data});
+  },
+);
 
 app.post('/:id/scorm-package-versions/:packageId/activate', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const cursoId = Number(c.req.param('id'));
