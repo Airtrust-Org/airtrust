@@ -51,11 +51,19 @@ jobs:
           if (!v.ok || !(await v.text()).includes(sha)) throw Error('PILOT_STAGING_WORKER_SHA_MISMATCH');
           // The Pages asset must be byte-identical to the exact candidate.
           execFileSync('git',['fetch','--quiet','origin',sha],{timeout:30000});
-          const source=execFileSync('git',['show',sha+':public/pilot/pilot-app.js'],{maxBuffer:20*1024*1024});
-          const response=await fetch(new URL('/pilot/pilot-app.js',pages),{signal:AbortSignal.timeout(12000)});
-          if(!response.ok)throw Error('PILOT_STAGING_PAGES_ASSET_UNAVAILABLE');
-          const live=Buffer.from(await response.arrayBuffer());
-          const blob=content=>createHash('sha1').update(Buffer.from('blob '+content.length+'\\0')).update(content).digest('hex');
-          if(blob(source)!==blob(live))throw Error('PILOT_STAGING_PAGES_SOURCE_SHA_MISMATCH');
-          console.log('PILOT_STAGING_WORKER_AND_PAGES_PROVENANCE_PASS '+sha);
+          const paths=execFileSync('git',['ls-tree','-r','--name-only',sha,'public/pilot']).toString().trim().split('\n');
+          if(paths.length<10 || paths.length>60) throw Error('PILOT_STAGING_SOURCE_ASSET_SET_INVALID');
+          const blob=content=>createHash('sha1')
+            .update(Buffer.from('blob '+content.length)).update(Buffer.from([0]))
+            .update(content).digest('hex');
+          for (const path of paths) {
+            if(!path.startsWith('public/pilot/'))throw Error('PILOT_ASSET_PATH_INVALID');
+            const source=execFileSync('git',['show',sha+':'+path],{maxBuffer:20*1024*1024});
+            const url=new URL('/'+path.slice('public/'.length),pages);
+            const response=await fetch(url,{signal:AbortSignal.timeout(12000)});
+            if(!response.ok)throw Error('PILOT_STAGING_PAGES_ASSET_UNAVAILABLE:'+path);
+            const live=Buffer.from(await response.arrayBuffer());
+            if(blob(source)!==blob(live))throw Error('PILOT_STAGING_PAGES_SOURCE_SHA_MISMATCH:'+path);
+          }
+          console.log('PILOT_STAGING_WORKER_AND_PAGES_PROVENANCE_PASS '+sha+' assets='+paths.length);
           NODE
