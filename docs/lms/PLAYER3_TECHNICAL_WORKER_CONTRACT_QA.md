@@ -27,7 +27,7 @@ O destino não pode existir. O gerador cria:
 - `private/source-stage-crosswalk.json`: identidade reproduzível das unidades e questões.
 - `manifest.json`: hashes de fonte, edição, política, banco privado, conteúdo e marcador **OFFLINE_TECHNICAL_CANDIDATE_NOT_APPROVED_FOR_STAGING_OR_PRODUCTION**.
 
-Todo conteúdo privado está em diretório `0700`, arquivos `0600`. Nunca adicionar ao Git, publicar gabaritos em origem HTML5, exibir em logs, disponibilizar a clientes ou fazer upload para R2 fora do fluxo governado e autorizado. O código não chama API, Cloudflare, D1 nem R2. O curso `courseId` exige prefixo `qa-` e o host da página deve ser HTTPS staging/QA.
+Todo conteúdo privado está em diretório `0700`, arquivos `0600`. O bundle remove o fragmento de gabarito criado pelo gerador primitivo em `browser/`, deixando nessa pasta **somente o ZIP público e um manifesto sem respostas**. Isso evita publicar respostas por engano ao distribuir a árvore de conteúdo. Nunca adicionar ao Git, publicar gabaritos em origem HTML5, exibir em logs, disponibilizar a clientes ou fazer upload para R2 fora do fluxo governado e autorizado. O código não chama API, Cloudflare, D1 nem R2. O curso `courseId` exige prefixo `qa-` e o host da página deve ser HTTPS staging/QA.
 
 ## Integração futura, fora do escopo desta PR
 

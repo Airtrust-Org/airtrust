@@ -27,6 +27,11 @@ class TechnicalCandidateTest(unittest.TestCase):
             bank = json.loads((private / "player3-server-private-bank.json").read_bytes())
             policy = json.loads((private / "player3-approved-policy.json").read_bytes())
             browser = (root / "browser" / "player3-technical-only.zip")
+            # Never permit the primitive ZIP generator's private sidecar in
+            # a directory which may later be used to serve static content.
+            self.assertEqual(sorted(p.name for p in (root / "browser").iterdir()),
+                             ["manifest.json", "player3-technical-only.zip"])
+            self.assertFalse((root / "browser" / "PRIVATE-qa-profile-fragment.json").exists())
             self.assertEqual(manifest["editionSha256"], hashlib.sha256(artifact_bytes).hexdigest())
             self.assertEqual(manifest["artifactSha256"], manifest["editionSha256"])
             self.assertRegex(artifact["packageVersion"], r"^n-[0-9a-f]{32}$")

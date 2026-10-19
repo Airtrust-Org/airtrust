@@ -98,6 +98,13 @@ def prepare(out: Path, parent_origin: str, course_id="qa-player3-synthetic") -> 
         private.mkdir(mode=0o700)
         public = out / "browser"
         result = zip_gen.build(public, parent_origin, edition_sha)
+        # The lower-level ZIP generator leaves a privileged companion beside
+        # the archive. This bundle's browser/ directory must NEVER include it:
+        # accidental static-folder publication would disclose QA answer keys.
+        legacy_secret = public / "PRIVATE-qa-profile-fragment.json"
+        if not legacy_secret.is_file() or legacy_secret.is_symlink():
+            raise CandidateError("PRIVATE_QA_FRAGMENT_MISSING_OR_UNSAFE")
+        legacy_secret.unlink()
         source_sha = result["sourceZipSha256"]
         ids = [u["id"] for u in zip_gen.units()]
         stage_id = "qa-stage-1"
