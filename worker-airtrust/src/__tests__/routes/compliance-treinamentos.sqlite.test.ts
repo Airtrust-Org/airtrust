@@ -111,6 +111,7 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
       vigencia_fim TEXT,
       prazo_inicial_dias INTEGER,
       auto_matricular_ead INTEGER NOT NULL DEFAULT 0,
+      modalidade_requerida TEXT,
       perfil_competencia TEXT,
       ativo INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -1234,8 +1235,8 @@ describe('training compliance engine', () => {
       UPDATE funcoes SET empresa_id=6 WHERE id=1;
       UPDATE funcionarios SET empresa_id=6 WHERE id=1000;
       UPDATE qualificacoes_tipos SET empresa_id=6,codigo='REGRAS_OURO_PETROBRAS',categoria='EAD' WHERE id=100;
-      INSERT INTO treinamento_requisitos (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem)
-      VALUES (6,100,'EMPRESA','OBRIGATORIA','EMPRESA');
+      INSERT INTO treinamento_requisitos (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem,auto_matricular_ead,modalidade_requerida)
+      VALUES (6,100,'EMPRESA','OBRIGATORIA','EMPRESA',1,'EAD');
       INSERT INTO lms_cursos (id,empresa_id,titulo,qualificacao_tipo_id)
       VALUES (600,6,'Regras de Ouro',100);
     `);
@@ -1250,6 +1251,10 @@ describe('training compliance engine', () => {
       modo: 'PREVIEW', pendentes: 1, matriculadas: 0, sem_curso_unico: 0,
     });
     expect((sqlite.database.prepare('SELECT COUNT(*) n FROM lms_matriculas').get() as any).n).toBe(0);
+    sqlite.database.exec("UPDATE treinamento_requisitos SET auto_matricular_ead=0 WHERE empresa_id=6");
+    expect((await (await app.request('/reconciliacao/matricular-pendentes', {method:'POST',body:JSON.stringify({aplicar:false})})).json() as any).data.pendentes).toBe(0);
+    sqlite.database.exec("UPDATE treinamento_requisitos SET auto_matricular_ead=1,modalidade_requerida=NULL WHERE empresa_id=6");
+    expect((await (await app.request('/reconciliacao/matricular-pendentes', {method:'POST',body:JSON.stringify({aplicar:false})})).json() as any).data.pendentes).toBe(0);
   });
 
   it('gera a matrícula Regras de Ouro uma vez, sem reabrir ciclo já ativo', async () => {
@@ -1268,8 +1273,8 @@ describe('training compliance engine', () => {
       UPDATE funcionarios SET empresa_id=6 WHERE id=1000;
       UPDATE qualificacoes_tipos SET empresa_id=6,codigo='REGRAS_OURO_PETROBRAS',categoria='EAD' WHERE id=100;
       INSERT INTO treinamento_requisitos
-        (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem)
-      VALUES (6,100,'EMPRESA','OBRIGATORIA','EMPRESA');
+        (empresa_id,qualificacao_tipo_id,escopo,obrigatoriedade,origem,auto_matricular_ead,modalidade_requerida)
+      VALUES (6,100,'EMPRESA','OBRIGATORIA','EMPRESA',1,'EAD');
       INSERT INTO lms_cursos (id,empresa_id,titulo,qualificacao_tipo_id)
       VALUES (600,6,'Regras de Ouro',100);
       CREATE TABLE auditoria_avancada_v2 (
