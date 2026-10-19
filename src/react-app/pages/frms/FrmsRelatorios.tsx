@@ -46,6 +46,7 @@ interface FrmsReportRow {
   repouso_suficiente?: number | null;
   repouso_estado?: 'SUFICIENTE' | 'INSUFICIENTE' | 'DESCONHECIDO';
   repouso_referencia?: string | null;
+  exposicao_referencia?: string | null;
   created_at?: string | null;
   nivel?: string | null;
   tipo_limite?: string | null;
@@ -285,7 +286,7 @@ export default function FrmsRelatorios() {
         ].map(csvCell).join(',') + '\n';
       }
     } else if (tipo === 'mapa-fadiga') {
-      csvContent += ['Tripulante', 'HV 7d%', 'HV Mês%', 'HV 365d%', 'Nível Max', 'Repouso', 'Fonte/data do repouso'].map(csvCell).join(',') + '\n';
+      csvContent += ['Tripulante', 'HV 7d%', 'HV Mês%', 'HV 365d%', 'Nível Max', 'Data da exposição HV', 'Repouso', 'Fonte/data do repouso'].map(csvCell).join(',') + '\n';
       for (const row of orderedData ?? []) {
         csvContent += [
           row.nome || row.tripulante_id,
@@ -293,6 +294,7 @@ export default function FrmsRelatorios() {
           row.pct_mes ?? '',
           row.pct_365d ?? '',
           row.nivel_max ?? '',
+          row.exposicao_referencia ?? 'Sem exposição HV registrada',
           row.repouso_estado === 'DESCONHECIDO' || row.repouso_suficiente == null ? 'Não avaliado' : row.repouso_suficiente ? 'Suficiente' : 'Insuficiente',
           row.repouso_referencia ? `FRMS rolling — ${row.repouso_referencia}` : 'Sem registro de repouso na janela',
         ].map(csvCell).join(',') + '\n';
@@ -566,7 +568,7 @@ function MapaFadigaTable({ data }: { data: FrmsReportRow[] }) {
                     : 'bg-slate-100 text-slate-600';
           return (
             <tr key={i} className="hover:bg-gray-50/50">
-              <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}</td>
+              <td className="px-4 py-2.5 font-medium text-gray-700">{r.nome || `#${r.tripulante_id}`}<div className="text-[10px] font-normal text-slate-500">Exposição HV: {r.exposicao_referencia ?? 'data não informada'}</div></td>
               <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_7d == null ? '—' : `${r.pct_7d.toFixed(1)}%`}</td>
               <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_mes == null ? '—' : `${r.pct_mes.toFixed(1)}%`}</td>
               <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">{r.pct_365d == null ? '—' : `${r.pct_365d.toFixed(1)}%`}</td>
