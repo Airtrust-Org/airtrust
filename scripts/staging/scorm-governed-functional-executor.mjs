@@ -43,7 +43,9 @@ export function validateF5Plan({plan,driver,zipBytes,driverFile,reviewFile,
     entries[0]?.browser==='CHROMIUM'&&entries[1]?.browser==='WEBKIT'&&
     entries.every(e=>positive(e.failedId)&&positive(e.passedId)&&
       positive(e.failedCycle)&&positive(e.passedCycle)&&
-      positive(e.foreignTenantId)&&e.failedId!==e.passedId),
+      positive(e.foreignTenantId)&&positive(e.archivedPassCycle)&&
+      e.archivedPassCycle!==e.passedCycle&&
+      e.failedId!==e.passedId),
     'BROWSER_SYNTHETIC_ENROLLMENTS_MISSING');
   requireProof(new Set(entries.flatMap(e=>[e.failedId,e.passedId])).size===4&&
     new Set(entries.flatMap(e=>[e.failedCycle,e.passedCycle])).size===4,
@@ -74,6 +76,21 @@ export function verifyF5Readback(row,plan,entry,id,cycle,phase){
     row.qualificationHistoryCount>=0&&
     typeof row.completionStatus==='string','BACKEND_WITNESS_UNTRUSTED');
   return row;
+}
+/** Only a real rejected old-cycle commit plus identical readbacks proves no mutation. */
+export function verifyF5StaleCycleRejection({status,before,after,archivedCycle}){
+  requireProof(Number.isSafeInteger(archivedCycle)&&archivedCycle>0&&
+    archivedCycle!==before?.cycleId&&
+    [403,409].includes(status)&&
+    before?.enrollmentId===after?.enrollmentId&&
+    before.cycleId===after.cycleId&&
+    before.packageSha256===after.packageSha256&&
+    before.cmiSha256===after.cmiSha256&&
+    before.suspendSha256===after.suspendSha256&&
+    before.sessionCount===after.sessionCount&&
+    before.qualificationHistoryCount===after.qualificationHistoryCount,
+    'STALE_CYCLE_COMMIT_NOT_REJECTED_ATOMICALLY');
+  return true;
 }
 export function verifyF5Pdf(bytes,backend,status){
   const doc=backend?.certificateDocument;
@@ -191,6 +208,17 @@ async function observe(browserName,browserType,plan,driver,entry,token,outDir){
         Number.isFinite(passed.scormScoreRaw)&&
         passed.scormScoreRaw>=driver.masteryScore),
       'PASS_NOT_OBSERVED');
+    // Deliberately attempt a syntactically valid commit from an archived,
+    // previously provisioned QA cycle. Never fabricate a PASS response.
+    const stale=await page.request.post(ORIGIN+'/api/lms/matriculas/scorm/commit',{
+      headers:auth,data:{
+        matricula_id:entry.passedId,ciclo_id:entry.archivedPassCycle,
+        commit_event:'SCORM_COMMIT',lesson_status:'passed',score_raw:100,
+      },
+    });
+    const unchanged=await read(entry.passedId,entry.passedCycle,'AFTER_STALE');
+    verifyF5StaleCycleRejection({status:stale.status(),
+      before:passed,after:unchanged,archivedCycle:entry.archivedPassCycle});
     await performDom(f.sco,f.host,driver.completion.actions);
     const done=await read(entry.passedId,entry.passedCycle,'COMPLETED');
     requireProof(done.completionStatus==='CONCLUIDO'&&

@@ -465,3 +465,15 @@ prova de launch/commit recebe HTTP 409
 estrutura de Schema V2/QA writer deverá garantir atomicidade/custódia
 dessas duas colunas, sem permitir preenchimento pelo aluno, pacote,
 driver ou script de atestação. Não há migration ou seed aplicada.
+
+**Stale-cycle readback real exigido:** cada matrícula QA de aprovação
+precisa de `archivedPassCycle` (ciclo previamente arquivado pelo fluxo
+governado). Após persistir a aprovação pela interface, o executor tenta
+um commit SCORM válido usando aquele ciclo antigo, exige HTTP 403/409 e
+releitura Worker/D1 com **mesmo** ciclo ativo, hashes CMI/suspend,
+`sessionCount` e contagem de qualificações. HTTP 400/200, alteração de
+estado ou ausência do ciclo arquivado bloqueiam a evidência. O teste é
+em staging sintético sob recovery/cleanup, nunca aplicado a matrícula
+real/produção. Replay de conclusão exige status CONCLUIDO, mesmo histórico
+e mesmo hash CMI antes/depois. Nenhum desses resultados é convertido pelo
+observador em atestação independente sem execução física e signer oficial.

@@ -5,7 +5,8 @@ import {mkdtempSync,rmSync,writeFileSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {zipSync,strToU8} from 'fflate';
-import {validateF5Plan,verifyF5Readback,verifyF5Pdf} from
+import {validateF5Plan,verifyF5Readback,verifyF5Pdf,
+  verifyF5StaleCycleRejection} from
   '../staging/scorm-governed-functional-executor.mjs';
 const hash=x=>createHash('sha256').update(x).digest('hex');
 function inputs(){
@@ -59,7 +60,8 @@ function inputs(){
     recoveryReceiptSha256:'2'.repeat(64),cleanupContractSha256:'3'.repeat(64),
     browserEnrollments:['CHROMIUM','WEBKIT'].map((browser,i)=>({
       browser,failedId:101+i*2,passedId:102+i*2,
-      failedCycle:201+i*2,passedCycle:202+i*2,foreignTenantId:901+i}))};
+      failedCycle:201+i*2,passedCycle:202+i*2,
+      archivedPassCycle:1001+i,foreignTenantId:901+i}))};
   const env={GITHUB_ACTIONS:'true',GITHUB_REF:'refs/heads/main',
     GITHUB_SHA:'a'.repeat(40)};
   const verify=(override={})=>validateF5Plan({plan,driver,zipBytes:zip,
@@ -125,4 +127,20 @@ test('backend PDF hash and identity must match exact bytes',()=>{
   assert.throws(()=>verifyF5Pdf(bytes,{...row,cycleId:999},200));
   assert.throws(()=>verifyF5Pdf(bytes,{...row,certificateDocument:{
     ...doc,sha256:'0'.repeat(64)}},200));
+});
+
+test('rejects fake stale-cycle denial, mutated CMI, duplicate replay history',()=>{
+  const before={enrollmentId:102,cycleId:202,packageSha256:'a'.repeat(64),
+    cmiSha256:'1'.repeat(64),suspendSha256:'2'.repeat(64),
+    sessionCount:3,qualificationHistoryCount:0};
+  const input={status:409,before,after:{...before},archivedCycle:1001};
+  assert.equal(verifyF5StaleCycleRejection(input),true);
+  for(const v of [
+    {status:200}, {status:400}, {archivedCycle:202},
+    {after:{...before,cmiSha256:'3'.repeat(64)}},
+    {after:{...before,sessionCount:4}},
+    {after:{...before,qualificationHistoryCount:1}},
+    {after:{...before,cycleId:1001}},
+    {after:{...before,packageSha256:'f'.repeat(64)}},
+  ]) assert.throws(()=>verifyF5StaleCycleRejection({...input,...v}));
 });
