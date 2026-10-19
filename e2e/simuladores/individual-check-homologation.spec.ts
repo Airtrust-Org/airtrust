@@ -41,27 +41,51 @@ const fixtures = (() => {
   return Object.fromEntries(parsed.fichas.map((f) => [f.cenario, f])) as Record<Scenario, Fixture>;
 })();
 
-async function login(page: Page, email: string, password: string) {
-  if (!email || !password) {
-    throw new Error(`LOGIN_CREDENTIALS_MISSING: email=${Boolean(email)} password=${Boolean(password)}`);
-  }
+async function doLoginOnce(page: Page, email: string, password: string) {
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.locator('input[type="email"]').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.locator('input[type="email"]').waitFor({ state: 'visible', timeout: 20_000 });
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
 
-  // Se o usuário possui múltiplos perfis operacionais, o app renderiza a seleção
-  // "Como você quer entrar?" antes de navegar para a rota protegida.
-  const profileButton = page.locator('button', { hasText: /Entrar como/i }).first();
-  try {
-    await profileButton.waitFor({ state: 'visible', timeout: 5000 });
-    await profileButton.click();
-  } catch {
-    // Perfil único ou navegação direta sem diálogo de seleção
+  // O app pode navegar diretamente ou renderizar o seletor de perfil operacional
+  // ("Como você quer entrar?"). Aguardamos até 30s por um dos dois estados.
+  await page.waitForFunction(
+    () => {
+      if (!window.location.pathname.startsWith('/login')) return true;
+      return Array.from(document.querySelectorAll('button')).some((b) =>
+        /^Entrar como/i.test((b.textContent || '').trim()),
+      );
+    },
+    undefined,
+    { timeout: 30_000 },
+  );
+
+  // Se ainda estiver em /login com perfil operacional disponível, seleciona perfil de administrador/gestor:
+  if (new URL(page.url()).pathname.startsWith('/login')) {
+    const profileButton = page
+      .getByRole('button', { name: /entrar como (administrador(?: geral| da empresa)?|gestor)/i })
+      .or(page.locator('button', { hasText: /Entrar como/i }))
+      .first();
+    if (await profileButton.isVisible()) {
+      await profileButton.click();
+    }
   }
 
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 });
+}
+
+async function login(page: Page, email: string, password: string) {
+  if (!email || !password) {
+    throw new Error(`LOGIN_CREDENTIALS_MISSING: email=${Boolean(email)} password=${Boolean(password)}`);
+  }
+  try {
+    await doLoginOnce(page, email, password);
+  } catch (err) {
+    console.warn('[qa-homologation] login retry after failure:', err);
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
+    await doLoginOnce(page, email, password);
+  }
 }
 
 /** Reaproveita exatamente a autenticação que o próprio app envia ao Worker (bearer e/ou cookie). */
@@ -191,6 +215,7 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
   test('B — REPROVADO pelo inline com sessão APROVADA: sem aprovação coletiva e FAP prematura revogada', async () => {
     const f = fixtures.B;
     await page.goto(`/simuladores/fichas/${f.ficha_id}?mode=sign&papel=INSTRUTOR`);
+    await page.waitForLoadState('networkidle');
     await draw(page, page.locator('body'));
     await page.locator('#concordo').check();
     await page.locator('input[name="aprovacao"]').first().check(); // sessão APROVADA (cenário perigoso)
@@ -212,6 +237,7 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
 
   test('C — PENDENTE: sem avaliação individual não há aprovação, FAP ou certificado', async () => {
     await page.goto(`/simuladores/fichas/${fixtures.C.ficha_id}`);
+    await page.waitForLoadState('networkidle');
     await expect(page.getByText('PENDENTE DE AVALIAÇÃO').first()).toBeVisible();
     const r = await api(page, auth, 'GET', checksPath('C'));
     expect(evidenceFor(r.body)).toMatchObject({ situacao: 'PENDENTE_AVALIACAO', aprovado_comprovado: false });
@@ -224,6 +250,7 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
   test('D — ficha finalizada: erro de rede não grava evidência; retry grava uma única vez', async () => {
     const f = fixtures.D;
     await page.goto(`/simuladores/fichas/${f.ficha_id}`);
+    await page.waitForLoadState('networkidle');
     await page.getByRole('button', { name: 'Aprovado', exact: true }).first().click();
 
     // 1ª tentativa: a rede falha antes de a resposta chegar.
