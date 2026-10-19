@@ -33,6 +33,7 @@ export type RosterEnrollAction = {
   cursoId: number;
   tipoId: number;
   existingId: number | null;
+  regraId: number;
 };
 export type RosterRemoveAction = {
   matriculaId: number;
@@ -128,6 +129,7 @@ export function buildTrainingComplianceRosterPlan(
         cursoId: courseId,
         tipoId: Number(req.qualificacao_tipo_id),
         existingId: existing[0]?.id || null,
+        regraId: req.regra_id,
       });
     }
   }
