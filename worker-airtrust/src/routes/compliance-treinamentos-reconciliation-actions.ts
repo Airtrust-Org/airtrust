@@ -193,7 +193,7 @@ router.post('/matricular-pendentes', requireRole('admin'), async (c) => {
         const created=await createComplianceEnrollmentAtomic(db,{
           empresaId,funcionarioId:pending.funcionarioId,cursoId:pending.cursoId,
           qualificacaoTipoId:pending.qualificacaoTipoId,regraId:pending.regraId,
-          origin:'REQUISITO_PENDENTE_QSMS',
+          origin:'REQUISITO_PENDENTE_QSMS',usuarioId:audit.usuario_id,
           observacoes:'Matrícula gerada por requisito pendente na matriz QSMS/SO (sem e-mail)',
         });
         if (created===null) {preservadas++;continue;}
