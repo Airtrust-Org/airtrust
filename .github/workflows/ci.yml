@@ -130,6 +130,7 @@ jobs:
       - name: validate Player3 synthetic QA activation and immutable private profile
         run: |
           node --test scripts/__tests__/player3-technical-qa-activation-preflight.test.mjs
+          node --test scripts/__tests__/player3-qa-readonly-inventory.test.mjs
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/learning-factory/test_prepare_player3_technical_candidate.py scripts/learning-factory/test_build_player3_technical_qa_profile.py -v
       - name: enforce unique Player3 Schema V2 numbering and pinned manifests
         run: node --test scripts/__tests__/player3-schema-numbering-contract.test.mjs
