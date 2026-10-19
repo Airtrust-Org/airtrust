@@ -169,6 +169,7 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
   if (!Array.isArray(fuelingsRaw) || fuelingsRaw.length > 16) {
     throw new ApiError('Abastecimentos offline invalidos', 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELINGS_INVALID');
   }
+  const seenFuelingIds = new Set<string>();
   const fuelings = fuelingsRaw.map((entry, index): SnapshotFuelingPayload => {
     if (!isPlainObject(entry)) {
       throw new ApiError(`Abastecimento offline invalido no indice ${index}`, 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_INVALID');
@@ -180,7 +181,7 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     const rawLitros = entry.litros_abastecidos;
     const litros = Number(rawLitros);
     if (
-      !localId ||
+      !localId || localId.length > 240 ||
       !dataHora ||
       !Number.isInteger(etapaNumero) || etapaNumero <= 0 || etapaNumero > 32 ||
       !supplierCode ||
@@ -193,6 +194,12 @@ function normalizeSnapshotPayload(command: PilotOfflineSyncCommand): SnapshotPay
     ) {
       throw new ApiError(`Abastecimento offline incompleto no indice ${index}`, 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_INVALID');
     }
+    // Each physical fueling has one stable client identity within a snapshot.
+    // Never collapse different IDs by supplier, timestamp, amount or stage.
+    if (seenFuelingIds.has(localId)) {
+      throw new ApiError('Abastecimento com identidade local duplicada no snapshot', 400, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_LOCAL_ID_DUPLICATE');
+    }
+    seenFuelingIds.add(localId);
     return {
       client_local_id: localId,
       data_hora: dataHora,
@@ -824,6 +831,48 @@ function buildNewRdvInsert(input: {
     );
 }
 
+// An offline snapshot is cumulative: a new command can carry previously
+// accepted physical fuelings. A stable ID, not matching attributes, identifies
+// a physical fueling across independent operation receipts.
+async function previouslyAppliedFuelingIds(input: {
+  db: D1Database;
+  empresaId: number;
+  flight: FlightRow;
+  fuelings: SnapshotFuelingPayload[];
+  supplierNamesByCode: Map<string, string>;
+}): Promise<Set<string>> {
+  const applied = new Set<string>();
+  for (const item of input.fuelings) {
+    const row = await input.db.prepare(`
+      SELECT f.fornecedor, f.combustivel_abastecido, f.numero_ce,
+             f.data_hora, f.observacoes, e.numero_etapa
+      FROM cv_voo_abastecimentos f
+      LEFT JOIN cv_voo_etapas e ON e.id=f.etapa_id
+        AND e.empresa_id=f.empresa_id AND e.voo_id=f.voo_id
+      WHERE f.empresa_id=? AND f.voo_id=? AND f.client_local_id=?
+      LIMIT 1
+    `).bind(input.empresaId,input.flight.id,item.client_local_id).first<{
+      fornecedor: string|null; combustivel_abastecido: number|null;
+      numero_ce: string|null; data_hora: string|null;
+      observacoes: string|null; numero_etapa: number|null;
+    }>();
+    if (!row) continue;
+    const unchanged =
+      String(row.fornecedor??'') === String(input.supplierNamesByCode.get(item.empresa_abastecimento_codigo)??'') &&
+      Number(row.combustivel_abastecido) === item.litros_abastecidos &&
+      (row.numero_ce??null) === item.numero_nota &&
+      row.data_hora === item.data_hora &&
+      (row.observacoes??null) === item.nota &&
+      Number(row.numero_etapa) === item.etapa_numero;
+    if (!unchanged) throw new ApiError(
+      'Abastecimento anteriormente aceito foi alterado; requer revisao da Coordenacao',
+      409, 'CONTROLE_VOOS_PILOT_SYNC_FUELING_ALREADY_RECORDED_CHANGED',
+    );
+    applied.add(item.client_local_id);
+  }
+  return applied;
+}
+
 function buildFuelingStatements(input: {
   db: D1Database;
   empresaId: number;
@@ -838,13 +887,13 @@ function buildFuelingStatements(input: {
       INSERT INTO cv_voo_abastecimentos (
         empresa_id, voo_id, etapa_id, fornecedor, localidade, combustivel_solicitado, unidade,
         combustivel_abastecido, numero_ce, anexo_r2_key, responsavel_id, data_hora, observacoes,
-        created_by, updated_by, created_at, updated_at
+        client_local_id, created_by, updated_by, created_at, updated_at
       )
       SELECT ?, ?, (
         SELECT id FROM cv_voo_etapas
         WHERE empresa_id = ? AND voo_id = ? AND numero_etapa = ? AND deleted_at IS NULL
         LIMIT 1
-      ), ?, NULL, NULL, 'L', ?, ?, NULL, NULL, ?, ?, ?, ?, datetime('now'), datetime('now')
+      ), ?, NULL, NULL, 'L', ?, ?, NULL, NULL, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
       WHERE EXISTS (
         SELECT 1 FROM cv_rdv_operacional
         WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
@@ -861,6 +910,7 @@ function buildFuelingStatements(input: {
       fueling.numero_nota,
       fueling.data_hora,
       fueling.nota,
+      fueling.client_local_id,
       input.userId,
       input.userId,
       input.flight.id, input.empresaId, input.newVersion,
@@ -1314,10 +1364,14 @@ export async function applyPilotOfflineSnapshotCommand(input: {
   const removedStageStatements = buildRemovedStageStatements({
     ...input, newVersion, removedStages: snapshot.removed_stages,
   });
+  const acceptedFuelingIds = await previouslyAppliedFuelingIds({
+    db: input.db, empresaId: input.empresaId, flight: input.flight,
+    fuelings: snapshot.fuelings, supplierNamesByCode,
+  });
   const fuelingStatements = buildFuelingStatements({
     ...input,
     newVersion,
-    fuelings: snapshot.fuelings,
+    fuelings: snapshot.fuelings.filter((item) => !acceptedFuelingIds.has(item.client_local_id)),
     supplierNamesByCode,
   });
   const justificationStatements = buildJustificationStatements({
@@ -1389,6 +1443,23 @@ export async function applyPilotOfflineSnapshotCommand(input: {
       input.command.client_operation_id,
     );
     if (racedReceipt) return replayReceipt(racedReceipt, input.command);
+
+    // The accepted-receipt insert deliberately violates its NOT NULL
+    // constraint when the preceding CAS changed no row. D1 rolls back the
+    // entire batch before reporting this guard, so no child write can escape.
+    if (String(error).includes('NOT NULL constraint failed: cv_offline_sync_receipts.result_status')) {
+      return recordOfflineSyncConflict(input.db, {
+        empresaId: input.empresaId,
+        command: input.command,
+        funcionarioId: input.funcionarioId,
+        code: 'CONTROLE_VOOS_PILOT_SYNC_CAS_CONFLICT',
+        detail: conflictDetail({
+          type: 'cas',
+          entity: 'cv_rdv_operacional',
+          expected: input.command.base_server_version,
+        }),
+      });
+    }
 
     const refreshedRdv = await getActiveRdvByFlight(input.db, input.flight.id, input.empresaId);
     if (

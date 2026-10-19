@@ -1,0 +1,31 @@
+# Restricted synthetic FRMS QA repair service. Do not deploy until the
+# separately controlled staging readiness/authorization workflow has verified
+# private bucket ACL/lifecycle, grants, runtime SHA and all service bindings.
+# No public route, workers.dev, preview URL, cron or HTTP apply endpoint.
+name = "airtrust-frms-qa-repair-staging-private"
+main = "worker.mjs"
+compatibility_date = "2026-10-19"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[vars]
+ENVIRONMENT = "staging"
+D1_ID = "bf9963f4-eb12-439b-a830-20bbf577ac22"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "airtrust-db-staging-baseline-20260701"
+database_id = "bf9963f4-eb12-439b-a830-20bbf577ac22"
+
+[[r2_buckets]]
+binding = "PREIMAGES"
+bucket_name = "airtrust-frms-qa-preimages-staging-private"
+
+[[durable_objects.bindings]]
+name = "COORDINATOR"
+class_name = "FrmsQaCoordinator"
+
+[[migrations]]
+tag = "frms-qa-private-v1"
+new_sqlite_classes = ["FrmsQaCoordinator"]

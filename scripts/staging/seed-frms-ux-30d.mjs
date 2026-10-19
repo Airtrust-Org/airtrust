@@ -21,7 +21,7 @@ export const TO = '2026-10-13';
 const PREFIX = 'QA-FRMS-UX-';
 export const QA_REVISION_ID = 'qa-frms-ux-999013-helicopter-offshore-v1';
 const CANONICAL_REVISION_ID = 'frms-helicopter-offshore-baseline-v1';
-const BASELINE_SOURCE_URL = new URL('../frms-seeds/frms_helicopter_offshore_baseline_v1.sql', import.meta.url);
+const baselineSourceUrl = () => new URL('../frms-seeds/frms_helicopter_offshore_baseline_v1.sql', import.meta.url);
 const SAFE_BANDS = new Set(['0','1-4','5-9','10-19','20-49','50+']);
 const quote = (x) => "'" + String(x).replaceAll("'", "''") + "'";
 const pad = (n) => String(n).padStart(2,'0');
@@ -52,7 +52,7 @@ export function approximation(band) {
   return result;
 }
 
-export function buildTenantScopedBaselineSql(sqlSource = readFileSync(BASELINE_SOURCE_URL, 'utf8')) {
+export function buildTenantScopedBaselineSql(sqlSource = readFileSync(baselineSourceUrl(), 'utf8')) {
   // Baseline values come from the reviewed versioned 128-key source. Do not
   // copy tenant data, hand-author thresholds, or create a global revision.
   const stripped = sqlSource.replace(/^(?:\s*--[^\n]*\n)+/, '').trim();
@@ -115,7 +115,10 @@ export function buildSeedSql(days, governedRevisionId = QA_REVISION_ID) {
     "CASE WHEN CAST(substr(f.matricula,-2) AS INTEGER)%4=0 THEN '04:30:00' ELSE '07:00:00' END,"+
     "'16:00:00',CASE WHEN CAST(substr(f.matricula,-2) AS INTEGER)%4=0 THEN 690 ELSE 540 END,"+
     "CASE WHEN CAST(substr(f.matricula,-2) AS INTEGER)%4=0 THEN 385 ELSE 270 END,'QA_FRMS_UX',"+
-    "'MANUAL','CENARIO SINTETICO - SEM VALIDADE OPERACIONAL',"+TENANT_ID+",datetime('now'),datetime('now'),NULL "+
+    // Two fictional crew simulate a canonical SIGVOOS feed to exercise the
+    // cases view. This is NEVER an actual SIGVOOS import or operational source.
+    "CASE WHEN CAST(substr(f.matricula,-2) AS INTEGER)<=2 THEN 'SIGVOOS' ELSE 'MANUAL' END,"+
+    "'CENARIO SINTETICO - FONTE SIMULADA SEM VALIDADE OPERACIONAL',"+TENANT_ID+",datetime('now'),datetime('now'),NULL "+
     "FROM source_days d JOIN funcionarios f ON f.empresa_id="+TENANT_ID+
     " AND f.matricula LIKE 'QA-FRMS-UX-%' AND f.deleted_at IS NULL "+
     "WHERE CAST(substr(f.matricula,-2) AS INTEGER) <= d.j_count"));
@@ -138,15 +141,25 @@ export function buildSeedSql(days, governedRevisionId = QA_REVISION_ID) {
     "FROM source_days d JOIN funcionarios f ON f.empresa_id="+TENANT_ID+
     " AND f.matricula LIKE 'QA-FRMS-UX-%' AND f.deleted_at IS NULL "+
     "WHERE CAST(substr(f.matricula,-2) AS INTEGER) <= d.c_count"));
+  // Alertas sem jornada e com origem MANUAL ficam invisíveis na consulta FRMS
+  // canônica. Vincular cada caso somente a jornada sintética SIGVOOS do MESMO
+  // tripulante/dia; nunca relaxar a política do Worker para permitir shadow.
+  const caseDays=days.filter(day=>approximation(day.jornadas)>=2).slice(-4);
+  if(caseDays.length!==4)throw new Error('QA_VISIBLE_CASE_DAYS_UNAVAILABLE');
   for(const [n,idx,day,level,type] of [
-      [1,7,'2026-10-13','CRITICO','REPOUSO'],[2,5,'2026-10-12','ATENCAO','FDP_DIARIO'],
-      [3,4,'2026-10-10','AVISO','HV_7D'],[4,14,'2026-10-09','CRITICO','REPOUSO']
+      [1,1,caseDays[3].day,'CRITICO','REPOUSO'],
+      [2,2,caseDays[2].day,'ATENCAO','FDP_DIARIO'],
+      [3,1,caseDays[1].day,'AVISO','HV_7D'],
+      [4,2,caseDays[0].day,'CRITICO','REPOUSO']
     ]){
     sql.push(stmt("INSERT INTO frms_alerta (id,tripulante_id,jornada_id,tipo_limite,nivel,percentual_atingido,valor_atual_min,valor_limite_min,mensagem,visualizado,resolvido,created_at,updated_at,deleted_at) "+
-      "SELECT "+quote('qa-frms-ux-case-'+n)+",f.id,NULL,"+quote(type)+","+quote(level)+
-      ",112,620,540,'QA SINTETICO: revisar contexto e registrar providencia',0,0,"+
-      quote(day+' 10:00:00')+",datetime('now'),NULL FROM funcionarios f WHERE f.empresa_id="+TENANT_ID+
-      " AND f.matricula="+quote(PREFIX+pad(idx))+" AND f.deleted_at IS NULL"));
+      "SELECT "+quote('qa-frms-ux-case-'+n)+",f.id,j.id,"+quote(type)+","+quote(level)+
+      ",112,j.duracao_jornada_minutos,540,'QA SINTETICO: revisar contexto e registrar providencia',0,0,"+
+      quote(day+' 10:00:00')+",datetime('now'),NULL FROM funcionarios f JOIN frms_jornada j "+
+      "ON j.empresa_id=f.empresa_id AND j.tripulante_id=f.id AND j.data="+quote(day)+
+      " AND j.deleted_at IS NULL AND UPPER(j.origem)='SIGVOOS' "+
+      "WHERE f.empresa_id="+TENANT_ID+" AND f.matricula="+quote(PREFIX+pad(idx))+
+      " AND f.deleted_at IS NULL"));
   }
   return sql.join('\n')+'\n';
 }

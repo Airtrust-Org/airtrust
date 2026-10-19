@@ -43,6 +43,7 @@ function plan(ids:number[]):RosterPlan {
   return {
     enroll:[], remove:ids.map(id=>({matriculaId:id,funcionarioId:101,cursoId:56,motivo:'EVIDENCIA_VALIDA' as const})),
     protectedCount:0,skippedAmbiguousCourses:0,skippedPendingEvidence:0,skippedManualModality:0,
+    skippedPolicyOptOut:0,
   };
 }
 describe('Governed all-course cleanup D1 — transactional and tenant-scoped',()=>{
@@ -58,6 +59,14 @@ describe('Governed all-course cleanup D1 — transactional and tenant-scoped',()
       .toMatchObject({deleted_at:expect.any(String)});
     expect(db.database.prepare('SELECT COUNT(*) AS n FROM audit_logs WHERE empresa_id=6').get())
       .toMatchObject({n:1});
+  });
+  it('does not dismiss notifications when a stale removal target is already in progress', async()=>{
+    const db=fixture();
+    db.database.exec("UPDATE lms_matriculas SET status='EM_ANDAMENTO' WHERE id=10");
+    const result=await applyTrainingRosterPlan(db.asD1(),6,plan([10]),4);
+    expect(result.removed).toBe(0);
+    expect(db.database.prepare("SELECT deleted_at FROM notificacoes_inapp WHERE id='n1'").get())
+      .toMatchObject({deleted_at:null});
   });
   it('does not remove in-progress, concluded, evidenced or cross-tenant rows',async()=>{
     const db=fixture();

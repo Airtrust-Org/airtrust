@@ -801,6 +801,17 @@
         </div>
       </header>
 
+      <section id="legacy-vault-card" class="card warning hidden" aria-labelledby="legacy-vault-heading">
+        <h2 id="legacy-vault-heading">Recuperação obrigatória do armazenamento antigo</h2>
+        <p class="muted">Este dispositivo contém dados offline protegidos pelo PIN anterior. Para evitar perda de rascunhos ou envios pendentes, o Pilot App permanecerá bloqueado até verificar a recuperação. Nenhum dado antigo será apagado.</p>
+        <form id="legacy-vault-form">
+          <label for="legacy-vault-pin">PIN offline antigo</label>
+          <input id="legacy-vault-pin" type="password" minlength="6" autocomplete="off" required />
+          <div class="actions"><button id="legacy-vault-recover" type="submit" class="primary">Recuperar dados e verificar</button></div>
+        </form>
+        <p id="legacy-vault-status" class="statusline attention" role="status" aria-live="polite">Se não souber o PIN, não limpe os dados do navegador. Contate a Coordenação.</p>
+      </section>
+
       <div id="workspace" class="hidden">
         <section id="flight-selection-card" class="card">
           <div class="section-head">
@@ -1044,6 +1055,7 @@
             <div><span class="muted">Armazenamento</span><strong id="storage">Verificando…</strong></div>
             <div><span class="muted">Modo</span><strong>Offline protegido</strong></div>
           </div>
+          <p id="storage-retention-status" class="statusline attention" aria-live="polite">Verificando se o navegador permite retenção persistente…</p>
           <p class="muted">
             Campo sintético mantido apenas para validar persistência contínua: após “Salvo no
             tablet”, refresh ou modo avião deve preservar exatamente o texto.

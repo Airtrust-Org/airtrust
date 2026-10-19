@@ -1,13 +1,14 @@
-import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
+import { canReuseMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from './training-compliance-evidence-profile';
 import { trainingComplianceNeedsImmediateEnrollmentOnRuleSave } from './training-compliance-enrollment-policy';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
+import { createComplianceEnrollmentAtomic } from './training-compliance-create-enrollment';
 
 type EnrollmentSnapshot = {
-  rules: Array<{ id: number; obrigatoriedade: string; modalidade_requerida: string | null; qualificacao_tipo_id: number }>;
+  rules: Array<{ id: number; obrigatoriedade: string; modalidade_requerida: string | null; auto_matricular_ead: number | null; qualificacao_tipo_id: number }>;
   people: Array<{
     id: number;
-    requisitos: Array<{ regra_id: number; obrigatoriedade: string; status_compliance: string }>;
+    requisitos: Array<{ regra_id: number; obrigatoriedade: string; status_compliance: string; evidencia_pendente_validacao: boolean; modalidade_requerida: string | null; auto_matricular_ead: number | null }>;
   }>;
 };
 
@@ -41,14 +42,16 @@ async function performComplianceRuleEnrollment<TAccess>(
   };
   const snapshot = await buildSnapshot(db, empresaId, access);
   const rule = snapshot.rules.find((candidate) => candidate.id === ruleId);
-  if (!rule || rule.obrigatoriedade !== 'OBRIGATORIA') return summary;
+  if (!rule || rule.obrigatoriedade !== 'OBRIGATORIA' || rule.auto_matricular_ead !== 1) return summary;
 
   // Never fulfill presencial/hybrid/practical regulatory requirements with an LMS launch.
-  if (rule.modalidade_requerida && rule.modalidade_requerida !== 'EAD') return summary;
+  if (rule.modalidade_requerida !== 'EAD') return summary;
 
   const applicable = snapshot.people.flatMap((person) =>
     person.requisitos
-      .filter((req) => req.regra_id === ruleId && req.obrigatoriedade === 'OBRIGATORIA')
+      .filter((req) => req.regra_id === ruleId && req.obrigatoriedade === 'OBRIGATORIA'
+        && req.auto_matricular_ead === 1 && req.modalidade_requerida === 'EAD'
+        && !req.evidencia_pendente_validacao)
       .map((req) => ({ person, status: req.status_compliance })),
   );
   summary.skipped_valid_evidence = applicable.filter(
@@ -60,9 +63,12 @@ async function performComplianceRuleEnrollment<TAccess>(
   if (!pending.length) return summary;
 
   const courses = await db.prepare(
-    `SELECT id FROM lms_cursos
-      WHERE empresa_id=? AND qualificacao_tipo_id=? AND ativo=1 AND publicado=1
-        AND deleted_at IS NULL ORDER BY id LIMIT 2`,
+    `SELECT c.id FROM lms_cursos c
+      JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id
+        AND qt.ativo=1 AND qt.deleted_at IS NULL
+        AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
+      WHERE c.empresa_id=? AND c.qualificacao_tipo_id=? AND c.ativo=1 AND c.publicado=1
+        AND c.deleted_at IS NULL ORDER BY c.id LIMIT 2`,
   ).bind(empresaId, rule.qualificacao_tipo_id).all<{ id: number }>();
   // A course/model relation must be unambiguous; never guess by title.
   if ((courses.results || []).length !== 1) {
@@ -106,33 +112,12 @@ async function performComplianceRuleEnrollment<TAccess>(
       summary.reactivated++;
       continue;
     }
-    let id: number;
-    try {
-      const inserted = await db.prepare(
-        `INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id,observacoes)
-         VALUES(?,?,?,'Matrícula automática: requisito de Compliance atualizado (sem e-mail)')`,
-      ).bind(empresaId, cursoId, person.id).run();
-      id = Number(inserted.meta.last_row_id || 0);
-      if (!id) throw new Error('COMPLIANCE_MATRICULA_NOT_CREATED');
-    } catch (error) {
-      // Concurrent idempotent writes must not create a second enrollment.
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('UNIQUE constraint failed') && message.includes('lms_matriculas')) {
-        summary.preserved++;
-        continue;
-      }
-      throw error;
-    }
-    const cycleId = await ensureMatriculaCycle(db, { matriculaId: id, origin: 'AUTO_RENOVACAO', empresaId });
-    if (!cycleId) throw new Error('COMPLIANCE_MATRICULA_CYCLE_NOT_CREATED');
-    await stampLmsEnrollmentEvidenceProfile(db, {
-      empresaId, matriculaId: id, funcionarioId: person.id, qualificacaoTipoId: rule.qualificacao_tipo_id,
+    const id=await createComplianceEnrollmentAtomic(db,{
+      empresaId,funcionarioId:person.id,cursoId,qualificacaoTipoId:rule.qualificacao_tipo_id,
+      regraId:rule.id,origin:'COMPLIANCE_RULE_SAVE',usuarioId:audit.usuario_id,
+      observacoes:'Matrícula automática: requisito de Compliance atualizado (sem e-mail)',
     });
-    await registrarAuditoria({
-      db, tabela: 'lms_matriculas', acao: 'INSERT', registro_id: id,
-      dados_novos: { empresa_id: empresaId, curso_id: cursoId, origem: 'COMPLIANCE_RULE_SAVE' },
-      ...audit,
-    });
+    if (id===null) {summary.preserved++;continue;}
     summary.created++;
   }
   return summary;

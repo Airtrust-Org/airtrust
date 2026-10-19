@@ -113,6 +113,12 @@ jobs:
           set -euo pipefail
           [[ -n "$FRMS_QA_EMAIL" && -n "$FRMS_QA_PASSWORD" ]] || { echo FRMS_PLATFORM_QA_CREDENTIAL_PAIR_MISSING; exit 1; }
       - run: npm ci
+      - name: Typecheck FRMS read-only Playwright contract before browser
+        run: >-
+          npx --no-install tsc --noEmit --skipLibCheck
+          --target es2022 --module nodenext --moduleResolution nodenext
+          --esModuleInterop --types node
+          e2e/staging-frms-ux-30d-acceptance.spec.ts
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Inspect Operação, Casos, Manutenção and Relatórios, read-only

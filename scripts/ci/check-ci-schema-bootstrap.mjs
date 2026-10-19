@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,6 +22,15 @@ export function extractDdlTargets(sql) {
     for (const match of sql.matchAll(pattern)) targets.add(match[1]);
   }
   return [...targets];
+}
+
+/** Reviewed critical DDL is pinned by file content, not just numerical order.
+ * A later PR adding 0553/0554 must not be hidden behind our reviewed 0557.
+ */
+export function isReviewedCriticalChange(filename, contents, allowlist) {
+  const expected = allowlist?.[filename];
+  if (typeof expected !== 'string' || !/^[0-9a-f]{64}$/.test(expected)) return false;
+  return createHash('sha256').update(contents).digest('hex') === expected;
 }
 
 export function schemaV2ChangesAfter(files, reviewedThrough) {
@@ -69,13 +79,23 @@ export function validateContract(root = ROOT) {
   }
 
   const changesDir = join(root, 'worker-airtrust/schema-v2/changes');
-  const changes = schemaV2ChangesAfter(readdirSync(changesDir), contract.reviewed_through_schema_v2_change);
+  const allFiles = readdirSync(changesDir);
+  const changes = schemaV2ChangesAfter(allFiles, contract.reviewed_through_schema_v2_change);
   const critical = new Set(contract.critical_tables);
+  const reviewed = contract.reviewed_critical_schema_v2_changes ?? {};
+  for (const [filename, digest] of Object.entries(reviewed)) {
+    if (!allFiles.includes(filename) || !/^[0-9]{4}_[A-Za-z0-9_-]+\.sql$/.test(filename) ||
+        !isReviewedCriticalChange(filename, readFileSync(join(changesDir, filename)), reviewed)) {
+      throw new Error(`CI schema bootstrap reviewed critical DDL drift: ${filename}`);
+    }
+  }
   const stale = [];
   for (const change of changes) {
-    const sql = readFileSync(join(changesDir, change), 'utf8');
-    const touched = extractDdlTargets(sql).filter((table) => critical.has(table));
-    if (touched.length) stale.push({ change, tables: touched });
+    const sql = readFileSync(join(changesDir, change));
+    const touched = extractDdlTargets(sql.toString()).filter((table) => critical.has(table));
+    if (touched.length && !isReviewedCriticalChange(change, sql, reviewed)) {
+      stale.push({ change, tables: touched });
+    }
   }
   if (stale.length) {
     throw new Error(

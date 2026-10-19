@@ -41,6 +41,18 @@ describe('read-only SCORM complete-assessment evidence driver', () => {
       { options: ['a', 'b'] }, { options: ['a', 'b'], answer: 99 }, { options: ['a', 'b'], answer: -1 },
     ] }] }), []);
   });
+  it('resolves only an explicit authored required scenario answer, never guesses', () => {
+    const plan = extractAnswerPlan({ slides: [
+      { kind: 'scenario', requiredDecision: true,
+        scenarioOptions: ['hold', 'inspect', 'release'], scenarioCorrect: 1 },
+      { kind: 'scenario', requiredDecision: true,
+        scenarioOptions: ['a', 'b'], scenarioCorrect: 99 },
+      { kind: 'scenario', requiredDecision: true,
+        scenarioOptions: ['a', 'b'] },
+    ] });
+    assert.deepEqual(plan.map(x => ({ slideIndex: x.slideIndex, indices: x.indices })),
+      [{ slideIndex: 1, indices: [1] }]);
+  });
   it('also supports the conventional correctIndex authoring schema', () => {
     const plan = extractAnswerPlan({ slides: [{ questions: [{ options: ['a', 'b'], correctIndex: 0 }] }] });
     assert.deepEqual(plan.map(x => x.indices), [[0]]);

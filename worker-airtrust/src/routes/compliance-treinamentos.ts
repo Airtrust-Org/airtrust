@@ -650,6 +650,7 @@ function computeRequirement(
     justificativa: rule.justificativa,
     perfil_competencia: rule.perfil_competencia,
     modalidade_requerida: rule.modalidade_requerida,
+    auto_matricular_ead: rule.auto_matricular_ead,
     fundamento_tipo: rule.fundamento_tipo,
     fundamento_documento: rule.fundamento_documento,
     fundamento_item: rule.fundamento_item,

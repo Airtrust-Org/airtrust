@@ -122,3 +122,31 @@ describe('ficha pdf — ITENS nunca trunca, quebra em ate 2 linhas', () => {
     expect(lines.length).toBe(1);
   });
 });
+
+
+describe('simulator proof in PDF appendix', () => {
+  it('keeps approved, rejected and pending individual checks distinct, with provenance', async () => {
+    capturedTextsHolder.texts = [];
+    await gerarPDFFichaCliente({
+      ...buildDados(['Pouso normal']),
+      modoModelo: false,
+      checksIndividuais: [
+        { codigo: 'FAP13', nome: 'Check A', situacao: 'APROVADO' as const,
+          evidenciaId: 42, confirmadoEm: '2026-10-17T19:00:00Z', dataVencimento:'2027-10-17' },
+        { codigo: 'FAP07', nome: 'Check B', situacao: 'REPROVADO' as const,
+          evidenciaId: 43, confirmadoEm: '2026-10-17T19:10:00Z' },
+        { codigo: 'FAP06', nome: 'Check C', situacao: 'PENDENTE_AVALIACAO' as const },
+      ],
+    });
+    const source = capturedTextsHolder.texts.join(' | ');
+    expect(source).toContain('FAP13 — APROVADO');
+    expect(source).toContain('Evidência #42 confirmada');
+    expect(source).toContain('Validade: 2027-10-17');
+    expect(source).toContain('FAP07 — REPROVADO');
+    expect(source).toContain('Evidência #43 confirmada');
+    expect(source).toContain('FAP06 — PENDENTE_AVALIACAO');
+    expect(source).toContain('Sem evidência individual confirmada');
+    expect(source).not.toContain('FAP07 — APROVADO');
+    expect(source).not.toContain('FAP06 — APROVADO');
+  });
+});

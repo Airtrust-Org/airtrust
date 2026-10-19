@@ -14,6 +14,13 @@ const spec = readFileSync('e2e/frontend-pr-ui-qa/training-compliance-lifecycle.s
 test('lifecycle workflow is main-only, staging-only, exact-SHA guarded and always cleans up', () => {
   assert.match(workflow, /refs\/heads\/main/);
   assert.match(workflow, /expected_deployed_sha/);
+  assert.match(workflow, /pr_number:/);
+  assert.match(workflow, /OPEN_REVIEWED_PR_REQUIRED/);
+  assert.match(workflow, /OPEN_REVIEWED_PR_SHA_OR_SCOPE_MISMATCH/);
+  assert.match(workflow, /pr\.state !== 'open'/);
+  assert.match(workflow, /pr\.head\?\.repo\?\.full_name !== repo/);
+  assert.match(workflow, /pr\.head\?\.sha\?\.toLowerCase\(\) !== expected/);
+  assert.match(workflow, /group: airtrust-staging-mutations-and-scorm-qa/);
   assert.match(workflow, /verify-release-gates\.mjs/);
   assert.match(workflow, /airtrust-api-staging\.airtrust\.workers\.dev/);
   assert.doesNotMatch(workflow, /api\.airtrust\.online/);
@@ -29,6 +36,30 @@ test('lifecycle fixture is reserved to the canonical synthetic tenant and fails 
   assert.match(seed, /DELETE FROM lms_xapi_statements/);
   assert.match(seed, /scorm_package_r2_prefix/);
   execFileSync('node', ['--check', 'scripts/staging/seed-qa-training-compliance-lifecycle.mjs']);
+});
+
+test('staging fixture binds both QA courses to manager-visible sector and cleans them up', () => {
+  // The catalog must stay scoped by RBAC. The fixture, not the LMS handler,
+  // supplies the two course-sector links for the synthetic Gestor identity.
+  assert.match(seed, /INSERT INTO lms_cursos_setores\(curso_id,setor_id,empresa_id/);
+  assert.match(seed, /course_sector_count INTEGER NOT NULL CHECK\(course_sector_count=2\)/);
+  assert.match(seed, /SELECT COUNT\(\*\) FROM lms_cursos_setores lcs JOIN lms_cursos c/);
+  assert.match(seed, /UPDATE lms_cursos_setores\s+SET deleted_at=COALESCE/);
+  assert.match(seed, /AND curso_id IN \(\s+SELECT id FROM lms_cursos WHERE empresa_id=/);
+  assert.match(seed, /AND c\.observacoes=\$\{esc\(marker\)\} AND lcs\.deleted_at IS NULL/);
+});
+
+test('EAD lifecycle explicitly opts in after proving defaults and NULL modality do not enroll', () => {
+  assert.equal((seed.match(/qc\.id,'EAD',1,12/g) || []).length, 2);
+  assert.equal((seed.match(/,'EAD',60,/g) || []).length, 2);
+  assert.match(spec, /mandatory alone cannot auto-enroll/);
+  assert.match(spec, /NULL modality must fail closed/);
+  assert.match(spec, /opt-in=0 must fail closed/);
+  assert.match(spec, /setExplicitEadEnrollment\(page, sectorRuleId, true, 'EAD'\)/);
+  assert.match(spec, /repeated eligible rule must not duplicate/);
+  assert.match(spec, /orphanOptIn\.json\.data\.auto_enrollment\.created\)\.toBe\(1\)/);
+  assert.match(spec, /evidencia_modalidade\)\.toBe\('EAD'\)/);
+  assert.match(spec, /data_validade\)\.toMatch/);
 });
 
 test('browser simulation covers organization, enrollment, progress, completion and reconciliation transitions', () => {

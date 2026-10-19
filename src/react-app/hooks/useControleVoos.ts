@@ -925,17 +925,20 @@ export function useAtualizarTripulante() {
       tripulanteId,
       funcionario_id,
       funcao,
+      horario_apresentacao,
       versao,
     }: {
       vooId: string | number;
       tripulanteId: number;
       funcionario_id?: number;
       funcao?: CvTripulante['funcao'];
+      horario_apresentacao?: string | null;
       versao?: number;
     }) => {
       const response = await apiClient.put<unknown>(`${API}/voos/${vooId}/tripulantes/${tripulanteId}`, {
         funcionario_id,
         funcao,
+        ...(horario_apresentacao !== undefined ? { horario_apresentacao } : {}),
         ...(versao !== undefined ? { versao } : {}),
       });
       return extractPayload<{ id: number }>(response, { id: 0 });

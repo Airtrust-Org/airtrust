@@ -13,6 +13,7 @@ import {
   buildCommonFlightFields,
   assertVerifiedLeaseAllowsDraft,
   buildDraftSnapshot,
+  requireStableFuelingIdentity,
   calcConsumoCombustivel,
   calcStageTotalWeight,
   convertWeight,
@@ -34,6 +35,7 @@ import {
   buildOfflineSyncCommand,
   verifyOfflineSyncCommandHash,
 } from '/pilot/pilot-sync.js';
+import { persistPilotFinalSyncResult } from '/pilot/pilot-sync-receipt.js';
 
 const DRAFT_ID = 'phase1-synthetic-rdv-draft';
 const SAVE_DELAY_MS = 180;
@@ -80,6 +82,12 @@ const flightDateTodayButton = document.querySelector('#flight-date-today');
 const flightDateNextButton = document.querySelector('#flight-date-next');
 const cachedCount = document.querySelector('#cached-count');
 const storageLabel = document.querySelector('#storage');
+const storageRetentionStatus = document.querySelector('#storage-retention-status');
+const legacyVaultCard = document.querySelector('#legacy-vault-card');
+const legacyVaultForm = document.querySelector('#legacy-vault-form');
+const legacyVaultPin = document.querySelector('#legacy-vault-pin');
+const legacyVaultRecoverButton = document.querySelector('#legacy-vault-recover');
+const legacyVaultStatus = document.querySelector('#legacy-vault-status');
 const cachedFlights = document.querySelector('#cached-flights');
 const onlineFlights = document.querySelector('#online-flights');
 const flightDetailCard = document.querySelector('#flight-detail-card');
@@ -729,14 +737,27 @@ async function updateStorageEstimate() {
     ' MB';
 }
 
-async function requestPersistentStorage() {
+export async function requestPersistentStorage() {
+  let state = 'unavailable';
   if (navigator.storage && typeof navigator.storage.persist === 'function') {
     try {
-      await navigator.storage.persist();
+      state = (await navigator.storage.persist()) === true ? 'granted' : 'denied';
     } catch {
-      // A UI nunca transforma esta tentativa em garantia de persistência.
+      state = 'error';
     }
   }
+  if (storageRetentionStatus) {
+    const messages = {
+      granted: 'Retenção persistente autorizada pelo navegador. Ainda faça a sincronização após o voo.',
+      denied: 'Navegador não concedeu retenção persistente. Há risco de limpeza automática: sincronize assim que tiver conexão.',
+      unavailable: 'Retenção persistente não disponível neste dispositivo. Dados locais podem ser removidos pelo sistema.',
+      error: 'Não foi possível verificar a retenção persistente. Não considere os dados locais um backup permanente.',
+    };
+    storageRetentionStatus.className = 'statusline ' + (state === 'granted' ? 'ok' : 'attention');
+    storageRetentionStatus.textContent = messages[state];
+    storageRetentionStatus.dataset.retention = state;
+  }
+  return state;
 }
 
 async function registerPilotServiceWorker() {
@@ -2571,6 +2592,11 @@ function refreshDraftValidationPresentation() {
     if (!String(fueling.empresa_abastecimento_codigo || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': selecione a empresa de abastecimento.');
     if (!String(fueling.numero_nota || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe o número da nota.');
     if (parseNumber(fueling.litros_abastecidos) === null) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe os litros abastecidos.');
+    try {
+      requireStableFuelingIdentity(fueling, activeRdvDraft.form?.data_voo);
+    } catch (error) {
+      supplementalErrors.push('Abastecimento ' + (index + 1) + ': ' + String(error?.message || error));
+    }
   }
   supplementalErrors.push(
     ...validatePlanningJustifications(
@@ -2802,24 +2828,24 @@ async function storeOutboxAttempt(record, patch) {
 async function markDraftAcceptedByServer(command, result) {
   const draftId = rdvDraftRecordId(command.flight_id);
   const stored = await vault.getJson('rdv_drafts', draftId);
-  if (!stored) return;
+  if (!stored) throw new Error('Rascunho offline ausente durante confirmação de sync. Outbox preservada.');
 
   const currentSequence = Number(stored.value?.local_sequence || 0);
   if (currentSequence !== Number(command.local_sequence)) {
     // O servidor aceitou exatamente o snapshot enfileirado, mas existem
     // mudanças locais posteriores. Preservamos tudo e exigimos refresh/rebase.
-    await vault.putJson(
-      'conflicts',
-      syncReceiptRecordId(command.client_operation_id) + ':local-ahead',
-      {
-        type: 'local_revision_ahead_after_server_accept',
-        command_sequence: command.local_sequence,
-        current_local_sequence: currentSequence,
-        server_entity_version: result.server_entity_version ?? null,
-        created_at: new Date().toISOString(),
-      },
-      1,
-    );
+    const conflictId = syncReceiptRecordId(command.client_operation_id) + ':local-ahead';
+    await vault.putJson('conflicts', conflictId, {
+      type: 'local_revision_ahead_after_server_accept',
+      command_sequence: command.local_sequence,
+      current_local_sequence: currentSequence,
+      server_entity_version: result.server_entity_version ?? null,
+      created_at: new Date().toISOString(),
+    }, 1);
+    const verifiedConflict = await vault.getJson('conflicts', conflictId);
+    if (verifiedConflict?.value?.command_sequence !== command.local_sequence) {
+      throw new Error('Conflito de revisão local não confirmado no tablet. Outbox preservada.');
+    }
     return;
   }
 
@@ -2836,6 +2862,12 @@ async function markDraftAcceptedByServer(command, result) {
     stored.localRevision,
   );
 
+  const verifiedDraft = await vault.getJson('rdv_drafts', draftId);
+  if (verifiedDraft?.value?.sync_state !== 'accepted_requires_refresh' ||
+      verifiedDraft.value?.sync_operation_id !== command.client_operation_id) {
+    throw new Error('Confirmação local do RDV não foi persistida. Outbox preservada.');
+  }
+
   if (activeRdvDraft && Number(activeRdvDraft.flight_id) === Number(command.flight_id)) {
     activeRdvDraft = {
       ...activeRdvDraft,
@@ -2848,55 +2880,13 @@ async function markDraftAcceptedByServer(command, result) {
 }
 
 async function persistFinalSyncResult(outboxRecord, result) {
-  const command = outboxRecord.value.command;
-  const receiptValue = {
-    schema_version: 1,
-    command_identity: {
-      client_operation_id: command.client_operation_id,
-      flight_id: command.flight_id,
-      local_sequence: command.local_sequence,
-      payload_hash: command.payload_hash,
-    },
-    server_result: structuredClone(result),
-    received_at_local: new Date().toISOString(),
-  };
-  const entries = [
-    {
-      storeName: 'sync_receipts',
-      id: syncReceiptRecordId(command.client_operation_id),
-      value: receiptValue,
-      localRevision: 1,
-    },
-  ];
-  if (result.status === 'conflict') {
-    entries.push({
-      storeName: 'conflicts',
-      id: syncReceiptRecordId(command.client_operation_id),
-      value: {
-        ...receiptValue,
-        conflict: result.conflict || null,
-      },
-      localRevision: 1,
-    });
-  }
-
-  await vault.putJsonBatch(entries);
-  const persistedReceipt = await vault.getJson(
-    'sync_receipts',
-    syncReceiptRecordId(command.client_operation_id),
-  );
-  if (
-    !persistedReceipt ||
-    persistedReceipt.value?.command_identity?.payload_hash !== command.payload_hash
-  ) {
-    throw new Error('Receipt do servidor não foi confirmado no armazenamento local.');
-  }
-
-  await vault.deleteJson('outbox', outboxRecord.id);
-
-  if (result.status === 'accepted' || result.status === 'already_accepted') {
-    await markDraftAcceptedByServer(command, result);
-  }
+  await persistPilotFinalSyncResult({
+    vault,
+    outboxRecord,
+    result,
+    receiptId: syncReceiptRecordId(outboxRecord.value.command.client_operation_id),
+    markAccepted: markDraftAcceptedByServer,
+  });
 }
 
 function isRecoverableAuthenticationSyncError(errorLike) {
@@ -5043,6 +5033,17 @@ function renderFuelingFields() {
         },
       }),
     );
+    grid.append(createEditorField({
+      label: 'Hora do abastecimento',
+      value: fueling.hora || '',
+      type: 'time',
+      onInput: (value) => {
+        fueling.hora = value;
+        scheduleOperationalSave();
+        refreshDraftValidationPresentation();
+      },
+      onBlur: () => void flushOperationalSave(),
+    }));
     for (const [label, key, type, inputMode] of [
       ['Número da nota', 'numero_nota', 'text', null],
       ['Litros abastecidos', 'litros_abastecidos', 'number', 'decimal'],
@@ -5340,6 +5341,11 @@ function enqueueDiagnosticSave(snapshot) {
         },
         nextRevision,
       );
+      const confirmedDraft = await vault.getJson('rdv_drafts', DRAFT_ID);
+      if (confirmedDraft?.localRevision !== nextRevision ||
+          confirmedDraft?.value?.observacoes !== snapshot) {
+        throw new Error('Rascunho diagnóstico não passou na leitura após gravação.');
+      }
       localRevision = nextRevision;
       revisionLabel.textContent = String(localRevision);
       lastSavedLabel.textContent = formatTimestamp(new Date().toISOString());
@@ -5501,12 +5507,42 @@ window.addEventListener('pagehide', () => {
   }
 });
 
+legacyVaultForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const pin = legacyVaultPin.value;
+  legacyVaultPin.value = '';
+  legacyVaultRecoverButton.disabled = true;
+  legacyVaultStatus.className = 'statusline attention';
+  legacyVaultStatus.textContent = 'Verificando e recuperando os registros cifrados…';
+  try {
+    const result = await vault.recoverLegacyPin(pin);
+    if (result.status !== 'ready' || (await vault.openAutomatically()).status !== 'ready') {
+      throw new Error('Recuperação não foi confirmada.');
+    }
+    legacyVaultCard.classList.add('hidden');
+    await openWorkspace();
+    setSessionMessage('Armazenamento antigo recuperado e verificado. O banco V1 original foi preservado.', 'ok');
+  } catch (error) {
+    legacyVaultStatus.className = 'statusline error';
+    legacyVaultStatus.textContent =
+      (error instanceof Error ? error.message : 'Falha na recuperação.') +
+      ' O armazenamento antigo foi preservado. Não limpe os dados deste dispositivo.';
+  } finally {
+    legacyVaultRecoverButton.disabled = false;
+  }
+});
+
 async function bootstrapPilotApp() {
   try {
     updateFlightNotificationControl();
     if (!offlineFlightLockMarkerActive()) await registerPilotServiceWorker();
     vault = await PilotVault.open();
     const vaultOpenState = await vault.openAutomatically();
+    if (vaultOpenState.status === 'legacy-pin-required') {
+      legacyVaultCard.classList.remove('hidden');
+      legacyVaultPin.focus();
+      return;
+    }
     if (vaultOpenState.status !== 'ready') {
       throw new Error('Falha ao preparar armazenamento offline automático.');
     }

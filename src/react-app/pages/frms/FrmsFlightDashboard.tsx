@@ -31,7 +31,7 @@ import {
 } from './frmsOperationalDecision';
 import { formatFrmsReason, formatSnapshotSource } from './frmsPresentation';
 import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
-import { frmsAttentionFacts, isFrmsRoutineDutyClosurePending } from './frmsEvidenceContext';
+import { frmsAttentionFacts, frmsOperationalEvidenceLabel } from './frmsEvidenceContext';
 
 const ACTION_LANES: { key: FrmsActionLane; title: string; explanation: string }[] = [
   { key: 'REVISAO', title: 'Revisão operacional', explanation: 'Sinais de atenção ou risco: avaliar antes da decisão.' },
@@ -625,7 +625,7 @@ export default function FrmsFlightDashboard() {
 
         {legacyControlRoute ? (
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
-            Controle Operacional foi consolidado nesta tela de Operação FRMS. Os filtros de data e tripulante da rota anterior foram preservados.
+            Controle Operacional foi consolidado nesta tela diária. A data inicial e o tripulante do link antigo foram preservados, quando informados. Se o link original usava um intervalo, esta tela exibe apenas o primeiro dia; escolha outra data para consultar os demais.
           </div>
         ) : null}
 
@@ -767,7 +767,7 @@ export default function FrmsFlightDashboard() {
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
               {visibleQueue.map(({ item, bucket }) => {
-                const confidence = operationalConfidence(item);
+                const evidenceLabel = frmsOperationalEvidenceLabel(item, todayIso);
                 const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
 
                 return (
@@ -782,11 +782,19 @@ export default function FrmsFlightDashboard() {
                       <p className="mt-2 truncate font-bold text-slate-950 dark:text-white">{displayName(item)}</p>
                       <p className="truncate text-xs text-slate-500">{[item.funcao, item.base, item.aeronave].filter(Boolean).join(' · ') || 'Função/base não informadas'}</p>
                       <p className="mt-2 text-xs font-semibold text-slate-600 dark:text-slate-300">Check-in diário</p>
-                      <span className={`mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold ${guidance.checkinComplete
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-                        : guidance.requiresCheckin
-                          ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
-                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                      <span
+                        className={`mt-1 inline-flex rounded-md px-2 py-1 text-xs font-bold ${guidance.checkinComplete
+                          ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200'
+                          : guidance.requiresCheckin
+                            ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}
+                        aria-label={guidance.checkinComplete
+                          ? 'Check-in diário: Recebido — informativo'
+                          : `Check-in diário: ${guidance.checkinLabel}`}
+                        title={guidance.checkinComplete
+                          ? 'Coleta recebida. Não comprova baixa fadiga nem autoriza liberação operacional.'
+                          : undefined}
+                      >
                         {guidance.checkinLabel}
                       </span>
                     </div>
@@ -806,8 +814,13 @@ export default function FrmsFlightDashboard() {
                         <p className="mt-1 line-clamp-2 text-xs font-semibold text-amber-800 dark:text-amber-200" title={frmsAttentionFacts(item).join(' · ')}>
                           {frmsAttentionFacts(item).slice(0, 2).join(' · ')}
                         </p> : null}
-                      <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200" title={'Confiança oficial: ' + confidence.toLowerCase()}>
-                        {isFrmsRoutineDutyClosurePending(item, todayIso) ? 'Jornada aguardando fechamento' : 'Dados: confiança ' + confidence.toLowerCase()}
+                      <p
+                        className={`mt-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold ${evidenceLabel.hasWarning
+                          ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200'
+                          : 'bg-indigo-50 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200'}`}
+                        title={evidenceLabel.title}
+                      >
+                        {evidenceLabel.label}
                       </p>
                       <p className="mt-1 text-[11px] text-slate-500">{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</p>
                     </div>

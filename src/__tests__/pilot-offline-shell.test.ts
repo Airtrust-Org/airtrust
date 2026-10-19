@@ -19,6 +19,7 @@ const pilotWorkspace = read('public/pilot/pilot-workspace.js');
 const pilotVault = read('public/pilot/pilot-vault.js');
 const pilotRdvDraft = read('public/pilot/pilot-rdv-draft.js');
 const pilotSync = read('public/pilot/pilot-sync.js');
+const pilotReceipt = read('public/pilot/pilot-sync-receipt.js');
 const pilotLease = read('public/pilot/pilot-lease.js');
 const pilotLeaseTrust = read('public/pilot/pilot-lease-trust.js');
 const pilotSw = read('public/pilot/pilot-sw.js');
@@ -291,7 +292,7 @@ describe('Pilot Offline shell', () => {
   });
 
   it('precacheia o shell e usa fallback offline apenas para navegacao /pilot/', () => {
-    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v35'");
+    expect(pilotSw).toContain("const PILOT_CACHE_VERSION = 'airtrust-pilot-shell-v37'");
     expect(pilotSw).toContain('PILOT_NETWORK_TIMEOUT_MS = 4_000');
     expect(pilotSw).toContain('controller.abort()');
     expect(pilotSw).not.toContain("'/pilot/index.html'");
@@ -476,12 +477,21 @@ describe('Pilot Offline shell', () => {
     expect(pilotIndex).toContain('id="sync-rdv-now"');
     expect(pilotIndex).toContain('Enviar informações do voo');
     expect(pilotApp).toContain("await vault.putJson(\n        'outbox'");
-    expect(pilotApp).toMatch(/await vault\.getJson\(\s*'sync_receipts'/);
     const persistResultIndex = pilotApp.indexOf('async function persistFinalSyncResult');
-    const receiptIndex = pilotApp.indexOf("'sync_receipts'", persistResultIndex);
-    const deleteIndex = pilotApp.indexOf("await vault.deleteJson('outbox'", receiptIndex);
+    expect(persistResultIndex).toBeGreaterThan(-1);
+    expect(pilotApp).toContain('await persistPilotFinalSyncResult({');
+    expect(pilotApp).toContain("if (!stored) throw new Error('Rascunho offline ausente");
+    expect(pilotApp).toContain("const verifiedDraft = await vault.getJson('rdv_drafts', draftId)");
+    expect(pilotApp).toContain("const verifiedConflict = await vault.getJson('conflicts', conflictId)");
+
+    expect(pilotReceipt).toContain("await vault.getJson('sync_receipts', receiptId)");
+    const receiptIndex = pilotReceipt.indexOf("await vault.getJson('sync_receipts', receiptId)");
+    const draftIndex = pilotReceipt.indexOf('await markAccepted(command, result)', receiptIndex);
+    const deleteIndex = pilotReceipt.indexOf("await vault.deleteJson('outbox'", draftIndex);
     expect(receiptIndex).toBeGreaterThan(-1);
-    expect(deleteIndex).toBeGreaterThan(receiptIndex);
+    expect(draftIndex).toBeGreaterThan(receiptIndex);
+    expect(deleteIndex).toBeGreaterThan(draftIndex);
+    expect(pilotSw).toContain("'/pilot/pilot-sync-receipt.js'");
   });
 
   it('gera comando de sync deterministico sem incluir bearer e sem derivar ciclos', () => {
@@ -585,8 +595,9 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('Empresa de abastecimento');
     expect(pilotApp).toContain('pilotFuelingCompanyOptions(activePackageData())');
     expect(pilotSync).toContain('empresa_abastecimento_codigo');
-    expect(pilotSync).toContain('client_local_id: optionalText(fueling?.local_id) || crypto.randomUUID()');
-    expect(pilotSync).toContain('data_hora: time ? fromInputDateTime(time, flightDate) : new Date().toISOString()');
+    expect(pilotSync).toContain('...requireStableFuelingIdentity(fueling, flightDate)');
+    expect(pilotSync).not.toContain('data_hora: time ? fromInputDateTime(time, flightDate) : new Date().toISOString()');
+    expect(pilotApp).toContain("label: 'Hora do abastecimento'");
     expect(pilotRdvDraft).toContain('fuelings: []');
     expect(pilotApp).toContain('Excluir nota do rascunho');
     expect(pilotApp).toContain('activeRdvDraft.fuelings.splice(index, 1)');
@@ -595,7 +606,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('fields.peso_padrao_ativo = false;');
     expect(pilotApp).toContain('applyStandardPassengerBaggageWeight(fields)');
     expect(pilotIndex).toContain('.pilot-standard-weight-toggle');
-    expect(pilotSw).toContain('airtrust-pilot-shell-v35');
+    expect(pilotSw).toContain('airtrust-pilot-shell-v37');
     expect(pilotApp).not.toContain("['Hora', 'hora', 'time'");
     expect(pilotApp).not.toContain("['Nota do combustível', 'nota'");
     expect(pilotSync).not.toContain('nota: optionalText(fueling?.nota)');
@@ -611,7 +622,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotRdvDraft).not.toContain('next.ciclos =');
   });
 
-  it('simplifica o fluxo operacional, não exibe PIN legado e preserva o vault antigo isolado', () => {
+  it('simplifica o fluxo operacional e recupera PIN legado somente quando há vault antigo', () => {
     expect(pilotIndex).toContain('1. Preparar voo');
     expect(pilotIndex).toContain('2. Registrar voo');
     expect(pilotIndex).toContain('3. Enviar');
@@ -632,12 +643,15 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('Nome de guerra: ');
     expect(pilotApp).toContain('ANAC: ');
     expect(pilotApp).toContain('Aguardando FRMS');
-    expect(pilotIndex).not.toContain('PIN offline');
+    expect(pilotIndex).toContain('PIN offline antigo');
+    expect(pilotIndex).toContain('id="legacy-vault-card"');
+    expect(pilotIndex).toContain('id="legacy-vault-pin"');
     expect(pilotIndex).not.toContain('Código local antigo');
     expect(pilotIndex).not.toContain('Atualizar armazenamento deste tablet');
     expect(pilotApp).toContain('await vault.openAutomatically()');
     expect(pilotApp).toContain("vaultOpenState.status !== 'ready'");
-    expect(pilotApp).not.toContain('showLegacyVaultMigration');
+    expect(pilotApp).toContain('vault.recoverLegacyPin(pin)');
+    expect(pilotVault).toContain('async recoverLegacyPin(pin)');
     expect(pilotVault).toContain("const DEVICE_DB_NAME = 'airtrust-pilot-v2'");
     expect(pilotVault).toContain('primaryDatabase.close()');
     expect(pilotVault).toContain("key_protection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY'");

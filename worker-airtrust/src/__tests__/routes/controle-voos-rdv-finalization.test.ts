@@ -88,6 +88,34 @@ describe('Controle de Voos RDV planning deviation finalization guard', () => {
     await expect(assertPlanningDeviationJustified(db, 7, flight)).resolves.toBeUndefined();
   });
 
+
+  it('does not fabricate a zero-minute plan when scheduled times are missing, malformed or reversed', async () => {
+    const db = makeDb([
+      { horario_motor_ligado: '10:00', horario_decolagem: '10:10',
+        horario_pouso: '11:00', horario_motor_desligado: '11:05' },
+    ], 5);
+    for (const plan of [
+      { horario_previsto_partida: null, horario_previsto_chegada: null },
+      { horario_previsto_partida: 'invalid-date', horario_previsto_chegada: flight.horario_previsto_chegada },
+      { horario_previsto_partida: flight.horario_previsto_chegada, horario_previsto_chegada: flight.horario_previsto_partida },
+    ]) {
+      await expect(assertPlanningDeviationJustified(db, 7, { id: flight.id, ...plan }))
+        .resolves.toBeUndefined();
+    }
+  });
+
+  it('still treats a genuine zero-minute planned interval as zero instead of missing', async () => {
+    const db = makeDb([
+      { horario_motor_ligado: '10:00', horario_decolagem: '10:10',
+        horario_pouso: '11:00', horario_motor_desligado: '11:05' },
+    ], 5);
+    const zeroPlan = { ...flight, horario_previsto_chegada: flight.horario_previsto_partida };
+    await expect(assertPlanningDeviationJustified(db, 7, zeroPlan)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'CONTROLE_VOOS_RDV_PLANNING_DEVIATION_JUSTIFICATION_MISMATCH',
+    });
+  });
+
   it('requires no justification when realized total time does not exceed planning', async () => {
     const db = makeDb([
       {

@@ -11,6 +11,10 @@ on:
         description: 'Exact already-deployed staging release SHA to validate'
         required: true
         type: string
+      pr_number:
+        description: 'Open reviewed same-repository release PR (required only when SHA is not yet in main)'
+        required: false
+        type: string
 
 # Serialize staging D1 migrations, Worker/Pages deploys and browser SCORM QA.
 # Mixed runtime SHA would invalidate the QA and can expose partially deployed state.
@@ -42,25 +46,53 @@ jobs:
           CONFIRMATION: ${{ inputs.confirmation }}
           RELEASE_SHA: ${{ inputs.release_sha }}
           EVENT_REF: ${{ github.ref }}
+          PR_NUMBER: ${{ inputs.pr_number }}
         run: |
           set -euo pipefail
           [[ "$EVENT_REF" == 'refs/heads/main' ]] || { echo 'MAIN_ONLY' >&2; exit 1; }
           [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_LMS_SCORM_QA' ]] || { echo 'CONFIRMATION_REJECTED' >&2; exit 1; }
           [[ "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo 'RELEASE_SHA_INVALID' >&2; exit 1; }
+          [[ -z "$PR_NUMBER" || "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'REVIEWED_PR_NUMBER_INVALID' >&2; exit 1; }
 
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Require deployed release to be an ancestor of trusted main
+      - name: Require trusted main ancestry or exact open reviewed release PR
         shell: bash
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git cat-file -e "$RELEASE_SHA^{commit}"
-          git merge-base --is-ancestor "$RELEASE_SHA" HEAD
-          echo "TRUSTED_RELEASE_ANCESTRY_OK=$RELEASE_SHA"
+          if git cat-file -e "$RELEASE_SHA^{commit}" 2>/dev/null &&
+             git merge-base --is-ancestor "$RELEASE_SHA" HEAD; then
+            echo "TRUSTED_RELEASE_ANCESTRY_OK=$RELEASE_SHA"
+          else
+            [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'OPEN_REVIEWED_PR_REQUIRED' >&2; exit 1; }
+            node --input-type=module <<'NODE'
+          const repo = process.env.GITHUB_REPOSITORY;
+          const sha = process.env.RELEASE_SHA.toLowerCase();
+          const number = process.env.PR_NUMBER;
+          const response = await fetch(
+            `https://api.github.com/repos/${repo}/pulls/${number}`,
+            { headers: { authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+              accept: 'application/vnd.github+json',
+              'x-github-api-version': '2022-11-28' } },
+          );
+          if (!response.ok) throw new Error(`RELEASE_PR_LOOKUP_HTTP_${response.status}`);
+          const pr = await response.json();
+          if (pr.state !== 'open' || pr.draft ||
+              pr.base?.ref !== 'main' ||
+              pr.head?.repo?.full_name !== repo ||
+              pr.head?.repo?.fork === true ||
+              pr.head?.sha?.toLowerCase() !== sha) {
+            throw new Error('OPEN_REVIEWED_PR_SHA_OR_SCOPE_MISMATCH');
+          }
+          console.log('TRUSTED_OPEN_RELEASE_PR_HEAD_OK');
+          NODE
+          fi
 
       - name: Require canonical release gates for deployed SHA
         shell: bash

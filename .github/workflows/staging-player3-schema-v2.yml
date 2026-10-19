@@ -20,8 +20,8 @@ on:
         required: true
         type: choice
         options:
-          - lms-native-v1-evidence-0553
-          - lms-player3-module-attempts-0554
+          - lms-native-v1-evidence-0558
+          - lms-player3-module-attempts-0559
       release_reason:
         description: Reason and authorization for the staging schema change
         required: true
@@ -69,7 +69,7 @@ jobs:
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'INVALID_RELEASE_SHA' >&2; exit 1; }
           [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'INVALID_PR_NUMBER' >&2; exit 1; }
           case "$CHANGE_ID" in
-            lms-native-v1-evidence-0553|lms-player3-module-attempts-0554) ;;
+            lms-native-v1-evidence-0558|lms-player3-module-attempts-0559) ;;
             *) echo 'UNAPPROVED_PLAYER3_CHANGE_ID' >&2; exit 1 ;;
           esac
           [[ -n "$RELEASE_REASON" ]] || { echo 'REASON_REQUIRED' >&2; exit 1; }
@@ -146,15 +146,15 @@ jobs:
           const manifest = JSON.parse(readFileSync('release/worker-airtrust/schema-v2/' +
             process.env.CHANGE_ID + '.json', 'utf8'));
           const pinned = Object.freeze({
-            'lms-native-v1-evidence-0553': {
-              fileHash: 'db8e31c3046b3d228f1113e8130f454bc41f95a2af77f251c0cc41f5c98b96e2',
-              planHash: 'c4534859021e175dc5c33c3d08dca28154d8a1779204e055aca69a7ebf2c4c28',
-              filePath: 'worker-airtrust/schema-v2/changes/0553_lms_native_v1_evidence.sql',
+            'lms-native-v1-evidence-0558': {
+              fileHash: 'b0f5b51f26f2428d23468751f575fdfb03ce1583635ef980c33d9ae27b204f57',
+              planHash: '639bbc2abfb4d7a8aea388697c52bfdf16082fed09a5d5863a5db6a79a53fdf4',
+              filePath: 'worker-airtrust/schema-v2/changes/0558_lms_native_v1_evidence.sql',
             },
-            'lms-player3-module-attempts-0554': {
-              fileHash: '0c4873f58b2e2c17f52d183d55b317ee9d91ee70c56d84807b844a2adf04f282',
-              planHash: 'a4859d99280e16244e6011d5490a0a3aaa19c4073b875e3f5e8f17689f9980c2',
-              filePath: 'worker-airtrust/schema-v2/changes/0554_lms_player3_module_attempts.sql',
+            'lms-player3-module-attempts-0559': {
+              fileHash: 'a8c56c0bce48476f48e20bd5d5d33befe6c0becc98d2af309c4fc78d5d18d775',
+              planHash: '8b2c0be03e82a39edd06191b570e6ff21e7f56d6125eeac30ba329d13611b9b2',
+              filePath: 'worker-airtrust/schema-v2/changes/0559_lms_player3_module_attempts.sql',
             },
           });
           const approved = pinned[process.env.CHANGE_ID];
@@ -211,11 +211,11 @@ jobs:
           [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id = '$CHANGE_ID'")" == '0' ]] ||
             { echo 'CHANGE_ALREADY_APPLIED_OR_LEDGER_DRIFT' >&2; exit 1; }
           # Absence of every target table before apply; no replay/ad hoc schema
-          # repair. 0554 has a strict ledger dependency on completed 0553.
-          if [[ "$CHANGE_ID" == 'lms-native-v1-evidence-0553' ]]; then
+          # repair. 0559 has a strict ledger dependency on completed 0558.
+          if [[ "$CHANGE_ID" == 'lms-native-v1-evidence-0558' ]]; then
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_cursos','lms_matriculas','lms_matricula_ciclos','usuarios')")" == '4' ]] ||
               { echo 'PLAYER3_LEGACY_BASE_TABLES_MISSING' >&2; exit 1; }
-            # Validate columns used by 0553 FK/tenant/status triggers on the
+            # Validate columns used by 0558 FK/tenant/status triggers on the
             # REAL staging legacy schema; a table name alone is insufficient.
             [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('lms_cursos') WHERE name IN ('id','empresa_id','tipo_conteudo','ativo','publicado','deleted_at')")" == '6' ]] ||
               { echo 'PLAYER3_LEGACY_COURSE_SHAPE_MISMATCH' >&2; exit 1; }
@@ -224,14 +224,14 @@ jobs:
             [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('lms_matricula_ciclos') WHERE name IN ('id','matricula_id','empresa_id','curso_id','funcionario_id','status','ciclo_atual','deleted_at')")" == '8' ]] ||
               { echo 'PLAYER3_LEGACY_CYCLE_SHAPE_MISMATCH' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_native_edicoes','lms_native_matricula_edicoes','lms_native_eventos','lms_native_tentativas')")" == '0' ]] ||
-              { echo 'PLAYER3_NATIVE_0553_PHYSICAL_DRIFT' >&2; exit 1; }
+              { echo 'PLAYER3_NATIVE_0558_PHYSICAL_DRIFT' >&2; exit 1; }
           else
-            [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='lms-native-v1-evidence-0553' AND baseline_id='$BASELINE_ID' AND file_hash='db8e31c3046b3d228f1113e8130f454bc41f95a2af77f251c0cc41f5c98b96e2'")" == '1' ]] ||
-              { echo 'PLAYER3_NATIVE_0553_REQUIRED_FIRST' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='lms-native-v1-evidence-0558' AND baseline_id='$BASELINE_ID' AND file_hash='b0f5b51f26f2428d23468751f575fdfb03ce1583635ef980c33d9ae27b204f57'")" == '1' ]] ||
+              { echo 'PLAYER3_NATIVE_0558_REQUIRED_FIRST' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_native_edicoes','lms_native_matricula_edicoes','lms_native_eventos','lms_native_tentativas')")" == '4' ]] ||
-              { echo 'PLAYER3_0553_TABLES_MISSING' >&2; exit 1; }
+              { echo 'PLAYER3_0558_TABLES_MISSING' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_player3_politicas','lms_player3_tentativas_modulares')")" == '0' ]] ||
-              { echo 'PLAYER3_0554_PHYSICAL_DRIFT' >&2; exit 1; }
+              { echo 'PLAYER3_0559_PHYSICAL_DRIFT' >&2; exit 1; }
           fi
           echo 'SCHEMA_V2_STAGING_PREFLIGHT=PASS'
 
@@ -288,23 +288,23 @@ jobs:
           read -r file_hash plan_hash <<< "$metadata"
           [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='$CHANGE_ID' AND baseline_id='$BASELINE_ID' AND file_hash='$file_hash' AND plan_hash='$plan_hash' AND github_sha='$RELEASE_SHA'")" == '1' ]] ||
             { echo 'SCHEMA_V2_EXACT_LEDGER_POSTCONDITION_FAILED' >&2; exit 1; }
-          if [[ "$CHANGE_ID" == 'lms-native-v1-evidence-0553' ]]; then
+          if [[ "$CHANGE_ID" == 'lms-native-v1-evidence-0558' ]]; then
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_native_edicoes','lms_native_matricula_edicoes','lms_native_eventos','lms_native_tentativas')")" == '4' ]] ||
-              { echo 'PLAYER3_0553_TABLE_POSTCONDITION_FAILED' >&2; exit 1; }
+              { echo 'PLAYER3_0558_TABLE_POSTCONDITION_FAILED' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name IN ('lms_native_edicoes_tenant_insert','lms_native_edicoes_scope_update','lms_native_vinculo_tenant_insert','lms_native_event_scope_sequence','lms_native_attempt_scope','lms_native_vinculo_immutable_update','lms_native_vinculo_immutable_delete','lms_native_event_immutable_update','lms_native_event_immutable_delete','lms_native_attempt_immutable_update','lms_native_attempt_immutable_delete')")" == '11' ]] ||
-              { echo 'PLAYER3_0553_TRIGGER_POSTCONDITION_FAILED' >&2; exit 1; }
+              { echo 'PLAYER3_0558_TRIGGER_POSTCONDITION_FAILED' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='index' AND name IN ('idx_lms_native_edicoes_course_status','idx_lms_native_vinculo_edicao','idx_lms_native_eventos_vinculo','idx_lms_native_tentativas_vinculo')")" == '4' ]] ||
-              { echo 'PLAYER3_0553_INDEX_POSTCONDITION_FAILED' >&2; exit 1; }
+              { echo 'PLAYER3_0558_INDEX_POSTCONDITION_FAILED' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM lms_native_edicoes")" == '0' ]] ||
-              { echo 'PLAYER3_0553_EDITION_TABLE_NOT_EMPTY' >&2; exit 1; }
+              { echo 'PLAYER3_0558_EDITION_TABLE_NOT_EMPTY' >&2; exit 1; }
           else
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_player3_politicas','lms_player3_tentativas_modulares')")" == '2' ]] ||
-              { echo 'PLAYER3_0554_TABLE_POSTCONDITION_FAILED' >&2; exit 1; }
+              { echo 'PLAYER3_0559_TABLE_POSTCONDITION_FAILED' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name IN ('lms_player3_policy_insert','lms_player3_policy_update','lms_player3_policy_delete','lms_player3_attempt_insert','lms_player3_attempt_update','lms_player3_attempt_delete')")" == '6' ]] ||
-              { echo 'PLAYER3_0554_TRIGGER_POSTCONDITION_FAILED' >&2; exit 1; }
+              { echo 'PLAYER3_0559_TRIGGER_POSTCONDITION_FAILED' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='index' AND name IN ('idx_lms_player3_stage_binding','idx_lms_player3_policy_tenant')")" == '2' ]] ||
-              { echo 'PLAYER3_0554_INDEX_POSTCONDITION_FAILED' >&2; exit 1; }
+              { echo 'PLAYER3_0559_INDEX_POSTCONDITION_FAILED' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM lms_player3_politicas")" == '0' ]] ||
-              { echo 'PLAYER3_0554_POLICY_TABLE_NOT_EMPTY' >&2; exit 1; }
+              { echo 'PLAYER3_0559_POLICY_TABLE_NOT_EMPTY' >&2; exit 1; }
           fi
           echo "SCHEMA_V2_STAGING_APPLIED_AND_VERIFIED=$CHANGE_ID" >> "$GITHUB_STEP_SUMMARY"

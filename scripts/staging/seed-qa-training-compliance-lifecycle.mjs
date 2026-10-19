@@ -12,6 +12,12 @@ import { spawnSync } from 'node:child_process';
 const ALLOWED_D1 = 'airtrust-db-staging-baseline-20260701';
 const CONFIRM = 'AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA';
 const TENANT = 'qa_examiner_training';
+const qaAdminEmail = String(
+  process.env.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid',
+).trim().toLowerCase();
+if (!/^[a-z0-9._+-]+@staging\.airtrust\.invalid$/.test(qaAdminEmail)) {
+  throw new Error('QA_ADMIN_STAGING_IDENTITY_REQUIRED');
+}
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
 const rollback = args.includes('--rollback');
@@ -49,6 +55,12 @@ const orphanCourseTitle = `${code} EAD legado`;
 const requiredPackagePrefix = `qa/h5p/${code}/required/`;
 const orphanPackagePrefix = `qa/h5p/${code}/orphan/`;
 const tenantId = `(SELECT id FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)`;
+const qaUserScope = `FROM usuarios u
+  INNER JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=${tenantId}
+  WHERE LOWER(TRIM(u.email))=${esc(qaAdminEmail)} AND u.deleted_at IS NULL
+    AND COALESCE(u.active,1)=1
+    AND LOWER(TRIM(ue.role)) IN ('admin','administrador','gestor','manager')`;
+const qaUserId = `(SELECT u.id ${qaUserScope} LIMIT 1)`;
 const sectorId = `(SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(sectorCode)} AND deleted_at IS NULL LIMIT 1)`;
 const invalidSectorId = `(SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(invalidSectorCode)} AND deleted_at IS NULL LIMIT 1)`;
 const functionId = `(SELECT id FROM funcoes WHERE empresa_id=${tenantId} AND codigo=${esc(functionCode)} AND deleted_at IS NULL LIMIT 1)`;
@@ -63,6 +75,7 @@ CREATE TABLE IF NOT EXISTS _qa_compliance_lifecycle_guard(ok INTEGER NOT NULL CH
 DELETE FROM _qa_compliance_lifecycle_guard;
 INSERT INTO _qa_compliance_lifecycle_guard(ok)
 SELECT CASE WHEN (SELECT COUNT(*) FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)=1
+ AND (SELECT COUNT(DISTINCT u.id) ${qaUserScope})=1
  AND NOT EXISTS (SELECT 1 FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(sectorCode)} AND deleted_at IS NULL)
  AND NOT EXISTS (SELECT 1 FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL)
  AND NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL)
@@ -75,6 +88,17 @@ FROM empresas WHERE id=${tenantId};
 INSERT INTO setores(codigo,nome,descricao,responsavel,ativo,empresa_id,created_at,updated_at,deleted_at)
 SELECT ${esc(invalidSectorCode)},${esc(invalidSectorName)},${esc(marker)},'QA',1,id,datetime('now'),datetime('now'),NULL
 FROM empresas WHERE id=${tenantId};
+
+-- Temporary manager grants: the QA login may select the scoped Gestor
+-- profile, whose catalogue correctly hides sectors without a manager link.
+-- Both synthetic sectors are needed for the negative unmapped-function case.
+INSERT INTO setores_gestores
+  (setor_id,usuario_id,gestor_id,empresa_id,role,ativo,created_at,updated_at,deleted_at)
+SELECT s.id,${qaUserId},NULL,s.empresa_id,'manager',1,datetime('now'),datetime('now'),NULL
+FROM setores s
+WHERE s.empresa_id=${tenantId}
+  AND s.codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)})
+  AND s.descricao=${esc(marker)} AND s.ativo=1 AND s.deleted_at IS NULL;
 
 INSERT INTO funcoes(codigo,nome,descricao,categoria,ativo,empresa_id,created_at,updated_at,deleted_at)
 SELECT ${esc(functionCode)},${esc(functionName)},${esc(marker)},'QA',1,id,datetime('now'),datetime('now'),NULL FROM empresas WHERE id=${tenantId};
@@ -95,16 +119,25 @@ INSERT INTO qualificacoes_categorias(nome,codigo,descricao,cor,ativo,empresa_id,
 SELECT ${esc(`${code} Categoria`)},${esc(categoryCode)},${esc(marker)},'#64748b',1,id,'OPERACOES',1,datetime('now'),datetime('now'),NULL FROM empresas WHERE id=${tenantId};
 
 INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria_id,categoria,carga_horaria,validade,vencimento_fim_mes,observacoes,ativo,empresa_id,created_at,updated_at,deleted_at)
-SELECT 'TREINAMENTO',${esc(requiredTypeCode)},${esc(requiredTypeName)},${esc(marker)},qc.id,qc.nome,1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
+SELECT 'TREINAMENTO',${esc(requiredTypeCode)},${esc(requiredTypeName)},${esc(marker)},qc.id,'EAD',1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
 FROM qualificacoes_categorias qc WHERE qc.empresa_id=${tenantId} AND qc.codigo=${esc(categoryCode)} AND qc.deleted_at IS NULL;
 INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria_id,categoria,carga_horaria,validade,vencimento_fim_mes,observacoes,ativo,empresa_id,created_at,updated_at,deleted_at)
-SELECT 'TREINAMENTO',${esc(orphanTypeCode)},${esc(orphanTypeName)},${esc(marker)},qc.id,qc.nome,1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
+SELECT 'TREINAMENTO',${esc(orphanTypeCode)},${esc(orphanTypeName)},${esc(marker)},qc.id,'EAD',1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
 FROM qualificacoes_categorias qc WHERE qc.empresa_id=${tenantId} AND qc.codigo=${esc(categoryCode)} AND qc.deleted_at IS NULL;
 
 INSERT INTO lms_cursos(empresa_id,titulo,descricao,categoria,carga_horaria_minutos,qualificacao_tipo_id,gerar_qualificacao_ao_concluir,ativo,publicado,version_tag,tipo_conteudo,scorm_package_r2_prefix,observacoes,created_at,updated_at,deleted_at)
-VALUES (${tenantId},${esc(requiredCourseTitle)},${esc(marker)},'QA',60,${requiredTypeId},1,1,1,${esc(code)},'h5p',${esc(requiredPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
+VALUES (${tenantId},${esc(requiredCourseTitle)},${esc(marker)},'EAD',60,${requiredTypeId},1,1,1,${esc(code)},'h5p',${esc(requiredPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
 INSERT INTO lms_cursos(empresa_id,titulo,descricao,categoria,carga_horaria_minutos,qualificacao_tipo_id,gerar_qualificacao_ao_concluir,ativo,publicado,version_tag,tipo_conteudo,scorm_package_r2_prefix,observacoes,created_at,updated_at,deleted_at)
-VALUES (${tenantId},${esc(orphanCourseTitle)},${esc(marker)},'QA',60,${orphanTypeId},1,1,1,${esc(code)},'h5p',${esc(orphanPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
+VALUES (${tenantId},${esc(orphanCourseTitle)},${esc(marker)},'EAD',60,${orphanTypeId},1,1,1,${esc(code)},'h5p',${esc(orphanPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
+
+-- The scoped QA Gestor only sees courses linked to the permitted synthetic
+-- sector. Do not relax product RBAC or grant global course visibility.
+INSERT INTO lms_cursos_setores(curso_id,setor_id,empresa_id,created_at,updated_at,deleted_at)
+SELECT c.id,${sectorId},c.empresa_id,datetime('now'),datetime('now'),NULL
+FROM lms_cursos c
+WHERE c.empresa_id=${tenantId}
+  AND c.titulo IN (${esc(requiredCourseTitle)},${esc(orphanCourseTitle)})
+  AND c.observacoes=${esc(marker)} AND c.deleted_at IS NULL;
 
 -- Historical enrollment with no requirement: deliberately creates the reconciliation case.
 INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id,status,progresso_pct,tentativas,observacoes,created_at,updated_at,deleted_at)
@@ -114,9 +147,11 @@ CREATE TABLE IF NOT EXISTS _qa_compliance_lifecycle_post(
   sector_count INTEGER NOT NULL CHECK(sector_count=2),
   function_count INTEGER NOT NULL CHECK(function_count=2),
   pair_count INTEGER NOT NULL CHECK(pair_count=1),
+  manager_grants_count INTEGER NOT NULL CHECK(manager_grants_count=2),
   employee_count INTEGER NOT NULL CHECK(employee_count=2),
   type_count INTEGER NOT NULL CHECK(type_count=2),
   course_count INTEGER NOT NULL CHECK(course_count=2),
+  course_sector_count INTEGER NOT NULL CHECK(course_sector_count=2),
   orphan_enrollment_count INTEGER NOT NULL CHECK(orphan_enrollment_count=1),
   rules_count INTEGER NOT NULL CHECK(rules_count=0)
 );
@@ -126,15 +161,32 @@ SELECT
  (SELECT COUNT(*) FROM setores WHERE empresa_id=${tenantId} AND codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM funcoes WHERE empresa_id=${tenantId} AND codigo IN (${esc(functionCode)},${esc(invalidFunctionCode)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM setores_funcoes WHERE empresa_id=${tenantId} AND setor_id=${sectorId} AND funcao_id=${functionId} AND ativo=1 AND deleted_at IS NULL),
+ (SELECT COUNT(*) FROM setores_gestores sg JOIN setores s ON s.id=sg.setor_id AND s.empresa_id=sg.empresa_id
+   WHERE sg.empresa_id=${tenantId} AND sg.usuario_id=${qaUserId}
+     AND s.codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)})
+     AND s.descricao=${esc(marker)} AND sg.ativo=1 AND sg.deleted_at IS NULL),
  (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM lms_cursos WHERE empresa_id=${tenantId} AND titulo IN (${esc(requiredCourseTitle)},${esc(orphanCourseTitle)}) AND deleted_at IS NULL),
+ (SELECT COUNT(*) FROM lms_cursos_setores lcs JOIN lms_cursos c ON c.id=lcs.curso_id AND c.empresa_id=lcs.empresa_id
+   WHERE lcs.empresa_id=${tenantId} AND lcs.setor_id=${sectorId}
+     AND c.observacoes=${esc(marker)}
+     AND c.titulo IN (${esc(requiredCourseTitle)},${esc(orphanCourseTitle)})
+     AND lcs.deleted_at IS NULL),
  (SELECT COUNT(*) FROM lms_matriculas WHERE empresa_id=${tenantId} AND curso_id=${orphanCourseId} AND funcionario_id=${employee1Id} AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM treinamento_requisitos WHERE empresa_id=${tenantId} AND qualificacao_tipo_id IN (${requiredTypeId},${orphanTypeId}) AND deleted_at IS NULL);
 DROP TABLE _qa_compliance_lifecycle_post;
 `;
 
 const rollbackSql = `
+-- Revoke only the two per-run manager grants before retiring the synthetic sectors.
+UPDATE setores_gestores
+SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
+WHERE empresa_id=${tenantId} AND usuario_id=${qaUserId}
+  AND setor_id IN (SELECT id FROM setores WHERE empresa_id=${tenantId}
+    AND codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)})
+    AND descricao=${esc(marker)}) AND deleted_at IS NULL;
+
 UPDATE treinamento_matricula_reconciliacoes
 SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND matricula_id IN (
@@ -169,6 +221,15 @@ WHERE empresa_id=${tenantId} AND curso_id IN (
 ) AND funcionario_id IN (
   SELECT id FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)})
 );
+-- Retire exactly this run's two course-sector links before retiring courses.
+UPDATE lms_cursos_setores
+SET deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
+WHERE empresa_id=${tenantId} AND setor_id=${sectorId} AND deleted_at IS NULL
+  AND curso_id IN (
+    SELECT id FROM lms_cursos WHERE empresa_id=${tenantId}
+      AND titulo IN (${esc(requiredCourseTitle)},${esc(orphanCourseTitle)})
+      AND observacoes=${esc(marker)}
+  );
 UPDATE lms_cursos SET ativo=0,publicado=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
 UPDATE funcionarios SET ativo=0,status='INATIVO',deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
@@ -190,10 +251,17 @@ DELETE FROM _qa_compliance_lifecycle_cleanup;
 INSERT INTO _qa_compliance_lifecycle_cleanup(active_count)
 SELECT
  (SELECT COUNT(*) FROM setores WHERE empresa_id=${tenantId} AND codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)}) AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM setores_gestores sg JOIN setores s ON s.id=sg.setor_id AND s.empresa_id=sg.empresa_id
+     WHERE sg.empresa_id=${tenantId} AND sg.usuario_id=${qaUserId}
+       AND s.codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)})
+       AND s.descricao=${esc(marker)} AND sg.ativo=1 AND sg.deleted_at IS NULL)
  +(SELECT COUNT(*) FROM funcoes WHERE empresa_id=${tenantId} AND codigo IN (${esc(functionCode)},${esc(invalidFunctionCode)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM lms_cursos WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM lms_cursos_setores lcs JOIN lms_cursos c ON c.id=lcs.curso_id AND c.empresa_id=lcs.empresa_id
+     WHERE lcs.empresa_id=${tenantId} AND lcs.setor_id=${sectorId}
+       AND c.observacoes=${esc(marker)} AND lcs.deleted_at IS NULL)
  +(SELECT COUNT(*) FROM treinamento_requisitos WHERE empresa_id=${tenantId} AND qualificacao_tipo_id IN (
     SELECT id FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)})
   ) AND deleted_at IS NULL)

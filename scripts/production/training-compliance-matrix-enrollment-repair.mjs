@@ -68,7 +68,7 @@ function runWrangler(sql, label, { mutating = false } = {}) {
 
 function baseCte() {
   return `WITH eligible AS (
-    SELECT f.id funcionario_id, tr.id regra_id, tr.qualificacao_tipo_id, tr.obrigatoriedade, tr.condicao_id, tr.escopo, tr.fundamento_tipo,
+    SELECT f.id funcionario_id, tr.id regra_id, tr.qualificacao_tipo_id, tr.obrigatoriedade, tr.condicao_id, tr.escopo, tr.fundamento_tipo, COALESCE(tr.auto_matricular_ead, 0) auto_matricular_ead,
            (CASE tr.escopo WHEN 'FUNCIONARIO' THEN 5000 WHEN 'SETOR_FUNCAO' THEN 40 WHEN 'FUNCAO' THEN 30 WHEN 'SETOR' THEN 20 WHEN 'EMPRESA' THEN 10 ELSE 0 END
             + CASE WHEN tr.condicao_id IS NOT NULL THEN 1000 ELSE 0 END
             + CASE WHEN NULLIF(TRIM(tr.aeronave_modelo),'') IS NOT NULL THEN 100 ELSE 0 END) prioridade
@@ -128,7 +128,7 @@ function baseCte() {
     ) rn
       FROM eligible
   ), expected AS (
-    SELECT r.funcionario_id,r.qualificacao_tipo_id,qt.codigo,qt.nome,r.condicao_id,r.escopo,r.fundamento_tipo
+    SELECT r.funcionario_id,r.qualificacao_tipo_id,qt.codigo,qt.nome,r.condicao_id,r.escopo,r.fundamento_tipo,r.auto_matricular_ead
       FROM ranked r
       JOIN qualificacoes_tipos qt ON qt.id=r.qualificacao_tipo_id AND qt.empresa_id=${EMPRESA_ID}
      WHERE r.rn=1
@@ -188,7 +188,7 @@ function requirementNeedsEnrollment(requirement) {
   if (realizedOn && realizedOn > today) fail('CANONICAL_FUTURE_EVIDENCE_REQUIRES_WORKER_FIX');
   const status = String(requirement?.status_compliance || '').trim().toUpperCase();
   if (['NAO_REALIZADO', 'VENCIDO'].includes(status)) return true;
-  if (status === 'EM_ANDAMENTO') return false;
+  if (status === 'EM_ANDAMENTO' || status === 'PENDENTE_VALIDACAO') return false;
   if (status === 'CONFORME' || status === 'VENCENDO') {
     const days = requirement?.dias_para_vencer;
     if (days == null || days === '') return false;
@@ -260,7 +260,7 @@ async function loadCanonicalRequirementMap(token, targetRows) {
 function readD1Topology() {
   const targetRows = runWrangler(
     `${baseCte()}
-     SELECT e.funcionario_id,e.qualificacao_tipo_id,e.codigo,e.nome,
+     SELECT e.funcionario_id,e.qualificacao_tipo_id,e.codigo,e.nome,e.auto_matricular_ead,
             COALESCE(ac.n_courses,0) n_courses,ac.course_id
        FROM enrollment_target e
        LEFT JOIN active_courses ac ON ac.qualificacao_tipo_id=e.qualificacao_tipo_id
@@ -337,6 +337,7 @@ async function readState(token) {
   const missingRows = [];
   let suppressedByValidEvidenceCount = 0;
   let modalityManualReviewCount = 0;
+  let policyManualReviewCount = 0;
   let renewalWindowCount = 0;
   for (const row of topology.targetRows) {
     const key = pairKey(row.funcionario_id, row.qualificacao_tipo_id);
@@ -348,6 +349,13 @@ async function readState(token) {
     }
     if (requirementNeedsManualModalityCompletion(requirement)) {
       modalityManualReviewCount += 1;
+      continue;
+    }
+    // The mandatory matrix determines applicability, but only an explicit
+    // auto-enrollment opt-in permits a new LMS enrollment. Never infer it
+    // from an absent historical qualification or a mandatory rule alone.
+    if (Number(row.auto_matricular_ead) !== 1) {
+      policyManualReviewCount += 1;
       continue;
     }
     if (
@@ -405,6 +413,7 @@ async function readState(token) {
     redundant_hash: sha(redundantIds.map(String)),
     redundant_manual_review_count: redundantManualReviewRows.length,
     modality_manual_review_count: modalityManualReviewCount,
+    policy_manual_review_count: policyManualReviewCount,
     no_course_types: noCourseTypes,
     no_course_count: noCourseTypes.length,
     no_course_hash: sha(noCourseTypes.map((row) => String(row.id))),
@@ -475,24 +484,6 @@ async function apiJson(token, path, options = {}, retry = {}) {
   }
 
   throw lastError || new Error(`${path}_RETRY_EXHAUSTED`);
-}
-
-async function ensureRequiredEadCourses(token, state) {
-  for (const type of state.no_course_types) {
-    await apiJson(token, '/api/lms/cursos', {
-      method: 'POST',
-      body: JSON.stringify({
-        titulo: type.nome,
-        descricao: 'Curso EAD placeholder criado para requisito obrigatório da matriz de Compliance. Conteúdo será carregado posteriormente.',
-        categoria: 'EAD',
-        qualificacao_tipo_id: type.id,
-        tipo_conteudo: 'scorm',
-        gerar_qualificacao_ao_concluir: 1,
-        publicado: 0,
-        observacoes: 'Placeholder EAD criado pela reconciliação exata da matriz obrigatória.',
-      }),
-    });
-  }
 }
 
 function chunk(items, size = 200) {
@@ -676,6 +667,7 @@ function sanitizedSummary(state) {
     redundant_hash: state.redundant_hash,
     redundant_manual_review_count: state.redundant_manual_review_count,
     modality_manual_review_count: state.modality_manual_review_count,
+    policy_manual_review_count: state.policy_manual_review_count,
     historical_evidence_preserved: true,
     no_course_count: state.no_course_count,
     no_course_hash: state.no_course_hash,
@@ -710,9 +702,10 @@ async function main() {
     return;
   }
 
+  // A published course with actual content is mandatory before enrollment.
+  // Never generate a placeholder course as a side effect of reconciliation.
+  if (before.no_course_count !== 0) fail('PUBLISHED_EAD_CONTENT_MISSING_MANUAL_REVIEW');
   verifyReviewedState(before);
-  await ensureRequiredEadCourses(token, before);
-  summary.created_courses = before.no_course_count;
 
   const enrollmentResult = await enrollMissingPairs(token);
   summary.created_enrollments = enrollmentResult.created;

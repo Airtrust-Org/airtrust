@@ -9,6 +9,7 @@ import { trainingComplianceNeedsEnrollment } from '../services/training-complian
 import { readTrainingRosterPlan, applyTrainingRosterPlan } from '../services/training-compliance-roster-sync';
 import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle, syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
+import { createComplianceEnrollmentAtomic } from '../services/training-compliance-create-enrollment';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import type { TrainingComplianceSnapshot } from './compliance-treinamentos';
 
@@ -142,7 +143,7 @@ router.post('/matricular-pendentes', requireRole('admin'), async (c) => {
   }
   const activeKeys = new Set(active.filter(row => row.qualificacao_tipo_id != null)
     .map(row => `${row.funcionario_id}:${row.qualificacao_tipo_id}`));
-  const pendentes: Array<{ funcionarioId: number; qualificacaoTipoId: number; cursoId: number }> = [];
+  const pendentes: Array<{ funcionarioId: number; qualificacaoTipoId: number; cursoId: number; regraId: number }> = [];
   let semCursoUnico = 0;
   for (const person of snapshot.people) {
     for (const req of person.requisitos) {
@@ -150,11 +151,12 @@ router.post('/matricular-pendentes', requireRole('admin'), async (c) => {
       if (req.obrigatoriedade !== 'OBRIGATORIA' ||
           req.evidencia_pendente_validacao ||
           !trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer) ||
-          (req.modalidade_requerida && req.modalidade_requerida !== 'EAD') ||
+          req.auto_matricular_ead !== 1 ||
+          req.modalidade_requerida !== 'EAD' ||
           activeKeys.has(`${person.id}:${req.qualificacao_tipo_id}`)) continue;
       const mapped = byType.get(Number(req.qualificacao_tipo_id)) || [];
       if (mapped.length !== 1) { semCursoUnico++; continue; }
-      pendentes.push({ funcionarioId: person.id, qualificacaoTipoId: req.qualificacao_tipo_id, cursoId: mapped[0] });
+      pendentes.push({ funcionarioId: person.id, qualificacaoTipoId: req.qualificacao_tipo_id, cursoId: mapped[0], regraId: req.regra_id });
     }
   }
   const total = pendentes.length;
@@ -188,12 +190,15 @@ router.post('/matricular-pendentes', requireRole('admin'), async (c) => {
         });
         id = existing.id;
       } else {
-        const inserted = await db.prepare(
-          `INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id,observacoes)
-           VALUES (?,?,?,'Matrícula gerada por requisito pendente na matriz QSMS/SO (sem e-mail)')`,
-        ).bind(empresaId, pending.cursoId, pending.funcionarioId).run();
-        id = Number(inserted.meta.last_row_id);
-        if (!id) throw new Error('LMS_ENROLLMENT_NOT_CREATED');
+        const created=await createComplianceEnrollmentAtomic(db,{
+          empresaId,funcionarioId:pending.funcionarioId,cursoId:pending.cursoId,
+          qualificacaoTipoId:pending.qualificacaoTipoId,regraId:pending.regraId,
+          origin:'REQUISITO_PENDENTE_QSMS',usuarioId:audit.usuario_id,
+          observacoes:'Matrícula gerada por requisito pendente na matriz QSMS/SO (sem e-mail)',
+        });
+        if (created===null) {preservadas++;continue;}
+        matriculadas++;
+        continue;
       }
       await ensureMatriculaCycle(db, { matriculaId: id, empresaId, origin: 'AUTO_RENOVACAO' });
       await stampLmsEnrollmentEvidenceProfile(db, {
@@ -201,8 +206,8 @@ router.post('/matricular-pendentes', requireRole('admin'), async (c) => {
         qualificacaoTipoId: pending.qualificacaoTipoId,
       });
       await registrarAuditoria({
-        db, tabela: 'lms_matriculas', acao: existing ? 'UPDATE' : 'INSERT', registro_id: id,
-        dados_anteriores: existing ? { status: existing.status, empresa_id: empresaId } : null,
+        db, tabela: 'lms_matriculas', acao: 'UPDATE', registro_id: id,
+        dados_anteriores: { status: existing.status, empresa_id: empresaId },
         dados_novos: { status: 'NAO_INICIADO', empresa_id: empresaId, curso_id: pending.cursoId,
           motivo: 'REQUISITO_PENDENTE_QSMS_20261010' },
         ...audit,

@@ -56,7 +56,7 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
   page.on('requestfailed', (request) => {
     const url = new URL(request.url());
     if (url.hostname === API_HOST && url.pathname === '/api/auth/login' &&
-        request.method() === 'POST' && request.failure() === 'net::ERR_ABORTED') {
+        request.method() === 'POST' && request.failure()?.errorText === 'net::ERR_ABORTED') {
       loginAborted.push('ABORTED');
     }
   });
@@ -159,17 +159,112 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
   await expect(page.getByText('Carregando prioridades e evidências.')).toHaveCount(0, { timeout: 30_000 });
   await captureMain(page, '01-operacao-frms-qa', 'Operação');
 
+  // The decision queue is NOT the 4-signal grid. Audit the visible receipt
+  // badge there first, then open a REAL row to inspect the independent signals.
+  const receivedCount = payload.data?.filter((row) => row.checkin_status === 'RECEBIDO').length ?? 0;
+  if (receivedCount > 0) {
+    // Search within the decision queue, not the overview's separate signal grid.
+    // An unscoped .first() can select a badge outside the clickable crew row.
+    const crewRow = page.locator('#frms-decision-queue button').filter({
+      has: page.locator('[aria-label="Check-in diário: Recebido — informativo"]'),
+    }).first();
+    const receipt = crewRow.getByLabel('Check-in diário: Recebido — informativo');
+    await expect(crewRow).toBeVisible();
+    await expect(receipt).toBeVisible();
+    await expect(receipt).toHaveClass(/bg-sky-100/);
+    await expect(receipt).toHaveAttribute('title', /Não comprova baixa fadiga nem autoriza liberação/);
+    await crewRow.click();
+    const detail = page.getByRole('dialog');
+    await expect(detail.getByLabel('Check-in diário: Recebido — informativo')).toBeVisible();
+    await test.info().attach('01b-frms-checkin-recebido-nao-libera', {
+      body: await detail.screenshot({ animations: 'disabled' }),
+      contentType: 'image/png',
+    });
+    await detail.getByRole('button', { name: 'Fechar', exact: true }).click();
+    await expect(detail).toHaveCount(0);
+  }
+  await expect(page.locator('main [aria-label^="Check-in diário: Recebido — normal"]')).toHaveCount(0);
+
+  // A green UI test that accepts "Nenhum caso" cannot prove case management.
+  // Require the four QA fixture cases to be returned by the REAL authenticated
+  // tenant-scoped endpoint; capture the actual UI even if the contract fails.
+  const casesRequest = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.hostname === API_HOST && url.pathname === '/api/frms/alertas' &&
+      url.searchParams.get('resolvido') === 'false' &&
+      response.request().method() === 'GET';
+  }, { timeout: 45_000 });
   await page.getByRole('link', { name: 'Casos', exact: true }).click();
   await expect(page).toHaveURL((url) => url.pathname === '/frms/alertas');
-  // A loader that has not mounted yet also has count 0. Require a terminal
-  // DOM state derived from the real API response before taking a screenshot:
-  // either an empty queue or an actual case row, never initial skeletons.
+  const casesResponse = await casesRequest;
+  expect(casesResponse.status(), 'Casos deve carregar com sessão QA real').toBe(200);
+  const casesPayload = await casesResponse.json() as {
+    success?: boolean;
+    total?: number;
+    data?: Array<{
+      id: string;
+      nome_tripulante?: string | null;
+      jornada_id?: string | null;
+      data_jornada?: string | null;
+      resolvido?: number;
+    }>;
+  };
+  expect(casesPayload.success).toBe(true);
+  // A loader that has not mounted yet also has count 0. Require terminal state.
   const casesSettled = page.getByText('Nenhum caso neste filtro', { exact: true })
     .or(page.locator('main article').first());
   await expect(casesSettled).toBeVisible({ timeout: 45_000 });
   await expect(page.locator('[aria-label="Carregando casos"]')).toHaveCount(0);
   await expect(page.getByText('Não foi possível atualizar os casos.')).toHaveCount(0);
   await captureMain(page, '02-casos-frms-qa', 'Casos');
+
+  const expectedCaseIds = [1, 2, 3, 4].map((n) => 'qa-frms-ux-case-' + n).sort();
+  // Soft assertions keep 4/4 a HARD final acceptance failure, but let the
+  // read-only browser collect independent Reports/Maintenance evidence first.
+  // Zero cases must never be converted into a passing operational acceptance.
+  expect.soft(casesPayload.total, 'FRMS_QA_CASES_NOT_VISIBLE: seed antigo nao prova ciclo de casos')
+    .toBe(expectedCaseIds.length);
+  expect.soft((casesPayload.data ?? []).map((row) => row.id).sort()).toEqual(expectedCaseIds);
+  expect.soft(casesPayload.data?.every((row) =>
+    row.nome_tripulante?.startsWith('QA Tripulante ') &&
+    row.jornada_id?.startsWith('qa-frms-ux-j-') &&
+    Boolean(row.data_jornada?.match(/^2026-\d\d-\d\d$/)) &&
+    row.resolvido === 0,
+  )).toBe(true);
+  const casesIntact = casesPayload.total === expectedCaseIds.length &&
+    (casesPayload.data ?? []).map((row) => row.id).sort().join(',') === expectedCaseIds.join(',');
+  if (casesIntact) {
+    await expect(page.locator('main article')).toHaveCount(expectedCaseIds.length);
+    await expect(page.getByText('Nenhum caso neste filtro', { exact: true })).toHaveCount(0);
+
+    // Exercise the real action affordance without sending any PUT or changing
+    // treatment/acknowledgement. A full lifecycle needs separate governed QA writes.
+    const firstCase = page.locator('main article').first();
+    await expect(firstCase.getByText('QA SINTETICO: revisar contexto e registrar providencia')).toBeVisible();
+    await firstCase.getByRole('button', { name: 'Registrar tratamento' }).click();
+    const treatmentDialog = page.getByRole('dialog');
+    await expect(treatmentDialog.getByRole('heading', { name: 'Registrar medida sem encerrar o caso' })).toBeVisible();
+    for (const field of ['Responsável pelo tratamento', 'Prazo', 'Medida de mitigação', 'Justificativa da decisão']) {
+      await expect(treatmentDialog.getByText(field, { exact: true })).toBeVisible();
+    }
+    await expect(treatmentDialog.getByRole('button', { name: 'Registrar sem encerrar' })).toBeDisabled();
+    await test.info().attach('02b-frms-caso-tratamento-dry-run', {
+      body: await treatmentDialog.screenshot({ animations: 'disabled' }),
+      contentType: 'image/png',
+    });
+    await treatmentDialog.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await expect(treatmentDialog).toHaveCount(0);
+    test.info().annotations.push({
+      type: 'coverage-gap',
+      description: 'Fluxo do caso foi inspecionado sem writes; tratamento, eficácia e encerramento precisam de QA de mutação governado.',
+    });
+
+  } else {
+    test.info().annotations.push({
+      type: 'coverage-gap',
+      description: '4/4 FRMS synthetic case contract failed; no treatment dialog inspected. Continuing read-only reports QA without accepting empty cases.',
+    });
+  }
 
   // Management of maintenance personnel requires an explicit backend grant.
   // The synthetic flight-operations account may have no such grant; never
@@ -208,5 +303,5 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
 
   expect(failures, 'Erros 5xx no escopo QA autenticado').toEqual([]);
   guard.assertClean();
-  console.log('FRMS_UX_30D_SYNTHETIC_BROWSER_QA_PASS; tenant=999013; routes=operacao,casos,relatorios; maintenance_conditional=true; production_writes=none');
+  console.log('FRMS_UX_30D_SYNTHETIC_BROWSER_QA_END; tenant=999013; cases=' + (casesPayload.total ?? 'unknown') + '/4; acceptance_requires_4_cases=true; reports_inspected=true; production_writes=none');
 });

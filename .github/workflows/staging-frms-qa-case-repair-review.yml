@@ -1,0 +1,96 @@
+name: Staging FRMS QA Case Repair Plan Review Only
+
+# No D1 token is available to this workflow; review only. Never an apply entrypoint.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_STAGING_FRMS_CASE_REPAIR_REVIEW_ONLY
+        required: true
+        type: string
+      expected_main_sha:
+        description: Full 40-hex reviewed main SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+jobs:
+  validate-source:
+    name: Verify main and reviewed aggregate provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reject unreviewed code or source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          [[ "$CONFIRMATION" == AIRTRUST_STAGING_FRMS_CASE_REPAIR_REVIEW_ONLY ]] || exit 1
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]] || exit 1
+          [[ "$(gh api repos/Airtrust-Org/airtrust/branches/main --jq '.commit.sha')" == "$EXPECTED_SHA" ]] || exit 1
+          run="$(gh api repos/Airtrust-Org/airtrust/actions/runs/38452591092 --jq '[.conclusion,.event,.head_sha,.path] | @tsv')"
+          IFS=$'\t' read -r conclusion event aggregate_sha source_path <<< "$run"
+          [[ "$conclusion" == success && "$event" == workflow_dispatch ]] || exit 1
+          [[ "$aggregate_sha" == 3f4017dd0ecdf03afbad4d39ecf8de06c05e0861 ]] || exit 1
+          [[ "$source_path" == *frms-ux-30d-production-aggregate.yml ]] || exit 1
+          echo FRMS_QA_REPAIR_SOURCE_GOVERNANCE_PASS
+
+  render-reviewed-plan:
+    name: Render eight-line CAS plan digest, zero remote writes
+    needs: validate-source
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/download-artifact@v7
+        with:
+          name: frms-ux-30d-deidentified-aggregates
+          run-id: 38452591092
+          github-token: ${{ github.token }}
+          path: _frms_qa_aggregate
+      - name: Run SQLite CAS invariants and source policy gate
+        run: |
+          set -euo pipefail
+          node --test scripts/__tests__/frms-qa-cases-repair-plan.test.mjs
+          node scripts/check-operational-sql-sources.mjs
+      - name: Render deterministic review digest
+        env:
+          SANITIZED_AGGREGATE_PATH: ${{ github.workspace }}/_frms_qa_aggregate/frms-ux-30d-aggregates.json
+        run: |
+          set -euo pipefail
+          test -z "${CLOUDFLARE_API_TOKEN:-}"
+          test -z "${CLOUDFLARE_ACCOUNT_ID:-}"
+          test -z "${FRMS_QA_MODE:-}"
+          node scripts/staging/frms-qa-cases-repair-plan.mjs |
+            tee "$RUNNER_TEMP/frms-qa-repair-review.json"
+          {
+            echo "## FRMS QA repair - REVIEW ONLY"
+            echo "- repo SHA: \`$GITHUB_SHA\`"
+            echo "- result: 4 synthetic journeys + 4 synthetic alerts; zero D1 writes"
+            echo "- authorization status: NOT GRANTED; no apply or rollback entrypoint"
+            echo "- see the sanitized report (no private records)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish safe digest (no SQL/preimage)
+        uses: actions/upload-artifact@v7
+        with:
+          name: frms-qa-case-repair-plan-review-${{ github.run_id }}
+          path: ${{ runner.temp }}/frms-qa-repair-review.json
+          retention-days: 7
+          if-no-files-found: error
