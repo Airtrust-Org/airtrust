@@ -42,7 +42,7 @@ describe('Compliance requirement save enrollment synchronization', () => {
     expect(body).toContain('hasActiveMatriculaCycle(existing)');
     expect(body).toContain('canReuseMatriculaCycle(existing)');
     expect(body).toContain('resetMatriculaForNewCycle(');
-    expect(body).toContain('ensureMatriculaCycle(');
+    expect(body).toContain('createComplianceEnrollmentAtomic(');
     expect(body).toContain('stampLmsEnrollmentEvidenceProfile(');
     expect(body).toContain('empresa_id=? AND curso_id=? AND funcionario_id=?');
     expect(body).toContain("registro_id: existing.id");
