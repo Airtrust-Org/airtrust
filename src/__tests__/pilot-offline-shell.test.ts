@@ -595,8 +595,9 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('Empresa de abastecimento');
     expect(pilotApp).toContain('pilotFuelingCompanyOptions(activePackageData())');
     expect(pilotSync).toContain('empresa_abastecimento_codigo');
-    expect(pilotSync).toContain('client_local_id: optionalText(fueling?.local_id) || crypto.randomUUID()');
-    expect(pilotSync).toContain('data_hora: time ? fromInputDateTime(time, flightDate) : new Date().toISOString()');
+    expect(pilotSync).toContain('...requireStableFuelingIdentity(fueling, flightDate)');
+    expect(pilotSync).not.toContain('data_hora: time ? fromInputDateTime(time, flightDate) : new Date().toISOString()');
+    expect(pilotApp).toContain("label: 'Hora do abastecimento'");
     expect(pilotRdvDraft).toContain('fuelings: []');
     expect(pilotApp).toContain('Excluir nota do rascunho');
     expect(pilotApp).toContain('activeRdvDraft.fuelings.splice(index, 1)');
