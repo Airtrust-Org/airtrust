@@ -43,8 +43,9 @@ class Player3SyntheticPublicationTests(unittest.TestCase):
         prefix=f"lms/native/{QA_TENANT}/12345/{d['artifactSha256']}/"
         self.assertEqual(d["stagedR2Prefix"], prefix)
         self.assertTrue(all(k["key"].startswith(prefix) for k in d["privateR2Objects"]))
-        self.assertTrue(all(k["url"].startswith(ORIGIN+"/qa/player3/")
-                            for k in d["publicHtml5Objects"]))
+        self.assertTrue(all(k["url"].startswith(
+            f"{ORIGIN}/qa/player3/{QA_TENANT}/12345/{d['artifactSha256']}/")
+            for k in d["publicHtml5Objects"]))
         self.assertTrue(all("sha256" in k and k["bytes"]>0
                             for k in d["privateR2Objects"]))
         self.assertNotIn("correctOptionId", json.dumps(d))
@@ -54,7 +55,10 @@ class Player3SyntheticPublicationTests(unittest.TestCase):
         for override in ({"tenant":6}, {"tenant":0}, {"course":0},
                          {"release_sha":"dev"}, {"content_origin":"https://airtrust.online"},
                          {"content_origin":"http://qa-player3-staging.example.org"},
-                         {"content_origin":"https://qa.airtrust.online"}):
+                         {"content_origin":"https://qa.airtrust.online"},
+                         {"content_origin":"https://staging.airtrust.pages.dev"},
+                         {"content_origin":"https://staging.airtrust.pages.dev."},
+                         {"content_origin":"https://airtrust-api-staging.airtrust.workers.dev"}):
             with self.subTest(override=override):
                 with self.assertRaises(PublicationDenied):
                     self.plan(**override)

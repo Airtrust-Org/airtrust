@@ -26,6 +26,12 @@ SHA64 = re.compile(r"^[0-9a-f]{64}$")
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 ID = re.compile(r"^[1-9][0-9]{0,15}$")
 QA_TENANT = 999006
+# Runtime and content origins must remain independently isolated. The HTML5
+# origin is a third HTTPS host and must never alias the API or Pages.
+STAGING_RUNTIME_HOSTS = frozenset((
+    "staging.airtrust.pages.dev",
+    "airtrust-api-staging.airtrust.workers.dev",
+))
 ROOT = Path(__file__).resolve().parents[2]
 FILES = (
     "native-private-candidate.json",
@@ -66,6 +72,7 @@ def allowed_origin(origin: object) -> str:
             and not url.path and not url.query and not url.fragment
             and not url.username and not url.password and
             not url.hostname.endswith("airtrust.online") and
+            url.hostname.rstrip(".") not in STAGING_RUNTIME_HOSTS and
             ("qa" in url.hostname or "staging" in url.hostname or
              "stage" in url.hostname),
             "QA_HTML5_SEPARATE_STAGING_ORIGIN_REQUIRED")
@@ -147,7 +154,9 @@ def compose(candidate: Path, tenant: int, course: int,
             manifest.get("unitCount") == 5 and manifest.get("stageCount") == 1,
             "QA_IMMUTABLE_TECHNICAL_UNIT_COUNT_DRIFT")
     r2prefix = f"lms/native/{tenant}/{course}/{private_files[0]['sha256']}/"
-    public_prefix = f"/qa/player3/{private_files[0]['sha256']}/"
+    # Browser paths bind tenant, physical course and immutable edition.
+    # No QA static artifact can be accidentally reused at another scope.
+    public_prefix = f"/qa/player3/{tenant}/{course}/{private_files[0]['sha256']}/"
     return {
         "schema": "AIRTRUST_PLAYER3_QA_PUBLICATION_PLAN_V1",
         "state": "REVIEW_ONLY_NO_REMOTE_APPLY",
