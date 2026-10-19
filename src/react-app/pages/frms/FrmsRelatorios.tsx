@@ -179,7 +179,11 @@ export default function FrmsRelatorios() {
     return `/api/frms/relatorios/alertas-historico?data_inicio=${periodoInicio}&data_fim=${periodoFim}`;
   }, [mesReferencia, periodoFim, periodoInicio, tipo]);
 
-  const { data: rawData, loading, error, refetch } = useApi<FrmsReportRow[] | FrmsReportEnvelope>(endpoint, { requireAuth: true });
+  const { data: rawData, loading, error, refetch } = useApi<FrmsReportRow[] | FrmsReportEnvelope>(endpoint, {
+    requireAuth: true,
+    bypassGetCache: true,
+    staleTime: 0,
+  });
   const data = Array.isArray(rawData) ? rawData : rawData?.data ?? null;
   const orderedData = useMemo(() => (data ? orderReportRows(tipo, data) : null), [data, tipo]);
   const reportMeta = rawData && !Array.isArray(rawData) ? rawData.meta ?? null : null;
