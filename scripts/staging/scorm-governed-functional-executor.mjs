@@ -11,7 +11,6 @@ import {createHash} from 'node:crypto';
 import {chromium,webkit} from '@playwright/test';
 import {validatePedagogicalReview} from '../ci/scorm-pedagogical-review-gate.mjs';
 import {validateGovernedScormZipDriver} from '../ci/validate-scorm-governed-driver.mjs';
-import {observeMonotonicSuspend} from '../qa/scorm-suspend-monotonic.mjs';
 
 const digest=b=>createHash('sha256').update(b).digest('hex');
 const SHA=/^[0-9a-f]{64}$/,COMMIT=/^[0-9a-f]{40}$/;
@@ -52,19 +51,25 @@ export function validateF5Plan({plan,driver,zipBytes,driverFile,reviewFile,
   validateGovernedScormZipDriver(zipBytes,driver,c);
   const review=validatePedagogicalReview({reviewFile,driverFile,approvalFile,
     trustedReviewerKeys,candidate:c});
-  requireProof(review.driverSha256===digest(readFileSync(driverFile)),
-    'REVIEWED_DRIVER_SHA_CHANGED');
+  requireProof(review.driverSha256===digest(readFileSync(driverFile))&&
+    plan.approvalReceiptSha256===review.approvalSignatureSha256&&
+    /^[0-9a-f-]{36}$/.test(plan.runId||''),
+    'REVIEWED_DRIVER_OR_APPROVAL_RECEIPT_CHANGED');
   return review;
 }
 export function verifyF5Readback(row,plan,entry,id,cycle,phase){
   const c=plan.candidate;
   requireProof(row?.source==='WORKER_D1_STAGING_READBACK'&&
-    row.phase===phase&&row.empresaId===c.empresaId&&
+    row.empresaId===c.empresaId&&
     row.cursoId===c.cursoId&&row.packageId===c.packageId&&
     row.packageSha256===c.packageSha256&&row.runtimeSha===plan.releaseSha&&
     row.synthetic===true&&row.enrollmentId===id&&row.cycleId===cycle&&
-    typeof row.cmiJson==='string'&&row.cmiJson.length<1048576&&
-    typeof row.suspendData==='string'&&row.suspendData.length<1048576&&
+    row.runId===plan.runId&&
+    row.approvalReceiptSha256===plan.approvalReceiptSha256&&
+    (row.cmiSha256===null||SHA.test(row.cmiSha256))&&
+    (row.suspendSha256===null||SHA.test(row.suspendSha256))&&
+    typeof row.hasSuspendData==='boolean'&&
+    Number.isSafeInteger(row.sessionCount)&&
     Number.isSafeInteger(row.qualificationHistoryCount)&&
     row.qualificationHistoryCount>=0&&
     typeof row.completionStatus==='string','BACKEND_WITNESS_UNTRUSTED');
@@ -76,13 +81,16 @@ export function verifyF5Pdf(bytes,backend,status){
     bytes.subarray(0,5).toString()==='%PDF-'&&
     bytes.subarray(-256).includes(Buffer.from('%%EOF')),
     'CERTIFICATE_PDF_INVALID');
-  requireProof(doc&&SHA.test(doc.sha256)&&
-    doc.sha256===digest(bytes)&&
+  // D1 stores a certificate document ID, not necessarily its SHA. Bind
+  // the downloaded PDF to that authoritative ID, then hash the real bytes.
+  requireProof(doc&&typeof doc.documentId==='string'&&
+    doc.documentId.length>0&&
+    (doc.sha256===null||doc.sha256===digest(bytes))&&
     doc.enrollmentId===backend.enrollmentId&&
     doc.cycleId===backend.cycleId&&
     doc.qualificationHistoryId===backend.qualificationHistoryId,
     'CERTIFICATE_BACKEND_MISMATCH');
-  return doc.sha256;
+  return digest(bytes);
 }
 async function performDom(sco,host,actions){
   for(const a of actions){
@@ -104,15 +112,19 @@ async function observe(browserName,browserType,plan,driver,entry,token,outDir){
     const ctx=await browser.newContext({serviceWorkers:'block'});
     const page=await ctx.newPage();
     const auth={Authorization:'Bearer '+token};
+    const qaAuth={...auth,'X-Airtrust-F5-QA-Readback':process.env.SCORM_QA_READBACK_SECRET||''};
     async function read(id,cycle,phase){
       // Requires F0's protected staging-only readback endpoint. This endpoint
       // does not exist in the current runtime: 404 means inconclusive.
-      const p='/api/lms/scorm/qa-evidence/'+plan.candidate.cursoId+'/'+
-        plan.candidate.packageId+'/'+id+'?phase='+phase;
-      const response=await page.request.get(ORIGIN+p,{headers:auth});
+      const p='/api/lms/cursos/'+plan.candidate.cursoId+
+        '/scorm-package-versions/'+plan.candidate.packageId+
+        '/qa-evidence/'+id+'?sha256='+plan.candidate.packageSha256;
+      const response=await page.request.get(ORIGIN+p,{headers:qaAuth});
       requireProof(response.status()===200,
         'CANDIDATE_READBACK_HTTP_'+response.status());
-      return verifyF5Readback(await response.json(),plan,entry,id,cycle,phase);
+      const envelope=await response.json();
+      requireProof(envelope?.success===true,'BACKEND_READBACK_ENVELOPE_INVALID');
+      return verifyF5Readback(envelope.data,plan,entry,id,cycle,phase);
     }
     const first=await read(entry.failedId,entry.failedCycle,'BEFORE');
     const second=await read(entry.passedId,entry.passedCycle,'BEFORE');
@@ -141,8 +153,11 @@ async function observe(browserName,browserType,plan,driver,entry,token,outDir){
       await f.sco.locator(content.selector).waitFor({state:'visible'});
     await performDom(f.sco,f.host,driver.resume.actions);
     const suspend=await read(entry.failedId,entry.failedCycle,'SUSPEND');
-    requireProof(suspend.suspendData!==first.suspendData&&
-      suspend.cmiJson!==first.cmiJson,'CMI_NOT_PERSISTED');
+    requireProof(suspend.hasSuspendData&&
+      suspend.suspendSha256!==first.suspendSha256&&
+      suspend.cmiSha256!==null&&
+      suspend.cmiSha256!==first.cmiSha256&&
+      suspend.sessionCount>first.sessionCount,'CMI_NOT_PERSISTED');
     f=await open(entry.failedId);
     const item=f.sco.locator(driver.resume.assertion.selector);
     if(driver.resume.assertion.state==='visible')
@@ -155,8 +170,11 @@ async function observe(browserName,browserType,plan,driver,entry,token,outDir){
       requireProof((await item.textContent())?.includes(driver.resume.assertion.value),
         'RESUME_TEXT_MISSING');
     const resume=await read(entry.failedId,entry.failedCycle,'RESUME');
-    requireProof(observeMonotonicSuspend(suspend.suspendData,resume.suspendData).ok,
-      'SUSPEND_STATE_REGRESSED');
+    // The backend returns only hashes, never answers/suspend raw payload.
+    // A restored UI plus a persisted nonempty hashed checkpoint is required;
+    // this is NOT a claim that opaque hashes establish semantic monotonicity.
+    requireProof(resume.hasSuspendData&&resume.suspendSha256!==null&&
+      resume.cmiSha256!==null,'SUSPEND_CHECKPOINT_DISAPPEARED');
     if(plan.candidate.requiresAssessment){
       await performDom(f.sco,f.host,driver.fail.actions);
       const rejected=await read(entry.failedId,entry.failedCycle,'REJECTED');
@@ -184,7 +202,7 @@ async function observe(browserName,browserType,plan,driver,entry,token,outDir){
     requireProof(replay.completionStatus==='CONCLUIDO'&&
       replay.qualificationHistoryCount===1&&
       replay.qualificationHistoryId===done.qualificationHistoryId&&
-      replay.cmiJson===done.cmiJson,'REPLAY_NOT_IDEMPOTENT');
+      replay.cmiSha256===done.cmiSha256,'REPLAY_NOT_IDEMPOTENT');
     const doc=done.certificateDocument;
     requireProof(doc?.documentId&&doc.documentId===
       replay.certificateDocument?.documentId,'CERTIFICATE_DOCUMENT_ABSENT');
@@ -211,8 +229,10 @@ export async function executeF5({planFile,driverFile,reviewFile,
   const zipBytes=readFileSync(plan.candidate.zipPath);
   const review=validateF5Plan({plan,driver,zipBytes,driverFile,
     reviewFile,approvalFile,trustedReviewerKeys,env});
-  requireProof(typeof token==='string'&&token.length>40,
-    'STAGING_SESSION_REQUIRED');
+  requireProof(typeof token==='string'&&token.length>40&&
+    typeof process.env.SCORM_QA_READBACK_SECRET==='string'&&
+    process.env.SCORM_QA_READBACK_SECRET.length>=32,
+    'STAGING_SESSION_OR_READBACK_SECRET_REQUIRED');
   const v=await fetch(ORIGIN+'/api/version');
   requireProof(v.ok,'STAGING_VERSION_UNAVAILABLE');
   const data=await v.json();

@@ -411,3 +411,44 @@ nunca entram no Git e não devem ser publicados como artifacts públicos.
 Staging deve obedecer o mutex
 \`airtrust-staging-mutations-and-scorm-qa\` e só avançar com aprovação
 F0 específica, provisionamento/limpeza e SHA live Worker+Pages.
+
+## Readback físico Worker/D1, escopado para staging (F5)
+
+`GET /api/lms/cursos/:id/scorm-package-versions/:packageId/qa-evidence/:enrollmentId?sha256=<ZIP_SHA>`
+foi integrado no Worker com três barreiras **simultâneas**: autenticação padrão +
+`requirePermission(lms, editar, admin)` + `requireOperacoesCurso(update)`,
+`ENVIRONMENT=staging`, tenant exatamente igual à configuração
+`SCORM_QA_SYNTHETIC_TENANT_ID` e segredo independente
+`SCORM_QA_READBACK_SECRET` via `X-Airtrust-F5-QA-Readback`.
+Sem qualquer dessas precondições, HTTP 403. É rota privada, não `isPublicPath`
+nem exposta no preview, e retorna `Cache-Control: private, no-store`.
+
+O endpoint só obtém evidência qualificada se
+`lms_scorm_qa_evidence_bindings` tiver sido provisionada **por Schema V2
+sob governança F0**; enquanto não existir, responde HTTP 409
+`SCORM_QA_BINDING_SCHEMA_NOT_READY`. A linha deve provar
+`empresa_id, curso_id, package_id, package_sha256, matricula_id,
+ciclo_id, staging_runtime_sha, approval_receipt_sha256, run_id,
+expires_at, synthetic=1, status=ACTIVE`, associar matrícula não excluída,
+ciclo atual e edição `VALIDATED` *não ativa*. O esquema proposto **não foi
+migrado/aplicado** nesta PR. Nenhum SQL remoto de provisioning ou D1 write
+foi efetuado. F0 deve decidir a migration versionada e os recibos de recovery,
+aprovação de dados sintéticos, lock e cleanup, além de validar que o launch
+e todos os commits vieram de **candidato QA exato**, não do pacote ativo.
+
+A resposta nunca devolve `cmi_json` ou `suspend_data` em claro:
+entrega seus digests SHA-256 calculados no Worker, contagem/sessões/status,
+ciclo, histórico de qualificação e `certificado_arquivo_id` como
+`documentId`. A tabela de qualificação não provê aqui hash de PDF:
+`certificateDocument.sha256=null`; o executor baixa o documento real,
+valida formato, documento e gera digest dos bytes; a verificação final
+de assinatura continua em pipeline separado. Um `phase` enviado pelo
+cliente **não é prova independente de tempo/causalidade**.
+
+**Impossibilidade residual real:** sem binding imutável criado em conjunto com
+um launch/commit QA que preserve curso ativo e rejeite stale cycles, apenas
+ver o CMI não prova que este ZIP candidato foi executado. Não marcar
+`GOVERNED_STAGING_AUTHENTICATED_QA_V1` ou emitir `FUNCTIONAL_CERTIFIED`
+enquanto F0 não entregar o executor de staging versionado, provas negativas,
+assinatura independente, autorização e limpeza; o readiness workflow segue
+fail-closed. Não adicionar um endpoint alternativo em produção.

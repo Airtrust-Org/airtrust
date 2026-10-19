@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {assertScormQaReadbackAccess,readScormQaBackendEvidence}
-  from '../../../lib/lms/lms-scorm-staging-readback';
+  from '../../lib/lms/lms-scorm-staging-readback';
 
 const secret='test-staging-f5-readback-secret-at-least-32-characters';
 const access=()=>({
@@ -8,7 +8,10 @@ const access=()=>({
   secret,providedSecret:secret,runtimeSha:'b'.repeat(40),
 });
 const qsha='c'.repeat(64),pkg='123e4567-e89b-42d3-a456-426614174001';
-function dbMock({binding=true,history=[],candidate=true,table=true}={}){
+function dbMock({binding=true,history=[],candidate=true,table=true}:{
+  binding?:boolean;history?:Array<{id:number;certificado_arquivo_id:number|null}>;
+  candidate?:boolean;table?:boolean;
+}={}){
   const statements:{sql:string;args:unknown[]}[]=[];
   const fake={
     prepare(sql:string){

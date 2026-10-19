@@ -49,7 +49,9 @@ function inputs(){
     review.approvalReference,approvedAt].join('\n');
   writeFileSync(approvalFile,JSON.stringify({...approval,
     signature:sign(null,Buffer.from(sig),key.privateKey).toString('base64')}));
-  const plan={schemaVersion:1,origin:'https://airtrust-api-staging.airtrust.workers.dev',
+  const signature=JSON.parse(readFileSync(approvalFile,'utf8')).signature;
+  const plan={schemaVersion:1,runId:'123e4567-e89b-42d3-a456-426614174002',
+    approvalReceiptSha256:hash(Buffer.from(signature,'base64')),origin:'https://airtrust-api-staging.airtrust.workers.dev',
     scope:'GOVERNED_STAGING_SYNTHETIC',releaseSha:'b'.repeat(40),
     harnessSha:'a'.repeat(40),candidate,synthetic:true,
     provisionedBy:'F0_GOVERNED_STAGING_QA',
@@ -73,6 +75,7 @@ test('requires independent Ed25519, trusted main, protected staging and distinct
       {plan:{...f.plan,synthetic:false}},
       {plan:{...f.plan,origin:'https://airtrust-api.airtrust.workers.dev'}},
       {plan:{...f.plan,cleanupContractSha256:null}},
+      {plan:{...f.plan,approvalReceiptSha256:'0'.repeat(64)}},
       {plan:{...f.plan,browserEnrollments:[
         f.plan.browserEnrollments[0],f.plan.browserEnrollments[0]]}},
       {plan:{...f.plan,candidate:{...f.plan.candidate,
@@ -90,10 +93,12 @@ test('rejects fake Worker/D1 state, wrong candidate SHA, wrong tenant or cycle',
   try{
     const entry=f.plan.browserEnrollments[0],c=f.plan.candidate;
     const row={source:'WORKER_D1_STAGING_READBACK',phase:'BEFORE',
+      runId:f.plan.runId,approvalReceiptSha256:f.plan.approvalReceiptSha256,
       empresaId:c.empresaId,cursoId:c.cursoId,packageId:c.packageId,
       packageSha256:c.packageSha256,runtimeSha:f.plan.releaseSha,
       synthetic:true,enrollmentId:entry.failedId,cycleId:entry.failedCycle,
-      cmiJson:'{}',suspendData:'',completionStatus:'EM_ANDAMENTO',
+      cmiSha256:hash(Buffer.from('{}')),suspendSha256:null,
+      hasSuspendData:false,sessionCount:0,completionStatus:'EM_ANDAMENTO',
       qualificationHistoryCount:0};
     assert.equal(verifyF5Readback(row,f.plan,entry,
       entry.failedId,entry.failedCycle,'BEFORE'),row);
@@ -101,7 +106,9 @@ test('rejects fake Worker/D1 state, wrong candidate SHA, wrong tenant or cycle',
       {source:'LOCAL_SCORM_API_EMULATOR'},{empresaId:99},
       {packageSha256:'0'.repeat(64)},{runtimeSha:'0'.repeat(40)},
       {enrollmentId:999},{cycleId:999},{synthetic:false},
-      {cmiJson:undefined},{qualificationHistoryCount:undefined},
+      {cmiSha256:'0'},{runId:'wrong'},
+      {approvalReceiptSha256:'0'.repeat(64)},
+      {qualificationHistoryCount:undefined},
     ])assert.throws(()=>verifyF5Readback({...row,...patch},f.plan,entry,
       entry.failedId,entry.failedCycle,'BEFORE'));
   }finally{rmSync(f.dir,{recursive:true,force:true});}
@@ -109,8 +116,8 @@ test('rejects fake Worker/D1 state, wrong candidate SHA, wrong tenant or cycle',
 test('backend PDF hash and identity must match exact bytes',()=>{
   const bytes=Buffer.from('%PDF-1.4\n'+
     ('Synthetic PDF for unit test only\n').repeat(24)+'%%EOF\n');
-  const doc={enrollmentId:101,cycleId:202,qualificationHistoryId:303,
-    sha256:hash(bytes)};
+  const doc={documentId:'900',enrollmentId:101,cycleId:202,
+    qualificationHistoryId:303,sha256:null};
   const row={...doc,certificateDocument:doc};
   assert.equal(verifyF5Pdf(bytes,row,200),hash(bytes));
   assert.throws(()=>verifyF5Pdf(Buffer.from('not a PDF'),row,200));
