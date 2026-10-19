@@ -8,7 +8,7 @@ type Requirement = TrainingComplianceSnapshot['people'][number]['requisitos'][nu
 
 function requirement(status:string, opts:Record<string,unknown>={}) {
   return {
-    obrigatoriedade:'OBRIGATORIA', qualificacao_tipo_id:7,
+    obrigatoriedade:'OBRIGATORIA', qualificacao_tipo_id:7, regra_id:1,
     status_compliance:status, modalidade_requerida:'EAD', auto_matricular_ead:1,
     evidencia_pendente_validacao:false,
     ...opts,
@@ -34,7 +34,7 @@ const plan = (s:ReturnType<typeof snapshot>, courses:RosterCourse[]=[course], ro
 describe('Matrícula orientada por função e situação da qualificação',()=>{
   it('matricula empregado com requisito obrigatório sem qualquer histórico',()=>{
     const result=plan(snapshot(person(101,[requirement('NAO_REALIZADO')])));
-    expect(result.enroll).toEqual([{funcionarioId:101,cursoId:56,tipoId:7,existingId:null}]);
+    expect(result.enroll).toEqual([{funcionarioId:101,cursoId:56,tipoId:7,existingId:null,regraId:1}]);
   });
   it('falha fechado sem opt-in explícito (0/NULL/ausente), modalidade e curso publicados',()=>{
     const s = snapshot(
