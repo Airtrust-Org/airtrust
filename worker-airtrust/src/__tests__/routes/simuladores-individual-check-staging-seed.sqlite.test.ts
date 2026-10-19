@@ -47,6 +47,9 @@ function buildDb(withLedger = true) {
   addMissing('modelos_sessao', 'qualificacao_tipo_id');
   addMissing('modelos_sessao', 'tipo_sessao_id');
   addMissing('tipos_sessao', 'empresa_id');
+  addMissing('funcionarios', 'setor_id');
+  addMissing('qualificacoes_categorias', 'empresa_id');
+  addMissing('qualificacoes_tipos', 'categoria_id');
   raw.exec(`
     CREATE TABLE IF NOT EXISTS simulador_atribuicoes_curriculares (
       id INTEGER PRIMARY KEY, empresa_id INTEGER, modelo_sessao_id INTEGER, deleted_at TEXT);
