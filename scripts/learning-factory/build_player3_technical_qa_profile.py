@@ -114,7 +114,10 @@ def main_profile(candidate: Path, assignments: dict) -> dict:
             assignments.get("tenantCode") == "qa_examiner_training",
             "QA_GOVERNED_SYNTHETIC_TENANT_REQUIRED")
     tenant = assignments.get("tenantId")
-    require(positive(tenant), "QA_SYNTHETIC_TENANT_ID_REQUIRED")
+    # qa_examiner_training has the exact physical D1 staging ID 999006.
+    # A matching tenantCode must never authorize an actual customer tenant.
+    require(positive(tenant) and tenant == 999006,
+            "QA_SYNTHETIC_TENANT_ID_REQUIRED")
     release = assignments.get("releaseSha")
     require(sha(release, 40), "QA_RELEASE_SHA_REQUIRED")
     origins = [safe_origin(assignments.get(key)) for key in

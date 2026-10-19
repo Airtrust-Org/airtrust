@@ -48,7 +48,7 @@ def assignments():
     return {
         "schema": "AIRTRUST_PLAYER3_QA_IDENTITIES_V1",
         "tenantCode": "qa_examiner_training",
-        "tenantId": 771,
+        "tenantId": 999006,
         "releaseSha": "a" * 40,
         "baseUrl": STAGING, "apiBaseUrl": API, "contentOrigin": CONTENT,
         "projects": projects,
@@ -68,7 +68,7 @@ class PrivateQaProfileTests(unittest.TestCase):
         out = main_profile(self.candidate, self.identities)
         self.assertEqual(out["qaContentMode"], "SYNTHETIC_TECHNICAL")
         self.assertEqual(out["expectedSourceSha"], "a" * 40)
-        self.assertEqual(out["empresaId"], 771)
+        self.assertEqual(out["empresaId"], 999006)
         mids = []
         for name in ("chromium", "webkit"):
             p = out["projects"][name]
@@ -91,7 +91,7 @@ class PrivateQaProfileTests(unittest.TestCase):
         target = self.root / "private" / "profile.json"
         write_private(self.candidate, assignment_path, target)
         self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
-        self.assertEqual(json.loads(target.read_text())["empresaId"], 771)
+        self.assertEqual(json.loads(target.read_text())["empresaId"], 999006)
         with self.assertRaisesRegex(QaProfileError, "ALREADY_EXISTS"):
             write_private(self.candidate, assignment_path, target)
 
@@ -99,6 +99,10 @@ class PrivateQaProfileTests(unittest.TestCase):
         wrong = copy.deepcopy(self.identities)
         wrong["tenantCode"] = "customer"
         with self.assertRaisesRegex(QaProfileError, "SYNTHETIC_TENANT"):
+            main_profile(self.candidate, wrong)
+        wrong = copy.deepcopy(self.identities)
+        wrong["tenantId"] = 6
+        with self.assertRaisesRegex(QaProfileError, "QA_SYNTHETIC_TENANT_ID_REQUIRED"):
             main_profile(self.candidate, wrong)
         wrong = copy.deepcopy(self.identities)
         wrong["projects"]["webkit"]["external"]["enrollmentId"] = 1001

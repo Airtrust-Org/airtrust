@@ -17,6 +17,9 @@
  */
 import {pathToFileURL} from 'node:url';
 
+// Bound to the physical staging tenant qa_examiner_training, never customer IDs.
+export const QA_SYNTHETIC_TENANT_ID = '999006';
+
 export const REQUIRED_TENANT_GATES = Object.freeze([
   'NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS',
   'NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS',
@@ -60,7 +63,8 @@ function stagingOrigin(raw) {
 /** Safe structural result only. Does not read or print secrets. */
 export function evaluatePlayer3QaActivation({env, tenant, expectedSha}) {
   const missing = [];
-  if (!intPattern.test(String(tenant)) || !Number.isSafeInteger(Number(tenant))) {
+  if (String(tenant) !== QA_SYNTHETIC_TENANT_ID ||
+      !intPattern.test(String(tenant)) || !Number.isSafeInteger(Number(tenant))) {
     missing.push('EXACT_SYNTHETIC_TENANT_REQUIRED');
   }
   if (env?.ENVIRONMENT !== 'staging') missing.push('STAGING_ONLY');

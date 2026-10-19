@@ -1,10 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {evaluatePlayer3QaActivation, exactTenantAllowed,
-  REQUIRED_TENANT_GATES} from '../staging/player3-technical-qa-activation-preflight.mjs';
+  REQUIRED_TENANT_GATES, QA_SYNTHETIC_TENANT_ID} from '../staging/player3-technical-qa-activation-preflight.mjs';
 
 const release = 'a'.repeat(40);
-const tenant = '771';
+const tenant = QA_SYNTHETIC_TENANT_ID;
 const fixture = () => ({
   ENVIRONMENT: 'staging',
   PLAYER3_QA_SYNTHETIC_TENANT_ID: tenant,
@@ -47,7 +47,7 @@ test('wildcards, substring tenant matches, invalid IDs and cross-tenant scopes n
   }
   assert.equal(exactTenantAllowed('22, 771, 901',tenant),false);
   assert.equal(exactTenantAllowed('771,771',tenant),false);
-  assert.equal(exactTenantAllowed('771',tenant),true);
+  assert.equal(exactTenantAllowed(tenant,tenant),true);
 });
 
 test('independently pinned synthetic ZIP SHA-256 is mandatory and cannot reuse RC8.1',() => {
@@ -80,6 +80,15 @@ test('a mismatch in the separately pinned QA tenant or SHA fails closed',() => {
   }).blockers.includes('EXACT_SYNTHETIC_TENANT_REQUIRED'));
 });
 
+test('a customer tenant with internally consistent flags is still rejected',()=>{
+  const customer='6';
+  const env={...fixture(),PLAYER3_QA_SYNTHETIC_TENANT_ID:customer,
+    ...Object.fromEntries(REQUIRED_TENANT_GATES.map(g=>[g,customer]))};
+  const x=evaluatePlayer3QaActivation({env,tenant:customer,expectedSha:release});
+  assert.equal(x.tenantGateReady,false);
+  assert.ok(x.blockers.includes('EXACT_SYNTHETIC_TENANT_REQUIRED'));
+});
+
 test('production and altered origins never qualify as QA',() => {
   for(const [key,value,expected] of [
     ['ENVIRONMENT','production','STAGING_ONLY'],
@@ -103,5 +112,5 @@ test('never embed user secrets, flag values or profile in the sanitized result',
   assert.equal(report.tenantGateReady,true);
   assert.ok(!raw.includes('top-secret'));
   assert.ok(!raw.includes('some-private-bearer'));
-  assert.ok(!raw.includes('771'));
+  assert.ok(!raw.includes(QA_SYNTHETIC_TENANT_ID));
 });
