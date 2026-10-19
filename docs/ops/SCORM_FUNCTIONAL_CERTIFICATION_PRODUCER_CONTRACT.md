@@ -346,3 +346,30 @@ separado de `status=UNCERTIFIED` e `activationAuthorized=false`:
 Mesmo com `classification=PROTOCOL_PASS`, o status do relatório local
 permanece `UNCERTIFIED` e não autoriza ativação. O arquivo da prova é
 privado (modo 0600) e identificado pelos SHA-256 dos bytes do ZIP e do driver.
+
+## Fechamento técnico sintético (19/10/2026) — não é certificado de aluno
+
+Uma regressão do produtor local tratava `cmi.core.score.raw=""` como nota
+zero por coerção numérica. Agora ausência de score é `NaN` (não provado)
+e impede `PROTOCOL_PASS`; somente um `0` explicitamente escrito pelo SCO
+pode comprovar reprovação com nota zero. Em Chromium e WebKit, o teste
+negativo retira apenas a escrita de nota do SCO **sintético** e confirma
+`INCONCLUSIVE`, sem falsificar reprovação.
+
+`lms-scorm-trusted-attestation.test.ts` também executa a cadeia técnica
+**Node signer → revisão Ed25519 de teste → HMAC → Worker verifier** com ZIP
+SCORM sintético real, digests dos bytes, edições imutáveis, testemunhos
+fictícios **identificados como fixtures** e dois documentos PDF *não válidos*
+para uso real. Exercita recusa de SHA/tenant/edição/runtime alterados,
+evidência incompleta e ZIP adulterado. O teste demonstra interoperabilidade
+do contrato, **não observações autênticas de staging**, nem relatório de
+um curso certificado: testemunhos e PDFs foram construídos pelo teste,
+não lidos de D1/Worker e downloads certificados em ambiente governado.
+
+Para emissão operacional de `FUNCTIONAL_CERTIFIED`, cada testemunho deve
+ser produzido pelo executor autorizado sobre o Worker real em staging,
+com matrícula/ciclo **sintéticos** e edição candidata SHA-bound, evidência
+Chromium/WebKit, aprovação externa confiável e PDFs reais recuperados do
+backend. Até lá: `activationAuthorized=false`, PR em draft, sem publicar
+ZIP nem materializar matrícula/certificado. A decisão de reconstruir EADs
+originais no futuro os remove do escopo desta frente técnica.

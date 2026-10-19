@@ -4,7 +4,6 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {zipSync,strToU8} from 'fflate';
 // Deliberately exercise the real Node signer and the Worker verifier together.
-// @ts-expect-error Node ESM test helper has no declaration file
 import {signGovernedScormEvidence} from '../../../../scripts/ci/sign-scorm-functional-attestation.mjs';
 import { describe, expect, it } from 'vitest';
 
