@@ -79,7 +79,9 @@ test('0561/0562 remain hashed NON-deployable reviewer artifacts until bootstrap 
     assert.equal(digest(meta.candidatePlanPath),meta.candidatePlanSha256);
     assert.ok(meta.candidateSqlPath.endsWith('.REVIEW-ONLY.sql.txt'));
     assert.ok(contents(meta.candidateSqlPath).includes('DO NOT APPLY'));
-    assert.ok(!byPrefix.has(n),'unreviewed critical DDL must not be registered executable');
+    assert.equal(byPrefix.get(n)?.change_file,n+'_'.concat(n==='0561'?'native_catalog_activation.sql':'player3_canonical_terminal.sql'));
+    assert.equal(byPrefix.get(n)?.governance_state,'REMOTE_APPLY_PENDING');
+    assert.match(byPrefix.get(n)?.note??'',/REVIEW_ONLY_NO_REMOTE_APPLY/);
     assert.ok(!workflow.includes('          - '+id),'trusted-main staging choice absent');
   }
 });
