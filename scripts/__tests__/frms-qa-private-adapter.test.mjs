@@ -143,14 +143,17 @@ test('concurrent apply and replay cannot apply the same grant twice',async t=>{
   assert.ok((await s.call('apply',input)).error);
 });
 
-test('late D1 failure rolls back earlier operations; nonce stays consumed',async t=>{
+test('late D1 failure rolls back and quarantines the repair lock',async t=>{
   const s=await setup(t),p=await s.call('prepare');assert.ok(p.receipt,p.error);
   const before=await rows(s.db),input=grant(p);
   await s.db.prepare("CREATE TRIGGER synthetic_abort BEFORE UPDATE ON frms_alerta WHEN NEW.id='qa-frms-ux-case-4' BEGIN SELECT RAISE(ABORT,'local test fault'); END").run();
   assert.match((await s.call('apply',input)).error,/QA_PRIVATE_EXECUTION_FAILED/);
   assert.deepEqual(await rows(s.db),before);
   await s.db.prepare('DROP TRIGGER synthetic_abort').run();
-  assert.match((await s.call('apply',input)).error,/QA_REPLAY_OR_LEDGER_REJECTED/);
+  // After a failed/indeterminate write, do not permit any grant or new
+  // preimage preparation until a separately authorized reconciliation.
+  assert.match((await s.call('apply',input)).error,/QA_EXCLUSIVE_LOCK_REQUIRED/);
+  assert.match((await s.call('prepare')).error,/QA_EXCLUSIVE_LOCK_REQUIRED/);
 });
 
 test('plan SQL tampering is rejected despite a copied approved digest',async()=>{

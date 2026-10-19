@@ -8,8 +8,6 @@
 //   permanecem como evidência órfã e sintética por desenho; o relatório identifica-as apenas por IDs numéricos.
 //
 // O seed recusa executar se Schema V2 0554 e 0560 não estiverem fisicamente aplicados no ledger.
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -40,8 +38,10 @@ function scope(code, qaAdminEmail) {
   const tenantId = `(SELECT id FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)`;
   const emp = (matricula) =>
     `(SELECT id FROM funcionarios WHERE empresa_id=${tenantId} AND matricula=${esc(matricula)} AND deleted_at IS NULL LIMIT 1)`;
+  const setorId = `(SELECT s.id FROM setores s WHERE s.empresa_id=${tenantId} AND s.deleted_at IS NULL ORDER BY s.id LIMIT 1)`;
+  const categoriaId = `(SELECT qc.id FROM qualificacoes_categorias qc WHERE qc.empresa_id=${tenantId} AND qc.ativo=1 AND qc.deleted_at IS NULL ORDER BY qc.id LIMIT 1)`;
   return {
-    n, tenantId, emp,
+    n, tenantId, emp, setorId, categoriaId,
     qaUserId: `(SELECT u.id FROM usuarios u JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=${tenantId}
       WHERE LOWER(TRIM(u.email))=${esc(qaAdminEmail)} AND (u.deleted_at IS NULL OR u.deleted_at=0)
         AND COALESCE(u.active,1)=1 AND LOWER(TRIM(ue.role)) IN ('admin','administrador') LIMIT 1)`,
@@ -56,7 +56,7 @@ const LEDGER_OK = `(SELECT COUNT(DISTINCT change_id) FROM airtrust_schema_change
 
 export function buildSeedSql(code, marker, qaAdminEmail) {
   assertCode(code, marker);
-  const { n, tenantId, emp, qaUserId, tipoId, simId, agId } = scope(code, qaAdminEmail);
+  const { n, tenantId, emp, setorId, categoriaId, qaUserId, tipoId, simId, agId } = scope(code, qaAdminEmail);
   const ficha = (suffix, who, status, aprovado, instrSigned) => `
 INSERT INTO fichas_sessao(uuid,agendamento_slot_id,colaborador_id_aluno,instrutor_id,status,resultado_final,aprovado,observacoes,
   empresa_id,tipo_sessao,data_sessao,assinatura_aluno_timestamp,assinatura_instrutor_timestamp,created_at,updated_at,deleted_at)
@@ -64,26 +64,40 @@ VALUES (${esc(`${code}-${suffix}`)},${agId},${emp(who)},${emp(n.instrutor)},${es
   ${aprovado ? 1 : 0},${esc(marker)},${tenantId},'CHECK',date('now'),datetime('now'),
   ${instrSigned ? "datetime('now')" : 'NULL'},datetime('now'),datetime('now'),NULL);`;
   return `
-CREATE TABLE IF NOT EXISTS _qa_sim_ind_guard(ok INTEGER NOT NULL CHECK(ok=1));
-DELETE FROM _qa_sim_ind_guard;
-INSERT INTO _qa_sim_ind_guard(ok)
 SELECT CASE WHEN ${LEDGER_OK}
   AND (SELECT COUNT(*) FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)=1
   AND (SELECT COUNT(*) FROM usuarios u WHERE u.id=${qaUserId} AND u.funcionario_id IS NULL)=1
   AND NOT EXISTS (SELECT 1 FROM funcionarios WHERE empresa_id=${tenantId} AND matricula LIKE ${esc(`${code}-%`)} AND deleted_at IS NULL)
-THEN 1 ELSE 0 END;
-DROP TABLE _qa_sim_ind_guard;
+THEN 1 ELSE json('FAIL_PREFLIGHT_GUARD_OR_LEDGER_MISSING') END;
 
-INSERT INTO funcionarios(nome,matricula,cargo,funcao,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
-VALUES (${esc(`${code} Instrutor`)},${esc(n.instrutor)},'QA','QA','ATIVO',1,1,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
-${['a', 'b', 'c', 'd'].map((k) => `INSERT INTO funcionarios(nome,matricula,cargo,funcao,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
-VALUES (${esc(`${code} Tripulante ${k.toUpperCase()}`)},${esc(n[k])},'QA','QA','ATIVO',0,0,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);`).join('\n')}
+-- Setor padrão exigido pelo trigger trg_funcionarios_setor_required_insert no D1 de staging
+INSERT INTO setores (codigo, nome, descricao, responsavel, ativo, created_at, updated_at, deleted_at, empresa_id)
+SELECT ${esc(`${code}-OPS`)}, 'operacoes', 'Setor operacional padrao QA', 'QA Admin', 1, datetime('now'), datetime('now'), NULL, id
+FROM empresas
+WHERE id = ${tenantId}
+  AND NOT EXISTS (
+    SELECT 1 FROM setores WHERE empresa_id = ${tenantId} AND deleted_at IS NULL
+  );
+
+-- Categoria padrão exigida pelo trigger trg_qualification_type_category_fk_insert_0457 no D1 de staging
+INSERT INTO qualificacoes_categorias (codigo, nome, descricao, ativo, created_at, updated_at, deleted_at, empresa_id)
+SELECT ${esc(`${code}-CAT`)}, 'Simulador QA', 'Categoria padrao simulador QA', 1, datetime('now'), datetime('now'), NULL, id
+FROM empresas
+WHERE id = ${tenantId}
+  AND NOT EXISTS (
+    SELECT 1 FROM qualificacoes_categorias WHERE empresa_id = ${tenantId} AND ativo = 1 AND deleted_at IS NULL
+  );
+
+INSERT INTO funcionarios(nome,matricula,cargo,funcao,setor_id,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
+VALUES (${esc(`${code} Instrutor`)},${esc(n.instrutor)},'QA','QA',${setorId},'ATIVO',1,1,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
+${['a', 'b', 'c', 'd'].map((k) => `INSERT INTO funcionarios(nome,matricula,cargo,funcao,setor_id,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
+VALUES (${esc(`${code} Tripulante ${k.toUpperCase()}`)},${esc(n[k])},'QA','QA',${setorId},'ATIVO',0,0,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);`).join('\n')}
 
 -- Vincula o login QA sintético (somente se estava sem vínculo, garantido pelo guard acima).
 UPDATE usuarios SET funcionario_id=${emp(n.instrutor)}, updated_at=datetime('now') WHERE id=${qaUserId} AND funcionario_id IS NULL;
 
-INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria,carga_horaria,validade,vencimento_fim_mes,observacoes,ativo,empresa_id,is_check,created_at,updated_at,deleted_at)
-VALUES ('CHECK',${esc(n.tipo)},${esc(`${code} Check individual`)},${esc(marker)},'QA',1,12,0,${esc(marker)},1,${tenantId},1,datetime('now'),datetime('now'),NULL);
+INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria,categoria_id,carga_horaria,validade,vencimento_fim_mes,observacoes,ativo,empresa_id,is_check,created_at,updated_at,deleted_at)
+VALUES ('CHECK',${esc(n.tipo)},${esc(`${code} Check individual`)},${esc(marker)},'QA',${categoriaId},1,12,0,${esc(marker)},1,${tenantId},1,datetime('now'),datetime('now'),NULL);
 
 INSERT INTO simuladores(nome,modelo,tipo,status,observacoes,created_at,updated_at,deleted_at)
 VALUES (${esc(n.simulador)},'QA','QA','ATIVO',${esc(marker)},datetime('now'),datetime('now'),NULL);
@@ -106,17 +120,12 @@ VALUES (${emp(n.b)},${tipoId},${esc(n.tipo)},${esc(n.tipo)},
   'Gerado da ficha #'||(SELECT id FROM fichas_sessao WHERE uuid=${esc(`${code}-B`)} AND empresa_id=${tenantId}),
   date('now'),date('now','+12 months'),'CONCLUIDA',${tenantId},datetime('now'),datetime('now'),NULL);
 
-CREATE TABLE IF NOT EXISTS _qa_sim_ind_post(
-  employees INTEGER NOT NULL CHECK(employees=5), fichas INTEGER NOT NULL CHECK(fichas=4),
-  checks INTEGER NOT NULL CHECK(checks=1), premature INTEGER NOT NULL CHECK(premature=1)
-);
-DELETE FROM _qa_sim_ind_post;
-INSERT INTO _qa_sim_ind_post SELECT
- (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL),
- (SELECT COUNT(*) FROM fichas_sessao WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL),
- (SELECT COUNT(*) FROM sessoes_checks WHERE sessao_id=${agId} AND deleted_at IS NULL),
- (SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${tenantId} AND qualificacao_id=${tipoId} AND funcionario_id=${emp(n.b)} AND deleted_at IS NULL);
-DROP TABLE _qa_sim_ind_post;
+SELECT CASE WHEN
+  (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)=5
+  AND (SELECT COUNT(*) FROM fichas_sessao WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)=4
+  AND (SELECT COUNT(*) FROM sessoes_checks WHERE sessao_id=${agId} AND deleted_at IS NULL)=1
+  AND (SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${tenantId} AND qualificacao_id=${tipoId} AND funcionario_id=${emp(n.b)} AND deleted_at IS NULL)=1
+THEN 1 ELSE json('FAIL_POST_SEED_COUNT_MISMATCH') END;
 `;
 }
 
@@ -136,17 +145,19 @@ WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
 UPDATE simuladores SET deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now') WHERE observacoes=${esc(marker)};
 UPDATE qualificacoes_tipos SET ativo=0, deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
+UPDATE qualificacoes_categorias SET deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now')
+WHERE empresa_id=${tenantId} AND codigo=${esc(`${code}-CAT`)};
 UPDATE funcionarios SET ativo=0, status='INATIVO', deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)};
+UPDATE setores SET deleted_at=COALESCE(deleted_at,datetime('now')), updated_at=datetime('now')
+WHERE empresa_id=${tenantId} AND codigo=${esc(`${code}-OPS`)};
 
-CREATE TABLE IF NOT EXISTS _qa_sim_ind_cleanup(active_count INTEGER NOT NULL CHECK(active_count=0));
-DELETE FROM _qa_sim_ind_cleanup;
-INSERT INTO _qa_sim_ind_cleanup SELECT
- (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
-+(SELECT COUNT(*) FROM fichas_sessao WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
-+(SELECT COUNT(*) FROM simulador_agendamentos WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
-+(SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${tenantId} AND qualificacao_id=${tipoId} AND deleted_at IS NULL);
-DROP TABLE _qa_sim_ind_cleanup;
+SELECT CASE WHEN
+  (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM fichas_sessao WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM simulador_agendamentos WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${tenantId} AND qualificacao_id=${tipoId} AND deleted_at IS NULL)=0
+THEN 1 ELSE json('FAIL_CLEANUP_ACTIVE_RECORDS_REMAIN') END;
 `;
 }
 
@@ -160,7 +171,7 @@ FROM fichas_sessao WHERE empresa_id=${tenantId} AND uuid IN
 }
 
 function runWrangler(db, args) {
-  const r = spawnSync('npx', ['wrangler', 'd1', 'execute', db, '--remote', ...args], {
+  const r = spawnSync('npx', ['wrangler', 'd1', 'execute', db, '--env', 'staging', '--remote', '--yes', ...args], {
     cwd: join(process.cwd(), 'worker-airtrust'), encoding: 'utf8', env: process.env,
   });
   if (r.status !== 0) {
@@ -200,15 +211,11 @@ function main() {
     console.log(JSON.stringify({ mode: 'DRY_RUN', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker }));
     return;
   }
-  const dir = mkdtempSync(join(tmpdir(), 'airtrust-sim-ind-'));
-  const file = join(dir, 'fixture.sql');
-  try {
-    writeFileSync(file, sql, { encoding: 'utf8', mode: 0o600 });
-    runWrangler(db, [`--file=${file}`]);
-    console.log(JSON.stringify({ mode: 'APPLY', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker, status: 'PASS' }));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  // Remote --file invoca o caminho de bulk-import/reset do D1 e falha com D1_RESET_DO.
+  // Usa o transporte normal de queries com --command, padronizado nos demais seeders de staging.
+  const cleanSql = sql.replace(/--.*$/gm, '').trim();
+  runWrangler(db, ['--json', '--command', cleanSql]);
+  console.log(JSON.stringify({ mode: 'APPLY', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker, status: 'PASS' }));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

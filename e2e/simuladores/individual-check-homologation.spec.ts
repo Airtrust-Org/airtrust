@@ -42,10 +42,25 @@ const fixtures = (() => {
 })();
 
 async function login(page: Page, email: string, password: string) {
+  if (!email || !password) {
+    throw new Error(`LOGIN_CREDENTIALS_MISSING: email=${Boolean(email)} password=${Boolean(password)}`);
+  }
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
+  await page.locator('input[type="email"]').waitFor({ state: 'visible', timeout: 15_000 });
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
+
+  // Se o usuário possui múltiplos perfis operacionais, o app renderiza a seleção
+  // "Como você quer entrar?" antes de navegar para a rota protegida.
+  const profileButton = page.locator('button', { hasText: /Entrar como/i }).first();
+  try {
+    await profileButton.waitFor({ state: 'visible', timeout: 5000 });
+    await profileButton.click();
+  } catch {
+    // Perfil único ou navegação direta sem diálogo de seleção
+  }
+
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 });
 }
 
