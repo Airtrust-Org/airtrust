@@ -162,6 +162,9 @@ function auditContentAssets(page: Page, contentOrigin: string, problems: string[
 test('Player3 Native: UI, formative gates, fail/retry, durable completion, qualification and PDF', async ({ browser }, testInfo) => {
   const { profile, fixture } = load(testInfo.project.name);
   const d = fixture.doutrinamento;
+  // QA supports both the original RC8.1 contract (8 stages) and the independently
+  // approved synthetic technical candidate (1-8 stages).
+  const officialStageCount = d.units.filter(unit => !!unit.official).length;
   let { context, page } = await openLearner(browser);
   const contentAssetProblems: string[] = [];
   // Observe ONLY browser-originated authenticated lesson writes. The QA
@@ -355,7 +358,8 @@ test('Player3 Native: UI, formative gates, fail/retry, durable completion, quali
         watchCheckpoints(page);
         auditContentAssets(page, profile.contentOrigin, contentAssetProblems);
         await page.goto(pathOn(profile.baseUrl, d.launchPath));
-        await expectAuthoredRc81Unit(page,d.units[21],21,d.units.length);
+        // Resume from the actual midpoint; synthetic QA is not always 42 units.
+        await expectAuthoredRc81Unit(page,d.units[index+1],index+1,d.units.length);
         const after = await snapshot(context, profile, d);
         expect(after.completed_unit_ids).toEqual(before.completed_unit_ids);
         expect(after.attempts).toEqual(before.attempts);
@@ -391,16 +395,18 @@ test('Player3 Native: UI, formative gates, fail/retry, durable completion, quali
     const stagesDone=await moduleSession(context,profile,d);
     demand(stagesDone.allOfficialStagesPassed &&
       stagesDone.stages.every(stage=>stage.passed && stage.attempts>0),
-      'EIGHT_OFFICIAL_STAGES_PASSED_WITHOUT_PREMATURE_CERTIFICATION');
+      'ALL_OFFICIAL_STAGES_PASSED_WITHOUT_PREMATURE_CERTIFICATION');
     demand(failureTested, 'OFFICIAL_FAILURE_RETRY_NOT_EXERCISED');
-    demand(observedOfficialEventIds.size===9,
-      'EIGHT_MODULE_PASSES_PLUS_ONE_REAL_FAILED_ATTEMPT');
+    demand(stagesDone.stages.length===officialStageCount,
+      'OFFICIAL_STAGE_COUNT_MUST_MATCH_QA_PROFILE');
+    demand(observedOfficialEventIds.size===officialStageCount+1,
+      'OFFICIAL_STAGE_PASSES_PLUS_ONE_REAL_FAILED_ATTEMPT');
     await test.step('PLAYER3-JOINT-READINESS / complete lesson+stage ledger is not a certificate',async()=>{
       const ready=await jointReadiness(context,profile,d);
       expect(ready).toMatchObject({
         totalRequiredLessons:d.requiredLessonIds.length,
         verifiedLessons:d.requiredLessonIds.length,
-        officialStageCount:8,officialStagesPassed:8,
+        officialStageCount,officialStagesPassed:officialStageCount,
         reason:'READY_FOR_TERMINAL_PREFLIGHT',
         readyForAtomicTerminalPreflight:true,
         completionSupported:false,completion_supported:false,
@@ -463,7 +469,7 @@ test('Player3 Native: UI, formative gates, fail/retry, durable completion, quali
         };
         expect(readinessBeforeBody.success).toBe(true);
         expect(validateQaJointReadiness(readinessBeforeBody.data,d,
-          d.requiredLessonIds.length,8).readyForAtomicTerminalPreflight).toBe(true);
+          d.requiredLessonIds.length,officialStageCount).readyForAtomicTerminalPreflight).toBe(true);
         const archiveIndex=wireEvents.indexOf('GET:'+archiveBeforeUrl);
         const readinessIndex=wireEvents.indexOf('GET:'+readinessUrl);
         const terminalIndex=wireEvents.indexOf('POST:'+terminalUrl);
