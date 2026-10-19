@@ -179,5 +179,7 @@ describe('Frente 7 — seed de homologação staging para checks individuais (SQ
     expect(handle.raw.prepare('SELECT COUNT(*) AS n FROM funcionarios WHERE deleted_at IS NULL').get().n).toBe(0);
     expect(handle.raw.prepare('SELECT COUNT(*) AS n FROM funcionarios').get().n).toBe(5);
     expect(handle.raw.prepare('SELECT COUNT(*) AS n FROM fichas_sessao').get().n).toBe(4);
+    expect(handle.raw.prepare('SELECT COUNT(*) AS n FROM fichas_sessao_manobras').get().n).toBe(4);
+    expect(handle.raw.prepare('SELECT COUNT(*) AS n FROM fichas_sessao_manobras WHERE deleted_at IS NULL').get().n).toBe(0);
   });
 });

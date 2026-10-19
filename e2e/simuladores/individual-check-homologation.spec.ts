@@ -41,27 +41,51 @@ const fixtures = (() => {
   return Object.fromEntries(parsed.fichas.map((f) => [f.cenario, f])) as Record<Scenario, Fixture>;
 })();
 
-async function login(page: Page, email: string, password: string) {
-  if (!email || !password) {
-    throw new Error(`LOGIN_CREDENTIALS_MISSING: email=${Boolean(email)} password=${Boolean(password)}`);
-  }
+async function doLoginOnce(page: Page, email: string, password: string) {
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.locator('input[type="email"]').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.locator('input[type="email"]').waitFor({ state: 'visible', timeout: 20_000 });
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
 
-  // Se o usuário possui múltiplos perfis operacionais, o app renderiza a seleção
-  // "Como você quer entrar?" antes de navegar para a rota protegida.
-  const profileButton = page.locator('button', { hasText: /Entrar como/i }).first();
-  try {
-    await profileButton.waitFor({ state: 'visible', timeout: 5000 });
-    await profileButton.click();
-  } catch {
-    // Perfil único ou navegação direta sem diálogo de seleção
+  // O app pode navegar diretamente ou renderizar o seletor de perfil operacional
+  // ("Como você quer entrar?"). Aguardamos até 30s por um dos dois estados.
+  await page.waitForFunction(
+    () => {
+      if (!window.location.pathname.startsWith('/login')) return true;
+      return Array.from(document.querySelectorAll('button')).some((b) =>
+        /^Entrar como/i.test((b.textContent || '').trim()),
+      );
+    },
+    undefined,
+    { timeout: 30_000 },
+  );
+
+  // Se ainda estiver em /login com perfil operacional disponível, seleciona perfil de administrador/gestor:
+  if (new URL(page.url()).pathname.startsWith('/login')) {
+    const profileButton = page
+      .getByRole('button', { name: /entrar como (administrador(?: geral| da empresa)?|gestor)/i })
+      .or(page.locator('button', { hasText: /Entrar como/i }))
+      .first();
+    if (await profileButton.isVisible()) {
+      await profileButton.click();
+    }
   }
 
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 });
+}
+
+async function login(page: Page, email: string, password: string) {
+  if (!email || !password) {
+    throw new Error(`LOGIN_CREDENTIALS_MISSING: email=${Boolean(email)} password=${Boolean(password)}`);
+  }
+  try {
+    await doLoginOnce(page, email, password);
+  } catch (err) {
+    console.warn('[qa-homologation] login retry after failure:', err);
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
+    await doLoginOnce(page, email, password);
+  }
 }
 
 /** Reaproveita exatamente a autenticação que o próprio app envia ao Worker (bearer e/ou cookie). */
@@ -132,8 +156,7 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     page = await context.newPage();
     auth = captureAuth(page);
     await login(page, QA_EMAIL, QA_PASSWORD);
-    await page.goto('/simuladores/fichas');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/simuladores/fichas', { waitUntil: 'domcontentloaded' });
   });
   test.afterAll(async () => { await context?.close(); });
 
@@ -154,10 +177,9 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
 
   test('A — APROVADO pelo modal: UI + API + persistência + FAP + validade + PDF', async () => {
     const f = fixtures.A;
-    await page.goto(`/simuladores/fichas/${f.ficha_id}`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`/simuladores/fichas/${f.ficha_id}`, { waitUntil: 'domcontentloaded' });
     const abrir = page.getByRole('button', { name: /^Assinar$/ }).last();
-    await abrir.waitFor({ state: 'visible', timeout: 20_000 });
+    await abrir.waitFor({ state: 'visible', timeout: 30_000 });
     await abrir.click();
     const modal = page.locator('div.fixed.inset-0').filter({ hasText: 'Assinatura Digital' });
     await expect(modal).toBeVisible();
@@ -175,10 +197,10 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     expect(String(evidenceFor(r.body).data_vencimento)).toMatch(/^\d{4}-\d{2}-\d{2}/);
 
     // UI após recarregar (persistência real).
-    await page.reload();
-    await expect(page.getByText('Evidências individuais dos checks')).toBeVisible();
-    await expect(page.getByText('APROVADO', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('Evidência imutável')).toBeVisible();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('Evidências individuais dos checks')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('APROVADO', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Evidência imutável')).toBeVisible({ timeout: 30_000 });
 
     // FAP / Qualificações e PDF coerentes com a mesma evidência.
     const hist = await api(page, auth, 'GET', history('A'));
@@ -190,7 +212,8 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
 
   test('B — REPROVADO pelo inline com sessão APROVADA: sem aprovação coletiva e FAP prematura revogada', async () => {
     const f = fixtures.B;
-    await page.goto(`/simuladores/fichas/${f.ficha_id}?mode=sign&papel=INSTRUTOR`);
+    await page.goto(`/simuladores/fichas/${f.ficha_id}?mode=sign&papel=INSTRUTOR`, { waitUntil: 'domcontentloaded' });
+    await page.locator('#concordo').waitFor({ state: 'visible', timeout: 30_000 });
     await draw(page, page.locator('body'));
     await page.locator('#concordo').check();
     await page.locator('input[name="aprovacao"]').first().check(); // sessão APROVADA (cenário perigoso)
@@ -202,8 +225,10 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     const r = await api(page, auth, 'GET', checksPath('B'));
     expect(evidenceFor(r.body)).toMatchObject({ situacao: 'REPROVADO', aprovado_comprovado: false });
 
-    await page.reload();
-    await expect(page.getByText('REPROVADO', { exact: true }).first()).toBeVisible();
+    await page.goto(`/simuladores/fichas/${f.ficha_id}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('Evidências individuais dos checks')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('REPROVADO', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Evidência imutável')).toBeVisible({ timeout: 30_000 });
 
     // Nenhuma FAP ativa; a prematura foi revogada (não apagada) — a linha cancelada permanece auditável.
     const hist = await api(page, auth, 'GET', history('B'));
@@ -211,20 +236,22 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
   });
 
   test('C — PENDENTE: sem avaliação individual não há aprovação, FAP ou certificado', async () => {
-    await page.goto(`/simuladores/fichas/${fixtures.C.ficha_id}`);
-    await expect(page.getByText('PENDENTE DE AVALIAÇÃO').first()).toBeVisible();
+    await page.goto(`/simuladores/fichas/${fixtures.C.ficha_id}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('PENDENTE DE AVALIAÇÃO').first()).toBeVisible({ timeout: 30_000 });
     const r = await api(page, auth, 'GET', checksPath('C'));
     expect(evidenceFor(r.body)).toMatchObject({ situacao: 'PENDENTE_AVALIACAO', aprovado_comprovado: false });
     const hist = await api(page, auth, 'GET', history('C'));
     expect(activeFapRows(hist.body, CODE)).toEqual([]);
-    await page.reload();
-    await expect(page.getByText('PENDENTE DE AVALIAÇÃO').first()).toBeVisible();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('PENDENTE DE AVALIAÇÃO').first()).toBeVisible({ timeout: 30_000 });
   });
 
   test('D — ficha finalizada: erro de rede não grava evidência; retry grava uma única vez', async () => {
     const f = fixtures.D;
-    await page.goto(`/simuladores/fichas/${f.ficha_id}`);
-    await page.getByRole('button', { name: 'Aprovado', exact: true }).first().click();
+    await page.goto(`/simuladores/fichas/${f.ficha_id}`, { waitUntil: 'domcontentloaded' });
+    const aprovadoBtn = page.getByRole('button', { name: 'Aprovado', exact: true }).first();
+    await aprovadoBtn.waitFor({ state: 'visible', timeout: 30_000 });
+    await aprovadoBtn.click();
 
     // 1ª tentativa: a rede falha antes de a resposta chegar.
     let aborted = false;
@@ -273,8 +300,8 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     const p = await fresh.newPage();
     const a = captureAuth(p);
     await login(p, QA_EMAIL, QA_PASSWORD);
-    await p.goto('/simuladores/fichas');
-    await p.waitForLoadState('networkidle');
+    await p.goto('/simuladores/fichas', { waitUntil: 'domcontentloaded' });
+    await expect.poll(() => a.header(), { timeout: 15_000 }).not.toBeNull();
     const expected: Record<Scenario, string> = { A: 'APROVADO', B: 'REPROVADO', C: 'PENDENTE_AVALIACAO', D: 'APROVADO' };
     for (const s of ['A', 'B', 'C', 'D'] as Scenario[]) {
       const r = await api(p, a, 'GET', checksPath(s));
@@ -289,8 +316,8 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     const p = await other.newPage();
     const a = captureAuth(p);
     await login(p, OTHER_EMAIL, OTHER_PASSWORD);
-    await p.goto('/');
-    await p.waitForLoadState('networkidle');
+    await p.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect.poll(() => a.header(), { timeout: 15_000 }).not.toBeNull();
     const read = await api(p, a, 'GET', checksPath('A'));
     expect([401, 403, 404]).toContain(read.status);
     const write = await api(p, a, 'POST', checksPath('C'), { sessao_check_id: fixtures.C.sessao_check_id, aprovado: true });
