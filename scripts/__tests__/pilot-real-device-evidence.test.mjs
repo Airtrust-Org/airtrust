@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import {requiredRows,requiredScenarios,verifyPilotRealDeviceEvidence as verify} from '../ci/pilot-real-device-evidence.mjs';
 const sha='a'.repeat(40);
 function sample(){
@@ -27,4 +28,15 @@ test('requires exact worker/pages provenance, real fields and all fifteen PASS p
  const v=sample();v.pages_source_sha='b'.repeat(40);assert.equal(verify(v,sha).ok,false);
  const vv=sample();vv.rows[4].scenario_results['10_idempotent_receipt_no_duplicate']='PENDING';assert.equal(verify(vv,sha).ok,false);
  const vvv=sample();vvv.rows[0].result='FAIL';assert.equal(verify(vvv,sha).ok,false);
+});
+
+test('official read-only device gate checks evidence at the exact reviewed PR SHA, not main',()=>{
+ const workflow=readFileSync('.github/workflows/pilot-real-device-acceptance.yml','utf8');
+ assert.match(workflow,/pr_number:/);
+ assert.match(workflow,/PILOT_ACCEPTANCE_PR_HEAD_MISMATCH/);
+ assert.match(workflow,/ref: \$\{\{ inputs.release_sha \}\}/);
+ assert.match(workflow,/working-directory: release/);
+ assert.match(workflow,/node \.\.\/scripts\/ci\/pilot-real-device-evidence\.mjs --release-sha/);
+ assert.match(workflow,/PILOT_STAGING_WORKER_AND_PAGES_PROVENANCE_PASS/);
+ assert.doesNotMatch(workflow,/pull_request_target:/);
 });
