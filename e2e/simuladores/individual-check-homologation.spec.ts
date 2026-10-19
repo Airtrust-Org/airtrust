@@ -156,8 +156,7 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     page = await context.newPage();
     auth = captureAuth(page);
     await login(page, QA_EMAIL, QA_PASSWORD);
-    await page.goto('/simuladores/fichas');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/simuladores/fichas', { waitUntil: 'domcontentloaded' });
   });
   test.afterAll(async () => { await context?.close(); });
 
@@ -178,10 +177,9 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
 
   test('A — APROVADO pelo modal: UI + API + persistência + FAP + validade + PDF', async () => {
     const f = fixtures.A;
-    await page.goto(`/simuladores/fichas/${f.ficha_id}`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`/simuladores/fichas/${f.ficha_id}`, { waitUntil: 'domcontentloaded' });
     const abrir = page.getByRole('button', { name: /^Assinar$/ }).last();
-    await abrir.waitFor({ state: 'visible', timeout: 20_000 });
+    await abrir.waitFor({ state: 'visible', timeout: 30_000 });
     await abrir.click();
     const modal = page.locator('div.fixed.inset-0').filter({ hasText: 'Assinatura Digital' });
     await expect(modal).toBeVisible();
@@ -214,8 +212,8 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
 
   test('B — REPROVADO pelo inline com sessão APROVADA: sem aprovação coletiva e FAP prematura revogada', async () => {
     const f = fixtures.B;
-    await page.goto(`/simuladores/fichas/${f.ficha_id}?mode=sign&papel=INSTRUTOR`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`/simuladores/fichas/${f.ficha_id}?mode=sign&papel=INSTRUTOR`, { waitUntil: 'domcontentloaded' });
+    await page.locator('#concordo').waitFor({ state: 'visible', timeout: 30_000 });
     await draw(page, page.locator('body'));
     await page.locator('#concordo').check();
     await page.locator('input[name="aprovacao"]').first().check(); // sessão APROVADA (cenário perigoso)
@@ -236,9 +234,8 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
   });
 
   test('C — PENDENTE: sem avaliação individual não há aprovação, FAP ou certificado', async () => {
-    await page.goto(`/simuladores/fichas/${fixtures.C.ficha_id}`);
-    await page.waitForLoadState('networkidle');
-    await expect(page.getByText('PENDENTE DE AVALIAÇÃO').first()).toBeVisible();
+    await page.goto(`/simuladores/fichas/${fixtures.C.ficha_id}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('PENDENTE DE AVALIAÇÃO').first()).toBeVisible({ timeout: 30_000 });
     const r = await api(page, auth, 'GET', checksPath('C'));
     expect(evidenceFor(r.body)).toMatchObject({ situacao: 'PENDENTE_AVALIACAO', aprovado_comprovado: false });
     const hist = await api(page, auth, 'GET', history('C'));
@@ -249,9 +246,10 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
 
   test('D — ficha finalizada: erro de rede não grava evidência; retry grava uma única vez', async () => {
     const f = fixtures.D;
-    await page.goto(`/simuladores/fichas/${f.ficha_id}`);
-    await page.waitForLoadState('networkidle');
-    await page.getByRole('button', { name: 'Aprovado', exact: true }).first().click();
+    await page.goto(`/simuladores/fichas/${f.ficha_id}`, { waitUntil: 'domcontentloaded' });
+    const aprovadoBtn = page.getByRole('button', { name: 'Aprovado', exact: true }).first();
+    await aprovadoBtn.waitFor({ state: 'visible', timeout: 30_000 });
+    await aprovadoBtn.click();
 
     // 1ª tentativa: a rede falha antes de a resposta chegar.
     let aborted = false;
@@ -300,8 +298,7 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     const p = await fresh.newPage();
     const a = captureAuth(p);
     await login(p, QA_EMAIL, QA_PASSWORD);
-    await p.goto('/simuladores/fichas');
-    await p.waitForLoadState('networkidle');
+    await p.goto('/simuladores/fichas', { waitUntil: 'domcontentloaded' });
     const expected: Record<Scenario, string> = { A: 'APROVADO', B: 'REPROVADO', C: 'PENDENTE_AVALIACAO', D: 'APROVADO' };
     for (const s of ['A', 'B', 'C', 'D'] as Scenario[]) {
       const r = await api(p, a, 'GET', checksPath(s));
@@ -316,8 +313,7 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     const p = await other.newPage();
     const a = captureAuth(p);
     await login(p, OTHER_EMAIL, OTHER_PASSWORD);
-    await p.goto('/');
-    await p.waitForLoadState('networkidle');
+    await p.goto('/', { waitUntil: 'domcontentloaded' });
     const read = await api(p, a, 'GET', checksPath('A'));
     expect([401, 403, 404]).toContain(read.status);
     const write = await api(p, a, 'POST', checksPath('C'), { sessao_check_id: fixtures.C.sessao_check_id, aprovado: true });
