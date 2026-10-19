@@ -88,6 +88,8 @@ describe('Compliance atomic enrollment, policy and tenant guards (SQLite D1)', (
     ["curso apagado","UPDATE lms_cursos SET deleted_at='2026-01-01'"],
     ["modelo não EAD","UPDATE qualificacoes_tipos SET categoria='Presencial' WHERE id=100"],
     ["escopo inadequado","UPDATE treinamento_requisitos SET escopo='FUNCIONARIO',funcionario_id=1001"],
+    ["designação sem confirmação","UPDATE treinamento_requisitos SET condicao_id=10"],
+    ["aeronave sem vínculo","UPDATE treinamento_requisitos SET aeronave_modelo='S-92'"],
   ])('fails closed when %s changes after planning', async (_name, sql) => {
     const db=setup();
     db.database.exec(sql);
@@ -97,7 +99,13 @@ describe('Compliance atomic enrollment, policy and tenant guards (SQLite D1)', (
     expect(count(db,'audit_logs')).toBe(0);
   });
 
-  it('rejects cross-tenant employee/course/rule even if IDs are known', async () => {
+  it('never guesses a course when two published editions match a qualification',async()=>{
+    const db=setup();
+    db.database.exec("INSERT INTO lms_cursos VALUES (57,1,100,1,1,NULL)");
+    expect(await createComplianceEnrollmentAtomic(db.asD1(),request())).toBeNull();
+    expect(count(db,'lms_matriculas')).toBe(0);
+  });
+    it('rejects cross-tenant employee/course/rule even if IDs are known', async () => {
     const db=setup();
     expect(await createComplianceEnrollmentAtomic(db.asD1(),request({funcionarioId:2000}))).toBeNull();
     expect(await createComplianceEnrollmentAtomic(db.asD1(),request({empresaId:2}))).toBeNull();
