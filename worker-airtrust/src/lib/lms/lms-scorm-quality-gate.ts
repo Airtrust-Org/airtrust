@@ -1,6 +1,11 @@
 import { strFromU8 } from 'fflate';
 
 import type { ValidatedLmsPackage } from './lms-package-validator';
+import {
+  evaluateScormFunctionalCertification,
+  type ScormFunctionalBrowserRun,
+  type ScormFunctionalCertification,
+} from './lms-scorm-functional-certification';
 
 export const SCORM_QUALITY_GATE_VERSION = 'AIRTRUST_SCORM_PACKAGE_QUALITY_GATE_V1';
 export const COMPLETION_CONTRACT = 'AIRTRUST_COMPLETION_CONTRACT_V1';
@@ -21,6 +26,8 @@ export type ScormQualityGateResult = {
   completionManifest: GateSection;
   diagnostics: GateSection;
   conformance: { status: GateStatus; tests: ConformanceTest[] };
+  /** Independent browser E2E attestation, not SCORM protocol conformance. */
+  functionalCertification: ScormFunctionalCertification;
   publishable: boolean;
 };
 
@@ -359,7 +366,8 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
     completionManifest: completion,
     diagnostics: diagnostic,
     conformance,
-    publishable: structural.status === 'PASS' && completion.status === 'PASS' && diagnostic.status === 'PASS' && conformance.status === 'PASS',
+    functionalCertification: evaluateScormFunctionalCertification('', []),
+    publishable: false,
   };
 }
 
@@ -367,6 +375,7 @@ export function applyRuntimeConformance(
   staticResult: ScormQualityGateResult,
   runtime: ScormRuntimeConformance,
   expectedSha256: string,
+  trustedFunctionalRuns: readonly ScormFunctionalBrowserRun[] = [],
 ): ScormQualityGateResult {
   const shaMatches = runtime.candidateSha256 === expectedSha256;
   const actualScore = Number(runtime.scoreRaw);
@@ -409,11 +418,50 @@ export function applyRuntimeConformance(
     name: 'CANDIDATE_SHA256', status: 'ERROR',
     detail: 'Resultado pertence a SHA diferente',
   });
+  const functionalCertification = evaluateScormFunctionalCertification(
+    expectedSha256, trustedFunctionalRuns,
+    { requiresAssessment: runtime.requiresAssessmentEvidence !== false },
+  );
   return {
     ...staticResult,
     conformance,
-    publishable: shaMatches && staticResult.structural.status === 'PASS' &&
+    functionalCertification,
+    publishable: functionalCertification.status === 'CERTIFIED' &&
+      functionalCertification.packageSha256 === expectedSha256 &&
+      shaMatches && staticResult.structural.status === 'PASS' &&
       staticResult.completionManifest.status === 'PASS' &&
       staticResult.diagnostics.status === 'PASS' && verdict === 'PASS',
   };
+}
+
+/** The activation gate checks stored attestations again, including legacy JSON
+ * written when protocol conformance alone could set publishable=true. */
+export function canActivateCertifiedScormPackage(
+  quality: ScormQualityGateResult | null | undefined,
+  expectedSha256: string,
+): boolean {
+  const certificate = quality?.functionalCertification;
+  // A stored CERTIFIED summary without underlying browser cases is not proof.
+  // Re-evaluate the case ledger independently when activating a version.
+  if (!certificate || !Array.isArray(certificate.runs) ||
+      !Array.isArray(certificate.missing) ||
+      !certificate.runs.every(run => run && typeof run === 'object') ||
+      typeof certificate.requiresAssessment !== 'boolean') return false;
+  const replay = evaluateScormFunctionalCertification(expectedSha256, certificate.runs, {
+    requiresAssessment: certificate.requiresAssessment,
+  });
+  const storedRuntime = (quality as ScormQualityGateResult & { runtime?: ScormRuntimeConformance })?.runtime;
+  if (storedRuntime && (storedRuntime.candidateSha256 !== expectedSha256 ||
+      certificate.requiresAssessment !== (storedRuntime.requiresAssessmentEvidence !== false))) return false;
+  return Boolean(replay.status === 'CERTIFIED' &&
+    certificate.status === 'CERTIFIED' &&
+    certificate.missing.length === 0 &&
+    expectedSha256 && quality?.publishable === true &&
+    quality.structural?.status === 'PASS' &&
+    quality.completionManifest?.status === 'PASS' &&
+    quality.diagnostics?.status === 'PASS' &&
+    quality.conformance?.status === 'PASS' &&
+    quality.functionalCertification?.status === 'CERTIFIED' &&
+    quality.functionalCertification.packageSha256 === expectedSha256 &&
+    quality.functionalCertification.missing.length === 0);
 }
