@@ -181,15 +181,49 @@ describe('Pilot offline sync with a disposable local D1 Worker', () => {
     expect((await responseBody(response)).code).toBe('CONTROLE_VOOS_PILOT_SYNC_FUELING_ALREADY_RECORDED_CHANGED');
     expect(await state()).toEqual(before);
   });
-  it('preserves an unchanged accepted administrative justification after deactivation', async () => {
+  it('preserves the entire accepted justification audit row after catalog deactivation', async () => {
     const first = await command();
     expect((await send(first)).status).toBe(200);
+    const original = (await state()).cv_voo_justificativas[0];
     expect((await request('/__fixture/catalog?action=disable-justification', { method: 'POST' })).status).toBe(200);
     const next = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
     expect((await send(next)).status).toBe(200);
     const saved = await state();
     expect(saved.cv_voo_justificativas).toHaveLength(1);
-    expect(saved.cv_voo_justificativas[0]).toMatchObject({ minutos: 20, observacao: 'reason', deleted_at: null });
+    // Id, timestamp, created_by, updated_by and deleted_at are evidence,
+    // not transient fields to rewrite on a cumulative snapshot.
+    expect(saved.cv_voo_justificativas[0]).toEqual(original);
+    expect(saved.cv_offline_sync_receipts).toHaveLength(2);
+  });
+  it('keeps unchanged active justification evidence but still updates changed active values', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const original = (await state()).cv_voo_justificativas[0];
+    const same = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+    expect((await send(same)).status).toBe(200);
+    expect((await state()).cv_voo_justificativas[0]).toEqual(original);
+    const changedBase = await nextSnapshot(same, same.payload.fuelings as Record<string, unknown>[], 3);
+    const changed = await command({
+      ...changedBase,
+      payload: {
+        ...changedBase.payload,
+        justifications: [{ justificativa_codigo: 'TEST', minutos: 25, observacao: 'revised with active catalog' }],
+      },
+    });
+    expect((await send(changed)).status).toBe(200);
+    const updated = (await state()).cv_voo_justificativas[0];
+    expect(updated).toMatchObject({
+      id: original.id, created_at: original.created_at,
+      minutos: 25, observacao: 'revised with active catalog', deleted_at: null,
+    });
+  });
+  it('soft-deletes an accepted justification omitted by a later cumulative snapshot', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const nextBase = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+    const omitted = await command({ ...nextBase, payload: { ...nextBase.payload, justifications: [] } });
+    expect((await send(omitted)).status).toBe(200);
+    expect((await state()).cv_voo_justificativas[0].deleted_at).not.toBeNull();
   });
   it('rejects new or changed inactive justifications without altering the accepted evidence', async () => {
     const first = await command();
