@@ -6,7 +6,7 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { selectQaStorageState } from './qa-storage-state';
+import { selectQaStorageState, selectQaApiBearerToken } from './qa-storage-state';
 import {
   qaPath as pathOn, requireQa as demand, validateQaProfile,
   validateQaAuthoredContentUrl,
@@ -41,27 +41,37 @@ function load(projectName: string) {
   const file = process.env.PLAYER3_QA_PROFILE_FILE;
   demand(file, 'PRIVATE_QA_PROFILE');
   const raw: unknown = JSON.parse(readFileSync(resolve(file), 'utf8'));
-  demand(process.env.PLAYER3_QA_READONLY_BEARER_TOKEN,
-    'STAGING_READONLY_API_AUTH');
-  return validateQaProfile(raw, projectName,
+  const validated=validateQaProfile(raw, projectName,
     process.env.PLAYER3_QA_STAGING_ORIGIN ?? '',
     process.env.PLAYER3_QA_API_ORIGIN ?? '',
     process.env.PLAYER3_QA_SYNTHETIC_TENANT_ID ?? '',
     process.env.PLAYER3_QA_CONTENT_ORIGIN ?? '',
     process.env.PLAYER3_QA_SYNTHETIC_SOURCE_SHA256 ?? '');
+  selectQaApiBearerToken(projectName,
+    validated.profile.qaContentMode ?? 'AUTHORED_RC81',process.env);
+  return validated;
+}
+const qaBearerByContext=new WeakMap<BrowserContext,string>();
+function bearerFor(context:BrowserContext):string{
+  const token=qaBearerByContext.get(context);
+  demand(token,'QA_LEARNER_CONTEXT_BEARER_NOT_BOUND');
+  return token;
 }
 async function openLearner(browser: Browser, profile: Profile):
   Promise<{ context: BrowserContext; page: Page }> {
   const state = selectQaStorageState(browser.browserType().name(),
     profile.qaContentMode ?? 'AUTHORED_RC81', process.env);
+  const token=selectQaApiBearerToken(browser.browserType().name(),
+    profile.qaContentMode ?? 'AUTHORED_RC81',process.env);
   const context = await browser.newContext({
     storageState: state, viewport: { width: 1365, height: 850 },
   });
+  qaBearerByContext.set(context,token);
   const page = await context.newPage();
   return { context, page };
 }
 async function apiData<T>(context: BrowserContext, origin: string, path: string): Promise<T> {
-  const token = process.env.PLAYER3_QA_READONLY_BEARER_TOKEN;
+  const token = bearerFor(context);
   const response = await context.request.get(pathOn(origin, path), {
     headers: token ? { Authorization: 'Bearer ' + token } : {},
     failOnStatusCode: false,
@@ -523,7 +533,7 @@ test('Player3 Native: UI, formative gates, fail/retry, durable completion, quali
           profile.apiBaseUrl,archivePath),
         d,enrolled.qualificacao_historico_id!,enrolled.certificate_id!,
         d.certificatePath);
-      const token = process.env.PLAYER3_QA_READONLY_BEARER_TOKEN;
+      const token = bearerFor(context);
       const pdf = await context.request.get(
         pathOn(profile.apiBaseUrl, archive.stream_path!), {
         headers:token ? {Authorization:'Bearer '+token}:{},
@@ -679,7 +689,7 @@ test('External SCORM 1.2: actual adapter, no fake completion from visual slides,
     expect(stored.certificate_id).toBeGreaterThan(0);
     // Verify a complete authenticated PDF, not a D1 document ID alone.
     const certificateUrl='/api/pasta-virtual/stream/'+stored.certificate_id;
-    const token=process.env.PLAYER3_QA_READONLY_BEARER_TOKEN;
+    const token=bearerFor(context);
     const pdf=await context.request.get(
       pathOn(profile.apiBaseUrl,certificateUrl),{
         headers:token?{Authorization:'Bearer '+token}:{},
