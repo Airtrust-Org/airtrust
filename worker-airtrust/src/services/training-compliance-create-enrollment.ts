@@ -11,6 +11,16 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
     throw new Error('COMPLIANCE_ATOMIC_SCHEMA_MISSING');
   const hasCondition=await hasSchemaColumn(db,'treinamento_requisitos','condicao_id');
   const hasAircraft=await hasSchemaColumn(db,'treinamento_requisitos','aeronave_modelo');
+  const priority=(alias:string)=>`(CASE ${alias}.escopo WHEN 'FUNCIONARIO' THEN 5000
+    WHEN 'SETOR_FUNCAO' THEN 40 WHEN 'FUNCAO' THEN 30 WHEN 'SETOR' THEN 20
+    WHEN 'EMPRESA' THEN 10 ELSE 0 END
+    ${hasCondition?`+ CASE WHEN ${alias}.condicao_id IS NOT NULL THEN 1000 ELSE 0 END`:''}
+    ${hasAircraft?`+ CASE WHEN NULLIF(TRIM(${alias}.aeronave_modelo),'') IS NOT NULL THEN 100 ELSE 0 END`:''})`;
+  const applies=(alias:string)=>`(${alias}.escopo='EMPRESA'
+    OR (${alias}.escopo='SETOR' AND ${alias}.setor_id=f.setor_id)
+    OR (${alias}.escopo='FUNCAO' AND ${alias}.funcao_id=f.funcao_id)
+    OR (${alias}.escopo='SETOR_FUNCAO' AND ${alias}.setor_id=f.setor_id AND ${alias}.funcao_id=f.funcao_id)
+    OR (${alias}.escopo='FUNCIONARIO' AND ${alias}.funcionario_id=f.id))`;
   const hasProfile=await hasSchemaColumn(db,'lms_matriculas','perfil_competencia');
   const profile=hasProfile ? await resolveEffectiveTrainingComplianceProfile(db,{
     empresaId:p.empresaId,funcionarioId:p.funcionarioId,qualificacaoTipoId:p.qualificacaoTipoId,
@@ -40,11 +50,20 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
               AND c2.ativo=1 AND c2.publicado=1 AND c2.deleted_at IS NULL)
           AND f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL
           AND UPPER(TRIM(f.status))='ATIVO' AND f.ativo=1
-          AND (tr.escopo='EMPRESA'
-            OR (tr.escopo='SETOR' AND tr.setor_id=f.setor_id)
-            OR (tr.escopo='FUNCAO' AND tr.funcao_id=f.funcao_id)
-            OR (tr.escopo='SETOR_FUNCAO' AND tr.setor_id=f.setor_id AND tr.funcao_id=f.funcao_id)
-            OR (tr.escopo='FUNCIONARIO' AND tr.funcionario_id=f.id))
+          AND ${applies('tr')}
+          -- A newly saved, higher-priority opt-out/NAO_APLICA rule invalidates a
+          -- previous preview even when the old rule itself remains active.
+          AND NOT EXISTS (
+            SELECT 1 FROM treinamento_requisitos higher
+             WHERE higher.empresa_id=tr.empresa_id
+               AND higher.qualificacao_tipo_id=tr.qualificacao_tipo_id
+               AND higher.id<>tr.id AND higher.ativo=1 AND higher.deleted_at IS NULL
+               AND (higher.vigencia_inicio IS NULL OR date(higher.vigencia_inicio)<=date('now'))
+               AND (higher.vigencia_fim IS NULL OR date(higher.vigencia_fim)>=date('now'))
+               AND ${applies('higher')}
+               AND (${priority('higher')}>${priority('tr')}
+                 OR (${priority('higher')}=${priority('tr')} AND higher.id>tr.id))
+          )
       ) AND NOT EXISTS (
         SELECT 1 FROM lms_matriculas m
          WHERE m.empresa_id=? AND m.curso_id=? AND m.funcionario_id=?
