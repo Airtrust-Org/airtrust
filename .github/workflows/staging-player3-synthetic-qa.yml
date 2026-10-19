@@ -1,0 +1,158 @@
+name: Staging Player3 Synthetic QA (Governed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_PLAYER3_SYNTHETIC_STAGING'
+        type: string
+        required: true
+      release_sha:
+        description: 'Exact open PR #1389 HEAD SHA with 8 gates and PR Check'
+        type: string
+        required: true
+      phase:
+        description: 'One separately approved synthetic QA phase'
+        type: choice
+        required: true
+        options: [bootstrap, publish, edition]
+      grant_id:
+        description: 'Current repository-admin grant issue-comment ID from #776'
+        type: string
+        required: true
+      sql_sha256:
+        description: 'Approved SHA-256 of generated SQL; none for publish'
+        type: string
+        required: true
+      plan_sha256:
+        description: 'Approved SHA-256 of publication plan; none for bootstrap'
+        type: string
+        required: true
+      course_id:
+        description: 'D1 physical course ID (0 for bootstrap)'
+        type: string
+        required: true
+      approver_user_id:
+        description: 'D1 QA approver ID (0 except edition)'
+        type: string
+        required: true
+
+# Single staging write lock shared with D1 Schema V2, Worker/Pages and SCORM.
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+  issues: read
+
+env:
+  QA_CONFIRMATION: ${{ inputs.confirmation }}
+  QA_RELEASE_SHA: ${{ inputs.release_sha }}
+  QA_PHASE: ${{ inputs.phase }}
+  QA_GRANT_ID: ${{ inputs.grant_id }}
+  QA_SQL_SHA: ${{ inputs.sql_sha256 }}
+  QA_PLAN_SHA: ${{ inputs.plan_sha256 }}
+  QA_COURSE_ID: ${{ inputs.course_id }}
+  QA_APPROVER_ID: ${{ inputs.approver_user_id }}
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  guard:
+    name: Approve exact reviewed SHA, 8 gates, PR Check and F0 issue grant
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Verify exact authorization without Cloudflare credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging/player3-qa-approval-guard.mjs
+
+  staging:
+    name: Protected synthetic Player 3 staging operation
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: staging
+    steps:
+      - name: Checkout trusted main code only
+        uses: actions/checkout@v7
+        with:
+          path: trusted
+          persist-credentials: false
+      - name: Checkout exact F4 commit as data and reviewed scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          path: trusted/release
+          persist-credentials: false
+      - name: Recheck grant after protected environment approval
+        working-directory: trusted
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging/player3-qa-approval-guard.mjs
+      - name: Generate immutable QA candidate and approved SQL/plan offline
+        working-directory: trusted
+        run: node scripts/staging/player3-qa-trusted-executor.mjs prepare
+      - name: Install reviewed Worker Wrangler only (no package lifecycle scripts)
+        run: npm --prefix trusted/release/worker-airtrust ci --ignore-scripts
+      - name: Read physical staging preimage and capture D1 Time Travel recovery
+        working-directory: trusted
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+        run: node scripts/staging/player3-qa-trusted-executor.mjs preflight
+      - name: Confirm already-published private R2 and isolated HTTPS bytes before D1 edition
+        if: inputs.phase == 'edition'
+        working-directory: trusted
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PLAYER3_QA_R2_PAGES_API_TOKEN }}
+        run: node scripts/staging/player3-qa-trusted-executor.mjs verify
+      - name: Run reviewed bootstrap or immutable edition SQL on exact staging D1
+        if: inputs.phase == 'bootstrap' || inputs.phase == 'edition'
+        working-directory: trusted
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+        run: node scripts/staging/player3-qa-trusted-executor.mjs apply
+      - name: Publish PRIVATE staging R2 and isolated QA Pages, verify hashes
+        if: inputs.phase == 'publish'
+        working-directory: trusted
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # A NEW resource-limited staging-only R2+QA-Pages token; never fallback to D1.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PLAYER3_QA_R2_PAGES_API_TOKEN }}
+          PLAYER3_QA_APPROVED_SHA: ${{ inputs.release_sha }}
+          PLAYER3_QA_LOCK_GRANTED: airtrust-staging-mutations-and-scorm-qa
+          PLAYER3_QA_PHYSICAL_COURSE_VERIFIED: 'true'
+          PLAYER3_QA_RECOVERY_POINT_VERIFIED: 'true'
+          PLAYER3_QA_PAGES_PROJECT: qa-player3-staging
+          PLAYER3_QA_R2_BUCKET: airtrust-storage-staging
+          CONFIRM_STAGING_PLAYER3_QA_PUBLISH: AIRTRUST_STAGING_PLAYER3_SYNTHETIC_PUBLISH
+        run: node scripts/staging/player3-qa-trusted-executor.mjs apply
+      - name: Destroy private candidate, bank, SQL and recovery bookmark
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/player3-qa"
+      - name: Publish sanitized staging phase receipt (not 6/6 acceptance)
+        if: always()
+        run: |
+          {
+            echo '## Player3 synthetic QA staging'
+            echo '- PR: #1389'
+            echo "- commit: $QA_RELEASE_SHA"
+            echo "- phase: $QA_PHASE"
+            echo "- approval issue #776 comment: $QA_GRANT_ID"
+            echo "- result: ${{ job.status }}"
+            echo '- D1: canonical staging; tenant: 999006'
+            echo '- schema 0561/0562: never reapplied'
+            echo '- six browser journeys and valid PDF: NOT verified by this workflow'
+            echo '- cleanup: immutable artifacts retained for F0 compensation review'
+            echo '- production writes: none'
+          } >> "$GITHUB_STEP_SUMMARY"
