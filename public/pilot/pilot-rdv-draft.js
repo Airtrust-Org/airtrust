@@ -21,6 +21,22 @@ export function fromInputDateTime(value, flightDate = '') {
   return parsed.toISOString();
 }
 
+// A physical fueling keeps the same identity and event time through all
+// versioned snapshots. Never create either value during transmission: old
+// drafts without provenance must be reconciled before submitting again.
+export function requireStableFuelingIdentity(fueling, flightDate) {
+  const localId = String(fueling?.local_id ?? '').trim();
+  if (!localId || localId.length > 240) {
+    throw new Error('nota sem identidade persistida; solicite conferência à Coordenação antes de retransmitir.');
+  }
+  const time = String(fueling?.hora ?? '').trim();
+  const dataHora = fromInputDateTime(time, flightDate);
+  if (!time || !dataHora || Number.isNaN(Date.parse(dataHora))) {
+    throw new Error('informe a hora real do abastecimento antes de transmitir.');
+  }
+  return { client_local_id: localId, data_hora: dataHora };
+}
+
 export function toInputTime(value) {
   const text = String(value || '').trim();
   if (!text) return '';
