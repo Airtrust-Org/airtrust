@@ -112,19 +112,34 @@ describe('FRMS rest evidence in report', () => {
   it('missing and negative rest remain unknown — never default to sufficient', () => {
     expect(summarizeReportRestEvidence()).toEqual({
       repouso_suficiente: null, repouso_estado: 'DESCONHECIDO', repouso_referencia: null,
+      repouso_atualidade: 'AUSENTE',
     });
     expect(summarizeReportRestEvidence({
       repouso_suficiente: 1, repouso_anterior_min: -1, data_referencia: '2026-10-11',
     })).toEqual({
       repouso_suficiente: null, repouso_estado: 'DESCONHECIDO', repouso_referencia: '2026-10-11',
+      repouso_atualidade: 'DESATUALIZADO',
     });
   });
   it('retains verified status and its own source date', () => {
     expect(summarizeReportRestEvidence({
       repouso_suficiente: 0, repouso_anterior_min: 540, data_referencia: '2026-10-14',
-    })).toMatchObject({ repouso_estado: 'INSUFICIENTE', repouso_suficiente: 0, repouso_referencia: '2026-10-14' });
+    }, '2026-10-14')).toMatchObject({ repouso_estado: 'INSUFICIENTE', repouso_suficiente: 0, repouso_referencia: '2026-10-14', repouso_atualidade: 'ATUAL' });
     expect(summarizeReportRestEvidence({
       repouso_suficiente: 1, repouso_anterior_min: 780, data_referencia: '2026-10-14',
-    })).toMatchObject({ repouso_estado: 'SUFICIENTE', repouso_suficiente: 1 });
+    }, '2026-10-14')).toMatchObject({ repouso_estado: 'SUFICIENTE', repouso_suficiente: 1, repouso_atualidade: 'ATUAL' });
+  });
+  it('historical sufficient rest never becomes a green current-day assessment', () => {
+    expect(summarizeReportRestEvidence({
+      repouso_suficiente: 1, repouso_anterior_min: 840, data_referencia: '2026-10-14',
+    }, '2026-10-19')).toMatchObject({
+      repouso_suficiente: null, repouso_estado: 'DESCONHECIDO', repouso_referencia: '2026-10-14',
+      repouso_atualidade: 'DESATUALIZADO',
+    });
+    expect(summarizeReportRestEvidence({
+      repouso_suficiente: 1, repouso_anterior_min: 840, data_referencia: '2026-10-20',
+    }, '2026-10-19')).toMatchObject({
+      repouso_suficiente: null, repouso_estado: 'DESCONHECIDO', repouso_atualidade: 'DESATUALIZADO',
+    });
   });
 });

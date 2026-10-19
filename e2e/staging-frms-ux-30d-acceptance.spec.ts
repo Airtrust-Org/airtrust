@@ -219,39 +219,52 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
   await captureMain(page, '02-casos-frms-qa', 'Casos');
 
   const expectedCaseIds = [1, 2, 3, 4].map((n) => 'qa-frms-ux-case-' + n).sort();
-  expect(casesPayload.total, 'FRMS_QA_CASES_NOT_VISIBLE: seed antigo nao prova ciclo de casos')
+  // Soft assertions keep 4/4 a HARD final acceptance failure, but let the
+  // read-only browser collect independent Reports/Maintenance evidence first.
+  // Zero cases must never be converted into a passing operational acceptance.
+  expect.soft(casesPayload.total, 'FRMS_QA_CASES_NOT_VISIBLE: seed antigo nao prova ciclo de casos')
     .toBe(expectedCaseIds.length);
-  expect((casesPayload.data ?? []).map((row) => row.id).sort()).toEqual(expectedCaseIds);
-  expect(casesPayload.data?.every((row) =>
+  expect.soft((casesPayload.data ?? []).map((row) => row.id).sort()).toEqual(expectedCaseIds);
+  expect.soft(casesPayload.data?.every((row) =>
     row.nome_tripulante?.startsWith('QA Tripulante ') &&
     row.jornada_id?.startsWith('qa-frms-ux-j-') &&
     Boolean(row.data_jornada?.match(/^2026-\d\d-\d\d$/)) &&
     row.resolvido === 0,
   )).toBe(true);
-  await expect(page.locator('main article')).toHaveCount(expectedCaseIds.length);
-  await expect(page.getByText('Nenhum caso neste filtro', { exact: true })).toHaveCount(0);
+  const casesIntact = casesPayload.total === expectedCaseIds.length &&
+    (casesPayload.data ?? []).map((row) => row.id).sort().join(',') === expectedCaseIds.join(',');
+  if (casesIntact) {
+    await expect(page.locator('main article')).toHaveCount(expectedCaseIds.length);
+    await expect(page.getByText('Nenhum caso neste filtro', { exact: true })).toHaveCount(0);
 
-  // Exercise the real action affordance without sending any PUT or changing
-  // treatment/acknowledgement. A full lifecycle needs separate governed QA writes.
-  const firstCase = page.locator('main article').first();
-  await expect(firstCase.getByText('QA SINTETICO: revisar contexto e registrar providencia')).toBeVisible();
-  await firstCase.getByRole('button', { name: 'Registrar tratamento' }).click();
-  const treatmentDialog = page.getByRole('dialog');
-  await expect(treatmentDialog.getByRole('heading', { name: 'Registrar medida sem encerrar o caso' })).toBeVisible();
-  for (const field of ['Responsável pelo tratamento', 'Prazo', 'Medida de mitigação', 'Justificativa da decisão']) {
-    await expect(treatmentDialog.getByText(field, { exact: true })).toBeVisible();
+    // Exercise the real action affordance without sending any PUT or changing
+    // treatment/acknowledgement. A full lifecycle needs separate governed QA writes.
+    const firstCase = page.locator('main article').first();
+    await expect(firstCase.getByText('QA SINTETICO: revisar contexto e registrar providencia')).toBeVisible();
+    await firstCase.getByRole('button', { name: 'Registrar tratamento' }).click();
+    const treatmentDialog = page.getByRole('dialog');
+    await expect(treatmentDialog.getByRole('heading', { name: 'Registrar medida sem encerrar o caso' })).toBeVisible();
+    for (const field of ['Responsável pelo tratamento', 'Prazo', 'Medida de mitigação', 'Justificativa da decisão']) {
+      await expect(treatmentDialog.getByText(field, { exact: true })).toBeVisible();
+    }
+    await expect(treatmentDialog.getByRole('button', { name: 'Registrar sem encerrar' })).toBeDisabled();
+    await test.info().attach('02b-frms-caso-tratamento-dry-run', {
+      body: await treatmentDialog.screenshot({ animations: 'disabled' }),
+      contentType: 'image/png',
+    });
+    await treatmentDialog.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await expect(treatmentDialog).toHaveCount(0);
+    test.info().annotations.push({
+      type: 'coverage-gap',
+      description: 'Fluxo do caso foi inspecionado sem writes; tratamento, eficácia e encerramento precisam de QA de mutação governado.',
+    });
+
+  } else {
+    test.info().annotations.push({
+      type: 'coverage-gap',
+      description: '4/4 FRMS synthetic case contract failed; no treatment dialog inspected. Continuing read-only reports QA without accepting empty cases.',
+    });
   }
-  await expect(treatmentDialog.getByRole('button', { name: 'Registrar sem encerrar' })).toBeDisabled();
-  await test.info().attach('02b-frms-caso-tratamento-dry-run', {
-    body: await treatmentDialog.screenshot({ animations: 'disabled' }),
-    contentType: 'image/png',
-  });
-  await treatmentDialog.getByRole('button', { name: 'Cancelar', exact: true }).click();
-  await expect(treatmentDialog).toHaveCount(0);
-  test.info().annotations.push({
-    type: 'coverage-gap',
-    description: 'Fluxo do caso foi inspecionado sem writes; tratamento, eficácia e encerramento precisam de QA de mutação governado.',
-  });
 
   // Management of maintenance personnel requires an explicit backend grant.
   // The synthetic flight-operations account may have no such grant; never
@@ -290,5 +303,5 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
 
   expect(failures, 'Erros 5xx no escopo QA autenticado').toEqual([]);
   guard.assertClean();
-  console.log('FRMS_UX_30D_SYNTHETIC_BROWSER_QA_PASS; tenant=999013; routes=operacao,casos_com_4_casos_e_modal_readonly,relatorios; maintenance_conditional=true; case_lifecycle_write_coverage=false; production_writes=none');
+  console.log('FRMS_UX_30D_SYNTHETIC_BROWSER_QA_END; tenant=999013; cases=' + (casesPayload.total ?? 'unknown') + '/4; acceptance_requires_4_cases=true; reports_inspected=true; production_writes=none');
 });

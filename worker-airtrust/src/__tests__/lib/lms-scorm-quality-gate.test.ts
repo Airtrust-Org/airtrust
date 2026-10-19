@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyRuntimeConformance, validateScormPackageQuality } from '../../lib/lms/lms-scorm-quality-gate';
+import { applyRuntimeConformance, canActivateCertifiedScormPackage, validateScormPackageQuality } from '../../lib/lms/lms-scorm-quality-gate';
 import type { ValidatedLmsPackage } from '../../lib/lms/lms-package-validator';
+import {
+  REQUIRED_SCORM_FUNCTIONAL_CASES, SCORM_FUNCTIONAL_HARNESS,
+  type ScormFunctionalBrowserRun,
+} from '../../lib/lms/lms-scorm-functional-certification';
 
 const encoder = new TextEncoder();
 
@@ -47,13 +51,98 @@ describe('SCORM package quality gate', () => {
       functionalCompletionVerified: true, functionalCompletionReason: null,
       scoreRaw: '85', masteryScore: '70',
     };
-    expect(applyRuntimeConformance(staticResult, passed, 'sha-a').publishable).toBe(true);
+    // A one-session browser drive is protocol/assessment proof, never full E2E certification.
+    expect(applyRuntimeConformance(staticResult, passed, 'sha-a').conformance.status).toBe('PASS');
+    expect(applyRuntimeConformance(staticResult, passed, 'sha-a').publishable).toBe(false);
     expect(applyRuntimeConformance(staticResult, { ...passed, scoreRaw: '69' }, 'sha-a').publishable).toBe(false);
     expect(applyRuntimeConformance(staticResult, { ...passed, functionalCompletionVerified: false }, 'sha-a').publishable).toBe(false);
     expect(applyRuntimeConformance(staticResult, { ...passed, masteryScore: null }, 'sha-a').publishable).toBe(false);
     expect(applyRuntimeConformance(staticResult, { ...passed, scoreRaw: null }, 'sha-a').publishable).toBe(false);
     expect(applyRuntimeConformance(staticResult, { ...passed, lessonStatus: 'completed', expectedSuccessStatus: 'passed' }, 'sha-a').publishable).toBe(false);
-    expect(applyRuntimeConformance(staticResult, { ...passed, requiresAssessmentEvidence: false, masteryScore: null, scoreRaw: null, lessonStatus: 'completed', expectedSuccessStatus: 'completed' }, 'sha-a').publishable).toBe(true);
+    expect(applyRuntimeConformance(staticResult, { ...passed, requiresAssessmentEvidence: false, masteryScore: null, scoreRaw: null, lessonStatus: 'completed', expectedSuccessStatus: 'completed' }, 'sha-a').publishable).toBe(false);
     expect(applyRuntimeConformance(staticResult, { ...passed, requiresAssessmentEvidence: true, masteryScore: null, scoreRaw: null }, 'sha-a').publishable).toBe(false);
+  });
+
+  it('requires both browser engines, all functional cases and exact ZIP SHA', () => {
+    const staticResult = validateScormPackageQuality(pkg(validManifest));
+    const passed = {
+      status: 'PASS' as const, candidateSha256: 'sha-a', startedAt: '',
+      finishedAt: '', initializeObserved: true, commitObserved: true, finishObserved: true,
+      completionReached: true, lessonStatus: 'passed', scoreRaw: '85', masteryScore: '70',
+      lessonLocation: '1/1', trace: [], errors: [], runnerVersion: 'v1',
+      functionalCompletionVerified: true,
+    };
+    const makeRun = (browser: 'CHROMIUM' | 'WEBKIT'): ScormFunctionalBrowserRun => ({
+      harness: SCORM_FUNCTIONAL_HARNESS, browser, packageSha256: 'sha-a',
+      cases: REQUIRED_SCORM_FUNCTIONAL_CASES.map(name => ({ name, status: 'PASS' })),
+    });
+    const chromium = makeRun('CHROMIUM');
+    const webkit = makeRun('WEBKIT');
+    expect(applyRuntimeConformance(staticResult, passed, 'sha-a', [chromium])
+      .functionalCertification.missing).toContain('WEBKIT:RUN_REQUIRED_UNIQUE');
+    const fullyCertified = applyRuntimeConformance(staticResult, passed, 'sha-a', [chromium, webkit]);
+    expect(fullyCertified.publishable).toBe(true);
+    expect(canActivateCertifiedScormPackage(fullyCertified, 'sha-a')).toBe(true);
+    expect(canActivateCertifiedScormPackage(fullyCertified, 'sha-b')).toBe(false);
+    // A CERTIFIED summary is not sufficient if the stored browser ledger
+    // is absent or has been altered.
+    expect(canActivateCertifiedScormPackage({
+      ...fullyCertified, functionalCertification: {
+        ...fullyCertified.functionalCertification, runs: [],
+      },
+    }, 'sha-a')).toBe(false);
+    expect(canActivateCertifiedScormPackage({
+      ...fullyCertified, functionalCertification: {
+        ...fullyCertified.functionalCertification,
+        runs: [chromium, { ...webkit, cases: webkit.cases.map(item =>
+          item.name === 'SUSPEND_RESUME' ? { ...item, status: 'FAIL' as const } : item) }],
+      },
+    }, 'sha-a')).toBe(false);
+    expect(canActivateCertifiedScormPackage({
+      ...fullyCertified, functionalCertification: {
+        ...fullyCertified.functionalCertification,
+        runs: [chromium, { ...webkit, packageSha256: 'another-zip' }],
+      },
+    }, 'sha-a')).toBe(false);
+    const mismatchedPolicy = {
+      ...fullyCertified, functionalCertification: {
+        ...fullyCertified.functionalCertification, requiresAssessment: false,
+      },
+      runtime: { ...passed, requiresAssessmentEvidence: true },
+    };
+    expect(canActivateCertifiedScormPackage(mismatchedPolicy, 'sha-a')).toBe(false);
+    // Old stored JSON may still contain publishable=true with no functional gate.
+    const legacyResult = { ...fullyCertified, functionalCertification: undefined };
+    expect(canActivateCertifiedScormPackage(
+      legacyResult as unknown as typeof fullyCertified, 'sha-a',
+    )).toBe(false);
+    expect(canActivateCertifiedScormPackage({
+      ...fullyCertified, conformance: { ...fullyCertified.conformance, status: 'FAIL' },
+    }, 'sha-a')).toBe(false);
+    expect(applyRuntimeConformance(staticResult, passed, 'sha-b', [chromium, webkit])
+      .publishable).toBe(false);
+    expect(applyRuntimeConformance(staticResult, passed, 'sha-a', [chromium, chromium, webkit])
+      .publishable).toBe(false);
+    const missingResume: ScormFunctionalBrowserRun = {
+      ...webkit,
+      cases: webkit.cases.filter(test => test.name !== 'SUSPEND_RESUME'),
+    };
+    expect(applyRuntimeConformance(staticResult, passed, 'sha-a', [chromium, missingResume])
+      .publishable).toBe(false);
+    const formative = {
+      ...passed, requiresAssessmentEvidence: false,
+      lessonStatus: 'completed', expectedSuccessStatus: 'completed',
+      scoreRaw: null, masteryScore: null,
+    };
+    const withoutScoredAssessment = [chromium, webkit].map(run => ({
+      ...run, cases: run.cases.filter(test =>
+        test.name !== 'ASSESSMENT_INSUFFICIENT' &&
+        test.name !== 'ASSESSMENT_APPROVED' &&
+        test.name !== 'ASSESSMENT_THRESHOLD'),
+    }));
+    expect(applyRuntimeConformance(staticResult, formative, 'sha-a', withoutScoredAssessment)
+      .publishable).toBe(true);
+    expect(applyRuntimeConformance(staticResult, passed, 'sha-a', withoutScoredAssessment)
+      .publishable).toBe(false);
   });
 });

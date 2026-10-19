@@ -178,7 +178,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Exercise real SCORM success, rejection, timeout and progress in staging UI
+      - name: Exercise governed SCORM functional blocking, rejection and timeout in staging UI
         run: npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium
 
       - name: Cleanup disposable LMS SCORM fixtures
@@ -208,7 +208,8 @@ jobs:
             '- exact Worker/frontend release provenance: PASS',
             `- real synthetic ZIP upload: ${browser.success?.real_zip_upload ? 'PASS' : 'FAIL'}`,
             `- visible upload progress/status: ${Array.isArray(browser.success?.visible_progress) ? 'PASS' : 'FAIL'}`,
-            `- Browser Rendering conformance success: ${browser.success?.runtime_conformance || 'FAIL'}`,
+            `- Browser Rendering protocol conformance: ${browser.success?.runtime_conformance || 'FAIL'}`,
+            `- Functional certification pending (no false PASS): ${browser.success?.functional_certification === 'UNCERTIFIED' && !browser.success?.activated ? 'PASS' : 'FAIL'}`,
             `- static rejection path: ${browser.rejection?.static_gate || 'FAIL'}`,
             `- runtime timeout path: ${browser.timeout?.runtime_conformance || 'FAIL'}`,
             `- rejected/timeout package activation blocked: ${!browser.rejection?.activated && !browser.timeout?.activated ? 'PASS' : 'FAIL'}`,

@@ -275,6 +275,10 @@ app.use('/api/*', async (c, next) => {
     pathname.startsWith('/api/lms/scorm/assets-by-curso/') ||
     pathname.startsWith('/api/lms/scorm/launch/') ||
     pathname.startsWith('/api/lms/scorm/preview/') ||
+    // The QA candidate handlers perform their own scoped, revocation-aware
+    // asset-cookie authentication. Never open arbitrary /api/lms paths.
+    pathname.startsWith('/api/lms/scorm/qa-preview/') ||
+    pathname.startsWith('/api/lms/scorm/qa-assets/') ||
     pathname.startsWith('/api/lms/h5p/assets/') ||
     pathname.startsWith('/api/lms/pptx/asset/') ||
     pathname === '/api/certificados/validar' ||

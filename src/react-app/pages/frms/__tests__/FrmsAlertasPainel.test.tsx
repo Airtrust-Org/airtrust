@@ -79,6 +79,13 @@ describe('FrmsAlertasPainel', () => {
     mockCases([caseRow()]);
   });
 
+  it('ausência de casos elegíveis não equivale a ausência de risco ou cobertura completa', () => {
+    mockCases([], 0);
+    renderPage();
+    expect(screen.getByText('Nenhum caso neste filtro')).toBeInTheDocument();
+    expect(screen.getByText(/não comprova ausência de risco nem cobertura completa/i)).toBeInTheDocument();
+  });
+
   it('agrupa os casos apenas na página atual sem inferir recorrência global', () => {
     mockCases([
       caseRow({ id: 'a', tripulante_id: '30', nome_tripulante: 'Ana', data_fato: '2026-08-26' }),

@@ -15,8 +15,10 @@ on:
         required: true
         type: string
 
+# This QA seeds and removes staging D1 fixtures; share the official staging
+# mutation lock with Worker/Pages, governed Schema V2 and lifecycle/SCORM QA.
 concurrency:
-  group: staging-training-compliance-qa
+  group: airtrust-staging-mutations-and-scorm-qa
   cancel-in-progress: false
 
 permissions:
