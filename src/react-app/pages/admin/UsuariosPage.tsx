@@ -1140,12 +1140,16 @@ function ModalEditarUsuario({
     setSetoresCarregados(false);
     (async () => {
       try {
-        const res = await apiFetch(`/setores-gestores/por-gestor/${usuario.id}`);
-        if (!res.ok) throw new Error('Falha ao consultar setores do gestor');
-        const json = await res.json();
-        if (!json.success || !Array.isArray(json.data)) throw new Error('Resposta inválida');
+        const res = await httpClient.get<{ success: boolean; data: Array<{ setor_id: number }> }>(
+          `/setores-gestores/por-gestor/${usuario.id}`,
+          { retry: 0 },
+        );
+        const payload = res.data;
+        if (!res.success || !payload?.success || !Array.isArray(payload.data)) {
+          throw new Error('Falha ao consultar setores do gestor');
+        }
         if (!cancelled) {
-          setSetorIds([...new Set(json.data.map((v: { setor_id: number }) => Number(v.setor_id)).filter((v: number) => Number.isInteger(v) && v > 0))]);
+          setSetorIds([...new Set(payload.data.map((v) => Number(v.setor_id)).filter((v) => Number.isInteger(v) && v > 0))]);
           setSetoresCarregados(true);
         }
       } catch {
