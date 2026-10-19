@@ -65,6 +65,10 @@ jobs:
           node --test scripts/ci/check-frontend-entry-chunks.test.mjs
       - name: validate SCORM source-map package guard
         run: node --test scripts/__tests__/guard-package-references-scorm-source-maps.test.mjs
+      - name: validate Pilot device gate and Schema V2 0564 contract (read-only)
+        run: |
+          node --test scripts/__tests__/pilot-real-device-evidence.test.mjs
+          node --test scripts/__tests__/pilot-supplier-history-0564.test.mjs
       - name: tenant mutations guard
         run: node scripts/guard-tenant-mutations.mjs
       - name: validate 0438 on disposable real-base SQLite

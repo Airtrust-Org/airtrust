@@ -62,13 +62,13 @@ Partir do arquivo `PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.example.json` e substit
 O registro deve conter, no mínimo:
 
 - `status` global;
-- `staging_release_sha` com 40 caracteres hexadecimais;
+- `staging_release_sha`, `worker_source_sha` e `pages_source_sha` iguais ao SHA exato publicado em staging (40 caracteres hexadecimais);
 - `validated_at` em ISO 8601;
 - modelo do dispositivo;
 - versão do sistema operacional;
 - navegador ou modo PWA;
 - orientação;
-- resultado de cada linha;
+- resultado de cada linha e referencia saneada de evidencia fisica (`evidence_ref`);
 - resultado dos 15 cenários, com observação curta quando necessário.
 
 Screenshots ou vídeos podem ser referenciados quando úteis, mas não devem conter credenciais, tokens, dados pessoais ou payload operacional sensível.
@@ -79,7 +79,7 @@ Uma linha só pode ter `result: "PASS"` se todos os cenários obrigatórios apli
 
 O `status` global só pode ser `PASS` se as seis linhas obrigatórias estiverem presentes e em PASS.
 
-O teste `src/__tests__/pilot-production-real-device-gate.test.ts` faz fail-closed caso produção seja reativada sem o arquivo de evidência com status PASS, SHA válido e as seis linhas obrigatórias.
+O gate read-only `.github/workflows/pilot-real-device-acceptance.yml` valida o SHA exato, o Worker de staging e o asset do Pilot App publicado em Pages, além dos 15 cenários em cada uma das seis linhas; somente depois da execução real pode existir evidência PASS. O teste `src/__tests__/pilot-production-real-device-gate.test.ts` faz fail-closed caso produção seja reativada sem o arquivo de evidência com status PASS, SHA válido e as seis linhas obrigatórias.
 
 ## Falha e reteste
 

@@ -1,0 +1,61 @@
+name: Pilot Physical Device Acceptance (exact staging SHA)
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact reviewed Worker and Pages staging release SHA'
+        type: string
+        required: true
+      staging_pages_url:
+        description: 'Actual official AirTrust Pages staging preview origin (*.airtrust.pages.dev)'
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  pilot-physical-acceptance:
+    name: Pilot Physical Device Acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.node-version'
+      - name: Validate six physical rows, fifteen cases, and exact source
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node scripts/ci/pilot-real-device-evidence.mjs --release-sha "$RELEASE_SHA"
+      - name: Verify live staging Worker SHA and Pages asset provenance
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PAGES_URL: ${{ inputs.staging_pages_url }}
+          STAGING_WORKER_VERSION_URL: https://airtrust-api-staging.airtrust.workers.dev/api/version
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          const sha=process.env.RELEASE_SHA;
+          const pages=new URL(process.env.PAGES_URL);
+          if (!/^[0-9a-f]{40}$/.test(sha) || pages.protocol!=='https:' ||
+              !/^(?:[a-z0-9-]+\.)?airtrust\.pages\.dev$/.test(pages.hostname) ||
+              pages.username || pages.password || pages.search || pages.hash ||
+              pages.pathname !== '/') throw Error('PILOT_STAGING_TARGET_INVALID');
+          const v=await fetch(process.env.STAGING_WORKER_VERSION_URL,{signal:AbortSignal.timeout(12000)});
+          if (!v.ok || !(await v.text()).includes(sha)) throw Error('PILOT_STAGING_WORKER_SHA_MISMATCH');
+          // The Pages asset must be byte-identical to the exact candidate.
+          execFileSync('git',['fetch','--quiet','origin',sha],{timeout:30000});
+          const source=execFileSync('git',['show',sha+':public/pilot/pilot-app.js'],{maxBuffer:20*1024*1024});
+          const response=await fetch(new URL('/pilot/pilot-app.js',pages),{signal:AbortSignal.timeout(12000)});
+          if(!response.ok)throw Error('PILOT_STAGING_PAGES_ASSET_UNAVAILABLE');
+          const live=Buffer.from(await response.arrayBuffer());
+          const blob=content=>createHash('sha1').update(Buffer.from('blob '+content.length+'\\0')).update(content).digest('hex');
+          if(blob(source)!==blob(live))throw Error('PILOT_STAGING_PAGES_SOURCE_SHA_MISMATCH');
+          console.log('PILOT_STAGING_WORKER_AND_PAGES_PROVENANCE_PASS '+sha);
+          NODE
