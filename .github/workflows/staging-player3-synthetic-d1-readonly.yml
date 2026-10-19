@@ -1,0 +1,125 @@
+name: Player3 Staging Synthetic Readonly Inventory
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_PLAYER3_STAGING_READONLY'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: player3-staging-readonly-inventory
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Inspect synthetic QA tenant only
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    env:
+      EXPECTED_STAGING_DB: airtrust-db-staging-baseline-20260701
+      EXPECTED_STAGING_DB_UUID: bf9963f4-eb12-439b-a830-20bbf577ac22
+      BLOCKED_PRODUCTION_DB_UUID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Guard trusted main and read-only QA scope
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo MAIN_ONLY >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_PLAYER3_STAGING_READONLY' ]] || { echo CONFIRMATION_REJECTED >&2; exit 1; }
+          [[ "$EXPECTED_STAGING_DB_UUID" != "$BLOCKED_PRODUCTION_DB_UUID" ]] || { echo PRODUCTION_TARGET_REJECTED >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo STAGING_D1_CREDENTIALS_MISSING >&2; exit 1; }
+          echo PLAYER3_SYNTHETIC_READONLY_GUARD_PASS
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install Wrangler from reviewed dependency lock
+        run: npm --prefix worker-airtrust ci
+      - name: Query only the staging QA tenant and Native catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          QUERY_FILE="$RUNNER_TEMP/player3-readonly-query.sql"
+          QUERY_RESULT="$RUNNER_TEMP/player3-readonly-results.json"
+          cat > "$QUERY_FILE" <<'SQL'
+          SELECT
+            (SELECT COUNT(*) FROM empresas e WHERE e.codigo='qa_examiner_training'
+               AND e.ativo=1 AND e.deleted_at IS NULL) AS qa_tenant_count,
+            (SELECT MIN(e.id) FROM empresas e WHERE e.codigo='qa_examiner_training'
+               AND e.ativo=1 AND e.deleted_at IS NULL) AS qa_tenant_id,
+            (SELECT COUNT(*) FROM funcionarios f JOIN empresas e ON e.id=f.empresa_id
+             WHERE e.codigo='qa_examiner_training' AND e.ativo=1 AND e.deleted_at IS NULL
+               AND f.ativo=1 AND f.deleted_at IS NULL
+               AND f.matricula IN ('QA-PARTICIPANTE-ALFA','QA-PARTICIPANTE-BRAVO')) AS qa_employee_count,
+            (SELECT COUNT(DISTINCT u.id) FROM usuarios u
+               JOIN funcionarios f ON f.id=u.funcionario_id
+               JOIN empresas e ON e.id=f.empresa_id
+               JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=e.id
+             WHERE e.codigo='qa_examiner_training' AND e.ativo=1 AND e.deleted_at IS NULL
+               AND f.ativo=1 AND f.deleted_at IS NULL
+               AND u.active=1 AND u.deleted_at IS NULL
+               AND LOWER(u.email) IN ('qa-player3-chromium@staging.airtrust.invalid',
+                                     'qa-player3-webkit@staging.airtrust.invalid')
+               AND LOWER(ue.role) IN ('student','aluno')) AS qa_browser_user_count,
+            (SELECT COUNT(*) FROM sqlite_master
+             WHERE type='table' AND name IN ('lms_native_edicoes','lms_native_matricula_edicoes',
+                 'lms_native_catalog_activation','lms_player3_completion_intents')) AS qa_native_schema_table_count,
+            (SELECT COUNT(*) FROM lms_native_catalog_activation a
+               JOIN empresas e ON e.id=a.empresa_id
+             WHERE e.codigo='qa_examiner_training' AND e.ativo=1 AND e.deleted_at IS NULL) AS qa_native_activated_course_count,
+            (SELECT COUNT(*) FROM lms_native_edicoes ed
+               JOIN empresas e ON e.id=ed.empresa_id
+             WHERE e.codigo='qa_examiner_training' AND e.ativo=1 AND e.deleted_at IS NULL
+               AND ed.status='PUBLISHED') AS qa_native_published_edition_count;
+          SQL
+          cd worker-airtrust
+          ./node_modules/.bin/wrangler d1 execute "$EXPECTED_STAGING_DB" --env staging --remote --json --file "$QUERY_FILE" > "$QUERY_RESULT"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { appendFileSync } from 'node:fs';
+          const raw=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/player3-readonly-results.json','utf8'));
+          const result=Array.isArray(raw)?raw[0]:raw;
+          if(result?.success!==true || !Array.isArray(result?.results) || result.results.length!==1) {
+            throw Error('PLAYER3_STAGING_READONLY_RESULT_INVALID');
+          }
+          const row=result.results[0];
+          const numeric=['qa_tenant_count','qa_employee_count','qa_browser_user_count',
+            'qa_native_schema_table_count','qa_native_activated_course_count',
+            'qa_native_published_edition_count'];
+          if(!numeric.every(key=>Number.isSafeInteger(row[key]) && row[key]>=0)) {
+            throw Error('PLAYER3_STAGING_READONLY_COUNTS_INVALID');
+          }
+          if(row.qa_tenant_count!==1 || !Number.isSafeInteger(row.qa_tenant_id) || row.qa_tenant_id<=0) {
+            throw Error('PLAYER3_SYNTHETIC_TENANT_MISSING_OR_AMBIGUOUS');
+          }
+          const checks={
+            tenant_unique:true,
+            employees_present:row.qa_employee_count===2,
+            browser_accounts_present:row.qa_browser_user_count===2,
+            native_tables_ready:row.qa_native_schema_table_count===4,
+            native_marker_present:row.qa_native_activated_course_count>=1,
+            published_edition_present:row.qa_native_published_edition_count>=1,
+          };
+          const pending=Object.entries(checks).filter(([,value])=>!value).map(([key])=>key);
+          const ready=pending.length===0;
+          const summary=['## Player 3 — staging synthetic D1 read-only inventory',
+            '', '- Tenant: \`qa_examiner_training\` (unique)',
+            '- Synthetic tenant ID: '+row.qa_tenant_id,
+            '- Physical D1 readiness: '+(ready?'READY':'NOT READY'),
+            '- Pending gates: '+(pending.join(', ')||'none'),
+            '', 'No data was changed. This is not a six-journey E2E acceptance or runtime provenance check.'];
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary.join('\n')+'\n');
+          console.log('PLAYER3_STAGING_SYNTHETIC_D1_READONLY='+ (ready?'READY':'PENDING'));
+          console.log('PLAYER3_QA_TENANT_ID='+row.qa_tenant_id);
+          console.log('PLAYER3_PENDING_GATE_NAMES='+ (pending.join(',')||'none'));
+          NODE
