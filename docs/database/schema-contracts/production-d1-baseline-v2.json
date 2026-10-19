@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-18",
-    "last_reconciled_against": "0554 simulator, 0557 LMS, 0560 simulator pending; 0563 Pilot fueling identity review-only, not applied",
-    "schema_v2_digest": "7b52728b60189df7ed887ca6806e384ea5902d28fa8bc1b3f953f7611c7f379e",
+    "last_reconciled_at": "2026-10-19",
+    "last_reconciled_against": "0564 Pilot supplier identity review-only, after 0563 identity; pending governed apply",
+    "schema_v2_digest": "8421abac59332810e13c76bfcd6113df65ca25cf4103d5556d58b731b420089e",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1623,6 +1623,20 @@
       "reviewed_manifest": "controle-voos-pilot-fueling-identity-0563.json",
       "evidence": "worker-airtrust/schema-v2/plans/controle-voos-pilot-fueling-identity-0563.md",
       "note": "Additive nullable event identity, tenant-flight unique index and immutable guards; legacy/manual fuelings left NULL. Candidate review-only until explicitly authorized trusted-main workflow, D1 recovery, staging postchecks and separate Worker rollout. No staging or production apply asserted."
+    },
+    {
+      "change_file": "0564_controle_voos_pilot_supplier_history.sql",
+      "change_id": "controle-voos-pilot-supplier-history-0564",
+      "sha256": "0474f9d87e419b85e6a851766a34a8a3c8a2a3728976bf52a4644a191d63c4b8",
+      "targets": [
+        "cv_voo_abastecimentos"
+      ],
+      "domain": "Pilot App offline: immutable accepted supplier identity across catalog rename/deactivation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-pilot-supplier-history-0564.json",
+      "evidence": "worker-airtrust/schema-v2/plans/controle-voos-pilot-supplier-history-0564.md",
+      "note": "Additive nullable immutable supplier code; no backfill or remote apply authorized. Newly accepted offline physical fuelings require code. Legacy ambiguous supplier identity remains fail-closed. Must apply after 0563 through governed Schema V2 before deploying the dependent Worker."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
