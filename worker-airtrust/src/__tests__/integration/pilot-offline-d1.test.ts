@@ -91,7 +91,7 @@ beforeEach(async () => {
 afterEach(async () => { await miniflare?.dispose(); });
 
 describe('Pilot offline sync with a disposable local D1 Worker', () => {
-  async function nextSnapshot(initial: PilotOfflineSyncCommand, fuelings: Record<string, unknown>[]) {
+  async function nextSnapshot(initial: PilotOfflineSyncCommand, fuelings: Record<string, unknown>[], sequence = 2) {
     const current = await state();
     const flightVersion = Number(current.cv_voos[0].versao);
     const rdvVersion = Number(current.cv_rdv_operacional[0].versao);
@@ -104,9 +104,9 @@ describe('Pilot offline sync with a disposable local D1 Worker', () => {
       },
     }));
     return command({
-      client_operation_id: '123e4567-e89b-42d3-a456-426614174001',
+      client_operation_id: `123e4567-e89b-42d3-a456-${String(426614174000 + sequence).padStart(12, '0')}`,
       base_server_version: rdvVersion, base_flight_version: flightVersion,
-      local_sequence: 2,
+      local_sequence: sequence,
       payload: {
         ...initial.payload,
         source_package_id: `pilot-offline:v1:voo:42:v${flightVersion}:rdv:${rdvVersion}`,
@@ -151,7 +151,7 @@ describe('Pilot offline sync with a disposable local D1 Worker', () => {
     expect((await send(next)).status).toBe(200);
     const saved = await state();
     expect(saved.cv_voo_abastecimentos).toHaveLength(1);
-    const third = await nextSnapshot(next, [...same, { ...same[0], client_local_id: 'fuel-new' }]);
+    const third = await nextSnapshot(next, [...same, { ...same[0], client_local_id: 'fuel-new' }], 3);
     const before = await state();
     const response = await send(third);
     expect(response.status).toBe(409);
