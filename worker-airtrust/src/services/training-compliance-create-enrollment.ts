@@ -9,6 +9,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
 }):Promise<number|null> {
   if (!(await hasSchemaTable(db,'audit_logs')) || !(await hasSchemaTable(db,'lms_matricula_ciclos')))
     throw new Error('COMPLIANCE_ATOMIC_SCHEMA_MISSING');
+  const hasCondition=await hasSchemaColumn(db,'treinamento_requisitos','condicao_id');
+  const hasAircraft=await hasSchemaColumn(db,'treinamento_requisitos','aeronave_modelo');
   const hasProfile=await hasSchemaColumn(db,'lms_matriculas','perfil_competencia');
   const profile=hasProfile ? await resolveEffectiveTrainingComplianceProfile(db,{
     empresaId:p.empresaId,funcionarioId:p.funcionarioId,qualificacaoTipoId:p.qualificacaoTipoId,
@@ -31,7 +33,12 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
           AND tr.modalidade_requerida='EAD'
           AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=date('now'))
           AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=date('now'))
-        WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL
+          ${hasCondition ? 'AND tr.condicao_id IS NULL' : ''}
+          ${hasAircraft ? "AND (tr.aeronave_modelo IS NULL OR TRIM(tr.aeronave_modelo)='')" : ''}
+        WHERE 1=(SELECT COUNT(*) FROM lms_cursos c2
+            WHERE c2.empresa_id=c.empresa_id AND c2.qualificacao_tipo_id=c.qualificacao_tipo_id
+              AND c2.ativo=1 AND c2.publicado=1 AND c2.deleted_at IS NULL)
+          AND f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL
           AND UPPER(COALESCE(f.status,'ATIVO'))='ATIVO' AND COALESCE(f.ativo,1)=1
           AND (tr.escopo='EMPRESA'
             OR (tr.escopo='SETOR' AND tr.setor_id=f.setor_id)
