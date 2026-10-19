@@ -105,6 +105,14 @@ describe('Compliance atomic enrollment, policy and tenant guards (SQLite D1)', (
     expect(await createComplianceEnrollmentAtomic(db.asD1(),request())).toBeNull();
     expect(count(db,'lms_matriculas')).toBe(0);
   });
+    it('rejects a formerly eligible rule superseded by a higher-priority opt-out',async()=>{
+    const db=setup();
+    db.database.exec(`INSERT INTO treinamento_requisitos
+      (id,empresa_id,qualificacao_tipo_id,escopo,funcionario_id,obrigatoriedade,auto_matricular_ead,modalidade_requerida)
+      VALUES (92,1,100,'FUNCIONARIO',1000,'NAO_APLICA',0,'EAD')`);
+    expect(await createComplianceEnrollmentAtomic(db.asD1(),request())).toBeNull();
+    expect(count(db,'lms_matriculas')).toBe(0);
+  });
     it('rejects cross-tenant employee/course/rule even if IDs are known', async () => {
     const db=setup();
     expect(await createComplianceEnrollmentAtomic(db.asD1(),request({funcionarioId:2000}))).toBeNull();
