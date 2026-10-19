@@ -164,7 +164,7 @@ describe('exact synthetic ZIP: governed Node signer -> real Worker verifier',()=
         approval.reviewSha256,approval.driverSha256,approval.reviewerReference,
         approvalReference,approval.approvedAt].join('\n');
       writeFileSync(approvalFile,JSON.stringify({...approval,
-        signature:edSign(null,Buffer.from(message),privateKey).toString('base64')}));
+        signature:Buffer.from(edSign(null,Buffer.from(message),privateKey)).toString('base64')}));
       const pdfFiles={CHROMIUM:join(dir,'chromium.pdf'),
         WEBKIT:join(dir,'webkit.pdf')};
       const evidenceFiles={CHROMIUM:join(dir,'chromium.json'),
