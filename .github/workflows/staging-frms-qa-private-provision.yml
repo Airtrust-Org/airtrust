@@ -1,0 +1,112 @@
+name: Staging FRMS QA Private Resources Provision (F0 Grant Required)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_FRMS_QA_PRIVATE_STAGING_PROVISION
+        required: true
+        type: string
+      expected_main_sha:
+        description: Exact current main SHA with all 8 official gates
+        required: true
+        type: string
+      grant_id:
+        description: Unedited fresh exact F0 admin grant comment ID in issue 776
+        required: true
+        type: string
+      phase:
+        description: Separately authorized private resource phase
+        required: true
+        type: choice
+        options:
+          - bucket
+          - worker
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+  issues: read
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+env:
+  FRMS_QA_CONFIRM: ${{ inputs.confirmation }}
+  FRMS_QA_EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+  FRMS_QA_GRANT_ID: ${{ inputs.grant_id }}
+  FRMS_QA_PHASE: ${{ inputs.phase }}
+jobs:
+  guard:
+    name: F0 grant exact SHA and 8 gate preflight (no remote writes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Verify current main and exact F0 issue comment before secret access
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node ops/frms-qa-repair/provision-private-resources.mjs guard
+
+  provision-private-r2:
+    name: Provision scoped FRMS private R2 bucket lifecycle only
+    if: inputs.phase == 'bucket'
+    needs: guard
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Guard grant again and create or verify exact private R2 resources
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_FRMS_QA_READ_API_TOKEN: ${{ secrets.CLOUDFLARE_FRMS_QA_READ_API_TOKEN }}
+          CLOUDFLARE_FRMS_QA_R2_PROVISION_API_TOKEN: ${{ secrets.CLOUDFLARE_FRMS_QA_R2_PROVISION_API_TOKEN }}
+        run: node ops/frms-qa-repair/provision-private-resources.mjs bucket
+      - name: Publish only sanitized private-resource receipt
+        if: success()
+        run: |
+          echo 'FRMS QA R2 private: bucket, zero public domains, prefix 24h lifecycle verified; no D1 writes, no case repair, no Worker deployment' >> "$GITHUB_STEP_SUMMARY"
+          echo "Main SHA: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+  provision-private-worker:
+    name: Provision scoped FRMS private Worker and SQLite DO only
+    if: inputs.phase == 'worker'
+    needs: guard
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Verify guarded private assets before any deploy
+        run: |
+          set -euo pipefail
+          node --test scripts/__tests__/frms-qa-provision-private-resources.test.mjs
+          npx wrangler deploy --dry-run --config ops/frms-qa-repair/wrangler.staging.toml --outdir "$RUNNER_TEMP/frms-qa-private-build"
+      - name: Revalidate F0 grant, R2 privacy, deploy private Worker with SQLite DO and secret bindings
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_FRMS_QA_READ_API_TOKEN: ${{ secrets.CLOUDFLARE_FRMS_QA_READ_API_TOKEN }}
+          CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN: ${{ secrets.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN }}
+          FRMS_QA_PREIMAGE_KEY_HEX: ${{ secrets.FRMS_QA_PREIMAGE_KEY_HEX }}
+          FRMS_QA_CALLER_KEY_HEX: ${{ secrets.FRMS_QA_CALLER_KEY_HEX }}
+          FRMS_QA_APPROVAL_PUBLIC_KEY_PEM: ${{ secrets.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM }}
+          FRMS_QA_D1_READ_TOKEN: ${{ secrets.FRMS_QA_D1_READ_TOKEN }}
+        run: node ops/frms-qa-repair/provision-private-resources.mjs worker
+      - name: Report private deployment without claiming operational 4/4
+        if: success()
+        run: |
+          echo 'FRMS private Worker + SQLite DO provision completed under specific F0 grant; workers.dev disabled, no public route, private caller not yet granted' >> "$GITHUB_STEP_SUMMARY"
+          echo "Main SHA: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Physical case repair and readiness: NOT ATTESTED BY DEPLOY' >> "$GITHUB_STEP_SUMMARY"
