@@ -25,6 +25,12 @@ function frontend(): string {
   return url.toString().replace(/\/$/, '');
 }
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 export default defineConfig({
   testDir: './simuladores',
   testMatch: /individual-check-homologation\.spec\.ts$/,
@@ -35,7 +41,7 @@ export default defineConfig({
   timeout: 180_000,
   reporter: [
     ['list'],
-    ['json', { outputFile: 'test-results/simulator-individual-check/results.json' }],
+    ['json', { outputFile: path.resolve(__dirname, '../test-results/simulator-individual-check/results.json') }],
   ],
   use: {
     ...devices['Desktop Chrome'],
