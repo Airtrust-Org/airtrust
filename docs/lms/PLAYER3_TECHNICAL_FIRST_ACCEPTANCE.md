@@ -83,3 +83,13 @@ python3 -m unittest scripts/learning-factory/test_build_player3_technical_qa_pro
 ```
 
 **Nenhuma dessas ações provisiona ou limpa D1/R2, publica a edição, concede permissões, autentica alunos, gera certificados ou equivale a 6/6 E2E.** As identidades sintéticas reais precisam ser comprovadas e o perfil deve ser destruído ao final da homologação. Não copiar para Git, Drive, logs, artefatos públicos nem usar dados de clientes.
+
+## Isolamento real dos dois alunos no aceite em navegador
+
+Os leitores `/api/lms/native/matriculas/:id/etapas/qa-evidencias` e `/api/lms/native/scorm/matriculas/:id/qa-evidencias` verificam **a identidade do funcionário titular da matrícula**. Um token de administrador genérico não é prova de leitura autorizada de duas matrículas de alunos diferentes.
+
+Por isso, a homologação técnica exige `PLAYER3_QA_STORAGE_STATE_CHROMIUM` e `PLAYER3_QA_STORAGE_STATE_WEBKIT` distintos, acompanhados por `PLAYER3_QA_READONLY_BEARER_TOKEN_CHROMIUM` e `PLAYER3_QA_READONLY_BEARER_TOKEN_WEBKIT` também distintos. Cada token deve corresponder ao usuário/funcionário QA do navegador respectivo; o E2E associa todas as leituras e downloads de certificado ao contexto correto. No modo `SYNTHETIC_TECHNICAL`, o token global `PLAYER3_QA_READONLY_BEARER_TOKEN` **não é fallback permitido**. A identidade do aluno deve ter autorização para suas três matrículas/cursos sintéticos sem escopo cross-tenant.
+
+Os dois pares de credenciais são privativos: não armazenar no Git, screenshots, relatórios, artifacts, logs nem HTML5. O teste é recusado se os dois tokens forem iguais, se um deles faltar ou se as sessões Playwright apontarem para o mesmo arquivo. As APIs continuam verificando `empresa_id`, `funcionario_id`, RBAC e edição no backend; não há exceção administrativa para facilitar QA.
+
+A governança de staging também dispõe de `scripts/staging/player3-qa-readonly-inventory.mjs`, que valida o D1 canônico e retorna apenas contagens do tenant `qa_examiner_training`, marcadores, edições, políticas e matrículas vinculadas. Invocação padrão: dry-run (nenhuma conexão). `--inspect` requer confirmação `CONFIRM_STAGING_PLAYER3_READONLY=AIRTRUST_STAGING_PLAYER3_READONLY`, consulta somente `SELECT` e falha se o D1 indicar qualquer write. Uma contagem suficiente **não** valida credenciais, origem HTML5, jornada, PDF nem aprovação de produção.
