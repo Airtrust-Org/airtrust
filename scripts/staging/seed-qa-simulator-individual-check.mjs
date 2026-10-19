@@ -61,7 +61,7 @@ export function buildSeedSql(code, marker, qaAdminEmail) {
 INSERT INTO fichas_sessao(uuid,agendamento_slot_id,colaborador_id_aluno,instrutor_id,status,resultado_final,aprovado,observacoes,
   empresa_id,tipo_sessao,data_sessao,assinatura_aluno_timestamp,assinatura_instrutor_timestamp,created_at,updated_at,deleted_at)
 VALUES (${esc(`${code}-${suffix}`)},${agId},${emp(who)},${emp(n.instrutor)},${esc(status)},${esc(aprovado ? 'APROVADO' : 'PENDENTE')},
-  ${aprovado ? 1 : 0},${esc(marker)},${tenantId},'CHECK',date('now'),datetime('now'),
+  ${aprovado ? 1 : 0},${esc(marker)},${tenantId},'CHECK',date('now', '-1 day'),datetime('now'),
   ${instrSigned ? "datetime('now')" : 'NULL'},datetime('now'),datetime('now'),NULL);`;
   return `
 SELECT CASE WHEN ${LEDGER_OK}
@@ -104,7 +104,7 @@ VALUES (${esc(n.simulador)},'QA','QA','ATIVO',${esc(marker)},datetime('now'),dat
 
 INSERT INTO simulador_agendamentos(uuid,simulador_id,funcionario_id,instrutor_id,examinador_id,data,hora_inicio,hora_fim,status,tipo_sessao,
   observacoes,nome,is_check,empresa_id,created_at,updated_at,deleted_at)
-VALUES (${esc(`${code}-AG`)},${simId},${emp(n.a)},${emp(n.instrutor)},${emp(n.instrutor)},date('now'),'08:00','10:00','EM_ANDAMENTO','CHECK',
+VALUES (${esc(`${code}-AG`)},${simId},${emp(n.a)},${emp(n.instrutor)},${emp(n.instrutor)},date('now', '-1 day'),'08:00','10:00','EM_ANDAMENTO','CHECK',
   ${esc(marker)},${esc(n.sessao)},1,${tenantId},datetime('now'),datetime('now'),NULL);
 
 INSERT INTO sessoes_checks(sessao_id,qualificacao_tipo_id,created_at,updated_at,deleted_at)

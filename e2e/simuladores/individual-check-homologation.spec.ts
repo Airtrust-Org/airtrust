@@ -155,7 +155,9 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
   test('A — APROVADO pelo modal: UI + API + persistência + FAP + validade + PDF', async () => {
     const f = fixtures.A;
     await page.goto(`/simuladores/fichas/${f.ficha_id}`);
+    await page.waitForLoadState('networkidle');
     const abrir = page.getByRole('button', { name: /^Assinar$/ }).last();
+    await abrir.waitFor({ state: 'visible', timeout: 20_000 });
     await abrir.click();
     const modal = page.locator('div.fixed.inset-0').filter({ hasText: 'Assinatura Digital' });
     await expect(modal).toBeVisible();
