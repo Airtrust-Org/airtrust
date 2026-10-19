@@ -214,7 +214,7 @@ frmsRelatoriosConfig.get(
       return frmsConfigurationUnavailable(c, error);
     }
     const crewScope = await resolveReportCrewScope(c, empresaId);
-    const result = await relatorioMapaFadiga(c.env.DB, empresaId, crewScope.scope);
+    const result = await relatorioMapaFadiga(c.env.DB, empresaId, crewScope.access);
     return c.json({ success: true, data: result, meta: {
       ...meta, scope: crewScope.access.mode,
       coverage: { authorized_crew: crewScope.ids.size, rows_returned: result.length, state: 'NOT_DETERMINED' },
