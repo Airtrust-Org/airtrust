@@ -8,8 +8,6 @@
 //   permanecem como evidência órfã e sintética por desenho; o relatório identifica-as apenas por IDs numéricos.
 //
 // O seed recusa executar se Schema V2 0554 e 0560 não estiverem fisicamente aplicados no ledger.
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -40,8 +38,9 @@ function scope(code, qaAdminEmail) {
   const tenantId = `(SELECT id FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)`;
   const emp = (matricula) =>
     `(SELECT id FROM funcionarios WHERE empresa_id=${tenantId} AND matricula=${esc(matricula)} AND deleted_at IS NULL LIMIT 1)`;
+  const setorId = `(SELECT s.id FROM setores s WHERE s.empresa_id=${tenantId} AND s.deleted_at IS NULL ORDER BY s.id LIMIT 1)`;
   return {
-    n, tenantId, emp,
+    n, tenantId, emp, setorId,
     qaUserId: `(SELECT u.id FROM usuarios u JOIN usuarios_empresas ue ON ue.usuario_id=u.id AND ue.empresa_id=${tenantId}
       WHERE LOWER(TRIM(u.email))=${esc(qaAdminEmail)} AND (u.deleted_at IS NULL OR u.deleted_at=0)
         AND COALESCE(u.active,1)=1 AND LOWER(TRIM(ue.role)) IN ('admin','administrador') LIMIT 1)`,
@@ -56,7 +55,7 @@ const LEDGER_OK = `(SELECT COUNT(DISTINCT change_id) FROM airtrust_schema_change
 
 export function buildSeedSql(code, marker, qaAdminEmail) {
   assertCode(code, marker);
-  const { n, tenantId, emp, qaUserId, tipoId, simId, agId } = scope(code, qaAdminEmail);
+  const { n, tenantId, emp, setorId, qaUserId, tipoId, simId, agId } = scope(code, qaAdminEmail);
   const ficha = (suffix, who, status, aprovado, instrSigned) => `
 INSERT INTO fichas_sessao(uuid,agendamento_slot_id,colaborador_id_aluno,instrutor_id,status,resultado_final,aprovado,observacoes,
   empresa_id,tipo_sessao,data_sessao,assinatura_aluno_timestamp,assinatura_instrutor_timestamp,created_at,updated_at,deleted_at)
@@ -76,20 +75,13 @@ SELECT ${esc(`${code}-OPS`)}, 'operacoes', 'Setor operacional padrao QA', 'QA Ad
 FROM empresas
 WHERE id = ${tenantId}
   AND NOT EXISTS (
-    SELECT 1 FROM setores
-    WHERE empresa_id = ${tenantId}
-      AND deleted_at IS NULL
-      AND ativo = 1
-      AND (
-        LOWER(TRIM(nome)) IN ('geral', 'operacoes', 'operacao', 'treinamento', 'instrucao')
-        OR LOWER(TRIM(codigo)) IN ('geral', 'ops', 'treinamento', 'inst')
-      )
+    SELECT 1 FROM setores WHERE empresa_id = ${tenantId} AND deleted_at IS NULL
   );
 
-INSERT INTO funcionarios(nome,matricula,cargo,funcao,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
-VALUES (${esc(`${code} Instrutor`)},${esc(n.instrutor)},'QA','QA','ATIVO',1,1,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
-${['a', 'b', 'c', 'd'].map((k) => `INSERT INTO funcionarios(nome,matricula,cargo,funcao,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
-VALUES (${esc(`${code} Tripulante ${k.toUpperCase()}`)},${esc(n[k])},'QA','QA','ATIVO',0,0,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);`).join('\n')}
+INSERT INTO funcionarios(nome,matricula,cargo,funcao,setor_id,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
+VALUES (${esc(`${code} Instrutor`)},${esc(n.instrutor)},'QA','QA',${setorId},'ATIVO',1,1,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
+${['a', 'b', 'c', 'd'].map((k) => `INSERT INTO funcionarios(nome,matricula,cargo,funcao,setor_id,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
+VALUES (${esc(`${code} Tripulante ${k.toUpperCase()}`)},${esc(n[k])},'QA','QA',${setorId},'ATIVO',0,0,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);`).join('\n')}
 
 -- Vincula o login QA sintético (somente se estava sem vínculo, garantido pelo guard acima).
 UPDATE usuarios SET funcionario_id=${emp(n.instrutor)}, updated_at=datetime('now') WHERE id=${qaUserId} AND funcionario_id IS NULL;
@@ -207,15 +199,11 @@ function main() {
     console.log(JSON.stringify({ mode: 'DRY_RUN', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker }));
     return;
   }
-  const dir = mkdtempSync(join(tmpdir(), 'airtrust-sim-ind-'));
-  const file = join(dir, 'fixture.sql');
-  try {
-    writeFileSync(file, sql, { encoding: 'utf8', mode: 0o600 });
-    runWrangler(db, [`--file=${file}`]);
-    console.log(JSON.stringify({ mode: 'APPLY', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker, status: 'PASS' }));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  // Remote --file invoca o caminho de bulk-import/reset do D1 e falha com D1_RESET_DO.
+  // Usa o transporte normal de queries com --command, padronizado nos demais seeders de staging.
+  const cleanSql = sql.replace(/--.*$/gm, '').trim();
+  runWrangler(db, ['--json', '--command', cleanSql]);
+  console.log(JSON.stringify({ mode: 'APPLY', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker, status: 'PASS' }));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();
