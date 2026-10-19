@@ -7,6 +7,7 @@ import { buscarJornadas } from './db-service-jornadas';
 import { buscarAcumuloFrota } from './db-service-acumulo';
 import { listFrmsOperationalSnapshot, type FrmsOperationalSnapshotItem } from './operational-snapshot';
 import { getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
+import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../services/employee-sector-access';
 
 export async function relatorioIndividual(
   db: D1Database,
@@ -202,7 +203,7 @@ export function summarizeReportRestEvidence(rest?: {
 export async function relatorioMapaFadiga(
   db: D1Database,
   empresaId: number,
-  sectorScope?: { clause: string; bindings: number[] },
+  access: EmployeeSectorAccess,
 ): Promise<
   Array<{
     tripulante_id: string;
@@ -215,8 +216,11 @@ export async function relatorioMapaFadiga(
     repouso_suficiente: number | null;
     repouso_estado: 'SUFICIENTE' | 'INSUFICIENTE' | 'DESCONHECIDO';
     repouso_referencia: string | null;
+    exposicao_referencia: string | null;
   }>
 > {
+  const restScope = buildFuncionarioScopeWhere(access, 'f');
+  const frotaScope = buildFuncionarioScopeWhere(access, 'p');
   // Repouso pertence à própria série rolling e pode ter referência temporal
   // distinta da pior exposição HV exibida no mapa. Evidência ausente ou
   // repouso anterior negativo nunca vira repouso suficiente por default.
@@ -226,7 +230,7 @@ export async function relatorioMapaFadiga(
        FROM frms_acumulo_rolling ar
        JOIN funcionarios f ON f.id = CAST(ar.tripulante_id AS INTEGER)
        WHERE f.empresa_id = ? AND f.deleted_at IS NULL
-         AND ${sectorScope?.clause ?? '1 = 1'}
+         AND ${restScope.clause}
          AND ar.deleted_at IS NULL
          AND ar.data_referencia >= date('now', '-30 days')
          AND ar.data_referencia <= date('now')
@@ -238,11 +242,11 @@ export async function relatorioMapaFadiga(
            ORDER BY ar2.data_referencia DESC, ar2.id DESC LIMIT 1
          )`,
     )
-    .bind(empresaId, ...(sectorScope?.bindings ?? []))
+    .bind(empresaId, ...restScope.bindings)
     .all<{ tripulante_id: string; repouso_suficiente: number | null; repouso_anterior_min: number | null; data_referencia: string }>();
   const repousoMap = new Map((repousoRows.results ?? []).map((r) => [String(r.tripulante_id), r]));
 
-  const frota = await buscarAcumuloFrota(db, undefined, empresaId, 30, undefined, sectorScope);
+  const frota = await buscarAcumuloFrota(db, undefined, empresaId, 30, undefined, frotaScope);
   return frota.map((f) => {
     const rest = repousoMap.get(String(f.tripulante_id));
 
@@ -255,6 +259,7 @@ export async function relatorioMapaFadiga(
       pct_365d: f.pct_365d,
       nivel_max: f.nivel_max,
       ...summarizeReportRestEvidence(rest),
+      exposicao_referencia: f.data_referencia ?? null,
     };
   });
 }
