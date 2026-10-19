@@ -1,4 +1,11 @@
-import { createHmac } from 'node:crypto';
+import {createHash,createHmac,generateKeyPairSync,sign as edSign} from 'node:crypto';
+import {mkdtempSync,rmSync,writeFileSync,readFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {zipSync,strToU8} from 'fflate';
+// Deliberately exercise the real Node signer and the Worker verifier together.
+// @ts-expect-error Node ESM test helper has no declaration file
+import {signGovernedScormEvidence} from '../../../../scripts/ci/sign-scorm-functional-attestation.mjs';
 import { describe, expect, it } from 'vitest';
 
 import { REQUIRED_SCORM_FUNCTIONAL_CASES, SCORM_FUNCTIONAL_HARNESS } from '../../lib/lms/lms-scorm-functional-certification';
@@ -109,5 +116,118 @@ describe('governed independent SCORM browser attestation', () => {
     expect(await verifyTrustedScormAttestation({ payload: extended, signature: 'a'.repeat(64) }, context, secret, now)).toBe(false);
     const bad = payload(); (bad.runs[0].cases[0] as {status:string}).status = 'passed';
     expect(await verifyTrustedScormAttestation(seal(bad), context, secret, now)).toBe(false);
+  });
+});
+
+describe('exact synthetic ZIP: governed Node signer -> real Worker verifier',()=>{
+  it('accepts cryptographically bound synthetic evidence and rejects changed scope and bytes',async()=>{
+    const dir=mkdtempSync(join(tmpdir(),'scorm-signer-worker-roundtrip-'));
+    try{
+      // Synthetic QA inputs only. Browser witness fields are test fixtures, not
+      // staging observations, so this test MUST NOT enable course activation.
+      const digest=(b:Uint8Array)=>createHash('sha256').update(b).digest('hex');
+      const zip=zipSync({'imsmanifest.xml':strToU8('<manifest/>'),
+        'index.html':strToU8('<h1>Technical synthetic test</h1>')});
+      const zipPath=join(dir,'technical.zip');
+      writeFileSync(zipPath,zip);
+      const packageSha256=digest(zip);
+      const id='123e4567-e89b-42d3-a456-426614174001';
+      const runtime='a'.repeat(40),harness='b'.repeat(40);
+      const candidate={scope:'GOVERNED_STAGING_SYNTHETIC',empresaId:17,
+        cursoId:23,packageId:id,packageSha256,zipPath,
+        stagingRuntimeSha:runtime,requiresAssessment:true,reviewItemCount:1};
+      const reviewFile=join(dir,'review.json');
+      const reviewerReference='synthetic-qa-reviewer-01';
+      const approvalReference='synthetic-qa-approval-01';
+      const approvedAt=new Date().toISOString();
+      writeFileSync(reviewFile,JSON.stringify({
+        kind:'AIRTRUST_SCORM_INDEPENDENT_PEDAGOGICAL_REVIEW_V1',
+        packageSha256,approved:true,independentOfPackageAuthor:true,
+        reviewerReference,approvalReference,approvedAt,
+        items:[{itemId:'synthetic-1',status:'APPROVED',selectedIndex:0,
+          rationale:'Synthetic technical review only, never authorization for real students',
+          reviewerReference}],
+      }));
+      const driverFile=join(dir,'driver.json');
+      writeFileSync(driverFile,JSON.stringify({schemaVersion:1,packageSha256,
+        authorReviewed:true,reviewArtifactSha256:digest(readFileSync(reviewFile))}));
+      const driverSha256=digest(readFileSync(driverFile));
+      const {privateKey,publicKey}=generateKeyPairSync('ed25519');
+      const reviewerKeyId='synthetic-reviewer-key-01';
+      const trustedReviewerKeys={[reviewerKeyId]:{reviewerReference,
+        role:'INDEPENDENT_PEDAGOGICAL_REVIEWER',
+        publicKeyPem:publicKey.export({type:'spki',format:'pem'})}};
+      const approvalFile=join(dir,'approval.json');
+      const approval={kind:'AIRTRUST_SCORM_PEDAGOGICAL_APPROVAL_ED25519_V1',
+        reviewerKeyId,packageSha256,reviewSha256:digest(readFileSync(reviewFile)),
+        driverSha256,reviewerReference,approvedAt};
+      const message=[approval.kind,approval.reviewerKeyId,approval.packageSha256,
+        approval.reviewSha256,approval.driverSha256,approval.reviewerReference,
+        approvalReference,approval.approvedAt].join('\n');
+      writeFileSync(approvalFile,JSON.stringify({...approval,
+        signature:edSign(null,Buffer.from(message),privateKey).toString('base64')}));
+      const pdfFiles={CHROMIUM:join(dir,'chromium.pdf'),
+        WEBKIT:join(dir,'webkit.pdf')};
+      const evidenceFiles={CHROMIUM:join(dir,'chromium.json'),
+        WEBKIT:join(dir,'webkit.json')};
+      for(const browser of ['CHROMIUM','WEBKIT'] as const){
+        const n=browser==='CHROMIUM'?1:2;
+        const enrollmentId=1000+n,cycleId=2000+n;
+        const qualificationHistoryId=3000+n,documentId='qa-synthetic-doc-'+n;
+        const pdf=Buffer.from('%PDF-1.4\n'+
+          ('Synthetic certificate '+browser+' NOT FOR PRODUCTION\n').repeat(12)+
+          '%%EOF\n');
+        writeFileSync(pdfFiles[browser],pdf);
+        const certificateDocument={enrollmentId,cycleId,qualificationHistoryId,
+          documentId,sha256:digest(pdf)};
+        const backendWitness={
+          source:'WORKER_D1_STAGING_READBACK',empresaId:17,cursoId:23,packageId:id,
+          enrollmentId,cycleId,qualificationHistoryId,documentId,
+          completionStatus:'CONCLUIDO',persistedCmiSha256:'1'.repeat(64),
+          staleAttempt:{cycleId:cycleId-10,commitHttpStatus:409,
+            progressBeforeSha256:'2'.repeat(64),progressAfterSha256:'2'.repeat(64),
+            activeCycleBeforeSha256:'3'.repeat(64),activeCycleAfterSha256:'3'.repeat(64)},
+          replay:{completionHttpStatus:200,qualificationHistoryCountBefore:1,
+            qualificationHistoryCountAfter:1,qualificationHistoryId},
+          authorization:{anonymousHttpStatus:401,foreignTenantHttpStatus:404,
+            mismatchedShaHttpStatus:409,incompatibleEditionHttpStatus:409},
+          validity:{status:'VALID',validFrom:approvedAt,validUntil:null},
+        };
+        writeFileSync(evidenceFiles[browser],JSON.stringify({
+          source:'GOVERNED_STAGING_AUTHENTICATED_QA_V1',
+          scope:'GOVERNED_STAGING_SYNTHETIC',browser,empresaId:17,cursoId:23,
+          packageId:id,packageSha256,runtimeSha:runtime,harnessSha:harness,
+          driverSha256,backendWitness,
+          syntheticEnrollment:true,persistedBackendEvidence:true,
+          verifiedCrossTenantDenial:true,verifiedIndependentCycle:true,
+          qualificationHistoryVerified:true,certificateDocumentVerified:true,
+          certificateDownloadHttpStatus:200,certificateDocument,
+          cases:REQUIRED_SCORM_FUNCTIONAL_CASES.map(name=>({name,status:'PASS'})),
+        }));
+      }
+      const make=()=>signGovernedScormEvidence({
+        candidate,chromiumFile:evidenceFiles.CHROMIUM,
+        webkitFile:evidenceFiles.WEBKIT,certificatePdfFiles:pdfFiles,
+        secret,runtimeSha:runtime,harnessSha:harness,reviewFile,driverFile,
+        approvalFile,trustedReviewerKeys,
+      });
+      const signed=make();
+      const expected:TrustedScormContext={empresaId:17,cursoId:23,
+        packageId:id,packageSha256,runtimeSha:runtime,requiresAssessment:true};
+      expect(await verifyTrustedScormAttestation(signed,expected,secret)).toBe(true);
+      expect(await verifyTrustedScormAttestation(signed,{...expected,empresaId:18},
+        secret)).toBe(false);
+      expect(await verifyTrustedScormAttestation(signed,{...expected,
+        packageSha256:'0'.repeat(64)},secret)).toBe(false);
+      expect(await verifyTrustedScormAttestation(signed,{...expected,
+        packageId:crypto.randomUUID()},secret)).toBe(false);
+      expect(await verifyTrustedScormAttestation(signed,{...expected,
+        runtimeSha:'f'.repeat(40)},secret)).toBe(false);
+      const missing=structuredClone(signed);
+      missing.payload.runs[1].cases[0].status='INCONCLUSIVE';
+      expect(await verifyTrustedScormAttestation(missing,expected,secret)).toBe(false);
+      writeFileSync(zipPath,Buffer.concat([Buffer.from(zip),Buffer.from('tampered')]));
+      expect(make).toThrow(/ZIP_SHA_DRIFT/);
+    }finally{rmSync(dir,{recursive:true,force:true});}
   });
 });

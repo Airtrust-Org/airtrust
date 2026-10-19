@@ -23,7 +23,7 @@ const driverFor=packageSha256=>({
     {op:'click',selector:'#submitAssessment'},
     {op:'click',selector:'#completeCourse'}],expectedStatus:'passed'},
 });
-function fixture({uncommittedResume=false}={}){
+function fixture({uncommittedResume=false,noReportedScore=false}={}){
   const content=buildInteractiveM8QaFiles('qa-browser','probe-v1');
   if(uncommittedResume){
     const original=new TextDecoder().decode(content['app.js']);
@@ -31,6 +31,12 @@ function fixture({uncommittedResume=false}={}){
     assert.ok(original.includes(committed));
     content['app.js']=strToU8(original.replace(committed,
       "modelState.q['qa-interaction-1'] = selected;\n      api.LMSSetValue('cmi.suspend_data', JSON.stringify(modelState));"));
+  }
+  if(noReportedScore){
+    const raw=new TextDecoder().decode(content['app.js']);
+    const writeScore="api.LMSSetValue('cmi.core.score.raw', String(modelState.best));";
+    assert.ok(raw.includes(writeScore));
+    content['app.js']=strToU8(raw.replaceAll(writeScore,'/* no score emitted */'));
   }
   const manifest='<manifest xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2" '+
     'xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"><organizations/><resources>'+
@@ -115,4 +121,21 @@ test('infra, missing engine and incomplete browser evidence are never promoted t
     'PROTOCOL_PASS');
   assert.equal(classifyIndependentProbeRuns([good('CHROMIUM'),{
     ...good('WEBKIT'),checks:{finishObserved:false}}]),'INCONCLUSIVE');
+});
+
+test('missing score is not fabricated as a failing score zero',async()=>{
+  const {zip,driver}=fixture({noReportedScore:true});
+  const dir=mkdtempSync(join(tmpdir(),'scorm-no-score-probe-'));
+  try{
+    const z=join(dir,'candidate.zip'),d=join(dir,'driver.json'),o=join(dir,'report.json');
+    writeFileSync(z,zip);writeFileSync(d,JSON.stringify(driver));
+    const report=await runIndependentZipProbe({zipPath:z,driverPath:d,outputPath:o});
+    assert.equal(report.status,'UNCERTIFIED');
+    assert.equal(report.activationAuthorized,false);
+    assert.equal(report.classification,'INCONCLUSIVE');
+    for(const run of report.browsers){
+      assert.equal(run.classification,'INCONCLUSIVE');
+      assert.match(run.diagnostic,/FAILURE_THRESHOLD_NOT_PROVEN/);
+    }
+  }finally{rmSync(dir,{recursive:true,force:true});}
 });

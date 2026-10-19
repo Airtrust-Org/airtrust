@@ -52,8 +52,14 @@ const statusOf=values=>{
   return String(values['cmi.completion_status']||lesson).toLowerCase();
 };
 const scoreOf=values=>{
-  const raw=values['cmi.score.raw'];
-  return Number(raw!==undefined&&raw!==''?raw:values['cmi.core.score.raw']);
+  // An empty or absent SCORM score is not zero. 0 is a valid observed score
+  // ONLY when the SCO explicitly writes the numeric string "0".
+  const newer=values['cmi.score.raw'];
+  const raw=newer!==undefined&&String(newer).trim()!==''?
+    newer:values['cmi.core.score.raw'];
+  if(raw===undefined||raw===null||String(raw).trim()==='')return NaN;
+  const value=Number(raw);
+  return Number.isFinite(value)?value:NaN;
 };
 const safeName=name=>typeof name==='string'&&name.length>0&&name.length<350&&
   !name.startsWith('/')&&!name.includes('\\')&&!name.split('/').includes('..')&&
