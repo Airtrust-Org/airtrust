@@ -184,12 +184,17 @@ export function summarizeReportRestEvidence(rest?: {
   repouso_suficiente: number | null;
   repouso_anterior_min: number | null;
   data_referencia: string;
-}): {
+}, referenceAt = getTodayIsoSaoPaulo()): {
   repouso_suficiente: number | null;
   repouso_estado: 'SUFICIENTE' | 'INSUFICIENTE' | 'DESCONHECIDO';
   repouso_referencia: string | null;
+  repouso_atualidade: 'ATUAL' | 'DESATUALIZADO' | 'AUSENTE';
 } {
-  const known = rest != null
+  const atualidade = rest == null ? 'AUSENTE'
+    : rest.data_referencia === referenceAt ? 'ATUAL' : 'DESATUALIZADO';
+  // Rolling exposure covers a window, but a rest observation valid on an old
+  // day cannot attest that the crew has enough rest on today's operational day.
+  const known = atualidade === 'ATUAL' && rest != null
     && rest.repouso_anterior_min != null
     && rest.repouso_anterior_min >= 0
     && (rest.repouso_suficiente === 0 || rest.repouso_suficiente === 1);
@@ -197,6 +202,7 @@ export function summarizeReportRestEvidence(rest?: {
     repouso_suficiente: known ? rest!.repouso_suficiente : null,
     repouso_estado: !known ? 'DESCONHECIDO' : rest!.repouso_suficiente === 1 ? 'SUFICIENTE' : 'INSUFICIENTE',
     repouso_referencia: rest?.data_referencia ?? null,
+    repouso_atualidade: atualidade,
   };
 }
 
@@ -216,11 +222,13 @@ export async function relatorioMapaFadiga(
     repouso_suficiente: number | null;
     repouso_estado: 'SUFICIENTE' | 'INSUFICIENTE' | 'DESCONHECIDO';
     repouso_referencia: string | null;
+    repouso_atualidade: 'ATUAL' | 'DESATUALIZADO' | 'AUSENTE';
     exposicao_referencia: string | null;
   }>
 > {
   const restScope = buildFuncionarioScopeWhere(access, 'f');
   const frotaScope = buildFuncionarioScopeWhere(access, 'p');
+  const referenceAt = getTodayIsoSaoPaulo();
   // Repouso pertence à própria série rolling e pode ter referência temporal
   // distinta da pior exposição HV exibida no mapa. Evidência ausente ou
   // repouso anterior negativo nunca vira repouso suficiente por default.
@@ -258,7 +266,7 @@ export async function relatorioMapaFadiga(
       pct_mes: f.pct_mes,
       pct_365d: f.pct_365d,
       nivel_max: f.nivel_max,
-      ...summarizeReportRestEvidence(rest),
+      ...summarizeReportRestEvidence(rest, referenceAt),
       exposicao_referencia: f.data_referencia ?? null,
     };
   });
