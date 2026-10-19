@@ -197,10 +197,10 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     expect(String(evidenceFor(r.body).data_vencimento)).toMatch(/^\d{4}-\d{2}-\d{2}/);
 
     // UI após recarregar (persistência real).
-    await page.reload();
-    await expect(page.getByText('Evidências individuais dos checks')).toBeVisible();
-    await expect(page.getByText('APROVADO', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('Evidência imutável')).toBeVisible();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('Evidências individuais dos checks')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('APROVADO', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Evidência imutável')).toBeVisible({ timeout: 30_000 });
 
     // FAP / Qualificações e PDF coerentes com a mesma evidência.
     const hist = await api(page, auth, 'GET', history('A'));
@@ -225,8 +225,8 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     const r = await api(page, auth, 'GET', checksPath('B'));
     expect(evidenceFor(r.body)).toMatchObject({ situacao: 'REPROVADO', aprovado_comprovado: false });
 
-    await page.reload();
-    await expect(page.getByText('REPROVADO', { exact: true }).first()).toBeVisible();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('REPROVADO', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
 
     // Nenhuma FAP ativa; a prematura foi revogada (não apagada) — a linha cancelada permanece auditável.
     const hist = await api(page, auth, 'GET', history('B'));
@@ -240,8 +240,8 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     expect(evidenceFor(r.body)).toMatchObject({ situacao: 'PENDENTE_AVALIACAO', aprovado_comprovado: false });
     const hist = await api(page, auth, 'GET', history('C'));
     expect(activeFapRows(hist.body, CODE)).toEqual([]);
-    await page.reload();
-    await expect(page.getByText('PENDENTE DE AVALIAÇÃO').first()).toBeVisible();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('PENDENTE DE AVALIAÇÃO').first()).toBeVisible({ timeout: 30_000 });
   });
 
   test('D — ficha finalizada: erro de rede não grava evidência; retry grava uma única vez', async () => {

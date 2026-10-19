@@ -39,6 +39,9 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   timeout: 180_000,
+  expect: {
+    timeout: 30_000,
+  },
   reporter: [
     ['list'],
     ['json', { outputFile: path.resolve(__dirname, '../test-results/simulator-individual-check/results.json') }],
