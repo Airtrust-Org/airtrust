@@ -11,6 +11,33 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
     throw new Error('COMPLIANCE_ATOMIC_SCHEMA_MISSING');
   const hasCondition=await hasSchemaColumn(db,'treinamento_requisitos','condicao_id');
   const hasAircraft=await hasSchemaColumn(db,'treinamento_requisitos','aeronave_modelo');
+  const supportsConditions=await hasSchemaTable(db,'funcionarios_compliance_condicoes');
+  const supportsAircraft=await hasSchemaTable(db,'funcionarios_aeronaves') &&
+    await hasSchemaTable(db,'aeronaves');
+  const conditionGuard=(alias:string)=> hasCondition
+    ? supportsConditions ? `AND (${alias}.condicao_id IS NULL OR EXISTS (
+         SELECT 1 FROM funcionarios_compliance_condicoes fcc
+         WHERE fcc.empresa_id=f.empresa_id AND fcc.funcionario_id=f.id
+           AND fcc.condicao_id=${alias}.condicao_id AND fcc.ativo=1
+           AND fcc.deleted_at IS NULL
+           AND (fcc.data_inicio IS NULL OR date(fcc.data_inicio)<=date('now'))
+           AND (fcc.data_fim IS NULL OR date(fcc.data_fim)>=date('now'))))`
+      : `AND ${alias}.condicao_id IS NULL`
+    : '';
+  const aircraftGuard=(alias:string)=> hasAircraft
+    ? supportsAircraft ? `AND (${alias}.aeronave_modelo IS NULL
+        OR TRIM(${alias}.aeronave_modelo)='' OR EXISTS (
+          SELECT 1 FROM funcionarios_aeronaves fa
+          JOIN aeronaves a ON a.id=fa.aeronave_id AND a.empresa_id=f.empresa_id
+            AND a.deleted_at IS NULL
+          WHERE fa.empresa_id=f.empresa_id AND fa.funcionario_id=f.id
+            AND fa.ativo=1 AND fa.deleted_at IS NULL
+            AND (fa.data_inicio IS NULL OR date(fa.data_inicio)<=date('now'))
+            AND (fa.data_fim IS NULL OR date(fa.data_fim)>=date('now'))
+            AND UPPER(REPLACE(TRIM(a.modelo),' ',''))=
+                UPPER(REPLACE(TRIM(${alias}.aeronave_modelo),' ',''))))`
+      : `AND (${alias}.aeronave_modelo IS NULL OR TRIM(${alias}.aeronave_modelo)='')`
+    : '';
   const priority=(alias:string)=>`(CASE ${alias}.escopo WHEN 'FUNCIONARIO' THEN 5000
     WHEN 'SETOR_FUNCAO' THEN 40 WHEN 'FUNCAO' THEN 30 WHEN 'SETOR' THEN 20
     WHEN 'EMPRESA' THEN 10 ELSE 0 END
@@ -43,8 +70,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
           AND tr.modalidade_requerida='EAD'
           AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=date('now'))
           AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=date('now'))
-          ${hasCondition ? 'AND tr.condicao_id IS NULL' : ''}
-          ${hasAircraft ? "AND (tr.aeronave_modelo IS NULL OR TRIM(tr.aeronave_modelo)='')" : ''}
+          ${conditionGuard('tr')}
+          ${aircraftGuard('tr')}
         WHERE 1=(SELECT COUNT(*) FROM lms_cursos c2
             WHERE c2.empresa_id=c.empresa_id AND c2.qualificacao_tipo_id=c.qualificacao_tipo_id
               AND c2.ativo=1 AND c2.publicado=1 AND c2.deleted_at IS NULL)
@@ -61,6 +88,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
                AND (higher.vigencia_inicio IS NULL OR date(higher.vigencia_inicio)<=date('now'))
                AND (higher.vigencia_fim IS NULL OR date(higher.vigencia_fim)>=date('now'))
                AND ${applies('higher')}
+               ${conditionGuard('higher')}
+               ${aircraftGuard('higher')}
                AND (${priority('higher')}>${priority('tr')}
                  OR (${priority('higher')}=${priority('tr')} AND higher.id>tr.id))
           )
