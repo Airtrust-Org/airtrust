@@ -12,6 +12,7 @@ import { buildReviewPlan } from '../staging/frms-qa-cases-repair-plan.mjs';
 import { expectedQaCases } from '../staging/inspect-frms-ux-cases.mjs';
 import { d1ScopeAdapter, timeTravelReader } from '../../ops/frms-qa-repair/adapters.mjs';
 import { prepareQaEvidence } from '../staging/frms-qa-repair-controller.mjs';
+import { signPrivateCaller } from '../../ops/frms-qa-repair/caller-auth.mjs';
 
 const days = Array.from({length:30},(_,i)=>({day:new Date(Date.parse('2026-09-14T00:00:00Z')+i*86400000).toISOString().slice(0,10),jornadas:i===29?'0':'5-9'}));
 const plan = buildReviewPlan(days), sha = 'c'.repeat(40);
@@ -58,6 +59,7 @@ function fixture() {
 }
 async function setup(t, extra = {}) {
   let recoveryCalls = 0;
+  const callerKey = randomBytes(32).toString('hex');
   const mf = new Miniflare({cf:false,workers:[{
     name:'caller',compatibilityDate:'2026-03-17',modules:true,script:`export default {async fetch(req,env) {try {const {op,input}=await req.json(); const result=await env.REPAIR[op](input); return Response.json(result);}catch(e){return Response.json({error:e.message},{status:409});}}}`,
     serviceBindings:{REPAIR:'repair'},
@@ -68,6 +70,7 @@ async function setup(t, extra = {}) {
     durableObjects:{COORDINATOR:{className:'FrmsQaCoordinator',useSQLite:true}},
     bindings:{ENVIRONMENT:'staging',D1_ID:plan.target.db_id,RELEASE_SHA:sha,
       APPROVAL_KEY_SHA256:pin,PREIMAGE_KEY_HEX:randomBytes(32).toString('hex'),
+      CALLER_KEY_HEX:callerKey,CALLER_KEY_SHA256:hash(Buffer.from(callerKey,'hex')),
       APPROVAL_PUBLIC_KEY_PEM:pub,PRIVATE_STORAGE_VERIFIED:'restricted-r2-lifecycle-1d',
       CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),D1_READ_TOKEN:'local-test-only',...extra},
     outboundService:async request=>{
@@ -81,8 +84,15 @@ async function setup(t, extra = {}) {
   await mf.ready;
   const db = await mf.getD1Database('DB','repair');
   await db.batch(fixture().map(sql=>db.prepare(sql)));
-  const call = async (op,input) => (await mf.dispatchFetch('https://local.invalid',{method:'POST',body:JSON.stringify({op,input})})).json();
-  return {mf,db,call,get recoveryCalls(){return recoveryCalls;}};
+  const rawCall = async (op,input) =>
+    (await mf.dispatchFetch('https://local.invalid',{
+      method:'POST',body:JSON.stringify({op,input}),
+    })).json();
+  const call = (op,input={}) => rawCall(op,{
+    ...input,callerAuth:signPrivateCaller({keyHex:callerKey,operation:op,
+      sha,runId:'39301760305'}),
+  });
+  return {mf,db,call,rawCall,callerKey,get recoveryCalls(){return recoveryCalls;}};
 }
 function grant(prepared, overrides={}) {
   const receipt = prepared.receipt;
@@ -188,4 +198,26 @@ test('deployment without approved staging bindings is closed; HTTP never applies
   assert.match((await s.call('prepare')).error,/QA_DEPLOYMENT_NOT_READY/);
   const worker=await s.mf.getWorker('repair');
   assert.equal((await worker.fetch('https://local.invalid/apply',{method:'POST'})).status,404);
+});
+
+
+test('private service binding rejects missing, forged and replayed runner capabilities',async t=>{
+  const s=await setup(t);
+  assert.match((await s.rawCall('prepare',{})).error,/QA_CALLER_AUTH_REJECTED/);
+  const valid=signPrivateCaller({keyHex:s.callerKey,operation:'prepare',
+    sha,runId:'39301760305'});
+  const forged={...valid,claims:{...valid.claims,tenantId:6}};
+  assert.match((await s.rawCall('prepare',{callerAuth:forged})).error,/QA_CALLER_AUTH_REJECTED/);
+  const wrongOp=signPrivateCaller({keyHex:s.callerKey,operation:'apply',
+    sha,runId:'39301760305'});
+  assert.match((await s.rawCall('prepare',{callerAuth:wrongOp})).error,/QA_CALLER_AUTH_REJECTED/);
+  const first=await s.rawCall('prepare',{callerAuth:valid});
+  assert.ok(first.receipt,first.error);
+  assert.match((await s.rawCall('prepare',{callerAuth:valid})).error,/QA_CALLER_AUTH_REJECTED/);
+  assert.match((await s.rawCall('prepare',{callerAuth:valid,sql:'DELETE FROM funcionarios'})).error,/QA_CALLER_INPUT_REJECTED/);
+});
+
+test('private worker rejects caller key drift even with a valid formerly signed request',async t=>{
+  const s=await setup(t,{CALLER_KEY_SHA256:'b'.repeat(64)});
+  assert.match((await s.call('prepare')).error,/QA_CALLER_AUTH_REJECTED/);
 });
