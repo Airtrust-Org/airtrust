@@ -183,6 +183,8 @@ function doPreflight(){
  demand(hasVerifiedBookmark(data),
         'PLAYER3_TIME_TRAVEL_BOOKMARK_MISSING');
  save(REC,JSON.stringify(data));
+ console.log('PLAYER3_D1_RECOVERY_TIMESTAMP_UTC='+stamp);
+ console.log('PLAYER3_D1_RECOVERY_RECEIPT_SHA256='+hash(Buffer.from(JSON.stringify(data))));
  console.log('PLAYER3_D1_READONLY_PREIMAGE_AND_PRIVATE_TIME_TRAVEL_RECEIPT');
 }
 async function doVerify(){
