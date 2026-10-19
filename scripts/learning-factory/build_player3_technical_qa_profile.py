@@ -89,6 +89,27 @@ def main_profile(candidate: Path, assignments: dict) -> dict:
                 "QA_PUBLIC_CONTENT_CONTAINS_UNEXPECTED_ASSETS")
     require(sha256(artifact) == manifest.get("artifactSha256"),
             "QA_ARTIFACT_DIGEST_MISMATCH")
+    bank_path = candidate / "private/player3-server-private-bank.json"
+    policy_path = candidate / "private/player3-approved-policy.json"
+    crosswalk_path = candidate / "private/source-stage-crosswalk.json"
+    require(all(p.is_file() and not p.is_symlink()
+                for p in (bank_path, policy_path, crosswalk_path)) and
+            sha256(bank_path) == manifest.get("privateBankSha256") and
+            sha256(policy_path) == manifest.get("policySha256"),
+            "QA_PRIVATE_POLICY_OR_BANK_DIGEST_MISMATCH")
+    policy = json.loads(policy_path.read_text())
+    bank = json.loads(bank_path.read_text())
+    artifact_doc = json.loads(artifact.read_text())
+    require(policy.get("editionSha256") == edition and
+            policy.get("source_sha256") == source and
+            bank.get("source_sha256") == source and
+            policy.get("courseId") == artifact_doc.get("courseId") ==
+            bank.get("courseId") and
+            isinstance(artifact_doc.get("courseId"), str) and
+            artifact_doc["courseId"].startswith("qa-") and
+            policy.get("learnerContent", {}).get("sourceStageCrosswalkSha256")
+            == sha256(crosswalk_path),
+            "QA_PRIVATE_POLICY_CROSSWALK_DRIFT")
     require(assignments.get("schema") == "AIRTRUST_PLAYER3_QA_IDENTITIES_V1" and
             assignments.get("tenantCode") == "qa_examiner_training",
             "QA_GOVERNED_SYNTHETIC_TENANT_REQUIRED")
