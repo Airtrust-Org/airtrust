@@ -42,3 +42,20 @@ O E2E executa os mesmos caminhos **reais** de tela/iframe, API, D1, histórico, 
 O Player 3 técnico está pronto quando: a suite do novo SHA passou por 8/8 gates, Worker/Pages/schema necessários foram publicados oficialmente em staging, seis jornadas Chromium/WebKit usando matrículas QA descartáveis foram **executadas** com evidência real (não apenas listadas/compiladas), casos de erro e segurança passaram e a página abre/retoma/conclui sem duplicidade e com PDF acessível. Documentar bloqueio real caso a homologação não possa ser executada. **Não declarar o LMS de cursos originais pronto nem percentual global derivado desses testes.**
 
 O contrato de homologação fiel do Doutrinamento RC8.1 permanece preservado em `docs/lms/PLAYER3_FRONT_D_HOMOLOGATION.md` e seu SHA original continua exigido em `AUTHORED_RC81`, **somente para a fase posterior**. Nada do treinamento real foi editado nesta mudança.
+
+## Preflight de ativação QA sintética — execução sem alterações remotas
+
+O candidato técnico possui o script `scripts/staging/player3-technical-qa-activation-preflight.mjs`. Ele valida **somente a configuração** do tenant QA para o SHA explicitamente revisado; não publica conteúdo, não cria matrícula, não consulta D1/R2 e nunca comprova seis jornadas.
+
+Para executá-lo em um workspace protegido, forneça as variáveis do **ambiente staging autorizado**, sem registrá-las em logs nem arquivos públicos: `ENVIRONMENT=staging`, `PLAYER3_QA_SYNTHETIC_TENANT_ID` e `PLAYER3_QA_EXPECTED_SHA`, os oito allowlists exigidos pelo script, `PLAYER3_QA_STAGING_ORIGIN`, `PLAYER3_QA_API_ORIGIN`, `PLAYER3_AUTHORED_CONTENT_ORIGIN` e `PLAYER3_QA_CONTENT_ORIGIN`. A origem HTML5 deve ser uma **terceira origem HTTPS** diferente de Pages e Worker. Valores wildcard, tenant de cliente, ambiente de produção, SHA ou origem discrepantes devem falhar.
+
+```bash
+node scripts/staging/player3-technical-qa-activation-preflight.mjs
+node --test scripts/__tests__/player3-technical-qa-activation-preflight.test.mjs
+```
+
+O output deliberadamente contém apenas nomes de gates ausentes, booleans e contagens, sem identidades, tokens ou valor de allowlist. **`tenantGateReady: true` não comprova schema, edição, matrícula, conclusão ou PDF**; esses campos permanecem `false` até validação física independente. Flags jamais devem ser habilitadas globalmente ou em produção.
+
+**Dependências materiais ainda não supridas pelo gerador offline:** tenant sintético exclusivo autorizado, usuário autenticado sem acesso cross-tenant, curso criado pela API sob governança, marker Native, edição publicada com bytes/hash pinados, banco e política privados no R2, conteúdo HTML5 isolado, seis matrículas/ciclos distintos, perfil QA privado com credenciais adequadas, uma matrícula de continuidade 80% e um pacote SCORM 1.2 externo autorizado. Aplicações 0561/0562 de staging são infraestrutura necessária, mas não provisionam esses dados nem ativam flags. As matrículas devem ser criadas pelo writer transacional do Worker, não por INSERT improvisado.
+
+A janela de mutações de staging utiliza o lock compartilhado `airtrust-staging-mutations-and-scorm-qa`; consultar issue #776 antes de qualquer seed, upload, deploy ou E2E. Restauração e limpeza dos dados descartáveis devem ser verificadas por recibos reais, sem apagar cursos ou matrículas preexistentes. Somente depois de executar e evidenciar 6/6 jornadas Chromium/WebKit, certificado PDF real e regressão SCORM é permitido avaliar saída de draft, merge protegido e release específico.
