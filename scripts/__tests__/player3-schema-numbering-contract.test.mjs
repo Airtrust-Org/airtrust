@@ -14,7 +14,7 @@ const workflow=contents('.github/workflows/staging-player3-schema-v2.yml');
 const entries=baseline.schema_v2_since_baseline;
 const byPrefix=new Map();
 for (const entry of entries) {
-  const number=entry.change_file.match(/^(055[0-9])_/);
+  const number=entry.change_file.match(/^(05[56][0-9])_/);
   if (!number) continue;
   assert.ok(!byPrefix.has(number[1]),
     'Schema V2 number collision for '+number[1]);
