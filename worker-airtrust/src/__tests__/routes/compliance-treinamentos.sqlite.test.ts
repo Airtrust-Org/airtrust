@@ -111,7 +111,6 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
       vigencia_fim TEXT,
       prazo_inicial_dias INTEGER,
       auto_matricular_ead INTEGER NOT NULL DEFAULT 0,
-      modalidade_requerida TEXT,
       perfil_competencia TEXT,
       ativo INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -1225,6 +1224,7 @@ describe('training compliance engine', () => {
     sqlite.database.exec(`
       ALTER TABLE lms_cursos ADD COLUMN ativo INTEGER DEFAULT 1;
       ALTER TABLE lms_cursos ADD COLUMN publicado INTEGER DEFAULT 1;
+      ALTER TABLE treinamento_requisitos ADD COLUMN modalidade_requerida TEXT;
       CREATE TABLE airtrust_schema_changes_v2 (
         change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL
       );
@@ -1262,6 +1262,7 @@ describe('training compliance engine', () => {
     sqlite.database.exec(`
       ALTER TABLE lms_cursos ADD COLUMN ativo INTEGER DEFAULT 1;
       ALTER TABLE lms_cursos ADD COLUMN publicado INTEGER DEFAULT 1;
+      ALTER TABLE treinamento_requisitos ADD COLUMN modalidade_requerida TEXT;
       CREATE TABLE airtrust_schema_changes_v2 (
         change_id TEXT PRIMARY KEY, baseline_id TEXT NOT NULL
       );
