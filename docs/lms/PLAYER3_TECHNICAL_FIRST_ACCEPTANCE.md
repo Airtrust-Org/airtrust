@@ -47,7 +47,7 @@ O contrato de homologação fiel do Doutrinamento RC8.1 permanece preservado em 
 
 O candidato técnico possui o script `scripts/staging/player3-technical-qa-activation-preflight.mjs`. Ele valida **somente a configuração** do tenant QA para o SHA explicitamente revisado; não publica conteúdo, não cria matrícula, não consulta D1/R2 e nunca comprova seis jornadas.
 
-Para executá-lo em um workspace protegido, forneça as variáveis do **ambiente staging autorizado**, sem registrá-las em logs nem arquivos públicos: `ENVIRONMENT=staging`, `PLAYER3_QA_SYNTHETIC_TENANT_ID` e `PLAYER3_QA_EXPECTED_SHA`, os oito allowlists exigidos pelo script, `PLAYER3_QA_STAGING_ORIGIN`, `PLAYER3_QA_API_ORIGIN`, `PLAYER3_AUTHORED_CONTENT_ORIGIN` e `PLAYER3_QA_CONTENT_ORIGIN`. A origem HTML5 deve ser uma **terceira origem HTTPS** diferente de Pages e Worker. Valores wildcard, tenant de cliente, ambiente de produção, SHA ou origem discrepantes devem falhar.
+Para executá-lo em um workspace protegido, forneça as variáveis do **ambiente staging autorizado**, sem registrá-las em logs nem arquivos públicos: `ENVIRONMENT=staging`, `PLAYER3_QA_SYNTHETIC_TENANT_ID`, `PLAYER3_QA_EXPECTED_SHA` e `PLAYER3_QA_SYNTHETIC_SOURCE_SHA256` (SHA-256 independente e diferente do RC8.1), os oito allowlists exclusivos ao tenant QA exigidos pelo script, `PLAYER3_QA_STAGING_ORIGIN`, `PLAYER3_QA_API_ORIGIN`, `PLAYER3_AUTHORED_CONTENT_ORIGIN` e `PLAYER3_QA_CONTENT_ORIGIN`. A origem HTML5 deve ser uma **terceira origem HTTPS** diferente de Pages e Worker. Valores wildcard, tenant de cliente, ambiente de produção, SHA ou origem discrepantes devem falhar.
 
 ```bash
 node scripts/staging/player3-technical-qa-activation-preflight.mjs

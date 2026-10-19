@@ -9,6 +9,7 @@ const fixture = () => ({
   ENVIRONMENT: 'staging',
   PLAYER3_QA_SYNTHETIC_TENANT_ID: tenant,
   PLAYER3_QA_EXPECTED_SHA: release,
+  PLAYER3_QA_SYNTHETIC_SOURCE_SHA256: 'b'.repeat(64),
   PLAYER3_QA_STAGING_ORIGIN: 'https://staging.airtrust.pages.dev',
   PLAYER3_QA_API_ORIGIN: 'https://airtrust-api-staging.airtrust.workers.dev',
   PLAYER3_AUTHORED_CONTENT_ORIGIN: 'https://content-qa.example.org',
@@ -44,8 +45,26 @@ test('wildcards, substring tenant matches, invalid IDs and cross-tenant scopes n
     '771,a','000771','0','-771','',' 771 ; 772 ','771,,771']) {
     assert.equal(exactTenantAllowed(raw,tenant),false,raw);
   }
-  assert.equal(exactTenantAllowed('22, 771, 901',tenant),true);
-  assert.equal(exactTenantAllowed('771,771',tenant),true);
+  assert.equal(exactTenantAllowed('22, 771, 901',tenant),false);
+  assert.equal(exactTenantAllowed('771,771',tenant),false);
+  assert.equal(exactTenantAllowed('771',tenant),true);
+});
+
+test('independently pinned synthetic ZIP SHA-256 is mandatory and cannot reuse RC8.1',() => {
+  for (const value of [undefined, '', 'b'.repeat(40), 'xyz',
+    'a0a9e955368a8e7f4dd3072b7bd98eb8e5d7cab47d31cbd9335f4282dbba18a2']) {
+    const env=fixture();
+    if (value===undefined) delete env.PLAYER3_QA_SYNTHETIC_SOURCE_SHA256;
+    else env.PLAYER3_QA_SYNTHETIC_SOURCE_SHA256=value;
+    assert.ok(verify(env).blockers.includes('INDEPENDENT_SYNTHETIC_SOURCE_SHA256_REQUIRED'));
+  }
+});
+
+test('a gate listing a second tenant never activates synthetic QA',() => {
+  for (const gate of REQUIRED_TENANT_GATES) {
+    const env=fixture();env[gate]=`${tenant},901`;
+    assert.ok(verify(env).blockers.includes(gate),gate);
+  }
 });
 
 test('a mismatch in the separately pinned QA tenant or SHA fails closed',() => {

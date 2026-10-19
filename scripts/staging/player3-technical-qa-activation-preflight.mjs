@@ -29,15 +29,20 @@ export const REQUIRED_TENANT_GATES = Object.freeze([
 ]);
 
 const shaPattern = /^[a-f0-9]{40}$/;
+const sha256Pattern = /^[a-f0-9]{64}$/;
+// Immutable original training source must never be used for disposable QA.
+const rc81OriginalSourceSha256 =
+  'a0a9e955368a8e7f4dd3072b7bd98eb8e5d7cab47d31cbd9335f4282dbba18a2';
 const intPattern = /^[1-9][0-9]{0,15}$/;
 
 export function exactTenantAllowed(value, tenant) {
   if (typeof value !== 'string' || value.length > 256 ||
       value.includes('*') || !intPattern.test(String(tenant))) return false;
   const ids = value.split(',').map(s => s.trim());
-  return ids.length > 0 &&
-    ids.every(s => intPattern.test(s) && Number.isSafeInteger(Number(s))) &&
-    ids.includes(String(tenant));
+  // Technical QA must not enable any other tenant, even when the QA tenant
+  // appears in a comma-separated production-style allowlist.
+  return ids.length === 1 && ids[0] === String(tenant) &&
+    intPattern.test(ids[0]) && Number.isSafeInteger(Number(ids[0]));
 }
 
 function stagingOrigin(raw) {
@@ -65,6 +70,11 @@ export function evaluatePlayer3QaActivation({env, tenant, expectedSha}) {
   }
   if (env?.PLAYER3_QA_EXPECTED_SHA !== expectedSha) {
     missing.push('RELEASE_SHA_PIN_MISSING');
+  }
+  const syntheticSourceSha = env?.PLAYER3_QA_SYNTHETIC_SOURCE_SHA256;
+  if (!sha256Pattern.test(syntheticSourceSha ?? '') ||
+      syntheticSourceSha === rc81OriginalSourceSha256) {
+    missing.push('INDEPENDENT_SYNTHETIC_SOURCE_SHA256_REQUIRED');
   }
   for (const gate of REQUIRED_TENANT_GATES) {
     if (!exactTenantAllowed(env?.[gate], tenant)) missing.push(gate);
