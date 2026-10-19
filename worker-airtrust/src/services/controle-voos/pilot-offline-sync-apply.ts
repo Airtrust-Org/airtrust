@@ -946,11 +946,21 @@ function buildJustificationStatements(input: {
   justifications: SnapshotJustificationPayload[];
   justificationIdsByCode: Map<string, number>;
 }): D1PreparedStatement[] {
+  // The snapshot is cumulative. Preserve the full original audit row for
+  // accepted justifications that are still in the snapshot, even if the
+  // catalog was later disabled. Only omitted links are soft-deleted.
+  const retainedIds = input.justifications
+    .map((item) => input.justificationIdsByCode.get(item.justificativa_codigo))
+    .filter((id): id is number => id !== undefined);
+  const retainedSql = retainedIds.length
+    ? ` AND justificativa_id NOT IN (${retainedIds.map(() => '?').join(', ')})`
+    : '';
   const statements: D1PreparedStatement[] = [
     input.db.prepare(`
       UPDATE cv_voo_justificativas
       SET deleted_at = datetime('now'), updated_by = ?, updated_at = datetime('now')
       WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
+        ${retainedSql}
         AND EXISTS (
           SELECT 1 FROM cv_rdv_operacional
           WHERE voo_id = ? AND empresa_id = ? AND deleted_at IS NULL
@@ -960,6 +970,7 @@ function buildJustificationStatements(input: {
       input.userId,
       input.empresaId,
       input.flight.id,
+      ...retainedIds,
       input.flight.id,
       input.empresaId,
       input.newVersion,
@@ -987,6 +998,9 @@ function buildJustificationStatements(input: {
           updated_by = excluded.updated_by,
           updated_at = datetime('now'),
           deleted_at = NULL
+        WHERE cv_voo_justificativas.minutos IS NOT excluded.minutos
+           OR cv_voo_justificativas.observacao IS NOT excluded.observacao
+           OR cv_voo_justificativas.deleted_at IS NOT NULL
       `).bind(
         input.empresaId,
         input.flight.id,
