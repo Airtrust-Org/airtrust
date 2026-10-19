@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 const bytes=(path)=>readFileSync(resolve(root,path));
@@ -86,7 +87,7 @@ test('0561/0562 remain hashed NON-deployable reviewer artifacts until bootstrap 
   }
 });
 
-test('0561/0562 exact versioned candidate manifests remain non-deployable without explicit reviewer promotion',async()=>{
+test('0561/0562 staging-approved manifests preserve hashes and refuse review-only transport',async()=>{
   const {buildReviewedSchemaApply}=await import('../schema-v2/build-reviewed-schema-apply.mjs');
   for(const [n,id,file] of [
     ['0561','lms-native-catalog-activation-0561','0561_native_catalog_activation.sql'],
@@ -94,21 +95,40 @@ test('0561/0562 exact versioned candidate manifests remain non-deployable withou
   ]) {
     const path='worker-airtrust/schema-v2/'+id+'.json';
     const metadata=JSON.parse(contents(path));
-    assert.equal(metadata.reviewStatus,'REVIEW_ONLY_NO_REMOTE_APPLY');
+    assert.equal(metadata.reviewStatus,'APPROVED_FOR_STAGING');
     assert.equal(metadata.filePath,'worker-airtrust/schema-v2/changes/'+file);
     assert.equal(metadata.fileHash,digest(metadata.filePath));
     assert.equal(metadata.planHash,digest(metadata.planPath));
-    assert.equal(
-      contents(metadata.filePath),
+    assert.equal(contents(metadata.filePath),
       contents('worker-airtrust/schema-v2/plans/'+id+'.REVIEW-ONLY.sql.txt'),
-      'candidate bytes must exactly preserve rehearsed schema');
-    assert.throws(()=>buildReviewedSchemaApply({
-      manifestPath:path,
-      outputPath:'/tmp/airtrust-review-only-must-not-create-'+n,
-      expectedChangeId:id,githubSha:'a'.repeat(40),
-    }),/SCHEMA_V2_REVIEW_ONLY_CANDIDATE_NOT_APPROVED/);
+      'approved SQL must exactly preserve historically rehearsed candidate bytes');
     assert.equal(byPrefix.get(n)?.governance_state,'REMOTE_APPLY_PENDING');
     assert.match(byPrefix.get(n)?.note??'',/REVIEW_ONLY_NO_REMOTE_APPLY/);
     assert.ok(!workflow.includes('          - '+id));
+    const dir=mkdtempSync(join(tmpdir(),'airtrust-player3-schema-approval-'));
+    try {
+      const deniedManifest=join(dir,'review-only.json');
+      const deniedOutput=join(dir,'must-not-exist.sql');
+      writeFileSync(deniedManifest,JSON.stringify({...metadata,
+        reviewStatus:'REVIEW_ONLY_NO_REMOTE_APPLY'}));
+      assert.throws(()=>buildReviewedSchemaApply({
+        manifestPath:deniedManifest,outputPath:deniedOutput,
+        expectedChangeId:id,githubSha:'a'.repeat(40),
+      }),/SCHEMA_V2_REVIEW_ONLY_CANDIDATE_NOT_APPROVED/);
+      assert.equal(existsSync(deniedOutput),false);
+      const approvedOutput=join(dir,'reviewed-staging.sql');
+      const built=buildReviewedSchemaApply({
+        manifestPath:path,outputPath:approvedOutput,
+        expectedChangeId:id,githubSha:'a'.repeat(40),
+      });
+      assert.equal(built.fileHash,metadata.fileHash);
+      assert.equal(built.planHash,metadata.planHash);
+      const bundle=readFileSync(approvedOutput,'utf8');
+      assert.ok(bundle.startsWith(contents(metadata.filePath).trimEnd()));
+      assert.ok(bundle.includes("INSERT INTO airtrust_schema_changes_v2"));
+      assert.ok(bundle.includes("'"+id+"'"));
+    } finally {
+      rmSync(dir,{recursive:true,force:true});
+    }
   }
 });
