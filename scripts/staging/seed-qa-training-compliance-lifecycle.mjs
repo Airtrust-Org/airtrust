@@ -126,9 +126,9 @@ SELECT 'TREINAMENTO',${esc(orphanTypeCode)},${esc(orphanTypeName)},${esc(marker)
 FROM qualificacoes_categorias qc WHERE qc.empresa_id=${tenantId} AND qc.codigo=${esc(categoryCode)} AND qc.deleted_at IS NULL;
 
 INSERT INTO lms_cursos(empresa_id,titulo,descricao,categoria,carga_horaria_minutos,qualificacao_tipo_id,gerar_qualificacao_ao_concluir,ativo,publicado,version_tag,tipo_conteudo,scorm_package_r2_prefix,observacoes,created_at,updated_at,deleted_at)
-VALUES (${tenantId},${esc(requiredCourseTitle)},${esc(marker)},'QA',60,${requiredTypeId},1,1,1,${esc(code)},'h5p',${esc(requiredPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
+VALUES (${tenantId},${esc(requiredCourseTitle)},${esc(marker)},'EAD',60,${requiredTypeId},1,1,1,${esc(code)},'h5p',${esc(requiredPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
 INSERT INTO lms_cursos(empresa_id,titulo,descricao,categoria,carga_horaria_minutos,qualificacao_tipo_id,gerar_qualificacao_ao_concluir,ativo,publicado,version_tag,tipo_conteudo,scorm_package_r2_prefix,observacoes,created_at,updated_at,deleted_at)
-VALUES (${tenantId},${esc(orphanCourseTitle)},${esc(marker)},'QA',60,${orphanTypeId},1,1,1,${esc(code)},'h5p',${esc(orphanPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
+VALUES (${tenantId},${esc(orphanCourseTitle)},${esc(marker)},'EAD',60,${orphanTypeId},1,1,1,${esc(code)},'h5p',${esc(orphanPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
 
 -- The scoped QA Gestor only sees courses linked to the permitted synthetic
 -- sector. Do not relax product RBAC or grant global course visibility.
