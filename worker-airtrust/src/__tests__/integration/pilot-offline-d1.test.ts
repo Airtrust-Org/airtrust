@@ -91,6 +91,65 @@ beforeEach(async () => {
 afterEach(async () => { await miniflare?.dispose(); });
 
 describe('Pilot offline sync with a disposable local D1 Worker', () => {
+  async function nextSnapshot(initial: PilotOfflineSyncCommand, fuelings: Record<string, unknown>[]) {
+    const current = await state();
+    const flightVersion = Number(current.cv_voos[0].versao);
+    const rdvVersion = Number(current.cv_rdv_operacional[0].versao);
+    const stages = current.cv_voo_etapas.map((stage: Record<string, unknown>) => ({
+      source_stage_id: stage.id,
+      source_stage_updated_at: stage.updated_at,
+      fields: {
+        numero_etapa: stage.numero_etapa, origem_icao: stage.origem_icao,
+        destino_icao: stage.destino_icao, pax: stage.pax, peso_vazio: stage.peso_vazio,
+      },
+    }));
+    return command({
+      client_operation_id: '123e4567-e89b-42d3-a456-426614174001',
+      base_server_version: rdvVersion, base_flight_version: flightVersion,
+      local_sequence: 2,
+      payload: {
+        ...initial.payload,
+        source_package_id: `pilot-offline:v1:voo:42:v${flightVersion}:rdv:${rdvVersion}`,
+        stages, fuelings,
+        rdv: { numero: 'RDV-TEST', data_voo: '2026-09-09', ocorrencias: 'independent second snapshot' },
+      },
+    });
+  }
+  it('keeps one physical fueling through two independently accepted versioned commands', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const fuel = (first.payload.fuelings as Record<string, unknown>[])[0];
+    const next = await nextSnapshot(first, [fuel]);
+    const response = await send(next);
+    expect(response.status).toBe(200);
+    expect((await responseBody(response)).data.results[0].status).toBe('accepted');
+    const saved = await state();
+    expect(saved.cv_rdv_operacional[0].versao).toBe(5);
+    expect(saved.cv_voo_abastecimentos).toHaveLength(1);
+    expect(saved.cv_voo_abastecimentos[0].client_local_id).toBe('fuel-1');
+    expect(saved.cv_offline_sync_receipts).toHaveLength(2);
+  });
+  it('accepts two equal-valued fuelings that have different physical identities', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const fuel = (first.payload.fuelings as Record<string, unknown>[])[0];
+    const next = await nextSnapshot(first, [fuel, { ...fuel, client_local_id: 'fuel-2' }]);
+    expect((await send(next)).status).toBe(200);
+    const all = (await state()).cv_voo_abastecimentos.map((row: Record<string, unknown>) => row.client_local_id).sort();
+    expect(all).toEqual(['fuel-1', 'fuel-2']);
+  });
+  it('rejects a changed payload for an already-accepted fueling identity with zero writes', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const fuel = (first.payload.fuelings as Record<string, unknown>[])[0];
+    const next = await nextSnapshot(first, [{ ...fuel, litros_abastecidos: 99 }]);
+    const before = await state();
+    const response = await send(next);
+    expect(response.status).toBe(409);
+    expect((await responseBody(response)).code).toBe('CONTROLE_VOOS_PILOT_SYNC_FUELING_ALREADY_RECORDED_CHANGED');
+    expect(await state()).toEqual(before);
+  });
+
   it('rejects duplicate client_local_id within the same fueling snapshot before any D1 write', async () => {
     const base = await command();
     const fueling = (base.payload.fuelings as Array<Record<string, unknown>>)[0];
