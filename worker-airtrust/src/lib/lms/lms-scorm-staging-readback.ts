@@ -51,12 +51,18 @@ export async function readScormQaBackendEvidence(params: {
   });
   // Explicit immutable candidate->enrollment->cycle binding: never infer
   // this association from a mutable course active pointer or CMI contents.
-  const table = await db.prepare(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'lms_scorm_qa_evidence_bindings'",
-  ).first<{name:string}>();
-  if (!table) throw new ApiError('SCORM_QA_BINDING_SCHEMA_NOT_READY', 409);
-
-  const bind = await db.prepare(
+  // The binding table is an optional, Schema-V2-governed staging capability:
+  // query it directly only for protected QA. Avoid adding schema introspection
+  // to every LMS request or bypassing the shared schema snapshot.
+  let bind: {
+    ciclo_id:number; staging_runtime_sha:string;
+    approval_receipt_sha256:string; run_id:string; expires_at:string;
+    launched_package_sha256:string|null;
+    last_committed_package_sha256:string|null;
+    matricula_status:string; numero_ciclo:number;
+  } | null;
+  try {
+    bind = await db.prepare(
     `SELECT b.ciclo_id, b.staging_runtime_sha, b.approval_receipt_sha256,
             b.run_id, b.expires_at, b.launched_package_sha256,
             b.last_committed_package_sha256,
@@ -78,12 +84,17 @@ export async function readScormQaBackendEvidence(params: {
       LIMIT 1`,
   ).bind(empresaId, cursoId, candidate.id, candidate.package_sha256,
     matriculaId, runtimeSha).first<{
-    ciclo_id:number; staging_runtime_sha:string;
-    approval_receipt_sha256:string; run_id:string; expires_at:string;
-    launched_package_sha256:string|null;
-    last_committed_package_sha256:string|null;
-    matricula_status:string; numero_ciclo:number;
-  }>();
+      ciclo_id:number; staging_runtime_sha:string;
+      approval_receipt_sha256:string; run_id:string; expires_at:string;
+      launched_package_sha256:string|null;
+      last_committed_package_sha256:string|null;
+      matricula_status:string; numero_ciclo:number;
+    }>();
+  } catch {
+    // Missing QA schema, incompatible Schema V2 layout or D1 outage:
+    // no evidence can be trusted. Never substitute a course/CMI-only read.
+    throw new ApiError('SCORM_QA_BINDING_SCHEMA_NOT_READY', 409);
+  }
   if (!bind || !Number.isSafeInteger(bind.ciclo_id) ||
       bind.ciclo_id <= 0 || !/^[a-f0-9]{64}$/.test(bind.approval_receipt_sha256) ||
       !/^[0-9a-f-]{36}$/.test(bind.run_id)) {

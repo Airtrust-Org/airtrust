@@ -25,14 +25,15 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
               r2_prefix:'lms/scorm/997/15/_candidates/'+pkg+'/',
               launch_file:'index.html',scorm_versao:'1.2',status:'VALIDATED',
               active_prefix:'lms/scorm/997/15/_active/'}:null;
-          if(sql.includes('sqlite_master'))return table?{name:'lms_scorm_qa_evidence_bindings'}:null;
-          if(sql.includes('FROM lms_scorm_qa_evidence_bindings b'))
+          if(sql.includes('FROM lms_scorm_qa_evidence_bindings b')) {
+            if(!table)throw new Error('D1_ERROR: no such table: lms_scorm_qa_evidence_bindings');
             return binding?{ciclo_id:555,staging_runtime_sha:'b'.repeat(40),
               approval_receipt_sha256:'f'.repeat(64),run_id:pkg,
               expires_at:'2999-01-01',
               launched_package_sha256:launchedSha,
               last_committed_package_sha256:committedSha,
               matricula_status:'EM_ANDAMENTO',numero_ciclo:1}:null;
+          }
           if(sql.includes('FROM lms_progresso_scorm'))
             return {cmi_json:'{"cmi":"real"}',suspend_data:'resume-01',lesson_status:'incomplete',
               completion_status:null,success_status:null,score_raw:null,
@@ -82,6 +83,7 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
     expect(statements.filter(s=>s.sql.includes('FROM qualificacoes_historico'))[0].args)
       .toEqual([997,88,555]);
     expect(statements.some(s=>/\b(?:INSERT|UPDATE|DELETE)\b/i.test(s.sql))).toBe(false);
+    expect(statements.some(s=>s.sql.includes('sqlite_master'))).toBe(false);
   });
   it('rejects duplicate qualification instead of passing synthetic replay',async()=>{
     const {db}=dbMock({history:[{id:700,certificado_arquivo_id:900},
