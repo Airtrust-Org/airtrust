@@ -120,6 +120,24 @@ class PrivateQaProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(QaProfileError, "NOT_PINNED"):
             main_profile(self.candidate, self.identities)
 
+    def test_private_policy_or_bank_drift_is_rejected(self):
+        policy = self.candidate / "private/player3-approved-policy.json"
+        bank = self.candidate / "private/player3-server-private-bank.json"
+        original_policy = policy.read_bytes()
+        original_bank = bank.read_bytes()
+        policy.write_bytes(b"{}")
+        with self.assertRaisesRegex(QaProfileError, "POLICY_OR_BANK_DIGEST"):
+            main_profile(self.candidate, self.identities)
+        policy.write_bytes(original_policy)
+        bank.write_bytes(b"{}")
+        with self.assertRaisesRegex(QaProfileError, "POLICY_OR_BANK_DIGEST"):
+            main_profile(self.candidate, self.identities)
+        bank.write_bytes(original_bank)
+        crosswalk = self.candidate / "private/source-stage-crosswalk.json"
+        crosswalk.write_text("{}")
+        with self.assertRaisesRegex(QaProfileError, "POLICY_CROSSWALK_DRIFT"):
+            main_profile(self.candidate, self.identities)
+
     def test_requires_real_resume_and_external_scorm_evidence(self):
         wrong = copy.deepcopy(self.identities)
         wrong["projects"]["webkit"]["resume80"]["creditedNavigationIds"] = []
