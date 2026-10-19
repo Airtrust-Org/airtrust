@@ -6,6 +6,7 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { selectQaStorageState } from './qa-storage-state';
 import {
   qaPath as pathOn, requireQa as demand, validateQaProfile,
   validateQaAuthoredContentUrl,
@@ -49,11 +50,12 @@ function load(projectName: string) {
     process.env.PLAYER3_QA_CONTENT_ORIGIN ?? '',
     process.env.PLAYER3_QA_SYNTHETIC_SOURCE_SHA256 ?? '');
 }
-async function openLearner(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
-  const state = process.env.PLAYER3_QA_STORAGE_STATE;
-  demand(state, 'AUTHORIZED_LEARNER_STORAGE_STATE');
+async function openLearner(browser: Browser, profile: Profile):
+  Promise<{ context: BrowserContext; page: Page }> {
+  const state = selectQaStorageState(browser.browserType().name(),
+    profile.qaContentMode ?? 'AUTHORED_RC81', process.env);
   const context = await browser.newContext({
-    storageState: resolve(state), viewport: { width: 1365, height: 850 },
+    storageState: state, viewport: { width: 1365, height: 850 },
   });
   const page = await context.newPage();
   return { context, page };
@@ -165,7 +167,7 @@ test('Player3 Native: UI, formative gates, fail/retry, durable completion, quali
   // QA supports both the original RC8.1 contract (8 stages) and the independently
   // approved synthetic technical candidate (1-8 stages).
   const officialStageCount = d.units.filter(unit => !!unit.official).length;
-  let { context, page } = await openLearner(browser);
+  let { context, page } = await openLearner(browser, profile);
   const contentAssetProblems: string[] = [];
   // Observe ONLY browser-originated authenticated lesson writes. The QA
   // bearer client itself never POSTs a checkpoint, score or completion.
@@ -354,7 +356,7 @@ test('Player3 Native: UI, formative gates, fail/retry, durable completion, quali
         await evidence(page, testInfo, 'doutrinamento-midpoint');
         // Entire browser session context is closed; no in-memory LMS state survives.
         await context.close();
-        ({ context, page } = await openLearner(browser));
+        ({ context, page } = await openLearner(browser, profile));
         watchCheckpoints(page);
         auditContentAssets(page, profile.contentOrigin, contentAssetProblems);
         await page.goto(pathOn(profile.baseUrl, d.launchPath));
@@ -530,7 +532,7 @@ test('Player3 Native: UI, formative gates, fail/retry, durable completion, quali
       const certificateBytes=await pdf.body();
       validateQaCertificatePdf(certificateBytes,pdf.headers()['content-type'] ?? '');
       await context.close();
-      ({context,page} = await openLearner(browser));
+      ({context,page} = await openLearner(browser, profile));
       auditContentAssets(page, profile.contentOrigin, contentAssetProblems);
       await page.goto(pathOn(profile.baseUrl, d.launchPath));
       const reopened = await snapshot(context, profile, d);
@@ -566,7 +568,7 @@ test('Player3 Native: UI, formative gates, fail/retry, durable completion, quali
 test('Legacy 80%: resume navigation only, without invented examination, grade or certificate', async ({browser}, info) => {
   const {profile,fixture}=load(info.project.name);
   const r=fixture.resume80;
-  let {context,page}=await openLearner(browser);
+  let {context,page}=await openLearner(browser, profile);
   try {
     await checkStagingProvenance(context,profile);
     const before=await snapshot(context,profile,r);
@@ -584,7 +586,7 @@ test('Legacy 80%: resume navigation only, without invented examination, grade or
     // Previously persisted official units may overlap navigation credits.
     // Equivalence must NOT add new evidence; the before/after equality above is authoritative.
     await context.close();
-    ({context,page}=await openLearner(browser));
+    ({context,page}=await openLearner(browser, profile));
     await page.goto(pathOn(profile.baseUrl,r.launchPath));
     await expect(page.getByTestId('player3-active-unit-id')).toHaveText(r.expectedResumeUnitId);
     const reopened=await snapshot(context,profile,r);
@@ -611,7 +613,7 @@ type QaPersistedScormState={
 test('External SCORM 1.2: actual adapter, no fake completion from visual slides, fail/resume/pass/finish', async ({browser},info) => {
   const {profile,fixture}=load(info.project.name);
   const e=fixture.external;
-  let {context,page}=await openLearner(browser);
+  let {context,page}=await openLearner(browser, profile);
   const state=async()=>{
     const value=await apiData<QaScormEvidence>(context,profile.apiBaseUrl,e.snapshotPath);
     demand(value.empresa_id===profile.empresaId &&
@@ -657,7 +659,7 @@ test('External SCORM 1.2: actual adapter, no fake completion from visual slides,
     await expect.poll(cmi).toBe('failed');
     expect((await state()).status).not.toBe('CONCLUIDO');
     await context.close();
-    ({context,page}=await openLearner(browser));
+    ({context,page}=await openLearner(browser, profile));
     await page.goto(pathOn(profile.baseUrl,e.launchPath));
     sco=page;
     for (const selector of e.frameSelectors) sco=sco.frameLocator(selector);
@@ -685,7 +687,7 @@ test('External SCORM 1.2: actual adapter, no fake completion from visual slides,
     expect(pdf.ok()).toBe(true);
     validateQaCertificatePdf(await pdf.body(),pdf.headers()['content-type']??'');
     await context.close();
-    ({context,page}=await openLearner(browser));
+    ({context,page}=await openLearner(browser, profile));
     await page.goto(pathOn(profile.baseUrl,e.launchPath));
     const persisted=await state();
     expect(persisted.status).toBe('CONCLUIDO');

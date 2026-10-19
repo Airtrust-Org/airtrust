@@ -21,7 +21,8 @@ export default defineConfig({
     video: 'off',
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
-    storageState: process.env.PLAYER3_QA_STORAGE_STATE || undefined,
+    // The acceptance spec creates explicit browser-scoped authenticated contexts.
+    // Do not implicitly reuse a single learner state across both browsers.
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
