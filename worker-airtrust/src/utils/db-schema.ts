@@ -13,6 +13,7 @@
 let _hasUsuariosEmpresas: boolean | null = null;
 let _tableExistenceCacheByDb = new WeakMap<D1Database, Map<string, boolean>>();
 let _schemaColumnsCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
+let _schemaTriggerNamesCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
 
 interface UsuariosSchema {
   hasActive: boolean;
@@ -75,6 +76,27 @@ export async function getSchemaColumns(
   const columns = new Set((results || []).map((row) => String(row.name || '')));
   cache.set(normalizedTableName, columns);
   return columns;
+}
+
+/** Physical trigger names for a table, cached only per D1 binding.
+ * This keeps runtime authorization checks from repeating direct schema probes.
+ */
+export async function getSchemaTriggerNames(
+  db: D1Database,
+  tableName: string,
+): Promise<ReadonlySet<string>> {
+  const normalized = String(tableName || '').trim().toLowerCase();
+  if (!normalized) return new Set<string>();
+  const cache = cacheForDb(_schemaTriggerNamesCacheByDb, db);
+  const previous = cache.get(normalized);
+  if (previous) return previous;
+  const response = await db
+    .prepare("SELECT name FROM sqlite_schema WHERE type = 'trigger' AND tbl_name = ?")
+    .bind(normalized)
+    .all<{ name: string }>();
+  const names = new Set((response.results || []).map((row) => String(row.name || '')));
+  cache.set(normalized, names);
+  return names;
 }
 
 export async function hasSchemaColumn(
@@ -145,6 +167,7 @@ export function resetSchemaCache(): void {
   _hasUsuariosEmpresas = null;
   _tableExistenceCacheByDb = new WeakMap<D1Database, Map<string, boolean>>();
   _schemaColumnsCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
+  _schemaTriggerNamesCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
   _usuariosSchema = null;
   _hasRefreshTokensEmpresaId = null;
   _hasRefreshTokensAccessTokenJti = null;

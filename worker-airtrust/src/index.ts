@@ -185,6 +185,7 @@ app.use('/api/escalas', noCacheMiddleware());
 app.use('/api/escalas/*', noCacheMiddleware());
 app.use('/api/qualificacoes/historico', noCacheMiddleware());
 app.use('/api/qualificacoes/historico/*', noCacheMiddleware());
+app.use('/api/qualificacoes/funcionario/*', noCacheMiddleware());
 app.use('/api/certificados', noCacheMiddleware());
 app.use('/api/certificados/*', noCacheMiddleware());
 // FRMS, SGSO e EVD são dados operacionais de segurança de voo — nunca servir cache.

@@ -79,6 +79,15 @@ export interface FichaPDFData {
    *  que ainda não passam esse campo (fichas reais renderizadas hoje). */
   templateVersion?: 'legacy' | 'v6';
   fileName?: string;
+  /** Proveniência individual para ficha real de check; nunca inferir de resultado da sessão. */
+  checksIndividuais?: Array<{
+    codigo: string;
+    nome: string;
+    situacao: 'APROVADO' | 'REPROVADO' | 'PENDENTE_AVALIACAO';
+    evidenciaId?: number | null;
+    confirmadoEm?: string | null;
+    dataVencimento?: string | null;
+  }>;
   manobras: Array<{
     ordem: number;
     nome?: string;
@@ -1128,7 +1137,41 @@ export async function gerarPDFFichaCliente(
   // Fonte única de bytes: arraybuffer (em vez de Blob) evita a dependência do
   // construtor Blob do documento/realm em que o jsPDF roda, e serve tanto o
   // download direto quanto o preview a partir do mesmo buffer.
-  const pdfBytes = doc.output('arraybuffer');
+  // Appendix is intentionally separate from the official Ficha V6.2 layout.
+  // Only server-resolved individual results reach this section. A session-
+  // level approval must never be represented as an employee-approved check.
+  if (!isModoModelo && dados.checksIndividuais?.length) {
+    doc.addPage();
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('Evidências individuais de checks', margin, 22);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Ficha #${dados.fichaId} — ${dados.tripulante_nome}`, margin, 30);
+    doc.setFontSize(9);
+    doc.text('Apenas o estado CONFIRMADO e aprovado comprova o check.', margin, 38);
+    let proofY = 50;
+    for (const item of dados.checksIndividuais) {
+      if (proofY > pageHeight - 24) {
+        doc.addPage();
+        proofY = 22;
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${item.codigo} — ${item.situacao}`, margin, proofY);
+      doc.setFont('helvetica', 'normal');
+      doc.text(String(item.nome || '').slice(0, 90), margin, proofY + 5);
+      const provenance = item.evidenciaId && item.confirmadoEm
+        ? `Evidência #${item.evidenciaId} confirmada em ${item.confirmadoEm}`
+        : 'Sem evidência individual confirmada';
+      doc.text(provenance.slice(0, 95), margin, proofY + 10);
+      if (item.situacao === 'APROVADO' && item.dataVencimento) {
+        doc.text(`Validade: ${item.dataVencimento}`, margin, proofY + 15);
+      }
+      proofY += 24;
+    }
+  }
+
+    const pdfBytes = doc.output('arraybuffer');
 
   const mode = opts?.mode ?? 'preview';
   if (mode === 'download' || isSafariBrowser()) {
