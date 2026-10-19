@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {checkWorkflowContent} from '../ci/cloudflare-secret-contract-lib.mjs';
 import {
   REPO,BRANCH,LOCK,ARTIFACT_SHA,REQUIRED,
   assertConfig,expectedGrant,checkGrantBody,checkChecks,verify,
@@ -96,6 +97,36 @@ test('trusted workflow separates D1 credential from Pages/R2 credential',()=>{
  assert.match(s,/if:\s*inputs\.phase == 'publish'/);
  assert.match(s,/if:\s*inputs\.phase == 'bootstrap' \|\| inputs\.phase == 'edition'/);
  assert.doesNotMatch(s,/pull_request_target:|secrets\.CLOUDFLARE_WORKER_API_TOKEN|secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
+});
+
+test('scoped staging jobs never inherit D1 and R2/Pages credentials together',()=>{
+ const w=readFileSync(resolve('.github/workflows/staging-player3-synthetic-qa.yml'),'utf8');
+ const failures=checkWorkflowContent('.github/workflows/staging-player3-synthetic-qa.yml',w);
+ assert.deepEqual(failures,[],failures.join('\n'));
+ const extract=(job)=>{
+   const tag='  '+job+':\n';
+   const i=w.indexOf(tag);
+   assert.notEqual(i,-1,'missing job '+job);
+   const next=w.slice(i+tag.length).search(/^  [a-z][a-z0-9-]*:\s*$/m);
+   return next===-1?w.slice(i):w.slice(i,i+tag.length+next);
+ };
+ const d1=extract('d1-schema-operation');
+ const verify=extract('verify-r2-pages');
+ const publish=extract('publish-r2-pages');
+ assert.match(d1,/name: Governed staging D1 schema preflight/);
+ assert.match(d1,/environment: staging/);
+ assert.match(d1,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+ assert.doesNotMatch(d1,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
+ assert.match(verify,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
+ assert.doesNotMatch(verify,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+ assert.match(publish,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
+ assert.doesNotMatch(publish,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+ assert.match(w,/needs\.verify-r2-pages\.result == 'success'/);
+ assert.match(w,/needs\.d1-schema-operation\.result == 'success'/);
+ assert.match(w,/QA_R2_VERIFIED_PLAN_SHA:/);
+ assert.match(w,/QA_D1_PREFLIGHT_OK:/);
+ assert.match(w,/cancel-in-progress: false/);
+ assert.doesNotMatch(w,/pull_request_target:/);
 });
 
 test('protected executor denies local operation without main and reviewed files',()=>{
