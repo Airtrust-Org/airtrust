@@ -6,7 +6,9 @@ import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {zipSync,strToU8} from 'fflate';
 import {buildInteractiveM8QaFiles} from '../staging/lms-scorm-m8-fixture.mjs';
-import {validateIndependentDriver,runIndependentZipProbe} from '../qa/scorm-independent-zip-producer.mjs';
+import {validateIndependentDriver,runIndependentZipProbe,
+  classifyIndependentProbeError,classifyIndependentProbeRuns
+} from '../qa/scorm-independent-zip-producer.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const driverFor=packageSha256=>({
@@ -56,8 +58,10 @@ test('uncommitted suspend changes cannot be reported as persisted or resumed',as
     const report=await runIndependentZipProbe({zipPath:z,driverPath:d,outputPath:o});
     assert.equal(report.status,'UNCERTIFIED');
     assert.equal(report.activationAuthorized,false);
+    assert.equal(report.classification,'INCONCLUSIVE');
     for(const run of report.browsers){
       assert.equal(run.outcome,'INCONCLUSIVE');
+      assert.equal(run.classification,'INCONCLUSIVE');
       assert.match(run.diagnostic,/SUSPEND_ACTION_NOT_COMMITTED/);
       assert.equal(run.checks?.suspendResume,undefined);
     }
@@ -73,6 +77,7 @@ test('real ZIP bytes yield browser observations without a forged staging certifi
     assert.equal(report.status,'UNCERTIFIED');
     assert.equal(report.activationAuthorized,false);
     assert.equal(report.packageSha256,sha(readFileSync(z)));
+    assert.equal(report.classification,'PROTOCOL_PASS');
     assert.deepEqual(report.browsers.map(r=>r.browser),['CHROMIUM','WEBKIT']);
     for(const run of report.browsers){
       assert.equal(run.outcome,'OBSERVED_IN_LOCAL_EMULATOR',
@@ -81,8 +86,33 @@ test('real ZIP bytes yield browser observations without a forged staging certifi
       assert.equal(run.checks.assessmentFailure.score,0);
       assert.equal(run.checks.assessmentPass.score,100);
       assert.equal(run.checks.reopenWithoutDowngrade,true);
+      assert.equal(run.checks.finishObserved,true);
+      assert.equal(run.classification,'PROTOCOL_PASS');
     }
     assert.ok(report.missing.includes('GOVERNED_STAGING_EXACT_PACKAGE_LAUNCH'));
     assert.equal(JSON.parse(readFileSync(o,'utf8')).status,'UNCERTIFIED');
   }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('infra, missing engine and incomplete browser evidence are never promoted to FAIL or PASS',()=>{
+  assert.equal(classifyIndependentProbeError(Error('browserType.launch: Executable does not exist')),
+    'INCONCLUSIVE');
+  assert.equal(classifyIndependentProbeError(Error('Timeout 30000ms exceeded')),'INCONCLUSIVE');
+  assert.equal(classifyIndependentProbeError(Error('SCORM_ZIP_PROBE_FINISH_NOT_OBSERVED')),
+    'INCONCLUSIVE');
+  assert.equal(classifyIndependentProbeError(Error('SCORM_ZIP_PROBE_PASS_SCORE_NOT_COMMITTED')),
+    'FAIL');
+  const good=browser=>({browser,outcome:'OBSERVED_IN_LOCAL_EMULATOR',
+    classification:'PROTOCOL_PASS',checks:{finishObserved:true}});
+  assert.equal(classifyIndependentProbeRuns([good('CHROMIUM')]),'INCONCLUSIVE');
+  assert.equal(classifyIndependentProbeRuns([good('CHROMIUM'),good('CHROMIUM')]),
+    'INCONCLUSIVE');
+  assert.equal(classifyIndependentProbeRuns([good('CHROMIUM'),
+    {browser:'WEBKIT',outcome:'INCONCLUSIVE',classification:'INCONCLUSIVE'}]),'INCONCLUSIVE');
+  assert.equal(classifyIndependentProbeRuns([good('CHROMIUM'),
+    {browser:'WEBKIT',outcome:'FAIL',classification:'FAIL'}]),'FAIL');
+  assert.equal(classifyIndependentProbeRuns([good('CHROMIUM'),good('WEBKIT')]),
+    'PROTOCOL_PASS');
+  assert.equal(classifyIndependentProbeRuns([good('CHROMIUM'),{
+    ...good('WEBKIT'),checks:{finishObserved:false}}]),'INCONCLUSIVE');
 });

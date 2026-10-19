@@ -323,3 +323,26 @@ no estado confirmado. Sem isso o resultado é `INCONCLUSIVE`, com diagnóstico
 no prazo. Esse diagnóstico não identifica automaticamente defeito do ZIP:
 pode refletir timeout ou inadequação do roteiro. O emulador continua local e
 não demonstra persistência no Worker/D1, nem concede certificação.
+
+## Quatro estados de evidência (sem promover prévia local)
+
+O relatório do produtor de ZIP independente contém agora `classification`,
+separado de `status=UNCERTIFIED` e `activationAuthorized=false`:
+
+- `PROTOCOL_PASS`: somente quando **Chromium e WebKit** observam o ZIP exato
+  com Initialize, Commit, Finish real no teardown, retomada, avaliação quando
+  aplicável e ausência de downgrade no emulador local. Não prova Worker/D1.
+- `FUNCTIONAL_CERTIFIED`: **nunca é emitido pelo probe local**. Exige
+  atestação governada e verificada pelo Worker, ZIP/edição/runtime exatos,
+  aprovação pedagógica independente e testemunhos de staging por navegador,
+  com matrícula/ciclo, histórico e PDF real.
+- `FAIL`: comportamento determinístico de defeito funcional do SCO depois
+  de carregamento e execução efetiva, como estado/nota não persistidos apesar
+  de Commit ou reabertura que rebaixa o estado terminal.
+- `INCONCLUSIVE`: falta de engine, timeout, travamento, erro de rede,
+  seletor/roteiro incompatível, ausência de Finish observável ou outro erro
+  sem atribuição segura ao conteúdo. Não tratar como PASS nem condenar o ZIP.
+
+Mesmo com `classification=PROTOCOL_PASS`, o status do relatório local
+permanece `UNCERTIFIED` e não autoriza ativação. O arquivo da prova é
+privado (modo 0600) e identificado pelos SHA-256 dos bytes do ZIP e do driver.

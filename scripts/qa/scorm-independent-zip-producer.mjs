@@ -16,6 +16,33 @@ import {chromium,webkit,expect} from '@playwright/test';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const SHA=/^[a-f0-9]{64}$/;
 const fail=code=>{throw Error('SCORM_ZIP_PROBE_'+code);};
+// Only deterministic observations after the real SCO has loaded may prove a
+// package defect. Browser crashes, timeouts, missing UI/driver selectors and
+// unavailable engines remain inconclusive (never FAIL or PASS).
+const CONFIRMED_PACKAGE_DEFECTS=new Set([
+  'INITIALIZE_MISSING','RESUME_INITIALIZE_MISSING','SUSPEND_COMMIT_MISSING',
+  'PASS_INITIALIZE_MISSING','PASS_COMMIT_MISSING','PASS_STATUS_NOT_COMMITTED',
+  'PASS_SCORE_NOT_COMMITTED','TERMINAL_STATUS_DOWNGRADE',
+]);
+export function classifyIndependentProbeError(error){
+  const diagnostic=String(error?.message||error);
+  const match=/^SCORM_ZIP_PROBE_([A-Z_]+)$/.exec(diagnostic);
+  return match&&CONFIRMED_PACKAGE_DEFECTS.has(match[1])?'FAIL':'INCONCLUSIVE';
+}
+/** This is a local observation classification, not an activation decision.
+ * FUNCTIONAL_CERTIFIED is reserved for the separately signed/staging-verified
+ * Worker attestation. This offline producer can NEVER return that status. */
+export function classifyIndependentProbeRuns(runs){
+  if(!Array.isArray(runs)||runs.length!==2)return 'INCONCLUSIVE';
+  for(const browser of ['CHROMIUM','WEBKIT']){
+    if(runs.filter(run=>run?.browser===browser).length!==1)return 'INCONCLUSIVE';
+  }
+  if(runs.some(run=>run.classification==='FAIL'))return 'FAIL';
+  if(runs.every(run=>run.outcome==='OBSERVED_IN_LOCAL_EMULATOR'&&
+    run.classification==='PROTOCOL_PASS'&&run.checks?.finishObserved===true))
+    return 'PROTOCOL_PASS';
+  return 'INCONCLUSIVE';
+}
 const check=(yes,code)=>{if(!yes)fail(code);};
 const statusOf=values=>{
   const success=String(values['cmi.success_status']||'').toLowerCase();
@@ -207,6 +234,7 @@ async function exercise(browserName,browserType,driver,host){
     if(assertion.state==='hidden')await expect(node).toBeHidden();
     if(assertion.state==='text')await expect(node).toContainText(assertion.value);
     const resumed=await snapshot();
+    check(resumed.events.some(e=>e.type==='Initialize'),'RESUME_INITIALIZE_MISSING');
     check(resumed.values['cmi.suspend_data']===suspend,'RESUME_CMI_CHANGED');
     await page.close();
     let failure=null;
@@ -239,11 +267,22 @@ async function exercise(browserName,browserType,driver,host){
     await frame.locator('body').waitFor({state:'attached'});
     const reopened=await snapshot();
     check(statusOf(reopened.values)===terminal,'TERMINAL_STATUS_DOWNGRADE');
+    // Teardown is initiated by the outside harness, not by injecting a SCORM
+    // status or finish call. Observe that the SCO itself invokes Finish.
+    await page.evaluate(()=>document.getElementById('sco')?.remove());
+    let finishObserved=false;
+    try{
+      await expect.poll(async()=> (await snapshot()).events.filter(e=>e.type==='Finish').length,
+        {timeout:3000}).toBe(1);
+      finishObserved=true;
+    }catch{ /* No conformance PASS without an observed Finish. */ }
+    check(finishObserved,'FINISH_NOT_OBSERVED');
     await page.close();
     return {browser:browserName,outcome:'OBSERVED_IN_LOCAL_EMULATOR',
+      classification:'PROTOCOL_PASS',
       checks:{requiredContent:true,suspendResume:true,assessmentFailure:failure,
         assessmentPass:{status:terminal,score:scoreOf(passed.values)},
-        reopenWithoutDowngrade:true},
+        reopenWithoutDowngrade:true,finishObserved:true},
       apiTraceSha256:hash(Buffer.from(JSON.stringify(passed.events))),
       limitations:['NO_AUTHENTICATED_STAGING_WORKER','NO_BACKEND_CMI_READBACK',
         'NO_CYCLE_ROTATION','NO_QUALIFICATION_OR_CERTIFICATE_PDF']};
@@ -265,7 +304,9 @@ export async function runIndependentZipProbe({zipPath,driverPath,outputPath}){
     for(const [browserName,browser] of [['CHROMIUM',chromium],['WEBKIT',webkit]]){
       try {runs.push(await exercise(browserName,browser,driver,host));}
       catch(error){
-        runs.push({browser:browserName,outcome:'INCONCLUSIVE',
+        const classification=classifyIndependentProbeError(error);
+        runs.push({browser:browserName,outcome:classification,
+          classification,
           diagnostic:String(error?.message||error).slice(0,350),
           limitations:['NO_AUTHENTICATED_STAGING_WORKER','NO_BACKEND_CMI_READBACK']});
       }
@@ -273,6 +314,7 @@ export async function runIndependentZipProbe({zipPath,driverPath,outputPath}){
   }finally{await host.close();}
   const report={schemaVersion:1,source:'AIRTRUST_LOCAL_INDEPENDENT_ZIP_PROBE_V1',
     scope:'LOCAL_SCORM_API_EMULATOR',status:'UNCERTIFIED',activationAuthorized:false,
+    classification:classifyIndependentProbeRuns(runs),
     packageSha256,zipBytes:bytes.length,driverSha256:hash(driverBytes),
     launchFile:driver.launchFile,requiresAssessment:driver.requiresAssessment,
     harnessSourceSha:/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA||'')?process.env.GITHUB_SHA:null,
@@ -288,7 +330,7 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const [zipPath,driverPath,outputPath]=process.argv.slice(2);
   if(!zipPath||!driverPath||!outputPath)fail('USAGE_ZIP_DRIVER_OUTPUT');
   runIndependentZipProbe({zipPath,driverPath,outputPath}).then(r=>{
-    console.log(JSON.stringify({status:r.status,sha256:r.packageSha256,
+    console.log(JSON.stringify({status:r.status,classification:r.classification,sha256:r.packageSha256,
       browsers:r.browsers.map(x=>({browser:x.browser,outcome:x.outcome})),
       output:outputPath}));
   }).catch(e=>{console.error(String(e.message).slice(0,300));process.exitCode=1;});
