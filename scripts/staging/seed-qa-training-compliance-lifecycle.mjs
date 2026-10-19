@@ -119,10 +119,10 @@ INSERT INTO qualificacoes_categorias(nome,codigo,descricao,cor,ativo,empresa_id,
 SELECT ${esc(`${code} Categoria`)},${esc(categoryCode)},${esc(marker)},'#64748b',1,id,'OPERACOES',1,datetime('now'),datetime('now'),NULL FROM empresas WHERE id=${tenantId};
 
 INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria_id,categoria,carga_horaria,validade,vencimento_fim_mes,observacoes,ativo,empresa_id,created_at,updated_at,deleted_at)
-SELECT 'TREINAMENTO',${esc(requiredTypeCode)},${esc(requiredTypeName)},${esc(marker)},qc.id,qc.nome,1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
+SELECT 'TREINAMENTO',${esc(requiredTypeCode)},${esc(requiredTypeName)},${esc(marker)},qc.id,'EAD',1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
 FROM qualificacoes_categorias qc WHERE qc.empresa_id=${tenantId} AND qc.codigo=${esc(categoryCode)} AND qc.deleted_at IS NULL;
 INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria_id,categoria,carga_horaria,validade,vencimento_fim_mes,observacoes,ativo,empresa_id,created_at,updated_at,deleted_at)
-SELECT 'TREINAMENTO',${esc(orphanTypeCode)},${esc(orphanTypeName)},${esc(marker)},qc.id,qc.nome,1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
+SELECT 'TREINAMENTO',${esc(orphanTypeCode)},${esc(orphanTypeName)},${esc(marker)},qc.id,'EAD',1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
 FROM qualificacoes_categorias qc WHERE qc.empresa_id=${tenantId} AND qc.codigo=${esc(categoryCode)} AND qc.deleted_at IS NULL;
 
 INSERT INTO lms_cursos(empresa_id,titulo,descricao,categoria,carga_horaria_minutos,qualificacao_tipo_id,gerar_qualificacao_ao_concluir,ativo,publicado,version_tag,tipo_conteudo,scorm_package_r2_prefix,observacoes,created_at,updated_at,deleted_at)
