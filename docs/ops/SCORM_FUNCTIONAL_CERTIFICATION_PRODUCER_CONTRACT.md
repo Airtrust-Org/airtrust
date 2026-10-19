@@ -373,3 +373,41 @@ Chromium/WebKit, aprovação externa confiável e PDFs reais recuperados do
 backend. Até lá: `activationAuthorized=false`, PR em draft, sem publicar
 ZIP nem materializar matrícula/certificado. A decisão de reconstruir EADs
 originais no futuro os remove do escopo desta frente técnica.
+
+
+## Executor F5 staging (observacional; bloqueio por prova insuficiente)
+
+\`scripts/staging/scorm-governed-functional-executor.mjs\` executa ações
+reais no Chromium e WebKit, mas **não emite atestado**, não reutiliza um
+relatório local como testemunho confiável e não reimplementa o validador
+de ZIP/driver. Exige ZIP privado com SHA dos bytes, aprovação Ed25519,
+harness trusted-main, runtime/edição/tenant/ciclo e quatro matrículas
+sintéticas distintas, com recibos governados de provisionamento,
+recovery e cleanup. A saída é sempre \`UNCERTIFIED\`, com no máximo
+\`PROTOCOL_PASS\` observacional e código de saída 2.
+
+**Fronteira técnica real:** a prévia da edição inativa tem
+\`commitUrl=null\`, não persiste CMI. O learner launch atual usa edição
+ativa. Portanto **não existe ainda** a implementação segura do
+\`GET /api/lms/scorm/qa-evidence/:cursoId/:packageId/:enrollmentId?phase=...\`
+read-only no Worker nem o vínculo QA de matrícula à edição inativa.
+O executor tenta obter essa leitura autenticada; HTTP 404 =>
+\`INCONCLUSIVE\`, sem alterar a matrícula ou trocar o pacote ativo.
+F0 deve aprovar/provisionar rota protegida, scoping de tenant, cleanup,
+consistência de ciclo e recovery antes de qualquer staging real. Nenhum
+endpoint de produção, migration ou SQL remoto é criado aqui.
+
+O produtor ainda **não** emite \`GOVERNED_STAGING_AUTHENTICATED_QA_V1\`,
+pois faltam readbacks e negativas de stale cycle, validade e replays
+no contrato final do assinador. Só após provas físicas o signer
+main-only existente poderá assinar e o Worker verificar. Não passar
+o resultado observacional ao signer como se fosse certificado.
+
+CLI protegido: \`node scripts/staging/scorm-governed-functional-executor.mjs
+<plan.json> <driver.json> <review.json> <approval.json> <outputDir>\`.
+Exige \`SCORM_QA_REVIEWER_PUBLIC_KEYS_JSON\`, \`SCORM_QA_ACCESS_TOKEN\`,
+\`GITHUB_ACTIONS\`, \`GITHUB_REF\` e \`GITHUB_SHA\`. Arquivos privados
+nunca entram no Git e não devem ser publicados como artifacts públicos.
+Staging deve obedecer o mutex
+\`airtrust-staging-mutations-and-scorm-qa\` e só avançar com aprovação
+F0 específica, provisionamento/limpeza e SHA live Worker+Pages.
