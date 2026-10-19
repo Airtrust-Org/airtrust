@@ -356,7 +356,8 @@ jobs:
             scripts/__tests__/scorm-independent-zip-producer.test.mjs \
             scripts/__tests__/scorm-real-learner-completion.test.mjs \
             scripts/__tests__/scorm-navigation-diagnostic-driver.test.mjs \
-            scripts/__tests__/scorm-suspend-monotonic.test.mjs
+            scripts/__tests__/scorm-suspend-monotonic.test.mjs \
+            scripts/__tests__/scorm-governed-functional-executor.test.mjs
           node scripts/ci/lms-scorm-local-precertification.mjs
       - name: Upload sanitized SCORM local precertification evidence
         if: always()
