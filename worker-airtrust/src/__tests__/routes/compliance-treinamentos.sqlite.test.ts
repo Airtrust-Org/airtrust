@@ -161,6 +161,7 @@ function patchComplianceSchema(sqlite: SqliteD1Database) {
       data_inicio TEXT,
       qualificacao_historico_id INTEGER,
       data_conclusao TEXT,
+      data_matricula TEXT DEFAULT CURRENT_TIMESTAMP,
       created_at TEXT,
       updated_at TEXT,
       deleted_at TEXT,
@@ -1278,6 +1279,12 @@ describe('training compliance engine', () => {
       VALUES (6,100,'EMPRESA','OBRIGATORIA','EMPRESA',1,'EAD');
       INSERT INTO lms_cursos (id,empresa_id,titulo,qualificacao_tipo_id)
       VALUES (600,6,'Regras de Ouro',100);
+      CREATE TABLE audit_logs (id INTEGER PRIMARY KEY,user_id INTEGER,action TEXT,entity_type TEXT,entity_id INTEGER,old_values TEXT,new_values TEXT,empresa_id INTEGER,created_at TEXT);
+      CREATE TABLE lms_matricula_ciclos (
+        id INTEGER PRIMARY KEY,empresa_id INTEGER,matricula_id INTEGER,curso_id INTEGER,
+        funcionario_id INTEGER,numero_ciclo INTEGER,origem TEXT,status TEXT,ciclo_atual INTEGER,
+        observacoes TEXT,data_matricula TEXT,progresso_pct INTEGER,tentativas INTEGER
+      );
       CREATE TABLE auditoria_avancada_v2 (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tabela TEXT, acao TEXT, registro_id TEXT, dados_anteriores TEXT,
