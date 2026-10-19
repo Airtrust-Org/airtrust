@@ -114,7 +114,7 @@ async function performComplianceRuleEnrollment<TAccess>(
     }
     const id=await createComplianceEnrollmentAtomic(db,{
       empresaId,funcionarioId:person.id,cursoId,qualificacaoTipoId:rule.qualificacao_tipo_id,
-      regraId:rule.id,origin:'COMPLIANCE_RULE_SAVE',
+      regraId:rule.id,origin:'COMPLIANCE_RULE_SAVE',usuarioId:audit.usuario_id,
       observacoes:'Matrícula automática: requisito de Compliance atualizado (sem e-mail)',
     });
     if (id===null) {summary.preserved++;continue;}
