@@ -276,10 +276,7 @@ async function buildHistoricoEmployeeScopeCompat(
  * GET /historico
  * Lista histórico de qualificações com filtros, stats e paginação
  */
-router.get(
-  '/',
-  auth(),
-  safe(async (c) => {
+export const getHistoricoListHandler = safe(async (c) => {
     const db = c.env.DB;
     const tenantCtx = getTenantContext(c);
     const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
@@ -320,15 +317,18 @@ router.get(
       activePlannedQualificationPredicate,
     } = buildRenewalSqlPredicates(hasRenovacaoDe);
 
+    const query = c.req.query();
+    const routeFuncionarioId =
+      c.req.param('funcionario_id') ||
+      (c.req.path.includes('/funcionario/') ? c.req.param('id') : '');
+    const isFuncionarioRoute = Boolean(routeFuncionarioId);
     const {
-      id = '',
       page = '1',
       limit = '20',
       stats = 'true',
       search = '',
       status = '',
       statuses = '',
-      funcionario_id = '',
       tipo_id = '',
       aeronave_id = '',
       categoria = '',
@@ -339,7 +339,9 @@ router.get(
       setor_ids = '',
       orderBy = 'data_vencimento',
       order = 'ASC',
-    } = c.req.query();
+    } = query;
+    const id = isFuncionarioRoute ? (query.id || '') : (c.req.param('id') || query.id || '');
+    const funcionario_id = routeFuncionarioId || query.funcionario_id || '';
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 500);
@@ -829,8 +831,10 @@ router.get(
         pages: Math.ceil(statsPayload.total / limitNum),
       },
     });
-  }),
-);
+});
+
+router.get('/', auth(), getHistoricoListHandler);
+router.get('/funcionario/:id', auth(), getHistoricoListHandler);
 
 /**
  * GET /historico/stats

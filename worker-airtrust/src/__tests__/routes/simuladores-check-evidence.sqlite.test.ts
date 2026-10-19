@@ -31,6 +31,7 @@ describe('individual evidence for simulator-generated FAP (real SQLite)', () => 
     db = new SqliteD1Database();
     db.database.exec(`
       ALTER TABLE qualificacoes_tipos ADD COLUMN nome TEXT;
+      ALTER TABLE qualificacoes_tipos ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1;
       CREATE TABLE simulador_agendamentos (
         id INTEGER PRIMARY KEY, empresa_id INTEGER, template_id INTEGER,
         deleted_at TEXT
@@ -157,4 +158,123 @@ describe('individual evidence for simulator-generated FAP (real SQLite)', () => 
     db!.database.exec('INSERT INTO sessoes_checks_resultados VALUES (2, 50, 1, NULL)');
     expect((await generate()).qualificacoes_geradas.map((row) => row.codigo)).toEqual(['OPS-12']);
   });
+  it('never grants principal qualification for a signed check fiche with zero configured checks', async () => {
+    db!.database.exec(`
+      ALTER TABLE fichas_sessao ADD COLUMN is_check INTEGER NOT NULL DEFAULT 0;
+      UPDATE fichas_sessao SET is_check=1 WHERE id=70;
+      DELETE FROM sessoes_checks WHERE sessao_id=60;
+      CREATE TABLE sessoes_checks_resultados_individuais (
+        id INTEGER PRIMARY KEY, empresa_id INTEGER, ficha_id INTEGER,
+        funcionario_id INTEGER, sessao_check_id INTEGER,
+        aprovado INTEGER, estado TEXT, deleted_at TEXT
+      );
+    `);
+    await expect(generate()).rejects.toThrow(/Nenhuma qualificação foi gerada/);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
+  it('requires every check of a qualification to pass individually', async () => {
+    db!.database.exec(`
+      CREATE TABLE sessoes_checks_resultados_individuais (
+        id INTEGER PRIMARY KEY, empresa_id INTEGER, ficha_id INTEGER,
+        funcionario_id INTEGER, sessao_check_id INTEGER,
+        aprovado INTEGER, estado TEXT, deleted_at TEXT
+      );
+      INSERT INTO sessoes_checks (id,sessao_id,qualificacao_tipo_id)
+      VALUES (52,60,103);
+      INSERT INTO sessoes_checks_resultados_individuais
+        (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
+      VALUES (1,1,70,1002,50,1,'CONFIRMADO');
+    `);
+    await expect(generate()).rejects.toThrow(/Nenhuma qualificação foi gerada/);
+    db!.database.exec(`
+      INSERT INTO sessoes_checks_resultados_individuais
+        (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
+      VALUES (2,1,70,1002,52,0,'CONFIRMADO');
+    `);
+    await expect(generate()).rejects.toThrow(/Nenhuma qualificação foi gerada/);
+    // Re-evaluation is a new signed fiche; never rewrite the immutable failure.
+    db!.database.exec(`
+      INSERT INTO fichas_sessao
+        (id,empresa_id,colaborador_id_aluno,agendamento_slot_id,
+         tipo_sessao,data_sessao,status,aprovado)
+      VALUES(73,1,1002,60,'PER','2026-07-22','APROVADO',1);
+      INSERT INTO sessoes_checks_resultados_individuais
+        (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
+      VALUES (3,1,73,1002,50,1,'CONFIRMADO'),
+             (4,1,73,1002,52,1,'CONFIRMADO');
+    `);
+    const revised = await gerarQualificacaoDaFicha(db!.asD1(),73);
+    expect(revised.qualificacoes_geradas.map(q => q.codigo)).toEqual(['OPS-12','SIX']);
+  });
+
+  it('uses only explicit signed individual evidence after 0554, never a shared-session pass', async () => {
+    db!.database.exec(`
+      CREATE TABLE sessoes_checks_resultados_individuais (
+        id INTEGER PRIMARY KEY, empresa_id INTEGER, ficha_id INTEGER,
+        funcionario_id INTEGER, sessao_check_id INTEGER,
+        aprovado INTEGER, estado TEXT, deleted_at TEXT
+      );
+      INSERT INTO sessoes_participantes(id,sessao_id,funcionario_id)
+        VALUES(2,60,1001),(3,60,1000);
+      INSERT INTO fichas_sessao
+        (id,empresa_id,colaborador_id_aluno,agendamento_slot_id,tipo_sessao,data_sessao,status,aprovado)
+      VALUES(71,1,1001,60,'PER','2026-07-21','APROVADO',1),
+            (72,1,1000,60,'PER','2026-07-21','APROVADO',1);
+      INSERT INTO sessoes_checks_resultados VALUES(90,50,1,NULL);
+      INSERT INTO sessoes_checks_resultados_individuais
+        (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
+      VALUES(1,1,70,1002,50,1,'CONFIRMADO'),
+            (2,1,71,1001,50,0,'CONFIRMADO');
+    `);
+    const a = await gerarQualificacaoDaFicha(db!.asD1(),70);
+    expect(a.qualificacoes_geradas.map((q) => q.codigo)).toEqual(['OPS-12','SIX']);
+    await expect(gerarQualificacaoDaFicha(db!.asD1(),71))
+      .rejects.toThrow(/Nenhuma qualificação foi gerada/);
+    await expect(gerarQualificacaoDaFicha(db!.asD1(),72))
+      .rejects.toThrow(/Nenhuma qualificação foi gerada/);
+    // A's explicit check did not approve B or C; the old session pass did not
+    // approve anybody lacking a positive individual record.
+    expect(mocks.upsert.mock.calls.filter(([,q]) => q.qualificacaoCodigo === 'SIX'))
+      .toHaveLength(1);
+  });
+
+  it('revokes any premature qualification history row from a ficha whose individual check is rejected or pending', async () => {
+    db!.database.exec(`
+      CREATE TABLE sessoes_checks_resultados_individuais (
+        id INTEGER PRIMARY KEY, empresa_id INTEGER, ficha_id INTEGER,
+        funcionario_id INTEGER, sessao_check_id INTEGER,
+        aprovado INTEGER, estado TEXT, deleted_at TEXT
+      );
+      INSERT INTO fichas_sessao
+        (id,empresa_id,colaborador_id_aluno,agendamento_slot_id,tipo_sessao,data_sessao,status,aprovado)
+      VALUES(71,1,1001,60,'PER','2026-07-21','APROVADO',1);
+      INSERT INTO sessoes_checks_resultados_individuais
+        (id,empresa_id,ficha_id,funcionario_id,sessao_check_id,aprovado,estado)
+      VALUES(2,1,71,1001,50,0,'CONFIRMADO');
+      INSERT INTO qualificacoes_historico
+        (id,funcionario_id,qualificacao_id,qualificacao_codigo,categoria,data_conclusao,data_vencimento,validade_meses,observacoes,status,renovada,empresa_id,created_at,updated_at)
+      VALUES
+        (501,1001,103,'SIX','MANUTENCAO','2026-07-21','2027-01-21',6,'FAP gerada da ficha #71 (check legado inequívoco)','CONCLUIDA',0,1,datetime('now'),datetime('now'));
+    `);
+
+    await expect(gerarQualificacaoDaFicha(db!.asD1(), 71))
+      .rejects.toThrow(/Nenhuma qualificação foi gerada/);
+
+    const revoked = db!.database
+      .prepare('SELECT status, deleted_at, observacoes FROM qualificacoes_historico WHERE id = 501')
+      .get() as { status: string; deleted_at: string | null; observacoes: string };
+    expect(revoked.status).toBe('CANCELADA');
+    expect(revoked.deleted_at).not.toBeNull();
+    expect(revoked.observacoes).toContain('Revogada após revisão de evidência individual da ficha #71');
+    expect(mocks.audit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        tabela: 'qualificacoes_historico',
+        acao: 'DELETE',
+        registro_id: 501,
+      }),
+    );
+  });
+
 });
