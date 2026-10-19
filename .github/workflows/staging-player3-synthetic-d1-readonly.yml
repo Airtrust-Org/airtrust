@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  inspect:
-    name: Inspect synthetic QA tenant only
+  staging_d1_readonly:
+    name: Inspect synthetic QA staging D1 (read-only)
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 15
