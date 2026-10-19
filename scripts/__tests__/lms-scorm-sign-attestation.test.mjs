@@ -180,7 +180,7 @@ test('legitimate formative ZIP requires both browsers without fabricated scored 
         item.name!=='ASSESSMENT_THRESHOLD');
       writeFileSync(path,JSON.stringify(row));
     }
-    assert.throws(()=>f.sign(),/DRIVER_NOT_APPROVED_BY_REVIEW/);
+    assert.throws(()=>f.sign(),/REVIEW_SIGNATURE_SCOPE_INVALID/);
     // An altered assessment policy invalidates the signed driver. It requires
     // a NEW independent review and signature before governed signing.
   }finally{rmSync(f.dir,{recursive:true,force:true});}
