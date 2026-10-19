@@ -68,7 +68,15 @@ export default {
         'legacy-fueling': "UPDATE cv_voo_abastecimentos SET supplier_code_at_acceptance=NULL WHERE empresa_id=7 AND client_local_id='fuel-1'",
       };
       if (!action || !updates[action]) return Response.json({ error: 'unknown synthetic action' }, { status: 400 });
-      await env.DB.prepare(updates[action]).run();
+      if (action === 'legacy-fueling') {
+        // Model a row accepted before 0564. This is a disposable test database;
+        // production never bypasses the immutable-code trigger.
+        await env.DB.prepare('DROP TRIGGER fixture_supplier_immutable').run();
+        await env.DB.prepare(updates[action]).run();
+        await env.DB.prepare(`CREATE TRIGGER fixture_supplier_immutable BEFORE UPDATE OF supplier_code_at_acceptance ON cv_voo_abastecimentos WHEN NEW.supplier_code_at_acceptance IS NOT OLD.supplier_code_at_acceptance BEGIN SELECT RAISE(ABORT, 'PILOT_FUELING_SUPPLIER_CODE_IMMUTABLE'); END`).run();
+      } else {
+        await env.DB.prepare(updates[action]).run();
+      }
       return Response.json({ ok: true });
     }
     if (url.pathname === '/__fixture/no-rdv') {
