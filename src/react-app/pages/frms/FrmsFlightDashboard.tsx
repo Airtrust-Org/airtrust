@@ -31,7 +31,7 @@ import {
 } from './frmsOperationalDecision';
 import { formatFrmsReason, formatSnapshotSource } from './frmsPresentation';
 import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
-import { frmsAttentionFacts, isFrmsRoutineDutyClosurePending } from './frmsEvidenceContext';
+import { frmsAttentionFacts, frmsOperationalEvidenceLabel, isFrmsRoutineDutyClosurePending } from './frmsEvidenceContext';
 
 const ACTION_LANES: { key: FrmsActionLane; title: string; explanation: string }[] = [
   { key: 'REVISAO', title: 'Revisão operacional', explanation: 'Sinais de atenção ou risco: avaliar antes da decisão.' },
@@ -767,7 +767,7 @@ export default function FrmsFlightDashboard() {
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
               {visibleQueue.map(({ item, bucket }) => {
-                const confidence = operationalConfidence(item);
+                const evidenceLabel = frmsOperationalEvidenceLabel(item, todayIso);
                 const guidance = resolveFrmsCoordinationGuidance(item, todayIso);
 
                 return (
@@ -814,8 +814,13 @@ export default function FrmsFlightDashboard() {
                         <p className="mt-1 line-clamp-2 text-xs font-semibold text-amber-800 dark:text-amber-200" title={frmsAttentionFacts(item).join(' · ')}>
                           {frmsAttentionFacts(item).slice(0, 2).join(' · ')}
                         </p> : null}
-                      <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200" title={'Confiança oficial: ' + confidence.toLowerCase()}>
-                        {isFrmsRoutineDutyClosurePending(item, todayIso) ? 'Jornada aguardando fechamento' : 'Dados: confiança ' + confidence.toLowerCase()}
+                      <p
+                        className={`mt-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold ${evidenceLabel.hasWarning
+                          ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200'
+                          : 'bg-indigo-50 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200'}`}
+                        title={evidenceLabel.title}
+                      >
+                        {evidenceLabel.label}
                       </p>
                       <p className="mt-1 text-[11px] text-slate-500">{item.hora_apresentacao ? `Apresentação ${item.hora_apresentacao}` : 'Apresentação —'}</p>
                     </div>
