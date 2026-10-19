@@ -225,8 +225,10 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     const r = await api(page, auth, 'GET', checksPath('B'));
     expect(evidenceFor(r.body)).toMatchObject({ situacao: 'REPROVADO', aprovado_comprovado: false });
 
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.goto(`/simuladores/fichas/${f.ficha_id}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('Evidências individuais dos checks')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('REPROVADO', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Evidência imutável')).toBeVisible({ timeout: 30_000 });
 
     // Nenhuma FAP ativa; a prematura foi revogada (não apagada) — a linha cancelada permanece auditável.
     const hist = await api(page, auth, 'GET', history('B'));
@@ -299,6 +301,7 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     const a = captureAuth(p);
     await login(p, QA_EMAIL, QA_PASSWORD);
     await p.goto('/simuladores/fichas', { waitUntil: 'domcontentloaded' });
+    await expect.poll(() => a.header(), { timeout: 15_000 }).not.toBeNull();
     const expected: Record<Scenario, string> = { A: 'APROVADO', B: 'REPROVADO', C: 'PENDENTE_AVALIACAO', D: 'APROVADO' };
     for (const s of ['A', 'B', 'C', 'D'] as Scenario[]) {
       const r = await api(p, a, 'GET', checksPath(s));
@@ -314,6 +317,7 @@ test.describe('Frente 7 — homologação staging: checks individuais de Simulad
     const a = captureAuth(p);
     await login(p, OTHER_EMAIL, OTHER_PASSWORD);
     await p.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect.poll(() => a.header(), { timeout: 15_000 }).not.toBeNull();
     const read = await api(p, a, 'GET', checksPath('A'));
     expect([401, 403, 404]).toContain(read.status);
     const write = await api(p, a, 'POST', checksPath('C'), { sessao_check_id: fixtures.C.sessao_check_id, aprovado: true });
