@@ -125,7 +125,7 @@ describe('exact synthetic ZIP: governed Node signer -> real Worker verifier',()=
       // Synthetic QA inputs only. Browser witness fields are test fixtures, not
       // staging observations, so this test MUST NOT enable course activation.
       const digest=(b:Uint8Array)=>createHash('sha256').update(b).digest('hex');
-      const zip=zipSync({'imsmanifest.xml':strToU8('<manifest/>'),
+      const zip=zipSync({'imsmanifest.xml':strToU8('<manifest><resources><resource href="index.html"/></resources></manifest>'),
         'index.html':strToU8('<h1>Technical synthetic test</h1>')});
       const zipPath=join(dir,'technical.zip');
       writeFileSync(zipPath,zip);
@@ -149,7 +149,16 @@ describe('exact synthetic ZIP: governed Node signer -> real Worker verifier',()=
       }));
       const driverFile=join(dir,'driver.json');
       writeFileSync(driverFile,JSON.stringify({schemaVersion:1,packageSha256,
-        authorReviewed:true,reviewArtifactSha256:digest(readFileSync(reviewFile))}));
+        authorReviewed:true,reviewArtifactSha256:digest(readFileSync(reviewFile)),
+        launchFile:'index.html',requiresAssessment:true,masteryScore:70,
+        requiredContent:[{selector:'h1'}],
+        resume:{actions:[{op:'click',selector:'#resume'}],
+          assertion:{selector:'#resume',state:'visible'}},
+        pass:{actions:[{op:'click',selector:'#pass'}]},
+        fail:{actions:[{op:'click',selector:'#fail'}]},
+        completion:{actions:[{op:'click',surface:'host',selector:'#finish'}]},
+        replayCompletion:{actions:[{op:'click',surface:'host',selector:'#finish'}]},
+      }));
       const driverSha256=digest(readFileSync(driverFile));
       const {privateKey,publicKey}=generateKeyPairSync('ed25519');
       const reviewerKeyId='synthetic-reviewer-key-01';

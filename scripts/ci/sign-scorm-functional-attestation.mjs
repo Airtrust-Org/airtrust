@@ -9,6 +9,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validatePedagogicalReview } from './scorm-pedagogical-review-gate.mjs';
+import {validateGovernedScormZipDriver} from './validate-scorm-governed-driver.mjs';
 
 /**
  * These are observations of backend state by the protected staging harness,
@@ -83,9 +84,12 @@ export function signGovernedScormEvidence({
     sha.test(candidate.packageSha256)&&
     typeof candidate.requiresAssessment==='boolean','CANDIDATE_INVALID');
   // Hash the exact ZIP bytes, not extracted files or manifest data.
-  assert(digest(readFileSync(candidate.zipPath))===candidate.packageSha256,
-    'ZIP_SHA_DRIFT');
+  const zipBytes=readFileSync(candidate.zipPath);
+  assert(digest(zipBytes)===candidate.packageSha256,'ZIP_SHA_DRIFT');
   assert(candidate.stagingRuntimeSha===runtimeSha,'RUNTIME_SHA_DRIFT');
+  // Cryptographic review alone does not prove a learner-usable ZIP or a
+  // complete UI driver; both must be checked before a staging signature.
+  validateGovernedScormZipDriver(zipBytes,read(driverFile),candidate);
   const pedagogicalReview=validatePedagogicalReview({
     reviewFile,driverFile,candidate,approvalFile,trustedReviewerKeys});
   const browserInputs=[
