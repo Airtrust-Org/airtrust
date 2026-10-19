@@ -74,10 +74,19 @@ export async function authorize({env,api,now=Date.now(),configText}){
   const plan=provisionPlan({sha,phase,configSha:hash(configText)});
   const main=await api('repos/'+REPO+'/branches/main');
   if(main?.commit?.sha!==sha)fail('FRMS_QA_CURRENT_MAIN_SHA_CHANGED');
-  const runs=await api('repos/'+REPO+'/commits/'+sha+'/check-runs?per_page=100');
-  const green=new Set((runs?.check_runs||[]).filter(x=>x.head_sha===sha&&
-    x.status==='completed'&&x.conclusion==='success').map(x=>x.name));
-  if(!GATES.every(x=>green.has(x)))fail('FRMS_QA_EIGHT_GATES_REQUIRED');
+  // A busy main may have >100 incidental check runs. A single unfiltered
+  // first page can omit official gates even when all eight passed. Query each
+  // required check name exactly and pin its SHA, conclusion and Actions app.
+  const gateResults=await Promise.all(GATES.map(async name=>({
+    name,
+    checks:await api('repos/'+REPO+'/commits/'+sha+'/check-runs?check_name='+
+      encodeURIComponent(name)+'&filter=latest&per_page=100'),
+  })));
+  if(!gateResults.every(({name,checks})=>
+    Array.isArray(checks?.check_runs)&&checks.check_runs.some(x=>
+      x.name===name&&x.head_sha===sha&&x.status==='completed'&&
+      x.conclusion==='success'&&x.app?.slug==='github-actions')))
+    fail('FRMS_QA_EIGHT_GATES_REQUIRED');
   const comment=await api('repos/'+REPO+'/issues/comments/'+grantId);
   if(comment?.issue_url!=='https://api.github.com/repos/'+REPO+'/issues/776'||
     comment.created_at!==comment.updated_at)

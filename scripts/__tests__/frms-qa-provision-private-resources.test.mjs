@@ -24,10 +24,24 @@ const body=p=>'AIRTRUST_FRMS_QA_PROVISION_V1\n'+JSON.stringify(p);
 function apiFor(plan,{permission='admin',gates=true,extraGrant={}}={}){
   return async path=>{
     if(path.endsWith('/branches/main'))return {commit:{sha}};
-    if(path.includes('/check-runs?'))return {check_runs:
-      (gates?['lint','build-content-gates','worker-typecheck','frontend-coverage',
-        'worker-tests-1','worker-tests-2','lms-smoke','public-e2e']:['lint'])
-        .map(name=>({name,head_sha:sha,status:'completed',conclusion:'success'}))};
+    if(path.includes('/check-runs?')){
+      const query=new URL('https://api.github.com/'+path).searchParams;
+      const name=query.get('check_name');
+      // GitHub main has many incidental workflows. A broad page of checks
+      // omits the eight required names, even though their individual checks pass.
+      if(!name)return {check_runs:Array.from({length:100},(_,i)=>({
+        name:'unrelated-check-'+i,head_sha:sha,status:'completed',
+        conclusion:'success',app:{slug:'github-actions'},
+      }))};
+      assert.equal(query.get('filter'),'latest');
+      assert.equal(query.get('per_page'),'100');
+      const accepted=(gates?['lint','build-content-gates','worker-typecheck',
+        'frontend-coverage','worker-tests-1','worker-tests-2','lms-smoke','public-e2e']:['lint']);
+      return {check_runs:accepted.includes(name)?[{
+        name,head_sha:sha,status:'completed',conclusion:'success',
+        app:{slug:'github-actions'},
+      }]:[]};
+    }
     if(path.includes('/issues/comments/'))return {
       issue_url:'https://api.github.com/repos/'+REPO+'/issues/776',
       body:body({...plan,...extraGrant}),
@@ -58,6 +72,41 @@ test('complete grant requires exact F0 admin, current SHA and all 8 gates',async
   assert.throws(()=>assertProvisionComment(body({...approved,extra:'no'}),approved),
     /NOT_EXACT/);
 });
+test('queries all eight exact Actions names despite crowded unrelated GitHub checks',async()=>{
+  const {createHash}=await import('node:crypto');
+  const digest=createHash('sha256').update(configText).digest('hex');
+  const approved=provisionPlan({sha,phase:'bucket',configSha:digest});
+  const underlying=apiFor(approved);
+  const calls=[];
+  const inspect=async path=>{
+    if(path.includes('/check-runs?'))calls.push(path);
+    return underlying(path);
+  };
+  const broad=await underlying('repos/'+REPO+'/commits/'+sha+'/check-runs?per_page=100');
+  assert.equal(broad.check_runs.length,100);
+  assert.equal(broad.check_runs.some(x=>x.name==='lint'),false);
+  assert.equal((await authorize({env,api:inspect,now,configText})).phase,'bucket');
+  assert.equal(calls.length,8);
+  assert.deepEqual(new Set(calls.map(path=>
+    new URL('https://api.github.com/'+path).searchParams.get('check_name'))),
+    new Set(['lint','build-content-gates','worker-typecheck','frontend-coverage',
+      'worker-tests-1','worker-tests-2','lms-smoke','public-e2e']));
+  for(const failure of ['wrong-sha','wrong-app','pending']){
+    const deny=async path=>{
+      const response=await underlying(path);
+      if(path.includes('check_name=worker-tests-2')){
+        const check=response.check_runs[0];
+        if(failure==='wrong-sha')check.head_sha='b'.repeat(40);
+        if(failure==='wrong-app')check.app.slug='untrusted-check-provider';
+        if(failure==='pending')check.status='in_progress';
+      }
+      return response;
+    };
+    await assert.rejects(authorize({env,api:deny,now,configText}),
+      /FRMS_QA_EIGHT_GATES_REQUIRED/);
+  }
+});
+
 test('provision plan fixes tenant 999013, D1 UUID and global lock',()=>{
   assert.equal(fakePlan.tenant_id,999013);
   assert.equal(fakePlan.d1_uuid,EXPECTED.d1Id);
