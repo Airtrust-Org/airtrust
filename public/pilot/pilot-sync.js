@@ -4,6 +4,7 @@ import {
   parseInteger,
   parseNumber,
   payloadToKg,
+  requireStableFuelingIdentity,
 } from '/pilot/pilot-rdv-draft.js';
 
 export const PILOT_SYNC_COMMAND_TYPE = 'rdv_snapshot_upsert_v1';
@@ -91,10 +92,8 @@ function rdvPayload(form) {
 }
 
 function fuelingPayload(fueling, flightDate) {
-  const time = optionalText(fueling?.hora);
   return {
-    client_local_id: optionalText(fueling?.local_id) || crypto.randomUUID(),
-    data_hora: time ? fromInputDateTime(time, flightDate) : new Date().toISOString(),
+    ...requireStableFuelingIdentity(fueling, flightDate),
     etapa_numero: parseInteger(fueling?.etapa_numero),
     empresa_abastecimento_codigo: optionalText(fueling?.empresa_abastecimento_codigo)?.toUpperCase() || null,
     numero_nota: optionalText(fueling?.numero_nota),
