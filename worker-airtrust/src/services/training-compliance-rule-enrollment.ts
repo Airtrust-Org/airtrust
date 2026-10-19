@@ -1,7 +1,8 @@
-import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
+import { canReuseMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from './training-compliance-evidence-profile';
 import { trainingComplianceNeedsImmediateEnrollmentOnRuleSave } from './training-compliance-enrollment-policy';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
+import { createComplianceEnrollmentAtomic } from './training-compliance-create-enrollment';
 
 type EnrollmentSnapshot = {
   rules: Array<{ id: number; obrigatoriedade: string; modalidade_requerida: string | null; auto_matricular_ead: number | null; qualificacao_tipo_id: number }>;
@@ -111,33 +112,12 @@ async function performComplianceRuleEnrollment<TAccess>(
       summary.reactivated++;
       continue;
     }
-    let id: number;
-    try {
-      const inserted = await db.prepare(
-        `INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id,observacoes)
-         VALUES(?,?,?,'Matrícula automática: requisito de Compliance atualizado (sem e-mail)')`,
-      ).bind(empresaId, cursoId, person.id).run();
-      id = Number(inserted.meta.last_row_id || 0);
-      if (!id) throw new Error('COMPLIANCE_MATRICULA_NOT_CREATED');
-    } catch (error) {
-      // Concurrent idempotent writes must not create a second enrollment.
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('UNIQUE constraint failed') && message.includes('lms_matriculas')) {
-        summary.preserved++;
-        continue;
-      }
-      throw error;
-    }
-    const cycleId = await ensureMatriculaCycle(db, { matriculaId: id, origin: 'AUTO_RENOVACAO', empresaId });
-    if (!cycleId) throw new Error('COMPLIANCE_MATRICULA_CYCLE_NOT_CREATED');
-    await stampLmsEnrollmentEvidenceProfile(db, {
-      empresaId, matriculaId: id, funcionarioId: person.id, qualificacaoTipoId: rule.qualificacao_tipo_id,
+    const id=await createComplianceEnrollmentAtomic(db,{
+      empresaId,funcionarioId:person.id,cursoId,qualificacaoTipoId:rule.qualificacao_tipo_id,
+      regraId:rule.id,origin:'COMPLIANCE_RULE_SAVE',
+      observacoes:'Matrícula automática: requisito de Compliance atualizado (sem e-mail)',
     });
-    await registrarAuditoria({
-      db, tabela: 'lms_matriculas', acao: 'INSERT', registro_id: id,
-      dados_novos: { empresa_id: empresaId, curso_id: cursoId, origem: 'COMPLIANCE_RULE_SAVE' },
-      ...audit,
-    });
+    if (id===null) {summary.preserved++;continue;}
     summary.created++;
   }
   return summary;
