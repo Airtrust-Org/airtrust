@@ -23,6 +23,9 @@ export const TRUSTED_DELTA_FILES=new Set([
   'docs/lms/PLAYER3_QA_TRUSTED_STAGING_RUNBOOK.md',
   '.github/workflows/f0-player3-staging-issueops.yml',
   '.github/workflows/ci.yml',
+  '.github/workflows/deploy-staging.yml',
+  'scripts/staging/f0-delegated-staging-attestation.mjs',
+  'scripts/__tests__/f0-delegated-staging-attestation.test.mjs',
   'scripts/staging/dispatch-f0-player3-staging-from-comment.mjs',
   'scripts/__tests__/f0-player3-staging-issueops.test.mjs'
 ]);
@@ -65,6 +68,7 @@ export function releaseInputs(sha,commentId) {
     throw Error('F0_CLOUD_DISPATCH_INVALID_INPUT');
   return {
     confirmation:'AIRTRUST_STAGING',pr_number:String(PR),release_sha:sha,
+    f0_request_comment_id:String(commentId),
     deploy_worker:'true',deploy_frontend:'true',apply_migrations:'false',
     approved_migrations:'',run_smoke:'true',run_full_smoke:'false',
     release_reason:'F0 Player3 synthetic QA staging runtime, issue 776 comment '+commentId+
