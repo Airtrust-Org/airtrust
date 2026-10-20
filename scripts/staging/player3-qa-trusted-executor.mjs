@@ -246,6 +246,14 @@ function validatePublishInputs(){
   validateLocal();cloudflare();
   demand(PH==='publish'&&/^[a-f0-9]{64}$/.test(E.QA_D1_PREFLIGHT_OK||''),
          'PLAYER3_PUBLISH_REQUIRES_GOVERNED_D1_PREFLIGHT');
+  demand(E.PLAYER3_QA_APPROVED_SHA===E.QA_RELEASE_SHA&&
+         E.PLAYER3_QA_LOCK_GRANTED==='airtrust-staging-mutations-and-scorm-qa'&&
+         E.PLAYER3_QA_PHYSICAL_COURSE_VERIFIED==='true'&&
+         E.PLAYER3_QA_RECOVERY_POINT_VERIFIED==='true'&&
+         E.PLAYER3_QA_PAGES_PROJECT===PROJECT&&
+         E.PLAYER3_QA_R2_BUCKET===BUCKET&&
+         E.CONFIRM_STAGING_PLAYER3_QA_PUBLISH==='AIRTRUST_STAGING_PLAYER3_SYNTHETIC_PUBLISH',
+         'PLAYER3_F0_APPROVAL_LOCK_RECOVERY_AND_TARGET_REQUIRED');
   const doc=publication();
   // The exact F4 SHA-pinned publisher recomputes and verifies this plan
   // without performing remote operations. Only main-owned steps below write.
