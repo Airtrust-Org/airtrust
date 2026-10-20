@@ -109,7 +109,7 @@ test('real executor selects two independent JWTs and denies cross-owned reads',a
           stages:[{stageId:'qa-stage-1',attempts:0}]};
       if(path.endsWith('qa-evidencias'))
         return {empresa_id:TENANT,matricula_id:r.matricula_id,ciclo_id:r.ciclo_id,
-          edition_sha256:edition,status:'EM_ANDAMENTO',
+          edition_sha256:edition,status:r.status,
           completed_unit_ids:[],attempts:[],
           qualificacao_historico_id:null,certificate_id:null};
       throw Error('unexpected read route');
@@ -172,8 +172,17 @@ test('GitHub and learner GET verify actual HTTP status before parsing response b
     });
     assert.equal(snap.matricula_id,201);
     await assert.rejects(
-      ()=>ownData('/private-check','synthetic-jwt',async()=>new Response('{}',{status:409})),
-      /LEARNER_GET_STATUS_409/);
+      ()=>ownData('/api/lms/native/matriculas/201/etapas/qa-evidencias',
+        'synthetic-jwt',async()=>new Response(
+          JSON.stringify({success:false,code:'PLAYER3_QA_SNAPSHOT_UNAVAILABLE'}),
+          {status:409})),
+      /LEARNER_QA_SNAPSHOT_HTTP_409_CODE_PLAYER3_QA_SNAPSHOT_UNAVAILABLE/);
+    await assert.rejects(
+      ()=>ownData('/api/lms/native/matriculas/201/etapas/sessao',
+        'synthetic-jwt',async()=>new Response(
+          JSON.stringify({success:false,code:'PLAYER3_STAGE_SESSION_UNAVAILABLE'}),
+          {status:409})),
+      /LEARNER_STAGE_SESSION_HTTP_409_CODE_PLAYER3_STAGE_SESSION_UNAVAILABLE/);
   }finally{
     if(before===undefined)delete process.env.GITHUB_TOKEN;
     else process.env.GITHUB_TOKEN=before;
@@ -216,4 +225,15 @@ test('full protected guard uses real Response.ok for GitHub and staging version'
       if(old[k]===undefined)delete process.env[k];else process.env[k]=old[k];
     }
   }
+});
+
+test('Native initial status is not an active modular session and snapshot status must match',async()=>{
+  assertOwnSnapshot({empresa_id:TENANT,matricula_id:rows[0].matricula_id,
+    ciclo_id:rows[0].ciclo_id,edition_sha256:edition,status:'NAO_INICIADO',
+    completed_unit_ids:[],attempts:[],qualificacao_historico_id:null,
+    certificate_id:null},rows[0]);
+  assert.throws(()=>assertOwnSnapshot({empresa_id:TENANT,matricula_id:rows[0].matricula_id,
+    ciclo_id:rows[0].ciclo_id,edition_sha256:edition,status:'EM_ANDAMENTO',
+    completed_unit_ids:[],attempts:[],qualificacao_historico_id:null,
+    certificate_id:null},rows[0]),/SNAPSHOT_NOT_FRESH_OR_NOT_SELF/);
 });
