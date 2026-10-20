@@ -41,6 +41,8 @@ describe('BOA/CBMMG check-in monthly evidence — independent of offshore scores
     expect(queries[0].sql).toContain('f.empresa_id = ?');
     expect(queries[0].sql).toContain('f.empresa_id = ch.empresa_id');
     expect(queries[0].sql).toContain('ch.submitted_at IS NOT NULL');
+    expect(queries[0].sql).toContain('TRIM(ch.submitted_at)');
+    expect(queries[0].sql).toContain('f.ativo = 1');
     expect(queries[0].sql).not.toMatch(/KSS|PVT|SCORE|HELICOPTER_OFFSHORE|COSTA/i);
     expect(data.current.receipt_person_days).toBe(17);
     expect(data.receipt_person_days_delta).toBe(4);
