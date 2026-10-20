@@ -1,0 +1,102 @@
+name: Player3 Synthetic Learner Start (Worker, Governed Staging)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_PLAYER3_QA_START_EXISTING_V1'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact approved OPEN/DRAFT Player 3 PR #1389 deployed SHA'
+        required: true
+        type: string
+      grant_id:
+        description: 'Fresh unedited issue #776 ADMIN authorization ID for this SHA and tenant'
+        required: true
+        type: string
+
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  checks: read
+
+env:
+  PLAYER3_QA_START_CONFIRMATION: ${{ inputs.confirmation }}
+  PLAYER3_QA_RELEASE_SHA: ${{ inputs.release_sha }}
+  PLAYER3_QA_START_GRANT_ID: ${{ inputs.grant_id }}
+
+jobs:
+  guard:
+    name: Exact fresh admin grant, 10 green checks, SHA and live staging
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Fail-closed command, comment author and live staged Worker guard
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging/player3-qa-start-existing-learners.mjs guard
+
+  start:
+    name: Worker-only synthetic staging Native START, then D1 SELECT verify
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install pinned Wrangler for SELECT-only post-validation
+        run: npm --prefix worker-airtrust ci --ignore-scripts
+      - name: Two independent signed learner POST /iniciar with real D1 postread
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONFIRM_PLAYER3_QA_START: AIRTRUST_PLAYER3_QA_START_EXISTING_V1
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PLAYER3_QA_CHROMIUM_PASSWORD: ${{ secrets.PLAYER3_QA_CHROMIUM_PASSWORD }}
+          PLAYER3_QA_WEBKIT_PASSWORD: ${{ secrets.PLAYER3_QA_WEBKIT_PASSWORD }}
+        run: node scripts/staging/player3-qa-start-existing-learners.mjs start
+
+  result:
+    name: Record real state only, never claim final 6-journey acceptance
+    needs: [guard, start]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Non-secret ledger and fail-closed summary
+        env:
+          GUARD_STATUS: ${{ needs.guard.result }}
+          START_STATUS: ${{ needs.start.result }}
+          SHA: ${{ inputs.release_sha }}
+        run: |
+          {
+            echo '## Player3 protected synthetic-only learner start'
+            echo "- pinned staging Worker SHA: $SHA"
+            echo "- exact admin grant and CI guard: $GUARD_STATUS"
+            echo "- Worker-only synthetic start and D1 postread: $START_STATUS"
+            echo '- tenant 999006, course 327, two existing independent learners'
+            echo '- No raw D1 SQL mutation, R2, schema, production or certificate'
+            echo '- Browser journeys 6/6, SCORM, resume and PDF: NOT ATTESTED'
+            echo '- Any partial start requires fresh grant and recovery review: DO NOT AUTO REPLAY'
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$GUARD_STATUS" = success
+          test "$START_STATUS" = success
