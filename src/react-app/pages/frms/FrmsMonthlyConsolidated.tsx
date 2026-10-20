@@ -1,50 +1,40 @@
 /**
- * Prévia mensal gerencial. Não é relatório assinado, prontuário, laudo de saúde
- * nem autorização operacional. A API decide RBAC, tenant e supressão.
+ * BOA/CBMMG monthly check-in receipt evidence ONLY. Deliberately no offshore
+ * operational score, regulatory compliance, individual sleep or duty fitness.
  */
 import { useState } from 'react';
 import { FileText, Printer } from 'lucide-react';
 import { useApi } from '@/react-app/hooks/useApi';
 
-type Metric = 'dias_avaliados' | 'dias_conformes' | 'dias_violacao'
-  | 'dias_nao_avaliados' | 'dias_mitigacao' | 'dias_atencao';
-type MetricValue = { value: number | null; state: string };
-type MonthlySummary = {
-  status: 'SMALL_COHORT_SUPPRESSED' | 'NO_OBSERVATIONS' | 'PARTIAL_COVERAGE' | 'COVERAGE_UNVERIFIED';
-  authorized_crew: number | null;
-  represented_crew: number | null;
-  indicators: Record<Metric, MetricValue>;
-  recorded_month_delta: Record<Metric, number | null>;
-  recommendations: string[];
-  limitations: string[];
+type Totals = {
+  receipt_person_days: number | null;
+  distinct_people: number | null;
+  privacy_state: 'OBSERVED' | 'NO_RECEIPTS' | 'SMALL_COHORT_SUPPRESSED' | 'SMALL_PARTICIPANT_SET_SUPPRESSED';
+};
+type Summary = {
+  current: Totals;
+  previous: Totals;
+  receipt_person_days_delta: number | null;
+  source: 'FRMS_FADIGA_CHECKIN_TENANT_SCOPED';
+  restrictions: string[];
 };
 type Envelope = {
   success: boolean;
-  data: MonthlySummary;
-  meta?: {
-    tenant_id?: number; period?: string; profile_code?: string;
-    policy_version?: string; revision_id?: string;
-    generated_at?: string; comparison_month?: string;
-    limitations?: string[];
-  };
-};
-const METRIC_LABELS: readonly { key: Metric; label: string }[] = [
-  { key: 'dias_avaliados', label: 'Dias avaliados' },
-  { key: 'dias_conformes', label: 'Dias conformes registrados' },
-  { key: 'dias_violacao', label: 'Dias com violação registrada' },
-  { key: 'dias_nao_avaliados', label: 'Dias sem avaliação conclusiva' },
-  { key: 'dias_mitigacao', label: 'Dias classificados para mitigação' },
-  { key: 'dias_atencao', label: 'Dias classificados em atenção' },
-];
-const UNKNOWN: Record<string, string> = {
-  SMALL_CELL_SUPPRESSED: 'Suprimido por privacidade',
-  INCOMPLETE_SOURCE: 'Fonte incompleta',
-  NO_OBSERVATION: 'Sem registros suficientes',
+  data: Summary;
+  meta?: { tenant_id?: number; period?: string; profile_code?: string;
+    policy_version?: string; revision_id?: string; comparison_month?: string;
+    limitations?: string[] };
 };
 function currentLocalMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
+function showCount(value: number | null, privacy: Totals['privacy_state']) {
+  if (value != null) return String(value);
+  return privacy === 'SMALL_COHORT_SUPPRESSED' || privacy === 'SMALL_PARTICIPANT_SET_SUPPRESSED'
+    ? 'Suprimido por privacidade' : 'Indisponível';
+}
+
 export default function FrmsMonthlyConsolidated() {
   const [month, setMonth] = useState(currentLocalMonth);
   const { data, loading, error, refetch } = useApi<Envelope>(
@@ -53,68 +43,67 @@ export default function FrmsMonthlyConsolidated() {
   );
   const summary = data?.success && data.data ? data.data : null;
   return (
-    <section aria-label="Prévia gerencial mensal FRMS" className="space-y-4 rounded-xl border border-slate-300 bg-white p-4">
+    <section aria-label="Evidências mensais BOA" className="space-y-4 rounded-xl border border-slate-300 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-            <FileText className="h-5 w-5" /> Resumo mensal consolidado
+            <FileText className="h-5 w-5" /> Recibos mensais de check-in — Bombeiros
           </h2>
           <p className="text-sm text-slate-600">
-            Acesso administrativo, sem informações pessoais. Prévia técnica não assinada.
+            Somente registros de envio do próprio tenant. Não é relatório de conformidade,
+            avaliação de aptidão, análise de fadiga nem fechamento técnico assinado.
           </p>
         </div>
         <label className="text-sm font-medium text-slate-700">
           Mês
-          <input aria-label="Mês do resumo consolidado" type="month" value={month}
+          <input aria-label="Mês das evidências de check-in" type="month" value={month}
             onChange={event => setMonth(event.target.value || month)}
             className="ml-2 rounded border border-slate-300 p-2" />
         </label>
       </div>
-      {loading && <p role="status">Consultando dados consolidados…</p>}
+      {loading && <p role="status">Consultando recibos do tenant…</p>}
       {error && <div role="alert" className="text-sm text-rose-800">
-        A consulta gerencial não está disponível para este acesso ou período: {error}
-        <button type="button" onClick={refetch} className="ml-2 underline">Tentar novamente</button>
+        Recibos indisponíveis para esta empresa, permissão ou período: {error}
+        <button type="button" onClick={() => refetch()} className="ml-2 underline">Tentar novamente</button>
       </div>}
-      {!loading && !error && !summary && <p role="status">Resumo não disponível. Nenhuma aptidão ou conformidade foi inferida.</p>}
+      {!loading && !error && !summary &&
+        <p role="status">Nenhuma evidência disponível. Não presumir conformidade ou aptidão.</p>}
       {summary && !error && <>
-        <div className="text-sm text-slate-600">
-          <p><strong>Estado da cobertura:</strong> {summary.status === 'NO_OBSERVATIONS' ? 'Sem observações'
-            : summary.status === 'PARTIAL_COVERAGE' ? 'Cobertura parcial'
-            : summary.status === 'COVERAGE_UNVERIFIED' ? 'Cobertura não comprovada'
-            : 'Exibição suprimida por privacidade'}.</p>
-          <p>Escopo autorizado: {summary.authorized_crew ?? 'suprimido'} profissionais.
-            Representados nos registros: {summary.represented_crew ?? 'indeterminado ou suprimido'}.</p>
-        </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {METRIC_LABELS.map(({ key, label }) => {
-            const metric = summary.indicators[key];
-            const delta = summary.recorded_month_delta[key];
-            return <div key={key} className="rounded-lg border border-slate-200 p-3">
-              <p className="text-sm text-slate-700">{label}</p>
-              <p className="text-xl font-semibold text-slate-900">
-                {metric?.value != null ? metric.value : UNKNOWN[metric?.state] ?? 'Indisponível'}
-              </p>
-              <p className="text-xs text-slate-600">
-                {delta == null ? 'Comparação mensal não disponível' :
-                  `Variação de registros: ${delta > 0 ? '+' : ''}${delta}`}
-              </p>
-            </div>;
-          })}
+          <div className="rounded-lg border border-slate-200 p-3">
+            <p className="text-sm text-slate-700">Pessoas com envio no mês</p>
+            <p className="text-xl font-semibold text-slate-900">
+              {showCount(summary.current.distinct_people, summary.current.privacy_state)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 p-3">
+            <p className="text-sm text-slate-700">Recibos por pessoa e dia</p>
+            <p className="text-xl font-semibold text-slate-900">
+              {showCount(summary.current.receipt_person_days, summary.current.privacy_state)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 p-3">
+            <p className="text-sm text-slate-700">Variação de recibos versus mês anterior</p>
+            <p className="text-xl font-semibold text-slate-900">
+              {summary.receipt_person_days_delta == null
+                ? 'Comparação não disponível'
+                : String(summary.receipt_person_days_delta)}
+            </p>
+          </div>
         </div>
+        <p className="text-xs text-slate-600">Fonte: {summary.source}.
+          Perfil: {data?.meta?.profile_code ?? 'não informado'}.
+          Revisão na emissão: {data?.meta?.revision_id ?? 'não informada'}.</p>
         <div className="space-y-2 text-sm text-slate-700">
-          <h3 className="font-semibold text-slate-900">Providências para o gestor</h3>
+          <h3 className="font-semibold text-slate-900">O que esses números não comprovam</h3>
           <ul className="list-disc pl-5">
-            {summary.recommendations.map((item, index) => <li key={index}>{item}</li>)}
-          </ul>
-          <h3 className="font-semibold text-slate-900">Limitações e proveniência</h3>
-          <p>Perfil: {data?.meta?.profile_code ?? 'não informado'} · Revisão: {data?.meta?.revision_id ?? 'não informada'} · Política na emissão: {data?.meta?.policy_version ?? 'não informada'}</p>
-          <ul className="list-disc pl-5">
-            {[...summary.limitations, ...(data?.meta?.limitations ?? [])].map((item, index) => <li key={index}>{item}</li>)}
+            {[...summary.restrictions, ...(data?.meta?.limitations ?? [])].map(
+              (value, index) => <li key={index}>{value}</li>)}
           </ul>
         </div>
         <button type="button" onClick={() => window.print()}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-300 p-2 text-sm">
-          <Printer className="h-4 w-4" /> Imprimir prévia (não é relatório oficial)
+          <Printer className="h-4 w-4" /> Imprimir prévia sem validade de relatório oficial
         </button>
       </>}
     </section>
