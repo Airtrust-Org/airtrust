@@ -9,6 +9,9 @@ vi.mock('@/react-app/hooks/useAuth', () => ({
 vi.mock('@/react-app/components/AppLayout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
+vi.mock('../BombeirosMethodologyDemo', () => ({
+  default: () => <div data-testid="boa-methodology-consumer">Método BOA</div>,
+}));
 vi.mock('../BombeirosWorkforcePanel', () => ({
   default: () => <div data-testid="boa-workforce-consumer">Funcionários BOA</div>,
 }));
@@ -34,6 +37,7 @@ describe('Portal separado BOA/CBMMG', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('exclusivo da empresa Bombeiros');
     expect(screen.queryByTestId('boa-monthly-api-consumer')).not.toBeInTheDocument();
     expect(screen.queryByTestId('boa-workforce-consumer')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('boa-methodology-consumer')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Cadastro de funcionários/i })).not.toBeInTheDocument();
   });
 
@@ -46,6 +50,7 @@ describe('Portal separado BOA/CBMMG', () => {
     render(<BombeirosFrmsPage />);
     expect(screen.getByTestId('boa-monthly-api-consumer')).toBeInTheDocument();
     expect(screen.getByTestId('boa-workforce-consumer')).toBeInTheDocument();
+    expect(screen.getByTestId('boa-methodology-consumer')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Cadastro de funcionários/i })).toHaveAttribute('href', '/funcionarios');
   });
 });
