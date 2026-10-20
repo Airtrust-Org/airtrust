@@ -4,7 +4,7 @@
  * winning/latest attempt with the approved, immutable server-private bank.
  */
 import type {Env} from '../types';
-import {loadApprovedPlayer3StageContext,Player3StageWriteError} from './lms-player3-module-attempt-writer';
+import {loadApprovedPlayer3StageContext,canReadPlayer3QaEvidence,Player3StageWriteError} from './lms-player3-module-attempt-writer';
 import {gradePlayer3ApprovedStage} from '../lib/lms-player3/private-stage-grader';
 
 const ID=/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
@@ -40,7 +40,13 @@ export async function readPlayer3ModuleSession(input:{
   env:Env;db:D1Database;bucket:R2Bucket;actorUserId:number;
   empresaId:number;matriculaId:number;
 }):Promise<Player3ModuleSession>{
-  const {course,binding,policy,bank}=await loadApprovedPlayer3StageContext(input);
+  // A governed staging learner can inspect the still-unstarted (NAO_INICIADO)
+  // stage ledger without acquiring any attempt/write authorization. Production
+  // and non-allowlisted tenants retain the original strict write-bound context.
+  const readOnlyQa=canReadPlayer3QaEvidence(input.env,input.empresaId);
+  const {course,binding,policy,bank}=await loadApprovedPlayer3StageContext({
+    ...input,readOnlyQa,
+  });
   if(!policy||policy.schema!=='AIRTRUST_PLAYER3_GRADE_POLICY_V1'||
       policy.certificationApproved!==true||
       !Array.isArray(policy.stages)||policy.stages.length<1||
