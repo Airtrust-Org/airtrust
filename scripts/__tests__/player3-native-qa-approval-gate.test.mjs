@@ -18,7 +18,10 @@ function make(){
  const source=file('synthetic-original.zip','SYNTHETIC ONLY, NOT A REAL COURSE');
  const media=file('image.png','SYNTHETIC PICTURE');
  const edition=file('edition.json',{schema:'AIRTRUST_NATIVE_COURSE_V1',
-  courseId:'synthetic-qa-course',packageVersion:'synthetic-v1',assets:[media]});
+  courseId:'synthetic-qa-course',packageVersion:'synthetic-v1',assets:[media],
+  policy:{mode:'SCORED',masteryScore:75,moduleGate:true},
+  questions:[{id:'learner-q-1'}],
+  units:[{id:'stage-1',kind:'assessment',questionIds:['learner-q-1']}]});
  const learner=file('learner.json',{courseId:'synthetic-qa-course',
   packageVersion:'synthetic-v1',questions:[{id:'learner-q-1',prompt:'A question?'}]});
  const privateBank=file('bank.json',{questions:[{id:'private-q-1',correctOptionId:'secret'}]});
@@ -135,7 +138,10 @@ negative('missing approval signature file fails',f=>{
 negative('unsanitized JavaScript with answer key fails',f=>{
  const media=f.file('runtime.js','const answerKey = {q: 1};');
  const edition=f.file('edition.json',{schema:'AIRTRUST_NATIVE_COURSE_V1',
-  courseId:'synthetic-qa-course',packageVersion:'synthetic-v1',assets:[media]});
+  courseId:'synthetic-qa-course',packageVersion:'synthetic-v1',assets:[media],
+  policy:{mode:'SCORED',masteryScore:75,moduleGate:true},
+  questions:[{id:'learner-q-1'}],
+  units:[{id:'stage-1',kind:'assessment',questionIds:['learner-q-1']}]});
  f.evidence.media=[media];f.evidence.artifacts.edition=edition;f.evidence.editionSha256=edition.sha256;
  f.evidence.artifacts.policy=f.file('policy.json',{
   schema:'AIRTRUST_PLAYER3_GRADE_POLICY_V1',courseId:'synthetic-qa-course',
@@ -153,3 +159,34 @@ negative('media inventory omission fails',f=>{
 negative('path traversal fails',f=>{
  f.evidence.artifacts.source.path='../secret.txt';f.signEvidence();
 },'UNSAFE_EVIDENCE_PATH');
+negative('packageVersion mismatch between edition and learner rejects',f=>{
+ f.evidence.artifacts.learner=f.file('learner.json',{
+  courseId:'synthetic-qa-course',packageVersion:'synthetic-v2',
+  questions:[{id:'learner-q-1',prompt:'A question?'}]});
+ f.signEvidence();
+},'COURSE_OR_VERSION_DRIFT');
+negative('Native edition unit omits mapped question rejects',f=>{
+ const media=f.evidence.media[0];
+ const edition=f.file('edition.json',{schema:'AIRTRUST_NATIVE_COURSE_V1',
+  courseId:'synthetic-qa-course',packageVersion:'synthetic-v1',assets:[media],
+  policy:{mode:'SCORED',masteryScore:75,moduleGate:true},
+  questions:[{id:'learner-q-1'}],
+  units:[{id:'stage-OTHER',kind:'assessment',questionIds:['learner-q-1']}]});
+ f.evidence.artifacts.edition=edition;
+ f.evidence.editionSha256=edition.sha256;
+ f.evidence.artifacts.policy=f.file('policy.json',{schema:'AIRTRUST_PLAYER3_GRADE_POLICY_V1',
+  courseId:'synthetic-qa-course',editionSha256:edition.sha256,
+  mode:'MODULE_CERTIFIED',masteryScore:75,moduleGate:true});
+ f.evidence.artifacts.fidelity=f.file('fidelity.json',{
+  schema:'AIRTRUST_PLAYER3_FIDELITY_REVIEW_V1',status:'PASS',
+  sourceSha256:f.evidence.artifacts.source.sha256,editionSha256:edition.sha256,
+  reviewedScreens:['synthetic-cover']});
+ f.evidence.humanReview.visual.evidenceSha256=f.evidence.artifacts.fidelity.sha256;
+ f.signEvidence();
+},'EDITION_QUESTION_ROUTE_OR_MAPPING_INVALID');
+negative('certification policy contradicts authored edition rejects',f=>{
+ f.evidence.artifacts.policy=f.file('policy.json',{schema:'AIRTRUST_PLAYER3_GRADE_POLICY_V1',
+  courseId:'synthetic-qa-course',editionSha256:f.evidence.editionSha256,
+  mode:'FINAL_CERTIFIED',masteryScore:90,moduleGate:false});
+ f.signEvidence();
+},'NATIVE_EDITION_POLICY_CONFLICT');
