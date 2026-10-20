@@ -125,8 +125,7 @@ export function verifyNativeQaApproval({rootDir,evidenceFile,approvalFile,truste
     Array.isArray(fidelity.reviewedScreens)&&fidelity.reviewedScreens.length>0&&
     fidelity.reviewedScreens.every(id),'VISUAL_MEDIA_FIDELITY_MISSING');
   need(exact(e.humanReview,['visual','pedagogical'])&&
-    ['visual','pedagogical'].every(k=>{const r=e.humanReview[k];return
-      exact(r,['status','reviewerReference','evidenceSha256'])&&r.status==='APPROVED'&&
+    ['visual','pedagogical'].every(k=>{const r=e.humanReview[k];return exact(r,['status','reviewerReference','evidenceSha256'])&&r.status==='APPROVED'&&
       id(r.reviewerReference)&&r.reviewerReference!==e.authorReference&&
       r.evidenceSha256===e.artifacts[k==='visual'?'fidelity':'crosswalk'].sha256;
     }),'HUMAN_PEDAGOGICAL_AND_VISUAL_REVIEW_REQUIRED');
