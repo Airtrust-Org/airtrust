@@ -8,7 +8,7 @@ const sha='307821d49f21161bfbd70b756d7d174b649fbea9';
 const actor='isaeldaumas';
 const now=Date.parse('2026-10-20T16:00:00Z');
 const valid=()=>({
-  body:'AIRTRUST_PLAYER3_QA_LEARNERS_V1 '+sha+' tenant=999006 course=327',
+  body:'AIRTRUST_PLAYER3_QA_LEARNERS_RECOVERY_V1 '+sha+' tenant=999006 course=327',
   issue_url:'https://api.github.com/repos/Airtrust-Org/airtrust/issues/776',
   user:{login:actor},
   created_at:'2026-10-20T15:30:00Z',
@@ -16,7 +16,8 @@ const valid=()=>({
 });
 const before=()=>({
   qa_tenant:1,alpha_count:1,alpha_id:2,bravo_count:1,bravo_id:3,
-  qa_browser_users:0,qa_employee_linked_users:0,qa_existing_course_enrollments:0,
+  qa_browser_users:1,qa_employee_linked_users:1,
+  qa_chromium_bound_active:1,qa_webkit_users:0,qa_existing_course_enrollments:0,
   qa_existing_native_pins:0,qa_course_published:1,qa_editions_published:1,
   qa_marker:1,applied_0561:1,applied_0562:1,
 });
@@ -25,7 +26,7 @@ const readMeta={changed_db:false,rows_written:0};
 test('only same-author immutable fresh exact SHA/tenant/course GitHub admin grant',()=>{
   assert.doesNotThrow(()=>assertGrant(valid(),'admin',actor,sha,now));
   for(const altered of [
-    {body:'AIRTRUST_PLAYER3_QA_LEARNERS_V1 '+sha+' tenant=6 course=327'},
+    {body:'AIRTRUST_PLAYER3_QA_LEARNERS_RECOVERY_V1 '+sha+' tenant=6 course=327'},
     {body:valid().body+'\n'},
     {issue_url:'https://api.github.com/repos/Airtrust-Org/airtrust/issues/1389'},
     {user:{login:'another'}},
@@ -42,7 +43,8 @@ test('SELECT-only fixture requires exactly two different physically unlinked QA 
   assert.deepEqual(assertPreflight(before(),readMeta),{chromium:2,webkit:3});
   for(const mutated of [
     {qa_tenant:0},{alpha_count:2},{bravo_count:0},{bravo_id:2},
-    {qa_browser_users:1},{qa_employee_linked_users:1},
+    {qa_browser_users:0},{qa_browser_users:2},{qa_employee_linked_users:0},
+    {qa_chromium_bound_active:0},{qa_webkit_users:1},
     {qa_existing_course_enrollments:1},{qa_existing_native_pins:1},
     {qa_course_published:0},{qa_editions_published:0},
     {qa_marker:0},{applied_0561:0},{applied_0562:0},
@@ -87,6 +89,9 @@ test('only fixed synthetic staging identities and course; no production or old E
   assert.match(source,/\/api\/admin\/usuarios/);
   assert.match(source,/\/api\/auth\/invite\/accept/);
   assert.match(source,/\/api\/lms\/native\/cursos\/327\/matricular/);
+  assert.match(source,/if\(body!==null\)headers\['Content-Type'\]/);
+  assert.match(source,/if\(learner.key==='webkit'\)/);
+  assert.match(source,/qa_chromium_bound_active/);
   assert.match(source,/spawnSync\('\.\/node_modules\/\.bin\/wrangler'/);
   assert.doesNotMatch(source,/\b(?:wrangler d1|d1 execute).*--command=.*(?:INSERT|UPDATE|DELETE)/i);
 });
