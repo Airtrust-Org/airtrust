@@ -92,11 +92,12 @@ test('trusted workflow separates D1 credential from Pages/R2 credential',()=>{
  const s=readFileSync(resolve('.github/workflows/staging-player3-synthetic-qa.yml'),'utf8');
  assert.match(s,/group:\s*airtrust-staging-mutations-and-scorm-qa/);
  assert.match(s,/environment:\s*staging/);
- assert.match(s,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
+ assert.match(s,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
+ assert.doesNotMatch(s,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
  assert.match(s,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
  assert.match(s,/inputs\.phase == 'publish' &&/);
  assert.match(s,/inputs\.phase == 'bootstrap' \|\| inputs\.phase == 'edition'/);
- assert.doesNotMatch(s,/pull_request_target:|secrets\.CLOUDFLARE_WORKER_API_TOKEN|secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
+ assert.doesNotMatch(s,/pull_request_target:|secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
 });
 
 test('scoped staging jobs never inherit D1 and R2/Pages credentials together',()=>{
@@ -110,22 +111,32 @@ test('scoped staging jobs never inherit D1 and R2/Pages credentials together',()
    const next=w.slice(i+tag.length).search(/^  [a-z][a-z0-9-]*:\s*$/m);
    return next===-1?w.slice(i):w.slice(i,i+tag.length+next);
  };
+ const readOnly=extract('verify-qa-credential');
  const d1=extract('d1-schema-operation');
  const verify=extract('verify-r2-pages');
  const publish=extract('publish-r2-pages');
  assert.match(d1,/name: Governed staging D1 schema preflight/);
  assert.match(d1,/environment: staging/);
  assert.match(d1,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
- assert.doesNotMatch(d1,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
- assert.match(verify,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
+ assert.doesNotMatch(d1,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
+ assert.match(readOnly,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
+ assert.doesNotMatch(readOnly,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+ assert.match(readOnly,/player3-qa-trusted-executor\.mjs access/);
+ assert.match(d1,/needs\.verify-qa-credential\.result == 'success'/);
+ assert.match(verify,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
  assert.doesNotMatch(verify,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
- assert.match(publish,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
+ assert.match(publish,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
  assert.doesNotMatch(publish,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
  assert.match(w,/needs\.verify-r2-pages\.result == 'success'/);
  assert.match(w,/needs\.d1-schema-operation\.result == 'success'/);
  assert.match(w,/QA_R2_VERIFIED_PLAN_SHA:/);
  assert.match(w,/QA_D1_PREFLIGHT_OK:/);
  assert.match(w,/cancel-in-progress: false/);
+ assert.match(w,/CREDENTIAL: \$\{\{ needs\.verify-qa-credential\.result \}\}/);
+ const executor=readFileSync(resolve('scripts/staging/player3-qa-trusted-executor.mjs'),'utf8');
+ assert.match(executor,/PLAYER3_QA_R2_TOKEN_SCOPE_MISSING/);
+ assert.match(executor,/PLAYER3_QA_PAGES_TOKEN_SCOPE_MISSING/);
+ assert.match(executor,/if\(mode==='access'\)await doAccess\(\)/);
  assert.doesNotMatch(w,/pull_request_target:/);
 });
 
