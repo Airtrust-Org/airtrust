@@ -142,11 +142,11 @@ def validate_private_pilot(path: str) -> dict:
                     slide_count += 1
                 if kind == "assessment":
                     question_ids = unit.get("questionIds", [])
-                    require(slide_count >= 20 and isinstance(question_ids, list) and
+                    require(slide_count >= 15 and isinstance(question_ids, list) and
                             1 <= len(question_ids) <= 200 and
                             len(question_ids) == len(set(question_ids)) and
                             set(question_ids).issubset(all_by_id), "MODULE_SLIDES_OR_QUESTIONS")
-                    require(len(question_ids) in (5, 10), "UNREVIEWED_ASSESSMENT_SIZE")
+                    require(len(question_ids) == 10, "UNREVIEWED_ASSESSMENT_SIZE")
                     stages.append({"stageId": unit["id"], "slides": slide_count,
                                    "questions": len(question_ids),
                                    "minimumCorrect": math.ceil(len(question_ids) * 0.70),
