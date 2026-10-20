@@ -23,3 +23,11 @@ A edição **QSMS SGSO M10.4** é a única variante mantida no novo catálogo de
 6. Produção exige candidato e autorização SHA/artefato/escopo-específica, os oito gates, workflows oficiais e smoke pós-release.
 
 O teste `scripts/__tests__/native-v3-course-inventory.test.mjs` **valida somente o inventário público sanitizado**, nunca substitui teste físico de curso. Os artefatos V3 privados foram produzidos fora do repositório e podem ser incorporados apenas pelo pipeline privado governado.
+
+## Correção do gate por módulo — 20/10
+
+A checagem anterior contabilizava apenas telas totais **por curso**, o que não provava o mínimo **por módulo**. O inventário agora explicita 26 módulos de conteúdo: 24 com avaliação pontuada planejada (70%) e 2 formativos do CRM Gestores. Todos têm >=20 telas. O CRM Gestores tem 41 telas de conteúdo + 1 atividade formativa, não 42 telas de conteúdo.
+
+**Limitação operacional, sem ocultação:** os módulos do inventário são um **plano editorial**; a edição Native privada ainda não possui IDs de módulo persistidos e a F4/Worker não comprovou tentativas, notas e conclusão por módulo para os cursos reais. Os seis sourceModuleGate históricos permanecem identificados, porém a nova regra do proprietário requer avaliação por módulo para os 20 cursos SCORED. Não transformar este plano em PASS funcional, assinatura independente ou publicação. Sem alteração no Player 3 (F4).
+
+O teste do inventário agora exige contagem individual por módulo, soma exata, distinção de CRM formativo e ausência de liberação prematura. QA do navegador e matrícula real seguem pendentes.

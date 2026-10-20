@@ -18,7 +18,10 @@
     "layout": "16:9 desktop viewport first; mobile and tablet responsive",
     "approvalRequired": true,
     "privateAnswers": "never publish in Pages or public GitHub",
-    "moduleAssessmentEvidence": "backend per-module attempt required when moduleGate is true"
+    "moduleAssessmentEvidence": "backend per-module attempt required when moduleGate is true",
+    "minimumAppliesTo": "each separately assessed module; not just whole course",
+    "assessmentImplementation": "PENDING_REAL_WORKER_ATTEMPTS_PER_MODULE; no release or grade may be inferred",
+    "courseReadiness": "REVIEW_ONLY_PENDING_PHYSICAL_QA_AND_BACKEND"
   },
   "courses": [
     {
@@ -28,7 +31,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": true,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": true,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 37,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "QSMS",
@@ -37,7 +50,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": true,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": true,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 34,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "QSMS",
@@ -46,7 +69,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 20,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "QSMS",
@@ -55,7 +88,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 25,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "QSMS",
@@ -64,7 +107,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 20,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "QSMS",
@@ -73,7 +126,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 20,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "QSMS",
@@ -82,7 +145,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": true,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": true,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 20,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "QSMS",
@@ -91,7 +164,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 28,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "QSMS",
@@ -100,7 +183,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 24,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
@@ -109,7 +202,22 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 23,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        },
+        {
+          "moduleId": "M02",
+          "contentSlides": 22,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
@@ -118,7 +226,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 20,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
@@ -127,7 +245,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 20,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
@@ -136,7 +264,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 20,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
@@ -145,7 +283,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 20,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
@@ -154,7 +302,22 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 24,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        },
+        {
+          "moduleId": "M02",
+          "contentSlides": 24,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
@@ -163,7 +326,22 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": true,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": true,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 28,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        },
+        {
+          "moduleId": "M02",
+          "contentSlides": 28,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
@@ -172,7 +350,22 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": true,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": true,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 23,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        },
+        {
+          "moduleId": "M02",
+          "contentSlides": 23,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
@@ -181,16 +374,42 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": true,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": true,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 24,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
       "courseId": "costa-do-sol-crm-gestores-rbac119",
-      "contentSlides": 42,
+      "contentSlides": 41,
       "mode": "FORMATIVE",
       "proposedPassingScorePercent": null,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": false,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 21,
+          "requiredAssessment": "FORMATIVE_NO_PASSING_GRADE"
+        },
+        {
+          "moduleId": "M02",
+          "contentSlides": 20,
+          "requiredAssessment": "FORMATIVE_NO_PASSING_GRADE"
+        }
+      ],
+      "additionalFormativeAssessmentScreens": 1,
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
@@ -199,7 +418,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 20,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     },
     {
       "area": "SEGURANCA_OPERACIONAL",
@@ -208,7 +437,17 @@
       "mode": "SCORED",
       "proposedPassingScorePercent": 70,
       "moduleGate": false,
-      "reviewStatus": "NOT_APPROVED"
+      "reviewStatus": "NOT_APPROVED",
+      "sourceModuleGate": false,
+      "targetModuleAssessment": true,
+      "modules": [
+        {
+          "moduleId": "M01",
+          "contentSlides": 20,
+          "requiredAssessment": "SCORED_70_PENDING_PHYSICAL_WORKER_EVIDENCE"
+        }
+      ],
+      "moduleAssessmentImplementationStatus": "NOT_IMPLEMENTED_OR_VERIFIED_FOR_REAL_COURSE"
     }
   ]
 }
