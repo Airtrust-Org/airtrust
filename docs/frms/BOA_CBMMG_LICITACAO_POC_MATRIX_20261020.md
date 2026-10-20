@@ -99,3 +99,37 @@ Apenas o namespace BOA, barreiras de autorização, prévia mensal consolidada, 
 3. O check-in operacional dos Bombeiros **ainda não tem fluxo BOA de escrita liberado**: o bloqueio da API genérica preserva fail-closed até implementação, aprovação de perfil/regras e testes de autorização por tripulante. Não afirmar que uma pessoa do BOA consegue responder check-in neste momento.
 4. Nenhum perfil `FIREFIGHTER_AVIATION` ativo foi confirmado em D1, nenhum usuário/tenant BOA foi provisionado e nenhum arquivo D1/R2 foi escrito. A PR é de desenvolvimento, não homologação de ambiente.
 5. Testes locais no SHA `3654fb5c64473ed94476c5a78e40298bb22b48d1` confirmaram **21 testes frontend + 43 Worker**, worker-typecheck, route-ownership e typescript-delta aprovados. Esses resultados precisam ser revalidados se o código avançar; os oito gates da CI devem ser conferidos no último HEAD para integração.
+
+
+## Etapa de demonstração metodológica interativa — contrato técnico 20/10/2026
+
+Foi implementado **somente no código da PR em draft**, ainda sem publicação em staging ou tenant BOA, um fluxo de comparação entre dois cenários **totalmente sintéticos**, independente das fórmulas offshore.
+
+- **UI** `src/react-app/pages/bombeiros/BombeirosMethodologyDemo.tsx`, exposta exclusivamente dentro do portal `/bombeiros/frms`: A = resgate diurno com observações disponíveis; B = resgate noturno, acionamento, sono fragmentado, PVT-B não realizado e declaração fictícia de impedimento.
+- **API** `POST /api/bombeiros/frms/simulacao/metodologia`, negada em produção (somente `ENVIRONMENT=staging|development`), requer administrador autenticado do tenant `bombeiros` (`empresa_id != 6`), perfil `FIREFIGHTER_AVIATION` vigente e dados `mode=SYNTHETIC` de esquema estrito sem nome/CPF/IDs ou textos livres. Nunca persiste resposta, nunca cria caso, nunca libera missão.
+- **Motor puro** `worker-airtrust/src/lib/frms/bombeiros-scenario-method.ts`: lista nove classes de fator com presença/ausência e proveniência `SYNTHETIC_SCENARIO` (missão, período do serviço, sobreaviso, criticidade, sono 24h, fragmentação, KSS subjetiva, PVT de 60 segundos *adaptado*, declaração de impedimento). Lacunas permanecem lacunas; declaração de impedimento exige escalonamento; período noturno, interrupção e carga contextual geram orientação de revisão de missão, descanso e mitigação. **Nenhum coeficiente, classificação de aptidão, threshold clínico ou regra offshore foi importado.**
+- **Resultado** `INCOMPLETE_EVIDENCE` ou `HUMAN_REVIEW_REQUIRED`, sempre `dispatch_permission=NOT_GRANTED` e `persisted=false`, com ações, limitações científicas, referência à KSS/PVT e versão `BOA_SYNTHETIC_EVIDENCE_TRIAGE_V1`. Esse método é um **exercício de triagem de evidências**, não um modelo científico de risco validado e não substitui parecer técnico.
+
+| Item da licitação | Demonstração oferecida pelo fluxo sintético | Evidência ainda obrigatória para aceite |
+| --- | --- | --- |
+| 1. Identificação, avaliação, monitoramento e mitigação | Identifica fatores disponíveis/ausentes e determina revisão humana, sem liberar missão | Fluxo real com casos persistidos, responsável, intervenção, acompanhamento e eficácia |
+| 2. Fundamentação científica | Explica o caráter subjetivo da KSS e as limitações da adaptação PVT de 60 segundos, sem score inventado | Parecer assinado, bibliografia examinada, política específica aprovada e validação local |
+| 3. Fadiga/sono/cognição/fisiologia | Dois cenários mostram sono/fragmentação, período de serviço, missão, sonolência e presença/ausência do PVT | Avaliação e fontes reais, protocolo cognitivo e indicadores fisiológicos definidos por especialistas |
+| 4. Auditabilidade | Versão do método e fatores determinísticos exibidos; execução explicitamente sem persistência | Log imutável tenant-scoped com autor, eventos, policy hash, timestamps, retificação e reprodução |
+| 5. Relatório mensal | Mantido módulo de recibos mensal segregado, sem diagnóstico | Relatório gerencial + técnico formal, tendências, medidas, eficácia, emissão e assinatura |
+| 6. Administração agregada | API de recibos já possui supressão de coorte/participação pequena | Definição de papéis, aceite com 130 sintéticos, QA autenticada cross-tenant |
+| 7. LGPD | Cenários fixos, sem nomes/IDs, POST bloqueado em produção, resposta sem saúde individual e sem storage | Mapeamento de tratamento, retenção, acessos, RIPD se cabível, testes e validação jurídica |
+| 8. Experiência prática | Não é demonstrável somente pelo software | Atestados e outros documentos autênticos da licitante sobre implantações ou acompanhamento FRMS real |
+
+**Regras de apresentação:** nunca exibir esta simulação como POC homologada; não dizer que fatores foram medidos no mundo real nem inferir comportamento de 130 usuários dos cenários fixos. A prova de conceito editalícia exigirá fluxo real completo com registros audíveis (e não apenas uma simulação), plus validação de segurança, availability e conformidade LGPD.
+
+### Testes de aceitação acrescentados
+
+1. Mesmo quando todas as observações parecem normais, o sistema exige decisão humana e não emite aptidão.
+2. KSS, sono, período e teste de vigilância ausentes permanecem `MISSING`, sem preenchimento por valores padrão.
+3. Declaração explícita de impedimento gera escalonamento prioritário, sem liberação.
+4. Campos arbitrários `empresa_id`, `funcionario_id`, informações pessoais e modo real são rejeitados pelo esquema.
+5. API recusada para Costa do Sol antes de consultar banco, e desativada em produção; staging exige perfil aprovado, sem consultar funcionários no cenário sintético.
+6. Frontend envia apenas os dois exemplos estáticos sem informações pessoais e não pode abrir no tenant errado.
+
+**Lacunas impeditivas:** fluxos de coleta operacional real e gravação governada de check-in, ciência/casos e mitigação, validação científica, ensaio de 130 usuários, relatório formal, documentação de LGPD e experiência profissional permanecem sem comprovação. Nenhuma migration, tenant ou dados foram provisionados por esta PR.
