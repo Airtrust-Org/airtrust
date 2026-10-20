@@ -124,6 +124,21 @@ SIMULATOR_SHARED_SESSIONS_ENABLED = "true"
 # One-off EAD incident executor. The endpoint remains fail-closed after its
 # single reviewed run; this non-secret flag only permits the official executor.
 ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
+# Player 3 Native technical QA ONLY: isolated synthetic tenant 999006.
+# Activation here does NOT create enrollments, certify students or authorize
+# staging data writes. Environment review and guarded learner identities remain
+# mandatory; production intentionally has none of these allowlists.
+NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS = "999006"
+NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS = "999006"
+NATIVE_LEARNER_WRITE_ENABLED_TENANTS = "999006"
+NATIVE_LEARNER_ENROLLMENT_CREATE_ENABLED_TENANTS = "999006"
+PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS = "999006"
+PLAYER3_AUTHORED_LAUNCH_ENABLED_TENANTS = "999006"
+PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS = "999006"
+PLAYER3_QA_READ_ENABLED_TENANTS = "999006"
+# HTML5 lives on an independent QA-only HTTPS origin, never on Worker/SPA.
+PLAYER3_AUTHORED_CONTENT_ORIGIN = "https://qa-player3-staging.pages.dev"
+
 # Pilot offline lease/sync is intentionally active in staging for governed QA.
 # These values are non-secret and must be versioned here so later staging deploys
 # cannot silently remove the runtime gate/configuration. The private ES256 JWK
