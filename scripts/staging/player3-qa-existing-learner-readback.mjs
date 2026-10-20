@@ -61,7 +61,9 @@ export function assertRoster(rows,meta){
   for(const l of LEARNERS){
     const row=byEmail.get(l.email);
     expect(row&&row.empresa_id===TENANT&&row.curso_id===COURSE&&
-      row.status==='EM_ANDAMENTO'&&row.edition_status==='PUBLISHED'&&
+      ['NAO_INICIADO','EM_ANDAMENTO'].includes(row.status)&&
+      row.ciclo_status===row.status&&row.ciclo_atual===1&&
+      row.edition_status==='PUBLISHED'&&
       positive(row.matricula_id)&&positive(row.ciclo_id)&&
       positive(row.funcionario_id)&&SHA64.test(row.edition_sha256||''),
       'PHYSICAL_LEARNER_EDITION_OR_CYCLE_INVALID');
@@ -114,6 +116,7 @@ function requireStagingWrangler(){
 }
 const SQL=`SELECT lower(u.email) email, f.empresa_id, m.curso_id,
  m.id matricula_id,b.ciclo_id, f.id funcionario_id, m.status,
+ cy.status ciclo_status, cy.ciclo_atual,
  ed.status edition_status,ed.artifact_sha256 edition_sha256
  FROM usuarios u
  JOIN funcionarios f ON f.id=u.funcionario_id AND f.empresa_id=999006
@@ -122,6 +125,10 @@ const SQL=`SELECT lower(u.email) email, f.empresa_id, m.curso_id,
  AND m.curso_id=327 AND m.deleted_at IS NULL
  JOIN lms_native_matricula_edicoes b ON b.matricula_id=m.id
  AND b.empresa_id=999006 AND b.curso_id=327
+ JOIN lms_matricula_ciclos cy ON cy.id=b.ciclo_id
+ AND cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+ AND cy.curso_id=m.curso_id AND cy.funcionario_id=m.funcionario_id
+ AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL AND cy.status=m.status
  JOIN lms_native_edicoes ed ON ed.id=b.edicao_id
  AND ed.empresa_id=999006 AND ed.curso_id=327
  WHERE u.active=1 AND u.deleted_at IS NULL

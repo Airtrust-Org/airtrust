@@ -12,7 +12,8 @@ const edition='b'.repeat(64);
 const row=(browser,index)=>({
   email:LEARNERS.find(l=>l.browser===browser).email,empresa_id:TENANT,
   curso_id:COURSE,matricula_id:200+index,ciclo_id:900+index,
-  funcionario_id:800+index,status:'EM_ANDAMENTO',
+  funcionario_id:800+index,status:index===1?'NAO_INICIADO':'EM_ANDAMENTO',
+  ciclo_status:index===1?'NAO_INICIADO':'EM_ANDAMENTO',ciclo_atual:1,
   edition_status:'PUBLISHED',edition_sha256:edition,
 });
 const rows=[row('chromium',1),row('webkit',2)];
@@ -55,6 +56,13 @@ test('SQL readback proves only two distinct tenant-scoped Native enrollments',()
     /NONINDEPENDENT_QA_IDENTITIES/);
   assert.throws(()=>assertRoster([rows[0],{...rows[1],empresa_id:3}],meta),
     /PHYSICAL_LEARNER_EDITION_OR_CYCLE_INVALID/);
+  assert.throws(()=>assertRoster([rows[0],{...rows[1],status:'CONCLUIDO'}],meta),
+    /PHYSICAL_LEARNER_EDITION_OR_CYCLE_INVALID/);
+  assert.throws(()=>assertRoster([rows[0],{...rows[1],ciclo_status:'NAO_INICIADO'}],meta),
+    /PHYSICAL_LEARNER_EDITION_OR_CYCLE_INVALID/);
+  assert.throws(()=>assertRoster([rows[0],{...rows[1],ciclo_atual:0}],meta),
+    /PHYSICAL_LEARNER_EDITION_OR_CYCLE_INVALID/);
+
 });
 
 test('claim and HTTP evidence cannot cross employee, edition or course scope',()=>{
