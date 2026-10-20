@@ -27,7 +27,7 @@ describe('BOA monthly check-in receipt evidence — UI', () => {
         previous: { receipt_person_days: null, distinct_people: null,
           privacy_state: 'SMALL_PARTICIPANT_SET_SUPPRESSED' },
         receipt_person_days_delta: null,
-        source: 'FRMS_FADIGA_CHECKIN_TENANT_SCOPED',
+        source: 'BOA_FRMS_CHECKIN_EVENT_TENANT_SCOPED',
         restrictions: ['Não confirma aptidão.'],
       }, meta: { profile_code: 'FIREFIGHTER_AVIATION', revision_id: 'BOA-QA-1' } },
       error: null, loading: false, refetch: vi.fn(),
@@ -46,7 +46,7 @@ describe('BOA monthly check-in receipt evidence — UI', () => {
         current: { receipt_person_days: 26, distinct_people: 6, privacy_state: 'OBSERVED' },
         previous: { receipt_person_days: 20, distinct_people: 6, privacy_state: 'OBSERVED' },
         receipt_person_days_delta: 6,
-        source: 'FRMS_FADIGA_CHECKIN_TENANT_SCOPED',
+        source: 'BOA_FRMS_CHECKIN_EVENT_TENANT_SCOPED',
         restrictions: ['Não é conformidade com normas operacionais.'],
       } }, error: null, loading: false, refetch: vi.fn(),
     });
