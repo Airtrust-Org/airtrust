@@ -8,8 +8,8 @@ Contrato de governança para a PR funcional #1389; coordenação central #776. E
 - Apenas `workflow_dispatch` em `refs/heads/main`; PR #1389 OPEN e mesma origem, HEAD SHA exato, oito gates + PR Check todos SUCCESS no HEAD.
 - `environment: staging` com aprovação e acesso mínimo; mutex `airtrust-staging-mutations-and-scorm-qa`, sem sobreposição com Pilot, FRMS ou SCORM.
 - DB D1 `airtrust-db-staging-baseline-20260701`, UUID `bf9963f4-eb12-439b-a830-20bbf577ac22`. Tenant `qa_examiner_training` / ID 999006. Verificar Schema V2 0561/0562 já aplicado uma vez; nunca reaplicar.
-- `CLOUDFLARE_D1_MIGRATION_API_TOKEN` é utilizado apenas para preflight D1/Time Travel e SQL D1. Para R2 privado e projeto Pages QA, a F0 precisa criar o segredo distinto `PLAYER3_QA_R2_PAGES_API_TOKEN`, restrito aos recursos de staging. Sem esse segredo, `publish` e prova de bytes da `edition` falham fechados.
-- O projeto Pages QA `qa-player3-staging` precisa existir separadamente de Worker/API e Pages de aplicação. O publicador recusa outro destino.
+- `CLOUDFLARE_D1_MIGRATION_API_TOKEN` é utilizado somente para D1/Time Travel e SQL D1. O executor reutiliza `CLOUDFLARE_PAGES_API_TOKEN` **já cadastrado no environment staging** para R2 privado e Pages QA, **somente se** o job `verify-qa-credential` comprovar, por leituras da API, acesso ao projeto QA e ao bucket de staging. Não reutilizar token de produção nem misturar D1 com Pages/R2. Se o token existente não possuir ambos os escopos, a fase fica bloqueada sem escrita; corrigir o contrato/escopo com revisão e PR, sem bypass.
+- O projeto Pages QA `qa-player3-staging` precisa existir separadamente de Worker/API e Pages de aplicação. O publicador recusa outro destino. A F0 criou e verificou esse projeto via Wrangler OAuth em 19/10/2026; nenhum deploy de QA foi inferido dessa criação.
 - Não publicar pacotes EAD originais, não habilitar flags em clientes, não disparar produção.
 
 ## 2. Concessão específica F0 na issue #776
@@ -58,6 +58,8 @@ Os valores são uma **amostra de concessão bootstrap**, não uma concessão já
 Os scripts e os hashes dos **quatro geradores/publicadores** da #1389 estão pinados dentro do executor confiável. Uma modificação nesses scripts após revisão exige nova autorização e alteração revisada dos pins; não existe fallback para código novo não revisado.
 
 ## 4. Ordem de execução e comprovação
+
+**Pré-gate comum — acesso:** com grant vigente, o workflow consulta apenas metadados de `qa-player3-staging` e `airtrust-storage-staging` com o Pages secret existente, sem token D1, sem alterações Cloudflare e sem registrar seu valor. HTTP 401/403, nome errado, ausência de escopo R2 ou falha de readback abortam antes de qualquer etapa mutável.
 
 **Fase A — bootstrap:** após lock e approval, regenerar candidato privado sintético em diretório efêmero, confrontar `sql_sha256` aprovado, executar inventário D1 SELECT read-only, capturar bookmark Time Travel, gravar somente categoria/tipo QA, curso SCORM-alias **sem pacote**, e marcador Native; conferir ID físico de volta no D1. Preservar timestamp UTC do recovery nos logs sanitizados. Não criar matrícula nem certificado.
 
