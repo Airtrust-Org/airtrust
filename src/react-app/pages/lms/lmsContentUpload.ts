@@ -244,6 +244,7 @@ type ScormQualityShape = {
   completionManifest?: ScormGateSection;
   diagnostics?: ScormGateSection;
   conformance?: ScormGateSection;
+  functionalCertification?: { status?: string; missing?: string[] };
   runtime?: { status?: string; errors?: string[] };
 };
 
@@ -256,6 +257,11 @@ function collectGateErrors(quality: ScormQualityShape): string[] {
   ];
   const errs = sections.flatMap((section) => section?.errors ?? []);
   errs.push(...(quality.runtime?.errors ?? []));
+  // Functional E2E is independent of SCORM protocol conformance. Report
+  // missing browser scenarios rather than a misleading generic player error.
+  errs.push(...(quality.functionalCertification?.missing ?? [])
+    .filter((entry) => typeof entry === 'string' && /^[A-Z][A-Z0-9_:]{0,100}$/.test(entry))
+    .slice(0, 24).map((entry) => `Certificação funcional pendente: ${entry}`));
   return [...new Set(errs.filter((entry) => typeof entry === 'string' && entry.trim()))];
 }
 
@@ -334,8 +340,14 @@ async function uploadScormZipPackage(params: {
   );
   const conformance = await parseApiResponse<ScormQualityShape>(conformanceResponse);
   if (!conformance.publishable) {
-    // Pacote ativo anterior segue inalterado.
-    throw scormGateError('O pacote não passou na validação de conformidade do player', conformance);
+    // Static/protocol success is NOT certification. Preserve the currently
+    // active ZIP until independent Chromium/WebKit and backend proof exists.
+    const technicalPass = conformance.conformance?.status === 'PASS';
+    const functionalPending = conformance.functionalCertification?.status !== 'CERTIFIED';
+    const prefix = technicalPass && functionalPending
+      ? 'O pacote passou na conformidade técnica, mas aguarda certificação funcional completa. O conteúdo ativo foi preservado'
+      : 'O pacote não passou na validação de conformidade do player';
+    throw scormGateError(prefix, conformance);
   }
 
   onStatus?.('Ativando nova versão...');

@@ -174,6 +174,29 @@ describe('uploadStructuredLmsPackage — SCORM governed package-version flow', (
     expect(calls.some((c) => c.includes('/activate'))).toBe(false);
   });
 
+  it('technical PASS without Chromium/WebKit functional certification never activates', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({
+      conformance: {
+        ...CANDIDATE_VALIDATED,
+        conformance: { status: 'PASS', errors: [] },
+        runtime: { status: 'PASS', errors: [] },
+        functionalCertification: {
+          status: 'UNCERTIFIED',
+          missing: ['CHROMIUM:FIRST_ACCESS', 'WEBKIT:SUSPEND_RESUME'],
+        },
+      },
+    });
+
+    await expect(uploadStructuredLmsPackage({
+      cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip),
+    })).rejects.toThrow(/conformidade técnica.*certificação funcional.*CHROMIUM:FIRST_ACCESS/s);
+
+    expect(calls.filter((c) => c.includes('/conformance'))).toHaveLength(1);
+    expect(calls.some((c) => c.includes('/activate'))).toBe(false);
+  });
+
   it('F: publishable=true calls activate exactly once and returns the active prefix/launch', async () => {
     const fixture = scormZip();
     extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);

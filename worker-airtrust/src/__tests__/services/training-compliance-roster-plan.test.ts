@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { buildTrainingComplianceRosterPlan, type RosterCourse, type RosterEnrollment } from '../../services/training-compliance-roster-plan';
 import type { TrainingComplianceSnapshot } from '../../routes/compliance-treinamentos';
 
-const course: RosterCourse = { id:56, qualificacao_tipo_id:7 };
-const otherCourse: RosterCourse = { id:57, qualificacao_tipo_id:8 };
+const course: RosterCourse = { id:56, qualificacao_tipo_id:7, ativo:1, publicado:1 };
+const otherCourse: RosterCourse = { id:57, qualificacao_tipo_id:8, ativo:1, publicado:1 };
 type Requirement = TrainingComplianceSnapshot['people'][number]['requisitos'][number];
 
 function requirement(status:string, opts:Record<string,unknown>={}) {
   return {
-    obrigatoriedade:'OBRIGATORIA', qualificacao_tipo_id:7,
-    status_compliance:status, modalidade_requerida:'EAD',
+    obrigatoriedade:'OBRIGATORIA', qualificacao_tipo_id:7, regra_id:1,
+    status_compliance:status, modalidade_requerida:'EAD', auto_matricular_ead:1,
     evidencia_pendente_validacao:false,
     ...opts,
   } as Requirement;
@@ -34,7 +34,21 @@ const plan = (s:ReturnType<typeof snapshot>, courses:RosterCourse[]=[course], ro
 describe('Matrícula orientada por função e situação da qualificação',()=>{
   it('matricula empregado com requisito obrigatório sem qualquer histórico',()=>{
     const result=plan(snapshot(person(101,[requirement('NAO_REALIZADO')])));
-    expect(result.enroll).toEqual([{funcionarioId:101,cursoId:56,tipoId:7,existingId:null}]);
+    expect(result.enroll).toEqual([{funcionarioId:101,cursoId:56,tipoId:7,existingId:null,regraId:1}]);
+  });
+  it('falha fechado sem opt-in explícito (0/NULL/ausente), modalidade e curso publicados',()=>{
+    const s = snapshot(
+      person(101,[requirement('NAO_REALIZADO',{auto_matricular_ead:0})]),
+      person(102,[requirement('NAO_REALIZADO',{auto_matricular_ead:null})]),
+      person(103,[requirement('NAO_REALIZADO',{auto_matricular_ead:undefined})]),
+      person(104,[requirement('NAO_REALIZADO',{modalidade_requerida:null})]),
+      person(105,[requirement('NAO_REALIZADO',{modalidade_requerida:'PRESENCIAL'})]),
+    );
+    expect(plan(s).enroll).toHaveLength(0);
+    expect(plan(s).skippedPolicyOptOut).toBe(3);
+    expect(plan(s).skippedManualModality).toBe(2);
+    expect(plan(snapshot(person(101,[requirement('NAO_REALIZADO')])),[{...course,publicado:undefined}]).enroll).toHaveLength(0);
+    expect(plan(snapshot(person(101,[requirement('NAO_REALIZADO')])),[{...course,ativo:0}]).enroll).toHaveLength(0);
   });
   it('matricula histórico vencido mas não quem permanece conforme ou vencendo',()=>{
     const result=plan(snapshot(
@@ -59,7 +73,7 @@ describe('Matrícula orientada por função e situação da qualificação',()=>
     expect(result.skippedManualModality).toBe(1);
   });
   it('recusa vínculo ambíguo de curso com mesma qualificação',()=>{
-    const result=plan(snapshot(person(101,[requirement('VENCIDO')])),[course,{id:77,qualificacao_tipo_id:7}]);
+    const result=plan(snapshot(person(101,[requirement('VENCIDO')])),[course,{id:77,qualificacao_tipo_id:7,ativo:1,publicado:1}]);
     expect(result.enroll).toHaveLength(0);
     expect(result.skippedAmbiguousCourses).toBe(1);
   });

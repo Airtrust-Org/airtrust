@@ -126,6 +126,12 @@ export interface Env {
   // Browser Run binding. It is intentionally separate from the PDF API token:
   // SCORM conformance launches a clean Chromium with no AirTrust credentials.
   SCORM_BROWSER?: unknown;
+  // Shared only between governed staging QA attestation signer and Worker;
+  // missing secret fails closed; never inject in browser/frontend.
+  SCORM_QA_ATTESTATION_SECRET?: string;
+  // Dedicated F5 staging readback; never share with signer or client.
+  SCORM_QA_READBACK_SECRET?: string;
+  SCORM_QA_SYNTHETIC_TENANT_ID?: string;
 
   // Maintenance routes secret (wrangler secret put MAINTENANCE_SECRET)
   MAINTENANCE_SECRET?: string;
@@ -380,6 +386,8 @@ export interface JwtPayload {
   asset_curso_id?: number;
   asset_matricula_id?: number;
   asset_scorm_package_prefix?: string;
+  asset_qa_candidate_id?: string; // Short-lived non-production preview scope only
+  asset_qa_candidate_sha256?: string; // Exact staged candidate ZIP identity
   asset_preview?: boolean;
   nome?: string;
   empresa_id?: number; // Multi-tenant: ID da empresa ativa

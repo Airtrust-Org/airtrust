@@ -49,6 +49,19 @@ test('staging fixture binds both QA courses to manager-visible sector and cleans
   assert.match(seed, /AND c\.observacoes=\$\{esc\(marker\)\} AND lcs\.deleted_at IS NULL/);
 });
 
+test('EAD lifecycle explicitly opts in after proving defaults and NULL modality do not enroll', () => {
+  assert.equal((seed.match(/qc\.id,'EAD',1,12/g) || []).length, 2);
+  assert.equal((seed.match(/,'EAD',60,/g) || []).length, 2);
+  assert.match(spec, /mandatory alone cannot auto-enroll/);
+  assert.match(spec, /NULL modality must fail closed/);
+  assert.match(spec, /opt-in=0 must fail closed/);
+  assert.match(spec, /setExplicitEadEnrollment\(page, sectorRuleId, true, 'EAD'\)/);
+  assert.match(spec, /repeated eligible rule must not duplicate/);
+  assert.match(spec, /orphanOptIn\.json\.data\.auto_enrollment\.created\)\.toBe\(1\)/);
+  assert.match(spec, /evidencia_modalidade\)\.toBe\('EAD'\)/);
+  assert.match(spec, /data_validade\)\.toMatch/);
+});
+
 test('browser simulation covers organization, enrollment, progress, completion and reconciliation transitions', () => {
   for (const token of [
     'OBRIGATORIA',

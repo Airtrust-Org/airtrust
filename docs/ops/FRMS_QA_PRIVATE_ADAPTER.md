@@ -81,6 +81,68 @@ rejection and rollback of earlier writes after a late D1 trigger failure.
 This is not staging acceptance, a real Time Travel restore test, or scientific
 validation. No production people are fixtures.
 
+## October 19 private control-plane increment — not deployed
+
+The isolated service has a versioned **private-only** staging Wrangler manifest at
+`ops/frms-qa-repair/wrangler.staging.toml`: D1 UUID and database name are
+fixed, the separate R2 bucket is named, a single SQLite Durable Object owns the
+receipt/nonce/audit lock, and `workers_dev=false`, `preview_urls=false`, with
+no HTTP routes. `wrangler deploy --dry-run` is a **bundle check**, not
+provisioning or a claim that any external binding exists.
+
+The repair Worker now refuses even `prepare()` unless an authorized service
+binding caller provides a 90-second HMAC-SHA256 capability that names
+`prepare` or `apply`, exact release SHA, staging D1 UUID, tenant 999013,
+GitHub runner run ID/attempt and a single-use 64-hex nonce. The HMAC key is
+a separate private `CALLER_KEY_HEX` and its independently pinned
+`CALLER_KEY_SHA256`; neither key nor proof appears in code or workflow inputs.
+The Durable Object records consumed caller nonces transactionally. The HMAC
+capability **does not replace** the independently signed Ed25519 grant for the
+eight-row apply. This is a private RPC guard, **not a ready public caller or
+evidence of a live authorized workflow**.
+
+`ops/frms-qa-repair/verify-readiness.mjs` and
+`.github/workflows/staging-frms-qa-private-readiness.yml` perform **GET-only**
+verification of the actual D1 UUID/name, dedicated R2 bucket, zero custom
+domains, disabled managed r2.dev domain and enabled deletion after at most
+86400 seconds on the exact `frms-qa/999013/` prefix. Any unexpected API shape,
+absence of bucket/token or permissive lifecycle fails closed. The workflow
+requires `CLOUDFLARE_FRMS_QA_READ_API_TOKEN` in the protected staging
+environment, with read-only D1/R2 metadata permissions; the name's existence
+is not proof that the token is provisioned. A staging admin must independently
+review the verified read-only output before setting
+`PRIVATE_STORAGE_VERIFIED=restricted-r2-lifecycle-1d`. The JSON inventory is
+only a resource readiness gate; it cannot attest deployed runtime secret values,
+service binding permissions or issuance of an Ed25519 grant.
+
+**Still required before any remote mutation:**
+
+1. A reviewed and specifically authorized private staging deployment and
+   service-binding **caller transport** whose lifetime holds the repository's
+   `airtrust-staging-mutations-and-scorm-qa` group across preparation,
+   signature approval, apply and durable confirmation. Do not expose an HTTP
+   repair route. A nonce/HMAC alone does not prove a GitHub run is still active.
+2. Independently provision dedicated private bucket and 24h deletion rule,
+   release-pinned D1 binding, Durable Object, least-privilege Time Travel
+   read-only token, protected Ed25519 public key/fingerprint, caller HMAC key
+   and AES preimage key. No private Ed25519 signing key belongs in the Worker.
+   The correct D1 UUID in source is not proof of the deployed Cloudflare binding.
+3. A **separate exact grant** by release coordination for current deploy
+   SHA/bundle, tenant 999013, exact 8 IDs, SQL digest, receipt, preimage and
+   recovery bookmark, with at most 15-minute TTL and nonce. No general
+   project authorization substitutes for this signature.
+4. A governed mutation workflow with fail-closed receipts, shared lock and
+   independent post-apply read-only preflight. An interrupted batch must
+   remain quarantined until separately approved reconciliation/compensation.
+5. Separate authorization and end-to-end evidence for the four **mutable**
+   case-treatment/effectiveness/closure cycles; the data-link repair grant
+   never authorizes those case updates.
+
+At the last physical check, #39301760305 remained 0/4 with four legacy
+alerts and four MANUAL journeys; browser #39301535598 failed at zero cases.
+Do not repeat either unchanged and do not call infrastructure readiness an
+FRMS operational acceptance.
+
 ## Required external provisioning / application sequence
 
 1. Review/integrate code after all eight official gates plus private integration.
