@@ -9,13 +9,14 @@ const context = {
 };
 
 type BoundStatement = { sql: string; binds: unknown[] };
-type BatchResult = { success: boolean; meta: { changes: number } };
+type BatchResult = { success: boolean; meta: { changes: number }; results?: Array<{native_start_state: string}> };
 
 function fakeDb(options: {
   matriculaChanges?: number;
   cycleChanges?: number;
   batchThrows?: boolean;
   incompleteResults?: boolean;
+  preflightState?: 'START' | 'ALREADY_STARTED';
 } = {}) {
   const prepared: BoundStatement[] = [];
   const batch = vi.fn(async (statements: BoundStatement[]): Promise<BatchResult[]> => {
@@ -23,7 +24,7 @@ function fakeDb(options: {
     if (options.incompleteResults) return [];
     expect(statements).toHaveLength(4);
     return [
-      { success: true, meta: { changes: 0 } },
+      { success: true, meta: { changes: 0 }, results: [{native_start_state: options.preflightState ?? 'START'}] },
       { success: true, meta: { changes: options.matriculaChanges ?? 1 } },
       { success: true, meta: { changes: options.cycleChanges ?? 1 } },
       { success: true, meta: { changes: 0 } },
@@ -139,11 +140,31 @@ describe('Native start transaction — D1 batch and tenant/cycle scope', () => {
   });
 
   it('returns idempotent receipt only after transactional postcheck', async () => {
-    const f = fakeDb({ matriculaChanges: 0, cycleChanges: 0 });
+    const f = fakeDb({ matriculaChanges: 0, cycleChanges: 0, preflightState: 'ALREADY_STARTED' });
     expect(await f.start()).toEqual({
       state: 'ALREADY_STARTED', cicloId: 1001, editionHash: context.editionHash,
     });
     expect(f.batch).toHaveBeenCalledOnce();
+  });
+
+  it('avoids a 409 after SQL postcheck proved both mirrors committed despite zero D1 changes counters',async()=>{
+    const f=fakeDb({matriculaChanges:0,cycleChanges:0,preflightState:'START'});
+    expect(await f.start()).toMatchObject({state:'STARTED'});
+    expect(f.prepared[0].sql).toContain('AS native_start_state');
+    expect(f.prepared[0].sql).toContain('"START"');
+    expect(f.prepared[0].sql).toContain('"ALREADY_STARTED"');
+    expect(f.prepared[3].sql).toContain('NATIVE_START_ATOMIC_SYNC_FAILED');
+  });
+
+  it('rejects a missing trusted preflight row even when counters appear successful',async()=>{
+    const f=fakeDb({preflightState:undefined});
+    f.batch.mockImplementationOnce(async()=>[
+      {success:true,meta:{changes:0},results:[]},
+      {success:true,meta:{changes:1}},
+      {success:true,meta:{changes:1}},
+      {success:true,meta:{changes:0}},
+    ]);
+    await expect(f.start()).rejects.toMatchObject({code:'NATIVE_START_INCONSISTENT_CHANGES'});
   });
 
   it('never claims success on mixed transition counts', async () => {
