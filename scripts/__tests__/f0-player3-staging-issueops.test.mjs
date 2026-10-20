@@ -47,7 +47,7 @@ test('the ONLY dispatched action is official Worker+Pages staging, no migrations
  const inputs=releaseInputs(sha,6283200012);
  assert.equal(inputs.release_sha,sha);
  assert.equal(inputs.pr_number,'1389');
- assert.equal(inputs.f0_request_comment_id,'6283200012');
+ assert.equal(inputs.release_reason,'F0 Player3 synthetic QA staging runtime, issue 776 comment 6283200012, no migrations or production');
  assert.equal(inputs.apply_migrations,'false');
  assert.equal(inputs.approved_migrations,'');
  assert.equal(inputs.deploy_worker,'true');
