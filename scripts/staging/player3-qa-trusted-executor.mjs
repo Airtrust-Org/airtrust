@@ -8,6 +8,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {isExplicitMissingR2Object} from './player3-qa-r2-object-miss.mjs';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 const E=process.env;
 const ROOT=process.cwd(), RELEASE=path.join(ROOT,'release');
 const TEMP=path.join(E.RUNNER_TEMP||'/tmp','player3-qa');
@@ -422,4 +423,4 @@ async function main(){
   process.exitCode=1;
  }
 }
-main();
+if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) main();
