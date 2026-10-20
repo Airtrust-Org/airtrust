@@ -20,10 +20,9 @@ import { loadBombeirosCheckinMonthlyEvidence } from '../lib/frms/bombeiros-check
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
 import { listBombeirosWorkforce } from '../lib/frms/bombeiros-workforce';
-import { isBombeirosManagerTenant } from '../lib/frms/bombeiros-case-access';
 import {
   BombeirosCheckinSchema, resolveBoaCrewIdentity, registerBoaCheckin,
-  loadBoaOperationalCase, registerBoaCaseAction,
+  loadBoaOperationalCase, registerBoaCaseAction, isBombeirosManagerTenant,
 } from '../lib/frms/bombeiros-operational-events';
 import { BombeirosScenarioSchema, assessBombeirosSyntheticScenario } from '../lib/frms/bombeiros-scenario-method';
 import { safe } from './frms-shared';
