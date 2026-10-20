@@ -35,6 +35,14 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def file_digest(path: str) -> str:
+    checksum = hashlib.sha256()
+    with open(path, 'rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            checksum.update(block)
+    return checksum.hexdigest()
+
+
 def private_fields(value: object) -> bool:
     if isinstance(value, dict):
         return bool(PRIVATE_KEYS.intersection(value)) or any(private_fields(v) for v in value.values())
@@ -157,7 +165,7 @@ def validate_private_pilot(path: str) -> dict:
             compatible_version = bool(NATIVE_WORKER_VERSION.fullmatch(
                 str(edition.get("packageVersion", ""))))
             return {
-                "courseId": course_id, "zipSha256": digest(open(path, "rb").read()),
+                "courseId": course_id, "zipSha256": file_digest(path),
                 "editionSha256": edition_hash, "sourceSha256": report["sourceZipSha256"],
                 "moduleStages": stages, "assetsVerified": len(assets),
                 "answerKeyExposedToLearner": False,
