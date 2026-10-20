@@ -22,7 +22,7 @@ function createDb() {
   CREATE TABLE funcionarios(id INTEGER,empresa_id INTEGER,matricula TEXT,ativo INTEGER,status TEXT,deleted_at TEXT);
   CREATE TABLE qualificacoes_categorias(empresa_id INTEGER,codigo TEXT,descricao TEXT,ativo INTEGER,deleted_at TEXT,updated_at TEXT);
   CREATE TABLE qualificacoes_tipos(id INTEGER,empresa_id INTEGER,codigo TEXT,ativo INTEGER,deleted_at TEXT,updated_at TEXT);
-  CREATE TABLE lms_cursos(id INTEGER,empresa_id INTEGER,titulo TEXT,observacoes TEXT,ativo INTEGER,publicado INTEGER,deleted_at TEXT);
+  CREATE TABLE lms_cursos(id INTEGER,empresa_id INTEGER,titulo TEXT,observacoes TEXT,qualificacao_tipo_id INTEGER,ativo INTEGER,publicado INTEGER,deleted_at TEXT);
   CREATE TABLE lms_cursos_setores(empresa_id INTEGER,setor_id INTEGER,curso_id INTEGER,deleted_at TEXT);
   CREATE TABLE lms_matriculas(id INTEGER,empresa_id INTEGER,curso_id INTEGER,funcionario_id INTEGER,status TEXT,deleted_at TEXT,updated_at TEXT);
   CREATE TABLE lms_matricula_ciclos(id INTEGER,empresa_id INTEGER,matricula_id INTEGER,ciclo_atual INTEGER,deleted_at TEXT,updated_at TEXT);
@@ -46,7 +46,7 @@ function createDb() {
   INSERT INTO funcionarios VALUES(201,999014,'${code}-E1',1,'ATIVO',NULL),(203,999014,'OTHER-QA',1,'ATIVO',NULL),(202,6,'REAL',1,'ATIVO',NULL);
   INSERT INTO qualificacoes_categorias VALUES(999014,'${code}-CAT','${marker}',1,NULL,NULL);
   INSERT INTO qualificacoes_tipos VALUES(101,999014,'${code}-REQ',1,NULL,NULL),(102,6,'REAL',1,NULL,NULL);
-  INSERT INTO lms_cursos VALUES(301,999014,'${code} EAD obrigatório','${marker}',1,1,NULL),(302,6,'REAL','real',1,1,NULL),(303,999014,'OTHER-QA','other-qa',1,1,NULL);
+  INSERT INTO lms_cursos VALUES(301,999014,'${code} EAD obrigatório','${marker}',101,1,1,NULL),(302,6,'REAL','real',102,1,1,NULL),(303,999014,'OTHER-QA','other-qa',101,1,1,NULL);
   INSERT INTO lms_cursos_setores VALUES(999014,11,301,NULL);
   INSERT INTO lms_matriculas VALUES(401,999014,301,201,'CONCLUIDO',NULL,NULL),(402,6,302,202,'CONCLUIDO',NULL,NULL),(403,999014,303,203,'CONCLUIDO',NULL,NULL);
   INSERT INTO lms_matricula_ciclos VALUES(801,999014,401,0,NULL,NULL),(802,999014,401,1,NULL,NULL),(803,6,402,1,NULL,NULL);
