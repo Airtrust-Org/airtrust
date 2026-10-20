@@ -246,6 +246,9 @@ export async function loadBoaCaseQueue(
      AND f.empresa_id = e.empresa_id
     WHERE e.empresa_id = ? AND f.empresa_id = ?
       AND e.tipo = ? AND f.deleted_at IS NULL AND f.ativo = 1
+      AND EXISTS (SELECT 1 FROM frms_fadiga_evento receipt
+         WHERE receipt.id = e.checkin_id AND receipt.empresa_id = e.empresa_id
+           AND receipt.tipo = 'BOA_CHECKIN_V1')
       AND ${scope.clause}
       ${before ? 'AND (e.created_at < ? OR (e.created_at = ? AND e.id < ?))' : ''}
     ORDER BY e.created_at DESC, e.id DESC LIMIT ?`;
