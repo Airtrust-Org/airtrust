@@ -172,6 +172,21 @@ test('existing Pages token is probed read-only by guarded staging diagnostic',()
  assert.doesNotMatch(source,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
 });
 
+test('new split publish modes preserve F0 grant and fail closed outside Actions',()=>{
+ const executor=readFileSync(resolve('scripts/staging/player3-qa-trusted-executor.mjs'),'utf8');
+ assert.match(executor,/PLAYER3_F0_APPROVAL_LOCK_RECOVERY_AND_TARGET_REQUIRED/);
+ assert.match(executor,/PLAYER3_PRIVATE_R2_STEP_PROOF_REQUIRED/);
+ assert.match(executor,/PLAYER3_R2_OBJECT_SCOPE_INVALID/);
+ assert.match(executor,/PLAYER3_PUBLIC_ASSET_SCOPE_INVALID/);
+ for(const mode of ['publish-r2','publish-pages','access-pages','access-r2']){
+  const result=spawnSync(process.execPath,
+   ['scripts/staging/player3-qa-trusted-executor.mjs',mode],
+   {cwd:resolve('.'),env:{...process.env,GITHUB_ACTIONS:'false'},encoding:'utf8'});
+  assert.notEqual(result.status,0);
+  assert.match(result.stderr,/PLAYER3_TRUSTED_MAIN_ONLY/);
+ }
+});
+
 test('protected executor denies local operation without main and reviewed files',()=>{
  const result=spawnSync(process.execPath,
    ['scripts/staging/player3-qa-trusted-executor.mjs','prepare'],
