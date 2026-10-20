@@ -20,6 +20,7 @@ import { loadBombeirosCheckinMonthlyEvidence } from '../lib/frms/bombeiros-check
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
 import { listBombeirosWorkforce } from '../lib/frms/bombeiros-workforce';
+import { BombeirosScenarioSchema, assessBombeirosSyntheticScenario } from '../lib/frms/bombeiros-scenario-method';
 import { safe } from './frms-shared';
 
 const frmsBombeiros = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
@@ -167,6 +168,48 @@ frmsBombeiros.get('/equipe', requireRole('admin'), safe(async (c) => {
       tenant_id: tenant.empresaId,
       profile_code: FRMS_FIREFIGHTER_AVIATION_PROFILE,
       source: 'AIRTRUST_FUNCIONARIOS_TENANT_SCOPED',
+    },
+  });
+}));
+
+/**
+ * POST /api/bombeiros/frms/simulacao/metodologia
+ * Only a synthetic, non-persistent methodological scenario for authorized QA.
+ * This never authorizes operational duty or accepts employee identifiers.
+ */
+frmsBombeiros.post('/simulacao/metodologia', requireRole('admin'), safe(async (c) => {
+  const tenant = getTenantContext(c);
+  if (!isAuthorizedBombeirosFrmsTenant(tenant)) {
+    return c.json({ success: false, code: 'BOMBEIROS_TENANT_REQUIRED' }, 403);
+  }
+  // Never run this with actual production data or user-entered clinical info.
+  if (c.env.ENVIRONMENT !== 'staging' && c.env.ENVIRONMENT !== 'development') {
+    return c.json({ success: false, code: 'BOMBEIROS_SYNTHETIC_ONLY_STAGING' }, 404);
+  }
+  const raw: unknown = await c.req.json().catch(() => null);
+  const parsed = BombeirosScenarioSchema.safeParse(raw);
+  if (!parsed.success) {
+    return c.json({ success: false, code: 'BOMBEIROS_INVALID_SYNTHETIC_SCENARIO' }, 400);
+  }
+  // Governance is required even for a synthetic screen; no shared offshore policy.
+  let policy: Awaited<ReturnType<typeof loadEffectiveFrmsConfiguration>>;
+  try {
+    ({ config: policy } = await resolveBombeirosReadiness(c.env.DB, tenant.empresaId));
+  } catch {
+    return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503);
+  }
+  const result = assessBombeirosSyntheticScenario(parsed.data);
+  c.header('Cache-Control', 'private, no-store');
+  return c.json({
+    success: true,
+    data: result,
+    meta: {
+      tenant_id: tenant.empresaId,
+      profile_code: policy.profileCode,
+      revision_id: policy.revision.id,
+      simulated: true,
+      stored: false,
+      human_review_required: true,
     },
   });
 }));
