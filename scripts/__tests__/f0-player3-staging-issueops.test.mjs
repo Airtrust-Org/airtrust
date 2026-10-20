@@ -68,6 +68,7 @@ test('GitHub-only entrypoint cannot bypass official protected deploy',()=>{
  assert.match(source,/\/actions\/workflows\/deploy-staging\.yml\/dispatches/);
  assert.match(source,/response\.status!==204/);
  assert.doesNotMatch(source,/deploy-airtrust\.yml|apply-migration|D1 execute/i);
+ assert.match(source,/'\\.github\\/workflows\\/deploy-staging\\.yml'/);
 });
 
 
