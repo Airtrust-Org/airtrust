@@ -1,0 +1,152 @@
+name: Player3 Recover WebKit QA Only (Governed Staging)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_PLAYER3_QA_RECOVER_WEBKIT_V1'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact reviewed F4 PR #1389 SHA already deployed in staging'
+        required: true
+        type: string
+      grant_id:
+        description: 'Fresh unedited admin issue #776 comment ID for only WebKit learner 188'
+        required: true
+        type: string
+
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  checks: read
+  pull-requests: read
+  issues: read
+
+env:
+  PLAYER3_RECOVERY_CONFIRMATION: ${{ inputs.confirmation }}
+  PLAYER3_RECOVERY_RELEASE_SHA: ${{ inputs.release_sha }}
+  PLAYER3_RECOVERY_GRANT_ID: ${{ inputs.grant_id }}
+
+jobs:
+  guard:
+    name: Guard fresh admin issue grant, exact F4 SHA, 10 checks and staging
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify current trusted-main, issue #776 grant and runtime
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging/player3-qa-recover-webkit.mjs guard
+
+  d1_preflight:
+    name: D1 SELECT confirms exactly 187 STARTED and 188 fresh
+    needs: guard
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    outputs:
+      qa_roster: ${{ steps.snapshot.outputs.qa_roster }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install pinned SELECT-only Wrangler
+        run: npm --prefix worker-airtrust ci --ignore-scripts
+      - name: Revalidate only two exact QA cycle and edition pins
+        id: snapshot
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/staging/player3-qa-recover-webkit.mjs preflight
+
+  worker_recover:
+    name: One authenticated Worker start only for WebKit matricula 188
+    needs: [guard, d1_preflight]
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: One authorized Worker POST then own snapshot and session
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONFIRM_ONLY_WEBKIT: AIRTRUST_PLAYER3_QA_RECOVER_WEBKIT_V1
+          PLAYER3_RECOVERY_ROSTER: ${{ needs.d1_preflight.outputs.qa_roster }}
+          PLAYER3_QA_WEBKIT_PASSWORD: ${{ secrets.PLAYER3_QA_WEBKIT_PASSWORD }}
+        run: node scripts/staging/player3-qa-recover-webkit.mjs recover
+
+  d1_postread:
+    name: D1 SELECT proves both current cycles started, no replacement
+    needs: [guard, d1_preflight, worker_recover]
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install pinned SELECT-only Wrangler
+        run: npm --prefix worker-airtrust ci --ignore-scripts
+      - name: Verify same two already-enrolled students, cycles and editions
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PLAYER3_RECOVERY_ROSTER: ${{ needs.d1_preflight.outputs.qa_roster }}
+        run: node scripts/staging/player3-qa-recover-webkit.mjs verify
+
+  result:
+    name: Never claim 6-journey acceptance or production
+    needs: [guard, d1_preflight, worker_recover, d1_postread]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Non-secret fail-closed summary
+        env:
+          G: ${{ needs.guard.result }}
+          P: ${{ needs.d1_preflight.result }}
+          W: ${{ needs.worker_recover.result }}
+          R: ${{ needs.d1_postread.result }}
+        run: |
+          {
+            echo '### Player3 WebKit-only staging QA recovery'
+            echo "- exact admin, CI, SHA and live staging guard: $G"
+            echo "- D1 existing 187-started / 188-fresh preflight: $P"
+            echo "- only authenticated WebKit Worker start: $W"
+            echo "- D1 unchanged identity and both active postread: $R"
+            echo '- Tenant 999006 / course 327, NO migration or direct SQL writes'
+            echo '- No grade, qualification, PDF, R2 or production writes'
+            echo '- Six browser journeys and real certifications NOT ATTESTED'
+            echo '- Any failure requires independent readback before another grant'
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$G" = success
+          test "$P" = success
+          test "$W" = success
+          test "$R" = success
