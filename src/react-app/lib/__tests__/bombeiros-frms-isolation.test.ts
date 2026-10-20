@@ -15,6 +15,15 @@ describe('BOA FRMS navigation boundary', () => {
     },
   );
 
+  it('routes authorized BOA operational managers to their own case workspace', () => {
+    expect(resolveBombeirosLegacyFrmsRedirect('bombeiros', '/frms', 'GESTOR'))
+      .toBe('/bombeiros/frms/casos');
+    expect(resolveBombeirosLegacyFrmsRedirect('bombeiros', '/frms/relatorios', 'manager'))
+      .toBe('/bombeiros/frms/casos');
+    expect(resolveBombeirosLegacyFrmsRedirect('bombeiros', '/frms', 'ADMINISTRADOR'))
+      .toBe('/bombeiros/frms');
+  });
+
   it('preserves canonical employee registration and BOA portal paths', () => {
     expect(resolveBombeirosLegacyFrmsRedirect('bombeiros', '/funcionarios')).toBeNull();
     expect(resolveBombeirosLegacyFrmsRedirect('bombeiros', '/bombeiros/frms')).toBeNull();
