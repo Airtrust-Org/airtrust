@@ -48,7 +48,7 @@ function currentLocalMonth() {
 export default function FrmsMonthlyConsolidated() {
   const [month, setMonth] = useState(currentLocalMonth);
   const { data, loading, error, refetch } = useApi<Envelope>(
-    `/api/frms/relatorios/mensal-consolidado?mes=${month}`,
+    `/api/bombeiros/frms/relatorios/mensal-consolidado?mes=${month}`,
     { requireAuth: true, bypassGetCache: true, staleTime: 0 },
   );
   const summary = data?.success && data.data ? data.data : null;
