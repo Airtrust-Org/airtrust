@@ -122,12 +122,21 @@ export function verifyNativeQaApproval({rootDir,evidenceFile,approvalFile,truste
     (policy.mode==='ATTENDANCE_ONLY'||(Number.isInteger(policy.masteryScore)&&
       policy.masteryScore>=0&&policy.masteryScore<=100&&typeof policy.moduleGate==='boolean')),
     'COMPLETION_AND_APPROVAL_POLICY_REQUIRED');
+  // Signed certification policy is explicit and edition hash-bound. Worker
+  // authoring accepts moduleGate:true or omission, but rejects false.
+  need(policy.mode==='ATTENDANCE_ONLY'||
+    (policy.mode==='MODULE_CERTIFIED'&&policy.moduleGate===true)||
+    (policy.mode==='FINAL_CERTIFIED'&&policy.moduleGate===false),
+    'COMPLETION_AND_APPROVAL_POLICY_REQUIRED');
   need(obj(edition.policy)&&
     (policy.mode==='ATTENDANCE_ONLY'?
       edition.policy.mode==='FORMATIVE':
       edition.policy.mode==='SCORED'&&
+      Number.isInteger(edition.policy.masteryScore)&&
       edition.policy.masteryScore===policy.masteryScore&&
-      Boolean(edition.policy.moduleGate)===policy.moduleGate),
+      (policy.mode==='MODULE_CERTIFIED'?
+        edition.policy.moduleGate===true:
+        !Object.hasOwn(edition.policy,'moduleGate'))),
     'NATIVE_EDITION_POLICY_CONFLICT');
   need(nav.schema==='AIRTRUST_PLAYER3_NAVIGATION_INTERACTION_REVIEW_V1'&&
     nav.status==='PASS'&&Array.isArray(nav.checks)&&
