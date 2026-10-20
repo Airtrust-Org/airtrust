@@ -299,6 +299,25 @@ app.use('/api/*', async (c, next) => {
   });
 });
 
+// BOA/CBMMG must NEVER run offshore/generic FRMS handlers. The shared global
+// auth + tenant guard above has already validated the membership and active
+// tenant. BOA endpoints are mounted ONLY under /api/bombeiros/frms.
+const rejectLegacyFrmsForBombeiros = async (
+  c: Parameters<Parameters<typeof app.use>[1]>[0],
+  next: () => Promise<void>,
+) => {
+  if (getTenantContext(c).empresaCodigo === 'bombeiros') {
+    return c.json({
+      success: false,
+      code: 'BOMBEIROS_LEGACY_FRMS_DISABLED',
+      error: 'Use a API específica de aviação dos Bombeiros.',
+    }, 403);
+  }
+  return next();
+};
+app.use('/api/frms', rejectLegacyFrmsForBombeiros);
+app.use('/api/frms/*', rejectLegacyFrmsForBombeiros);
+
 app.use('/api/*', domainEventProcessorMiddleware());
 
 // Logger - Loga todas as requisições
