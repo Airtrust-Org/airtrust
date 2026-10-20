@@ -19,6 +19,7 @@ import { loadEffectiveFrmsConfiguration, relatorioCompliance } from '../lib/frms
 import { buildFrmsMonthlyConsolidatedSummary } from '../lib/frms/monthly-consolidated-summary';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
+import { listBombeirosWorkforce } from '../lib/frms/bombeiros-workforce';
 import { safe } from './frms-shared';
 
 const frmsBombeiros = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
@@ -45,6 +46,25 @@ function parseMonth(month: string | undefined): string | null {
 function precedingMonth(month: string): string {
   const [year, m] = month.split('-').map(Number);
   return m === 1 ? `${year - 1}-12` : `${year}-${String(m - 1).padStart(2, '0')}`;
+}
+
+/** Same profile guard for all BOA FRMS reads — no offshore fallback. */
+async function resolveBombeirosReadiness(db: D1Database, empresaId: number) {
+  const referenceAt = getTodayIsoSaoPaulo();
+  const [evidence, config] = await Promise.all([
+    resolveFrmsRegulatoryProfileEvidence(db, { empresaId, referenceAt }),
+    loadEffectiveFrmsConfiguration(db, empresaId, referenceAt),
+  ]);
+  if (
+    evidence.empresaId !== empresaId
+    || evidence.profileCode !== FRMS_FIREFIGHTER_AVIATION_PROFILE
+    || config.empresaId !== empresaId
+    || config.profileCode !== FRMS_FIREFIGHTER_AVIATION_PROFILE
+    || evidence.regulatoryProfileId !== config.regulatoryProfileId
+  ) {
+    throw new Error('BOMBEIROS_PROFILE_NOT_APPROVED');
+  }
+  return { config, referenceAt };
 }
 
 frmsBombeiros.use('*', async (c, next) => {
@@ -74,27 +94,11 @@ frmsBombeiros.get('/relatorios/mensal-consolidado', requireRole('admin'), safe(a
     return c.json({ success: false, code: 'BOMBEIROS_INVALID_MONTH' }, 400);
   }
 
-  // Independent regulatory governance. Offshore assignment, a missing revision,
-  // or ambiguous profile all fail closed before any workforce/FRMS aggregation.
-  const referenceAt = getTodayIsoSaoPaulo();
+  // Independent governance is enforced BEFORE touching canonical employees.
   let policy: Awaited<ReturnType<typeof loadEffectiveFrmsConfiguration>>;
+  let referenceAt: string;
   try {
-    const [evidence, config] = await Promise.all([
-      resolveFrmsRegulatoryProfileEvidence(c.env.DB, {
-        empresaId, referenceAt,
-      }),
-      loadEffectiveFrmsConfiguration(c.env.DB, empresaId, referenceAt),
-    ]);
-    if (
-      evidence.empresaId !== empresaId
-      || evidence.profileCode !== FRMS_FIREFIGHTER_AVIATION_PROFILE
-      || config.empresaId !== empresaId
-      || config.profileCode !== FRMS_FIREFIGHTER_AVIATION_PROFILE
-      || evidence.regulatoryProfileId !== config.regulatoryProfileId
-    ) {
-      return c.json({ success: false, code: 'BOMBEIROS_PROFILE_NOT_APPROVED' }, 503);
-    }
-    policy = config;
+    ({ config: policy, referenceAt } = await resolveBombeirosReadiness(c.env.DB, empresaId));
   } catch {
     return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503);
   }
@@ -129,6 +133,43 @@ frmsBombeiros.get('/relatorios/mensal-consolidado', requireRole('admin'), safe(a
         'A revisão exibida é a vigente na emissão; a revisão de cada dia histórico deve ser auditada separadamente.',
         'Escopo de funcionários e consultas pertencem somente ao tenant Bombeiros.',
       ],
+    },
+  });
+}));
+
+/**
+ * GET /api/bombeiros/frms/equipe?cursor=0&limit=50
+ * Read-only employee registry view, NOT an operational dispatch or crew roster.
+ * A person's aviation classification cannot by itself authorize flight duty.
+ */
+frmsBombeiros.get('/equipe', requireRole('admin'), safe(async (c) => {
+  const tenant = getTenantContext(c);
+  if (!isAuthorizedBombeirosFrmsTenant(tenant)) {
+    return c.json({ success: false, code: 'BOMBEIROS_TENANT_REQUIRED' }, 403);
+  }
+  const cursorQuery = c.req.query('cursor') ?? '0';
+  const limitQuery = c.req.query('limit') ?? '50';
+  if (!/^\d+$/.test(cursorQuery) || !/^\d+$/.test(limitQuery)) {
+    return c.json({ success: false, code: 'BOMBEIROS_INVALID_ROSTER_PAGE' }, 400);
+  }
+  const cursor = Number(cursorQuery);
+  const limit = Number(limitQuery);
+  if (!Number.isSafeInteger(cursor) || cursor < 0
+    || !Number.isSafeInteger(limit) || limit < 1 || limit > 130) {
+    return c.json({ success: false, code: 'BOMBEIROS_INVALID_ROSTER_PAGE' }, 400);
+  }
+  try {
+    await resolveBombeirosReadiness(c.env.DB, tenant.empresaId);
+  } catch {
+    return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503);
+  }
+  const access = await getEmployeeSectorAccess(c, tenant.empresaId);
+  const result = await listBombeirosWorkforce(c.env.DB, tenant.empresaId, access, { cursor, limit });
+  return c.json({
+    success: true, data: result, meta: {
+      tenant_id: tenant.empresaId,
+      profile_code: FRMS_FIREFIGHTER_AVIATION_PROFILE,
+      source: 'AIRTRUST_FUNCIONARIOS_TENANT_SCOPED',
     },
   });
 }));
