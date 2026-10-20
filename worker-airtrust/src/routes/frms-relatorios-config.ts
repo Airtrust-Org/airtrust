@@ -22,6 +22,7 @@ import { resolveFrmsRegulatoryProfileEvidence } from '../lib/frms/parameter-gove
 import { requireRole } from '../middleware/rbac';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
+import { buildFrmsMonthlyConsolidatedSummary } from '../lib/frms/monthly-consolidated-summary';
 import {
   relatorioIndividual,
   relatorioCompliance,
@@ -256,6 +257,61 @@ frmsRelatoriosConfig.get(
       coverage: { authorized_crew: crewScope.ids.size, rows_returned: result.alertas.length,
         total_matching: result.total, state: result.total > result.alertas.length ? 'PARTIAL' : 'NOT_DETERMINED' },
     } });
+  }),
+);
+
+/**
+ * GET /api/frms/relatorios/mensal-consolidado?mes=YYYY-MM
+ *
+ * Resumo destinado à Administração do tenant. Sem IDs/nomes/respostas
+ * individuais. Exige perfil admin E escopo real autorizado; grupos pequenos
+ * não são divulgados. Não persiste nem assina fechamento mensal.
+ */
+frmsRelatoriosConfig.get(
+  '/relatorios/mensal-consolidado',
+  requireRole('admin'),
+  safe(async (c) => {
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json({ success: false, code: 'FRMS_CONTEXT_UNAVAILABLE' }, 403);
+    }
+    const mes = reportMonth(c.req.query('mes'));
+    if (!mes) {
+      return c.json({ success: false, code: 'FRMS_INVALID_REPORT_MONTH' }, 400);
+    }
+    const crewScope = await resolveReportCrewScope(c, empresaId);
+    if (crewScope.ids.size < 5) {
+      return c.json({ success: false, code: 'FRMS_CONSOLIDATED_SMALL_COHORT' }, 403);
+    }
+    let meta;
+    try {
+      meta = await buildFrmsReportMeta(c.env.DB, empresaId, mes, 'FRMS_MONTHLY_CONSOLIDATED');
+    } catch (error) {
+      return frmsConfigurationUnavailable(c, error);
+    }
+    const [year, month] = mes.split('-').map(Number);
+    const previousMonth = month === 1
+      ? `${year - 1}-12`
+      : `${year}-${String(month - 1).padStart(2, '0')}`;
+    const [current, previous] = await Promise.all([
+      relatorioCompliance(c.env.DB, mes, empresaId, crewScope.ids),
+      relatorioCompliance(c.env.DB, previousMonth, empresaId, crewScope.ids),
+    ]);
+    const summary = buildFrmsMonthlyConsolidatedSummary(current, previous, crewScope.ids.size);
+    return c.json({
+      success: true,
+      data: summary,
+      meta: {
+        ...meta,
+        scope: crewScope.access.mode,
+        comparison_month: previousMonth,
+        limitations: [
+          ...meta.limitations,
+          'Resumo administrativo: somente indicadores agregados; células pequenas suprimidas.',
+          'Ainda não é fechamento mensal assinado, relatório de eficácia de medidas ou prova de completude.',
+        ],
+      },
+    });
   }),
 );
 
