@@ -154,8 +154,7 @@ describe('BOA check-in -> case -> intervention -> efficacy (SQLite, no offshore 
       });
       expect(await registerBoaCaseAction(db, 130, id, 201, intervention, 'treatment', manager))
         .toBe('NOT_ALLOWED');
-      const counts = sqlite.prepare('SELECT tipo, COUNT(*) as n FROM frms_fadiga_evento GROUP BY tipo').all()
-        as Array<{ tipo: string; n: number }>;
+      const counts = sqlite.prepare('SELECT tipo, COUNT(*) as n FROM frms_fadiga_evento GROUP BY tipo').all() as Array<{ tipo: string; n: number }>;
       expect(Object.fromEntries(counts.map(x => [x.tipo, x.n]))).toMatchObject({
         [BOA_CHECKIN_TYPE]: 1, [BOA_CASE_OPEN_TYPE]: 1,
         [BOA_CASE_TREATMENT_TYPE]: 1, [BOA_CASE_CLOSED_TYPE]: 1,
