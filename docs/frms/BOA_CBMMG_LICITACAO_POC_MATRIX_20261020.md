@@ -29,7 +29,7 @@
 5. **LGPD:** administração só recebe dados agregados, equipe clínica/responsável técnico acessa informações identificáveis conforme RBAC, outro tenant recebe 403, células 1–4 suprimidas.
 
 ## Primeira entrega de engenharia do contrato — 20/10/2026
-- Endpoint novo: `GET /api/frms/relatorios/mensal-consolidado?mes=YYYY-MM`, com autenticação já existente do router, `requireRole('admin')`, tenant validado e equipe autorizada.
+- Endpoint exclusivo: `GET /api/bombeiros/frms/relatorios/mensal-consolidado?mes=YYYY-MM`, com autenticação já existente do router, `requireRole('admin')`, tenant validado e equipe autorizada.
 - Reutiliza exclusivamente `relatorioCompliance()` que deriva `listFrmsOperationalSnapshot()` em escopo autorizado; compara somente contagens de **eventos registrados** com mês anterior.
 - Resposta **sem nome, ID de pessoa, KSS, sono, PVT ou informação médica individual**; escopos menores que cinco são negados; contagens 1–4 são suprimidas com `null` e motivo; ausência/incompletude também devolve `null`, nunca zero inventado.
 - Nenhum SQL de write, migration, seed, alteração de coeficiente ou despacho. Consulta é uma **prévia técnica**, NÃO relatório gerencial homologado, assinado ou arquivado. Ainda não inclui indicador de eficácia de mitigação nem denominador validado de cobertura.
@@ -72,4 +72,4 @@
 8. **Paridade / não regressão:** não alterar telas, formulários, limitações, scores, rotas públicas, schemas ou relatórios da Costa do Sol para cumprir o edital; mudanças no motor compartilhado exigem testes das duas empresas, revisão de regressão e aprovação separada.
 
 ### Estado desta PR
-Apenas o namespace BOA, barreiras de autorização, prévia mensal consolidada, telas e testes negativos foram codificados. **Não** comprova ainda todas as rotas operacionais de check-in, missão, mitigação, R2, offline e relatórios; elas exigem aceitação cross-tenant própria. **Nenhum tenant BOA foi provisionado** e nenhuma escrita D1/R2 executada.
+Apenas o namespace BOA, barreiras de autorização, prévia mensal consolidada, portal exclusivo e testes negativos foram codificados. **Não** comprova ainda todas as rotas operacionais de check-in, missão, mitigação, R2, offline e relatórios; elas exigem aceitação cross-tenant própria. **Nenhum tenant BOA foi provisionado** e nenhuma escrita D1/R2 executada.
