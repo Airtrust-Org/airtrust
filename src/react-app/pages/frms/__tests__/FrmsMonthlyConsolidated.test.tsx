@@ -53,7 +53,7 @@ describe('BOA monthly check-in receipt evidence — UI', () => {
     render(<FrmsMonthlyConsolidated />);
     expect(useApiMock.mock.calls[0][0]).toMatch(/^\/api\/bombeiros\/frms\/relatorios\/mensal-consolidado/);
     expect(screen.getByText('26')).toBeInTheDocument();
-    expect(screen.getByText('6', { selector: 'p.text-xl' })).toBeInTheDocument();
+    expect(screen.getAllByText('6', { selector: 'p.text-xl' })).toHaveLength(2);
     expect(screen.queryByText(/Dias conformes registrados/)).not.toBeInTheDocument();
   });
 });
