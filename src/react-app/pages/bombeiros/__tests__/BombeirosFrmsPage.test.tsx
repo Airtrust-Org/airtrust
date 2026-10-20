@@ -1,0 +1,46 @@
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import BombeirosFrmsPage, { isBombeirosPortalTenant } from '../BombeirosFrmsPage';
+
+const useAuthMock = vi.fn();
+vi.mock('@/react-app/hooks/useAuth', () => ({
+  useAuth: (...args: unknown[]) => useAuthMock(...args),
+}));
+vi.mock('@/react-app/components/AppLayout', () => ({
+  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+vi.mock('../../frms/FrmsMonthlyConsolidated', () => ({
+  default: () => <div data-testid="boa-monthly-api-consumer">Painel mensal exclusivo</div>,
+}));
+
+describe('Portal separado BOA/CBMMG', () => {
+  beforeEach(() => useAuthMock.mockReset());
+
+  it.each([
+    { id: 6, codigo: 'costadosol' },
+    { id: 6, codigo: 'bombeiros' },
+    { id: 130, codigo: 'airtrust' },
+    { id: 130, codigo: 'costadosol' },
+  ])('recusa exibição de BOA para empresa $id / $codigo', (empresa) => {
+    expect(isBombeirosPortalTenant(empresa)).toBe(false);
+    useAuthMock.mockReturnValue({
+      empresaAtualId: empresa.id,
+      empresas: [{ ...empresa, nome: 'QA', role: 'ADMINISTRADOR', is_primary: 1, is_current: 1 }],
+    });
+    render(<BombeirosFrmsPage />);
+    expect(screen.getByRole('alert')).toHaveTextContent('exclusivo da empresa Bombeiros');
+    expect(screen.queryByTestId('boa-monthly-api-consumer')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Cadastro de funcionários/i })).not.toBeInTheDocument();
+  });
+
+  it('permite UI exclusiva quando código e ID são do tenant Bombeiros', () => {
+    useAuthMock.mockReturnValue({
+      empresaAtualId: 130,
+      empresas: [{ id: 130, codigo: 'bombeiros', nome: 'Bombeiros',
+        role: 'ADMINISTRADOR', is_primary: 1, is_current: 1 }],
+    });
+    render(<BombeirosFrmsPage />);
+    expect(screen.getByTestId('boa-monthly-api-consumer')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Cadastro de funcionários/i })).toHaveAttribute('href', '/funcionarios');
+  });
+});
