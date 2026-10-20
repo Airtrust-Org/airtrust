@@ -163,7 +163,7 @@ describe('Native start transaction — D1 batch and tenant/cycle scope', () => {
       {success:true,meta:{changes:0},results:[]},
       {success:true,meta:{changes:1}},
       {success:true,meta:{changes:1}},
-      {success:true,meta:{changes:0}},
+      {success:true,meta:{changes:0},results:[{native_start_postcheck:'null'}]},
     ]);
     await expect(f.start()).rejects.toMatchObject({code:'NATIVE_START_INCONSISTENT_CHANGES'});
   });
