@@ -32,10 +32,24 @@ export default function BombeirosCaseManagementPage() {
   const [justificativa, setJustificativa] = useState('');
   const [eficacia, setEficacia] = useState('');
   const [notice, setNotice] = useState('');
+  const [queueCursor, setQueueCursor] = useState<{ created_at: string; id: string } | null>(null);
   const { data, loading, error, refetch } = useApi<CaseEnvelope>(
     `/api/bombeiros/frms/casos/${encodeURIComponent(caseId)}`,
     { enabled: validTenant && Boolean(caseId), bypassGetCache: true, staleTime: 0, requireAuth: true },
   );
+  const queueQuery = queueCursor
+    ? `&cursor_at=${encodeURIComponent(queueCursor.created_at)}&cursor_id=${encodeURIComponent(queueCursor.id)}`
+    : '';
+  const { data: caseQueue, loading: queueLoading, error: queueError, refetch: refetchQueue } =
+    useApi<{ success: boolean; data: {
+      items: CaseStatus[]; next_cursor: { created_at: string; id: string } | null;
+    } }>(
+      `/api/bombeiros/frms/casos?limit=50${queueQuery}`,
+      { enabled: validTenant, bypassGetCache: true, staleTime: 0, requireAuth: true },
+    );
+  const visibleCases = caseQueue?.success && Array.isArray(caseQueue.data?.items)
+    ? caseQueue.data.items : [];
+
   const { mutate, loading: saving, error: mutationError } = useApiMutation<{
     success: boolean; status: string;
   }>();
@@ -62,6 +76,7 @@ export default function BombeirosCaseManagementPage() {
       });
       setNotice('Tratamento registrado. O caso permanece aberto até verificação de eficácia.');
       void refetch();
+      void refetchQueue();
     } catch { /* Safe error from authenticated API displayed below. */ }
   };
   const closeCase = async () => {
@@ -94,6 +109,40 @@ export default function BombeirosCaseManagementPage() {
               possuem responsável, prazo, medida, justificativa e auditoria.
             </p>
           </header>
+          <section className="rounded border border-slate-300 bg-white p-4 space-y-3"
+            aria-label="Fila de revisão BOA">
+            <h2 className="font-semibold">Fila de ocorrências da equipe autorizada</h2>
+            <p className="text-sm text-slate-700">
+              Apenas código, data e situação. Dados individuais de fadiga não são publicados
+              nesta lista. A fila não inclui pessoas de outros setores ou empresas.
+            </p>
+            {queueLoading && <p role="status">Consultando fila de revisão…</p>}
+            {queueError && <p role="alert" className="text-sm text-rose-800">
+              Fila indisponível para o escopo autorizado: {queueError}
+            </p>}
+            {!queueLoading && !queueError && visibleCases.length === 0 &&
+              <p className="text-sm">Nenhuma ocorrência disponível neste recorte.</p>}
+            <ul className="space-y-2">
+              {visibleCases.map(item => <li key={item.case_id}
+                className="flex flex-wrap justify-between gap-2 rounded border border-slate-200 p-2 text-sm">
+                <div><strong>{item.case_id}</strong>
+                  <span className="ml-2">{item.state} · {item.created_at ?? 'data indisponível'}</span>
+                </div>
+                <button type="button" className="rounded border px-3 py-1"
+                  onClick={() => {
+                    setDraftId(item.case_id); setCaseId(item.case_id);
+                    setNotice('');
+                  }}>Abrir caso</button>
+              </li>)}
+            </ul>
+            <div className="flex gap-2">
+              <button type="button" className="rounded border px-3 py-2 text-sm"
+                disabled={!queueCursor} onClick={() => setQueueCursor(null)}>Primeira página</button>
+              <button type="button" className="rounded border px-3 py-2 text-sm"
+                disabled={!caseQueue?.data?.next_cursor}
+                onClick={() => setQueueCursor(caseQueue?.data?.next_cursor ?? null)}>Próxima página</button>
+            </div>
+          </section>
           <section className="rounded border border-slate-300 bg-white p-4 space-y-3">
             <h2 className="font-semibold">Consultar ocorrência previamente registrada</h2>
             <div className="flex flex-wrap gap-2">
