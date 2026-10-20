@@ -78,7 +78,7 @@ const START_CYCLE_SQL = [
 const POSTCHECK_SQL = [
   'SELECT json(CASE WHEN EXISTS (SELECT 1', PINNED_SCOPE,
   "AND m.status='EM_ANDAMENTO' AND ciclo.status='EM_ANDAMENTO')",
-  "THEN 'null' ELSE 'NATIVE_START_ATOMIC_SYNC_FAILED' END)",
+  "THEN 'null' ELSE 'NATIVE_START_ATOMIC_SYNC_FAILED' END) AS native_start_postcheck",
 ].join(' ');
 
 
@@ -155,23 +155,23 @@ export async function startNativeEnrollment(params: {
   const preflightState = (
     results[0]?.results as Array<{ native_start_state?: unknown }> | undefined
   )?.[0]?.native_start_state;
-  const matriculaChanges = results[1]?.meta.changes;
-  const cycleChanges = results[2]?.meta.changes;
-  // The preflight classifies the authenticated, edition-pinned state before
-  // either write; the final SQL postcheck proves BOTH mirrors are active in
-  // the SAME transaction. D1 may report 0 changes for a successfully
-  // synchronized row (triggers/adapter). Do not return 409 AFTER COMMIT merely
-  // because both metadata counters are zero.
-  if (preflightState === 'START' &&
-      ((matriculaChanges === 1 && cycleChanges === 1) ||
-       (matriculaChanges === 0 && cycleChanges === 0))) {
+  const postcheckValue = (
+    results[3]?.results as Array<{ native_start_postcheck?: unknown }> | undefined
+  )?.[0]?.native_start_postcheck;
+  if (postcheckValue !== 'null') {
+    throw new NativeEnrollmentStartError('NATIVE_START_POSTCHECK_RECEIPT_MISSING');
+  }
+  // The final DB-side assertion proves both mirrors share EM_ANDAMENTO,
+  // within the SAME D1 transaction. Statement meta.changes counters are
+  // advisory and can disagree with committed state. A false 409 after commit
+  // caused the physical staging learner to start despite a failed API reply.
+  // Choose the receipt from the prior trusted scope+state, never those
+  // metadata counters. Invalid scope/partial update still aborts in SQLite.
+  if (preflightState === 'START') {
     return { state: 'STARTED', cicloId, editionHash };
   }
-  if (preflightState === 'ALREADY_STARTED' &&
-      matriculaChanges === 0 && cycleChanges === 0) {
+  if (preflightState === 'ALREADY_STARTED') {
     return { state: 'ALREADY_STARTED', cicloId, editionHash };
   }
-  // A mixed/unknown count, missing preflight receipt or mismatched
-  // lifecycle mode is still a hard failure; never guess completion.
   throw new NativeEnrollmentStartError('NATIVE_START_INCONSISTENT_CHANGES');
 }
