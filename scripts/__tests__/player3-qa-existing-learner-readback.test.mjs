@@ -69,7 +69,7 @@ test('claim and HTTP evidence cannot cross employee, edition or course scope',()
   assertClaims(jwt(1),rows[0]);
   assert.throws(()=>assertClaims(jwt(1),rows[1]),/LEARNER_JWT/);
   const snapshot={empresa_id:TENANT,matricula_id:201,ciclo_id:901,
-    edition_sha256:edition,status:'EM_ANDAMENTO',
+    edition_sha256:edition,status:'NAO_INICIADO',
     completed_unit_ids:[],attempts:[],qualificacao_historico_id:null,
     certificate_id:null};
   assertOwnSnapshot(snapshot,rows[0]);
