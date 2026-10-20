@@ -17,6 +17,7 @@ import {
 import AppLayout from '@/react-app/components/AppLayout';
 import { useApi } from '@/react-app/hooks/useApi';
 import { deriveFrmsReportInsights } from './frmsReportInsights';
+import FrmsMonthlyConsolidated from './FrmsMonthlyConsolidated';
 
 function toDateKeyLocal(date: Date): string {
   const year = date.getFullYear();
@@ -161,6 +162,7 @@ function orderReportRows(tipo: TipoRelatorio, rows: FrmsReportRow[]): FrmsReport
 export default function FrmsRelatorios() {
   const navigate = useNavigate();
   const [tipo, setTipo] = useState<TipoRelatorio>('compliance');
+  const [showMonthlyConsolidated, setShowMonthlyConsolidated] = useState(false);
   const [periodoInicio, setPeriodoInicio] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -358,6 +360,20 @@ export default function FrmsRelatorios() {
           >
             <Printer className="h-4 w-4" /> PDF
           </button>
+        </div>
+
+        <div className="space-y-3">
+          <button type="button"
+            aria-expanded={showMonthlyConsolidated}
+            aria-controls="frms-mensal-consolidado-preview"
+            onClick={() => setShowMonthlyConsolidated(value => !value)}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800"
+          >
+            {showMonthlyConsolidated ? 'Ocultar resumo mensal da Administração' : 'Consultar resumo mensal da Administração'}
+          </button>
+          {showMonthlyConsolidated && <div id="frms-mensal-consolidado-preview">
+            <FrmsMonthlyConsolidated />
+          </div>}
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
