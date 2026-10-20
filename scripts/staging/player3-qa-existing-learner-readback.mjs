@@ -137,7 +137,7 @@ const SQL=`SELECT lower(u.email) email, f.empresa_id, m.curso_id,
  ('qa-player3-chromium@staging.airtrust.invalid',
  'qa-player3-webkit@staging.airtrust.invalid')
  ORDER BY u.email;`;
-function roster(){
+export function roster(){
   expect(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID,
     'STAGING_READ_CREDENTIALS_REQUIRED');
   requireStagingWrangler();
