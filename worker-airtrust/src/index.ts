@@ -23,7 +23,7 @@
  * - JWT_SECRET: Secret para autenticação JWT
  */
 
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import type { Env, Variables } from './types';
 import { resolveAllowedOrigin } from './config/allowed-origins';
 import { createWorkerEntrypoint } from './runtime/worker-entrypoint';
@@ -302,10 +302,10 @@ app.use('/api/*', async (c, next) => {
 // BOA/CBMMG must NEVER run offshore/generic FRMS handlers. The shared global
 // auth + tenant guard above has already validated the membership and active
 // tenant. BOA endpoints are mounted ONLY under /api/bombeiros/frms.
-const rejectLegacyFrmsForBombeiros = async (
-  c: Parameters<Parameters<typeof app.use>[1]>[0],
-  next: () => Promise<void>,
-) => {
+const rejectLegacyFrmsForBombeiros: MiddlewareHandler<{
+  Bindings: Env;
+  Variables: Variables;
+}> = async (c, next) => {
   if (getTenantContext(c).empresaCodigo === 'bombeiros') {
     return c.json({
       success: false,
