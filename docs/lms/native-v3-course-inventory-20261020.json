@@ -1,0 +1,214 @@
+{
+  "schema": "AIRTRUST_NATIVE_V3_PRIVATE_CONTENT_INVENTORY_METADATA_V1",
+  "date": "2026-10-20",
+  "owner": "Learning Factory / cursos EAD",
+  "source": "User-supplied V2 candidate ZIPs; V3 editorial preview prepared offline without D1/R2 writes",
+  "status": "REVIEW_ONLY_NOT_PUBLISHABLE",
+  "productionWritesPerformed": false,
+  "canonicalSGSO": {
+    "courseId": "SGSO",
+    "area": "QSMS",
+    "sourceArchive": "SGSO_M10_4_CORRIGIDO__NATIVE_V1_REVISAO.zip",
+    "excludedCandidate": "SEGURANCA_OPERACIONAL/SGSO_M10_7_RECONSTRUIDO_PADRAO_CANONICO__NATIVE_V1_REVISAO.zip",
+    "exclusionScope": "only from new candidate catalog, not delete production history or source"
+  },
+  "rules": {
+    "minimumContentSlidesPerModule": 20,
+    "proposedPassingScorePercent": 70,
+    "layout": "16:9 desktop viewport first; mobile and tablet responsive",
+    "approvalRequired": true,
+    "privateAnswers": "never publish in Pages or public GitHub",
+    "moduleAssessmentEvidence": "backend per-module attempt required when moduleGate is true"
+  },
+  "courses": [
+    {
+      "area": "QSMS",
+      "courseId": "SGSO",
+      "contentSlides": 37,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": true,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "QSMS",
+      "courseId": "costa-do-sol-doutrinamento-seguranca-qualidade",
+      "contentSlides": 34,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": true,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "QSMS",
+      "courseId": "costa-do-sol-gerenciamento-residuos-coleta-seletiva",
+      "contentSlides": 20,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "QSMS",
+      "courseId": "costa-do-sol-integracao-corporativa",
+      "contentSlides": 25,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "QSMS",
+      "courseId": "costa-do-sol-nr6-epi",
+      "contentSlides": 20,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "QSMS",
+      "courseId": "costa-do-sol-nr11-movimentacao-materiais",
+      "contentSlides": 20,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "QSMS",
+      "courseId": "costa-do-sol-nr20-iniciacao",
+      "contentSlides": 20,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": true,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "QSMS",
+      "courseId": "costa-do-sol-nr26-fds",
+      "contentSlides": 28,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "QSMS",
+      "courseId": "costa-do-sol-nr35-trabalho-altura-apoio",
+      "contentSlides": 24,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-fdm-comite-gatekeeper",
+      "contentSlides": 45,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-ppsp-supervisor-arso",
+      "contentSlides": 20,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-ppsp-arso",
+      "contentSlides": 20,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-cultura-justa",
+      "contentSlides": 20,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-fod",
+      "contentSlides": 20,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-losa-observador-analista",
+      "contentSlides": 48,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-codigo-etica-conduta",
+      "contentSlides": 56,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": true,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-nr05-cipa",
+      "contentSlides": 46,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": true,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-stop-work",
+      "contentSlides": 24,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": true,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-crm-gestores-rbac119",
+      "contentSlides": 42,
+      "mode": "FORMATIVE",
+      "proposedPassingScorePercent": null,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-fdm-manutencao",
+      "contentSlides": 20,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    },
+    {
+      "area": "SEGURANCA_OPERACIONAL",
+      "courseId": "costa-do-sol-fdm-tripulacao",
+      "contentSlides": 20,
+      "mode": "SCORED",
+      "proposedPassingScorePercent": 70,
+      "moduleGate": false,
+      "reviewStatus": "NOT_APPROVED"
+    }
+  ]
+}
