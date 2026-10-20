@@ -123,7 +123,7 @@ jobs:
           PLAYER3_QA_WEBKIT_PASSWORD: ${{ secrets.PLAYER3_QA_WEBKIT_PASSWORD }}
         run: node scripts/staging/player3-qa-learners.mjs provision
 
-  verify:
+  d1_verify:
     name: Read back two employee-scoped and edition-bound Native enrollments
     needs: [guard, preflight, provision]
     runs-on: ubuntu-latest
@@ -147,7 +147,7 @@ jobs:
 
   summary:
     name: Record narrow Player3 QA bootstrap result (never six-journey acceptance)
-    needs: [guard, preflight, provision, verify]
+    needs: [guard, preflight, provision, d1_verify]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -157,7 +157,7 @@ jobs:
           GUARD_RESULT: ${{ needs.guard.result }}
           PREFLIGHT_RESULT: ${{ needs.preflight.result }}
           PROVISION_RESULT: ${{ needs.provision.result }}
-          VERIFY_RESULT: ${{ needs.verify.result }}
+          VERIFY_RESULT: ${{ needs.d1_verify.result }}
         run: |
           set -euo pipefail
           {
