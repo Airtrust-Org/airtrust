@@ -151,6 +151,7 @@ describe('Native start transaction — D1 batch and tenant/cycle scope', () => {
     const f=fakeDb({matriculaChanges:0,cycleChanges:0,preflightState:'START'});
     expect(await f.start()).toMatchObject({state:'STARTED'});
     expect(f.prepared[0].sql).toContain('AS native_start_state');
+    expect(f.prepared[0].sql).toContain("json_extract(json(COALESCE");
     expect(f.prepared[0].sql).toContain('"START"');
     expect(f.prepared[0].sql).toContain('"ALREADY_STARTED"');
     expect(f.prepared[3].sql).toContain('NATIVE_START_ATOMIC_SYNC_FAILED');
