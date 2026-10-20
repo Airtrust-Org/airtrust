@@ -15,7 +15,7 @@ export interface BombeirosCheckinMonthlyEvidence {
   current: BombeirosCheckinMonthTotals;
   previous: BombeirosCheckinMonthTotals;
   receipt_person_days_delta: number | null;
-  source: 'FRMS_FADIGA_CHECKIN_TENANT_SCOPED';
+  source: 'BOA_FRMS_CHECKIN_EVENT_TENANT_SCOPED';
   restrictions: string[];
 }
 
@@ -71,27 +71,32 @@ export async function loadBombeirosCheckinMonthlyEvidence(
     const suppressed = protectTotals({ receipt_person_days: 0, distinct_people: 0 }, ids.length);
     return {
       current: suppressed, previous: suppressed, receipt_person_days_delta: null,
-      source: 'FRMS_FADIGA_CHECKIN_TENANT_SCOPED',
+      source: 'BOA_FRMS_CHECKIN_EVENT_TENANT_SCOPED',
       restrictions: ['Acesso suprimido para equipe autorizada com menos de cinco funcionários.'],
     };
   }
   const placeholders = ids.map(() => '?').join(', ');
-  // Bind both tenant IDs independently: the employee join must never select
-  // check-ins from a different empresa even for a coincident employee ID.
-  const sql = `SELECT COUNT(DISTINCT CAST(ch.funcionario_id AS TEXT) || ':' || ch.data_checkin) AS receipt_person_days,
-                      COUNT(DISTINCT ch.funcionario_id) AS distinct_people
-                 FROM frms_fadiga_checkin ch
-                 JOIN funcionarios f ON f.id = ch.funcionario_id
-                   AND f.empresa_id = ch.empresa_id
-                WHERE ch.empresa_id = ?
-                  AND f.empresa_id = ?
-                  AND ch.deleted_at IS NULL
-                  AND f.deleted_at IS NULL
-                  AND f.ativo = 1
-                  AND ch.submitted_at IS NOT NULL
-                  AND TRIM(ch.submitted_at) <> ''
-                  AND ch.data_checkin >= ? AND ch.data_checkin < ?
-                  AND ch.funcionario_id IN (${placeholders})`;
+  // Query only BOA check-in events, NOT offshore frms_fadiga_checkin rows.
+  // Both tenant predicates are mandatory, and payload employee ID is checked
+  // against canonical funcionarios with active membership.
+  const sql = `SELECT
+      COUNT(DISTINCT CAST(f.id AS TEXT) || ':' ||
+        json_extract(e.payload_json, '$.reference_date')) AS receipt_person_days,
+      COUNT(DISTINCT f.id) AS distinct_people
+     FROM frms_fadiga_evento e
+     JOIN funcionarios f
+       ON f.id = CAST(json_extract(e.payload_json, '$.funcionario_id') AS INTEGER)
+      AND f.empresa_id = e.empresa_id
+    WHERE e.empresa_id = ?
+      AND f.empresa_id = ?
+      AND e.tipo = 'BOA_CHECKIN_V1'
+      AND json_extract(e.payload_json, '$.schema') = 'BOA_CHECKIN_V1'
+      AND f.deleted_at IS NULL
+      AND f.ativo = 1
+      AND json_extract(e.payload_json, '$.submitted_at') IS NOT NULL
+      AND json_extract(e.payload_json, '$.reference_date') >= ?
+      AND json_extract(e.payload_json, '$.reference_date') < ?
+      AND f.id IN (${placeholders})`;
   const run = async (referenceMonth: string): Promise<BombeirosCheckinMonthTotals> => {
     const row = await db.prepare(sql)
       .bind(empresaId, empresaId, `${referenceMonth}-01`, `${nextMonth(referenceMonth)}-01`, ...ids)
@@ -104,9 +109,9 @@ export async function loadBombeirosCheckinMonthlyEvidence(
     current, previous,
     receipt_person_days_delta: current.receipt_person_days !== null && previous.receipt_person_days !== null
       ? current.receipt_person_days - previous.receipt_person_days : null,
-    source: 'FRMS_FADIGA_CHECKIN_TENANT_SCOPED',
+    source: 'BOA_FRMS_CHECKIN_EVENT_TENANT_SCOPED',
     restrictions: [
-      'Contagem de recibos enviados; não confirma completude, autenticidade do sono, prontidão ou aptidão.',
+      'Contagem de recibos de triagem BOA enviados; não confirma completude, recuperação, prontidão ou aptidão.',
       'Sem denominador de dias escalados, não calcular taxa de adesão ou cobertura.',
       'Não usa classificação/limites de aviação offshore nem retorna respostas individuais de saúde.',
       'Células com menos de cinco participantes são suprimidas, inclusive quando o número de dias é maior.',
