@@ -147,7 +147,8 @@ test('existing Pages token is probed read-only by guarded staging diagnostic',()
  assert.match(source,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
  assert.match(source,/pages\/projects\/qa-player3-staging/);
  assert.match(source,/r2\/buckets\/airtrust-storage-staging/);
- assert.match(source,/R2_READONLY_ACCESS/);
+ assert.match(source,/\['R2','r2\/buckets\/airtrust-storage-staging'/);
+ assert.match(source,/kind\+'_READONLY_ACCESS='/);
  assert.doesNotMatch(source,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
 });
 
