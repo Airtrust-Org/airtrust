@@ -15,7 +15,7 @@ type Summary = {
   current: Totals;
   previous: Totals;
   receipt_person_days_delta: number | null;
-  source: 'FRMS_FADIGA_CHECKIN_TENANT_SCOPED';
+  source: 'BOA_FRMS_CHECKIN_EVENT_TENANT_SCOPED';
   restrictions: string[];
 };
 type Envelope = {
