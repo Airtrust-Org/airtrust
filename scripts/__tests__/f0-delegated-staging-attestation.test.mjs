@@ -52,8 +52,10 @@ test('no anonymous, stale, edited, forged, or downgraded admin comment',()=>{
 });
 test('the official staging guard consumes the id and does not silently accept bot',()=>{
  const wf=readFileSync('.github/workflows/deploy-staging.yml','utf8');
- assert.match(wf,/f0_request_comment_id:/);
- assert.match(wf,/F0_REQUEST_COMMENT_ID: \$\{\{ inputs.f0_request_comment_id \}\}/);
+ assert.doesNotMatch(wf,/f0_request_comment_id:/);
+ assert.match(wf,/f0RequestMatch/);
+ const block=wf.split('  workflow_dispatch:\n    inputs:\n')[1].split('\n# The')[0];
+ assert.equal((block.match(/^      [a-z_]+:$/gm)||[]).length,10);
  assert.match(wf,/validateF0DelegatedStaging/);
  assert.match(wf,/issues\/comments/);
  assert.match(wf,/issues: read/);
