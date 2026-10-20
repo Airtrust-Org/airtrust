@@ -111,6 +111,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm --prefix worker-airtrust ci
+      - name: Require dedicated staging QA R2 cleanup credentials before seeding
+        env:
+          QA_LIFECYCLE_R2_ACCESS_KEY_ID: ${{ secrets.QA_LIFECYCLE_R2_ACCESS_KEY_ID }}
+          QA_LIFECYCLE_R2_SECRET_ACCESS_KEY: ${{ secrets.QA_LIFECYCLE_R2_SECRET_ACCESS_KEY }}
+        run: |
+          test -n "$QA_LIFECYCLE_R2_ACCESS_KEY_ID"
+          test -n "$QA_LIFECYCLE_R2_SECRET_ACCESS_KEY"
       - name: Validate schemas and seed lifecycle fixture
         env:
           QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
@@ -170,13 +177,29 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm --prefix worker-airtrust ci
-      - name: Soft-delete only this run's synthetic artifacts
+      - name: Delete only verified run-owned certificate PDF keys
+        id: r2_cleanup
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          QA_LIFECYCLE_R2_ACCESS_KEY_ID: ${{ secrets.QA_LIFECYCLE_R2_ACCESS_KEY_ID }}
+          QA_LIFECYCLE_R2_SECRET_ACCESS_KEY: ${{ secrets.QA_LIFECYCLE_R2_SECRET_ACCESS_KEY }}
+          CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA: AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA
+        run: node scripts/staging/cleanup-qa-training-compliance-r2.mjs --apply --code="$QA_LIFECYCLE_CODE" --marker="$QA_LIFECYCLE_MARKER"
+      - name: Soft-delete only this run's synthetic D1 artifacts
+        if: always()
         env:
           QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA: AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA
         run: node scripts/staging/seed-qa-training-compliance-lifecycle.mjs --rollback --apply --code="$QA_LIFECYCLE_CODE" --marker="$QA_LIFECYCLE_MARKER"
+      - name: Enforce R2 deletion verification
+        if: always()
+        env:
+          R2_CLEANUP_OUTCOME: ${{ steps.r2_cleanup.outcome }}
+        run: test "$R2_CLEANUP_OUTCOME" = success
 
   summary:
     name: Compliance Lifecycle QA Summary
