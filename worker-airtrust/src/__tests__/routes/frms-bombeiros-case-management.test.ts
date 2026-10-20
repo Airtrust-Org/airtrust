@@ -43,7 +43,9 @@ function createApp(empresaId = 130, code = 'bombeiros', role = 'manager', enviro
     });
     await next();
   });
-  app.onError(e => new Response(JSON.stringify({ message: String(e) }), { status: 500 }));
+  app.onError(e => new Response(JSON.stringify({ message: String(e) }), {
+    status: (e as { statusCode?: number }).statusCode ?? 500,
+  }));
   app.route('/', frmsBombeiros);
   return (method: 'GET' | 'PUT', path: string, body?: unknown) => app.fetch(
     new Request(`http://localhost${path}`, {
