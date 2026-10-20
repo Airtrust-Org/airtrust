@@ -32,7 +32,7 @@ A única fonte operacional é `frms_fadiga_evento` com `tipo=BOA_CHECKIN_V1`, `B
 
 **Proteção contra inferência:** se 1–4 participantes enviaram check-in, ocultar **todos** os números daquela coorte, inclusive totais grandes de pessoa/dia. Para coorte suficiente, se **qualquer** classe de estado apresentar contagem de 1–4, ocultar **a distribuição inteira dos casos**, inclusive seu total, evitando reconstrução por subtração. Se a equipe autorizada tiver menos de cinco, recusar a solicitação sem consulta de eventos.
 
-**Integridade fail-closed:** devolver erro sem agregados quando faltam casos, existem aberturas/ações duplicadas ou transições impossíveis, resultados negativos ou contagens incoerentes. Nunca traduzir fonte incompleta/invalidada em zero ou conformidade. Zero só significa ausência de recibos encontrados naquele recorte autorizado.
+**Integridade fail-closed:** devolver erro sem agregados quando faltam casos, existem aberturas/ações duplicadas ou transições impossíveis, há mais de um recibo para o mesmo funcionário e dia, referência de data inválida, resultados negativos ou contagens incoerentes. Nunca traduzir fonte incompleta/invalidada em zero ou conformidade. Zero só significa ausência de recibos encontrados naquele recorte autorizado.
 
 ## 3. Fundamentos científicos e recomendações
 
@@ -49,7 +49,7 @@ A resposta identifica versão do método `BOA_MONTHLY_EVIDENCE_PREVIEW_V1`, mês
 ## 5. Aceite executado versus pendências reais
 
 - **Comprovado em testes locais:** 18 testes focados de backend e 8 de frontend para o novo módulo; na suíte afetada, 96 testes Worker e 40 frontend passaram no SHA de código `7ed679d551b05eb5a47a9bbd3b213b24d2608c6a`. Typecheck do Worker e guards de rotas/segurança de tipos: PASS.
-- **SQLite local com dados fictícios:** consultas de coorte e casos entre outubro/setembro reproduzidas, valores sob coorte pequena suprimidos, empresa 6 excluída e quebra de proveniência rejeitada. Não é D1 remoto nem ensaio de 130 usuários concorrentes.
+- **SQLite local com dados fictícios:** consultas de coorte e casos entre outubro/setembro reproduzidas, valores sob coorte pequena suprimidos, empresa 6 excluída e quebra de proveniência rejeitada. Ensaio adicional em SQLite com 130 funcionários fictícios e 520 eventos em dois meses passou; demonstra a consulta nesse volume, **não** 130 sessões concorrentes ou Cloudflare D1. Não é D1 remoto nem ensaio de 130 usuários concorrentes.
 - **Não executado:** provisionamento de tenant BOA, perfil homologado/assinado, rollout de staging, QA com perfis reais, migração, qualquer escrita D1/R2 remota, merge ou produção.
 - **Bloqueios para o requisito 5 do edital:** relatório gerencial/técnico final necessita método científico aprovado, escalas/turnos e exposição, política jurídica LGPD, avaliação independente de eficácia, histórico por snapshot, assinatura/arquivo imutável, trilha de emissão, estabilidade/teste de carga de 130 usuários e validação formal da POC.
 - **Requisito 8:** comprovação de experiência prática depende de documentos legítimos da licitante, não do software.
