@@ -47,10 +47,14 @@ const PINNED_SCOPE = [
 // abort and could accidentally permit half a lifecycle write. SQLite json()
 // deliberately raises on the malformed non-JSON error literal.
 const PREFLIGHT_SQL = [
-  'SELECT json(CASE WHEN EXISTS (SELECT 1', PINNED_SCOPE,
-  "AND ((m.status='NAO_INICIADO' AND ciclo.status='NAO_INICIADO')",
-  "OR (m.status='EM_ANDAMENTO' AND ciclo.status='EM_ANDAMENTO')))",
-  "THEN 'null' ELSE 'NATIVE_START_SCOPE_OR_STATUS_DRIFT' END)",
+  'SELECT json(CASE',
+  'WHEN EXISTS (SELECT 1', PINNED_SCOPE,
+  "AND m.status='NAO_INICIADO' AND ciclo.status='NAO_INICIADO')",
+  'THEN \'"START"\'',
+  'WHEN EXISTS (SELECT 1', PINNED_SCOPE,
+  "AND m.status='EM_ANDAMENTO' AND ciclo.status='EM_ANDAMENTO')",
+  'THEN \'"ALREADY_STARTED"\'',
+  "ELSE 'NATIVE_START_SCOPE_OR_STATUS_DRIFT' END) AS native_start_state",
 ].join(' ');
 
 const START_MATRICULA_SQL = [
@@ -148,15 +152,26 @@ export async function startNativeEnrollment(params: {
   if (results.length !== 4 || results.some((result) => !result.success)) {
     throw new NativeEnrollmentStartError('NATIVE_START_ATOMIC_SYNC_REJECTED');
   }
+  const preflightState = (
+    results[0]?.results as Array<{ native_start_state?: unknown }> | undefined
+  )?.[0]?.native_start_state;
   const matriculaChanges = results[1]?.meta.changes;
   const cycleChanges = results[2]?.meta.changes;
-  if (matriculaChanges === 1 && cycleChanges === 1) {
+  // The preflight classifies the authenticated, edition-pinned state before
+  // either write; the final SQL postcheck proves BOTH mirrors are active in
+  // the SAME transaction. D1 may report 0 changes for a successfully
+  // synchronized row (triggers/adapter). Do not return 409 AFTER COMMIT merely
+  // because both metadata counters are zero.
+  if (preflightState === 'START' &&
+      ((matriculaChanges === 1 && cycleChanges === 1) ||
+       (matriculaChanges === 0 && cycleChanges === 0))) {
     return { state: 'STARTED', cicloId, editionHash };
   }
-  if (matriculaChanges === 0 && cycleChanges === 0) {
+  if (preflightState === 'ALREADY_STARTED' &&
+      matriculaChanges === 0 && cycleChanges === 0) {
     return { state: 'ALREADY_STARTED', cicloId, editionHash };
   }
-  // This should be impossible after the fail-closed postcheck, but never
-  // report success if a nonconforming D1 adapter returns mixed row counts.
+  // A mixed/unknown count, missing preflight receipt or mismatched
+  // lifecycle mode is still a hard failure; never guess completion.
   throw new NativeEnrollmentStartError('NATIVE_START_INCONSISTENT_CHANGES');
 }
