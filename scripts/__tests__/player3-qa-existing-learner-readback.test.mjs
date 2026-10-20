@@ -4,6 +4,7 @@ import {
   TENANT,COURSE,GATES,LEARNERS,
   assertGuard,assertRoster,assertClaims,assertOwnSnapshot,
   assertModuleSession,verifyLearners,readVersionResponse,
+  requireHttpOk,ownData,github,guard as guardWorkflow,
 } from '../staging/player3-qa-existing-learner-readback.mjs';
 
 const sha='a'.repeat(40);
@@ -85,7 +86,7 @@ test('real executor selects two independent JWTs and denies cross-owned reads',a
       if(path==='/api/auth/login'){
         attempts++;
         const token=tokenByEmail[options.body.email];
-        return {ok:()=>true,json:async()=>({success:true,data:{accessToken:token}})};
+        return new Response(JSON.stringify({success:true,data:{accessToken:token}}),{status:200});
       }
       assert.match(path,/qa-evidencias$/);
       foreign++;
@@ -131,4 +132,80 @@ test('fetch Response.ok is a boolean: real 200 passes, HTTP rejection fails clos
     /VERSION_JSON_INVALID/);
   await assert.rejects(()=>readVersionResponse(new Response('{}',{status:200})),
     /VERSION_DATA_MISSING/);
+});
+
+test('all HTTP result checks require native boolean Response.ok, never a function',()=>{
+  assert.doesNotThrow(()=>requireHttpOk(new Response('{}',{status:200}),'HTTP_OK'));
+  assert.throws(()=>requireHttpOk({ok:()=>true},'INVALID_MOCK_RESPONSE'),
+    /INVALID_MOCK_RESPONSE/);
+  assert.throws(()=>requireHttpOk(new Response('{}',{status:503}),'HTTP_FAILED'),
+    /HTTP_FAILED/);
+});
+
+test('GitHub and learner GET verify actual HTTP status before parsing response body',async()=>{
+  const before=process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN='synthetic-only-token';
+  try{
+    let pathSeen='';
+    const accepted=await github('/pulls/1389',async(url,{headers})=>{
+      pathSeen=url;
+      assert.equal(headers.Authorization,'Bearer synthetic-only-token');
+      return new Response(JSON.stringify({number:1389}),{status:200});
+    });
+    assert.equal(accepted.number,1389);
+    assert.match(pathSeen,/\/pulls\/1389$/);
+    await assert.rejects(
+      ()=>github('/pulls/1389',async()=>new Response('{}',{status:403})),
+      /GITHUB_QUERY_FAILED/);
+    const snap=await ownData('/private-check','synthetic-jwt',async(path,{token})=>{
+      assert.equal(path,'/private-check');
+      assert.equal(token,'synthetic-jwt');
+      return new Response(JSON.stringify({success:true,data:{matricula_id:201}}),{status:200});
+    });
+    assert.equal(snap.matricula_id,201);
+    await assert.rejects(
+      ()=>ownData('/private-check','synthetic-jwt',async()=>new Response('{}',{status:409})),
+      /LEARNER_GET_STATUS_409/);
+  }finally{
+    if(before===undefined)delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN=before;
+  }
+});
+
+test('full protected guard uses real Response.ok for GitHub and staging version',async()=>{
+  const keys=['GITHUB_TOKEN','PLAYER3_QA_RELEASE_SHA','GITHUB_EVENT_NAME',
+    'GITHUB_REF','GITHUB_REPOSITORY','GITHUB_ACTOR','PLAYER3_QA_CONFIRMATION'];
+  const old=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+  Object.assign(process.env,{
+    GITHUB_TOKEN:'test-only',PLAYER3_QA_RELEASE_SHA:sha,
+    GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_REF:'refs/heads/main',
+    GITHUB_REPOSITORY:'Airtrust-Org/airtrust',GITHUB_ACTOR:'qa-admin',
+    PLAYER3_QA_CONFIRMATION:'AIRTRUST_PLAYER3_READBACK_ONLY',
+  });
+  const positive=guard();
+  const mocks={
+    async github(path){
+      if(path==='/pulls/1389')return positive.pr;
+      if(path.includes('/check-runs?'))return positive.checks;
+      if(path.includes('/collaborators/'))return {permission:'admin'};
+      throw Error('UNKNOWN_TEST_GITHUB_PATH');
+    },
+    async api(path){
+      assert.equal(path,'/api/version');
+      return new Response(JSON.stringify({success:true,data:positive.live}),{status:200});
+    },
+  };
+  try{
+    await assert.doesNotReject(()=>guardWorkflow(mocks));
+    await assert.rejects(()=>guardWorkflow({...mocks,
+      api:async()=>new Response('{}',{status:502})}),/VERSION_HTTP/);
+    await assert.rejects(()=>guardWorkflow({...mocks,
+      github:async path=>path==='/pulls/1389'?positive.pr:
+        path.includes('check-runs')?positive.checks:
+        {permission:'read'}}),/WORKFLOW_ACTOR_PERMISSION_DENIED/);
+  }finally{
+    for(const k of keys){
+      if(old[k]===undefined)delete process.env[k];else process.env[k]=old[k];
+    }
+  }
 });
