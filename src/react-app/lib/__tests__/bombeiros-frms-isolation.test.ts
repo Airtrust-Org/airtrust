@@ -4,7 +4,8 @@ import { resolveBombeirosLegacyFrmsRedirect } from '../bombeiros-frms-isolation'
 describe('BOA FRMS navigation boundary', () => {
   it.each(['/frms', '/frms/', '/frms/relatorios', '/frms/checkin', '/frms/tripulante/42'])(
     'redirects BOA legacy path %s to dedicated portal', path => {
-      expect(resolveBombeirosLegacyFrmsRedirect('bombeiros', path)).toBe('/bombeiros/frms');
+      expect(resolveBombeirosLegacyFrmsRedirect('bombeiros', path, 'STUDENT'))
+        .toBe('/bombeiros/frms/checkin');
     },
   );
 
@@ -20,6 +21,8 @@ describe('BOA FRMS navigation boundary', () => {
       .toBe('/bombeiros/frms/casos');
     expect(resolveBombeirosLegacyFrmsRedirect('bombeiros', '/frms/relatorios', 'manager'))
       .toBe('/bombeiros/frms/casos');
+    expect(resolveBombeirosLegacyFrmsRedirect('bombeiros', '/frms', 'ALUNO'))
+      .toBe('/bombeiros/frms/checkin');
     expect(resolveBombeirosLegacyFrmsRedirect('bombeiros', '/frms', 'ADMINISTRADOR'))
       .toBe('/bombeiros/frms');
   });
