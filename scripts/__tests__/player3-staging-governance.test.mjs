@@ -88,55 +88,71 @@ test('requires current admin grant and nonforked same-repo PR',async()=>{
  await assert.rejects(verify(v,'test',fakeGet(v),clock+13*3600000),/GRANT_EXPIRED/);
 });
 
-test('trusted workflow separates D1 credential from Pages/R2 credential',()=>{
+test('trusted workflow isolates existing staging Pages, Worker/R2 and D1 tokens',()=>{
  const s=readFileSync(resolve('.github/workflows/staging-player3-synthetic-qa.yml'),'utf8');
  assert.match(s,/group:\s*airtrust-staging-mutations-and-scorm-qa/);
  assert.match(s,/environment:\s*staging/);
- assert.match(s,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
- assert.doesNotMatch(s,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
- assert.match(s,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+ for(const name of ['CLOUDFLARE_WORKER_API_TOKEN','CLOUDFLARE_PAGES_API_TOKEN','CLOUDFLARE_D1_MIGRATION_API_TOKEN'])
+   assert.ok(s.includes('secrets.'+name));
+ assert.doesNotMatch(s,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN|pull_request_target:/);
  assert.match(s,/inputs\.phase == 'publish' &&/);
  assert.match(s,/inputs\.phase == 'bootstrap' \|\| inputs\.phase == 'edition'/);
- assert.doesNotMatch(s,/pull_request_target:|secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
 });
 
-test('scoped staging jobs never inherit D1 and R2/Pages credentials together',()=>{
+test('scoped QA jobs preserve least-privilege steps, provenance and recovery',()=>{
  const w=readFileSync(resolve('.github/workflows/staging-player3-synthetic-qa.yml'),'utf8');
  const failures=checkWorkflowContent('.github/workflows/staging-player3-synthetic-qa.yml',w);
  assert.deepEqual(failures,[],failures.join('\n'));
- const extract=(job)=>{
+ const extract=job=>{
    const tag='  '+job+':\n';
    const i=w.indexOf(tag);
    assert.notEqual(i,-1,'missing job '+job);
    const next=w.slice(i+tag.length).search(/^  [a-z][a-z0-9-]*:\s*$/m);
    return next===-1?w.slice(i):w.slice(i,i+tag.length+next);
  };
- const readOnly=extract('verify-qa-credential');
+ const pages=extract('access-qa-pages');
+ const r2=extract('access-qa-r2');
+ const verify=extract('verify-r2-https');
  const d1=extract('d1-schema-operation');
- const verify=extract('verify-r2-pages');
- const publish=extract('publish-r2-pages');
+ const publish=extract('publish-qa-artifacts');
+ assert.match(pages,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
+ assert.doesNotMatch(pages,/secrets\.CLOUDFLARE_WORKER_API_TOKEN|secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+ assert.match(pages,/player3-qa-trusted-executor\.mjs access-pages/);
+ assert.match(r2,/secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
+ assert.doesNotMatch(r2,/secrets\.CLOUDFLARE_PAGES_API_TOKEN|secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+ assert.match(r2,/player3-qa-trusted-executor\.mjs access-r2/);
+ assert.match(verify,/secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
+ assert.doesNotMatch(verify,/secrets\.CLOUDFLARE_PAGES_API_TOKEN|secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
  assert.match(d1,/name: Governed staging D1 schema preflight/);
- assert.match(d1,/environment: staging/);
  assert.match(d1,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
- assert.doesNotMatch(d1,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
- assert.match(readOnly,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
- assert.doesNotMatch(readOnly,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
- assert.match(readOnly,/player3-qa-trusted-executor\.mjs access/);
- assert.match(d1,/needs\.verify-qa-credential\.result == 'success'/);
- assert.match(verify,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
- assert.doesNotMatch(verify,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
- assert.match(publish,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
- assert.doesNotMatch(publish,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
- assert.match(w,/needs\.verify-r2-pages\.result == 'success'/);
+ assert.doesNotMatch(d1,/secrets\.CLOUDFLARE_WORKER_API_TOKEN|secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
+ assert.match(d1,/needs\.access-qa-pages\.result == 'success'/);
+ assert.match(d1,/needs\.access-qa-r2\.result == 'success'/);
+ assert.match(d1,/needs\.verify-r2-https\.result == 'success'/);
+ assert.match(publish,/run: node scripts\/staging\/player3-qa-trusted-executor\.mjs publish-r2/);
+ assert.match(publish,/run: node scripts\/staging\/player3-qa-trusted-executor\.mjs publish-pages/);
+ const r2Step=publish.split('      - name: Publish and verify only immutable tenant-scoped private R2 with Worker token')[1]
+   .split('      - name: Publish only reviewed browser assets on isolated QA Pages with Pages token')[0];
+ const pagesStep=publish.split('      - name: Publish only reviewed browser assets on isolated QA Pages with Pages token')[1]
+   .split('      - name: Erase temporary private publication files')[0];
+ assert.match(r2Step,/secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
+ assert.doesNotMatch(r2Step,/secrets\.CLOUDFLARE_PAGES_API_TOKEN|secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+ assert.match(pagesStep,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
+ assert.doesNotMatch(pagesStep,/secrets\.CLOUDFLARE_WORKER_API_TOKEN|secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
  assert.match(w,/needs\.d1-schema-operation\.result == 'success'/);
  assert.match(w,/QA_R2_VERIFIED_PLAN_SHA:/);
  assert.match(w,/QA_D1_PREFLIGHT_OK:/);
  assert.match(w,/cancel-in-progress: false/);
- assert.match(w,/CREDENTIAL: \$\{\{ needs\.verify-qa-credential\.result \}\}/);
+ assert.match(w,/PAGES_ACCESS: \$\{\{ needs\.access-qa-pages\.result \}\}/);
+ assert.match(w,/R2_ACCESS: \$\{\{ needs\.access-qa-r2\.result \}\}/);
  const executor=readFileSync(resolve('scripts/staging/player3-qa-trusted-executor.mjs'),'utf8');
  assert.match(executor,/PLAYER3_QA_R2_TOKEN_SCOPE_MISSING/);
  assert.match(executor,/PLAYER3_QA_PAGES_TOKEN_SCOPE_MISSING/);
- assert.match(executor,/if\(mode==='access'\)await doAccess\(\)/);
+ assert.match(executor,/mode==='access-pages'\|\|mode==='access-r2'/);
+ assert.match(executor,/mode==='publish-r2'/);
+ assert.match(executor,/mode==='publish-pages'/);
+ assert.match(executor,/PLAYER3_SPLIT_PUBLISH_MODES_REQUIRED/);
+ assert.match(executor,/--branch=main/);
  assert.doesNotMatch(w,/pull_request_target:/);
 });
 
@@ -149,7 +165,26 @@ test('existing Pages token is probed read-only by guarded staging diagnostic',()
  assert.match(source,/r2\/buckets\/airtrust-storage-staging/);
  assert.match(source,/\['R2','r2\/buckets\/airtrust-storage-staging'/);
  assert.match(source,/kind\+'_READONLY_ACCESS='/);
+ assert.match(source,/- player3_worker_r2/);
+ assert.match(source,/inputs\.credential == 'player3_worker_r2' && inputs\.target_environment == 'staging'/);
+ assert.match(source,/secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
+ assert.match(source,/R2_READONLY_ACCESS/);
  assert.doesNotMatch(source,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
+});
+
+test('new split publish modes preserve F0 grant and fail closed outside Actions',()=>{
+ const executor=readFileSync(resolve('scripts/staging/player3-qa-trusted-executor.mjs'),'utf8');
+ assert.match(executor,/PLAYER3_F0_APPROVAL_LOCK_RECOVERY_AND_TARGET_REQUIRED/);
+ assert.match(executor,/PLAYER3_PRIVATE_R2_STEP_PROOF_REQUIRED/);
+ assert.match(executor,/PLAYER3_R2_OBJECT_SCOPE_INVALID/);
+ assert.match(executor,/PLAYER3_PUBLIC_ASSET_SCOPE_INVALID/);
+ for(const mode of ['publish-r2','publish-pages','access-pages','access-r2']){
+  const result=spawnSync(process.execPath,
+   ['scripts/staging/player3-qa-trusted-executor.mjs',mode],
+   {cwd:resolve('.'),env:{...process.env,GITHUB_ACTIONS:'false'},encoding:'utf8'});
+  assert.notEqual(result.status,0);
+  assert.match(result.stderr,/PLAYER3_TRUSTED_MAIN_ONLY/);
+ }
 });
 
 test('protected executor denies local operation without main and reviewed files',()=>{
