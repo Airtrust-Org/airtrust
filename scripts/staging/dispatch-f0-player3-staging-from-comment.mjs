@@ -22,6 +22,7 @@ export const TRUSTED_DELTA_FILES=new Set([
   'scripts/__tests__/player3-qa-pages-propagation.test.mjs',
   'docs/lms/PLAYER3_QA_TRUSTED_STAGING_RUNBOOK.md',
   '.github/workflows/f0-player3-staging-issueops.yml',
+  '.github/workflows/ci.yml',
   'scripts/staging/dispatch-f0-player3-staging-from-comment.mjs',
   'scripts/__tests__/f0-player3-staging-issueops.test.mjs'
 ]);
