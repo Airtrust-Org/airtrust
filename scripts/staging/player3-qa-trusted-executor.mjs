@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import {execFileSync,spawnSync} from 'node:child_process';
+import {isExplicitMissingR2Object} from './player3-qa-r2-object-miss.mjs';
 import path from 'node:path';
 const E=process.env;
 const ROOT=process.cwd(), RELEASE=path.join(ROOT,'release');
@@ -274,7 +275,7 @@ function getRemoteR2(key,target){
     encoding:'utf8',maxBuffer:4194304,timeout:90000});
   if(result.status===0)return true;
   const summary=(result.stderr||'')+' '+(result.stdout||'');
-  if(!result.error&&/\b(404|object not found|object does not exist|no such r2 object)\b/i.test(summary))
+  if(!result.error&&isExplicitMissingR2Object(summary))
     return false;
   throw Error('PLAYER3_R2_GET_DENIED_OR_UNVERIFIED');
 }
