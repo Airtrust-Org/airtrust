@@ -329,6 +329,12 @@ DROP TABLE _qa_compliance_lifecycle_cleanup;
 `;
 
 const sql = rollback ? rollbackSql : seedSql;
+// Read-only test hook: only the local Node SQLite harness may render the DML.
+// No remote write, no custom D1 target, no production process may use this.
+if (process.env.NODE_ENV === 'test' && args.includes('--print-sql-for-qa-test')) {
+  process.stdout.write(sql);
+  process.exit(0);
+}
 if (!apply) {
   console.log(JSON.stringify({ mode: 'DRY_RUN', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker }));
   process.exit(0);
