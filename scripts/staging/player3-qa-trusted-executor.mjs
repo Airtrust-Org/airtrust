@@ -5,8 +5,10 @@
  */
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
+import {isExplicitMissingR2Object} from './player3-qa-r2-object-miss.mjs';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 const E=process.env;
 const ROOT=process.cwd(), RELEASE=path.join(ROOT,'release');
 const TEMP=path.join(E.RUNNER_TEMP||'/tmp','player3-qa');
@@ -58,6 +60,28 @@ function validateLocal(){
 function cloudflare(){
  demand(E.CLOUDFLARE_API_TOKEN&&E.CLOUDFLARE_ACCOUNT_ID&&fs.existsSync(WR),
         'PLAYER3_SCOPED_CLOUDFLARE_STAGING_TOKEN_REQUIRED');
+}
+async function doAccess(mode){
+  validateLocal();
+  demand(E.CLOUDFLARE_API_TOKEN&&E.CLOUDFLARE_ACCOUNT_ID,
+         'PLAYER3_SCOPED_STAGING_CREDENTIAL_MISSING');
+  const options={
+    'access-pages':['pages/projects/'+PROJECT,PROJECT,'PLAYER3_QA_PAGES_TOKEN_SCOPE_MISSING'],
+    'access-r2':['r2/buckets/'+BUCKET,BUCKET,'PLAYER3_QA_R2_TOKEN_SCOPE_MISSING']
+  };
+  const target=options[mode];
+  demand(target,'PLAYER3_UNSUPPORTED_CREDENTIAL_PROBE');
+  let response,body;
+  try{
+    response=await fetch('https://api.cloudflare.com/client/v4/accounts/'+
+      E.CLOUDFLARE_ACCOUNT_ID+'/'+target[0],{
+        headers:{Authorization:'Bearer '+E.CLOUDFLARE_API_TOKEN},
+        signal:AbortSignal.timeout(15000)});
+    body=await response.json();
+  }catch{throw Error(target[2]);}
+  demand(response.ok&&body?.success===true&&body?.result?.name===target[1],target[2]);
+  console.log(mode==='access-pages'?'PLAYER3_EXISTING_PAGES_STAGING_ACCESS_PASS':
+                                    'PLAYER3_EXISTING_WORKER_R2_STAGING_ACCESS_PASS');
 }
 function readD1(statement){
  cloudflare();
@@ -219,44 +243,176 @@ function postD1(){
   console.log('PLAYER3_QA_PHYSICAL_EDITION_ID='+rows[0].id);
  }
 }
-async function doApply(){
- validateLocal();cloudflare();
- if(PH==='publish'){
-  demand(/^[a-f0-9]{64}$/.test(E.QA_D1_PREFLIGHT_OK||''),
-         'PLAYER3_TRUSTED_D1_PREFLIGHT_JOB_PROOF_REQUIRED');
+const R2_PROOF=path.join(TEMP,'r2-upload-verified.json');
+function validatePublishInputs(){
+  validateLocal();cloudflare();
+  demand(PH==='publish'&&/^[a-f0-9]{64}$/.test(E.QA_D1_PREFLIGHT_OK||''),
+         'PLAYER3_PUBLISH_REQUIRES_GOVERNED_D1_PREFLIGHT');
+  demand(E.PLAYER3_QA_APPROVED_SHA===E.QA_RELEASE_SHA&&
+         E.PLAYER3_QA_LOCK_GRANTED==='airtrust-staging-mutations-and-scorm-qa'&&
+         E.PLAYER3_QA_PHYSICAL_COURSE_VERIFIED==='true'&&
+         E.PLAYER3_QA_RECOVERY_POINT_VERIFIED==='true'&&
+         E.PLAYER3_QA_PAGES_PROJECT===PROJECT&&
+         E.PLAYER3_QA_R2_BUCKET===BUCKET&&
+         E.CONFIRM_STAGING_PLAYER3_QA_PUBLISH==='AIRTRUST_STAGING_PLAYER3_SYNTHETIC_PUBLISH',
+         'PLAYER3_F0_APPROVAL_LOCK_RECOVERY_AND_TARGET_REQUIRED');
   const doc=publication();
-  const res=await fetch('https://api.cloudflare.com/client/v4/accounts/'+
-    E.CLOUDFLARE_ACCOUNT_ID+'/pages/projects/'+PROJECT,{
-      headers:{Authorization:'Bearer '+E.CLOUDFLARE_API_TOKEN},
-      signal:AbortSignal.timeout(20000)});
-  demand(res.ok,'PLAYER3_ISOLATED_PAGES_PROJECT_NOT_PROVISIONED');
-  const j=await res.json();
-  demand(j.success===true&&j.result?.name===PROJECT,'PLAYER3_PAGES_PROJECT_MISMATCH');
+  // The exact F4 SHA-pinned publisher recomputes and verifies this plan
+  // without performing remote operations. Only main-owned steps below write.
   cleanRun('python3',['scripts/staging/player3-qa-governed-publisher.py',
-    '--candidate',CAND,'--plan',PLAN,'--pages-project',PROJECT,'--apply']);
-  await verifyBytes(doc);
-  console.log('PLAYER3_PRIVATE_R2_AND_HTTPS_STAGING_PUBLICATION_VERIFIED');
-  return;
- }
- const before=prepared();
- demand(fs.existsSync(SQL)&&fileHash(SQL)===E.QA_SQL_SHA,
-        'PLAYER3_SQL_PLAN_TAMPERED');
- demand(JSON.stringify(snapshot())===JSON.stringify(before),
-        'PLAYER3_D1_CHANGED_SINCE_TIME_TRAVEL_PREIMAGE');
- if(PH==='edition'){
-  demand(/^[a-f0-9]{64}$/.test(E.QA_R2_VERIFIED_PLAN_SHA||'') &&
-         E.QA_R2_VERIFIED_PLAN_SHA===E.QA_PLAN_SHA,
-         'PLAYER3_R2_HTTPS_PREPUBLICATION_PROOF_MISSING');
- }
- cleanRun(WR,['d1','execute',DB,'--env','staging','--remote','--json',
-   '--file='+SQL],path.join(RELEASE,'worker-airtrust'));
- postD1();
- console.log('PLAYER3_PROTECTED_D1_PHASE_PUBLISHED_AND_READBACK_VERIFIED');
+    '--candidate',CAND,'--plan',PLAN,'--pages-project',PROJECT]);
+  return doc;
+}
+function expectedR2Proof(doc){
+  return hash(Buffer.from(JSON.stringify({
+    releaseSha:E.QA_RELEASE_SHA,courseId:CID,planSha:E.QA_PLAN_SHA,
+    d1Proof:E.QA_D1_PREFLIGHT_OK,
+    objects:doc.privateR2Objects.map(x=>[x.key,x.sha256,x.bytes])
+  })));
+}
+function getRemoteR2(key,target){
+  const result=spawnSync(WR,['r2','object','get',BUCKET+'/'+key,'--remote',
+    '--file='+target],{cwd:path.join(RELEASE,'worker-airtrust'),
+    encoding:'utf8',maxBuffer:4194304,timeout:90000});
+  if(result.status===0)return true;
+  const summary=(result.stderr||'')+' '+(result.stdout||'');
+  if(!result.error&&isExplicitMissingR2Object(summary))
+    return false;
+  throw Error('PLAYER3_R2_GET_DENIED_OR_UNVERIFIED');
+}
+function assertRemoteR2(file,obj){
+  demand(fs.existsSync(file)&&fileHash(file)===obj.sha256&&
+    fs.statSync(file).size===obj.bytes,'PLAYER3_PRIVATE_R2_HASH_MISMATCH');
+}
+async function doPublishR2(){
+  const doc=validatePublishInputs();
+  await doAccess('access-r2');
+  demand(!fs.existsSync(R2_PROOF),'PLAYER3_R2_PROOF_REPLAY_DENIED');
+  for(const [index,obj] of doc.privateR2Objects.entries()){
+    const name=path.basename(obj.key);
+    demand(obj.key.startsWith('lms/native/999006/'+CID+'/'+AR+'/')&&
+      /^[a-zA-Z0-9._-]{1,128}$/.test(name),
+      'PLAYER3_R2_OBJECT_SCOPE_INVALID');
+    const file=path.join(CAND,'private',name);
+    demand(fs.existsSync(file)&&fs.statSync(file).isFile()&&
+      fileHash(file)===obj.sha256&&fs.statSync(file).size===obj.bytes,
+      'PLAYER3_R2_LOCAL_HASH_MISMATCH');
+    const retrieved=path.join(TEMP,'r2-readback-'+index);
+    demand(!fs.existsSync(retrieved),'PLAYER3_R2_TEMP_REPLAY_DENIED');
+    let exists=getRemoteR2(obj.key,retrieved);
+    if(exists){
+      assertRemoteR2(retrieved,obj);
+    }else{
+      cleanRun(WR,['r2','object','put',BUCKET+'/'+obj.key,'--remote',
+        '--file='+file,'--content-type=application/json'],
+        path.join(RELEASE,'worker-airtrust'));
+      exists=getRemoteR2(obj.key,retrieved);
+      demand(exists,'PLAYER3_R2_PUT_NOT_READABLE');
+      assertRemoteR2(retrieved,obj);
+    }
+  }
+  save(R2_PROOF,JSON.stringify({digest:expectedR2Proof(doc)}));
+  console.log('PLAYER3_PRIVATE_R2_ALL_FOUR_OBJECTS_VERIFIED');
+}
+/** Pages' canonical QA domain may briefly 404 while a first deploy propagates.
+ * Retries are bounded, read-only and strictly compare SHA-256/bytes on 200.
+ */
+export async function verifyQaAssetWithRetry(item,prefix,{
+  fetcher=fetch,
+  sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+  attempts=9,intervalMs=4000
+}={}){
+  demand(Number.isInteger(attempts)&&attempts>=1&&attempts<=9,
+    'PLAYER3_QA_HTTPS_RETRY_SCOPE_INVALID');
+  demand(item.url.startsWith(prefix)&&
+    ['index.html','app.js'].includes(item.url.slice(prefix.length)),
+    'PLAYER3_QA_PUBLIC_ASSET_SCOPE_INVALID');
+  for(let i=0;i<attempts;i++){
+    let response;
+    try{
+      response=await fetcher(item.url,{
+        signal:AbortSignal.timeout(12000),headers:{'Cache-Control':'no-cache'}});
+    }catch{
+      if(i===attempts-1)throw Error('PLAYER3_QA_HTTPS_NOT_FOUND');
+      await sleep(intervalMs);
+      continue;
+    }
+    if(response.status===200){
+      const bytes=Buffer.from(await response.arrayBuffer());
+      demand(bytes.length===item.bytes&&hash(bytes)===item.sha256,
+        'PLAYER3_QA_HTTPS_BYTE_HASH_INVALID');
+      return;
+    }
+    // Only propagation/transient states are retryable. Auth fails closed.
+    demand([404,429,502,503,504].includes(response.status),
+      'PLAYER3_QA_HTTPS_NOT_FOUND');
+    if(i===attempts-1)throw Error('PLAYER3_QA_HTTPS_NOT_FOUND');
+    await sleep(intervalMs);
+  }
+}
+async function verifyPublicHttps(doc){
+  const prefix=ORIGIN+'/qa/player3/999006/'+CID+'/'+AR+'/';
+  for(const item of doc.publicHtml5Objects)
+    await verifyQaAssetWithRetry(item,prefix);
+}
+async function doPublishPages(){
+  const doc=validatePublishInputs();
+  const receipt=fs.existsSync(R2_PROOF)?
+    JSON.parse(fs.readFileSync(R2_PROOF,'utf8')):null;
+  demand(receipt?.digest===expectedR2Proof(doc),
+    'PLAYER3_PRIVATE_R2_STEP_PROOF_REQUIRED');
+  await doAccess('access-pages');
+  const prefix=ORIGIN+'/qa/player3/999006/'+CID+'/'+AR+'/';
+  const zip=path.join(CAND,'browser/player3-technical-only.zip');
+  const names=[];
+  const site=path.join(TEMP,'site');
+  for(const item of doc.publicHtml5Objects){
+    const name=item.url.startsWith(prefix)?item.url.slice(prefix.length):'';
+    demand(['index.html','app.js'].includes(name),'PLAYER3_PUBLIC_ASSET_SCOPE_INVALID');
+    names.push(name);
+    let bytes;
+    try{bytes=execFileSync('unzip',['-p',zip,name],{
+      encoding:null,maxBuffer:4194304,timeout:30000});}
+    catch{throw Error('PLAYER3_PINNED_BROWSER_ASSET_UNREADABLE');}
+    demand(bytes.length===item.bytes&&hash(bytes)===item.sha256,
+      'PLAYER3_PINNED_BROWSER_ASSET_DRIFT');
+    const target=path.join(site,'qa','player3','999006',String(CID),AR,name);
+    fs.mkdirSync(path.dirname(target),{recursive:true,mode:0o700});
+    fs.writeFileSync(target,bytes,{mode:0o600,flag:'wx'});
+  }
+  demand(names.sort().join('|')==='app.js|index.html','PLAYER3_PUBLIC_ASSET_SET_INVALID');
+  // Main is the production branch of the isolated qa-player3-staging Pages
+  // project, NOT the AirTrust application project or production environment.
+  cleanRun(WR,['pages','deploy',site,'--project-name='+PROJECT,
+    '--branch=main','--commit-hash='+E.QA_RELEASE_SHA],RELEASE);
+  await verifyPublicHttps(doc);
+  console.log('PLAYER3_ISOLATED_QA_PAGES_AND_PRIVATE_R2_VERIFIED');
+}
+async function doApply(){
+  validateLocal();cloudflare();
+  demand(PH!=='publish','PLAYER3_SPLIT_PUBLISH_MODES_REQUIRED');
+  const before=prepared();
+  demand(fs.existsSync(SQL)&&fileHash(SQL)===E.QA_SQL_SHA,
+         'PLAYER3_SQL_PLAN_TAMPERED');
+  demand(JSON.stringify(snapshot())===JSON.stringify(before),
+         'PLAYER3_D1_CHANGED_SINCE_TIME_TRAVEL_PREIMAGE');
+  if(PH==='edition'){
+    demand(/^[a-f0-9]{64}$/.test(E.QA_R2_VERIFIED_PLAN_SHA||'') &&
+           E.QA_R2_VERIFIED_PLAN_SHA===E.QA_PLAN_SHA,
+           'PLAYER3_R2_HTTPS_PREPUBLICATION_PROOF_MISSING');
+  }
+  cleanRun(WR,['d1','execute',DB,'--env','staging','--remote','--json',
+    '--file='+SQL],path.join(RELEASE,'worker-airtrust'));
+  postD1();
+  console.log('PLAYER3_PROTECTED_D1_PHASE_PUBLISHED_AND_READBACK_VERIFIED');
 }
 async function main(){
  const mode=process.argv[2];
  try{
-  if(mode==='prepare')doPrepare();
+  if(mode==='access-pages'||mode==='access-r2')await doAccess(mode);
+  else if(mode==='publish-r2')await doPublishR2();
+  else if(mode==='publish-pages')await doPublishPages();
+  else if(mode==='prepare')doPrepare();
   else if(mode==='preflight')doPreflight();
   else if(mode==='verify')await doVerify();
   else if(mode==='apply')await doApply();
@@ -267,4 +423,4 @@ async function main(){
   process.exitCode=1;
  }
 }
-main();
+if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) main();
