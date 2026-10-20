@@ -313,19 +313,46 @@ async function doPublishR2(){
   save(R2_PROOF,JSON.stringify({digest:expectedR2Proof(doc)}));
   console.log('PLAYER3_PRIVATE_R2_ALL_FOUR_OBJECTS_VERIFIED');
 }
+/** Pages' canonical QA domain may briefly 404 while a first deploy propagates.
+ * Retries are bounded, read-only and strictly compare SHA-256/bytes on 200.
+ */
+export async function verifyQaAssetWithRetry(item,prefix,{
+  fetcher=fetch,
+  sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+  attempts=9,intervalMs=4000
+}={}){
+  demand(Number.isInteger(attempts)&&attempts>=1&&attempts<=9,
+    'PLAYER3_QA_HTTPS_RETRY_SCOPE_INVALID');
+  demand(item.url.startsWith(prefix)&&
+    ['index.html','app.js'].includes(item.url.slice(prefix.length)),
+    'PLAYER3_QA_PUBLIC_ASSET_SCOPE_INVALID');
+  for(let i=0;i<attempts;i++){
+    let response;
+    try{
+      response=await fetcher(item.url,{
+        signal:AbortSignal.timeout(12000),headers:{'Cache-Control':'no-cache'}});
+    }catch{
+      if(i===attempts-1)throw Error('PLAYER3_QA_HTTPS_NOT_FOUND');
+      await sleep(intervalMs);
+      continue;
+    }
+    if(response.status===200){
+      const bytes=Buffer.from(await response.arrayBuffer());
+      demand(bytes.length===item.bytes&&hash(bytes)===item.sha256,
+        'PLAYER3_QA_HTTPS_BYTE_HASH_INVALID');
+      return;
+    }
+    // Only propagation/transient states are retryable. Auth fails closed.
+    demand([404,429,502,503,504].includes(response.status),
+      'PLAYER3_QA_HTTPS_NOT_FOUND');
+    if(i===attempts-1)throw Error('PLAYER3_QA_HTTPS_NOT_FOUND');
+    await sleep(intervalMs);
+  }
+}
 async function verifyPublicHttps(doc){
   const prefix=ORIGIN+'/qa/player3/999006/'+CID+'/'+AR+'/';
-  for(const item of doc.publicHtml5Objects){
-    demand(item.url.startsWith(prefix)&&
-      ['index.html','app.js'].includes(item.url.slice(prefix.length)),
-      'PLAYER3_QA_PUBLIC_ASSET_SCOPE_INVALID');
-    const response=await fetch(item.url,{
-      signal:AbortSignal.timeout(25000),headers:{'Cache-Control':'no-cache'}});
-    demand(response.ok&&response.status===200,'PLAYER3_QA_HTTPS_NOT_FOUND');
-    const bytes=Buffer.from(await response.arrayBuffer());
-    demand(bytes.length===item.bytes&&hash(bytes)===item.sha256,
-      'PLAYER3_QA_HTTPS_BYTE_HASH_INVALID');
-  }
+  for(const item of doc.publicHtml5Objects)
+    await verifyQaAssetWithRetry(item,prefix);
 }
 async function doPublishPages(){
   const doc=validatePublishInputs();
