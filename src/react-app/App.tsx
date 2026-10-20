@@ -199,6 +199,10 @@ const BombeirosFrmsPage = lazyWithRetry(
   () => import('./pages/bombeiros/BombeirosFrmsPage'),
   'BombeirosFrmsPage',
 );
+const BombeirosCaseManagementPage = lazyWithRetry(
+  () => import('./pages/bombeiros/BombeirosCaseManagementPage'),
+  'BombeirosCaseManagementPage',
+);
 const FrmsEscalas = lazyWithRetry(() => import('./pages/frms/FrmsEscalas'), 'FrmsEscalas');
 const FrmsConfiguracoes = lazyWithRetry(
   () => import('./pages/frms/FrmsConfiguracoes'),
@@ -850,6 +854,15 @@ export default function App() {
                       element={
                         <ProtectedRoute requiredRole={['ADMIN']}>
                           <BombeirosFrmsPage />
+                        </ProtectedRoute>
+                      }
+                    />
+                    {/* BOA — coordenação operacional; admin vê apenas o agregado. */}
+                    <Route
+                      path="/bombeiros/frms/casos"
+                      element={
+                        <ProtectedRoute requiredRole={['GESTOR']}>
+                          <BombeirosCaseManagementPage />
                         </ProtectedRoute>
                       }
                     />
