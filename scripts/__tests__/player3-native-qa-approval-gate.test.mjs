@@ -212,8 +212,12 @@ function setSignedPolicyFixture(f,authoredPolicy,certificationMode,moduleGate){
  f.evidence.humanReview.visual.evidenceSha256=fidelity.sha256;
  f.signEvidence();
 }
-negative('signed final certification rejects absent authored module gate',f=>{
+negative('module certification rejects absent authored module gate',f=>{
  setSignedPolicyFixture(f,{mode:'SCORED',masteryScore:75},
+  'MODULE_CERTIFIED',true);
+},'NATIVE_EDITION_POLICY_CONFLICT');
+negative('authored false module gate rejects to match Worker Native schema',f=>{
+ setSignedPolicyFixture(f,{mode:'SCORED',masteryScore:75,moduleGate:false},
   'FINAL_CERTIFIED',false);
 },'NATIVE_EDITION_POLICY_CONFLICT');
 negative('signed module certification cannot disable module gate',f=>{
@@ -227,7 +231,7 @@ negative('signed final certification cannot enable module gate',f=>{
 test('explicit signed final certification gate false remains QA-only',()=>{
  const f=make();
  try{
-  setSignedPolicyFixture(f,{mode:'SCORED',masteryScore:75,moduleGate:false},
+  setSignedPolicyFixture(f,{mode:'SCORED',masteryScore:75},
    'FINAL_CERTIFIED',false);
   const result=f.verify();
   assert.equal(result.status,'QA_ELIGIBLE_NOT_AUTHORIZED_TO_PUBLISH');
