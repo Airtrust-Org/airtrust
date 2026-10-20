@@ -110,6 +110,7 @@ import { empresasRoutes } from './routes/empresas';
 import { assetsRouter } from './routes/assets';
 // FRMS (Flight & Rest Management System)
 import frmsRoutes from './routes/frms';
+import frmsBombeiros from './routes/frms-bombeiros';
 import frmsFadigaCheckinRoutes from './routes/frms-fadiga-checkin';
 import frmsReadinessRoutes from './routes/frms-readiness';
 import frmsOperationalSnapshotRoutes from './routes/frms-operational-snapshot';
@@ -761,6 +762,10 @@ app.route('/api/backup', backupRoutes);
  */
 // tenantMiddleware já aplicado dentro do empresasRoutes
 app.route('/api/empresas', empresasRoutes);
+
+// BOA/CBMMG — router próprio, empresa e perfil FRMS separados da empresa 6.
+// O guard auth + tenant global antecede TODA a API, inclusive esta rota.
+app.route('/api/bombeiros/frms', frmsBombeiros);
 
 // FRMS — Gestão de Fadiga e Jornada
 app.route('/api/frms', frmsRoutes);
