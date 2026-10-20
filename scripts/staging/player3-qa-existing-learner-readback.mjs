@@ -214,14 +214,21 @@ async function github(path){
   expect(response.ok(),'GITHUB_QUERY_FAILED');
   return response.json();
 }
-async function guard(){
+export async function readVersionResponse(response){
+  expect(response?.ok===true,'VERSION_HTTP');
+  let payload;
+  try{payload=await response.json();}catch{fail('VERSION_JSON_INVALID');}
+  expect(payload?.data&&typeof payload.data==='object','VERSION_DATA_MISSING');
+  return payload.data;
+}
+\nasync function guard(){
   const e=process.env;
   expect(!!e.GITHUB_TOKEN&&SHA40.test(e.PLAYER3_QA_RELEASE_SHA||''),
     'TRUSTED_INPUT_MISSING');
   const [pr,checks,version,permission]=await Promise.all([
     github('/pulls/1389'),
     github('/commits/'+e.PLAYER3_QA_RELEASE_SHA+'/check-runs?per_page=100'),
-    api('/api/version').then(async r=>{expect(r.ok(),'VERSION_HTTP');return (await r.json()).data;}),
+    api('/api/version').then(readVersionResponse),
     github('/collaborators/'+encodeURIComponent(e.GITHUB_ACTOR)+'/permission'),
   ]);
   expect(['admin','maintain','write','push'].includes(permission.permission),
