@@ -190,3 +190,56 @@ negative('certification policy contradicts authored edition rejects',f=>{
   mode:'FINAL_CERTIFIED',masteryScore:90,moduleGate:false});
  f.signEvidence();
 },'NATIVE_EDITION_POLICY_CONFLICT');
+
+function setSignedPolicyFixture(f,authoredPolicy,certificationMode,moduleGate){
+ const editionData=JSON.parse(readFileSync(join(f.rootDir,'edition.json'),'utf8'));
+ editionData.policy=authoredPolicy;
+ const edition=f.file('edition.json',editionData);
+ f.evidence.artifacts.edition=edition;
+ f.evidence.editionSha256=edition.sha256;
+ const policy={schema:'AIRTRUST_PLAYER3_GRADE_POLICY_V1',
+  courseId:'synthetic-qa-course',editionSha256:edition.sha256,
+  mode:certificationMode};
+ if(certificationMode!=='ATTENDANCE_ONLY'){
+  policy.masteryScore=75;policy.moduleGate=moduleGate;
+ }
+ f.evidence.artifacts.policy=f.file('policy.json',policy);
+ const fidelity=f.file('fidelity.json',{
+  schema:'AIRTRUST_PLAYER3_FIDELITY_REVIEW_V1',status:'PASS',
+  sourceSha256:f.evidence.artifacts.source.sha256,
+  editionSha256:edition.sha256,reviewedScreens:['synthetic-cover']});
+ f.evidence.artifacts.fidelity=fidelity;
+ f.evidence.humanReview.visual.evidenceSha256=fidelity.sha256;
+ f.signEvidence();
+}
+negative('signed final certification rejects absent authored module gate',f=>{
+ setSignedPolicyFixture(f,{mode:'SCORED',masteryScore:75},
+  'FINAL_CERTIFIED',false);
+},'NATIVE_EDITION_POLICY_CONFLICT');
+negative('signed module certification cannot disable module gate',f=>{
+ setSignedPolicyFixture(f,{mode:'SCORED',masteryScore:75,moduleGate:false},
+  'MODULE_CERTIFIED',false);
+},'COMPLETION_AND_APPROVAL_POLICY_REQUIRED');
+negative('signed final certification cannot enable module gate',f=>{
+ setSignedPolicyFixture(f,{mode:'SCORED',masteryScore:75,moduleGate:true},
+  'FINAL_CERTIFIED',true);
+},'COMPLETION_AND_APPROVAL_POLICY_REQUIRED');
+test('explicit signed final certification gate false remains QA-only',()=>{
+ const f=make();
+ try{
+  setSignedPolicyFixture(f,{mode:'SCORED',masteryScore:75,moduleGate:false},
+   'FINAL_CERTIFIED',false);
+  const result=f.verify();
+  assert.equal(result.status,'QA_ELIGIBLE_NOT_AUTHORIZED_TO_PUBLISH');
+  assert.equal(result.certificationPerformed,false);
+ }finally{f.close();}
+});
+test('formative attendance-only without scored gate remains QA-only',()=>{
+ const f=make();
+ try{
+  setSignedPolicyFixture(f,{mode:'FORMATIVE'},'ATTENDANCE_ONLY');
+  const result=f.verify();
+  assert.equal(result.status,'QA_ELIGIBLE_NOT_AUTHORIZED_TO_PUBLISH');
+  assert.equal(result.publicationPerformed,false);
+ }finally{f.close();}
+});
