@@ -52,6 +52,7 @@ export interface BoaMonthlyReportPreview {
 
 interface RawPeriod {
   receipt_count: number;
+  unique_person_days: number;
   participants: number;
   opened: number;
   untreated: number;
@@ -72,6 +73,7 @@ function previousMonth(value: string): string {
 function nonnegative(raw: RawPeriod): void {
   if (Object.values(raw).some(x => !Number.isSafeInteger(x) || x < 0)
     || raw.participants > raw.receipt_count
+    || raw.unique_person_days !== raw.receipt_count
     || raw.invalid !== 0
     || raw.opened !== raw.receipt_count
     || raw.untreated + raw.treating + raw.closed !== raw.opened) {
@@ -139,7 +141,8 @@ export async function loadBoaMonthlyManagementPreview(
   }
   const placeholders = ids.map(() => '?').join(', ');
   const sql = `WITH receipts AS (
-    SELECT e.id AS receipt_id, f.id AS employee_id
+    SELECT e.id AS receipt_id, f.id AS employee_id,
+      json_extract(e.payload_json, '$.reference_date') AS reference_date
       FROM frms_fadiga_evento e
       JOIN funcionarios f
         ON f.id = CAST(json_extract(e.payload_json, '$.funcionario_id') AS INTEGER)
@@ -150,11 +153,14 @@ export async function loadBoaMonthlyManagementPreview(
        AND e.tipo = ?
        AND json_extract(e.payload_json, '$.schema') = ?
        AND json_extract(e.payload_json, '$.submitted_at') IS NOT NULL
+       AND TRIM(CAST(json_extract(e.payload_json, '$.submitted_at') AS TEXT)) <> ''
+       AND LENGTH(CAST(json_extract(e.payload_json, '$.reference_date') AS TEXT)) = 10
+       AND DATE(json_extract(e.payload_json, '$.reference_date')) = json_extract(e.payload_json, '$.reference_date')
        AND json_extract(e.payload_json, '$.reference_date') >= ?
        AND json_extract(e.payload_json, '$.reference_date') < ?
        AND f.id IN (${placeholders})
   ), states AS (
-    SELECT r.receipt_id, r.employee_id,
+    SELECT r.receipt_id, r.employee_id, r.reference_date,
        COUNT(DISTINCT o.id) AS opens,
        COUNT(DISTINCT treatment.id) AS treatments,
        COUNT(DISTINCT closure.id) AS closures
@@ -168,9 +174,10 @@ export async function loadBoaMonthlyManagementPreview(
       LEFT JOIN frms_fadiga_evento closure
         ON closure.checkin_id = o.id AND closure.empresa_id = o.empresa_id
        AND closure.tipo = ?
-     GROUP BY r.receipt_id, r.employee_id
+     GROUP BY r.receipt_id, r.employee_id, r.reference_date
   ) SELECT
       COUNT(*) AS receipt_count,
+      COUNT(DISTINCT CAST(employee_id AS TEXT) || ':' || reference_date) AS unique_person_days,
       COUNT(DISTINCT employee_id) AS participants,
       COALESCE(SUM(opens), 0) AS opened,
       COALESCE(SUM(CASE WHEN opens = 1 AND treatments = 0 AND closures = 0
