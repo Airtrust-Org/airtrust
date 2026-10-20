@@ -112,8 +112,8 @@ test('official staging guard checks GitHub bot dispatch against an immutable adm
           user:{login:'isaeldaumas',type:'User'}};
       else if(path=== '/repos/'+repo+'/collaborators/isaeldaumas/permission')
         data={permission:admin?'admin':'write'};
-      else if(path=== '/repos/'+repo+'/collaborators/normal-user/permission')
-        data={permission:'write'};
+      else if(path=== '/repos/'+repo+'/collaborators/external-bot/permission')
+        data={permission:'read'};
       else throw Error('UNEXPECTED_TEST_ENDPOINT:'+path);
       return {ok:true,json:async()=>data};
     };
