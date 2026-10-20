@@ -9,6 +9,7 @@
 import AppLayout from '@/react-app/components/AppLayout';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import FrmsMonthlyConsolidated from '../frms/FrmsMonthlyConsolidated';
+import BombeirosWorkforcePanel from './BombeirosWorkforcePanel';
 
 export function isBombeirosPortalTenant(
   empresa: { id: number; codigo: string } | null | undefined,
@@ -47,6 +48,7 @@ export default function BombeirosFrmsPage() {
                 Cadastro de funcionários da empresa
               </a>
             </header>
+            <BombeirosWorkforcePanel />
             <FrmsMonthlyConsolidated />
             <p className="text-sm text-slate-600">
               Esta prévia não é relatório mensal assinado nem comprova integralmente a licitação.
