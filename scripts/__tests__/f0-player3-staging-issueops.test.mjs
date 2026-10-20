@@ -69,3 +69,65 @@ test('GitHub-only entrypoint cannot bypass official protected deploy',()=>{
  assert.match(source,/response\.status!==204/);
  assert.doesNotMatch(source,/deploy-airtrust\.yml|apply-migration|D1 execute/i);
 });
+
+
+test('official staging guard checks GitHub bot dispatch against an immutable admin comment',async()=>{
+  const {runInNewContext}=await import('node:vm');
+  const official=readFileSync('.github/workflows/deploy-staging.yml','utf8');
+  const heredoc=official.split("node <<'NODE'\n")[1]?.split('\n          NODE')[0];
+  assert.ok(heredoc,'official guard inline Node program exists');
+  const program=heredoc.split('\n').map(line=>line.replace(/^ {10}/,'')).join('\n');
+  const end=program.indexOf('})().catch');
+  assert.ok(end>0,'guard catch boundary is present');
+  const executable=program.slice(0,end)+'})()';
+  const commentId=6291312417;
+  const repo='Airtrust-Org/airtrust';
+  const fixedTime=Date.parse('2026-10-20T12:56:00Z');
+  const makeDate=class extends Date {
+    static now(){return fixedTime;}
+  };
+  const run=async({body='AIRTRUST_F0_PLAYER3_STAGING_V1 '+sha,
+    admin=true,created='2026-10-20T12:54:12Z',
+    updated=created,actor='github-actions[bot]',apply='false',worker='true',
+    frontend='true',smoke='true',reasonId=commentId,commentIssue=776}={})=>{
+    const env={
+      GITHUB_REPOSITORY:repo,PR_NUMBER:'1389',RELEASE_SHA:sha,
+      GITHUB_ACTOR:actor,GITHUB_TOKEN:'unit-test-token',
+      DEPLOY_WORKER:worker,DEPLOY_FRONTEND:frontend,RUN_SMOKE:smoke,
+      APPLY_MIGRATIONS:apply,APPROVED_MIGRATIONS:'',
+      RELEASE_REASON:'F0 Player3 synthetic QA staging runtime, issue 776 comment '+
+        reasonId+', no migrations or production'
+    };
+    const requests=[];
+    const fakeFetch=async(url)=>{
+      const path=String(url).replace('https://api.github.com','');
+      requests.push(path);
+      let data;
+      if(path=== '/repos/'+repo+'/pulls/1389')
+        data={state:'open',base:{ref:'main'},head:{sha,repo:{full_name:repo,fork:false}}};
+      else if(path=== '/repos/'+repo+'/git/commits/'+sha)data={sha};
+      else if(path=== '/repos/'+repo+'/issues/comments/'+commentId)
+        data={issue_url:'https://api.github.com/repos/'+repo+'/issues/'+commentIssue,
+          body,created_at:created,updated_at:updated,
+          user:{login:'isaeldaumas',type:'User'}};
+      else if(path=== '/repos/'+repo+'/collaborators/isaeldaumas/permission')
+        data={permission:admin?'admin':'write'};
+      else if(path=== '/repos/'+repo+'/collaborators/normal-user/permission')
+        data={permission:'write'};
+      else throw Error('UNEXPECTED_TEST_ENDPOINT:'+path);
+      return {ok:true,json:async()=>data};
+    };
+    const sandbox={process:{env},fetch:fakeFetch,Date:makeDate,
+      console:{log:()=>{},error:()=>{}}};
+    return runInNewContext(executable,sandbox);
+  };
+  await assert.doesNotReject(run());
+  await assert.rejects(run({admin:false}),/F0_STAGING_ADMIN_PERMISSION_REQUIRED/);
+  await assert.rejects(run({updated:'2026-10-20T12:55:00Z'}),/F0_STAGING_ADMIN_COMMENT_MISMATCH/);
+  await assert.rejects(run({created:'2026-10-20T10:54:12Z'}),/F0_STAGING_ADMIN_COMMENT_/);
+  await assert.rejects(run({commentIssue:1389}),/F0_STAGING_ADMIN_COMMENT_MISMATCH/);
+  await assert.rejects(run({body:'untrusted command'}),/F0_STAGING_ADMIN_COMMENT_MISMATCH/);
+  await assert.rejects(run({apply:'true'}),/F0_STAGING_BOT_SCOPE_DENIED/);
+  await assert.rejects(run({frontend:'false'}),/F0_STAGING_BOT_SCOPE_DENIED/);
+  await assert.rejects(run({actor:'external-bot'}),/Workflow actor must have write/);
+});
