@@ -41,7 +41,10 @@ function appFor(empresaId: number, codigo: string, role = 'admin') {
   const get = (query = '?mes=2026-09') => app.fetch(
     new Request(`http://localhost/relatorios/mensal-consolidado${query}`), {}, execContext,
   );
-  return { queries, get };
+  const getCrew = (query = '?cursor=0&limit=50') => app.fetch(
+    new Request(`http://localhost/equipe${query}`), {}, execContext,
+  );
+  return { queries, get, getCrew };
 }
 
 describe('BOA/CBMMG — fronteira exclusiva de tenant', () => {
@@ -96,5 +99,31 @@ describe('BOA/CBMMG — fronteira exclusiva de tenant', () => {
     const { get, queries } = appFor(130, 'bombeiros');
     expect((await get('?mes=2026-99')).status).toBe(400);
     expect(queries).toEqual([]);
+  });
+
+  it.each([
+    [6, 'costadosol'],
+    [6, 'bombeiros'],
+    [130, 'costadosol'],
+    [130, 'airtrust'],
+  ] as const)('nega cadastro BOA via HTTP de empresa %i/%s antes de SQL', async (id, codigo) => {
+    const { getCrew, queries } = appFor(id, codigo);
+    expect((await getCrew('?cursor=0&limit=50&empresa_id=130')).status).toBe(403);
+    expect(queries).toHaveLength(0);
+  });
+
+  it('não expõe cadastro em tenant Bombeiros sem perfil regulatório aprovado', async () => {
+    const { getCrew, queries } = appFor(130, 'bombeiros');
+    const res = await getCrew();
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' });
+    expect(queries.some(q => /FROM funcionarios/i.test(q.sql))).toBe(false);
+  });
+
+  it('rejeita cursor malformado ou limit acima do teto sem consultar DB', async () => {
+    const { getCrew, queries } = appFor(130, 'bombeiros');
+    expect((await getCrew('?cursor=-1&limit=50')).status).toBe(400);
+    expect((await getCrew('?cursor=0&limit=131')).status).toBe(400);
+    expect(queries).toHaveLength(0);
   });
 });
