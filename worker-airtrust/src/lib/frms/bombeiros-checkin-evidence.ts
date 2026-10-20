@@ -87,7 +87,9 @@ export async function loadBombeirosCheckinMonthlyEvidence(
                   AND f.empresa_id = ?
                   AND ch.deleted_at IS NULL
                   AND f.deleted_at IS NULL
+                  AND f.ativo = 1
                   AND ch.submitted_at IS NOT NULL
+                  AND TRIM(ch.submitted_at) <> ''
                   AND ch.data_checkin >= ? AND ch.data_checkin < ?
                   AND ch.funcionario_id IN (${placeholders})`;
   const run = async (referenceMonth: string): Promise<BombeirosCheckinMonthTotals> => {
