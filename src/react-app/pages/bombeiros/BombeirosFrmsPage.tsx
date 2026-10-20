@@ -10,6 +10,7 @@ import AppLayout from '@/react-app/components/AppLayout';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import FrmsMonthlyConsolidated from '../frms/FrmsMonthlyConsolidated';
 import BombeirosWorkforcePanel from './BombeirosWorkforcePanel';
+import BombeirosMethodologyDemo from './BombeirosMethodologyDemo';
 
 export function isBombeirosPortalTenant(
   empresa: { id: number; codigo: string } | null | undefined,
@@ -49,6 +50,7 @@ export default function BombeirosFrmsPage() {
               </a>
             </header>
             <BombeirosWorkforcePanel />
+            <BombeirosMethodologyDemo />
             <FrmsMonthlyConsolidated />
             <p className="text-sm text-slate-600">
               Esta prévia não é relatório mensal assinado nem comprova integralmente a licitação.
