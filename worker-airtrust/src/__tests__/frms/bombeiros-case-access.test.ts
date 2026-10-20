@@ -58,7 +58,7 @@ describe('BOA manager case access — no Costa do Sol contamination', () => {
     expect(row?.id).toBe('boa-alert-1');
     expect(statements).toHaveLength(1);
     expect(statements[0].binds).toEqual(['boa-alert-1', 130, 9, 10]);
-    expect(statements[0].sql).toContain("a.tipo_limite LIKE 'BOA_%'");
+    expect(statements[0].sql).toContain("substr(COALESCE(a.tipo_limite, ''), 1, 4) = 'BOA_'");
     expect(statements[0].sql).toContain('f.empresa_id = ?');
     expect(statements[0].sql).toContain('f.setor_id IN (?, ?)');
   });
