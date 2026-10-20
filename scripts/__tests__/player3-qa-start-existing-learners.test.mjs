@@ -90,12 +90,13 @@ test('guard checks admin grant, immutable main, 10 gates, exact live staging',as
     GITHUB_SHA:'e'.repeat(40),
   };
   const live=runtime();
+  const stamp=new Date(Date.now()-60000).toISOString();
   const mocks={
     async gh(path){
       if(path==='/git/ref/heads/main')return {object:{sha:env.GITHUB_SHA}};
       if(path==='/issues/comments/9001')return {...grant(),
-        created_at:new Date(Date.now()-60000).toISOString(),
-        updated_at:new Date(Date.now()-60000).toISOString()};
+        created_at:stamp,
+        updated_at:stamp};
       if(path.includes('/collaborators/'))return {permission:'admin'};
       if(path==='/pulls/1389')return live.pr;
       if(path.includes('/check-runs?'))return live.checks;
