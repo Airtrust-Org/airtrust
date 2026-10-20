@@ -176,6 +176,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
+      # The run-owned R2 cleanup uses the root @aws-sdk/client-s3 dependency;
+      # Wrangler D1 comes from the Worker installation.
+      - run: npm ci --omit=dev --ignore-scripts
       - run: npm --prefix worker-airtrust ci
       - name: Delete only verified run-owned certificate PDF keys
         id: r2_cleanup
