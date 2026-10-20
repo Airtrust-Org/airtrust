@@ -92,6 +92,7 @@ export function assertOwnSnapshot(data,row){
     data.ciclo_id===row.ciclo_id&&
     data.edition_sha256===row.edition_sha256&&
     ['NAO_INICIADO','EM_ANDAMENTO'].includes(data.status)&&
+    data.status===row.status&&
     Array.isArray(data.completed_unit_ids)&&Array.isArray(data.attempts)&&
     data.qualificacao_historico_id===null&&data.certificate_id===null,
     'SNAPSHOT_NOT_FRESH_OR_NOT_SELF');
@@ -169,7 +170,16 @@ async function api(path,{method='GET',token,body}={}){
 }
 export async function ownData(path,token,reader=api){
   const response=await reader(path,{token});
-  requireHttpOk(response,'LEARNER_GET_STATUS_'+response.status);
+  if(response?.ok!==true){
+    const kind=path.endsWith('/qa-evidencias')?'QA_SNAPSHOT':
+      path.endsWith('/sessao')?'STAGE_SESSION':'OTHER_READ';
+    let code='UNCLASSIFIED';
+    try{
+      const body=await response.json();
+      if(/^[A-Z][A-Z0-9_]{2,80}$/.test(String(body?.code??'')))code=body.code;
+    }catch{ /* Deliberately never log server response bodies. */ }
+    fail('LEARNER_'+kind+'_HTTP_'+String(response?.status??0)+'_CODE_'+code);
+  }
   let json;try{json=await response.json();}catch{fail('LEARNER_JSON_INVALID');}
   expect(json?.success===true&&json?.data,'LEARNER_RESPONSE_INVALID');
   return json.data;
@@ -205,8 +215,19 @@ export async function verifyLearners(rows,client={api,ownData}){
     const prefix='/api/lms/native/matriculas/'+row.matricula_id+'/etapas/';
     const snapshot=await client.ownData(prefix+'qa-evidencias',token);
     assertOwnSnapshot(snapshot,row);
-    const session=await client.ownData(prefix+'sessao',token);
-    assertModuleSession(session,row);
+    if(row.status==='EM_ANDAMENTO'){
+      const session=await client.ownData(prefix+'sessao',token);
+      assertModuleSession(session,row);
+    }else{
+      // The existing Worker stage-session route enforces EM_ANDAMENTO.
+      // Enrolling does not itself start a course. Do not issue a checkpoint
+      // or reinterpret a guarded 409 as an active/passed assessment.
+      expect(row.status==='NAO_INICIADO'&&
+        snapshot.completed_unit_ids.length===0&&
+        snapshot.attempts.length===0,
+        'INITIAL_ENROLLMENT_MUST_HAVE_NO_EVIDENCE');
+      console.log('PLAYER3_READBACK_INITIAL_SESSION_NOT_STARTED:'+browser);
+    }
     // An independent student must never see another student's ledger.
     const stranger=claims.find(x=>x.browser!==browser);
     const denied=await client.api(
