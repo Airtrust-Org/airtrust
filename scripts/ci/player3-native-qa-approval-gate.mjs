@@ -109,12 +109,26 @@ export function verifyNativeQaApproval({rootDir,evidenceFile,approvalFile,truste
     same(map.questions.map(q=>q.learnerQuestionId),learner.questions.map(q=>q.id))&&
     new Set(map.questions.map(q=>q.sourceQuestionId)).size===map.questions.length,
     'QUESTION_MAPPING_INCOMPLETE');
+  need(ids(edition.questions)&&Array.isArray(edition.units)&&edition.units.length>0&&
+    same(edition.questions.map(q=>q.id),learner.questions.map(q=>q.id))&&
+    map.questions.every(q=>edition.units.some(unit=>unit.id===q.stageId&&
+      Array.isArray(unit.questionIds)&&unit.questionIds.includes(q.learnerQuestionId)))&&
+    same([...new Set(edition.units.flatMap(unit=>unit.questionIds??[]))],
+      map.questions.map(q=>q.learnerQuestionId)),
+    'EDITION_QUESTION_ROUTE_OR_MAPPING_INVALID');
   need(policy.schema==='AIRTRUST_PLAYER3_GRADE_POLICY_V1'&&policy.courseId===e.courseId&&
     policy.editionSha256===e.editionSha256&&
     ['MODULE_CERTIFIED','FINAL_CERTIFIED','ATTENDANCE_ONLY'].includes(policy.mode)&&
     (policy.mode==='ATTENDANCE_ONLY'||(Number.isInteger(policy.masteryScore)&&
       policy.masteryScore>=0&&policy.masteryScore<=100&&typeof policy.moduleGate==='boolean')),
     'COMPLETION_AND_APPROVAL_POLICY_REQUIRED');
+  need(obj(edition.policy)&&
+    (policy.mode==='ATTENDANCE_ONLY'?
+      edition.policy.mode==='FORMATIVE':
+      edition.policy.mode==='SCORED'&&
+      edition.policy.masteryScore===policy.masteryScore&&
+      Boolean(edition.policy.moduleGate)===policy.moduleGate),
+    'NATIVE_EDITION_POLICY_CONFLICT');
   need(nav.schema==='AIRTRUST_PLAYER3_NAVIGATION_INTERACTION_REVIEW_V1'&&
     nav.status==='PASS'&&Array.isArray(nav.checks)&&
     ['NAVIGATION','INTERACTIONS','REOPEN'].every(k=>nav.checks.some(c=>c.kind===k&&c.status==='PASS'))&&
