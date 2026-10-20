@@ -73,3 +73,20 @@
 
 ### Estado desta PR
 Apenas o namespace BOA, barreiras de autorização, prévia mensal consolidada, portal exclusivo e testes negativos foram codificados. **Não** comprova ainda todas as rotas operacionais de check-in, missão, mitigação, R2, offline e relatórios; elas exigem aceitação cross-tenant própria. **Nenhum tenant BOA foi provisionado** e nenhuma escrita D1/R2 executada.
+
+
+## Continuidade da implementação — leitura de funcionários e bloqueio de rotas offshore (20/10/2026)
+
+**Novo contrato de leitura, sem D1/R2 writes:**
+- `GET /api/bombeiros/frms/equipe?cursor=0&limit=50` retorna uma projeção mínima de `funcionarios`: identificador interno, nome/nome de guerra, cargo, função e classificação descritiva FRMS.
+- A identidade da empresa **não** vem do navegador: `tenantContext` validado pelo auth/tenant global, role admin, código `bombeiros`, `empresa_id` não igual a 6, perfil `FIREFIGHTER_AVIATION` vigente e independente, e escopo de equipe do servidor.
+- A consulta SQL impõe `f.empresa_id = ?`, `deleted_at IS NULL`, funcionário ativo, setor autorizado e cursor parametrizado. O resultado confirma novamente `empresa_id` de cada linha (fail-closed em qualquer incoerência).
+- `other`/função não classificada **não** vira piloto ou tripulante habilitado; `flight` é apenas classificação funcional e nunca decisão de aptidão, despacho ou validade de treinamento.
+- Paginação por cursor e teto de 130 registros por solicitação (não confundir com teste de capacidade de 130 usuários concorrentes).
+- A UI do BOA contém painel próprio da equipe e link para `/funcionarios` — cadastro corporativo normal no tenant autenticado. Não há tabela de colaboradores duplicada.
+- **Barreira adicional:** quando o tenant ativo é `bombeiros`, rotas frontend `/frms` e `/frms/*` redirecionam ao portal `/bombeiros/frms`; as APIs genéricas `/api/frms` e `/api/frms/*` respondem `403 BOMBEIROS_LEGACY_FRMS_DISABLED`. A API exclusiva `/api/bombeiros/frms/*` permanece separada. Para `costadosol` e outros tenants nenhuma lógica de redirecionamento/bloqueio adicional é acionada.
+- Esses guards são adicionais ao RBAC/tenant backend, não substitutos.
+
+**Evidência técnica:** testes negativos de empresa 6, outro tenant, identidade com código errado, gestor sem autorização, perfil não aprovado, query `empresa_id` maliciosa, linha de origem cross-tenant em fixture, campos desnecessários não retornados, cursor, e rotas offshore. Worker typecheck/testes e gates GitHub Actions são pré-condições para merge.
+
+**Limites de entrega:** esta PR ainda **não implementa** workflow operacional completo de missões, check-in BOA, PVT BOA, ações mitigadoras persistidas, relatório mensal oficial assinado, políticas finais de LGPD, carga de 130 usuários, tenant real provisionado ou POC homologada. Os acessos genéricos são negados até existirem os endpoints BOA necessários; nunca liberar o genérico para mascarar ausência de implementação.
