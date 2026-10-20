@@ -5,6 +5,7 @@ on:
     paths:
       - 'ops/frms-qa-repair/**'
       - '.github/workflows/staging-frms-qa-private-readiness.yml'
+      - '.github/workflows/staging-frms-qa-private-provision.yml'
       - 'scripts/staging/frms-qa-*.mjs'
       - 'scripts/staging/seed-frms-ux-30d.mjs'
       - 'scripts/__tests__/frms-qa-*.test.mjs'
@@ -26,4 +27,4 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Disposable Workerd, D1, R2, Durable Object and private ACL integration
-        run: node --test scripts/__tests__/frms-qa-private-adapter.test.mjs scripts/__tests__/frms-qa-repair-controller.test.mjs scripts/__tests__/frms-qa-cases-atomic-executor.test.mjs scripts/__tests__/frms-qa-cases-repair-plan.test.mjs scripts/__tests__/frms-qa-private-readiness.test.mjs
+        run: node --test scripts/__tests__/frms-qa-private-adapter.test.mjs scripts/__tests__/frms-qa-repair-controller.test.mjs scripts/__tests__/frms-qa-cases-atomic-executor.test.mjs scripts/__tests__/frms-qa-cases-repair-plan.test.mjs scripts/__tests__/frms-qa-private-readiness.test.mjs scripts/__tests__/frms-qa-provision-private-resources.test.mjs
