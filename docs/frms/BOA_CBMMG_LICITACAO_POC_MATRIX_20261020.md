@@ -55,3 +55,21 @@
 - `docs/frms/FRMS_V3_DECISAO_METODOLOGICA_ICAO_IOGP_BMM_2026-10-14.md`, `docs/frms/FRMS_CHECKIN_SCIENCE_UX_CONTRACT_2026-10-14.md` e issue #1476 documentam as limitações de método.
 
 **Portão final:** declarar "APTA" apenas depois de evidências efetivamente observadas e parecer técnico/administrativo, sem tratar esta matriz como certificação.
+
+
+## Decisão obrigatória do proprietário — isolamento da empresa 6 (20/10/2026)
+
+**Reaproveitar infraestrutura, NÃO reaproveitar os dados nem a operação.** O BOA será uma empresa autônoma no SaaS AirTrust. Seu único cadastro de funcionários é `funcionarios` e os vínculos de identidade/permissão canônicos da plataforma, mas todas as consultas, inserções, históricos, índices, relatórios, check-ins, sessões e arquivos operacionais deverão estar vinculados ao **empresa_id exclusivo dos Bombeiros**. Nunca criar cadastro paralelo de colaboradores. Nunca migrar/copiar pessoas, check-ins, jornadas, documentos, casos ou relatórios da Costa do Sol (`empresa_id=6` na produção).
+
+### Fronteiras verificáveis
+1. **Identidade da empresa:** novo `empresa_id` gerado por cadastro governado, **diferente de 6**, código único `bombeiros` e vínculo do usuário efetivo no tenant. A atribuição `FIREFIGHTER_AVIATION` deve ser única, vigente, documentada, e apontar ao mesmo `empresa_id`. Na ausência de qualquer componente, nenhuma avaliação BOA.
+2. **Segurança de acesso:** autenticação e `tenantMiddleware` comuns, `requireRole('admin')` e checagem explícita de `tenantContext.role`, `empresaCodigo === bombeiros` e `empresaId !== 6`. Plataforma admin só opera quando seleciona conscientemente o tenant BOA; não recebe dados do BOA a partir da empresa plataforma. Não confiar em `empresa_id` de query/body/header fornecido pelo navegador.
+3. **API própria:** `GET /api/bombeiros/frms/relatorios/mensal-consolidado?mes=YYYY-MM`. Este endpoint **não existe** sob `/api/frms/relatorios/mensal-consolidado`. O escopo da consulta vem exclusivamente da identidade autenticada, e a leitura de funcionários é filtrada por empresa e escopo funcional antes de agregar.
+4. **UI própria:** `/bombeiros/frms`, com barreira pelo tenant selecionado. Nenhuma inserção de componente/atalho BOA em `/frms/relatorios` da Costa do Sol. A ação *Cadastro de funcionários da empresa* abre o módulo canônico `/funcionarios` **no tenant atual**, sem copiar dados.
+5. **Configuração própria:** perfil, política, limites, classificação, fontes, missões, relatórios e gates de despacho BOA não assumem baseline offshore. Uso de funções comuns de cálculo/FRMS é permitido somente se os inputs, revisão e fontes são especificamente do tenant BOA e a regra foi homologada para sua operação.
+6. **Persistência e backups:** qualquer tabela operacional com identidade individual precisa de delimitação tenant verificável por coluna `empresa_id` ou junção provada com `funcionarios.empresa_id`, incluindo anexos R2, índices e exports. Dados de QA serão 100% fictícios, provisionados via procedimento governado de staging e nunca por clonagem da empresa 6.
+7. **Testes negativos:** empresa 6 não faz sequer consulta D1 pela API BOA; outro tenant é negado; role insuficiente é negada; ausência de revisão aprovada retorna 503 antes de ler funcionários; tentativa de passar `empresa_id=6` por query é ignorada. UI BOA não carrega o consumidor de API sob empresa 6; testar alternância de tenant/cache, sessão e R2 antes do aceite integral.
+8. **Paridade / não regressão:** não alterar telas, formulários, limitações, scores, rotas públicas, schemas ou relatórios da Costa do Sol para cumprir o edital; mudanças no motor compartilhado exigem testes das duas empresas, revisão de regressão e aprovação separada.
+
+### Estado desta PR
+Apenas o namespace BOA, barreiras de autorização, prévia mensal consolidada, telas e testes negativos foram codificados. **Não** comprova ainda todas as rotas operacionais de check-in, missão, mitigação, R2, offline e relatórios; elas exigem aceitação cross-tenant própria. **Nenhum tenant BOA foi provisionado** e nenhuma escrita D1/R2 executada.
