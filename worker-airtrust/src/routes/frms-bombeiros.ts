@@ -17,6 +17,7 @@ import {
 } from '../lib/frms/parameter-governance';
 import { loadEffectiveFrmsConfiguration } from '../lib/frms/db-service';
 import { loadBombeirosCheckinMonthlyEvidence } from '../lib/frms/bombeiros-checkin-evidence';
+import { loadBoaMonthlyManagementPreview } from '../lib/frms/bombeiros-monthly-management-report';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
 import { listBombeirosWorkforce } from '../lib/frms/bombeiros-workforce';
@@ -135,6 +136,56 @@ frmsBombeiros.get('/relatorios/mensal-consolidado', requireRole('admin'), safe(a
         'A revisão exibida é a vigente na emissão; a revisão de cada dia histórico deve ser auditada separadamente.',
         'Escopo de funcionários e consultas pertencem somente ao tenant Bombeiros.',
       ],
+    },
+  });
+}));
+
+/**
+ * GET /api/bombeiros/frms/relatorios/gerencial-tecnico-previa?mes=YYYY-MM
+ *
+ * Read-only, non-persisted, unsigned evidence preview for the tender.
+ * Never treat this as the official signed monthly report.
+ */
+frmsBombeiros.get('/relatorios/gerencial-tecnico-previa', requireRole('admin'), safe(async c => {
+  const tenant = getTenantContext(c);
+  if (!isAuthorizedBombeirosFrmsTenant(tenant)) {
+    return c.json({ success: false, code: 'BOMBEIROS_TENANT_REQUIRED' }, 403);
+  }
+  const mes = parseMonth(c.req.query('mes'));
+  if (!mes || mes.startsWith('0000')) {
+    return c.json({ success: false, code: 'BOMBEIROS_INVALID_MONTH' }, 400);
+  }
+  let policy: Awaited<ReturnType<typeof loadEffectiveFrmsConfiguration>>;
+  let referenceAt: string;
+  try {
+    ({ config: policy, referenceAt } = await resolveBombeirosReadiness(c.env.DB, tenant.empresaId));
+  } catch {
+    return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503);
+  }
+  const access = await getEmployeeSectorAccess(c, tenant.empresaId);
+  const { ids } = await loadFrmsReportCrewScope(c.env.DB, tenant.empresaId, access);
+  if (ids.size < 5) {
+    return c.json({ success: false, code: 'BOMBEIROS_SMALL_COHORT' }, 403);
+  }
+  let report: Awaited<ReturnType<typeof loadBoaMonthlyManagementPreview>>;
+  try {
+    report = await loadBoaMonthlyManagementPreview(c.env.DB, tenant.empresaId, mes, ids);
+  } catch {
+    // Invalid/missing provenance MUST NOT degrade to a normal-looking zero.
+    return c.json({ success: false, code: 'BOMBEIROS_MONTHLY_EVIDENCE_UNVERIFIED' }, 503);
+  }
+  return c.json({
+    success: true, data: report,
+    meta: {
+      tenant_id: tenant.empresaId,
+      reference_month: mes,
+      generated_at: new Date().toISOString(),
+      profile_code: policy.profileCode,
+      policy_revision: policy.revision.id,
+      policy_version: policy.revision.policy_version,
+      policy_reference_date: referenceAt,
+      signature: 'NOT_SIGNED',
+      permanent_archive: 'NOT_CREATED',
     },
   });
 }));
