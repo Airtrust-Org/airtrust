@@ -4,7 +4,7 @@ import {
   TENANT,COURSE,GATES,LEARNERS,
   assertGuard,assertRoster,assertClaims,assertOwnSnapshot,
   assertModuleSession,verifyLearners,readVersionResponse,
-  requireHttpOk,ownData,github,guard:guardWorkflow,
+  requireHttpOk,ownData,github,guard as guardWorkflow,
 } from '../staging/player3-qa-existing-learner-readback.mjs';
 
 const sha='a'.repeat(40);
