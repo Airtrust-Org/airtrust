@@ -221,7 +221,8 @@ export async function readVersionResponse(response){
   expect(payload?.data&&typeof payload.data==='object','VERSION_DATA_MISSING');
   return payload.data;
 }
-\nasync function guard(){
+
+async function guard(){
   const e=process.env;
   expect(!!e.GITHUB_TOKEN&&SHA40.test(e.PLAYER3_QA_RELEASE_SHA||''),
     'TRUSTED_INPUT_MISSING');
