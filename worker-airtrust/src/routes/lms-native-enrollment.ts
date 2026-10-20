@@ -34,8 +34,30 @@ app.post('/cursos/:cursoId/matricular', async c => {
   }
   // This endpoint has no JSON/body arguments. Employee, version and cycle
   // must be selected exclusively from authenticated, tenant-bound data.
-  if (c.req.raw.body || c.req.header('content-length') && c.req.header('content-length') !== '0') {
+  // Fetch/Workers may expose a non-null ReadableStream even for an empty POST.
+  // Reject actual bytes, not the existence of a stream object. Check the
+  // first chunk only and cancel immediately so a large client payload cannot
+  // be buffered. Never parse enrollment attributes from the request.
+  const declaredLength = c.req.header('content-length');
+  if (declaredLength != null && declaredLength !== '0') {
     return c.json({ success: false, code: 'NATIVE_ENROLLMENT_CREATE_BODY_NOT_ALLOWED' }, 400);
+  }
+  if (c.req.raw.body) {
+    const reader = c.req.raw.body.getReader();
+    let hasPayload = false;
+    try {
+      let part = await reader.read();
+      while (!part.done && part.value.byteLength === 0) part = await reader.read();
+      hasPayload = !part.done;
+      if (hasPayload) void reader.cancel().catch(() => {});
+    } catch {
+      return c.json({ success: false, code: 'NATIVE_ENROLLMENT_CREATE_BODY_NOT_ALLOWED' }, 400);
+    } finally {
+      reader.releaseLock();
+    }
+    if (hasPayload) {
+      return c.json({ success: false, code: 'NATIVE_ENROLLMENT_CREATE_BODY_NOT_ALLOWED' }, 400);
+    }
   }
   const rawActor = c.get('userId' as never) as unknown;
   const actorUserId = typeof rawActor === 'number' ? rawActor :
