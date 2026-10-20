@@ -152,7 +152,7 @@ export default function ProtectedRoute({
   // BOA has a dedicated FRMS flow. Redirect any old /frms deep link instead
   // of allowing its offshore screens to run with a Bombeiros session.
   const bombeirosRedirect = resolveBombeirosLegacyFrmsRedirect(
-    empresaAtual?.codigo, location.pathname,
+    empresaAtual?.codigo, location.pathname, user?.role,
   );
   if (bombeirosRedirect) return <Navigate to={bombeirosRedirect} replace />;
 
