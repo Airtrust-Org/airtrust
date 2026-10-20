@@ -108,7 +108,8 @@ test('failed SQL execution is transactional and never deletes immutable historic
  try {
   const sql=rollbackSql();
   db.exec('BEGIN');
-  assert.throws(()=>execRollback(db,sql);db.exec("DELETE FROM lms_ciclo_evidencias WHERE id=1001;"),/LMS_CYCLE_EVIDENCE_IMMUTABLE/);
+  execRollback(db,sql);
+  assert.throws(()=>db.exec("DELETE FROM lms_ciclo_evidencias WHERE id=1001;"),/LMS_CYCLE_EVIDENCE_IMMUTABLE/);
   db.exec('ROLLBACK');
   assert.equal(db.prepare('SELECT deleted_at FROM documentos WHERE id=601').get().deleted_at,null);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM lms_xapi_statements').get().n,4);
