@@ -92,6 +92,7 @@ export function assertOwnSnapshot(data,row){
     data.ciclo_id===row.ciclo_id&&
     data.edition_sha256===row.edition_sha256&&
     ['NAO_INICIADO','EM_ANDAMENTO'].includes(data.status)&&
+    data.status===row.status&&
     Array.isArray(data.completed_unit_ids)&&Array.isArray(data.attempts)&&
     data.qualificacao_historico_id===null&&data.certificate_id===null,
     'SNAPSHOT_NOT_FRESH_OR_NOT_SELF');
