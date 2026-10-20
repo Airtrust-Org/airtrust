@@ -77,7 +77,7 @@ frmsBombeiros.get('/relatorios/mensal-consolidado', requireRole('admin'), safe(a
   // Independent regulatory governance. Offshore assignment, a missing revision,
   // or ambiguous profile all fail closed before any workforce/FRMS aggregation.
   const referenceAt = getTodayIsoSaoPaulo();
-  let policy;
+  let policy: Awaited<ReturnType<typeof loadEffectiveFrmsConfiguration>>;
   try {
     const [evidence, config] = await Promise.all([
       resolveFrmsRegulatoryProfileEvidence(c.env.DB, {
