@@ -7,6 +7,7 @@
  * separate staging environment review. Partial success fails closed.
  */
 import {pathToFileURL} from 'node:url';
+import {appendFileSync} from 'node:fs';
 import {
   API,REPO,TENANT,COURSE,LEARNERS,GATES,roster,
   assertClaims,assertOwnSnapshot,assertModuleSession,
@@ -194,15 +195,46 @@ export async function applyStart(before,client={post,get},passwords={
 }
 async function main(mode){
   if(mode==='guard'){await checkedGuard();return;}
+  if(mode==='preflight'){
+    await checkedGuard();
+    guard(!!process.env.CLOUDFLARE_API_TOKEN&&
+      !!process.env.CLOUDFLARE_ACCOUNT_ID&&
+      !!process.env.GITHUB_OUTPUT,'D1_READ_AND_GITHUB_OUTPUT_REQUIRED');
+    const before=roster();assertFresh(before);
+    // Numeric identifiers and synthetic-only aliases, never user tokens,
+    // answers, passwords or customer records.
+    appendFileSync(process.env.GITHUB_OUTPUT,
+      'qa_roster='+JSON.stringify(before)+'\\n');
+    console.log('PLAYER3_QA_D1_TWO_FRESH_SYNTHETIC_ENROLLMENTS_VERIFIED');
+    return;
+  }
   if(mode==='start'){
     guard(process.env.CONFIRM_PLAYER3_QA_START===CONFIRM,
       'MUTATION_CONFIRMATION_REQUIRED');
     await checkedGuard();
-    const before=roster();assertFresh(before);
+    guard(!process.env.CLOUDFLARE_API_TOKEN&&
+      !process.env.CLOUDFLARE_ACCOUNT_ID,
+      'WORKER_JOB_MUST_NOT_HAVE_D1_CREDENTIALS');
+    let before;
+    try{before=JSON.parse(process.env.PLAYER3_QA_PREAPPROVED_ROSTER||'');}
+    catch{err('D1_PREFLIGHT_ROSTER_MISSING')}
+    assertFresh(before);
     await applyStart(before);
-    const after=roster();assertStarted(after,before);
-    console.log('PLAYER3_QA_TWO_SYNTHETIC_LEARNERS_ATOMICALLY_STARTED_PER_WORKER');
+    console.log('PLAYER3_QA_TWO_SYNTHETIC_WORKER_START_RECEIPTS_AND_AUTH_SNAPSHOTS');
     console.log('PLAYER3_QA_SIX_JOURNEYS_COMPLETION_PDF_NOT_ATTESTED');
+    return;
+  }
+  if(mode==='d1-verify'){
+    await checkedGuard();
+    guard(!!process.env.CLOUDFLARE_API_TOKEN&&
+      !!process.env.CLOUDFLARE_ACCOUNT_ID,
+      'D1_POSTREAD_CREDENTIAL_REQUIRED');
+    let before;
+    try{before=JSON.parse(process.env.PLAYER3_QA_PREAPPROVED_ROSTER||'');}
+    catch{err('D1_PREFLIGHT_ROSTER_MISSING')}
+    assertFresh(before);
+    const after=roster();assertStarted(after,before);
+    console.log('PLAYER3_QA_D1_ATOMIC_START_PERSISTENCE_VERIFIED');
     return;
   }
   err('UNSUPPORTED_PHASE');
