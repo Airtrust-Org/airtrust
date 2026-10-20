@@ -22,7 +22,7 @@ import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
 import { listBombeirosWorkforce } from '../lib/frms/bombeiros-workforce';
 import {
   BombeirosCheckinSchema, resolveBoaCrewIdentity, registerBoaCheckin,
-  loadBoaOperationalCase, registerBoaCaseAction, isBombeirosManagerTenant,
+  loadBoaOperationalCase, loadBoaCaseQueue, registerBoaCaseAction, isBombeirosManagerTenant,
 } from '../lib/frms/bombeiros-operational-events';
 import { BombeirosScenarioSchema, assessBombeirosSyntheticScenario } from '../lib/frms/bombeiros-scenario-method';
 import { safe } from './frms-shared';
@@ -266,6 +266,38 @@ frmsBombeiros.post('/checkin', requireRole('student', 'editor', 'instructor', 'm
     profile_code: policy.profileCode, revision_id: policy.revision.id,
     clinical_validation: 'NOT_ESTABLISHED',
   } }, 201);
+}));
+
+/**
+ * The manager's queue contains only case IDs and lifecycle states. It cannot
+ * expose a health note, employee identity, KSS or sleep metrics.
+ */
+frmsBombeiros.get('/casos', requireRole('manager'), safe(async c => {
+  const tenant = getTenantContext(c);
+  if (!isBombeirosManagerTenant(tenant)) {
+    return c.json({ success: false, code: 'BOMBEIROS_MANAGER_TENANT_REQUIRED' }, 403);
+  }
+  const limitText = c.req.query('limit') ?? '50';
+  const cursorAt = c.req.query('cursor_at');
+  const cursorId = c.req.query('cursor_id');
+  if (!/^\d+$/.test(limitText) || Number(limitText) < 1 || Number(limitText) > 100
+      || (cursorAt == null) !== (cursorId == null)) {
+    return c.json({ success: false, code: 'BOMBEIROS_INVALID_CASE_CURSOR' }, 400);
+  }
+  if (cursorAt != null && (!/^\d{4}-\d{2}-\d{2}T[^ ]+Z$/.test(cursorAt)
+    || !cursorId || cursorId.length > 120)) {
+    return c.json({ success: false, code: 'BOMBEIROS_INVALID_CASE_CURSOR' }, 400);
+  }
+  try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId); }
+  catch { return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503); }
+  const access = await getEmployeeSectorAccess(c, tenant.empresaId);
+  const queue = await loadBoaCaseQueue(c.env.DB, tenant.empresaId, access,
+    Number(limitText), cursorAt && cursorId ? { created_at: cursorAt, id: cursorId } : undefined);
+  if (!queue) return c.json({ success: false, code: 'BOMBEIROS_MANAGER_SECTOR_REQUIRED' }, 403);
+  return c.json({
+    success: true, data: queue,
+    meta: { tenant_id: tenant.empresaId, source: 'BOA_SANITIZED_CASE_QUEUE' },
+  });
 }));
 
 /** Case overview without identifying health values or employee names. */
