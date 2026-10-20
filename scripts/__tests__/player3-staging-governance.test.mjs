@@ -140,6 +140,17 @@ test('scoped staging jobs never inherit D1 and R2/Pages credentials together',()
  assert.doesNotMatch(w,/pull_request_target:/);
 });
 
+test('existing Pages token is probed read-only by guarded staging diagnostic',()=>{
+ const source=readFileSync(resolve('.github/workflows/cloudflare-credential-doctor.yml'),'utf8');
+ assert.match(source,/- player3_pages_r2/);
+ assert.match(source,/inputs\.credential == 'player3_pages_r2' && inputs\.target_environment == 'staging'/);
+ assert.match(source,/secrets\.CLOUDFLARE_PAGES_API_TOKEN/);
+ assert.match(source,/pages\/projects\/qa-player3-staging/);
+ assert.match(source,/r2\/buckets\/airtrust-storage-staging/);
+ assert.match(source,/R2_READONLY_ACCESS/);
+ assert.doesNotMatch(source,/secrets\.PLAYER3_QA_R2_PAGES_API_TOKEN/);
+});
+
 test('protected executor denies local operation without main and reviewed files',()=>{
  const result=spawnSync(process.execPath,
    ['scripts/staging/player3-qa-trusted-executor.mjs','prepare'],
