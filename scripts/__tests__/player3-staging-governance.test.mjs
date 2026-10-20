@@ -136,3 +136,17 @@ test('protected executor denies local operation without main and reviewed files'
  assert.notEqual(result.status,0);
  assert.match(result.stderr,/PLAYER3_TRUSTED_MAIN_ONLY/);
 });
+
+
+test('trusted executor also pins transitive Python loader and Wrangler lockfile',()=>{
+ const source=readFileSync(resolve('scripts/staging/player3-qa-trusted-executor.mjs'),'utf8');
+ for(const [file,sha] of [
+   ['scripts/learning-factory/generate_player3_technical_zip.py',
+    '9a18f21c60c05c3173f03ad365d6ee1df5b1519202f513e88aea34f6e038f7e5'],
+   ['worker-airtrust/package-lock.json',
+    '0516921fa9eddea097711828b9f5b406391828cb12bb88dbe46b90ffd5562235']
+ ]){
+   assert.ok(source.includes("'"+file+"':'"+sha+"'"),'missing pinned dependency '+file);
+ }
+ assert.match(source,/fileHash\(p\)===expected/);
+});

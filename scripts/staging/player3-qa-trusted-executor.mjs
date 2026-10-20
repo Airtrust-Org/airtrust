@@ -24,6 +24,8 @@ const SO='2c3794a87fa914370594f1871f2e43d0d2e3fc0995db86372b516f49fa3baa29';
 const PO='e576d02331a43c02b5027bc543b10f208b8fc13eb111367f589eb53cd0f74d72';
 const BA='17a61f5914a6ce1d4e853525ef8b2daefde8cf65ff5fe65be6a29cb42e1d1875';
 const PIN={
+ 'scripts/learning-factory/generate_player3_technical_zip.py':'9a18f21c60c05c3173f03ad365d6ee1df5b1519202f513e88aea34f6e038f7e5',
+ 'worker-airtrust/package-lock.json':'0516921fa9eddea097711828b9f5b406391828cb12bb88dbe46b90ffd5562235',
  'scripts/staging/build_player3_qa_catalog_sql_plan.py':'210c707548362e7130bf7205ef6ef010498c3aeb55ae288468a2bf0ebd8d2986',
  'scripts/staging/player3-qa-governed-publisher.py':'a9d279306411c5af9063cd5f85de4fd4e6d78f3910ea07cfcca92a410f6224a0',
  'scripts/learning-factory/prepare_player3_technical_candidate.py':'1cf8cbe4e19e06115c511d091e01fa0854ae663c5c1b5fb22259617217f80a4b',
