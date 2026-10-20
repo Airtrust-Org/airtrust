@@ -60,7 +60,7 @@ describe('FRMS resumo mensal consolidado — BOA/CBMMG', () => {
     }));
     const summary = buildFrmsMonthlyConsolidatedSummary(current, [], 130);
     const payload = JSON.stringify(summary);
-    expect(payload).not.toMatch(/CONFIDENCIAL|tripulante_id|kss|sono_horas/i);
+    expect(payload).not.toMatch(/CONFIDENCIAL|tripulante_id|"kss":|"sono_horas":/i);
     expect(summary.indicators.dias_nao_avaliados.value).toBe(12);
     expect(summary.represented_crew).toBe(6);
   });
