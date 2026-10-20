@@ -44,10 +44,6 @@ on:
         required: true
         type: boolean
         default: false
-      f0_request_comment_id:
-        description: 'Optional issue #776 admin comment ID for trusted F0 cloud-only bot dispatch'
-        required: false
-        type: string
       release_reason:
         description: 'Why this staging release is needed'
         required: true
@@ -109,7 +105,6 @@ jobs:
           APPLY_MIGRATIONS: ${{ inputs.apply_migrations }}
           APPROVED_MIGRATIONS: ${{ inputs.approved_migrations }}
           RUN_SMOKE: ${{ inputs.run_smoke }}
-          F0_REQUEST_COMMENT_ID: ${{ inputs.f0_request_comment_id }}
         run: |
           set -euo pipefail
 
@@ -195,7 +190,11 @@ jobs:
           }
           const commit = await get(`/repos/${repo}/git/commits/${releaseSha}`);
           if (!commit?.sha) throw new Error('release_sha does not exist in this repository.');
-          const f0Id = process.env.F0_REQUEST_COMMENT_ID;
+          // GitHub workflow_dispatch has a hard limit of TEN inputs. The
+          // existing audited release_reason carries the issue comment ID;
+          // parse only this exact generated value, never arbitrary text.
+          const f0RequestMatch = /^F0 Player3 synthetic QA staging runtime, issue 776 comment ([1-9][0-9]*), no migrations or production$/.exec(process.env.RELEASE_REASON||'');
+          const f0Id = f0RequestMatch?.[1];
           if (actor==='github-actions[bot]') {
             // Ephemeral GITHUB_TOKEN is deliberately a bot identity. Prove the
             // human-admin source of this SPECIFIC dispatch rather than relaxing
