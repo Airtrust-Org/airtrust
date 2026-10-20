@@ -205,14 +205,58 @@ WHERE empresa_id=${tenantId} AND funcionario_id IN (
 ) AND qualificacao_id IN (
   SELECT id FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)})
 );
+-- Schema V2 0557 archives are immutable by trigger. Retain archived xAPI
+-- and lms_ciclo_evidencias in the run-scoped synthetic tenant for audit.
+-- Delete only unarchived, mutable QA statements.
 DELETE FROM lms_xapi_statements
-WHERE empresa_id=${tenantId} AND matricula_id IN (
+WHERE archived_cycle_id IS NULL AND empresa_id=${tenantId} AND matricula_id IN (
   SELECT m.id FROM lms_matriculas m
   JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
   WHERE m.empresa_id=${tenantId} AND c.observacoes=${esc(marker)}
     AND m.funcionario_id IN (
       SELECT id FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)})
     )
+);
+-- Certificate R2 objects MUST be deleted and HEAD-verified first by
+-- cleanup-qa-training-compliance-r2.mjs with dedicated staging-only credentials.
+-- D1 records are only retired when the exact employee, qualification and
+-- enrollment are all proven to be this run's synthetic fixture.
+UPDATE pasta_virtual
+SET deleted_at=COALESCE(deleted_at,datetime('now'))
+WHERE empresa_id=${tenantId} AND deleted_at IS NULL AND caminho_arquivo IN (
+  SELECT d.r2_key FROM documentos d
+  JOIN qualificacoes_historico qh ON qh.certificado_arquivo_id=d.id
+    AND qh.empresa_id=d.empresa_id AND qh.funcionario_id=d.funcionario_id
+  JOIN lms_matriculas m ON m.id=qh.lms_matricula_id
+    AND m.empresa_id=d.empresa_id AND m.funcionario_id=d.funcionario_id
+  JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+  WHERE d.empresa_id=${tenantId} AND c.observacoes=${esc(marker)}
+    AND d.funcionario_id IN (${employee1Id},${employee2Id})
+    AND qh.qualificacao_id=c.qualificacao_tipo_id
+);
+UPDATE documentos
+SET deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
+WHERE empresa_id=${tenantId} AND deleted_at IS NULL AND id IN (
+  SELECT d.id FROM documentos d
+  JOIN qualificacoes_historico qh ON qh.certificado_arquivo_id=d.id
+    AND qh.empresa_id=d.empresa_id AND qh.funcionario_id=d.funcionario_id
+  JOIN lms_matriculas m ON m.id=qh.lms_matricula_id
+    AND m.empresa_id=d.empresa_id AND m.funcionario_id=d.funcionario_id
+  JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+  WHERE d.empresa_id=${tenantId} AND c.observacoes=${esc(marker)}
+    AND d.funcionario_id IN (${employee1Id},${employee2Id})
+    AND qh.qualificacao_id=c.qualificacao_tipo_id
+);
+-- Cycle rows are soft-deleted, but immutable archived evidence and statements
+-- remain attributable to their historical synthetic cycle (never hard DELETE).
+UPDATE lms_matricula_ciclos
+SET ciclo_atual=0,deleted_at=COALESCE(deleted_at,datetime('now')),
+    updated_at=datetime('now')
+WHERE empresa_id=${tenantId} AND deleted_at IS NULL AND matricula_id IN (
+  SELECT m.id FROM lms_matriculas m
+  JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+  WHERE m.empresa_id=${tenantId} AND c.observacoes=${esc(marker)}
+    AND m.funcionario_id IN (${employee1Id},${employee2Id})
 );
 UPDATE lms_matriculas
 SET status='CANCELADO',deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
@@ -259,6 +303,19 @@ SELECT
  +(SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL)
  +(SELECT COUNT(*) FROM lms_cursos WHERE empresa_id=${tenantId} AND observacoes=${esc(marker)} AND deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM documentos d
+    JOIN funcionarios f ON f.id=d.funcionario_id AND f.empresa_id=d.empresa_id
+    WHERE d.empresa_id=${tenantId} AND f.matricula IN (${esc(employee1Code)},${esc(employee2Code)})
+      AND d.deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM pasta_virtual pv
+    JOIN funcionarios f ON f.id=pv.funcionario_id AND f.empresa_id=pv.empresa_id
+    WHERE pv.empresa_id=${tenantId} AND f.matricula IN (${esc(employee1Code)},${esc(employee2Code)})
+      AND pv.deleted_at IS NULL)
+ +(SELECT COUNT(*) FROM lms_matricula_ciclos cy
+    JOIN lms_matriculas m ON m.id=cy.matricula_id AND m.empresa_id=cy.empresa_id
+    JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+    WHERE cy.empresa_id=${tenantId} AND c.observacoes=${esc(marker)}
+      AND cy.deleted_at IS NULL)
  +(SELECT COUNT(*) FROM lms_cursos_setores lcs JOIN lms_cursos c ON c.id=lcs.curso_id AND c.empresa_id=lcs.empresa_id
      WHERE lcs.empresa_id=${tenantId} AND lcs.setor_id=${sectorId}
        AND c.observacoes=${esc(marker)} AND lcs.deleted_at IS NULL)
@@ -272,6 +329,12 @@ DROP TABLE _qa_compliance_lifecycle_cleanup;
 `;
 
 const sql = rollback ? rollbackSql : seedSql;
+// Read-only test hook: only the local Node SQLite harness may render the DML.
+// No remote write, no custom D1 target, no production process may use this.
+if (process.env.NODE_ENV === 'test' && args.includes('--print-sql-for-qa-test')) {
+  process.stdout.write(sql);
+  process.exit(0);
+}
 if (!apply) {
   console.log(JSON.stringify({ mode: 'DRY_RUN', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker }));
   process.exit(0);
