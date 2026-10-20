@@ -22,7 +22,10 @@ describe('BOA tender method — evidence without false fitness score', () => {
     expect(result.dispatch_permission).toBe('NOT_GRANTED');
     expect(result.persisted).toBe(false);
     expect(result.evidence).toHaveLength(9);
-    expect(JSON.stringify(result)).not.toMatch(/HELICOPTER_OFFSHORE|Costa do Sol|score_fadiga|apto_para_voo/i);
+    expect(result).not.toHaveProperty('score_fadiga');
+    expect(result).not.toHaveProperty('apto_para_voo');
+    expect(result).not.toHaveProperty('fatigue_risk_score');
+    expect(result.references.join(' ')).not.toMatch(/HELICOPTER_OFFSHORE|RBAC 117/i);
   });
   it('retains missing KSS, sleep and PVT as missing, never as normal', () => {
     const result = assessBombeirosSyntheticScenario({
