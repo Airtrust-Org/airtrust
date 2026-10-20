@@ -4,6 +4,7 @@ import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useOperationalAccess, type OperationalDomain } from '@/react-app/hooks/useOperationalAccess';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
+import { resolveBombeirosLegacyFrmsRedirect } from '@/react-app/lib/bombeiros-frms-isolation';
 import {
   canSeeControleVoosDevelopmentModule,
   canSeeDevelopmentModules,
@@ -148,6 +149,13 @@ export default function ProtectedRoute({
   }
 
   const empresaAtual = empresas.find((empresa) => empresa.id === empresaAtualId) || null;
+  // BOA has a dedicated FRMS flow. Redirect any old /frms deep link instead
+  // of allowing its offshore screens to run with a Bombeiros session.
+  const bombeirosRedirect = resolveBombeirosLegacyFrmsRedirect(
+    empresaAtual?.codigo, location.pathname,
+  );
+  if (bombeirosRedirect) return <Navigate to={bombeirosRedirect} replace />;
+
   const moduleKey = getModuleKeyForPath(location.pathname);
   const isTrainingAreaPath = [
     '/treinamentos',
