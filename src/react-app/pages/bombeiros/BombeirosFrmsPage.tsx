@@ -8,7 +8,7 @@
  */
 import AppLayout from '@/react-app/components/AppLayout';
 import { useAuth } from '@/react-app/hooks/useAuth';
-import FrmsMonthlyConsolidated from '../frms/FrmsMonthlyConsolidated';
+import BombeirosMonthlyReportPreview from './BombeirosMonthlyReportPreview';
 import BombeirosWorkforcePanel from './BombeirosWorkforcePanel';
 import BombeirosMethodologyDemo from './BombeirosMethodologyDemo';
 
@@ -51,7 +51,7 @@ export default function BombeirosFrmsPage() {
             </header>
             <BombeirosWorkforcePanel />
             <BombeirosMethodologyDemo />
-            <FrmsMonthlyConsolidated />
+            <BombeirosMonthlyReportPreview />
             <p className="text-sm text-slate-600">
               Esta prévia não é relatório mensal assinado nem comprova integralmente a licitação.
               Operações e parâmetros do FRMS offshore não são utilizados como configuração padrão.
