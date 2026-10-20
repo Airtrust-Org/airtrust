@@ -133,3 +133,35 @@ Foi implementado **somente no código da PR em draft**, ainda sem publicação e
 6. Frontend envia apenas os dois exemplos estáticos sem informações pessoais e não pode abrir no tenant errado.
 
 **Lacunas impeditivas:** fluxos de coleta operacional real e gravação governada de check-in, ciência/casos e mitigação, validação científica, ensaio de 130 usuários, relatório formal, documentação de LGPD e experiência profissional permanecem sem comprovação. Nenhuma migration, tenant ou dados foram provisionados por esta PR.
+
+
+## Etapa de ocorrências e mitigação BOA — implementação na PR (20/10/2026)
+
+### Separação de papéis e superfícies
+- **Administração BOA**: portal `/bombeiros/frms` e relatórios **agregados**, sem informações individuais de saúde.
+- **Gestor operacional com setor explicitamente autorizado**: portal distinto `/bombeiros/frms/casos`, com `ProtectedRoute requiredRole=GESTOR`. Redirecionamento de atalhos genéricos `/frms/*` considera o papel ativo: gestores para casos BOA e administradores para área agregada; Costa do Sol mantém suas rotas existentes.
+- **Backend de casos separado**: `GET /api/bombeiros/frms/casos/:id`, `PUT .../:id/tratamento`, `PUT .../:id/resolver`. Exige manager autenticado do tenant exato `bombeiros`, `empresa_id != 6`, revisão `FIREFIGHTER_AVIATION` vigente, setor autorizado vinculado à identidade e ocorrência existente `frms_alerta.tipo_limite` de prefixo **literal** `BOA_`. IDs enviados pelo cliente não concedem autorização.
+- **Proteção de dados**: GET retorna apenas código do caso, datas e estado; nunca nome de funcionário, identificador do tripulante, KSS, sono, prontuário ou texto de tratamento. A área administrativa não pode chamar as rotas individuais do gestor.
+- **Cadastro e auditoria reaproveitados**: registros são `frms_alerta` e `funcionarios` canônicos, com filtros obrigatórios tenant+setor. Escritas delegadas aos serviços canônicos `registrarTratamentoAlerta`/`marcarAlertaResolvido`, que reaplicam o filtro de empresa no `UPDATE` e chamam `logAuditoria`. Nenhuma tabela paralela de funcionários foi criada.
+
+### Máquina de estados
+```
+[ABERTO]
+   -- registrar responsável + prazo + mitigação + justificativa -->
+[EM_TRATAMENTO]
+   -- eficácia documentada e validada, com gestor identificado -->
+[RESOLVIDO]
+```
+
+- Sem tratamento anterior, nenhuma resolução. Sem justificativa/medida (mínimo contratual) ou eficácia documentada, recusa 400/409. Alerta já encerrado ou fora do escopo não pode ser alterado.
+- Notas antigas/não reconhecidas não podem ser silenciosamente convertidas nem sobrescritas. Ações de casos antigos só serão possíveis com migração semântica governada separada.
+- **Não há criação automática de casos BOA a partir de check-in** nesta etapa, nem ocorrência BOA real provisionada. Logo o fluxo é código funcional e testado em fixtures, mas **ainda não é teste de ciclo completo em staging**.
+- O serviço de casos existente usa auditoria padrão. A evidência imutável e a recuperação em runtime, inclusive concorrência de edições, exigem testes end-to-end sob D1 governado antes de afirmar integridade de ponta a ponta.
+
+### Testes e limites de aceite
+- Testes de propriedade e autorização: negam empresa 6, outro tenant, administração sem papel operacional, gestor sem setor, evento sem prefixo BOA, ID inconsistente e caso não encontrado.
+- Testes de ciclo de vida em backend: registra tratamento com autor, responsável e prazo sem encerrar; impede sobrescrita de tratamento registrado; exige eficácia antes de fechar; só devolve estado sem dados médicos.
+- Testes de interface: administrador não vê os casos; gestor da empresa 6 não vê painel BOA; gestor BOA envia medida e eficácia somente para a API isolada.
+- **Faltam** emissão de casos BOA, assessoramento formal/parecer técnico, revisão de eficácia por competência aprovada, assinaturas/proveniência imutável, tratamentos sob concorrência, relatórios mensais assinados com tendências e comprovação externa de experiência profissional. Política final de papéis específicos do BOA deve ser aprovada com o órgão antes da produção.
+
+**Nota de segurança:** criar essa API na PR não constitui execução de escrita de dados remotos. Nenhum D1/R2 real foi alterado. O fluxo permanecerá inoperante em ambiente real enquanto não houver tenant próprio, configuração aprovada, eventos BOA legítimos e integração governada.
