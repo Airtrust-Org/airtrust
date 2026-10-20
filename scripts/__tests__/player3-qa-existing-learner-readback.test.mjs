@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   TENANT,COURSE,GATES,LEARNERS,
   assertGuard,assertRoster,assertClaims,assertOwnSnapshot,
-  assertModuleSession,verifyLearners,
+  assertModuleSession,verifyLearners,readVersionResponse,
 } from '../staging/player3-qa-existing-learner-readback.mjs';
 
 const sha='a'.repeat(40);
@@ -117,4 +117,18 @@ test('real executor selects two independent JWTs and denies cross-owned reads',a
       if(previous[k]===undefined)delete process.env[k];else process.env[k]=previous[k];
     }
   }
+});
+
+test('fetch Response.ok is a boolean: real 200 passes, HTTP rejection fails closed',async()=>{
+  const ok=new Response(JSON.stringify({success:true,data:{
+    environment:'staging',sourceSha:sha,releaseManifestSha256:'c'.repeat(64),
+    workerBundleSha256:'d'.repeat(64),
+  }}),{status:200,headers:{'Content-Type':'application/json'}});
+  assert.equal((await readVersionResponse(ok)).sourceSha,sha);
+  await assert.rejects(()=>readVersionResponse(new Response('{}',{status:503})),
+    /VERSION_HTTP/);
+  await assert.rejects(()=>readVersionResponse(new Response('invalid json',{status:200})),
+    /VERSION_JSON_INVALID/);
+  await assert.rejects(()=>readVersionResponse(new Response('{}',{status:200})),
+    /VERSION_DATA_MISSING/);
 });
