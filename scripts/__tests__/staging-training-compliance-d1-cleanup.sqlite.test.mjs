@@ -69,11 +69,19 @@ function rollbackSql(){
  QA_EXAMINER_ADMIN_EMAIL:'qa-examiner-admin@staging.airtrust.invalid'}});
 }
 
+function execRollback(db,sql){
+  for(const statement of sql.split(';\\n')){
+    if (!statement.trim()) continue;
+    try { db.exec(statement+';'); }
+    catch(e){ throw Error('QA_ROLLBACK_SQL_FAILED:'+statement.trim().slice(0,90)+':'+e.message); }
+  }
+}
+
 test('actual rollback SQL retires QA operational records, preserves audited archives, foreign tenant and other QA',()=>{
  const db=createDb();
  try {
   const sql=rollbackSql();
-  db.exec(sql);
+  execRollback(db,sql);
   const scalar=(query)=>db.prepare(query).get().n;
   assert.equal(scalar('SELECT COUNT(*) n FROM documentos WHERE id=601 AND deleted_at IS NULL'),0);
   assert.equal(scalar('SELECT COUNT(*) n FROM pasta_virtual WHERE id=701 AND deleted_at IS NULL'),0);
@@ -89,7 +97,7 @@ test('actual rollback SQL retires QA operational records, preserves audited arch
   for(const id of [402,403]) assert.equal(scalar('SELECT COUNT(*) n FROM lms_matriculas WHERE id='+id+" AND status='CONCLUIDO'"),1);
   assert.equal(scalar('SELECT COUNT(*) n FROM lms_ciclo_evidencias WHERE id=1002'),1);
   assert.equal(scalar('SELECT COUNT(*) n FROM lms_xapi_statements WHERE id IN (903,904)'),2);
-  db.exec(sql); // no new changes or violations on retry
+  execRollback(db,sql); // no new changes or violations on retry
   assert.equal(scalar('SELECT COUNT(*) n FROM lms_xapi_statements WHERE id=901'),1);
   assert.equal(scalar('SELECT COUNT(*) n FROM lms_ciclo_evidencias WHERE id=1001'),1);
  } finally {db.close();}
@@ -100,7 +108,7 @@ test('failed SQL execution is transactional and never deletes immutable historic
  try {
   const sql=rollbackSql();
   db.exec('BEGIN');
-  assert.throws(()=>db.exec(sql+"DELETE FROM lms_ciclo_evidencias WHERE id=1001;"),/LMS_CYCLE_EVIDENCE_IMMUTABLE/);
+  assert.throws(()=>execRollback(db,sql);db.exec("DELETE FROM lms_ciclo_evidencias WHERE id=1001;"),/LMS_CYCLE_EVIDENCE_IMMUTABLE/);
   db.exec('ROLLBACK');
   assert.equal(db.prepare('SELECT deleted_at FROM documentos WHERE id=601').get().deleted_at,null);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM lms_xapi_statements').get().n,4);
