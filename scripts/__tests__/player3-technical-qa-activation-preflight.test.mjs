@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {evaluatePlayer3QaActivation, exactTenantAllowed,
   REQUIRED_TENANT_GATES, QA_SYNTHETIC_TENANT_ID} from '../staging/player3-technical-qa-activation-preflight.mjs';
 
@@ -113,4 +114,19 @@ test('never embed user secrets, flag values or profile in the sanitized result',
   assert.ok(!raw.includes('top-secret'));
   assert.ok(!raw.includes('some-private-bearer'));
   assert.ok(!raw.includes(QA_SYNTHETIC_TENANT_ID));
+});
+
+
+test('versioned staging deployment activates only isolated Player3 technical QA tenant',() => {
+  const wrangler=readFileSync(new URL('../../worker-airtrust/wrangler.toml',import.meta.url),'utf8');
+  const staging=wrangler.split('[env.staging.vars]')[1]?.split('[[env.staging.r2_buckets]]')[0]??'';
+  const production=wrangler.split('[env.production.vars]')[1]??'';
+  assert.ok(staging,'STAGING_VARS_MISSING');
+  assert.ok(production,'PRODUCTION_VARS_MISSING');
+  for(const key of REQUIRED_TENANT_GATES) {
+    const line=new RegExp('^'+key+'\\s*=\\s*"'+QA_SYNTHETIC_TENANT_ID+'"\\s*$','gm');
+    assert.equal([...staging.matchAll(line)].length,1,key+' staging QA-only allowlist');
+    assert.ok(!new RegExp('^'+key+'\\s*=','m').test(production),key+' must stay disabled in production');
+  }
+  assert.match(staging,/^PLAYER3_AUTHORED_CONTENT_ORIGIN = "https:\/\/qa-player3-staging\.pages\.dev"$/m);
 });
