@@ -9,7 +9,7 @@ const context = {
 };
 
 type BoundStatement = { sql: string; binds: unknown[] };
-type BatchResult = { success: boolean; meta: { changes: number }; results?: Array<{native_start_state: string}> };
+type BatchResult = { success: boolean; meta: { changes: number }; results?: Array<{native_start_state?: string; native_start_postcheck?: string}> };
 
 function fakeDb(options: {
   matriculaChanges?: number;
@@ -27,7 +27,7 @@ function fakeDb(options: {
       { success: true, meta: { changes: 0 }, results: [{native_start_state: options.preflightState ?? 'START'}] },
       { success: true, meta: { changes: options.matriculaChanges ?? 1 } },
       { success: true, meta: { changes: options.cycleChanges ?? 1 } },
-      { success: true, meta: { changes: 0 } },
+      { success: true, meta: { changes: 0 }, results: [{native_start_postcheck:'null'}] },
     ];
   });
   const db = {
@@ -168,11 +168,21 @@ describe('Native start transaction — D1 batch and tenant/cycle scope', () => {
     await expect(f.start()).rejects.toMatchObject({code:'NATIVE_START_INCONSISTENT_CHANGES'});
   });
 
-  it('never claims success on mixed transition counts', async () => {
-    const f = fakeDb({ matriculaChanges: 1, cycleChanges: 0 });
-    await expect(f.start()).rejects.toMatchObject({
-      code: 'NATIVE_START_INCONSISTENT_CHANGES',
-    });
+  it('uses the actual transactional postcheck instead of misleading mixed D1 metadata counts', async () => {
+    const f = fakeDb({ matriculaChanges: 1, cycleChanges: 0, preflightState:'START' });
+    await expect(f.start()).resolves.toMatchObject({state:'STARTED'});
+    expect(f.prepared[3].sql).toContain('AS native_start_postcheck');
+  });
+
+  it('never reports start on a missing postcheck receipt even if counters report two updates',async()=>{
+    const f=fakeDb();
+    f.batch.mockImplementationOnce(async()=>[
+      {success:true,meta:{changes:0},results:[{native_start_state:'START'}]},
+      {success:true,meta:{changes:1}},
+      {success:true,meta:{changes:1}},
+      {success:true,meta:{changes:0},results:[]},
+    ]);
+    await expect(f.start()).rejects.toMatchObject({code:'NATIVE_START_POSTCHECK_RECEIPT_MISSING'});
   });
 
   it('does not recover from a rolled back batch by guessing start state', async () => {
