@@ -47,6 +47,43 @@ describe('Player3 approved bank stage grader',()=>{
     {stageId:'m1',answers:[{questionId:'q1',optionId:'o1'},
       {questionId:'q2',optionId:'o0'}]})).toThrow('INVALID_PRIVATE_BANK');
  });
+ it('grades two independent ten-question V7 modules at exactly 7/10 without certifying',()=>{
+  const questions=Array.from({length:20},(_,i)=>({
+    id:'v7q'+(i+1),stageId:i<10?'avaliacao-modulo-01':'avaliacao-final',
+    options:['o0','o1'],correctOptionId:'o1',
+    feedbackCorrect:'ok',feedbackIncorrect:'revise',
+  }));
+  const stagedBank:Player3PrivateBank={...bank,questions};
+  const stages=['avaliacao-modulo-01','avaliacao-final'];
+  const stagedPolicy:Player3ApprovedPolicy={...policy,stages:stages.map((stageId,index)=>({
+    stageId,masteryScore:70,
+    requiredQuestionIds:questions.slice(index*10,index*10+10).map(q=>q.id),
+  }))};
+  const attempt=(stage:number,correct:number)=>{
+    const answers=questions.slice(stage*10,stage*10+10).map((q,index)=>({
+      questionId:q.id,optionId:index<correct?'o1':'o0',
+    }));
+    return gradePlayer3ApprovedStage(stagedBank,stagedPolicy,{
+      stageId:stages[stage],answers,
+    });
+  };
+  for(const stage of [0,1]){
+    expect(attempt(stage,6)).toMatchObject({
+      total:10,correct:6,scorePct:60,stagePassed:false,
+      grantsCompletion:false,grantsCertificate:false,
+    });
+    expect(attempt(stage,7)).toMatchObject({
+      total:10,correct:7,scorePct:70,stagePassed:true,
+      grantsCompletion:false,grantsCertificate:false,
+    });
+    expect(attempt(stage,10)).toMatchObject({scorePct:100,stagePassed:true});
+  }
+  // Even a perfect module-1 submission cannot substitute for module 2.
+  const firstAnswers=questions.slice(0,10).map(q=>({questionId:q.id,optionId:'o1'}));
+  expect(()=>gradePlayer3ApprovedStage(stagedBank,stagedPolicy,{
+    stageId:stages[1],answers:firstAnswers,
+  })).toThrow('INVALID_STAGE_ANSWER');
+ });
  it('passes stage two independently without issuing a certificate',()=>{
   expect(grade([{questionId:'q3',optionId:'o1'}],'m2'))
     .toMatchObject({stagePassed:true,total:1,grantsCertificate:false});
