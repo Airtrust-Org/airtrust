@@ -195,6 +195,10 @@ const FrmsAlertasPainel = lazyWithRetry(
   'FrmsAlertasPainel',
 );
 const FrmsRelatorios = lazyWithRetry(() => import('./pages/frms/FrmsRelatorios'), 'FrmsRelatorios');
+const BombeirosFrmsPage = lazyWithRetry(
+  () => import('./pages/bombeiros/BombeirosFrmsPage'),
+  'BombeirosFrmsPage',
+);
 const FrmsEscalas = lazyWithRetry(() => import('./pages/frms/FrmsEscalas'), 'FrmsEscalas');
 const FrmsConfiguracoes = lazyWithRetry(
   () => import('./pages/frms/FrmsConfiguracoes'),
@@ -838,6 +842,16 @@ export default function App() {
                     <Route
                       path="/escalas/evd"
                       element={<Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/escalas/evd']} replace />}
+                    />
+
+                    {/* BOA/CBMMG — portal FRMS dedicado: não reutiliza a UI offshore. */}
+                    <Route
+                      path="/bombeiros/frms"
+                      element={
+                        <ProtectedRoute requiredRole={['ADMIN']}>
+                          <BombeirosFrmsPage />
+                        </ProtectedRoute>
+                      }
                     />
 
                     {/* FRMS — Gestão de Fadiga e Jornada (protegido) */}
