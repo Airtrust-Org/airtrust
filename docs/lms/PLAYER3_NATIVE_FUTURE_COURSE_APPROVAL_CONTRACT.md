@@ -14,8 +14,8 @@ Cada chave obrigatória em artifacts contém path relativo e sha256 hex de 64 ca
 - edition: JSON AIRTRUST_NATIVE_COURSE_V1, courseId, packageVersion, assets[]; SHA do próprio arquivo igual a editionSha256 (edição imutável).
 - learner: projeção JSON courseId, packageVersion e questions[].id, sem gabarito/feedback privado.
 - privateBank: banco exclusivamente privado, questions[].id, nunca exposto ao aluno.
-- policy: AIRTRUST_PLAYER3_GRADE_POLICY_V1, courseId, editionSha256, modo MODULE_CERTIFIED, FINAL_CERTIFIED ou ATTENDANCE_ONLY; para avaliação, masteryScore de 0 a 100 e moduleGate booleano explícito.
-- crosswalk: AIRTRUST_PLAYER3_QUESTION_CROSSWALK_V1, questions[] com sourceQuestionId, privateQuestionId, learnerQuestionId e stageId; cobertura exata de questões privadas e learner, sem duplicações.
+- policy: AIRTRUST_PLAYER3_GRADE_POLICY_V1, courseId, editionSha256, modo MODULE_CERTIFIED, FINAL_CERTIFIED ou ATTENDANCE_ONLY; para avaliação, masteryScore de 0 a 100 e moduleGate booleano explícito. A política certificadora deve coincidir com edition.policy (modo SCORED, nota e moduleGate); ATTENDANCE_ONLY exige edição FORMATIVE.
+- crosswalk: AIRTRUST_PLAYER3_QUESTION_CROSSWALK_V1, questions[] com sourceQuestionId, privateQuestionId, learnerQuestionId e stageId; cobertura exata de questões privadas e learner, sem duplicações. A unidade Native identificada por stageId deve existir em edition.units[] e incluir learnerQuestionId em questionIds; edition.questions[] e learner.questions[] devem coincidir.
 - navigation: AIRTRUST_PLAYER3_NAVIGATION_INTERACTION_REVIEW_V1, status PASS, checks NAVIGATION, INTERACTIONS e REOPEN PASS, sem outros checks reprovados.
 - fidelity: AIRTRUST_PLAYER3_FIDELITY_REVIEW_V1, status PASS, hashes exatos sourceSha256 e editionSha256 e reviewedScreens[] não vazio.
 
@@ -38,6 +38,6 @@ Futuro publicador real deverá ter contrato **distinto**, grants específicos F4
 ## Ensaios e handoff
 Executar: node --test scripts/__tests__/player3-native-qa-approval-gate.test.mjs
 
-Fixture inteiramente sintética, chave efêmera, zero dados reais. Negativos: fonte adulterada, mídia faltante, gabarito no aluno ou JS, política ausente/incompleta, edição alterada, falta/forja de assinatura, revisor igual a autor, revisão visual recusada, navegação incompleta, crosswalk com questões ausentes, alteração pós-assinatura, mídia omitida e caminho inseguro.
+Fixture inteiramente sintética, chave efêmera, zero dados reais. Negativos: fonte adulterada, mídia faltante, gabarito no aluno ou JS, política ausente/incompleta, edição alterada, versão incorreta, questão fora da unidade Native, política conflitante, falta/forja de assinatura, revisor igual a autor, revisão visual recusada, navegação incompleta, crosswalk com questões ausentes, alteração pós-assinatura, mídia omitida e caminho inseguro.
 
 F4 só poderá apresentar o primeiro curso futuro mediante fonte individual autorizada, revisão humana de fidelidade pedagógica e visual, política assinada e banco realmente segregado; não iniciar conversão dos 22 cursos nesta execução. Cursos #15 e #41 intocados. Nenhuma publicação, matrícula, Schema V2 ou produção nesta F5.
