@@ -30,10 +30,10 @@
 
 ## Primeira entrega de engenharia do contrato — 20/10/2026
 - Endpoint exclusivo: `GET /api/bombeiros/frms/relatorios/mensal-consolidado?mes=YYYY-MM`, com autenticação já existente do router, `requireRole('admin')`, tenant validado e equipe autorizada.
-- Reutiliza exclusivamente `relatorioCompliance()` que deriva `listFrmsOperationalSnapshot()` em escopo autorizado; compara somente contagens de **eventos registrados** com mês anterior.
-- Resposta **sem nome, ID de pessoa, KSS, sono, PVT ou informação médica individual**; escopos menores que cinco são negados; contagens 1–4 são suprimidas com `null` e motivo; ausência/incompletude também devolve `null`, nunca zero inventado.
+- **Retificação de engenharia, 20/10:** a dependência de `relatorioCompliance()`/`listFrmsOperationalSnapshot()` foi removida do endpoint BOA: o snapshot genérico ainda contém decisões/limites da operação offshore e NÃO pode comprovar o edital dos Bombeiros. A consulta agora lê somente recibos enviados em `frms_fadiga_checkin`, com join no cadastro `funcionarios` e dois filtros `empresa_id` parametrizados; compara somente quantidade de recibos por pessoa/dia com mês anterior.
+- Resposta **sem nome, ID de pessoa, KSS, sono, PVT ou informação médica individual**. Escopos menores que cinco são negados; se apenas 1–4 pessoas enviaram check-in, os números **por pessoa/dia** também são suprimidos mesmo quando ultrapassam quatro. Zero só significa nenhum recibo efetivamente identificado. Não há denominador de escalas e NÃO há declaração de conclusão ou conformidade.
 - Nenhum SQL de write, migration, seed, alteração de coeficiente ou despacho. Consulta é uma **prévia técnica**, NÃO relatório gerencial homologado, assinado ou arquivado. Ainda não inclui indicador de eficácia de mitigação nem denominador validado de cobertura.
-- Testes focados para supressão de grupo/células, ausência, dados incompletos e não vazamento de identificadores.
+- Testes focados para bloqueio do tenant 6, dupla cláusula de tenant no join, supressão de grupo e participação pequena, ausência, dados agregados incoerentes e não vazamento de identificadores.
 
 ## Critérios de fechamento do produto — TODO (não presumir)
 1. Conferir integralmente edital/Termo de Referência + eventuais respostas oficiais/retificações.
@@ -90,3 +90,12 @@ Apenas o namespace BOA, barreiras de autorização, prévia mensal consolidada, 
 **Evidência técnica:** testes negativos de empresa 6, outro tenant, identidade com código errado, gestor sem autorização, perfil não aprovado, query `empresa_id` maliciosa, linha de origem cross-tenant em fixture, campos desnecessários não retornados, cursor, e rotas offshore. Worker typecheck/testes e gates GitHub Actions são pré-condições para merge.
 
 **Limites de entrega:** esta PR ainda **não implementa** workflow operacional completo de missões, check-in BOA, PVT BOA, ações mitigadoras persistidas, relatório mensal oficial assinado, políticas finais de LGPD, carga de 130 usuários, tenant real provisionado ou POC homologada. Os acessos genéricos são negados até existirem os endpoints BOA necessários; nunca liberar o genérico para mascarar ausência de implementação.
+
+
+## Checkpoint — método BOA independente e limites de aceitação (20/10/2026)
+
+1. O endpoint BOA mensal entrega **apenas recibos de check-in submetidos**, com total de pessoas participantes, pares únicos pessoa/dia e delta do mês anterior. **Não utiliza** fórmula, inferência de aptidão, conformidade regulatória, cálculo de fadiga acumulada, IOGP/offshore ou snapshot Costa do Sol. A tabela canônica continua compartilhada fisicamente, mas SQL restringe os dois lados da associação ao tenant BOA e à equipe autorizada.
+2. O resumo atual **não é o relatório mensal exigido pela licitação** nem demonstra disponibilidade, cobertura de escala, dados cognitivos/PVT, risco, mitigação, avaliação de eficácia, assinatura ou emissão auditada. Trata-se somente de evidência mínima para a futura metodologia BOA.
+3. O check-in operacional dos Bombeiros **ainda não tem fluxo BOA de escrita liberado**: o bloqueio da API genérica preserva fail-closed até implementação, aprovação de perfil/regras e testes de autorização por tripulante. Não afirmar que uma pessoa do BOA consegue responder check-in neste momento.
+4. Nenhum perfil `FIREFIGHTER_AVIATION` ativo foi confirmado em D1, nenhum usuário/tenant BOA foi provisionado e nenhum arquivo D1/R2 foi escrito. A PR é de desenvolvimento, não homologação de ambiente.
+5. Testes locais no SHA `3654fb5c64473ed94476c5a78e40298bb22b48d1` confirmaram **21 testes frontend + 43 Worker**, worker-typecheck, route-ownership e typescript-delta aprovados. Esses resultados precisam ser revalidados se o código avançar; os oito gates da CI devem ser conferidos no último HEAD para integração.
