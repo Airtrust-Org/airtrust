@@ -59,6 +59,25 @@ function cloudflare(){
  demand(E.CLOUDFLARE_API_TOKEN&&E.CLOUDFLARE_ACCOUNT_ID&&fs.existsSync(WR),
         'PLAYER3_SCOPED_CLOUDFLARE_STAGING_TOKEN_REQUIRED');
 }
+async function doAccess(){
+  validateLocal();
+  demand(E.CLOUDFLARE_API_TOKEN&&E.CLOUDFLARE_ACCOUNT_ID,
+         'PLAYER3_EXISTING_STAGING_PAGES_TOKEN_MISSING');
+  const base='https://api.cloudflare.com/client/v4/accounts/'+E.CLOUDFLARE_ACCOUNT_ID;
+  for(const [url,name,errorCode] of [
+    [base+'/pages/projects/'+PROJECT,PROJECT,'PLAYER3_QA_PAGES_TOKEN_SCOPE_MISSING'],
+    [base+'/r2/buckets/'+BUCKET,BUCKET,'PLAYER3_QA_R2_TOKEN_SCOPE_MISSING']
+  ]){
+    let response,body;
+    try{
+      response=await fetch(url,{headers:{Authorization:'Bearer '+E.CLOUDFLARE_API_TOKEN},
+        signal:AbortSignal.timeout(15000)});
+      body=await response.json();
+    }catch{throw Error(errorCode);}
+    demand(response.ok&&body?.success===true&&body?.result?.name===name,errorCode);
+  }
+  console.log('PLAYER3_EXISTING_STAGING_TOKEN_PAGES_R2_READONLY_PREFLIGHT_PASS');
+}
 function readD1(statement){
  cloudflare();
  const output=cleanRun(WR,['d1','execute',DB,'--env','staging','--remote',
@@ -256,7 +275,8 @@ async function doApply(){
 async function main(){
  const mode=process.argv[2];
  try{
-  if(mode==='prepare')doPrepare();
+  if(mode==='access')await doAccess();
+  else if(mode==='prepare')doPrepare();
   else if(mode==='preflight')doPreflight();
   else if(mode==='verify')await doVerify();
   else if(mode==='apply')await doApply();
