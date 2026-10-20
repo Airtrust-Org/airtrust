@@ -227,15 +227,15 @@ export async function readVersionResponse(response){
   return payload.data;
 }
 
-async function guard(){
+export async function guard(client={github,api}){
   const e=process.env;
   expect(!!e.GITHUB_TOKEN&&SHA40.test(e.PLAYER3_QA_RELEASE_SHA||''),
     'TRUSTED_INPUT_MISSING');
   const [pr,checks,version,permission]=await Promise.all([
-    github('/pulls/1389'),
-    github('/commits/'+e.PLAYER3_QA_RELEASE_SHA+'/check-runs?per_page=100'),
-    api('/api/version').then(readVersionResponse),
-    github('/collaborators/'+encodeURIComponent(e.GITHUB_ACTOR)+'/permission'),
+    client.github('/pulls/1389'),
+    client.github('/commits/'+e.PLAYER3_QA_RELEASE_SHA+'/check-runs?per_page=100'),
+    client.api('/api/version').then(readVersionResponse),
+    client.github('/collaborators/'+encodeURIComponent(e.GITHUB_ACTOR)+'/permission'),
   ]);
   expect(['admin','maintain','write','push'].includes(permission.permission),
     'WORKFLOW_ACTOR_PERMISSION_DENIED');
