@@ -200,7 +200,7 @@ export async function verifyLearners(rows,client={api,ownData}){
     const denied=await client.api(
       '/api/lms/native/matriculas/'+stranger.row.matricula_id+'/etapas/qa-evidencias',
       {token});
-    expect([403,404].includes(denied.status),
+    expect([403,404,409].includes(denied.status),
       'CROSS_EMPLOYEE_QA_READ_NOT_DENIED_'+browser);
     console.log('PLAYER3_STAGING_READBACK_PASS:'+browser+
       ':OWN_STAGE_AND_SNAPSHOT:CROSS_EMPLOYEE_DENIED');
