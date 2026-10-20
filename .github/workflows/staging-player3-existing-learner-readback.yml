@@ -1,0 +1,97 @@
+name: Player3 Existing Learner Readback (Staging, Read Only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_PLAYER3_READBACK_ONLY'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact staging deployed OPEN/DRAFT F4 PR #1389 head SHA'
+        required: true
+        type: string
+
+# Serialize even SELECT-only acceptance with staging writes and SCORM QA.
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+  pull-requests: read
+
+env:
+  PLAYER3_QA_CONFIRMATION: ${{ inputs.confirmation }}
+  PLAYER3_QA_RELEASE_SHA: ${{ inputs.release_sha }}
+
+jobs:
+  guard:
+    name: SHA, CI, actor and actual staging Worker guard (no secrets)
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Exact release and trusted live provenance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging/player3-qa-existing-learner-readback.mjs guard
+
+  d1_readonly:
+    name: D1 SELECT-only physical two-learner tenant/cycle isolation readback
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install trusted Wrangler CLI for SELECT-only pinned staging
+        run: npm --prefix worker-airtrust ci --ignore-scripts
+      - name: Exact SHA guard, D1 SELECT, own-ledger/cross-employee HTTP denial
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PLAYER3_QA_CHROMIUM_PASSWORD: ${{ secrets.PLAYER3_QA_CHROMIUM_PASSWORD }}
+          PLAYER3_QA_WEBKIT_PASSWORD: ${{ secrets.PLAYER3_QA_WEBKIT_PASSWORD }}
+        run: node scripts/staging/player3-qa-existing-learner-readback.mjs inspect
+
+  result:
+    name: Fail closed — do not claim 6-journey acceptance
+    needs: [guard, d1_readonly]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sanitary summary
+        env:
+          GUARD_STATUS: ${{ needs.guard.result }}
+          INSPECT_STATUS: ${{ needs.d1_readonly.result }}
+          SHA: ${{ inputs.release_sha }}
+        run: |
+          {
+            echo '### Player 3 physical read-only staging preflight'
+            echo "- exact F4 SHA: $SHA"
+            echo "- trusted guard: $GUARD_STATUS"
+            echo "- existing learner readback: $INSPECT_STATUS"
+            echo '- tenant 999006 / Native course 327; no D1/R2 writes'
+            echo '- Browser UI, 80% resume and external SCORM: NOT TESTED'
+            echo '- Six journeys, attempts, terminal, PDF: NOT ATTESTED'
+            echo '- Production: NO ACTION'
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$GUARD_STATUS" = success
+          test "$INSPECT_STATUS" = success
