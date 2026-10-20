@@ -46,8 +46,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/staging/player3-qa-existing-learner-readback.mjs guard
 
-  inspect:
-    name: Physical two-learner tenant/cycle isolation readback
+  d1_readonly:
+    name: D1 SELECT-only physical two-learner tenant/cycle isolation readback
     needs: guard
     runs-on: ubuntu-latest
     environment: staging
@@ -73,14 +73,14 @@ jobs:
 
   result:
     name: Fail closed — do not claim 6-journey acceptance
-    needs: [guard, inspect]
+    needs: [guard, d1_readonly]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Sanitary summary
         env:
           GUARD_STATUS: ${{ needs.guard.result }}
-          INSPECT_STATUS: ${{ needs.inspect.result }}
+          INSPECT_STATUS: ${{ needs.d1_readonly.result }}
           SHA: ${{ inputs.release_sha }}
         run: |
           {
