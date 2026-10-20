@@ -42,6 +42,7 @@ import { requestIdMiddleware } from './middleware/requestId';
 import { rateLimiter, rateLimitPresets, tenantAwareKeyExtractor } from './middleware/rate-limit';
 import { requireRole } from './middleware/rbac';
 import { getTenantContext, tenantMiddleware } from './middleware/tenant';
+import { isBombeirosLegacyFrmsBlocked } from './lib/frms/bombeiros-legacy-boundary';
 import { domainEventProcessorMiddleware } from './middleware/domainEventProcessor';
 
 // Cron
@@ -306,7 +307,7 @@ const rejectLegacyFrmsForBombeiros: MiddlewareHandler<{
   Bindings: Env;
   Variables: Variables;
 }> = async (c, next) => {
-  if (getTenantContext(c).empresaCodigo === 'bombeiros') {
+  if (isBombeirosLegacyFrmsBlocked(getTenantContext(c).empresaCodigo, c.req.path)) {
     return c.json({
       success: false,
       code: 'BOMBEIROS_LEGACY_FRMS_DISABLED',
