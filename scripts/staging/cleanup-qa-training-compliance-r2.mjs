@@ -110,6 +110,12 @@ async function main() {
     console.log(JSON.stringify(await cleanupOwnedPdfs(rows, code, marker, null, false)));
     return;
   }
+  // Nothing was issued (or seed failed): the SQL rollback is still mandatory,
+  // but a missing R2 key must not turn a harmless no-op into an unclean fixture.
+  if (rows.length === 0) {
+    console.log(JSON.stringify({result:'PASS',checked:0,deleted:0,dryRun:false}));
+    return;
+  }
   const accessKeyId=process.env.QA_LIFECYCLE_R2_ACCESS_KEY_ID;
   const secretAccessKey=process.env.QA_LIFECYCLE_R2_SECRET_ACCESS_KEY;
   const account=process.env.CLOUDFLARE_ACCOUNT_ID;
