@@ -1,10 +1,11 @@
 import {describe,it,expect,vi,beforeEach} from 'vitest';
-import {loadApprovedPlayer3StageContext} from '../../services/lms-player3-module-attempt-writer';
+import {loadApprovedPlayer3StageContext,canReadPlayer3QaEvidence} from '../../services/lms-player3-module-attempt-writer';
 import {readPlayer3ModuleSession} from '../../services/lms-player3-module-progress-reader';
 import type {Env} from '../../types';
 
 vi.mock('../../services/lms-player3-module-attempt-writer',()=>({
   loadApprovedPlayer3StageContext:vi.fn(),
+  canReadPlayer3QaEvidence:vi.fn(()=>false),
   Player3StageWriteError:class Player3StageWriteError extends Error {
     constructor(public readonly code:string){super(code);}
   },
@@ -50,6 +51,8 @@ function read(rows:unknown[],success=true){
     bucket:{} as R2Bucket,empresaId:6,matriculaId:911,actorUserId:31});
 }
 beforeEach(()=>{
+  vi.mocked(canReadPlayer3QaEvidence).mockReset();
+  vi.mocked(canReadPlayer3QaEvidence).mockReturnValue(false);
   vi.mocked(loadApprovedPlayer3StageContext).mockReset();
   vi.mocked(loadApprovedPlayer3StageContext).mockResolvedValue({
     binding:{vinculo_id:200,politica_id:301,source_sha256:source},
@@ -58,6 +61,26 @@ beforeEach(()=>{
   } as never);
 });
 describe('Player3 authenticated modular resumed session',()=>{
+  it('does not widen production and non-allowlisted learners to QA-only initial reads',async()=>{
+    await read([]);
+    expect(vi.mocked(canReadPlayer3QaEvidence)).toHaveBeenCalledWith(
+      expect.any(Object),6);
+    expect(vi.mocked(loadApprovedPlayer3StageContext)).toHaveBeenCalledWith(
+      expect.objectContaining({readOnlyQa:false,empresaId:6,matriculaId:911}));
+  });
+  it('reads an initially empty modular ledger ONLY through governed staging QA',async()=>{
+    vi.mocked(canReadPlayer3QaEvidence).mockReturnValue(true);
+    const session=await read([]);
+    expect(session).toMatchObject({allOfficialStagesPassed:false,
+      completionSupported:false,
+      stages:[{stageId:'module1',attempts:0,passed:false},
+        {stageId:'module2',attempts:0,passed:false}]});
+    expect(vi.mocked(loadApprovedPlayer3StageContext)).toHaveBeenCalledWith(
+      expect.objectContaining({readOnlyQa:true,empresaId:6,matriculaId:911}));
+    expect(JSON.stringify(session)).not.toContain('SECRET');
+    expect(JSON.stringify(session)).not.toContain('correctOptionId');
+  });
+
   it('shows no pass before any attempt, with independent next attempt numbers',async()=>{
     const s=await read([]);
     expect(s).toMatchObject({allOfficialStagesPassed:false,completionSupported:false,
