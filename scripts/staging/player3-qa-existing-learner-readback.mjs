@@ -215,18 +215,19 @@ export async function verifyLearners(rows,client={api,ownData}){
     const prefix='/api/lms/native/matriculas/'+row.matricula_id+'/etapas/';
     const snapshot=await client.ownData(prefix+'qa-evidencias',token);
     assertOwnSnapshot(snapshot,row);
-    if(row.status==='EM_ANDAMENTO'){
-      const session=await client.ownData(prefix+'sessao',token);
-      assertModuleSession(session,row);
-    }else{
-      // The existing Worker stage-session route enforces EM_ANDAMENTO.
-      // Enrolling does not itself start a course. Do not issue a checkpoint
-      // or reinterpret a guarded 409 as an active/passed assessment.
-      expect(row.status==='NAO_INICIADO'&&
-        snapshot.completed_unit_ids.length===0&&
-        snapshot.attempts.length===0,
+    // The F4 runtime now supports an independently gated, read-only
+    // modular session at NAO_INICIADO. Require actual HTTP GET, never
+    // fabricate progress from a missing/409 response.
+    const session=await client.ownData(prefix+'sessao',token);
+    assertModuleSession(session,row);
+    if(row.status==='NAO_INICIADO'){
+      expect(snapshot.completed_unit_ids.length===0&&
+        snapshot.attempts.length===0&&
+        session.allOfficialStagesPassed===false&&
+        session.stages.every(stage=>stage.attempts===0&&
+          stage.passed===false&&stage.lastScorePct===null),
         'INITIAL_ENROLLMENT_MUST_HAVE_NO_EVIDENCE');
-      console.log('PLAYER3_READBACK_INITIAL_SESSION_NOT_STARTED:'+browser);
+      console.log('PLAYER3_READBACK_REAL_UNSTARTED_MODULE_SESSION:'+browser);
     }
     // An independent student must never see another student's ledger.
     const stranger=claims.find(x=>x.browser!==browser);
