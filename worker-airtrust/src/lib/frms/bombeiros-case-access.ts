@@ -39,7 +39,7 @@ export async function loadBombeirosManagerCase(
        JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
       WHERE a.id = ?
         AND a.deleted_at IS NULL
-        AND a.tipo_limite LIKE 'BOA_%'
+        AND substr(COALESCE(a.tipo_limite, ''), 1, 4) = 'BOA_'
         AND f.empresa_id = ?
         AND f.deleted_at IS NULL
         AND COALESCE(f.ativo, 1) = 1
