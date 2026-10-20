@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   resolveBoaCrewIdentity, registerBoaCheckin, loadBoaOperationalCase,
-  registerBoaCaseAction, BOA_CHECKIN_TYPE, BOA_CASE_OPEN_TYPE,
+  registerBoaCaseAction, loadBoaCaseQueue, BOA_CHECKIN_TYPE, BOA_CASE_OPEN_TYPE,
 } from '../../lib/frms/bombeiros-operational-events';
 import type { EmployeeSectorAccess } from '../../services/employee-sector-access';
 
@@ -151,5 +151,44 @@ describe('BOA event intake and immutable case stream contracts', () => {
     expect(insert?.sql).toContain('NOT EXISTS');
     expect(insert?.sql).toContain('f.empresa_id = ?');
     expect(insert?.values).toContain(130);
+  });
+
+  it('sanitizes BOA manager queue with tenant, sector and cursor limitation', async () => {
+    const queries: Array<{ sql: string; bind: unknown[] }> = [];
+    const db = {
+      prepare(sql: string) {
+        const request = { sql, bind: [] as unknown[] };
+        queries.push(request);
+        return {
+          bind(...values: unknown[]) {
+            request.bind = values;
+            return {
+              async all() { return { results: [
+                { case_id: 'case-a', created_at: '2026-10-20T10:00:00Z', state: 'ABERTO' },
+                { case_id: 'case-b', created_at: '2026-10-19T10:00:00Z', state: 'RESOLVIDO' },
+              ] }; },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+    const queue = await loadBoaCaseQueue(db, 130, authorized, 1);
+    expect(queue?.items).toMatchObject([
+      { case_id: 'case-a', state: 'ABERTO', treatment_recorded: false },
+    ]);
+    expect(queue?.next_cursor).toEqual({ created_at: '2026-10-20T10:00:00Z', id: 'case-a' });
+    expect(queries[0].sql).toContain('e.empresa_id = ?');
+    expect(queries[0].sql).toContain('f.empresa_id = ?');
+    expect(queries[0].sql).toContain('f.setor_id IN (?)');
+    expect(queries[0].bind).toEqual([130, 130, BOA_CASE_OPEN_TYPE, 9, 2]);
+    expect(JSON.stringify(queue)).not.toMatch(/funcionario_id|kss_reported|sleep_hours/);
+  });
+
+  it('never queries case queue under empresa 6 or without authorized manager sectors', async () => {
+    const { db, queries } = fakeDb();
+    await expect(loadBoaCaseQueue(db, 6, authorized)).rejects.toThrow('BOMBEIROS_INVALID_TENANT');
+    const noSectors: EmployeeSectorAccess = { mode: 'restricted', setorIds: [], funcionarioId: null };
+    expect(await loadBoaCaseQueue(db, 130, noSectors)).toBeNull();
+    expect(queries).toHaveLength(0);
   });
 });
