@@ -79,3 +79,15 @@ Os scripts e os hashes dos **quatro geradores/publicadores** da #1389 estão pin
 ## 6. Critério de aceite funcional da PR #1389
 
 Não sair de DRAFT nem fazer merge da PR funcional antes dos oito gates do candidato final, staging com Worker/Pages/schema corretos, seis evidências físicas sem mocks, proteção por aluno/tenant, histórico, qualificação e PDF real, replay e cleanup/retention documentados. Cada fase deve atualizar a issue #776 sem alegar sucesso antecipadamente.
+
+## F0 cloud-only release request for isolated technical QA (no Mac)
+
+When a local Desktop Commander/Wrangler session is unavailable, F0 can still request the **existing official** staging Worker+Pages deployment directly from the trusted GitHub main workflow, without installing tokens or using a workstation:
+
+- An administrator of `Airtrust-Org/airtrust` creates exactly one single-line comment on **issue #776**: `AIRTRUST_F0_PLAYER3_STAGING_V1 <reviewed-PR-1389-HEAD-SHA>`.
+- Trusted GitHub Actions workflow `.github/workflows/f0-player3-staging-issueops.yml` checks comment author and collaborator **admin** permission, exact same-repository PR #1389 head SHA, no fork, its 8 required gates plus browser SCORM and PR Check, and that the only main/main-vs-F4 delta is the already-reviewed F0 QA infrastructure. Any changed runtime file causes a **hard stop** until renewed review.
+- If all guards pass it calls **only** the official `deploy-staging.yml` dispatch on main, pinning that PR head for **Worker+Pages staging** with `apply_migrations=false` and baseline authenticated smoke. It has **no Cloudflare secrets**, does not execute SQL and cannot call the production deploy.
+- The target official staging workflow remains responsible for its own SHA/gate verification, reviewer-protected `staging` environment, global `airtrust-staging-mutations-and-scorm-qa` mutex, version/provenance and smoke. This request does **not** grant production approval, nor certify 6/6 physical Chromium/WebKit QA journeys.
+- Re-dispatching a new SHA requires a new admin comment and recomparison. After staging success, provision distinct synthetic learners/enrollments through the authorized Worker and run real browser acceptance before considering PR #1389 integration.
+
+This route exists to support overnight GitHub-only execution when the owner's Mac is asleep. The command must never contain credentials or personal data.
