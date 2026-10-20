@@ -87,7 +87,7 @@ test('real executor selects two independent JWTs and denies cross-owned reads',a
   const previous={...process.env};
   process.env.PLAYER3_QA_CHROMIUM_PASSWORD='synthetic-chrome-only';
   process.env.PLAYER3_QA_WEBKIT_PASSWORD='synthetic-webkit-only';
-  let attempts=0,foreign=0;
+  let attempts=0,foreign=0,sessionReads=0;
   const tokenByEmail=Object.fromEntries(LEARNERS.map((r,i)=>[r.email,jwt(i+1)]));
   const mock={
     async api(path,options){
@@ -104,9 +104,12 @@ test('real executor selects two independent JWTs and denies cross-owned reads',a
       const index=token===jwt(1)?1:2;
       const r=rows[index-1];
       assert.ok(path.includes(String(r.matricula_id)));
-      if(path.endsWith('sessao'))
+      if(path.endsWith('sessao')){
+        sessionReads++;
         return {editionSha256:edition,cycleId:r.ciclo_id,completionSupported:false,
-          stages:[{stageId:'qa-stage-1',attempts:0}]};
+          allOfficialStagesPassed:false,
+          stages:[{stageId:'qa-stage-1',attempts:0,passed:false,lastScorePct:null}]};
+      }
       if(path.endsWith('qa-evidencias'))
         return {empresa_id:TENANT,matricula_id:r.matricula_id,ciclo_id:r.ciclo_id,
           edition_sha256:edition,status:r.status,
@@ -119,6 +122,7 @@ test('real executor selects two independent JWTs and denies cross-owned reads',a
     await verifyLearners(assertRoster(rows,meta),mock);
     assert.equal(attempts,2);
     assert.equal(foreign,2);
+    assert.equal(sessionReads,2);
     process.env.PLAYER3_QA_WEBKIT_PASSWORD=process.env.PLAYER3_QA_CHROMIUM_PASSWORD;
     await assert.rejects(()=>verifyLearners(rows,mock),/DISTINCT_PROTECTED_PASSWORDS_REQUIRED/);
   }finally{
