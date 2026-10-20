@@ -204,7 +204,7 @@ async function main(mode){
     // Numeric identifiers and synthetic-only aliases, never user tokens,
     // answers, passwords or customer records.
     appendFileSync(process.env.GITHUB_OUTPUT,
-      'qa_roster='+JSON.stringify(before)+'\\n');
+      'qa_roster='+JSON.stringify(before)+'\n');
     console.log('PLAYER3_QA_D1_TWO_FRESH_SYNTHETIC_ENROLLMENTS_VERIFIED');
     return;
   }
