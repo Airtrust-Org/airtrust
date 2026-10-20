@@ -184,9 +184,46 @@ jobs:
           }
           const commit = await get(`/repos/${repo}/git/commits/${releaseSha}`);
           if (!commit?.sha) throw new Error('release_sha does not exist in this repository.');
-          const permission = await get(`/repos/${repo}/collaborators/${actor}/permission`);
-          if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) {
-            throw new Error('Workflow actor must have write, maintain, or admin permission.');
+          // Workflow dispatches made by GitHub Actions run as github-actions[bot],
+          // even when the original requester was an administrator. Accept only
+          // the narrowly scoped, immutable admin comment proven below; never
+          // treat bot identity alone as authorization.
+          if (actor === 'github-actions[bot]') {
+            if (repo !== 'Airtrust-Org/airtrust' || prNumber !== '1389' ||
+                process.env.DEPLOY_WORKER !== 'true' ||
+                process.env.DEPLOY_FRONTEND !== 'true' ||
+                process.env.RUN_SMOKE !== 'true' ||
+                process.env.APPLY_MIGRATIONS !== 'false' ||
+                process.env.APPROVED_MIGRATIONS !== '') {
+              throw new Error('F0_STAGING_BOT_SCOPE_DENIED');
+            }
+            const expectedReason = /^F0 Player3 synthetic QA staging runtime, issue 776 comment ([1-9][0-9]{0,15}), no migrations or production$/;
+            const match = expectedReason.exec(process.env.RELEASE_REASON || '');
+            if (!match) throw new Error('F0_STAGING_ADMIN_COMMENT_REQUIRED');
+            const comment = await get(`/repos/${repo}/issues/comments/${match[1]}`);
+            if (comment.issue_url !== `https://api.github.com/repos/${repo}/issues/776` ||
+                comment.body !== `AIRTRUST_F0_PLAYER3_STAGING_V1 ${releaseSha}` ||
+                comment.user?.type !== 'User' ||
+                !comment.user?.login ||
+                comment.created_at !== comment.updated_at) {
+              throw new Error('F0_STAGING_ADMIN_COMMENT_MISMATCH');
+            }
+            const created = Date.parse(comment.created_at);
+            if (!Number.isFinite(created) || created > Date.now() + 120000 ||
+                Date.now() - created > 60 * 60 * 1000) {
+              throw new Error('F0_STAGING_ADMIN_COMMENT_EXPIRED');
+            }
+            const originalRequester = await get(
+              `/repos/${repo}/collaborators/${encodeURIComponent(comment.user.login)}/permission`
+            );
+            if (originalRequester.permission !== 'admin')
+              throw new Error('F0_STAGING_ADMIN_PERMISSION_REQUIRED');
+            console.log('F0_STAGING_ADMIN_COMMENT_PROVENANCE_VERIFIED');
+          } else {
+            const permission = await get(`/repos/${repo}/collaborators/${encodeURIComponent(actor)}/permission`);
+            if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) {
+              throw new Error('Workflow actor must have write, maintain, or admin permission.');
+            }
           }
           })().catch((error) => {
             console.error(`Reviewed PR release guard failed: ${error.message}`);
