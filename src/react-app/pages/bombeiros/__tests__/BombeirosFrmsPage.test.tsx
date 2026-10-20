@@ -15,8 +15,8 @@ vi.mock('../BombeirosMethodologyDemo', () => ({
 vi.mock('../BombeirosWorkforcePanel', () => ({
   default: () => <div data-testid="boa-workforce-consumer">Funcionários BOA</div>,
 }));
-vi.mock('../../frms/FrmsMonthlyConsolidated', () => ({
-  default: () => <div data-testid="boa-monthly-api-consumer">Painel mensal exclusivo</div>,
+vi.mock('../BombeirosMonthlyReportPreview', () => ({
+  default: () => <div data-testid="boa-monthly-management-preview">Painel mensal exclusivo</div>,
 }));
 
 describe('Portal separado BOA/CBMMG', () => {
@@ -35,7 +35,7 @@ describe('Portal separado BOA/CBMMG', () => {
     });
     render(<BombeirosFrmsPage />);
     expect(screen.getByRole('alert')).toHaveTextContent('exclusivo da empresa Bombeiros');
-    expect(screen.queryByTestId('boa-monthly-api-consumer')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('boa-monthly-management-preview')).not.toBeInTheDocument();
     expect(screen.queryByTestId('boa-workforce-consumer')).not.toBeInTheDocument();
     expect(screen.queryByTestId('boa-methodology-consumer')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Cadastro de funcionários/i })).not.toBeInTheDocument();
@@ -48,7 +48,7 @@ describe('Portal separado BOA/CBMMG', () => {
         role: 'ADMINISTRADOR', is_primary: 1, is_current: 1 }],
     });
     render(<BombeirosFrmsPage />);
-    expect(screen.getByTestId('boa-monthly-api-consumer')).toBeInTheDocument();
+    expect(screen.getByTestId('boa-monthly-management-preview')).toBeInTheDocument();
     expect(screen.getByTestId('boa-workforce-consumer')).toBeInTheDocument();
     expect(screen.getByTestId('boa-methodology-consumer')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Cadastro de funcionários/i })).toHaveAttribute('href', '/funcionarios');
