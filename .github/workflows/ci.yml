@@ -123,6 +123,8 @@ jobs:
         run: node --test scripts/__tests__/player3-staging-governance.test.mjs
       - name: validate F0 GitHub-native staging dispatch privileges and exact candidate
         run: node --test scripts/__tests__/f0-player3-staging-issueops.test.mjs
+      - name: validate F0 delegated bot release requires original admin issue command
+        run: node --test scripts/__tests__/f0-delegated-staging-attestation.test.mjs
       - name: verify frozen Factory SCORM core lock is fail-closed
         run: python3 -m unittest scripts/__tests__/test_scorm_golden_core_lock.py -v
       - name: validate 0438 legacy staging workflow guards
