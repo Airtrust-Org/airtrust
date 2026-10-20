@@ -11,7 +11,7 @@ export function resolveBombeirosLegacyFrmsRedirect(
   const path = pathname.replace(/\/+$/, '') || '/';
   if (path !== '/frms' && !path.startsWith('/frms/')) return null;
   const role = String(currentRole || '').trim().toLowerCase();
-  return role === 'gestor' || role === 'manager'
-    ? '/bombeiros/frms/casos'
-    : '/bombeiros/frms';
+  if (role === 'gestor' || role === 'manager') return '/bombeiros/frms/casos';
+  if (role === 'admin' || role === 'administrador') return '/bombeiros/frms';
+  return '/bombeiros/frms/checkin';
 }
