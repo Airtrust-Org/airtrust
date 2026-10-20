@@ -70,7 +70,7 @@ function rollbackSql(){
 }
 
 function execRollback(db,sql){
-  for(const statement of sql.split(';\\n')){
+  for(const statement of sql.split(';\n')){
     if (!statement.trim()) continue;
     try { db.exec(statement+';'); }
     catch(e){ throw Error('QA_ROLLBACK_SQL_FAILED:'+statement.trim().slice(0,90)+':'+e.message); }
