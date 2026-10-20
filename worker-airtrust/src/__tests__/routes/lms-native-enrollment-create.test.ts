@@ -81,6 +81,41 @@ describe('Native enrollment creation — separate staging authorization', () => 
     }
     expect(mocks.select).not.toHaveBeenCalled();
   });
+  it('accepts a real empty ReadableStream POST but rejects streamed payload bytes', async () => {
+    const root = new Hono<{ Bindings: Env }>();
+    root.route('/api/lms/native', nativeRoutes);
+    const headers = { 'x-test-user': '900', 'x-test-tenant': '6' };
+    const env = {
+      ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6',
+      NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS: '6',
+      NATIVE_LEARNER_WRITE_ENABLED_TENANTS: '6',
+      NATIVE_LEARNER_ENROLLMENT_CREATE_ENABLED_TENANTS: '6',
+      DB: {} as D1Database, BUCKET: {} as R2Bucket,
+    } as Env;
+    const request = (payload: Uint8Array | null) => new Request(
+      'http://localhost/api/lms/native/cursos/10/matricular', {
+        method: 'POST', headers,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            if (payload) controller.enqueue(payload);
+            controller.close();
+          },
+        }),
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' });
+    const empty = await root.fetch(request(null), env);
+    expect(empty.status).toBe(201);
+    expect(mocks.provision).toHaveBeenCalledTimes(1);
+    vi.clearAllMocks();
+    const withBytes = await root.fetch(request(new TextEncoder().encode('{}')), env);
+    expect(withBytes.status).toBe(400);
+    expect(await withBytes.json()).toMatchObject({
+      code: 'NATIVE_ENROLLMENT_CREATE_BODY_NOT_ALLOWED',
+    });
+    expect(mocks.select).not.toHaveBeenCalled();
+    expect(mocks.provision).not.toHaveBeenCalled();
+  });
   it('selects reviewed private edition and provisions same-tenant actor once', async () => {
     const r = await call();
     expect(r.status).toBe(201);
