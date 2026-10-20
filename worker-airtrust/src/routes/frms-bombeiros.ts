@@ -20,6 +20,9 @@ import { loadBombeirosCheckinMonthlyEvidence } from '../lib/frms/bombeiros-check
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
 import { listBombeirosWorkforce } from '../lib/frms/bombeiros-workforce';
+import { loadBombeirosManagerCase, isBombeirosManagerTenant } from '../lib/frms/bombeiros-case-access';
+import { buildFrmsCaseTreatmentNotes, buildFrmsCaseResolutionNotes, readFrmsPendingTreatment } from '../lib/frms/case-resolution';
+import { registrarTratamentoAlerta, marcarAlertaResolvido } from '../lib/frms/db-service';
 import { BombeirosScenarioSchema, assessBombeirosSyntheticScenario } from '../lib/frms/bombeiros-scenario-method';
 import { safe } from './frms-shared';
 
@@ -212,6 +215,99 @@ frmsBombeiros.post('/simulacao/metodologia', requireRole('admin'), safe(async (c
       human_review_required: true,
     },
   });
+}));
+
+/**
+ * BOA mitigation workflow — deliberately restricted to sector-scoped managers.
+ * Administrator-facing reports remain aggregate. No health details are sent
+ * back; only BOA_* alert identifiers, lifecycle state and provenance.
+ */
+async function scopedBombeirosCase(c: Parameters<Parameters<typeof safe>[0]>[0], alertId: string) {
+  const tenant = getTenantContext(c);
+  if (!isBombeirosManagerTenant(tenant)) return null;
+  const access = await getEmployeeSectorAccess(c, tenant.empresaId);
+  return loadBombeirosManagerCase(c.env.DB, tenant.empresaId, alertId, access);
+}
+
+frmsBombeiros.get('/casos/:id', requireRole('manager'), safe(async c => {
+  const tenant = getTenantContext(c);
+  if (!isBombeirosManagerTenant(tenant)) {
+    return c.json({ success: false, code: 'BOMBEIROS_MANAGER_TENANT_REQUIRED' }, 403);
+  }
+  try {
+    await resolveBombeirosReadiness(c.env.DB, tenant.empresaId);
+  } catch {
+    return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503);
+  }
+  const id = c.req.param('id') ?? '';
+  const found = await scopedBombeirosCase(c, id);
+  if (!found) return c.json({ success: false, code: 'BOMBEIROS_CASE_NOT_AVAILABLE' }, 404);
+  const pending = readFrmsPendingTreatment(found.notas_resolucao);
+  return c.json({
+    success: true,
+    data: {
+      case_id: found.id,
+      state: Number(found.resolvido) === 1 ? 'RESOLVIDO' : pending ? 'EM_TRATAMENTO' : 'ABERTO',
+      created_at: found.created_at,
+      closed_at: found.resolvido_em,
+      treatment_recorded: pending != null || Number(found.resolvido) === 1,
+      // No employee ID, identifying details or sensitive case notes.
+      employee: null,
+      clinical_details: null,
+    },
+    meta: { tenant_id: tenant.empresaId, source: 'BOA_TENANT_SCOPED_CASE' },
+  });
+}));
+
+frmsBombeiros.put('/casos/:id/tratamento', requireRole('manager'), safe(async c => {
+  const tenant = getTenantContext(c);
+  if (!isBombeirosManagerTenant(tenant)) {
+    return c.json({ success: false, code: 'BOMBEIROS_MANAGER_TENANT_REQUIRED' }, 403);
+  }
+  try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId); }
+  catch { return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503); }
+  const id = c.req.param('id') ?? '';
+  const found = await scopedBombeirosCase(c, id);
+  if (!found) return c.json({ success: false, code: 'BOMBEIROS_CASE_NOT_AVAILABLE' }, 404);
+  if (Number(found.resolvido) !== 0 || found.notas_resolucao) {
+    // No overwrite of prior treatment or legacy notes without a separate amendment contract.
+    return c.json({ success: false, code: 'BOMBEIROS_CASE_TREATMENT_ALREADY_RECORDED' }, 409);
+  }
+  const userId = String(c.get('userId') ?? '');
+  if (!userId) return c.json({ success: false, code: 'BOMBEIROS_ACTOR_REQUIRED' }, 403);
+  const body: unknown = await c.req.json().catch(() => null);
+  const notes = buildFrmsCaseTreatmentNotes(body, userId);
+  if (!notes) return c.json({ success: false, code: 'BOMBEIROS_TREATMENT_INCOMPLETE' }, 400);
+  const recorded = await registrarTratamentoAlerta(c.env.DB, id, userId, notes, tenant.empresaId);
+  if (!recorded) return c.json({ success: false, code: 'BOMBEIROS_CASE_NOT_OPEN' }, 409);
+  return c.json({ success: true, status: 'EM_TRATAMENTO', case_id: id });
+}));
+
+frmsBombeiros.put('/casos/:id/resolver', requireRole('manager'), safe(async c => {
+  const tenant = getTenantContext(c);
+  if (!isBombeirosManagerTenant(tenant)) {
+    return c.json({ success: false, code: 'BOMBEIROS_MANAGER_TENANT_REQUIRED' }, 403);
+  }
+  try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId); }
+  catch { return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503); }
+  const id = c.req.param('id') ?? '';
+  const found = await scopedBombeirosCase(c, id);
+  if (!found) return c.json({ success: false, code: 'BOMBEIROS_CASE_NOT_AVAILABLE' }, 404);
+  if (Number(found.resolvido) !== 0) {
+    return c.json({ success: false, code: 'BOMBEIROS_CASE_ALREADY_CLOSED' }, 409);
+  }
+  const treatment = readFrmsPendingTreatment(found.notas_resolucao);
+  if (!treatment) return c.json({ success: false, code: 'BOMBEIROS_TREATMENT_REQUIRED' }, 409);
+  const body: unknown = await c.req.json().catch(() => null);
+  const efficacy = body && typeof body === 'object'
+    ? (body as Record<string, unknown>).avaliacao_eficacia : null;
+  const userId = String(c.get('userId') ?? '');
+  if (!userId) return c.json({ success: false, code: 'BOMBEIROS_ACTOR_REQUIRED' }, 403);
+  const notes = buildFrmsCaseResolutionNotes({ ...treatment, avaliacao_eficacia: efficacy }, userId);
+  if (!notes) return c.json({ success: false, code: 'BOMBEIROS_EFFECTIVENESS_REQUIRED' }, 400);
+  const recorded = await marcarAlertaResolvido(c.env.DB, id, userId, notes, tenant.empresaId);
+  if (!recorded) return c.json({ success: false, code: 'BOMBEIROS_CASE_NOT_OPEN' }, 409);
+  return c.json({ success: true, status: 'RESOLVIDO', case_id: id });
 }));
 
 export default frmsBombeiros;
