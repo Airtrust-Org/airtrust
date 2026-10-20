@@ -15,8 +15,8 @@ import {
   FRMS_FIREFIGHTER_AVIATION_PROFILE,
   resolveFrmsRegulatoryProfileEvidence,
 } from '../lib/frms/parameter-governance';
-import { loadEffectiveFrmsConfiguration, relatorioCompliance } from '../lib/frms/db-service';
-import { buildFrmsMonthlyConsolidatedSummary } from '../lib/frms/monthly-consolidated-summary';
+import { loadEffectiveFrmsConfiguration } from '../lib/frms/db-service';
+import { loadBombeirosCheckinMonthlyEvidence } from '../lib/frms/bombeiros-checkin-evidence';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
 import { listBombeirosWorkforce } from '../lib/frms/bombeiros-workforce';
@@ -109,27 +109,24 @@ frmsBombeiros.get('/relatorios/mensal-consolidado', requireRole('admin'), safe(a
     return c.json({ success: false, code: 'BOMBEIROS_SMALL_COHORT' }, 403);
   }
 
-  const previousMonth = precedingMonth(mes);
-  const [current, previous] = await Promise.all([
-    relatorioCompliance(c.env.DB, mes, empresaId, ids),
-    relatorioCompliance(c.env.DB, previousMonth, empresaId, ids),
-  ]);
-  const summary = buildFrmsMonthlyConsolidatedSummary(current, previous, ids.size);
+  // Do not call the generic operational-snapshot/compliance aggregator: it
+  // contains offshore-specific policy paths and is NOT BOA methodology.
+  const summary = await loadBombeirosCheckinMonthlyEvidence(c.env.DB, empresaId, mes, ids);
   return c.json({
     success: true,
     data: summary,
     meta: {
       tenant_id: empresaId,
       period: mes,
-      comparison_month: previousMonth,
+      comparison_month: precedingMonth(mes),
       generated_at: new Date().toISOString(),
       policy_reference_date: referenceAt,
       profile_code: policy.profileCode,
       revision_id: policy.revision.id,
       policy_version: policy.revision.policy_version,
-      source: 'BOMBEIROS_FRMS_CANONICAL_COMPLIANCE',
+      source: 'BOMBEIROS_CHECKIN_RECEIPT_EVIDENCE_ONLY',
       limitations: [
-        'Este resumo não é o relatório mensal técnico assinado exigido pelo edital.',
+        'Este resumo comprova somente a existência de recibos de check-in enviados e NÃO comprova conformidade com limites, prontidão nem aptidão.',
         'A revisão exibida é a vigente na emissão; a revisão de cada dia histórico deve ser auditada separadamente.',
         'Escopo de funcionários e consultas pertencem somente ao tenant Bombeiros.',
       ],
