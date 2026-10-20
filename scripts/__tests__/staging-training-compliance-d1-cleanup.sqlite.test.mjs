@@ -58,6 +58,13 @@ function createDb() {
   INSERT INTO treinamento_requisitos VALUES(999014,101,1,NULL,NULL),(6,102,1,NULL,NULL);
   INSERT INTO treinamento_matricula_reconciliacoes VALUES(999014,401,1,NULL,NULL),(6,402,1,NULL,NULL);
   `);
+  // Mock historical DDL is intentionally minimal. Supply timestamps expected
+  // by the real rollback without weakening its production SQL.
+  for (const table of ['lms_cursos','lms_cursos_setores','funcionarios','pasta_virtual',
+    'empresas','usuarios','usuarios_empresas','lms_xapi_statements']) {
+    if (!db.prepare(`PRAGMA table_info(${table})`).all().some(col=>col.name==='updated_at'))
+      db.exec(`ALTER TABLE ${table} ADD COLUMN updated_at TEXT;`);
+  }
   return db;
 }
 
