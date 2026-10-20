@@ -5,10 +5,13 @@
 export function resolveBombeirosLegacyFrmsRedirect(
   empresaCodigo: string | null | undefined,
   pathname: string,
+  currentRole?: string | null,
 ): string | null {
   if (empresaCodigo !== 'bombeiros') return null;
   const path = pathname.replace(/\/+$/, '') || '/';
-  return path === '/frms' || path.startsWith('/frms/')
-    ? '/bombeiros/frms'
-    : null;
+  if (path !== '/frms' && !path.startsWith('/frms/')) return null;
+  const role = String(currentRole || '').trim().toLowerCase();
+  return role === 'gestor' || role === 'manager'
+    ? '/bombeiros/frms/casos'
+    : '/bombeiros/frms';
 }
