@@ -160,13 +160,18 @@ async function api(path,{method='GET',token,body}={}){
   });
   return response;
 }
-async function ownData(path,token){
-  const response=await api(path,{token});
-  expect(response.ok(),'LEARNER_GET_STATUS_'+response.status);
+export async function ownData(path,token,reader=api){
+  const response=await reader(path,{token});
+  requireHttpOk(response,'LEARNER_GET_STATUS_'+response.status);
   let json;try{json=await response.json();}catch{fail('LEARNER_JSON_INVALID');}
   expect(json?.success===true&&json?.data,'LEARNER_RESPONSE_INVALID');
   return json.data;
 }
+/** Real Fetch Response.ok is a boolean property; reject callable/mocked variants. */
+export function requireHttpOk(response,code){
+  expect(response?.ok===true,code);
+}
+
 export async function verifyLearners(rows,client={api,ownData}){
   const passwords={
     chromium:process.env.PLAYER3_QA_CHROMIUM_PASSWORD,
@@ -181,7 +186,7 @@ export async function verifyLearners(rows,client={api,ownData}){
     const resp=await client.api('/api/auth/login',{
       method:'POST',body:{email,password:passwords[row.browser]},
     });
-    expect(resp.ok(),'AUTH_STATUS_'+row.browser);
+    requireHttpOk(resp,'AUTH_STATUS_'+row.browser);
     let result;try{result=await resp.json();}catch{fail('AUTH_JSON_INVALID');}
     const token=result?.data?.accessToken;
     assertClaims(token,row);
@@ -206,16 +211,16 @@ export async function verifyLearners(rows,client={api,ownData}){
       ':OWN_STAGE_AND_SNAPSHOT:CROSS_EMPLOYEE_DENIED');
   }
 }
-async function github(path){
-  const response=await fetch('https://api.github.com/repos/'+REPO+path,{
+export async function github(path,request=fetch){
+  const response=await request('https://api.github.com/repos/'+REPO+path,{
     headers:{Authorization:'Bearer '+process.env.GITHUB_TOKEN,
       Accept:'application/vnd.github+json'},
     signal:AbortSignal.timeout(16000)});
-  expect(response.ok(),'GITHUB_QUERY_FAILED');
+  requireHttpOk(response,'GITHUB_QUERY_FAILED');
   return response.json();
 }
 export async function readVersionResponse(response){
-  expect(response?.ok===true,'VERSION_HTTP');
+  requireHttpOk(response,'VERSION_HTTP');
   let payload;
   try{payload=await response.json();}catch{fail('VERSION_JSON_INVALID');}
   expect(payload?.data&&typeof payload.data==='object','VERSION_DATA_MISSING');
