@@ -17,7 +17,7 @@ def raw(obj):
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
 
 
-def fixture(path, slides=20, questions=5, leak=False, media_tamper=False,
+def fixture(path, slides=15, questions=10, leak=False, media_tamper=False,
             mastery=70, modules=1):
     course = "qa-test-module"
     q = [
@@ -88,10 +88,10 @@ class NativePilotReview(unittest.TestCase):
         fixture(path, **kwargs)
         return path
 
-    def test_one_module_70_five_questions_rounds_to_80(self):
+    def test_one_module_70_ten_questions_requires_seven(self):
         result = validate_private_pilot(self.use_case())
-        self.assertEqual(result["moduleStages"][0]["minimumCorrect"], 4)
-        self.assertEqual(result["moduleStages"][0]["firstPassingScore"], 80)
+        self.assertEqual(result["moduleStages"][0]["minimumCorrect"], 7)
+        self.assertEqual(result["moduleStages"][0]["firstPassingScore"], 70)
         self.assertFalse(result["qaEligible"])
         self.assertFalse(result["publishable"])
         self.assertIn("REPACKAGE_EDITION_WITH_NATIVE_N_VERSION_AND_NEW_APPROVED_SHA",
@@ -102,9 +102,13 @@ class NativePilotReview(unittest.TestCase):
         self.assertEqual(len(result["moduleStages"]), 2)
         self.assertEqual([v["minimumCorrect"] for v in result["moduleStages"]], [7, 7])
 
-    def test_under_20_slides_rejected(self):
+    def test_under_15_slides_rejected(self):
         with self.assertRaisesRegex(PilotReviewError, "MODULE_SLIDES_OR_QUESTIONS"):
-            validate_private_pilot(self.use_case(slides=19))
+            validate_private_pilot(self.use_case(slides=14))
+
+    def test_five_question_module_rejected(self):
+        with self.assertRaisesRegex(PilotReviewError, 'UNREVIEWED_ASSESSMENT_SIZE'):
+            validate_private_pilot(self.use_case(questions=5))
 
     def test_private_answers_must_not_leak_to_learner(self):
         with self.assertRaisesRegex(PilotReviewError, "ANSWER_KEY_IN_LEARNER_PROJECTION"):
