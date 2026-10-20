@@ -37,7 +37,8 @@ test('eight canonical gates, SCORM E2E and Check PR must be exact GH Actions suc
 test('runtime main drift is rejected; reviewed F0 infra-only delta accepted',()=>{
  assert.doesNotThrow(()=>assertReviewedDelta({status:'diverged',ahead_by:4,
   files:[{filename:'scripts/staging/player3-qa-trusted-executor.mjs'},
-   {filename:'.github/workflows/f0-player3-staging-issueops.yml'}]}));
+   {filename:'.github/workflows/f0-player3-staging-issueops.yml'},
+   {filename:'.github/workflows/ci.yml'}]}));
  assert.throws(()=>assertReviewedDelta({status:'diverged',ahead_by:4,
   files:[{filename:'worker-airtrust/src/index.ts'}]}),/RUNTIME_MAIN_DRIFT_DENIED/);
  assert.throws(()=>assertReviewedDelta({status:'diverged',ahead_by:20,files:[]}),/DELTA_UNBOUNDED/);
