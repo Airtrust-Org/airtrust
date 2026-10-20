@@ -37,11 +37,11 @@ describe('BOA/CBMMG check-in monthly evidence — independent of offshore scores
     expect(queries).toHaveLength(2);
     expect(queries[0].args).toEqual([130, 130, '2026-09-01', '2026-10-01', 10, 11, 12, 13, 14, 15]);
     expect(queries[1].args).toEqual([130, 130, '2026-08-01', '2026-09-01', 10, 11, 12, 13, 14, 15]);
-    expect(queries[0].sql).toContain('ch.empresa_id = ?');
+    expect(queries[0].sql).toContain('e.empresa_id = ?');
     expect(queries[0].sql).toContain('f.empresa_id = ?');
-    expect(queries[0].sql).toContain('f.empresa_id = ch.empresa_id');
-    expect(queries[0].sql).toContain('ch.submitted_at IS NOT NULL');
-    expect(queries[0].sql).toContain('TRIM(ch.submitted_at)');
+    expect(queries[0].sql).toContain('f.empresa_id = e.empresa_id');
+    expect(queries[0].sql).toContain("json_extract(e.payload_json, '$.submitted_at') IS NOT NULL");
+    expect(queries[0].sql).toContain("e.tipo = 'BOA_CHECKIN_V1'");
     expect(queries[0].sql).toContain('f.ativo = 1');
     expect(queries[0].sql).not.toMatch(/KSS|PVT|SCORE|HELICOPTER_OFFSHORE|COSTA/i);
     expect(data.current.receipt_person_days).toBe(17);
