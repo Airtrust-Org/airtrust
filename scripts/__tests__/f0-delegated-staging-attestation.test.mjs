@@ -63,5 +63,5 @@ test('the official staging guard consumes the id and does not silently accept bo
  assert.match(wf,/if \(f0Id\) throw new Error/);
  assert.match(wf,/environment: staging/);
  const dispatcher=readFileSync('scripts/staging/dispatch-f0-player3-staging-from-comment.mjs','utf8');
- assert.match(dispatcher,/f0_request_comment_id:String\(commentId\)/);
+ assert.match(dispatcher,/release_reason:'F0 Player3 synthetic QA staging runtime, issue 776 comment '/);
 });
