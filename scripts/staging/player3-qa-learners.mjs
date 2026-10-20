@@ -28,7 +28,7 @@ export const EXPECTED_CHECKS = Object.freeze([
   'worker-tests-1','worker-tests-2','lms-smoke','public-e2e',
   'lms-scorm-browser-e2e','🧪 Check PR',
 ]);
-export const APPROVAL = 'AIRTRUST_PLAYER3_QA_LEARNERS_V1';
+export const APPROVAL = 'AIRTRUST_PLAYER3_QA_LEARNERS_RECOVERY_V1';
 
 export function assertGrant(comment, permission, actor, sha, now=Date.now()) {
   const expected=APPROVAL+' '+sha+' tenant=999006 course=327';
@@ -49,7 +49,8 @@ export function assertPreflight(row, meta) {
     !Number.isSafeInteger(row.alpha_id)||row.alpha_id<=0 ||
     !Number.isSafeInteger(row.bravo_id)||row.bravo_id<=0 ||
     row.alpha_id===row.bravo_id ||
-    row.qa_browser_users!==0 || row.qa_employee_linked_users!==0 ||
+    row.qa_browser_users!==1 || row.qa_employee_linked_users!==1 ||
+    row.qa_chromium_bound_active!==1 || row.qa_webkit_users!==0 ||
     row.qa_existing_course_enrollments!==0 || row.qa_existing_native_pins!==0 ||
     row.qa_course_published!==1 || row.qa_editions_published!==1 ||
     row.qa_marker!==1 || row.applied_0561!==1 || row.applied_0562!==1) {
@@ -97,6 +98,13 @@ const sqlBefore = `SELECT
  (SELECT COUNT(*) FROM usuarios u JOIN funcionarios f ON f.id=u.funcionario_id
   WHERE f.empresa_id=999006 AND f.matricula IN ('QA-PARTICIPANTE-ALFA','QA-PARTICIPANTE-BRAVO')
   AND u.deleted_at IS NULL) qa_employee_linked_users,
+ (SELECT COUNT(*) FROM usuarios u JOIN funcionarios f ON f.id=u.funcionario_id
+  WHERE lower(u.email)='qa-player3-chromium@staging.airtrust.invalid'
+  AND u.active=1 AND u.deleted_at IS NULL AND f.id=2 AND f.empresa_id=999006
+  AND f.matricula='QA-PARTICIPANTE-ALFA' AND f.ativo=1 AND f.deleted_at IS NULL)
+  qa_chromium_bound_active,
+ (SELECT COUNT(*) FROM usuarios u WHERE
+  lower(u.email)='qa-player3-webkit@staging.airtrust.invalid') qa_webkit_users,
  (SELECT COUNT(*) FROM lms_matriculas m WHERE m.empresa_id=999006 AND m.curso_id=327
   AND m.deleted_at IS NULL) qa_existing_course_enrollments,
  (SELECT COUNT(*) FROM lms_native_matricula_edicoes b WHERE b.empresa_id=999006
@@ -215,12 +223,25 @@ async function guard(){
 }
 
 async function apiPost(path,body,token){
-  const headers={'Content-Type':'application/json'};
+  const headers={Accept:'application/json'};
+  // An empty POST must not advertize a JSON payload. Native enrollment
+  // rejects a present request body and is deliberately bodyless.
+  if(body!==null)headers['Content-Type']='application/json';
   if(token) headers.Authorization='Bearer '+token;
   const response=await fetch(API+path,{method:'POST',headers,
     ...(body===null?{}:{body:JSON.stringify(body)}),
     signal:AbortSignal.timeout(20000)});
-  if(!response.ok)throw Error('PLAYER3_QA_API_'+path.replace(/[0-9]+/g,'N')+'_HTTP_'+response.status);
+  if(!response.ok){
+    // Only structured server error codes, never request/response bodies,
+    // credentials, tokens or invitation URLs are safe to record.
+    let code='UNCLASSIFIED';
+    try {
+      const rejected=await response.json();
+      if(/^[A-Z][A-Z0-9_]{2,80}$/.test(String(rejected?.code??'')))code=rejected.code;
+    } catch { /* no diagnostic body */ }
+    throw Error('PLAYER3_QA_API_'+path.replace(/[0-9]+/g,'N')+
+      '_HTTP_'+response.status+'_CODE_'+code);
+  }
   const payload=await response.json();
   if(payload?.success!==true)throw Error('PLAYER3_QA_API_REJECTED');
   return payload.data;
@@ -251,15 +272,19 @@ async function provision(){
   for(const learner of LEARNERS){
     const employeeId=employeeIds[learner.key];
     // Only fixed disposable email + employee and course; never customer identities.
-    const created=await apiPost('/api/admin/usuarios',{
-      email:learner.email,nome:learner.name,perfil:'ALUNO',
-      funcionario_id:employeeId,empresa_id:QA_TENANT
-    },admin.accessToken);
-    if(!Number.isSafeInteger(created?.id)||!created.inviteToken)
-      throw Error('PLAYER3_QA_INVITATION_NOT_ISSUED');
     const password=learner.key==='chromium'?
       e.PLAYER3_QA_CHROMIUM_PASSWORD:e.PLAYER3_QA_WEBKIT_PASSWORD;
-    await apiPost('/api/auth/invite/accept',{token:created.inviteToken,senha:password},null);
+    // Physical SELECT-only preflight pins Chromium's exact existing active
+    // user+employee and WebKit absence. Never reissue an invite for Chromium.
+    if(learner.key==='webkit'){
+      const created=await apiPost('/api/admin/usuarios',{
+        email:learner.email,nome:learner.name,perfil:'ALUNO',
+        funcionario_id:employeeId,empresa_id:QA_TENANT
+      },admin.accessToken);
+      if(!Number.isSafeInteger(created?.id)||!created.inviteToken)
+        throw Error('PLAYER3_QA_INVITATION_NOT_ISSUED');
+      await apiPost('/api/auth/invite/accept',{token:created.inviteToken,senha:password},null);
+    }
     const logged=await apiPost('/api/auth/login',{
       email:learner.email,password
     },null);
