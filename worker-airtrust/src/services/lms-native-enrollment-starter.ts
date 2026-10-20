@@ -47,14 +47,14 @@ const PINNED_SCOPE = [
 // abort and could accidentally permit half a lifecycle write. SQLite json()
 // deliberately raises on the malformed non-JSON error literal.
 const PREFLIGHT_SQL = [
-  'SELECT json(CASE',
-  'WHEN EXISTS (SELECT 1', PINNED_SCOPE,
-  "AND m.status='NAO_INICIADO' AND ciclo.status='NAO_INICIADO')",
+  'SELECT json(COALESCE((SELECT CASE',
+  "WHEN m.status='NAO_INICIADO' AND ciclo.status='NAO_INICIADO'",
   'THEN \'"START"\'',
-  'WHEN EXISTS (SELECT 1', PINNED_SCOPE,
-  "AND m.status='EM_ANDAMENTO' AND ciclo.status='EM_ANDAMENTO')",
+  "WHEN m.status='EM_ANDAMENTO' AND ciclo.status='EM_ANDAMENTO'",
   'THEN \'"ALREADY_STARTED"\'',
-  "ELSE 'NATIVE_START_SCOPE_OR_STATUS_DRIFT' END) AS native_start_state",
+  "ELSE 'NATIVE_START_SCOPE_OR_STATUS_DRIFT' END",
+  PINNED_SCOPE, 'LIMIT 1),',
+  "'NATIVE_START_SCOPE_OR_STATUS_DRIFT')) AS native_start_state",
 ].join(' ');
 
 const START_MATRICULA_SQL = [
