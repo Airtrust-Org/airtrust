@@ -6,7 +6,7 @@ const execContext = {
   waitUntil: vi.fn(), passThroughOnException: vi.fn(), props: {},
 } as ExecutionContext;
 
-function appFor(empresaId: number, codigo: string, role = 'admin') {
+function appFor(empresaId: number, codigo: string, role = 'admin', environment = 'test') {
   const queries: { sql: string; params: unknown[] }[] = [];
   const db = {
     prepare(sql: string) {
@@ -23,7 +23,7 @@ function appFor(empresaId: number, codigo: string, role = 'admin') {
   };
   const app = new Hono<{ Bindings: any; Variables: any }>();
   app.use('*', async (c, next) => {
-    c.env = { DB: db, ENVIRONMENT: 'test' };
+    c.env = { DB: db, ENVIRONMENT: environment };
     c.set('userId', '999');
     c.set('userRole', role);
     c.set('empresaId', empresaId);
@@ -44,7 +44,13 @@ function appFor(empresaId: number, codigo: string, role = 'admin') {
   const getCrew = (query = '?cursor=0&limit=50') => app.fetch(
     new Request(`http://localhost/equipe${query}`), {}, execContext,
   );
-  return { queries, get, getCrew };
+  const postScenario = (payload: unknown) => app.fetch(
+    new Request('http://localhost/simulacao/metodologia', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }), {}, execContext,
+  );
+  return { queries, get, getCrew, postScenario };
 }
 
 describe('BOA/CBMMG — fronteira exclusiva de tenant', () => {
@@ -125,5 +131,40 @@ describe('BOA/CBMMG — fronteira exclusiva de tenant', () => {
     expect((await getCrew('?cursor=-1&limit=50')).status).toBe(400);
     expect((await getCrew('?cursor=0&limit=131')).status).toBe(400);
     expect(queries).toHaveLength(0);
+  });
+
+  const scenario = {
+    mode: 'SYNTHETIC', mission_type: 'RESGATE', duty_period: 'NOTURNO',
+    standby_activation: true, critical_mission: true,
+    sleep_hours_24h: 4, sleep_fragmented: true, kss_reported: 8,
+    pvt_60s_completed: false, self_declared_unfit: true,
+  };
+
+  it('blocks synthetic evaluation when tenant is Costa do Sol without DB reads', async () => {
+    const { postScenario, queries } = appFor(6, 'costadosol', 'admin', 'staging');
+    const response = await postScenario(scenario);
+    expect(response.status).toBe(403);
+    expect(queries).toHaveLength(0);
+  });
+
+  it('does not expose simulation in production, even for BOA admin', async () => {
+    const { postScenario, queries } = appFor(130, 'bombeiros', 'admin', 'production');
+    const response = await postScenario(scenario);
+    expect(response.status).toBe(404);
+    expect(queries).toHaveLength(0);
+  });
+
+  it('rejects arbitrary user/tenant identifiers before governance queries', async () => {
+    const { postScenario, queries } = appFor(130, 'bombeiros', 'admin', 'staging');
+    const response = await postScenario({ ...scenario, empresa_id: 6, funcionario_id: 1 });
+    expect(response.status).toBe(400);
+    expect(queries).toHaveLength(0);
+  });
+
+  it('refuses simulation without an approved BOA scientific revision', async () => {
+    const { postScenario, queries } = appFor(130, 'bombeiros', 'admin', 'staging');
+    const response = await postScenario(scenario);
+    expect(response.status).toBe(503);
+    expect(queries.some(row => /FROM funcionarios/i.test(row.sql))).toBe(false);
   });
 });
