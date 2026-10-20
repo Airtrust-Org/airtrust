@@ -11,6 +11,14 @@ import {
   buildFrmsCaseResolutionNotes, buildFrmsCaseTreatmentNotes, readFrmsPendingTreatment,
 } from './case-resolution';
 
+export function isBombeirosManagerTenant(tenant: {
+  empresaId: number; empresaCodigo: string; role: string;
+} | null | undefined): boolean {
+  return Boolean(tenant && Number.isSafeInteger(tenant.empresaId)
+    && tenant.empresaId > 0 && tenant.empresaId !== 6
+    && tenant.empresaCodigo === 'bombeiros' && tenant.role === 'manager');
+}
+
 export const BOA_CHECKIN_TYPE = 'BOA_CHECKIN_V1';
 export const BOA_CASE_OPEN_TYPE = 'BOA_CASE_OPENED_V1';
 export const BOA_CASE_TREATMENT_TYPE = 'BOA_CASE_TREATMENT_V1';
