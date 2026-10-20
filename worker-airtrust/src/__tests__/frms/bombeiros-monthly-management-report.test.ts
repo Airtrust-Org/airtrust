@@ -3,11 +3,11 @@ import { loadBoaMonthlyManagementPreview } from '../../lib/frms/bombeiros-monthl
 
 const crew = new Set([10, 11, 12, 13, 14, 15]);
 type Period = {
-  receipt_count: number; participants: number; opened: number;
+  receipt_count: number; unique_person_days: number; participants: number; opened: number;
   untreated: number; treating: number; closed: number; invalid: number;
 };
 const verified: Period = {
-  receipt_count: 21, participants: 6, opened: 21,
+  receipt_count: 21, unique_person_days: 21, participants: 6, opened: 21,
   untreated: 11, treating: 5, closed: 5, invalid: 0,
 };
 function dbRows(rows: Period[]) {
@@ -42,7 +42,7 @@ describe('BOA monthly managerial/technical evidence preview — source and priva
 
   it('executes separate month-scoped, tenant-scoped read-only queries for BOA event cases', async () => {
     const { db, statements } = dbRows([verified, {
-      receipt_count: 15, participants: 6, opened: 15,
+      receipt_count: 15, unique_person_days: 15, participants: 6, opened: 15,
       untreated: 5, treating: 5, closed: 5, invalid: 0,
     }]);
     const report = await loadBoaMonthlyManagementPreview(db, 130, '2026-10', crew);
@@ -76,7 +76,7 @@ describe('BOA monthly managerial/technical evidence preview — source and priva
 
   it('suppresses everything when participation is 1–4, even if check-in count is large', async () => {
     const { db } = dbRows([
-      { receipt_count: 29, participants: 1, opened: 29,
+      { receipt_count: 29, unique_person_days: 29, participants: 1, opened: 29,
         untreated: 29, treating: 0, closed: 0, invalid: 0 },
       verified,
     ]);
@@ -89,7 +89,7 @@ describe('BOA monthly managerial/technical evidence preview — source and priva
 
   it('hides the entire distribution when one category has a small cell', async () => {
     const { db } = dbRows([
-      { receipt_count: 6, participants: 6, opened: 6,
+      { receipt_count: 6, unique_person_days: 6, participants: 6, opened: 6,
         untreated: 4, treating: 1, closed: 1, invalid: 0 },
       verified,
     ]);
@@ -103,7 +103,7 @@ describe('BOA monthly managerial/technical evidence preview — source and priva
 
   it('does not misrepresent no observations as complete reporting', async () => {
     const empty: Period = {
-      receipt_count: 0, participants: 0, opened: 0,
+      receipt_count: 0, unique_person_days: 0, participants: 0, opened: 0,
       untreated: 0, treating: 0, closed: 0, invalid: 0,
     };
     const { db } = dbRows([empty, empty]);
@@ -113,12 +113,22 @@ describe('BOA monthly managerial/technical evidence preview — source and priva
     expect(report.technical_caveats.join(' ')).toMatch(/não taxa de adesão|não é persistido/i);
   });
 
+  it('rejects repeated check-in receipts for the same employee and day', async () => {
+    const { db } = dbRows([
+      { receipt_count: 6, unique_person_days: 5, participants: 5,
+        opened: 6, untreated: 6, treating: 0, closed: 0, invalid: 0 },
+      verified,
+    ]);
+    await expect(loadBoaMonthlyManagementPreview(db, 130, '2026-10', crew))
+      .rejects.toThrow('BOA_MONTHLY_CASE_STREAM_INTEGRITY_ERROR');
+  });
+
   it.each([
-    { receipt_count: 5, participants: 5, opened: 4, untreated: 4,
+    { receipt_count: 5, unique_person_days: 5, participants: 5, opened: 4, untreated: 4,
       treating: 0, closed: 0, invalid: 1 },
-    { receipt_count: 5, participants: 6, opened: 5, untreated: 5,
+    { receipt_count: 5, unique_person_days: 5, participants: 6, opened: 5, untreated: 5,
       treating: 0, closed: 0, invalid: 0 },
-    { receipt_count: 5, participants: 5, opened: 5, untreated: 0,
+    { receipt_count: 5, unique_person_days: 5, participants: 5, opened: 5, untreated: 0,
       treating: 0, closed: 6, invalid: 0 },
   ])('refuses broken provenance instead of exporting plausible numbers', async row => {
     const { db } = dbRows([row, verified]);
