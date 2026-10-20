@@ -50,9 +50,58 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/staging/player3-qa-start-existing-learners.mjs guard
 
-  start:
-    name: Worker-only synthetic staging Native START, then D1 SELECT verify
+  d1_preflight:
+    name: D1 SELECT-only fresh synthetic roster with current SHA and grant
     needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 18
+    outputs:
+      qa_roster: ${{ steps.prove.outputs.qa_roster }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Locked Wrangler for SELECT-only QA staging
+        run: npm --prefix worker-airtrust ci --ignore-scripts
+      - name: Pin two fresh QA Native enrollments without mutation
+        id: prove
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/staging/player3-qa-start-existing-learners.mjs preflight
+
+  start:
+    name: Worker-only scoped student API Native start with distinct JWTs
+    needs: [guard, d1_preflight]
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Two own-learner POST /iniciar and authenticated session proofs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONFIRM_PLAYER3_QA_START: AIRTRUST_PLAYER3_QA_START_EXISTING_V1
+          PLAYER3_QA_PREAPPROVED_ROSTER: ${{ needs.d1_preflight.outputs.qa_roster }}
+          PLAYER3_QA_CHROMIUM_PASSWORD: ${{ secrets.PLAYER3_QA_CHROMIUM_PASSWORD }}
+          PLAYER3_QA_WEBKIT_PASSWORD: ${{ secrets.PLAYER3_QA_WEBKIT_PASSWORD }}
+        run: node scripts/staging/player3-qa-start-existing-learners.mjs start
+
+  d1_verify:
+    name: D1 SELECT-only exact cycle and edition start persistence readback
+    needs: [guard, d1_preflight, start]
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 18
@@ -64,39 +113,43 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Install pinned Wrangler for SELECT-only post-validation
+      - name: Locked Wrangler for postread
         run: npm --prefix worker-airtrust ci --ignore-scripts
-      - name: Two independent signed learner POST /iniciar with real D1 postread
+      - name: SELECT-only verify both Worker-owned D1 transactional starts
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          CONFIRM_PLAYER3_QA_START: AIRTRUST_PLAYER3_QA_START_EXISTING_V1
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PLAYER3_QA_CHROMIUM_PASSWORD: ${{ secrets.PLAYER3_QA_CHROMIUM_PASSWORD }}
-          PLAYER3_QA_WEBKIT_PASSWORD: ${{ secrets.PLAYER3_QA_WEBKIT_PASSWORD }}
-        run: node scripts/staging/player3-qa-start-existing-learners.mjs start
+          PLAYER3_QA_PREAPPROVED_ROSTER: ${{ needs.d1_preflight.outputs.qa_roster }}
+        run: node scripts/staging/player3-qa-start-existing-learners.mjs d1-verify
 
   result:
-    name: Record real state only, never claim final 6-journey acceptance
-    needs: [guard, start]
+    name: Fail closed; no six-journey, assessment or PDF claims
+    needs: [guard, d1_preflight, start, d1_verify]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Non-secret ledger and fail-closed summary
+      - name: Sanitary result
         env:
           GUARD_STATUS: ${{ needs.guard.result }}
+          PREFLIGHT_STATUS: ${{ needs.d1_preflight.result }}
           START_STATUS: ${{ needs.start.result }}
+          POST_STATUS: ${{ needs.d1_verify.result }}
           SHA: ${{ inputs.release_sha }}
         run: |
           {
-            echo '## Player3 protected synthetic-only learner start'
-            echo "- pinned staging Worker SHA: $SHA"
-            echo "- exact admin grant and CI guard: $GUARD_STATUS"
-            echo "- Worker-only synthetic start and D1 postread: $START_STATUS"
-            echo '- tenant 999006, course 327, two existing independent learners'
-            echo '- No raw D1 SQL mutation, R2, schema, production or certificate'
-            echo '- Browser journeys 6/6, SCORM, resume and PDF: NOT ATTESTED'
-            echo '- Any partial start requires fresh grant and recovery review: DO NOT AUTO REPLAY'
+            echo '## Governed staging synthetic Native enrollment start'
+            echo "- pinned Player3 SHA: $SHA"
+            echo "- exact grant, SHA and gates: $GUARD_STATUS"
+            echo "- D1 SELECT-only fresh roster: $PREFLIGHT_STATUS"
+            echo "- Worker-only authenticated start: $START_STATUS"
+            echo "- independent D1 SELECT-only postread: $POST_STATUS"
+            echo '- 2 synthetic tenant 999006/course 327 students, no score/grade/cert'
+            echo '- No raw D1 writes, migration, R2, Pages or production action'
+            echo '- Partial start means manual recovery; NEVER auto-replay'
+            echo '- Six journeys, resume 80%, SCORM and PDF: NOT ATTESTED'
           } >> "$GITHUB_STEP_SUMMARY"
           test "$GUARD_STATUS" = success
+          test "$PREFLIGHT_STATUS" = success
           test "$START_STATUS" = success
+          test "$POST_STATUS" = success
