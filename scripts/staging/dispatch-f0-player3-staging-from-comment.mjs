@@ -27,7 +27,11 @@ export const TRUSTED_DELTA_FILES=new Set([
   'scripts/staging/f0-delegated-staging-attestation.mjs',
   'scripts/__tests__/f0-delegated-staging-attestation.test.mjs',
   'scripts/staging/dispatch-f0-player3-staging-from-comment.mjs',
-  'scripts/__tests__/f0-player3-staging-issueops.test.mjs'
+  'scripts/__tests__/f0-player3-staging-issueops.test.mjs',
+  // F5 #1643: reviewed, merged, read-only Native QA policy verifier + fixtures.
+  // Explicit paths only; no Native Worker/frontend/runtime source accepted.
+  'scripts/ci/player3-native-qa-approval-gate.mjs',
+  'scripts/__tests__/player3-native-qa-approval-gate.test.mjs'
 ]);
 export function parseRequest(event,{actor,ref,repo,sha}) {
   if(repo!==REPO||ref!=='refs/heads/main')

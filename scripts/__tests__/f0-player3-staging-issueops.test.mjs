@@ -39,6 +39,15 @@ test('runtime main drift is rejected; reviewed F0 infra-only delta accepted',()=
   files:[{filename:'scripts/staging/player3-qa-trusted-executor.mjs'},
    {filename:'.github/workflows/f0-player3-staging-issueops.yml'},
    {filename:'.github/workflows/ci.yml'}]}));
+ assert.doesNotThrow(()=>assertReviewedDelta({status:'diverged',ahead_by:7,
+  files:[
+   {filename:'scripts/ci/player3-native-qa-approval-gate.mjs'},
+   {filename:'scripts/__tests__/player3-native-qa-approval-gate.test.mjs'},
+   {filename:'.github/workflows/ci.yml'}
+  ]}));
+ assert.throws(()=>assertReviewedDelta({status:'diverged',ahead_by:7,
+  files:[{filename:'worker-airtrust/src/lib/lms/lms-native-course-contract.ts'}]}),
+  /RUNTIME_MAIN_DRIFT_DENIED/);
  assert.throws(()=>assertReviewedDelta({status:'diverged',ahead_by:4,
   files:[{filename:'worker-airtrust/src/index.ts'}]}),/RUNTIME_MAIN_DRIFT_DENIED/);
  assert.throws(()=>assertReviewedDelta({status:'diverged',ahead_by:20,files:[]}),/DELTA_UNBOUNDED/);
