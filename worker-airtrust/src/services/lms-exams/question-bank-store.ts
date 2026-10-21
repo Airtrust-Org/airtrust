@@ -97,7 +97,7 @@ export async function getAdminQuestion(db:D1Database,actor:QuestionAdminActor,
   return fetchRevision(db,actor,questionId,revision);
 }
 export async function listAdminQuestions(db:D1Database,actor:QuestionAdminActor):Promise<readonly {
-  questionId:string;revision:number;status:string;moduleId:string;updatedAt:string;
+  questionId:string;revision:number;status:string;updatedAt:string;
 }[]> {
   const {scope}=actorScope(actor);
   // Fail-closed listing: answer and content_json are NEVER selected.
@@ -109,7 +109,7 @@ export async function listAdminQuestions(db:D1Database,actor:QuestionAdminActor)
   }>();
   return (result.results||[]).map(row=>({
     questionId:row.question_key,revision:row.revision,status:row.status,
-    moduleId:'',updatedAt:row.updated_at,
+    updatedAt:row.updated_at,
   }));
 }
 export async function createAdminQuestionDraft(db:D1Database,
