@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import AppLayout from '@/react-app/components/AppLayout';
 import { useAuth } from '@/react-app/hooks/useAuth';
-import { useApiMutation } from '@/react-app/hooks/useApi';
+import { useApi, useApiMutation } from '@/react-app/hooks/useApi';
 
 const MISSIONS = [
   ['RESGATE', 'Resgate'],
@@ -42,6 +42,16 @@ export default function BombeirosCheckinPage() {
   const [consent, setConsent] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const { mutate, loading, error } = useApiMutation<Result>();
+  const {
+    data: receiptResponse, error: receiptError,
+    loading: checkingReceipt, refetch: refetchReceipt,
+  } = useApi<{ success: boolean; data: {
+    received: boolean; checkin_id: string | null; case_id: string | null;
+    human_review_required: boolean; dispatch_permission: 'NOT_GRANTED';
+  } }>('/api/bombeiros/frms/checkin/status', {
+    enabled: allowed, requireAuth: true, bypassGetCache: true, staleTime: 0,
+  });
+  const received = Boolean(receiptResponse?.success && receiptResponse.data.received);
   const tri = (label: string, v: TriState, change: (v: TriState) => void) =>
     <label className="block text-sm">{label}
       <select className="mt-1 block w-full rounded border p-2" value={v}
@@ -54,7 +64,7 @@ export default function BombeirosCheckinPage() {
 
   const submit = async () => {
     setResult(null);
-    if (!allowed || !consent) return;
+    if (!allowed || !consent || received || receiptError || checkingReceipt) return;
     try {
       const saved = await mutate('/api/bombeiros/frms/checkin', {
         method: 'POST',
@@ -71,6 +81,7 @@ export default function BombeirosCheckinPage() {
         }),
       });
       setResult(saved);
+      void refetchReceipt();
     } catch { /* API error shown below, never infer check-in success. */ }
   };
 
@@ -88,6 +99,21 @@ export default function BombeirosCheckinPage() {
           Este preenchimento não libera missão, não determina aptidão e não calcula
           pontuações utilizadas pela operação offshore.
         </p>
+        <section className="space-y-2 rounded border border-slate-300 p-3 text-sm"
+          aria-label="Situação do recibo BOA">
+          {checkingReceipt && <p role="status">Conferindo recibo existente…</p>}
+          {receiptError && <p role="alert">
+            Não foi possível verificar o recibo anterior: {receiptError}.
+            O envio fica indisponível até revalidar a situação.
+          </p>}
+          {received && <div>
+            <p>Check-in do dia já recebido. Não reenviar nem interpretar como aptidão.</p>
+            <p>Recibo: {receiptResponse?.data.checkin_id ?? 'indisponível'}</p>
+            <p>Ocorrência para revisão humana: {receiptResponse?.data.case_id ?? 'indisponível'}</p>
+          </div>}
+          {!received && !checkingReceipt && !receiptError &&
+            <p>Nenhum recibo identificado hoje. A submissão, se aceita, exige revisão humana.</p>}
+        </section>
         <section className="grid gap-3 rounded border p-4 md:grid-cols-2" aria-label="Avaliação inicial BOA">
           <label className="text-sm">Tipo de missão
             <select aria-label="Tipo de missão" value={mission}
@@ -130,7 +156,7 @@ export default function BombeirosCheckinPage() {
           Declaro ciência de que os dados são restritos, não substituem avaliação profissional
           e serão usados somente no ambiente de validação autorizado.
         </label>
-        <button type="button" disabled={!consent || loading}
+        <button type="button" disabled={!consent || loading || checkingReceipt || Boolean(receiptError) || received}
           className="rounded border border-slate-500 px-4 py-2 font-semibold disabled:opacity-50"
           onClick={() => void submit()}>
           {loading ? 'Registrando evidência…' : 'Enviar para revisão humana'}
