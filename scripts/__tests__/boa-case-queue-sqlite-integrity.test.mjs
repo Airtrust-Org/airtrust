@@ -27,7 +27,7 @@ const mod = new Module(artifact);
 mod.filename = artifact;
 mod.paths = Module._nodeModulePaths(dirname(artifact));
 mod._compile(built.outputFiles[0].text, artifact);
-const { loadBoaCaseQueue, registerBoaCaseAction } = mod.exports;
+const { loadBoaCaseQueue, loadBoaOperationalCase, registerBoaCaseAction } = mod.exports;
 
 function dbFixture() {
   const sqlite = new DatabaseSync(':memory:');
@@ -109,15 +109,18 @@ test('BOA manager queue never labels a corrupt, offshore or premature case as re
   try {
     const queue = await fetch();
     assert.deepEqual(queue.items.map(x => x.case_id), ['boa-case']);
+    assert.equal((await loadBoaOperationalCase(d1, 130, 'boa-case', 90, scope))?.status.state, 'ABERTO');
     assert.equal(queue.items[0].state, 'ABERTO');
     assert.doesNotMatch(JSON.stringify(queue), /funcionario_id|kss|sono|pvt/i);
     await assert.rejects(loadBoaCaseQueue(d1, 6, 90, scope), /BOMBEIROS_INVALID_TENANT/);
     // Observers may not read case IDs even if generic sector scope still contains 9.
     sqlite.exec("UPDATE setores_gestores SET role='observer' WHERE usuario_id=90");
     assert.deepEqual((await fetch()).items, []);
+    assert.equal(await loadBoaOperationalCase(d1, 130, 'boa-case', 90, scope), null);
     sqlite.exec("UPDATE setores_gestores SET role='manager' WHERE usuario_id=90");
     sqlite.exec("UPDATE usuarios_empresas SET role='student' WHERE usuario_id=90");
     assert.deepEqual((await fetch()).items, []);
+    assert.equal(await loadBoaOperationalCase(d1, 130, 'boa-case', 90, scope), null);
     sqlite.exec("UPDATE usuarios_empresas SET role='manager' WHERE usuario_id=90");
 
     patch.run(JSON.stringify({ schema: 'HELICOPTER_OFFSHORE',
