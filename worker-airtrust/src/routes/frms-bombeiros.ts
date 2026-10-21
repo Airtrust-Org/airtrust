@@ -404,8 +404,12 @@ frmsBombeiros.get('/casos', requireRole('manager'), safe(async c => {
   }
   try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId); }
   catch { return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503); }
+  const actorId = Number(c.get('userId'));
+  if (!Number.isSafeInteger(actorId) || actorId <= 0) {
+    return c.json({ success: false, code: 'BOMBEIROS_ACTOR_REQUIRED' }, 403);
+  }
   const access = await getEmployeeSectorAccess(c, tenant.empresaId);
-  const queue = await loadBoaCaseQueue(c.env.DB, tenant.empresaId, access,
+  const queue = await loadBoaCaseQueue(c.env.DB, tenant.empresaId, actorId, access,
     Number(limitText), cursorAt && cursorId ? { created_at: cursorAt, id: cursorId } : undefined);
   if (!queue) return c.json({ success: false, code: 'BOMBEIROS_MANAGER_SECTOR_REQUIRED' }, 403);
   return c.json({
@@ -422,8 +426,13 @@ frmsBombeiros.get('/casos/:id', requireRole('manager'), safe(async c => {
   }
   try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId); }
   catch { return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503); }
+  const actorId = Number(c.get('userId'));
+  if (!Number.isSafeInteger(actorId) || actorId <= 0) {
+    return c.json({ success: false, code: 'BOMBEIROS_ACTOR_REQUIRED' }, 403);
+  }
   const access = await getEmployeeSectorAccess(c, tenant.empresaId);
-  const result = await loadBoaOperationalCase(c.env.DB, tenant.empresaId, c.req.param('id') ?? '', access);
+  const result = await loadBoaOperationalCase(
+    c.env.DB, tenant.empresaId, c.req.param('id') ?? '', actorId, access);
   if (!result) return c.json({ success: false, code: 'BOMBEIROS_CASE_NOT_AVAILABLE' }, 404);
   return c.json({ success: true, data: result.status, meta: {
     tenant_id: tenant.empresaId, source: 'BOA_FRMS_APPEND_ONLY_EVENT_STREAM',
