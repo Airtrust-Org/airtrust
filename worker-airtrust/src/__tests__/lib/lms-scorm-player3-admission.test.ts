@@ -45,7 +45,7 @@ describe('Player 3 SCORM admission is separately scoped from Native or legacy', 
     const p = base();
     expect(await resolveScormPlayer3Admission({...p, activePrefix: null}))
       .toMatchObject({kind: 'LEGACY'});
-    expect(await resolveScormPlayer3Admission({...p, scormVersion: '2004'}))
+    expect(await resolveScormPlayer3Admission({...p, scormVersion: '2004',activePrefix:null}))
       .toMatchObject({kind: 'LEGACY'});
     expect(vi.mocked(p.db.prepare)).not.toHaveBeenCalled();
   });
@@ -53,6 +53,10 @@ describe('Player 3 SCORM admission is separately scoped from Native or legacy', 
     const p = base();
     expect(await resolveScormPlayer3Admission({...p, tenant: 7}))
       .toMatchObject({kind: 'BLOCKED', reason: 'SCOPE_INVALID'});
+    expect(await resolveScormPlayer3Admission({...p, scormVersion: null}))
+      .toMatchObject({kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED'});
+    expect(await resolveScormPlayer3Admission({...p, scormVersion: '2004'}))
+      .toMatchObject({kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED'});
     expect(await resolveScormPlayer3Admission({...p, db: database(null)}))
       .toMatchObject({kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED'});
     expect(await resolveScormPlayer3Admission({...p, bucket: bucket(null)}))
