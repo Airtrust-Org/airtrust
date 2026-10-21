@@ -124,6 +124,9 @@ describe('BOA event intake and immutable case stream contracts', () => {
     expect(found?.status.state).toBe('ABERTO');
     expect(queries[0].sql).toContain('f.empresa_id = ?');
     expect(queries[0].sql).toContain('f.setor_id IN (?)');
+    expect(queries[0].sql).toContain('invalid_treatment_count');
+    expect(queries[0].sql).toContain('invalid_closure_count');
+    expect(queries[0].sql).toContain('opening_dispatch');
     expect(queries[0].values).toEqual(['case-1', 130, BOA_CASE_OPEN_TYPE, 130, 9]);
     expect(queries[1].sql).toContain('e.empresa_id = ?');
   });
@@ -269,8 +272,8 @@ describe('BOA event intake and immutable case stream contracts', () => {
             request.bind = values;
             return {
               async all() { return { results: [
-                { case_id: 'case-a', created_at: '2026-10-20T10:00:00Z', treatment_count: 0, closure_count: 0 },
-                { case_id: 'case-b', created_at: '2026-10-19T10:00:00Z', treatment_count: 1, closure_count: 1 },
+                { case_id: 'case-a', created_at: '2026-10-20T10:00:00Z', opening_schema: 'BOA_CASE_OPENED_V1', opening_dispatch: 'NOT_GRANTED', treatment_count: 0, closure_count: 0, invalid_treatment_count: 0, invalid_closure_count: 0, treatment_at: null, closure_at: null },
+                { case_id: 'case-b', created_at: '2026-10-19T10:00:00Z', opening_schema: 'BOA_CASE_OPENED_V1', opening_dispatch: 'NOT_GRANTED', treatment_count: 1, closure_count: 1, invalid_treatment_count: 0, invalid_closure_count: 0, treatment_at: '2026-10-19T11:00:00Z', closure_at: '2026-10-19T12:00:00Z' },
               ] }; },
             };
           },
@@ -294,6 +297,11 @@ describe('BOA event intake and immutable case stream contracts', () => {
       { treatment_count: 2, closure_count: 0 },
       { treatment_count: 0, closure_count: 1 },
       { treatment_count: 1, closure_count: 2 },
+      { treatment_count: 1, closure_count: 1, invalid_treatment_count: 1 },
+      { treatment_count: 1, closure_count: 1, invalid_closure_count: 1 },
+      { treatment_count: 1, closure_count: 1, closure_at: '2026-10-20T11:00:00Z' },
+      { opening_schema: 'HELICOPTER_OFFSHORE' },
+      { opening_dispatch: 'GRANTED' },
     ];
     for (const counts of cases) {
       const db = {
@@ -301,7 +309,12 @@ describe('BOA event intake and immutable case stream contracts', () => {
           bind: () => ({
             async all() {
               return { results: [{
-                case_id: 'bad-1', created_at: '2026-10-20T11:00:00Z', ...counts,
+                case_id: 'bad-1', created_at: '2026-10-20T11:00:00Z',
+                opening_schema: 'BOA_CASE_OPENED_V1', opening_dispatch: 'NOT_GRANTED',
+                treatment_count: 0, closure_count: 0,
+                invalid_treatment_count: 0, invalid_closure_count: 0,
+                treatment_at: '2026-10-20T12:00:00Z',
+                closure_at: '2026-10-20T13:00:00Z', ...counts,
               }] };
             },
           }),
