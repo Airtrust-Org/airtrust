@@ -134,6 +134,24 @@ export async function registerBoaCheckin(
     policy_version: governance.policy_version,
     ...checkin,
     evidence_state: 'CREW_SELF_REPORT_NOT_VERIFIED',
+    // Individual provenance travels with the immutable receipt, rather than
+    // being reconstructed from a monthly aggregate or assumed duty roster.
+    // The 60-second checkbox records claimed completion only: NO latency,
+    // lapses, cognitive performance, scientific score or flight clearance.
+    measurement_provenance: {
+      schema: 'BOA_INTAKE_PROVENANCE_V1',
+      collection_channel: 'AUTHENTICATED_CREW_SELF_REPORT',
+      observed_at: createdAt,
+      sleep_hours_24h: checkin.sleep_hours_24h === null ? 'NOT_REPORTED' : 'CREW_REPORTED_NOT_MEASURED',
+      kss_reported: checkin.kss_reported === null ? 'NOT_REPORTED' : 'SUBJECTIVE_KSS_1_TO_9',
+      pvt_60s_completed: 'CREW_DECLARATION_ONLY_NOT_A_PERFORMANCE_TEST',
+      pvt_response_times_ms: null,
+      pvt_lapses: null,
+      duty_roster: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+      actual_mission_times: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+      scientific_risk_estimate: null,
+      boa_validation: 'NOT_ESTABLISHED',
+    },
     dispatch_permission: 'NOT_GRANTED',
   });
   const event = db.prepare(
