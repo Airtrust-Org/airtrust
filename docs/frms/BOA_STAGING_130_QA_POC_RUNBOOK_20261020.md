@@ -187,10 +187,18 @@ provisionamento sintético precisa criar o vínculo moderno
 `usuario_id` pelo fluxo governado, sem copiar atribuições da
 Costa do Sol. Os demais tenants não mudam.
 
-**Limite:** este endurecimento protege a operação **de escrita**.
-A fila e a consulta detalhada possuem checagens próprias de RBAC,
-setores/empresa e histórico, mas a revisão da semântica de acesso
-de leitura por observador/substituto permanece um item de QA
-autenticado; não considerar revisão de leitura concluída por esse
-teste de gravação.
+**Leituras alinhadas (etapa posterior):** `GET /api/bombeiros/frms/casos`
+e `GET /api/bombeiros/frms/casos/:id` agora conferem, **dentro de
+cada SELECT**, o usuário autenticado, o papel gerencial atual,
+`usuarios_empresas`, a designação moderna `setores_gestores.usuario_id`
+ativa com role `manager` ou `backup`, e o setor ativo do
+funcionário. Atribuição `observer`, revogação, setor errado ou
+vínculo legado apenas por e-mail não autorizam nem IDs de ocorrência.
+
+O teste SQLite de `boa-case-queue-sqlite-integrity.test.mjs`
+verifica tanto a lista quanto o detalhe após alteração de papel
+e atribuição. **Limitação remanescente:** a ausência de
+sessão real no Cloudflare, verificação de cache distribuído,
+auditoria operacional e revisão LGPD ainda exige QA autenticado
+em staging antes de considerar a implantação validada.
 
