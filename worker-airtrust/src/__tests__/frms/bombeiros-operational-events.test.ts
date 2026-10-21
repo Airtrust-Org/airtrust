@@ -25,6 +25,7 @@ function fakeDb(options: {
   receipt?: Record<string, unknown> | null;
   childEvents?: unknown[];
   batchChanges?: number[];
+  existingReceipts?: Array<{ id: string }>;
   writeChanges?: number;
 } = {}) {
   const queries: Array<{ sql: string; values: unknown[] }> = [];
@@ -41,7 +42,12 @@ function fakeDb(options: {
           if (selectCount === 1) return options.case ?? null;
           return options.receipt ?? null;
         },
-        async all() { return { results: options.childEvents ?? [] }; },
+        async all() {
+          if (sql.includes('JOIN usuarios u ON u.funcionario_id')) {
+            return { results: options.existingReceipts ?? [] };
+          }
+          return { results: options.childEvents ?? [] };
+        },
         async run() { return { meta: { changes: options.writeChanges ?? 1 } }; },
       };
       return bound;
@@ -89,6 +95,10 @@ describe('BOA event intake and immutable case stream contracts', () => {
     });
     expect(queries).toHaveLength(2);
     expect(queries[0].sql).toContain('NOT EXISTS');
+    expect(queries[0].sql).toContain('usuarios_empresas ue');
+    expect(queries[0].sql).toContain('f.id = u.funcionario_id');
+    expect(queries[0].sql).toContain('u.deleted_at IS NULL OR u.deleted_at = 0');
+    expect(queries[0].values.slice(6, 10)).toEqual([130, 19, 21, 130]);
     expect(queries[0].sql).toContain("json_extract(e.payload_json, '$.funcionario_id')");
     expect(queries[0].values).toContain(BOA_CHECKIN_TYPE);
     expect(queries[1].values).toContain(BOA_CASE_OPEN_TYPE);
@@ -99,12 +109,34 @@ describe('BOA event intake and immutable case stream contracts', () => {
   });
 
   it('treats duplicate daily receipt as NOT an operational clearance', async () => {
-    const { db } = fakeDb({ batchChanges: [0, 0] });
+    const { db } = fakeDb({ batchChanges: [0, 0],
+      existingReceipts: [{ id: 'boa-checkin-original' }] });
     const result = await registerBoaCheckin(db, 130, 21, 19, '2026-10-20', input, governance);
     expect(result).toMatchObject({
       accepted: false, status: 'ALREADY_RECEIVED', dispatch_permission: 'NOT_GRANTED',
       case_id: null,
     });
+  });
+
+  it('denies a revoked or unlinked actor instead of falsely claiming a duplicate', async () => {
+    const { db, queries } = fakeDb({ batchChanges: [0, 0], existingReceipts: [] });
+    const result = await registerBoaCheckin(db, 130, 21, 19, '2026-10-20', input, governance);
+    expect(result).toMatchObject({
+      accepted: false, status: 'RECHECK_DENIED', checkin_id: null, case_id: null,
+      dispatch_permission: 'NOT_GRANTED',
+    });
+    expect(queries[2].sql).toContain('JOIN usuarios u ON u.funcionario_id = f.id');
+    expect(queries[2].sql).toContain('ue.usuario_id = u.id');
+    expect(queries[2].values).toEqual([
+      130, 130, 21, 19, 130, BOA_CHECKIN_TYPE, BOA_CHECKIN_TYPE, '2026-10-20',
+    ]);
+  });
+
+  it('fails closed when an existing daily receipt is duplicated or inconsistent', async () => {
+    const { db } = fakeDb({ batchChanges: [0, 0],
+      existingReceipts: [{ id: 'duplicate-1' }, { id: 'duplicate-2' }] });
+    await expect(registerBoaCheckin(db, 130, 21, 19, '2026-10-20', input, governance))
+      .rejects.toThrow('BOMBEIROS_DUPLICATE_RECEIPT_INTEGRITY_ERROR');
   });
 
   it('rejects inconsistent two-write stream rather than claiming success', async () => {
