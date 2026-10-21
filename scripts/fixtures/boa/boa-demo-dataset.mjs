@@ -182,6 +182,52 @@ export function buildBoaDemoDataset({ month = '2026-10' } = {}) {
 }
 
 /**
+ * Procurement sizing is UP TO 130 ACTIVE USERS TOTAL (crew + managers + admin),
+ * not 130 crew plus supervisory accounts. Keep the full 130-crew fixture as a
+ * separate capacity stress artifact; the tender-sized cohort is read-only data.
+ * It includes every crew member associated with one of the 839 example events.
+ */
+export function buildBoaTender130IdentityPlan(dataset) {
+  if (dataset?.metadata?.fixture_id !== 'BOA_DEMO_SYNTHETIC_20261021_V1'
+    || !Array.isArray(dataset.crew) || dataset.crew.length !== 130
+    || !Array.isArray(dataset.managers) || dataset.managers.length !== 4
+    || !dataset.admin || !Array.isArray(dataset.events)) {
+    throw new Error('BOA_TENDER_PLAN_FIXTURE_INVALID');
+  }
+  const crew = dataset.crew.slice(0, 125);
+  const participantRefs = new Set(crew.map(person => person.ref));
+  const actorRefs = new Set([
+    ...crew.map(person => person.user_ref),
+    ...dataset.managers.map(manager => manager.ref),
+    dataset.admin.ref,
+  ]);
+  if (dataset.events.some(event => !participantRefs.has(event.crew_ref)
+      || !actorRefs.has(event.actor_ref))) {
+    throw new Error('BOA_TENDER_PLAN_EVENT_ACTOR_NOT_COVERED');
+  }
+  const accounts = [
+    ...crew.map(person => ({
+      ref: person.user_ref, role: 'tripulante', employee_ref: person.ref,
+      sector_ref: person.setor_ref, credentials_provisioned: false,
+    })),
+    ...dataset.managers.map(manager => ({
+      ref: manager.ref, role: 'gestor', sector_ref: manager.setor_ref,
+      credentials_provisioned: false,
+    })),
+    { ref: dataset.admin.ref, role: 'administrador', credentials_provisioned: false },
+  ];
+  if (accounts.length !== 130 || new Set(accounts.map(a => a.ref)).size !== 130)
+    throw new Error('BOA_TENDER_PLAN_130_ACCOUNTS_REQUIRED');
+  return {
+    purpose: 'PROCUREMENT_INITIAL_CAPACITY_UP_TO_130_USERS',
+    count: accounts.length, crew_count: crew.length,
+    manager_count: dataset.managers.length, admin_count: 1,
+    official_provisioned_users: 0, authentication_ready: false,
+    accounts, // identity ALIASES ONLY; never passwords, tokens or D1 IDs
+  };
+}
+
+/**
  * Materialize templates only after an external, governed process has resolved
  * *all* employee/user aliases to existing synthetic IDs in one authorized BOA
  * tenant. The function returns rows in memory: NEVER INSERTs them.
