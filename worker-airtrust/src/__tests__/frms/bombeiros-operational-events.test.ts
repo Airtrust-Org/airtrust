@@ -185,19 +185,23 @@ describe('BOA event intake and immutable case stream contracts', () => {
         } };
       },
     } as unknown as D1Database;
-    const status = await loadBoaCrewCheckinStatus(db, 130, 21, '2026-10-20');
+    const status = await loadBoaCrewCheckinStatus(db, 130, 21, 101, '2026-10-20');
     expect(status).toMatchObject({
       received: true, checkin_id: 'boa-receipt-21',
       case_id: 'boa-case-21', human_review_required: true,
       dispatch_permission: 'NOT_GRANTED',
     });
     expect(queries[0].binds).toEqual([
-      130, 130, 21, BOA_CHECKIN_TYPE, BOA_CHECKIN_TYPE, '2026-10-20',
+      130, 130, 21, 101, 130, BOA_CHECKIN_TYPE, BOA_CHECKIN_TYPE, '2026-10-20',
     ]);
     expect(queries[1].binds).toEqual([
-      130, 130, 'boa-receipt-21', BOA_CASE_OPEN_TYPE, BOA_CHECKIN_TYPE, 21, 21,
+      130, 130, 'boa-receipt-21', BOA_CASE_OPEN_TYPE, BOA_CHECKIN_TYPE,
+      21, 21, 21, 130, 101, 130,
     ]);
     expect(queries[1].sql).toContain("json_extract(c.payload_json, '$.funcionario_id')");
+    expect(queries[0].sql).toContain('usuarios_empresas ue');
+    expect(queries[1].sql).toContain('usuarios_empresas ue');
+    expect(queries[1].sql).toContain('u.funcionario_id = f.id');
     expect(JSON.stringify(status)).not.toMatch(/kss|sleep|pvt|funcionario_id|HELICOPTER_OFFSHORE/i);
   });
 
@@ -205,7 +209,7 @@ describe('BOA event intake and immutable case stream contracts', () => {
     const db = { prepare: () => ({
       bind: () => ({ async all() { return { results: [] }; } }),
     }) } as unknown as D1Database;
-    expect(await loadBoaCrewCheckinStatus(db, 130, 21, '2026-10-20')).toMatchObject({
+    expect(await loadBoaCrewCheckinStatus(db, 130, 21, 101, '2026-10-20')).toMatchObject({
       received: false, case_id: null, dispatch_permission: 'NOT_GRANTED',
     });
   });
@@ -220,7 +224,7 @@ describe('BOA event intake and immutable case stream contracts', () => {
       const db = { prepare: () => ({
         bind: () => ({ async all() { return { results: results[n++] }; } }),
       }) } as unknown as D1Database;
-      await expect(loadBoaCrewCheckinStatus(db, 130, 21, '2026-10-20'))
+      await expect(loadBoaCrewCheckinStatus(db, 130, 21, 101, '2026-10-20'))
         .rejects.toThrow('BOMBEIROS_CHECKIN_STATUS_INTEGRITY_ERROR');
     }
   });
