@@ -304,10 +304,13 @@ function isBoaResolutionEvent(payload: string): boolean {
   } catch { return false; }
 }
 export async function loadBoaOperationalCase(
-  db: D1Database, empresaId: number, caseId: string, access: EmployeeSectorAccess,
+  db: D1Database, empresaId: number, caseId: string, actorId: number,
+  access: EmployeeSectorAccess,
 ): Promise<{ status: BoaCaseStatus; treatment: string | null } | null> {
   assertBoaTenant(empresaId);
-  if (!caseId || caseId.length > 120 || access.mode !== 'restricted' || access.setorIds.length === 0) return null;
+  if (!Number.isSafeInteger(actorId) || actorId <= 0
+    || !caseId || caseId.length > 120
+    || access.mode !== 'restricted' || access.setorIds.length === 0) return null;
   const scope = buildFuncionarioScopeWhere(access, 'f');
   if (!scope.bindings.length) return null;
   const opened = await db.prepare(
@@ -318,8 +321,10 @@ export async function loadBoaOperationalCase(
         AND json_extract(e.payload_json, '$.schema') = 'BOA_CASE_OPENED_V1'
         AND json_extract(e.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'
         AND f.empresa_id = ? AND f.ativo = 1 AND f.deleted_at IS NULL
+${scopeSql}
         AND ${scope.clause} LIMIT 1`,
-  ).bind(caseId, empresaId, BOA_CASE_OPEN_TYPE, empresaId, ...scope.bindings).first<BoaEventRow>();
+  ).bind(caseId, empresaId, BOA_CASE_OPEN_TYPE, empresaId,
+    actorId, empresaId, actorId, ...scope.bindings).first<BoaEventRow>();
   if (!opened || opened.id !== caseId) return null;
   const receipt = await db.prepare(
     `SELECT e.id FROM frms_fadiga_evento e
@@ -369,11 +374,13 @@ export async function loadBoaOperationalCase(
  * joined employee at the DB, not merely to the API request's active tenant.
  */
 export async function loadBoaCaseQueue(
-  db: D1Database, empresaId: number, access: EmployeeSectorAccess,
-  limit = 50, before?: { created_at: string; id: string },
+  db: D1Database, empresaId: number, actorId: number,
+  access: EmployeeSectorAccess, limit = 50,
+  before?: { created_at: string; id: string },
 ): Promise<{ items: BoaCaseStatus[]; next_cursor: { created_at: string; id: string } | null } | null> {
   assertBoaTenant(empresaId);
-  if (access.mode !== 'restricted' || !access.setorIds.length) return null;
+  if (!Number.isSafeInteger(actorId) || actorId <= 0
+    || access.mode !== 'restricted' || !access.setorIds.length) return null;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('BOA_CASE_QUEUE_INVALID_PAGE');
   if (before && (!/^\d{4}-\d{2}-\d{2}T[^ ]+Z$/.test(before.created_at)
       || before.id.length === 0 || before.id.length > 120)) {
@@ -417,6 +424,7 @@ export async function loadBoaCaseQueue(
      AND f.empresa_id = e.empresa_id
     WHERE e.empresa_id = ? AND f.empresa_id = ?
       AND e.tipo = ? AND f.deleted_at IS NULL AND f.ativo = 1
+${scopeSql}
       AND EXISTS (SELECT 1 FROM frms_fadiga_evento receipt
          WHERE receipt.id = e.checkin_id AND receipt.empresa_id = e.empresa_id
            AND receipt.tipo = 'BOA_CHECKIN_V1'
@@ -428,7 +436,8 @@ export async function loadBoaCaseQueue(
       ${before ? 'AND (e.created_at < ? OR (e.created_at = ? AND e.id < ?))' : ''}
     ORDER BY e.created_at DESC, e.id DESC LIMIT ?`;
   const bindings: (string | number)[] = [
-    empresaId, empresaId, BOA_CASE_OPEN_TYPE, ...scope.bindings,
+    empresaId, empresaId, BOA_CASE_OPEN_TYPE,
+    actorId, empresaId, actorId, ...scope.bindings,
     ...(before ? [before.created_at, before.created_at, before.id] : []),
     limit + 1,
   ];
@@ -472,7 +481,7 @@ export async function registerBoaCaseAction(
 ): Promise<'RECORDED' | 'NOT_ALLOWED' | 'INVALID'> {
   assertBoaTenant(empresaId);
   if (!Number.isSafeInteger(actorId) || actorId <= 0) return 'NOT_ALLOWED';
-  const current = await loadBoaOperationalCase(db, empresaId, caseId, access);
+  const current = await loadBoaOperationalCase(db, empresaId, caseId, actorId, access);
   if (!current || (kind === 'treatment' && current.status.state !== 'ABERTO')
     || (kind === 'closure' && current.status.state !== 'EM_TRATAMENTO')) return 'NOT_ALLOWED';
   const notes = kind === 'treatment'
