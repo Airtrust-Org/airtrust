@@ -48,6 +48,14 @@ describe('BOA checkin form — own tenant and zero offshore scope', () => {
     expect(screen.getByRole('alert')).toBeInTheDocument();
   });
 
+  it('states that 60-second PVT completion is only a declaration, not cognitive measurement', () => {
+    setCompany(130, 'bombeiros');
+    render(<BombeirosCheckinPage />);
+    expect(screen.getByText(/não executa um PVT nem registra tempos de reação/i)).toBeInTheDocument();
+    expect(screen.getByText(/não equivale automaticamente ao PVT-B de três minutos/i)).toBeInTheDocument();
+    expect(screen.getByText(/sono e a KSS são autorrelatos/i)).toBeInTheDocument();
+  });
+
   it('requires confidentiality acknowledgement before sending the isolated BOA payload', async () => {
     setCompany(130, 'bombeiros');
     render(<BombeirosCheckinPage />);
