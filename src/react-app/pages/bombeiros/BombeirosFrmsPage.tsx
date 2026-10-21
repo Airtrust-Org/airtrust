@@ -10,7 +10,6 @@ import AppLayout from '@/react-app/components/AppLayout';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import BombeirosMonthlyReportPreview from './BombeirosMonthlyReportPreview';
 import BombeirosWorkforcePanel from './BombeirosWorkforcePanel';
-import BombeirosMethodologyDemo from './BombeirosMethodologyDemo';
 
 export function isBombeirosPortalTenant(
   empresa: { id: number; codigo: string } | null | undefined,
@@ -49,12 +48,27 @@ export default function BombeirosFrmsPage() {
                 Cadastro de funcionários da empresa
               </a>
             </header>
+            <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950"
+              aria-label="Origem operacional dos dados">
+              <h2 className="font-semibold">Dados operacionais autenticados</h2>
+              <p className="mt-1">
+                A equipe e os relatórios abaixo são consultados na API do próprio tenant Bombeiros.
+                Sem funcionário, check-in real, caso rastreável ou revisão científica válida,
+                a informação correspondente permanece indisponível. Esta tela não importa
+                dados de apresentação nem presume conformidade ou aptidão para voo.
+              </p>
+              <p className="mt-2">
+                Os tripulantes registram seus autorrelatos no acesso individual de check-in;
+                os gestores autorizados fazem o tratamento em sua fila setorial. O administrador
+                consulta somente consolidados, sem visualizar informações pessoais de saúde.
+              </p>
+            </section>
             <BombeirosWorkforcePanel />
-            <BombeirosMethodologyDemo />
             <BombeirosMonthlyReportPreview />
             <p className="text-sm text-slate-600">
-              Esta prévia não é relatório mensal assinado nem comprova integralmente a licitação.
-              Operações e parâmetros do FRMS offshore não são utilizados como configuração padrão.
+              O relatório exibido é uma prévia técnica não assinada. Não há cálculo
+              científico homologado de risco de fadiga nem liberação automática de missão.
+              Nenhum dado ou parâmetro da operação offshore é reutilizado.
             </p>
           </>
         )}
