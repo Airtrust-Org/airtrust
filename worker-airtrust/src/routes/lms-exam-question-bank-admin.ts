@@ -9,7 +9,7 @@
 import {Hono} from 'hono';
 import {auth} from '../middleware/auth';
 import {requireRole} from '../middleware/rbac';
-import {getEmpresaId} from '../middleware/tenant';
+import {getEmpresaId,getTenantContext} from '../middleware/tenant';
 import type {Env} from '../types';
 import {QuestionBankError, type QuestionContent} from '../lib/lms-exams/question-bank-domain';
 import {
@@ -45,7 +45,7 @@ function positive(value:string):number{
 }
 function actor(c:Parameters<typeof getEmpresaId>[0],courseId:string){
   const id=Number((c.get as (key:string)=>unknown)('userId'));
-  const role=String((c.get as (key:string)=>unknown)('userRole')??'').toLowerCase();
+  const role=getTenantContext(c).role;
   return {empresaId:getEmpresaId(c),cursoId:positive(courseId),
     userId:id,tenantRole:role};
 }
