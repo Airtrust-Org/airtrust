@@ -126,7 +126,8 @@ jobs:
             scripts/__tests__/boa-case-queue-sqlite-integrity.test.mjs \
             scripts/__tests__/boa-checkin-membership-sqlite-integrity.test.mjs \
             scripts/__tests__/boa-staging-130-readonly.test.mjs \
-            scripts/__tests__/boa-demo-dataset.test.mjs
+            scripts/__tests__/boa-demo-dataset.test.mjs \
+            scripts/__tests__/boa-demo-offline-preview.test.mjs
 
   lms-smoke:
     name: lms-smoke
