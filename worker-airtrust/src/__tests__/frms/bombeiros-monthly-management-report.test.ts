@@ -69,6 +69,20 @@ describe('BOA monthly managerial/technical evidence preview — source and priva
     expect(statements[0].sql).toContain('treatment.empresa_id = o.empresa_id');
     expect(statements[0].sql).toContain('closure.empresa_id = o.empresa_id');
     expect(statements[0].sql).toContain('f.id IN (?, ?, ?, ?, ?, ?)');
+    // Every case must preserve the BOA receipt's employee and dispatch scope.
+    expect(statements[0].sql).toContain(
+      "json_extract(o.payload_json, '$.funcionario_id') IS NOT r.employee_id",
+    );
+    expect(statements[0].sql).toContain(
+      "json_extract(o.payload_json, '$.schema') IS NOT 'BOA_CASE_OPENED_V1'",
+    );
+    expect(statements[0].sql).toContain(
+      "json_extract(treatment.payload_json, '$.schema') IS NOT 'FRMS_CASE_TREATMENT_V1'",
+    );
+    expect(statements[0].sql).toContain(
+      "json_extract(closure.payload_json, '$.schema') IS NOT 'FRMS_CASE_RESOLUTION_V1'",
+    );
+    expect(statements[0].sql).toContain('bad_open > 0 OR bad_treatment > 0 OR bad_closure > 0');
     expect(statements[0].sql).not.toMatch(/HELICOPTER_OFFSHORE|frms_alerta|frms_fadiga_checkin/);
     expect(report.current).toMatchObject({
       month: '2026-10', participants: 6, checkin_receipts: 21,
