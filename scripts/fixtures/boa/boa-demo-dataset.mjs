@@ -78,7 +78,7 @@ export function buildBoaDemoDataset({ month = '2026-10' } = {}) {
     const counters = { participants: period.count, receipts: 0, ABERTO: 0, EM_TRATAMENTO: 0, RESOLVIDO: 0 };
     for (let i = 0; i < period.count + period.extra; i++) {
       const person = crew[i % period.count];
-      const day = i < period.count ? 6 + (i % 6) : 16 + (i % 4);
+      const day = i < period.count ? 6 + (i % 6) : 12 + (i % 4);
       const date = period.month + '-' + String(day).padStart(2, '0');
       const suffix = period.month.replace('-', '') + '-' + num(i + 1);
       const receiptRef = 'BOA-DEMO-' + suffix + '-REC';
