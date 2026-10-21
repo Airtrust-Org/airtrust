@@ -49,7 +49,6 @@ describe('Independent authorable bank and immutable published revisions',()=>{
     const reviewed=reviewQuestionDraft(draft,'reviewer2');
     expect(()=>editQuestionDraft(reviewed,{prompt:'altered'},'author1'))
       .toThrow('REVISION_NOT_EDITABLE');
-    expect(()=>await 1).not.toThrow();
     const frozen=await publishReviewedQuestion(reviewed,'approver3');
     expect(frozen.status).toBe('PUBLISHED');
     expect(await verifyPublishedQuestion(frozen)).toBe(true);
@@ -90,6 +89,21 @@ describe('Independent authorable bank and immutable published revisions',()=>{
       .rejects.toThrow('UNTRUSTED_EXAM_QUESTION_VERSION');
     await expect(validateExamPlan(approved,[{...q,status:'DRAFT'}]))
       .rejects.toThrow(QuestionBankError);
+  });
+  it('rejects duplicate logical question IDs across exam sections/revisions',async()=>{
+    const current=await published();
+    const revised=await publishReviewedQuestion(
+      reviewQuestionDraft(forkPublishedQuestion(current,'editor4'),'reviewer2'),'approver3');
+    const p=plan([current]);
+    const duplicate={...p,sections:[{
+      ...p.sections[0],
+      questions:[...p.sections[0].questions,{
+        questionId:revised.questionId,revision:revised.revision,
+        contentSha256:revised.contentSha256!,
+      }],
+    }]};
+    await expect(validateExamPlan(duplicate,[current,revised]))
+      .rejects.toThrow('DUPLICATE_EXAM_QUESTION');
   });
   it('grades server-side, 6/10 fails and 7/10 passes, no certificate is granted',async()=>{
     const bank=await Promise.all(Array.from({length:10},(_,i)=>published('q'+(i+1))));

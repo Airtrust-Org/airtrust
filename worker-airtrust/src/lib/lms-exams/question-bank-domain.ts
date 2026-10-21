@@ -186,6 +186,9 @@ export async function validateExamPlan(plan: ExamPlan,
       !Array.isArray(plan.sections) || plan.sections.length < 1 ||
       plan.sections.length > 60 || !Array.isArray(published)) deny('INVALID_EXAM_PLAN');
   const used = new Set<string>();
+  // One logical question cannot appear twice in a single attempt, even if
+  // different published revisions exist: learner answers are keyed by ID.
+  const usedQuestionIds = new Set<string>();
   const modules = new Set<string>();
   const bank = new Map(published.map(q => [q.questionId + ':' + q.revision, q]));
   for (const section of plan.sections) {
@@ -201,8 +204,11 @@ export async function validateExamPlan(plan: ExamPlan,
       if (!ref || !safeId(ref.questionId) || !safeInt(ref.revision) ||
           !SHA.test(ref.contentSha256)) deny('INVALID_QUESTION_REFERENCE');
       const key = ref.questionId + ':' + ref.revision;
-      if (used.has(key)) deny('DUPLICATE_EXAM_QUESTION');
+      if (used.has(key) || usedQuestionIds.has(ref.questionId)) {
+        deny('DUPLICATE_EXAM_QUESTION');
+      }
       used.add(key);
+      usedQuestionIds.add(ref.questionId);
       const q = bank.get(key);
       if (!q || q.status !== 'PUBLISHED' ||
           q.tenantId !== plan.tenantId || q.courseId !== plan.courseId ||
