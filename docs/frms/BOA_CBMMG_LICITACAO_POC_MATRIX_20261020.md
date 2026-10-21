@@ -52,7 +52,7 @@ As cinco **cenas abaixo são roteiro técnico interno do AirTrust**, não cenár
 - Testes focados para bloqueio do tenant 6, dupla cláusula de tenant no join, supressão de grupo e participação pequena, ausência, dados agregados incoerentes e não vazamento de identificadores.
 
 ## Critérios de fechamento do produto — TODO (não presumir)
-1. Conferir integralmente edital/Termo de Referência + eventuais respostas oficiais/retificações.
+1. **Edital e Termo de Referência publicados no PNCP conferidos em 20/10/2026 (36 páginas).** Antes da licitação e PoC, conferir **retificações posteriores, respostas oficiais vinculantes e estado da sessão** no Portal de Compras MG; não presumir que a versão analisada é a última.
 2. Aprovar perfil específico BOA, operador/regime aeronáutico aplicável, fonte de limites e versão de política; não copiar offshore.
 3. Preparar tenant QA separado, 130 **pessoas totalmente fictícias** com dados de missão, sono, check-ins e decisões, inseridas por procedimento governado de staging com backup/rollback; nenhum dado Costa do Sol.
 4. Implementar relatório técnico mensal formal: exposição, cobertura real, distribuição por missão/base somente acima do limiar de privacidade, tendência ajustada pela exposição, eventos relevantes, mitigação e eficácia, revisor/assinatura, versão e armazenamento imutável autorizado.
