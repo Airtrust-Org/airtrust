@@ -6,6 +6,7 @@
  * or change qualifications. Native course storage/schema requires Schema V2.
  */
 import { Hono } from 'hono';
+import {canReadStudyOnlyInProduction,permitNativeStudyContent,isApprovedStudyOnlyEdition} from '../services/lms-native-study-only';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaIdSafe } from './escalas-shared';
@@ -32,7 +33,8 @@ app.use('*', auth());
 app.get('/matriculas/:matriculaId/admissao', async (c) => {
   c.header('Cache-Control', 'private, no-store');
   const empresaId = getEmpresaIdSafe(c);
-  const previewEnabled = canPreviewNativeInStaging(c.env, empresaId);
+  const previewEnabled = canPreviewNativeInStaging(c.env, empresaId) ||
+    canReadStudyOnlyInProduction(c.env, empresaId);
   // A separately enabled staging activation marker can outlive the preview
   // flag. Never return the legacy-fallback 404 for an activated SCORM course.
   // With both capabilities OFF (including production), perform zero D1 reads.
@@ -61,6 +63,7 @@ app.get('/matriculas/:matriculaId/admissao', async (c) => {
     return c.json({
       success: true,
       data: {
+        study_only:canReadStudyOnlyInProduction(c.env,empresaId),
         matricula_id: admission.matriculaId,
         curso_id: admission.cursoId,
         mode: admission.mode,
@@ -98,7 +101,8 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
   c.header('Cache-Control', 'private, no-store');
   const empresaId = getEmpresaIdSafe(c);
   // A missing explicit staging allowlist results in no D1/R2 lookup at all.
-  if (!canPreviewNativeInStaging(c.env, empresaId)) {
+  if (!canPreviewNativeInStaging(c.env, empresaId) &&
+      !canReadStudyOnlyInProduction(c.env, empresaId)) {
     return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED' }, 404);
   }
   const rawId = c.req.param('matriculaId');
@@ -116,9 +120,14 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
       matriculaId: Number(rawId),
       actorUserId: actorUserId as number,
     });
+    if(c.env.ENVIRONMENT==='production' &&
+       !isApprovedStudyOnlyEdition(c.env,empresaId,published.editionHash,published.course)) {
+      return c.json({success:false,code:'NATIVE_STUDY_ONLY_EDITION_NOT_APPROVED'},409);
+    }
     return c.json({
       success: true,
       data: {
+        study_only:c.env.ENVIRONMENT==='production',
         matricula_id: Number(rawId),
         ciclo_id: published.cicloId,
         mode: published.mode,
@@ -128,7 +137,8 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
         evidence_write_enabled: canWriteNative(c.env, empresaId) && published.mode === 'LEARN',
         // This capability flag is server-owned, exact-tenant, staging only.
         // It does not imply that certificate issuance already succeeded.
-        completion_supported: canCompleteNative(c.env, empresaId) && published.mode === 'LEARN',
+        completion_supported: c.env.ENVIRONMENT==='production' ? false :
+          canCompleteNative(c.env, empresaId) && published.mode === 'LEARN',
       },
     });
   } catch (error) {
@@ -150,7 +160,8 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
 app.get('/matriculas/:matriculaId/sessao', async (c) => {
   c.header('Cache-Control', 'private, no-store');
   const empresaId = getEmpresaIdSafe(c);
-  if (!canPreviewNativeInStaging(c.env, empresaId)) {
+  if (!canPreviewNativeInStaging(c.env, empresaId) &&
+      !canReadStudyOnlyInProduction(c.env, empresaId)) {
     return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED' }, 404);
   }
   const rawId = c.req.param('matriculaId');
@@ -168,6 +179,9 @@ app.get('/matriculas/:matriculaId/sessao', async (c) => {
       env: c.env, db: c.env.DB, bucket: c.env.BUCKET,
       empresaId, matriculaId: Number(rawId), actorUserId,
     });
+    if(!permitNativeStudyContent(c.env,empresaId,edition.editionHash,edition.artifact)) {
+      return c.json({success:false,code:'NATIVE_STUDY_ONLY_EDITION_NOT_APPROVED'},409);
+    }
     const { summary } = await readNativeLearnerSession({
       env: c.env, db: c.env.DB, actorUserId, artifact: edition.artifact,
       scope: {
@@ -179,6 +193,7 @@ app.get('/matriculas/:matriculaId/sessao', async (c) => {
     return c.json({
       success: true,
       data: {
+        study_only:c.env.ENVIRONMENT==='production',
         matricula_id: Number(rawId),
         ciclo_id: summary.cicloId,
         edition_sha256: summary.editionHash,
@@ -192,7 +207,8 @@ app.get('/matriculas/:matriculaId/sessao', async (c) => {
           score_pct: summary.latestAttempt.scorePct,
           assessment_satisfied: summary.latestAttempt.assessmentSatisfied,
         } : null,
-        completion_supported: canCompleteNative(c.env, empresaId) && summary.mode === 'LEARN',
+        completion_supported: c.env.ENVIRONMENT==='production' ? false :
+          canCompleteNative(c.env, empresaId) && summary.mode === 'LEARN',
       },
     });
   } catch (error) {
@@ -216,7 +232,8 @@ app.get('/matriculas/:matriculaId/assets/:assetId', async (c) => {
   c.header('X-Content-Type-Options', 'nosniff');
   c.header('Cross-Origin-Resource-Policy', 'same-origin');
   const empresaId = getEmpresaIdSafe(c);
-  if (!canPreviewNativeInStaging(c.env, empresaId)) {
+  if (!canPreviewNativeInStaging(c.env, empresaId) &&
+      !canReadStudyOnlyInProduction(c.env, empresaId)) {
     return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED' }, 404);
   }
   const rawId = c.req.param('matriculaId');
@@ -233,6 +250,14 @@ app.get('/matriculas/:matriculaId/assets/:assetId', async (c) => {
       empresaId, matriculaId: Number(rawId),
       actorUserId: actorUserId as number, assetId,
     });
+    if(c.env.ENVIRONMENT==='production'){
+      const privateCourse=await loadNativePrivateCourse({env:c.env,db:c.env.DB,
+        bucket:c.env.BUCKET,empresaId,matriculaId:Number(rawId),
+        actorUserId:actorUserId as number});
+      if(!permitNativeStudyContent(c.env,empresaId,privateCourse.editionHash,privateCourse.artifact)){
+        return c.json({success:false,code:'NATIVE_STUDY_ONLY_EDITION_NOT_APPROVED'},409);
+      }
+    }
     const buffer = new Uint8Array(verified.bytes);
     const range = c.req.header('Range');
     const headers: Record<string, string> = {

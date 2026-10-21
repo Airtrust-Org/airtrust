@@ -42,6 +42,10 @@ export interface Env {
   // Staging-only pilot for Native V1 read-only learner course projection.
   // Exact CSV tenant IDs, absent/empty means OFF. Never enabled in production.
   NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS?: string;
+  /** Explicit release/tenant/edition pinned STUDY_ONLY production; default off. */
+  NATIVE_STUDY_ONLY_PRODUCTION_TENANTS?: string;
+  NATIVE_STUDY_ONLY_PRODUCTION_RELEASE_SHA?: string;
+  NATIVE_STUDY_ONLY_PRODUCTION_EDITIONS?: string;
   // Independent opt-in for synthetic Native checkpoints/quiz writes in staging.
   // Defaults OFF. An allowlisted tenant also requires Preview, Schema V2 and R2 pin.
   // Do not activate without governed staging authorization and E2E validation.

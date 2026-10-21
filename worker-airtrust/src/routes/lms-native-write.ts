@@ -9,6 +9,7 @@
  * awards completion, qualifications or certificates.
  */
 import { Hono, type Context } from 'hono';
+import {canReadStudyOnlyInProduction,permitNativeStudyContent} from '../services/lms-native-study-only';
 import { z } from 'zod';
 import type { Env } from '../types';
 import { getEmpresaIdSafe } from './escalas-shared';
@@ -51,9 +52,10 @@ function isTenantAllowed(raw: string | undefined, tenant: number): boolean {
 }
 
 export function canWriteNative(env: Env, tenant: number): boolean {
-  return env.ENVIRONMENT === 'staging' &&
+  return (env.ENVIRONMENT === 'staging' &&
     isTenantAllowed(env.NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS, tenant) &&
-    isTenantAllowed(env.NATIVE_LEARNER_WRITE_ENABLED_TENANTS, tenant);
+    isTenantAllowed(env.NATIVE_LEARNER_WRITE_ENABLED_TENANTS, tenant)) ||
+    canReadStudyOnlyInProduction(env,tenant);
 }
 
 async function readSmallJson(c: { req: { header(name: string): string | undefined; raw: Request } }): Promise<unknown> {
@@ -101,7 +103,8 @@ async function execute(c: Context<{ Bindings: Env }>,
   kind: 'start' | 'checkpoint' | 'attempt') {
   c.header('Cache-Control', 'private, no-store');
   const empresaId = getEmpresaIdSafe(c);
-  if (!canWriteNative(c.env, empresaId)) {
+  if (!canWriteNative(c.env, empresaId) ||
+      (c.env.ENVIRONMENT==='production' && kind==='attempt')) {
     return c.json({ success: false, code: 'NATIVE_EVIDENCE_WRITE_NOT_ENABLED' }, 404);
   }
   const matriculaRaw = c.req.param('matriculaId');
@@ -130,6 +133,9 @@ async function execute(c: Context<{ Bindings: Env }>,
       env: c.env, db: c.env.DB, bucket: c.env.BUCKET,
       empresaId, matriculaId: Number(matriculaRaw), actorUserId,
     });
+    if(!permitNativeStudyContent(c.env,empresaId,verified.editionHash,verified.artifact)){
+      return c.json({success:false,code:'NATIVE_STUDY_ONLY_EDITION_NOT_APPROVED'},409);
+    }
     if (verified.mode !== 'LEARN') {
       return c.json({ success: false, code: 'NATIVE_REVIEW_READ_ONLY' }, 409);
     }

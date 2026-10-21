@@ -3,6 +3,7 @@
  * capability as other learner writes. Does not persist a score or change a cycle.
  */
 import { Hono } from 'hono';
+import {permitNativeStudyContent} from '../services/lms-native-study-only';
 import type { Env } from '../types';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { canWriteNative } from './lms-native-write';
@@ -70,6 +71,9 @@ app.post('/matriculas/:matriculaId/pratica', async (c) => {
       env: c.env, db: c.env.DB, bucket: c.env.BUCKET,
       empresaId, matriculaId: Number(rawId), actorUserId: actorId,
     });
+    if(!permitNativeStudyContent(c.env,empresaId,verified.editionHash,verified.artifact)) {
+      return c.json({success:false,code:'NATIVE_STUDY_ONLY_EDITION_NOT_APPROVED'},409);
+    }
     if (verified.mode !== 'LEARN') {
       return c.json({ success: false, code: 'NATIVE_REVIEW_READ_ONLY' }, 409);
     }
