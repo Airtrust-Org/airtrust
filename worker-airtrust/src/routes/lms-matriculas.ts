@@ -7,6 +7,7 @@
  * - Geração automática de qualificação ao concluir
  */
 import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-guard';
+import { resolveScormPlayer3Admission } from '../services/lms-scorm-player3-admission';
 import { projectNativeCatalogEnrollments } from '../services/lms-native-catalog-course-projection';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -86,6 +87,70 @@ import { activeXapiFirst } from '../services/lms-active-xapi-read';
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 app.route('/convites', lmsMatriculasConvitesRoutes);
+
+/**
+ * Player 3 SCORM 1.2 is admitted separately from Native. This read-only
+ * endpoint never upgrades client-provided CMI into completion/certification.
+ * The frontend must use the existing authenticated SCO wrapper after admission.
+ */
+app.get('/:id/player3-scorm-admissao', async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaIdSafe(c);
+  const matriculaId = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(matriculaId) || matriculaId < 1)
+    throw new ApiError('Matrícula inválida', 400);
+  const enrollment = await db.prepare(
+    'SELECT m.id, m.funcionario_id, m.status, c.id AS curso_id, ' +
+    'c.tipo_conteudo, c.scorm_versao, c.scorm_package_r2_prefix, ' +
+    'c.ativo, c.publicado ' +
+    'FROM lms_matriculas m JOIN lms_cursos c ' +
+    'ON c.id=m.curso_id AND c.empresa_id=m.empresa_id ' +
+    'WHERE m.id=? AND m.empresa_id=? AND m.deleted_at IS NULL ' +
+    'AND c.deleted_at IS NULL'
+  ).bind(matriculaId, empresaId).first<{
+    id: number; funcionario_id: number; status: string;
+    curso_id: number; tipo_conteudo: string | null;
+    scorm_versao: string | null; scorm_package_r2_prefix: string | null;
+    ativo: number; publicado: number;
+  }>();
+  if (!enrollment) throw new ApiError('Matrícula não encontrada', 404);
+  const canManage = hasRole(c, 'admin', 'manager');
+  if (!canManage) {
+    const callerId = await resolveCallerFuncionarioId(c, db);
+    if (!callerId || enrollment.funcionario_id !== callerId)
+      throw new ApiError('Acesso negado', 403);
+    if (enrollment.ativo !== 1 || enrollment.publicado !== 1)
+      throw new ApiError('Curso não disponível', 403);
+  }
+  if (enrollment.status === 'CANCELADO')
+    throw new ApiError('Matrícula cancelada', 403);
+  const decision = await resolveScormPlayer3Admission({
+    env: c.env, db, bucket: c.env.BUCKET,
+    tenant: empresaId, course: enrollment.curso_id,
+    scormVersion: enrollment.scorm_versao,
+    contentType: enrollment.tipo_conteudo,
+    activePrefix: enrollment.scorm_package_r2_prefix,
+    // Production review needs independently verified governance, not a
+    // manifest field or a learner-supplied boolean.
+    reviewedForProduction: false,
+  });
+  if (decision.kind === 'LEGACY')
+    return c.json({success: false, code: 'SCORM_PLAYER3_NOT_APPLICABLE'}, 404);
+  if (decision.kind === 'BLOCKED')
+    return c.json({success: false, code: decision.reason}, 409);
+  return c.json({
+    success: true,
+    data: {
+      mode: 'SCORM_STUDY', matricula_id: matriculaId,
+      curso_id: enrollment.curso_id,
+      package_sha256: decision.packageSha256,
+      package_version: decision.packageVersion,
+      completion_authorized: false, exam_authorized: false,
+      certificate_authorized: false,
+    },
+  });
+});
+
 function getCallerFuncionarioId(c: Context): number | null {
   const raw = c.get('funcionarioId' as never) as unknown;
   const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
