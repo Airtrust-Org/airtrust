@@ -27,7 +27,7 @@ const mod = new Module(artifact);
 mod.filename = artifact;
 mod.paths = Module._nodeModulePaths(dirname(artifact));
 mod._compile(built.outputFiles[0].text, artifact);
-const { loadBoaCaseQueue } = mod.exports;
+const { loadBoaCaseQueue, registerBoaCaseAction } = mod.exports;
 
 function dbFixture() {
   const sqlite = new DatabaseSync(':memory:');
@@ -36,6 +36,10 @@ function dbFixture() {
       id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, setor_id INTEGER,
       ativo INTEGER NOT NULL, deleted_at TEXT
     );
+    CREATE TABLE usuarios (id INTEGER PRIMARY KEY, deleted_at TEXT);
+    CREATE TABLE usuarios_empresas (usuario_id INTEGER, empresa_id INTEGER);
+    INSERT INTO usuarios VALUES (90, NULL);
+    INSERT INTO usuarios_empresas VALUES (90, 130);
     CREATE TABLE frms_fadiga_evento (
       id TEXT PRIMARY KEY, empresa_id INTEGER NOT NULL,
       checkin_id TEXT, tipo TEXT NOT NULL, payload_json TEXT,
@@ -68,6 +72,9 @@ function dbFixture() {
       return {
         bind(...values) { bindings = values; return this; },
         async all() { return { results: stmt.all(...bindings) }; },
+        async first() { return stmt.get(...bindings) ?? null; },
+        async run() { const result = stmt.run(...bindings);
+          return { meta: { changes: Number(result.changes) } }; },
       };
     },
   };
@@ -124,6 +131,58 @@ test('BOA manager queue never labels a corrupt, offshore or premature case as re
     assert.deepEqual(final.items.map(x => x.case_id), ['boa-case']);
     assert.equal(final.items[0].state, 'RESOLVIDO');
     assert.equal(final.items[0].treatment_recorded, true);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test('BOA case append rechecks current manager membership and valid treatment in real SQLite', async () => {
+  const { sqlite, d1 } = dbFixture();
+  const addTreatment = () => registerBoaCaseAction(d1, 130, 'boa-case', 90, {
+    responsavel: 'Coordenador BOA', prazo: '2026-10-31',
+    acao_mitigacao: 'Revisar o sobreaviso e a escala antes de retomar a missão.',
+    justificativa: 'A ocorrência exige revisão e autorização humana independente.',
+  }, 'treatment', scope);
+  const resolve = () => registerBoaCaseAction(d1, 130, 'boa-case', 90, {
+    avaliacao_eficacia: 'Repouso verificado e escala reavaliada pelo responsável.',
+  }, 'closure', scope);
+  const count = () => sqlite.prepare(
+    "SELECT COUNT(*) AS n FROM frms_fadiga_evento WHERE empresa_id=130 AND checkin_id='boa-case'",
+  ).get().n;
+  try {
+    assert.equal(count(), 0);
+    // The manager may have seen the case during the preflight.
+    // The membership is revoked just before the SQL write.
+    sqlite.exec('DELETE FROM usuarios_empresas WHERE usuario_id=90 AND empresa_id=130');
+    assert.equal(await addTreatment(), 'NOT_ALLOWED');
+    assert.equal(count(), 0);
+
+    sqlite.exec('INSERT INTO usuarios_empresas VALUES (90,130)');
+    assert.equal(await addTreatment(), 'RECORDED');
+    assert.equal(count(), 1);
+    assert.equal(await addTreatment(), 'NOT_ALLOWED');
+
+    sqlite.exec('UPDATE usuarios SET deleted_at="2026-10-20" WHERE id=90');
+    assert.equal(await resolve(), 'NOT_ALLOWED');
+    assert.equal(count(), 1);
+    sqlite.exec('UPDATE usuarios SET deleted_at=NULL WHERE id=90');
+
+    // An invalid treatment must never permit a closure just because it exists.
+    const t = sqlite.prepare(
+      "SELECT id,payload_json FROM frms_fadiga_evento WHERE checkin_id='boa-case' AND tipo='BOA_CASE_TREATMENT_V1'",
+    ).get();
+    sqlite.prepare('UPDATE frms_fadiga_evento SET payload_json=? WHERE id=?')
+      .run(JSON.stringify({ schema: 'FRMS_CASE_TREATMENT_V1' }), t.id);
+    assert.equal(await resolve(), 'NOT_ALLOWED');
+    assert.equal(count(), 1);
+    sqlite.prepare('UPDATE frms_fadiga_evento SET payload_json=? WHERE id=?')
+      .run(t.payload_json, t.id);
+    assert.equal(await resolve(), 'RECORDED');
+    assert.equal(count(), 2);
+    assert.equal(await resolve(), 'NOT_ALLOWED');
+    assert.equal(sqlite.prepare(
+      'SELECT COUNT(*) AS n FROM frms_fadiga_evento WHERE empresa_id=6',
+    ).get().n, 2);
   } finally {
     sqlite.close();
   }
