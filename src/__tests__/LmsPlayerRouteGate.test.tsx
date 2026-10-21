@@ -5,6 +5,7 @@ const mocks=vi.hoisted(()=>({
   params:{matriculaId:'101'},
   auth:{user:{id:900},empresaAtualId:6,isAuthenticated:true},
   legacyMounts:0,
+  studyMounts:0,
 }));
 vi.mock('@/react-app/config/api',()=>({
   API_BASE_URL:'/api',fetchWithAuth:mocks.fetch,
@@ -17,7 +18,8 @@ vi.mock('react-router-dom',()=>({
   Navigate:({to}:{to:string})=><span data-testid="route-player3">{to}</span>,
 }));
 vi.mock('@/react-app/pages/lms/LmsPlayer',()=>({
-  default:()=>{
+  default:({scormStudyOnly=false}:{scormStudyOnly?:boolean})=>{
+    if(scormStudyOnly){mocks.studyMounts++;return <span data-testid="route-scorm-study">Estudo SCORM 1.2</span>;}
     mocks.legacyMounts++;
     return <span data-testid="route-legacy">SCORM 1.2 legado</span>;
   },
@@ -33,18 +35,23 @@ const admitted={success:true,data:{
 }};
 const notNative=(code:string)=>
   payload({success:false,code},404);
+const notScorm=()=>payload({success:false,code:'SCORM_PLAYER3_NOT_APPLICABLE'},404);
+const study={success:true,data:{mode:'SCORM_STUDY',matricula_id:101,curso_id:31,
+  package_sha256:'a'.repeat(64),package_version:'SCORE-V4',
+  completion_authorized:false,exam_authorized:false,certificate_authorized:false}};
 
 describe('LMS launch router — Player3 admission must precede legacy SCORM',()=>{
   beforeEach(()=>{
     mocks.fetch.mockReset();
     mocks.legacyMounts=0;
+    mocks.studyMounts=0;
     mocks.params={matriculaId:'101'};
     mocks.auth={user:{id:900},empresaAtualId:6,isAuthenticated:true};
   });
 
   it('preserves SCORM when Worker says pilot off or no activation marker',async()=>{
     for(const code of ['NATIVE_PLAYER_NOT_ENABLED','NATIVE_COURSE_NOT_AVAILABLE']){
-      mocks.fetch.mockResolvedValueOnce(notNative(code));
+      mocks.fetch.mockResolvedValueOnce(notNative(code)).mockResolvedValueOnce(notScorm());
       const view=render(<LmsPlayerRouteGate/>);
       expect(screen.queryByTestId('route-legacy')).toBeNull();
       expect(await screen.findByTestId('route-legacy')).toHaveTextContent('SCORM 1.2');
@@ -52,7 +59,9 @@ describe('LMS launch router — Player3 admission must precede legacy SCORM',()=
       view.unmount();
     }
     expect(mocks.legacyMounts).toBe(2);
-    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+    expect(mocks.fetch).toHaveBeenCalledTimes(4);
+    expect(mocks.fetch).toHaveBeenCalledWith('/api/lms/matriculas/101/player3-scorm-admissao',
+      expect.objectContaining({method:'GET',cache:'no-store'}));
   });
 
   it('routes a Worker-verified activated SCORM enrollment to Player3',async()=>{
@@ -66,6 +75,32 @@ describe('LMS launch router — Player3 admission must precede legacy SCORM',()=
       '/api/lms/native/matriculas/101/admissao',
       expect.objectContaining({method:'GET',cache:'no-store',signal:expect.any(AbortSignal)}),
     );
+  });
+
+  it('admits Score V4 only after BOTH scoped Worker decisions',async()=>{
+    mocks.fetch.mockResolvedValueOnce(notNative('NATIVE_COURSE_NOT_AVAILABLE'))
+      .mockResolvedValueOnce(payload(study));
+    render(<LmsPlayerRouteGate/>);
+    expect(await screen.findByTestId('route-scorm-study'))
+      .toHaveTextContent('Estudo SCORM 1.2');
+    expect(mocks.studyMounts).toBe(1);
+    expect(mocks.legacyMounts).toBe(0);
+  });
+  it('fails closed on blocked, unverified and forged Score candidates',async()=>{
+    for(const result of [
+      payload({success:false,code:'CANDIDATE_UNVERIFIED'},409),
+      payload({...study,data:{...study.data,matricula_id:999}}),
+      payload({...study,data:{...study.data,completion_authorized:true}}),
+      payload({...study,data:{...study.data,package_sha256:'wrong'}}),
+    ]){
+      mocks.fetch.mockResolvedValueOnce(notNative('NATIVE_PLAYER_NOT_ENABLED'))
+        .mockResolvedValueOnce(result);
+      const view=render(<LmsPlayerRouteGate/>);
+      expect(await screen.findByRole('alert')).toHaveTextContent(/não foi possível/i);
+      expect(screen.queryByTestId('route-legacy')).toBeNull();
+      expect(screen.queryByTestId('route-scorm-study')).toBeNull();
+      view.unmount();
+    }
   });
 
   it('denies ambiguous, forged and unauthenticated responses without SCORM fallback',async()=>{
@@ -113,15 +148,17 @@ describe('LMS launch router — Player3 admission must precede legacy SCORM',()=
     expect(screen.getByRole('status')).toHaveTextContent(/verificando/i);
     mocks.auth={...mocks.auth,user:{id:901}};
     mocks.fetch.mockResolvedValueOnce(notNative('NATIVE_COURSE_NOT_AVAILABLE'));
+    mocks.fetch.mockResolvedValueOnce(notScorm());
     view.rerender(<LmsPlayerRouteGate/>);
     expect(await screen.findByTestId('route-legacy')).toBeInTheDocument();
     finishOld?.(payload(admitted));
-    await waitFor(()=>expect(mocks.fetch).toHaveBeenCalledTimes(2));
+    await waitFor(()=>expect(mocks.fetch).toHaveBeenCalledTimes(3));
     expect(screen.queryByTestId('route-player3')).toBeNull();
     expect(mocks.legacyMounts).toBeGreaterThan(0);
   });
   it('requires fresh Worker admission after logout and re-login with the same identity',async()=>{
     mocks.fetch.mockResolvedValueOnce(notNative('NATIVE_COURSE_NOT_AVAILABLE'));
+    mocks.fetch.mockResolvedValueOnce(notScorm());
     const view=render(<LmsPlayerRouteGate/>);
     expect(await screen.findByTestId('route-legacy')).toBeInTheDocument();
     mocks.auth={...mocks.auth,isAuthenticated:false};
@@ -140,7 +177,7 @@ describe('LMS launch router — Player3 admission must precede legacy SCORM',()=
     rejectAdmission?.(payload({success:false},403));
     expect(await screen.findByRole('alert')).toHaveTextContent(/não foi possível/i);
     expect(mocks.legacyMounts).toBe(1);
-    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+    expect(mocks.fetch).toHaveBeenCalledTimes(3);
   });
 
   it('cannot reuse an old account admission after switching away and back',async()=>{
