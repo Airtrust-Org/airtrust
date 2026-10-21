@@ -46,20 +46,20 @@ td b{color:#1a4133}.state{display:inline-block;font-size:11px;font-weight:750;pa
 .small{font-size:12px;color:#688072}.footer{margin-top:25px;font-size:12px;color:#70887b}
 .hidden{display:none!important}a{color:#237b55;text-decoration:none}a:hover{text-decoration:underline}
 @media(max-width:1000px){.shell{grid-template-columns:78px minmax(0,1fr)}.brand{padding:4px}.brand b,.brand small,.sidebar-label,.nav-btn .name,.sidebar-bottom{display:none}.nav-btn{justify-content:center;padding:13px}.sidebar{padding:19px 12px}.grid2{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:650px){.shell{display:block}.sidebar{position:static;padding:12px;gap:10px}.brand{display:none}nav{display:flex;overflow:auto}.nav-btn{min-width:43px}.main .container{padding:23px 15px 45px}.topbar{padding:14px 15px}.kpis{grid-template-columns:1fr 1fr}.kpi{padding:14px}.kpi .value{font-size:26px}.scenarios{grid-template-columns:1fr}h1{font-size:24px}.panel{padding:16px}.bar-row{grid-template-columns:105px 1fr 32px;gap:8px}}
+@media(max-width:650px){.shell{display:block}.sidebar{position:static;padding:12px;gap:10px}.brand{display:none}nav{display:flex;overflow-x:auto;overscroll-behavior-x:contain}.nav-btn .name{display:inline}.nav-btn{min-width:max-content;gap:8px;white-space:nowrap;padding:10px 12px}.main .container{padding:23px 15px 45px}.topbar{padding:14px 15px}.kpis{grid-template-columns:1fr 1fr}.kpi{padding:14px}.kpi .value{font-size:26px}.scenarios{grid-template-columns:1fr}h1{font-size:24px}.panel{padding:16px}.bar-row{grid-template-columns:105px 1fr 32px;gap:8px}}
 </style>
 </head>
 <body>
 <div class="shell">
 <aside class="sidebar">
  <div class="brand"><div class="brand-mark">A</div><div><b>AirTrust</b><small>AVIAÇÃO BOA</small></div></div>
- <div><div class="sidebar-label">Demonstração</div><nav id="nav">
- <button class="nav-btn active" data-view="visao"><span>◫</span><span class="name">Visão geral</span></button>
- <button class="nav-btn" data-view="equipe"><span>♙</span><span class="name">Tripulantes</span></button>
- <button class="nav-btn" data-view="casos"><span>◷</span><span class="name">Ocorrências</span></button>
- <button class="nav-btn" data-view="relatorio"><span>▤</span><span class="name">Relatório mensal</span></button>
- <button class="nav-btn" data-view="metodo"><span>◈</span><span class="name">Cenários de fadiga</span></button>
- <button class="nav-btn" data-view="roteiro"><span>◎</span><span class="name">Roteiro da PoC</span></button>
+ <div><div class="sidebar-label">Demonstração</div><nav id="nav" aria-label="Seções da demonstração">
+ <button type="button" class="nav-btn active" data-view="visao" aria-label="Visão geral"><span>◫</span><span class="name">Visão geral</span></button>
+ <button type="button" class="nav-btn" data-view="equipe" aria-label="Tripulantes"><span>♙</span><span class="name">Tripulantes</span></button>
+ <button type="button" class="nav-btn" data-view="casos" aria-label="Ocorrências"><span>◷</span><span class="name">Ocorrências</span></button>
+ <button type="button" class="nav-btn" data-view="relatorio" aria-label="Relatório mensal"><span>▤</span><span class="name">Relatório mensal</span></button>
+ <button type="button" class="nav-btn" data-view="metodo" aria-label="Cenários de fadiga"><span>◈</span><span class="name">Cenários de fadiga</span></button>
+ <button type="button" class="nav-btn" data-view="roteiro" aria-label="Roteiro da PoC"><span>◎</span><span class="name">Roteiro da PoC</span></button>
  </nav></div>
  <div class="sidebar-bottom"><b>AMBIENTE SIMULADO</b><div>Sem login, rede, integração ou conexão com a base real.</div><div>Dados 100% fictícios.</div></div>
 </aside>
@@ -95,6 +95,7 @@ td b{color:#1a4133}.state{display:inline-block;font-size:11px;font-weight:750;pa
  var view="visao",role="admin",query="",sectorFilter="TODOS",caseState="TODOS",month="2026-10",selected=null;
  var root=document.getElementById("content"),roleInput=document.getElementById("role");
  function fmt(n){return n.toLocaleString("pt-BR");}
+ function escapeAttr(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
  function allowedPeople(){return role==="gestor"?crew.filter(function(p){return p.sector===sectors[0];}):role==="tripulante"?crew.filter(function(p){return p.id===1;}):crew;}
  function allowedCases(){var ids=new Set(allowedPeople().map(function(p){return p.id;}));return cases.filter(function(c){return ids.has(c.person.id);});}
  function stats(c){return{all:c.length,opened:c.filter(function(x){return x.state==="ABERTO";}).length,treat:c.filter(function(x){return x.state==="EM_TRATAMENTO";}).length,closed:c.filter(function(x){return x.state==="RESOLVIDO";}).length,people:new Set(c.map(function(x){return x.person.id;})).size};}
@@ -113,7 +114,7 @@ td b{color:#1a4133}.state{display:inline-block;font-size:11px;font-weight:750;pa
  function viewEquipe(){
   var visible=allowedPeople().filter(function(p){return(sectorFilter==="TODOS"||p.sector===sectorFilter)&&(!query||[p.name,p.callsign,p.role,p.sector].join(" ").toLowerCase().includes(query.toLowerCase()));});
   return'<section class="panel"><div class="panel-header"><h2>Cadastro sintético de tripulantes</h2><span class="tag">'+visible.length+' registros visíveis</span></div>'+
-  '<div class="filterbar"><input id="filter-crew" aria-label="Buscar tripulantes" placeholder="Buscar nome, função ou identificação fictícia" value="'+query.replace(/"/g,"&quot;")+'"><select id="filter-sector" aria-label="Filtrar base"><option value="TODOS">Todas as bases permitidas</option>'+sectors.map(function(s){return'<option value="'+s+'" '+(sectorFilter===s?'selected':'')+'>'+s+'</option>';}).join("")+'</select></div>'+
+  '<div class="filterbar"><input id="filter-crew" aria-label="Buscar tripulantes" placeholder="Buscar nome, função ou identificação fictícia" value="'+escapeAttr(query)+'"><select id="filter-sector" aria-label="Filtrar base"><option value="TODOS">Todas as bases permitidas</option>'+sectors.map(function(s){return'<option value="'+s+'" '+(sectorFilter===s?'selected':'')+'>'+s+'</option>';}).join("")+'</select></div>'+
   '<div class="table-scroll"><table><thead><tr><th>Nome fictício</th><th>Identificação</th><th>Função aeronáutica</th><th>Base/setor</th></tr></thead><tbody>'+visible.slice(0,130).map(function(p){return'<tr><td><b>'+p.name+'</b></td><td>'+p.callsign+'</td><td>'+p.role+'</td><td>'+p.sector+'</td></tr>';}).join("")+'</tbody></table></div>'+
   '<p class="small">As 130 identidades acima são invenções. Não representam pilotos, bombeiros ou códigos ANAC reais.</p></section>';
  }
@@ -162,7 +163,7 @@ td b{color:#1a4133}.state{display:inline-block;font-size:11px;font-weight:750;pa
   root.querySelectorAll("[data-go]").forEach(function(btn){btn.addEventListener("click",function(){view=btn.dataset.go;render();});});
   root.querySelectorAll("[data-case]").forEach(function(btn){btn.addEventListener("click",function(){selected=btn.dataset.case;render();});});
   var crewFilter=document.getElementById("filter-crew");
-  if(crewFilter)crewFilter.addEventListener("change",function(){query=crewFilter.value;render();});
+  if(crewFilter)crewFilter.addEventListener("input",function(){var pos=crewFilter.selectionStart;query=crewFilter.value;render();var next=document.getElementById("filter-crew");next.focus({preventScroll:true});if(pos!==null)next.setSelectionRange(pos,pos);});
   var sect=document.getElementById("filter-sector");
   if(sect)sect.addEventListener("change",function(){sectorFilter=sect.value;render();});
   var cm=document.getElementById("case-month");
