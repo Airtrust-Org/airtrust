@@ -198,9 +198,10 @@ export function assessNativeCompletionReadiness(
     return { readyForCanonicalCompletion: false, reason: 'ASSESSMENT_EVIDENCE_MISSING' };
   }
   const grade = proof.gradedAttempt.assessment;
-  const practiceIds = new Set(artifact.units
-    .filter((unit) => unit.kind === 'practice').flatMap((unit) => unit.questionIds));
-  const certifyingQuestionCount = artifact.questions.filter((q) => !practiceIds.has(q.id)).length;
+  const assessmentUnits = artifact.units.filter((unit) => unit.kind === 'assessment');
+  const finalQuestionIds = new Set(assessmentUnits.at(-1)?.questionIds ?? []);
+  const certifyingQuestionCount = artifact.questions
+    .filter((question) => finalQuestionIds.has(question.id)).length;
   if (!Number.isSafeInteger(grade.total) || grade.total !== certifyingQuestionCount ||
       grade.answered !== grade.total ||
       (grade.mode === 'SCORED' &&

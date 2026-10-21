@@ -16,6 +16,7 @@ import type { NativeSessionScope } from '../lib/lms/lms-native-evidence-domain';
 import type { Env } from '../types';
 import { NATIVE_ACTIVE_EMPLOYEE_JOIN, NATIVE_ACTIVE_USER_CONDITION } from './lms-native-active-learner-sql';
 import { nativeScopedSql } from './lms-native-catalog-legacy-guard';
+import { readNativeLearnerSession } from './lms-native-readiness-repository';
 
 export class NativeAttemptWriteError extends Error {
   constructor(public readonly code: string) {
@@ -167,6 +168,18 @@ export async function commitNativeAssessmentAttempt(params: {
   }
   if (attemptNumber !== (last?.tentativa_numero ?? 0) + 1) {
     fail('NATIVE_ATTEMPT_SEQUENCE_CONFLICT');
+  }
+
+  const session = await readNativeLearnerSession({
+    db, env: params.env, actorUserId, artifact,
+    scope: { ...scope, artifactHash: scope.artifactHash },
+  });
+  const requiredLessonIds = artifact.units.filter((unit) => unit.kind === 'lesson')
+    .map((unit) => unit.id);
+  if (session.summary.mode !== 'LEARN' || requiredLessonIds.length === 0 ||
+      session.summary.seenLessonIds.length !== requiredLessonIds.length ||
+      requiredLessonIds.some((id, index) => session.summary.seenLessonIds[index] !== id)) {
+    fail('NATIVE_FORMAL_EXAM_NOT_RELEASED');
   }
 
   try {

@@ -1,9 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { commitNativeAssessmentAttempt } from '../../services/lms-native-attempt-writer';
 import { validateNativeCourseArtifact } from '../../lib/lms/lms-native-course-contract';
 import type { NativeSessionScope } from '../../lib/lms/lms-native-evidence-domain';
+import { readNativeLearnerSession } from '../../services/lms-native-readiness-repository';
+
+vi.mock('../../services/lms-native-readiness-repository', () => ({
+  readNativeLearnerSession: vi.fn(async ({ artifact }: { artifact: typeof import('../../lib/lms/lms-native-course-contract').NativeCourseArtifact }) => ({
+    summary: { mode: 'LEARN', seenLessonIds: artifact.units
+      .filter((unit) => unit.kind === 'lesson').map((unit) => unit.id) },
+  })),
+}));
 
 const artifact = validateNativeCourseArtifact(JSON.parse(readFileSync(
   join(process.cwd(), '..', 'scripts/learning-factory/fixtures/native-v1-synthetic.json'),
@@ -14,11 +22,9 @@ const scope: NativeSessionScope = {
   cursoId: 31, artifactHash: 'a'.repeat(64),
 };
 const good = [
-  { questionId: 'choice-question-001', optionId: 'option-2' },
   { questionId: 'exam-question-001', optionId: 'option-2' },
 ];
 const failed = [
-  good[0],
   { questionId: 'exam-question-001', optionId: 'option-1' },
 ];
 type Row = {
@@ -137,9 +143,18 @@ describe('Native V1 private server-graded attempt persistence', () => {
       .rejects.toThrow();
     await expect(f.commit(1,[{ ...good[0], correctOptionId:'option-2' },good[1]]))
       .rejects.toThrow();
-    await expect(f.commit(1,[good[0]]))
+    await expect(f.commit(1,[]))
       .rejects.toThrowError('NATIVE_ATTEMPT_INCOMPLETE');
     expect(f.calls).toHaveLength(0);
+  });
+
+  it('refuses the formal exam until every lesson has a persisted server receipt', async () => {
+    const f=harness();
+    vi.mocked(readNativeLearnerSession).mockResolvedValueOnce({summary:{
+      mode:'LEARN',seenLessonIds:[],
+    }} as never);
+    await expect(f.commit()).rejects.toThrowError('NATIVE_FORMAL_EXAM_NOT_RELEASED');
+    expect(f.writes()).toBe(0);
   });
 
   it('fails closed when user, tenant, cycle or artifact edition changes', async () => {

@@ -83,7 +83,7 @@ describe('AirTrust native server-side grading', () => {
       mode: 'FORMATIVE', answered: 2, total: 2, scorePct: null, assessmentSatisfied: true,
     });
     expect(evaluateNativeAssessment(course('FORMATIVE'), [good[0]])).toMatchObject({
-      assessmentSatisfied: false,
+      assessmentSatisfied: true,
     });
   });
 
@@ -101,7 +101,7 @@ describe('AirTrust native server-side grading', () => {
     }
   });
 
-  it('requires correct scenario decisions without inflating or diluting certification scores', () => {
+  it('does not score scenario decisions or accept them in the formal exam', () => {
     const base = course();
     const scenario = { ...base.questions[0], id: 'scenario-q1' };
     const enriched = validateNativeCourseArtifact({
@@ -113,24 +113,17 @@ describe('AirTrust native server-side grading', () => {
         base.units[1],
       ],
     });
-    const wrongDecision = evaluateNativeAssessment(enriched, [
-      ...good, { questionId: 'scenario-q1', optionId: 'b' },
-    ]);
-    expect(wrongDecision).toEqual({
-      mode: 'SCORED', answered: 3, total: 3, scorePct: 100,
-      assessmentSatisfied: false,
+    expect(evaluateNativeAssessment(enriched, good)).toMatchObject({
+      scorePct: 100, assessmentSatisfied: true,
     });
-    const correctDecision = evaluateNativeAssessment(enriched, [
+    expect(() => evaluateNativeAssessment(enriched, [
       ...good, { questionId: 'scenario-q1', optionId: 'a' },
-    ]);
-    expect(correctDecision).toMatchObject({ scorePct: 100, assessmentSatisfied: true });
-    const badExam = evaluateNativeAssessment(enriched, [
-      ...bad, { questionId: 'scenario-q1', optionId: 'a' },
-    ]);
+    ])).toThrowError(NativeSubmissionError);
+    const badExam = evaluateNativeAssessment(enriched, bad);
     expect(badExam).toMatchObject({ scorePct: 0, assessmentSatisfied: false });
   });
 
-  it('blocks global 80% approval when a mandatory module is failed', () => {
+  it('scores only the last assessment and treats earlier quiz groups as formative', () => {
     const base = course();
     const questions = Array.from({ length: 10 }, (_, i) => ({
       ...base.questions[0], id: `q${i + 1}`,
@@ -144,18 +137,18 @@ describe('AirTrust native server-side grading', () => {
       ...base, policy: { mode: 'SCORED', masteryScore: 80, moduleGate: true },
       units, questions,
     });
-    const answers = questions.map((q, i) => ({ questionId: q.id, optionId: i < 8 ? 'a' : 'b' }));
+    const answers = questions.slice(8).map((q, i) => ({ questionId: q.id, optionId: i === 0 ? 'a' : 'b' }));
     expect(evaluateNativeAssessment(gated, answers)).toMatchObject({
-      scorePct: 80, assessmentSatisfied: false,
+      scorePct: 50, assessmentSatisfied: false,
     });
     const ordinary = validateNativeCourseArtifact({
       ...gated, policy: { mode: 'SCORED', masteryScore: 80 },
     });
     expect(evaluateNativeAssessment(ordinary, answers)).toMatchObject({
-      scorePct: 80, assessmentSatisfied: true,
+      scorePct: 50, assessmentSatisfied: false,
     });
     expect(evaluateNativeAssessment(gated,
-      questions.map((q) => ({ questionId: q.id, optionId: 'a' })))).toMatchObject({
+      questions.slice(8).map((q) => ({ questionId: q.id, optionId: 'a' })))).toMatchObject({
       scorePct: 100, assessmentSatisfied: true,
     });
   });

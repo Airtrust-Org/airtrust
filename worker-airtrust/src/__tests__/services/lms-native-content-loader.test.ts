@@ -59,7 +59,13 @@ function createFixture(params: {
           bind(...binds: unknown[]) {
             calls.push({ sql, binds });
             return {
+              async all() {
+                if (sql.includes('FROM lms_native_eventos')) return { success: true, results: [] };
+                throw Error('UNEXPECTED_ALL_SQL');
+              },
               async first() {
+                if (sql.includes('SELECT b.id, m.status')) return { id: 101, status: 'EM_ANDAMENTO' };
+                if (sql.includes('FROM lms_native_tentativas')) return null;
                 if (sql.includes('FROM lms_matriculas m')) {
                   return {
                     id: 101, empresa_id: params.enrollmentEmpresa ?? 6,
@@ -130,6 +136,8 @@ describe('Native R2 immutable learner content loader', () => {
     expect(serialized).not.toContain('feedbackCorrect');
     expect(serialized).not.toContain('feedbackIncorrect');
     expect(result.course.questions[0]?.prompt).toBe('Qual conduta?');
+    expect(result.course.questions.some((question) => question.id === 'exam-question-001')).toBe(false);
+    expect(result.course.units.at(-1)?.questionIds).toEqual([]);
   });
 
   it('refuses another employee and never probes the bucket', async () => {

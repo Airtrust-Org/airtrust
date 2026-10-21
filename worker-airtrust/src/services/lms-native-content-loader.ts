@@ -15,6 +15,7 @@ import {
 import type { Env } from '../types';
 import { NATIVE_ACTIVE_EMPLOYEE_JOIN, NATIVE_ACTIVE_USER_CONDITION } from './lms-native-active-learner-sql';
 import { nativeCourseIdentityPredicate } from './lms-native-catalog-legacy-guard';
+import { readNativeLearnerSession } from './lms-native-readiness-repository';
 import {
   resolveNativeEnrollmentAdmission,
   type NativeAdmission,
@@ -173,8 +174,33 @@ export async function loadNativePublishedCourse(params: {
   env?: Env;
 }): Promise<NativePublishedCourse> {
   const verified = await loadNativePrivateCourse(params);
+  const { summary } = await readNativeLearnerSession({
+    db: params.db,
+    env: params.env,
+    actorUserId: params.actorUserId,
+    scope: {
+      empresaId: params.empresaId,
+      cursoId: verified.cursoId,
+      matriculaId: params.matriculaId,
+      cicloId: verified.cicloId,
+      artifactHash: verified.editionHash,
+    },
+    artifact: verified.artifact,
+  });
+  const course = toNativeLearnerCourse(verified.artifact);
+  const lessonIds = verified.artifact.units.filter((unit) => unit.kind === 'lesson').map((unit) => unit.id);
+  const formalExamReleased = lessonIds.length > 0 &&
+    lessonIds.every((id) => summary.seenLessonIds.includes(id));
+  if (!formalExamReleased) {
+    const examUnit = course.units.filter((unit) => unit.kind === 'assessment').at(-1);
+    if (examUnit) {
+      const examIds = new Set(examUnit.questionIds);
+      examUnit.questionIds = [];
+      course.questions = course.questions.filter((question) => !examIds.has(question.id));
+    }
+  }
   return {
-    course: toNativeLearnerCourse(verified.artifact),
+    course,
     editionHash: verified.editionHash,
     cicloId: verified.cicloId,
     cursoId: verified.cursoId,

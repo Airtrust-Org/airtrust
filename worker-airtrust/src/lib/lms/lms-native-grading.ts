@@ -36,15 +36,17 @@ export function evaluateNativeAssessment(
   submission: unknown,
 ): NativeAssessmentResult {
   const course = validateNativeCourseArtifact(artifact);
-  // Module practice is formative: never score it, consume an exam attempt,
-  // or require a practice answer in the certifying submission.
-  const practiceIds = new Set(course.units
-    .filter((unit) => unit.kind === 'practice').flatMap((unit) => unit.questionIds));
-  const certifyingQuestions = course.questions.filter((q) => !practiceIds.has(q.id));
+  // Only the terminal assessment is formal. Every other unit question,
+  // including legacy assessment groups and scenarios, is non-certifying.
+  const assessmentUnits = course.units.filter((unit) => unit.kind === 'assessment');
+  const finalAssessment = assessmentUnits.at(-1);
+  const certifyingIds = new Set(finalAssessment?.questionIds ?? []);
+  const certifyingQuestions = course.questions.filter((q) => certifyingIds.has(q.id));
   if (!Array.isArray(submission) || submission.length > certifyingQuestions.length) {
     throw new NativeSubmissionError('NATIVE_INVALID_SUBMISSION');
   }
-  // An injected practice answer is not valid in a formal exam attempt.
+  // An injected practice, scenario, or intermediate assessment answer is
+  // invalid in the formal exam attempt.
   const questions = new Map(certifyingQuestions.map((q) => [q.id, q]));
   const answerMap = new Map<string, string>();
 
@@ -68,42 +70,25 @@ export function evaluateNativeAssessment(
 
   const answered = answerMap.size;
   const total = certifyingQuestions.length;
-  const scenarios = new Set(course.units.filter((unit) => unit.kind === 'scenario').flatMap((unit) => unit.questionIds));
-  const exams = new Set(course.units.filter((unit) => unit.kind === 'assessment').flatMap((unit) => unit.questionIds));
-  // Required scenario decisions and certifying exam questions are independent.
-  // Otherwise non-certifying practice questions could dilute or inflate the grade.
-  const decisionsSatisfied = course.questions
-    .filter((q) => scenarios.has(q.id))
-    .every((q) => answerMap.get(q.id) === q.correctOptionId);
   if (course.policy.mode === 'FORMATIVE') {
     return {
       mode: 'FORMATIVE', answered, total, scorePct: null,
-      assessmentSatisfied: answered === total && decisionsSatisfied,
+      assessmentSatisfied: true,
     };
   }
 
   if (answered !== total) {
     return { mode: 'SCORED', answered, total, scorePct: null, assessmentSatisfied: false };
   }
-  const certifying = course.questions.filter((q) => exams.has(q.id));
+  const certifying = certifyingQuestions;
   const correct = certifying.filter((q) => answerMap.get(q.id) === q.correctOptionId).length;
   const masteryScore = course.policy.masteryScore;
   const scorePct = Math.round((100 * correct) / certifying.length);
-  // SCORM moduleGate means a global pass cannot compensate for failure in
-  // any compulsory module assessment. Scenarios remain an independent gate.
-  const modulesSatisfied = course.policy.mode !== 'SCORED' || !course.policy.moduleGate ||
-    course.units.filter((unit) => unit.kind === 'assessment').every((unit) => {
-      const passed = unit.questionIds.filter((id) =>
-        answerMap.get(id) === questions.get(id)?.correctOptionId
-      ).length;
-      return passed * 100 >= masteryScore * unit.questionIds.length;
-    });
   return {
     mode: 'SCORED',
     answered,
     total,
     scorePct,
-    assessmentSatisfied: decisionsSatisfied && modulesSatisfied &&
-      correct * 100 >= course.policy.masteryScore * certifying.length,
+    assessmentSatisfied: correct * 100 >= course.policy.masteryScore * certifying.length,
   };
 }

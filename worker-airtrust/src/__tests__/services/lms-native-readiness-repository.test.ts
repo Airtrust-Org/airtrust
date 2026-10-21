@@ -25,7 +25,6 @@ const twoLessonArtifact = validateNativeCourseArtifact(JSON.parse(JSON.stringify
   ],
 })));
 const answers = JSON.stringify([
-  { questionId: 'choice-question-001', optionId: 'option-2' },
   { questionId: 'exam-question-001', optionId: 'option-2' },
 ]);
 async function digest(input: string) {
@@ -126,7 +125,6 @@ describe('Native V1 persisted-readiness bridge (read only)', () => {
 
   it('re-evaluates and rejects forged persisted grades and pass flags', async () => {
     const wrong = JSON.stringify([
-      { questionId: 'choice-question-001', optionId: 'option-2' },
       { questionId: 'exam-question-001', optionId: 'option-1' },
     ]);
     const { db } = dbMock({ attempt: {
