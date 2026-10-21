@@ -12,7 +12,8 @@
  *
  * JSON file outside repository: [{"label":"BOA-QA-001","token":"<test access JWT>"}, ...]
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import { isAbsolute, relative } from 'node:path';
 
 function required(name) {
   const val = process.env[name];
@@ -51,7 +52,16 @@ async function main() {
     throw new Error('BOA_QA_CONCURRENCY must be an integer 1–130');
   }
   const path = required('BOA_QA_TOKENS_FILE');
-  const users = JSON.parse(readFileSync(path, 'utf8'));
+  if (!isAbsolute(path)) throw new Error('Credentials file must have an absolute path');
+  const sourcePath = realpathSync(path);
+  const relativeToRepo = relative(process.cwd(), sourcePath);
+  if (!relativeToRepo.startsWith('..') && !isAbsolute(relativeToRepo)) {
+    throw new Error('Credentials file must be outside the repository');
+  }
+  // Never print parser errors: JSON errors can include snippets of secret JWTs.
+  let users;
+  try { users = JSON.parse(readFileSync(sourcePath, 'utf8')); }
+  catch { throw new Error('Invalid or unreadable external credentials file'); }
   if (!Array.isArray(users) || users.length !== 130) {
     throw new Error('Exactly 130 distinct synthetic credentials are required');
   }
@@ -135,9 +145,8 @@ async function main() {
   }));
   if (!success) process.exitCode = 1;
 }
-main().catch(error => {
-  // Never log exception objects: they might accidentally contain URLs/credentials.
-  console.error(`BOA QA validation blocked: ${String(error?.message || 'configuration invalid')
-    .replaceAll(process.env.BOA_QA_TOKENS_FILE || '\0', '[PRIVATE_PATH]')}`);
+main().catch(() => {
+  // Never log caught exception messages: JSON and fetch errors can contain JWTs.
+  console.error('BOA QA validation blocked: prerequisites incomplete or execution refused.');
   process.exitCode = 1;
 });
