@@ -321,7 +321,7 @@ frmsBombeiros.get('/checkin/status', requireRole('student', 'editor', 'instructo
     return c.json({ success: false, code: 'BOMBEIROS_CREW_NOT_AUTHORIZED' }, 403);
   }
   const result = await loadBoaCrewCheckinStatus(
-    c.env.DB, tenant.empresaId, employeeId, getTodayIsoSaoPaulo(),
+    c.env.DB, tenant.empresaId, employeeId, userId, getTodayIsoSaoPaulo(),
   );
   c.header('Cache-Control', 'private, no-store');
   return c.json({ success: true, data: result, meta: { tenant_id: tenant.empresaId } });
