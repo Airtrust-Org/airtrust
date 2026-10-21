@@ -76,3 +76,16 @@ A API acrescenta `meta.content_sha256` (64 dígitos hexadecimais) da codificaç�
 ```
 
 Os valores acima são **exemplos**, e `report` deve ser o objeto agregado devolvido pela API. A propriedade `meta.checksum_only_not_signature = true` registra o limite: **checksum NÃO é assinatura digital, certificação, trilha imutável ou documento oficial**. A UI rotula explicitamente o corte e o SHA-256. A futura emissão oficial requer identidade do signatário, versão imutável da fonte, guarda governada do documento, assinatura e verificação independente.
+
+
+## 7. Integridade do ciclo e ensaio SQLite verificável
+
+O relatório mensal valida, no próprio SQL agregado, os quatro tipos de evento do tenant BOA, a ligação do caso ao **mesmo funcionário** do recibo e a declaração `NOT_GRANTED`, a presença de mitigação com responsável/prazo/justificativa/medida e uma avaliação de eficácia textual válida no encerramento. Encerramento anterior ao tratamento ou histórico com schema adulterado **reprova toda a apuração** em vez de divulgar uma falsa quantidade de casos resolvidos. Esse controle é integridade técnica do registro, **não** parecer clínico sobre efetividade real da mitigação.
+
+O teste com SQLite real, utilizando somente pessoas e eventos fictícios e sem qualquer acesso Cloudflare, fica versionado em:
+
+```bash
+node --test scripts/__tests__/boa-monthly-sqlite-integrity.test.mjs
+```
+
+Ele demonstra contabilização de duas coortes mensais, isolamento da empresa 6, falha para caso atribuído a funcionário indevido, falta de intervenção, avaliação de eficácia curta, fechamento cronologicamente impossível e supressão de subgrupos. **Não comprova assinatura, retenção, transação entre leituras D1, aprovação científica ou aceite de staging**.
