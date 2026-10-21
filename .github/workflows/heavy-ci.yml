@@ -115,6 +115,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends sqlite3 git
       - run: cd worker-airtrust && npx vitest run --shard=2/2
+      - name: Verify BOA tenant and case lifecycle with isolated synthetic SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          # All tests use :memory: SQLite, synthetic employees and no cloud credentials.
+          # Retain the official worker-tests-2 gate; these checks are additive.
+          node --test \
+            scripts/__tests__/boa-monthly-sqlite-integrity.test.mjs \
+            scripts/__tests__/boa-case-queue-sqlite-integrity.test.mjs \
+            scripts/__tests__/boa-checkin-membership-sqlite-integrity.test.mjs \
+            scripts/__tests__/boa-staging-130-readonly.test.mjs
 
   lms-smoke:
     name: lms-smoke
