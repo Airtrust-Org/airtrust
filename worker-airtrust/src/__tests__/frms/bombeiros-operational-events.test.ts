@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveBoaCrewIdentity, registerBoaCheckin, loadBoaCrewCheckinStatus, loadBoaOperationalCase,
   registerBoaCaseAction, loadBoaCaseQueue, BOA_CHECKIN_TYPE, BOA_CASE_OPEN_TYPE,
+  BOA_CASE_TREATMENT_TYPE, BOA_CASE_CLOSED_TYPE,
 } from '../../lib/frms/bombeiros-operational-events';
 import type { EmployeeSectorAccess } from '../../services/employee-sector-access';
 
@@ -45,6 +46,14 @@ function fakeDb(options: {
         async all() {
           if (sql.includes('JOIN usuarios u ON u.funcionario_id')) {
             return { results: options.existingReceipts ?? [] };
+          }
+          if (sql.includes('LEFT JOIN frms_fadiga_evento events')) {
+            // Authorized LEFT JOIN yields one null child for a case without actions.
+            // Legacy unit fixtures omitted event IDs; synthesize only in tests.
+            const children = options.childEvents ?? [];
+            return { results: children.length ? children.map((e, i) => ({
+              id: `child-${i}`, ...(e as Record<string, unknown>),
+            })) : [{ id: null, tipo: null, payload_json: null, created_at: null }] };
           }
           return { results: options.childEvents ?? [] };
         },
@@ -162,6 +171,13 @@ describe('BOA event intake and immutable case stream contracts', () => {
     expect(queries[0].sql).toContain('assigned.usuario_id = ?');
     expect(queries[0].sql).toContain('current_membership.role');
     expect(queries[1].sql).toContain('e.empresa_id = ?');
+    expect(queries[2].sql).toContain('LEFT JOIN frms_fadiga_evento events');
+    expect(queries[2].sql).toContain('assigned.usuario_id = ?');
+    expect(queries[2].sql).toContain('current_membership.role');
+    expect(queries[2].values).toEqual([
+      BOA_CASE_TREATMENT_TYPE, BOA_CASE_CLOSED_TYPE,
+      'case-1', 130, BOA_CASE_OPEN_TYPE, 130, 90, 130, 90, 9,
+    ]);
   });
 
   it('never reads cases with missing manager sector scope', async () => {
