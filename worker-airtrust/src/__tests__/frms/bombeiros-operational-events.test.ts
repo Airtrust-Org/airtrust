@@ -207,8 +207,8 @@ describe('BOA event intake and immutable case stream contracts', () => {
             request.bind = values;
             return {
               async all() { return { results: [
-                { case_id: 'case-a', created_at: '2026-10-20T10:00:00Z', state: 'ABERTO' },
-                { case_id: 'case-b', created_at: '2026-10-19T10:00:00Z', state: 'RESOLVIDO' },
+                { case_id: 'case-a', created_at: '2026-10-20T10:00:00Z', treatment_count: 0, closure_count: 0 },
+                { case_id: 'case-b', created_at: '2026-10-19T10:00:00Z', treatment_count: 1, closure_count: 1 },
               ] }; },
             };
           },
@@ -225,6 +225,29 @@ describe('BOA event intake and immutable case stream contracts', () => {
     expect(queries[0].sql).toContain('f.setor_id IN (?)');
     expect(queries[0].bind).toEqual([130, 130, BOA_CASE_OPEN_TYPE, 9, 2]);
     expect(JSON.stringify(queue)).not.toMatch(/funcionario_id|kss_reported|sleep_hours/);
+  });
+
+  it('fails closed when manager queue has duplicate or impossible event transitions', async () => {
+    const cases = [
+      { treatment_count: 2, closure_count: 0 },
+      { treatment_count: 0, closure_count: 1 },
+      { treatment_count: 1, closure_count: 2 },
+    ];
+    for (const counts of cases) {
+      const db = {
+        prepare: () => ({
+          bind: () => ({
+            async all() {
+              return { results: [{
+                case_id: 'bad-1', created_at: '2026-10-20T11:00:00Z', ...counts,
+              }] };
+            },
+          }),
+        }),
+      } as unknown as D1Database;
+      await expect(loadBoaCaseQueue(db, 130, authorized))
+        .rejects.toThrow('BOA_CASE_QUEUE_INTEGRITY_ERROR');
+    }
   });
 
   it('never queries case queue under empresa 6 or without authorized manager sectors', async () => {
