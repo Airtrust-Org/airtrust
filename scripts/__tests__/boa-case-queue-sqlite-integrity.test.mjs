@@ -162,7 +162,7 @@ test('BOA case append rechecks current manager membership and valid treatment in
     assert.equal(count(), 1);
     assert.equal(await addTreatment(), 'NOT_ALLOWED');
 
-    sqlite.exec('UPDATE usuarios SET deleted_at="2026-10-20" WHERE id=90');
+    sqlite.prepare('UPDATE usuarios SET deleted_at=? WHERE id=?').run('2026-10-20', 90);
     assert.equal(await resolve(), 'NOT_ALLOWED');
     assert.equal(count(), 1);
     sqlite.exec('UPDATE usuarios SET deleted_at=NULL WHERE id=90');
