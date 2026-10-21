@@ -290,10 +290,41 @@ describe('BOA event intake and immutable case stream contracts', () => {
     const insert = queries.find(q => q.sql.startsWith('INSERT INTO frms_fadiga_evento'));
     expect(insert?.sql).toContain('NOT EXISTS');
     expect(insert?.sql).toContain('f.empresa_id = ?');
+    expect(insert?.sql).toContain('JOIN usuarios_empresas member');
+    expect(insert?.sql).toContain('member.empresa_id = base.empresa_id');
+    expect(insert?.sql).toContain('(actor.deleted_at IS NULL OR actor.deleted_at = 0)');
+    expect(insert?.values.slice(6, 12)).toEqual([
+      'case-1', 130, BOA_CASE_OPEN_TYPE, 130, 90, 130,
+    ]);
     expect(insert?.sql).toContain("receipt.empresa_id = base.empresa_id");
     expect(insert?.sql).toContain("json_extract(receipt.payload_json, '$.funcionario_id')");
     expect(insert?.sql).toContain("json_extract(base.payload_json, '$.funcionario_id')");
     expect(insert?.values).toContain(130);
+  });
+
+  it('closure SQL rechecks current manager membership, valid treatment and event chronology', async () => {
+    const { db, queries } = fakeDb({
+      case: { id: 'case-1', tipo: BOA_CASE_OPEN_TYPE,
+        payload_json: '{"funcionario_id":21}', created_at: '2026-10-20T09:00:00Z' },
+      receipt: { id: 'receipt-1' },
+      childEvents: [{ id: 'treatment-1', tipo: 'BOA_CASE_TREATMENT_V1',
+        payload_json: JSON.stringify({ schema: 'FRMS_CASE_TREATMENT_V1',
+          responsavel: 'Coordenador BOA', prazo: '2026-10-30',
+          acao_mitigacao: 'Reavaliar escala e tempo de recuperação antes do voo.',
+          justificativa: 'O responsável precisa conferir repouso documentado.' }),
+        created_at: '2026-10-20T10:00:00Z' }],
+      writeChanges: 0,
+    });
+    const result = await registerBoaCaseAction(db, 130, 'case-1', 90, {
+      avaliacao_eficacia: 'Acompanhamento realizado e eficácia registrada pelo gestor.',
+    }, 'closure', authorized);
+    expect(result).toBe('NOT_ALLOWED');
+    const insert = queries.find(q => q.sql.startsWith('INSERT INTO frms_fadiga_evento'));
+    expect(insert?.sql).toContain('JOIN usuarios_empresas member');
+    expect(insert?.sql).toContain("json_extract(t.payload_json, '$.schema') = 'FRMS_CASE_TREATMENT_V1'");
+    expect(insert?.sql).toContain("json_extract(t.payload_json, '$.acao_mitigacao')");
+    expect(insert?.sql).toContain('t.created_at <= ?');
+    expect(insert?.values).toContain(90);
   });
 
   it('sanitizes BOA manager queue with tenant, sector and cursor limitation', async () => {
