@@ -157,6 +157,77 @@ export async function registerBoaCheckin(
     method_version: 'BOA_EVIDENCE_INTAKE_V1' };
 }
 
+export interface BoaCrewCheckinStatus {
+  reference_date: string;
+  received: boolean;
+  checkin_id: string | null;
+  case_id: string | null;
+  human_review_required: true;
+  dispatch_permission: 'NOT_GRANTED';
+  source: 'BOA_APPEND_ONLY_RECEIPT';
+}
+
+/**
+ * Read-only receipt status of the authenticated crew employee for one local
+ * operational date. Never returns KSS, sleep, PVT, mission or clinical values.
+ * Any orphan/duplicate receipt is a hard integrity error, not a normal status.
+ */
+export async function loadBoaCrewCheckinStatus(
+  db: D1Database, empresaId: number, funcionarioId: number, date: string,
+): Promise<BoaCrewCheckinStatus> {
+  assertBoaTenant(empresaId);
+  if (!Number.isSafeInteger(funcionarioId) || funcionarioId <= 0
+    || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error('BOMBEIROS_CHECKIN_STATUS_INPUT_INVALID');
+  }
+  const rows = await db.prepare(
+    `SELECT e.id
+       FROM frms_fadiga_evento e
+       JOIN funcionarios f
+         ON f.id = CAST(json_extract(e.payload_json, '$.funcionario_id') AS INTEGER)
+        AND f.empresa_id = e.empresa_id
+      WHERE e.empresa_id = ? AND f.empresa_id = ? AND f.id = ?
+        AND f.deleted_at IS NULL AND f.ativo = 1
+        AND e.tipo = ? AND json_extract(e.payload_json, '$.schema') = ?
+        AND json_extract(e.payload_json, '$.reference_date') = ?
+      ORDER BY e.created_at DESC LIMIT 2`,
+  ).bind(empresaId, empresaId, funcionarioId, BOA_CHECKIN_TYPE, BOA_CHECKIN_TYPE, date)
+    .all<{ id: string }>();
+  const receipts = rows.results ?? [];
+  if (receipts.length > 1 || (receipts.length === 1 && !receipts[0].id)) {
+    throw new Error('BOMBEIROS_CHECKIN_STATUS_INTEGRITY_ERROR');
+  }
+  const result: BoaCrewCheckinStatus = {
+    reference_date: date,
+    received: false,
+    checkin_id: null,
+    case_id: null,
+    human_review_required: true,
+    dispatch_permission: 'NOT_GRANTED',
+    source: 'BOA_APPEND_ONLY_RECEIPT',
+  };
+  if (!receipts.length) return result;
+  const cases = await db.prepare(
+    `SELECT c.id FROM frms_fadiga_evento c
+       JOIN frms_fadiga_evento receipt ON receipt.id = c.checkin_id
+      WHERE c.empresa_id = ? AND receipt.empresa_id = ?
+        AND receipt.id = ? AND c.tipo = ? AND receipt.tipo = ?
+        AND json_extract(c.payload_json, '$.funcionario_id') = ?
+        AND json_extract(receipt.payload_json, '$.funcionario_id') = ?
+        AND json_extract(receipt.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'
+      LIMIT 2`,
+  ).bind(empresaId, empresaId, receipts[0].id, BOA_CASE_OPEN_TYPE, BOA_CHECKIN_TYPE,
+    funcionarioId, funcionarioId).all<{ id: string }>();
+  if ((cases.results ?? []).length !== 1 || !cases.results[0].id) {
+    throw new Error('BOMBEIROS_CHECKIN_STATUS_INTEGRITY_ERROR');
+  }
+  return {
+    ...result, received: true,
+    checkin_id: receipts[0].id,
+    case_id: cases.results[0].id,
+  };
+}
+
 export interface BoaCaseStatus {
   case_id: string;
   state: 'ABERTO' | 'EM_TRATAMENTO' | 'RESOLVIDO';
