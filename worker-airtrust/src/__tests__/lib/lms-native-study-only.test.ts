@@ -7,10 +7,10 @@ import type {NativeCourseArtifact} from '../../lib/lms/lms-native-course-contrac
 
 const release='a'.repeat(40);
 const edition='b'.repeat(64);
-const lesson={id:'l1',title:'Aula obrigatória',kind:'lesson',questionIds:[],blocks:[
+const lesson:NativeCourseArtifact['units'][number]={id:'l1',title:'Aula obrigatória',kind:'lesson',questionIds:[],blocks:[
   {type:'paragraph',text:'Conteúdo importante'},
 ]};
-const practice={id:'p1',title:'Fixação',kind:'practice',questionIds:['q1'],blocks:[]};
+const practice:NativeCourseArtifact['units'][number]={id:'p1',title:'Fixação',kind:'practice',questionIds:['q1'],blocks:[]};
 const artifact={policy:{mode:'FORMATIVE'},units:[lesson,practice]} as unknown as NativeCourseArtifact;
 function env(overrides:Record<string,unknown>={}):Env {
  return {ENVIRONMENT:'production',AIRTRUST_SOURCE_SHA:release,
