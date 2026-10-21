@@ -98,3 +98,29 @@ A variável é opcional e **ausente por padrão**, logo nenhuma dessas rotas de 
 **Não configure a variável nesta PR nem por console de Cloudflare.** A eventual habilitação exige aprovação científica/LGPD, revisão de tenant e guard, autorização do artefato, janela de staging e workflow governado. Retirar a autorização ao final do ensaio e guardar o comprovante em canal seguro; nunca o ID inventado do exemplo como valor real.
 
 O teste de 130 usuários deste runbook é **somente GET** e não depende dessa variável. O teste completo com gravação precisará de procedimento adicional formalizado, volume e recuperação autorizados.
+
+
+## 6. Integridade da fila de ocorrências para gestores BOA
+
+`GET /api/bombeiros/frms/casos` só pode apresentar status `ABERTO`,
+`EM_TRATAMENTO` ou `RESOLVIDO` quando o caso tem recibo BOA do
+**mesmo funcionário/tenant**, esquema `BOA_CASE_OPENED_V1`, declaração
+`NOT_GRANTED` e transições plausíveis. A consulta valida conteúdo
+mínimo de mitigação/eficácia, duplicações e ordem cronológica. Caso
+algum registro da página esteja corrompido, **toda a página falha
+fechada** em vez de exibir uma resolução aparentemente válida. O
+append-only de tratamento/encerramento também revalida o esquema
+do caso-base no próprio SQL de gravação.
+
+Ensaio versionado e reproduzível (somente dados fictícios, SQLite
+`:memory:`, sem D1/R2 remoto):
+
+```bash
+node --test scripts/__tests__/boa-case-queue-sqlite-integrity.test.mjs
+```
+
+O teste cobre exclusão da empresa 6 e de outro setor, schema offshore
+adulterado, intervenção sem substância, eficácia incompleta,
+fechamento precoce e histórico coerente. **Não** valida efetividade
+clínica da medida, aprovação científica, prova de conceito formal
+ou autorização de voo.
