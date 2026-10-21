@@ -63,7 +63,7 @@ describe('BOA monthly managerial/technical evidence preview — source and priva
     ]);
     expect([3, 15, 17, 19].map(i => statements[0].args[i]))
       .toEqual([report.as_of, report.as_of, report.as_of, report.as_of]);
-    expect(report.as_of).toMatch(/^\\d{4}-\\d{2}-\\d{2}T/);
+    expect(report.as_of).toMatch(/^[0-9]{4}-[0-9]{2}-[0-9]{2}T/);
     expect(statements[0].sql).toContain('f.empresa_id = e.empresa_id');
     expect(statements[0].sql).toContain('o.empresa_id = ?');
     expect(statements[0].sql).toContain('treatment.empresa_id = o.empresa_id');
