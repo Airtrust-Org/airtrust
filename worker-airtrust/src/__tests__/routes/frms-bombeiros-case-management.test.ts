@@ -111,7 +111,7 @@ describe('BOA case event-stream route — security and lifecycle boundaries', ()
     const req = createApp();
     const response = await req('GET', '/casos/boa-case-1/evidencias');
     expect(response.status).toBe(200);
-    const data = await response.json();
+    const data = await response.json() as { data: Record<string, unknown> };
     expect(data.data).toMatchObject({
       sleep_evidence: 'SELF_REPORTED_UNVERIFIED',
       pvt_evidence: 'NO_PERFORMANCE_MEASUREMENT',
