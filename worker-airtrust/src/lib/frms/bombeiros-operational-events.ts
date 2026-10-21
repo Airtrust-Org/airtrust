@@ -545,6 +545,87 @@ ${boaManagerReadScopeSql}
   };
 }
 
+/** BOA manager-only evidence coverage: absence/provenance, never raw clinical values.
+ * This SELECT rechecks membership, active employee, tenant and direct sector grant. */
+export interface BoaCaseEvidenceCoverage {
+  case_id: string;
+  source: 'BOA_AUTHENTICATED_CHECKIN_EVENT';
+  sleep_evidence: 'SELF_REPORTED_UNVERIFIED' | 'NOT_REPORTED';
+  kss_evidence: 'SUBJECTIVE_SELF_REPORT' | 'NOT_REPORTED';
+  mission_context: 'CREW_DECLARATION_UNVERIFIED' | 'NOT_REPORTED';
+  pvt_evidence: 'NO_PERFORMANCE_MEASUREMENT';
+  duty_roster: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE';
+  actual_mission_times: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE';
+  scientific_risk_estimate: null;
+  requires_human_review: true;
+  dispatch_permission: 'NOT_GRANTED';
+}
+
+export async function loadBoaCaseEvidenceCoverage(
+  db: D1Database, empresaId: number, caseId: string, actorId: number,
+  access: EmployeeSectorAccess,
+): Promise<BoaCaseEvidenceCoverage | null> {
+  assertBoaTenant(empresaId);
+  if (!Number.isSafeInteger(actorId) || actorId <= 0 || !caseId || caseId.length > 120
+    || access.mode !== 'restricted' || !access.setorIds.length) return null;
+  const scope = buildFuncionarioScopeWhere(access, 'f');
+  if (!scope.bindings.length) return null;
+  const rows = await db.prepare(
+    `SELECT base.id AS case_id,
+       CASE WHEN json_type(receipt.payload_json, '$.sleep_hours_24h')
+         IN ('integer','real') THEN 'SELF_REPORTED_UNVERIFIED'
+         ELSE 'NOT_REPORTED' END AS sleep_evidence,
+       CASE WHEN json_type(receipt.payload_json, '$.kss_reported')
+         IN ('integer','real') THEN 'SUBJECTIVE_SELF_REPORT'
+         ELSE 'NOT_REPORTED' END AS kss_evidence,
+       CASE WHEN json_extract(receipt.payload_json, '$.mission_type')
+         IN ('RESGATE','SALVAMENTO','TRANSPORTE_AEROMEDICO',
+             'COMBATE_AEREO_INCENDIO','TREINAMENTO','OUTRA')
+         AND json_extract(receipt.payload_json, '$.duty_period')
+         IN ('DIURNO','NOTURNO','MISTO') THEN 'CREW_DECLARATION_UNVERIFIED'
+         ELSE 'NOT_REPORTED' END AS mission_context
+     FROM frms_fadiga_evento base
+     JOIN frms_fadiga_evento receipt
+       ON receipt.id = base.checkin_id
+      AND receipt.empresa_id = base.empresa_id
+      AND receipt.tipo = 'BOA_CHECKIN_V1'
+      AND json_extract(receipt.payload_json, '$.schema') = 'BOA_CHECKIN_V1'
+     JOIN funcionarios f
+       ON f.id = CAST(json_extract(base.payload_json, '$.funcionario_id') AS INTEGER)
+      AND f.empresa_id = base.empresa_id
+      AND f.id = CAST(json_extract(receipt.payload_json, '$.funcionario_id') AS INTEGER)
+    WHERE base.id = ? AND base.empresa_id = ? AND base.tipo = 'BOA_CASE_OPENED_V1'
+      AND json_extract(base.payload_json, '$.schema') = 'BOA_CASE_OPENED_V1'
+      AND json_extract(base.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'
+      AND json_extract(receipt.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'
+      AND f.empresa_id = ? AND f.ativo = 1 AND f.deleted_at IS NULL
+${boaManagerReadScopeSql}
+      AND ${scope.clause}
+    LIMIT 2`,
+  ).bind(caseId, empresaId, empresaId, actorId, empresaId, actorId, ...scope.bindings)
+    .all<Pick<BoaCaseEvidenceCoverage, 'case_id' | 'sleep_evidence' |
+      'kss_evidence' | 'mission_context'>>();
+  const found = rows.results ?? [];
+  if (found.length > 1) throw new Error('BOA_CASE_EVIDENCE_INTEGRITY_ERROR');
+  if (!found.length) return null;
+  const row = found[0];
+  if (row.case_id !== caseId
+    || !['SELF_REPORTED_UNVERIFIED','NOT_REPORTED'].includes(row.sleep_evidence)
+    || !['SUBJECTIVE_SELF_REPORT','NOT_REPORTED'].includes(row.kss_evidence)
+    || !['CREW_DECLARATION_UNVERIFIED','NOT_REPORTED'].includes(row.mission_context)) {
+    throw new Error('BOA_CASE_EVIDENCE_INTEGRITY_ERROR');
+  }
+  return {
+    case_id: caseId, source: 'BOA_AUTHENTICATED_CHECKIN_EVENT',
+    sleep_evidence: row.sleep_evidence, kss_evidence: row.kss_evidence,
+    mission_context: row.mission_context,
+    pvt_evidence: 'NO_PERFORMANCE_MEASUREMENT',
+    duty_roster: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+    actual_mission_times: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+    scientific_risk_estimate: null, requires_human_review: true,
+    dispatch_permission: 'NOT_GRANTED',
+  };
+}
 export async function registerBoaCaseAction(
   db: D1Database, empresaId: number, caseId: string, actorId: number,
   input: unknown, kind: 'treatment' | 'closure',
