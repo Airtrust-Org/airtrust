@@ -14,8 +14,13 @@ import {useAuth} from '@/react-app/hooks/useAuth';
 import {API_BASE_URL,fetchWithAuth} from '@/react-app/config/api';
 import LmsPlayer from './LmsPlayer';
 
-type GateResult='LEGACY'|'PLAYER3'|'BLOCKED';
+type GateResult='LEGACY'|'PLAYER3'|'PLAYER3_SCORM'|'BLOCKED';
 type GateState={scope:string;result:GateResult};
+type ScormAdmissionResponse={success?:boolean;code?:string;data?:{
+  mode?:string;matricula_id?:number;curso_id?:number;
+  package_sha256?:string;package_version?:string;
+  completion_authorized?:boolean;exam_authorized?:boolean;certificate_authorized?:boolean;
+}};
 type AdmissionResponse={
   success?:boolean;
   code?:string;
@@ -49,7 +54,30 @@ function ScopedPlayerLaunch({id,scope}:{id:number;scope:string}){
       const body=await response.json() as AdmissionResponse;
       if(response.status===404&&
          allowedLegacyCodes.has(body?.code??'')){
-        if(!controller.signal.aborted)setState({scope,result:'LEGACY'});
+        // A Native 404 only excludes Native. It does NOT certify this course
+        // as ordinary legacy SCORM: the Worker must check its pinned package.
+        const scorm=await fetchWithAuth(
+          API_BASE_URL+'/lms/matriculas/'+id+'/player3-scorm-admissao',
+          {method:'GET',cache:'no-store',signal:controller.signal},
+        );
+        const scormBody=await scorm.json() as ScormAdmissionResponse;
+        if(scorm.status===404&&
+           scormBody?.code==='SCORM_PLAYER3_NOT_APPLICABLE'){
+          if(!controller.signal.aborted)setState({scope,result:'LEGACY'});
+          return;
+        }
+        const data=scormBody?.data;
+        const validStudy=scorm.ok&&scorm.status===200&&
+          scormBody.success===true&&data?.mode==='SCORM_STUDY'&&
+          data.matricula_id===id&&validId(data.curso_id)&&
+          typeof data.package_sha256==='string'&&
+          /^[a-f0-9]{64}$/.test(data.package_sha256)&&
+          typeof data.package_version==='string'&&data.package_version.length>0&&
+          data.completion_authorized===false&&
+          data.exam_authorized===false&&data.certificate_authorized===false;
+        if(!controller.signal.aborted)setState({
+          scope,result:validStudy?'PLAYER3_SCORM':'BLOCKED',
+        });
         return;
       }
       const admitted=response.status===200&&response.ok&&
@@ -70,6 +98,7 @@ function ScopedPlayerLaunch({id,scope}:{id:number;scope:string}){
     return <p role="status">Verificando o player autorizado para esta matrícula…</p>;
   }
   if(state.result==='LEGACY')return <LmsPlayer/>;
+  if(state.result==='PLAYER3_SCORM')return <LmsPlayer scormStudyOnly/>;
   if(state.result==='PLAYER3'){
     return <Navigate to={'/lms/player/native/'+id} replace/>;
   }
