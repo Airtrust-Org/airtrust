@@ -173,7 +173,7 @@ test('BOA case append rechecks current manager membership and valid treatment in
     ).get();
     sqlite.prepare('UPDATE frms_fadiga_evento SET payload_json=? WHERE id=?')
       .run(JSON.stringify({ schema: 'FRMS_CASE_TREATMENT_V1' }), t.id);
-    assert.equal(await resolve(), 'NOT_ALLOWED');
+    await assert.rejects(resolve(), /BOMBEIROS_CASE_STREAM_INTEGRITY_ERROR/);
     assert.equal(count(), 1);
     sqlite.prepare('UPDATE frms_fadiga_evento SET payload_json=? WHERE id=?')
       .run(t.payload_json, t.id);
