@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { buildBoaDemoDataset, bindBoaDemoEventRows } from '../fixtures/boa/boa-demo-dataset.mjs';
+import { buildBoaDemoDataset, bindBoaDemoEventRows, buildBoaTender130IdentityPlan } from '../fixtures/boa/boa-demo-dataset.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -69,6 +69,28 @@ test('dataset consists only of 130 clearly fictitious crew and stable two-month 
     participants: 120, receipts: 180, ABERTO: 60, EM_TRATAMENTO: 60, RESOLVIDO: 60,
   });
   assert.equal(a.crew.length - a.expected['2026-10'].participants, 10);
+});
+
+test('official sizing is 130 user roles total, not 130 crew plus supervisors', () => {
+  const dataset = buildBoaDemoDataset();
+  const plan = buildBoaTender130IdentityPlan(dataset);
+  assert.equal(plan.count, 130);
+  assert.deepEqual([plan.crew_count, plan.manager_count, plan.admin_count], [125, 4, 1]);
+  assert.equal(plan.official_provisioned_users, 0);
+  assert.equal(plan.authentication_ready, false);
+  assert.equal(plan.accounts.length, 130);
+  assert.equal(new Set(plan.accounts.map(x => x.ref)).size, 130);
+  assert.equal(plan.accounts.filter(x => x.role === 'tripulante').length, 125);
+  assert.equal(plan.accounts.filter(x => x.role === 'gestor').length, 4);
+  assert.equal(plan.accounts.filter(x => x.role === 'administrador').length, 1);
+  assert.ok(plan.accounts.every(x => x.credentials_provisioned === false));
+  assert.ok(plan.accounts.every(x => !('token' in x || 'password' in x)));
+  assert.ok(dataset.events.every(x => plan.accounts.some(a =>
+    a.ref === x.actor_ref || a.employee_ref === x.crew_ref)));
+  assert.equal(dataset.events.length, 839);
+  const tampered = structuredClone(dataset);
+  tampered.events[0].crew_ref = dataset.crew[129].ref;
+  assert.throws(() => buildBoaTender130IdentityPlan(tampered), /EVENT_ACTOR_NOT_COVERED/);
 });
 
 test('bind requires isolated synthetic tenant, distinct actor identities and explicit approved-profile evidence', () => {
