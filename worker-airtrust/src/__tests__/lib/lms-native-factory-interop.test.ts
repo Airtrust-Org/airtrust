@@ -30,20 +30,17 @@ describe('Factory Python → AirTrust Worker: synthetic Native V1 interoperabili
     expect(learner.questions).toHaveLength(2);
   });
 
-  it('separates valid practice decisions from the certifying assessment', () => {
+  it('keeps scenario decisions formative and scores only the terminal assessment', () => {
     const artifact = validateNativeCourseArtifact(fixture);
     const full = evaluateNativeAssessment(artifact, [
-      { questionId: 'choice-question-001', optionId: 'option-2' },
       { questionId: 'exam-question-001', optionId: 'option-2' },
     ]);
     expect(full).toMatchObject({ mode: 'SCORED', scorePct: 100, assessmentSatisfied: true });
-    const failedScenario = evaluateNativeAssessment(artifact, [
+    expect(() => evaluateNativeAssessment(artifact, [
       { questionId: 'choice-question-001', optionId: 'option-1' },
       { questionId: 'exam-question-001', optionId: 'option-2' },
-    ]);
-    expect(failedScenario).toMatchObject({ mode: 'SCORED', scorePct: 100, assessmentSatisfied: false });
+    ])).toThrow('NATIVE_INVALID_SUBMISSION');
     const failedExam = evaluateNativeAssessment(artifact, [
-      { questionId: 'choice-question-001', optionId: 'option-2' },
       { questionId: 'exam-question-001', optionId: 'option-1' },
     ]);
     expect(failedExam).toMatchObject({ mode: 'SCORED', scorePct: 0, assessmentSatisfied: false });
