@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Governed F0 staging-only transition for TWO existing, disposable QA
- * learners: NAO_INICIADO -> EM_ANDAMENTO via authenticated Worker route.
+ * learners: preserve an already-started empty session and start only
+ * NAO_INICIADO -> EM_ANDAMENTO via the authenticated Worker route.
  * No migration, direct SQL writes, invented grades or completion.
  * Every invocation requires a fresh unedited administrator grant and a
  * separate staging environment review. Partial success fails closed.
@@ -60,7 +61,8 @@ export function assertFresh(rows){
   for(const label of LEARNERS){
     const row=rows.find(x=>x.email===label.email);
     guard(row&&row.empresa_id===TENANT&&row.curso_id===COURSE&&
-      row.status==='NAO_INICIADO'&&row.ciclo_status==='NAO_INICIADO'&&
+      ['NAO_INICIADO','EM_ANDAMENTO'].includes(row.status)&&
+      row.ciclo_status===row.status&&
       row.ciclo_atual===1&&row.edition_status==='PUBLISHED'&&
       Number.isSafeInteger(row.matricula_id)&&row.matricula_id>0&&
       Number.isSafeInteger(row.ciclo_id)&&row.ciclo_id>0&&
@@ -73,6 +75,9 @@ export function assertFresh(rows){
   }
   guard(cycleIds.size===2&&enrollmentIds.size===2&&employeeIds.size===2,
     'LEARNER_IDENTITIES_NOT_DISTINCT');
+  // Never replay a wholly started cohort; prove existing started evidence empty.
+  guard(rows.some(row=>row.status==='NAO_INICIADO'),
+    'NO_UNSTARTED_LEARNER_TO_START');
 }
 export function assertStarted(rows,before){
   guard(rows.length===2,'AFTER_STATE_MISSING');
@@ -160,15 +165,26 @@ export async function applyStart(before,client={post,get},passwords={
     sessions.push({label,row,token:auth.accessToken});
   }
   guard(sessions[0].token!==sessions[1].token,'SAME_BEARER_DENIED');
-  // Both students' actual snapshots must be empty before any mutation.
+  // Prove both real ledgers and modular sessions empty before ANY mutation.
+  // A previous partial Worker success must not be reset, replayed or fabricated.
   for(const s of sessions){
-    const d=await client.get('/api/lms/native/matriculas/'+s.row.matricula_id+
-      '/etapas/qa-evidencias',s.token);
+    const prefix='/api/lms/native/matriculas/'+s.row.matricula_id+'/etapas/';
+    const d=await client.get(prefix+'qa-evidencias',s.token);
     assertOwnSnapshot(d,s.row);
     guard(d.completed_unit_ids.length===0&&d.attempts.length===0,
       'PREEXISTING_EVIDENCE_REQUIRES_MANUAL_REVIEW');
+    const modular=await client.get(prefix+'sessao',s.token);
+    assertModuleSession(modular,s.row);
+    guard(modular.allOfficialStagesPassed===false&&
+      modular.stages.every(stage=>stage.attempts===0&&stage.passed===false&&
+        stage.lastScorePct===null),
+      'PREEXISTING_STAGE_EVIDENCE_REQUIRES_MANUAL_REVIEW');
   }
   for(const s of sessions){
+    if(s.row.status==='EM_ANDAMENTO'){
+      console.log('PLAYER3_QA_PREEXISTING_EMPTY_START_PRESERVED:'+s.label.browser);
+      continue;
+    }
     const d=await client.post('/api/lms/native/matriculas/'+s.row.matricula_id+
       '/iniciar',s.token,{});
     guard(d.status===201&&d.state==='STARTED'&&
@@ -205,7 +221,7 @@ async function main(mode){
     // answers, passwords or customer records.
     appendFileSync(process.env.GITHUB_OUTPUT,
       'qa_roster='+JSON.stringify(before)+'\n');
-    console.log('PLAYER3_QA_D1_TWO_FRESH_SYNTHETIC_ENROLLMENTS_VERIFIED');
+    console.log('PLAYER3_QA_D1_TWO_SCOPED_PARTIAL_START_ENROLLMENTS_VERIFIED');
     return;
   }
   if(mode==='start'){
@@ -220,7 +236,7 @@ async function main(mode){
     catch{err('D1_PREFLIGHT_ROSTER_MISSING')}
     assertFresh(before);
     await applyStart(before);
-    console.log('PLAYER3_QA_TWO_SYNTHETIC_WORKER_START_RECEIPTS_AND_AUTH_SNAPSHOTS');
+    console.log('PLAYER3_QA_TWO_SCOPED_START_STATES_AND_AUTH_SNAPSHOTS_VERIFIED');
     console.log('PLAYER3_QA_SIX_JOURNEYS_COMPLETION_PDF_NOT_ATTESTED');
     return;
   }
