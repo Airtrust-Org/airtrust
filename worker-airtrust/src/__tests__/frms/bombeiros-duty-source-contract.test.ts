@@ -122,6 +122,38 @@ describe('BOA source-neutral duty and activation contract (no writes)', () => {
     expect(() => validateBoaOperationalSourceBatch(duplicate)).toThrow('BOA_SOURCE_DUPLICATE_ACTIVATION');
   });
 
+  it('rejects completed observations after export or source revision but permits future plans', () => {
+    const futureActual = batch();
+    futureActual.records[0].actual.end_at = '2026-10-22T06:30:00-03:00';
+    expect(() => validateBoaOperationalSourceBatch(futureActual))
+      .toThrow('BOA_SOURCE_OBSERVED_AFTER_EXPORT_ACTUAL');
+
+    const staleRevision = batch();
+    staleRevision.records[0].source_record_updated_at = '2026-10-21T05:00:00-03:00';
+    expect(() => validateBoaOperationalSourceBatch(staleRevision))
+      .toThrow('BOA_SOURCE_OBSERVED_AFTER_REVISION_ACTUAL');
+
+    const futureStandby = batch();
+    futureStandby.records[0].actual = null as never;
+    futureStandby.records[0].standby!.end_at = '2026-10-22T01:30:00-03:00';
+    futureStandby.records[0].activations = [];
+    expect(() => validateBoaOperationalSourceBatch(futureStandby))
+      .toThrow('BOA_SOURCE_OBSERVED_AFTER_EXPORT_STANDBY');
+
+    const futurePlan = batch();
+    futurePlan.records[0].planned = {
+      start_at: '2026-10-23T22:00:00-03:00', end_at: '2026-10-24T06:00:00-03:00',
+    };
+    futurePlan.records[0].actual = null as never;
+    futurePlan.records[0].standby_state = 'UNKNOWN';
+    futurePlan.records[0].standby = null as never;
+    futurePlan.records[0].activation_state = 'UNKNOWN';
+    futurePlan.records[0].activations = [];
+    const candidate = validateBoaOperationalSourceBatch(futurePlan);
+    expect(candidate.records[0].planned_elapsed_ms).toBe(8 * 3600000);
+    expect(candidate.operational_exposure_denominator_ms).toBeNull();
+  });
+
   it('rejects missing timezone and injected clinical or tenant-authority fields', () => {
     const noTimezone = batch();
     noTimezone.records[0].planned.start_at = '2026-10-20T22:00:00';

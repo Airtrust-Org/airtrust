@@ -130,6 +130,17 @@ export function validateBoaOperationalSourceBatch(input: unknown): BoaDutyCandid
     const planned = record.planned ? bounds(record.planned, 'PLANNED') : null;
     const actual = record.actual ? bounds(record.actual, 'ACTUAL') : null;
     const standby = record.standby ? bounds(record.standby, 'STANDBY') : null;
+    // A completed observed interval cannot end after its source revision
+    // or export snapshot. Future planned duty is intentionally exempt.
+    const revisedAt = Date.parse(record.source_record_updated_at);
+    for (const [kind, observed] of [['ACTUAL', actual], ['STANDBY', standby]] as const) {
+      if (observed && observed.end > exportedAt) {
+        throw new Error('BOA_SOURCE_OBSERVED_AFTER_EXPORT_' + kind);
+      }
+      if (observed && observed.end > revisedAt) {
+        throw new Error('BOA_SOURCE_OBSERVED_AFTER_REVISION_' + kind);
+      }
+    }
     for (const [value, map] of [[planned, plannedByCrew], [actual, actualByCrew]] as const) {
       if (value) {
         const intervals = map.get(record.external_crew_id) ?? [];
