@@ -101,7 +101,7 @@ function LmsNativePlayerSession() {
         active={matricula.status === 'EM_ANDAMENTO'}
         allowLegacyNativePreview={matricula.tipo_conteudo === 'native'}
         completed={matricula.status === 'CONCLUIDO'}
-        studyOnly={admissionCheck.studyOnly && matricula.tipo_conteudo === 'native'}
+        studyOnly={admissionCheck?.studyOnly === true && matricula.tipo_conteudo === 'native'}
       />
     </main>
   );
