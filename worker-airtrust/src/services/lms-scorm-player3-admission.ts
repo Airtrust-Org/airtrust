@@ -36,12 +36,14 @@ export async function resolveScormPlayer3Admission(input: {
   const { env, db, bucket, tenant, course, activePrefix } = input;
   if (!positive(tenant) || !positive(course))
     return { kind: 'BLOCKED', reason: 'SCOPE_INVALID' };
-  if (input.contentType?.toLowerCase() !== 'scorm' ||
-      input.scormVersion !== '1.2')
+  if (input.contentType?.toLowerCase() !== 'scorm')
     return { kind: 'LEGACY', reason: 'NOT_A_SCORE_CANDIDATE' };
-  // Legacy public packages have no candidate marker. Do not load R2 for them.
-  if (!activePrefix || !activePrefix.includes('/_candidates/'))
+  // Only the original public/noncandidate editions may use the legacy path.
+  // An inconsistent candidate path/version is never evidence of legacy SCORM.
+  if (!activePrefix || !activePrefix.includes('/_candidates'))
     return { kind: 'LEGACY', reason: 'NOT_A_SCORE_CANDIDATE' };
+  if (input.scormVersion !== '1.2')
+    return { kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED' };
 
   // Candidate path must bind to the trusted course row and current tenant.
   const scopedPrefix = new RegExp(
