@@ -6,7 +6,7 @@
  * or change qualifications. Native course storage/schema requires Schema V2.
  */
 import { Hono } from 'hono';
-import {canReadStudyOnlyInProduction,permitNativeStudyContent,isApprovedStudyOnlyEdition} from '../services/lms-native-study-only';
+import {isNativeStudyOnlyEnabled,permitNativeStudyContent,isApprovedStudyOnlyEdition} from '../services/lms-native-study-only';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaIdSafe } from './escalas-shared';
@@ -34,7 +34,7 @@ app.get('/matriculas/:matriculaId/admissao', async (c) => {
   c.header('Cache-Control', 'private, no-store');
   const empresaId = getEmpresaIdSafe(c);
   const previewEnabled = canPreviewNativeInStaging(c.env, empresaId) ||
-    canReadStudyOnlyInProduction(c.env, empresaId);
+    isNativeStudyOnlyEnabled(c.env, empresaId);
   // A separately enabled staging activation marker can outlive the preview
   // flag. Never return the legacy-fallback 404 for an activated SCORM course.
   // With both capabilities OFF (including production), perform zero D1 reads.
@@ -63,7 +63,7 @@ app.get('/matriculas/:matriculaId/admissao', async (c) => {
     return c.json({
       success: true,
       data: {
-        study_only:canReadStudyOnlyInProduction(c.env,empresaId),
+        study_only:isNativeStudyOnlyEnabled(c.env,empresaId),
         matricula_id: admission.matriculaId,
         curso_id: admission.cursoId,
         mode: admission.mode,
@@ -102,7 +102,7 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   // A missing explicit staging allowlist results in no D1/R2 lookup at all.
   if (!canPreviewNativeInStaging(c.env, empresaId) &&
-      !canReadStudyOnlyInProduction(c.env, empresaId)) {
+      !isNativeStudyOnlyEnabled(c.env, empresaId)) {
     return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED' }, 404);
   }
   const rawId = c.req.param('matriculaId');
@@ -120,14 +120,14 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
       matriculaId: Number(rawId),
       actorUserId: actorUserId as number,
     });
-    if(c.env.ENVIRONMENT==='production' &&
+    if(isNativeStudyOnlyEnabled(c.env,empresaId) &&
        !isApprovedStudyOnlyEdition(c.env,empresaId,published.editionHash,published.course)) {
       return c.json({success:false,code:'NATIVE_STUDY_ONLY_EDITION_NOT_APPROVED'},409);
     }
     return c.json({
       success: true,
       data: {
-        study_only:c.env.ENVIRONMENT==='production',
+        study_only:isNativeStudyOnlyEnabled(c.env,empresaId),
         matricula_id: Number(rawId),
         ciclo_id: published.cicloId,
         mode: published.mode,
@@ -137,7 +137,7 @@ app.get('/matriculas/:matriculaId/curso', async (c) => {
         evidence_write_enabled: canWriteNative(c.env, empresaId) && published.mode === 'LEARN',
         // This capability flag is server-owned, exact-tenant, staging only.
         // It does not imply that certificate issuance already succeeded.
-        completion_supported: c.env.ENVIRONMENT==='production' ? false :
+        completion_supported: isNativeStudyOnlyEnabled(c.env,empresaId) ? false :
           canCompleteNative(c.env, empresaId) && published.mode === 'LEARN',
       },
     });
@@ -161,7 +161,7 @@ app.get('/matriculas/:matriculaId/sessao', async (c) => {
   c.header('Cache-Control', 'private, no-store');
   const empresaId = getEmpresaIdSafe(c);
   if (!canPreviewNativeInStaging(c.env, empresaId) &&
-      !canReadStudyOnlyInProduction(c.env, empresaId)) {
+      !isNativeStudyOnlyEnabled(c.env, empresaId)) {
     return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED' }, 404);
   }
   const rawId = c.req.param('matriculaId');
@@ -193,7 +193,7 @@ app.get('/matriculas/:matriculaId/sessao', async (c) => {
     return c.json({
       success: true,
       data: {
-        study_only:c.env.ENVIRONMENT==='production',
+        study_only:isNativeStudyOnlyEnabled(c.env,empresaId),
         matricula_id: Number(rawId),
         ciclo_id: summary.cicloId,
         edition_sha256: summary.editionHash,
@@ -207,7 +207,7 @@ app.get('/matriculas/:matriculaId/sessao', async (c) => {
           score_pct: summary.latestAttempt.scorePct,
           assessment_satisfied: summary.latestAttempt.assessmentSatisfied,
         } : null,
-        completion_supported: c.env.ENVIRONMENT==='production' ? false :
+        completion_supported: isNativeStudyOnlyEnabled(c.env,empresaId) ? false :
           canCompleteNative(c.env, empresaId) && summary.mode === 'LEARN',
       },
     });
@@ -233,7 +233,7 @@ app.get('/matriculas/:matriculaId/assets/:assetId', async (c) => {
   c.header('Cross-Origin-Resource-Policy', 'same-origin');
   const empresaId = getEmpresaIdSafe(c);
   if (!canPreviewNativeInStaging(c.env, empresaId) &&
-      !canReadStudyOnlyInProduction(c.env, empresaId)) {
+      !isNativeStudyOnlyEnabled(c.env, empresaId)) {
     return c.json({ success: false, code: 'NATIVE_PLAYER_NOT_ENABLED' }, 404);
   }
   const rawId = c.req.param('matriculaId');
@@ -250,7 +250,7 @@ app.get('/matriculas/:matriculaId/assets/:assetId', async (c) => {
       empresaId, matriculaId: Number(rawId),
       actorUserId: actorUserId as number, assetId,
     });
-    if(c.env.ENVIRONMENT==='production'){
+    if(isNativeStudyOnlyEnabled(c.env,empresaId)){
       const privateCourse=await loadNativePrivateCourse({env:c.env,db:c.env.DB,
         bucket:c.env.BUCKET,empresaId,matriculaId:Number(rawId),
         actorUserId:actorUserId as number});

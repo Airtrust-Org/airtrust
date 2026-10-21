@@ -9,7 +9,7 @@
  * awards completion, qualifications or certificates.
  */
 import { Hono, type Context } from 'hono';
-import {canReadStudyOnlyInProduction,permitNativeStudyContent} from '../services/lms-native-study-only';
+import {canReadStudyOnlyInProduction,isNativeStudyOnlyEnabled,permitNativeStudyContent} from '../services/lms-native-study-only';
 import { z } from 'zod';
 import type { Env } from '../types';
 import { getEmpresaIdSafe } from './escalas-shared';
@@ -104,7 +104,7 @@ async function execute(c: Context<{ Bindings: Env }>,
   c.header('Cache-Control', 'private, no-store');
   const empresaId = getEmpresaIdSafe(c);
   if (!canWriteNative(c.env, empresaId) ||
-      (c.env.ENVIRONMENT==='production' && kind==='attempt')) {
+      (isNativeStudyOnlyEnabled(c.env,empresaId) && kind==='attempt')) {
     return c.json({ success: false, code: 'NATIVE_EVIDENCE_WRITE_NOT_ENABLED' }, 404);
   }
   const matriculaRaw = c.req.param('matriculaId');

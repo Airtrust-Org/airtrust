@@ -43,6 +43,10 @@ export interface Env {
   // Exact CSV tenant IDs, absent/empty means OFF. Never enabled in production.
   NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS?: string;
   /** Explicit release/tenant/edition pinned STUDY_ONLY production; default off. */
+  /** Governed synthetic staging acceptance, separate from production. */
+  NATIVE_STUDY_ONLY_STAGING_TENANTS?: string;
+  NATIVE_STUDY_ONLY_STAGING_RELEASE_SHA?: string;
+  NATIVE_STUDY_ONLY_STAGING_EDITIONS?: string;
   NATIVE_STUDY_ONLY_PRODUCTION_TENANTS?: string;
   NATIVE_STUDY_ONLY_PRODUCTION_RELEASE_SHA?: string;
   NATIVE_STUDY_ONLY_PRODUCTION_EDITIONS?: string;

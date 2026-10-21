@@ -1,6 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {
- canReadStudyOnlyInProduction,isApprovedStudyOnlyEdition,permitNativeStudyContent,
+ canReadStudyOnlyInProduction,canReadStudyOnlyInStaging,isNativeStudyOnlyEnabled,
+ isApprovedStudyOnlyEdition,permitNativeStudyContent,
 } from '../../services/lms-native-study-only';
 import type {Env} from '../../types';
 import type {NativeCourseArtifact} from '../../lib/lms/lms-native-course-contract';
@@ -54,6 +55,28 @@ describe('Player3 Native production study-only release guard',()=>{
    }
    expect(isApprovedStudyOnlyEdition(env(),6,edition,
      {...artifact,units:[practice]})).toBe(false);
+ });
+ it('only enables staging study-only by independent SHA, tenant and edition',()=>{
+   const s=env({ENVIRONMENT:'staging',
+    NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS:'6',
+    NATIVE_LEARNER_WRITE_ENABLED_TENANTS:'6',
+    NATIVE_STUDY_ONLY_STAGING_TENANTS:'6',
+    NATIVE_STUDY_ONLY_STAGING_RELEASE_SHA:release,
+    NATIVE_STUDY_ONLY_STAGING_EDITIONS:edition,
+   });
+   expect(canReadStudyOnlyInStaging(s,6)).toBe(true);
+   expect(isNativeStudyOnlyEnabled(s,6)).toBe(true);
+   expect(isApprovedStudyOnlyEdition(s,6,edition,artifact)).toBe(true);
+   expect(isApprovedStudyOnlyEdition(s,6,'c'.repeat(64),artifact)).toBe(false);
+   expect(permitNativeStudyContent(s,6,edition,{
+     ...artifact,units:[lesson,{...practice,kind:'assessment'}]
+   } as NativeCourseArtifact)).toBe(false);
+   for(const key of ['NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS',
+    'NATIVE_LEARNER_WRITE_ENABLED_TENANTS','NATIVE_STUDY_ONLY_STAGING_TENANTS',
+    'NATIVE_STUDY_ONLY_STAGING_RELEASE_SHA','NATIVE_STUDY_ONLY_STAGING_EDITIONS']){
+      expect(canReadStudyOnlyInStaging({...s,[key]:undefined},6)).toBe(false);
+   }
+   expect(canReadStudyOnlyInStaging({...s,NATIVE_STUDY_ONLY_STAGING_TENANTS:'*'},6)).toBe(false);
  });
  it('never turns a terminal stage into an authorized player by changing a feature flag',()=>{
    const forged={...artifact,units:[lesson,{...practice,kind:'assessment'}]} as NativeCourseArtifact;
