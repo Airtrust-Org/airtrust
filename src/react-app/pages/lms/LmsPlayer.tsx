@@ -26,6 +26,7 @@ import { useAuth } from '@/react-app/hooks/useAuth';
 import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/useLms';
 import { formatMinutes } from './lmsUi';
 import { describeScormClosureMissing } from './lmsScormClosureReasons';
+import {isScormStudyTerminalMessage} from './lmsScormStudyMessages';
 import {
   parseGranularDiagnostic,
   type LmsGranularDiagnostic,
@@ -187,8 +188,6 @@ function parseSlideLocation(
 
   return null;
 }
-
-import {isScormStudyTerminalMessage} from './lmsScormStudyMessages';
 
 export default function LmsPlayer({scormStudyOnly=false}:{scormStudyOnly?:boolean}={}) {
   const { matriculaId } = useParams<{ matriculaId: string }>();
