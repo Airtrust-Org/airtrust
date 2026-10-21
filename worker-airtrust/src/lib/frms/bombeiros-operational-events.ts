@@ -259,6 +259,8 @@ export async function loadBoaOperationalCase(
        FROM frms_fadiga_evento e
        JOIN funcionarios f ON f.id = CAST(json_extract(e.payload_json, '$.funcionario_id') AS INTEGER)
       WHERE e.id = ? AND e.empresa_id = ? AND e.tipo = ?
+        AND json_extract(e.payload_json, '$.schema') = 'BOA_CASE_OPENED_V1'
+        AND json_extract(e.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'
         AND f.empresa_id = ? AND f.ativo = 1 AND f.deleted_at IS NULL
         AND ${scope.clause} LIMIT 1`,
   ).bind(caseId, empresaId, BOA_CASE_OPEN_TYPE, empresaId, ...scope.bindings).first<BoaEventRow>();
@@ -324,12 +326,35 @@ export async function loadBoaCaseQueue(
   const scope = buildFuncionarioScopeWhere(access, 'f');
   if (!scope.bindings.length) return null;
   const query = `SELECT e.id AS case_id, e.created_at,
+      json_extract(e.payload_json, '$.schema') AS opening_schema,
+      json_extract(e.payload_json, '$.dispatch_permission') AS opening_dispatch,
       (SELECT COUNT(*) FROM frms_fadiga_evento treatment
        WHERE treatment.empresa_id = e.empresa_id AND treatment.checkin_id = e.id
          AND treatment.tipo = 'BOA_CASE_TREATMENT_V1') AS treatment_count,
+      (SELECT MIN(treatment.created_at) FROM frms_fadiga_evento treatment
+       WHERE treatment.empresa_id = e.empresa_id AND treatment.checkin_id = e.id
+         AND treatment.tipo = 'BOA_CASE_TREATMENT_V1') AS treatment_at,
+      (SELECT COUNT(*) FROM frms_fadiga_evento treatment
+       WHERE treatment.empresa_id = e.empresa_id AND treatment.checkin_id = e.id
+         AND treatment.tipo = 'BOA_CASE_TREATMENT_V1'
+         AND (json_extract(treatment.payload_json, '$.schema') IS NOT 'FRMS_CASE_TREATMENT_V1'
+           OR COALESCE(LENGTH(TRIM(json_extract(treatment.payload_json, '$.responsavel'))), 0) < 2
+           OR COALESCE(LENGTH(TRIM(json_extract(treatment.payload_json, '$.acao_mitigacao'))), 0) < 10
+           OR COALESCE(LENGTH(TRIM(json_extract(treatment.payload_json, '$.justificativa'))), 0) < 10
+           OR COALESCE(json_extract(treatment.payload_json, '$.prazo'), '') NOT GLOB '????-??-??'
+         )) AS invalid_treatment_count,
       (SELECT COUNT(*) FROM frms_fadiga_evento closed
        WHERE closed.empresa_id = e.empresa_id AND closed.checkin_id = e.id
-         AND closed.tipo = 'BOA_CASE_CLOSED_V1') AS closure_count
+         AND closed.tipo = 'BOA_CASE_CLOSED_V1') AS closure_count,
+      (SELECT MIN(closed.created_at) FROM frms_fadiga_evento closed
+       WHERE closed.empresa_id = e.empresa_id AND closed.checkin_id = e.id
+         AND closed.tipo = 'BOA_CASE_CLOSED_V1') AS closure_at,
+      (SELECT COUNT(*) FROM frms_fadiga_evento closed
+       WHERE closed.empresa_id = e.empresa_id AND closed.checkin_id = e.id
+         AND closed.tipo = 'BOA_CASE_CLOSED_V1'
+         AND (json_extract(closed.payload_json, '$.schema') IS NOT 'FRMS_CASE_RESOLUTION_V1'
+           OR COALESCE(LENGTH(TRIM(json_extract(closed.payload_json, '$.avaliacao_eficacia'))), 0) < 10
+         )) AS invalid_closure_count
     FROM frms_fadiga_evento e
     JOIN funcionarios f
       ON f.id = CAST(json_extract(e.payload_json, '$.funcionario_id') AS INTEGER)
@@ -352,13 +377,21 @@ export async function loadBoaCaseQueue(
     limit + 1,
   ];
   const result = await db.prepare(query).bind(...bindings)
-    .all<{ case_id: string; created_at: string; treatment_count: number; closure_count: number }>();
+    .all<{ case_id: string; created_at: string; opening_schema: string | null;
+      opening_dispatch: string | null; treatment_count: number; closure_count: number;
+      invalid_treatment_count: number; invalid_closure_count: number;
+      treatment_at: string | null; closure_at: string | null }>();
   const entries = result.results ?? [];
   if (entries.some(x => !x.case_id || !x.created_at
+      || x.opening_schema !== 'BOA_CASE_OPENED_V1'
+      || x.opening_dispatch !== 'NOT_GRANTED'
       || !Number.isSafeInteger(x.treatment_count) || !Number.isSafeInteger(x.closure_count)
       || x.treatment_count < 0 || x.treatment_count > 1
       || x.closure_count < 0 || x.closure_count > 1
-      || x.closure_count > x.treatment_count)) {
+      || x.closure_count > x.treatment_count
+      || x.invalid_treatment_count !== 0 || x.invalid_closure_count !== 0
+      || (x.closure_count === 1 && x.treatment_count === 1
+        && (!x.treatment_at || !x.closure_at || x.closure_at < x.treatment_at)))) {
     throw new Error('BOA_CASE_QUEUE_INTEGRITY_ERROR');
   }
   const page = entries.slice(0, limit);
@@ -409,6 +442,8 @@ export async function registerBoaCaseAction(
       FROM frms_fadiga_evento base
       JOIN funcionarios f ON f.id = CAST(json_extract(base.payload_json, '$.funcionario_id') AS INTEGER)
      WHERE base.id = ? AND base.empresa_id = ? AND base.tipo = ?
+       AND json_extract(base.payload_json, '$.schema') = 'BOA_CASE_OPENED_V1'
+       AND json_extract(base.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'
        AND f.empresa_id = ? AND f.deleted_at IS NULL AND f.ativo = 1
        AND EXISTS (SELECT 1 FROM frms_fadiga_evento receipt
          WHERE receipt.id = base.checkin_id
