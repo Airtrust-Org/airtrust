@@ -165,8 +165,8 @@ describe('NativeCoursePreview — display only', () => {
     expect(onSubmitAssessment).toHaveBeenCalledExactlyOnceWith([{questionId:'q1',optionId:'b'}]);
   });
 
-  it('preserves multi-module scored assessments without inventing a final exam', () => {
-    const onSubmitAssessment = vi.fn();
+  it('treats earlier assessment groups as repeatable practice and scores only the final exam', () => {
+    const onCheckPractice = vi.fn(), onSubmitAssessment = vi.fn();
     const modular: NativeLearnerCourse = {
       ...course,
       units: [
@@ -183,17 +183,21 @@ describe('NativeCoursePreview — display only', () => {
       }],
     };
     render(<NativeCoursePreview course={modular}
-      resolveAssetHref={() => null} onSubmitAssessment={onSubmitAssessment} />);
+      resolveAssetHref={() => null} onCheckPractice={onCheckPractice}
+      onSubmitAssessment={onSubmitAssessment} />);
     fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
-    expect(screen.getByText('AVALIAÇÃO DO MÓDULO')).toBeInTheDocument();
+    expect(screen.getByText('FIXAÇÃO DO MÓDULO')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio',{name:'Verificar o EPI'}));
     expect(screen.queryByRole('button',{name:'Enviar respostas para avaliação'})).toBeNull();
-    expect(screen.getByText(/gravação independente de cada avaliação/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Conferir resposta de fixação'}));
+    expect(onCheckPractice).toHaveBeenCalledExactlyOnceWith('q1','b');
+    expect(onSubmitAssessment).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
+    expect(screen.getByText('PROVA FORMAL')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio',{name:'Verificar condição'}));
     fireEvent.click(screen.getByRole('button',{name:'Enviar respostas para avaliação'}));
     expect(onSubmitAssessment).toHaveBeenCalledExactlyOnceWith([
-      {questionId:'q1',optionId:'b'},{questionId:'q2',optionId:'a'},
+      {questionId:'q2',optionId:'a'},
     ]);
   });
 

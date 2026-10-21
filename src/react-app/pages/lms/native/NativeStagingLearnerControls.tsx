@@ -55,9 +55,14 @@ export default function NativeStagingLearnerControls({
 
   const base = `${API_BASE_URL}/lms/native/matriculas/${matriculaId}`;
   const lessonIds = new Set(course.units.filter((unit) => unit.kind === 'lesson').map((unit) => unit.id));
-  const practiceIds = new Set(course.units.filter((unit) => unit.kind === 'practice')
-    .flatMap((unit) => unit.questionIds));
-  const examQuestions = course.questions.filter((q) => !practiceIds.has(q.id));
+  const assessmentUnits = course.units.filter((unit) => unit.kind === 'assessment');
+  const finalAssessment = assessmentUnits.at(-1);
+  const finalQuestionIds = new Set(finalAssessment?.questionIds ?? []);
+  const practiceIds = new Set(course.units
+    .filter((unit) => unit.kind === 'practice' || unit.kind === 'assessment')
+    .flatMap((unit) => unit.questionIds)
+    .filter((id) => !finalQuestionIds.has(id)));
+  const examQuestions = course.questions.filter((q) => finalQuestionIds.has(q.id));
 
   async function refreshSession(): Promise<NativePilotSession> {
     const response = await fetchWithAuth(`${base}/sessao`, { method: 'GET', cache: 'no-store' });
@@ -188,7 +193,10 @@ export default function NativeStagingLearnerControls({
 
   const submit = (answers: Array<{ questionId: string; optionId: string }>) => void mutate(async () => {
     if(studyOnly)throw Error('NATIVE_STUDY_ONLY_ASSESSMENT_DISABLED');
-    if (!started || answers.length !== examQuestions.length ||
+    if (!started || !finalAssessment ||
+        session.seenLessonIds.length !== lessonIds.size ||
+        session.seenLessonIds.some((id) => !lessonIds.has(id)) ||
+        answers.length !== examQuestions.length ||
         examQuestions.some((question, i) =>
           answers[i]?.questionId !== question.id ||
           !question.options.some((option) => option.id === answers[i].optionId))) {
@@ -279,6 +287,9 @@ export default function NativeStagingLearnerControls({
         onCheckPractice={started && !locked && !completed ? checkPractice : undefined}
         practiceFeedback={practiceFeedback}
         evidenceBusy={busy}
+        finalAssessmentAvailable={lessonIds.size > 0 &&
+          session.seenLessonIds.length === lessonIds.size &&
+          session.seenLessonIds.every((id) => lessonIds.has(id))}
       />
     </section>
   );

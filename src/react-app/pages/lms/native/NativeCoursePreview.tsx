@@ -20,6 +20,7 @@ type PreviewProps = {
   onCheckPractice?: (questionId: string, optionId: string) => void;
   practiceFeedback?: { questionId: string; optionId: string; correct: boolean; feedback: string } | null;
   evidenceBusy?: boolean;
+  finalAssessmentAvailable?: boolean;
 };
 
 const TEMPLATE_VARIANTS = [
@@ -113,7 +114,8 @@ function ProtectedNativeMedia({ asset, type, alt, stacked = false, fetchAsset }:
  */
 export default function NativeCoursePreview({
   course, resolveAssetHref, fetchAuthorizedAsset, initialUnitId,
-  serverSeenLessonIds, onRecordLessonVisit, onSubmitAssessment, onCheckPractice, practiceFeedback, evidenceBusy = false,
+  serverSeenLessonIds, onRecordLessonVisit, onSubmitAssessment, onCheckPractice, practiceFeedback,
+  evidenceBusy = false, finalAssessmentAvailable = true,
 }: PreviewProps) {
   const [unitIndex, setUnitIndex] = useState(() => {
     const index = initialUnitId ? course.units.findIndex((u) => u.id === initialUnitId) : -1;
@@ -140,14 +142,13 @@ export default function NativeCoursePreview({
   const isActivity = unit.kind === 'practice' || unit.kind === 'scenario' || unit.kind === 'assessment';
   // Legacy scenarios may still be mandatory; practice never contributes to
   // certifying attempts, even when its answer happens to be correct.
-  const practiceIds = new Set(course.units.filter((candidate) => candidate.kind === 'practice')
-    .flatMap((candidate) => candidate.questionIds));
-  const certifyingQuestions = course.questions.filter((q) => !practiceIds.has(q.id));
   const assessmentIndexes = course.units.flatMap((candidate, i) =>
     candidate.kind === 'assessment' ? [i] : []);
-  // Module-scored courses have several assessment units but no invented
-  // standalone final exam. The current staging API accepts only the consolidated
-  // certifying attempt, so don't offer a premature impossible submission.
+  const finalAssessment = course.units[assessmentIndexes[assessmentIndexes.length - 1]];
+  const finalQuestionIds = new Set(finalAssessment?.questionIds ?? []);
+  const certifyingQuestions = course.questions.filter((q) => finalQuestionIds.has(q.id));
+  // Only the last assessment unit is the formal exam. Earlier assessment
+  // groups are routed through formative feedback and never enter the score.
   const canSubmitOfficialAttempt = (unit.kind === 'assessment' &&
       unitIndex === assessmentIndexes[assessmentIndexes.length - 1]) ||
     (unit.kind === 'scenario' && assessmentIndexes.length === 0);
@@ -176,7 +177,8 @@ export default function NativeCoursePreview({
   const unitLabel = unit.kind === 'lesson' ? 'CONTEÚDO DO TREINAMENTO'
     : unit.kind === 'practice' ? 'FIXAÇÃO DO MÓDULO'
     : unit.kind === 'scenario' ? 'DECISÃO OPERACIONAL'
-    : assessmentIndexes.length > 1 ? 'AVALIAÇÃO DO MÓDULO' : 'AVALIAÇÃO OFICIAL';
+    : unitIndex === assessmentIndexes[assessmentIndexes.length - 1]
+      ? 'PROVA FORMAL' : 'FIXAÇÃO DO MÓDULO';
   const navigationProgress = ((unitIndex + 1) / course.units.length) * 100;
 
   function navigateTo(index: number) {
@@ -327,7 +329,13 @@ export default function NativeCoursePreview({
                 {contentBlocks.map(renderTextBlock)}
               </div>
 
-              {isActivity && (
+              {unit.kind === 'assessment' &&
+                unitIndex === assessmentIndexes[assessmentIndexes.length - 1] &&
+                !finalAssessmentAvailable ? (
+                <p role="status" className="rounded-xl border border-[#dce6ed] bg-[#f7fafc] p-4 text-sm text-[#536b82]">
+                  A prova formal será liberada depois que todo o conteúdo obrigatório estiver concluído.
+                </p>
+              ) : isActivity && (
                 <div className="space-y-5 pt-2">
                   {unit.questionIds.map((questionId, position) => {
                     const question = questionMap.get(questionId);
@@ -360,7 +368,10 @@ export default function NativeCoursePreview({
                             </label>
                           ))}
                         </div>
-                        {unit.kind === 'practice' && onCheckPractice && (
+                        {(unit.kind === 'practice' ||
+                          (unit.kind === 'assessment' &&
+                            unitIndex !== assessmentIndexes[assessmentIndexes.length - 1])) &&
+                          onCheckPractice && (
                           <div className="mt-4 space-y-2">
                             <button type="button" disabled={evidenceBusy || !choices[question.id]}
                               onClick={() => onCheckPractice(question.id, choices[question.id])}
@@ -400,9 +411,8 @@ export default function NativeCoursePreview({
               )}
               {unit.kind === 'assessment' && !canSubmitOfficialAttempt && (
                 <p role="status" className="text-sm text-[#536b82]">
-                  Avaliação modular: prossiga para os próximos módulos. Esta prévia
-                  mantém as seleções somente na sessão do navegador; a gravação
-                  independente de cada avaliação no servidor ainda está pendente.
+                  Atividade de fixação: esta resposta não tem nota eliminatória nem
+                  consome tentativa oficial. Você pode repetir a atividade e seguir.
                 </p>
               )}
               {onSubmitAssessment && canSubmitOfficialAttempt && certifyingQuestions.length > 0 && (

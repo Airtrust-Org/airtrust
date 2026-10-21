@@ -141,8 +141,7 @@ export async function loadApprovedPlayer3StageContext(input:{
   if(!policy||!bank||policy.source_sha256!==binding.source_sha256||
      bank.source_sha256!==binding.source_sha256||
      policy.editionSha256!==course.editionHash)deny('STAGE_EDITION_MISMATCH');
-  if(!Array.isArray(policy.stages)||policy.stages.length<1||
-     policy.stages.length>100||
+  if(!Array.isArray(policy.stages)||policy.stages.length!==1||
      policy.stages.some(stage=>!stage||!ID.test(stage.stageId))||
      new Set(policy.stages.map(stage=>stage.stageId)).size!==policy.stages.length){
     deny('STAGE_POLICY_NOT_APPROVED');
@@ -150,7 +149,11 @@ export async function loadApprovedPlayer3StageContext(input:{
   const authoredPositions=policy.stages.map(stage=>
     course.artifact.units.findIndex(unit=>
       unit.id===stage.stageId&&unit.kind==='assessment'));
+  const lastAssessmentPosition=course.artifact.units.reduce((last,unit,index)=>
+    unit.kind==='assessment'?index:last,-1);
   if(authoredPositions.some(index=>index<0)||
+     authoredPositions[0]!==lastAssessmentPosition||
+     lastAssessmentPosition!==course.artifact.units.length-1||
      authoredPositions.some((index,position)=>
        position>0&&index<=authoredPositions[position-1])){
     deny('STAGE_AUTHORED_CROSSWALK_INVALID');

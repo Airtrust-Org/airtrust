@@ -24,8 +24,12 @@ export function gradeNativePracticeAnswer(
     typeof answer.optionId !== 'string') {
     throw new NativePracticeError('NATIVE_INVALID_PRACTICE_ANSWER');
   }
-  const practiceIds = new Set(course.units.filter((unit) => unit.kind === 'practice')
-    .flatMap((unit) => unit.questionIds));
+  const assessments = course.units.filter((unit) => unit.kind === 'assessment');
+  const finalQuestionIds = new Set(assessments.at(-1)?.questionIds ?? []);
+  const practiceIds = new Set(course.units
+    .filter((unit) => unit.kind === 'practice' || unit.kind === 'assessment')
+    .flatMap((unit) => unit.questionIds)
+    .filter((questionId) => !finalQuestionIds.has(questionId)));
   if (!practiceIds.has(answer.questionId)) {
     throw new NativePracticeError('NATIVE_PRACTICE_QUESTION_NOT_FOUND');
   }

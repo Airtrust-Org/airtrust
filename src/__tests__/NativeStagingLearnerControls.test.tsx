@@ -77,10 +77,14 @@ describe('Native staging learner — evidence-only interaction', () => {
     fireEvent.click(screen.getByRole('button', { name: /Iniciar ou retomar/ }));
     expect(await screen.findByText(/Registro de aprendizagem habilitado/)).toBeInTheDocument();
     expect(onVerifiedStarted).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name:'Próximo' }));
+    expect(screen.queryByText('Questão do piloto')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name:'Anterior' }));
     fireEvent.click(screen.getByRole('button', { name: 'Registrar visita a esta aula' }));
     expect(await screen.findByText(/Visita registrada pelo servidor/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Visita registrada no servidor' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
+    expect(screen.getByText('Questão do piloto')).toBeInTheDocument();
     const submit = screen.getByRole('button', { name: 'Enviar respostas para avaliação' });
     expect(submit).toBeDisabled();
     fireEvent.click(screen.getByLabelText('Primeira alternativa'));
@@ -153,8 +157,9 @@ describe('Native staging learner — evidence-only interaction', () => {
         ...course.questions,
       ],
     };
-    const session = (attempted: boolean) => respond({success:true,data:{
-      ...scope, next_sequence:1, seen_lesson_ids:[],last_visited_unit_id:null,
+    const session = (attempted: boolean, visited=false) => respond({success:true,data:{
+      ...scope, next_sequence:visited?2:1, seen_lesson_ids:visited?['intro']:[],
+      last_visited_unit_id:visited?'intro':null,
       latest_attempt:attempted
         ? {attempt_number:1, score_pct:null, assessment_satisfied:true} : null,
     }});
@@ -165,6 +170,11 @@ describe('Native staging learner — evidence-only interaction', () => {
       }}))
       .mockResolvedValueOnce(session(false))
       .mockResolvedValueOnce(respond({success:true,data:{
+        committed_sequence:1,edition_sha256:editionHash,
+        completion_supported:false,state:'APPLIED',
+      }}))
+      .mockResolvedValueOnce(session(false,true))
+      .mockResolvedValueOnce(respond({success:true,data:{
         question_id:'practice-question', edition_sha256:editionHash,
         correct:false, feedback:'Reveja o conteúdo de segurança',
         non_certifying:true,
@@ -174,7 +184,7 @@ describe('Native staging learner — evidence-only interaction', () => {
         completion_supported:false,state:'APPLIED',
         score_pct:null,assessment_satisfied:true,
       }}))
-      .mockResolvedValueOnce(session(true));
+      .mockResolvedValueOnce(session(true,true));
     render(<NativeStagingLearnerControls
       matriculaId={101} cycleId={9} editionHash={editionHash}
       course={withPractice} initialSession={initialSession}
@@ -182,6 +192,8 @@ describe('Native staging learner — evidence-only interaction', () => {
     />);
     fireEvent.click(screen.getByRole('button',{name:/Iniciar ou retomar/}));
     expect(await screen.findByText(/Registro de aprendizagem habilitado/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Registrar visita a esta aula'}));
+    expect(await screen.findByText(/Visita registrada pelo servidor/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'Próximo'}));
     fireEvent.click(screen.getByRole('radio',{name:'Revisar'}));
     fireEvent.click(screen.getByRole('button',{name:'Conferir resposta de fixação'}));
@@ -194,13 +206,14 @@ describe('Native staging learner — evidence-only interaction', () => {
     const posts=api.fetchWithAuth.mock.calls.filter(([,opts])=>opts.method==='POST');
     expect(posts.map(([url])=>url)).toEqual([
       '/api/lms/native/matriculas/101/iniciar',
+      '/api/lms/native/matriculas/101/checkpoints',
       '/api/lms/native/matriculas/101/pratica',
       '/api/lms/native/matriculas/101/tentativas',
     ]);
-    expect(JSON.parse(posts[1][1].body as string)).toEqual({
+    expect(JSON.parse(posts[2][1].body as string)).toEqual({
       questionId:'practice-question',optionId:'a',
     });
-    expect(JSON.parse(posts[2][1].body as string).answers).toEqual([
+    expect(JSON.parse(posts[3][1].body as string).answers).toEqual([
       {questionId:'q1',optionId:'a'},
     ]);
   });

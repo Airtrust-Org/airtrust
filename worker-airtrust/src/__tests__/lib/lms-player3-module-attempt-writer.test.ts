@@ -17,10 +17,7 @@ const prefix='lms/native/6/10/'+EDITION+'/';
 const policy={
   schema:'AIRTRUST_PLAYER3_GRADE_POLICY_V1',source_sha256:SOURCE,
   courseId:'doutrinamento',editionSha256:EDITION,certificationApproved:true,
-  stages:[
-    {stageId:'m1',masteryScore:70,requiredQuestionIds:['q1','q2']},
-    {stageId:'m2',masteryScore:70,requiredQuestionIds:['q3']},
-  ],
+  stages:[{stageId:'m1',masteryScore:70,requiredQuestionIds:['q1','q2']}],
 };
 const bank={
   schema:'AIRTRUST_PLAYER3_SERVER_PRIVATE_BANK_REVIEW_V1',source_sha256:SOURCE,
@@ -29,8 +26,6 @@ const bank={
     {id:'q1',stageId:'m1',options:['o0','o1'],correctOptionId:'o1',
       feedbackCorrect:'private',feedbackIncorrect:'private'},
     {id:'q2',stageId:'m1',options:['o0','o1'],correctOptionId:'o0',
-      feedbackCorrect:'private',feedbackIncorrect:'private'},
-    {id:'q3',stageId:'m2',options:['o0','o1'],correctOptionId:'o1',
       feedbackCorrect:'private',feedbackIncorrect:'private'},
   ],
 };
@@ -135,8 +130,6 @@ beforeEach(()=>{
     artifact:{units:[
       {id:'lesson1',kind:'lesson'},
       {id:'m1',kind:'assessment'},
-      {id:'lesson2',kind:'lesson'},
-      {id:'m2',kind:'assessment'},
     ]} as never,
   });
   vi.mocked(readNativeLearnerSession).mockResolvedValue({summary:{
@@ -159,9 +152,8 @@ describe('Player 3 staging module attempt writer',()=>{
       editionHash:EDITION,cursoId:10,cicloId:1000,mode:'LEARN',
       artifact:{units:[
         {id:'lesson1',kind:'lesson'},
-        {id:'m2',kind:'assessment'},
-        {id:'lesson2',kind:'lesson'},
         {id:'m1',kind:'assessment'},
+        {id:'lesson2',kind:'lesson'},
       ]} as never,
     });
     await expect(f.call()).rejects.toMatchObject({
@@ -222,16 +214,13 @@ describe('Player 3 staging module attempt writer',()=>{
     expect(insert?.[0]).toContain('approved.passed=1');
     expect(insert?.[0]).toContain('approved.politica_id=p.id');
   });
-  it('requires earlier approved modules before a later official stage',async()=>{
+  it('rejects a module quiz as an official attempt',async()=>{
     const f=await fixture();
     await expect(f.call({stageId:'m2',eventId:'m2early',
       answers:[{questionId:'q3',optionId:'o1'}]}))
-      .rejects.toMatchObject({code:'STAGE_PREREQUISITE_NOT_PASSED'});
+      .rejects.toMatchObject({code:'STAGE_EVIDENCE_INVALID'});
     expect(f.stored.size).toBe(0);
-    await f.call();
-    expect((await f.call({stageId:'m2',eventId:'m2event',
-      answers:[{questionId:'q3',optionId:'o1'}]})).stagePassed).toBe(true);
-    expect(f.stored.size).toBe(2);
+    expect(f.stored.size).toBe(0);
   });
   it('stores a failed official attempt as a failure and allows the next number',async()=>{
     const f=await fixture();

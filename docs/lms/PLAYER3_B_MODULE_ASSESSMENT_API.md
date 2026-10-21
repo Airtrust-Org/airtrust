@@ -1,8 +1,16 @@
-# Player 3 — Contrato de avaliações por módulo (Frente B)
+# Player 3 — Contrato da prova formal terminal (Frente B)
 
 **Estado 2026-10-14:** Código em PR #1389, em draft. Staging desativado por padrão, migrations **não aplicadas**. Não constitui homologação do LMS.
 
 ## API para Frentes A e D
+
+Esta API recebe somente a prova formal terminal, liberada após o registro de
+todas as unidades instrucionais obrigatórias. Fixações dos módulos usam a rota
+`POST /api/lms/native/matriculas/{matriculaId}/pratica`; elas podem ser repetidas,
+retornam feedback sem nota ou tentativa e não participam da conclusão.
+Uma política aprovada deve conter exatamente uma etapa oficial, vinculada à
+última unidade de avaliação da edição. Políticas oficiais com etapas modulares
+intermediárias são recusadas pelo Worker.
 
 **POST /api/lms/native/matriculas/{matriculaId}/etapas/{stageId}/tentativas**
 
