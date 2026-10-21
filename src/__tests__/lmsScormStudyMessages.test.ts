@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {describe,expect,it} from 'vitest';
 import {isScormStudyTerminalMessage} from '@/react-app/pages/lms/lmsScormStudyMessages';
 
@@ -32,7 +33,7 @@ describe('SCORM Player 3 study-only terminal messages',()=>{
     expect(isScormStudyTerminalMessage({type:'lms:completion-error-legacy'})).toBe(false);
   });
   it('wires the study-only guard before legacy terminal handlers and progress reconciliation',()=>{
-    const source=readFileSync(new URL('../react-app/pages/lms/LmsPlayer.tsx',import.meta.url),'utf8');
+    const source=readFileSync(resolve(process.cwd(),'src/react-app/pages/lms/LmsPlayer.tsx'),'utf8');
     const sourceGuard=source.indexOf('isScormStudyTerminalMessage(event.data)');
     const legacyTerminal=source.indexOf("event.data.type === 'lms:completed' &&");
     expect(sourceGuard).toBeGreaterThan(0);
