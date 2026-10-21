@@ -89,6 +89,7 @@ describe('Native resume snapshot endpoint — no grade secrets or completion', (
     expect(data).toEqual({
       success: true,
       data: {
+        study_only: false,
         matricula_id: 101, ciclo_id: 11, edition_sha256: digest, mode: 'LEARN',
         next_sequence: 3, seen_lesson_ids: ['opening', 'module2'],
         last_visited_unit_id: 'module2', total_lessons: 3,

@@ -81,7 +81,7 @@ describe('Native integration admission endpoint — read only and tenant scoped'
     expect(response.headers.get('cache-control')).toContain('no-store');
     expect(await response.json()).toEqual({
       success: true,
-      data: { matricula_id: 51, curso_id: 7, mode: 'LEARN', native_package: 'NOT_YET_ENABLED' },
+      data: { study_only: false, matricula_id: 51, curso_id: 7, mode: 'LEARN', native_package: 'NOT_YET_ENABLED' },
     });
     expect(bindings[0]).toEqual([51, 6]);
     expect(bindings[1]).toEqual([51, 6, 100]);
