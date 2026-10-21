@@ -4,9 +4,12 @@ import BombeirosCheckinPage from '../BombeirosCheckinPage';
 
 const useAuthMock = vi.fn();
 const mutateMock = vi.fn();
+const statusApiMock = vi.fn();
+const refetchMock = vi.fn();
 vi.mock('@/react-app/hooks/useAuth', () => ({ useAuth: () => useAuthMock() }));
 vi.mock('@/react-app/hooks/useApi', () => ({
   useApiMutation: () => ({ mutate: mutateMock, loading: false, error: null }),
+  useApi: (...args: unknown[]) => statusApiMock(...args),
 }));
 vi.mock('@/react-app/components/AppLayout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -19,6 +22,12 @@ const setCompany = (id: number, code: string, role = 'ALUNO') =>
 describe('BOA checkin form — own tenant and zero offshore scope', () => {
   beforeEach(() => {
     useAuthMock.mockReset();
+    statusApiMock.mockReset().mockReturnValue({
+      data: { success: true, data: { received: false, checkin_id: null,
+        case_id: null, human_review_required: true, dispatch_permission: 'NOT_GRANTED' } },
+      error: null, loading: false, refetch: refetchMock,
+    });
+    refetchMock.mockReset();
     mutateMock.mockReset().mockResolvedValue({
       accepted: true, checkin_id: 'qa-receipt', case_id: 'qa-case',
       status: 'HUMAN_REVIEW_REQUIRED', dispatch_permission: 'NOT_GRANTED',
@@ -62,6 +71,34 @@ describe('BOA checkin form — own tenant and zero offshore scope', () => {
     expect(data).not.toHaveProperty('score_fadiga');
     expect(await screen.findByText('qa-case')).toBeInTheDocument();
     expect(screen.getByText(/não concedida/)).toBeInTheDocument();
+  });
+
+  it('does not post a duplicate or invent clearance after a prior accepted BOA receipt', () => {
+    setCompany(130, 'bombeiros');
+    statusApiMock.mockReturnValue({
+      data: { success: true, data: {
+        received: true, checkin_id: 'boa-existing', case_id: 'boa-case-existing',
+        human_review_required: true, dispatch_permission: 'NOT_GRANTED',
+      } },
+      loading: false, error: null, refetch: refetchMock,
+    });
+    render(<BombeirosCheckinPage />);
+    fireEvent.click(screen.getByLabelText('Confirmar ciência e confidencialidade'));
+    expect(screen.getByRole('button', { name: 'Enviar para revisão humana' })).toBeDisabled();
+    expect(screen.getByText(/Check-in do dia já recebido/)).toBeInTheDocument();
+    expect(screen.getByText(/boa-case-existing/)).toBeInTheDocument();
+    expect(mutateMock).not.toHaveBeenCalled();
+  });
+
+  it('blocks sending when prior receipt status cannot be verified', () => {
+    setCompany(130, 'bombeiros');
+    statusApiMock.mockReturnValue({ data: null, loading: false,
+      error: 'integrity failed', refetch: refetchMock });
+    render(<BombeirosCheckinPage />);
+    fireEvent.click(screen.getByLabelText('Confirmar ciência e confidencialidade'));
+    expect(screen.getByRole('button', { name: 'Enviar para revisão humana' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('integrity failed');
+    expect(mutateMock).not.toHaveBeenCalled();
   });
 
   it('keeps missing data as null without defaulting to normality', async () => {
