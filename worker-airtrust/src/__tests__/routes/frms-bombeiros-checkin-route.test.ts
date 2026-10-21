@@ -30,12 +30,13 @@ const input = {
   self_declared_unfit: false, acknowledge_confidentiality: true,
 };
 function makeApp({
-  id = 130, codigo = 'bombeiros', role = 'student', env = 'staging',
-}: { id?: number; codigo?: string; role?: string; env?: string } = {}) {
+  id = 130, codigo = 'bombeiros', role = 'student', env = 'staging', approved = '130',
+}: { id?: number; codigo?: string; role?: string; env?: string; approved?: string } = {}) {
   const app = new Hono<{ Bindings: any; Variables: any }>();
   const db = { prepare: vi.fn() };
   app.use('*', async (c, next) => {
-    c.env = { ENVIRONMENT: env, DB: db };
+    c.env = { ENVIRONMENT: env, DB: db,
+      BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID: approved };
     c.set('userId', 101);
     c.set('userRole', role);
     c.set('empresaId', id);
@@ -88,6 +89,20 @@ describe('BOA crew check-in API — real employee link, independent tenant and p
     expect(crewIdentity).not.toHaveBeenCalled();
     expect(registerCheckin).not.toHaveBeenCalled();
   });
+  it('rejects sensitive staging writes by default without exact tenant authorization', async () => {
+    const missing = makeApp({ approved: '' });
+    expect((await missing.post(input)).status).toBe(503);
+    expect(registerCheckin).not.toHaveBeenCalled();
+
+    const other = makeApp({ approved: '6' });
+    expect((await other.post(input)).status).toBe(503);
+    expect(registerCheckin).not.toHaveBeenCalled();
+
+    const wildcard = makeApp({ approved: 'all' });
+    expect((await wildcard.post(input)).status).toBe(503);
+    expect(registerCheckin).not.toHaveBeenCalled();
+  });
+
   it('does not accept real health data on production until governance release', async () => {
     const { post, db } = makeApp({ env: 'production' });
     expect((await post(input)).status).toBe(404);
