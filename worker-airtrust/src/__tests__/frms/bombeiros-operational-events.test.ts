@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   resolveBoaCrewIdentity, registerBoaCheckin, loadBoaCrewCheckinStatus, loadBoaOperationalCase,
-  registerBoaCaseAction, loadBoaCaseQueue, BOA_CHECKIN_TYPE, BOA_CASE_OPEN_TYPE,
+  registerBoaCaseAction, loadBoaCaseQueue, loadBoaCaseEvidenceCoverage,
+  BOA_CHECKIN_TYPE, BOA_CASE_OPEN_TYPE,
   BOA_CASE_TREATMENT_TYPE, BOA_CASE_CLOSED_TYPE,
 } from '../../lib/frms/bombeiros-operational-events';
 import type { EmployeeSectorAccess } from '../../services/employee-sector-access';
@@ -76,6 +77,57 @@ describe('BOA event intake and immutable case stream contracts', () => {
     await expect(registerBoaCheckin(db, 6, 21, 19, '2026-10-20', input, governance))
       .rejects.toThrow('BOMBEIROS_INVALID_TENANT');
     expect(queries).toHaveLength(0);
+  });
+
+  it('shows only evidence coverage after an exact current manager-sector and tenant query', async () => {
+    const { db, queries } = fakeDb({ childEvents: [{
+      case_id: 'boa-case-1', sleep_evidence: 'SELF_REPORTED_UNVERIFIED',
+      kss_evidence: 'SUBJECTIVE_SELF_REPORT',
+      mission_context: 'CREW_DECLARATION_UNVERIFIED',
+    }] });
+    const coverage = await loadBoaCaseEvidenceCoverage(db, 130, 'boa-case-1', 90, authorized);
+    expect(coverage).toMatchObject({
+      source: 'BOA_AUTHENTICATED_CHECKIN_EVENT',
+      kss_evidence: 'SUBJECTIVE_SELF_REPORT',
+      pvt_evidence: 'NO_PERFORMANCE_MEASUREMENT',
+      duty_roster: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+      scientific_risk_estimate: null,
+      dispatch_permission: 'NOT_GRANTED',
+    });
+    expect(JSON.stringify(coverage)).not.toMatch(/kss_reported|sleep_hours_24h|funcionario_id|nome_guerra/);
+    expect(queries).toHaveLength(1);
+    expect(queries[0].values).toEqual(['boa-case-1', 130, 130, 90, 130, 90, 9]);
+    expect(queries[0].sql).toContain('receipt.empresa_id = base.empresa_id');
+    expect(queries[0].sql).toContain('f.empresa_id = base.empresa_id');
+    expect(queries[0].sql).toContain('setores_gestores assigned');
+    expect(queries[0].sql).toContain('usuarios_empresas current_membership');
+    expect(queries[0].sql).toContain('f.setor_id IN (?)');
+    expect(queries[0].sql).not.toContain('SELECT *');
+  });
+
+  it('fails closed for empresa 6, revoked/no sector scope and inconsistent evidence', async () => {
+    const denied = fakeDb();
+    await expect(loadBoaCaseEvidenceCoverage(denied.db, 6, 'boa-case-1', 90, authorized))
+      .rejects.toThrow('BOMBEIROS_INVALID_TENANT');
+    expect(denied.queries).toHaveLength(0);
+    expect(await loadBoaCaseEvidenceCoverage(denied.db, 130, 'boa-case-1', 90, {
+      mode: 'restricted', setorIds: [], funcionarioId: null,
+    })).toBeNull();
+    expect(denied.queries).toHaveLength(0);
+    const broken = fakeDb({ childEvents: [{
+      case_id: 'boa-case-1', sleep_evidence: 'UNKNOWN_SUCCESS',
+      kss_evidence: 'NOT_REPORTED', mission_context: 'NOT_REPORTED',
+    }] });
+    await expect(loadBoaCaseEvidenceCoverage(broken.db, 130, 'boa-case-1', 90, authorized))
+      .rejects.toThrow('BOA_CASE_EVIDENCE_INTEGRITY_ERROR');
+    const dup = fakeDb({ childEvents: [
+      { case_id: 'boa-case-1', sleep_evidence: 'NOT_REPORTED',
+        kss_evidence: 'NOT_REPORTED', mission_context: 'NOT_REPORTED' },
+      { case_id: 'boa-case-1', sleep_evidence: 'NOT_REPORTED',
+        kss_evidence: 'NOT_REPORTED', mission_context: 'NOT_REPORTED' },
+    ] });
+    await expect(loadBoaCaseEvidenceCoverage(dup.db, 130, 'boa-case-1', 90, authorized))
+      .rejects.toThrow('BOA_CASE_EVIDENCE_INTEGRITY_ERROR');
   });
 
   it('only resolves employee through tenant-scoped authenticated user relation', async () => {
