@@ -91,6 +91,11 @@ export interface Env {
   // Explicit, single approved historical cohort. Absent = no data access.
   FRMS_V3_COHORT_APPROVED_WINDOW_DAYS?: string;
   FRMS_V3_COHORT_APPROVED_END_DATE?: string;
+  // BOA sensitive check-in/case QA write gate: single reviewed synthetic
+  // staging tenant ID, never 'all', no production. Absent = disabled.
+  // Must only be injected after scientific and LGPD approval plus staging
+  // release authorization; do not store the approval in source control.
+  BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID?: string;
 
 
   // CORS Origins (pode ser string separada por vírgula)
