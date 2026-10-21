@@ -1,3 +1,12 @@
+/**
+ * BOA monthly report: SQLite in-memory integration-test fixture only.
+ * source_reference: worker-airtrust/migrations/0287_frms_fadiga_checkin_diario.sql
+ * operational_decision: Test DML creates synthetic employee/event fixtures in :memory:;
+ *   no operations on Cloudflare D1, production, staging, tenant 6 data or actual personnel.
+ * dry_run_required: This script IS the offline dry run. It cannot address a remote DB.
+ * rollback_plan_required: In-memory fixture is closed and discarded in finally;
+ *   no persistent resource, migration, remote write or recovery action is necessary.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
