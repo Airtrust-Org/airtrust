@@ -46,8 +46,21 @@ function inputId(key: string, version: number): void {
 }
 function deserialize(row: DbRow): StoredQuestion {
   let content: QuestionContent;
-  try { content=JSON.parse(row.content_json) as QuestionContent; }
-  catch { return deny('EXAM_STORED_CONTENT_INVALID'); }
+  try {
+    const raw=JSON.parse(row.content_json) as Record<string,unknown>;
+    const allowed=['moduleId','topicId','sourceUnitId','sourceSha256','prompt',
+      'choices','correctChoiceId','explanation'];
+    if(!raw||typeof raw!=='object'||Array.isArray(raw)||
+      Object.keys(raw).sort().join('|')!==[...allowed].sort().join('|')) {
+      return deny('EXAM_STORED_CONTENT_INVALID');
+    }
+    content={
+      moduleId:raw.moduleId as string,topicId:raw.topicId as string,
+      sourceUnitId:raw.sourceUnitId as string,sourceSha256:raw.sourceSha256 as string,
+      prompt:raw.prompt as string,choices:raw.choices as QuestionContent['choices'],
+      correctChoiceId:raw.correctChoiceId as string,explanation:raw.explanation as string,
+    };
+  } catch { return deny('EXAM_STORED_CONTENT_INVALID'); }
   const q=validateQuestionRevision({
     schema:'AIRTRUST_QUESTION_BANK_REVISION_V1',
     tenantId:row.empresa_id,courseId:row.curso_id,
