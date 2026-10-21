@@ -34,12 +34,15 @@ export async function resolveScormPlayer3Admission(input: {
   reviewedForProduction: boolean;
 }): Promise<ScormPlayer3Admission> {
   const { env, db, bucket, tenant, course, activePrefix } = input;
+  // No candidate edition: preserve the existing legacy contract. The
+  // caller has already validated its authenticated enrollment and tenant.
+  // Candidate editions require stronger identity and immutable-package checks.
+  if (!activePrefix || !activePrefix.includes('/_candidates'))
+    return { kind: 'LEGACY', reason: 'NOT_A_SCORE_CANDIDATE' };
   if (!positive(tenant) || !positive(course))
     return { kind: 'BLOCKED', reason: 'SCOPE_INVALID' };
   // Trust only the Worker-sourced active course path. Malformed candidate
   // metadata (content type or SCORM version) MUST NOT be reclassified legacy.
-  if (!activePrefix || !activePrefix.includes('/_candidates'))
-    return { kind: 'LEGACY', reason: 'NOT_A_SCORE_CANDIDATE' };
   if (input.contentType?.toLowerCase() !== 'scorm' ||
       input.scormVersion !== '1.2')
     return { kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED' };
