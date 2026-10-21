@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
-import {beforeEach,describe,expect,it,vi} from 'vitest';
-import {fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
+import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import QuestionBankAdmin from '../react-app/pages/lms/exams/QuestionBankAdmin';
 import {fetchWithAuth} from '../react-app/config/api';
 
@@ -29,6 +29,7 @@ function success(data:unknown,status=200){
 }
 describe('Question bank separated from SCORM player',()=>{
   beforeEach(()=>{vi.resetAllMocks();});
+  afterEach(()=>cleanup());
   it('refuses an unpinned course and does not contact any API',()=>{
     render(<QuestionBankAdmin courseId={0} trainingSourceSha256={sha}/>);
     expect(screen.getByRole('alert').textContent).toContain('Selecione um curso');
