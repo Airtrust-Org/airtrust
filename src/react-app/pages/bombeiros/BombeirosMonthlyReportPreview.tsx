@@ -19,6 +19,7 @@ type MonthlyPreview = {
   method_version: string;
   state: 'UNSIGNED_UNVALIDATED_PREVIEW';
   basis: string;
+  as_of: string;
   coverage: 'NOT_DETERMINABLE_WITHOUT_ROSTER';
   current: Period;
   previous: Period;
@@ -33,6 +34,7 @@ type Response = {
   meta?: {
     tenant_id: number; profile_code: string; policy_revision: string;
     policy_version: string; generated_at: string; signature: string;
+    content_sha256?: string; checksum_only_not_signature?: boolean;
   };
 };
 const monthNow = () => {
@@ -129,6 +131,11 @@ export default function BombeirosMonthlyReportPreview() {
         <p>Metodologia: {report.method_version} · Fonte: eventos BOA registrados por tenant.</p>
         <p>Revisão regulatória vigente na consulta: {data?.meta?.policy_revision ?? 'indisponível'}.</p>
         <p>Gerado em: {data?.meta?.generated_at ?? 'indisponível'}.</p>
+        <p>Corte único dos eventos: {report.as_of ?? 'não informado'}.</p>
+        <p className="break-all">Checksum SHA-256 para conferência:
+          {' '}{data?.meta?.content_sha256 ?? 'não disponível'}.
+          Não é assinatura digital nem arquivo imutável.
+        </p>
         <p><strong>Não assinado · não arquivado · sem valor de relatório oficial.</strong></p>
       </footer>
       <button type="button" className="rounded border border-slate-400 px-3 py-2 text-sm"
