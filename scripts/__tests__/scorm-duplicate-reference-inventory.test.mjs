@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  parseGitTree, manifestDeclaredPaths, findDuplicateGroups, summarize,
+  parseGitTree, manifestDeclaredPaths, findMissingManifestReferences, findDuplicateGroups, summarize,
 } from '../ops/scorm-duplicate-reference-inventory.mjs';
 
 const SHA = 'a'.repeat(40);
@@ -47,4 +47,40 @@ test('logical duplicated bytes are not permission to delete course files', () =>
   assert.equal(summary.directManifestReferencedCopies, 1);
   assert.equal(summary.deletionAuthorized, false);
   assert.ok(groups[0].paths.every((p) => p.safeToDelete === false));
+});
+
+test('inventory reports exact manifest paths missing from tracked tree without deletion authorization', () => {
+  const manifest = ROOT + '/Emergencias/imsmanifest.xml';
+  const declared = ROOT + '/Emergencias/fit_content_assets/Sem_títulosds_qihroh.png';
+  const encodedOnDisk = ROOT + '/Emergencias/fit_content_assets/Sem_t%C3%ADtulosds_qihroh.png';
+  const entries = [
+    { sha: SHA, bytes: 200, file: manifest },
+    { sha: OTHER, bytes: 200, file: encodedOnDisk },
+  ];
+  const sources = [{
+    file: manifest,
+    xml: '<manifest><resources><resource href="index.html"><file href="fit_content_assets/Sem_t%C3%ADtulosds_qihroh.png" /></resource></resources></manifest>',
+  }];
+  const missing = findMissingManifestReferences(entries, sources);
+  assert.deepEqual(missing, [
+    { manifest, file: declared, safeToDelete: false },
+    { manifest, file: ROOT + '/Emergencias/index.html', safeToDelete: false },
+  ].sort((a, b) => a.file.localeCompare(b.file)));
+  assert.equal(summarize([], 1, missing.length).missingManifestReferences, 2);
+  assert.equal(summarize([], 1, missing.length).deletionAuthorized, false);
+});
+
+test('inventory skips external paths and accepts tracked local manifest references', () => {
+  const manifest = ROOT + '/Course A/imsmanifest.xml';
+  const file = ROOT + '/Course A/media file.mp4';
+  const entries = [
+    { sha: SHA, bytes: 180, file: manifest },
+    { sha: OTHER, bytes: 300000, file },
+  ];
+  const sources = [{
+    file: manifest,
+    xml: '<manifest><resources><resource href="media%20file.mp4" /><file href="https://example.org/remote.jpg"/><file href="../../untracked.txt" /></resources></manifest>',
+  }];
+  assert.deepEqual(findMissingManifestReferences(entries, sources), []);
+  assert.equal(summarize([], 1).missingManifestReferences, 0);
 });
