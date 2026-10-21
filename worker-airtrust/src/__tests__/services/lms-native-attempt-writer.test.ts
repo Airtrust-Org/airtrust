@@ -2,12 +2,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { commitNativeAssessmentAttempt } from '../../services/lms-native-attempt-writer';
-import { validateNativeCourseArtifact } from '../../lib/lms/lms-native-course-contract';
+import { validateNativeCourseArtifact, type NativeCourseArtifact } from '../../lib/lms/lms-native-course-contract';
 import type { NativeSessionScope } from '../../lib/lms/lms-native-evidence-domain';
 import { readNativeLearnerSession } from '../../services/lms-native-readiness-repository';
 
 vi.mock('../../services/lms-native-readiness-repository', () => ({
-  readNativeLearnerSession: vi.fn(async ({ artifact }: { artifact: typeof import('../../lib/lms/lms-native-course-contract').NativeCourseArtifact }) => ({
+  readNativeLearnerSession: vi.fn(async ({ artifact }: { artifact: NativeCourseArtifact }) => ({
     summary: { mode: 'LEARN', seenLessonIds: artifact.units
       .filter((unit) => unit.kind === 'lesson').map((unit) => unit.id) },
   })),
