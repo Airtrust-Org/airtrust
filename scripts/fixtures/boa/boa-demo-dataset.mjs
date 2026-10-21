@@ -116,6 +116,22 @@ export function buildBoaDemoDataset({ month = '2026-10' } = {}) {
           schema: TYPES.receipt, reference_date: date, submitted_at: at,
           profile_code: 'FIREFIGHTER_AVIATION',
           ...report, evidence_state: 'CREW_SELF_REPORT_NOT_VERIFIED',
+          measurement_provenance: {
+            schema: 'BOA_INTAKE_PROVENANCE_V1',
+            collection_channel: 'AUTHENTICATED_CREW_SELF_REPORT',
+            observed_at: at,
+            sleep_hours_24h: report.sleep_hours_24h === null
+              ? 'NOT_REPORTED' : 'CREW_REPORTED_NOT_MEASURED',
+            kss_reported: report.kss_reported === null
+              ? 'NOT_REPORTED' : 'SUBJECTIVE_KSS_1_TO_9',
+            pvt_60s_completed: 'CREW_DECLARATION_ONLY_NOT_A_PERFORMANCE_TEST',
+            pvt_response_times_ms: null,
+            pvt_lapses: null,
+            duty_roster: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+            actual_mission_times: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+            scientific_risk_estimate: null,
+            boa_validation: 'NOT_ESTABLISHED',
+          },
           dispatch_permission: 'NOT_GRANTED',
         },
       });
