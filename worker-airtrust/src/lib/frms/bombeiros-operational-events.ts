@@ -253,15 +253,12 @@ export async function loadBoaCaseQueue(
   const scope = buildFuncionarioScopeWhere(access, 'f');
   if (!scope.bindings.length) return null;
   const query = `SELECT e.id AS case_id, e.created_at,
-      CASE WHEN EXISTS (
-        SELECT 1 FROM frms_fadiga_evento closed
-         WHERE closed.empresa_id = e.empresa_id AND closed.checkin_id = e.id
-           AND closed.tipo = 'BOA_CASE_CLOSED_V1'
-      ) THEN 'RESOLVIDO' WHEN EXISTS (
-        SELECT 1 FROM frms_fadiga_evento treatment
-         WHERE treatment.empresa_id = e.empresa_id AND treatment.checkin_id = e.id
-           AND treatment.tipo = 'BOA_CASE_TREATMENT_V1'
-      ) THEN 'EM_TRATAMENTO' ELSE 'ABERTO' END AS state
+      (SELECT COUNT(*) FROM frms_fadiga_evento treatment
+       WHERE treatment.empresa_id = e.empresa_id AND treatment.checkin_id = e.id
+         AND treatment.tipo = 'BOA_CASE_TREATMENT_V1') AS treatment_count,
+      (SELECT COUNT(*) FROM frms_fadiga_evento closed
+       WHERE closed.empresa_id = e.empresa_id AND closed.checkin_id = e.id
+         AND closed.tipo = 'BOA_CASE_CLOSED_V1') AS closure_count
     FROM frms_fadiga_evento e
     JOIN funcionarios f
       ON f.id = CAST(json_extract(e.payload_json, '$.funcionario_id') AS INTEGER)
@@ -284,17 +281,24 @@ export async function loadBoaCaseQueue(
     limit + 1,
   ];
   const result = await db.prepare(query).bind(...bindings)
-    .all<{ case_id: string; created_at: string; state: BoaCaseStatus['state'] }>();
+    .all<{ case_id: string; created_at: string; treatment_count: number; closure_count: number }>();
   const entries = result.results ?? [];
-  if (entries.some(x => !x.case_id || !['ABERTO','EM_TRATAMENTO','RESOLVIDO'].includes(x.state))) {
+  if (entries.some(x => !x.case_id || !x.created_at
+      || !Number.isSafeInteger(x.treatment_count) || !Number.isSafeInteger(x.closure_count)
+      || x.treatment_count < 0 || x.treatment_count > 1
+      || x.closure_count < 0 || x.closure_count > 1
+      || x.closure_count > x.treatment_count)) {
     throw new Error('BOA_CASE_QUEUE_INTEGRITY_ERROR');
   }
   const page = entries.slice(0, limit);
   const last = page[page.length - 1];
   return {
     items: page.map(x => ({
-      case_id: x.case_id, state: x.state, created_at: x.created_at, closed_at: null,
-      treatment_recorded: x.state !== 'ABERTO',
+      case_id: x.case_id,
+      state: x.closure_count === 1 ? 'RESOLVIDO'
+        : x.treatment_count === 1 ? 'EM_TRATAMENTO' : 'ABERTO',
+      created_at: x.created_at, closed_at: null,
+      treatment_recorded: x.treatment_count === 1,
     })),
     next_cursor: entries.length > limit && last
       ? { created_at: last.created_at, id: last.case_id } : null,
