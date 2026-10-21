@@ -293,9 +293,13 @@ describe('BOA event intake and immutable case stream contracts', () => {
     expect(insert?.sql).toContain('JOIN usuarios_empresas member');
     expect(insert?.sql).toContain('member.empresa_id = base.empresa_id');
     expect(insert?.sql).toContain('(actor.deleted_at IS NULL OR actor.deleted_at = 0)');
-    expect(insert?.values.slice(6, 12)).toEqual([
-      'case-1', 130, BOA_CASE_OPEN_TYPE, 130, 90, 130,
+    expect(insert?.values.slice(6, 13)).toEqual([
+      'case-1', 130, BOA_CASE_OPEN_TYPE, 130, 90, 130, 90,
     ]);
+    expect(insert?.sql).toContain('grant_bo.usuario_id = ?');
+    expect(insert?.sql).toContain('grant_bo.setor_id = f.setor_id');
+    expect(insert?.sql).toContain("grant_bo.role, '')) IN ('manager', 'backup')");
+    expect(insert?.sql).toContain('member.role');
     expect(insert?.sql).toContain("receipt.empresa_id = base.empresa_id");
     expect(insert?.sql).toContain("json_extract(receipt.payload_json, '$.funcionario_id')");
     expect(insert?.sql).toContain("json_extract(base.payload_json, '$.funcionario_id')");
