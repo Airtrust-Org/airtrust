@@ -55,6 +55,8 @@ describe('Player 3 SCORM admission is separately scoped from Native or legacy', 
       .toMatchObject({kind: 'BLOCKED', reason: 'SCOPE_INVALID'});
     expect(await resolveScormPlayer3Admission({...p, scormVersion: null}))
       .toMatchObject({kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED'});
+    expect(await resolveScormPlayer3Admission({...p, contentType: null}))
+      .toMatchObject({kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED'});
     expect(await resolveScormPlayer3Admission({...p, scormVersion: '2004'}))
       .toMatchObject({kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED'});
     expect(await resolveScormPlayer3Admission({...p, db: database(null)}))
