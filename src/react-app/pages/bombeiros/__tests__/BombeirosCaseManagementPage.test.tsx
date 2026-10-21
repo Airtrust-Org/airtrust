@@ -36,6 +36,39 @@ describe('BOA mitigation and efficacy manager portal', () => {
     });
   });
 
+  it('labels actual check-in provenance and missing authoritative sources without clinical values', () => {
+    setupTenant(130, 'bombeiros');
+    useApiMock.mockImplementation((path: string) => {
+      if (path.endsWith('/evidencias')) return {
+        data: { success: true, data: {
+          case_id: 'BOA-QA-ALERT-1',
+          source: 'BOA_AUTHENTICATED_CHECKIN_EVENT',
+          sleep_evidence: 'SELF_REPORTED_UNVERIFIED',
+          kss_evidence: 'SUBJECTIVE_SELF_REPORT',
+          mission_context: 'CREW_DECLARATION_UNVERIFIED',
+          pvt_evidence: 'NO_PERFORMANCE_MEASUREMENT',
+          duty_roster: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+          actual_mission_times: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+          scientific_risk_estimate: null,
+          requires_human_review: true,
+          dispatch_permission: 'NOT_GRANTED',
+        } }, loading: false, error: null, refetch: refetchMock,
+      };
+      return { data: caseEnvelope('ABERTO'), loading: false, error: null, refetch: refetchMock };
+    });
+    render(<BombeirosCaseManagementPage />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Identificador da ocorrência BOA' }), {
+      target: { value: 'BOA-QA-ALERT-1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar' }));
+    expect(screen.getByText(/autorrelato recebido, não aferido/)).toBeInTheDocument();
+    expect(screen.getByText(/escala subjetiva declarada/)).toBeInTheDocument();
+    expect(screen.getByText(/sem teste PVT mensurado/)).toBeInTheDocument();
+    expect(screen.getByText(/Escala operacional: não conectada/)).toBeInTheDocument();
+    expect(screen.getByText(/Liberação de voo não concedida/)).toBeInTheDocument();
+    expect(useApiMock.mock.calls.some((x: unknown[]) => String(x[0]).endsWith('/evidencias'))).toBe(true);
+  });
+
   it('never renders a BOA case workflow in empresa 6', () => {
     setupTenant(6, 'costadosol');
     render(<BombeirosCaseManagementPage />);
