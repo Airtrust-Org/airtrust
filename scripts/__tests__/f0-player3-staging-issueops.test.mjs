@@ -35,6 +35,12 @@ test('eight canonical gates, SCORM E2E and Check PR must be exact GH Actions suc
  assert.throws(()=>assertGates(checks.map(c=>c.name==='worker-tests-2'?{...c,app:{slug:'external'}}:c)),/REQUIRED_GATE_NOT_GREEN/);
 });
 test('runtime main drift is rejected; reviewed F0 infra-only delta accepted',()=>{
+ // GitHub's exact compare returns "behind" after strict-main synchronization.
+ assert.doesNotThrow(()=>assertReviewedDelta({status:'behind',ahead_by:0,behind_by:999,files:[]}));
+ assert.throws(()=>assertReviewedDelta({status:'behind',ahead_by:1,behind_by:999,files:[]}),
+  /UNEXPECTED_COMPARISON/);
+ assert.throws(()=>assertReviewedDelta({status:'behind',ahead_by:0,behind_by:999,
+  files:[{filename:'worker-airtrust/src/index.ts'}]}),/UNEXPECTED_COMPARISON/);
  assert.doesNotThrow(()=>assertReviewedDelta({status:'diverged',ahead_by:4,
   files:[{filename:'scripts/staging/player3-qa-trusted-executor.mjs'},
    {filename:'.github/workflows/f0-player3-staging-issueops.yml'},
