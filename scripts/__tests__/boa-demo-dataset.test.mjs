@@ -62,6 +62,13 @@ test('dataset consists only of 130 clearly fictitious crew and stable two-month 
     || x.tipo === 'BOA_CASE_TREATMENT_V1' || x.tipo === 'BOA_CASE_CLOSED_V1'));
   assert.ok(a.events.some(x => x.tipo === 'BOA_CHECKIN_V1'
     && x.payload_template.sleep_hours_24h === null));
+  const missingReceipt = a.events.find(x => x.tipo === 'BOA_CHECKIN_V1'
+    && x.payload_template.sleep_hours_24h === null);
+  assert.equal(missingReceipt.payload_template.measurement_provenance.sleep_hours_24h, 'NOT_REPORTED');
+  assert.equal(missingReceipt.payload_template.measurement_provenance.kss_reported, 'NOT_REPORTED');
+  assert.equal(missingReceipt.payload_template.measurement_provenance.pvt_response_times_ms, null);
+  assert.equal(missingReceipt.payload_template.measurement_provenance.pvt_lapses, null);
+  assert.equal(missingReceipt.payload_template.measurement_provenance.scientific_risk_estimate, null);
   assert.deepEqual(a.expected['2026-09'], {
     participants: 100, receipts: 100, ABERTO: 34, EM_TRATAMENTO: 33, RESOLVIDO: 33,
   });
