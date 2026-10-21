@@ -31,10 +31,11 @@ const status = {
   case_id: 'boa-case-1', state: 'ABERTO', created_at: '2026-10-20',
   closed_at: null, treatment_recorded: false,
 };
-function createApp(empresaId = 130, code = 'bombeiros', role = 'manager', environment = 'staging') {
+function createApp(empresaId = 130, code = 'bombeiros', role = 'manager', environment = 'staging', approved = '130') {
   const app = new Hono<{ Bindings: any; Variables: any }>();
   app.use('*', async (c, next) => {
-    c.env = { ENVIRONMENT: environment, DB: { prepare: vi.fn() } };
+    c.env = { ENVIRONMENT: environment, DB: { prepare: vi.fn() },
+      BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID: approved };
     c.set('userId', 90);
     c.set('userRole', role);
     c.set('empresaId', empresaId);
@@ -126,6 +127,14 @@ describe('BOA case event-stream route — security and lifecycle boundaries', ()
     });
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code: 'BOMBEIROS_EFFECTIVENESS_REQUIRED' });
+  });
+
+  it('blocks unapproved BOA staging case writes before D1 read or append', async () => {
+    const request = createApp(130, 'bombeiros', 'manager', 'staging', '');
+    const response = await request('PUT', '/casos/boa-case-1/tratamento', {});
+    expect(response.status).toBe(503);
+    expect(appendAction).not.toHaveBeenCalled();
+    expect(loadCase).not.toHaveBeenCalled();
   });
 
   it('blocks all case writes in production until governed activation', async () => {
