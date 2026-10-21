@@ -30,6 +30,18 @@ import { BombeirosScenarioSchema, assessBombeirosSyntheticScenario } from '../li
 import { safe } from './frms-shared';
 
 const frmsBombeiros = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
+/**
+ * Default-closed BOA QA health-data write authorization.
+ * Staging/dev alone does NOT authorize sensitive writes. A single explicitly
+ * approved synthetic tenant must be named at runtime, never empresa 6 or all.
+ */
+function boaSensitiveQaWriteAllowed(env: Env, tenantId: number): boolean {
+  const configured = env.BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID ?? '';
+  return (env.ENVIRONMENT === 'staging' || env.ENVIRONMENT === 'development')
+    && Number.isSafeInteger(tenantId) && tenantId > 0 && tenantId !== 6
+    && /^[1-9]\\d*$/.test(configured) && Number(configured) === tenantId;
+}
+
 
 /** An isolated tenant is mandatory even for platform-admin browsing. */
 export function isAuthorizedBombeirosFrmsTenant(
@@ -310,6 +322,9 @@ frmsBombeiros.post('/checkin', requireRole('student', 'editor', 'instructor', 'm
   if (c.env.ENVIRONMENT !== 'staging' && c.env.ENVIRONMENT !== 'development') {
     return c.json({ success: false, code: 'BOMBEIROS_CHECKIN_STAGING_ONLY' }, 404);
   }
+  if (!boaSensitiveQaWriteAllowed(c.env, tenant.empresaId)) {
+    return c.json({ success: false, code: 'BOMBEIROS_QA_WRITE_NOT_APPROVED' }, 503);
+  }
   const raw: unknown = await c.req.json().catch(() => null);
   const parsed = BombeirosCheckinSchema.safeParse(raw);
   if (!parsed.success) return c.json({
@@ -403,6 +418,9 @@ async function handleBoaCaseTransition(
   }
   if (c.env.ENVIRONMENT !== 'staging' && c.env.ENVIRONMENT !== 'development') {
     return c.json({ success: false, code: 'BOMBEIROS_CASE_WRITES_STAGING_ONLY' }, 404);
+  }
+  if (!boaSensitiveQaWriteAllowed(c.env, tenant.empresaId)) {
+    return c.json({ success: false, code: 'BOMBEIROS_QA_WRITE_NOT_APPROVED' }, 503);
   }
   try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId); }
   catch { return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503); }
