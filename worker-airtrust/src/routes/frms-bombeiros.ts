@@ -187,9 +187,26 @@ frmsBombeiros.get('/relatorios/gerencial-tecnico-previa', requireRole('admin'), 
     // Invalid/missing provenance MUST NOT degrade to a normal-looking zero.
     return c.json({ success: false, code: 'BOMBEIROS_MONTHLY_EVIDENCE_UNVERIFIED' }, 503);
   }
+  // An integrity checksum enables comparing a captured read-only JSON
+  // preview with its source metadata. It is NOT a signature, custody ledger,
+  // immutable archive or substitute for independent audit.
+  const digestInput = {
+    tenant_id: tenant.empresaId,
+    reference_month: mes,
+    as_of: report.as_of,
+    policy_revision: policy.revision.id,
+    report,
+  };
+  const digest = await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode(JSON.stringify(digestInput)));
+  const digestHex = [...new Uint8Array(digest)]
+    .map(value => value.toString(16).padStart(2, '0')).join('');
   return c.json({
     success: true, data: report,
     meta: {
+      content_sha256: digestHex,
+      checksum_scope: 'JSON_STRINGIFY_TENANT_MONTH_AS_OF_POLICY_REVISION_REPORT_V1',
+      checksum_only_not_signature: true,
       tenant_id: tenant.empresaId,
       reference_month: mes,
       generated_at: new Date().toISOString(),
