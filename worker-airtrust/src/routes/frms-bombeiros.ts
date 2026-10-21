@@ -365,6 +365,12 @@ frmsBombeiros.post('/checkin', requireRole('student', 'editor', 'instructor', 'm
     { profile_code: policy.profileCode, revision_id: policy.revision.id,
       policy_version: policy.revision.policy_version },
   );
+  if (!receipt.accepted && receipt.status === 'RECHECK_DENIED') {
+    return c.json({
+      success: false, code: 'BOMBEIROS_CREW_NOT_AUTHORIZED',
+      dispatch_permission: 'NOT_GRANTED',
+    }, 403);
+  }
   if (!receipt.accepted) return c.json({
     success: false, code: 'BOMBEIROS_CHECKIN_ALREADY_RECEIVED',
     dispatch_permission: 'NOT_GRANTED',
