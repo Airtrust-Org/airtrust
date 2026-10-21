@@ -188,7 +188,7 @@ function parseSlideLocation(
   return null;
 }
 
-export default function LmsPlayer() {
+export default function LmsPlayer({scormStudyOnly=false}:{scormStudyOnly?:boolean}={}) {
   const { matriculaId } = useParams<{ matriculaId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -284,7 +284,7 @@ export default function LmsPlayer() {
     mergedProgress,
   });
   const isScormContent = (matricula?.tipo_conteudo ?? 'scorm') === 'scorm';
-  const shouldReconcilePassedScorm = canReconcilePersistedScormCompletion({
+  const shouldReconcilePassedScorm = !scormStudyOnly && canReconcilePersistedScormCompletion({
     reviewMode: effectiveReviewMode,
     isScormContent,
     matriculaStatus: matricula?.status,
@@ -334,14 +334,14 @@ export default function LmsPlayer() {
   // and mastery score. Never demand a second, proprietary per-page checklist
   // in the player. FORMATIVE retains its real coverage requirement.
   const canRequestScormCompletion =
-    isScormContent && !newEditionRequired && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
+    !scormStudyOnly && isScormContent && !newEditionRequired && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
     (isScoredScorm
       ? closureReadiness?.eligible_for_server_verification === true
       : allSlidesVisited && (granularDiagnostic
         ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
           granularDiagnostic.assessment.passed !== false)
         : Boolean(legacyFinalSlide && legacyAssessmentEvidence)));
-  const canRequestCompletion = !newEditionRequired &&
+  const canRequestCompletion = !scormStudyOnly && !newEditionRequired &&
     (canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm);
 
   // The SCO owns its own assessment/submission control. The LMS never opens
@@ -349,7 +349,7 @@ export default function LmsPlayer() {
   // reconcile the server result automatically, or offer one explicit retry
   // only if reconciliation fails.
   const showScormRegistrationRetry =
-    isScormContent && !effectiveReviewMode && completionState === 'error';
+    !scormStudyOnly && isScormContent && !effectiveReviewMode && completionState === 'error';
 
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
@@ -1218,6 +1218,13 @@ export default function LmsPlayer() {
           </button>
         </div>
       </header>
+
+      {scormStudyOnly && (
+        <div role="status" className="border-b border-blue-500/30 bg-blue-950 px-4 py-2 text-xs text-blue-100">
+          Modo de estudo SCORM 1.2: navegação e retomada permitidas.
+          Este percurso não emite nota, aprovação, qualificação ou certificado.
+        </div>
+      )}
 
       {newEditionRequired && editionMismatch && !effectiveReviewMode && (
         <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100">
