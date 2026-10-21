@@ -4,7 +4,8 @@ Data: 20/10/2026. Frente única: PR #1650. Status: **pré-condições para execu
 
 ## 1. Portões antes de executar qualquer chamada remota
 
-- [ ] Edital integral, anexos, respostas e retificações oficiais conferidos por responsável pela licitação; matriz `BOA_CBMMG_LICITACAO_POC_MATRIX_20261020.md` reconciliada com o instrumento vigente.
+- [x] PDF publicado no PNCP (36 páginas), incluindo o Anexo I, lido e comparado à matriz no dia 20/10/2026; edital e TR corroboram os oito requisitos e os cinco critérios mínimos da PoC.
+- [ ] **Retificações, respostas vinculantes, estado atual da sessão e habilitação** ainda devem ser confirmados por responsável pela licitação no Portal de Compras MG. A versão do PDF acessada não comprova que não houve republicação.
 - [ ] Parecer científico e procedimento de fadiga específico da aviação BOA aprovados por responsável técnico competente, incluindo KSS, PVT adaptado, limites operacionais, triagem, revisão humana e responsabilidade por liberação.
 - [ ] Tratamento LGPD com finalidade, hipótese jurídica, categorias de dado sensível, ciclo de retenção/exclusão, necessidade de RIPD, segregação de acesso, logs, criptografia e incidente aprovado pelo controlador/operador; nenhuma conta real ou dado de saúde real em QA.
 - [ ] Tenant `bombeiros` específico provisionado por fluxo governado, `empresa_id` **não 6**, `FIREFIGHTER_AVIATION` aprovado e `setores_gestores`/papéis exclusivamente de QA.
@@ -14,6 +15,12 @@ Data: 20/10/2026. Frente única: PR #1650. Status: **pré-condições para execu
 - [ ] Backups/recuperação e evidência prévia de isolamento bidirecional BOA ↔ empresa 6.
 
 **Não execute o ensaio em produção, nem importe 130 funcionários sem Schema V2 e autorização de escrita.**
+
+### Distinção entre requisito do edital e teste de engenharia
+
+O **Anexo I, itens 1.5.3.2.2–1.5.3.2.5**, estabelece que *até 130 usuários ativos* é referência estimativa de dimensionamento, **sem obrigação de utilização integral**. O script com exatamente 130 JWTs é **um ensaio de capacidade interno**, não um número de sessões simultâneas ou um procedimento específico exigido no edital. O item 8.4.2 requer demonstrar método, fatores, registros/relatórios, segurança/disponibilidade e LGPD; a Administração define data e forma da PoC após a classificação provisória em primeiro lugar (Edital 7.15; TR 8.4).
+
+Este processo é um contrato global de assessoria técnica SGSO, não uma licitação isolada de licença de software: a empresa deverá demonstrar pessoal, experiência, vistorias, treinamento e pareceres do escopo geral. Fonte oficial: https://pncp.gov.br/app/editais/18715516000188/2026/125 .
 
 ## 2. Ensaio de leitura autenticada de 130 contas
 
