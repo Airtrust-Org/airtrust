@@ -1426,6 +1426,22 @@ app.post('/scorm/commit', async (c) => {
     return c.json({success: false, code: 'SCORM_PLAYER3_PROFILE_NOT_ADMITTED'}, 409);
   const isScoreStudy = scormAdmission.kind === 'SCORM_STUDY';
   if (isScoreStudy) {
+    // Unlike legacy integrations, a pinned Score edition MUST include its
+    // persisted current cycle in every save. A stale tab must not write into
+    // another attempt, even if the browser retains an old SCORM session.
+    if (!Number.isSafeInteger(d.ciclo_id) || !d.ciclo_id || d.ciclo_id < 1)
+      return c.json({success: false, code: 'SCORM_STUDY_CYCLE_REQUIRED'}, 409);
+    // The externally reviewed package's version comes from ACTIVE D1+R2,
+    // never the client. Reject foreign suspend_data on every populated save.
+    if (d.suspend_data) {
+      let resume: unknown;
+      try { resume = JSON.parse(d.suspend_data); }
+      catch { return c.json({success: false, code: 'SCORM_STUDY_EDITION_MISMATCH'}, 409); }
+      if (!resume || typeof resume !== 'object' || Array.isArray(resume) ||
+          (resume as Record<string, unknown>).v !== 1 ||
+          (resume as Record<string, unknown>).p !== scormAdmission.packageVersion)
+        return c.json({success: false, code: 'SCORM_STUDY_EDITION_MISMATCH'}, 409);
+    }
     const permitted = (status: string | null | undefined) =>
       status == null || status === '' ||
       ['incomplete', 'not attempted', 'unknown'].includes(status.toLowerCase());
