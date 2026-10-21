@@ -101,6 +101,8 @@ class SqliteQuestionBankReview(unittest.TestCase):
             published_by='publisher',content_sha256=?
           WHERE empresa_id=6 AND curso_id=100 AND question_key='q1' AND revision=1
         """,('f'*64,))
+        # Snapshot of the valid publication must survive rejected mutations.
+        self.db.commit()
         for statement in [
             "UPDATE lms_exam_question_revisions SET status='DRAFT' WHERE question_key='q1'",
             "UPDATE lms_exam_question_revisions SET content_json='{}' WHERE question_key='q1'",

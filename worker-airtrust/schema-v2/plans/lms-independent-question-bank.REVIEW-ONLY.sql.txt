@@ -81,7 +81,8 @@ BEGIN
   OR NEW.created_by<>OLD.created_by OR NEW.created_at<>OLD.created_at
  THEN RAISE(ABORT,'LMS_EXAM_REVISION_IDENTITY_IMMUTABLE') END;
  SELECT CASE WHEN
-  (OLD.status='DRAFT' AND NEW.status='DRAFT' AND
+  (OLD.status='DRAFT' AND NEW.status NOT IN ('DRAFT','REVIEWED'))
+  OR (OLD.status='DRAFT' AND NEW.status='DRAFT' AND
      (NEW.reviewed_by IS NOT NULL OR NEW.published_by IS NOT NULL
       OR NEW.content_sha256 IS NOT NULL OR
       NEW.edit_version<>OLD.edit_version+1))
