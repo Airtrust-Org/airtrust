@@ -24,6 +24,36 @@ export const BOA_CASE_OPEN_TYPE = 'BOA_CASE_OPENED_V1';
 export const BOA_CASE_TREATMENT_TYPE = 'BOA_CASE_TREATMENT_V1';
 export const BOA_CASE_CLOSED_TYPE = 'BOA_CASE_CLOSED_V1';
 
+/**
+ * BOA-only direct manager grants. Reused by case list and detail, independent
+ * of the historical email-based gestor_id fallback used by other tenants.
+ * Variables are SQL placeholders; caller always binds actor ID + tenant ID.
+ */
+const boaManagerReadScopeSql = `
+       AND EXISTS (
+         SELECT 1 FROM usuarios current_actor
+           JOIN usuarios_empresas current_membership
+             ON current_membership.usuario_id = current_actor.id
+            AND current_membership.empresa_id = f.empresa_id
+         WHERE current_actor.id = ?
+           AND current_membership.empresa_id = ?
+           AND (current_actor.deleted_at IS NULL OR current_actor.deleted_at = 0)
+           AND LOWER(TRIM(COALESCE(current_membership.role, ''))) IN
+             ('manager', 'gestor', 'supervisor', 'coordenador', 'coordinator')
+       )
+       AND EXISTS (
+         SELECT 1 FROM setores_gestores assigned
+           JOIN setores current_sector
+             ON current_sector.id = assigned.setor_id
+            AND current_sector.empresa_id = assigned.empresa_id
+         WHERE assigned.empresa_id = f.empresa_id
+           AND assigned.usuario_id = ?
+           AND assigned.setor_id = f.setor_id
+           AND assigned.ativo = 1 AND assigned.deleted_at IS NULL
+           AND LOWER(COALESCE(assigned.role, '')) IN ('manager', 'backup')
+           AND current_sector.ativo = 1 AND current_sector.deleted_at IS NULL
+       )`;
+
 export const BombeirosCheckinSchema = z.object({
   mission_type: z.enum(['RESGATE','SALVAMENTO','TRANSPORTE_AEROMEDICO','COMBATE_AEREO_INCENDIO','TREINAMENTO','OUTRA']),
   duty_period: z.enum(['DIURNO','NOTURNO','MISTO','DESCONHECIDO']),
@@ -321,7 +351,7 @@ export async function loadBoaOperationalCase(
         AND json_extract(e.payload_json, '$.schema') = 'BOA_CASE_OPENED_V1'
         AND json_extract(e.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'
         AND f.empresa_id = ? AND f.ativo = 1 AND f.deleted_at IS NULL
-${scopeSql}
+${boaManagerReadScopeSql}
         AND ${scope.clause} LIMIT 1`,
   ).bind(caseId, empresaId, BOA_CASE_OPEN_TYPE, empresaId,
     actorId, empresaId, actorId, ...scope.bindings).first<BoaEventRow>();
@@ -424,7 +454,7 @@ export async function loadBoaCaseQueue(
      AND f.empresa_id = e.empresa_id
     WHERE e.empresa_id = ? AND f.empresa_id = ?
       AND e.tipo = ? AND f.deleted_at IS NULL AND f.ativo = 1
-${scopeSql}
+${boaManagerReadScopeSql}
       AND EXISTS (SELECT 1 FROM frms_fadiga_evento receipt
          WHERE receipt.id = e.checkin_id AND receipt.empresa_id = e.empresa_id
            AND receipt.tipo = 'BOA_CHECKIN_V1'
