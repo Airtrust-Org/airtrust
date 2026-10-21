@@ -231,7 +231,7 @@ describe('BOA event intake and immutable case stream contracts', () => {
 
   it('blocks any employee 6 status lookup before SQL', async () => {
     const { db, queries } = fakeDb();
-    await expect(loadBoaCrewCheckinStatus(db, 6, 21, '2026-10-20'))
+    await expect(loadBoaCrewCheckinStatus(db, 6, 21, 101, '2026-10-20'))
       .rejects.toThrow('BOMBEIROS_INVALID_TENANT');
     expect(queries).toHaveLength(0);
   });
