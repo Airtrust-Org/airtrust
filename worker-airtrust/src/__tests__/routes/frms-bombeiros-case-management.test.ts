@@ -91,7 +91,7 @@ describe('BOA case event-stream route — security and lifecycle boundaries', ()
     const text = await response.text();
     expect(text).toContain('ABERTO');
     expect(text).not.toMatch(/funcionario_id|kss_reported|sleep_hours_24h|nome_guerra/);
-    expect(loadCase).toHaveBeenCalledWith(expect.anything(), 130, 'boa-case-1', sector);
+    expect(loadCase).toHaveBeenCalledWith(expect.anything(), 130, 'boa-case-1', 90, sector);
   });
 
   it('passes treatment to tenant-specific append-only event handler', async () => {
