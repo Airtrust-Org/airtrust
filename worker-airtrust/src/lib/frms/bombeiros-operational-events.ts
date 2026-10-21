@@ -490,7 +490,13 @@ export async function registerBoaCaseAction(
   const scope = buildFuncionarioScopeWhere(access, 'f');
   const prerequisite = kind === 'closure'
     ? `AND EXISTS (SELECT 1 FROM frms_fadiga_evento t
-          WHERE t.empresa_id = ? AND t.checkin_id = base.id AND t.tipo = ?)`
+          WHERE t.empresa_id = ? AND t.checkin_id = base.id AND t.tipo = ?
+            AND json_extract(t.payload_json, '$.schema') = 'FRMS_CASE_TREATMENT_V1'
+            AND COALESCE(LENGTH(TRIM(json_extract(t.payload_json, '$.responsavel'))), 0) >= 2
+            AND COALESCE(LENGTH(TRIM(json_extract(t.payload_json, '$.acao_mitigacao'))), 0) >= 10
+            AND COALESCE(LENGTH(TRIM(json_extract(t.payload_json, '$.justificativa'))), 0) >= 10
+            AND COALESCE(json_extract(t.payload_json, '$.prazo'), '') GLOB '????-??-??'
+            AND t.created_at <= ?)`
     : '';
   const result = await db.prepare(
     `INSERT INTO frms_fadiga_evento (id, empresa_id, checkin_id, tipo, payload_json, created_at)
@@ -501,6 +507,13 @@ export async function registerBoaCaseAction(
        AND json_extract(base.payload_json, '$.schema') = 'BOA_CASE_OPENED_V1'
        AND json_extract(base.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'
        AND f.empresa_id = ? AND f.deleted_at IS NULL AND f.ativo = 1
+       AND EXISTS (
+         SELECT 1 FROM usuarios actor
+           JOIN usuarios_empresas member
+             ON member.usuario_id = actor.id AND member.empresa_id = base.empresa_id
+          WHERE actor.id = ? AND member.empresa_id = ?
+            AND (actor.deleted_at IS NULL OR actor.deleted_at = 0)
+       )
        AND EXISTS (SELECT 1 FROM frms_fadiga_evento receipt
          WHERE receipt.id = base.checkin_id
            AND receipt.empresa_id = base.empresa_id
@@ -516,8 +529,8 @@ export async function registerBoaCaseAction(
        AND NOT EXISTS (SELECT 1 FROM frms_fadiga_evento done
          WHERE done.empresa_id = ? AND done.checkin_id = base.id AND done.tipo = ?)`,
   ).bind(crypto.randomUUID(), empresaId, caseId, kindType, notes, now,
-    caseId, empresaId, BOA_CASE_OPEN_TYPE, empresaId, ...scope.bindings,
-    ...(kind === 'closure' ? [empresaId, BOA_CASE_TREATMENT_TYPE] : []),
+    caseId, empresaId, BOA_CASE_OPEN_TYPE, empresaId, actorId, empresaId, ...scope.bindings,
+    ...(kind === 'closure' ? [empresaId, BOA_CASE_TREATMENT_TYPE, now] : []),
     empresaId, kindType, empresaId, BOA_CASE_CLOSED_TYPE).run();
   return result.meta?.changes === 1 ? 'RECORDED' : 'NOT_ALLOWED';
 }
