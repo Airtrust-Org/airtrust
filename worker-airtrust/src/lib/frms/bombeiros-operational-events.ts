@@ -204,10 +204,12 @@ export interface BoaCrewCheckinStatus {
  * Any orphan/duplicate receipt is a hard integrity error, not a normal status.
  */
 export async function loadBoaCrewCheckinStatus(
-  db: D1Database, empresaId: number, funcionarioId: number, date: string,
+  db: D1Database, empresaId: number, funcionarioId: number, userId: number,
+  date: string,
 ): Promise<BoaCrewCheckinStatus> {
   assertBoaTenant(empresaId);
   if (!Number.isSafeInteger(funcionarioId) || funcionarioId <= 0
+    || !Number.isSafeInteger(userId) || userId <= 0
     || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw new Error('BOMBEIROS_CHECKIN_STATUS_INPUT_INVALID');
   }
@@ -219,10 +221,19 @@ export async function loadBoaCrewCheckinStatus(
         AND f.empresa_id = e.empresa_id
       WHERE e.empresa_id = ? AND f.empresa_id = ? AND f.id = ?
         AND f.deleted_at IS NULL AND f.ativo = 1
+        AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+        AND EXISTS (
+          SELECT 1 FROM usuarios u
+            JOIN usuarios_empresas ue
+              ON ue.usuario_id = u.id AND ue.empresa_id = f.empresa_id
+           WHERE u.id = ? AND u.funcionario_id = f.id AND ue.empresa_id = ?
+             AND (u.deleted_at IS NULL OR u.deleted_at = 0)
+        )
         AND e.tipo = ? AND json_extract(e.payload_json, '$.schema') = ?
         AND json_extract(e.payload_json, '$.reference_date') = ?
       ORDER BY e.created_at DESC LIMIT 2`,
-  ).bind(empresaId, empresaId, funcionarioId, BOA_CHECKIN_TYPE, BOA_CHECKIN_TYPE, date)
+  ).bind(empresaId, empresaId, funcionarioId, userId, empresaId,
+    BOA_CHECKIN_TYPE, BOA_CHECKIN_TYPE, date)
     .all<{ id: string }>();
   const receipts = rows.results ?? [];
   if (receipts.length > 1 || (receipts.length === 1 && !receipts[0].id)) {
@@ -241,14 +252,28 @@ export async function loadBoaCrewCheckinStatus(
   const cases = await db.prepare(
     `SELECT c.id FROM frms_fadiga_evento c
        JOIN frms_fadiga_evento receipt ON receipt.id = c.checkin_id
+       JOIN funcionarios f
+         ON f.id = CAST(json_extract(receipt.payload_json, '$.funcionario_id') AS INTEGER)
+        AND f.empresa_id = receipt.empresa_id
       WHERE c.empresa_id = ? AND receipt.empresa_id = ?
         AND receipt.id = ? AND c.tipo = ? AND receipt.tipo = ?
         AND json_extract(c.payload_json, '$.funcionario_id') = ?
         AND json_extract(receipt.payload_json, '$.funcionario_id') = ?
         AND json_extract(receipt.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'
+        AND f.id = ? AND f.empresa_id = ?
+        AND f.deleted_at IS NULL AND f.ativo = 1
+        AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+        AND EXISTS (
+          SELECT 1 FROM usuarios u
+            JOIN usuarios_empresas ue
+              ON ue.usuario_id = u.id AND ue.empresa_id = f.empresa_id
+           WHERE u.id = ? AND u.funcionario_id = f.id AND ue.empresa_id = ?
+             AND (u.deleted_at IS NULL OR u.deleted_at = 0)
+        )
       LIMIT 2`,
   ).bind(empresaId, empresaId, receipts[0].id, BOA_CASE_OPEN_TYPE, BOA_CHECKIN_TYPE,
-    funcionarioId, funcionarioId).all<{ id: string }>();
+    funcionarioId, funcionarioId, funcionarioId, empresaId, userId, empresaId)
+    .all<{ id: string }>();
   if ((cases.results ?? []).length !== 1 || !cases.results[0].id) {
     throw new Error('BOMBEIROS_CHECKIN_STATUS_INTEGRITY_ERROR');
   }
