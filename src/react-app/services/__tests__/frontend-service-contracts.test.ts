@@ -72,6 +72,13 @@ describe('frontend service API contracts', () => {
     expect(result.type).toBe('text/csv');
   });
 
+  it('uses one canonical schedule service through both import paths', async () => {
+    const { agendamentosService: canonical } = await import('@/services/agendamentos.service');
+    const { agendamentosService: compatibility } = await import('@/react-app/services/agendamentos.service');
+
+    expect(compatibility).toBe(canonical);
+  });
+
   it('returns a created schedule entity instead of an envelope', async () => {
     appFetchMock.mockResolvedValueOnce(
       jsonResponse({ success: true, data: { id: 11, status: 'AGENDADO' } }),
