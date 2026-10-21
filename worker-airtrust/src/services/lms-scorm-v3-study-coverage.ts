@@ -48,10 +48,11 @@ export function scoreV3Blueprint(model:unknown,manifest:unknown,
   if(rows.some(x=>!object(x)||typeof x.id!=='string'||!id.test(x.id)||
       typeof x.kind!=='string'))throw Error('SCORE_STUDY_SLIDE_INVALID');
   const slides=rows.map(x=>(x as Obj).id as string);
+  const requiredSlides=manifest.content.requiredSlides;
   if(new Set(slides).size!==slides.length||
-     !Array.isArray(manifest.content.requiredSlides)||
-     manifest.content.requiredSlides.length!==slides.length||
-     !slides.every((x,i)=>manifest.content.requiredSlides[i]===x))
+     !Array.isArray(requiredSlides)||
+     requiredSlides.length!==slides.length||
+     !slides.every((x,i)=>requiredSlides[i]===x))
     throw Error('SCORE_STUDY_SLIDE_MANIFEST_MISMATCH');
   const fixations=rows.filter(x=>(x as Obj).kind==='scenario')
     .map(x=>(x as Obj).id as string);
