@@ -186,7 +186,7 @@ describe('BOA crew check-in API — real employee link, independent tenant and p
     expect(JSON.stringify(body)).not.toMatch(/kss_reported|sleep_hours_24h|funcionario_id/);
     expect(crewIdentity).toHaveBeenCalledWith(expect.anything(), 130, 101);
     expect(readCheckinStatus).toHaveBeenCalledWith(
-      expect.anything(), 130, 21, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      expect.anything(), 130, 21, 101, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     );
     expect(registerCheckin).not.toHaveBeenCalled();
   });
