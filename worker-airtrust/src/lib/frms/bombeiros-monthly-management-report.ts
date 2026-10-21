@@ -167,6 +167,8 @@ export async function loadBoaMonthlyManagementPreview(
        COUNT(DISTINCT o.id) AS opens,
        COUNT(DISTINCT treatment.id) AS treatments,
        COUNT(DISTINCT closure.id) AS closures,
+       MIN(treatment.created_at) AS treatment_at,
+       MIN(closure.created_at) AS closure_at,
        COUNT(DISTINCT CASE WHEN
          json_extract(o.payload_json, '$.schema') IS NOT 'BOA_CASE_OPENED_V1'
          OR json_extract(o.payload_json, '$.funcionario_id') IS NOT r.employee_id
@@ -174,9 +176,14 @@ export async function loadBoaMonthlyManagementPreview(
          THEN o.id END) AS bad_open,
        COUNT(DISTINCT CASE WHEN
          json_extract(treatment.payload_json, '$.schema') IS NOT 'FRMS_CASE_TREATMENT_V1'
+         OR COALESCE(LENGTH(TRIM(json_extract(treatment.payload_json, '$.responsavel'))), 0) < 2
+         OR COALESCE(LENGTH(TRIM(json_extract(treatment.payload_json, '$.acao_mitigacao'))), 0) < 10
+         OR COALESCE(LENGTH(TRIM(json_extract(treatment.payload_json, '$.justificativa'))), 0) < 10
+         OR json_extract(treatment.payload_json, '$.prazo') NOT GLOB '????-??-??'
          THEN treatment.id END) AS bad_treatment,
        COUNT(DISTINCT CASE WHEN
          json_extract(closure.payload_json, '$.schema') IS NOT 'FRMS_CASE_RESOLUTION_V1'
+         OR COALESCE(LENGTH(TRIM(json_extract(closure.payload_json, '$.avaliacao_eficacia'))), 0) < 10
          THEN closure.id END) AS bad_closure
       FROM receipts r
       LEFT JOIN frms_fadiga_evento o
@@ -203,6 +210,7 @@ export async function loadBoaMonthlyManagementPreview(
       COALESCE(SUM(CASE WHEN opens <> 1 OR treatments > 1
         OR closures > 1 OR closures > treatments
         OR bad_open > 0 OR bad_treatment > 0 OR bad_closure > 0
+        OR (closures = 1 AND treatments = 1 AND closure_at < treatment_at)
         THEN 1 ELSE 0 END), 0) AS invalid
       FROM states`;
   const load = async (referenceMonth: string): Promise<BoaMonthlyEvidencePeriod> => {
