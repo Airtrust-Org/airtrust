@@ -1,4 +1,5 @@
 import path from 'path';
+import { readFileSync } from 'node:fs';
 import { execSync } from 'child_process';
 import { defineConfig, loadEnv } from 'vite';
 import type { Plugin } from 'vite';
@@ -69,6 +70,35 @@ function verifyVendorChunkPlugin(): Plugin {
   };
 }
 
+/**
+ * Adds the 100% fictitious FRMS BOA walkthrough to governed Pages staging only.
+ * Never bundle into production or development and never rely on tenant access:
+ * this is a public static PREVIEW, not the authenticated FRMS application.
+ */
+function boaSyntheticPreviewPlugin(enabled: boolean): Plugin {
+  return {
+    name: 'boa-synthetic-preview-staging-only',
+    apply: 'build',
+    generateBundle() {
+      if (!enabled) return;
+      const source = readFileSync(
+        path.resolve(__dirname, 'docs/frms/BOA_DEMO_INTERATIVA_OFFLINE_20261021.html'),
+        'utf8',
+      );
+      if (!source.includes('DEMO LOCAL • NÃO HOMOLOGADA')
+        || !source.includes('Sem gravações nem requisições de rede')
+        || /<script[^>]+src\s*=/i.test(source)) {
+        this.error('BOA_SYNTHETIC_STAGING_PREVIEW_CONTRACT_INVALID');
+      }
+      this.emitFile({
+        type: 'asset',
+        fileName: 'qa/boa-frms-demonstracao.html',
+        source,
+      });
+    },
+  };
+}
+
 function getBuildVersion(): string {
   const explicitVersion = process.env.APP_VERSION?.trim();
   if (explicitVersion) return explicitVersion;
@@ -105,6 +135,11 @@ export default defineConfig(({ mode }) => {
         },
       },
       verifyVendorChunkPlugin(),
+      boaSyntheticPreviewPlugin(
+        mode === 'production'
+        && apiUrl === 'https://airtrust-api-staging.airtrust.workers.dev/api'
+        && devProxyTarget === 'https://airtrust-api-staging.airtrust.workers.dev',
+      ),
     ],
     resolve: {
       alias: {
