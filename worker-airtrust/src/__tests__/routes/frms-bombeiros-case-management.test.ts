@@ -6,6 +6,7 @@ const profileEvidence = vi.fn();
 const policyConfig = vi.fn();
 const sectorAccess = vi.fn();
 const loadCase = vi.fn();
+const loadCaseEvidence = vi.fn();
 const appendAction = vi.fn();
 vi.mock('../../lib/frms/parameter-governance', async original => ({
   ...(await original<typeof import('../../lib/frms/parameter-governance')>()),
@@ -22,6 +23,7 @@ vi.mock('../../services/employee-sector-access', async original => ({
 vi.mock('../../lib/frms/bombeiros-operational-events', async original => ({
   ...(await original<typeof import('../../lib/frms/bombeiros-operational-events')>()),
   loadBoaOperationalCase: (...args: unknown[]) => loadCase(...args),
+  loadBoaCaseEvidenceCoverage: (...args: unknown[]) => loadCaseEvidence(...args),
   registerBoaCaseAction: (...args: unknown[]) => appendAction(...args),
 }));
 
@@ -68,6 +70,17 @@ describe('BOA case event-stream route — security and lifecycle boundaries', ()
     });
     sectorAccess.mockReset().mockResolvedValue(sector);
     loadCase.mockReset().mockResolvedValue({ status, treatment: null });
+    loadCaseEvidence.mockReset().mockResolvedValue({
+      case_id: 'boa-case-1', source: 'BOA_AUTHENTICATED_CHECKIN_EVENT',
+      sleep_evidence: 'SELF_REPORTED_UNVERIFIED',
+      kss_evidence: 'SUBJECTIVE_SELF_REPORT',
+      mission_context: 'CREW_DECLARATION_UNVERIFIED',
+      pvt_evidence: 'NO_PERFORMANCE_MEASUREMENT',
+      duty_roster: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+      actual_mission_times: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+      scientific_risk_estimate: null, requires_human_review: true,
+      dispatch_permission: 'NOT_GRANTED',
+    });
     appendAction.mockReset().mockResolvedValue('RECORDED');
   });
 
@@ -92,6 +105,39 @@ describe('BOA case event-stream route — security and lifecycle boundaries', ()
     expect(text).toContain('ABERTO');
     expect(text).not.toMatch(/funcionario_id|kss_reported|sleep_hours_24h|nome_guerra/);
     expect(loadCase).toHaveBeenCalledWith(expect.anything(), 130, 'boa-case-1', 90, sector);
+  });
+
+  it('returns only provenance and missing-source flags to the authorized sector manager', async () => {
+    const req = createApp();
+    const response = await req('GET', '/casos/boa-case-1/evidencias');
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.data).toMatchObject({
+      sleep_evidence: 'SELF_REPORTED_UNVERIFIED',
+      pvt_evidence: 'NO_PERFORMANCE_MEASUREMENT',
+      duty_roster: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+      scientific_risk_estimate: null,
+      dispatch_permission: 'NOT_GRANTED',
+    });
+    expect(JSON.stringify(data)).not.toMatch(/sleep_hours_24h|kss_reported|pvt_response_times_ms|funcionario_id|nome_guerra/);
+    expect(loadCaseEvidence).toHaveBeenCalledWith(expect.anything(), 130, 'boa-case-1', 90, sector);
+  });
+
+  it('denies admin, Costa do Sol and unapproved BOA policies before reading evidence', async () => {
+    expect((await createApp(130, 'bombeiros', 'admin')('GET', '/casos/boa-case-1/evidencias')).status).toBe(403);
+    expect((await createApp(6, 'costadosol')('GET', '/casos/boa-case-1/evidencias')).status).toBe(403);
+    expect(loadCaseEvidence).not.toHaveBeenCalled();
+    profileEvidence.mockResolvedValueOnce({
+      empresaId: 130, profileCode: 'HELICOPTER_OFFSHORE', regulatoryProfileId: 'offshore',
+    });
+    expect((await createApp()('GET', '/casos/boa-case-1/evidencias')).status).toBe(503);
+    expect(loadCaseEvidence).not.toHaveBeenCalled();
+  });
+
+  it('reports an out-of-scope or revoked evidence link as unavailable', async () => {
+    loadCaseEvidence.mockResolvedValue(null);
+    const response = await createApp()('GET', '/casos/other-tenant/evidencias');
+    expect(response.status).toBe(404);
   });
 
   it('passes treatment to tenant-specific append-only event handler', async () => {
