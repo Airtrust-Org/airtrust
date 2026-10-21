@@ -26,6 +26,7 @@ type Props = {
   course: NativeLearnerCourse;
   initialSession: NativePilotSession;
   completionSupported?: boolean;
+  studyOnly?:boolean;
   fetchAuthorizedAsset: (asset: NativeAsset, signal: AbortSignal) => Promise<Blob>;
   onVerifiedStarted?: () => void;
 };
@@ -39,7 +40,7 @@ function newEventId(): string {
 
 export default function NativeStagingLearnerControls({
   matriculaId, cycleId, editionHash, course, initialSession,
-  completionSupported = false, fetchAuthorizedAsset, onVerifiedStarted,
+  completionSupported = false, studyOnly=false, fetchAuthorizedAsset, onVerifiedStarted,
 }: Props) {
   const [session, setSession] = useState(initialSession);
   const [started, setStarted] = useState(false);
@@ -186,6 +187,7 @@ export default function NativeStagingLearnerControls({
   });
 
   const submit = (answers: Array<{ questionId: string; optionId: string }>) => void mutate(async () => {
+    if(studyOnly)throw Error('NATIVE_STUDY_ONLY_ASSESSMENT_DISABLED');
     if (!started || answers.length !== examQuestions.length ||
         examQuestions.some((question, i) =>
           answers[i]?.questionId !== question.id ||
@@ -208,7 +210,7 @@ export default function NativeStagingLearnerControls({
       : 'Avaliação registrada; critérios de aprovação ainda não atendidos. Nenhum certificado emitido.');
   });
 
-  const readyToComplete = completionSupported && started && !busy &&
+  const readyToComplete = !studyOnly && completionSupported && started && !busy &&
     !locked && !completed && session.latestAttempt?.assessment_satisfied === true &&
     lessonIds.size > 0 && session.seenLessonIds.length === lessonIds.size &&
     session.seenLessonIds.every((id) => lessonIds.has(id));
@@ -249,7 +251,9 @@ export default function NativeStagingLearnerControls({
   return (
     <section aria-label="Piloto Native com evidências" className="space-y-4">
       <div className="mx-auto max-w-5xl space-y-2 px-4 pt-4">
-        <p className="text-sm font-semibold">Piloto exclusivo de staging. A conclusão e a emissão de certificados dependem de confirmação do servidor.</p>
+        <p className="text-sm font-semibold">{studyOnly
+          ? 'Modo de estudo: navegação e retomada registradas. Prova, nota, conclusão e certificado ainda não estão disponíveis.'
+          : 'Piloto exclusivo de staging. A conclusão e a emissão de certificados dependem de confirmação do servidor.'}</p>
         {!started && !locked && (
           <button type="button" onClick={start} disabled={busy}
             className="rounded border px-4 py-2 disabled:opacity-50">
@@ -271,7 +275,7 @@ export default function NativeStagingLearnerControls({
         initialUnitId={initialSession.lastVisitedUnitId}
         serverSeenLessonIds={session.seenLessonIds}
         onRecordLessonVisit={started && !locked && !completed ? visit : undefined}
-        onSubmitAssessment={started && !locked && !completed ? submit : undefined}
+        onSubmitAssessment={!studyOnly && started && !locked && !completed ? submit : undefined}
         onCheckPractice={started && !locked && !completed ? checkPractice : undefined}
         practiceFeedback={practiceFeedback}
         evidenceBusy={busy}

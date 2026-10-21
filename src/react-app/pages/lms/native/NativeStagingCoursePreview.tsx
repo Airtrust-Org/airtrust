@@ -17,6 +17,7 @@ type PreviewResponse = {
     edition_sha256: string;
     mode: 'LEARN' | 'REVIEW';
     completion_supported: boolean;
+    study_only?:boolean;
     evidence_write_enabled?: boolean;
     course: NativeLearnerCourse;
   };
@@ -38,12 +39,13 @@ type ResumeResponse = {
       assessment_satisfied: boolean;
     } | null;
     completion_supported: boolean;
+    study_only?:boolean;
   };
 };
 type NativeResume = NativePilotSession & { initialUnitId: string | null };
 
-export default function NativeStagingCoursePreview({ matriculaId, onVerifiedStarted }: {
-  matriculaId: number; onVerifiedStarted?: () => void;
+export default function NativeStagingCoursePreview({ matriculaId, onVerifiedStarted, studyOnly=false }: {
+  matriculaId: number; onVerifiedStarted?: () => void; studyOnly?:boolean;
 }) {
   const [course, setCourse] = useState<NativeLearnerCourse | null>(null);
   const [resume, setResume] = useState<NativeResume | null>(null);
@@ -75,6 +77,11 @@ export default function NativeStagingCoursePreview({ matriculaId, onVerifiedStar
           payload.data.matricula_id !== matriculaId ||
           typeof payload.data.completion_supported !== 'boolean' ||
           !/^[a-f0-9]{64}$/.test(payload.data.edition_sha256) ||
+          (studyOnly && (payload.data.study_only!==true ||
+            payload.data.completion_supported!==false ||
+            payload.data.course?.policy?.mode!=='FORMATIVE' ||
+            !Array.isArray(payload.data.course?.units) ||
+            payload.data.course.units.some(u=>u.kind==='assessment'||u.kind==='scenario'))) ||
           payload.data.course?.schema !== 'AIRTRUST_NATIVE_COURSE_V1' ||
           !Array.isArray(payload.data.course.units) ||
           !Array.isArray(payload.data.course.assets) ||
@@ -194,6 +201,7 @@ export default function NativeStagingCoursePreview({ matriculaId, onVerifiedStar
       editionHash={writeScope.editionHash}
       initialSession={resume}
       completionSupported={writeScope.completionSupported}
+      studyOnly={studyOnly}
       fetchAuthorizedAsset={fetchAsset}
       onVerifiedStarted={onVerifiedStarted}
     />;

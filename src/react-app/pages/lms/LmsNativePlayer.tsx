@@ -11,10 +11,10 @@ import { useAuth } from '@/react-app/hooks/useAuth';
 import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import Player3AuthenticatedStagingEntry from './player3/Player3AuthenticatedStagingEntry';
 
-type AdmissionCheck = { scope: string; admitted: boolean };
+type AdmissionCheck = { scope: string; admitted: boolean; studyOnly:boolean };
 type Admission = { success?: boolean; data?: {
   matricula_id?: number; curso_id?: number; mode?: string;
-  native_package?: string;
+  native_package?: string;study_only?:boolean;
 } };
 const permittedStatuses = new Set(['NAO_INICIADO', 'EM_ANDAMENTO', 'CONCLUIDO']);
 
@@ -63,9 +63,9 @@ function LmsNativePlayerSession() {
           body.data.native_package !== 'NOT_YET_ENABLED') {
         throw Error('PLAYER3_ENROLLMENT_SCOPE_CONFLICT');
       }
-      if (!controller.signal.aborted) setAdmissionCheck({ scope, admitted: true });
+      if (!controller.signal.aborted) setAdmissionCheck({ scope, admitted: true,studyOnly:body.data.study_only===true });
     })().catch(() => {
-      if (!controller.signal.aborted) setAdmissionCheck({ scope, admitted: false });
+      if (!controller.signal.aborted) setAdmissionCheck({ scope, admitted: false,studyOnly:false });
     });
     return () => controller.abort();
   }, [isAdmissionCandidate,scope,id,expectedMode,matricula?.curso_id]);
@@ -101,6 +101,7 @@ function LmsNativePlayerSession() {
         active={matricula.status === 'EM_ANDAMENTO'}
         allowLegacyNativePreview={matricula.tipo_conteudo === 'native'}
         completed={matricula.status === 'CONCLUIDO'}
+        studyOnly={admissionCheck.studyOnly && matricula.tipo_conteudo === 'native'}
       />
     </main>
   );

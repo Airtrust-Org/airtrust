@@ -21,13 +21,14 @@ const launchMatches=(launch:Launch,empresaId:number,cursoId:number,
 
 export default function Player3AuthenticatedStagingEntry({
   matriculaId,empresaId,cursoId,title,active,allowLegacyNativePreview=false,
-  completed=false,
+  completed=false,studyOnly=false,
 }:{
   matriculaId:number;empresaId:number;cursoId:number;title:string;active:boolean;
   /** Only the physical Native V1 pilot may use its earlier assessment UI. */
   allowLegacyNativePreview?:boolean;
   /** Completed enrollment is read-only: never issue a new start. */
   completed?:boolean;
+  studyOnly?:boolean;
 }){
   const [state,setState]=useState<State>({kind:'LOADING'});
   const [refresh,setRefresh]=useState(0);
@@ -50,6 +51,7 @@ export default function Player3AuthenticatedStagingEntry({
     setState(previous=>previous.kind==='READY' && learnerStarted &&
       launchMatches(previous.launch,empresaId,cursoId,matriculaId)
       ?previous:{kind:'LOADING'});
+    if(studyOnly)return ()=>controller.abort();
     if(!learnerStarted||![matriculaId,empresaId,cursoId].every(positive)){
       setState({kind:allowLegacyNativePreview?'LEGACY_PREVIEW':'BLOCKED'});
       return ()=>controller.abort();
@@ -79,7 +81,7 @@ export default function Player3AuthenticatedStagingEntry({
       if(!controller.signal.aborted)setState({kind:'BLOCKED'});
     });
     return ()=>controller.abort();
-  },[matriculaId,empresaId,cursoId,learnerStarted,refresh,allowLegacyNativePreview]);
+  },[matriculaId,empresaId,cursoId,learnerStarted,refresh,allowLegacyNativePreview,studyOnly]);
 
   // An activated SCORM-backed course must never use the old Native pilot
   // as its start button. Perform one explicit, Worker-owned Native start and
@@ -187,6 +189,9 @@ export default function Player3AuthenticatedStagingEntry({
     }
   }
 
+  // No staged official assessment is used in the explicitly admitted study-only mode.
+  if(studyOnly)return <NativeStagingCoursePreview key={scopeKey} matriculaId={matriculaId}
+    studyOnly onVerifiedStarted={()=>setVerifiedStartScope(scopeKey)}/>;
   if(!learnerStarted&&!allowLegacyNativePreview){
     if(completed)return <p role="status">
       Treinamento concluído. Consulte o histórico de qualificações e certificados.
