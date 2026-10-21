@@ -1,0 +1,134 @@
+-- AIRTRUST EXAMS / D1 SCHEMA V2 — REVIEW ONLY, NOT AN APPLICABLE MIGRATION
+-- source_reference: issue #1661 / PR #1662
+-- operational_decision: independent LMS question revision storage
+-- dry_run_required: true
+-- rollback_plan_required: true
+-- No data edits, no flags, no rollout, no implicit authorization.
+-- Assign a unique numbered Schema V2 change/manifest only after governance review.
+PRAGMA foreign_keys=ON;
+
+CREATE TABLE IF NOT EXISTS lms_exam_question_revisions (
+  empresa_id INTEGER NOT NULL,
+  curso_id INTEGER NOT NULL,
+  question_key TEXT NOT NULL CHECK(length(question_key) BETWEEN 1 AND 80),
+  revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 2147483647),
+  status TEXT NOT NULL DEFAULT 'DRAFT'
+    CHECK(status IN ('DRAFT','REVIEWED','PUBLISHED')),
+  content_json TEXT NOT NULL CHECK(json_valid(content_json)),
+  edit_version INTEGER NOT NULL DEFAULT 1 CHECK(edit_version>=1),
+  created_by TEXT NOT NULL,
+  last_edited_by TEXT NOT NULL,
+  reviewed_by TEXT,
+  published_by TEXT,
+  content_sha256 TEXT CHECK(content_sha256 IS NULL OR
+    (length(content_sha256)=64 AND content_sha256 NOT GLOB '*[^0-9a-f]*')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (empresa_id,curso_id,question_key,revision),
+  CHECK(empresa_id>0 AND curso_id>0),
+  CHECK(
+    (status='DRAFT' AND reviewed_by IS NULL AND published_by IS NULL AND content_sha256 IS NULL)
+    OR (status='REVIEWED' AND reviewed_by IS NOT NULL AND published_by IS NULL AND content_sha256 IS NULL)
+    OR (status='PUBLISHED' AND reviewed_by IS NOT NULL AND published_by IS NOT NULL
+      AND content_sha256 IS NOT NULL)
+  ),
+  CHECK(reviewed_by IS NULL OR reviewed_by<>last_edited_by)
+);
+CREATE INDEX IF NOT EXISTS idx_lms_exam_questions_tenant_course_status
+  ON lms_exam_question_revisions(empresa_id,curso_id,status,question_key,revision);
+
+-- Audit contains NO prompt, choices, correct answer or rationale.
+CREATE TABLE IF NOT EXISTS lms_exam_question_audit (
+  audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  empresa_id INTEGER NOT NULL,
+  curso_id INTEGER NOT NULL,
+  question_key TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  event_type TEXT NOT NULL CHECK(event_type IN ('CREATED','EDITED','REVIEWED','PUBLISHED')),
+  actor_key TEXT NOT NULL,
+  edit_version INTEGER NOT NULL,
+  content_sha256 TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_lms_exam_question_audit_scope
+  ON lms_exam_question_audit(empresa_id,curso_id,question_key,revision,audit_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_insert_scope
+BEFORE INSERT ON lms_exam_question_revisions
+BEGIN
+ SELECT CASE WHEN NOT EXISTS (
+  SELECT 1 FROM lms_cursos c WHERE c.id=NEW.curso_id
+   AND c.empresa_id=NEW.empresa_id AND c.deleted_at IS NULL
+ ) THEN RAISE(ABORT,'LMS_EXAM_COURSE_TENANT_MISMATCH') END;
+ SELECT CASE WHEN NEW.status<>'DRAFT' OR NEW.edit_version<>1 OR
+   NEW.created_by<>NEW.last_edited_by
+ THEN RAISE(ABORT,'LMS_EXAM_DRAFT_ONLY_INSERT') END;
+ SELECT CASE WHEN NEW.revision<>1 AND NOT EXISTS (
+   SELECT 1 FROM lms_exam_question_revisions old
+   WHERE old.empresa_id=NEW.empresa_id AND old.curso_id=NEW.curso_id
+     AND old.question_key=NEW.question_key AND old.revision=NEW.revision-1
+     AND old.status='PUBLISHED'
+ ) THEN RAISE(ABORT,'LMS_EXAM_NEW_REVISION_REQUIRES_PUBLISHED_PARENT') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_update_guards
+BEFORE UPDATE ON lms_exam_question_revisions
+BEGIN
+ SELECT CASE WHEN OLD.status='PUBLISHED'
+ THEN RAISE(ABORT,'LMS_EXAM_PUBLISHED_IMMUTABLE') END;
+ SELECT CASE WHEN NEW.empresa_id<>OLD.empresa_id OR NEW.curso_id<>OLD.curso_id
+  OR NEW.question_key<>OLD.question_key OR NEW.revision<>OLD.revision
+  OR NEW.created_by<>OLD.created_by OR NEW.created_at<>OLD.created_at
+ THEN RAISE(ABORT,'LMS_EXAM_REVISION_IDENTITY_IMMUTABLE') END;
+ SELECT CASE WHEN
+  (OLD.status='DRAFT' AND NEW.status='DRAFT' AND
+     (NEW.reviewed_by IS NOT NULL OR NEW.published_by IS NOT NULL
+      OR NEW.content_sha256 IS NOT NULL OR
+      NEW.edit_version<>OLD.edit_version+1))
+  OR (OLD.status='DRAFT' AND NEW.status='REVIEWED' AND
+      (NEW.content_json<>OLD.content_json OR NEW.edit_version<>OLD.edit_version OR
+       NEW.last_edited_by<>OLD.last_edited_by OR
+       NEW.reviewed_by IS NULL OR NEW.reviewed_by=OLD.last_edited_by OR
+       NEW.published_by IS NOT NULL OR NEW.content_sha256 IS NOT NULL))
+  OR (OLD.status='REVIEWED' AND NEW.status='PUBLISHED' AND
+      (NEW.content_json<>OLD.content_json OR NEW.edit_version<>OLD.edit_version OR
+       NEW.last_edited_by<>OLD.last_edited_by OR
+       NEW.reviewed_by<>OLD.reviewed_by OR
+       NEW.published_by IS NULL OR NEW.content_sha256 IS NULL))
+  OR NEW.status NOT IN ('DRAFT','REVIEWED','PUBLISHED')
+  OR (OLD.status='REVIEWED' AND NEW.status<>'PUBLISHED')
+ THEN RAISE(ABORT,'LMS_EXAM_INVALID_REVISION_TRANSITION') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_no_delete
+BEFORE DELETE ON lms_exam_question_revisions
+BEGIN SELECT RAISE(ABORT,'LMS_EXAM_REVISION_DELETE_FORBIDDEN'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_audit_insert
+AFTER INSERT ON lms_exam_question_revisions
+BEGIN
+ INSERT INTO lms_exam_question_audit
+ (empresa_id,curso_id,question_key,revision,event_type,actor_key,edit_version,content_sha256)
+ VALUES(NEW.empresa_id,NEW.curso_id,NEW.question_key,NEW.revision,'CREATED',
+  NEW.created_by,NEW.edit_version,NULL);
+END;
+CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_audit_update
+AFTER UPDATE ON lms_exam_question_revisions
+BEGIN
+ INSERT INTO lms_exam_question_audit
+ (empresa_id,curso_id,question_key,revision,event_type,actor_key,edit_version,content_sha256)
+ VALUES(NEW.empresa_id,NEW.curso_id,NEW.question_key,NEW.revision,
+ CASE NEW.status WHEN 'REVIEWED' THEN 'REVIEWED' WHEN 'PUBLISHED' THEN 'PUBLISHED' ELSE 'EDITED' END,
+ CASE NEW.status WHEN 'REVIEWED' THEN NEW.reviewed_by
+ WHEN 'PUBLISHED' THEN NEW.published_by ELSE NEW.last_edited_by END,
+ NEW.edit_version,NEW.content_sha256);
+END;
+CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_audit_no_update
+BEFORE UPDATE ON lms_exam_question_audit
+BEGIN SELECT RAISE(ABORT,'LMS_EXAM_AUDIT_IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_audit_no_delete
+BEFORE DELETE ON lms_exam_question_audit
+BEGIN SELECT RAISE(ABORT,'LMS_EXAM_AUDIT_IMMUTABLE'); END;
+
+-- No schema for exams/attempts yet. Publication and evaluation stay disabled
+-- until that contract and the authoritative LMS terminal are reviewed.
