@@ -5,6 +5,7 @@
  * POST /api/lms/xapi/statements            — recebe statement xAPI, salva e pode disparar qualificação
  */
 import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-guard';
+import { resolveScormPlayer3Admission } from '../services/lms-scorm-player3-admission';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -232,6 +233,7 @@ app.post('/xapi/statements', async (c) => {
       SELECT m.id, m.funcionario_id, m.status, m.empresa_id, m.progresso_pct, m.score_final,
         m.qualificacao_historico_id,
         c.id AS curso_id, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
+        c.scorm_versao, c.scorm_package_r2_prefix,
         c.titulo AS curso_titulo,
         c.scorm_mastery_score,
         qt.codigo AS qualificacao_codigo,
@@ -257,6 +259,8 @@ app.post('/xapi/statements', async (c) => {
       qualificacao_historico_id: number | null;
       curso_id: number;
       tipo_conteudo: string | null;
+      scorm_versao: string | null;
+      scorm_package_r2_prefix: string | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       curso_titulo: string;
@@ -279,6 +283,21 @@ app.post('/xapi/statements', async (c) => {
   // private Native enrollment ledger or indirectly alter its LMS status.
   if (await isNativeForLegacyLmsPath(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo)) {
     throw new ApiError('Curso nativo exige eventos e avaliações do player próprio.', 409);
+  }
+
+  // Original Score SCORM uses only the authenticated SCORM 1.2 wrapper.
+  // xAPI completion/passed events cannot bypass its study-only policy or
+  // mint a qualification from caller-supplied statements.
+  if (String(matricula.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm') {
+    const studyAdmission = await resolveScormPlayer3Admission({
+      env: c.env, db, bucket: c.env.BUCKET, tenant: empresaId,
+      course: matricula.curso_id, scormVersion: matricula.scorm_versao,
+      contentType: matricula.tipo_conteudo,
+      activePrefix: matricula.scorm_package_r2_prefix,
+      reviewedForProduction: false,
+    });
+    if (studyAdmission.kind !== 'LEGACY')
+      return c.json({success: false, code: 'SCORM_STUDY_REQUIRES_SCORM_COMMIT'}, 409);
   }
 
   const verbId = stmt.verb.id;
