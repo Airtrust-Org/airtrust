@@ -27,7 +27,7 @@ const moduleForTest = new Module(path);
 moduleForTest.filename = path;
 moduleForTest.paths = Module._nodeModulePaths(dirname(path));
 moduleForTest._compile(compiled.outputFiles[0].text, path);
-const { resolveBoaCrewIdentity, registerBoaCheckin } = moduleForTest.exports;
+const { resolveBoaCrewIdentity, registerBoaCheckin, loadBoaCrewCheckinStatus } = moduleForTest.exports;
 
 function fixture() {
   const sqlite = new DatabaseSync(':memory:');
@@ -123,6 +123,10 @@ test('BOA D1 conditional write refuses revoked membership, returns 403-equivalen
     assert.equal(accepted.accepted, true);
     assert.equal(accepted.status, 'HUMAN_REVIEW_REQUIRED');
     assert.equal(eventCount(), 2);
+    const receiptVisible = await loadBoaCrewCheckinStatus(d1, 130, 21, 101, '2026-10-20');
+    assert.equal(receiptVisible.received, true);
+    assert.equal(receiptVisible.case_id, accepted.case_id);
+    assert.equal(receiptVisible.dispatch_permission, 'NOT_GRANTED');
     const duplicate = await collect('2026-10-20');
     assert.equal(duplicate.accepted, false);
     assert.equal(duplicate.status, 'ALREADY_RECEIVED');
@@ -139,6 +143,10 @@ test('BOA D1 conditional write refuses revoked membership, returns 403-equivalen
     sqlite.exec("UPDATE funcionarios SET status='ATIVO' WHERE id=21");
 
     sqlite.exec('DELETE FROM usuarios_empresas WHERE usuario_id=101');
+    const hidden = await loadBoaCrewCheckinStatus(d1, 130, 21, 101, '2026-10-20');
+    assert.equal(hidden.received, false);
+    assert.equal(hidden.checkin_id, null);
+    assert.equal(hidden.case_id, null);
     assert.equal((await collect('2026-10-20')).status, 'RECHECK_DENIED');
     assert.equal(eventCount(), 2);
     assert.equal(sqlite.prepare(
