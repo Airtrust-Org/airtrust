@@ -45,6 +45,15 @@ export interface Env {
   /** Explicit release/tenant/edition pinned STUDY_ONLY production; default off. */
   /** Governed synthetic staging acceptance, separate from production. */
   /** Staging-only QA upload for private SCORM Score V3 candidates; default off. */
+  /** Player3 SCORM explicit tenant/course/ZIP release allowlists; default off. */
+  SCORM_PLAYER3_STAGING_TENANTS?: string;
+  SCORM_PLAYER3_STAGING_COURSES?: string;
+  SCORM_PLAYER3_STAGING_PACKAGES?: string;
+  SCORM_PLAYER3_STAGING_RELEASE_SHA?: string;
+  SCORM_PLAYER3_PRODUCTION_TENANTS?: string;
+  SCORM_PLAYER3_PRODUCTION_COURSES?: string;
+  SCORM_PLAYER3_PRODUCTION_PACKAGES?: string;
+  SCORM_PLAYER3_PRODUCTION_RELEASE_SHA?: string;
   SCORM_STUDY_QA_ENABLED_TENANTS?: string;
   NATIVE_STUDY_ONLY_STAGING_TENANTS?: string;
   NATIVE_STUDY_ONLY_STAGING_RELEASE_SHA?: string;

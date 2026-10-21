@@ -337,6 +337,7 @@ function sanitizeUpdateCursoPayload(dto: UpdateCursoDTO): UpdateCursoDTO {
     payload.gerar_qualificacao_ao_concluir = dto.gerar_qualificacao_ao_concluir;
   }
   if ('scorm_mastery_score' in dto) payload.scorm_mastery_score = dto.scorm_mastery_score;
+  if ('scorm_assessment_policy' in dto) payload.scorm_assessment_policy = dto.scorm_assessment_policy;
   if ('scorm_versao' in dto) payload.scorm_versao = dto.scorm_versao ?? null;
   if ('tipo_conteudo' in dto) payload.tipo_conteudo = dto.tipo_conteudo;
   if ('publicado' in dto) payload.publicado = dto.publicado;
