@@ -23,6 +23,7 @@ import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
 import { listBombeirosWorkforce } from '../lib/frms/bombeiros-workforce';
 import {
   BombeirosCheckinSchema, resolveBoaCrewIdentity, registerBoaCheckin,
+  loadBoaCrewCheckinStatus,
   loadBoaOperationalCase, loadBoaCaseQueue, registerBoaCaseAction, isBombeirosManagerTenant,
 } from '../lib/frms/bombeiros-operational-events';
 import { BombeirosScenarioSchema, assessBombeirosSyntheticScenario } from '../lib/frms/bombeiros-scenario-method';
@@ -273,6 +274,30 @@ frmsBombeiros.post('/simulacao/metodologia', requireRole('admin'), safe(async (c
  * Crew-owned BOA check-in. Never derive an employee from user-supplied IDs.
  * No dummy offshore score, no "fit for duty" declaration, no background write.
  */
+frmsBombeiros.get('/checkin/status', requireRole('student', 'editor', 'instructor', 'manager'), safe(async c => {
+  const tenant = getTenantContext(c);
+  if (!tenant || tenant.empresaCodigo !== 'bombeiros' || tenant.empresaId === 6
+    || !Number.isSafeInteger(tenant.empresaId) || tenant.empresaId <= 0
+    || !['student', 'editor', 'instructor', 'manager'].includes(tenant.role)) {
+    return c.json({ success: false, code: 'BOMBEIROS_CREW_TENANT_REQUIRED' }, 403);
+  }
+  const userId = Number(c.get('userId'));
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
+    return c.json({ success: false, code: 'BOMBEIROS_ACTOR_REQUIRED' }, 403);
+  }
+  try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId); }
+  catch { return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503); }
+  const employeeId = await resolveBoaCrewIdentity(c.env.DB, tenant.empresaId, userId);
+  if (!employeeId) {
+    return c.json({ success: false, code: 'BOMBEIROS_CREW_NOT_AUTHORIZED' }, 403);
+  }
+  const result = await loadBoaCrewCheckinStatus(
+    c.env.DB, tenant.empresaId, employeeId, getTodayIsoSaoPaulo(),
+  );
+  c.header('Cache-Control', 'private, no-store');
+  return c.json({ success: true, data: result, meta: { tenant_id: tenant.empresaId } });
+}));
+
 frmsBombeiros.post('/checkin', requireRole('student', 'editor', 'instructor', 'manager'), safe(async c => {
   const tenant = getTenantContext(c);
   if (!tenant || tenant.empresaCodigo !== 'bombeiros' || tenant.empresaId === 6
