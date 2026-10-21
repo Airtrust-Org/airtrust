@@ -39,7 +39,7 @@ const snap=(r,status)=>({
 const session=(r)=>({
   editionSha256:edition,cycleId:r.ciclo_id,completionSupported:false,
   allOfficialStagesPassed:false,
-  stages:[{stageId:'synthetic-stage-1',attempts:0,passed:false}],
+  stages:[{stageId:'synthetic-stage-1',attempts:0,passed:false,lastScorePct:null}],
 });
 
 test('grant exact SHA/tenant/learner count from unedited fresh repository admin only',()=>{
@@ -67,10 +67,14 @@ test('only exact 10 green GitHub Actions and matching live staging candidate',()
   assert.throws(()=>assertRuntime(nondraft),/PR_1389_CANDIDATE_CHANGED/);
 });
 
-test('both existing identities must be fresh, independently pinned and not completed',()=>{
+test('pinned QA cohort permits only empty pending and already-started enrollments',()=>{
   assert.doesNotThrow(()=>assertFresh(rows));
-  const wrong=[rows[0],{...rows[1],status:'EM_ANDAMENTO'}];
-  assert.throws(()=>assertFresh(wrong),/LEARNER_NOT_FRESH_OR_NOT_PINNED/);
+  const mixed=[{...rows[0],status:'EM_ANDAMENTO',ciclo_status:'EM_ANDAMENTO'},rows[1]];
+  assert.doesNotThrow(()=>assertFresh(mixed));
+  const drift=[rows[0],{...rows[1],status:'EM_ANDAMENTO'}];
+  assert.throws(()=>assertFresh(drift),/LEARNER_NOT_FRESH_OR_NOT_PINNED/);
+  const allStarted=rows.map(r=>({...r,status:'EM_ANDAMENTO',ciclo_status:'EM_ANDAMENTO'}));
+  assert.throws(()=>assertFresh(allStarted),/NO_UNSTARTED_LEARNER_TO_START/);
   assert.throws(()=>assertFresh([rows[0],{...rows[1],ciclo_id:rows[0].ciclo_id}]),
     /LEARNER_IDENTITIES_NOT_DISTINCT/);
   assert.throws(()=>assertFresh([rows[0],{...rows[1],empresa_id:5}]),
@@ -149,7 +153,7 @@ test('uses independently scoped bearer POST /iniciar and verifies ungraded state
   };
   await applyStart(rows,client,{chromium:'synthetic-A',webkit:'synthetic-B'});
   assert.equal(calls.filter(x=>x.kind==='POST'&&x.path.endsWith('/iniciar')).length,2);
-  assert.equal(calls.filter(x=>x.kind==='GET'&&x.path.endsWith('/sessao')).length,2);
+  assert.equal(calls.filter(x=>x.kind==='GET'&&x.path.endsWith('/sessao')).length,4);
   assert.equal(calls.filter(x=>x.kind==='GET'&&x.path.endsWith('/qa-evidencias')).length,4);
   await assert.rejects(()=>applyStart(rows,client,
     {chromium:'synthetic-A',webkit:'synthetic-A'}),/DISTINCT_STAGING_QA_SECRETS_REQUIRED/);
@@ -175,4 +179,66 @@ test('never proceeds after disallowed snapshot, partial Worker receipt or forbid
   await assert.rejects(()=>applyStart(rows,client,
     {chromium:'A',webkit:'B'}),/WORKER_START_RECEIPT_INVALID/);
   assert.equal(starts,1);
+});
+
+
+test('resume a partial Worker start: do not POST or overwrite Chromium, start only WebKit',async()=>{
+  const before=[{...row(0),status:'EM_ANDAMENTO',ciclo_status:'EM_ANDAMENTO'},row(1)];
+  const status=new Map(before.map(x=>[x.matricula_id,x.status]));
+  const posted=[];
+  const client={
+    async post(path,token,body){
+      if(path==='/api/auth/login'){
+        const i=LEARNERS.findIndex(l=>l.email===body.email);
+        return {accessToken:jwt(i)};
+      }
+      posted.push(path);
+      assert.equal(path,'/api/lms/native/matriculas/'+before[1].matricula_id+'/iniciar');
+      assert.equal(token,jwt(1));
+      assert.deepEqual(body,{});
+      status.set(before[1].matricula_id,'EM_ANDAMENTO');
+      return {status:201,state:'STARTED',ciclo_id:before[1].ciclo_id,
+        edition_sha256:edition,completion_supported:false};
+    },
+    async get(path,token){
+      const id=Number(path.match(/matriculas\/(\d+)\//)?.[1]);
+      const i=before.findIndex(x=>x.matricula_id===id);
+      assert.ok(i>=0);
+      assert.equal(token,jwt(i));
+      if(path.endsWith('/qa-evidencias'))return snap(before[i],status.get(id));
+      if(path.endsWith('/sessao'))return session(before[i]);
+      throw Error('UNKNOWN_READ');
+    },
+  };
+  await applyStart(before,client,{chromium:'QA-A',webkit:'QA-B'});
+  assert.deepEqual(posted,['/api/lms/native/matriculas/'+before[1].matricula_id+'/iniciar']);
+  assertStarted(before.map(x=>({...x,status:status.get(x.matricula_id),ciclo_status:status.get(x.matricula_id)})),before);
+});
+
+test('reject graded prior-start evidence before any pending student mutation',async()=>{
+  const before=[{...row(0),status:'EM_ANDAMENTO',ciclo_status:'EM_ANDAMENTO'},row(1)];
+  let mutation=0;
+  const client={
+    async post(path,token,body){
+      if(path==='/api/auth/login'){
+        const i=LEARNERS.findIndex(l=>l.email===body.email);
+        return {accessToken:jwt(i)};
+      }
+      mutation++;throw Error('UNAUTHORIZED_MUTATION');
+    },
+    async get(path,token){
+      const id=Number(path.match(/matriculas\/(\d+)\//)?.[1]);
+      const i=before.findIndex(x=>x.matricula_id===id);
+      assert.ok(i>=0);
+      if(path.endsWith('/qa-evidencias')){
+        const d=snap(before[i],before[i].status);
+        if(i===0)d.attempts=[{stage_id:'already-graded'}];
+        return d;
+      }
+      return session(before[i]);
+    },
+  };
+  await assert.rejects(()=>applyStart(before,client,{chromium:'QA-A',webkit:'QA-B'}),
+    /PREEXISTING_EVIDENCE_REQUIRES_MANUAL_REVIEW/);
+  assert.equal(mutation,0);
 });
