@@ -1341,7 +1341,8 @@ app.post('/scorm/commit', async (c) => {
       `
       SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.tentativas,
         m.qualificacao_historico_id,
-        c.id AS curso_id, c.tipo_conteudo, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
+        c.id AS curso_id, c.tipo_conteudo, c.scorm_mastery_score, c.scorm_assessment_policy,
+        c.scorm_versao, c.scorm_package_r2_prefix, c.gerar_qualificacao_ao_concluir,
         c.qualificacao_tipo_id, c.titulo AS curso_titulo,
         qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
         qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1365,6 +1366,8 @@ app.post('/scorm/commit', async (c) => {
       tipo_conteudo: string | null;
       scorm_mastery_score: number | null;
       scorm_assessment_policy: 'FORMATIVE' | 'SCORED' | null;
+      scorm_versao: string | null;
+      scorm_package_r2_prefix: string | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       curso_titulo: string;
@@ -1409,6 +1412,32 @@ app.post('/scorm/commit', async (c) => {
   }
   // Do not bypass the current cycle guard when recording standard SCORM.
   await assertScormCommitCycle(db, empresaId, d.matricula_id, d.ciclo_id);
+
+  // A Worker-verified original Score edition can save CMI but must not
+  // emit SCORM-derived completion, failure, exam results or certificates.
+  const scormAdmission = await resolveScormPlayer3Admission({
+    env: c.env, db, bucket: c.env.BUCKET, tenant: empresaId,
+    course: matricula.curso_id, scormVersion: matricula.scorm_versao,
+    contentType: matricula.tipo_conteudo,
+    activePrefix: matricula.scorm_package_r2_prefix,
+    reviewedForProduction: false,
+  });
+  if (scormAdmission.kind === 'BLOCKED')
+    return c.json({success: false, code: 'SCORM_PLAYER3_PROFILE_NOT_ADMITTED'}, 409);
+  const isScoreStudy = scormAdmission.kind === 'SCORM_STUDY';
+  if (isScoreStudy) {
+    const permitted = (status: string | null | undefined) =>
+      status == null || status === '' ||
+      ['incomplete', 'not attempted', 'unknown'].includes(status.toLowerCase());
+    if (!permitted(d.lesson_status) || !permitted(d.completion_status) ||
+        !permitted(d.success_status) ||
+        [d.score_raw, d.score_min, d.score_max, d.score_scaled]
+          .some(score => score != null) || d.completion_candidate === true) {
+      return c.json({
+        success: false, code: 'SCORM_STUDY_CANNOT_CERTIFY',
+      }, 409);
+    }
+  }
 
   // ─── Guard: prevent CONCLUIDO downgrade via SCORM commit ─────────────────
   // Completed enrollments allow only idempotent non-downgrading SCORM commits.
@@ -1469,11 +1498,11 @@ app.post('/scorm/commit', async (c) => {
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
-  const sucesso = canFinalizeScormEnrollment({
+  const sucesso = !isScoreStudy && canFinalizeScormEnrollment({
     commit: d, wasCompleted: matriculaWasConcluido, cmiJson: mergedCmiJson,
     location: mergedLocation, policy: matricula.scorm_assessment_policy,
     masteryScore: matricula.scorm_mastery_score, scorePct: effectiveScorePct });
-  const falha = !matriculaWasConcluido && isScormFailed(d);
+  const falha = !isScoreStudy && !matriculaWasConcluido && isScormFailed(d);
   let progressoPct = progressoAnterior;
   if (sucesso) {
     progressoPct = 100;
@@ -1886,6 +1915,7 @@ app.post('/:id/finalizar', async (c) => {
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct,
               m.qualificacao_historico_id,
               c.id AS curso_id, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score, c.scorm_assessment_policy,
+              c.scorm_versao, c.scorm_package_r2_prefix,
               c.titulo AS curso_titulo,
               qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1909,6 +1939,8 @@ app.post('/:id/finalizar', async (c) => {
       qualificacao_tipo_id: number | null;
       scorm_mastery_score: number | null;
       scorm_assessment_policy: 'SCORED' | 'FORMATIVE' | null;
+      scorm_versao: string | null;
+      scorm_package_r2_prefix: string | null;
       curso_titulo: string;
       qualificacao_codigo: string | null;
       qualificacao_nome: string | null;
@@ -1965,6 +1997,19 @@ app.post('/:id/finalizar', async (c) => {
         completion_diagnostic: completionDiagnostic,
       },
     });
+  }
+
+  if (String(matricula.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm') {
+    const scormStudyAdmission = await resolveScormPlayer3Admission({
+      env: c.env, db, bucket: c.env.BUCKET, tenant: empresaId,
+      course: matricula.curso_id, scormVersion: matricula.scorm_versao,
+      contentType: matricula.tipo_conteudo,
+      activePrefix: matricula.scorm_package_r2_prefix,
+      reviewedForProduction: false,
+    });
+    if (scormStudyAdmission.kind !== 'LEGACY')
+      return c.json({success: false, code: 'SCORM_STUDY_NOT_TERMINAL',
+        data: {matricula_id: matriculaId, novo_status: matricula.status}}, 409);
   }
 
   // Defense in depth: the route and middleware MUST use the same server
@@ -2172,6 +2217,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       `SELECT m.id, m.status, m.progresso_pct, m.funcionario_id, m.qualificacao_historico_id,
               c.id AS curso_id, c.titulo AS curso_titulo, c.qualificacao_tipo_id,
               c.tipo_conteudo, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
+              c.scorm_versao, c.scorm_package_r2_prefix,
               qt.nome AS qualificacao_nome, qt.codigo AS qualificacao_codigo,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
               qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
@@ -2193,6 +2239,8 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       tipo_conteudo: string | null;
       scorm_mastery_score: number | null;
       scorm_assessment_policy: 'SCORED' | 'FORMATIVE' | null;
+      scorm_versao: string | null;
+      scorm_package_r2_prefix: string | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_nome: string | null;
       qualificacao_codigo: string | null;
@@ -2222,6 +2270,21 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         'Somente administradores podem concluir matrículas vinculadas a qualificações',
         403,
       );
+    }
+
+    // Administrative overrides cannot certify a Score study candidate,
+    // even with manual observations. A future external exam needs its own
+    // separately governed server evidence and completion contract.
+    if (String(existing.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm') {
+      const studyAdmission = await resolveScormPlayer3Admission({
+        env: c.env, db, bucket: c.env.BUCKET, tenant: empresaId,
+        course: existing.curso_id, scormVersion: existing.scorm_versao,
+        contentType: existing.tipo_conteudo,
+        activePrefix: existing.scorm_package_r2_prefix,
+        reviewedForProduction: false,
+      });
+      if (studyAdmission.kind !== 'LEGACY')
+        return c.json({success: false, code: 'SCORM_STUDY_NOT_TERMINAL'}, 409);
     }
 
     // Cursos SCORM exigem evidência real de conclusão — mesmo gate do /finalizar.
