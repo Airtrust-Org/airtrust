@@ -44,6 +44,8 @@ export interface Env {
   NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS?: string;
   /** Explicit release/tenant/edition pinned STUDY_ONLY production; default off. */
   /** Governed synthetic staging acceptance, separate from production. */
+  /** Staging-only QA upload for private SCORM Score V3 candidates; default off. */
+  SCORM_STUDY_QA_ENABLED_TENANTS?: string;
   NATIVE_STUDY_ONLY_STAGING_TENANTS?: string;
   NATIVE_STUDY_ONLY_STAGING_RELEASE_SHA?: string;
   NATIVE_STUDY_ONLY_STAGING_EDITIONS?: string;

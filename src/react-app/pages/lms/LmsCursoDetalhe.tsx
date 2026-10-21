@@ -30,6 +30,7 @@ import {
   LmsSurface,
 } from './lmsUi';
 import { getAdminCoursePreviewPath, supportsAdminCoursePreview } from './lmsAdminPreview';
+import ScormStudyQaCandidateUpload from './ScormStudyQaCandidateUpload';
 
 export default function LmsCursoDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -389,6 +390,9 @@ export default function LmsCursoDetalhe() {
             </div>
           </LmsSurface>
         </div>
+        {canManage && curso.tipo_conteudo === 'scorm' &&
+          typeof window !== 'undefined' && /^(staging\.|airtrust-staging\.)/.test(window.location.hostname)
+          ? <ScormStudyQaCandidateUpload cursoId={curso.id}/> : null}
         {canManage && curso.tipo_conteudo === 'scorm' ? <LmsSurface title="Quality Gate SCORM" description="Candidatos só substituem o pacote ativo após os gates."><div className="space-y-2">{(packageVersions.data?.data ?? []).map((pkg: ScormPackageVersionRow) => <div key={pkg.packageId} className="rounded-lg border p-3 text-sm"><p className="font-medium">{pkg.status} · SHA {String(pkg.packageSha256 ?? '').slice(0, 12)}</p><p>Estático: {pkg.structural?.status ?? '—'} · Runtime: {pkg.runtime?.status ?? pkg.conformance?.status ?? 'PENDENTE'} · Certificação funcional: {pkg.functionalCertification?.status === 'CERTIFIED' ? 'certificada' : 'pendente'} · Publicável: {pkg.publishable ? 'sim' : 'não'}</p>{(pkg.runtime?.errors ?? pkg.completionManifest?.errors ?? []).map((reason: string) => <p key={reason} className="text-rose-600">{reason}</p>)}<div className="mt-2 flex gap-2"><Button variant="secondary" loading={runConformance.isPending} onClick={() => void runConformance.mutateAsync(pkg.packageId)}>Executar conformance</Button><Button variant="primary" disabled={!pkg.publishable} loading={activatePackage.isPending} onClick={() => void activatePackage.mutateAsync(pkg.packageId)}>Ativar versão</Button></div></div>)}</div></LmsSurface> : null}
         {curso.conteudo_programatico ? (
           <LmsSurface
