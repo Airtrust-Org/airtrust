@@ -642,16 +642,16 @@ describe('Front D — RC8.1 original lesson D1 evidence, not 42/42 visual illusi
   };
   it('pins unique checkpoint IDs and strictly increasing sequence to reviewed lesson IDs',()=>{
     const a=validateQaAuthoredLessonCheckpoint({
-      eventId:'v-'+'a'.repeat(32),sequence:1,unitId:'lesson-a',
+      eventId:'p3v-'+'a'.repeat(32),sequence:1,unitId:'lesson-a',
     },'lesson-a',1,new Set());
     const b=validateQaAuthoredLessonCheckpoint({
-      eventId:'v-'+'b'.repeat(32),sequence:2,unitId:'lesson-b',
+      eventId:'p3v-'+'b'.repeat(32),sequence:2,unitId:'lesson-b',
     },'lesson-b',2,new Set([a.eventId]));
     expect(b.sequence).toBe(2);
     expect(validateQaNativeLessonSession(recorded,e,ids).next_sequence).toBe(3);
   });
   it('rejects invented completion, scores, tenant and cross-cycle evidence in lesson POST',()=>{
-    const base={eventId:'v-'+'a'.repeat(32),sequence:1,unitId:'lesson-a'};
+    const base={eventId:'p3v-'+'a'.repeat(32),sequence:1,unitId:'lesson-a'};
     for(const payload of [
       {...base,score_pct:100},{...base,complete:true},{...base,empresa_id:9},
       {...base,unitId:'lesson-b'},{...base,sequence:3},
@@ -663,6 +663,10 @@ describe('Front D — RC8.1 original lesson D1 evidence, not 42/42 visual illusi
       new Set([base.eventId]))).toThrow('RC81_LESSON_CHECKPOINT_EVENT_UNIQUE');
     expect(()=>validateQaAuthoredLessonCheckpoint({...base,eventId:'v-guess'},
       'lesson-a',1,new Set())).toThrow('RC81_LESSON_CHECKPOINT_EVENT_UNIQUE');
+    // Regression: the old QA-only `v-` prefix cannot be sent by the Player 3.
+    expect(()=>validateQaAuthoredLessonCheckpoint(
+      {...base,eventId:'v-'+'c'.repeat(32)},'lesson-a',1,new Set()))
+      .toThrow('RC81_LESSON_CHECKPOINT_EVENT_UNIQUE');
   });
   it('rejects phantom lessons, mismatched edition, mode and invalid canonical resume state',()=>{
     for(const bad of [

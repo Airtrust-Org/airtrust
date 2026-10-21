@@ -364,7 +364,8 @@ export function validateQaAuthoredLessonCheckpoint(
     expectedSequence<=10000&&e.sequence===expectedSequence,
     'RC81_LESSON_CHECKPOINT_CANONICAL_ID_SEQUENCE');
   requireQa(typeof e.eventId==='string'&&
-    /^v-[a-f0-9]{32}$/.test(e.eventId) &&
+    // Must match the real browser emitter in Player3NavigationTransport.
+    /^p3v-[a-f0-9]{32}$/.test(e.eventId) &&
     !seenIds.has(e.eventId),
     'RC81_LESSON_CHECKPOINT_EVENT_UNIQUE');
   return e;
