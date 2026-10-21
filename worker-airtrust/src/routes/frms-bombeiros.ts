@@ -39,7 +39,7 @@ function boaSensitiveQaWriteAllowed(env: Env, tenantId: number): boolean {
   const configured = env.BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID ?? '';
   return (env.ENVIRONMENT === 'staging' || env.ENVIRONMENT === 'development')
     && Number.isSafeInteger(tenantId) && tenantId > 0 && tenantId !== 6
-    && /^[1-9]\\d*$/.test(configured) && Number(configured) === tenantId;
+    && /^[1-9][0-9]*$/.test(configured) && Number(configured) === tenantId;
 }
 
 
