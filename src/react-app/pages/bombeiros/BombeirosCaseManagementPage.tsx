@@ -19,6 +19,19 @@ type CaseEnvelope = {
   data: CaseStatus;
   meta?: { tenant_id: number };
 };
+type EvidenceCoverage = {
+  case_id: string;
+  source: 'BOA_AUTHENTICATED_CHECKIN_EVENT';
+  sleep_evidence: 'SELF_REPORTED_UNVERIFIED' | 'NOT_REPORTED';
+  kss_evidence: 'SUBJECTIVE_SELF_REPORT' | 'NOT_REPORTED';
+  mission_context: 'CREW_DECLARATION_UNVERIFIED' | 'NOT_REPORTED';
+  pvt_evidence: 'NO_PERFORMANCE_MEASUREMENT';
+  duty_roster: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE';
+  actual_mission_times: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE';
+  scientific_risk_estimate: null;
+  requires_human_review: true;
+  dispatch_permission: 'NOT_GRANTED';
+};
 
 export default function BombeirosCaseManagementPage() {
   const { empresas, empresaAtualId } = useAuth();
@@ -37,6 +50,14 @@ export default function BombeirosCaseManagementPage() {
     `/api/bombeiros/frms/casos/${encodeURIComponent(caseId)}`,
     { enabled: validTenant && Boolean(caseId), bypassGetCache: true, staleTime: 0, requireAuth: true },
   );
+  const {
+    data: evidenceEnvelope, loading: evidenceLoading, error: evidenceError,
+  } = useApi<{ success: boolean; data: EvidenceCoverage }>(
+    `/api/bombeiros/frms/casos/${encodeURIComponent(caseId)}/evidencias`,
+    { enabled: validTenant && Boolean(caseId), bypassGetCache: true, staleTime: 0, requireAuth: true },
+  );
+  const evidence = evidenceEnvelope?.success && evidenceEnvelope.data.case_id === caseId
+    ? evidenceEnvelope.data : null;
   const queueQuery = queueCursor
     ? `&cursor_at=${encodeURIComponent(queueCursor.created_at)}&cursor_id=${encodeURIComponent(queueCursor.id)}`
     : '';
@@ -161,6 +182,33 @@ export default function BombeirosCaseManagementPage() {
               <p>Ocorrência: <strong>{status.case_id}</strong></p>
               <p>Estado registrado: <strong>{status.state}</strong></p>
               <p>Tratamento já registrado: {status.treatment_recorded ? 'sim' : 'não'}</p>
+              <section className="space-y-2 rounded border border-slate-200 bg-slate-50 p-3"
+                aria-label="Evidências do check-in de origem">
+                <h3 className="font-semibold">Cobertura das evidências recebidas</h3>
+                <p>Esta avaliação da disponibilidade de fontes vem do recibo autenticado
+                  vinculado à ocorrência, sem valores pessoais de sono, KSS ou desempenho.</p>
+                {evidenceLoading && <p role="status">Verificando fontes do check-in…</p>}
+                {evidenceError && <p role="alert">
+                  Cobertura indisponível. Não presumir que o dado foi coletado: {evidenceError}
+                </p>}
+                {!evidenceLoading && !evidenceError && !evidence &&
+                  <p>Não foi possível comprovar as evidências desta ocorrência.</p>}
+                {evidence && <>
+                  <ul className="space-y-1">
+                    <li>Sono: {evidence.sleep_evidence === 'SELF_REPORTED_UNVERIFIED'
+                      ? 'autorrelato recebido, não aferido' : 'não informado'}</li>
+                    <li>Sonolência KSS: {evidence.kss_evidence === 'SUBJECTIVE_SELF_REPORT'
+                      ? 'escala subjetiva declarada' : 'não informada'}</li>
+                    <li>Missão e período: {evidence.mission_context === 'CREW_DECLARATION_UNVERIFIED'
+                      ? 'declarados, sem confirmação da escala' : 'contexto não comprovado'}</li>
+                    <li>Desempenho cognitivo: sem teste PVT mensurado.</li>
+                    <li>Escala operacional: não conectada a fonte BOA autorizada.</li>
+                    <li>Horários reais da missão: não conectados a fonte BOA autorizada.</li>
+                  </ul>
+                  <p className="font-medium">Revisão humana obrigatória. Estimativa científica
+                    de risco indisponível. Liberação de voo não concedida.</p>
+                </>}
+              </section>
               {status.state === 'ABERTO' && (
                 <div className="space-y-2">
                   <h3 className="font-semibold">Registrar mitigação sem encerrar</h3>
