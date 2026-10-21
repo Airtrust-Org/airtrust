@@ -136,6 +136,46 @@ describe('BOA event intake and immutable case stream contracts', () => {
     expect(queries).toHaveLength(0);
   });
 
+  it('requires the opened case to reference a receipt owned by the same employee and tenant', async () => {
+    const { db, queries } = fakeDb({
+      case: { id: 'case-1', tipo: BOA_CASE_OPEN_TYPE,
+        payload_json: '{"funcionario_id":21}', created_at: '2026-10-20T12:00:00Z' },
+      receipt: null,
+    });
+    expect(await loadBoaOperationalCase(db, 130, 'case-1', authorized)).toBeNull();
+    expect(queries[1].sql).toContain("json_extract(e.payload_json, '$.funcionario_id')");
+    expect(queries[1].sql).toContain("json_extract(base.payload_json, '$.funcionario_id')");
+    expect(queries[1].sql).toContain("'NOT_GRANTED'");
+    expect(queries[1].values).toEqual([
+      'case-1', 130, 130, BOA_CHECKIN_TYPE, BOA_CASE_OPEN_TYPE,
+    ]);
+  });
+
+  it('refuses corrupt or out-of-order treatment and closure history', async () => {
+    const base = {
+      case: { id: 'case-1', tipo: BOA_CASE_OPEN_TYPE,
+        payload_json: '{"funcionario_id":21}', created_at: '2026-10-20T12:00:00Z' },
+      receipt: { id: 'receipt-1' },
+    };
+    const invalid = [
+      [{ tipo: 'BOA_CASE_TREATMENT_V1', payload_json: 'not-json',
+        created_at: '2026-10-20T13:00:00Z' }],
+      [{ tipo: 'BOA_CASE_TREATMENT_V1',
+          payload_json: '{"schema":"FRMS_CASE_TREATMENT_V1","responsavel":"AB","prazo":"2026-10-30"}',
+          created_at: '2026-10-20T13:00:00Z' },
+       { tipo: 'BOA_CASE_CLOSED_V1',
+          payload_json: '{"schema":"FRMS_CASE_RESOLUTION_V1","avaliacao_eficacia":"ok"}',
+          created_at: '2026-10-20T13:30:00Z' }],
+      [{ tipo: 'BOA_CASE_CLOSED_V1', payload_json: '{}',
+        created_at: '2026-10-20T13:30:00Z' }],
+    ];
+    for (const childEvents of invalid) {
+      const { db } = fakeDb({ ...base, childEvents });
+      await expect(loadBoaOperationalCase(db, 130, 'case-1', authorized))
+        .rejects.toThrow('BOMBEIROS_CASE_STREAM_INTEGRITY_ERROR');
+    }
+  });
+
   it('case treatment write rechecks ownership and rejects concurrent duplicates', async () => {
     const { db, queries } = fakeDb({
       case: { id: 'case-1', tipo: BOA_CASE_OPEN_TYPE, payload_json: '{}', created_at: '2026-10-20' },
@@ -150,6 +190,9 @@ describe('BOA event intake and immutable case stream contracts', () => {
     const insert = queries.find(q => q.sql.startsWith('INSERT INTO frms_fadiga_evento'));
     expect(insert?.sql).toContain('NOT EXISTS');
     expect(insert?.sql).toContain('f.empresa_id = ?');
+    expect(insert?.sql).toContain("receipt.empresa_id = base.empresa_id");
+    expect(insert?.sql).toContain("json_extract(receipt.payload_json, '$.funcionario_id')");
+    expect(insert?.sql).toContain("json_extract(base.payload_json, '$.funcionario_id')");
     expect(insert?.values).toContain(130);
   });
 
