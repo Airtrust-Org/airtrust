@@ -220,3 +220,34 @@ test('BOA case append rechecks current manager membership and valid treatment in
     sqlite.close();
   }
 });
+
+test('BOA case detail denies revoked manager between case opening and child stream', async () => {
+  const { sqlite, d1, add } = dbFixture();
+  try {
+    add.run('treat-after-preflight', 130, 'boa-case', 'BOA_CASE_TREATMENT_V1',
+      JSON.stringify(validTreatment), '2026-10-20T10:00:00Z');
+    const initial = await loadBoaOperationalCase(d1, 130, 'boa-case', 90, scope);
+    assert.equal(initial?.status.state, 'EM_TRATAMENTO');
+
+    let revokedDuringRead = false;
+    const interleaved = {
+      prepare(sql) {
+        if (!revokedDuringRead &&
+            (sql.includes('ORDER BY created_at ASC, id ASC') ||
+             sql.includes('LEFT JOIN frms_fadiga_evento events'))) {
+          sqlite.exec("UPDATE setores_gestores SET ativo=0 WHERE usuario_id=90");
+          revokedDuringRead = true;
+        }
+        return d1.prepare(sql);
+      },
+    };
+    const after = await loadBoaOperationalCase(interleaved, 130, 'boa-case', 90, scope);
+    assert.equal(revokedDuringRead, true, 'must trigger revocation before final event read');
+    assert.equal(after, null, 'revoked manager must not receive historical case status or notes');
+    assert.equal(sqlite.prepare(
+      "SELECT COUNT(*) AS n FROM frms_fadiga_evento WHERE empresa_id=6",
+    ).get().n, 2);
+  } finally {
+    sqlite.close();
+  }
+});
