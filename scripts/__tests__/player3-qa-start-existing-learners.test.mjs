@@ -173,7 +173,7 @@ test('never proceeds after disallowed snapshot, partial Worker receipt or forbid
     },
     async get(path,token){
       const i=token===jwt(0)?0:1;
-      return snap(rows[i],'NAO_INICIADO');
+      return path.endsWith('/sessao') ? session(rows[i]) : snap(rows[i],'NAO_INICIADO');
     },
   };
   await assert.rejects(()=>applyStart(rows,client,
