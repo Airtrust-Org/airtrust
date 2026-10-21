@@ -152,19 +152,21 @@ describe('BOA event intake and immutable case stream contracts', () => {
       receipt: { id: 'receipt-1' },
       childEvents: [],
     });
-    const found = await loadBoaOperationalCase(db, 130, 'case-1', authorized);
+    const found = await loadBoaOperationalCase(db, 130, 'case-1', 90, authorized);
     expect(found?.status.state).toBe('ABERTO');
     expect(queries[0].sql).toContain('f.empresa_id = ?');
     expect(queries[0].sql).toContain('f.setor_id IN (?)');
     expect(queries[0].sql).toContain("json_extract(e.payload_json, '$.schema') = 'BOA_CASE_OPENED_V1'");
     expect(queries[0].sql).toContain("json_extract(e.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'");
-    expect(queries[0].values).toEqual(['case-1', 130, BOA_CASE_OPEN_TYPE, 130, 9]);
+    expect(queries[0].values).toEqual(['case-1', 130, BOA_CASE_OPEN_TYPE, 130, 90, 130, 90, 9]);
+    expect(queries[0].sql).toContain('assigned.usuario_id = ?');
+    expect(queries[0].sql).toContain('current_membership.role');
     expect(queries[1].sql).toContain('e.empresa_id = ?');
   });
 
   it('never reads cases with missing manager sector scope', async () => {
     const { db, queries } = fakeDb();
-    const found = await loadBoaOperationalCase(db, 130, 'case-1',
+    const found = await loadBoaOperationalCase(db, 130, 'case-1', 90,
       { mode: 'restricted', setorIds: [], funcionarioId: null });
     expect(found).toBeNull();
     expect(queries).toHaveLength(0);
@@ -242,7 +244,7 @@ describe('BOA event intake and immutable case stream contracts', () => {
         payload_json: '{"funcionario_id":21}', created_at: '2026-10-20T12:00:00Z' },
       receipt: null,
     });
-    expect(await loadBoaOperationalCase(db, 130, 'case-1', authorized)).toBeNull();
+    expect(await loadBoaOperationalCase(db, 130, 'case-1', 90, authorized)).toBeNull();
     expect(queries[1].sql).toContain("json_extract(e.payload_json, '$.funcionario_id')");
     expect(queries[1].sql).toContain("json_extract(base.payload_json, '$.funcionario_id')");
     expect(queries[1].sql).toContain("'NOT_GRANTED'");
@@ -271,7 +273,7 @@ describe('BOA event intake and immutable case stream contracts', () => {
     ];
     for (const childEvents of invalid) {
       const { db } = fakeDb({ ...base, childEvents });
-      await expect(loadBoaOperationalCase(db, 130, 'case-1', authorized))
+      await expect(loadBoaOperationalCase(db, 130, 'case-1', 90, authorized))
         .rejects.toThrow('BOMBEIROS_CASE_STREAM_INTEGRITY_ERROR');
     }
   });
@@ -350,7 +352,7 @@ describe('BOA event intake and immutable case stream contracts', () => {
         };
       },
     } as unknown as D1Database;
-    const queue = await loadBoaCaseQueue(db, 130, authorized, 1);
+    const queue = await loadBoaCaseQueue(db, 130, 90, authorized, 1);
     expect(queue?.items).toMatchObject([
       { case_id: 'case-a', state: 'ABERTO', treatment_recorded: false },
     ]);
@@ -361,7 +363,8 @@ describe('BOA event intake and immutable case stream contracts', () => {
     expect(queries[0].sql).toContain('invalid_treatment_count');
     expect(queries[0].sql).toContain('invalid_closure_count');
     expect(queries[0].sql).toContain('opening_dispatch');
-    expect(queries[0].bind).toEqual([130, 130, BOA_CASE_OPEN_TYPE, 9, 2]);
+    expect(queries[0].bind).toEqual([130, 130, BOA_CASE_OPEN_TYPE, 90, 130, 90, 9, 2]);
+    expect(queries[0].sql).toContain('assigned.usuario_id = ?');
     expect(JSON.stringify(queue)).not.toMatch(/funcionario_id|kss_reported|sleep_hours/);
   });
 
@@ -393,16 +396,16 @@ describe('BOA event intake and immutable case stream contracts', () => {
           }),
         }),
       } as unknown as D1Database;
-      await expect(loadBoaCaseQueue(db, 130, authorized))
+      await expect(loadBoaCaseQueue(db, 130, 90, authorized))
         .rejects.toThrow('BOA_CASE_QUEUE_INTEGRITY_ERROR');
     }
   });
 
   it('never queries case queue under empresa 6 or without authorized manager sectors', async () => {
     const { db, queries } = fakeDb();
-    await expect(loadBoaCaseQueue(db, 6, authorized)).rejects.toThrow('BOMBEIROS_INVALID_TENANT');
+    await expect(loadBoaCaseQueue(db, 6, 90, authorized)).rejects.toThrow('BOMBEIROS_INVALID_TENANT');
     const noSectors: EmployeeSectorAccess = { mode: 'restricted', setorIds: [], funcionarioId: null };
-    expect(await loadBoaCaseQueue(db, 130, noSectors)).toBeNull();
+    expect(await loadBoaCaseQueue(db, 130, 90, noSectors)).toBeNull();
     expect(queries).toHaveLength(0);
   });
 });
