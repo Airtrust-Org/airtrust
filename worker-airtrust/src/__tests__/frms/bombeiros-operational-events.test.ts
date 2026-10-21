@@ -114,7 +114,48 @@ describe('BOA event intake and immutable case stream contracts', () => {
     const receipt = String(queries[0].values[4]);
     expect(receipt).toContain('"profile_code":"FIREFIGHTER_AVIATION"');
     expect(receipt).not.toMatch(/score_fadiga|HELICOPTER_OFFSHORE/);
+    const evidence = JSON.parse(receipt) as {
+      measurement_provenance: Record<string, unknown>;
+      sleep_hours_24h: number | null;
+      kss_reported: number | null;
+    };
+    expect(evidence.measurement_provenance).toMatchObject({
+      schema: 'BOA_INTAKE_PROVENANCE_V1',
+      collection_channel: 'AUTHENTICATED_CREW_SELF_REPORT',
+      sleep_hours_24h: 'CREW_REPORTED_NOT_MEASURED',
+      kss_reported: 'SUBJECTIVE_KSS_1_TO_9',
+      pvt_60s_completed: 'CREW_DECLARATION_ONLY_NOT_A_PERFORMANCE_TEST',
+      pvt_response_times_ms: null,
+      pvt_lapses: null,
+      duty_roster: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+      actual_mission_times: 'NOT_LINKED_TO_AUTHORIZED_BOA_SOURCE',
+      scientific_risk_estimate: null,
+      boa_validation: 'NOT_ESTABLISHED',
+    });
     expect(queries[1].sql).toContain('EXISTS');
+  });
+
+  it('does not convert missing self-reports into measured risk or safe duty', async () => {
+    const { db, queries } = fakeDb({ batchChanges: [1, 1] });
+    const noData = {
+      ...input, sleep_hours_24h: null, kss_reported: null,
+      pvt_60s_completed: null, self_declared_unfit: null,
+    };
+    const result = await registerBoaCheckin(db, 130, 21, 19, '2026-10-20', noData, governance);
+    expect(result.dispatch_permission).toBe('NOT_GRANTED');
+    const payload = JSON.parse(String(queries[0].values[4])) as {
+      sleep_hours_24h: null; kss_reported: null;
+      measurement_provenance: Record<string, unknown>;
+    };
+    expect(payload.sleep_hours_24h).toBeNull();
+    expect(payload.kss_reported).toBeNull();
+    expect(payload.measurement_provenance).toMatchObject({
+      sleep_hours_24h: 'NOT_REPORTED',
+      kss_reported: 'NOT_REPORTED',
+      scientific_risk_estimate: null,
+      pvt_response_times_ms: null,
+      pvt_lapses: null,
+    });
   });
 
   it('treats duplicate daily receipt as NOT an operational clearance', async () => {
