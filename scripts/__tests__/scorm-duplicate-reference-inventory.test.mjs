@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  parseGitTree, manifestDeclaredPaths, findMissingManifestReferences, findDuplicateGroups, summarize,
+  parseGitTree, manifestDeclaredPaths, findManifestPathIssues, findMissingManifestReferences,
+  findDuplicateGroups, summarize,
 } from '../ops/scorm-duplicate-reference-inventory.mjs';
 
 const SHA = 'a'.repeat(40);
@@ -61,13 +62,20 @@ test('inventory reports exact manifest paths missing from tracked tree without d
     file: manifest,
     xml: '<manifest><resources><resource href="index.html"><file href="fit_content_assets/Sem_t%C3%ADtulosds_qihroh.png" /></resource></resources></manifest>',
   }];
-  const missing = findMissingManifestReferences(entries, sources);
-  assert.deepEqual(missing, [
-    { manifest, file: declared, safeToDelete: false },
+  const issues = findManifestPathIssues(entries, sources);
+  assert.deepEqual(findMissingManifestReferences(entries, sources), issues.missingManifestReferences);
+  assert.deepEqual(issues.missingManifestReferences, [
     { manifest, file: ROOT + '/Emergencias/index.html', safeToDelete: false },
-  ].sort((a, b) => a.file.localeCompare(b.file)));
-  assert.equal(summarize([], 1, missing.length).missingManifestReferences, 2);
-  assert.equal(summarize([], 1, missing.length).deletionAuthorized, false);
+  ]);
+  assert.deepEqual(issues.encodedLiteralManifestReferences, [{
+    manifest, file: declared, literalFile: encodedOnDisk,
+    runtimeVerified: false, safeToDelete: false,
+  }]);
+  const summary = summarize([], 1, issues.missingManifestReferences.length,
+    issues.encodedLiteralManifestReferences.length);
+  assert.equal(summary.missingManifestReferences, 1);
+  assert.equal(summary.encodedLiteralManifestReferences, 1);
+  assert.equal(summary.deletionAuthorized, false);
 });
 
 test('inventory skips external paths and accepts tracked local manifest references', () => {
@@ -83,4 +91,30 @@ test('inventory skips external paths and accepts tracked local manifest referenc
   }];
   assert.deepEqual(findMissingManifestReferences(entries, sources), []);
   assert.equal(summarize([], 1).missingManifestReferences, 0);
+});
+
+test('truly missing encoded resource stays missing when neither tracked path exists', () => {
+  const manifest = ROOT + '/Course A/imsmanifest.xml';
+  const entries = [{ sha: SHA, bytes: 200, file: manifest }];
+  const sources = [{
+    file: manifest,
+    xml: '<manifest><resource href="images/absent%20file.jpg" /></manifest>',
+  }];
+  const result = findManifestPathIssues(entries, sources);
+  assert.deepEqual(result.missingManifestReferences, [{
+    manifest, file: ROOT + '/Course A/images/absent file.jpg', safeToDelete: false,
+  }]);
+  assert.deepEqual(result.encodedLiteralManifestReferences, []);
+});
+
+test('encoded literal path cannot authorize asset removal or claim runtime verified', () => {
+  const manifest = ROOT + '/Course A/imsmanifest.xml';
+  const literal = ROOT + '/Course A/fit_content_assets/Sem_t%C3%ADtulos.png';
+  const sources = [{ file: manifest, xml: '<file href="fit_content_assets/Sem_t%C3%ADtulos.png"/>' }];
+  const result = findManifestPathIssues([{ sha: SHA, bytes: 200, file: literal }], sources);
+  assert.equal(result.missingManifestReferences.length, 0);
+  assert.equal(result.encodedLiteralManifestReferences.length, 1);
+  assert.equal(result.encodedLiteralManifestReferences[0].runtimeVerified, false);
+  assert.equal(result.encodedLiteralManifestReferences[0].safeToDelete, false);
+  assert.equal(summarize([], 1, 0, 1).deletionAuthorized, false);
 });
