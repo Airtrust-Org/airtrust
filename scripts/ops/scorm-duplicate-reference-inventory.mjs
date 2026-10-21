@@ -37,6 +37,25 @@ export function manifestDeclaredPaths(xml, manifestPath) {
   return declared;
 }
 
+/**
+ * Reports literal tracked paths missing from package manifests. This is
+ * diagnostic only: URL decoding, case-sensitive hosting and generated runtime
+ * assets require a separate review before any package asset is changed.
+ */
+export function findMissingManifestReferences(entries, manifests) {
+  const tracked = new Set(entries.map(({ file }) => file));
+  const missing = [];
+  for (const { file: manifestPath, xml } of manifests) {
+    for (const declaredPath of manifestDeclaredPaths(xml, manifestPath)) {
+      if (!tracked.has(declaredPath)) {
+        missing.push({ manifest: manifestPath, file: declaredPath, safeToDelete: false });
+      }
+    }
+  }
+  return missing.sort((a, b) =>
+    a.manifest.localeCompare(b.manifest) || a.file.localeCompare(b.file));
+}
+
 export function findDuplicateGroups(entries, declaredPaths = new Set(), minBytes = DEFAULT_MIN_BYTES) {
   if (!Number.isSafeInteger(minBytes) || minBytes < 1) throw Error('MIN_BYTES_INVALID');
   const blobs = new Map();
@@ -65,9 +84,10 @@ export function findDuplicateGroups(entries, declaredPaths = new Set(), minBytes
     }).sort((a, b) => b.logicalDuplicateBytes - a.logicalDuplicateBytes);
 }
 
-export function summarize(groups, manifestCount) {
+export function summarize(groups, manifestCount, missingManifestCount = 0) {
   return {
     trackedManifestCount: manifestCount,
+    missingManifestReferences: missingManifestCount,
     duplicateGroups: groups.length,
     duplicateCopies: groups.reduce((n, group) => n + group.copies - 1, 0),
     logicalDuplicateBytes: groups.reduce((n, group) => n + group.logicalDuplicateBytes, 0),
@@ -85,14 +105,21 @@ export function scanRepository() {
   ], { cwd: ROOT, maxBuffer: 32 * 1024 * 1024 }));
   const manifests = tree.filter((entry) => entry.file.toLowerCase().endsWith('/imsmanifest.xml'));
   const refs = new Set();
+  const manifestSources = [];
   for (const manifest of manifests) {
     const xml = execFileSync('git', ['show', 'HEAD:' + manifest.file], {
       cwd: ROOT, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
     });
+    manifestSources.push({ file: manifest.file, xml });
     for (const href of manifestDeclaredPaths(xml, manifest.file)) refs.add(href);
   }
   const groups = findDuplicateGroups(tree, refs);
-  return { summary: summarize(groups, manifests.length), groups };
+  const missingManifestReferences = findMissingManifestReferences(tree, manifestSources);
+  return {
+    summary: summarize(groups, manifests.length, missingManifestReferences.length),
+    missingManifestReferences,
+    groups,
+  };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
