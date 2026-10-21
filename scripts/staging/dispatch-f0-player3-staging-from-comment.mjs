@@ -57,6 +57,14 @@ export function assertGates(checkRuns) {
   }
 }
 export function assertReviewedDelta(comparison) {
+  // compare(F4_SHA...main) is "behind" when the PR already contains main.
+  // No commits or files from main remain to be reviewed in that case.
+  if(comparison?.status==='behind') {
+    if(comparison.ahead_by!==0 || !Array.isArray(comparison.files) ||
+       comparison.files.length!==0)
+      throw Error('F0_CLOUD_DISPATCH_UNEXPECTED_COMPARISON');
+    return;
+  }
   if(comparison?.status!=='diverged' && comparison?.status!=='ahead')
     throw Error('F0_CLOUD_DISPATCH_UNEXPECTED_COMPARISON');
   if(!Number.isInteger(comparison.ahead_by)||comparison.ahead_by<0||
