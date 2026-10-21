@@ -137,6 +137,37 @@ describe('BOA crew check-in API — real employee link, independent tenant and p
         policy_version: 'BOA-QA-P1' },
     );
   });
+  it('returns 403 if BOA crew membership is revoked at the actual DB write', async () => {
+    registerCheckin.mockResolvedValueOnce({
+      accepted: false, status: 'RECHECK_DENIED',
+      checkin_id: null, case_id: null,
+      dispatch_permission: 'NOT_GRANTED',
+      method_version: 'BOA_EVIDENCE_INTAKE_V1',
+    });
+    const { post } = makeApp();
+    const result = await post(input);
+    expect(result.status).toBe(403);
+    expect(await result.json()).toMatchObject({
+      code: 'BOMBEIROS_CREW_NOT_AUTHORIZED',
+      dispatch_permission: 'NOT_GRANTED',
+    });
+  });
+
+  it('keeps daily idempotency conflict distinct from a revoked account', async () => {
+    registerCheckin.mockResolvedValueOnce({
+      accepted: false, status: 'ALREADY_RECEIVED',
+      checkin_id: null, case_id: null,
+      dispatch_permission: 'NOT_GRANTED',
+      method_version: 'BOA_EVIDENCE_INTAKE_V1',
+    });
+    const result = await makeApp().post(input);
+    expect(result.status).toBe(409);
+    expect(await result.json()).toMatchObject({
+      code: 'BOMBEIROS_CHECKIN_ALREADY_RECEIVED',
+      dispatch_permission: 'NOT_GRANTED',
+    });
+  });
+
   it('rejects employee identity unlinked from BOA even if its user has valid login', async () => {
     crewIdentity.mockResolvedValue(null);
     const { post } = makeApp();
