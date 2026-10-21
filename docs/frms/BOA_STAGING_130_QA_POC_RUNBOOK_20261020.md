@@ -169,3 +169,28 @@ middleware e política de acesso antes do staging oficial.
 Nenhuma variável de autorização de escrita é habilitada por este
 runbook, nenhuma escrita D1/R2 remota é necessária e a empresa 6
 permanece separada.
+
+### Bloqueio BOA adicional: papel e designação direta do setor
+
+A instrução de gravação também valida `usuarios_empresas.role` como
+perfil gerencial e a existência de um vínculo **direto**
+`setores_gestores.usuario_id` ativo com o setor do funcionário,
+no mesmo tenant BOA. O setor deve permanecer ativo; somente a
+atribuição `manager` ou `backup` permite escrita, e `observer`
+não autoriza o tratamento/encerramento. A revogação de setor ou
+perfil entre o preflight e o INSERT resulta em zero gravações.
+
+**Decisão de segurança BOA:** o vínculo legado
+`setores_gestores.gestor_id` por correspondência de e-mail não
+autoriza gravações de saúde na nova operação dos Bombeiros. O
+provisionamento sintético precisa criar o vínculo moderno
+`usuario_id` pelo fluxo governado, sem copiar atribuições da
+Costa do Sol. Os demais tenants não mudam.
+
+**Limite:** este endurecimento protege a operação **de escrita**.
+A fila e a consulta detalhada possuem checagens próprias de RBAC,
+setores/empresa e histórico, mas a revisão da semântica de acesso
+de leitura por observador/substituto permanece um item de QA
+autenticado; não considerar revisão de leitura concluída por esse
+teste de gravação.
+
