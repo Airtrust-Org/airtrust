@@ -35,6 +35,7 @@ export interface BoaMonthlyReportPreview {
   state: 'UNSIGNED_UNVALIDATED_PREVIEW';
   coverage: 'NOT_DETERMINABLE_WITHOUT_ROSTER';
   basis: 'CHECKIN_MONTH_AND_CASE_STATUS_AT_GENERATION';
+  as_of: string;
   current: BoaMonthlyEvidencePeriod;
   previous: BoaMonthlyEvidencePeriod;
   receipt_delta: number | null;
@@ -139,6 +140,7 @@ export async function loadBoaMonthlyManagementPreview(
       || new Set(ids).size !== ids.length) {
     throw new Error('BOA_REPORT_INVALID_EMPLOYEE_SCOPE');
   }
+  const asOf = new Date().toISOString();
   const placeholders = ids.map(() => '?').join(', ');
   const sql = `WITH receipts AS (
     SELECT e.id AS receipt_id, f.id AS employee_id,
@@ -151,6 +153,7 @@ export async function loadBoaMonthlyManagementPreview(
        AND f.empresa_id = ?
        AND f.deleted_at IS NULL AND f.ativo = 1
        AND e.tipo = ?
+       AND e.created_at <= ?
        AND json_extract(e.payload_json, '$.schema') = ?
        AND json_extract(e.payload_json, '$.submitted_at') IS NOT NULL
        AND TRIM(CAST(json_extract(e.payload_json, '$.submitted_at') AS TEXT)) <> ''
@@ -167,13 +170,13 @@ export async function loadBoaMonthlyManagementPreview(
       FROM receipts r
       LEFT JOIN frms_fadiga_evento o
         ON o.checkin_id = r.receipt_id AND o.empresa_id = ?
-       AND o.tipo = ?
+       AND o.tipo = ? AND o.created_at <= ?
       LEFT JOIN frms_fadiga_evento treatment
         ON treatment.checkin_id = o.id AND treatment.empresa_id = o.empresa_id
-       AND treatment.tipo = ?
+       AND treatment.tipo = ? AND treatment.created_at <= ?
       LEFT JOIN frms_fadiga_evento closure
         ON closure.checkin_id = o.id AND closure.empresa_id = o.empresa_id
-       AND closure.tipo = ?
+       AND closure.tipo = ? AND closure.created_at <= ?
      GROUP BY r.receipt_id, r.employee_id, r.reference_date
   ) SELECT
       COUNT(*) AS receipt_count,
@@ -192,10 +195,10 @@ export async function loadBoaMonthlyManagementPreview(
       FROM states`;
   const load = async (referenceMonth: string): Promise<BoaMonthlyEvidencePeriod> => {
     const raw = await db.prepare(sql).bind(
-      empresaId, empresaId, BOA_CHECKIN_TYPE, BOA_CHECKIN_TYPE,
+      empresaId, empresaId, BOA_CHECKIN_TYPE, asOf, BOA_CHECKIN_TYPE,
       `${referenceMonth}-01`, `${nextMonth(referenceMonth)}-01`,
-      ...ids, empresaId, BOA_CASE_OPEN_TYPE, BOA_CASE_TREATMENT_TYPE,
-      BOA_CASE_CLOSED_TYPE,
+      ...ids, empresaId, BOA_CASE_OPEN_TYPE, asOf,
+      BOA_CASE_TREATMENT_TYPE, asOf, BOA_CASE_CLOSED_TYPE, asOf,
     ).first<RawPeriod>();
     if (!raw) throw new Error('BOA_MONTHLY_REPORT_SOURCE_UNAVAILABLE');
     return safePeriod(referenceMonth, raw);
@@ -207,6 +210,7 @@ export async function loadBoaMonthlyManagementPreview(
     state: 'UNSIGNED_UNVALIDATED_PREVIEW',
     coverage: 'NOT_DETERMINABLE_WITHOUT_ROSTER',
     basis: 'CHECKIN_MONTH_AND_CASE_STATUS_AT_GENERATION',
+    as_of: asOf,
     current, previous,
     receipt_delta: current.checkin_receipts == null || previous.checkin_receipts == null
       ? null : current.checkin_receipts - previous.checkin_receipts,
@@ -217,7 +221,7 @@ export async function loadBoaMonthlyManagementPreview(
     ],
     technical_caveats: [
       'Os registros representam recibos enviados, não taxa de adesão, incidência de fadiga ou liberação de serviço.',
-      'Estados dos casos abertos no mês são consultados na geração; não representam necessariamente o estado ao fechar o mês.',
+      'Estados dos casos abertos no mês são apurados pelo mesmo instante de corte temporal (as_of), não necessariamente pelo estado no fechamento histórico do mês.',
       'A avaliação científica, limiares, validade local KSS/PVT adaptado e critérios operacionais BOA ainda exigem homologação.',
       'A política exibida no envelope é a vigente na emissão, não necessariamente a revisão de todos os registros históricos.',
       'Este documento não é persistido, assinado nem auditado como relatório oficial e não serve isoladamente para comprovar o edital.',
