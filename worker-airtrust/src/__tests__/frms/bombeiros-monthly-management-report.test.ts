@@ -83,6 +83,13 @@ describe('BOA monthly managerial/technical evidence preview — source and priva
       "json_extract(closure.payload_json, '$.schema') IS NOT 'FRMS_CASE_RESOLUTION_V1'",
     );
     expect(statements[0].sql).toContain('bad_open > 0 OR bad_treatment > 0 OR bad_closure > 0');
+    expect(statements[0].sql).toContain(
+      "LENGTH(TRIM(json_extract(treatment.payload_json, '$.acao_mitigacao')))",
+    );
+    expect(statements[0].sql).toContain(
+      "LENGTH(TRIM(json_extract(closure.payload_json, '$.avaliacao_eficacia')))",
+    );
+    expect(statements[0].sql).toContain('closure_at < treatment_at');
     expect(statements[0].sql).not.toMatch(/HELICOPTER_OFFSHORE|frms_alerta|frms_fadiga_checkin/);
     expect(report.current).toMatchObject({
       month: '2026-10', participants: 6, checkin_receipts: 21,
