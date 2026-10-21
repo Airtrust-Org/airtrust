@@ -85,7 +85,7 @@ describe('BOA source-neutral duty and activation contract (no writes)', () => {
     expect(() => validateBoaOperationalSourceBatch(duplicate)).toThrow('BOA_SOURCE_DUPLICATE_DUTY');
     const overlap = batch();
     overlap.records.push({
-      ...overlap.records[0], external_duty_id: 'duty-2', external_mission_id: 'mission-2',
+      ...overlap.records[0], external_duty_id: 'duty-2',
       activation_state: 'UNKNOWN', activations: [],
     });
     expect(() => validateBoaOperationalSourceBatch(overlap)).toThrow(/OVERLAPPING_PLANNED_DUTIES|OVERLAPPING_ACTUAL_DUTIES/);
