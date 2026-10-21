@@ -139,3 +139,33 @@ node --test scripts/__tests__/boa-checkin-membership-sqlite-integrity.test.mjs
 
 Cobre remoção da linha `usuarios_empresas` depois da validação inicial, desativação de `usuarios.deleted_at`, funcionário `INATIVO`, reativação autorizada, recebimento idempotente e empresa 6 inalterada. **Não** demonstra revogação de JWT, efeito de cache em Cloudflare ou autorização de staging; tais cenários requerem ensaio autenticado de segurança no ambiente governado.
 
+
+
+## 8. Gestor BOA — revogação de vínculo e fechamento no SQL
+
+A escrita `PUT /api/bombeiros/frms/casos/:id/tratamento` e `.../resolver`
+não depende apenas do RBAC/escopo consultados no preflight. O
+`INSERT INTO frms_fadiga_evento ... SELECT` revalida, no instante da
+gravação, a existência de `usuarios` ativo e associação
+`usuarios_empresas` vigente para o **gestor autenticado** e o **mesmo
+tenant do caso**; mantém a restrição de `empresa_id`, setor do
+funcionário, vínculo do recibo e ausência de eventos repetidos.
+
+No encerramento, a mesma instrução exige tratamento anterior com
+schema `FRMS_CASE_TREATMENT_V1`, responsável, prazo, medida e
+justificativa preenchidos, e cronologia anterior ou igual à emissão.
+Um evento de tratamento apenas nominal não autoriza fechamento.
+Isso protege a janela entre leitura do caso e gravação de um novo
+evento. A efetividade clínica/operacional verdadeira continua sob
+decisão e aprovação humana, não por comprimento de texto.
+
+**Evidência:** `scripts/__tests__/boa-case-queue-sqlite-integrity.test.mjs`
+executa SQL real em SQLite `:memory:` com usuários, vínculo de gestor
+revogado, intervenção/encerramento, idempotência e tratamento
+adulterado. A proteção de vínculo aqui é de **tenant**; eventuais
+revogações granulares de setor e papel exigem testes autenticados do
+middleware e política de acesso antes do staging oficial.
+
+Nenhuma variável de autorização de escrita é habilitada por este
+runbook, nenhuma escrita D1/R2 remota é necessária e a empresa 6
+permanece separada.
