@@ -1,11 +1,11 @@
 # BOA/CBMMG — matriz de aceite FRMS e prova de conceito
-**Base:** requisitos 1.5.3, 1.5.3.2 e 8.4 do Termo de Referência **conforme transcrição fornecida pelo proprietário em 20/10/2026**. O PDF integral do edital, seus anexos e eventuais retificações **ainda precisam ser confrontados**. Este documento não afirma habilitação, aptidão nem resultado de prova de conceito.
+**Base oficial conferida em 20/10/2026:** edital integral publicado no PNCP, Pregão Eletrônico 02/2026, processo 1320139 02/2026 / SEI 1400.01.0082253/2025-56, incluindo Anexo I — Termo de Referência, **36 páginas**. Fonte: https://pncp.gov.br/app/editais/18715516000188/2026/125 ; PDF de origem: https://pncp.gov.br/pncp-api/v1/orgaos/18715516000188/compras/2026/125/arquivos/1 . Os oito requisitos foram confirmados no item **1.5.3.2, I–VIII (p. 12)** e os cinco aspectos mínimos de PoC no item **8.4.2 (p. 19–20)**. **Retificações, respostas e estado atual da sessão no Portal de Compras MG ainda exigem confirmação**; ler essa versão não prova ausência de versões posteriores. Este documento não afirma habilitação, aptidão nem resultado de prova de conceito.
 
 ## Premissas invariantes
 - Perfil **FIREFIGHTER_AVIATION**, novo tenant BOA/CBMMG separado da Costa do Sol; não herdar HELICOPTER_OFFSHORE.
 - Escopo é operação **aérea** de bombeiros (tripulação, bases, aeronaves, missões e acionamentos).
 - Até 130 usuários ativos iniciais: capacidade deve ser demonstrada por ensaio, não inferida da configuração `max_funcionarios`.
-- A Administração pode convocar apresentação remota ou presencial; prazo específico será o fixado pelo Pregoeiro. O relato menciona referência usual de dois dias úteis, **não garantia contratual**.
+- O edital 7.15 (p. 7–8) prevê PoC **após classificação provisória em primeiro lugar**, com data/local definidos e publicados no Portal de Compras MG, podendo ser presencial ou remota (TR 8.4.4–8.4.8). Não presume prazo específico para convocação ou entrega.
 - Cada requisito é cumulativo. Dados sintéticos servem para testar funcionalidade, não substituem experiência profissional prévia nem validam coeficientes científicos.
 - Nunca usar resultado de KSS, PVT-B (60s adaptado) ou score interno isoladamente para declarar aptidão ou diagnosticar uma pessoa.
 
@@ -21,12 +21,28 @@
 | 7 | LGPD | Mostrar inventário de dados, finalidade, base legal, operadores, retenção, segurança e atendimento a direitos | RIPD/avaliação necessária, matriz de acesso, logs sem conteúdo sensível, contratos aplicáveis | Revisão jurídica/LGPD e testes sobre dados sintéticos |
 | 8 | Experiência comprovada | Conferir atestados, histórico de implantação/assessoramento, relatórios ou estudo de caso idôneo | Documentos emitidos por terceiro, escopo, duração, responsável e autenticidade | Obrigação externa da licitante; software e certificado de curso não suprem |
 
-## Cinco cenas da prova de conceito (item 8.4)
+## Cinco cenas internas de demonstração correspondentes aos cinco critérios mínimos do item 8.4.2
+
+As cinco **cenas abaixo são roteiro técnico interno do AirTrust**, não cenários prescritos literalmente pelo edital. O texto oficial exige demonstrar: I metodologia efetiva, II fatores de fadiga/sonolência/cognição quando aplicáveis, III registros e relatórios, IV rastreabilidade/integridade/disponibilidade/segurança e V proteção de dados. Uma POC somente será considerada apta após avaliação formal do BOA (8.4.3).
 1. **Método:** tripulante sintético conclui check-in e recebe interpretação; insuficiência gera revisão, não liberação automática.
 2. **Fatores:** dois cenários equivalentes com diferenças documentadas em sono/turno/acionamento e PVT-B, com fonte e explicação de risco **sem coeficiente médico inventado**.
 3. **Registros/relatórios:** caso e mitigação com ciclo fechado, comparação de meses e evidência do relatório mensal exportado.
 4. **Integridade/disponibilidade:** consulta auditada, trilha do responsável, política/revisão, teste negativo de alteração indevida, backup/recovery governado, saúde real de Worker/Pages/D1.
 5. **LGPD:** administração só recebe dados agregados, equipe clínica/responsável técnico acessa informações identificáveis conforme RBAC, outro tenant recebe 403, células 1–4 suprimidas.
+
+## Verificação do edital e escopo global da contratação (20/10/2026)
+
+**Aviso crítico:** o objeto deste pregão é uma **assessoria continuada SGSO/Safety** de 12 meses, com PRE, RELPREV, FOD, Cultura Justa, vistorias, treinamentos CRM, documentos e conformidade ANAC/ICAO/CENIPA; o FRMS constitui **uma das parcelas do objeto**, não o objeto inteiro (Edital 2.1; Anexo I 1.1 e 1.5.2–1.5.9). O software AirTrust não substitui o corpo técnico, serviços presenciais ou documentação de habilitação da empresa licitante.
+
+- **Data original:** sessão pública 21/10/2026 às 09h Brasília, Portal de Compras MG (capa, p. 1). Valor global estimado **R$ 489.160,80** (capa); menor preço global. Consultar retificações e hora efetiva na origem antes de agir.
+- **A tecnologia não é compulsória:** TR 1.5.3.1 diz expressamente que o FRMS não depende de software proprietário, equipamento específico ou metodologia exclusiva. KSS e PVT adaptado são **opções técnicas a justificar cientificamente**, não imposições nominais do edital.
+- **130 usuários é parâmetro estimativo:** TR 1.5.3.2.2–1.5.3.2.5 prevê *até* 130 usuários ativos para dimensionamento/preço, sem garantia de uso integral. Ensaio local com 130 sintéticos é prudência de engenharia, não teste obrigatório de 130 conexões simultâneas descrito no documento.
+- **PoC formal:** edital 7.15 e TR 8.4: convocação do primeiro colocado provisório, cinco critérios mínimos, resultado **apta/inapta**, modalidade presencial ou remota determinada pela Administração. A UI sintética do AirTrust não é a prova de conceito exigida.
+- **FRMS contratado:** implantação até 90 dias após início do contrato; monitoramento contínuo e **relatórios mensais até o 10º dia útil do mês subsequente** (TR 1.5.11.3.7.1, p. 14–15). Não são necessariamente exigências de entrega até o dia da sessão de lances.
+- **Entregas transversais adicionais:** planejamento anual na primeira quinzena, diagnóstico SGSO até 90 dias, GASO/CSO, seis vistorias anuais, treinamento SGSO/CRM e aprovação formal pelo fiscal/gestor para cada produto técnico (TR 1.5.5, 1.5.10 e 1.5.11).
+- **Habilitação real:** atestados técnicos com emitente, assinatura/contato, período e quantidade, conforme TR 9.1.4; o órgão pode verificar legitimidade. Atestado não se gera por código.
+
+**Estado verdadeiro:** fontes oficiais documentais agora conferidas para essa versão; aprovação científica, política de proteção de dados, tenant, prévia assinada, QA real e experiência da licitante permanecem sem comprovação. Nunca confundir análise do edital com habilitação da licitante ou autorização de staging/produção.
 
 ## Primeira entrega de engenharia do contrato — 20/10/2026
 - Endpoint exclusivo: `GET /api/bombeiros/frms/relatorios/mensal-consolidado?mes=YYYY-MM`, com autenticação já existente do router, `requireRole('admin')`, tenant validado e equipe autorizada.
