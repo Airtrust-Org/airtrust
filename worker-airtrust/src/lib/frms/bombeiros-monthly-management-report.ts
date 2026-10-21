@@ -166,7 +166,18 @@ export async function loadBoaMonthlyManagementPreview(
     SELECT r.receipt_id, r.employee_id, r.reference_date,
        COUNT(DISTINCT o.id) AS opens,
        COUNT(DISTINCT treatment.id) AS treatments,
-       COUNT(DISTINCT closure.id) AS closures
+       COUNT(DISTINCT closure.id) AS closures,
+       COUNT(DISTINCT CASE WHEN
+         json_extract(o.payload_json, '$.schema') IS NOT 'BOA_CASE_OPENED_V1'
+         OR json_extract(o.payload_json, '$.funcionario_id') IS NOT r.employee_id
+         OR json_extract(o.payload_json, '$.dispatch_permission') IS NOT 'NOT_GRANTED'
+         THEN o.id END) AS bad_open,
+       COUNT(DISTINCT CASE WHEN
+         json_extract(treatment.payload_json, '$.schema') IS NOT 'FRMS_CASE_TREATMENT_V1'
+         THEN treatment.id END) AS bad_treatment,
+       COUNT(DISTINCT CASE WHEN
+         json_extract(closure.payload_json, '$.schema') IS NOT 'FRMS_CASE_RESOLUTION_V1'
+         THEN closure.id END) AS bad_closure
       FROM receipts r
       LEFT JOIN frms_fadiga_evento o
         ON o.checkin_id = r.receipt_id AND o.empresa_id = ?
@@ -191,6 +202,7 @@ export async function loadBoaMonthlyManagementPreview(
         THEN 1 ELSE 0 END), 0) AS closed,
       COALESCE(SUM(CASE WHEN opens <> 1 OR treatments > 1
         OR closures > 1 OR closures > treatments
+        OR bad_open > 0 OR bad_treatment > 0 OR bad_closure > 0
         THEN 1 ELSE 0 END), 0) AS invalid
       FROM states`;
   const load = async (referenceMonth: string): Promise<BoaMonthlyEvidencePeriod> => {
