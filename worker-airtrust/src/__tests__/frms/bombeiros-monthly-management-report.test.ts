@@ -48,15 +48,22 @@ describe('BOA monthly managerial/technical evidence preview — source and priva
     const report = await loadBoaMonthlyManagementPreview(db, 130, '2026-10', crew);
     expect(statements).toHaveLength(2);
     expect(statements[0].args).toEqual([
-      130, 130, 'BOA_CHECKIN_V1', 'BOA_CHECKIN_V1',
+      130, 130, 'BOA_CHECKIN_V1', expect.any(String), 'BOA_CHECKIN_V1',
       '2026-10-01', '2026-11-01', 10, 11, 12, 13, 14, 15,
-      130, 'BOA_CASE_OPENED_V1', 'BOA_CASE_TREATMENT_V1', 'BOA_CASE_CLOSED_V1',
+      130, 'BOA_CASE_OPENED_V1', expect.any(String),
+      'BOA_CASE_TREATMENT_V1', expect.any(String),
+      'BOA_CASE_CLOSED_V1', expect.any(String),
     ]);
     expect(statements[1].args).toEqual([
-      130, 130, 'BOA_CHECKIN_V1', 'BOA_CHECKIN_V1',
+      130, 130, 'BOA_CHECKIN_V1', report.as_of, 'BOA_CHECKIN_V1',
       '2026-09-01', '2026-10-01', 10, 11, 12, 13, 14, 15,
-      130, 'BOA_CASE_OPENED_V1', 'BOA_CASE_TREATMENT_V1', 'BOA_CASE_CLOSED_V1',
+      130, 'BOA_CASE_OPENED_V1', report.as_of,
+      'BOA_CASE_TREATMENT_V1', report.as_of,
+      'BOA_CASE_CLOSED_V1', report.as_of,
     ]);
+    expect([3, 14, 16, 18].map(i => statements[0].args[i]))
+      .toEqual([report.as_of, report.as_of, report.as_of, report.as_of]);
+    expect(report.as_of).toMatch(/^\\d{4}-\\d{2}-\\d{2}T/);
     expect(statements[0].sql).toContain('f.empresa_id = e.empresa_id');
     expect(statements[0].sql).toContain('o.empresa_id = ?');
     expect(statements[0].sql).toContain('treatment.empresa_id = o.empresa_id');
