@@ -71,7 +71,7 @@ export interface BoaCheckinWriteResult {
   accepted: boolean;
   checkin_id: string | null;
   case_id: string | null;
-  status: 'HUMAN_REVIEW_REQUIRED' | 'ALREADY_RECEIVED';
+  status: 'HUMAN_REVIEW_REQUIRED' | 'ALREADY_RECEIVED' | 'RECHECK_DENIED';
   dispatch_permission: 'NOT_GRANTED';
   method_version: 'BOA_EVIDENCE_INTAKE_V1';
 }
@@ -111,9 +111,15 @@ export async function registerBoaCheckin(
        (id, empresa_id, checkin_id, tipo, payload_json, created_at)
      SELECT ?, ?, ?, ?, ?, ?
       WHERE EXISTS (
-        SELECT 1 FROM funcionarios f
-         WHERE f.id = ? AND f.empresa_id = ?
+        SELECT 1 FROM usuarios u
+          JOIN usuarios_empresas ue
+            ON ue.usuario_id = u.id AND ue.empresa_id = ?
+          JOIN funcionarios f
+            ON f.id = u.funcionario_id AND f.empresa_id = ue.empresa_id
+         WHERE u.id = ? AND f.id = ? AND f.empresa_id = ?
            AND f.deleted_at IS NULL AND f.ativo = 1
+           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+           AND (u.deleted_at IS NULL OR u.deleted_at = 0)
       )
         AND NOT EXISTS (
           SELECT 1 FROM frms_fadiga_evento e
@@ -122,7 +128,8 @@ export async function registerBoaCheckin(
              AND json_extract(e.payload_json, '$.reference_date') = ?
         )`,
   ).bind(receiptId, empresaId, receiptId, BOA_CHECKIN_TYPE, payload, createdAt,
-    funcionarioId, empresaId, empresaId, BOA_CHECKIN_TYPE, funcionarioId, date);
+    empresaId, userId, funcionarioId, empresaId,
+    empresaId, BOA_CHECKIN_TYPE, funcionarioId, date);
   // Every receipt goes to human review until the BOA scientific method and
   // operational release policy are approved. No invented risk threshold.
   const opening = db.prepare(
@@ -143,10 +150,34 @@ export async function registerBoaCheckin(
   const [insert, caseInsert] = await db.batch([event, opening]);
   const written = (insert.meta?.changes ?? 0) === 1;
   if (!written) {
-    // A prior receipt exists. Never reinterpret that as "safe" or reinsert a case.
+    // A zero-row conditional INSERT can mean either a legitimate daily
+    // duplicate OR a membership/employee revocation between the API
+    // preflight and the D1 write. Never classify a revoked actor as a
+    // duplicate or reveal a receipt that they are no longer entitled to see.
+    const existing = await db.prepare(
+      `SELECT e.id FROM frms_fadiga_evento e
+         JOIN funcionarios f
+           ON f.id = CAST(json_extract(e.payload_json, '$.funcionario_id') AS INTEGER)
+          AND f.empresa_id = e.empresa_id
+         JOIN usuarios u ON u.funcionario_id = f.id
+         JOIN usuarios_empresas ue
+           ON ue.usuario_id = u.id AND ue.empresa_id = f.empresa_id
+        WHERE e.empresa_id = ? AND f.empresa_id = ?
+          AND f.id = ? AND u.id = ? AND ue.empresa_id = ?
+          AND f.deleted_at IS NULL AND f.ativo = 1
+          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+          AND (u.deleted_at IS NULL OR u.deleted_at = 0)
+          AND e.tipo = ? AND json_extract(e.payload_json, '$.schema') = ?
+          AND json_extract(e.payload_json, '$.reference_date') = ?
+        LIMIT 2`,
+    ).bind(empresaId, empresaId, funcionarioId, userId, empresaId,
+      BOA_CHECKIN_TYPE, BOA_CHECKIN_TYPE, date).all<{ id: string }>();
+    if ((existing.results ?? []).length > 1) {
+      throw new Error('BOMBEIROS_DUPLICATE_RECEIPT_INTEGRITY_ERROR');
+    }
     return { accepted: false, checkin_id: null, case_id: null,
-      status: 'ALREADY_RECEIVED', dispatch_permission: 'NOT_GRANTED',
-      method_version: 'BOA_EVIDENCE_INTAKE_V1' };
+      status: existing.results?.[0]?.id ? 'ALREADY_RECEIVED' : 'RECHECK_DENIED',
+      dispatch_permission: 'NOT_GRANTED', method_version: 'BOA_EVIDENCE_INTAKE_V1' };
   }
   if ((caseInsert.meta?.changes ?? 0) !== 1) {
     // Atomic DB.batch is expected; treat any incoherence as a hard failure.
