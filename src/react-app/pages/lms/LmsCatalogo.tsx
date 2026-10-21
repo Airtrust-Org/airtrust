@@ -61,7 +61,7 @@ import {
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
 import { uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
-import {defaultNewScormAssessmentPolicy,existingCourseAssessmentPolicy,describeCourseFinalAssessment} from './lmsAssessmentModes';
+import {defaultNewScormAssessmentPolicy,initialAssessmentPolicyForEditor,describeCourseFinalAssessment} from './lmsAssessmentModes';
 import { createNativeEnrollment } from './lmsNativeEnrollment';
 import { getLmsPlayerRoute } from './lmsPlayerRoute';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
@@ -286,7 +286,7 @@ async function fetchFreshQualificacaoTipoById(
   return tipos.find((tipo) => sameTipoId(tipo.id, qualificacaoTipoId)) ?? null;
 }
 
-function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
+function buildInitialForm(initial?: Partial<LmsCurso>,canConfigureAssessment=false): CreateCursoDTO {
   return {
     titulo: initial?.titulo ?? '',
     descricao: initial?.descricao ?? '',
@@ -301,7 +301,7 @@ function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
     qualificacao_area_id: null,
     gerar_qualificacao_ao_concluir: initial?.gerar_qualificacao_ao_concluir ?? 0,
     scorm_mastery_score: initial?.scorm_mastery_score ?? 70,
-    scorm_assessment_policy: initial ? existingCourseAssessmentPolicy(initial.scorm_assessment_policy) : defaultNewScormAssessmentPolicy(),
+    scorm_assessment_policy: initialAssessmentPolicyForEditor(initial?.scorm_assessment_policy,Boolean(initial?.id),canConfigureAssessment),
     scorm_versao: initial?.scorm_versao ?? '1.2',
     tipo_conteudo: initial?.tipo_conteudo ?? 'scorm',
     publicado: initial?.publicado ?? 0,
@@ -687,6 +687,7 @@ function CourseDrawer({
   uploadProgress,
   uploadStatus,
   availableAreas,
+  canConfigureAssessment,
 }: {
   initial?: LmsCurso;
   onClose: () => void;
@@ -699,12 +700,13 @@ function CourseDrawer({
   uploadProgress: number;
   uploadStatus: string;
   availableAreas: { id: number; nome: string; codigo?: string | null }[];
+  canConfigureAssessment: boolean;
 }) {
   const { tipos: qualTipos } = useQualificacaoTipos(true, 500);
   const { data: latestCourse } = useLmsCurso(initial?.id ?? 0);
   const courseSnapshot = latestCourse ?? initial;
   const storedThumbPreview = useLmsCourseThumbnailUrl(courseSnapshot);
-  const [form, setForm] = useState<CreateCursoDTO>(() => buildInitialForm(initial));
+  const [form, setForm] = useState<CreateCursoDTO>(() => buildInitialForm(initial,canConfigureAssessment));
   const [contentFile, setContentFile] = useState<File | null>(null);
   const [skipPurge, setSkipPurge] = useState(false);
   const [thumbFile, setThumbFile] = useState<File | null>(null);
@@ -925,7 +927,7 @@ function CourseDrawer({
                         />
                       </div>
                       <div className="space-y-2">
-                        <fieldset aria-label="Avaliação final do treinamento" disabled={form.tipo_conteudo !== 'scorm'}>
+                        <fieldset aria-label="Avaliação final do treinamento" disabled={form.tipo_conteudo !== 'scorm' || !canConfigureAssessment}>
                           <legend className="mb-2 text-sm font-semibold text-slate-800">Avaliação final</legend>
                           <div className="grid gap-2">
                             {([
@@ -945,6 +947,9 @@ function CourseDrawer({
                             ))}
                           </div>
                         </fieldset>
+                        {!canConfigureAssessment && form.tipo_conteudo==='scorm' ? (
+                          <p className="text-xs text-amber-700">Somente administradores podem alterar o modo de avaliação final. A configuração existente será preservada.</p>
+                        ) : null}
                         <div className="grid grid-cols-2 gap-3">
                           <select
                             value={form.scorm_versao ?? '1.2'}
@@ -2322,6 +2327,7 @@ export default function LmsCatalogo() {
           uploadProgress={uploadProgress}
           uploadStatus={uploadStatus}
           availableAreas={areas}
+          canConfigureAssessment={isAdmin}
         />
       ) : null}
     </AppLayout>
