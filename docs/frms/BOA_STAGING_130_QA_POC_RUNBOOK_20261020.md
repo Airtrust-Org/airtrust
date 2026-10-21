@@ -124,3 +124,18 @@ adulterado, intervenção sem substância, eficácia incompleta,
 fechamento precoce e histórico coerente. **Não** valida efetividade
 clínica da medida, aprovação científica, prova de conceito formal
 ou autorização de voo.
+
+## 7. Revogação de vínculo no momento da gravação BOA
+
+A operação de check-in `POST /api/bombeiros/frms/checkin` resolve inicialmente o tripulante por `usuarios` → `usuarios_empresas` → `funcionarios`. Sua gravação condicional em `frms_fadiga_evento` **repete a conferência de usuário ativo, vínculo do tenant e funcionário ativo/status**, na mesma operação atômica de D1 que gera o recibo e abre a revisão humana.
+
+Esse segundo controle evita que a revogação do vínculo durante o intervalo entre consulta e gravação resulte em um recibo de dados sensíveis. Quando a condição SQL rejeita a escrita, a API **não presume que existe duplicata**: uma leitura adicional só classificará como **409 (ALREADY_RECEIVED)** quando houver exatamente um recibo da mesma pessoa/dia **e acesso ainda ativo**. Sem vínculo, ela retorna **403** sem revelar o ID do recibo; dois recibos inconsistentes são erro de integridade.
+
+Ensaio reproduzível, exclusivamente com SQLite `:memory:`, funcionário e usuário sintéticos:
+
+```bash
+node --test scripts/__tests__/boa-checkin-membership-sqlite-integrity.test.mjs
+```
+
+Cobre remoção da linha `usuarios_empresas` depois da validação inicial, desativação de `usuarios.deleted_at`, funcionário `INATIVO`, reativação autorizada, recebimento idempotente e empresa 6 inalterada. **Não** demonstra revogação de JWT, efeito de cache em Cloudflare ou autorização de staging; tais cenários requerem ensaio autenticado de segurança no ambiente governado.
+
