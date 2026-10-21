@@ -7,7 +7,8 @@
  * - Geração automática de qualificação ao concluir
  */
 import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-guard';
-import { resolveScormPlayer3Admission } from '../services/lms-scorm-player3-admission';
+import {checkScormStudyCommit,scormStudyTerminalBlocked} from '../services/lms-scorm-player3-terminal-guard';
+import {emitScormCommitTelemetry} from './lms-matriculas-scorm-telemetry';
 import player3ScormAdmissionRoutes from './lms-matriculas-player3-scorm-admission';
 import { projectNativeCatalogEnrollments } from '../services/lms-native-catalog-course-projection';
 import { Hono } from 'hono';
@@ -195,55 +196,7 @@ const MatriculaLoteSchema = z.object({
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function emitScormCommitTelemetry(
-  c: Context,
-  params: {
-    matriculaId: number;
-    cursoTitulo: string;
-    preferIncomingState: boolean;
-    previousLocation: { current: number; total: number | null } | null;
-    incomingLocation: { current: number; total: number | null } | null;
-    finalLocation: { current: number; total: number | null } | null;
-    previousSuspendData: string | null | undefined;
-    incomingSuspendData: string | null | undefined;
-    finalSuspendData: string | null | undefined;
-    decisions: {
-      blockedLocationRegression: boolean;
-      blockedEmptySuspendData: boolean;
-      blockedShorterSuspendData: boolean;
-      blockedTerminalRegression: boolean;
-      preservedLocationFromCurrent: boolean;
-    };
-  },
-) {
-  const { blockedLocationRegression, blockedEmptySuspendData, blockedShorterSuspendData, blockedTerminalRegression } = params.decisions;
-  const blocked = blockedLocationRegression || blockedEmptySuspendData ||
-    blockedShorterSuspendData || blockedTerminalRegression;
 
-  const event = blocked ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_COMMIT';
-  const reason = [
-    params.decisions.blockedLocationRegression ? 'location-regression' : null,
-    params.decisions.blockedEmptySuspendData ? 'empty-suspend-data' : null,
-    params.decisions.blockedShorterSuspendData ? 'shorter-suspend-data' : null,
-    params.decisions.blockedTerminalRegression ? 'terminal-status-regression' : null,
-    !blocked && params.decisions.preservedLocationFromCurrent ? 'preserved-current-location' : null,
-  ].filter(Boolean).join(',');
-
-  createLogger(c, 'LmsMatriculas.scorm').info('lms_scorm_commit_telemetry', {
-    matriculaId: params.matriculaId,
-    cursoTitulo: params.cursoTitulo,
-    event,
-    decision: blocked ? 'blocked' : 'accepted',
-    reason: reason || 'normal-merge',
-    preferIncomingState: params.preferIncomingState,
-    previousLocation: formatScormLocationTelemetry(params.previousLocation),
-    incomingLocation: formatScormLocationTelemetry(params.incomingLocation),
-    finalLocation: formatScormLocationTelemetry(params.finalLocation),
-    previousSuspendData: summarizeScormTextPayload(params.previousSuspendData),
-    incomingSuspendData: summarizeScormTextPayload(params.incomingSuspendData),
-    finalSuspendData: summarizeScormTextPayload(params.finalSuspendData),
-  });
-}
 
 // ── Treinamentos EAD enriquecidos (dashboard do aluno/instrutor) ─────────────
 
@@ -1359,47 +1312,11 @@ app.post('/scorm/commit', async (c) => {
   // Do not bypass the current cycle guard when recording standard SCORM.
   await assertScormCommitCycle(db, empresaId, d.matricula_id, d.ciclo_id);
 
-  // A Worker-verified original Score edition can save CMI but must not
-  // emit SCORM-derived completion, failure, exam results or certificates.
-  const scormAdmission = await resolveScormPlayer3Admission({
-    env: c.env, db, bucket: c.env.BUCKET, tenant: empresaId,
-    course: matricula.curso_id, scormVersion: matricula.scorm_versao,
-    contentType: matricula.tipo_conteudo,
-    activePrefix: matricula.scorm_package_r2_prefix,
-    reviewedForProduction: false,
+  const scoreStudy = await checkScormStudyCommit({
+    env:c.env,db,empresaId,course:matricula,commit:d,
   });
-  if (scormAdmission.kind === 'BLOCKED')
-    return c.json({success: false, code: 'SCORM_PLAYER3_PROFILE_NOT_ADMITTED'}, 409);
-  const isScoreStudy = scormAdmission.kind === 'SCORM_STUDY';
-  if (isScoreStudy) {
-    // Unlike legacy integrations, a pinned Score edition MUST include its
-    // persisted current cycle in every save. A stale tab must not write into
-    // another attempt, even if the browser retains an old SCORM session.
-    if (!Number.isSafeInteger(d.ciclo_id) || !d.ciclo_id || d.ciclo_id < 1)
-      return c.json({success: false, code: 'SCORM_STUDY_CYCLE_REQUIRED'}, 409);
-    // The externally reviewed package's version comes from ACTIVE D1+R2,
-    // never the client. Reject foreign suspend_data on every populated save.
-    if (d.suspend_data) {
-      let resume: unknown;
-      try { resume = JSON.parse(d.suspend_data); }
-      catch { return c.json({success: false, code: 'SCORM_STUDY_EDITION_MISMATCH'}, 409); }
-      if (!resume || typeof resume !== 'object' || Array.isArray(resume) ||
-          (resume as Record<string, unknown>).v !== 1 ||
-          (resume as Record<string, unknown>).p !== scormAdmission.packageVersion)
-        return c.json({success: false, code: 'SCORM_STUDY_EDITION_MISMATCH'}, 409);
-    }
-    const permitted = (status: string | null | undefined) =>
-      status == null || status === '' ||
-      ['incomplete', 'not attempted', 'unknown'].includes(status.toLowerCase());
-    if (!permitted(d.lesson_status) || !permitted(d.completion_status) ||
-        !permitted(d.success_status) ||
-        [d.score_raw, d.score_min, d.score_max, d.score_scaled]
-          .some(score => score != null) || d.completion_candidate === true) {
-      return c.json({
-        success: false, code: 'SCORM_STUDY_CANNOT_CERTIFY',
-      }, 409);
-    }
-  }
+  if(scoreStudy.error)return c.json({success:false,code:scoreStudy.error},409);
+  const isScoreStudy=scoreStudy.study;
 
   // ─── Guard: prevent CONCLUIDO downgrade via SCORM commit ─────────────────
   // Completed enrollments allow only idempotent non-downgrading SCORM commits.
@@ -1961,18 +1878,9 @@ app.post('/:id/finalizar', async (c) => {
     });
   }
 
-  if (String(matricula.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm') {
-    const scormStudyAdmission = await resolveScormPlayer3Admission({
-      env: c.env, db, bucket: c.env.BUCKET, tenant: empresaId,
-      course: matricula.curso_id, scormVersion: matricula.scorm_versao,
-      contentType: matricula.tipo_conteudo,
-      activePrefix: matricula.scorm_package_r2_prefix,
-      reviewedForProduction: false,
-    });
-    if (scormStudyAdmission.kind !== 'LEGACY')
-      return c.json({success: false, code: 'SCORM_STUDY_NOT_TERMINAL',
-        data: {matricula_id: matriculaId, novo_status: matricula.status}}, 409);
-  }
+  if(await scormStudyTerminalBlocked({env:c.env,db,empresaId,course:matricula}))
+    return c.json({success:false,code:'SCORM_STUDY_NOT_TERMINAL',
+      data:{matricula_id:matriculaId,novo_status:matricula.status}},409);
 
   // Defense in depth: the route and middleware MUST use the same server
   // readiness verdict. A SCORM 'passed' bit, high score or 99/100% progress
@@ -2234,20 +2142,8 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       );
     }
 
-    // Administrative overrides cannot certify a Score study candidate,
-    // even with manual observations. A future external exam needs its own
-    // separately governed server evidence and completion contract.
-    if (String(existing.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm') {
-      const studyAdmission = await resolveScormPlayer3Admission({
-        env: c.env, db, bucket: c.env.BUCKET, tenant: empresaId,
-        course: existing.curso_id, scormVersion: existing.scorm_versao,
-        contentType: existing.tipo_conteudo,
-        activePrefix: existing.scorm_package_r2_prefix,
-        reviewedForProduction: false,
-      });
-      if (studyAdmission.kind !== 'LEGACY')
-        return c.json({success: false, code: 'SCORM_STUDY_NOT_TERMINAL'}, 409);
-    }
+    if(await scormStudyTerminalBlocked({env:c.env,db,empresaId,course:existing}))
+      return c.json({success:false,code:'SCORM_STUDY_NOT_TERMINAL'},409);
 
     // Cursos SCORM exigem evidência real de conclusão — mesmo gate do /finalizar.
     const isScorm = String(existing.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm';
