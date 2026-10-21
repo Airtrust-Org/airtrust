@@ -195,10 +195,21 @@ ativa com role `manager` ou `backup`, e o setor ativo do
 funcionário. Atribuição `observer`, revogação, setor errado ou
 vínculo legado apenas por e-mail não autorizam nem IDs de ocorrência.
 
+A leitura do detalhe executa consultas separadas para abertura, recibo
+e histórico de tratamento. Na **última consulta**, que lê as notas de
+tratamento, o SQL repete o vínculo tenant/papel e a designação vigente
+do setor. Um LEFT JOIN conserva o caso legitimamente aberto sem eventos;
+zero linhas representa negação de acesso, e não "caso aberto" presumido.
+A reprodução SQLite intercalou uma revogação real de `setores_gestores`
+entre o preflight e a leitura final: antes da correção as notas eram
+retornadas; depois, a função falha fechada com `null`, sem divulgar
+estado ou histórico.
+
 O teste SQLite de `boa-case-queue-sqlite-integrity.test.mjs`
-verifica tanto a lista quanto o detalhe após alteração de papel
-e atribuição. **Limitação remanescente:** a ausência de
-sessão real no Cloudflare, verificação de cache distribuído,
-auditoria operacional e revisão LGPD ainda exige QA autenticado
-em staging antes de considerar a implantação validada.
+cobre fila, detalhe, revogação durante a consulta, papel de observador
+e mudanças de atribuição e é executado pelo gate oficial
+`worker-tests-2`. **Limitação remanescente:** sessão real no Cloudflare,
+verificação de cache distribuído, auditoria operacional e revisão LGPD
+ainda exigem QA autenticado em staging antes de considerar a
+implantação validada.
 
