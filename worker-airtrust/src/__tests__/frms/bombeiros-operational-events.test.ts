@@ -124,9 +124,8 @@ describe('BOA event intake and immutable case stream contracts', () => {
     expect(found?.status.state).toBe('ABERTO');
     expect(queries[0].sql).toContain('f.empresa_id = ?');
     expect(queries[0].sql).toContain('f.setor_id IN (?)');
-    expect(queries[0].sql).toContain('invalid_treatment_count');
-    expect(queries[0].sql).toContain('invalid_closure_count');
-    expect(queries[0].sql).toContain('opening_dispatch');
+    expect(queries[0].sql).toContain("json_extract(e.payload_json, '$.schema') = 'BOA_CASE_OPENED_V1'");
+    expect(queries[0].sql).toContain("json_extract(e.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'");
     expect(queries[0].values).toEqual(['case-1', 130, BOA_CASE_OPEN_TYPE, 130, 9]);
     expect(queries[1].sql).toContain('e.empresa_id = ?');
   });
@@ -288,6 +287,9 @@ describe('BOA event intake and immutable case stream contracts', () => {
     expect(queries[0].sql).toContain('e.empresa_id = ?');
     expect(queries[0].sql).toContain('f.empresa_id = ?');
     expect(queries[0].sql).toContain('f.setor_id IN (?)');
+    expect(queries[0].sql).toContain('invalid_treatment_count');
+    expect(queries[0].sql).toContain('invalid_closure_count');
+    expect(queries[0].sql).toContain('opening_dispatch');
     expect(queries[0].bind).toEqual([130, 130, BOA_CASE_OPEN_TYPE, 9, 2]);
     expect(JSON.stringify(queue)).not.toMatch(/funcionario_id|kss_reported|sleep_hours/);
   });
