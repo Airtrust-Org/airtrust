@@ -76,3 +76,18 @@ Para o requisito **8 — experiência da licitante**, anexar atestados/documento
 - **Não comprovado/executado**: tenant staging, aprovação científica/jurídica, QA de 130 contas reais sintéticas, deploy, migration/seed/import, banco remoto, prova de conceito, relatório oficial assinado, atestados de experiência.
 
 **Portão de liberação:** não integrar nem publicar a PR em ambiente real antes de comprovar os oito gates atuais, proteção de branch, habilitação específica do ambiente, segurança científica e LGPD. Produção depende de autorização atual para SHA/artefato/escopo.
+
+
+## 5. Autorização de escrita de dados sensíveis em staging
+
+**Camada nova de segurança da implementação:** as rotas `POST /api/bombeiros/frms/checkin` e `PUT /api/bombeiros/frms/casos/:id/{tratamento,resolver}` agora exigem, **além** de `ENVIRONMENT=staging|development`, tenant `bombeiros` autenticado, perfis e setor autorizados e política BOA vigente, a vinculação explícita do runtime:
+
+```text
+BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID=<ID numérico do tenant sintético aprovado>
+```
+
+A variável é opcional e **ausente por padrão**, logo nenhuma dessas rotas de escrita opera apenas porque um perfil de test foi criado. Valores `all`, outro ID, empresa 6, vazio ou ambientes de produção falham com `BOMBEIROS_QA_WRITE_NOT_APPROVED` (staging) ou bloqueio de produção. O endpoint de simulação metodológica, que **não persiste**, não necessita dessa autorização de escrita.
+
+**Não configure a variável nesta PR nem por console de Cloudflare.** A eventual habilitação exige aprovação científica/LGPD, revisão de tenant e guard, autorização do artefato, janela de staging e workflow governado. Retirar a autorização ao final do ensaio e guardar o comprovante em canal seguro; nunca o ID inventado do exemplo como valor real.
+
+O teste de 130 usuários deste runbook é **somente GET** e não depende dessa variável. O teste completo com gravação precisará de procedimento adicional formalizado, volume e recuperação autorizados.
