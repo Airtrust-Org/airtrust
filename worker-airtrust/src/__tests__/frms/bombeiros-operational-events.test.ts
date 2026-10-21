@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  resolveBoaCrewIdentity, registerBoaCheckin, loadBoaOperationalCase,
+  resolveBoaCrewIdentity, registerBoaCheckin, loadBoaCrewCheckinStatus, loadBoaOperationalCase,
   registerBoaCaseAction, loadBoaCaseQueue, BOA_CHECKIN_TYPE, BOA_CASE_OPEN_TYPE,
 } from '../../lib/frms/bombeiros-operational-events';
 import type { EmployeeSectorAccess } from '../../services/employee-sector-access';
@@ -133,6 +133,68 @@ describe('BOA event intake and immutable case stream contracts', () => {
     const found = await loadBoaOperationalCase(db, 130, 'case-1',
       { mode: 'restricted', setorIds: [], funcionarioId: null });
     expect(found).toBeNull();
+    expect(queries).toHaveLength(0);
+  });
+
+  it('returns own check-in receipt status without health values or any offshore inference', async () => {
+    const queries: Array<{ sql: string; binds: unknown[] }> = [];
+    const db = {
+      prepare(sql: string) {
+        const entry = { sql, binds: [] as unknown[] };
+        queries.push(entry);
+        return { bind(...args: unknown[]) {
+          entry.binds = args;
+          return { async all() {
+            return { results: queries.length === 1 ? [{ id: 'boa-receipt-21' }]
+              : [{ id: 'boa-case-21' }] };
+          } };
+        } };
+      },
+    } as unknown as D1Database;
+    const status = await loadBoaCrewCheckinStatus(db, 130, 21, '2026-10-20');
+    expect(status).toMatchObject({
+      received: true, checkin_id: 'boa-receipt-21',
+      case_id: 'boa-case-21', human_review_required: true,
+      dispatch_permission: 'NOT_GRANTED',
+    });
+    expect(queries[0].binds).toEqual([
+      130, 130, 21, BOA_CHECKIN_TYPE, BOA_CHECKIN_TYPE, '2026-10-20',
+    ]);
+    expect(queries[1].binds).toEqual([
+      130, 130, 'boa-receipt-21', BOA_CASE_OPEN_TYPE, BOA_CHECKIN_TYPE, 21, 21,
+    ]);
+    expect(queries[1].sql).toContain("json_extract(c.payload_json, '$.funcionario_id')");
+    expect(JSON.stringify(status)).not.toMatch(/kss|sleep|pvt|funcionario_id|HELICOPTER_OFFSHORE/i);
+  });
+
+  it('returns not received rather than a false approval when no check-in exists', async () => {
+    const db = { prepare: () => ({
+      bind: () => ({ async all() { return { results: [] }; } }),
+    }) } as unknown as D1Database;
+    expect(await loadBoaCrewCheckinStatus(db, 130, 21, '2026-10-20')).toMatchObject({
+      received: false, case_id: null, dispatch_permission: 'NOT_GRANTED',
+    });
+  });
+
+  it('blocks orphan or duplicate crew receipts instead of reporting success', async () => {
+    for (const results of [
+      [[{ id: 'one' }, { id: 'two' }]],
+      [[{ id: 'one' }], []],
+      [[{ id: 'one' }], [{ id: 'case-a' }, { id: 'case-b' }]],
+    ]) {
+      let n = 0;
+      const db = { prepare: () => ({
+        bind: () => ({ async all() { return { results: results[n++] }; } }),
+      }) } as unknown as D1Database;
+      await expect(loadBoaCrewCheckinStatus(db, 130, 21, '2026-10-20'))
+        .rejects.toThrow('BOMBEIROS_CHECKIN_STATUS_INTEGRITY_ERROR');
+    }
+  });
+
+  it('blocks any employee 6 status lookup before SQL', async () => {
+    const { db, queries } = fakeDb();
+    await expect(loadBoaCrewCheckinStatus(db, 6, 21, '2026-10-20'))
+      .rejects.toThrow('BOMBEIROS_INVALID_TENANT');
     expect(queries).toHaveLength(0);
   });
 
