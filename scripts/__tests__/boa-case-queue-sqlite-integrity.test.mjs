@@ -102,7 +102,7 @@ const validClosure = {
 
 test('BOA manager queue never labels a corrupt, offshore or premature case as resolved', async () => {
   const { sqlite, d1, add } = dbFixture();
-  const fetch = () => loadBoaCaseQueue(d1, 130, scope);
+  const fetch = () => loadBoaCaseQueue(d1, 130, 90, scope);
   const fail = async () => assert.rejects(fetch(), /BOA_CASE_QUEUE_INTEGRITY_ERROR/);
   const patch = sqlite.prepare('UPDATE frms_fadiga_evento SET payload_json=? WHERE id=?');
   const patchTime = sqlite.prepare('UPDATE frms_fadiga_evento SET created_at=? WHERE id=?');
@@ -111,7 +111,14 @@ test('BOA manager queue never labels a corrupt, offshore or premature case as re
     assert.deepEqual(queue.items.map(x => x.case_id), ['boa-case']);
     assert.equal(queue.items[0].state, 'ABERTO');
     assert.doesNotMatch(JSON.stringify(queue), /funcionario_id|kss|sono|pvt/i);
-    await assert.rejects(loadBoaCaseQueue(d1, 6, scope), /BOMBEIROS_INVALID_TENANT/);
+    await assert.rejects(loadBoaCaseQueue(d1, 6, 90, scope), /BOMBEIROS_INVALID_TENANT/);
+    // Observers may not read case IDs even if generic sector scope still contains 9.
+    sqlite.exec("UPDATE setores_gestores SET role='observer' WHERE usuario_id=90");
+    assert.deepEqual((await fetch()).items, []);
+    sqlite.exec("UPDATE setores_gestores SET role='manager' WHERE usuario_id=90");
+    sqlite.exec("UPDATE usuarios_empresas SET role='student' WHERE usuario_id=90");
+    assert.deepEqual((await fetch()).items, []);
+    sqlite.exec("UPDATE usuarios_empresas SET role='manager' WHERE usuario_id=90");
 
     patch.run(JSON.stringify({ schema: 'HELICOPTER_OFFSHORE',
       funcionario_id: 21, dispatch_permission: 'NOT_GRANTED' }), 'boa-case');
