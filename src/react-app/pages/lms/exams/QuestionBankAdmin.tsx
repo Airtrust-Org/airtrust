@@ -3,7 +3,7 @@
  * F4 owns that file until its Player 3 integration has been coordinated.
  * Requires a staged, approved read/write API and an authenticated admin route.
  */
-import {useCallback,useEffect,useState} from 'react';
+import React,{useCallback,useEffect,useState} from 'react';
 import {API_BASE_URL,fetchWithAuth} from '../../../config/api';
 
 type Choice={id:string;text:string};
