@@ -38,8 +38,8 @@ describe('SCORM Player 3 study-only terminal messages',()=>{
     const legacyTerminal=source.indexOf("event.data.type === 'lms:completed' &&");
     expect(sourceGuard).toBeGreaterThan(0);
     expect(legacyTerminal).toBeGreaterThan(sourceGuard);
-    expect(source).toMatch(/effectiveReviewMode\\s*\\|\\|\\s*scormStudyOnly/);
-    expect(source).toMatch(/shouldVerifyCanonicalProgress\\(event\\.data\\.novo_status\\)\\s*&&\\s*!effectiveReviewMode\\s*&&\\s*!scormStudyOnly/);
+    expect(source).toContain('effectiveReviewMode || scormStudyOnly');
+    expect(source).toContain('shouldVerifyCanonicalProgress(event.data.novo_status) && !effectiveReviewMode && !scormStudyOnly');
   });
 
 });
