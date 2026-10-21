@@ -60,6 +60,7 @@ function makeApp(id = 130, codigo = 'bombeiros', role = 'admin') {
 const sampleReport = {
   method_version: 'BOA_MONTHLY_EVIDENCE_PREVIEW_V1',
   state: 'UNSIGNED_UNVALIDATED_PREVIEW',
+  as_of: '2026-10-20T20:00:00.000Z',
   current: { month: '2026-10', participants: 6, checkin_receipts: 12 },
   previous: { month: '2026-09', participants: 6, checkin_receipts: 10 },
   receipt_delta: 2,
@@ -128,7 +129,8 @@ describe('BOA unsigned monthly management report — exact tenant and approved p
     const response = await get('?mes=2026-10&empresa_id=6');
     expect(response.status).toBe(200);
     const body = await response.json() as {
-      data: typeof sampleReport; meta: { signature: string; permanent_archive: string;
+      data: typeof sampleReport; meta: { content_sha256: string; checksum_scope: string;
+        checksum_only_not_signature: boolean; signature: string; permanent_archive: string;
         tenant_id: number; policy_revision: string };
     };
     expect(body.data).toMatchObject(sampleReport);
@@ -136,6 +138,17 @@ describe('BOA unsigned monthly management report — exact tenant and approved p
       signature: 'NOT_SIGNED', permanent_archive: 'NOT_CREATED',
       tenant_id: 130, policy_revision: 'boa-r1',
     });
+    expect(body.meta.content_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(body.meta.checksum_only_not_signature).toBe(true);
+    const evidence = {
+      tenant_id: 130, reference_month: '2026-10',
+      as_of: body.data.as_of, policy_revision: 'boa-r1', report: body.data,
+    };
+    const bytes = await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(JSON.stringify(evidence)));
+    const expectedChecksum = [...new Uint8Array(bytes)]
+      .map(value => value.toString(16).padStart(2, '0')).join('');
+    expect(body.meta.content_sha256).toBe(expectedChecksum);
     expect(reportMock).toHaveBeenCalledWith(
       expect.anything(), 130, '2026-10', new Set([10,11,12,13,14,15]),
     );
