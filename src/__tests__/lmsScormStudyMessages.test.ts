@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import {describe,expect,it} from 'vitest';
 import {isScormStudyTerminalMessage} from '@/react-app/pages/lms/lmsScormStudyMessages';
 
@@ -5,7 +6,7 @@ import {isScormStudyTerminalMessage} from '@/react-app/pages/lms/lmsScormStudyMe
  * The original Score SCO may emit legacy completion messages. A Player 3
  * study-only session must ignore these signals rather than display a false
  * certificate/qualification or start the terminal reconciliation flow.
- * This verifies the predicate; the iframe listener still must wire it in.
+ * The final test also asserts that the authenticated player listener uses it.
  */
 describe('SCORM Player 3 study-only terminal messages',()=>{
   it.each([
@@ -30,4 +31,14 @@ describe('SCORM Player 3 study-only terminal messages',()=>{
     expect(isScormStudyTerminalMessage({type:'lms:completed:debug'})).toBe(false);
     expect(isScormStudyTerminalMessage({type:'lms:completion-error-legacy'})).toBe(false);
   });
+  it('wires the study-only guard before legacy terminal handlers and progress reconciliation',()=>{
+    const source=readFileSync(new URL('../react-app/pages/lms/LmsPlayer.tsx',import.meta.url),'utf8');
+    const sourceGuard=source.indexOf('isScormStudyTerminalMessage(event.data)');
+    const legacyTerminal=source.indexOf("event.data.type === 'lms:completed' &&");
+    expect(sourceGuard).toBeGreaterThan(0);
+    expect(legacyTerminal).toBeGreaterThan(sourceGuard);
+    expect(source).toMatch(/effectiveReviewMode\\s*\\|\\|\\s*scormStudyOnly/);
+    expect(source).toMatch(/shouldVerifyCanonicalProgress\\(event\\.data\\.novo_status\\)\\s*&&\\s*!effectiveReviewMode\\s*&&\\s*!scormStudyOnly/);
+  });
+
 });
