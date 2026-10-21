@@ -105,3 +105,15 @@ test('real SQLite blocks other sector, wrong tenant, revoked manager and leaves 
     await assert.rejects(()=>loadBoaCaseEvidenceCoverage(db,6,'c6',92,sector9),/INVALID_TENANT/);
   } finally {sql.close();}
 });
+
+test('malformed historical KSS, sleep or mission evidence fails closed instead of becoming missing',async()=>{
+  const {sql,db}=fixture();
+  try {
+    sql.exec("UPDATE frms_fadiga_evento SET payload_json=json_set(payload_json,'$.kss_reported',0) WHERE id='r1'");
+    await assert.rejects(()=>loadBoaCaseEvidenceCoverage(db,130,'c1',90,sector9),/INTEGRITY_ERROR/);
+    sql.exec("UPDATE frms_fadiga_evento SET payload_json=json_set(payload_json,'$.kss_reported',8,'$.sleep_hours_24h',-1) WHERE id='r1'");
+    await assert.rejects(()=>loadBoaCaseEvidenceCoverage(db,130,'c1',90,sector9),/INTEGRITY_ERROR/);
+    sql.exec("UPDATE frms_fadiga_evento SET payload_json=json_set(payload_json,'$.sleep_hours_24h',7,'$.mission_type','INVALID') WHERE id='r1'");
+    await assert.rejects(()=>loadBoaCaseEvidenceCoverage(db,130,'c1',90,sector9),/INTEGRITY_ERROR/);
+  } finally {sql.close();}
+});
