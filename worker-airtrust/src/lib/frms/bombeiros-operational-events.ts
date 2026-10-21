@@ -572,18 +572,34 @@ export async function loadBoaCaseEvidenceCoverage(
   if (!scope.bindings.length) return null;
   const rows = await db.prepare(
     `SELECT base.id AS case_id,
-       CASE WHEN json_type(receipt.payload_json, '$.sleep_hours_24h')
-         IN ('integer','real') THEN 'SELF_REPORTED_UNVERIFIED'
-         ELSE 'NOT_REPORTED' END AS sleep_evidence,
-       CASE WHEN json_type(receipt.payload_json, '$.kss_reported')
-         IN ('integer','real') THEN 'SUBJECTIVE_SELF_REPORT'
-         ELSE 'NOT_REPORTED' END AS kss_evidence,
-       CASE WHEN json_extract(receipt.payload_json, '$.mission_type')
-         IN ('RESGATE','SALVAMENTO','TRANSPORTE_AEROMEDICO',
-             'COMBATE_AEREO_INCENDIO','TREINAMENTO','OUTRA')
-         AND json_extract(receipt.payload_json, '$.duty_period')
-         IN ('DIURNO','NOTURNO','MISTO') THEN 'CREW_DECLARATION_UNVERIFIED'
-         ELSE 'NOT_REPORTED' END AS mission_context
+       CASE
+         WHEN json_type(receipt.payload_json, '$.sleep_hours_24h') IS NULL
+           OR json_type(receipt.payload_json, '$.sleep_hours_24h') = 'null'
+           THEN 'NOT_REPORTED'
+         WHEN json_type(receipt.payload_json, '$.sleep_hours_24h') IN ('integer','real')
+           AND json_extract(receipt.payload_json, '$.sleep_hours_24h') BETWEEN 0 AND 24
+           THEN 'SELF_REPORTED_UNVERIFIED'
+         ELSE 'INVALID' END AS sleep_evidence,
+       CASE
+         WHEN json_type(receipt.payload_json, '$.kss_reported') IS NULL
+           OR json_type(receipt.payload_json, '$.kss_reported') = 'null'
+           THEN 'NOT_REPORTED'
+         WHEN json_type(receipt.payload_json, '$.kss_reported') = 'integer'
+           AND json_extract(receipt.payload_json, '$.kss_reported') BETWEEN 1 AND 9
+           THEN 'SUBJECTIVE_SELF_REPORT'
+         ELSE 'INVALID' END AS kss_evidence,
+       CASE
+         WHEN json_extract(receipt.payload_json, '$.mission_type')
+           IN ('RESGATE','SALVAMENTO','TRANSPORTE_AEROMEDICO',
+               'COMBATE_AEREO_INCENDIO','TREINAMENTO','OUTRA')
+           AND json_extract(receipt.payload_json, '$.duty_period')
+           IN ('DIURNO','NOTURNO','MISTO') THEN 'CREW_DECLARATION_UNVERIFIED'
+         WHEN json_extract(receipt.payload_json, '$.mission_type')
+           IN ('RESGATE','SALVAMENTO','TRANSPORTE_AEROMEDICO',
+               'COMBATE_AEREO_INCENDIO','TREINAMENTO','OUTRA')
+           AND json_extract(receipt.payload_json, '$.duty_period')
+           = 'DESCONHECIDO' THEN 'NOT_REPORTED'
+         ELSE 'INVALID' END AS mission_context
      FROM frms_fadiga_evento base
      JOIN frms_fadiga_evento receipt
        ON receipt.id = base.checkin_id
