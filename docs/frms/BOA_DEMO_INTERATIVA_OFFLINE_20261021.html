@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>AirTrust | FRMS Aviação BOA — Demonstração Fictícia</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#15352e;background:#f2f5f4}
+*{box-sizing:border-box}body{margin:0}button,select,input{font:inherit}button{cursor:pointer}
+.shell{display:grid;grid-template-columns:246px minmax(0,1fr);min-height:100vh}
+.sidebar{background:#12382e;color:#f4faf7;padding:25px 17px;display:flex;flex-direction:column;gap:25px}
+.brand{display:flex;align-items:center;gap:12px;padding:3px 9px}.brand-mark{width:40px;height:40px;border-radius:13px;background:#bdebd7;color:#12382e;display:grid;place-items:center;font-weight:900;font-size:21px}
+.brand b{font-size:21px;letter-spacing:-.7px}.brand small{display:block;color:#b9d4c8;font-size:11px;letter-spacing:1.5px;margin-top:2px}
+.sidebar-label{color:#9bbfb0;font-size:11px;text-transform:uppercase;letter-spacing:1.4px;padding:0 13px;margin-bottom:11px}
+nav{display:grid;gap:4px}.nav-btn{display:flex;align-items:center;text-align:left;gap:12px;border:0;color:#daeae3;background:transparent;width:100%;padding:12px 14px;border-radius:10px;font-weight:600}
+.nav-btn:hover,.nav-btn.active{background:#275547;color:#fff}.nav-btn.active{box-shadow:inset 3px 0 #88d6b1}
+.sidebar-bottom{margin-top:auto;color:#c8e2d7;border-top:1px solid #3d6458;padding:16px 9px;font-size:12px;line-height:1.65}
+.main{min-width:0}.topbar{background:white;border-bottom:1px solid #dee8e3;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:17px 35px;flex-wrap:wrap}
+.breadcrumb{font-size:13px;color:#627b70}.breadcrumb b{color:#193b30}.tag{display:inline-flex;align-items:center;gap:6px;background:#ecf8ee;color:#2d6846;border:1px solid #c8e6d0;padding:6px 9px;border-radius:9px;font-weight:700;font-size:11px;letter-spacing:.4px}
+.top-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.top-actions select{padding:9px 11px;border:1px solid #cfded6;border-radius:9px;color:#224637;background:white}
+.container{max-width:1330px;margin:0 auto;padding:30px 35px 65px}
+h1{font-size:30px;line-height:1.2;letter-spacing:-.95px;margin:0 0 9px}h2{font-size:18px;letter-spacing:-.3px;margin:0 0 14px}h3{font-size:14px;margin:0 0 10px}
+.muted{color:#667f75;font-size:14px;line-height:1.55}.intro{margin-bottom:26px;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.notice{background:#fffaf0;border:1px solid #e7d7ad;color:#6f592c;border-radius:12px;padding:13px 16px;line-height:1.5;font-size:13px;margin:0 0 22px}
+.pills{display:flex;gap:8px;flex-wrap:wrap}.pill{font-size:12px;padding:7px 10px;border-radius:9px;color:#426d5d;background:#e4f1ea}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px}
+.kpi,.panel{border:1px solid #e0e9e3;background:white;border-radius:16px;box-shadow:0 2px 6px rgba(19,63,45,.035)}
+.kpi{padding:20px}.kpi .label{font-size:12px;font-weight:700;color:#607b70}.kpi .value{font-size:34px;font-weight:790;line-height:1.2;letter-spacing:-.8px;margin:11px 0 6px}.kpi .hint{font-size:12px;color:#6d8379}
+.grid2{display:grid;grid-template-columns:1.55fr 1fr;gap:18px;margin-top:18px}.panel{padding:22px;min-width:0}.panel-header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}.panel-header h2{margin:0}
+.button{background:#246a50;color:white;border:none;padding:10px 13px;border-radius:9px;font-weight:700;font-size:13px}
+.button.secondary{background:#ebf3ee;color:#225644}.button:focus-visible,.nav-btn:focus-visible{outline:3px solid #91dabb;outline-offset:2px}
+.table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:13px 10px;border-bottom:1px solid #eef1ed;white-space:nowrap}th{font-size:11px;text-transform:uppercase;color:#698176;letter-spacing:.6px}td{color:#305144}tr:last-child td{border-bottom:0}
+td b{color:#1a4133}.state{display:inline-block;font-size:11px;font-weight:750;padding:6px 9px;border-radius:8px}
+.state.ABERTO{background:#fff1e5;color:#9b5b21}.state.EM_TRATAMENTO{background:#eaf3ff;color:#3d6499}.state.RESOLVIDO{background:#e8f5ed;color:#327452}
+.bar-row{display:grid;grid-template-columns:128px 1fr 36px;gap:13px;align-items:center;margin:17px 0;font-size:12px;color:#4b6659}
+.track{height:12px;border-radius:99px;background:#eff3ef;overflow:hidden}.fill{height:100%;border-radius:99px;background:#298866}
+.fill.orange{background:#e1a35c}.fill.blue{background:#6a96cf}.fill.green{background:#35a67b}
+.mini-list{display:grid;gap:12px}.mini-item{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #eff2ef;padding-bottom:10px;font-size:13px;color:#4a6959}.mini-item:last-child{border:0}
+.filterbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}.filterbar input,.filterbar select{border:1px solid #cfdfd4;background:white;border-radius:10px;padding:11px 12px;min-width:150px;max-width:100%;color:#294f3d}
+.filterbar input{flex:1}.summary-list{margin:0;padding-left:20px;color:#426355;font-size:14px;line-height:1.8}
+.metric-compare{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px}.metric-compare>div{background:#eef6f0;padding:13px 16px;border-radius:11px;flex:1;min-width:130px;font-size:12px;color:#587667}.metric-compare b{display:block;font-size:24px;color:#1c5841;margin-top:4px}
+.scenarios{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.scenario{border:1px solid #dfe8df;border-radius:13px;padding:18px}.scenario b{display:block;margin-bottom:8px}.scenario p{font-size:13px;line-height:1.6;color:#567065}
+.row-actions{display:flex;gap:9px;flex-wrap:wrap}.empty{padding:26px;border:1px dashed #c8d8d0;border-radius:12px;color:#678073;text-align:center}
+.details{margin-top:15px;background:#f5faf7;border:1px solid #dcebe1;border-radius:12px;padding:17px;font-size:13px;line-height:1.65;color:#426452}
+.small{font-size:12px;color:#688072}.footer{margin-top:25px;font-size:12px;color:#70887b}
+.hidden{display:none!important}a{color:#237b55;text-decoration:none}a:hover{text-decoration:underline}
+@media(max-width:1000px){.shell{grid-template-columns:78px minmax(0,1fr)}.brand{padding:4px}.brand b,.brand small,.sidebar-label,.nav-btn .name,.sidebar-bottom{display:none}.nav-btn{justify-content:center;padding:13px}.sidebar{padding:19px 12px}.grid2{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:650px){.shell{display:block}.sidebar{position:static;padding:12px;gap:10px}.brand{display:none}nav{display:flex;overflow:auto}.nav-btn{min-width:43px}.main .container{padding:23px 15px 45px}.topbar{padding:14px 15px}.kpis{grid-template-columns:1fr 1fr}.kpi{padding:14px}.kpi .value{font-size:26px}.scenarios{grid-template-columns:1fr}h1{font-size:24px}.panel{padding:16px}.bar-row{grid-template-columns:105px 1fr 32px;gap:8px}}
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+ <div class="brand"><div class="brand-mark">A</div><div><b>AirTrust</b><small>AVIAÇÃO BOA</small></div></div>
+ <div><div class="sidebar-label">Demonstração</div><nav id="nav">
+ <button class="nav-btn active" data-view="visao"><span>◫</span><span class="name">Visão geral</span></button>
+ <button class="nav-btn" data-view="equipe"><span>♙</span><span class="name">Tripulantes</span></button>
+ <button class="nav-btn" data-view="casos"><span>◷</span><span class="name">Ocorrências</span></button>
+ <button class="nav-btn" data-view="relatorio"><span>▤</span><span class="name">Relatório mensal</span></button>
+ <button class="nav-btn" data-view="metodo"><span>◈</span><span class="name">Cenários de fadiga</span></button>
+ <button class="nav-btn" data-view="roteiro"><span>◎</span><span class="name">Roteiro da PoC</span></button>
+ </nav></div>
+ <div class="sidebar-bottom"><b>AMBIENTE SIMULADO</b><div>Sem login, rede, integração ou conexão com a base real.</div><div>Dados 100% fictícios.</div></div>
+</aside>
+<div class="main">
+ <div class="topbar">
+  <div class="breadcrumb">AirTrust / <b>FRMS Bombeiros</b> / <span id="crumb">Visão geral</span></div>
+  <div class="top-actions"><span class="tag">● DEMO LOCAL • NÃO HOMOLOGADA</span>
+    <label class="small" for="role">Visualização:</label><select id="role" aria-label="Simular perfil"><option value="admin">Administrador (simulado)</option><option value="gestor">Gestor Setor Alfa (simulado)</option><option value="tripulante">Tripulante 001 (simulado)</option></select>
+  </div>
+ </div>
+ <main class="container">
+  <div class="intro"><div><h1 id="heading">Painel de fadiga aeronáutica</h1><div class="muted">Base demonstrativa BOA/CBMMG • setembro e outubro de 2026</div></div><div class="pills"><span class="pill">130 tripulantes inventados</span><span class="pill">4 bases fictícias</span></div></div>
+  <div class="notice"><strong>ATENÇÃO — demonstração estática e interativa, não é a aplicação conectada ao Cloudflare.</strong> Todos os nomes, eventos, números e cenários são inventados. A troca de perfil abaixo é apenas uma simulação visual, não é autenticação nem prova de RBAC. Não demonstra aptidão para voo, validação científica, relatório assinado ou aceite em licitação.</div>
+  <div id="content" aria-live="polite"></div>
+  <div class="footer">FRMS BOA • Dataset sintético BOA_DEMO_SYNTHETIC_20261021_V1 • Sem gravações nem requisições de rede • Nenhum vínculo com a Costa do Sol.</div>
+ </main>
+</div></div>
+<script>
+"use strict";
+(function(){
+ var sectors=["BASE FICTÍCIA ALFA","BASE FICTÍCIA BRAVO","BASE FICTÍCIA CHARLIE","BASE FICTÍCIA DELTA"];
+ var roles=["PILOTO DE HELICÓPTERO","COPILOTO","OPERADOR AEROTÁTICO","TRIPULANTE DE RESGATE AÉREO","OPERADOR DE GUINCHO","MÉDICO DE BORDO"];
+ var missions=["RESGATE","SALVAMENTO","TRANSPORTE AEROMÉDICO","COMBATE AÉREO A INCÊNDIO","TREINAMENTO","OUTRA"];
+ var crew=Array.from({length:130},function(_,i){return{id:i+1,name:"TRIPULANTE TOTALMENTE FICTÍCIO "+String(i+1).padStart(3,"0"),callsign:"DEMO-"+String(i+1).padStart(3,"0"),sector:sectors[i%4],role:roles[i%6]};});
+ var periods={"2026-09":{count:100,extra:0},"2026-10":{count:120,extra:60}};
+ var cases=[]; var missionTotal=0;
+ Object.keys(periods).forEach(function(month){var p=periods[month];for(var i=0;i<p.count+p.extra;i++){
+  var person=crew[i%p.count],day=i<p.count?6+i%6:12+i%4;
+  var state=["ABERTO","EM_TRATAMENTO","RESOLVIDO"][i%3];
+  cases.push({id:"BOA-DEMO-"+month.replace("-","")+"-"+String(i+1).padStart(3,"0"),person:person,month:month,date:month+"-"+String(day).padStart(2,"0"),state:state,mission:missions[i%6],night:i%4===1||i%4===2,standby:i%4===1,sleep:i%13===0?null:[8,6,4.5,7][i%4],kss:i%13===0?null:[2,5,7,4][i%4],review:i%17===0});
+  missionTotal++;
+ }});
+ var view="visao",role="admin",query="",sectorFilter="TODOS",caseState="TODOS",month="2026-10",selected=null;
+ var root=document.getElementById("content"),roleInput=document.getElementById("role");
+ function fmt(n){return n.toLocaleString("pt-BR");}
+ function allowedPeople(){return role==="gestor"?crew.filter(function(p){return p.sector===sectors[0];}):role==="tripulante"?crew.filter(function(p){return p.id===1;}):crew;}
+ function allowedCases(){var ids=new Set(allowedPeople().map(function(p){return p.id;}));return cases.filter(function(c){return ids.has(c.person.id);});}
+ function stats(c){return{all:c.length,opened:c.filter(function(x){return x.state==="ABERTO";}).length,treat:c.filter(function(x){return x.state==="EM_TRATAMENTO";}).length,closed:c.filter(function(x){return x.state==="RESOLVIDO";}).length,people:new Set(c.map(function(x){return x.person.id;})).size};}
+ function stateLabel(s){return s==="ABERTO"?"Aguardando tratamento":s==="EM_TRATAMENTO"?"Em tratamento":"Encerrado (avaliação registrada)";}
+ function pill(s){return'<span class="state '+s+'">'+stateLabel(s)+'</span>';}
+ function kpi(label,n,hint){return'<div class="kpi"><div class="label">'+label+'</div><div class="value">'+fmt(n)+'</div><div class="hint">'+hint+'</div></div>';}
+ function bars(c){var s=stats(c),max=Math.max(s.opened,s.treat,s.closed,1);return[
+  ["Aguardando",s.opened,"orange"],["Em tratamento",s.treat,"blue"],["Encerrados",s.closed,"green"]
+ ].map(function(t){return'<div class="bar-row"><span>'+t[0]+'</span><div class="track"><div class="fill '+t[2]+'" style="width:'+(t[1]*100/max).toFixed(1)+'%"></div></div><b>'+fmt(t[1])+'</b></div>';}).join("");}
+ function viewOverview(){
+  var current=allowedCases().filter(function(x){return x.month==="2026-10";}),s=stats(current);
+  return'<div class="kpis">'+kpi("Tripulantes no escopo",allowedPeople().length,"Contas fictícias, não provisionadas")+kpi("Recibos em outubro",s.all,"Autorrelatos totalmente inventados")+kpi("Ocorrências em aberto",s.opened,"Toda ocorrência exige revisão humana")+kpi("Casos com eficácia registrada",s.closed,"Texto ilustrativo, não eficácia comprovada")+'</div>'+
+   '<div class="grid2"><section class="panel"><div class="panel-header"><h2>Estados das ocorrências • outubro</h2><span class="small">Somente escopo visual selecionado</span></div>'+bars(current)+'<p class="muted">Os dados ilustram a rastreabilidade check-in → caso → mitigação → avaliação. Nenhum caso autoriza operação aérea.</p><button class="button secondary" data-go="casos">Explorar ocorrências</button></section>'+
+   '<section class="panel"><h2>Atividades demonstrativas</h2><div class="mini-list"><div class="mini-item"><span>Missões ilustrativas nos dois meses</span><strong>'+missionTotal+'</strong></div><div class="mini-item"><span>Setores/base</span><strong>4</strong></div><div class="mini-item"><span>Períodos comparados</span><strong>2</strong></div><div class="mini-item"><span>Tenant Costa do Sol</span><strong>Não utilizado</strong></div></div><p class="muted">Perfis fictícios: piloto, copiloto, operador aerotático, resgate, guincho e médico de bordo.</p></section></div>';
+ }
+ function viewEquipe(){
+  var visible=allowedPeople().filter(function(p){return(sectorFilter==="TODOS"||p.sector===sectorFilter)&&(!query||[p.name,p.callsign,p.role,p.sector].join(" ").toLowerCase().includes(query.toLowerCase()));});
+  return'<section class="panel"><div class="panel-header"><h2>Cadastro sintético de tripulantes</h2><span class="tag">'+visible.length+' registros visíveis</span></div>'+
+  '<div class="filterbar"><input id="filter-crew" aria-label="Buscar tripulantes" placeholder="Buscar nome, função ou identificação fictícia" value="'+query.replace(/"/g,"&quot;")+'"><select id="filter-sector" aria-label="Filtrar base"><option value="TODOS">Todas as bases permitidas</option>'+sectors.map(function(s){return'<option value="'+s+'" '+(sectorFilter===s?'selected':'')+'>'+s+'</option>';}).join("")+'</select></div>'+
+  '<div class="table-scroll"><table><thead><tr><th>Nome fictício</th><th>Identificação</th><th>Função aeronáutica</th><th>Base/setor</th></tr></thead><tbody>'+visible.slice(0,130).map(function(p){return'<tr><td><b>'+p.name+'</b></td><td>'+p.callsign+'</td><td>'+p.role+'</td><td>'+p.sector+'</td></tr>';}).join("")+'</tbody></table></div>'+
+  '<p class="small">As 130 identidades acima são invenções. Não representam pilotos, bombeiros ou códigos ANAC reais.</p></section>';
+ }
+ function viewCases(){
+  var base=allowedCases().filter(function(c){return c.month===month&&(caseState==="TODOS"||c.state===caseState);});
+  var choose=base.find(function(x){return x.id===selected;});
+  return'<section class="panel"><div class="panel-header"><h2>Fila demonstrativa de ocorrências</h2><span class="tag">'+base.length+' casos fictícios</span></div>'+
+  '<div class="filterbar"><select id="case-month" aria-label="Mês da ocorrência"><option value="2026-10" '+(month==="2026-10"?"selected":"")+'>Outubro de 2026</option><option value="2026-09" '+(month==="2026-09"?"selected":"")+'>Setembro de 2026</option></select><select id="case-state" aria-label="Estado da ocorrência">'+["TODOS","ABERTO","EM_TRATAMENTO","RESOLVIDO"].map(function(s){return'<option value="'+s+'" '+(caseState===s?"selected":"")+'>'+(s==="TODOS"?"Todos os estados":stateLabel(s))+'</option>';}).join("")+'</select></div>'+
+  (role==="admin"?'<p class="notice">O administrador vê apenas contagens agregadas na API BOA real. Esta página não mostra detalhes clínicos nem notas individuais.</p><div class="kpis">'+kpi("Casos no mês",base.length,"Somente contagem fictícia")+kpi("Abertos",stats(base).opened,"Revisão pendente")+kpi("Em tratamento",stats(base).treat,"Mitigação documentada")+kpi("Encerrados",stats(base).closed,"Eficácia não homologada")+'</div>':
+   '<div class="table-scroll"><table><thead><tr><th>Referência fictícia</th><th>Data</th><th>Missão</th><th>Situação</th><th></th></tr></thead><tbody>'+base.slice(0,60).map(function(c){return'<tr><td><b>'+c.id+'</b></td><td>'+c.date+'</td><td>'+c.mission+'</td><td>'+pill(c.state)+'</td><td><button class="button secondary" data-case="'+c.id+'">Inspecionar</button></td></tr>';}).join("")+'</tbody></table></div>'+
+   (base.length>60?'<p class="small">Exibindo primeiros 60 casos deste filtro.</p>':'')+
+   (choose?'<div class="details"><strong>Ocorrência fictícia '+choose.id+'</strong><p>Missão: '+choose.mission+' · Data: '+choose.date+' · Estado: '+stateLabel(choose.state)+'.</p><p>Relato sintético de sono: '+(choose.sleep===null?"não informado":choose.sleep+" h")+'; KSS ilustrativa: '+(choose.kss===null?"não informada":choose.kss)+'.</p><p>'+ (choose.state==="ABERTO"?"Aguardando responsável e decisão humana.":choose.state==="EM_TRATAMENTO"?"Mitigação inventada: reorganizar escala, verificar repouso e registrar decisão humana.":"Avaliação ilustrativa de eficácia: providências registradas e pendentes de validação independente.")+'</p><b>Despacho/autorização: NÃO CONCEDIDO.</b></div>':''))
+  +'</section>';
+ }
+ function viewReport(){
+  if(role!=="admin")return'<div class="empty">Relatórios administrativos não fazem parte da visualização '+(role==="gestor"?"de gestor de setor":"do tripulante")+'.<br>Troque para o perfil simulado de administrador para conhecer a prévia agregada. Isso não é um teste de permissões do servidor.</div>';
+  var c=cases.filter(function(x){return x.month===month;}),s=stats(c),other=cases.filter(function(x){return x.month!==month;}),p=stats(other);
+  return'<section class="panel"><div class="panel-header"><h2>Prévia mensal gerencial e técnica</h2><select id="report-month" aria-label="Mês do relatório"><option value="2026-10" '+(month==="2026-10"?"selected":"")+'>Outubro/2026</option><option value="2026-09" '+(month==="2026-09"?"selected":"")+'>Setembro/2026</option></select></div>'+
+  '<div class="notice"><b>PRÉVIA NÃO OFICIAL.</b> Não é um relatório persistido, assinado, cientificamente validado ou aceito pela licitação. Sem denominador de escala não é possível calcular cobertura/adesão.</div>'+
+  '<div class="metric-compare"><div>Participantes no mês<b>'+s.people+'</b></div><div>Recibos do mês<b>'+s.all+'</b></div><div>Comparação com outro mês<b>'+p.all+'</b></div><div>Casos com eficácia escrita<b>'+s.closed+'</b></div></div>'+
+  '<h3>Distribuição dos estados</h3>'+bars(c)+'<h3>Recomendações gerenciais para cenário fictício</h3><ul class="summary-list"><li>Confrontar recibos com a escala aprovada antes de avaliar cobertura ou participação.</li><li>Acompanhar responsável, prazo e registro da eficácia nas ações de mitigação.</li><li>Revisar sobreavisos noturnos e oportunidades de repouso sob protocolo aeronáutico BOA a ser aprovado.</li></ul>'+
+  '<p class="small">O método desta visualização é descritivo: contagem de recibos e situações de casos. Não apresenta escore biomatemático, risco clínico ou permissão de voo. Nenhuma célula com menos de cinco participantes é divulgada por um relatório real.</p></section>';
+ }
+ function viewMethod(){
+ return'<div class="scenarios"><section class="panel"><h2>Cenário A — missão diurna</h2><div class="scenario"><b>Resgate • dados fictícios completos</b><p>8 horas de sono autorrelatado, KSS = 2, período diurno, sem acionamento de sobreaviso. PVT de 60 segundos indicado como realizado, sem medida de desempenho.</p><span class="state EM_TRATAMENTO">REVISÃO HUMANA OBRIGATÓRIA</span><p>A evidência não concede aptidão. O resultado requer interpretação por responsável habilitado e método aprovado.</p></div></section>'+
+ '<section class="panel"><h2>Cenário B — acionamento noturno</h2><div class="scenario"><b>Resgate • revisão prioritária fictícia</b><p>4 horas de sono autorrelatado, KSS = 8, sono fragmentado, sobreaviso acionado, PVT pendente e declaração ilustrativa de impedimento.</p><span class="state ABERTO">EVIDÊNCIA INCOMPLETA</span><p>Escalonar para revisão humana. Não presumir resultado clínico ou autorização de missão.</p></div></section></div>'+
+ '<section class="panel" style="margin-top:18px"><h2>O que esta simulação comprova — e não comprova</h2><ul class="summary-list"><li>Mostra coleta e organização de fatores contextuais, ausência como null e necessidade de revisão.</li><li>Não mede recuperação fisiológica, desempenho PVT, risco validado nem qualidade da decisão operacional.</li><li>A metodologia específica BOA, o procedimento de escalonamento e os limites devem ser homologados.</li></ul></section>';
+ }
+ function viewRoteiro(){
+ return'<section class="panel"><h2>Cinco cenas para uma demonstração controlada</h2><div class="mini-list">'+[
+ ["1. Método e triagem","Mostrar check-in fictício, campos ausentes e revisão humana."],
+ ["2. Fatores aeronáuticos","Contrastar missão diurna com acionamento noturno, sono e PVT apenas ilustrativo."],
+ ["3. Registros e relatório","Abrir uma ocorrência, mostrar mitigação e eficácia textual, comparar meses."],
+ ["4. Rastreabilidade e disponibilidade","Conferir ordem dos registros e demonstrar separação entre ambientes quando homologado."],
+ ["5. Proteção de dados","Verificar a visibilidade agregada do administrador e o acesso setorial em teste autenticado."]
+ ].map(function(x){return'<div class="mini-item"><span><b>'+x[0]+'</b><br><span class="muted">'+x[1]+'</span></span></div>';}).join("")+
+ '</div><p class="notice"><strong>Para a prova de conceito oficial:</strong> são exigidos staging realmente provisionado, autenticação e autorização no servidor, controle LGPD, avaliação técnica e convocação da Administração. Este arquivo independente não atende esses requisitos sozinho.</p></section>';
+ }
+ var titles={visao:"Painel de fadiga aeronáutica",equipe:"Equipe aeronáutica fictícia",casos:"Gestão demonstrativa de ocorrências",relatorio:"Relatório mensal demonstrativo",metodo:"Comparação de cenários simulados",roteiro:"Roteiro da prova de conceito"};
+ var crumbs={visao:"Visão geral",equipe:"Tripulantes",casos:"Ocorrências",relatorio:"Relatório mensal",metodo:"Cenários de fadiga",roteiro:"Roteiro da PoC"};
+ function render(){
+  document.getElementById("heading").textContent=titles[view]; document.getElementById("crumb").textContent=crumbs[view];
+  Array.from(document.querySelectorAll(".nav-btn")).forEach(function(x){x.classList.toggle("active",x.dataset.view===view);x.setAttribute("aria-current",x.dataset.view===view?"page":"false");});
+  var renderers={visao:viewOverview,equipe:viewEquipe,casos:viewCases,relatorio:viewReport,metodo:viewMethod,roteiro:viewRoteiro};
+  root.innerHTML=renderers[view]();
+  root.querySelectorAll("[data-go]").forEach(function(btn){btn.addEventListener("click",function(){view=btn.dataset.go;render();});});
+  root.querySelectorAll("[data-case]").forEach(function(btn){btn.addEventListener("click",function(){selected=btn.dataset.case;render();});});
+  var crewFilter=document.getElementById("filter-crew");
+  if(crewFilter)crewFilter.addEventListener("change",function(){query=crewFilter.value;render();});
+  var sect=document.getElementById("filter-sector");
+  if(sect)sect.addEventListener("change",function(){sectorFilter=sect.value;render();});
+  var cm=document.getElementById("case-month");
+  if(cm)cm.addEventListener("change",function(){month=cm.value;selected=null;render();});
+  var cs=document.getElementById("case-state");
+  if(cs)cs.addEventListener("change",function(){caseState=cs.value;selected=null;render();});
+  var rm=document.getElementById("report-month");
+  if(rm)rm.addEventListener("change",function(){month=rm.value;render();});
+ }
+ document.querySelectorAll(".nav-btn").forEach(function(x){x.addEventListener("click",function(){view=x.dataset.view;selected=null;render();});});
+ roleInput.addEventListener("change",function(){role=roleInput.value;sectorFilter="TODOS";selected=null;render();});
+ render();
+})();
+</script>
+</body>
+</html>
