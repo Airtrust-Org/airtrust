@@ -65,17 +65,37 @@ function fixture(){
 }
 describe('Score SCORM study mode cannot certify through legacy terminal endpoints',()=>{
   beforeEach(()=>{
-    admissionMock.mockReset().mockResolvedValue({kind:'SCORM_STUDY'});
+    admissionMock.mockReset().mockResolvedValue({kind:'SCORM_STUDY',packageVersion:'SCORE-V4'});
     cycleMock.mockReset().mockResolvedValue(undefined);
   });
   it('rejects a forged SCORM passed/score commit before any D1 mutation',async()=>{
     const {send,writes}=fixture();
     const r=await send('POST','/scorm/commit',{
       matricula_id:101,ciclo_id:1,lesson_status:'passed',
-      score_raw:100,score_max:100,suspend_data:'{"study":true}',
+      score_raw:100,score_max:100,suspend_data:'{"v":1,"p":"SCORE-V4","study":true}',
     });
     expect(r.status).toBe(409);
     expect(await r.json()).toMatchObject({code:'SCORM_STUDY_CANNOT_CERTIFY'});
+    expect(writes).not.toHaveBeenCalled();
+  });
+  it('rejects a SCORM study commit without a current cycle',async()=>{
+    const {send,writes}=fixture();
+    const r=await send('POST','/scorm/commit',{
+      matricula_id:101,lesson_status:'incomplete',
+      suspend_data:'{"v":1,"p":"SCORE-V4"}',
+    });
+    expect(r.status).toBe(409);
+    expect(await r.json()).toMatchObject({code:'SCORM_STUDY_CYCLE_REQUIRED'});
+    expect(writes).not.toHaveBeenCalled();
+  });
+  it('rejects replay of a different package edition without touching progress',async()=>{
+    const {send,writes}=fixture();
+    const r=await send('POST','/scorm/commit',{
+      matricula_id:101,ciclo_id:1,lesson_status:'incomplete',
+      suspend_data:'{"v":1,"p":"OTHER-EDITION"}',
+    });
+    expect(r.status).toBe(409);
+    expect(await r.json()).toMatchObject({code:'SCORM_STUDY_EDITION_MISMATCH'});
     expect(writes).not.toHaveBeenCalled();
   });
   it('rejects manual finalization of a Score study enrollment',async()=>{
