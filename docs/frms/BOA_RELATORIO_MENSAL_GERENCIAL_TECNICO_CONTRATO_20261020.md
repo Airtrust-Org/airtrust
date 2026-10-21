@@ -57,3 +57,22 @@ A resposta identifica versão do método `BOA_MONTHLY_EVIDENCE_PREVIEW_V1`, mês
 **Ordem de conclusão:** rever ciência e contrato operacional BOA → homologar tenant/staging por fluxo autorizado → testar check-in/caso/mitigação/rastreabilidade com dados sintéticos e isolamento bidirecional → vincular escalas reais do BOA e definir denominadores → homologar relatório auditável e assinatura → executar prova de conceito e entregar atestados/documentação.
 
 Este documento descreve **código em PR draft**, não funcionalidade publicada ou aceite da licitação.
+
+
+## 6. Corte temporal único e checksum reprodutível (etapa posterior)
+
+As duas consultas mensais e todos os joins de ocorrência, mitigação e encerramento da prévia agora são limitados a **um mesmo timestamp `as_of`** emitido no início da apuração. Eventos posteriores não alteram o resultado daquele corte se o snapshot D1 utilizado for consistente. O corte **não** resolve, sozinho, a prova de integridade do armazenamento nem substitui um snapshot transacional assinado.
+
+A API acrescenta `meta.content_sha256` (64 dígitos hexadecimais) da codificação UTF-8 de `JSON.stringify` do objeto:
+
+```json
+{
+  "tenant_id": 130,
+  "reference_month": "YYYY-MM",
+  "as_of": "2026-10-20T12:00:00.000Z",
+  "policy_revision": "revisao-BOA",
+  "report": {}
+}
+```
+
+Os valores acima são **exemplos**, e `report` deve ser o objeto agregado devolvido pela API. A propriedade `meta.checksum_only_not_signature = true` registra o limite: **checksum NÃO é assinatura digital, certificação, trilha imutável ou documento oficial**. A UI rotula explicitamente o corte e o SHA-256. A futura emissão oficial requer identidade do signatário, versão imutável da fonte, guarda governada do documento, assinatura e verificação independente.
