@@ -97,7 +97,9 @@ export default function BombeirosCheckinPage() {
           Fluxo próprio dos Bombeiros para testes em staging/desenvolvimento.
           Utilize exclusivamente contas e registros fictícios homologados para QA.
           Este preenchimento não libera missão, não determina aptidão e não calcula
-          pontuações utilizadas pela operação offshore.
+          pontuações utilizadas pela operação offshore. O sono e a KSS são autorrelatos,
+          não medições fisiológicas; o período de missão não substitui uma escala de serviço
+          validada, e lacunas ficam registradas como não informadas.
         </p>
         <section className="space-y-2 rounded border border-slate-300 p-3 text-sm"
           aria-label="Situação do recibo BOA">
@@ -147,7 +149,14 @@ export default function BombeirosCheckinPage() {
                 <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
-          {tri('PVT-B de 60 segundos adaptado realizado (somente autorrelato)',pvt,setPvt)}
+          <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3">
+            {tri('Teste experimental de atenção de 60 segundos: declaro somente se o realizei',pvt,setPvt)}
+            <p className="text-xs text-amber-950">
+              Esta resposta não executa um PVT nem registra tempos de reação, lapsos ou desempenho cognitivo.
+              A duração de 60 segundos não equivale automaticamente ao PVT-B de três minutos validado na
+              literatura. Não há avaliação científica de fadiga nem autorização de voo por este campo.
+            </p>
+          </div>
           {tri('Declaro impedimento ou indisponibilidade operacional',unfit,setUnfit)}
         </section>
         <label className="flex gap-2 text-sm">
