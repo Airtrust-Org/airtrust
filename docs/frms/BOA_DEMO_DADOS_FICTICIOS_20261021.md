@@ -76,3 +76,11 @@ Os testes usam `node:sqlite` em `:memory:` e a **consulta SQL existente** do rel
 **Produção:** não autorizada, não incluída. **PoC oficial:** só após convocação e avaliação da Administração, conforme edital e documentos vigentes. O software e essa massa de teste não substituem atestados de experiência da licitante nem pareceres assinados.
 
 Relacionados: `docs/frms/BOA_STAGING_130_QA_POC_RUNBOOK_20261020.md`, `docs/frms/BOA_CBMMG_LICITACAO_POC_MATRIX_20261020.md` e `docs/frms/BOA_RELATORIO_MENSAL_GERENCIAL_TECNICO_CONTRATO_20261020.md`.
+
+## Prévia interativa sem Cloudflare (21/10/2026)
+
+Foi incluído na mesma PR o arquivo **`docs/frms/BOA_DEMO_INTERATIVA_OFFLINE_20261021.html`**, um painel demonstrativo HTML/CSS/JS totalmente independente, sem login, sem rede, sem D1/R2 e sem bibliotecas externas. Pode ser aberto no navegador com o arquivo local. Reproduz deterministicamente o mesmo contrato de 130 perfis sintéticos, 100/180 recibos e casos do conjunto oficial offline; não consulta o gerador Node durante a execução. Contém navegação por Visão Geral, Tripulantes, Ocorrências, Relatório Mensal, Cenários e Roteiro, além de alternância meramente ilustrativa de administrador/gestor/tripulante. **Esse seletor não testa RBAC ou autenticação real.**
+
+Para visualizar, no GitHub da PR use **Raw / Download raw file** para salvar `BOA_DEMO_INTERATIVA_OFFLINE_20261021.html` e abra o arquivo em navegador moderno. Alternativamente, a conversa ChatGPT pode distribuir uma cópia baixável deste HTML após conferir o mesmo SHA no GitHub.
+
+O teste de segurança `scripts/__tests__/boa-demo-offline-preview.test.mjs` bloqueia bibliotecas/requisições externas, chamadas de escrita/rede e uso de armazenamento/sessão; está incluído no gate `worker-tests-2`. A visualização sintética offline serve para **revisão visual e apresentação sem integração**, enquanto a demonstração autenticada em staging continua dependendo das autorizações já descritas.
