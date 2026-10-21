@@ -6,6 +6,7 @@ const profileEvidence = vi.fn();
 const policyConfig = vi.fn();
 const crewIdentity = vi.fn();
 const registerCheckin = vi.fn();
+const readCheckinStatus = vi.fn();
 vi.mock('../../lib/frms/parameter-governance', async original => ({
   ...(await original<typeof import('../../lib/frms/parameter-governance')>()),
   resolveFrmsRegulatoryProfileEvidence: (...args: unknown[]) => profileEvidence(...args),
@@ -18,6 +19,7 @@ vi.mock('../../lib/frms/bombeiros-operational-events', async original => ({
   ...(await original<typeof import('../../lib/frms/bombeiros-operational-events')>()),
   resolveBoaCrewIdentity: (...args: unknown[]) => crewIdentity(...args),
   registerBoaCheckin: (...args: unknown[]) => registerCheckin(...args),
+  loadBoaCrewCheckinStatus: (...args: unknown[]) => readCheckinStatus(...args),
 }));
 const ctx = { waitUntil: vi.fn(), passThroughOnException: vi.fn(), props: {} } as ExecutionContext;
 const input = {
@@ -49,6 +51,7 @@ function makeApp({
   app.route('/', frmsBombeiros);
   return {
     db,
+    getStatus: () => app.fetch(new Request('http://localhost/checkin/status'), {}, ctx),
     post: (body: unknown) => app.fetch(new Request('http://localhost/checkin', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -66,6 +69,12 @@ describe('BOA crew check-in API — real employee link, independent tenant and p
       revision: { id: 'boa-r1', policy_version: 'BOA-QA-P1' },
     });
     crewIdentity.mockReset().mockResolvedValue(21);
+    readCheckinStatus.mockReset().mockResolvedValue({
+      reference_date: '2026-10-20', received: true,
+      checkin_id: 'boa-checkin-1', case_id: 'boa-case-1',
+      human_review_required: true, dispatch_permission: 'NOT_GRANTED',
+      source: 'BOA_APPEND_ONLY_RECEIPT',
+    });
     registerCheckin.mockReset().mockResolvedValue({
       accepted: true, checkin_id: 'boa-checkin-1', case_id: 'boa-case-1',
       status: 'HUMAN_REVIEW_REQUIRED', dispatch_permission: 'NOT_GRANTED',
@@ -119,6 +128,41 @@ describe('BOA crew check-in API — real employee link, independent tenant and p
     expect((await post(input)).status).toBe(403);
     expect(registerCheckin).not.toHaveBeenCalled();
   });
+  it('returns only authenticated crew receipt status without health payload or client employee ID', async () => {
+    const { getStatus } = makeApp();
+    const response = await getStatus();
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, unknown> };
+    expect(body.data).toMatchObject({
+      received: true, case_id: 'boa-case-1',
+      human_review_required: true, dispatch_permission: 'NOT_GRANTED',
+    });
+    expect(JSON.stringify(body)).not.toMatch(/kss_reported|sleep_hours_24h|funcionario_id/);
+    expect(crewIdentity).toHaveBeenCalledWith(expect.anything(), 130, 101);
+    expect(readCheckinStatus).toHaveBeenCalledWith(
+      expect.anything(), 130, 21, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    );
+    expect(registerCheckin).not.toHaveBeenCalled();
+  });
+
+  it('blocks cross-tenant, missing crew link and offshore policy for status reads', async () => {
+    const denied = makeApp({ id: 6, codigo: 'costadosol' });
+    expect((await denied.getStatus()).status).toBe(403);
+    expect(readCheckinStatus).not.toHaveBeenCalled();
+
+    crewIdentity.mockResolvedValueOnce(null);
+    const noEmployee = makeApp();
+    expect((await noEmployee.getStatus()).status).toBe(403);
+    expect(readCheckinStatus).not.toHaveBeenCalled();
+
+    profileEvidence.mockResolvedValueOnce({
+      empresaId: 130, profileCode: 'HELICOPTER_OFFSHORE', regulatoryProfileId: 'offshore',
+    });
+    const offshore = makeApp();
+    expect((await offshore.getStatus()).status).toBe(503);
+    expect(readCheckinStatus).not.toHaveBeenCalled();
+  });
+
   it('never falls back to the offshore regulatory revision', async () => {
     profileEvidence.mockResolvedValue({
       empresaId: 130, profileCode: 'HELICOPTER_OFFSHORE', regulatoryProfileId: 'offshore',
