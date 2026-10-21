@@ -188,6 +188,8 @@ function parseSlideLocation(
   return null;
 }
 
+import {isScormStudyTerminalMessage} from './lmsScormStudyMessages';
+
 export default function LmsPlayer({scormStudyOnly=false}:{scormStudyOnly?:boolean}={}) {
   const { matriculaId } = useParams<{ matriculaId: string }>();
   const navigate = useNavigate();
@@ -753,14 +755,11 @@ export default function LmsPlayer({scormStudyOnly=false}:{scormStudyOnly?:boolea
         return;
       }
 
-      if (
-        effectiveReviewMode &&
-        event.data &&
-        typeof event.data === 'object' &&
-        (event.data.type === 'lms:completed' ||
-          event.data.type === 'lms:completion-pending' ||
-          event.data.type === 'lms:completion-error')
-      ) {
+      // The SCO is allowed to report study progress, never terminal approval
+      // in a Worker-admitted SCORM study-only session. Its postMessage data
+      // cannot change the canonical enrollment or generate a success toast.
+      if ((effectiveReviewMode || scormStudyOnly) &&
+          isScormStudyTerminalMessage(event.data)) {
         return;
       }
       if (
@@ -843,7 +842,7 @@ export default function LmsPlayer({scormStudyOnly=false}:{scormStudyOnly?:boolea
         if (typeof event.data.slide_current === 'number' && Number.isFinite(event.data.slide_current)) {
           setMaxVisitedSlide((prev) => Math.max(prev, event.data.slide_current));
         }
-        if (shouldVerifyCanonicalProgress(event.data.novo_status) && !effectiveReviewMode) {
+        if (shouldVerifyCanonicalProgress(event.data.novo_status) && !effectiveReviewMode && !scormStudyOnly) {
           verifyCanonicalAndReturn();
           return;
         }
@@ -872,7 +871,7 @@ export default function LmsPlayer({scormStudyOnly=false}:{scormStudyOnly?:boolea
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, queryClient, closureReadiness?.slide_coverage?.recorded]);
+  }, [effectiveReviewMode, scormStudyOnly, id, launchOrigin, navigate, refetchMatricula, queryClient, closureReadiness?.slide_coverage?.recorded]);
 
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
