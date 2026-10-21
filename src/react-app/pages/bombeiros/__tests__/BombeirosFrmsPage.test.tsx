@@ -50,7 +50,9 @@ describe('Portal separado BOA/CBMMG', () => {
     render(<BombeirosFrmsPage />);
     expect(screen.getByTestId('boa-monthly-management-preview')).toBeInTheDocument();
     expect(screen.getByTestId('boa-workforce-consumer')).toBeInTheDocument();
-    expect(screen.getByTestId('boa-methodology-consumer')).toBeInTheDocument();
+    expect(screen.queryByTestId('boa-methodology-consumer')).not.toBeInTheDocument();
+    expect(screen.getByText(/Dados operacionais autenticados/)).toBeInTheDocument();
+    expect(screen.getByText(/Esta tela não importa/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Cadastro de funcionários/i })).toHaveAttribute('href', '/funcionarios');
   });
 });
