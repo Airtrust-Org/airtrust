@@ -165,6 +165,17 @@ export interface BoaCaseStatus {
   treatment_recorded: boolean;
 }
 type BoaEventRow = { id: string; tipo: string; payload_json: string | null; created_at: string };
+
+/** Existing canonical resolution-note format; fail closed on corrupt events. */
+function isBoaResolutionEvent(payload: string): boolean {
+  try {
+    const decoded: unknown = JSON.parse(payload);
+    return Boolean(decoded && typeof decoded === 'object'
+      && (decoded as { schema?: unknown }).schema === 'FRMS_CASE_RESOLUTION_V1'
+      && typeof (decoded as { avaliacao_eficacia?: unknown }).avaliacao_eficacia === 'string'
+      && ((decoded as { avaliacao_eficacia: string }).avaliacao_eficacia.trim().length >= 10));
+  } catch { return false; }
+}
 export async function loadBoaOperationalCase(
   db: D1Database, empresaId: number, caseId: string, access: EmployeeSectorAccess,
 ): Promise<{ status: BoaCaseStatus; treatment: string | null } | null> {
@@ -186,7 +197,12 @@ export async function loadBoaOperationalCase(
       JOIN frms_fadiga_evento base ON base.id = ?
      WHERE e.id = base.checkin_id
        AND e.empresa_id = ? AND base.empresa_id = ?
-       AND e.tipo = ? AND base.tipo = ? LIMIT 1`,
+       AND e.tipo = ? AND base.tipo = ?
+       AND json_extract(e.payload_json, '$.schema') = 'BOA_CHECKIN_V1'
+       AND json_extract(e.payload_json, '$.funcionario_id') =
+           json_extract(base.payload_json, '$.funcionario_id')
+       AND json_extract(e.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'
+       LIMIT 1`,
   ).bind(caseId, empresaId, empresaId, BOA_CHECKIN_TYPE, BOA_CASE_OPEN_TYPE)
     .first<{ id: string }>();
   if (!receipt) return null;
@@ -201,7 +217,13 @@ export async function loadBoaOperationalCase(
   const treatments = events.filter(e => e.tipo === BOA_CASE_TREATMENT_TYPE);
   const closures = events.filter(e => e.tipo === BOA_CASE_CLOSED_TYPE);
   // Duplicate or out-of-order state transitions must never be silently accepted.
-  if (treatments.length > 1 || closures.length > 1 || (closures.length && !treatments.length)) {
+  if (treatments.length > 1 || closures.length > 1 || (closures.length && !treatments.length)
+    || (treatments.length === 1
+      && !readFrmsPendingTreatment(treatments[0].payload_json))
+    || (closures.length === 1 && (!closures[0].payload_json
+      || !isBoaResolutionEvent(closures[0].payload_json)))
+    || (treatments.length === 1 && closures.length === 1
+      && closures[0].created_at < treatments[0].created_at)) {
     throw new Error('BOMBEIROS_CASE_STREAM_INTEGRITY_ERROR');
   }
   const closed = closures[0] ?? null;
@@ -248,7 +270,11 @@ export async function loadBoaCaseQueue(
       AND e.tipo = ? AND f.deleted_at IS NULL AND f.ativo = 1
       AND EXISTS (SELECT 1 FROM frms_fadiga_evento receipt
          WHERE receipt.id = e.checkin_id AND receipt.empresa_id = e.empresa_id
-           AND receipt.tipo = 'BOA_CHECKIN_V1')
+           AND receipt.tipo = 'BOA_CHECKIN_V1'
+           AND json_extract(receipt.payload_json, '$.schema') = 'BOA_CHECKIN_V1'
+           AND json_extract(receipt.payload_json, '$.funcionario_id') =
+               json_extract(e.payload_json, '$.funcionario_id')
+           AND json_extract(receipt.payload_json, '$.dispatch_permission') = 'NOT_GRANTED')
       AND ${scope.clause}
       ${before ? 'AND (e.created_at < ? OR (e.created_at = ? AND e.id < ?))' : ''}
     ORDER BY e.created_at DESC, e.id DESC LIMIT ?`;
@@ -309,6 +335,14 @@ export async function registerBoaCaseAction(
       JOIN funcionarios f ON f.id = CAST(json_extract(base.payload_json, '$.funcionario_id') AS INTEGER)
      WHERE base.id = ? AND base.empresa_id = ? AND base.tipo = ?
        AND f.empresa_id = ? AND f.deleted_at IS NULL AND f.ativo = 1
+       AND EXISTS (SELECT 1 FROM frms_fadiga_evento receipt
+         WHERE receipt.id = base.checkin_id
+           AND receipt.empresa_id = base.empresa_id
+           AND receipt.tipo = 'BOA_CHECKIN_V1'
+           AND json_extract(receipt.payload_json, '$.schema') = 'BOA_CHECKIN_V1'
+           AND json_extract(receipt.payload_json, '$.funcionario_id') =
+               json_extract(base.payload_json, '$.funcionario_id')
+           AND json_extract(receipt.payload_json, '$.dispatch_permission') = 'NOT_GRANTED')
        AND ${scope.clause}
        ${prerequisite}
        AND NOT EXISTS (SELECT 1 FROM frms_fadiga_evento t
