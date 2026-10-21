@@ -513,6 +513,23 @@ export async function registerBoaCaseAction(
              ON member.usuario_id = actor.id AND member.empresa_id = base.empresa_id
           WHERE actor.id = ? AND member.empresa_id = ?
             AND (actor.deleted_at IS NULL OR actor.deleted_at = 0)
+            AND LOWER(TRIM(COALESCE(member.role, ''))) IN
+              ('manager', 'gestor', 'supervisor', 'coordenador', 'coordinator')
+       )
+       -- BOA requires a current direct user-sector grant. The offshore-era
+       -- gestor_id/email fallback is not valid authority for BOA-sensitive writes.
+       AND EXISTS (
+         SELECT 1 FROM setores_gestores grant_bo
+           JOIN setores active_sector
+             ON active_sector.id = grant_bo.setor_id
+            AND active_sector.empresa_id = grant_bo.empresa_id
+         WHERE grant_bo.empresa_id = base.empresa_id
+           AND grant_bo.usuario_id = ?
+           AND grant_bo.setor_id = f.setor_id
+           AND grant_bo.ativo = 1 AND grant_bo.deleted_at IS NULL
+           AND LOWER(COALESCE(grant_bo.role, '')) IN ('manager', 'backup')
+           AND active_sector.ativo = 1
+           AND active_sector.deleted_at IS NULL
        )
        AND EXISTS (SELECT 1 FROM frms_fadiga_evento receipt
          WHERE receipt.id = base.checkin_id
@@ -529,7 +546,8 @@ export async function registerBoaCaseAction(
        AND NOT EXISTS (SELECT 1 FROM frms_fadiga_evento done
          WHERE done.empresa_id = ? AND done.checkin_id = base.id AND done.tipo = ?)`,
   ).bind(crypto.randomUUID(), empresaId, caseId, kindType, notes, now,
-    caseId, empresaId, BOA_CASE_OPEN_TYPE, empresaId, actorId, empresaId, ...scope.bindings,
+    caseId, empresaId, BOA_CASE_OPEN_TYPE, empresaId, actorId, empresaId, actorId,
+    ...scope.bindings,
     ...(kind === 'closure' ? [empresaId, BOA_CASE_TREATMENT_TYPE, now] : []),
     empresaId, kindType, empresaId, BOA_CASE_CLOSED_TYPE).run();
   return result.meta?.changes === 1 ? 'RECORDED' : 'NOT_ALLOWED';
