@@ -37,9 +37,17 @@ function dbFixture() {
       ativo INTEGER NOT NULL, deleted_at TEXT
     );
     CREATE TABLE usuarios (id INTEGER PRIMARY KEY, deleted_at TEXT);
-    CREATE TABLE usuarios_empresas (usuario_id INTEGER, empresa_id INTEGER);
+    CREATE TABLE usuarios_empresas (usuario_id INTEGER, empresa_id INTEGER, role TEXT);
+    CREATE TABLE setores (id INTEGER PRIMARY KEY, empresa_id INTEGER,
+      ativo INTEGER NOT NULL, deleted_at TEXT);
+    CREATE TABLE setores_gestores (id INTEGER PRIMARY KEY, setor_id INTEGER,
+      usuario_id INTEGER, empresa_id INTEGER, role TEXT, ativo INTEGER NOT NULL,
+      deleted_at TEXT);
+    INSERT INTO setores VALUES (9, 130, 1, NULL), (10, 130, 1, NULL),
+      (6, 6, 1, NULL);
     INSERT INTO usuarios VALUES (90, NULL);
-    INSERT INTO usuarios_empresas VALUES (90, 130);
+    INSERT INTO usuarios_empresas VALUES (90, 130, 'manager');
+    INSERT INTO setores_gestores VALUES (1, 9, 90, 130, 'manager', 1, NULL);
     CREATE TABLE frms_fadiga_evento (
       id TEXT PRIMARY KEY, empresa_id INTEGER NOT NULL,
       checkin_id TEXT, tipo TEXT NOT NULL, payload_json TEXT,
@@ -157,7 +165,7 @@ test('BOA case append rechecks current manager membership and valid treatment in
     assert.equal(await addTreatment(), 'NOT_ALLOWED');
     assert.equal(count(), 0);
 
-    sqlite.exec('INSERT INTO usuarios_empresas VALUES (90,130)');
+    sqlite.exec("INSERT INTO usuarios_empresas VALUES (90,130,'manager')");
     assert.equal(await addTreatment(), 'RECORDED');
     assert.equal(count(), 1);
     assert.equal(await addTreatment(), 'NOT_ALLOWED');
@@ -166,6 +174,21 @@ test('BOA case append rechecks current manager membership and valid treatment in
     assert.equal(await resolve(), 'NOT_ALLOWED');
     assert.equal(count(), 1);
     sqlite.exec('UPDATE usuarios SET deleted_at=NULL WHERE id=90');
+
+    // The active tenant membership alone is insufficient. Live sector grant
+    // and manager privilege are revalidated by the same conditional INSERT.
+    sqlite.exec("UPDATE setores_gestores SET ativo=0 WHERE usuario_id=90");
+    assert.equal(await resolve(), 'NOT_ALLOWED');
+    assert.equal(count(), 1);
+    sqlite.exec("UPDATE setores_gestores SET ativo=1, role='observer' WHERE usuario_id=90");
+    assert.equal(await resolve(), 'NOT_ALLOWED');
+    assert.equal(count(), 1);
+    sqlite.exec("UPDATE setores_gestores SET role='manager' WHERE usuario_id=90");
+    sqlite.exec("UPDATE usuarios_empresas SET role='student' WHERE usuario_id=90");
+    assert.equal(await resolve(), 'NOT_ALLOWED');
+    assert.equal(count(), 1);
+    sqlite.exec("UPDATE usuarios_empresas SET role='manager' WHERE usuario_id=90");
+
 
     // An invalid treatment must never permit a closure just because it exists.
     const t = sqlite.prepare(
