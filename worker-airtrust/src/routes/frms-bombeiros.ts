@@ -24,7 +24,8 @@ import { listBombeirosWorkforce } from '../lib/frms/bombeiros-workforce';
 import {
   BombeirosCheckinSchema, resolveBoaCrewIdentity, registerBoaCheckin,
   loadBoaCrewCheckinStatus,
-  loadBoaOperationalCase, loadBoaCaseQueue, registerBoaCaseAction, isBombeirosManagerTenant,
+  loadBoaOperationalCase, loadBoaCaseQueue, loadBoaCaseEvidenceCoverage,
+  registerBoaCaseAction, isBombeirosManagerTenant,
 } from '../lib/frms/bombeiros-operational-events';
 import { BombeirosScenarioSchema, assessBombeirosSyntheticScenario } from '../lib/frms/bombeiros-scenario-method';
 import { safe } from './frms-shared';
@@ -418,6 +419,27 @@ frmsBombeiros.get('/casos', requireRole('manager'), safe(async c => {
   });
 }));
 
+/** Coverage of evidence, NOT an individual clinical report or risk score. */
+frmsBombeiros.get('/casos/:id/evidencias', requireRole('manager'), safe(async c => {
+  const tenant = getTenantContext(c);
+  if (!isBombeirosManagerTenant(tenant)) {
+    return c.json({ success: false, code: 'BOMBEIROS_MANAGER_TENANT_REQUIRED' }, 403);
+  }
+  try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId); }
+  catch { return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503); }
+  const actorId = Number(c.get('userId'));
+  if (!Number.isSafeInteger(actorId) || actorId <= 0) {
+    return c.json({ success: false, code: 'BOMBEIROS_ACTOR_REQUIRED' }, 403);
+  }
+  const access = await getEmployeeSectorAccess(c, tenant.empresaId);
+  const result = await loadBoaCaseEvidenceCoverage(
+    c.env.DB, tenant.empresaId, c.req.param('id') ?? '', actorId, access);
+  if (!result) return c.json({ success: false, code: 'BOMBEIROS_CASE_NOT_AVAILABLE' }, 404);
+  return c.json({ success: true, data: result, meta: {
+    tenant_id: tenant.empresaId, source: 'BOA_CASE_EVIDENCE_COVERAGE_ONLY',
+    clinical_validation: 'NOT_ESTABLISHED',
+  } });
+}));
 /** Case overview without identifying health values or employee names. */
 frmsBombeiros.get('/casos/:id', requireRole('manager'), safe(async c => {
   const tenant = getTenantContext(c);
