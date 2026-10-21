@@ -370,14 +370,37 @@ ${boaManagerReadScopeSql}
   ).bind(caseId, empresaId, empresaId, BOA_CHECKIN_TYPE, BOA_CASE_OPEN_TYPE)
     .first<{ id: string }>();
   if (!receipt) return null;
+  // Repeat manager/sector authorization in the SAME SQL that selects raw
+  // treatment notes. A grant can be revoked after the opening preflight and
+  // before the child event read. LEFT JOIN yields one null-event row for a
+  // valid, authorized open case with no treatment; zero rows means deny.
   const child = await db.prepare(
-    `SELECT id, tipo, payload_json, created_at FROM frms_fadiga_evento
-      WHERE empresa_id = ? AND checkin_id = ?
-        AND tipo IN (?, ?)
-      ORDER BY created_at ASC, id ASC`,
-  ).bind(empresaId, caseId, BOA_CASE_TREATMENT_TYPE, BOA_CASE_CLOSED_TYPE)
-    .all<BoaEventRow>();
-  const events = child.results ?? [];
+    `SELECT events.id, events.tipo, events.payload_json, events.created_at
+       FROM frms_fadiga_evento base
+       JOIN funcionarios f
+         ON f.id = CAST(json_extract(base.payload_json, '$.funcionario_id') AS INTEGER)
+        AND f.empresa_id = base.empresa_id
+       LEFT JOIN frms_fadiga_evento events
+         ON events.empresa_id = base.empresa_id
+        AND events.checkin_id = base.id
+        AND events.tipo IN (?, ?)
+      WHERE base.id = ? AND base.empresa_id = ? AND base.tipo = ?
+        AND json_extract(base.payload_json, '$.schema') = 'BOA_CASE_OPENED_V1'
+        AND json_extract(base.payload_json, '$.dispatch_permission') = 'NOT_GRANTED'
+        AND f.empresa_id = ? AND f.ativo = 1 AND f.deleted_at IS NULL
+${boaManagerReadScopeSql}
+        AND ${scope.clause}
+      ORDER BY events.created_at ASC, events.id ASC`,
+  ).bind(BOA_CASE_TREATMENT_TYPE, BOA_CASE_CLOSED_TYPE,
+    caseId, empresaId, BOA_CASE_OPEN_TYPE, empresaId,
+    actorId, empresaId, actorId, ...scope.bindings)
+    .all<{ id: string | null; tipo: string | null;
+      payload_json: string | null; created_at: string | null }>();
+  const authorizedRows = child.results ?? [];
+  if (!authorizedRows.length) return null;
+  const events = authorizedRows.filter((e): e is BoaEventRow =>
+    typeof e.id === 'string' && e.id.length > 0
+    && typeof e.tipo === 'string' && typeof e.created_at === 'string');
   const treatments = events.filter(e => e.tipo === BOA_CASE_TREATMENT_TYPE);
   const closures = events.filter(e => e.tipo === BOA_CASE_CLOSED_TYPE);
   // Duplicate or out-of-order state transitions must never be silently accepted.
