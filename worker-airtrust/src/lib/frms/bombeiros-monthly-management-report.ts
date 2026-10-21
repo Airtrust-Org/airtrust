@@ -179,7 +179,7 @@ export async function loadBoaMonthlyManagementPreview(
          OR COALESCE(LENGTH(TRIM(json_extract(treatment.payload_json, '$.responsavel'))), 0) < 2
          OR COALESCE(LENGTH(TRIM(json_extract(treatment.payload_json, '$.acao_mitigacao'))), 0) < 10
          OR COALESCE(LENGTH(TRIM(json_extract(treatment.payload_json, '$.justificativa'))), 0) < 10
-         OR json_extract(treatment.payload_json, '$.prazo') NOT GLOB '????-??-??'
+         OR COALESCE(json_extract(treatment.payload_json, '$.prazo'), '') NOT GLOB '????-??-??'
          THEN treatment.id END) AS bad_treatment,
        COUNT(DISTINCT CASE WHEN
          json_extract(closure.payload_json, '$.schema') IS NOT 'FRMS_CASE_RESOLUTION_V1'
