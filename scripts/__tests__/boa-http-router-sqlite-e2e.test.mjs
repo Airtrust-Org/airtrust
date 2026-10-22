@@ -20,7 +20,7 @@ const root=fileURLToPath(new URL('../..',import.meta.url));
 const stubs={
  'parameter-governance':"export const FRMS_FIREFIGHTER_AVIATION_PROFILE='FIREFIGHTER_AVIATION'; export async function resolveFrmsRegulatoryProfileEvidence(_db,{empresaId}) { return {empresaId,profileCode:'FIREFIGHTER_AVIATION',regulatoryProfileId:'QA_UNAPPROVED_ONLY'}; }",
  'db-service':"export async function loadEffectiveFrmsConfiguration(_db,empresaId) {return {empresaId,profileCode:'FIREFIGHTER_AVIATION',regulatoryProfileId:'QA_UNAPPROVED_ONLY',revision:{id:'qa-not-authorized',policy_version:'QA_TEST_ONLY'}};}",
- 'employee-sector-access':"export async function getEmployeeSectorAccess(c) {return c.get('userRole')==='manager'?{mode:'restricted',setorIds:[9],funcionarioId:null}:{mode:'all',setorIds:[],funcionarioId:null};}",
+ 'employee-sector-access':"export async function getEmployeeSectorAccess(c) {return c.get('tenantContext')?.role==='manager'?{mode:'restricted',setorIds:[9],funcionarioId:null}:{mode:'all',setorIds:[],funcionarioId:null};}",
  'report-access':"export async function loadFrmsReportCrewScope(db,empresaId) {const x=await db.prepare('SELECT id FROM funcionarios WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL').bind(empresaId).all();return {ids:new Set(x.results.map(r=>r.id))};}",
 };
 const mockPaths={
