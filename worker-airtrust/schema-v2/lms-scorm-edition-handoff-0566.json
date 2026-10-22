@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-scorm-edition-handoff-0566",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0566_lms_scorm_edition_handoffs.sql",
+  "fileHash": "587c41a3729081d954ed8d8290d1142251b2235814629271813f299f915b4da2",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-scorm-edition-handoff-0566.md",
+  "planHash": "7008cd5a344938952635c06bd7c9892e2eaf72ff4c1e9d2321c9612b035e9c09"
+}
