@@ -160,4 +160,16 @@ describe('Player 3 governed administrative resume intent',()=>{
     const advanced={...enrollment,matricula_progresso_pct:100,ciclo_progresso_pct:100};
     expect(()=>create({enrollment:advanced})).toThrow('FRONT_C_RECONCILIATION_NOT_VERIFIED');
   });
+  it('CFIT 37/37 keeps the official terminal evaluation separate and denies a position credit',()=>{
+    const complete={...enrollment,matricula_progresso_pct:100,ciclo_progresso_pct:100,
+      ultimo_slide:37,ultima_pagina:37};
+    expect(()=>create({
+      enrollment:complete,
+      reconciliation:{...reconciliation,decision:{...reconciliation.decision,
+        previous_reported_pct:99,current_reported_pct:100,
+        historical_pct_to_preserve:100,source_updated_at:complete.matricula_updated_at}},
+      review:{...review,expected_matricula_updated_at:complete.matricula_updated_at,
+        expected_ciclo_id:complete.ciclo_id},
+    })).toThrow('NOT_ELIGIBLE_FOR_BOOKMARK_CREDIT');
+  });
 });

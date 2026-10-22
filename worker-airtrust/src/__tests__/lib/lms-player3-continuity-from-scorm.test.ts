@@ -114,4 +114,23 @@ describe('Player3 recovery from persisted SCORM without false certifications',()
     expect(result.continuity.reason).toBe('MISSING_TARGET_EDITION');
     expect(result.proposed_resume_unit_id).toBeNull();
   });
+  it('CFIT 32/37 resumes at source unit 33 without converting navigation into evidence',()=>{
+    const cfitUnits=Array.from({length:37},(_,index)=>
+      'cfit-'+String(index+1).padStart(2,'0'));
+    const result=proposeLegacyScormResume({
+      enrollment:{...enrollment,matricula_id:932,matricula_progresso_pct:86,
+        ciclo_progresso_pct:86,ultimo_slide:32,ultima_pagina:32},
+      sourceEdition:{...sourceEdition,ordered_source_unit_ids:cfitUnits},
+      destination:{...destination,target_unit_ids:cfitUnits,
+        certified_source_unit_ids:cfitUnits,
+        units_by_source_id:Object.fromEntries(cfitUnits.map(id=>[id,id]))},
+      persistedSuspendData:JSON.stringify({v:3,p:sourceEdition.source_package_version,
+        a:32,d:Array.from({length:32},(_,index)=>index)}),
+    });
+    expect(result.proposed_resume_unit_id).toBe('cfit-33');
+    expect(result.evidence.visited_unit_ids).toHaveLength(32);
+    expect(result.continuity.source_progress_pct).toBe(86);
+    expect(result).toMatchObject({grants_exam_pass:false,grants_completed:false,
+      grants_certificate:false,review_required:true});
+  });
 });
