@@ -1,5 +1,7 @@
 # Player 3 — catálogo sintético QA: publicação governada em duas fases
 
+**Revisão do candidato final-only (22/10/2026):** o curso sintético V1 `327` permanece com edição e matrículas imutáveis; não reutilizar/republicar esse curso. O novo fixture tem quatro lições e prova final na quinta unidade. O bootstrap da QA V2 usa categoria/tipo/título/version_tag de curso distintos, no mesmo tenant sintético `999006`, com novo ID físico obtido somente após execução governada. O seletor Native exige **uma única** edição `PUBLISHED` por curso. Provisionar os novos vínculos para o novo curso pela API protegida e jamais alterar a edição original. O executor confiável da `main` também precisa ter os hashes imutáveis e preflight V2 aprovados antes de qualquer dispatch; o código desta PR, sozinho, não concede permissão de D1/R2.
+
 **Status: REVIEW ONLY.** Este roteiro não autoriza gravação D1/R2, Pages,
 staging deploy, matrícula ou alteração dos 22 EADs originais. A PR #1389
 permanece DRAFT enquanto seis jornadas reais e PDFs não forem comprovados.

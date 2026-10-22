@@ -31,10 +31,10 @@ blueprint = SourceFileLoader(
 SHA = re.compile(r"^[a-f0-9]{64}$")
 GIT = re.compile(r"^[a-f0-9]{40}$")
 TENANT = 999006
-CATEGORY = "QA-PLAYER3-NATIVE-CAT"
-TYPE = "QA-PLAYER3-NATIVE-TYPE"
-COURSE_TITLE = "QA-PLAYER3-NATIVE-ONLY-SYNTHETIC"
-COURSE_VERSION = "qa-player3-native-synthetic-v1"
+CATEGORY = "QA-PLAYER3-NATIVE-CAT-V2"
+TYPE = "QA-PLAYER3-NATIVE-TYPE-V2"
+COURSE_TITLE = "QA-PLAYER3-NATIVE-ONLY-SYNTHETIC-V2"
+COURSE_VERSION = "qa-player3-native-synthetic-v2"
 ADMIN_EMAIL = "qa-examiner-admin@staging.airtrust.invalid"
 DB = "airtrust-db-staging-baseline-20260701"
 DB_UUID = "bf9963f4-eb12-439b-a830-20bbf577ac22"
@@ -95,6 +95,8 @@ def bootstrap(candidate: Path, release_sha: str):
     category = f"(SELECT id FROM qualificacoes_categorias WHERE empresa_id={t} AND codigo={sql(CATEGORY)} AND deleted_at IS NULL)"
     qual_type = f"(SELECT id FROM qualificacoes_tipos WHERE empresa_id={t} AND codigo={sql(TYPE)} AND ativo=1 AND deleted_at IS NULL)"
     course = f"(SELECT id FROM lms_cursos WHERE empresa_id={t} AND titulo={sql(COURSE_TITLE)} AND version_tag={sql(COURSE_VERSION)} AND deleted_at IS NULL)"
+    # V1 QA course 327, edition and learners are immutable and remain untouched.
+    # Qualify only this distinct V2 course; never require an empty tenant.
     preflight = [
         assertion("SELECT COUNT(*) FROM empresas WHERE codigo='qa_examiner_training' AND id=999006 AND ativo=1 AND deleted_at IS NULL", "QA_TENANT_NOT_EXACT"),
         assertion(f"SELECT COUNT(*) FROM airtrust_schema_changes_v2 WHERE change_id='lms-native-catalog-activation-0561'", "QA_SCHEMA_0561_NOT_APPLIED_ONCE"),

@@ -106,6 +106,47 @@ class SqlCatalogTest(unittest.TestCase):
             self.db.executescript(bootstrap(self.candidate,RELEASE))
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM lms_cursos").fetchone()[0],1)
 
+    def test_existing_v1_course_and_edition_survive_v2_bootstrap(self):
+        # Synthetic old QA data mimics the already-published course 327.
+        self.db.execute("""INSERT INTO qualificacoes_categorias
+          (id,codigo,empresa_id,ativo) VALUES
+          (301,'QA-PLAYER3-NATIVE-CAT',999006,1)""")
+        self.db.execute("""INSERT INTO qualificacoes_tipos
+          (id,codigo,empresa_id,categoria_id,ativo) VALUES
+          (302,'QA-PLAYER3-NATIVE-TYPE',999006,301,1)""")
+        self.db.execute("""INSERT INTO lms_cursos
+          (id,empresa_id,titulo,version_tag,tipo_conteudo,
+           qualificacao_tipo_id,ativo,publicado)
+          VALUES (327,999006,'QA-PLAYER3-NATIVE-ONLY-SYNTHETIC',
+                  'qa-player3-native-synthetic-v1','scorm',302,1,1)""")
+        self.db.execute("""INSERT INTO lms_native_catalog_activation
+          (curso_id,empresa_id) VALUES (327,999006)""")
+        old_hash = '0dcbbb7d50235d2e37d2c1ddda16c1f55cb2482551a6cf3a3a420829cf642b8f'
+        self.db.execute("""INSERT INTO lms_native_edicoes
+          (id,empresa_id,curso_id,artifact_sha256,package_version,
+           r2_prefix,status) VALUES (45,999006,327,?,'n-old',
+           ?, 'PUBLISHED')""",
+          (old_hash, 'lms/native/999006/327/' + old_hash + '/'))
+        self.db.execute("""INSERT INTO lms_player3_politicas
+          (edicao_id,empresa_id,curso_id,source_sha256,
+           policy_sha256,bank_sha256,estado)
+           VALUES (45,999006,327,?,?,?,'APPROVED')""",
+           ('b'*64,'c'*64,'d'*64))
+        course = self.create_catalog()
+        self.assertNotEqual(course, 327)
+        self.assertEqual(self.db.execute(
+          "SELECT COUNT(*) FROM lms_cursos WHERE empresa_id=999006"
+        ).fetchone()[0], 2)
+        self.assertEqual(self.db.execute(
+          "SELECT artifact_sha256,status FROM lms_native_edicoes WHERE id=45"
+        ).fetchone(), (old_hash,'PUBLISHED'))
+        self.assertEqual(self.db.execute(
+          "SELECT estado FROM lms_player3_politicas WHERE edicao_id=45"
+        ).fetchone(), ('APPROVED',))
+        self.assertEqual(self.db.execute(
+          "SELECT COUNT(*) FROM lms_native_catalog_activation WHERE empresa_id=999006"
+        ).fetchone()[0], 2)
+
     def test_wrong_tenant_or_unapplied_schema_fail_closed(self):
         self.db.execute("DELETE FROM empresas")
         with self.assertRaises(sqlite3.DatabaseError):
