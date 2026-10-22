@@ -36,7 +36,9 @@ function makeApp({
   const db = { prepare: vi.fn() };
   app.use('*', async (c, next) => {
     c.env = { ENVIRONMENT: env, DB: db,
-      BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID: approved };
+      BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID: approved,
+      BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256: 'a'.repeat(64),
+      BOA_FRMS_QA_REVIEWED_REVISION_ID: 'boa-r1' };
     c.set('userId', 101);
     c.set('userRole', role);
     c.set('empresaId', id);
@@ -63,11 +65,20 @@ describe('BOA crew check-in API — real employee link, independent tenant and p
   beforeEach(() => {
     profileEvidence.mockReset().mockResolvedValue({
       empresaId: 130, profileCode: 'FIREFIGHTER_AVIATION', regulatoryProfileId: 'boa-policy',
+      serviceCategory: 'QA_FIREFIGHTER_TEST',
+      approvalReference: 'QA-SYNTHETIC-REVIEW-ONLY',
+      policyVersion: 'BOA-QA-P1',
+      sourceDocumentHash: 'a'.repeat(64),
     });
     policyConfig.mockReset().mockResolvedValue({
       empresaId: 130, profileCode: 'FIREFIGHTER_AVIATION',
       regulatoryProfileId: 'boa-policy',
-      revision: { id: 'boa-r1', policy_version: 'BOA-QA-P1' },
+      revision: { id: 'boa-r1', policy_version: 'BOA-QA-P1',
+        empresa_id: 130, profile_code: 'FIREFIGHTER_AVIATION',
+        regulatory_profile_id: 'boa-policy',
+        source_type: 'APPROVED_OPERATIONAL_POLICY',
+        source_reference: 'QA-SYNTHETIC-REVIEW-ONLY',
+      },
     });
     crewIdentity.mockReset().mockResolvedValue(21);
     readCheckinStatus.mockReset().mockResolvedValue({
