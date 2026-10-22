@@ -37,6 +37,9 @@ class SqlCatalogTest(unittest.TestCase):
               id INTEGER PRIMARY KEY,nome TEXT,codigo TEXT,descricao TEXT,cor TEXT,
               ativo INTEGER,empresa_id INTEGER,dominio_codigo TEXT,lms_integrada INTEGER,
               created_at TEXT,updated_at TEXT,deleted_at TEXT);
+            CREATE UNIQUE INDEX ux_qualificacoes_categorias_lms_integrada_active
+              ON qualificacoes_categorias(empresa_id)
+              WHERE lms_integrada=1 AND ativo=1 AND deleted_at IS NULL;
             CREATE TABLE qualificacoes_tipos(
               id INTEGER PRIMARY KEY,tipo TEXT,codigo TEXT,nome TEXT,descricao TEXT,
               categoria_id INTEGER,categoria TEXT,carga_horaria INTEGER,validade INTEGER,
@@ -79,6 +82,9 @@ class SqlCatalogTest(unittest.TestCase):
             INSERT INTO empresas VALUES (999006,'qa_examiner_training',1,NULL);
             INSERT INTO airtrust_schema_changes_v2 VALUES ('lms-native-catalog-activation-0561');
             INSERT INTO airtrust_schema_changes_v2 VALUES ('lms-player3-canonical-terminal-0562');
+            INSERT INTO qualificacoes_categorias
+              (id,nome,codigo,ativo,empresa_id,lms_integrada,deleted_at)
+              VALUES (301,'TREINAMENTO EAD','QA-PLAYER3-NATIVE-CAT',1,999006,1,NULL);
         """)
 
     def create_catalog(self):
@@ -102,15 +108,22 @@ class SqlCatalogTest(unittest.TestCase):
         JOIN lms_native_catalog_activation a ON a.curso_id=c.id
         """).fetchone()
         self.assertEqual(row,(999006,"scorm",None,1,1,"TREINAMENTO EAD",999006))
+        self.assertEqual(self.db.execute(
+          "SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id=999006 AND lms_integrada=1 AND ativo=1 AND deleted_at IS NULL"
+        ).fetchone()[0],1)
         with self.assertRaises(sqlite3.DatabaseError):
             self.db.executescript(bootstrap(self.candidate,RELEASE))
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM lms_cursos").fetchone()[0],1)
 
+    def test_bootstrap_fails_closed_without_the_unique_integrated_qa_category(self):
+        self.db.execute("DELETE FROM qualificacoes_categorias WHERE empresa_id=999006")
+        with self.assertRaises(sqlite3.DatabaseError):
+            self.db.executescript(bootstrap(self.candidate,RELEASE))
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM qualificacoes_tipos").fetchone()[0],0)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM lms_cursos").fetchone()[0],0)
+
     def test_existing_v1_course_and_edition_survive_v2_bootstrap(self):
         # Synthetic old QA data mimics the already-published course 327.
-        self.db.execute("""INSERT INTO qualificacoes_categorias
-          (id,codigo,empresa_id,ativo) VALUES
-          (301,'QA-PLAYER3-NATIVE-CAT',999006,1)""")
         self.db.execute("""INSERT INTO qualificacoes_tipos
           (id,codigo,empresa_id,categoria_id,ativo) VALUES
           (302,'QA-PLAYER3-NATIVE-TYPE',999006,301,1)""")

@@ -31,7 +31,7 @@ blueprint = SourceFileLoader(
 SHA = re.compile(r"^[a-f0-9]{64}$")
 GIT = re.compile(r"^[a-f0-9]{40}$")
 TENANT = 999006
-CATEGORY = "QA-PLAYER3-NATIVE-CAT-V2"
+CATEGORY = "QA-PLAYER3-NATIVE-CAT"
 TYPE = "QA-PLAYER3-NATIVE-TYPE-V2"
 COURSE_TITLE = "QA-PLAYER3-NATIVE-ONLY-SYNTHETIC-V2"
 COURSE_VERSION = "qa-player3-native-synthetic-v2"
@@ -92,7 +92,7 @@ def bootstrap(candidate: Path, release_sha: str):
           "QA_NATIVE_ARTIFACT_HASH_DRIFT")
 
     t = tenant()
-    category = f"(SELECT id FROM qualificacoes_categorias WHERE empresa_id={t} AND codigo={sql(CATEGORY)} AND deleted_at IS NULL)"
+    category = f"(SELECT id FROM qualificacoes_categorias WHERE empresa_id={t} AND codigo={sql(CATEGORY)} AND lms_integrada=1 AND ativo=1 AND deleted_at IS NULL)"
     qual_type = f"(SELECT id FROM qualificacoes_tipos WHERE empresa_id={t} AND codigo={sql(TYPE)} AND ativo=1 AND deleted_at IS NULL)"
     course = f"(SELECT id FROM lms_cursos WHERE empresa_id={t} AND titulo={sql(COURSE_TITLE)} AND version_tag={sql(COURSE_VERSION)} AND deleted_at IS NULL)"
     # V1 QA course 327, edition and learners are immutable and remain untouched.
@@ -101,14 +101,11 @@ def bootstrap(candidate: Path, release_sha: str):
         assertion("SELECT COUNT(*) FROM empresas WHERE codigo='qa_examiner_training' AND id=999006 AND ativo=1 AND deleted_at IS NULL", "QA_TENANT_NOT_EXACT"),
         assertion(f"SELECT COUNT(*) FROM airtrust_schema_changes_v2 WHERE change_id='lms-native-catalog-activation-0561'", "QA_SCHEMA_0561_NOT_APPLIED_ONCE"),
         assertion(f"SELECT COUNT(*) FROM airtrust_schema_changes_v2 WHERE change_id='lms-player3-canonical-terminal-0562'", "QA_SCHEMA_0562_NOT_APPLIED_ONCE"),
-        assertion(f"SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id={t} AND codigo={sql(CATEGORY)}", "QA_CATEGORY_ALREADY_EXISTS", 0),
+        assertion(f"SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id={t} AND codigo={sql(CATEGORY)} AND lms_integrada=1 AND ativo=1 AND deleted_at IS NULL", "QA_LMS_CATEGORY_NOT_UNIQUE"),
         assertion(f"SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id={t} AND codigo={sql(TYPE)}", "QA_TYPE_ALREADY_EXISTS", 0),
         assertion(f"SELECT COUNT(*) FROM lms_cursos WHERE empresa_id={t} AND titulo={sql(COURSE_TITLE)}", "QA_COURSE_ALREADY_EXISTS", 0),
     ]
     statements = [
-        f"""INSERT INTO qualificacoes_categorias
-(nome,codigo,descricao,cor,ativo,empresa_id,dominio_codigo,lms_integrada,created_at,updated_at,deleted_at)
-VALUES ('TREINAMENTO EAD',{sql(CATEGORY)},'QA_ONLY_PLAYER3_SYNTHETIC','#64748b',1,{t},'OPERACOES',1,datetime('now'),datetime('now'),NULL);""",
         assertion(f"SELECT COUNT(*) FROM qualificacoes_categorias WHERE id={category} AND empresa_id=999006 AND lms_integrada=1", "QA_CATEGORY_POSTCONDITION_FAILED"),
         f"""INSERT INTO qualificacoes_tipos
 (tipo,codigo,nome,descricao,categoria_id,categoria,carga_horaria,validade,vencimento_fim_mes,observacoes,ativo,empresa_id,created_at,updated_at,deleted_at)
