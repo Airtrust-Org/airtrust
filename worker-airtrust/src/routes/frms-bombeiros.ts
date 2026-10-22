@@ -327,11 +327,9 @@ frmsBombeiros.post('/fontes-operacionais/validar-qa', requireRole('admin'), safe
   // Optional QA-only identity map is validated against active tenant records.
   // It never becomes an approved source link and never writes to D1.
   const qaCrosswalk = (payload as { qa_crosswalk?: unknown }).qa_crosswalk;
-  const sourcePayload = qaCrosswalk === undefined ? payload : {
-    ...(payload as Record<string, unknown>), qa_crosswalk: undefined,
-  };
-  // Remove optional property: Zod's strict source contract must stay strict.
-  if (qaCrosswalk !== undefined) delete sourcePayload.qa_crosswalk;
+  const sourcePayload = qaCrosswalk === undefined ? payload
+    : Object.fromEntries(Object.entries(payload as Record<string, unknown>)
+      .filter(([key]) => key !== 'qa_crosswalk'));
   let candidate: ReturnType<typeof validateBoaOperationalSourceBatch>;
   try { candidate = validateBoaOperationalSourceBatch(sourcePayload); }
   catch { return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_INVALID' }, 400); }
