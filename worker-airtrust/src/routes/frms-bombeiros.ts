@@ -30,6 +30,7 @@ import {
 import { BombeirosScenarioSchema, assessBombeirosSyntheticScenario } from '../lib/frms/bombeiros-scenario-method';
 import { validateBoaOperationalSourceBatch } from '../lib/frms/bombeiros-duty-source-contract';
 import { checkBoaQaCrosswalk } from '../lib/frms/bombeiros-qa-crosswalk';
+import { hasBoaQaDocumentaryReleaseBinding } from '../lib/frms/bombeiros-documentary-approval';
 import { safe } from './frms-shared';
 
 const frmsBombeiros = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
@@ -71,7 +72,7 @@ function precedingMonth(month: string): string {
 }
 
 /** Same profile guard for all BOA FRMS reads — no offshore fallback. */
-async function resolveBombeirosReadiness(db: D1Database, empresaId: number) {
+async function resolveBombeirosReadiness(db: D1Database, empresaId: number, sensitiveQaEnv?: Env) {
   const referenceAt = getTodayIsoSaoPaulo();
   const [evidence, config] = await Promise.all([
     resolveFrmsRegulatoryProfileEvidence(db, { empresaId, referenceAt }),
@@ -85,6 +86,14 @@ async function resolveBombeirosReadiness(db: D1Database, empresaId: number) {
     || evidence.regulatoryProfileId !== config.regulatoryProfileId
   ) {
     throw new Error('BOMBEIROS_PROFILE_NOT_APPROVED');
+  }
+  // The profile being active, even with its parameters complete, is NOT a
+  // documentary/scientific review. Before health-data writes demand a separate
+  // reviewed document hash and revision binding from the staging operator.
+  if (sensitiveQaEnv && !hasBoaQaDocumentaryReleaseBinding(
+    evidence, config.revision, sensitiveQaEnv,
+  )) {
+    throw new Error('BOMBEIROS_DOCUMENTARY_REVIEW_NOT_BOUND');
   }
   return { config, referenceAt };
 }
@@ -551,7 +560,7 @@ frmsBombeiros.post('/checkin', requireRole('student', 'editor', 'instructor', 'm
   const date = getTodayIsoSaoPaulo();
   let policy: Awaited<ReturnType<typeof loadEffectiveFrmsConfiguration>>;
   try {
-    ({ config: policy } = await resolveBombeirosReadiness(c.env.DB, tenant.empresaId));
+    ({ config: policy } = await resolveBombeirosReadiness(c.env.DB, tenant.empresaId, c.env));
   } catch {
     return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503);
   }
@@ -672,7 +681,7 @@ async function handleBoaCaseTransition(
   if (!boaSensitiveQaWriteAllowed(c.env, tenant.empresaId)) {
     return c.json({ success: false, code: 'BOMBEIROS_QA_WRITE_NOT_APPROVED' }, 503);
   }
-  try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId); }
+  try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId, c.env); }
   catch { return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503); }
   const userId = Number(c.get('userId'));
   if (!Number.isSafeInteger(userId) || userId <= 0) {
