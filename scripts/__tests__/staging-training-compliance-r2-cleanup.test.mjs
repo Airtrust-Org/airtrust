@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   assertRunIdentity, ownedPdfKey, buildOwnedPdfSql, cleanupOwnedPdfs,
+  createCloudflareR2Storage, proveCloudflareR2CleanupCapability,
   QA_TENANT, QA_BUCKET,
 } from '../staging/cleanup-qa-training-compliance-r2.mjs';
 
@@ -106,17 +107,86 @@ test('D1 source query and cleanup contract preserve immutable archive while reti
   assert.doesNotMatch(fixture,/UPDATE lms_ciclo_evidencias/);
 });
 
-test('workflow checks dedicated credential before seed and cleans D1 even on R2 failure',()=>{
+test('workflow proves existing staging Worker token before seed and cleans D1 even on R2 failure',()=>{
   const w=readFileSync('.github/workflows/staging-training-compliance-lifecycle-qa.yml','utf8');
-  const before=w.indexOf('Require dedicated staging QA R2 cleanup credentials');
+  const before=w.indexOf('Prove R2 object cleanup with existing staging Worker API token before seed');
   const seed=w.indexOf('Validate schemas and seed lifecycle fixture');
   const r2=w.indexOf('Delete only verified run-owned certificate PDF keys');
   const d1=w.indexOf('Soft-delete only this run');
   const verify=w.indexOf('Enforce R2 deletion verification');
   assert.ok(before>0 && before<seed);
+  assert.ok(w.includes('secrets.CLOUDFLARE_WORKER_API_TOKEN'));
+  assert.ok(w.includes('--preflight --code="$QA_LIFECYCLE_CODE" --marker="$QA_LIFECYCLE_MARKER"'));
+  assert.ok(!w.includes('secrets.QA_LIFECYCLE_R2_ACCESS_KEY_ID'));
+  assert.ok(!w.includes('secrets.QA_LIFECYCLE_R2_SECRET_ACCESS_KEY'));
   assert.ok(r2>seed && d1>r2 && verify>d1);
   assert.match(w,/id: r2_cleanup\s+continue-on-error: true/);
   assert.match(w,/name: Soft-delete only this run's synthetic D1 artifacts\s+if: always\(\)/);
   assert.match(w,/test "\$R2_CLEANUP_OUTCOME" = success/);
   assert.match(w,/group: airtrust-staging-mutations-and-scorm-qa/);
+});
+
+const accountId = 'a'.repeat(32);
+const token = 'existing-staging-worker-token';
+function fakeRest({denyWrites=false, keepAfterDelete=false}={}) {
+  const keys = new Set();
+  const calls = [];
+  const fetchImpl = async (url,opts) => {
+    const key = url.split('/objects/')[1];
+    calls.push({method:opts.method,key,range:opts.headers.Range});
+    assert.ok(url.startsWith('https://api.cloudflare.com/client/v4/accounts/'+accountId+'/r2/buckets/airtrust-storage-staging/objects/'));
+    assert.equal(opts.headers.Authorization,'Bearer '+token);
+    let status;
+    if (opts.method === 'GET') status = keys.has(key) ? 206 : 404;
+    else if (denyWrites) status = 403;
+    else if (opts.method === 'PUT') { keys.add(key);status=200; }
+    else if (opts.method === 'DELETE') { if (!keepAfterDelete) keys.delete(key);status=200; }
+    else throw Error('UNEXPECTED_METHOD');
+    return {status,ok:status>=200&&status<300,
+      headers:{get:()=>null},body:{cancel:async()=>{}},
+      json:async()=>({success:true})};
+  };
+  return {keys,calls,fetchImpl};
+}
+
+test('existing Worker token R2 adapter supports exact-object read, delete, and 404 readback',async()=>{
+  const r=fakeRest();
+  const key=pdf(1).r2_key;
+  r.keys.add(key);
+  const client=createCloudflareR2Storage({accountId,token,fetchImpl:r.fetchImpl});
+  assert.deepEqual(await cleanupOwnedPdfs([pdf(1)],code,marker,client,true),
+    {checked:1,deleted:1,dryRun:false});
+  assert.deepEqual(r.calls.map(x=>x.method),['GET','DELETE','GET']);
+  assert.equal(r.calls[0].range,'bytes=0-0');
+  assert.equal(r.keys.size,0);
+  await assert.rejects(()=>client.delete('certificados/empresa-1/../../elsewhere'),
+    /QA_R2_OBJECT_KEY_DENIED/);
+  assert.throws(()=>createCloudflareR2Storage({accountId,token:''}),/TOKEN_REQUIRED/);
+});
+
+test('run-isolated capability preflight writes only its own canary, deletes it, and verifies absence',async()=>{
+  const r=fakeRest();
+  const z=await proveCloudflareR2CleanupCapability({accountId,token,runId:'39349812345',
+    fetchImpl:r.fetchImpl});
+  assert.equal(z.result,'PASS');
+  assert.equal(z.capability,'R2_REST_READ_WRITE_DELETE');
+  assert.deepEqual(r.calls.map(x=>x.method),['PUT','GET','DELETE','GET']);
+  assert.ok(r.calls.every(x=>x.key==='__airtrust_qa_preflight__/compliance/39349812345/capability.txt'));
+  assert.equal(r.keys.size,0);
+});
+
+test('preflight is fail-closed if existing token cannot write to R2',async()=>{
+  const r=fakeRest({denyWrites:true});
+  await assert.rejects(()=>proveCloudflareR2CleanupCapability({accountId,token,runId:'39349812345',
+    fetchImpl:r.fetchImpl}),/QA_R2_REST_WRITE_DENIED/);
+  assert.deepEqual(r.calls.map(x=>x.method),['PUT']);
+  assert.equal(r.keys.size,0);
+});
+
+test('preflight never accepts R2 delete without absence on readback',async()=>{
+  const r=fakeRest({keepAfterDelete:true});
+  await assert.rejects(()=>proveCloudflareR2CleanupCapability({accountId,token,runId:'39349812345',
+    fetchImpl:r.fetchImpl}),/QA_R2_PREFLIGHT_CANARY_REMAINS/);
+  assert.equal(r.keys.size,1);
+  assert.equal(r.calls.filter(x=>x.method==='DELETE').length,2);
 });
