@@ -305,7 +305,7 @@ frmsBombeiros.post('/fontes-operacionais/validar-qa', requireRole('admin'), safe
   for (const part of parts) { payloadBytes.set(part, position); position += part.byteLength; }
   let payload: unknown;
   try {
-    payload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(payloadBytes));
+    payload = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(payloadBytes));
   } catch {
     return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_INVALID_JSON' }, 400);
   }
