@@ -5,6 +5,7 @@
 // rollback_plan_required: --apply deletes only validated QA PDF keys, verifies absence,
 //   then the caller always runs the SQL fixture rollback; archived D1 evidence is immutable.
 import { spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 export const QA_TENANT = 'qa_examiner_training';
 export const QA_DB = 'airtrust-db-staging-baseline-20260701';
@@ -82,6 +83,81 @@ export async function cleanupOwnedPdfs(rows, code, marker, storage, apply = fals
   return { checked: keys.length, deleted, dryRun: false };
 }
 
+// The existing staging Worker API token is scoped by the workflow environment.
+// This adapter never enumerates a bucket: every object key is generated from
+// an already verified D1 ownership row, or is this run's disposable canary.
+const REST_OBJECT_KEY = /^(?:certificados\/empresa-[1-9][0-9]*\/funcionario-[1-9][0-9]*\/historico-[1-9][0-9]*\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf|__airtrust_qa_preflight__\/compliance\/[0-9]{3,32}\/capability\.txt)$/i;
+
+export function createCloudflareR2Storage({ accountId, token, fetchImpl = fetch }) {
+  if (!/^[0-9a-f]{32}$/.test(String(accountId || '')) || typeof token !== 'string' || !token)
+    throw Error('QA_R2_EXISTING_STAGING_TOKEN_REQUIRED');
+  if (typeof fetchImpl !== 'function') throw Error('QA_R2_FETCH_INVALID');
+
+  async function request(method, key, body) {
+    if (!REST_OBJECT_KEY.test(key)) throw Error('QA_R2_OBJECT_KEY_DENIED');
+    const url = 'https://api.cloudflare.com/client/v4/accounts/' + accountId +
+      '/r2/buckets/' + QA_BUCKET + '/objects/' + key;
+    const headers = { Authorization: 'Bearer ' + token };
+    if (method === 'GET') headers.Range = 'bytes=0-0';
+    if (method === 'PUT') headers['Content-Type'] = 'text/plain';
+    const response = await fetchImpl(url, {
+      method, headers, ...(body === undefined ? {} : {body}),
+      signal: AbortSignal.timeout(15000),
+    });
+    // Do not materialize/download a real certificate PDF into memory or logs.
+    if (method === 'GET') {
+      if (response.body && typeof response.body.cancel === 'function')
+        await response.body.cancel();
+      if (response.status === 404) return false;
+      if (response.status === 200 || response.status === 206) return true;
+      throw Error('QA_R2_REST_READ_DENIED');
+    }
+    if (!response.ok) throw Error('QA_R2_REST_WRITE_DENIED');
+    if (response.headers?.get?.('content-type')?.includes('application/json')) {
+      let data;
+      try { data = await response.json(); } catch { throw Error('QA_R2_REST_RESPONSE_INVALID'); }
+      if (data?.success === false) throw Error('QA_R2_REST_RESPONSE_DENIED');
+    }
+    return true;
+  }
+  return {
+    exists: key => request('GET', key),
+    delete: key => request('DELETE', key),
+    writeCanary: (key, body) => {
+      if (!/^__airtrust_qa_preflight__\/compliance\/[0-9]{3,32}\/capability\.txt$/.test(key))
+        throw Error('QA_R2_CANARY_SCOPE_DENIED');
+      return request('PUT', key, body);
+    },
+  };
+}
+
+export async function proveCloudflareR2CleanupCapability({
+  accountId, token, runId, fetchImpl = fetch,
+}) {
+  if (!/^[0-9]{3,32}$/.test(String(runId || '')))
+    throw Error('QA_R2_PREFLIGHT_RUN_ID_INVALID');
+  const key = '__airtrust_qa_preflight__/compliance/' + runId + '/capability.txt';
+  const storage = createCloudflareR2Storage({accountId, token, fetchImpl});
+  // A failed/timed-out PUT may already have persisted the object remotely.
+  // Record the attempt BEFORE awaiting it, and always compensate that exact key.
+  let attempted = false;
+  try {
+    attempted = true;
+    await storage.writeCanary(key, 'AIRTRUST_QA_R2_PREFLIGHT_' + runId);
+    if (!await storage.exists(key)) throw Error('QA_R2_PREFLIGHT_WRITE_NOT_VISIBLE');
+    await storage.delete(key);
+    if (await storage.exists(key)) throw Error('QA_R2_PREFLIGHT_DELETE_NOT_VERIFIED');
+    attempted = false;
+    return { result: 'PASS', capability: 'R2_REST_READ_WRITE_DELETE', runId };
+  } finally {
+    if (attempted) {
+      // A failed preflight MUST NOT continue to the synthetic D1 fixture.
+      await storage.delete(key);
+      if (await storage.exists(key)) throw Error('QA_R2_PREFLIGHT_CANARY_REMAINS');
+    }
+  }
+}
+
 function queryStagingD1(sql) {
   const run = spawnSync('npx',
     ['wrangler','d1','execute',QA_DB,'--remote','--json',`--command=${sql}`],
@@ -95,54 +171,74 @@ function queryStagingD1(sql) {
   return results;
 }
 
+export function validateR2CleanupPlan(plan, code, marker) {
+  assertRunIdentity(code, marker);
+  if (!plan || plan.code !== code || plan.marker !== marker ||
+      !Array.isArray(plan.rows) || plan.rows.length > 16)
+    throw Error('QA_R2_RUN_PLAN_INVALID');
+  const keys = plan.rows.map(row => ownedPdfKey(row, code));
+  if (new Set(keys).size !== keys.length) throw Error('QA_PDF_DUPLICATE_KEY');
+  return plan.rows;
+}
+
+function runPlanFile(code) {
+  const temp = process.env.RUNNER_TEMP;
+  const runId = code.slice('QA-COMP-LIFE-'.length);
+  const expected = String(temp || '') + '/airtrust-f1-r2-' + runId + '.json';
+  if (!temp || process.env.QA_R2_PLAN_FILE !== expected)
+    throw Error('QA_R2_RUN_PLAN_PATH_DENIED');
+  return expected;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const code = (args.find(v => v.startsWith('--code=')) || '').slice(7);
   const marker = (args.find(v => v.startsWith('--marker=')) || '').slice(9);
   const apply = args.includes('--apply');
+  const preparePlan = args.includes('--prepare-plan');
+  const preflight = args.includes('--preflight');
   assertRunIdentity(code, marker);
   if (process.env.STAGING_D1_NAME && process.env.STAGING_D1_NAME !== QA_DB)
     throw Error('QA_D1_TARGET_REJECTED');
-  if (apply && process.env.CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA !== QA_CONFIRM)
+  if ((apply || preflight || preparePlan) &&
+      process.env.CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA !== QA_CONFIRM)
     throw Error('QA_R2_CONFIRMATION_REQUIRED');
-  const rows = queryStagingD1(buildOwnedPdfSql(code, marker));
+  if (preflight) {
+    const runId = code.slice('QA-COMP-LIFE-'.length);
+    const result = await proveCloudflareR2CleanupCapability({
+      accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+      token: process.env.CLOUDFLARE_WORKER_API_TOKEN, runId,
+    });
+    console.log(JSON.stringify(result));
+    return;
+  }
+  if (preparePlan) {
+    // Read-only D1 phase. The next step will use only Worker/R2 credentials.
+    const rows = queryStagingD1(buildOwnedPdfSql(code, marker));
+    const plan = {code, marker, rows};
+    validateR2CleanupPlan(plan, code, marker);
+    writeFileSync(runPlanFile(code), JSON.stringify(plan), {flag:'wx',mode:0o600});
+    console.log(JSON.stringify({result:'PASS',ownedPdfCount:rows.length,stage:'D1_READ_ONLY_PLAN'}));
+    return;
+  }
   if (!apply) {
+    const rows = queryStagingD1(buildOwnedPdfSql(code, marker));
     console.log(JSON.stringify(await cleanupOwnedPdfs(rows, code, marker, null, false)));
     return;
   }
-  // Nothing was issued (or seed failed): the SQL rollback is still mandatory,
-  // but a missing R2 key must not turn a harmless no-op into an unclean fixture.
+  // R2-only phase. Never map the D1 token and Worker token to the same step.
+  const plan = JSON.parse(readFileSync(runPlanFile(code), 'utf8'));
+  const rows = validateR2CleanupPlan(plan, code, marker);
   if (rows.length === 0) {
     console.log(JSON.stringify({result:'PASS',checked:0,deleted:0,dryRun:false}));
     return;
   }
-  const accessKeyId=process.env.QA_LIFECYCLE_R2_ACCESS_KEY_ID;
-  const secretAccessKey=process.env.QA_LIFECYCLE_R2_SECRET_ACCESS_KEY;
-  const account=process.env.CLOUDFLARE_ACCOUNT_ID;
-  if (!accessKeyId || !secretAccessKey || !/^[a-f0-9]{32}$/.test(account || ''))
-    throw Error('QA_R2_DEDICATED_CREDENTIALS_REQUIRED');
-  const { S3Client, HeadObjectCommand, DeleteObjectCommand } =
-    await import('@aws-sdk/client-s3');
-  const client = new S3Client({
-    region:'auto', endpoint:`https://${account}.r2.cloudflarestorage.com`,
-    credentials:{accessKeyId,secretAccessKey},
+  const storage = createCloudflareR2Storage({
+    accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+    token: process.env.CLOUDFLARE_WORKER_API_TOKEN,
   });
-  const exists = async key => {
-    try { await client.send(new HeadObjectCommand({Bucket:QA_BUCKET,Key:key})); return true; }
-    catch(e) {
-      if (e?.name === 'NotFound' || e?.name === 'NoSuchKey' ||
-          Number(e?.$metadata?.httpStatusCode) === 404) return false;
-      throw Error('QA_R2_HEAD_FAILED');
-    }
-  };
-  try {
-    const result = await cleanupOwnedPdfs(rows, code, marker, {
-      exists, delete: async key => {
-        await client.send(new DeleteObjectCommand({Bucket:QA_BUCKET,Key:key}));
-      },
-    }, true);
-    console.log(JSON.stringify({result:'PASS',...result}));
-  } finally { client.destroy(); }
+  const result = await cleanupOwnedPdfs(rows, code, marker, storage, true);
+  console.log(JSON.stringify({result:'PASS',...result}));
 }
 
 if (process.argv[1] && /cleanup-qa-training-compliance-r2\.mjs$/.test(process.argv[1])) {
