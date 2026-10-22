@@ -21,6 +21,26 @@ type EnrollmentSummary = {
 };
 
 /**
+ * Classify only stable, non-sensitive database failure categories for logs.
+ * Do not log raw D1 messages: driver text can contain query or row details.
+ */
+export function classifyComplianceEnrollmentFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  if (message === 'COMPLIANCE_ATOMIC_SCHEMA_MISSING') return 'SCHEMA_REQUIRED_TABLE_MISSING';
+  if (message === 'COMPLIANCE_ATOMIC_POSTCHECK_FAILED') return 'ATOMIC_POSTCHECK_FAILED';
+  if (message === 'COMPLIANCE_ATOMIC_ID_MISSING') return 'ATOMIC_ID_MISSING';
+  if (/no such table:/i.test(message)) return 'DB_SCHEMA_TABLE_MISSING';
+  if (/no such column:/i.test(message)) return 'DB_SCHEMA_COLUMN_MISSING';
+  if (/unique constraint failed/i.test(message)) return 'DB_UNIQUE_CONSTRAINT';
+  if (/foreign key constraint failed/i.test(message)) return 'DB_FOREIGN_KEY_CONSTRAINT';
+  if (/not null constraint failed/i.test(message)) return 'DB_NOT_NULL_CONSTRAINT';
+  if (/check constraint failed/i.test(message)) return 'DB_CHECK_CONSTRAINT';
+  if (/database is locked|database is busy/i.test(message)) return 'DB_BUSY';
+  if (/^D1_ERROR\b/i.test(message)) return 'D1_ERROR';
+  return 'UNCLASSIFIED';
+}
+
+/**
  * A change to an obligatory Compliance rule must immediately reconcile the
  * corresponding published LMS course. Never dispatch email or push invitations
  * in this path; existing valid evidence and in-progress cycles are preserved.
@@ -140,10 +160,12 @@ export async function reconcileTrainingComplianceRuleEnrollment<TAccess>(
       auto_enrollment: summary,
       auto_enrollment_warning: summary.unavailable_course ? 'LMS_COURSE_MAPPING_UNAVAILABLE' : null,
     };
-  } catch {
+  } catch (error) {
     // Saving a requirement is durable. The caller must not claim a successful
     // enrollment sync after a partial failure; the operation is idempotent on retry.
-    console.error('[TRAINING_COMPLIANCE] Falha na sincronização após salvar requisito');
+    console.error('[TRAINING_COMPLIANCE] Falha na sincronização após salvar requisito', {
+      code: classifyComplianceEnrollmentFailure(error),
+    });
     return { auto_enrollment: null, auto_enrollment_warning: 'AUTO_ENROLLMENT_DEFERRED' };
   }
 }
