@@ -9,8 +9,9 @@ Nenhuma conclusão/nota/certificado pode ser obtida pelo mapeamento da posição
 Nova tabela append-only `lms_scorm_edition_handoffs` com chave tenant,
 matrícula, ciclo e SHA alvo, operação idempotente, actor e JSON do estado
 anterior. Triggers verificam a matrícula/ciclo ativo e pacote ACTIVE no
-catálogo; UPDATE e DELETE são proibidos. Apenas DDL na migration: zero
-backfills, zero resets, zero D1/R2 remoto. Código Writer não é montado
+catálogo; UPDATE e DELETE são proibidos. Apenas DDL no change Schema V2,
+sem espelho na cadeia regular `worker-airtrust/migrations`: zero backfills,
+zero resets, zero D1/R2 remoto. Código Writer não é montado
 em rota/feature flag; permanece inerte até staging/QA autorizado.
 
 ## Pré-condições, postchecks, recuperação
