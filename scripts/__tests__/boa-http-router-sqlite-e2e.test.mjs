@@ -4,7 +4,7 @@
  * operational_decision: check the full API using both simulated upstream
  * context and real signed access JWT + auth() + tenantMiddleware(),
  * live employee-sector grant lookup and report crew scope with revocation checks.
- * BOA scientific approval is still explicitly stubbed; this is not staging login.
+ * Regulatory assignment and parameters resolve against real SQLite governance;\n * all QA approval references and values are synthetic, never scientific approval.
  * dry_run_required: fictitious local identities only; ALL SQL writes to :memory:.
  * rollback_plan_required: sqlite.close() destroys every inserted event.
  */
@@ -19,14 +19,6 @@ import Module from 'node:module';
 const require=createRequire(import.meta.url);
 const esbuild=require('esbuild');
 const root=fileURLToPath(new URL('../..',import.meta.url));
-const stubs={
- 'parameter-governance':"export const FRMS_FIREFIGHTER_AVIATION_PROFILE='FIREFIGHTER_AVIATION'; export async function resolveFrmsRegulatoryProfileEvidence(_db,{empresaId}) { return {empresaId,profileCode:'FIREFIGHTER_AVIATION',regulatoryProfileId:'QA_UNAPPROVED_ONLY'}; }",
- 'db-service':"export async function loadEffectiveFrmsConfiguration(_db,empresaId) {return {empresaId,profileCode:'FIREFIGHTER_AVIATION',regulatoryProfileId:'QA_UNAPPROVED_ONLY',revision:{id:'qa-not-authorized',policy_version:'QA_TEST_ONLY'}};}",
-};
-const mockPaths={
- 'parameter-governance':/lib\/frms\/parameter-governance$/,
- 'db-service':/lib\/frms\/db-service$/,
-};
 const output=(await esbuild.build({
  stdin:{
   contents:[
@@ -34,29 +26,19 @@ const output=(await esbuild.build({
    "import {auth} from './middleware/auth';",
    "import {tenantMiddleware} from './middleware/tenant';",
    "import {generateJWT} from './utils/security';",
-   "export {router,auth,tenantMiddleware,generateJWT};",
+   "import {LIMITES_DEFAULT} from './lib/frms/types';",
+   "export {router,auth,tenantMiddleware,generateJWT,LIMITES_DEFAULT};",
   ].join(String.fromCharCode(10)),
   resolveDir:join(root,'worker-airtrust/src'),
   sourcefile:'boa-jwt-integration-entry.ts',loader:'ts',
  },
  bundle:true,platform:'node',format:'cjs',write:false,
- plugins:[{name:'BOA-QA-scoped-stubs',setup(build){
-  for(const [name,pattern] of Object.entries(mockPaths)){
-   build.onResolve({filter:pattern},args=>{
-    if(!args.importer.endsWith('/routes/frms-bombeiros.ts'))return;
-    return {path:name,namespace:'boa-qa-module'};
-   });
-  }
-  build.onLoad({filter:/.*/,namespace:'boa-qa-module'},args=>({
-   contents:stubs[args.path],loader:'js',
-  }));
- }}],
 })).outputFiles[0].text;
 const filename='/tmp/airtrust-boa-hono-real-sqlite-qa.cjs';
 const mod=new Module(filename);
 mod.filename=filename;mod.paths=Module._nodeModulePaths(dirname(filename));
 mod._compile(output,filename);
-const {router,auth,tenantMiddleware,generateJWT}=mod.exports;
+const {router,auth,tenantMiddleware,generateJWT,LIMITES_DEFAULT}=mod.exports;
 // This standalone router is mounted without the app's production error handler.
 // Reproduce the HTTP error translation without changing route authorization.
 router.onError(error=>new Response(JSON.stringify({success:false,code:error.code??'QA_ROUTE_ERROR'}),{
@@ -75,6 +57,10 @@ function fixture(){
   'CREATE TABLE setores(id INTEGER,empresa_id INTEGER,ativo INTEGER,deleted_at TEXT)',
   'CREATE TABLE setores_gestores(id INTEGER PRIMARY KEY,setor_id INTEGER,usuario_id INTEGER,empresa_id INTEGER,role TEXT,ativo INTEGER,deleted_at TEXT)',
   'CREATE TABLE frms_fadiga_evento(id TEXT PRIMARY KEY,empresa_id INTEGER,checkin_id TEXT,tipo TEXT,payload_json TEXT,created_at TEXT)',
+  'CREATE TABLE frms_regulatory_profiles(id TEXT PRIMARY KEY,empresa_id INTEGER,profile_code TEXT,service_category TEXT,approval_reference TEXT,policy_version TEXT,limits_json TEXT,source_document_hash TEXT,active INTEGER,deleted_at TEXT,effective_from TEXT,effective_to TEXT)',
+  'CREATE TABLE frms_profile_assignments(id TEXT PRIMARY KEY,empresa_id INTEGER,regulatory_profile_id TEXT,profile_code TEXT,status TEXT,effective_from TEXT,effective_to TEXT)',
+  'CREATE TABLE frms_config_revisions(id TEXT PRIMARY KEY,empresa_id INTEGER,profile_code TEXT,revision_number INTEGER,status TEXT,source_type TEXT,source_reference TEXT,regulatory_profile_id TEXT,policy_version TEXT,effective_from TEXT,effective_to TEXT,actor_user_id TEXT,reason TEXT,supersedes_revision_id TEXT,created_at TEXT)',
+  'CREATE TABLE frms_config_parameters(id TEXT PRIMARY KEY,revision_id TEXT,parameter_key TEXT,numeric_value REAL,json_value TEXT,unit TEXT,metric TEXT,window_kind TEXT,direction TEXT,required INTEGER,created_at TEXT)',
   "INSERT INTO setores VALUES(9,130,1,NULL),(10,130,1,NULL),(109,6,1,NULL)",
   "INSERT INTO funcionarios VALUES(21,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(22,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(23,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(24,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(25,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(26,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(70,6,109,1,NULL,'ATIVO','Tripulante','Outro')",
   "INSERT INTO usuarios VALUES(101,21,NULL,'student',1),(102,22,NULL,'student',1),(103,23,NULL,'student',1),(104,24,NULL,'student',1),(105,25,NULL,'student',1),(106,26,NULL,'student',1),(190,NULL,NULL,'manager',1),(191,NULL,NULL,'manager',1),(200,NULL,NULL,'admin',1),(600,70,NULL,'student',1)",
@@ -82,6 +68,31 @@ function fixture(){
   "INSERT INTO usuarios_empresas VALUES(101,130,'student'),(102,130,'student'),(103,130,'student'),(104,130,'student'),(105,130,'student'),(106,130,'student'),(190,130,'manager'),(191,130,'manager'),(200,130,'admin'),(600,6,'student')",
   "INSERT INTO setores_gestores VALUES(1,9,190,130,'manager',1,NULL),(2,10,191,130,'manager',1,NULL)"
  ].join(';')+';');
+ // These are only fictional QA rows; approval fields remain NULL.
+ // This proves that an effective D1 revision can be resolved without
+ // implying that the aviation regulator approved any scientific method.
+ sqlite.prepare(
+  'INSERT INTO frms_regulatory_profiles VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+ ).run('qa-profile-130',130,'FIREFIGHTER_AVIATION','QA_FIREFIGHTER_TEST',
+  null,'QA_NOT_APPROVED','{}',null,1,null,'2020-01-01',null);
+ sqlite.prepare(
+  'INSERT INTO frms_profile_assignments VALUES (?,?,?,?,?,?,?)'
+ ).run('qa-assignment-130',130,'qa-profile-130','FIREFIGHTER_AVIATION',
+  'ACTIVE','2020-01-01',null);
+ sqlite.prepare(
+  'INSERT INTO frms_config_revisions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+ ).run('qa-revision-130',130,'FIREFIGHTER_AVIATION',1,'ACTIVE',
+  'QA_SYNTHETIC_NOT_APPROVED','qa-local-only','qa-profile-130',
+  'QA_POLICY_NOT_APPROVED','2020-01-01',null,null,
+  'Fixture only; no independent scientific review',null,'2020-01-01');
+ const addParameter=sqlite.prepare(
+  'INSERT INTO frms_config_parameters VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+ );
+ for(const [key,value] of Object.entries(LIMITES_DEFAULT)){
+  assert.ok(Number.isFinite(value),'QA numeric fixture key '+key);
+  addParameter.run('qa-param-'+key,'qa-revision-130',key,value,null,
+   'QA_UNIT',null,null,null,1,'2020-01-01');
+ }
  const d1={
   prepare(sql){const statement=sqlite.prepare(sql);let vals=[];
    return{bind(...values){vals=values;return this;},
@@ -301,6 +312,30 @@ test('signed admin JWT reads actual SQLite QA roster readiness without write or 
   assert.equal(payload.data.operational_poc_accepted,false);
   assert.equal(payload.meta.write_performed,false);
   assert.doesNotMatch(JSON.stringify(payload),/funcionario_id|sleep_hours_24h|kss_reported/);
+  assert.equal(count(),0);
+ }finally{sqlite.close();}
+});
+
+test('real FRMS regulatory evidence and parameters fail closed on absent or ambiguous QA governance',async()=>{
+ const {sqlite,as,count}=fixture();
+ try{
+  const crew=as(101,'student');
+  sqlite.exec("UPDATE frms_regulatory_profiles SET active=0 WHERE id='qa-profile-130'");
+  const missing=await crew('POST','/checkin',checkin);
+  assert.equal(missing.status,503,'inactive governance must block checkin');
+  assert.equal((await missing.json()).code,'BOMBEIROS_FRMS_POLICY_NOT_READY');
+  assert.equal(count(),0);
+  sqlite.exec("UPDATE frms_regulatory_profiles SET active=1 WHERE id='qa-profile-130'");
+  sqlite.prepare(
+   'INSERT INTO frms_profile_assignments VALUES (?,?,?,?,?,?,?)'
+  ).run('qa-assignment-duplicate',130,'qa-profile-130','FIREFIGHTER_AVIATION',
+   'ACTIVE','2020-01-01',null);
+  assert.equal((await crew('POST','/checkin',checkin)).status,503);
+  assert.equal(count(),0);
+  sqlite.exec("DELETE FROM frms_profile_assignments WHERE id='qa-assignment-duplicate'");
+  sqlite.exec("DELETE FROM frms_config_parameters WHERE revision_id='qa-revision-130' AND parameter_key=(SELECT parameter_key FROM frms_config_parameters LIMIT 1)");
+  assert.equal((await crew('POST','/checkin',checkin)).status,503,
+   'incomplete revision must block without generic policy fallback');
   assert.equal(count(),0);
  }finally{sqlite.close();}
 });
