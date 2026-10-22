@@ -110,7 +110,7 @@ describe('BOA source preflight is bounded, authenticated, synthetic-only and rea
       [6, 'bombeiros', 'admin', 'staging'],
       [130, 'bombeiros', 'manager', 'staging'],
       [130, 'bombeiros', 'admin', 'production'],
-    ] as const) {
+    ] as Array<[number, string, string, string]>) {
       const response = await appFor(...args).post(payload);
       expect([403, 404]).toContain(response.status);
     }
