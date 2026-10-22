@@ -376,10 +376,9 @@ test('QA document and scientific review bindings are mandatory before any health
   const manager=await realJwt(190,'manager',130);
   const get=await request(manager,'GET','/casos?limit=5');
   assert.equal(get.status,200,'sanitized case reads do not imply approved intake');
-  const self=(await request(jwt,'GET','/checkin/status')).status;
-  assert.equal(self,200);
-  const caseQueue=await request(manager,'GET','/casos?limit=5');
-  const caseId=(await caseQueue.json()).data.items[0].case_id;
+  const self=await request(jwt,'GET','/checkin/status');
+  assert.equal(self.status,200);
+  const caseId=(await self.json()).data.case_id;
   const blockedAction=await request(manager,'PUT','/casos/'+encodeURIComponent(caseId)+'/tratamento',treatment);
   assert.equal(blockedAction.status,503,'review revocation blocks treatment writes');
   assert.equal(count(),2);
