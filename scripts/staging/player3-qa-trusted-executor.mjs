@@ -25,14 +25,14 @@ const AR='07d9a165a7840b548aee339354054885d437d19909537ead6e5eab4b71449c8e';
 const SO='71fdbe8714a10b965507490fdd5d148a2bbb205185615ed4f6a0c8e82e7c4ea9';
 const PO='20f10008389fb08db6abb73ae0f00908ad3cd457cb730e16086af4cefc3cd7c6';
 const BA='b6317fb1a187fababb7a909943a65aa822741dc7a327433412e06f5e67a69216';
-const PIN={
+export const PIN=Object.freeze({
  'scripts/learning-factory/generate_player3_technical_zip.py':'a6c178bbddf132088007989300ec9f7c0ebd4943d68a53e7736066dfabd22bca',
  'worker-airtrust/package-lock.json':'6b5f8dbed586c6e67ebbf16dda5c157d5e16be621a81e136f530896cc69c45f6',
- 'scripts/staging/build_player3_qa_catalog_sql_plan.py':'9637574efffad9b2ac6dcc344595482dc295777b5986d9d2613a642641b9813b',
+ 'scripts/staging/build_player3_qa_catalog_sql_plan.py':'ad01d77112639fac1216b1bdc120b13c8fd7c8861513193bf0bdc36231745adc',
  'scripts/staging/player3-qa-governed-publisher.py':'a9d279306411c5af9063cd5f85de4fd4e6d78f3910ea07cfcca92a410f6224a0',
  'scripts/learning-factory/prepare_player3_technical_candidate.py':'1cf8cbe4e19e06115c511d091e01fa0854ae663c5c1b5fb22259617217f80a4b',
  'scripts/learning-factory/build_player3_qa_publication_plan.py':'e517317068f4bbab4f61ab8896f0cdcc03f4934f6feeeeee87d2fc0b14a7df92'
-};
+});
 const WR=path.join(RELEASE,'worker-airtrust/node_modules/.bin/wrangler');
 const PH=E.QA_PHASE, CID=Number(E.QA_COURSE_ID), APPROVER=Number(E.QA_APPROVER_ID);
 function demand(ok,code){if(!ok)throw Error(code);}

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import {strict as assert} from 'node:assert';
-import {assertV2QaSnapshot} from '../staging/player3-qa-trusted-executor.mjs';
+import {assertV2QaSnapshot,PIN} from '../staging/player3-qa-trusted-executor.mjs';
 import {ARTIFACT_SHA,expectedGrant,checkGrantBody} from '../staging/player3-qa-approval-guard.mjs';
 
 const base=Object.freeze({
@@ -8,6 +8,10 @@ const base=Object.freeze({
  types:0,courses:0,course_id:0,markers:0,editions:0,policies:0,enrolled:0
 });
 const ready=Object.freeze({...base,types:1,courses:1,course_id:328,markers:1});
+test('trusted executor pins the staged-bootstrap category reuse correction',()=>{
+ assert.equal(PIN['scripts/staging/build_player3_qa_catalog_sql_plan.py'],
+  'ad01d77112639fac1216b1bdc120b13c8fd7c8861513193bf0bdc36231745adc');
+});
 test('v2 bootstrap tolerates preserved v1 course but requires empty new course',()=>{
  assert.equal(assertV2QaSnapshot(base,'bootstrap',0),base);
  assert.throws(()=>assertV2QaSnapshot({...base,courses:1},'bootstrap',0),/PLAYER3_V2_BOOTSTRAP_NOT_FRESH/);
