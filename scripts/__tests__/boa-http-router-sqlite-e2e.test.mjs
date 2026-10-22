@@ -211,8 +211,8 @@ test('simulated BOA actor hits real Hono checkin, events, case and report with S
   assert.equal((await manager('GET','/relatorios/gerencial-tecnico-previa?mes='+month)).status,403);
   sqlite.exec('UPDATE setores_gestores SET ativo=0 WHERE usuario_id=190');
   const revoked=await manager('GET','/casos?limit=50');
-  assert.equal(revoked.status,200);
-  assert.equal((await revoked.json()).data.items.length,0);
+  assert.equal(revoked.status,403,
+    'real sector scope resolver denies a manager whose last grant was revoked');
   assert.equal((await manager('PUT','/casos/'+encodeURIComponent(receipts[1].case_id)+'/tratamento',treatment)).status,409);
   assert.equal(count(),14);
  }finally{sqlite.close();}
