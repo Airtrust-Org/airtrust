@@ -28,6 +28,8 @@ export type ScormQualityGateResult = {
   conformance: { status: GateStatus; tests: ConformanceTest[] };
   /** Independent browser E2E attestation, not SCORM protocol conformance. */
   functionalCertification: ScormFunctionalCertification;
+  /** Author-declared review is a release safeguard, not independent SME approval. */
+  authoringReview?: { externalExam: boolean; reviewed: boolean };
   publishable: boolean;
 };
 
@@ -378,6 +380,9 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
   const completion = completionManifest(pkg);
   const diagnostic = diagnostics(pkg);
   const conformance = conformanceNotSupported();
+  const manifest = parseJsonEntry(pkg, 'airtrust-completion-manifest.json');
+  const externalExam = asRecord(manifest?.assessment)?.mode === 'EXTERNAL';
+  const declaredReviewed = asRecord(manifest?.release)?.reviewed === true;
   return {
     validatorVersion: SCORM_QUALITY_GATE_VERSION,
     structural,
@@ -385,6 +390,7 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
     diagnostics: diagnostic,
     conformance,
     functionalCertification: evaluateScormFunctionalCertification('', []),
+    authoringReview: { externalExam, reviewed: !externalExam || declaredReviewed },
     publishable: false,
   };
 }
@@ -445,6 +451,7 @@ export function applyRuntimeConformance(
     conformance,
     functionalCertification,
     publishable: functionalCertification.status === 'CERTIFIED' &&
+      !(staticResult.authoringReview?.externalExam && !staticResult.authoringReview.reviewed) &&
       functionalCertification.packageSha256 === expectedSha256 &&
       shaMatches && staticResult.structural.status === 'PASS' &&
       staticResult.completionManifest.status === 'PASS' &&
@@ -459,6 +466,9 @@ export function canActivateCertifiedScormPackage(
   expectedSha256: string,
 ): boolean {
   const certificate = quality?.functionalCertification;
+  // An author-declared PRIVATE/UNREVIEWED external course can be tested but
+  // must not be activated, even with a complete browser certification ledger.
+  if (quality?.authoringReview?.externalExam && quality.authoringReview.reviewed !== true) return false;
   // A stored CERTIFIED summary without underlying browser cases is not proof.
   // Re-evaluate the case ledger independently when activating a version.
   if (!certificate || !Array.isArray(certificate.runs) ||
