@@ -261,6 +261,7 @@ const LmsMeusTreinamentos = lazyWithRetry(
   'LmsMeusTreinamentos',
 );
 const LmsMatriculas = lazyWithRetry(() => import('./pages/lms/LmsMatriculas'), 'LmsMatriculas');
+const LmsEmAndamento = lazyWithRetry(() => import('./pages/LmsEmAndamento'), 'LmsEmAndamento');
 const ConhecimentoAtivoHome = lazyWithRetry(
   () => import('./pages/conhecimento-ativo/ConhecimentoAtivoHome'),
   'ConhecimentoAtivoHome',
@@ -1210,6 +1211,14 @@ export default function App() {
                       element={
                         <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
                           <LmsMatriculas />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/lms/matriculas/em-andamento"
+                      element={
+                        <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
+                          <LmsEmAndamento />
                         </ProtectedRoute>
                       }
                     />
