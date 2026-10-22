@@ -174,5 +174,34 @@ describe('SCORM package quality gate', () => {
       .publishable).toBe(true);
     expect(applyRuntimeConformance(staticResult, passed, 'sha-a', withoutScoredAssessment)
       .publishable).toBe(false);
+
+    const externalManifest = {
+      ...validManifest,
+      assessment: { mode: 'EXTERNAL', scoringBySCORM: false, requiredInteractions: [] },
+      completion: {
+        strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1',
+        passStatusFromSCORM: false, workerApprovalRequired: true,
+      },
+      release: { status: 'PRIVATE_CANDIDATE_DO_NOT_ACTIVATE', reviewed: false },
+    };
+    const unreviewed = validateScormPackageQuality(pkg(externalManifest));
+    expect(unreviewed.completionManifest.status).toBe('PASS'); // QA intake remains possible.
+    expect(unreviewed.authoringReview).toEqual({ externalExam: true, reviewed: false });
+    const tested = applyRuntimeConformance(unreviewed, formative, 'sha-a', withoutScoredAssessment);
+    expect(tested.functionalCertification.status).toBe('CERTIFIED');
+    expect(tested.publishable).toBe(false);
+    // An old persisted or forged publishable bit must not bypass the review flag.
+    expect(canActivateCertifiedScormPackage({ ...tested, publishable: true }, 'sha-a')).toBe(false);
+
+    const declaredReviewed = validateScormPackageQuality(pkg({
+      ...externalManifest, release: { reviewed: true },
+    }));
+    expect(declaredReviewed.authoringReview).toEqual({ externalExam: true, reviewed: true });
+    expect(applyRuntimeConformance(declaredReviewed, formative, 'sha-a', withoutScoredAssessment)
+      .publishable).toBe(true); // Still needs all browser cases and governed SME approval.
+    const missingReview = validateScormPackageQuality(pkg({
+      ...externalManifest, release: undefined,
+    }));
+    expect(missingReview.authoringReview?.reviewed).toBe(false);
   });
 });
