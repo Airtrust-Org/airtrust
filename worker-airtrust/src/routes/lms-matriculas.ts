@@ -77,6 +77,7 @@ import {
 import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '../repositories/lms-matricula-queries';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
+import { readScormActiveResumeProposal } from '../services/lms-scorm-active-resume-readonly';
 import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard';
 import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
 import { activeXapiFirst } from '../services/lms-active-xapi-read';
@@ -631,6 +632,19 @@ app.get('/:id', async (c) => {
     : null;
   const editionMismatch = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo, activePrefix: matricula.scorm_package_r2_prefix, empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data, db, enrollmentStartedAt: matricula.data_inicio });
+  // Navigation preview only. A different edition still requires an
+  // audited snapshot before the active player can write into this enrollment.
+  const activeResumeProposal = tipoConteudo === 'scorm' && editionMismatch
+    ? await readScormActiveResumeProposal({
+        db, bucket: c.env.BUCKET, empresaId, cursoId: Number(matricula.curso_id),
+        activePrefix: typeof matricula.scorm_package_r2_prefix === 'string'
+          ? matricula.scorm_package_r2_prefix : null,
+        cycleStartedAt: typeof matricula.data_inicio === 'string'
+          ? matricula.data_inicio : null,
+        cmiJson: typeof progressoScorm?.cmi_json === 'string'
+          ? progressoScorm.cmi_json : null,
+      })
+    : null;
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: matricula.status as string | null,
     progressoBruto: matricula.progresso_pct as number | null,
@@ -648,6 +662,7 @@ app.get('/:id', async (c) => {
       completion_diagnostic: completionDiagnostic,
       closure_readiness: scormClosureReadiness,
       edition_mismatch: editionMismatch,
+      active_resume_proposal: activeResumeProposal,
     },
   });
 });
