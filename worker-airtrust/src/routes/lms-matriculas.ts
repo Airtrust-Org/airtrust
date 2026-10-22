@@ -514,6 +514,12 @@ app.get('/:id', async (c) => {
     .prepare(
       `
       SELECT m.*, c.titulo, c.tipo_conteudo, c.scorm_versao, c.scorm_launch_file, c.scorm_package_r2_prefix,
+          (SELECT cy.id FROM lms_matricula_ciclos cy
+            WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+              AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL LIMIT 1) AS active_lms_cycle_id,
+          (SELECT cy.data_inicio FROM lms_matricula_ciclos cy
+            WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+              AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL LIMIT 1) AS active_lms_cycle_started_at,
           c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
           qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
           qt.validade AS qualificacao_validade, qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes, h.id AS h5p_conteudo_id,
@@ -637,10 +643,11 @@ app.get('/:id', async (c) => {
   const activeResumeProposal = tipoConteudo === 'scorm' && editionMismatch
     ? await readScormActiveResumeProposal({
         db, bucket: c.env.BUCKET, empresaId, cursoId: Number(matricula.curso_id),
+        cycleId: Number(matricula.active_lms_cycle_id ?? 0) || null,
         activePrefix: typeof matricula.scorm_package_r2_prefix === 'string'
           ? matricula.scorm_package_r2_prefix : null,
-        cycleStartedAt: typeof matricula.data_inicio === 'string'
-          ? matricula.data_inicio : null,
+        cycleStartedAt: typeof matricula.active_lms_cycle_started_at === 'string'
+          ? matricula.active_lms_cycle_started_at : null,
         cmiJson: typeof progressoScorm?.cmi_json === 'string'
           ? progressoScorm.cmi_json : null,
       })

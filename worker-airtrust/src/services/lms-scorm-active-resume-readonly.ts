@@ -8,6 +8,7 @@ import { planScormActiveResume, type ScormActiveResumePlan } from './lms-scorm-a
 export async function readScormActiveResumeProposal(params: {
   db: D1Database; bucket: R2Bucket | null | undefined;
   empresaId: number; cursoId: number;
+  cycleId?: number | null;
   activePrefix: string | null;
   cycleStartedAt: string | null | undefined;
   cmiJson: string | null | undefined;
@@ -42,6 +43,17 @@ export async function readScormActiveResumeProposal(params: {
 
   const activeSlideIds = await readSlides(activePrefix);
   if (!activeSlideIds) return null;
+  let activePackageSha256: string | null = null;
+  try {
+    const row = await params.db.prepare(
+      `SELECT package_sha256 FROM lms_scorm_package_versions
+       WHERE empresa_id=? AND curso_id=? AND r2_prefix=? AND status='ACTIVE' LIMIT 1`,
+    ).bind(empresaId, cursoId, activePrefix)
+      .first<{package_sha256:string|null}>();
+    activePackageSha256 = row?.package_sha256 ?? null;
+  } catch {
+    activePackageSha256 = null;
+  }
   let cmi: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(params.cmiJson || 'null') as unknown;
@@ -56,18 +68,20 @@ export async function readScormActiveResumeProposal(params: {
   );
 
   let previousPrefix: string | null = null;
+  let previousPackageSha256: string | null = null;
   if (typeof params.cycleStartedAt === 'string' && params.cycleStartedAt.trim()) {
     try {
       const row = await params.db.prepare(
-        'SELECT p.r2_prefix FROM lms_scorm_package_audit_log a ' +
+        'SELECT p.r2_prefix,p.package_sha256 FROM lms_scorm_package_audit_log a ' +
         'JOIN lms_scorm_package_versions p ON p.id = a.package_id ' +
         'AND p.empresa_id = a.empresa_id AND p.curso_id = a.curso_id ' +
         'WHERE a.empresa_id = ? AND a.curso_id = ? AND a.action = \'ACTIVATED\' ' +
         'AND datetime(a.created_at) <= datetime(?) ' +
         'ORDER BY a.created_at DESC, a.id DESC LIMIT 1',
       ).bind(empresaId, cursoId, params.cycleStartedAt)
-        .first<{ r2_prefix: string | null }>();
+        .first<{ r2_prefix: string | null; package_sha256: string | null }>();
       previousPrefix = row?.r2_prefix ?? null;
+      previousPackageSha256 = row?.package_sha256 ?? null;
     } catch {
       previousPrefix = null;
     }
@@ -89,5 +103,7 @@ export async function readScormActiveResumeProposal(params: {
   return planScormActiveResume({
     activeSlideIds, previousSlideIds, previousVisitedIds,
     previousCursorId, previousPosition, previousTotal: marker?.total ?? null,
+    cycleId: params.cycleId ?? null,
+    activePackageSha256, previousPackageSha256,
   });
 }

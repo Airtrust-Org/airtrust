@@ -12,6 +12,9 @@ export type ScormActiveResumeInput = Readonly<{
   previousCursorId?: string | null;
   previousPosition?: number | null;
   previousTotal?: number | null;
+  cycleId?: number | null;
+  activePackageSha256?: string | null;
+  previousPackageSha256?: string | null;
   /**
    * Reviewed equivalence may only be provided by an authenticated server
    * workflow after checking BOTH package hashes; never accept browser input.
@@ -22,6 +25,9 @@ export type ScormActiveResumeInput = Readonly<{
 
 export type ScormActiveResumePlan = Readonly<{
   status: 'MATCHED_ANCHOR' | 'SUGGESTED_ANCHOR' | 'START_ACTIVE' | 'INVALID_ACTIVE_PACKAGE';
+  cycleId: number | null;
+  activePackageSha256: string | null;
+  previousPackageSha256: string | null;
   targetSlideId: string | null;
   targetPosition: number;
   activeTotal: number;
@@ -42,8 +48,17 @@ const validPosition = (n: number | null | undefined, total: number): n is number
 
 export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiveResumePlan {
   const active = input.activeSlideIds;
+  const metadata = {
+    cycleId: Number.isSafeInteger(input.cycleId) && Number(input.cycleId) > 0
+      ? Number(input.cycleId) : null,
+    activePackageSha256: typeof input.activePackageSha256 === 'string' &&
+      /^[a-f0-9]{64}$/.test(input.activePackageSha256) ? input.activePackageSha256 : null,
+    previousPackageSha256: typeof input.previousPackageSha256 === 'string' &&
+      /^[a-f0-9]{64}$/.test(input.previousPackageSha256) ? input.previousPackageSha256 : null,
+  };
   if (!safeIds(active)) {
     return {
+      ...metadata,
       status: 'INVALID_ACTIVE_PACKAGE', targetSlideId: null,
       targetPosition: 1, activeTotal: 0, matchedNavigationUnitIds: [], pendingUnitIds: [],
       reviewRequired: true, canTransferScore: false, canMarkComplete: false,
@@ -96,6 +111,7 @@ export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiv
 
   if (chosen) {
     return {
+      ...metadata,
       status: 'MATCHED_ANCHOR', targetSlideId: chosen,
       targetPosition: active.indexOf(chosen) + 1, activeTotal: active.length,
       matchedNavigationUnitIds, pendingUnitIds, reviewRequired: true,
@@ -112,6 +128,7 @@ export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiv
         (active.length - 1) / (previousTotal - 1)))
     : 0;
   return {
+    ...metadata,
     status: index === 0 ? 'START_ACTIVE' : 'SUGGESTED_ANCHOR',
     targetSlideId: active[index], targetPosition: index + 1,
     activeTotal: active.length, matchedNavigationUnitIds, pendingUnitIds,

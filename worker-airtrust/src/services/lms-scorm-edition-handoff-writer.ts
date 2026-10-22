@@ -25,14 +25,18 @@ function verify(input:ScormEditionHandoff):void {
     }
   }catch{throw new Error('SCORM_HANDOFF_PLAN_UNSAFE');}
 }
-type ScopeRow={ciclo_id:number;curso_id:number;funcionario_id:number;target_prefix:string};
+type ScopeRow={
+  ciclo_id:number;curso_id:number;funcionario_id:number;target_prefix:string;
+  cycle_started_at:string|null;
+};
 type ArchiveRow={id:number;ciclo_id:number;target_package_sha256:string;operation_id:string};
 export async function writeScormEditionHandoff(
   db:D1Database,input:ScormEditionHandoff,
 ):Promise<HandoffReceipt> {
   verify(input);
   const scope=await db.prepare(`
-    SELECT cy.id ciclo_id,m.curso_id,m.funcionario_id,p.r2_prefix target_prefix
+    SELECT cy.id ciclo_id,m.curso_id,m.funcionario_id,p.r2_prefix target_prefix,
+      cy.data_inicio cycle_started_at
     FROM lms_matriculas m
     JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
     JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
@@ -46,6 +50,18 @@ export async function writeScormEditionHandoff(
      AND p.status='ACTIVE' AND p.package_sha256=?`)
      .bind(input.matriculaId,input.empresaId,input.targetSha256).first<ScopeRow>();
   if(!scope?.ciclo_id||!scope.target_prefix)throw new Error('SCORM_HANDOFF_TARGET_OR_CYCLE_NOT_VERIFIED');
+  const previousPackage=scope.cycle_started_at
+    ? await db.prepare(`
+      SELECT p.r2_prefix,p.package_sha256
+      FROM lms_scorm_package_audit_log a
+      JOIN lms_scorm_package_versions p ON p.id=a.package_id
+        AND p.empresa_id=a.empresa_id AND p.curso_id=a.curso_id
+      WHERE a.empresa_id=? AND a.curso_id=? AND a.action='ACTIVATED'
+        AND datetime(a.created_at)<=datetime(?)
+      ORDER BY a.created_at DESC,a.id DESC LIMIT 1`)
+      .bind(input.empresaId,scope.curso_id,scope.cycle_started_at)
+      .first<{r2_prefix:string;package_sha256:string}>()
+    : null;
   const findReceipt=()=>db.prepare(`
     SELECT id,ciclo_id,target_package_sha256,operation_id
     FROM lms_scorm_edition_handoffs
@@ -69,18 +85,29 @@ export async function writeScormEditionHandoff(
       previous_enrollment_json,previous_scorm_json,previous_diagnostics_json,
       previous_package_prefix,target_package_sha256,target_package_prefix,resume_plan_json)
      SELECT m.empresa_id,m.id,?,m.curso_id,m.funcionario_id,?,?,
-      json_object('status',m.status,'progresso_pct',m.progresso_pct,'score_final',m.score_final,
-        'tentativas',m.tentativas,'data_inicio',m.data_inicio,
-        'ultimo_slide',m.ultimo_slide,'ultima_pagina',m.ultima_pagina),
-      (SELECT json_object('lesson_status',p.lesson_status,'completion_status',p.completion_status,
+      json_object('enrollment',json_object('status',m.status,'progresso_pct',m.progresso_pct,
+        'score_final',m.score_final,'tentativas',m.tentativas,'data_matricula',m.data_matricula,
+        'data_inicio',m.data_inicio,'data_conclusao',m.data_conclusao,
+        'data_expiracao',m.data_expiracao,'ultimo_slide',m.ultimo_slide,
+        'ultima_pagina',m.ultima_pagina),
+        'cycle',(SELECT json_object('status',cy.status,'progresso_pct',cy.progresso_pct,
+          'score_final',cy.score_final,'tentativas',cy.tentativas,'data_matricula',cy.data_matricula,
+          'data_inicio',cy.data_inicio,'data_conclusao',cy.data_conclusao,
+          'data_expiracao',cy.data_expiracao,'qualificacao_historico_id',cy.qualificacao_historico_id,
+          'observacoes',cy.observacoes,'created_at',cy.created_at,'updated_at',cy.updated_at)
+          FROM lms_matricula_ciclos cy WHERE cy.id=? AND cy.matricula_id=m.id
+            AND cy.empresa_id=m.empresa_id),
+        'previous_package_sha256',?),
+      (SELECT json_object('id',p.id,'lesson_status',p.lesson_status,'completion_status',p.completion_status,
          'success_status',p.success_status,'score_raw',p.score_raw,'score_max',p.score_max,
-         'score_scaled',p.score_scaled,'suspend_data',p.suspend_data,'cmi_json',p.cmi_json,
+         'score_min',p.score_min,'score_scaled',p.score_scaled,'suspend_data',p.suspend_data,'cmi_json',p.cmi_json,
          'session_time',p.session_time,'total_time',p.total_time,'launch_data',p.launch_data,
-         'session_count',p.session_count,'last_commit_at',p.last_commit_at)
+         'session_count',p.session_count,'last_commit_at',p.last_commit_at,
+         'created_at',p.created_at,'updated_at',p.updated_at)
        FROM lms_progresso_scorm p WHERE p.matricula_id=m.id AND p.empresa_id=m.empresa_id),
       (SELECT json_group_array(json_object('tentativa',d.tentativa,'diagnostics_json',d.diagnostics_json))
         FROM lms_completion_diagnostics_snapshots d WHERE d.matricula_id=m.id AND d.empresa_id=m.empresa_id),
-      NULL,?,?,?
+      ?,?,?,?
      FROM lms_matriculas m
      WHERE m.id=? AND m.empresa_id=? AND m.deleted_at IS NULL
        AND m.status IN ('NAO_INICIADO','EM_ANDAMENTO')
@@ -88,8 +115,10 @@ export async function writeScormEditionHandoff(
        AND EXISTS(SELECT 1 FROM lms_matricula_ciclos cy
          WHERE cy.id=? AND cy.empresa_id=m.empresa_id AND cy.matricula_id=m.id
           AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL)`)
-      .bind(scope.ciclo_id,input.operationId,input.actorId,input.targetSha256,scope.target_prefix,
-        input.resumePlanJson,input.matriculaId,input.empresaId,scope.ciclo_id),
+      .bind(scope.ciclo_id,input.operationId,input.actorId,scope.ciclo_id,
+        previousPackage?.package_sha256 ?? null,previousPackage?.r2_prefix ?? null,
+        input.targetSha256,scope.target_prefix,input.resumePlanJson,
+        input.matriculaId,input.empresaId,scope.ciclo_id),
     db.prepare(`UPDATE lms_progresso_scorm
       SET lesson_status=NULL,completion_status=NULL,success_status=NULL,
        score_raw=NULL,score_max=NULL,score_min=NULL,score_scaled=NULL,

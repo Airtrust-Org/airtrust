@@ -9,9 +9,11 @@ describe('SCORM active-edition resume (navigation is not certification)', () => 
       activeSlideIds:active, previousSlideIds:old,
       previousVisitedIds:old.slice(0,32), previousCursorId:'cfit-32',
       previousPosition:32, previousTotal:37,
+      cycleId:812,activePackageSha256:'b'.repeat(64),previousPackageSha256:'a'.repeat(64),
     });
     expect(plan).toMatchObject({
       status:'MATCHED_ANCHOR', targetSlideId:'cfit-32', targetPosition:34,
+      cycleId:812,activePackageSha256:'b'.repeat(64),previousPackageSha256:'a'.repeat(64),
       reviewRequired:true, canTransferScore:false, canMarkComplete:false,
     });
     expect(plan.pendingUnitIds).toContain('new-threat');
@@ -82,5 +84,12 @@ describe('SCORM active-edition resume (navigation is not certification)', () => 
   it('begins at active start without usable old evidence', () => {
     expect(planScormActiveResume({activeSlideIds:['one','two']}))
       .toMatchObject({status:'START_ACTIVE',targetPosition:1,reviewRequired:true});
+  });
+
+  it('rejects malformed package digests while retaining navigation-only semantics', () => {
+    const result=planScormActiveResume({activeSlideIds:['one','two'],cycleId:812,
+      activePackageSha256:'not-a-digest',previousPackageSha256:'f'.repeat(64)});
+    expect(result).toMatchObject({cycleId:812,activePackageSha256:null,
+      previousPackageSha256:'f'.repeat(64),canMarkComplete:false});
   });
 });

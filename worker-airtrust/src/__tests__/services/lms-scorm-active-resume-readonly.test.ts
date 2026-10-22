@@ -8,9 +8,12 @@ function bucketWith(slides: Record<string,string[]>) {
     : null)} as unknown as R2Bucket;
 }
 function database(prefix:string|null, error=false) {
-  return {prepare:vi.fn(()=>({bind:vi.fn(()=>({first:vi.fn(async()=>{
+  return {prepare:vi.fn((sql:string)=>({bind:vi.fn(()=>({first:vi.fn(async()=>{
     if(error)throw new Error('history unavailable');
-    return prefix ? {r2_prefix:prefix} : null;
+    if(sql.includes('FROM lms_scorm_package_audit_log'))return prefix
+      ? {r2_prefix:prefix,package_sha256:'a'.repeat(64)} : null;
+    if(sql.includes('FROM lms_scorm_package_versions'))return {package_sha256:'b'.repeat(64)};
+    return null;
   })}))}))} as unknown as D1Database;
 }
 describe('read-only ACTIVE SCORM resume',()=>{
@@ -22,14 +25,16 @@ describe('read-only ACTIVE SCORM resume',()=>{
     const db=database(root+'old/');
     const result=await readScormActiveResumeProposal({
       db,bucket,empresaId:6,cursoId:119,activePrefix:root+'new/',
+      cycleId:812,
       cycleStartedAt:'2026-09-01T10:00:00Z',
       cmiJson:JSON.stringify({'cmi.core.lesson_location':'32/37',
         'airtrust.viewed_slides':Array.from({length:32},(_,i)=>i+1)}),
     });
     expect(result).toMatchObject({status:'MATCHED_ANCHOR',targetSlideId:'unit32',
-      targetPosition:34,canMarkComplete:false,canTransferScore:false});
+      targetPosition:34,cycleId:812,activePackageSha256:'b'.repeat(64),
+      previousPackageSha256:'a'.repeat(64),canMarkComplete:false,canTransferScore:false});
     expect(result?.pendingUnitIds).toContain('new1');
-    expect(db.prepare).toHaveBeenCalledOnce();
+    expect(db.prepare).toHaveBeenCalledTimes(2);
   });
 
   it('suggests navigation only when historical package metadata is unavailable',async()=>{
