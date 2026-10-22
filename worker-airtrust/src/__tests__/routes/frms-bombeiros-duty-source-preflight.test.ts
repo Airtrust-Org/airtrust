@@ -103,6 +103,59 @@ describe('BOA source preflight is bounded, authenticated, synthetic-only and rea
     expect(db.prepare).not.toHaveBeenCalled();
   });
 
+  it('verifies optional synthetic crosswalk against the tenant roster without leaking person IDs', async () => {
+    const { db, post } = appFor();
+    db.prepare.mockReturnValue({ bind: vi.fn().mockReturnValue({
+      all: vi.fn().mockResolvedValue({ results: [{ funcionario_id: 21, setor_id: 9 }] }),
+    }) });
+    const payload = {
+      ...fixture(),
+      qa_crosswalk: {
+        schema: 'BOA_QA_SYNTHETIC_CROSSWALK_V1',
+        source_system_id: 'BOA-QA-SYNTHETIC',
+        mappings: [{
+          external_crew_id: 'qa-crew-1', external_sector_id: 'qa-sector-1',
+          funcionario_id: 21, setor_id: 9,
+        }],
+      },
+    };
+    const response = await post(JSON.stringify(payload));
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data: Record<string, unknown>; meta: Record<string, unknown>;
+    };
+    expect(body.data).toMatchObject({
+      tenant_identity_link: 'QA_CANDIDATE_ONLY_NOT_APPROVED',
+      qa_crosswalk_status: 'QA_CROSSWALK_STRUCTURALLY_MATCHED_SOURCE_UNVERIFIED',
+      qa_matched_crew_count: 1,
+      source_approval: 'NOT_EVALUATED', stored: false,
+    });
+    expect(JSON.stringify(body)).not.toMatch(/funcionario_id|external_crew_id|qa-crew-1|setor_id/);
+    expect(db.prepare).toHaveBeenCalledOnce();
+    expect(body.meta.write_performed).toBe(false);
+  });
+
+  it('rejects unverified or revoked employee crosswalk without describing that identity', async () => {
+    const { db, post } = appFor();
+    db.prepare.mockReturnValue({ bind: vi.fn().mockReturnValue({
+      all: vi.fn().mockResolvedValue({ results: [] }),
+    }) });
+    const payload = { ...fixture(), qa_crosswalk: {
+      schema: 'BOA_QA_SYNTHETIC_CROSSWALK_V1',
+      source_system_id: 'BOA-QA-SYNTHETIC',
+      mappings: [{
+        external_crew_id: 'qa-crew-1', external_sector_id: 'qa-sector-1',
+        funcionario_id: 21, setor_id: 9,
+      }],
+    }};
+    const response = await post(JSON.stringify(payload));
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      success: false, code: 'BOA_SOURCE_QA_CROSSWALK_UNVERIFIED',
+    });
+    expect(db.prepare).toHaveBeenCalledOnce();
+  });
+
   it('rejects wrong role/tenant/production before policy evaluation', async () => {
     const payload = JSON.stringify(fixture());
     for (const args of [
