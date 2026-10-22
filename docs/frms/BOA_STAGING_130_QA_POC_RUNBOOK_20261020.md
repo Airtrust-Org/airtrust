@@ -213,3 +213,38 @@ verificação de cache distribuído, auditoria operacional e revisão LGPD
 ainda exigem QA autenticado em staging antes de considerar a
 implantação validada.
 
+
+
+## Gate adicional de compatibilidade do Worker compartilhado — 22/10/2026
+
+O staging usa o mesmo Worker \`airtrust-api-staging\` para outras frentes, incluindo Player 3.
+Oito gates verdes na PR BOA **não demonstram que seu commit inclui o código
+já publicado no Worker**. Antes de qualquer tentativa de disparar
+\`.github/workflows/deploy-staging.yml\`, executar a verificação de
+ancestralidade, em clone oficial atualizado, usando **SHAs completos** obtidos
+do GitHub vivo:
+
+\`\`\`bash
+node scripts/staging/check-boa-staging-release-lineage.mjs \
+  --candidate-sha=<HEAD_EXATO_PR_1650> \
+  --main-sha=<HEAD_EXATO_MAIN>
+\`\`\`
+
+Ela lê \`GET https://airtrust-api-staging.airtrust.workers.dev/api/version\`
+e exige que tanto a \`main\` viva quanto o commit de origem do Worker publicado
+sejam ancestrais do candidato, sem mudar branches, Worker, Pages, D1 ou R2.
+O resultado \`BLOCK_CANDIDATE_BEHIND_MAIN\`,
+\`BLOCK_CANDIDATE_DIVERGES_FROM_STAGING\` ou evidência incompleta é um
+**no-go obrigatório**: não disparar deploy de um commit que substituiria
+a versão de outra frente. \`NOOP_ALREADY_DEPLOYED\` também não justifica
+republicar. O estado \`ANCESTRY_ONLY_COMPATIBLE_NOT_RELEASE_AUTHORIZED\`
+comprova somente ancestralidade; ainda se exigem aprovação de ambiente,
+oito gates do SHA final, workflow governado, fonte BOA e LGPD/ciência.
+
+**Registro reproduzido em 22/10/2026:** a versão staging declarava
+\`sourceSha=e267424c3cea7d5f21e8f3cd8e1f0f8214419444\` e Worker ID
+\`0305cf8a-771d-4600-917b-b42042eb91fb\`. A PR BOA estava atrás da
+\`main\` em commits necessários e divergia da origem do staging.
+O verificador retornou \`BLOCK_CANDIDATE_BEHIND_MAIN\`, com exit code 2.
+**Nenhum deploy ocorreu.** Atualizar evidência antes de nova tentativa;
+não promover código antigo ou substituir Player 3 para fechar a PoC BOA.
