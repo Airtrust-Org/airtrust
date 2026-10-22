@@ -68,13 +68,12 @@ function fixture(){
   "INSERT INTO usuarios_empresas VALUES(101,130,'student'),(102,130,'student'),(103,130,'student'),(104,130,'student'),(105,130,'student'),(106,130,'student'),(190,130,'manager'),(191,130,'manager'),(200,130,'admin'),(600,6,'student')",
   "INSERT INTO setores_gestores VALUES(1,9,190,130,'manager',1,NULL),(2,10,191,130,'manager',1,NULL)"
  ].join(';')+';');
- // These are only fictional QA rows; approval fields remain NULL.
- // This proves that an effective D1 revision can be resolved without
- // implying that the aviation regulator approved any scientific method.
+ // Fictional QA only: the mock operator review bindings exercise guards
+ // but ARE NOT a real scientific review, document or legal authorization.
  sqlite.prepare(
   'INSERT INTO frms_regulatory_profiles VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
  ).run('qa-profile-130',130,'FIREFIGHTER_AVIATION','QA_FIREFIGHTER_TEST',
-  null,'QA_NOT_APPROVED','{}',null,1,null,'2020-01-01',null);
+  'QA-FICTIONAL-APPROVAL','QA_POLICY_NOT_APPROVED','{}','a'.repeat(64),1,null,'2020-01-01',null);
  sqlite.prepare(
   'INSERT INTO frms_profile_assignments VALUES (?,?,?,?,?,?,?)'
  ).run('qa-assignment-130',130,'qa-profile-130','FIREFIGHTER_AVIATION',
@@ -82,7 +81,7 @@ function fixture(){
  sqlite.prepare(
   'INSERT INTO frms_config_revisions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
  ).run('qa-revision-130',130,'FIREFIGHTER_AVIATION',1,'ACTIVE',
-  'QA_SYNTHETIC_NOT_APPROVED','qa-local-only','qa-profile-130',
+  'APPROVED_OPERATIONAL_POLICY','qa-fictional-approval-source','qa-profile-130',
   'QA_POLICY_NOT_APPROVED','2020-01-01',null,null,
   'Fixture only; no independent scientific review',null,'2020-01-01');
  const addParameter=sqlite.prepare(
@@ -116,7 +115,9 @@ function fixture(){
   app.use('*',async(c,next)=>{
    c.env={DB:d1,ENVIRONMENT:environment,JWT_SECRET:jwtSecret,
     ENABLE_DEV_AUTH_BYPASS:'false',
-    BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID:gate};
+    BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID:gate,
+    BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256:'a'.repeat(64),
+    BOA_FRMS_QA_REVIEWED_REVISION_ID:'qa-revision-130'};
    return auth()(c,async()=>tenantMiddleware()(c,next));
   });
   app.onError(error=>new Response(JSON.stringify({success:false,
@@ -135,7 +136,9 @@ function fixture(){
  const as=(user,role,tenant=130,environment='staging',gate='130')=>{
   const app=new Hono();
   app.use('*',async(c,next)=>{
-   c.env={DB:d1,ENVIRONMENT:environment,BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID:gate};
+   c.env={DB:d1,ENVIRONMENT:environment,BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID:gate,
+    BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256:'a'.repeat(64),
+    BOA_FRMS_QA_REVIEWED_REVISION_ID:'qa-revision-130'};
    c.set('userId',user);c.set('userRole',role);c.set('empresaId',tenant);
    c.set('tenantContext',{empresaId:tenant,
     empresaCodigo:tenant===130?'bombeiros':'costadosol',
@@ -337,5 +340,39 @@ test('real FRMS regulatory evidence and parameters fail closed on absent or ambi
   assert.equal((await crew('POST','/checkin',checkin)).status,503,
    'incomplete revision must block without generic policy fallback');
   assert.equal(count(),0);
+ }finally{sqlite.close();}
+});
+
+test('QA document and scientific review bindings are mandatory before any health-event write',async()=>{
+ const {sqlite,as,actualAuth,realJwt,count}=fixture();
+ try {
+  const crew=as(101,'student');
+  sqlite.exec("UPDATE frms_regulatory_profiles SET source_document_hash=NULL WHERE id='qa-profile-130'");
+  assert.equal((await crew('POST','/checkin',checkin)).status,503);
+  assert.equal(count(),0);
+  sqlite.exec("UPDATE frms_regulatory_profiles SET source_document_hash='"+'b'.repeat(64)+"' WHERE id='qa-profile-130'");
+  assert.equal((await crew('POST','/checkin',checkin)).status,503);
+  assert.equal(count(),0);
+  sqlite.exec("UPDATE frms_regulatory_profiles SET source_document_hash='"+'a'.repeat(64)+"' WHERE id='qa-profile-130'");
+  sqlite.exec("UPDATE frms_regulatory_profiles SET approval_reference=NULL WHERE id='qa-profile-130'");
+  assert.equal((await crew('POST','/checkin',checkin)).status,503);
+  assert.equal(count(),0);
+  sqlite.exec("UPDATE frms_regulatory_profiles SET approval_reference='QA-FICTIONAL-APPROVAL' WHERE id='qa-profile-130'");
+  sqlite.exec("UPDATE frms_config_revisions SET source_type='QA_UNREVIEWED' WHERE id='qa-revision-130'");
+  assert.equal((await crew('POST','/checkin',checkin)).status,503);
+  assert.equal(count(),0);
+  sqlite.exec("UPDATE frms_config_revisions SET source_type='APPROVED_OPERATIONAL_POLICY' WHERE id='qa-revision-130'");
+  const jwt=await realJwt(101,'student',130);
+  const request=actualAuth('staging','130');
+  assert.equal((await request(jwt,'POST','/checkin',checkin)).status,201);
+  assert.equal(count(),2);
+  // Revoke documentary binding: no further sensitive case transitions allowed.
+  sqlite.exec("UPDATE frms_regulatory_profiles SET source_document_hash=NULL WHERE id='qa-profile-130'");
+  const manager=await realJwt(190,'manager',130);
+  const get=await request(manager,'GET','/casos?limit=5');
+  assert.equal(get.status,200,'sanitized case reads do not imply approved intake');
+  const id=(await request(jwt,'GET','/checkin/status')).status;
+  assert.equal(id,200);
+  assert.equal(count(),2);
  }finally{sqlite.close();}
 });
