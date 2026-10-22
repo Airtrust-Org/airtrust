@@ -248,13 +248,20 @@ jobs:
       # The preceding preflight verifies write/delete capability before D1 seeding.
       - run: npm ci --omit=dev --ignore-scripts
       - run: npm --prefix worker-airtrust ci
+      - name: Prepare exact run-owned R2 cleanup plan with read-only D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          QA_R2_PLAN_FILE: ${{ runner.temp }}/airtrust-f1-r2-${{ github.run_id }}.json
+          CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA: AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA
+        run: node scripts/staging/cleanup-qa-training-compliance-r2.mjs --prepare-plan --code="$QA_LIFECYCLE_CODE" --marker="$QA_LIFECYCLE_MARKER"
       - name: Delete only verified run-owned certificate PDF keys
         id: r2_cleanup
         continue-on-error: true
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_WORKER_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          QA_R2_PLAN_FILE: ${{ runner.temp }}/airtrust-f1-r2-${{ github.run_id }}.json
           CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA: AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA
         run: node scripts/staging/cleanup-qa-training-compliance-r2.mjs --apply --code="$QA_LIFECYCLE_CODE" --marker="$QA_LIFECYCLE_MARKER"
       - name: Soft-delete only this run's synthetic D1 artifacts
