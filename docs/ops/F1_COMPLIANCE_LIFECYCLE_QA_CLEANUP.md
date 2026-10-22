@@ -16,19 +16,29 @@ R2 no padrão
 `certificados/empresa-ID/funcionario-ID/historico-ID/UUID.pdf`.
 Não aceita prefix listing, delete geral por tenant, chave arbitrária nem mais de
 16 certificados. Primeiro valida **todos** os candidatos, depois executa
-`HeadObject` → `DeleteObject` → `HeadObject` por chave, abortando se
-existir objeto residual. O script é dry-run por padrão; `--apply` só opera
-com confirmação literal no ambiente oficial e credenciais dedicadas.
+GET com `Range: bytes=0-0` (sem conservar o conteúdo) → DELETE → GET
+para cada chave REST Cloudflare, abortando se existir objeto residual.
+O script é dry-run por padrão; `--apply` só opera com confirmação literal
+no ambiente oficial e token existente do GitHub Environment `staging`.
 
-**Pré-condição administrativa da F0**: antes de semear a fixture, configurar
-no GitHub environment protegido `staging` exatamente
-`QA_LIFECYCLE_R2_ACCESS_KEY_ID` e
-`QA_LIFECYCLE_R2_SECRET_ACCESS_KEY`, credenciais S3 R2 de escopo restrito
-ao bucket **staging** com GetObject/HeadObject/DeleteObject. Não usar chave de
-produção nem token global. Revisar ACL efetiva (o código ainda impõe
-propriedade por tenant/curso/histórico). O job valida a existência das duas
-credenciais antes de qualquer seed. Se não estiverem configuradas, falha
-sem D1 write.
+**Pré-condição administrativa da F0**: reutilizar somente
+`CLOUDFLARE_WORKER_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` já existentes
+no GitHub Environment `staging`; não copiar secrets de produção ou
+emitir novas chaves S3 para esse fluxo. Esse token necessita permissão
+R2 de leitura/escrita sobre `airtrust-storage-staging`, que deve ser
+**comprovada** antes de semear D1: o workflow cria um pequeno objeto
+descartável sob `__airtrust_qa_preflight__/compliance/<run-id>/capability.txt`,
+lê, remove e exige readback 404. Se escrever ou excluir falhar, o workflow
+para antes da fixture. A prova não altera PDFs reais. O canário é limitado
+ao ID da execução, e qualquer falha em excluir seu objeto bloqueia o seed.
+
+No cleanup, mesmo que o token possua escopo de conta mais amplo, o código
+só aceita chaves de PDF cujo proprietário tenha sido comprovado pela
+consulta D1 parametrizada para o marcador/tenant/usuário dessa execução.
+Não há listagem de prefixo nem exclusão por lote. Uma operação REST
+negada bloqueia o QA, sem fallback para credencial de produção.
+A disponibilidade do token **não dispensa** a autorização governada do
+workflow, a proteção de staging, a confirmação e o mutex.
 
 ## Ordem de compensação / falhas
 
@@ -62,8 +72,9 @@ V2 e autorização independente; não declarar `0 D1 rows` nesse caso.
 Teste SQLite executa o SQL real do rollback com triggers de imutabilidade,
 incluindo tenant real e segundo usuário QA não pertencente à execução;
 exige zero documentos/pasta/ciclos *ativos* de fixture, enquanto registros
-históricos e alheios continuam intactos. Mock R2 prova dry-run,
-ownership, leitura após delete, falha intermediária, retry e idempotência.
+históricos e alheios continuam intactos. Mock R2 prova dry-run, ownership, leitura após delete, falha intermediária,
+retry e idempotência. Teste REST adicional prova canário por run, escrita,
+leitura parcial, DELETE, readback 404 e falha fechada no token sem permissão.
 
 **Limite:** estes testes não comprovam emissão real de certificado
 nem vencimento/renovação em staging. O workflow de lifecycle existente
