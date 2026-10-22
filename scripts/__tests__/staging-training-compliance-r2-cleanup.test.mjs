@@ -186,7 +186,7 @@ test('preflight is fail-closed if existing token cannot write to R2',async()=>{
   const r=fakeRest({denyWrites:true});
   await assert.rejects(()=>proveCloudflareR2CleanupCapability({accountId,token,runId:'39349812345',
     fetchImpl:r.fetchImpl}),/QA_R2_REST_WRITE_DENIED/);
-  assert.deepEqual(r.calls.map(x=>x.method),['PUT']);
+  assert.deepEqual(r.calls.map(x=>x.method),['PUT','DELETE']);
   assert.equal(r.keys.size,0);
 });
 
@@ -205,4 +205,21 @@ test('D1 plan is bound to exact run marker and ownership before R2-scoped cleanu
   assert.throws(()=>validateR2CleanupPlan({...plan,marker:marker+'1'},code,marker),/QA_R2_RUN_PLAN_INVALID/);
   assert.throws(()=>validateR2CleanupPlan({...plan,rows:[pdf(1),pdf(1)]},code,marker),/QA_PDF_DUPLICATE_KEY/);
   assert.throws(()=>validateR2CleanupPlan({...plan,rows:[pdf(1),{...pdf(2),tenant_code:'other'}]},code,marker),/QA_PDF_OWNER_MISMATCH/);
+});
+
+test('R2 canary is compensated if PUT persists remotely but the reply times out',async()=>{
+  const r=fakeRest();
+  const fetchImpl=async(url,opts)=>{
+    const response=await r.fetchImpl(url,opts);
+    if(opts.method==='PUT') throw Error('NETWORK_TIMEOUT_AFTER_WRITE');
+    return response;
+  };
+  await assert.rejects(
+    ()=>proveCloudflareR2CleanupCapability({
+      accountId,token,runId:'39349812345',fetchImpl,
+    }),
+    /NETWORK_TIMEOUT_AFTER_WRITE/,
+  );
+  assert.equal(r.keys.size,0,'canary must be deleted after an ambiguous PUT');
+  assert.deepEqual(r.calls.map(x=>x.method),['PUT','DELETE','GET']);
 });
