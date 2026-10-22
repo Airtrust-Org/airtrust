@@ -32,7 +32,9 @@ function appFor(options?: {
   const app = new Hono<{ Bindings: any; Variables: any }>();
   app.use('*', async (c, next) => {
     c.env = { DB: db, ENVIRONMENT: options?.env ?? 'staging',
-      BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID: options?.gate ?? '' };
+      BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID: options?.gate ?? '',
+      BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256: 'a'.repeat(64),
+      BOA_FRMS_QA_REVIEWED_REVISION_ID: 'qa-only' };
     c.set('userId', 200);
     c.set('userRole', options?.role ?? 'admin');
     c.set('tenantContext', {
@@ -55,11 +57,20 @@ describe('BOA read-only staging readiness, no clinical data or approval', () => 
     profile.mockReset().mockResolvedValue({
       empresaId: 130, profileCode: 'FIREFIGHTER_AVIATION',
       regulatoryProfileId: 'qa-unapproved-profile',
+      serviceCategory: 'QA_FIREFIGHTER_TEST',
+      approvalReference: 'QA-SYNTHETIC-REVIEW-ONLY',
+      policyVersion: 'QA_NOT_APPROVED',
+      sourceDocumentHash: 'a'.repeat(64),
     });
     policy.mockReset().mockResolvedValue({
       empresaId: 130, profileCode: 'FIREFIGHTER_AVIATION',
       regulatoryProfileId: 'qa-unapproved-profile',
-      revision: { id: 'qa-only', policy_version: 'QA_NOT_APPROVED' },
+      revision: { id: 'qa-only', policy_version: 'QA_NOT_APPROVED',
+        empresa_id: 130, profile_code: 'FIREFIGHTER_AVIATION',
+        regulatory_profile_id: 'qa-unapproved-profile',
+        source_type: 'APPROVED_OPERATIONAL_POLICY',
+        source_reference: 'QA-SYNTHETIC-SOURCE-ONLY',
+      },
     });
   });
 
@@ -73,6 +84,7 @@ describe('BOA read-only staging readiness, no clinical data or approval', () => 
       accounts: { member_accounts: 0, crew_links: 0, manager_roles: 0, admin_roles: 0 },
       cohort_130_structurally_present: false,
       firefighter_profile_configuration_resolves: true,
+      documentary_review_binding_matches: true,
       synthetic_tenant_write_gate_matches: false,
       scientific_validation: 'NOT_ATTESTED',
       privacy_authorization: 'NOT_ATTESTED',
@@ -94,6 +106,7 @@ describe('BOA read-only staging readiness, no clinical data or approval', () => 
     expect(body.data).toMatchObject({
       status: 'CONFIGURATION_CHECKS_PASSED_NOT_AUTHORIZED',
       cohort_130_structurally_present: true,
+      documentary_review_binding_matches: true,
       synthetic_tenant_write_gate_matches: true,
       official_boa_source: 'NOT_VERIFIED',
       scientific_validation: 'NOT_ATTESTED',
@@ -101,6 +114,26 @@ describe('BOA read-only staging readiness, no clinical data or approval', () => 
       real_d1_checkin: 'NOT_TESTED',
       operational_poc_accepted: false,
     });
+  });
+
+  it('never labels the cohort configured if independent review bindings are missing', async () => {
+    const { get } = appFor({
+      counts: { member_accounts: 130, crew_links: 125, manager_roles: 4, admin_roles: 1 },
+      gate: '130',
+    });
+    profile.mockResolvedValueOnce({
+      empresaId: 130, profileCode: 'FIREFIGHTER_AVIATION',
+      regulatoryProfileId: 'qa-unapproved-profile',
+      serviceCategory: 'QA_FIREFIGHTER_TEST',
+      approvalReference: null, policyVersion: 'QA_NOT_APPROVED',
+      sourceDocumentHash: null,
+    });
+    const response = await get();
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, unknown> };
+    expect(body.data.documentary_review_binding_matches).toBe(false);
+    expect(body.data.status).toBe('QA_PRECONDITIONS_INCOMPLETE');
+    expect(body.data.operational_poc_accepted).toBe(false);
   });
 
   it('rejects other tenant, unsupported role and production before any SQL', async () => {
