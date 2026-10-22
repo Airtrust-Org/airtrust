@@ -73,10 +73,10 @@ async function run(name,type){
   result.requiredContent='PASS';
   const baselineSuspend=readState(enrollment)?.suspend_data??null;
   for(const action of driver.resume.actions){
-   const e=sco.locator(action.selector);
-   if(action.op==='click')await e.click({timeout:20000});
-   else if(action.op==='fill')await e.fill(action.value,{timeout:20000});
-   else await e.press(action.value,{timeout:20000});
+   if(action.op==='click')await sco.locator(action.selector).click({timeout:20000});
+   else if(action.op==='fill')await sco.locator(action.selector).fill(action.value,{timeout:20000});
+   else if(action.op==='click_text')
+    await sco.getByRole('button',{name:action.value,exact:true}).click({timeout:20000});
   }
   let previous;
   for(let i=0;i<35;i++){

@@ -25,6 +25,9 @@ SAFE_EXT = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp3', '.wav', '.mp4', '.
 JS_JSON_ASSIGNMENT = re.compile(
     r'^\s*window\.(?:COURSE_DATA|AIRTRUST_COURSE_MODEL)\s*=\s*', re.DOTALL,
 )
+F5_JSON_ASSIGNMENT = re.compile(
+    r'^\s*window\.AIRTRUST_F5_MODEL\s*=\s*', re.DOTALL,
+)
 
 
 class ConversionError(ValueError):
@@ -42,7 +45,7 @@ def safe_member_name(name: str) -> str:
     return str(path)
 
 
-def source_json(archive: ZipFile, name: str) -> dict | None:
+def source_json(archive: ZipFile, name: str, *, assignment=JS_JSON_ASSIGNMENT) -> dict | None:
     try:
         info = archive.getinfo(name)
     except KeyError:
@@ -51,10 +54,10 @@ def source_json(archive: ZipFile, name: str) -> dict | None:
         raise ConversionError('SOURCE_MODEL_OVERSIZE')
     data = archive.read(info).decode('utf-8-sig').strip()
     if name.endswith('.js'):
-        assignment = JS_JSON_ASSIGNMENT.match(data)
-        if not assignment:
+        match = assignment.match(data)
+        if not match:
             raise ConversionError('SOURCE_MODEL_NOT_JSON_ASSIGNMENT')
-        data = data[assignment.end():].strip().rstrip(';').strip()
+        data = data[match.end():].strip().rstrip(';').strip()
     try:
         result = json.loads(data)
     except json.JSONDecodeError as exc:
@@ -82,6 +85,18 @@ def extract_draft(source: Path, destination: Path) -> dict:
                 indexed[name] = entry
             if 'imsmanifest.xml' not in indexed:
                 raise ConversionError('MISSING_SCORM_MANIFEST')
+            f5_model = source_json(
+                archive, 'airtrust-course-data.js', assignment=F5_JSON_ASSIGNMENT,
+            )
+            completion = source_json(archive, 'airtrust-completion-manifest.json')
+            if isinstance(f5_model, dict) and f5_model.get('schema') == 'AIRTRUST_UNIFIED_SCORE_SCORM12_V1':
+                assessment = completion.get('assessment') if isinstance(completion, dict) else None
+                if (isinstance(completion, dict) and
+                    completion.get('engineId') == 'AIRTRUST_UNIFIED_SCORE_SCORM12_V1' and
+                    isinstance(assessment, dict) and assessment.get('mode') == 'EXTERNAL' and
+                    assessment.get('scoringBySCORM') is False):
+                    raise ConversionError('EXTERNAL_SCORE_SCORM_REQUIRES_SCORM_PLAYER')
+                raise ConversionError('UNREVIEWED_F5_SCORE_AUTHORING_MODEL')
             model = source_json(archive, 'course-model.js')
             data = source_json(archive, 'course_data.js')
             if model is None and data is None:
@@ -111,7 +126,6 @@ def extract_draft(source: Path, destination: Path) -> dict:
             )
             if not all(isinstance(value, str) and value.strip() for value in (course_id, title, version)):
                 raise ConversionError('MISSING_ID_TITLE_VERSION')
-            completion = source_json(archive, 'airtrust-completion-manifest.json')
             media = []
             for name, entry in indexed.items():
                 if PurePosixPath(name).suffix.lower() not in SAFE_EXT:

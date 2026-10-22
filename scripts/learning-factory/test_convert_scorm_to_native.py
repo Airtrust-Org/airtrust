@@ -27,6 +27,31 @@ def example_zip(path, *, slides=None, source='window.COURSE_DATA = ', malicious=
 
 
 class NativeImportTests(unittest.TestCase):
+    def test_external_f5_score_package_is_directed_to_scorm_player(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, dest = Path(tmp)/'course.zip', Path(tmp)/'native'
+            model = {'schema':'AIRTRUST_UNIFIED_SCORE_SCORM12_V1',
+                     'courseId':'nr20', 'edition':'v1', 'title':'NR-20',
+                     'slides':[{'id':'nr20_01','kind':'lesson','title':'NR-20'}]}
+            completion = {
+                'schemaVersion':1, 'scormVersion':'1.2',
+                'engineId':'AIRTRUST_UNIFIED_SCORE_SCORM12_V1',
+                'assessment':{'mode':'EXTERNAL','scoringBySCORM':False,
+                              'requiredInteractions':[]},
+                'completion':{'passStatusFromSCORM':False,
+                              'workerApprovalRequired':True},
+            }
+            with ZipFile(source,'w') as archive:
+                archive.writestr('imsmanifest.xml','<manifest/>')
+                archive.writestr('airtrust-course-data.js',
+                    'window.AIRTRUST_F5_MODEL = '+json.dumps(model)+';')
+                archive.writestr('airtrust-completion-manifest.json',json.dumps(completion))
+            with self.assertRaisesRegex(
+                ConversionError,'EXTERNAL_SCORE_SCORM_REQUIRES_SCORM_PLAYER'
+            ):
+                extract_draft(source,dest)
+            self.assertFalse(dest.exists())
+
     def test_extract_preserves_content_media_and_never_marks_publishable(self):
         with tempfile.TemporaryDirectory() as tmp:
             source, dest = Path(tmp)/'course.zip', Path(tmp)/'native'
