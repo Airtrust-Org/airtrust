@@ -22,7 +22,7 @@ const routes=new Hono<{Bindings:Env}>();
 const MAX_BODY=48*1024;
 
 routes.use('*',async(c,next)=>{
-  const flag=(c.env as unknown as Record<string,unknown>)['LMS_EXAM_QUESTION_ADMIN_STAGING'];
+  const flag=Reflect.get(c.env, 'LMS_EXAM_QUESTION_ADMIN_STAGING');
   if(c.env.ENVIRONMENT!=='staging' || flag!=='REVIEWED_SCHEMA_ONLY'){
     return c.json({success:false,code:'QUESTION_BANK_NOT_ACTIVATED'},503);
   }
