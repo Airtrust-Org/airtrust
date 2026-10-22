@@ -22,6 +22,11 @@ export default function BombeirosFrmsPage() {
   const { empresas, empresaAtualId } = useAuth();
   const active = empresas.find(item => item.id === empresaAtualId);
   const allowed = isBombeirosPortalTenant(active);
+  // The QA source preflight is intentionally absent from production UI.
+  // Backend staging+role+tenant checks remain the actual authorization.
+  const qaPreflightVisible = import.meta.env.DEV
+    || (import.meta.env.VITE_API_URL === 'https://airtrust-api-staging.airtrust.workers.dev/api'
+      && import.meta.env.VITE_DEV_PROXY_TARGET === 'https://airtrust-api-staging.airtrust.workers.dev');
   return (
     <AppLayout>
       <main className="space-y-5 p-2">
@@ -64,7 +69,7 @@ export default function BombeirosFrmsPage() {
                 consulta somente consolidados, sem visualizar informações pessoais de saúde.
               </p>
             </section>
-            <BombeirosDutySourcePreflight />
+            {qaPreflightVisible && <BombeirosDutySourcePreflight />}
             <BombeirosWorkforcePanel />
             <BombeirosMonthlyReportPreview />
             <p className="text-sm text-slate-600">
