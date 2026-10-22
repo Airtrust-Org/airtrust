@@ -10,6 +10,7 @@ import AppLayout from '@/react-app/components/AppLayout';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import BombeirosMonthlyReportPreview from './BombeirosMonthlyReportPreview';
 import BombeirosWorkforcePanel from './BombeirosWorkforcePanel';
+import BombeirosDutySourcePreflight from './BombeirosDutySourcePreflight';
 
 export function isBombeirosPortalTenant(
   empresa: { id: number; codigo: string } | null | undefined,
@@ -63,6 +64,7 @@ export default function BombeirosFrmsPage() {
                 consulta somente consolidados, sem visualizar informações pessoais de saúde.
               </p>
             </section>
+            <BombeirosDutySourcePreflight />
             <BombeirosWorkforcePanel />
             <BombeirosMonthlyReportPreview />
             <p className="text-sm text-slate-600">
