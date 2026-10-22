@@ -138,17 +138,19 @@ export async function proveCloudflareR2CleanupCapability({
     throw Error('QA_R2_PREFLIGHT_RUN_ID_INVALID');
   const key = '__airtrust_qa_preflight__/compliance/' + runId + '/capability.txt';
   const storage = createCloudflareR2Storage({accountId, token, fetchImpl});
-  let uploaded = false;
+  // A failed/timed-out PUT may already have persisted the object remotely.
+  // Record the attempt BEFORE awaiting it, and always compensate that exact key.
+  let attempted = false;
   try {
+    attempted = true;
     await storage.writeCanary(key, 'AIRTRUST_QA_R2_PREFLIGHT_' + runId);
-    uploaded = true;
     if (!await storage.exists(key)) throw Error('QA_R2_PREFLIGHT_WRITE_NOT_VISIBLE');
     await storage.delete(key);
     if (await storage.exists(key)) throw Error('QA_R2_PREFLIGHT_DELETE_NOT_VERIFIED');
-    uploaded = false;
+    attempted = false;
     return { result: 'PASS', capability: 'R2_REST_READ_WRITE_DELETE', runId };
   } finally {
-    if (uploaded) {
+    if (attempted) {
       // A failed preflight MUST NOT continue to the synthetic D1 fixture.
       await storage.delete(key);
       if (await storage.exists(key)) throw Error('QA_R2_PREFLIGHT_CANARY_REMAINS');
