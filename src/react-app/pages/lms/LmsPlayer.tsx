@@ -1214,10 +1214,10 @@ export default function LmsPlayer() {
       </header>
 
       {newEditionRequired && editionMismatch && !effectiveReviewMode && (
-        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100">
+        <div className="flex w-full shrink-0 flex-col items-stretch gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100 sm:flex-row sm:items-start">
           <AlertTriangle className="h-5 w-5 shrink-0 text-amber-300" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Nova edição do curso — matrícula anterior incompatível</p>
+          <div className="w-full min-w-0 flex-1 break-words sm:w-auto" style={{ overflowWrap: 'anywhere' }}>
+            <p className="text-sm font-semibold">Nova edição do curso — progresso em reconciliação</p>
             <p className="text-xs text-amber-200/90">
               {editionMismatch.reason === 'PACKAGE_VERSION_CHANGED' || editionMismatch.reason === 'SLIDE_IDS_CHANGED'
                 ? 'A versão ou a identidade das unidades mudou, mesmo que a quantidade de telas seja igual. '
@@ -1236,7 +1236,7 @@ export default function LmsPlayer() {
               {startingNewEdition ? 'Preparando novo ciclo...' : 'Iniciar nova edição'}
             </button>
           ) : (
-            <span className="text-xs font-medium">Solicite nova matrícula à Gerência de Treinamento.</span>
+            <span className="block w-full min-w-0 break-words text-xs font-medium sm:w-auto">Solicite à Gerência de Treinamento a análise de continuidade da sua matrícula.</span>
           )}
         </div>
       )}
@@ -1266,7 +1266,7 @@ export default function LmsPlayer() {
             ) : null}
 
             {newEditionRequired && !effectiveReviewMode ? (
-              <div role="alert" className="absolute inset-0 flex items-center justify-center bg-slate-950 px-8 text-center">
+              <div role="alert" className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-slate-950 px-4 py-6 text-center sm:px-8">
                 <div className="max-w-lg space-y-3 text-white">
                   <AlertTriangle className="mx-auto h-9 w-9 text-amber-300" />
                   <p className="text-base font-semibold">Treinamento temporariamente bloqueado para preservar o progresso anterior</p>
