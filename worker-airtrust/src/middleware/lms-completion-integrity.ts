@@ -11,6 +11,7 @@ import {
 import { extractScormLocationFromCmiJson, mergeMonotonicNumber, mergeScormRuntimeState } from '../services/lms-progress-guardrails';
 import { evaluateScormClosureReadiness } from '../services/lms-matricula-runtime-domain';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
+import { resolveScormEnrollmentEdition } from '../services/lms-scorm-enrollment-edition';
 import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-guard';
 import { activeXapiFirst } from '../services/lms-active-xapi-read';
 import { isEligibleForHistoricEditionCredit } from '../lib/lms/lms-historical-edition-admin-credit';
@@ -26,6 +27,7 @@ type EnrollmentEvidenceRow = {
   status: string;
   progresso_pct: number | null;
   data_inicio: string | null;
+  cycle_started_at: string | null;
   qualificacao_historico_id: number | null;
   curso_id: number;
   tipo_conteudo: string | null;
@@ -35,6 +37,7 @@ type EnrollmentEvidenceRow = {
   scorm_assessment_policy: 'SCORED' | 'FORMATIVE';
   scorm_package_r2_prefix: string | null;
   scorm_launch_file: string | null;
+  scorm_versao: string | null;
   gerar_qualificacao_ao_concluir: number;
   lesson_status: string | null;
   completion_status: string | null;
@@ -114,13 +117,19 @@ async function hasValidAssetSession(
   row: EnrollmentEvidenceRow,
 ): Promise<boolean> {
   const payload = await readCourseAssetSessionPayload(c.env, c.req.raw);
-  return payload
-    ? assetSessionMatchesEnrollment(payload, {
+  if (!payload || !assetSessionMatchesEnrollment(payload, {
         empresaId: row.empresa_id,
         cursoId: row.curso_id,
         matriculaId: row.id,
-      })
-    : false;
+      })) return false;
+  if (normalizeStatus(row.tipo_conteudo) !== 'scorm') return true;
+  const edition = await resolveScormEnrollmentEdition({
+    db: c.env.DB, empresaId: row.empresa_id, cursoId: row.curso_id,
+    cycleStartedAt: row.cycle_started_at, currentPrefix: row.scorm_package_r2_prefix,
+    currentLaunchFile: row.scorm_launch_file, currentScormVersion: row.scorm_versao,
+  });
+  return edition.status !== 'UNRESOLVED' &&
+    (payload.asset_scorm_package_prefix ?? null) === (edition.r2Prefix ?? null);
 }
 
 async function readEnrollmentEvidence(
@@ -130,9 +139,13 @@ async function readEnrollmentEvidence(
 ): Promise<EnrollmentEvidenceRow | null> {
   return activeXapiFirst<EnrollmentEvidenceRow>(db,
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.data_inicio,
+              COALESCE((SELECT cy.data_matricula FROM lms_matricula_ciclos cy
+                         WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+                           AND cy.curso_id=m.curso_id AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+                         ORDER BY cy.id DESC LIMIT 1), m.data_matricula, m.data_inicio, m.created_at) AS cycle_started_at,
               m.qualificacao_historico_id,
               c.id AS curso_id, c.tipo_conteudo, c.ativo, c.publicado,
-              c.scorm_mastery_score, c.scorm_assessment_policy, c.scorm_package_r2_prefix, c.scorm_launch_file,
+              c.scorm_mastery_score, c.scorm_assessment_policy, c.scorm_package_r2_prefix, c.scorm_launch_file, c.scorm_versao,
               c.gerar_qualificacao_ao_concluir,
               p.lesson_status, p.completion_status, p.success_status,
               p.score_raw, p.score_min, p.score_max, p.score_scaled,
@@ -152,6 +165,35 @@ async function readEnrollmentEvidence(
           AND m.empresa_id = ?
           AND m.deleted_at IS NULL
         LIMIT 1`, [matriculaId, empresaId]);
+}
+
+async function detectEnrollmentEditionMismatch(
+  c: Context<LmsIntegrityContext>,
+  row: EnrollmentEvidenceRow,
+) {
+  if (normalizeStatus(row.tipo_conteudo) !== 'scorm') {
+    return detectLmsEditionMismatch({
+      bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
+      activePrefix: row.scorm_package_r2_prefix, empresaId: row.empresa_id, cursoId: row.curso_id,
+      cmiJson: row.cmi_json, suspendData: row.suspend_data, db: c.env.DB,
+      enrollmentStartedAt: row.cycle_started_at,
+    });
+  }
+  const edition = await resolveScormEnrollmentEdition({
+    db: c.env.DB, empresaId: row.empresa_id, cursoId: row.curso_id,
+    cycleStartedAt: row.cycle_started_at, currentPrefix: row.scorm_package_r2_prefix,
+    currentLaunchFile: row.scorm_launch_file, currentScormVersion: row.scorm_versao,
+  });
+  if (edition.status === 'UNRESOLVED') {
+    return { required: true as const, previous_total: 0, active_total: 0,
+      reason: 'EDITION_HISTORY_UNAVAILABLE' as const };
+  }
+  return detectLmsEditionMismatch({
+    bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
+    activePrefix: edition.r2Prefix ?? null, empresaId: row.empresa_id, cursoId: row.curso_id,
+    cmiJson: row.cmi_json, suspendData: row.suspend_data, db: c.env.DB,
+    enrollmentStartedAt: row.cycle_started_at,
+  });
 }
 
 function scorePctFromValues(raw: unknown, max: unknown, scaled: unknown, min?: unknown): number | null {
@@ -403,12 +445,7 @@ async function guardScormCommit(
   }
   const nativeBlocked = await nativeLegacyCompletionBlocked(c, row);
   if (nativeBlocked) return nativeBlocked;
-  const edition = await detectLmsEditionMismatch({
-    bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
-    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
-    cmiJson: row.cmi_json,
-    suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
-  });
+  const edition = await detectEnrollmentEditionMismatch(c, row);
   if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
     'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
     { matricula_id: matriculaId, edition_mismatch: edition });
@@ -568,12 +605,7 @@ async function guardManualFinalize(
   const nativeBlocked = await nativeLegacyCompletionBlocked(c, row);
   if (nativeBlocked) return nativeBlocked;
   if (String(row.status).toUpperCase() === 'CONCLUIDO') return null;
-  const edition = await detectLmsEditionMismatch({
-    bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
-    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
-    cmiJson: row.cmi_json,
-    suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
-  });
+  const edition = await detectEnrollmentEditionMismatch(c, row);
   if (edition) return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
     'Esta matrícula pertence a uma edição anterior. Inicie um novo ciclo antes da conclusão.',
     { matricula_id: matriculaId, edition_mismatch: edition });
@@ -654,12 +686,7 @@ async function guardAdministrativeStatus(
   }
   if (requestedStatus !== 'CONCLUIDO') return null;
   if (String(row.status).toUpperCase() !== 'CONCLUIDO') {
-    const edition = await detectLmsEditionMismatch({
-      bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
-      activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
-      cmiJson: row.cmi_json,
-    suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
-    });
+    const edition = await detectEnrollmentEditionMismatch(c, row);
     if (edition) {
       // Managerial attestation is historical training credit, NOT a SCORM pass
       // for the new edition. Finite tenant-6 enrollment/course allowlist,

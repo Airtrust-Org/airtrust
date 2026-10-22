@@ -82,6 +82,7 @@ import {
 import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '../repositories/lms-matricula-queries';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
+import { resolveScormEnrollmentEdition } from '../services/lms-scorm-enrollment-edition';
 import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard';
 import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
 import { activeXapiFirst } from '../services/lms-active-xapi-read';
@@ -478,6 +479,10 @@ app.get('/:id', async (c) => {
     .prepare(
       `
       SELECT m.*, c.titulo, c.tipo_conteudo, c.scorm_versao, c.scorm_launch_file, c.scorm_package_r2_prefix,
+          COALESCE((SELECT cy.data_matricula FROM lms_matricula_ciclos cy
+                     WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+                       AND cy.curso_id=m.curso_id AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+                     ORDER BY cy.id DESC LIMIT 1), m.data_matricula, m.data_inicio, m.created_at) AS cycle_started_at,
           c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
           qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
           qt.validade AS qualificacao_validade, qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes, h.id AS h5p_conteudo_id,
@@ -595,8 +600,26 @@ app.get('/:id', async (c) => {
   const scormClosureReadiness = tipoConteudo === 'scorm'
     ? buildPersistedScormClosureReadiness(matricula, progressoScorm)
     : null;
-  const editionMismatch = await detectLmsEditionMismatch({
-    bucket: c.env.BUCKET, contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo, activePrefix: matricula.scorm_package_r2_prefix, empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data, db, enrollmentStartedAt: matricula.data_inicio });
+  const editionSelection = tipoConteudo === 'scorm'
+    ? await resolveScormEnrollmentEdition({
+        db, empresaId, cursoId: Number(matricula.curso_id),
+        cycleStartedAt: matricula.cycle_started_at,
+        currentPrefix: String(matricula.scorm_package_r2_prefix ?? '') || null,
+        currentLaunchFile: String(matricula.scorm_launch_file ?? '') || null,
+        currentScormVersion: String(matricula.scorm_versao ?? '') || null,
+      })
+    : null;
+  const editionMismatch = editionSelection?.status === 'UNRESOLVED'
+    ? { required: true as const, previous_total: 0, active_total: 0,
+        reason: 'EDITION_HISTORY_UNAVAILABLE' as const }
+    : await detectLmsEditionMismatch({
+        bucket: c.env.BUCKET,
+        contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo,
+        activePrefix: editionSelection?.r2Prefix ?? (String(matricula.scorm_package_r2_prefix ?? '') || null),
+        empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json,
+        suspendData: progressoScorm?.suspend_data, db,
+        enrollmentStartedAt: String(matricula.cycle_started_at ?? matricula.data_inicio ?? ''),
+      });
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: matricula.status as string | null,
     progressoBruto: matricula.progresso_pct as number | null,

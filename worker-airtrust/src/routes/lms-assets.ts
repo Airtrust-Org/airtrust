@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { ApiError } from '../middleware/error-handler';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
+import { resolveScormEnrollmentEdition } from '../services/lms-scorm-enrollment-edition';
 import { registerScormCandidateQaRoutes } from './lms-scorm-candidate-qa';
 import { guessMime, normalizeR2Path, appendCacheBusterToRelativeAssetRefs } from './lms-scorm-asset-paths';
 export { guessMime } from './lms-scorm-asset-paths';
@@ -257,11 +258,9 @@ async function resolveScormLaunchFile(
   return resolvedKey.startsWith(prefix) ? resolvedKey.slice(prefix.length) : launchFile;
 }
 
-// Course content is live-versioned: every enrollment opens the package currently
-// active on lms_cursos. Enrollment/cycle/progress history remains in its own LMS
-// records and must not pin the learner to a superseded package. Older asset tokens
-// may still carry asset_scorm_package_prefix during rollout; it is intentionally
-// ignored so activation takes effect for all learners immediately.
+// Versioned SCORM activations are resolved against the current cycle's
+// enrollment date. The signed asset token carries that exact server-selected
+// prefix; package activation cannot repin an existing learner mid-course.
 
 function isPreviewAllowedRole(rawRole: unknown): boolean {
   const role = String(rawRole ?? '')
@@ -473,7 +472,13 @@ app.post('/assets/session', auth(), async (c) => {
 
   if (matriculaId > 0) {
     const matricula = await c.env.DB.prepare(
-      `SELECT m.id, m.curso_id, m.funcionario_id, m.status, c.ativo, c.publicado, c.tipo_conteudo, c.scorm_package_r2_prefix
+      `SELECT m.id, m.curso_id, m.funcionario_id, m.status, m.data_inicio, m.data_matricula, m.created_at,
+              COALESCE((SELECT cy.data_matricula FROM lms_matricula_ciclos cy
+                         WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+                           AND cy.curso_id=m.curso_id AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+                         ORDER BY cy.id DESC LIMIT 1), m.data_matricula, m.data_inicio, m.created_at) AS cycle_started_at,
+              c.ativo, c.publicado, c.tipo_conteudo, c.scorm_package_r2_prefix,
+              c.scorm_launch_file, c.scorm_versao
            FROM lms_matriculas m
            JOIN lms_cursos c
              ON c.id = m.curso_id
@@ -489,10 +494,16 @@ app.post('/assets/session', auth(), async (c) => {
         curso_id: number;
         funcionario_id: number;
         status: string;
+        data_inicio: string | null;
+        data_matricula: string | null;
+        created_at: string | null;
+        cycle_started_at: string | null;
         ativo: number;
         publicado: number;
         tipo_conteudo: string | null;
         scorm_package_r2_prefix: string | null;
+        scorm_launch_file: string | null;
+        scorm_versao: string | null;
       }>();
 
     if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
@@ -512,6 +523,19 @@ app.post('/assets/session', auth(), async (c) => {
     cursoId = matricula.curso_id;
     scopedMatriculaId = matricula.id;
     scopedScormPackagePrefix = matricula.scorm_package_r2_prefix ?? undefined;
+    if (String(matricula.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm') {
+      const edition = await resolveScormEnrollmentEdition({
+        db: c.env.DB, empresaId, cursoId: matricula.curso_id,
+        cycleStartedAt: matricula.cycle_started_at,
+        currentPrefix: matricula.scorm_package_r2_prefix,
+        currentLaunchFile: matricula.scorm_launch_file,
+        currentScormVersion: matricula.scorm_versao,
+      });
+      if (edition.status === 'UNRESOLVED') {
+        throw new ApiError('A edição desta matrícula precisa de reconciliação antes da retomada', 409);
+      }
+      scopedScormPackagePrefix = edition.r2Prefix;
+    }
   } else if (preview && requestedCursoId > 0) {
     if (!isPreviewAllowedRole(accessPayload.role)) {
       throw new ApiError('Acesso negado', 403);
@@ -797,12 +821,49 @@ app.get('/scorm/assets/:empresa_id/:curso_id/*', async (c) => {
   );
   const rangeHeader = c.req.header('range');
 
+  let activePrefix = cursoAccess.scorm_package_r2_prefix;
+  const tokenMatriculaId = Number(payload.asset_matricula_id ?? 0);
+  if (tokenMatriculaId > 0) {
+    const enrollment = await c.env.DB.prepare(
+      `SELECT m.id, m.funcionario_id, m.empresa_id, m.curso_id, m.data_inicio, m.data_matricula, m.created_at,
+              COALESCE((SELECT cy.data_matricula FROM lms_matricula_ciclos cy
+                         WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+                           AND cy.curso_id=m.curso_id AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+                         ORDER BY cy.id DESC LIMIT 1), m.data_matricula, m.data_inicio, m.created_at) AS cycle_started_at,
+              c.scorm_package_r2_prefix, c.scorm_launch_file, c.scorm_versao
+         FROM lms_matriculas m JOIN lms_cursos c
+           ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
+        WHERE m.id=? AND m.empresa_id=? AND m.curso_id=? AND m.deleted_at IS NULL
+        LIMIT 1`,
+    ).bind(tokenMatriculaId, Number(empresaId), Number(cursoId)).first<{
+      id: number; funcionario_id: number; empresa_id: number; curso_id: number;
+      data_inicio: string | null; data_matricula: string | null; created_at: string | null;
+      cycle_started_at: string | null; scorm_package_r2_prefix: string | null;
+      scorm_launch_file: string | null; scorm_versao: string | null;
+    }>();
+    if (!enrollment || (!isPrivilegedRole(payload.role) &&
+        Number(payload.funcionario_id ?? 0) !== enrollment.funcionario_id)) {
+      throw new ApiError('Acesso negado', 403);
+    }
+    const edition = await resolveScormEnrollmentEdition({
+      db: c.env.DB, empresaId: Number(empresaId), cursoId: Number(cursoId),
+      cycleStartedAt: enrollment.cycle_started_at,
+      currentPrefix: enrollment.scorm_package_r2_prefix,
+      currentLaunchFile: enrollment.scorm_launch_file,
+      currentScormVersion: enrollment.scorm_versao,
+    });
+    if (edition.status === 'UNRESOLVED' ||
+        (payload.asset_scorm_package_prefix ?? null) !== (edition.r2Prefix ?? null)) {
+      throw new ApiError('A edição da matrícula mudou ou precisa de reconciliação', 409);
+    }
+    activePrefix = edition.r2Prefix ?? null;
+  }
   const { object, resolvedKey } = await resolveScormObject(
     c.env.BUCKET,
     empresaId,
     cursoId,
     wildcard,
-    { activePrefix: cursoAccess.scorm_package_r2_prefix },
+    { activePrefix },
   );
   if (!object) {
     return c.text('Not found', 404);
@@ -992,7 +1053,11 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   const matricula = await db
     .prepare(
       `
-      SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.data_inicio,
+      SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.data_inicio, m.data_matricula, m.created_at,
+        COALESCE((SELECT cy.data_matricula FROM lms_matricula_ciclos cy
+                   WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+                     AND cy.curso_id=m.curso_id AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+                   ORDER BY cy.id DESC LIMIT 1), m.data_matricula, m.data_inicio, m.created_at) AS cycle_started_at,
         c.id AS curso_id, c.titulo, c.scorm_versao, c.tipo_conteudo,
         c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado
       FROM lms_matriculas m
@@ -1007,6 +1072,9 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       empresa_id: number;
       status: string;
       data_inicio: string | null;
+      data_matricula: string | null;
+      created_at: string | null;
+      cycle_started_at: string | null;
       curso_id: number;
       titulo: string;
       scorm_versao: string | null;
@@ -1033,15 +1101,28 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     }
   }
   await assertScormAssetRouteAllowed(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo, 'Curso nativo exige o player próprio.');
-  if (!matricula.scorm_launch_file)
+  const edition = await resolveScormEnrollmentEdition({
+    db, empresaId, cursoId: matricula.curso_id,
+    cycleStartedAt: matricula.cycle_started_at,
+    currentPrefix: matricula.scorm_package_r2_prefix,
+    currentLaunchFile: matricula.scorm_launch_file,
+    currentScormVersion: matricula.scorm_versao,
+  });
+  if (edition.status === 'UNRESOLVED') {
+    throw new ApiError('A edição original desta matrícula não pôde ser identificada com segurança', 409);
+  }
+  const selectedPrefix = edition.r2Prefix ?? null;
+  const selectedLaunchFile = edition.launchFile ?? matricula.scorm_launch_file;
+  const selectedScormVersion = edition.scormVersion ?? matricula.scorm_versao;
+  if (!selectedLaunchFile)
     throw new ApiError('Este curso não tem conteúdo SCORM configurado', 400);
 
   const resolvedLaunchFile = await resolveScormLaunchFile(
     c.env.BUCKET,
     matricula.empresa_id,
     matricula.curso_id,
-    matricula.scorm_launch_file,
-    { activePrefix: matricula.scorm_package_r2_prefix },
+    selectedLaunchFile,
+    { activePrefix: selectedPrefix },
   );
   if (!resolvedLaunchFile) {
     throw new ApiError('Arquivo inicial do pacote SCORM não foi encontrado no storage', 404);
@@ -1051,7 +1132,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   const commitUrl = '/api/lms/matriculas/scorm/commit';
 
   // Versão SCORM: 1.2 ou 2004
-  const isScorm2004 = matricula.scorm_versao === '2004';
+  const isScorm2004 = selectedScormVersion === '2004';
   const progressoScorm = await db
     .prepare(
       `SELECT suspend_data, cmi_json
@@ -1064,10 +1145,10 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
 
   if (matricula.status !== 'CONCLUIDO') {
     const mismatch = await detectLmsEditionMismatch({
-      bucket: c.env.BUCKET, db, contentType: 'scorm', activePrefix: matricula.scorm_package_r2_prefix,
+      bucket: c.env.BUCKET, db, contentType: 'scorm', activePrefix: selectedPrefix,
       empresaId, cursoId: matricula.curso_id,
       cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data,
-      enrollmentStartedAt: matricula.data_inicio,
+      enrollmentStartedAt: matricula.cycle_started_at,
     });
     if (mismatch) throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
   }

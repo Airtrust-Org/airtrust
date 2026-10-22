@@ -1,8 +1,6 @@
 /**
- * Regression tests for SCORM asset resolution correctly honoring the
- * course's current active package prefix (lms_cursos.scorm_package_r2_prefix)
- * instead of falling back to an unordered R2 bucket listing across every
- * candidate a course has ever had.
+ * Regression tests for SCORM asset resolution retaining the edition selected
+ * by the enrollment cycle instead of following the course's newer package.
  *
  * Root cause (pre-fix): when the direct object key missed, resolveScormObject()
  * fell back to bucket.list({prefix: courseBasePrefix}) and picked the first
@@ -112,6 +110,7 @@ function createMultiCandidateBucket(
   } as unknown as R2Bucket;
 }
 
+const PACKAGE_SHA = 'a'.repeat(64);
 function createMockDb(scormPackageR2Prefix: string | null, enrollmentStatus = 'EM_ANDAMENTO') {
   return {
     prepare: vi.fn((query: string) => ({
@@ -126,12 +125,24 @@ function createMockDb(scormPackageR2Prefix: string | null, enrollmentStatus = 'E
             };
           }
           if (query.includes('FROM lms_matriculas')) {
-            return { id: 1, status: enrollmentStatus };
+            return {
+              id: 346, status: enrollmentStatus, funcionario_id: 42, empresa_id: EMPRESA_ID,
+              curso_id: CURSO_ID, cycle_started_at: '2026-07-01T00:00:00Z',
+              scorm_package_r2_prefix: scormPackageR2Prefix,
+              scorm_launch_file: 'index.html', scorm_versao: '1.2',
+            };
           }
           return null;
         },
         run: async () => ({ meta: { changes: 1, last_row_id: 0 } }),
-        all: async () => ({ results: [] }),
+        all: async () => ({ results: query.includes('lms_scorm_package_audit_log') ? [
+          { package_id: 'old', package_sha256: PACKAGE_SHA, r2_prefix: SUPERSEDED_PREFIX,
+            launch_file: 'index.html', scorm_versao: '1.2', package_status: 'SUPERSEDED',
+            activated_at: '2026-06-01T00:00:00Z' },
+          { package_id: 'active', package_sha256: 'b'.repeat(64), r2_prefix: ACTIVE_PREFIX,
+            launch_file: 'index.html', scorm_versao: '1.2', package_status: 'ACTIVE',
+            activated_at: '2026-09-01T00:00:00Z' },
+        ] : [] }),
       }),
       first: async () => null,
       run: async () => ({}),
@@ -176,7 +187,7 @@ describe('SCORM asset resolution — current active candidate prefix', () => {
     });
   });
 
-  it('ignores a stale matrícula package pin for an in-progress enrollment after the course activates a newer package', async () => {
+  it('keeps the superseded package selected for a cycle enrolled before the newer activation', async () => {
     verifyJWTMock.mockResolvedValue({
       empresa_id: EMPRESA_ID,
       funcionario_id: 42,
@@ -194,11 +205,10 @@ describe('SCORM asset resolution — current active candidate prefix', () => {
     const res = await getAsset(`/api/lms/scorm/assets/${EMPRESA_ID}/${CURSO_ID}/index.html`, env);
 
     expect(res.status).toBe(200);
-    expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${ACTIVE_PREFIX}index.html`);
-    expect(res.headers.get('X-LMS-Asset-Key')).not.toContain('12f7d6fd-old');
+    expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${SUPERSEDED_PREFIX}index.html`);
   });
 
-  it('ignores a stale matrícula package pin after the enrollment is completed', async () => {
+  it('keeps the historical package selected after the enrollment is completed', async () => {
     verifyJWTMock.mockResolvedValue({
       empresa_id: EMPRESA_ID,
       funcionario_id: 42,
@@ -216,8 +226,7 @@ describe('SCORM asset resolution — current active candidate prefix', () => {
     const res = await getAsset(`/api/lms/scorm/assets/${EMPRESA_ID}/${CURSO_ID}/index.html`, env);
 
     expect(res.status).toBe(200);
-    expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${ACTIVE_PREFIX}index.html`);
-    expect(res.headers.get('X-LMS-Asset-Key')).not.toContain('12f7d6fd-old');
+    expect(res.headers.get('X-LMS-Asset-Key')).toBe(`${SUPERSEDED_PREFIX}index.html`);
   });
 
   it('serves the file from the ACTIVE candidate prefix, not the lexicographically-first superseded one', async () => {

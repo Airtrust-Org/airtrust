@@ -267,7 +267,7 @@ export default function LmsPlayer({scormStudyOnly=false}:{scormStudyOnly?:boolea
     inferredPersistedLocationProgress ?? 0,
   );
   const editionMismatch = (matricula as (typeof matricula & {
-    edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' | 'PACKAGE_SHA_CHANGED' } | null;
+    edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' | 'PACKAGE_SHA_CHANGED' | 'EDITION_HISTORY_UNAVAILABLE' } | null;
   }) | undefined)?.edition_mismatch ?? null;
   const newEditionRequired = editionMismatch?.required === true;
   const isTenantAdmin = ['admin', 'administrador'].includes(
@@ -1228,17 +1228,25 @@ export default function LmsPlayer({scormStudyOnly=false}:{scormStudyOnly?:boolea
         <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100">
           <AlertTriangle className="h-5 w-5 shrink-0 text-amber-300" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Nova edição do curso — matrícula anterior incompatível</p>
+            <p className="text-sm font-semibold">
+              {editionMismatch.reason === 'EDITION_HISTORY_UNAVAILABLE'
+                ? 'Histórico da edição precisa de reconciliação'
+                : 'Nova edição do curso — matrícula anterior incompatível'}
+            </p>
             <p className="text-xs text-amber-200/90">
-              {editionMismatch.reason === 'PACKAGE_VERSION_CHANGED' || editionMismatch.reason === 'SLIDE_IDS_CHANGED'
-                ? 'A versão ou a identidade das unidades mudou, mesmo que a quantidade de telas seja igual. '
-                : `O pacote anterior registra ${editionMismatch.previous_total} unidades e a edição ativa exige ${editionMismatch.active_total}. `}
-              O progresso de {displayProgress}% pertence ao ciclo anterior e não representa o avanço
-              na nova edição. As evidências serão preservadas; não é permitido reaproveitar
-              automaticamente essa conclusão. É necessário iniciar um novo ciclo auditado.
+              {editionMismatch.reason === 'EDITION_HISTORY_UNAVAILABLE'
+                ? 'Não foi possível comprovar qual edição pertence a este ciclo. O progresso foi preservado; solicite a reconciliação pela equipe responsável antes de retomar.'
+                : editionMismatch.reason === 'PACKAGE_VERSION_CHANGED' || editionMismatch.reason === 'SLIDE_IDS_CHANGED'
+                  ? 'A versão ou a identidade das unidades mudou, mesmo que a quantidade de telas seja igual. '
+                  : `O pacote anterior registra ${editionMismatch.previous_total} unidades e a edição ativa exige ${editionMismatch.active_total}. `}
+              {editionMismatch.reason !== 'EDITION_HISTORY_UNAVAILABLE' && (
+                <>O progresso de {displayProgress}% pertence ao ciclo anterior e não representa o avanço
+                na nova edição. As evidências serão preservadas; não é permitido reaproveitar
+                automaticamente essa conclusão. É necessário iniciar um novo ciclo auditado.</>
+              )}
             </p>
           </div>
-          {isTenantAdmin ? (
+          {isTenantAdmin && editionMismatch.reason !== 'EDITION_HISTORY_UNAVAILABLE' ? (
             <button
               onClick={() => void startVerifiedNewEdition()}
               disabled={startingNewEdition}

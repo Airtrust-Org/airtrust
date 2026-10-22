@@ -7,6 +7,12 @@ vi.mock('../../lib/lms/lms-asset-session', () => ({
   readCourseAssetSessionPayload: vi.fn(async () => null),
   assetSessionMatchesEnrollment: vi.fn(() => false),
 }));
+vi.mock('../../services/lms-scorm-enrollment-edition', () => ({
+  resolveScormEnrollmentEdition: vi.fn(async (params: { currentPrefix: string | null; currentLaunchFile: string | null; currentScormVersion: string | null }) => ({
+    status: 'LEGACY', r2Prefix: params.currentPrefix ?? undefined,
+    launchFile: params.currentLaunchFile ?? undefined, scormVersion: params.currentScormVersion ?? undefined,
+  })),
+}));
 import { enforceLmsCompletionIntegrity } from '../../middleware/lms-completion-integrity';
 
 const row = {
