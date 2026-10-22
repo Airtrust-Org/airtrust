@@ -10,6 +10,10 @@ Validar o Pilot App em hardware real, contra um SHA exato já publicado em stagi
 
 Os testes automatizados de browser são complementares. Eles não substituem esta matriz física.
 
+## Vínculo com a publicação de produção
+
+O workflow oficial de produção valida a evidência física vinculada ao SHA publicado em staging antes de publicar Worker ou Pages. O SHA de staging precisa ser ancestral do release de produção, e o único arquivo que pode mudar entre eles é `docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json`; qualquer alteração de runtime ou outro delta bloqueia a publicação. Assim, o commit posterior que registra os resultados físicos não altera o código que foi homologado.
+
 ## Pré-condições
 
 - usar apenas staging;

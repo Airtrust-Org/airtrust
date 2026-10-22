@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import {requiredRows,requiredScenarios,verifyPilotRealDeviceEvidence as verify} from '../ci/pilot-real-device-evidence.mjs';
+import {requiredRows,requiredScenarios,verifyPilotRealDeviceEvidence as verify,verifyPilotProductionReleaseLineage as verifyProductionLineage} from '../ci/pilot-real-device-evidence.mjs';
 const sha='a'.repeat(40);
 function sample(){
  const scenarios=Object.fromEntries(requiredScenarios.map(s=>[s,'PASS']));
@@ -63,6 +63,19 @@ test('physical evidence rejects missing, placeholder or external Pages origin',(
  const offsite=sample();offsite.staging_pages_url='https://staging.airtrust.pages.dev.attacker.example/';
  assert.equal(verify(offsite,sha).ok,false);
 });
+
+test('production release requires the staged SHA ancestor and evidence-only delta',()=>{
+ const evidence=sample();
+ assert.equal(verifyProductionLineage({evidence,releaseSha:'b'.repeat(40),changedPaths:['docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json'],stagedShaIsAncestor:true}).ok,true);
+ assert.equal(verifyProductionLineage({evidence,releaseSha:'b'.repeat(40),changedPaths:['worker-airtrust/src/index.ts'],stagedShaIsAncestor:true}).ok,false);
+ assert.equal(verifyProductionLineage({evidence,releaseSha:'b'.repeat(40),changedPaths:['docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json'],stagedShaIsAncestor:false}).ok,false);
+});
+
+test('production Worker deploy invokes the exact Pilot acceptance lineage guard',()=>{
+ const workflow=readFileSync('.github/workflows/deploy-airtrust.yml','utf8');
+ assert.match(workflow,/name: Verify Pilot real-device acceptance for production release[\s\S]*?if: \$\{\{ inputs\.deploy_worker \|\| inputs\.deploy_pages \}\}[\s\S]*?node scripts\/ci\/pilot-production-release-guard\.mjs --release-sha/);
+});
+
 test('protocol documents the distinct staged SHA and later evidence commit',()=>{
  const protocol=readFileSync('docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_PROTOCOL.md','utf8');
  assert.ok(protocol.includes('commit de evidência'));

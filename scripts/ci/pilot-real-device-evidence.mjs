@@ -80,6 +80,24 @@ export function verifyPilotRealDeviceEvidence(evidence, releaseSha) {
   return { ok: errors.length === 0, errors };
 }
 
+export function verifyPilotProductionReleaseLineage({ evidence, releaseSha, changedPaths, stagedShaIsAncestor }) {
+  const errors = [];
+  const stagedSha = evidence?.staging_release_sha;
+  if (!/^[0-9a-f]{40}$/.test(String(releaseSha ?? '')))
+    errors.push('PRODUCTION_RELEASE_SHA_INVALID');
+  if (!/^[0-9a-f]{40}$/.test(String(stagedSha ?? '')))
+    errors.push('STAGING_RELEASE_SHA_INVALID');
+  if (stagedShaIsAncestor !== true) errors.push('STAGING_RELEASE_NOT_ANCESTOR');
+  if (!Array.isArray(changedPaths) || changedPaths.length !== 1 ||
+      changedPaths[0] !== 'docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json')
+    errors.push('RUNTIME_DELTA_AFTER_PHYSICAL_ACCEPTANCE');
+  if (/^[0-9a-f]{40}$/.test(String(stagedSha ?? ''))) {
+    const evidenceResult = verifyPilotRealDeviceEvidence(evidence, stagedSha);
+    if (!evidenceResult.ok) errors.push(...evidenceResult.errors.map(error => 'PHYSICAL_' + error));
+  }
+  return { ok: errors.length === 0, errors, stagedSha };
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const args = process.argv.slice(2);
   const index = args.indexOf('--release-sha');
