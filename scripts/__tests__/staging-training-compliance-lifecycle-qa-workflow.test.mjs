@@ -41,6 +41,10 @@ test('lifecycle fixture is reserved to the canonical synthetic tenant and fails 
   assert.match(seed, /scorm_package_r2_prefix/);
   assert.match(seed, /'--command', sql, '--json'/);
   assert.doesNotMatch(seed, /`--file=\$\{file\}`/);
+  assert.match(seed, /lms_integrada=1 AND ativo=1 AND deleted_at IS NULL/);
+  assert.match(seed, /const lmsCategoryId =/);
+  assert.doesNotMatch(seed, /INSERT INTO qualificacoes_categorias/);
+  assert.doesNotMatch(seed, /UPDATE qualificacoes_categorias/);
   execFileSync('node', ['--check', 'scripts/staging/seed-qa-training-compliance-lifecycle.mjs']);
   execFileSync('node', ['--check', 'scripts/staging/qa-training-compliance-cycle-evidence.mjs']);
 });
