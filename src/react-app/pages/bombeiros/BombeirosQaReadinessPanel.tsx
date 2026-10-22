@@ -9,6 +9,7 @@ type QaReadiness = {
   intended_user_count: 130;
   cohort_130_structurally_present: boolean;
   firefighter_profile_configuration_resolves: boolean;
+  documentary_review_binding_matches: boolean;
   synthetic_tenant_write_gate_matches: boolean;
   official_boa_source: 'NOT_VERIFIED';
   scientific_validation: 'NOT_ATTESTED';
@@ -59,6 +60,7 @@ export default function BombeirosQaReadinessPanel() {
           <li>Gestores cadastrados: {snapshot.accounts.manager_roles}</li>
           <li>Administradores cadastrados: {snapshot.accounts.admin_roles}</li>
           <li>Perfil FIREFIGHTER_AVIATION resolvido: {snapshot.firefighter_profile_configuration_resolves ? 'sim' : 'não'}</li>
+          <li>Vínculo de revisão e documento revisado: {snapshot.documentary_review_binding_matches ? 'presente (não substitui validação científica)' : 'ausente — gravação bloqueada'}</li>
           <li>Flag técnico do tenant sintético: {snapshot.synthetic_tenant_write_gate_matches ? 'configurado' : 'desativado'}</li>
           <li>Fonte oficial de escalas BOA: não verificada</li>
           <li>Validação científica e autorização LGPD: não atestadas</li>
