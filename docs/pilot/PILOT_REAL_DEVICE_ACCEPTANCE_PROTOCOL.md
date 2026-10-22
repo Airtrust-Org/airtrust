@@ -12,7 +12,9 @@ Os testes automatizados de browser são complementares. Eles não substituem est
 
 ## Vínculo com a publicação de produção
 
-O workflow oficial de produção valida a evidência física vinculada ao SHA publicado em staging antes de publicar Worker ou Pages. O SHA de staging precisa ser ancestral do release de produção, e o único arquivo que pode mudar entre eles é `docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json`; qualquer alteração de runtime ou outro delta bloqueia a publicação. Assim, o commit posterior que registra os resultados físicos não altera o código que foi homologado.
+O workflow oficial de produção compara o SHA candidato com o SHA efetivamente publicado no Worker de produção (via `/api/version`, sem parâmetro livre). Se os arquivos do Pilot ou de componentes compartilhados críticos mudaram, exige evidência física vinculada ao SHA publicado em staging. Mudanças comprovadamente independentes (como módulos isolados de Compliance/FRMS/LMS, documentação ou testes) podem seguir os gates e aprovações normais sem refazer o aceite Pilot. Quando o endpoint, histórico Git ou escopo forem ambíguos, o guard falha fechado.
+
+O workflow oficial de produção valida a evidência física vinculada ao SHA publicado em staging antes de publicar Worker ou Pages. O SHA de staging precisa ser ancestral do release de produção, e o único delta **pertinente ao Pilot** entre staging e produção é o JSON `docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json`; alterações independentes de outros módulos são permitidas, mas qualquer alteração adicional do Pilot ou componente compartilhado crítico bloqueia a publicação. Assim, o commit posterior que registra os resultados físicos não altera o código que foi homologado.
 
 ## Pré-condições
 

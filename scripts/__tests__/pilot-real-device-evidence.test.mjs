@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import {requiredRows,requiredScenarios,verifyPilotRealDeviceEvidence as verify,verifyPilotProductionReleaseLineage as verifyProductionLineage} from '../ci/pilot-real-device-evidence.mjs';
+import {requiredRows,requiredScenarios,verifyPilotRealDeviceEvidence as verify,verifyPilotProductionReleaseLineage as verifyProductionLineage,isPilotImpactingPath} from '../ci/pilot-real-device-evidence.mjs';
 const sha='a'.repeat(40);
 function sample(){
  const scenarios=Object.fromEntries(requiredScenarios.map(s=>[s,'PASS']));
@@ -64,16 +64,58 @@ test('physical evidence rejects missing, placeholder or external Pages origin',(
  assert.equal(verify(offsite,sha).ok,false);
 });
 
-test('production release requires the staged SHA ancestor and evidence-only delta',()=>{
- const evidence=sample();
- assert.equal(verifyProductionLineage({evidence,releaseSha:'b'.repeat(40),changedPaths:['docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json'],stagedShaIsAncestor:true}).ok,true);
- assert.equal(verifyProductionLineage({evidence,releaseSha:'b'.repeat(40),changedPaths:['worker-airtrust/src/index.ts'],stagedShaIsAncestor:true}).ok,false);
- assert.equal(verifyProductionLineage({evidence,releaseSha:'b'.repeat(40),changedPaths:['docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json'],stagedShaIsAncestor:false}).ok,false);
+test('Pilot scope is conservative for shared code and independent for named domain modules',()=>{
+ for(const path of ['public/pilot/app.js','worker-airtrust/src/services/controle-voos/pilot-offline-sync.ts',
+  'worker-airtrust/wrangler.toml','worker-airtrust/src/index.ts',
+  'worker-airtrust/src/middleware/tenant.ts','src/App.tsx',
+  'scripts/ci/pilot-production-release-guard.mjs','.github/workflows/deploy-airtrust.yml',
+  'worker-airtrust/schema-v2/changes/0564_controle_voos_pilot_supplier_history.sql'])
+  assert.equal(isPilotImpactingPath(path),true,path);
+ for(const path of ['worker-airtrust/src/services/training-compliance-roster-plan.ts',
+  'worker-airtrust/src/services/frms/risk.ts','worker-airtrust/src/routes/lms/courses.ts',
+  'worker-airtrust/src/cron/resilient/compliance-roster.ts',
+  'scripts/staging/qa-training-compliance-cycle-evidence.mjs',
+  'docs/frms/REPORT.md','e2e/frontend-pr-ui-qa/training-compliance-lifecycle.spec.ts',
+  '.github/workflows/staging-training-compliance-lifecycle-qa.yml',
+  'docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json'])
+  assert.equal(isPilotImpactingPath(path),false,path);
+ assert.equal(isPilotImpactingPath('worker-airtrust/src/services/unknown-module.ts'),true);
 });
+
+test('unrelated production release needs no new Pilot evidence',()=>{
+ const result=verifyProductionLineage({
+  evidence:null,releaseSha:'b'.repeat(40),
+  productionChangedPaths:['worker-airtrust/src/services/training-compliance-roster-plan.ts',
+   '.github/workflows/staging-training-compliance-lifecycle-qa.yml',
+   'worker-airtrust/src/services/frms/risk.ts'],
+  changedPaths:[],stagedShaIsAncestor:false,
+ });
+ assert.equal(result.ok,true);assert.equal(result.requiresPhysicalAcceptance,false);
+});
+
+test('Pilot production requires staged SHA ancestor, valid 6x15 and no subsequent Pilot delta',()=>{
+ const evidence=sample();
+ const productionChangedPaths=['worker-airtrust/src/services/controle-voos/pilot-offline-sync-apply.ts'];
+ const base={evidence,releaseSha:'b'.repeat(40),productionChangedPaths,
+  changedPaths:['docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json',
+    'worker-airtrust/src/services/training-compliance-roster-plan.ts'],
+  stagedShaIsAncestor:true};
+ assert.equal(verifyProductionLineage(base).ok,true);
+ assert.equal(verifyProductionLineage({...base,
+  changedPaths:[...base.changedPaths,'public/pilot/app.js']}).ok,false);
+ assert.equal(verifyProductionLineage({...base,
+  changedPaths:[...base.changedPaths,'worker-airtrust/src/services/controle-voos/pilot-offline-sync.ts']}).ok,false);
+ assert.equal(verifyProductionLineage({...base,stagedShaIsAncestor:false}).ok,false);
+ assert.equal(verifyProductionLineage({...base,evidence:null}).ok,false);
+ assert.equal(verifyProductionLineage({...base,evidence:{...evidence,worker_source_sha:'c'.repeat(40)}}).ok,false);
+ assert.equal(verifyProductionLineage({...base,productionChangedPaths:undefined}).ok,false);
+});
+
 
 test('production Worker deploy invokes the exact Pilot acceptance lineage guard',()=>{
  const workflow=readFileSync('.github/workflows/deploy-airtrust.yml','utf8');
  assert.match(workflow,/name: Verify Pilot real-device acceptance for production release[\s\S]*?if: \$\{\{ inputs\.deploy_worker \|\| inputs\.deploy_pages \}\}[\s\S]*?node scripts\/ci\/pilot-production-release-guard\.mjs --release-sha/);
+ assert.match(workflow,/Checkout trusted production pipeline[\s\S]*?fetch-depth: 0/);
 });
 
 test('protocol documents the distinct staged SHA and later evidence commit',()=>{

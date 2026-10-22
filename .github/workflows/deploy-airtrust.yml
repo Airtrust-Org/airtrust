@@ -67,6 +67,8 @@ jobs:
       - name: Checkout trusted production pipeline
         uses: actions/checkout@v7
         with:
+          fetch-depth: 0 # compare production source SHA against candidate; fail closed if unavailable
+        with:
           fetch-depth: 0
 
       - name: Validate production dispatch inputs

@@ -80,22 +80,87 @@ export function verifyPilotRealDeviceEvidence(evidence, releaseSha) {
   return { ok: errors.length === 0, errors };
 }
 
-export function verifyPilotProductionReleaseLineage({ evidence, releaseSha, changedPaths, stagedShaIsAncestor }) {
+// Explicit allowlist of independent modules. Unknown/shared runtime changes
+// remain Pilot-impacting; never infer safety merely from absence of "pilot"
+// in a filename. Changes to Pilot source, runtime configuration, auth and
+// production/physical release guards always require renewed hardware proof.
+const INDEPENDENT_WORKER = /^worker-airtrust\/src\/(?:routes|services)\/(?:training-compliance(?:[-/])|frms(?:[-/])|lms(?:[-/])|scorm(?:[-/])|compliance(?:[-/]))/;
+const INDEPENDENT_FRONTEND = /^src\/(?:pages|components|features|modules)\/(?:Compliance|FRMS|Frms|LMS|Lms|SCORM|Scorm)(?:[-/.]|\/)/;
+
+export function isPilotImpactingPath(path) {
+  if (typeof path !== 'string' || !path || path.includes('..') ||
+      path.startsWith('/') || path.includes('\\')) return true;
+  if (path === 'docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json') return false;
+  if (path === 'docs/database/schema-contracts/production-d1-baseline-v2.json') return true;
+  if (path.startsWith('docs/')) return false;
+  if (path.startsWith('e2e/') || path.startsWith('tests/')) return false;
+  if (path.startsWith('worker-airtrust/src/__tests__/')) return false;
+  if (path.startsWith('src/__tests__/') &&
+      path !== 'src/__tests__/pilot-production-real-device-gate.test.ts') return false;
+  if (path.startsWith('scripts/__tests__/')) return false;
+  if (path.startsWith('.github/workflows/'))
+    return path === '.github/workflows/deploy-airtrust.yml' ||
+      path === '.github/workflows/pilot-real-device-acceptance.yml';
+  if (path.startsWith('scripts/')) {
+    return path === 'scripts/ci/pilot-production-release-guard.mjs' ||
+      path === 'scripts/ci/pilot-real-device-evidence.mjs' ||
+      path === 'scripts/ci/validate-production-deploy-dispatch.mjs' ||
+      path === 'scripts/ci/verify-release-gates.mjs' ||
+      path.startsWith('scripts/deploy/');
+  }
+  if (path.startsWith('worker-airtrust/schema-v2/')) {
+    if (/pilot|controle[-_]voos/i.test(path)) return true;
+    // Other reviewed, explicitly named domain migrations have no Pilot D1
+    // contract edits. An unknown generic schema file stays fail-closed.
+    return !/^worker-airtrust\/schema-v2\/(?:changes|plans)\/\d*[-_a-z0-9.]+$/i.test(path);
+  }
+  if (path.startsWith('public/')) return path.startsWith('public/pilot/') ||
+    path === 'public/sw.js' || path === 'public/index.html' ||
+    path === 'public/manifest.json' || path === 'public/manifest.webmanifest';
+  if (path.startsWith('worker-airtrust/src/')) {
+    if (path === 'worker-airtrust/src/cron/resilient/compliance-roster.ts') return false;
+    if (INDEPENDENT_WORKER.test(path)) return false;
+    return true;
+  }
+  if (path.startsWith('src/')) {
+    if (INDEPENDENT_FRONTEND.test(path)) return false;
+    return true;
+  }
+  if (/^(?:package(?:-lock)?\.json|worker-airtrust\/package(?:-lock)?\.json|vite\.config\.[cm]?[jt]s|worker-airtrust\/wrangler\.toml)$/.test(path))
+    return true;
+  // Unknown project files may alter shared startup or build behavior.
+  return true;
+}
+
+export function verifyPilotProductionReleaseLineage({
+  evidence, releaseSha, changedPaths, stagedShaIsAncestor, productionChangedPaths,
+}) {
   const errors = [];
   const stagedSha = evidence?.staging_release_sha;
   if (!/^[0-9a-f]{40}$/.test(String(releaseSha ?? '')))
     errors.push('PRODUCTION_RELEASE_SHA_INVALID');
+  if (!Array.isArray(productionChangedPaths) ||
+      productionChangedPaths.some(path => typeof path !== 'string'))
+    errors.push('PRODUCTION_DIFF_UNAVAILABLE');
+  if (errors.length) return { ok: false, errors, stagedSha, requiresPhysicalAcceptance: true };
+
+  const requiresPhysicalAcceptance = productionChangedPaths.some(isPilotImpactingPath);
+  if (!requiresPhysicalAcceptance)
+    return { ok: true, errors, stagedSha, requiresPhysicalAcceptance: false };
+
   if (!/^[0-9a-f]{40}$/.test(String(stagedSha ?? '')))
     errors.push('STAGING_RELEASE_SHA_INVALID');
   if (stagedShaIsAncestor !== true) errors.push('STAGING_RELEASE_NOT_ANCESTOR');
-  if (!Array.isArray(changedPaths) || changedPaths.length !== 1 ||
-      changedPaths[0] !== 'docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json')
-    errors.push('RUNTIME_DELTA_AFTER_PHYSICAL_ACCEPTANCE');
+  if (!Array.isArray(changedPaths) ||
+      !changedPaths.includes('docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json') ||
+      changedPaths.some(isPilotImpactingPath))
+    errors.push('PILOT_RUNTIME_DELTA_AFTER_PHYSICAL_ACCEPTANCE');
   if (/^[0-9a-f]{40}$/.test(String(stagedSha ?? ''))) {
     const evidenceResult = verifyPilotRealDeviceEvidence(evidence, stagedSha);
-    if (!evidenceResult.ok) errors.push(...evidenceResult.errors.map(error => 'PHYSICAL_' + error));
+    if (!evidenceResult.ok)
+      errors.push(...evidenceResult.errors.map(error => 'PHYSICAL_' + error));
   }
-  return { ok: errors.length === 0, errors, stagedSha };
+  return { ok: errors.length === 0, errors, stagedSha, requiresPhysicalAcceptance };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
