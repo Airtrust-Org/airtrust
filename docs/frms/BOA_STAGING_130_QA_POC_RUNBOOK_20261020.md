@@ -248,3 +248,51 @@ oito gates do SHA final, workflow governado, fonte BOA e LGPD/ciência.
 O verificador retornou `BLOCK_CANDIDATE_BEHIND_MAIN`, com exit code 2.
 **Nenhum deploy ocorreu.** Atualizar evidência antes de nova tentativa;
 não promover código antigo ou substituir Player 3 para fechar a PoC BOA.
+
+## Aprovação documental obrigatória para escritas sensíveis BOA — 22/10/2026
+
+O status *ACTIVE* de `frms_profile_assignments`/`frms_regulatory_profiles`
+e uma revisão com parâmetros completos **não comprovam** aprovação
+científica, finalidade LGPD, autorização da fonte de escalas ou aptidão
+operacional. O Worker recusa check-in de saúde e transições de tratamento/
+eficácia com `BOMBEIROS_FRMS_POLICY_NOT_READY` (HTTP 503) se faltar
+vínculo documental independente — ainda que a flag de tenant QA esteja ativa.
+
+O controle fail-closed compara, sem registrar valores sensíveis ou fazer
+escritas, os campos existentes do tenant e da revisão:
+`approval_reference`, `service_category`, `policy_version`,
+`source_document_hash` (SHA-256 completo), `source_reference`,
+`source_type=APPROVED_OPERATIONAL_POLICY`,
+`regulatory_profile_id`, versão/tenant/perfil exatos; e dois bindings
+de Worker, **ausentes por padrão**:
+
+- `BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256` — digest de documento efetivamente
+  revisado e autorizado por responsável competente para a finalidade QA.
+- `BOA_FRMS_QA_REVIEWED_REVISION_ID` — ID exato da revisão D1 revisada.
+
+**Nenhum valor deve ser copiado das fixtures sintéticas de teste para o
+Cloudflare.** Configuração desses bindings e da flag de escrita exige o
+procedimento governado de environment grants, comprovação independente
+do parecer científico, análise de base legal/retencão/LGPD, aprovação da
+fonte BOA e autorização específica de staging/Schema V2, conforme
+a documentação canônica. O par de bindings **não é certificado digital,
+assinatura independente ou prova automática da qualidade do método**:
+somente bloqueia gravações que não correspondam à revisão/documento
+efetivamente selecionados pelo operador autorizado.
+
+O painel admin `/api/bombeiros/frms/qa/prontidao` informa apenas
+`documentary_review_binding_matches: true|false`. Na ausência de
+correspondência, o estado permanece `QA_PRECONDITIONS_INCOMPLETE`
+mesmo com 130 contas, configuração vigente e flag de escrita presentes.
+A tela continua mostrando `scientific_validation: NOT_ATTESTED` e
+`privacy_authorization: NOT_ATTESTED`: revisão técnica e aprovação
+jurídico-operacional precisam de evidência externa. Revogar ou trocar o
+documento/revisão cancela imediatamente a capacidade de criar novos
+eventos na rota BOA, sem apagar registros históricos.
+
+Prova no teste SQL local `boa-http-router-sqlite-e2e.test.mjs`:
+documento ausente, digest divergente, referência faltante, revisão
+desprovida do marcador aprovado e bindings de runtime omitidos retornam
+503/zero novos eventos; com valores exclusivamente fictícios e
+configuração coerente o circuito QA ainda passa. O teste não publica
+nada e não constitui homologação humana.
