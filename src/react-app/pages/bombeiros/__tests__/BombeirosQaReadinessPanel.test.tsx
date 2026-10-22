@@ -18,6 +18,7 @@ const snapshot = {
     intended_user_count: 130,
     cohort_130_structurally_present: false,
     firefighter_profile_configuration_resolves: false,
+    documentary_review_binding_matches: false,
     synthetic_tenant_write_gate_matches: false,
     official_boa_source: 'NOT_VERIFIED',
     scientific_validation: 'NOT_ATTESTED',
@@ -43,6 +44,7 @@ describe('BOA operational QA readiness panel', () => {
     expect(screen.getByText(/Pré-requisitos técnicos incompletos/)).toBeInTheDocument();
     expect(screen.getByText(/Contas com vínculo à empresa: 9 \/ 130/)).toBeInTheDocument();
     expect(screen.getByText(/Validação científica e autorização LGPD: não atestadas/)).toBeInTheDocument();
+    expect(screen.getByText(/Vínculo de revisão e documento revisado: ausente/)).toBeInTheDocument();
     expect(screen.getByText(/Esta consulta não concede permissão de voo/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', {name:'Conferir novamente'}));
     expect(refetch).toHaveBeenCalledOnce();
@@ -63,6 +65,7 @@ describe('BOA operational QA readiness panel', () => {
         accounts: {member_accounts:130,crew_links:125,manager_roles:4,admin_roles:1},
         cohort_130_structurally_present: true,
         firefighter_profile_configuration_resolves: true,
+        documentary_review_binding_matches: true,
         synthetic_tenant_write_gate_matches: true,
       } },
       error:null,loading:false,refetch,
