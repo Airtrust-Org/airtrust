@@ -29,6 +29,7 @@ import {
 } from '../lib/frms/bombeiros-operational-events';
 import { BombeirosScenarioSchema, assessBombeirosSyntheticScenario } from '../lib/frms/bombeiros-scenario-method';
 import { validateBoaOperationalSourceBatch } from '../lib/frms/bombeiros-duty-source-contract';
+import { checkBoaQaCrosswalk } from '../lib/frms/bombeiros-qa-crosswalk';
 import { safe } from './frms-shared';
 
 const frmsBombeiros = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
@@ -323,9 +324,26 @@ frmsBombeiros.post('/fontes-operacionais/validar-qa', requireRole('admin'), safe
   // The BOA policy must be active before the QA result is exposed.
   try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId); }
   catch { return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503); }
+  // Optional QA-only identity map is validated against active tenant records.
+  // It never becomes an approved source link and never writes to D1.
+  const qaCrosswalk = (payload as { qa_crosswalk?: unknown }).qa_crosswalk;
+  const sourcePayload = qaCrosswalk === undefined ? payload : {
+    ...(payload as Record<string, unknown>), qa_crosswalk: undefined,
+  };
+  // Remove optional property: Zod's strict source contract must stay strict.
+  if (qaCrosswalk !== undefined) delete sourcePayload.qa_crosswalk;
   let candidate: ReturnType<typeof validateBoaOperationalSourceBatch>;
-  try { candidate = validateBoaOperationalSourceBatch(payload); }
+  try { candidate = validateBoaOperationalSourceBatch(sourcePayload); }
   catch { return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_INVALID' }, 400); }
+  let mappingStatus: Awaited<ReturnType<typeof checkBoaQaCrosswalk>> | null = null;
+  if (qaCrosswalk !== undefined) {
+    try {
+      mappingStatus = await checkBoaQaCrosswalk(
+        c.env.DB, tenant.empresaId, sourcePayload, qaCrosswalk);
+    } catch {
+      return c.json({ success: false, code: 'BOA_SOURCE_QA_CROSSWALK_UNVERIFIED' }, 422);
+    }
+  }
   const digest = await crypto.subtle.digest('SHA-256', payloadBytes);
   const sha256 = [...new Uint8Array(digest)]
     .map(v => v.toString(16).padStart(2, '0')).join('');
@@ -340,7 +358,9 @@ frmsBombeiros.post('/fontes-operacionais/validar-qa', requireRole('admin'), safe
       input_sha256: sha256, record_count: candidate.records.length,
       candidate_totals_ms: candidate.candidate_totals_ms,
       missing_sources_count: missing,
-      tenant_identity_link: 'NOT_RESOLVED',
+      tenant_identity_link: mappingStatus?.tenant_identity_link ?? 'NOT_RESOLVED',
+      qa_crosswalk_status: mappingStatus?.status ?? 'NOT_SUBMITTED',
+      qa_matched_crew_count: mappingStatus?.mapped_crew_count ?? null,
       source_approval: 'NOT_EVALUATED',
       scientific_risk_score: null,
       operational_exposure_denominator_ms: null,
