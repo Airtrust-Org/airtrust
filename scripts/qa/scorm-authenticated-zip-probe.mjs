@@ -101,9 +101,14 @@ async function run(name,type){
   requireCondition(!!previous?.cmi_json&&!!previous?.suspend_data&&
     previous.suspend_data!==baselineSuspend,'ACTION_NOT_PERSISTED_TO_CMI');
   if(expectedCursor!==null){
-   const checkpoint=JSON.parse(previous.suspend_data);
-   requireCondition(checkpoint.c===expectedCursor&&checkpoint.a===expectedCursor,
-    'EXPECTED_CURSOR_NOT_PERSISTED_TO_CMI');
+   let checkpoint=null;
+   try{checkpoint=JSON.parse(previous.suspend_data);}catch{}
+   if(checkpoint?.v===1&&typeof checkpoint.p==='string'&&
+     Number.isSafeInteger(checkpoint.c)&&Number.isSafeInteger(checkpoint.a)&&
+     Array.isArray(checkpoint.d)&&Array.isArray(checkpoint.f)&&
+     typeof checkpoint.study==='boolean')
+    requireCondition(checkpoint.c===expectedCursor&&checkpoint.a===expectedCursor,
+     'EXPECTED_CURSOR_NOT_PERSISTED_TO_CMI');
   }
   result.persistedCmi='PASS';
   result.cmiSha256=hash(Buffer.from(previous.cmi_json));
