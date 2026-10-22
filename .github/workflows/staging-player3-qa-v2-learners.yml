@@ -1,0 +1,126 @@
+name: Player3 QA V2 Existing Students — Governed Native Enroll
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_PLAYER3_QA_V2_ENROLL_V1'
+        type: string
+        required: true
+      release_sha:
+        description: 'Exact reviewed Player3 PR #1389 SHA LIVE in staging'
+        type: string
+        required: true
+      grant_id:
+        description: 'Fresh unchanged administrator approval comment ID in issue 776'
+        type: string
+        required: true
+      course_id:
+        description: 'New V2 course physical ID, never V1 course 327'
+        type: string
+        required: true
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+permissions:
+  contents: read
+  issues: read
+  checks: read
+  pull-requests: read
+env:
+  CONFIRM_V2_ENROLL: ${{ inputs.confirmation }}
+  PLAYER3_QA_V2_RELEASE_SHA: ${{ inputs.release_sha }}
+  PLAYER3_QA_V2_GRANT_ID: ${{ inputs.grant_id }}
+  PLAYER3_QA_V2_COURSE_ID: ${{ inputs.course_id }}
+jobs:
+  guard:
+    name: Exact admin grant, SHA, CI and staging provenance
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Fail closed before secrets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging/player3-qa-v2-learners.mjs guard
+  preflight:
+    name: D1 SELECT only proves clean V2 course and two existing QA employees
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      roster: ${{ steps.check.outputs.roster }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm --prefix worker-airtrust ci --ignore-scripts
+      - name: Check V2 roster, published edition, no existing enrollment
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/staging/player3-qa-v2-learners.mjs preflight
+  enroll:
+    name: Worker only creates two V2 Native pins, no D1 admin token
+    needs: [guard,preflight]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Post scoped Native matricular with two distinct student tokens
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONFIRM_V2_MUTATION: AIRTRUST_PLAYER3_QA_V2_ENROLL_V1
+          PLAYER3_QA_V2_ROSTER: ${{ needs.preflight.outputs.roster }}
+          PLAYER3_QA_CHROMIUM_PASSWORD: ${{ secrets.PLAYER3_QA_CHROMIUM_PASSWORD }}
+          PLAYER3_QA_WEBKIT_PASSWORD: ${{ secrets.PLAYER3_QA_WEBKIT_PASSWORD }}
+        run: node scripts/staging/player3-qa-v2-learners.mjs enroll
+  verify:
+    name: D1 SELECT only proves two independent V2 edition pins
+    needs: [guard,preflight,enroll]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm --prefix worker-airtrust ci --ignore-scripts
+      - name: Readback V2 pins and cycles without grades
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/staging/player3-qa-v2-learners.mjs verify
+  result:
+    name: Fail closed, never claim six-journey QA or PDF
+    needs: [guard,preflight,enroll,verify]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          test "${{ needs.guard.result }}" = success
+          test "${{ needs.preflight.result }}" = success
+          test "${{ needs.enroll.result }}" = success
+          test "${{ needs.verify.result }}" = success
+          echo "Only V2 two-student enrollment proven; 6 journeys/PDF NOT ATTESTED" >> "$GITHUB_STEP_SUMMARY"
