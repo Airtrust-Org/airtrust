@@ -4,10 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
-const source = readFileSync(resolve(currentDir, '../../routes/lms-matriculas.ts'), 'utf8');
-const start = source.indexOf("  '/em-andamento'");
-const end = source.indexOf('// ── Detalhe de matrícula', start);
-const route = source.slice(start, end);
+const source = readFileSync(resolve(currentDir, '../../routes/lms-matriculas-em-andamento.ts'), 'utf8');
+const route = source;
 
 describe('LMS visão consolidada de matrículas em andamento', () => {
   it('restringe a consulta à empresa, a matrículas ativas e a funcionários ativos', () => {
