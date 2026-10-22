@@ -1,86 +1,88 @@
-name: Pilot Physical Device Acceptance (exact staging SHA)
+name: Pilot Physical Device Acceptance (source and evidence lineage)
+# Read-only: physical evidence is committed AFTER staging the exact code SHA.
 on:
-  workflow_dispatch:
-    inputs:
-      release_sha:
-        description: 'Exact reviewed Worker and Pages staging release SHA'
-        type: string
-        required: true
-      pr_number:
-        description: 'Open same-repository PR containing the evidence at release_sha'
-        type: string
-        required: true
-      staging_pages_url:
-        description: 'Actual official AirTrust Pages staging preview origin (*.airtrust.pages.dev)'
-        type: string
-        required: true
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - 'docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json'
+
 permissions:
   contents: read
   pull-requests: read
+
 jobs:
   pilot-physical-acceptance:
     name: Pilot Physical Device Acceptance
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout exact evidence PR HEAD without saved credentials
+        uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version-file: '.node-version'
-      - name: Verify reviewed PR head and same-repository origin
+      - name: Prove HEAD and same-repository open PR
         shell: bash
         env:
-          RELEASE_SHA: ${{ inputs.release_sha }}
-          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF" == "refs/heads/main" ]] || exit 1
-          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$PR_HEAD" =~ ^[0-9a-f]{40}$ ]] || exit 1
           [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || exit 1
+          [[ "$(git rev-parse HEAD)" == "$PR_HEAD" ]] || { echo 'PILOT_PR_CHECKOUT_SHA_MISMATCH' >&2; exit 1; }
           node --input-type=module <<'NODE'
-          const resp=await fetch(
+          const response=await fetch(
             'https://api.github.com/repos/'+process.env.GITHUB_REPOSITORY+'/pulls/'+process.env.PR_NUMBER,
             {headers:{authorization:'Bearer '+process.env.GITHUB_TOKEN,accept:'application/vnd.github+json'}}
           );
-          if(!resp.ok)throw Error('REVIEWED_PR_LOOKUP_FAILED');
-          const pr=await resp.json();
+          if(!response.ok)throw Error('PILOT_REVIEWED_PR_LOOKUP_FAILED');
+          const pr=await response.json();
           if(pr.state!=='open'||pr.base?.ref!=='main'||
              pr.head?.repo?.full_name!==process.env.GITHUB_REPOSITORY||
-             pr.head?.repo?.fork||
-             pr.head?.sha!==process.env.RELEASE_SHA)
+             pr.head?.repo?.fork||pr.head?.sha!==process.env.PR_HEAD)
             throw Error('PILOT_ACCEPTANCE_PR_HEAD_MISMATCH');
           console.log('PILOT_ACCEPTANCE_REVIEWED_PR_HEAD=PASS');
           NODE
-      - name: Checkout exact candidate evidence separately from trusted workflow
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.release_sha }}
-          path: release
-          persist-credentials: false
-      - name: Validate six physical rows, fifteen cases, and exact source
+      - name: Validate staged ancestor, evidence-only delta and 90 physical cases
         shell: bash
-        working-directory: release
+        id: candidate
         env:
-          RELEASE_SHA: ${{ inputs.release_sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]] || exit 1
-          node ../scripts/ci/pilot-real-device-evidence.mjs --release-sha "$RELEASE_SHA"
+          evidence='docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json'
+          test -f "$evidence"
+          RELEASE_SHA="$(node -p "require('./$evidence').staging_release_sha")"
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'PILOT_STAGE_SHA_INVALID' >&2; exit 1; }
+          git cat-file -e "$RELEASE_SHA^{commit}" 2>/dev/null || git fetch --quiet --no-tags origin "$RELEASE_SHA"
+          git merge-base --is-ancestor "$RELEASE_SHA" "$PR_HEAD" ||
+            { echo 'PILOT_STAGED_SHA_NOT_ANCESTOR' >&2; exit 1; }
+          changed="$(git diff --name-only "$RELEASE_SHA" "$PR_HEAD")"
+          [[ "$changed" == "$evidence" ]] ||
+            { echo 'PILOT_RUNTIME_DELTA_AFTER_STAGING_DENIED' >&2; exit 1; }
+          node scripts/ci/pilot-real-device-evidence.mjs --release-sha "$RELEASE_SHA"
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          echo 'PILOT_EVIDENCE_ONLY_DELTA=PASS'
       - name: Verify live staging Worker SHA and Pages asset provenance
         shell: bash
         env:
-          RELEASE_SHA: ${{ inputs.release_sha }}
-          PAGES_URL: ${{ inputs.staging_pages_url }}
+          RELEASE_SHA: ${{ steps.candidate.outputs.release_sha }}
           STAGING_WORKER_VERSION_URL: https://airtrust-api-staging.airtrust.workers.dev/api/version
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           import { createHash } from 'node:crypto';
           import { execFileSync } from 'node:child_process';
+          import { readFileSync } from 'node:fs';
           const sha=process.env.RELEASE_SHA;
-          const pages=new URL(process.env.PAGES_URL);
+          const evidence=JSON.parse(readFileSync('docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json','utf8'));
+          const pages=new URL(evidence.staging_pages_url);
           if (!/^[0-9a-f]{40}$/.test(sha) || pages.protocol!=='https:' ||
               !/^(?:[a-z0-9-]+\.)?airtrust\.pages\.dev$/.test(pages.hostname) ||
               pages.username || pages.password || pages.search || pages.hash ||

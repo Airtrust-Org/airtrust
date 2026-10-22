@@ -7,6 +7,7 @@ function sample(){
  const scenarios=Object.fromEntries(requiredScenarios.map(s=>[s,'PASS']));
  return {
   status:'PASS',staging_release_sha:sha,worker_source_sha:sha,pages_source_sha:sha,
+  staging_pages_url:'https://staging.airtrust.pages.dev/',
   validated_at:'2026-10-19T13:00:00Z',
   rows:requiredRows.map(([platform,mode,orientation],i)=>({
    platform,mode,orientation,device_model:'Synthetic fixture model '+i,os_version:'FixtureOS 1',browser_version:'FixtureBrowser 1',evidence_ref:'synthetic-only-test-'+i,
@@ -30,15 +31,17 @@ test('requires exact worker/pages provenance, real fields and all fifteen PASS p
  const vvv=sample();vvv.rows[0].result='FAIL';assert.equal(verify(vvv,sha).ok,false);
 });
 
-test('official read-only device gate checks evidence at the exact reviewed PR SHA, not main',()=>{
+test('PR-only physical gate binds prior staged code to later evidence without self-referential SHA',()=>{
  const workflow=readFileSync('.github/workflows/pilot-real-device-acceptance.yml','utf8');
- assert.match(workflow,/pr_number:/);
- assert.match(workflow,/PILOT_ACCEPTANCE_PR_HEAD_MISMATCH/);
- assert.match(workflow,/ref: \$\{\{ inputs.release_sha \}\}/);
- assert.match(workflow,/working-directory: release/);
- assert.match(workflow,/node \.\.\/scripts\/ci\/pilot-real-device-evidence\.mjs --release-sha/);
- assert.match(workflow,/PILOT_STAGING_WORKER_AND_PAGES_PROVENANCE_PASS/);
- assert.doesNotMatch(workflow,/pull_request_target:/);
+ for(const marker of ['pull_request:', 'docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json',
+  'github.event.pull_request.head.sha', 'PILOT_ACCEPTANCE_PR_HEAD_MISMATCH',
+  'git merge-base --is-ancestor "$RELEASE_SHA" "$PR_HEAD"',
+  'git diff --name-only "$RELEASE_SHA" "$PR_HEAD"',
+  'PILOT_RUNTIME_DELTA_AFTER_STAGING_DENIED',
+  'node scripts/ci/pilot-real-device-evidence.mjs --release-sha',
+  'PILOT_STAGING_WORKER_AND_PAGES_PROVENANCE_PASS'])
+   assert.ok(workflow.includes(marker),'missing gate: '+marker);
+ assert.doesNotMatch(workflow,/pull_request_target:|workflow_dispatch:/);
 });
 
 test('real-device evidence example keeps all six rows and all fifteen cases PENDING',()=>{
@@ -52,4 +55,16 @@ test('real-device evidence example keeps all six rows and all fifteen cases PEND
   assert.deepEqual(Object.keys(row.scenario_results).sort(),[...requiredScenarios].sort());
   assert.ok(Object.values(row.scenario_results).every(result=>result==='PENDING'));
  }
+});
+
+test('physical evidence rejects missing, placeholder or external Pages origin',()=>{
+ const missing=sample();delete missing.staging_pages_url;assert.equal(verify(missing,sha).ok,false);
+ const placeholder=sample();placeholder.staging_pages_url='REPLACE';assert.equal(verify(placeholder,sha).ok,false);
+ const offsite=sample();offsite.staging_pages_url='https://staging.airtrust.pages.dev.attacker.example/';
+ assert.equal(verify(offsite,sha).ok,false);
+});
+test('protocol documents the distinct staged SHA and later evidence commit',()=>{
+ const protocol=readFileSync('docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_PROTOCOL.md','utf8');
+ assert.ok(protocol.includes('commit de evidência'));
+ assert.ok(protocol.includes('somente o arquivo EVIDENCE.json'));
 });

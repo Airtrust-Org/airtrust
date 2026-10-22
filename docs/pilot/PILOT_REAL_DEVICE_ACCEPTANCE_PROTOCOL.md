@@ -13,7 +13,7 @@ Os testes automatizados de browser são complementares. Eles não substituem est
 ## Pré-condições
 
 - usar apenas staging;
-- registrar o SHA exato da release validada;
+- registrar o SHA exato do codigo publicado em staging, antes de registrar a evidencia fisica;
 - usar usuário/tenant de QA autorizado, sem inserir credenciais ou payload operacional sensível na evidência;
 - confirmar que o Pilot App, Worker e frontend de staging correspondem ao mesmo release SHA;
 - não executar promoção de produção durante esta validação.
@@ -62,7 +62,8 @@ Partir do arquivo `PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.example.json` e substit
 O registro deve conter, no mínimo:
 
 - `status` global;
-- `staging_release_sha`, `worker_source_sha` e `pages_source_sha` iguais ao SHA exato publicado em staging (40 caracteres hexadecimais);
+- `staging_release_sha`, `worker_source_sha` e `pages_source_sha` iguais ao SHA do codigo publicado em staging (40 caracteres hexadecimais);
+- `staging_pages_url` com o HTTPS do preview oficial `*.airtrust.pages.dev`;
 - `validated_at` em ISO 8601;
 - modelo do dispositivo;
 - versão do sistema operacional;
@@ -72,6 +73,11 @@ O registro deve conter, no mínimo:
 - resultado dos 15 cenários, com observação curta quando necessário.
 
 Screenshots ou vídeos podem ser referenciados quando úteis, mas não devem conter credenciais, tokens, dados pessoais ou payload operacional sensível.
+
+## Vinculo entre o SHA publicado e o commit de evidência
+Apos publicar o codigo exato em staging e realizar os testes fisicos, adicionar os resultados em um **commit de evidência** posterior, alterando **somente o arquivo EVIDENCE.json**. O SHA desse commit sera diferente do SHA da release, porque um commit Git nao pode conter seu proprio SHA sem alterar o SHA.
+
+O workflow read-only passa a iniciar em `pull_request` quando a PR recebe o arquivo de evidencia: verifica o HEAD da PR de mesma origem, exige que o SHA publicado seja antepassado do commit da evidencia, proibe qualquer delta de runtime entre eles, valida 6 x 15 PASS e confere o Worker /api/version e assets Pages com o SHA publicado. Se o codigo mudar apos staging, publicar um novo candidato e refazer o aceite fisico. Isso **nao** libera schema, deploy, merge, flag ou producao.
 
 ## Regra de PASS
 

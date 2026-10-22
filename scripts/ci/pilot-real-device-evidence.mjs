@@ -40,6 +40,9 @@ export function verifyPilotRealDeviceEvidence(evidence, releaseSha) {
   if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence))
     return { ok: false, errors: [...errors, 'EVIDENCE_INVALID'] };
   if (evidence.status !== 'PASS') errors.push('GLOBAL_STATUS_NOT_PASS');
+  if (typeof evidence.staging_pages_url !== 'string' ||
+      !/^https:\/\/[a-z0-9-]+\.airtrust\.pages\.dev\/?$/.test(evidence.staging_pages_url))
+    errors.push('STAGING_PAGES_URL_INVALID');
   for (const field of ['staging_release_sha','worker_source_sha','pages_source_sha']) {
     if (evidence[field] !== releaseSha) errors.push(field.toUpperCase() + '_MISMATCH');
   }

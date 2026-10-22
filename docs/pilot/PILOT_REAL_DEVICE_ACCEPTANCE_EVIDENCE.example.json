@@ -168,5 +168,6 @@
   ],
   "notes": "Do not include credentials, tokens, personal data or sensitive operational payloads. A row may be PASS only when all mandatory scenarios applicable to it are PASS.",
   "worker_source_sha": "REPLACE_WITH_EXACT_40_CHAR_WORKER_SHA",
-  "pages_source_sha": "REPLACE_WITH_EXACT_40_CHAR_PAGES_SHA"
+  "pages_source_sha": "REPLACE_WITH_EXACT_40_CHAR_PAGES_SHA",
+  "staging_pages_url": "REPLACE_WITH_OFFICIAL_STAGING_PAGES_PREVIEW_URL"
 }
