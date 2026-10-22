@@ -2,9 +2,9 @@
  * Hono HTTP request/response over actual BOA SQL in ephemeral SQLite.
  * source_reference: docs/frms/BOA_CBMMG_AUDITORIA_FUNCIONAL_CIENTIFICA_CADEIA_DADOS_20261021.md
  * operational_decision: check the full API using both simulated upstream
- * context and real signed access JWT + auth() + tenantMiddleware() with
- * revocation checks. The BOA scientific profile is explicitly stubbed and
- * does not represent an approved policy, staging login, or real tenant.
+ * context and real signed access JWT + auth() + tenantMiddleware(),
+ * live employee-sector grant lookup and report crew scope with revocation checks.
+ * BOA scientific approval is still explicitly stubbed; this is not staging login.
  * dry_run_required: fictitious local identities only; ALL SQL writes to :memory:.
  * rollback_plan_required: sqlite.close() destroys every inserted event.
  */
@@ -22,14 +22,10 @@ const root=fileURLToPath(new URL('../..',import.meta.url));
 const stubs={
  'parameter-governance':"export const FRMS_FIREFIGHTER_AVIATION_PROFILE='FIREFIGHTER_AVIATION'; export async function resolveFrmsRegulatoryProfileEvidence(_db,{empresaId}) { return {empresaId,profileCode:'FIREFIGHTER_AVIATION',regulatoryProfileId:'QA_UNAPPROVED_ONLY'}; }",
  'db-service':"export async function loadEffectiveFrmsConfiguration(_db,empresaId) {return {empresaId,profileCode:'FIREFIGHTER_AVIATION',regulatoryProfileId:'QA_UNAPPROVED_ONLY',revision:{id:'qa-not-authorized',policy_version:'QA_TEST_ONLY'}};}",
- 'employee-sector-access':"export async function getEmployeeSectorAccess(c) {return c.get('tenantContext')?.role==='manager'?{mode:'restricted',setorIds:[9],funcionarioId:null}:{mode:'all',setorIds:[],funcionarioId:null};}",
- 'report-access':"export async function loadFrmsReportCrewScope(db,empresaId) {const x=await db.prepare('SELECT id FROM funcionarios WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL').bind(empresaId).all();return {ids:new Set(x.results.map(r=>r.id))};}",
 };
 const mockPaths={
  'parameter-governance':/lib\/frms\/parameter-governance$/,
  'db-service':/lib\/frms\/db-service$/,
- 'employee-sector-access':/services\/employee-sector-access$/,
- 'report-access':/lib\/frms\/report-access$/,
 };
 const output=(await esbuild.build({
  stdin:{
@@ -242,6 +238,10 @@ test('signed JWT and actual auth + tenant middleware protect BOA checkin and cas
   assert.equal((await request(token,'GET','/checkin/status')).status,200);
   assert.equal((await request(admin,'GET','/casos')).status,403);
   assert.equal((await request(manager,'GET','/casos')).status,200);
+
+  const otherManager=await realJwt(191,'manager',130);
+  assert.equal((await request(otherManager,'GET','/casos/'+encodeURIComponent(payload.data.case_id))).status,404,
+    'real employee-sector grant query must deny a manager of another sector');
   assert.equal(count(),2);
   for(let uid=102;uid<=106;uid++){
    const jwt=await realJwt(uid,'student',130);
