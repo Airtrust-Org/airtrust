@@ -60,7 +60,7 @@ function fixture(){
   'CREATE TABLE setores_gestores(id INTEGER PRIMARY KEY,setor_id INTEGER,usuario_id INTEGER,empresa_id INTEGER,role TEXT,ativo INTEGER,deleted_at TEXT)',
   'CREATE TABLE frms_fadiga_evento(id TEXT PRIMARY KEY,empresa_id INTEGER,checkin_id TEXT,tipo TEXT,payload_json TEXT,created_at TEXT)',
   "INSERT INTO setores VALUES(9,130,1,NULL),(10,130,1,NULL),(109,6,1,NULL)",
-  "INSERT INTO funcionarios VALUES(21,130,9,1,NULL,'ATIVO','Tripulante','Piloto'),(22,130,9,1,NULL,'ATIVO','Tripulante','Piloto'),(23,130,9,1,NULL,'ATIVO','Tripulante','Piloto'),(24,130,9,1,NULL,'ATIVO','Tripulante','Piloto'),(25,130,9,1,NULL,'ATIVO','Tripulante','Piloto'),(26,130,9,1,NULL,'ATIVO','Tripulante','Piloto'),(70,6,109,1,NULL,'ATIVO','Tripulante','Outro')",
+  "INSERT INTO funcionarios VALUES(21,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(22,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(23,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(24,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(25,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(26,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(70,6,109,1,NULL,'ATIVO','Tripulante','Outro')",
   'INSERT INTO usuarios VALUES(101,21,NULL),(102,22,NULL),(103,23,NULL),(104,24,NULL),(105,25,NULL),(106,26,NULL),(190,NULL,NULL),(191,NULL,NULL),(200,NULL,NULL),(600,70,NULL)',
   "INSERT INTO usuarios_empresas VALUES(101,130,'student'),(102,130,'student'),(103,130,'student'),(104,130,'student'),(105,130,'student'),(106,130,'student'),(190,130,'manager'),(191,130,'manager'),(200,130,'admin'),(600,6,'student')",
   "INSERT INTO setores_gestores VALUES(1,9,190,130,'manager',1,NULL),(2,10,191,130,'manager',1,NULL)"
