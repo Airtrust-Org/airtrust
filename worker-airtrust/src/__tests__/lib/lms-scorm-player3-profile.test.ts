@@ -43,6 +43,12 @@ describe('Player 3 SCORM external-exam authorization is fail-closed',()=>{
      scoringBySCORM:true}})).toBe(false);
    expect(isExternalExamScormManifest({...good,assessment:{...good.assessment,
      mode:'SCORED'}})).toBe(false);
+   expect(isExternalExamScormManifest({...good,assessment:{...good.assessment,
+     requiredInteractions:['quiz-1']}})).toBe(false);
+   expect(isExternalExamScormManifest({...good,assessment:{...good.assessment,
+     masteryScore:80}})).toBe(false);
+   expect(isExternalExamScormManifest({...good,completion:{...good.completion,
+     workerApprovalRequired:false}})).toBe(false);
    expect(isExternalExamScormManifest({...good,completion:{...good.completion,
      passStatusFromSCORM:true}})).toBe(false);
  });

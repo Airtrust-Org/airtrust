@@ -69,6 +69,15 @@ describe('Player 3 SCORM admission is separately scoped from Native or legacy', 
     expect(await resolveScormPlayer3Admission({...p,
       bucket: bucket({...manifest, assessment: {...manifest.assessment, mode: 'SCORED'}}),
     })).toMatchObject({kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED'});
+    expect(await resolveScormPlayer3Admission({...p,
+      bucket: bucket({...manifest, assessment: {...manifest.assessment, masteryScore: 80}}),
+    })).toMatchObject({kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED'});
+    expect(await resolveScormPlayer3Admission({...p,
+      bucket: bucket({...manifest, assessment: {...manifest.assessment, requiredInteractions: ['quiz-1']}}),
+    })).toMatchObject({kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED'});
+    expect(await resolveScormPlayer3Admission({...p,
+      bucket: bucket({...manifest, completion: {...manifest.completion, workerApprovalRequired: false}}),
+    })).toMatchObject({kind: 'BLOCKED', reason: 'CANDIDATE_UNVERIFIED'});
   });
   it('respects default OFF and exact deployed-release/tenant/package flags', async () => {
     const p = base();

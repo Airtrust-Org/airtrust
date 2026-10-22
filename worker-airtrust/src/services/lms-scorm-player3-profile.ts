@@ -55,6 +55,7 @@ export function isExternalExamScormManifest(raw:unknown):raw is {
     content.requiredSlides.length>0&&content.requiredSlides.length<=2000&&
     !!assessment&&assessment.mode==='EXTERNAL'&&
     assessment.scoringBySCORM===false&&Array.isArray(assessment.requiredInteractions)&&
+    assessment.requiredInteractions.length===0&&assessment.masteryScore===undefined&&
     !!completion&&completion.passStatusFromSCORM===false&&
     completion.workerApprovalRequired===true;
 }
