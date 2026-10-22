@@ -22,9 +22,11 @@ do GitHub Actions staging, nunca em comentários ou logs.
 
 ## Modalidade de prova técnica
 
+**Compatibilidade com o SHA de outubro/2026:** o antigo curso sintético com avaliação na terceira das cinco unidades é incompatível com o novo contrato final-only. O gerador passa a produzir quatro lições e prova formal na última unidade, com fixação não bloqueante por erro. A edição antiga em staging é imutável e matrículas já vinculadas a ela não podem ser silenciosamente repinadas. Exigir nova publicação, novo vínculo e grants de staging específicos via workflows governados; não corrigir dados R2/D1 diretamente nem relaxar o Worker.
+
 Em `e2e/player3/fixture-contract.ts`, o perfil privado pode declarar `qaContentMode: "SYNTHETIC_TECHNICAL"` em vez do padrão `"AUTHORED_RC81"`. O hash SHA-256 do ZIP sintético deve corresponder exatamente à variável protegida `PLAYER3_QA_SYNTHETIC_SOURCE_SHA256` e **ser diferente do hash original RC8.1**. O perfil, por si só, nunca autoriza seu próprio pacote. A edição de conteúdo continua imutável, em origem HTTPS staging segregada; URLs continuam vinculadas a `empresa_id`, curso, edição e hash de conteúdo.
 
-O teste técnico aceita **4 a 100 unidades sintéticas**, **1 a 8 avaliações oficiais** (dez perguntas verificáveis por avaliação), unidades de lição com recibos canônicos, pelo menos uma fixação e duas matrículas de browsers independentes. Os dois outros casos por browser permanecem: retomada histórica de navegação a 80% (sem nota inventada) e compatibilidade SCORM 1.2 externo em ambiente QA, separado do Native.
+O teste técnico aceita **4 a 100 unidades sintéticas**, **exatamente uma avaliação formal, obrigatoriamente na última unidade após todas as lições** (dez perguntas verificáveis); demais atividades são de fixação sem nota ou reprovação, unidades de lição com recibos canônicos, pelo menos uma fixação e duas matrículas de browsers independentes. Os dois outros casos por browser permanecem: retomada histórica de navegação a 80% (sem nota inventada) e compatibilidade SCORM 1.2 externo em ambiente QA, separado do Native.
 
 O E2E executa os mesmos caminhos **reais** de tela/iframe, API, D1, histórico, R2 e PDF. Não simular status de aprovação, gravar resultado direto no banco, falsificar `postMessage`, desligar guards do backend, nem usar pacote SCORM incompatível só para gerar verde. Ausência de infraestrutura/identidade, botão ou fixture deve falhar, não ser marcada como skip aprovado.
 

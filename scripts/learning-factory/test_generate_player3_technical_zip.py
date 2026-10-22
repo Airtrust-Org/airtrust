@@ -25,11 +25,18 @@ class TechnicalPackageTest(unittest.TestCase):
                              (b / 'player3-technical-only.zip').read_bytes())
             self.assertEqual(first['unitCount'], 5)
             self.assertEqual(first['stageCount'], 1)
+            units = module.units()
+            self.assertEqual([u['kind'] for u in units],
+                             ['lesson', 'lesson', 'lesson', 'lesson', 'assessment'])
+            self.assertEqual(units[-1]['official']['stageId'], 'qa-stage-1')
+            self.assertIn('practice', units[0])
             self.assertFalse(first['remoteWrites'])
             with ZipFile(a / 'player3-technical-only.zip') as z:
                 self.assertEqual(z.namelist(), ['app.js', 'index.html'])
                 js = z.read('app.js').decode()
                 self.assertIn('AIRTRUST_PLAYER3_STAGE_SUBMIT_HINT_V1', js)
+                self.assertIn('b.onclick=()=>{practiced=true;next.disabled=false;', js)
+                self.assertNotIn('if(i===1){practiced=true;', js)
                 self.assertIn('AIRTRUST_PLAYER3_RESUME_ACK_V1', js)
                 self.assertIn('AIRTRUST_PLAYER3_CONTENT_END_HINT_V1', js)
                 self.assertIn("event.source!==window.parent", js)
