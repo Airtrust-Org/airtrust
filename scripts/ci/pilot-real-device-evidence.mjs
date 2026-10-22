@@ -102,21 +102,23 @@ export function isPilotImpactingPath(path) {
     return path === '.github/workflows/deploy-airtrust.yml' ||
       path === '.github/workflows/pilot-real-device-acceptance.yml';
   if (path.startsWith('scripts/')) {
-    return path === 'scripts/ci/pilot-production-release-guard.mjs' ||
-      path === 'scripts/ci/pilot-real-device-evidence.mjs' ||
-      path === 'scripts/ci/validate-production-deploy-dispatch.mjs' ||
-      path === 'scripts/ci/verify-release-gates.mjs' ||
-      path.startsWith('scripts/deploy/');
+    // Only isolated staging tools for named other domains can be presumed
+    // independent. Unknown CI/build/deploy scripts may alter Pilot artifacts.
+    if (/^scripts\/staging\/(?:qa-training-compliance|training-compliance|frms|player3|scorm)[-/.]/.test(path))
+      return false;
+    return true;
   }
   if (path.startsWith('worker-airtrust/schema-v2/')) {
     if (/pilot|controle[-_]voos/i.test(path)) return true;
     // Other reviewed, explicitly named domain migrations have no Pilot D1
     // contract edits. An unknown generic schema file stays fail-closed.
-    return !/^worker-airtrust\/schema-v2\/(?:changes|plans)\/\d*[-_a-z0-9.]+$/i.test(path);
+    return !/^worker-airtrust\/schema-v2\/(?:changes|plans)\/(?:\d+[_-])?(?:frms|lms|scorm|player3|training[-_]compliance|qualificacoes[-_])[-_a-z0-9.]+$/i.test(path);
   }
-  if (path.startsWith('public/')) return path.startsWith('public/pilot/') ||
-    path === 'public/sw.js' || path === 'public/index.html' ||
-    path === 'public/manifest.json' || path === 'public/manifest.webmanifest';
+  if (path.startsWith('public/')) {
+    // Only the LMS-contained H5P bundle is independently owned. Global
+    // branding, service-worker, reload and config files can affect Pilot.
+    return !path.startsWith('public/h5p-standalone/');
+  }
   if (path.startsWith('worker-airtrust/src/')) {
     if (path === 'worker-airtrust/src/cron/resilient/compliance-roster.ts') return false;
     if (INDEPENDENT_WORKER.test(path)) return false;

@@ -67,6 +67,8 @@ test('physical evidence rejects missing, placeholder or external Pages origin',(
 test('Pilot scope is conservative for shared code and independent for named domain modules',()=>{
  for(const path of ['public/pilot/app.js','worker-airtrust/src/services/controle-voos/pilot-offline-sync.ts',
   'worker-airtrust/wrangler.toml','worker-airtrust/src/index.ts',
+  'public/dev-config.js','public/force-reload.js','public/branding/global.css',
+  'scripts/ci/build-content-gates.mjs','worker-airtrust/schema-v2/changes/9999_unknown.sql',
   'worker-airtrust/src/middleware/tenant.ts','src/App.tsx',
   'scripts/ci/pilot-production-release-guard.mjs','.github/workflows/deploy-airtrust.yml',
   'worker-airtrust/schema-v2/changes/0564_controle_voos_pilot_supplier_history.sql'])
@@ -76,6 +78,8 @@ test('Pilot scope is conservative for shared code and independent for named doma
   'worker-airtrust/src/cron/resilient/compliance-roster.ts',
   'scripts/staging/qa-training-compliance-cycle-evidence.mjs',
   'docs/frms/REPORT.md','e2e/frontend-pr-ui-qa/training-compliance-lifecycle.spec.ts',
+  'public/h5p-standalone/engine.js',
+  'worker-airtrust/schema-v2/changes/0580_training-compliance-cycle.sql',
   '.github/workflows/staging-training-compliance-lifecycle-qa.yml',
   'docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json'])
   assert.equal(isPilotImpactingPath(path),false,path);
@@ -116,6 +120,8 @@ test('production Worker deploy invokes the exact Pilot acceptance lineage guard'
  const workflow=readFileSync('.github/workflows/deploy-airtrust.yml','utf8');
  assert.match(workflow,/name: Verify Pilot real-device acceptance for production release[\s\S]*?if: \$\{\{ inputs\.deploy_worker \|\| inputs\.deploy_pages \}\}[\s\S]*?node scripts\/ci\/pilot-production-release-guard\.mjs --release-sha/);
  assert.match(workflow,/Checkout trusted production pipeline[\s\S]*?fetch-depth: 0/);
+ const guard=readFileSync('scripts/ci/pilot-production-release-guard.mjs','utf8');
+ assert.ok(guard.includes("'--no-renames'"),'renames must expose both source and destination');
 });
 
 test('protocol documents the distinct staged SHA and later evidence commit',()=>{

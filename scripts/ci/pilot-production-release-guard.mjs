@@ -25,7 +25,7 @@ function changedPathsBetween(base, head) {
   git(['cat-file', '-e', base + '^{commit}']);
   git(['cat-file', '-e', head + '^{commit}']);
   git(['merge-base', '--is-ancestor', base, head]);
-  return git(['diff', '--name-only', base, head, '--']).split('\n').filter(Boolean);
+  return git(['diff', '--no-renames', '--name-only', base, head, '--']).split('\n').filter(Boolean);
 }
 
 async function currentProductionSourceSha() {
