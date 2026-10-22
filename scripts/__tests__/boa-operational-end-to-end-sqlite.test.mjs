@@ -147,7 +147,7 @@ test('BOA complete synthetic 130-role cycle with real SQL and no remote connecti
     assert.equal(await resolveBoaCrewIdentity(d1,130,20001),10001);
     assert.equal(await resolveBoaCrewIdentity(d1,6,20001).catch(() => null),null);
     let checkinAndCase = [];
-    for (let i=0; i<10; i++) {
+    for (let i=0; i<125; i++) {
       const employee = crewIds[i], user = 20001+i;
       const receipt = await registerBoaCheckin(d1,130,employee,user,date,checkinInput,governance);
       assert.equal(receipt.accepted,true);
@@ -156,11 +156,11 @@ test('BOA complete synthetic 130-role cycle with real SQL and no remote connecti
       assert.equal((await loadBoaCrewCheckinStatus(d1,130,employee,user,date)).case_id,receipt.case_id);
       checkinAndCase.push(receipt);
     }
-    assert.equal(eventCount(sqlite),20); // 10 receipts + 10 opened cases
+    assert.equal(eventCount(sqlite),250); // 125 receipts + 125 opened cases
     assert.equal((await registerBoaCheckin(d1,130,10001,20001,date,checkinInput,governance)).status,'ALREADY_RECEIVED');
-    assert.equal(eventCount(sqlite),20); // duplicate is idempotent
+    assert.equal(eventCount(sqlite),250); // duplicate is idempotent
     const queue = await loadBoaCaseQueue(d1,130,300,sectorScope);
-    assert.equal(queue.items.length,10);
+    assert.equal(queue.items.length,39); // only directly assigned setor 9 from 125 crew
     assert.ok(queue.items.every(item=>item.state==='ABERTO'));
     assert.doesNotMatch(JSON.stringify(queue),/kss_reported|sleep_hours_24h|funcionario_id/i);
 
@@ -187,23 +187,23 @@ test('BOA complete synthetic 130-role cycle with real SQL and no remote connecti
         avaliacao_eficacia:'Repetição proibida de encerramento fictício.',
       },'closure',sectorScope),'NOT_ALLOWED');
     }
-    assert.equal(eventCount(sqlite),30); // 20 original + 5 mitigations + 5 closures
+    assert.equal(eventCount(sqlite),260); // 250 original + 5 mitigations + 5 closures
     const status = await loadBoaCaseQueue(d1,130,300,sectorScope);
     assert.equal(status.items.filter(item=>item.state==='RESOLVIDO').length,5);
-    assert.equal(status.items.filter(item=>item.state==='ABERTO').length,5);
+    assert.equal(status.items.filter(item=>item.state==='ABERTO').length,34);
 
     const report = await loadBoaMonthlyManagementPreview(
       d1,130,'2026-10',new Set(crewIds),
     );
-    assert.equal(report.current.participants,10);
-    assert.equal(report.current.checkin_receipts,10);
+    assert.equal(report.current.participants,125);
+    assert.equal(report.current.checkin_receipts,125);
     assert.equal(report.current.cases.privacy,'OBSERVED');
-    assert.equal(report.current.cases.opened,10);
-    assert.equal(report.current.cases.awaiting_treatment,5);
+    assert.equal(report.current.cases.opened,125);
+    assert.equal(report.current.cases.awaiting_treatment,120);
     assert.equal(report.current.cases.closed_with_efficacy,5);
     assert.equal(report.current.cases.under_treatment,0);
     assert.equal(report.previous.checkin_receipts,0);
-    assert.equal(report.receipt_delta,10);
+    assert.equal(report.receipt_delta,125);
     assert.equal(report.provenance.signed,false);
     assert.equal(report.provenance.scientific_score,'NOT_VALIDATED');
     assert.doesNotMatch(JSON.stringify(report),
@@ -218,6 +218,6 @@ test('BOA complete synthetic 130-role cycle with real SQL and no remote connecti
       acao_mitigacao:'Mitigação depois de revogação não autorizada.',
       justificativa:'Não deve inserir evento após revogação de acesso.',
     },'treatment',sectorScope),'NOT_ALLOWED');
-    assert.equal(eventCount(sqlite),30);
+    assert.equal(eventCount(sqlite),260);
   } finally { sqlite.close(); }
 });
