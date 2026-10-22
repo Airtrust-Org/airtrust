@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   assertRunIdentity, ownedPdfKey, buildOwnedPdfSql, cleanupOwnedPdfs,
-  createCloudflareR2Storage, proveCloudflareR2CleanupCapability,
+  createCloudflareR2Storage, proveCloudflareR2CleanupCapability, validateR2CleanupPlan,
   QA_TENANT, QA_BUCKET,
 } from '../staging/cleanup-qa-training-compliance-r2.mjs';
 
@@ -111,6 +111,7 @@ test('workflow proves existing staging Worker token before seed and cleans D1 ev
   const w=readFileSync('.github/workflows/staging-training-compliance-lifecycle-qa.yml','utf8');
   const before=w.indexOf('Prove R2 object cleanup with existing staging Worker API token before seed');
   const seed=w.indexOf('Validate schemas and seed lifecycle fixture');
+  const plan=w.indexOf('Prepare exact run-owned R2 cleanup plan with read-only D1');
   const r2=w.indexOf('Delete only verified run-owned certificate PDF keys');
   const d1=w.indexOf('Soft-delete only this run');
   const verify=w.indexOf('Enforce R2 deletion verification');
@@ -119,7 +120,13 @@ test('workflow proves existing staging Worker token before seed and cleans D1 ev
   assert.ok(w.includes('--preflight --code="$QA_LIFECYCLE_CODE" --marker="$QA_LIFECYCLE_MARKER"'));
   assert.ok(!w.includes('secrets.QA_LIFECYCLE_R2_ACCESS_KEY_ID'));
   assert.ok(!w.includes('secrets.QA_LIFECYCLE_R2_SECRET_ACCESS_KEY'));
-  assert.ok(r2>seed && d1>r2 && verify>d1);
+  assert.ok(r2>seed && plan>seed && r2>plan && d1>r2 && verify>d1);
+  const planStep=w.slice(plan,r2), deleteStep=w.slice(r2,d1);
+  assert.ok(planStep.includes('secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN'));
+  assert.ok(!planStep.includes('secrets.CLOUDFLARE_WORKER_API_TOKEN'));
+  assert.ok(deleteStep.includes('secrets.CLOUDFLARE_WORKER_API_TOKEN'));
+  assert.ok(!deleteStep.includes('secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN'));
+  assert.ok(deleteStep.includes('--apply --code="$QA_LIFECYCLE_CODE"'));
   assert.match(w,/id: r2_cleanup\s+continue-on-error: true/);
   assert.match(w,/name: Soft-delete only this run's synthetic D1 artifacts\s+if: always\(\)/);
   assert.match(w,/test "\$R2_CLEANUP_OUTCOME" = success/);
@@ -189,4 +196,13 @@ test('preflight never accepts R2 delete without absence on readback',async()=>{
     fetchImpl:r.fetchImpl}),/QA_R2_PREFLIGHT_CANARY_REMAINS/);
   assert.equal(r.keys.size,1);
   assert.equal(r.calls.filter(x=>x.method==='DELETE').length,2);
+});
+
+test('D1 plan is bound to exact run marker and ownership before R2-scoped cleanup',()=>{
+  const plan={code,marker,rows:[pdf(1),pdf(2)]};
+  assert.deepEqual(validateR2CleanupPlan(plan,code,marker),plan.rows);
+  assert.throws(()=>validateR2CleanupPlan({...plan,code:code+'1'},code,marker),/QA_R2_RUN_PLAN_INVALID/);
+  assert.throws(()=>validateR2CleanupPlan({...plan,marker:marker+'1'},code,marker),/QA_R2_RUN_PLAN_INVALID/);
+  assert.throws(()=>validateR2CleanupPlan({...plan,rows:[pdf(1),pdf(1)]},code,marker),/QA_PDF_DUPLICATE_KEY/);
+  assert.throws(()=>validateR2CleanupPlan({...plan,rows:[pdf(1),{...pdf(2),tenant_code:'other'}]},code,marker),/QA_PDF_OWNER_MISMATCH/);
 });
