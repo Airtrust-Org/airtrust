@@ -144,7 +144,7 @@ jobs:
             echo "- D1 SELECT-only fresh roster: $PREFLIGHT_STATUS"
             echo "- Worker-only authenticated start: $START_STATUS"
             echo "- independent D1 SELECT-only postread: $POST_STATUS"
-            echo '- 2 synthetic tenant 999006/course 327 students, no score/grade/cert'
+            echo '- 2 synthetic tenant 999006/course 328 students, no score/grade/cert'
             echo '- No raw D1 writes, migration, R2, Pages or production action'
             echo '- Partial start means manual recovery; NEVER auto-replay'
             echo '- Six journeys, resume 80%, SCORM and PDF: NOT ATTESTED'
