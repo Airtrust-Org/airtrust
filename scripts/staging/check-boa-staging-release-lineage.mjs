@@ -5,7 +5,7 @@
  * approval, database schema, grants, or runtime compatibility. Read-only.
  * Never dispatches, changes Git refs, or writes staging resources.
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
