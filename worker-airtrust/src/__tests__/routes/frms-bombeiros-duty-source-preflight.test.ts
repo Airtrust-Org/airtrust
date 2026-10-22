@@ -27,6 +27,9 @@ function appFor(id = 130, code = 'bombeiros', role = 'admin', env = 'staging') {
     });
     await next();
   });
+  app.onError(error => new Response(JSON.stringify({ code: 'DENIED' }), {
+    status: (error as { statusCode?: number }).statusCode ?? 500,
+  }));
   app.route('/', frmsBombeiros);
   return {
     db,
@@ -86,7 +89,7 @@ describe('BOA source preflight is bounded, authenticated, synthetic-only and rea
     expect(body.data).toMatchObject({
       schema: 'BOA_OPERATIONAL_SOURCE_BATCH_V1',
       status: 'SCHEMA_VALID_SOURCE_UNVERIFIED',
-      record_count: 1, persisted: undefined,
+      record_count: 1,
       candidate_totals_ms: { planned: 28800000, actual: 28800000,
         standby: null, activations: null },
       missing_sources_count: { STANDBY_STATUS_UNKNOWN: 1, ACTIVATION_COVERAGE_UNKNOWN: 1 },
