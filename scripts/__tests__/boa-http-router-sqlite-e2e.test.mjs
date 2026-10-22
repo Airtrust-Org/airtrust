@@ -49,6 +49,12 @@ const mod=new Module(filename);
 mod.filename=filename;mod.paths=Module._nodeModulePaths(dirname(filename));
 mod._compile(output,filename);
 const router=mod.exports.default;
+// This standalone router is mounted without the app's production error handler.
+// Reproduce the HTTP error translation without changing route authorization.
+router.onError(error=>new Response(JSON.stringify({success:false,code:error.code??'QA_ROUTE_ERROR'}),{
+ status:error.statusCode??error.status??500,
+ headers:{'Content-Type':'application/json'},
+}));
 const {Hono}=require('hono');
 function fixture(){
  const sqlite=new DatabaseSync(':memory:');
