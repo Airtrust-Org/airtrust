@@ -67,7 +67,7 @@ describe('BOA read-only staging readiness, no clinical data or approval', () => 
     const { db, get } = appFor();
     const response = await get();
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await response.json() as { data: Record<string, unknown>; meta: Record<string, unknown> };
     expect(body.data).toMatchObject({
       status: 'QA_PRECONDITIONS_INCOMPLETE',
       accounts: { member_accounts: 0, crew_links: 0, manager_roles: 0, admin_roles: 0 },
@@ -90,7 +90,7 @@ describe('BOA read-only staging readiness, no clinical data or approval', () => 
       gate: '130',
     }).get();
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await response.json() as { data: Record<string, unknown>; meta: Record<string, unknown> };
     expect(body.data).toMatchObject({
       status: 'CONFIGURATION_CHECKS_PASSED_NOT_AUTHORIZED',
       cohort_130_structurally_present: true,
@@ -122,7 +122,7 @@ describe('BOA read-only staging readiness, no clinical data or approval', () => 
     const {get: errorGet} = appFor({failQuery: true});
     const error = await errorGet();
     expect(error.status).toBe(503);
-    expect((await error.json()).code).toBe('BOA_QA_ROSTER_READ_UNAVAILABLE');
+    expect((await error.json() as {code:string}).code).toBe('BOA_QA_ROSTER_READ_UNAVAILABLE');
     const {get: brokenGet} = appFor({
       counts: {member_accounts: 1,crew_links: 2,manager_roles: 0,admin_roles: 0},
     });
@@ -130,7 +130,7 @@ describe('BOA read-only staging readiness, no clinical data or approval', () => 
     profile.mockRejectedValueOnce(new Error('not approved'));
     const result = await appFor().get();
     expect(result.status).toBe(200);
-    const body = await result.json();
+    const body = await result.json() as { data: Record<string, unknown> };
     expect(body.data.firefighter_profile_configuration_resolves).toBe(false);
     expect(body.data.status).toBe('QA_PRECONDITIONS_INCOMPLETE');
   });
