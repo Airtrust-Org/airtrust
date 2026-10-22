@@ -30,7 +30,17 @@ const mockPaths={
  'report-access':/lib\/frms\/report-access$/,
 };
 const output=(await esbuild.build({
- entryPoints:[join(root,'worker-airtrust/src/routes/frms-bombeiros.ts')],
+ stdin:{
+  contents:[
+   "import router from './routes/frms-bombeiros';",
+   "import {auth} from './middleware/auth';",
+   "import {tenantMiddleware} from './middleware/tenant';",
+   "import {generateJWT} from './utils/security';",
+   "export {router,auth,tenantMiddleware,generateJWT};",
+  ].join(String.fromCharCode(10)),
+  resolveDir:join(root,'worker-airtrust/src'),
+  sourcefile:'boa-jwt-integration-entry.ts',loader:'ts',
+ },
  bundle:true,platform:'node',format:'cjs',write:false,
  plugins:[{name:'BOA-QA-scoped-stubs',setup(build){
   for(const [name,pattern] of Object.entries(mockPaths)){
@@ -48,7 +58,7 @@ const filename='/tmp/airtrust-boa-hono-real-sqlite-qa.cjs';
 const mod=new Module(filename);
 mod.filename=filename;mod.paths=Module._nodeModulePaths(dirname(filename));
 mod._compile(output,filename);
-const router=mod.exports.default;
+const {router,auth,tenantMiddleware,generateJWT}=mod.exports;
 // This standalone router is mounted without the app's production error handler.
 // Reproduce the HTTP error translation without changing route authorization.
 router.onError(error=>new Response(JSON.stringify({success:false,code:error.code??'QA_ROUTE_ERROR'}),{
@@ -60,14 +70,17 @@ function fixture(){
  const sqlite=new DatabaseSync(':memory:');
  sqlite.exec([
   'CREATE TABLE funcionarios(id INTEGER PRIMARY KEY,empresa_id INTEGER,setor_id INTEGER,ativo INTEGER,deleted_at TEXT,status TEXT,cargo TEXT,funcao TEXT)',
-  'CREATE TABLE usuarios(id INTEGER PRIMARY KEY,funcionario_id INTEGER,deleted_at TEXT)',
+  'CREATE TABLE usuarios(id INTEGER PRIMARY KEY,funcionario_id INTEGER,deleted_at TEXT,perfil TEXT,ativo INTEGER)',
+  'CREATE TABLE empresas(id INTEGER PRIMARY KEY,codigo TEXT,nome TEXT,plano TEXT,ativo INTEGER,deleted_at TEXT)',
+  'CREATE TABLE token_blocklist(jti TEXT,expires_at TEXT)',
   'CREATE TABLE usuarios_empresas(usuario_id INTEGER,empresa_id INTEGER,role TEXT)',
   'CREATE TABLE setores(id INTEGER,empresa_id INTEGER,ativo INTEGER,deleted_at TEXT)',
   'CREATE TABLE setores_gestores(id INTEGER PRIMARY KEY,setor_id INTEGER,usuario_id INTEGER,empresa_id INTEGER,role TEXT,ativo INTEGER,deleted_at TEXT)',
   'CREATE TABLE frms_fadiga_evento(id TEXT PRIMARY KEY,empresa_id INTEGER,checkin_id TEXT,tipo TEXT,payload_json TEXT,created_at TEXT)',
   "INSERT INTO setores VALUES(9,130,1,NULL),(10,130,1,NULL),(109,6,1,NULL)",
   "INSERT INTO funcionarios VALUES(21,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(22,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(23,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(24,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(25,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(26,130,9,1,NULL,'ATIVO','PILOTO','Piloto'),(70,6,109,1,NULL,'ATIVO','Tripulante','Outro')",
-  'INSERT INTO usuarios VALUES(101,21,NULL),(102,22,NULL),(103,23,NULL),(104,24,NULL),(105,25,NULL),(106,26,NULL),(190,NULL,NULL),(191,NULL,NULL),(200,NULL,NULL),(600,70,NULL)',
+  "INSERT INTO usuarios VALUES(101,21,NULL,'student',1),(102,22,NULL,'student',1),(103,23,NULL,'student',1),(104,24,NULL,'student',1),(105,25,NULL,'student',1),(106,26,NULL,'student',1),(190,NULL,NULL,'manager',1),(191,NULL,NULL,'manager',1),(200,NULL,NULL,'admin',1),(600,70,NULL,'student',1)",
+  "INSERT INTO empresas VALUES(130,'bombeiros','BOA QA','qa',1,NULL),(6,'costadosol','Costa do Sol','qa',1,NULL)",
   "INSERT INTO usuarios_empresas VALUES(101,130,'student'),(102,130,'student'),(103,130,'student'),(104,130,'student'),(105,130,'student'),(106,130,'student'),(190,130,'manager'),(191,130,'manager'),(200,130,'admin'),(600,6,'student')",
   "INSERT INTO setores_gestores VALUES(1,9,190,130,'manager',1,NULL),(2,10,191,130,'manager',1,NULL)"
  ].join(';')+';');
@@ -85,6 +98,31 @@ function fixture(){
   }catch(e){sqlite.exec('ROLLBACK');throw e;}},
  };
  const execution={waitUntil(){},passThroughOnException(){},props:{}};
+ const jwtSecret='BOA_LOCAL_TEST_ONLY_NOT_STAGING_SECRET_20261022';
+ const realJwt=(user,role='student',tenant=130)=>generateJWT({
+   sub:user,email:'qa-only@example.invalid',role,empresa_id:tenant,token_type:'access',
+  },jwtSecret,600).then(x=>x.token);
+ const actualAuth=(environment='staging',gate='130')=>{
+  const app=new Hono();
+  app.use('*',async(c,next)=>{
+   c.env={DB:d1,ENVIRONMENT:environment,JWT_SECRET:jwtSecret,
+    ENABLE_DEV_AUTH_BYPASS:'false',
+    BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID:gate};
+   return auth()(c,async()=>tenantMiddleware()(c,next));
+  });
+  app.onError(error=>new Response(JSON.stringify({success:false,
+    code:error.code??'QA_AUTH_ROUTE_ERROR'}),{
+     status:error.statusCode??error.status??500,
+     headers:{'Content-Type':'application/json'},
+  }));
+  app.route('/api/bombeiros/frms',router);
+  return(token,method,path,body)=>app.fetch(new Request(
+   'http://localhost/api/bombeiros/frms'+path,{
+    method,headers:{...(token?{Authorization:'Bearer '+token}:{}),
+     ...(body?{'Content-Type':'application/json'}:{})},
+    ...(body?{body:JSON.stringify(body)}:{}),
+   }),{},execution);
+ };
  const as=(user,role,tenant=130,environment='staging',gate='130')=>{
   const app=new Hono();
   app.use('*',async(c,next)=>{
@@ -102,7 +140,7 @@ function fixture(){
    ...(body?{body:JSON.stringify(body)}:{}),
   }),{},execution);
  };
- return{sqlite,as,count:()=>sqlite.prepare('SELECT COUNT(*) n FROM frms_fadiga_evento').get().n};
+ return{sqlite,as,realJwt,actualAuth,count:()=>sqlite.prepare('SELECT COUNT(*) n FROM frms_fadiga_evento').get().n};
 }
 const checkin={
  mission_type:'RESGATE',duty_period:'NOTURNO',
@@ -179,5 +217,37 @@ test('simulated BOA actor hits real Hono checkin, events, case and report with S
   assert.equal((await revoked.json()).data.items.length,0);
   assert.equal((await manager('PUT','/casos/'+encodeURIComponent(receipts[1].case_id)+'/tratamento',treatment)).status,409);
   assert.equal(count(),14);
+ }finally{sqlite.close();}
+});
+
+test('signed JWT and actual auth + tenant middleware protect BOA checkin and cases',async()=>{
+ const {sqlite,actualAuth,realJwt,count}=fixture();
+ try{
+  const request=actualAuth();
+  const token=await realJwt(101,'student',130);
+  const manager=await realJwt(190,'manager',130);
+  const admin=await realJwt(200,'admin',130);
+  const coastal=await realJwt(600,'student',6);
+  assert.equal((await request(null,'GET','/checkin/status')).status,401);
+  assert.equal((await request('bad.jwt','GET','/checkin/status')).status,401);
+  assert.equal((await request(coastal,'POST','/checkin',checkin)).status,403);
+  assert.equal((await request(manager,'POST','/checkin',checkin)).status,403);
+  assert.equal(count(),0);
+  const created=await request(token,'POST','/checkin',checkin);
+  assert.equal(created.status,201,'JWT checkin: '+await created.clone().text());
+  const payload=await created.json();
+  assert.equal(payload.data.dispatch_permission,'NOT_GRANTED');
+  assert.equal((await request(token,'GET','/checkin/status')).status,200);
+  assert.equal((await request(admin,'GET','/casos')).status,403);
+  assert.equal((await request(manager,'GET','/casos')).status,200);
+  assert.equal(count(),2);
+  sqlite.exec('DELETE FROM usuarios_empresas WHERE usuario_id=101 AND empresa_id=130');
+  assert.equal((await request(token,'GET','/checkin/status')).status,401);
+  assert.equal((await request(token,'POST','/checkin',checkin)).status,401);
+  assert.equal(count(),2);
+  const cross=await realJwt(101,'student',6);
+  assert.equal((await request(cross,'GET','/checkin/status')).status,401);
+  assert.equal((await actualAuth('production')(manager,'GET','/casos')).status,200);
+  assert.equal((await actualAuth('production')(admin,'POST','/checkin',checkin)).status,403);
  }finally{sqlite.close();}
 });
