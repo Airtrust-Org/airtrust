@@ -5,6 +5,7 @@
 // rollback_plan_required: --apply deletes only validated QA PDF keys, verifies absence,
 //   then the caller always runs the SQL fixture rollback; archived D1 evidence is immutable.
 import { spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 export const QA_TENANT = 'qa_examiner_training';
 export const QA_DB = 'airtrust-db-staging-baseline-20260701';
@@ -168,16 +169,37 @@ function queryStagingD1(sql) {
   return results;
 }
 
+export function validateR2CleanupPlan(plan, code, marker) {
+  assertRunIdentity(code, marker);
+  if (!plan || plan.code !== code || plan.marker !== marker ||
+      !Array.isArray(plan.rows) || plan.rows.length > 16)
+    throw Error('QA_R2_RUN_PLAN_INVALID');
+  const keys = plan.rows.map(row => ownedPdfKey(row, code));
+  if (new Set(keys).size !== keys.length) throw Error('QA_PDF_DUPLICATE_KEY');
+  return plan.rows;
+}
+
+function runPlanFile(code) {
+  const temp = process.env.RUNNER_TEMP;
+  const runId = code.slice('QA-COMP-LIFE-'.length);
+  const expected = String(temp || '') + '/airtrust-f1-r2-' + runId + '.json';
+  if (!temp || process.env.QA_R2_PLAN_FILE !== expected)
+    throw Error('QA_R2_RUN_PLAN_PATH_DENIED');
+  return expected;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const code = (args.find(v => v.startsWith('--code=')) || '').slice(7);
   const marker = (args.find(v => v.startsWith('--marker=')) || '').slice(9);
   const apply = args.includes('--apply');
+  const preparePlan = args.includes('--prepare-plan');
+  const preflight = args.includes('--preflight');
   assertRunIdentity(code, marker);
   if (process.env.STAGING_D1_NAME && process.env.STAGING_D1_NAME !== QA_DB)
     throw Error('QA_D1_TARGET_REJECTED');
-  const preflight = args.includes('--preflight');
-  if ((apply || preflight) && process.env.CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA !== QA_CONFIRM)
+  if ((apply || preflight || preparePlan) &&
+      process.env.CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA !== QA_CONFIRM)
     throw Error('QA_R2_CONFIRMATION_REQUIRED');
   if (preflight) {
     const runId = code.slice('QA-COMP-LIFE-'.length);
@@ -188,13 +210,23 @@ async function main() {
     console.log(JSON.stringify(result));
     return;
   }
-  const rows = queryStagingD1(buildOwnedPdfSql(code, marker));
+  if (preparePlan) {
+    // Read-only D1 phase. The next step will use only Worker/R2 credentials.
+    const rows = queryStagingD1(buildOwnedPdfSql(code, marker));
+    const plan = {code, marker, rows};
+    validateR2CleanupPlan(plan, code, marker);
+    writeFileSync(runPlanFile(code), JSON.stringify(plan), {flag:'wx',mode:0o600});
+    console.log(JSON.stringify({result:'PASS',ownedPdfCount:rows.length,stage:'D1_READ_ONLY_PLAN'}));
+    return;
+  }
   if (!apply) {
+    const rows = queryStagingD1(buildOwnedPdfSql(code, marker));
     console.log(JSON.stringify(await cleanupOwnedPdfs(rows, code, marker, null, false)));
     return;
   }
-  // Nothing was issued (or seed failed): the SQL rollback is still mandatory,
-  // but a missing R2 key must not turn a harmless no-op into an unclean fixture.
+  // R2-only phase. Never map the D1 token and Worker token to the same step.
+  const plan = JSON.parse(readFileSync(runPlanFile(code), 'utf8'));
+  const rows = validateR2CleanupPlan(plan, code, marker);
   if (rows.length === 0) {
     console.log(JSON.stringify({result:'PASS',checked:0,deleted:0,dryRun:false}));
     return;
