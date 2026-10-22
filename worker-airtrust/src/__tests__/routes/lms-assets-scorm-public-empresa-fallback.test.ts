@@ -190,7 +190,7 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
       expect(text).toContain('Empresa não identificada');
     });
 
-    it('uses the current active package for an in-progress enrollment after a course update', async () => {
+    it('uses the package activated before the in-progress enrollment cycle', async () => {
       verifyJWTMock.mockResolvedValue({
         empresa_id: 6,
         funcionario_id: 42,
@@ -211,9 +211,17 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
               ativo: 1,
               publicado: 1,
               scorm_package_r2_prefix: currentPrefix,
+              scorm_launch_file: 'index.html',
+              scorm_versao: '1.2',
+              cycle_started_at: '2026-09-14T14:46:16Z',
             }),
           },
         ],
+        ['lms_scorm_package_audit_log', { all: () => ({ results: [{
+          package_id: 'package-current', package_sha256: 'a'.repeat(64), r2_prefix: currentPrefix,
+          launch_file: 'index.html', scorm_versao: '1.2', package_status: 'ACTIVE',
+          activated_at: '2026-09-10T00:00:00Z',
+        }] }) }],
       ]);
 
       const response = await createApp().fetch(
@@ -238,13 +246,17 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
       );
     });
 
-    it('uses the current active package when reviewing a completed enrollment', async () => {
+    it('uses the package activated before a completed enrollment cycle', async () => {
       verifyJWTMock.mockResolvedValue({ empresa_id: 6, funcionario_id: 42, role: 'admin', sub: '42' });
       const currentPrefix = 'lms/scorm/6/99/_candidates/current-package/';
       const db = createMockDb([[
         'FROM lms_matriculas m',
-        { first: () => ({ id: 77, funcionario_id: 42, empresa_id: 6, status: 'CONCLUIDO', curso_id: 99, data_inicio: '2026-09-14 14:46:16', ativo: 1, publicado: 1, scorm_package_r2_prefix: currentPrefix }) },
-      ]]);
+        { first: () => ({ id: 77, funcionario_id: 42, empresa_id: 6, status: 'CONCLUIDO', curso_id: 99, data_inicio: '2026-09-14 14:46:16', cycle_started_at: '2026-09-14T14:46:16Z', ativo: 1, publicado: 1, scorm_package_r2_prefix: currentPrefix, scorm_launch_file: 'index.html', scorm_versao: '1.2' }) },
+      ], ['lms_scorm_package_audit_log', { all: () => ({ results: [{
+        package_id: 'package-current', package_sha256: 'a'.repeat(64), r2_prefix: currentPrefix,
+        launch_file: 'index.html', scorm_versao: '1.2', package_status: 'ACTIVE',
+        activated_at: '2026-09-10T00:00:00Z',
+      }] }) }]]);
 
       const response = await createApp().fetch(
         new Request('https://airtrust-api-staging.airtrust.workers.dev/assets/session', {

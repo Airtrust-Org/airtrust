@@ -26,6 +26,13 @@ type ActivationRow = {
 
 const SHA256 = /^[a-f0-9]{64}$/;
 
+export const SCORM_CYCLE_STARTED_AT_SQL = `COALESCE(
+  (SELECT cy.data_matricula FROM lms_matricula_ciclos cy
+    WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+      AND cy.curso_id=m.curso_id AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+    ORDER BY cy.id DESC LIMIT 1), m.data_matricula, m.data_inicio, m.created_at
+)`;
+
 function parseTime(value: unknown): number | null {
   if (typeof value !== 'string' || !value.trim()) return null;
   const time = Date.parse(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`);
@@ -109,4 +116,40 @@ export async function resolveScormEnrollmentEdition(params: {
     status: 'RESOLVED', packageId: row.package_id, packageSha256: row.package_sha256,
     r2Prefix: row.r2_prefix, launchFile: row.launch_file, scormVersion: row.scorm_versao,
   };
+}
+
+export async function resolveScormAssetEnrollmentEdition(params: {
+  db: D1Database;
+  empresaId: number;
+  cursoId: number;
+  matriculaId: number;
+  isPrivileged: boolean;
+  funcionarioId: number;
+  tokenPrefix: string | null;
+}): Promise<{ status: 'RESOLVED' | 'DENIED' | 'UNRESOLVED'; r2Prefix?: string }> {
+  const enrollment = await params.db.prepare(
+    `SELECT m.id, m.funcionario_id, c.scorm_package_r2_prefix,
+            c.scorm_launch_file, c.scorm_versao, ${SCORM_CYCLE_STARTED_AT_SQL} AS cycle_started_at
+       FROM lms_matriculas m JOIN lms_cursos c
+         ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
+      WHERE m.id=? AND m.empresa_id=? AND m.curso_id=? AND m.deleted_at IS NULL
+      LIMIT 1`,
+  ).bind(params.matriculaId, params.empresaId, params.cursoId).first<{
+    id: number; funcionario_id: number; scorm_package_r2_prefix: string | null;
+    scorm_launch_file: string | null; scorm_versao: string | null; cycle_started_at: string | null;
+  }>();
+  if (!enrollment || (!params.isPrivileged && params.funcionarioId !== enrollment.funcionario_id)) {
+    return { status: 'DENIED' };
+  }
+  const edition = await resolveScormEnrollmentEdition({
+    db: params.db, empresaId: params.empresaId, cursoId: params.cursoId,
+    cycleStartedAt: enrollment.cycle_started_at,
+    currentPrefix: enrollment.scorm_package_r2_prefix,
+    currentLaunchFile: enrollment.scorm_launch_file,
+    currentScormVersion: enrollment.scorm_versao,
+  });
+  if (edition.status === 'UNRESOLVED' || (params.tokenPrefix ?? null) !== (edition.r2Prefix ?? null)) {
+    return { status: 'UNRESOLVED' };
+  }
+  return { status: 'RESOLVED', r2Prefix: edition.r2Prefix };
 }
