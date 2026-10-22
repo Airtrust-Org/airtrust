@@ -22,6 +22,7 @@ import {
 import { unauthorized, serviceUnavailable } from './error-handler';
 import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
+import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
 
 const USUARIOS_TABLE_SQL =
   "SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = 'usuarios' LIMIT 1";
@@ -422,6 +423,32 @@ async function authenticateScopedScormCommitAsset(
       'Usuário sem vínculo válido com o tenant do token.',
       'TENANT_MEMBERSHIP_INVALID',
     );
+  }
+
+  if (c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED === 'true') {
+    const active = await c.env.DB.prepare(`
+      SELECT cy.id AS cycle_id,h.id AS handoff_id
+      FROM lms_matricula_ciclos cy
+      JOIN lms_cursos course ON course.id=? AND course.empresa_id=cy.empresa_id
+      LEFT JOIN lms_scorm_package_versions p ON p.empresa_id=cy.empresa_id
+        AND p.curso_id=course.id AND p.status='ACTIVE'
+        AND p.r2_prefix=course.scorm_package_r2_prefix
+      LEFT JOIN lms_scorm_edition_handoffs h ON h.empresa_id=cy.empresa_id
+        AND h.matricula_id=cy.matricula_id AND h.ciclo_id=cy.id
+        AND h.target_package_sha256=p.package_sha256
+      WHERE cy.empresa_id=? AND cy.matricula_id=?
+        AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+      ORDER BY p.id DESC,h.id DESC LIMIT 1`)
+      .bind(cursoId,empresaId,matriculaId)
+      .first<{cycle_id:number;handoff_id:number|null}>();
+    if (!active?.cycle_id || !isScormHandoffSessionCurrent({
+      claimedCycleId:Number(payload.asset_cycle_id ?? 0),
+      claimedHandoffId:Number(payload.asset_handoff_id ?? 0),
+      activeCycleId:active.cycle_id,
+      activeHandoffId:active.handoff_id ?? null,
+    })) {
+      return unauthorized('Sessão SCORM anterior à reconciliação da edição.', 'SCORM_HANDOFF_SESSION_STALE');
+    }
   }
 
   c.set('userId', userId);

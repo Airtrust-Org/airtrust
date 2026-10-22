@@ -60,6 +60,7 @@ describe('SCORM in-cycle edition handoff batch',()=>{
   expect(sql.indexOf('INSERT INTO lms_scorm_edition_handoffs'))
    .toBeLessThan(sql.indexOf('UPDATE lms_progresso_scorm'));
   expect(sql).toContain('UPDATE lms_matriculas');
+  expect(sql).toContain('progresso_pct=0,score_final=NULL,tentativas=0,data_inicio=NULL');
   expect(sql).toContain('DELETE FROM lms_completion_diagnostics_snapshots');
   expect(f.batch).toHaveBeenCalledOnce();
  });

@@ -138,7 +138,8 @@ export async function writeScormEditionHandoff(
         AND qualificacao_historico_id IS NULL AND ${predicate}`)
       .bind(input.matriculaId,input.empresaId,...scopeArgs),
     db.prepare(`UPDATE lms_matricula_ciclos SET status='NAO_INICIADO',
-      progresso_pct=0,tentativas=0,updated_at=datetime('now')
+      progresso_pct=0,score_final=NULL,tentativas=0,data_inicio=NULL,
+      data_conclusao=NULL,updated_at=datetime('now')
       WHERE id=? AND empresa_id=? AND matricula_id=? AND ciclo_atual=1
         AND deleted_at IS NULL AND ${predicate}`)
       .bind(scope.ciclo_id,input.empresaId,input.matriculaId,...scopeArgs),

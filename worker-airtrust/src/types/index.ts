@@ -39,6 +39,9 @@ export interface Env {
   EDB_SHADOW_PILOT_TENANTS?: string;
   // Conhecimento Ativo: fail-closed. Use 'all' ou CSV de empresa_id após homologação técnica.
   CONHECIMENTO_ATIVO_ENABLED_TENANTS?: string;
+  // SCORM in-cycle edition handoff. Keep disabled until Schema V2 0566 is
+  // applied and exact-SHA staging acceptance is complete.
+  LMS_SCORM_EDITION_HANDOFF_ENABLED?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
@@ -385,6 +388,8 @@ export interface JwtPayload {
   asset_scope?: 'pptx_viewer' | 'course_assets';
   asset_curso_id?: number;
   asset_matricula_id?: number;
+  asset_cycle_id?: number;
+  asset_handoff_id?: number | null;
   asset_scorm_package_prefix?: string;
   asset_qa_candidate_id?: string; // Short-lived non-production preview scope only
   asset_qa_candidate_sha256?: string; // Exact staged candidate ZIP identity

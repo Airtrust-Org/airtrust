@@ -388,7 +388,10 @@ export default function LmsPlayer() {
   // NOT included (must NOT recreate the iframe):
   //   - progresso_pct, lesson_location, status, updated_at, nota
   //   - token value, timestamp
-  const sessionKey = `${id}:${reviewParam ? 'review' : 'normal'}:${user?.id ?? 'anon'}:${empresaAtualId ?? 'none'}`;
+  const activeHandoffId = (matricula as (typeof matricula & {
+    active_scorm_handoff_id?: number | null;
+  }) | undefined)?.active_scorm_handoff_id ?? null;
+  const sessionKey = `${id}:${reviewParam ? 'review' : 'normal'}:${user?.id ?? 'anon'}:${empresaAtualId ?? 'none'}:${activeHandoffId ?? 'none'}`;
   const sessionKeyRef = useRef<string | null>(null);
   const stableLaunchUrlRef = useRef<string | null>(null);
   const assetSessionKeyRef = useRef<string | null>(null);
@@ -536,7 +539,7 @@ export default function LmsPlayer() {
       try {
         const response = await fetchWithAuth('/api/lms/assets/session', {
           method: 'POST',
-          body: JSON.stringify({ matricula_id: id }),
+          body: JSON.stringify({ matricula_id: id, expected_handoff_id: activeHandoffId }),
         });
         if (cancelled) return;
 
@@ -565,7 +568,7 @@ export default function LmsPlayer() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [assetContentType, assetMatriculaId, id, playerToken, sessionKey]);
+  }, [activeHandoffId, assetContentType, assetMatriculaId, id, playerToken, sessionKey]);
 
   useEffect(() => {
     const persisted = parseSlideLocation(persistedLocation);
@@ -911,6 +914,31 @@ export default function LmsPlayer() {
     }
   }
 
+  async function preserveAndResumeActiveEdition() {
+    if (!isTenantAdmin || startingNewEdition) return;
+    const confirmed = window.confirm(
+      'O sistema arquivará o CMI, progresso, avaliações e tentativas atuais antes de reinicializar a sessão no pacote ativo. Nenhuma nota ou conclusão será transferida. Continuar?',
+    );
+    if (!confirmed) return;
+    setStartingNewEdition(true);
+    try {
+      const res = await fetchWithAuth(`${API_BASE_URL}/lms/matriculas/${id}/scorm-edition-handoff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const result = await res.json() as { success?: boolean; code?: string; error?: string };
+      if (!res.ok || result.success !== true) {
+        throw new Error(result.error || result.code || `HTTP ${res.status}`);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['lms'] });
+      window.location.reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível preservar e retomar a edição ativa.');
+      setStartingNewEdition(false);
+    }
+  }
+
   async function handleFullscreen() {
     const el = iframeRef.current;
     if (!el) return;
@@ -1245,18 +1273,40 @@ export default function LmsPlayer() {
             )}
           </div>
           {isTenantAdmin ? (
-            <button
-              onClick={() => void startVerifiedNewEdition()}
-              disabled={startingNewEdition}
-              className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
-            >
-              {startingNewEdition ? 'Preparando ciclo excepcional...' : 'Novo ciclo (exceção)'}
-            </button>
+            <div className="flex flex-col gap-2 sm:items-end">
+              {(matricula as (typeof matricula & { scorm_handoff_available?: boolean }) | undefined)?.scorm_handoff_available === true && (
+                <button
+                  onClick={() => void preserveAndResumeActiveEdition()}
+                  disabled={startingNewEdition}
+                  className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-300 disabled:opacity-60"
+                >
+                  {startingNewEdition ? 'Preservando e preparando retomada...' : 'Preservar histórico e retomar edição ativa'}
+                </button>
+              )}
+              <button
+                onClick={() => void startVerifiedNewEdition()}
+                disabled={startingNewEdition}
+                className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
+              >
+                {startingNewEdition ? 'Preparando ciclo excepcional...' : 'Novo ciclo (exceção)'}
+              </button>
+            </div>
           ) : (
             <span className="block w-full min-w-0 break-words text-xs font-medium sm:w-auto">Solicite à Gerência de Treinamento a análise de continuidade da sua matrícula.</span>
           )}
         </div>
       )}
+
+      {!newEditionRequired && activeHandoffId != null && (() => {
+        const bookmark = (matricula as (typeof matricula & {
+          active_scorm_resume_position?: { position: number; total: number } | null;
+        }) | undefined)?.active_scorm_resume_position;
+        return bookmark ? (
+          <div className="shrink-0 border-b border-emerald-400/30 bg-emerald-950/80 px-4 py-2 text-xs text-emerald-100">
+            Histórico anterior preservado. Retomada sugerida na unidade {bookmark.position}/{bookmark.total}; o marcador serve para navegação e não concede crédito de estudo.
+          </div>
+        ) : null;
+      })()}
 
       {effectiveReviewMode && (
         <div className="flex items-center gap-3 bg-blue-950/80 border-b border-blue-500/30 px-4 py-2.5 flex-shrink-0">

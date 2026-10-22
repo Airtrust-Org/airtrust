@@ -28,6 +28,8 @@ import { getEmpresaIdOptional } from './escalas-shared';
 import type { Env, JwtPayload } from '../types';
 import { buildLmsContentSecurityPolicy } from '../lib/lms/security-headers';
 import { LMS_ASSET_TOKEN_COOKIE } from '../lib/lms/lms-asset-session';
+import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
+import { buildScormLaunchState, readScormNavigationBookmark } from '../services/lms-scorm-launch-state';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -454,6 +456,7 @@ app.post('/assets/session', auth(), async (c) => {
     preview?: boolean;
     candidate_package_id?: string;
     candidate_package_sha256?: string;
+    expected_handoff_id?: number | null;
   };
   const body: AssetSessionRequest = await c.req
     .json<AssetSessionRequest>()
@@ -476,6 +479,8 @@ app.post('/assets/session', auth(), async (c) => {
   let cursoId = 0;
   let scopedMatriculaId: number | undefined;
   let scopedScormPackagePrefix: string | undefined;
+  let scopedCycleId: number | undefined;
+  let scopedHandoffId: number | null | undefined;
   let candidateScope: { id: string; package_sha256: string } | null = null;
 
   if (matriculaId > 0) {
@@ -517,6 +522,28 @@ app.post('/assets/session', auth(), async (c) => {
     cursoId = matricula.curso_id;
     scopedMatriculaId = matricula.id;
     scopedScormPackagePrefix = matricula.scorm_package_r2_prefix ?? undefined;
+    if (c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED === 'true') {
+      const active = await c.env.DB.prepare(`
+        SELECT cy.id AS cycle_id,h.id AS handoff_id
+        FROM lms_matricula_ciclos cy
+        LEFT JOIN lms_scorm_package_versions p ON p.empresa_id=cy.empresa_id
+          AND p.curso_id=? AND p.r2_prefix=? AND p.status='ACTIVE'
+        LEFT JOIN lms_scorm_edition_handoffs h ON h.empresa_id=cy.empresa_id
+          AND h.matricula_id=cy.matricula_id AND h.ciclo_id=cy.id
+          AND h.target_package_sha256=p.package_sha256
+        WHERE cy.empresa_id=? AND cy.matricula_id=?
+          AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+        ORDER BY p.id DESC,h.id DESC LIMIT 1`)
+        .bind(matricula.curso_id,matricula.scorm_package_r2_prefix,empresaId,matricula.id)
+        .first<{cycle_id:number;handoff_id:number|null}>();
+      if (!active?.cycle_id) throw new ApiError('Ciclo ativo indisponível para sessão SCORM', 409);
+      scopedCycleId = active.cycle_id;
+      scopedHandoffId = active.handoff_id ?? null;
+      const expected = body.expected_handoff_id ?? null;
+      if (expected !== scopedHandoffId) {
+        throw new ApiError('A sessão SCORM mudou. Atualize a matrícula antes de continuar.', 409);
+      }
+    }
   } else if (preview && requestedCursoId > 0) {
     if (!isPreviewAllowedRole(accessPayload.role)) {
       throw new ApiError('Acesso negado', 403);
@@ -546,6 +573,8 @@ app.post('/assets/session', auth(), async (c) => {
       asset_scope: 'course_assets',
       asset_curso_id: cursoId,
       asset_matricula_id: scopedMatriculaId,
+      asset_cycle_id: scopedCycleId,
+      asset_handoff_id: scopedHandoffId,
       asset_scorm_package_prefix: scopedScormPackagePrefix,
       asset_qa_candidate_id: candidateScope?.id,
       asset_qa_candidate_sha256: candidateScope?.package_sha256,
@@ -1063,6 +1092,38 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     .bind(matricula.id, empresaId)
     .first<{ suspend_data: string | null; cmi_json: string | null }>();
 
+  const ciclo = await db
+    .prepare(
+      `SELECT id, numero_ciclo FROM lms_matricula_ciclos
+        WHERE matricula_id=? AND empresa_id=? AND ciclo_atual=1 AND deleted_at IS NULL
+        ORDER BY id DESC LIMIT 1`,
+    )
+    .bind(matricula.id, empresaId)
+    .first<{ id: number; numero_ciclo: number }>();
+  if (!ciclo) throw new ApiError('Ciclo ativo da matrícula não encontrado', 409);
+
+  let navigationBookmark: { position: number; total: number } | null = null;
+  if (c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED === 'true') {
+    const receipt = await db.prepare(`
+      SELECT h.id,h.resume_plan_json FROM lms_scorm_edition_handoffs h
+      JOIN lms_scorm_package_versions p ON p.empresa_id=h.empresa_id
+        AND p.curso_id=h.curso_id AND p.package_sha256=h.target_package_sha256
+        AND p.r2_prefix=h.target_package_prefix AND p.status='ACTIVE'
+      WHERE h.empresa_id=? AND h.matricula_id=? AND h.ciclo_id=?
+        AND h.target_package_prefix=? ORDER BY h.id DESC LIMIT 1`)
+      .bind(empresaId,matricula.id,ciclo.id,matricula.scorm_package_r2_prefix)
+      .first<{id:number;resume_plan_json:string}>();
+    const claimedHandoffId = Number(payload.asset_handoff_id ?? 0);
+    const claimedCycleId = Number(payload.asset_cycle_id ?? 0);
+    if (!isScormHandoffSessionCurrent({
+      claimedHandoffId,claimedCycleId,activeCycleId:ciclo.id,
+      activeHandoffId:receipt?.id ?? null,
+    })) {
+      throw new ApiError('A sessão SCORM está desatualizada. Reabra a matrícula.', 409);
+    }
+    if (receipt) navigationBookmark = readScormNavigationBookmark(receipt.resume_plan_json);
+  }
+
   if (matricula.status !== 'CONCLUIDO') {
     const mismatch = await detectLmsEditionMismatch({
       bucket: c.env.BUCKET, db, contentType: 'scorm', activePrefix: matricula.scorm_package_r2_prefix,
@@ -1077,21 +1138,8 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     progressoScorm?.suspend_data ?? null,
     isScorm2004,
     matricula.status === 'CONCLUIDO',
+    navigationBookmark,
   );
-
-  const ciclo = await db
-    .prepare(
-      `SELECT id, numero_ciclo
-         FROM lms_matricula_ciclos
-        WHERE matricula_id = ?
-          AND empresa_id = ?
-          AND ciclo_atual = 1
-          AND deleted_at IS NULL
-        ORDER BY id DESC
-        LIMIT 1`,
-    )
-    .bind(matricula.id, empresaId)
-    .first<{ id: number; numero_ciclo: number }>();
 
   const html = buildLaunchPage({
     matriculaId: matricula.id,
@@ -1201,67 +1249,6 @@ interface LaunchPageConfig {
   previewMode?: boolean;
   assetCacheBuster?: string;
   reviewMode?: boolean;
-}
-
-export function buildScormLaunchState(
-  rawCmiJson: string | null,
-  suspendData: string | null,
-  isScorm2004: boolean,
-  completedReview = false,
-): { initialCmiJson: string; hasResumeState: boolean } {
-  let cmi: Record<string, unknown> = {};
-
-  if (rawCmiJson) {
-    try {
-      const parsed = JSON.parse(rawCmiJson) as Record<string, unknown>;
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        cmi = parsed;
-      }
-    } catch {
-      cmi = {};
-    }
-  }
-
-  if (suspendData && !cmi['cmi.suspend_data']) {
-    cmi['cmi.suspend_data'] = suspendData;
-  }
-
-  // Completed review is read-only. Preserve terminal completion in memory, but
-  // deliberately strip resume/bookmark state for this launch so "Rever treinamento"
-  // starts from the beginning. Persisted SCORM evidence remains untouched in D1.
-  if (completedReview) {
-    delete cmi['cmi.suspend_data'];
-    delete cmi['cmi.location'];
-    delete cmi['cmi.core.lesson_location'];
-    delete cmi['cmi.entry'];
-    delete cmi['cmi.core.entry'];
-    delete cmi['cmi.exit'];
-    delete cmi['cmi.core.exit'];
-
-    if (isScorm2004) {
-      cmi['cmi.completion_status'] = 'completed';
-      cmi['cmi.success_status'] = 'passed';
-    } else {
-      cmi['cmi.core.lesson_status'] = 'passed';
-    }
-  }
-
-  const hasResumeState = Boolean(
-    cmi['cmi.suspend_data'] || cmi['cmi.location'] || cmi['cmi.core.lesson_location'],
-  );
-
-  if (hasResumeState) {
-    if (isScorm2004) {
-      cmi['cmi.entry'] = 'resume';
-    } else {
-      cmi['cmi.core.entry'] = 'resume';
-    }
-  }
-
-  return {
-    initialCmiJson: JSON.stringify(cmi),
-    hasResumeState,
-  };
 }
 
 export function buildLaunchPage(cfg: LaunchPageConfig): string {

@@ -76,15 +76,16 @@ import {
 } from '../services/lms-matricula-runtime-domain';
 import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '../repositories/lms-matricula-queries';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
-import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
-import { readScormActiveResumeProposal } from '../services/lms-scorm-active-resume-readonly';
+import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
 import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard';
 import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
 import { activeXapiFirst } from '../services/lms-active-xapi-read';
+import { registerLmsScormEditionHandoffRoute } from './lms-scorm-edition-handoff';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 app.route('/convites', lmsMatriculasConvitesRoutes);
+registerLmsScormEditionHandoffRoute(app);
 
 function getCallerFuncionarioId(c: Context): number | null {
   const raw = c.get('funcionarioId' as never) as unknown;
@@ -636,22 +637,11 @@ app.get('/:id', async (c) => {
   const scormClosureReadiness = tipoConteudo === 'scorm'
     ? buildPersistedScormClosureReadiness(matricula, progressoScorm)
     : null;
-  const editionMismatch = await detectLmsEditionMismatch({
-    bucket: c.env.BUCKET, contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo, activePrefix: matricula.scorm_package_r2_prefix, empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data, db, enrollmentStartedAt: matricula.data_inicio });
-  // Navigation preview only. A different edition still requires an
-  // audited snapshot before the active player can write into this enrollment.
-  const activeResumeProposal = tipoConteudo === 'scorm' && editionMismatch
-    ? await readScormActiveResumeProposal({
-        db, bucket: c.env.BUCKET, empresaId, cursoId: Number(matricula.curso_id),
-        cycleId: Number(matricula.active_lms_cycle_id ?? 0) || null,
-        activePrefix: typeof matricula.scorm_package_r2_prefix === 'string'
-          ? matricula.scorm_package_r2_prefix : null,
-        cycleStartedAt: typeof matricula.active_lms_cycle_started_at === 'string'
-          ? matricula.active_lms_cycle_started_at : null,
-        cmiJson: typeof progressoScorm?.cmi_json === 'string'
-          ? progressoScorm.cmi_json : null,
-      })
-    : null;
+  const {mismatch:editionMismatch,proposal:activeResumeProposal,handoffId:activeHandoffId,
+    handoffBookmark:activeHandoffBookmark,handoffAvailable}=await readLmsScormEditionState({
+      db,bucket:c.env.BUCKET,empresaId,matriculaId,matricula,progressoScorm,
+      handoffEnabled:c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED==='true',
+    });
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: matricula.status as string | null,
     progressoBruto: matricula.progresso_pct as number | null,
@@ -670,6 +660,9 @@ app.get('/:id', async (c) => {
       closure_readiness: scormClosureReadiness,
       edition_mismatch: editionMismatch,
       active_resume_proposal: activeResumeProposal,
+      active_scorm_handoff_id: activeHandoffId,
+      active_scorm_resume_position: activeHandoffBookmark,
+      scorm_handoff_available: handoffAvailable,
     },
   });
 });
