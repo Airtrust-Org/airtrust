@@ -10,6 +10,7 @@ import test from 'node:test';
 const workflow = readFileSync('.github/workflows/staging-training-compliance-lifecycle-qa.yml', 'utf8');
 const seed = readFileSync('scripts/staging/seed-qa-training-compliance-lifecycle.mjs', 'utf8');
 const spec = readFileSync('e2e/frontend-pr-ui-qa/training-compliance-lifecycle.spec.ts', 'utf8');
+const cycleEvidence = readFileSync('scripts/staging/qa-training-compliance-cycle-evidence.mjs', 'utf8');
 
 test('lifecycle workflow is main-only, staging-only, exact-SHA guarded and always cleans up', () => {
   assert.match(workflow, /refs\/heads\/main/);
@@ -26,6 +27,9 @@ test('lifecycle workflow is main-only, staging-only, exact-SHA guarded and alway
   assert.doesNotMatch(workflow, /api\.airtrust\.online/);
   assert.match(workflow, /if: always\(\) && needs\.d1_fixture\.result != 'skipped'/);
   assert.match(workflow, /--rollback --apply/);
+  assert.match(workflow, /airtrust-staging-mutations-and-scorm-qa/);
+  assert.match(workflow, /expired synthetic evidence renews cycle two and issues an authorized PDF/);
+  assert.match(workflow, /needs\.renewal_browser\.result/);
 });
 
 test('lifecycle fixture is reserved to the canonical synthetic tenant and fails closed', () => {
@@ -36,6 +40,21 @@ test('lifecycle fixture is reserved to the canonical synthetic tenant and fails 
   assert.match(seed, /DELETE FROM lms_xapi_statements/);
   assert.match(seed, /scorm_package_r2_prefix/);
   execFileSync('node', ['--check', 'scripts/staging/seed-qa-training-compliance-lifecycle.mjs']);
+  execFileSync('node', ['--check', 'scripts/staging/qa-training-compliance-cycle-evidence.mjs']);
+});
+
+test('controlled expiry is limited to this synthetic E1 LMS qualification and cycle proof is read-only', () => {
+  assert.match(cycleEvidence, /airtrust-db-staging-baseline-20260701/);
+  assert.match(cycleEvidence, /AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA/);
+  assert.match(cycleEvidence, /qa_examiner_training/);
+  assert.match(cycleEvidence, /f\.matricula=\$\{q\(\`\$\{code\}-E1\`\)\}/);
+  assert.match(cycleEvidence, /c\.observacoes=\$\{q\(marker\)\}/);
+  assert.match(cycleEvidence, /AUTO_RENOVACAO/);
+  assert.match(cycleEvidence, /archived_xapi/);
+  assert.match(cycleEvidence, /lms_ciclo_evidencias/);
+  assert.match(cycleEvidence, /certificate_count/);
+  assert.match(workflow, /--expire --apply/);
+  assert.match(workflow, /--verify/);
 });
 
 test('staging fixture binds both QA courses to manager-visible sector and cleans them up', () => {
@@ -83,4 +102,10 @@ test('browser simulation covers organization, enrollment, progress, completion a
   assert.doesNotMatch(spec, /getByRole\('button', \{ name: 'Matricular gaps \(sem e-mail\)'/);
   assert.match(spec, /PRODUCTION_TARGET_REJECTED/);
   assert.match(spec, /describe\.configure\(\{ retries: 0 \}\)/);
+  assert.match(spec, /status_compliance: 'VENCIDO'/);
+  assert.match(spec, /reactivated: 1, created: 0/);
+  assert.match(spec, /%PDF-/);
+  assert.match(spec, /application\/pdf/);
+  assert.match(spec, /SHA-256/);
+  assert.match(spec, /renewal-cycle-2/);
 });

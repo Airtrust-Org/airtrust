@@ -154,7 +154,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Run write-capable staging lifecycle simulation
-        run: npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts
+        run: npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --grep 'full training compliance lifecycle'
       - name: Upload sanitized lifecycle result
         if: always()
         uses: actions/upload-artifact@v7
@@ -164,9 +164,76 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  renewal_fixture:
+    name: Expire only the completed synthetic qualification
+    needs: [d1_fixture, browser]
+    if: needs.browser.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+      QA_LIFECYCLE_CODE: QA-COMP-LIFE-${{ github.run_id }}
+      QA_LIFECYCLE_MARKER: QA_ONLY_TRAINING_COMPLIANCE_LIFECYCLE_${{ github.run_id }}
+      CONFIRM_STAGING_COMPLIANCE_LIFECYCLE_QA: AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm --prefix worker-airtrust ci
+      - name: Preview the exact run-owned expiry candidate
+        run: node scripts/staging/qa-training-compliance-cycle-evidence.mjs --expire
+      - name: Set a due date on this run's completed synthetic evidence
+        run: node scripts/staging/qa-training-compliance-cycle-evidence.mjs --expire --apply
+
+  renewal_browser:
+    name: Authenticated renewal and certificate PDF E2E
+    needs: [guard, renewal_fixture]
+    if: needs.renewal_fixture.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: staging
+    env:
+      RELEASE_SHA: ${{ inputs.expected_deployed_sha }}
+      AUDIT_PROFILE: training-compliance-lifecycle
+      E2E_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      QA_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      QA_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm --prefix worker-airtrust ci
+      - run: npx playwright install --with-deps chromium
+      - name: Renew the expired synthetic cycle and generate/read its real PDF
+        run: npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --grep 'expired synthetic evidence renews cycle two and issues an authorized PDF'
+      - name: Verify cycle, archived xAPI, qualification and certificate linkage in staging D1
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+          QA_LIFECYCLE_CODE: QA-COMP-LIFE-${{ github.run_id }}
+          QA_LIFECYCLE_MARKER: QA_ONLY_TRAINING_COMPLIANCE_LIFECYCLE_${{ github.run_id }}
+        run: node scripts/staging/qa-training-compliance-cycle-evidence.mjs --verify
+      - name: Upload sanitized renewal result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: staging-training-compliance-renewal-${{ github.run_id }}
+          path: test-results/frontend-pr-ui-qa/results.json
+          if-no-files-found: warn
+          retention-days: 14
+
   d1_cleanup:
     name: Cleanup Isolated Compliance Lifecycle Fixture
-    needs: [d1_fixture, browser]
+    needs: [d1_fixture, browser, renewal_fixture, renewal_browser]
     if: always() && needs.d1_fixture.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -206,21 +273,29 @@ jobs:
 
   summary:
     name: Compliance Lifecycle QA Summary
-    needs: [guard, d1_fixture, browser, d1_cleanup]
+    needs: [guard, d1_fixture, browser, renewal_fixture, renewal_browser, d1_cleanup]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Publish result
         env:
           EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
+          GUARD_RESULT: ${{ needs.guard.result }}
+          FIXTURE_RESULT: ${{ needs.d1_fixture.result }}
+          LIFECYCLE_RESULT: ${{ needs.browser.result }}
+          RENEWAL_FIXTURE_RESULT: ${{ needs.renewal_fixture.result }}
+          RENEWAL_BROWSER_RESULT: ${{ needs.renewal_browser.result }}
+          CLEANUP_RESULT: ${{ needs.d1_cleanup.result }}
         run: |
           {
             echo '## Training Compliance lifecycle audit'
             echo ''
             echo "- staging SHA: \`$EXPECTED_DEPLOYED_SHA\`"
-            echo '- schema + fixture seed: `${{ needs.d1_fixture.result }}`'
-            echo '- lifecycle E2E: `${{ needs.browser.result }}`'
-            echo '- fixture cleanup: `${{ needs.d1_cleanup.result }}`'
-            echo '- production writes: `none`'
+            echo "- schema + fixture seed: \`$FIXTURE_RESULT\`"
+            echo "- lifecycle E2E: \`$LIFECYCLE_RESULT\`"
+            echo "- renewal fixture: \`$RENEWAL_FIXTURE_RESULT\`"
+            echo "- renewal cycle 2 + certificate PDF: \`$RENEWAL_BROWSER_RESULT\`"
+            echo "- fixture cleanup: \`$CLEANUP_RESULT\`"
+            echo "- production writes: \`none\`"
           } >> "$GITHUB_STEP_SUMMARY"
-          [[ '${{ needs.guard.result }}' == success && '${{ needs.d1_fixture.result }}' == success && '${{ needs.browser.result }}' == success && '${{ needs.d1_cleanup.result }}' == success ]]
+          [[ "$GUARD_RESULT" == success && "$FIXTURE_RESULT" == success && "$LIFECYCLE_RESULT" == success && "$RENEWAL_FIXTURE_RESULT" == success && "$RENEWAL_BROWSER_RESULT" == success && "$CLEANUP_RESULT" == success ]]
