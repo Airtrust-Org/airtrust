@@ -67,8 +67,12 @@ jobs:
         run: node --test scripts/__tests__/player3-native-qa-approval-gate.test.mjs
       - name: validate Player3 independent synthetic learner workflow
         run: node --test scripts/__tests__/player3-qa-learners.test.mjs
-      - name: validate SCORM source-map package guard
-        run: node --test scripts/__tests__/guard-package-references-scorm-source-maps.test.mjs
+      - name: validate SCORM package and duplicate inventory contracts
+        run: |
+          node --test scripts/__tests__/guard-package-references-scorm-source-maps.test.mjs
+          node --test scripts/__tests__/scorm-duplicate-reference-inventory.test.mjs
+      - name: validate legacy qualification comparison CLI compatibility
+        run: node --test scripts/__tests__/legacy-qualification-comparison-entrypoint.test.mjs
       - name: tenant mutations guard
         run: node scripts/guard-tenant-mutations.mjs
       - name: validate 0438 on disposable real-base SQLite

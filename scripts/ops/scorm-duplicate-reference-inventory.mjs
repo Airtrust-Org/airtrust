@@ -22,19 +22,62 @@ export function parseGitTree(buffer) {
   });
 }
 
-export function manifestDeclaredPaths(xml, manifestPath) {
-  const declared = new Set();
+function manifestReferenceVariants(xml, manifestPath) {
   const base = pathPosix.dirname(manifestPath);
+  const variants = new Map();
   const matches = String(xml).matchAll(/<(?:[A-Za-z0-9_-]+:)?(?:file|resource)\b[^>]*\bhref\s*=\s*(["'])(.*?)\1/gi);
   for (const item of matches) {
-    let href = String(item[2] || '').trim().split(/[?#]/, 1)[0];
+    const href = String(item[2] || '').trim().split(/[?#]/, 1)[0];
     if (!href || /^(?:[a-z][a-z0-9+.-]*:|\/|\\)/i.test(href)) continue;
-    href = href.replaceAll('\\', '/');
-    try { href = decodeURIComponent(href); } catch { /* Retain literal path. */ }
-    const resolved = pathPosix.normalize(pathPosix.join(base, href));
-    if (resolved.startsWith(SOURCE_ROOT) && !resolved.includes('/../')) declared.add(resolved);
+    const literalHref = href.replaceAll('\\', '/');
+    let decodedHref = literalHref;
+    try { decodedHref = decodeURIComponent(literalHref); } catch { /* Retain literal path. */ }
+    const decodedPath = pathPosix.normalize(pathPosix.join(base, decodedHref));
+    const literalPath = pathPosix.normalize(pathPosix.join(base, literalHref));
+    if (!decodedPath.startsWith(SOURCE_ROOT) || decodedPath.includes('/../')) continue;
+    if (!literalPath.startsWith(SOURCE_ROOT) || literalPath.includes('/../')) continue;
+    variants.set(decodedPath + '\0' + literalPath, { decodedPath, literalPath });
   }
-  return declared;
+  return [...variants.values()];
+}
+
+export function manifestDeclaredPaths(xml, manifestPath) {
+  return new Set(manifestReferenceVariants(xml, manifestPath).map(({ decodedPath }) => decodedPath));
+}
+
+/**
+ * Separates truly missing tracked manifest assets from ambiguous URL-encoded
+ * filenames that are present literally in Git but not after decoding.
+ * Neither class proves runtime failure or authorizes file deletion.
+ */
+export function findManifestPathIssues(entries, manifests) {
+  const tracked = new Set(entries.map(({ file }) => file));
+  const missingManifestReferences = [];
+  const encodedLiteralManifestReferences = [];
+  for (const { file: manifestPath, xml } of manifests) {
+    for (const { decodedPath, literalPath } of manifestReferenceVariants(xml, manifestPath)) {
+      if (tracked.has(decodedPath)) continue;
+      if (literalPath !== decodedPath && tracked.has(literalPath)) {
+        encodedLiteralManifestReferences.push({
+          manifest: manifestPath, file: decodedPath, literalFile: literalPath,
+          runtimeVerified: false, safeToDelete: false,
+        });
+      } else {
+        missingManifestReferences.push({
+          manifest: manifestPath, file: decodedPath, safeToDelete: false,
+        });
+      }
+    }
+  }
+  const order = (a, b) => a.manifest.localeCompare(b.manifest) || a.file.localeCompare(b.file);
+  missingManifestReferences.sort(order);
+  encodedLiteralManifestReferences.sort(order);
+  return { missingManifestReferences, encodedLiteralManifestReferences };
+}
+
+/** Backwards-compatible accessor for genuinely absent paths. */
+export function findMissingManifestReferences(entries, manifests) {
+  return findManifestPathIssues(entries, manifests).missingManifestReferences;
 }
 
 export function findDuplicateGroups(entries, declaredPaths = new Set(), minBytes = DEFAULT_MIN_BYTES) {
@@ -65,9 +108,11 @@ export function findDuplicateGroups(entries, declaredPaths = new Set(), minBytes
     }).sort((a, b) => b.logicalDuplicateBytes - a.logicalDuplicateBytes);
 }
 
-export function summarize(groups, manifestCount) {
+export function summarize(groups, manifestCount, missingManifestCount = 0, encodedLiteralCount = 0) {
   return {
     trackedManifestCount: manifestCount,
+    missingManifestReferences: missingManifestCount,
+    encodedLiteralManifestReferences: encodedLiteralCount,
     duplicateGroups: groups.length,
     duplicateCopies: groups.reduce((n, group) => n + group.copies - 1, 0),
     logicalDuplicateBytes: groups.reduce((n, group) => n + group.logicalDuplicateBytes, 0),
@@ -85,14 +130,27 @@ export function scanRepository() {
   ], { cwd: ROOT, maxBuffer: 32 * 1024 * 1024 }));
   const manifests = tree.filter((entry) => entry.file.toLowerCase().endsWith('/imsmanifest.xml'));
   const refs = new Set();
+  const tracked = new Set(tree.map(({ file }) => file));
+  const manifestSources = [];
   for (const manifest of manifests) {
     const xml = execFileSync('git', ['show', 'HEAD:' + manifest.file], {
       cwd: ROOT, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
     });
-    for (const href of manifestDeclaredPaths(xml, manifest.file)) refs.add(href);
+    manifestSources.push({ file: manifest.file, xml });
+    for (const { decodedPath, literalPath } of manifestReferenceVariants(xml, manifest.file)) {
+      refs.add(tracked.has(decodedPath) ? decodedPath : tracked.has(literalPath) ? literalPath : decodedPath);
+    }
   }
   const groups = findDuplicateGroups(tree, refs);
-  return { summary: summarize(groups, manifests.length), groups };
+  const { missingManifestReferences, encodedLiteralManifestReferences } =
+    findManifestPathIssues(tree, manifestSources);
+  return {
+    summary: summarize(groups, manifests.length, missingManifestReferences.length,
+      encodedLiteralManifestReferences.length),
+    missingManifestReferences,
+    encodedLiteralManifestReferences,
+    groups,
+  };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
