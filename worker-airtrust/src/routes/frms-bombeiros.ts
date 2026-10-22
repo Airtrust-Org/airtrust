@@ -28,6 +28,7 @@ import {
   registerBoaCaseAction, isBombeirosManagerTenant,
 } from '../lib/frms/bombeiros-operational-events';
 import { BombeirosScenarioSchema, assessBombeirosSyntheticScenario } from '../lib/frms/bombeiros-scenario-method';
+import { validateBoaOperationalSourceBatch } from '../lib/frms/bombeiros-duty-source-contract';
 import { safe } from './frms-shared';
 
 const frmsBombeiros = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
@@ -254,6 +255,101 @@ frmsBombeiros.get('/equipe', requireRole('admin'), safe(async (c) => {
       tenant_id: tenant.empresaId,
       profile_code: FRMS_FIREFIGHTER_AVIATION_PROFILE,
       source: 'AIRTRUST_FUNCIONARIOS_TENANT_SCOPED',
+    },
+  });
+}));
+
+
+/**
+ * Preflight for a purely fictitious BOA duty export. No database or object
+ * storage write is authorized; this checks payload integrity only.
+ * An approved source, tenant/employee mapping and exposure denominator are
+ * deliberately NOT implied by this successful validation.
+ */
+frmsBombeiros.post('/fontes-operacionais/validar-qa', requireRole('admin'), safe(async c => {
+  const tenant = getTenantContext(c);
+  if (!isAuthorizedBombeirosFrmsTenant(tenant)) {
+    return c.json({ success: false, code: 'BOMBEIROS_TENANT_REQUIRED' }, 403);
+  }
+  if (c.env.ENVIRONMENT !== 'staging' && c.env.ENVIRONMENT !== 'development') {
+    return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_STAGING_ONLY' }, 404);
+  }
+  const contentType = c.req.header('Content-Type') ?? '';
+  if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
+    return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_JSON_REQUIRED' }, 415);
+  }
+  // Bound the *actual* body, not only an untrusted Content-Length header.
+  // Never retain, echo or log opaque source identifiers or raw JSON.
+  const maxBytes = 262144;
+  const reader = c.req.raw.body?.getReader();
+  if (!reader) return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_EMPTY' }, 400);
+  const parts: Uint8Array[] = [];
+  let bytes = 0;
+  let tooLarge = false;
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      if (bytes > maxBytes) { tooLarge = true; break; }
+      parts.push(chunk.value);
+    }
+  } finally {
+    if (tooLarge) await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  if (tooLarge) return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_TOO_LARGE' }, 413);
+  if (!bytes) return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_EMPTY' }, 400);
+  const payloadBytes = new Uint8Array(bytes);
+  let position = 0;
+  for (const part of parts) { payloadBytes.set(part, position); position += part.byteLength; }
+  let payload: unknown;
+  try {
+    payload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(payloadBytes));
+  } catch {
+    return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_INVALID_JSON' }, 400);
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_INVALID' }, 400);
+  }
+  const source = (payload as { source?: Record<string, unknown> }).source;
+  // Without approved LGPD and official BOA source, accept fictitious QA only.
+  if (!source || source.source_system_id !== 'BOA-QA-SYNTHETIC'
+    || typeof source.dataset_id !== 'string' || !source.dataset_id.startsWith('qa-')
+    || typeof source.source_document_reference !== 'string'
+    || !source.source_document_reference.startsWith('qa-')) {
+    return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_SYNTHETIC_ONLY' }, 403);
+  }
+  // The BOA policy must be active before the QA result is exposed.
+  try { await resolveBombeirosReadiness(c.env.DB, tenant.empresaId); }
+  catch { return c.json({ success: false, code: 'BOMBEIROS_FRMS_POLICY_NOT_READY' }, 503); }
+  let candidate: ReturnType<typeof validateBoaOperationalSourceBatch>;
+  try { candidate = validateBoaOperationalSourceBatch(payload); }
+  catch { return c.json({ success: false, code: 'BOA_SOURCE_PREFLIGHT_INVALID' }, 400); }
+  const digest = await crypto.subtle.digest('SHA-256', payloadBytes);
+  const sha256 = [...new Uint8Array(digest)]
+    .map(v => v.toString(16).padStart(2, '0')).join('');
+  const missing = Object.fromEntries(
+    [...new Set(candidate.records.flatMap(item => item.missing_sources))].sort()
+      .map(key => [key, candidate.records.filter(item => item.missing_sources.includes(key)).length]),
+  );
+  return c.json({
+    success: true,
+    data: {
+      schema: candidate.contract_version, status: candidate.verification,
+      input_sha256: sha256, record_count: candidate.records.length,
+      candidate_totals_ms: candidate.candidate_totals_ms,
+      missing_sources_count: missing,
+      tenant_identity_link: 'NOT_RESOLVED',
+      source_approval: 'NOT_EVALUATED',
+      scientific_risk_score: null,
+      operational_exposure_denominator_ms: null,
+      stored: false,
+      dispatch_permission: 'NOT_GRANTED',
+    },
+    meta: {
+      tenant_id: tenant.empresaId, synthetic_only: true, write_performed: false,
+      interpretation: 'SCHEMA_ONLY_NO_APPROVED_SOURCE_OR_AUTHENTICATED_ROSTER',
     },
   });
 }));
