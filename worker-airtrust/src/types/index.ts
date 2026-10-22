@@ -96,6 +96,12 @@ export interface Env {
   // Must only be injected after scientific and LGPD approval plus staging
   // release authorization; do not store the approval in source control.
   BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID?: string;
+  // Independent, operator-reviewed BOA QA documentary binding. Neither value
+  // is a substitute for scientific/legal approval. Missing means no writes.
+  // SHA-256 must match the tenant regulatory source document exactly and the
+  // revision must be the current persisted approved-policy revision.
+  BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256?: string;
+  BOA_FRMS_QA_REVIEWED_REVISION_ID?: string;
 
 
   // CORS Origins (pode ser string separada por vírgula)
