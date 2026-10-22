@@ -269,6 +269,16 @@ export default function LmsPlayer() {
     edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' | 'PACKAGE_SHA_CHANGED' } | null;
   }) | undefined)?.edition_mismatch ?? null;
   const newEditionRequired = editionMismatch?.required === true;
+  // Server suggestion is read-only: never credit units or unlock commits from a bookmark.
+  const activeResumeProposal = (matricula as (typeof matricula & {
+    active_resume_proposal?: {
+      status: 'MATCHED_ANCHOR' | 'SUGGESTED_ANCHOR' | 'START_ACTIVE' | 'INVALID_ACTIVE_PACKAGE';
+      targetPosition: number;
+      activeTotal: number;
+      reviewRequired: boolean;
+      canMarkComplete: false;
+    } | null;
+  }) | undefined)?.active_resume_proposal ?? null;
   const isTenantAdmin = ['admin', 'administrador'].includes(
     String(user?.role ?? '').trim().toLowerCase(),
   );
@@ -877,7 +887,7 @@ export default function LmsPlayer() {
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
     const confirmed = window.confirm(
-      `Iniciar a nova edição do curso? O histórico e as evidências do ciclo anterior serão preservados. O progresso desta matrícula (${displayProgress}%) pertence à edição anterior e não será transferido automaticamente para as ${editionMismatch.active_total} unidades da nova edição.`, 
+      `Esta é uma reinscrição excepcional, e NÃO a retomada normal. Deseja abrir um novo ciclo auditado? A matrícula anterior manterá seu histórico, mas o progresso (${displayProgress}%) não será creditado automaticamente na nova edição com ${editionMismatch.active_total} unidades.`, 
     );
     if (!confirmed) return;
     setStartingNewEdition(true);
@@ -1224,8 +1234,15 @@ export default function LmsPlayer() {
                 : `O pacote anterior registra ${editionMismatch.previous_total} unidades e a edição ativa exige ${editionMismatch.active_total}. `}
               O progresso de {displayProgress}% pertence ao ciclo anterior e não representa o avanço
               na nova edição. As evidências serão preservadas; não é permitido reaproveitar
-              automaticamente essa conclusão. É necessário iniciar um novo ciclo auditado.
+              automaticamente essa conclusão. A continuidade na edição ativa exige preservar
+              o histórico antes da primeira gravação; não é necessário presumir um novo ciclo.
             </p>
+            {activeResumeProposal && activeResumeProposal.status !== 'INVALID_ACTIVE_PACKAGE' && (
+              <p className="mt-1 text-xs font-medium text-amber-100">
+                Posição sugerida na edição ativa: {activeResumeProposal.targetPosition}/{activeResumeProposal.activeTotal}.
+                Esse marcador é apenas para navegação; não comprova unidades estudadas nem autorização para concluir.
+              </p>
+            )}
           </div>
           {isTenantAdmin ? (
             <button
@@ -1233,7 +1250,7 @@ export default function LmsPlayer() {
               disabled={startingNewEdition}
               className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
             >
-              {startingNewEdition ? 'Preparando novo ciclo...' : 'Iniciar nova edição'}
+              {startingNewEdition ? 'Preparando ciclo excepcional...' : 'Novo ciclo (exceção)'}
             </button>
           ) : (
             <span className="block w-full min-w-0 break-words text-xs font-medium sm:w-auto">Solicite à Gerência de Treinamento a análise de continuidade da sua matrícula.</span>
@@ -1271,9 +1288,15 @@ export default function LmsPlayer() {
                   <AlertTriangle className="mx-auto h-9 w-9 text-amber-300" />
                   <p className="text-base font-semibold">Treinamento temporariamente bloqueado para preservar o progresso anterior</p>
                   <p className="text-sm text-white/70">
-                    Esta matrícula pertence a outra edição. O pacote atualizado não será aberto
-                    até a criação de um novo ciclo auditado, evitando sobrescrever respostas ou
-                    registros anteriores.
+                    A edição atual foi identificada, mas o histórico SCORM anterior deve ser
+                    preservado em uma transição auditável antes da primeira gravação.
+                    Não é necessário apagar o progresso nem exigir uma nova matrícula.
+                    {activeResumeProposal && activeResumeProposal.status !== 'INVALID_ACTIVE_PACKAGE' && (
+                      <span className="mt-2 block text-amber-200">
+                        Retomada proposta: {activeResumeProposal.targetPosition}/{activeResumeProposal.activeTotal}
+                        {' '}— somente referência de navegação, não uma conclusão certificada.
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -1314,7 +1337,7 @@ export default function LmsPlayer() {
               </h3>
               <div className="space-y-1.5 text-xs text-white/75">
                 <p>{newEditionRequired ? 'Progresso da edição anterior' : 'Progresso'}: {displayProgress}%</p>
-                {!newEditionRequired ? <p>Restante: {remainingProgress}%</p> : <p>Nova edição: execução bloqueada até a abertura de novo ciclo.</p>}
+                {!newEditionRequired ? <p>Restante: {remainingProgress}%</p> : <p>Edição ativa: retomada aguardando preservação auditável do histórico.</p>}
                 <p>{newEditionRequired ? 'Posição anterior' : 'Posição'}: {liveLocation || persistedLocation || 'sem marcador'}</p>
                 <p>
                   Carga horária:{' '}
