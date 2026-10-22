@@ -34,7 +34,7 @@ ao ID da execução, e qualquer falha em excluir seu objeto bloqueia o seed.
 
 No cleanup, mesmo que o token possua escopo de conta mais amplo, o código
 só aceita chaves de PDF cujo proprietário tenha sido comprovado pela
-consulta D1 parametrizada para o marcador/tenant/usuário dessa execução.
+consulta D1 limitada aos identificadores validados da execução para o marcador/tenant/usuário dessa execução.
 Não há listagem de prefixo nem exclusão por lote. Uma operação REST
 negada bloqueia o QA, sem fallback para credencial de produção.
 A disponibilidade do token **não dispensa** a autorização governada do
