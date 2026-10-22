@@ -64,6 +64,25 @@ test('physical evidence rejects missing, placeholder or external Pages origin',(
  assert.equal(verify(offsite,sha).ok,false);
 });
 
+test('production provenance uses the official HEAD response and fails closed on missing headers',async()=>{
+ const {currentProductionSourceSha}=await import('../ci/pilot-production-release-guard.mjs');
+ const previous=globalThis.fetch;
+ const h={'x-airtrust-source-sha':'a'.repeat(40),'x-airtrust-source-tree':'b'.repeat(40),
+  'x-airtrust-release-manifest-sha256':'c'.repeat(64),'x-airtrust-environment':'production'};
+ try{
+  globalThis.fetch=async(url,options)=>{
+   assert.equal(url,'https://api.airtrust.online/api/version');
+   assert.equal(options.method,'HEAD');
+   return {ok:true,headers:new Headers(h)};
+  };
+  assert.equal(await currentProductionSourceSha(),'a'.repeat(40));
+  globalThis.fetch=async()=>({ok:true,headers:new Headers({...h,'x-airtrust-environment':'staging'})});
+  await assert.rejects(()=>currentProductionSourceSha(),/SOURCE_UNVERIFIED/);
+  globalThis.fetch=async()=>({ok:false,headers:new Headers()});
+  await assert.rejects(()=>currentProductionSourceSha(),/LOOKUP_DENIED/);
+ }finally{globalThis.fetch=previous;}
+});
+
 test('Pilot scope is conservative for shared code and independent for named domain modules',()=>{
  for(const path of ['public/pilot/app.js','worker-airtrust/src/services/controle-voos/pilot-offline-sync.ts',
   'worker-airtrust/wrangler.toml','worker-airtrust/src/index.ts',

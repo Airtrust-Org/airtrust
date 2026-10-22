@@ -28,16 +28,21 @@ function changedPathsBetween(base, head) {
   return git(['diff', '--no-renames', '--name-only', base, head, '--']).split('\n').filter(Boolean);
 }
 
-async function currentProductionSourceSha() {
+export async function currentProductionSourceSha() {
+  // The official runtime emits immutable deployment identity headers on HEAD.
+  // This avoids depending on a JSON GET endpoint that may reject non-browser
+  // clients. Missing provenance is never interpreted as a safe/no-op release.
   const response = await fetch(PRODUCTION_VERSION_URL, {
-    headers: { accept: 'application/json' },
+    method: 'HEAD',
     signal: AbortSignal.timeout(12000),
   });
   if (!response.ok) throw Error('PILOT_PRODUCTION_SOURCE_LOOKUP_DENIED');
-  const body = await response.json();
-  const sha = body?.data?.sourceSha;
-  if (body?.success !== true || body?.data?.environment !== 'production' ||
-      !SHA.test(String(sha ?? '')))
+  const sha = response.headers.get('x-airtrust-source-sha');
+  const sourceTree = response.headers.get('x-airtrust-source-tree');
+  const manifest = response.headers.get('x-airtrust-release-manifest-sha256');
+  if (response.headers.get('x-airtrust-environment') !== 'production' ||
+      !SHA.test(String(sha ?? '')) || !SHA.test(String(sourceTree ?? '')) ||
+      !/^[0-9a-f]{64}$/.test(String(manifest ?? '')))
     throw Error('PILOT_PRODUCTION_SOURCE_UNVERIFIED');
   return sha;
 }
