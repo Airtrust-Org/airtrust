@@ -292,6 +292,24 @@ function completionManifest(pkg: ValidatedLmsPackage): GateSection {
     uniqueStrings(assessment.requiredInteractions, 'assessment.requiredInteractions', errors);
     if (assessment.masteryScore !== undefined && (typeof assessment.masteryScore !== 'number' || assessment.masteryScore < 0 || assessment.masteryScore > 100)) errors.push('assessment.masteryScore inválido');
     for (const key of ['successStatus', 'failureStatus']) if (assessment[key] !== undefined && !['passed', 'completed', 'failed', 'incomplete'].includes(String(assessment[key]))) errors.push(`assessment.${key} inválido`);
+
+    // Opt-in safeguard for formative SCORM packages whose certifying exam is
+    // exclusively external. Do not change legacy/graded packages implicitly.
+    // An EXTERNAL declaration must never coexist with a SCORM pass/score gate.
+    if (assessment.mode === 'EXTERNAL') {
+      if (assessment.scoringBySCORM !== false) {
+        errors.push('assessment.mode=EXTERNAL exige scoringBySCORM=false');
+      }
+      if (!Array.isArray(assessment.requiredInteractions) || assessment.requiredInteractions.length !== 0) {
+        errors.push('assessment.mode=EXTERNAL exige requiredInteractions=[]');
+      }
+      if (assessment.masteryScore !== undefined) {
+        errors.push('assessment.mode=EXTERNAL não admite masteryScore no SCORM');
+      }
+      if (completion?.passStatusFromSCORM !== false || completion?.workerApprovalRequired !== true) {
+        errors.push('assessment.mode=EXTERNAL exige conclusão governada pelo Worker, sem passStatusFromSCORM');
+      }
+    }
   }
   if (!completion || completion.strategy !== COMPLETION_CONTRACT) errors.push(`completion.strategy deve ser ${COMPLETION_CONTRACT}`);
   return errors.length ? fail(...errors) : pass();
