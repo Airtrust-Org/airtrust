@@ -110,14 +110,14 @@ function fixture(){
  const realJwt=(user,role='student',tenant=130)=>generateJWT({
    sub:user,email:'qa-only@example.invalid',role,empresa_id:tenant,token_type:'access',
   },jwtSecret,600).then(x=>x.token);
- const actualAuth=(environment='staging',gate='130')=>{
+ const actualAuth=(environment='staging',gate='130',documentary=true)=>{
   const app=new Hono();
   app.use('*',async(c,next)=>{
    c.env={DB:d1,ENVIRONMENT:environment,JWT_SECRET:jwtSecret,
     ENABLE_DEV_AUTH_BYPASS:'false',
     BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID:gate,
-    BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256:'a'.repeat(64),
-    BOA_FRMS_QA_REVIEWED_REVISION_ID:'qa-revision-130'};
+    BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256:documentary?'a'.repeat(64):undefined,
+    BOA_FRMS_QA_REVIEWED_REVISION_ID:documentary?'qa-revision-130':undefined};
    return auth()(c,async()=>tenantMiddleware()(c,next));
   });
   app.onError(error=>new Response(JSON.stringify({success:false,
@@ -354,6 +354,11 @@ test('QA document and scientific review bindings are mandatory before any health
   assert.equal((await crew('POST','/checkin',checkin)).status,503);
   assert.equal(count(),0);
   sqlite.exec("UPDATE frms_regulatory_profiles SET source_document_hash='"+'a'.repeat(64)+"' WHERE id='qa-profile-130'");
+  const unsignedJwt=await realJwt(101,'student',130);
+  const withoutBinding=actualAuth('staging','130',false);
+  assert.equal((await withoutBinding(unsignedJwt,'POST','/checkin',checkin)).status,503,
+    'absence of independently deployed review bindings blocks writes');
+  assert.equal(count(),0);
   sqlite.exec("UPDATE frms_regulatory_profiles SET approval_reference=NULL WHERE id='qa-profile-130'");
   assert.equal((await crew('POST','/checkin',checkin)).status,503);
   assert.equal(count(),0);
@@ -371,6 +376,13 @@ test('QA document and scientific review bindings are mandatory before any health
   const manager=await realJwt(190,'manager',130);
   const get=await request(manager,'GET','/casos?limit=5');
   assert.equal(get.status,200,'sanitized case reads do not imply approved intake');
+  const self=(await request(jwt,'GET','/checkin/status')).status;
+  assert.equal(self,200);
+  const caseQueue=await request(manager,'GET','/casos?limit=5');
+  const caseId=(await caseQueue.json()).data.items[0].case_id;
+  const blockedAction=await request(manager,'PUT','/casos/'+encodeURIComponent(caseId)+'/tratamento',treatment);
+  assert.equal(blockedAction.status,503,'review revocation blocks treatment writes');
+  assert.equal(count(),2);
   const id=(await request(jwt,'GET','/checkin/status')).status;
   assert.equal(id,200);
   assert.equal(count(),2);
