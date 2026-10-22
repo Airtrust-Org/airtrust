@@ -142,8 +142,8 @@ describe('Cursor persistente do roster: justiça, limites e idempotência do pla
   });
 
   it('percorre matrícula e remoção sem ultrapassar o limite nem alterar o plano original', () => {
-    const full = plan(snapshot(...Array.from({length: 8}, (_,i) =>
-      person(101+i,[requirement('NAO_REALIZADO')]))), [course], [row(10), row(11)]);
+    const full = plan(snapshot(person(101, []), ...Array.from({length: 8}, (_,i) =>
+      person(102+i,[requirement('NAO_REALIZADO')]))), [course], [row(10), row(11)]);
     const before = JSON.stringify(full);
     let cursor: string | null = null;
     const selected = new Set<string>();
