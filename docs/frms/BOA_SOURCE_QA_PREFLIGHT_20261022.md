@@ -59,3 +59,25 @@ Espera-se **um registro validado**, duração planejada e realizada de oito hora
 6. PoC real: testar 201, 409, 403, isolamento, integridade, falha/recovery, tratamento, eficácia, relatórios e perfil humano no browser; coletar evidência do Worker/Pages/Schema aprovados.
 
 **Bloqueio atual:** ausência de origem BOA legitimada, crosswalk oficial e evidência de aprovação científica/LGPD; sem autorização específica de carga e provisionamento. A validação de QA não é ingestão operacional. **Produção e publicação Worker não foram autorizadas por este documento.**
+
+
+## 4. Conferência opcional de correspondência com o cadastro canônico — QA
+
+O mesmo JSON de pré-validação pode incluir a propriedade opcional `qa_crosswalk` na raiz:
+
+```json
+"qa_crosswalk": {
+  "schema": "BOA_QA_SYNTHETIC_CROSSWALK_V1",
+  "source_system_id": "BOA-QA-SYNTHETIC",
+  "mappings": [{
+    "external_crew_id": "qa-crew-1",
+    "external_sector_id": "qa-sector-1",
+    "funcionario_id": 21,
+    "setor_id": 9
+  }]
+}
+```
+
+**Esses números são apenas ilustrativos e não correspondem a identificadores BOA existentes.** Para um tenant de QA autorizado, o servidor consulta `funcionarios` e `setores` **somente em leitura e exclusivamente na empresa autenticada**, exige funcionários ativos, setores ativos e correspondência um a um. Rejeita vínculos duplicados, setor divergente, vínculo removido ou empregado de outra empresa sem retornar o identificador afetado.
+
+O retorno bem-sucedido informa `QA_CROSSWALK_STRUCTURALLY_MATCHED_SOURCE_UNVERIFIED`, contagem de pessoas conferidas e `source_approval: NOT_EVALUATED`, com `stored: false`. **Não substitui** o crosswalk assinado/aprovado pelo controlador BOA, não autoriza importação, não cria conta, não valida LGPD, não calcula exposição e não habilita despacho. Se o tenant de teste ainda não foi provisionado, a conferência de vínculo falhará corretamente; somente a conferência sintática original permanece disponível.
