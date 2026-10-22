@@ -39,6 +39,8 @@ test('lifecycle fixture is reserved to the canonical synthetic tenant and fails 
   assert.match(seed, /airtrust-db-staging-baseline-20260701/);
   assert.match(seed, /DELETE FROM lms_xapi_statements/);
   assert.match(seed, /scorm_package_r2_prefix/);
+  assert.match(seed, /'--command', sql, '--json'/);
+  assert.doesNotMatch(seed, /`--file=\$\{file\}`/);
   execFileSync('node', ['--check', 'scripts/staging/seed-qa-training-compliance-lifecycle.mjs']);
   execFileSync('node', ['--check', 'scripts/staging/qa-training-compliance-cycle-evidence.mjs']);
 });

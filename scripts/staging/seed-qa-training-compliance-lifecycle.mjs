@@ -4,8 +4,6 @@
 // operational_decision: STAGING_ONLY; targets only qa_examiner_training on the canonical staging D1.
 // dry_run_required: default mode never writes; --apply requires explicit staging confirmation.
 // rollback_plan_required: --rollback --apply soft-deletes only artifacts identified by this run's reserved QA codes.
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -339,18 +337,14 @@ if (!apply) {
   console.log(JSON.stringify({ mode: 'DRY_RUN', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker }));
   process.exit(0);
 }
-const dir = mkdtempSync(join(tmpdir(), 'airtrust-compliance-lifecycle-'));
-const file = join(dir, 'fixture.sql');
-try {
-  writeFileSync(file, sql, { encoding: 'utf8', mode: 0o600 });
-  const r = spawnSync('npx', ['wrangler', 'd1', 'execute', db, '--remote', `--file=${file}`], {
-    cwd: join(process.cwd(), 'worker-airtrust'), encoding: 'utf8', env: process.env,
-  });
-  if (r.status !== 0) {
-    process.stderr.write(r.stderr || r.stdout);
-    process.exit(r.status || 1);
-  }
-  console.log(JSON.stringify({ mode: 'APPLY', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker, status: 'PASS' }));
-} finally {
-  rmSync(dir, { recursive: true, force: true });
+// Keep this bounded fixture on D1's normal query path. Remote --file routes
+// through Wrangler's bulk-import/reset endpoint and can fail closed with
+// D1_RESET_DO before executing otherwise valid fixture SQL.
+const r = spawnSync('npx', ['wrangler', 'd1', 'execute', db, '--remote', '--command', sql, '--json'], {
+  cwd: join(process.cwd(), 'worker-airtrust'), encoding: 'utf8', env: process.env,
+});
+if (r.status !== 0) {
+  process.stderr.write(r.stderr || r.stdout);
+  process.exit(r.status || 1);
 }
+console.log(JSON.stringify({ mode: 'APPLY', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker, status: 'PASS' }));
