@@ -17,6 +17,10 @@ describe('SCORM active-edition resume (navigation is not certification)', () => 
       reviewRequired:true, canTransferScore:false, canMarkComplete:false,
     });
     expect(plan.pendingUnitIds).toContain('new-threat');
+    expect(plan.matchedNavigationUnitIds).toContain('cfit-32');
+    expect(plan.pendingUnitIds).not.toContain('cfit-32');
+    expect(plan.reviewRequired).toBe(true);
+    expect(plan.canMarkComplete).toBe(false);
   });
 
   it('CFIT 37/37 is not evidence of a passed assessment or completion', () => {

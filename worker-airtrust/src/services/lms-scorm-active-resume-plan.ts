@@ -32,6 +32,11 @@ export type ScormActiveResumePlan = Readonly<{
   targetPosition: number;
   activeTotal: number;
   matchedNavigationUnitIds: readonly string[];
+  /**
+   * Active-package units with no historical visited unit mapped to them.
+   * This is navigation-coverage metadata only: it does not mean that a unit
+   * was completed, earned credit, or is exempt from learner review.
+   */
   pendingUnitIds: readonly string[];
   reviewRequired: boolean;
   canTransferScore: false;
@@ -94,6 +99,9 @@ export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiv
     }
   }
   const matchedNavigationUnitIds = active.filter((id) => matchedForNavigation.has(id));
+  // Despite the legacy field name, this is only the complement of historical
+  // navigation coverage. Every active unit still requires review in this
+  // edition, including IDs that match a previously visited unit.
   const pendingUnitIds = active.filter((id) => !matchedForNavigation.has(id));
 
   let chosen: string | null = null;
