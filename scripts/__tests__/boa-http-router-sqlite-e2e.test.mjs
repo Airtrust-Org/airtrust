@@ -1,8 +1,10 @@
 /**
  * Hono HTTP request/response over actual BOA SQL in ephemeral SQLite.
  * source_reference: docs/frms/BOA_CBMMG_AUDITORIA_FUNCIONAL_CIENTIFICA_CADEIA_DADOS_20261021.md
- * operational_decision: check the full API boundary using simulated upstream login,
- * fake readiness configuration and real domain handlers/SQL. No real JWT or approval.
+ * operational_decision: check the full API using both simulated upstream
+ * context and real signed access JWT + auth() + tenantMiddleware() with
+ * revocation checks. The BOA scientific profile is explicitly stubbed and
+ * does not represent an approved policy, staging login, or real tenant.
  * dry_run_required: fictitious local identities only; ALL SQL writes to :memory:.
  * rollback_plan_required: sqlite.close() destroys every inserted event.
  */
