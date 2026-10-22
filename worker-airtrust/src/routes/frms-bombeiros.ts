@@ -72,7 +72,7 @@ function precedingMonth(month: string): string {
 }
 
 /** Same profile guard for all BOA FRMS reads — no offshore fallback. */
-async function resolveBombeirosReadiness(db: D1Database, empresaId: number, sensitiveQaEnv?: Env) {
+async function resolveBombeirosReadiness(db: D1Database, empresaId: number, sensitiveQaEnv?: Env, requireDocumentaryBinding = Boolean(sensitiveQaEnv)) {
   const referenceAt = getTodayIsoSaoPaulo();
   const [evidence, config] = await Promise.all([
     resolveFrmsRegulatoryProfileEvidence(db, { empresaId, referenceAt }),
@@ -90,12 +90,13 @@ async function resolveBombeirosReadiness(db: D1Database, empresaId: number, sens
   // The profile being active, even with its parameters complete, is NOT a
   // documentary/scientific review. Before health-data writes demand a separate
   // reviewed document hash and revision binding from the staging operator.
-  if (sensitiveQaEnv && !hasBoaQaDocumentaryReleaseBinding(
-    evidence, config.revision, sensitiveQaEnv,
-  )) {
+  const documentaryBindingMatches = hasBoaQaDocumentaryReleaseBinding(
+    evidence, config.revision, sensitiveQaEnv ?? {},
+  );
+  if (requireDocumentaryBinding && !documentaryBindingMatches) {
     throw new Error('BOMBEIROS_DOCUMENTARY_REVIEW_NOT_BOUND');
   }
-  return { config, referenceAt };
+  return { config, referenceAt, documentaryBindingMatches };
 }
 
 frmsBombeiros.use('*', async (c, next) => {
@@ -315,9 +316,11 @@ frmsBombeiros.get('/qa/prontidao', requireRole('admin'), safe(async c => {
     return c.json({ success: false, code: 'BOA_QA_ROSTER_INTEGRITY_ERROR' }, 503);
   }
   let configurationResolves = false;
+  let documentaryBindingMatches = false;
   try {
-    await resolveBombeirosReadiness(c.env.DB, tenant.empresaId);
+    const resolved = await resolveBombeirosReadiness(c.env.DB, tenant.empresaId, c.env, false);
     configurationResolves = true;
+    documentaryBindingMatches = resolved.documentaryBindingMatches;
   } catch {
     // No offshore fallback: missing effective governance remains unresolved.
   }
@@ -327,13 +330,14 @@ frmsBombeiros.get('/qa/prontidao', requireRole('admin'), safe(async c => {
   return c.json({
     success: true,
     data: {
-      status: configurationResolves && cohortOf130 && exactWriteGate
+      status: configurationResolves && documentaryBindingMatches && cohortOf130 && exactWriteGate
         ? 'CONFIGURATION_CHECKS_PASSED_NOT_AUTHORIZED'
         : 'QA_PRECONDITIONS_INCOMPLETE',
       accounts: roster,
       intended_user_count: 130,
       cohort_130_structurally_present: cohortOf130,
       firefighter_profile_configuration_resolves: configurationResolves,
+      documentary_review_binding_matches: documentaryBindingMatches,
       synthetic_tenant_write_gate_matches: exactWriteGate,
       official_boa_source: 'NOT_VERIFIED',
       scientific_validation: 'NOT_ATTESTED',
