@@ -1,14 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  TENANT,COURSE,GATES,LEARNERS,
+  TENANT,COURSE,NATIVE_QA_EDITION_SHA256,GATES,LEARNERS,
   assertGuard,assertRoster,assertClaims,assertOwnSnapshot,
   assertModuleSession,verifyLearners,readVersionResponse,
   requireHttpOk,ownData,github,guard as guardWorkflow,
 } from '../staging/player3-qa-existing-learner-readback.mjs';
 
 const sha='a'.repeat(40);
-const edition='b'.repeat(64);
+const edition=NATIVE_QA_EDITION_SHA256;
 const row=(browser,index)=>({
   email:LEARNERS.find(l=>l.browser===browser).email,empresa_id:TENANT,
   curso_id:COURSE,matricula_id:200+index,ciclo_id:900+index,
