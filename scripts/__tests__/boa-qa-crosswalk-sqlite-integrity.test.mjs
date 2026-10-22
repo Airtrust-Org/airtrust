@@ -1,4 +1,12 @@
 /**
+ * source_reference: docs/frms/BOA_SOURCE_QA_PREFLIGHT_20261022.md
+ * operational_decision: exercise only fictitious BOA QA crosswalk cases
+ *   against tenant-isolated native SQLite, never an authorized operational import.
+ * dry_run_required: yes; every INSERT/UPDATE in this test targets :memory: only.
+ * rollback_plan_required: sqlite.close() discards the transient test database;
+ *   no Cloudflare D1/R2 data or credentials are accessed.
+ */
+/**
  * BOA crosswalk/tenant integrity against native SQLite :memory:.
  * Purely fictitious; no remote staging, D1/R2 or real employee records.
  */
