@@ -30,6 +30,11 @@ decision key. Update/delete triggers retain every applied decision.
   are not authorization.
 - The T1 row watermark and SCORM commit time still match the source; the source
   archive and sealed inventory stay in private custody.
+- The Worker writer is guarded independently by `ENVIRONMENT=staging` and an
+  exact `PLAYER3_RESUME_CREDIT_WRITE_ENABLED_TENANTS` allowlist, in addition
+  to the Native catalog, preview, learner-write and module-attempt gates. The
+  new allowlist remains absent from default configuration until a separate
+  staging decision; production is always denied by this writer.
 
 Any missing table, drift, inactive cycle, stale watermark, cross-tenant actor,
 non-published edition, duplicate decision with different fields or existing

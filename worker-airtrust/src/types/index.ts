@@ -76,6 +76,8 @@ export interface Env {
   PLAYER3_QA_READ_ENABLED_TENANTS?: string;
   // Extra terminal gate; not equal to grading access. Staging only, default OFF.
   PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS?: string;
+  // Independent staging-only gate for reviewed legacy resume credits; default OFF.
+  PLAYER3_RESUME_CREDIT_WRITE_ENABLED_TENANTS?: string;
   // Independent authored HTML5 staging launch gate; absent means OFF.
   PLAYER3_AUTHORED_LAUNCH_ENABLED_TENANTS?: string;
   // Isolated HTTPS content origin; never accept a URL/host from the learner.

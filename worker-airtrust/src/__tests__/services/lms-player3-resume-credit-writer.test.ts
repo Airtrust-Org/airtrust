@@ -1,7 +1,8 @@
 import {describe,expect,it,vi} from 'vitest';
-import {applyPlayer3ResumeCredit,Player3ResumeCreditWriteError} from
+import {applyPlayer3ResumeCredit,canWritePlayer3ResumeCredit,Player3ResumeCreditWriteError} from
   '../../services/lms-player3-resume-credit-writer';
 import type {ResumeCreditIntent} from '../../lib/lms-player3/admin-resume-credit';
+import type {Env} from '../../types';
 
 const intent:ResumeCreditIntent={
   kind:'AIRTRUST_PLAYER3_ADMIN_RESUME_CREDIT_V1',empresa_id:6,matricula_id:30,
@@ -23,6 +24,12 @@ const stored={id:901,idempotency_key:intent.front_c_decision_key,
   source_updated_at:intent.source_updated_at,source_scorm_commit_at:null,
   historical_progress_pct:80,resume_unit_id:'unit-33',manager_user_id:90,
   second_reviewer_user_id:91,approved_at:intent.approved_at,justification:intent.justification};
+const env=(overrides:Record<string,unknown>={})=>({
+  ENVIRONMENT:'staging',NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS:'6',
+  NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS:'6',NATIVE_LEARNER_WRITE_ENABLED_TENANTS:'6',
+  PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:'6',
+  PLAYER3_RESUME_CREDIT_WRITE_ENABLED_TENANTS:'6',...overrides,
+} as Env);
 
 function dbHarness(opts:{batchError?:Error;row?:typeof stored|null}={}){
   const statements:{sql:string;bindings:unknown[]}[]=[];
@@ -41,7 +48,7 @@ function dbHarness(opts:{batchError?:Error;row?:typeof stored|null}={}){
 describe('Player3 append-only resume credit writer',()=>{
   it('writes one tenant/cycle-bound atomic batch and returns position only',async()=>{
     const f=dbHarness();
-    await expect(applyPlayer3ResumeCredit({db:f.db,intent,bindingId:80})).resolves.toMatchObject({
+    await expect(applyPlayer3ResumeCredit({env:env(),db:f.db,intent,bindingId:80})).resolves.toMatchObject({
       state:'APPLIED',creditId:901,empresaId:6,matriculaId:30,cicloId:50,
       resumeUnitId:'unit-33',historicalProgressPct:80,
       grantsAssessmentPass:false,grantsCompletion:false,grantsQualification:false,grantsCertificate:false,
@@ -59,11 +66,11 @@ describe('Player3 append-only resume credit writer',()=>{
 
   it('recognizes only a byte-for-byte compatible retry after an idempotency conflict',async()=>{
     const f=dbHarness({batchError:new Error('UNIQUE constraint failed'),row:stored});
-    await expect(applyPlayer3ResumeCredit({db:f.db,intent,bindingId:80}))
+    await expect(applyPlayer3ResumeCredit({env:env(),db:f.db,intent,bindingId:80}))
       .resolves.toMatchObject({state:'IDEMPOTENT_REPLAY',creditId:901});
     const conflict=dbHarness({batchError:new Error('UNIQUE constraint failed'),
       row:{...stored,resume_unit_id:'different-unit'}});
-    await expect(applyPlayer3ResumeCredit({db:conflict.db,intent,bindingId:80}))
+    await expect(applyPlayer3ResumeCredit({env:env(),db:conflict.db,intent,bindingId:80}))
       .rejects.toMatchObject({code:'PLAYER3_RESUME_CREDIT_IDEMPOTENCY_CONFLICT'});
   });
 
@@ -74,10 +81,27 @@ describe('Player3 append-only resume credit writer',()=>{
       {...intent,empresa_id:0},
     ]){
       const f=dbHarness();
-      await expect(applyPlayer3ResumeCredit({db:f.db,intent:invalid,bindingId:80}))
+      await expect(applyPlayer3ResumeCredit({env:env(),db:f.db,intent:invalid,bindingId:80}))
         .rejects.toBeInstanceOf(Player3ResumeCreditWriteError);
       expect(f.prepare).not.toHaveBeenCalled();
       expect(f.batch).not.toHaveBeenCalled();
     }
+  });
+
+  it('keeps production, missing flags, wildcard and neighboring tenants disabled',()=>{
+    expect(canWritePlayer3ResumeCredit(env(),6)).toBe(true);
+    expect(canWritePlayer3ResumeCredit(env({
+      PLAYER3_RESUME_CREDIT_WRITE_ENABLED_TENANTS:undefined,
+    }),6)).toBe(false);
+    const allGates={NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS:'6',
+      NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS:'6',NATIVE_LEARNER_WRITE_ENABLED_TENANTS:'6',
+      PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:'6',
+      PLAYER3_RESUME_CREDIT_WRITE_ENABLED_TENANTS:'6'};
+    expect(canWritePlayer3ResumeCredit(env({...allGates,ENVIRONMENT:'production'}),6)).toBe(false);
+    expect(canWritePlayer3ResumeCredit(env({...allGates,
+      PLAYER3_RESUME_CREDIT_WRITE_ENABLED_TENANTS:'*'}),6)).toBe(false);
+    expect(canWritePlayer3ResumeCredit(env({...allGates,
+      PLAYER3_RESUME_CREDIT_WRITE_ENABLED_TENANTS:'60'}),6)).toBe(false);
+    expect(canWritePlayer3ResumeCredit(env(allGates),6)).toBe(true);
   });
 });

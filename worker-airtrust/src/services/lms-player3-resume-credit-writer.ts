@@ -10,6 +10,7 @@
  */
 import type { D1Database } from '@cloudflare/workers-types';
 import type { ResumeCreditIntent } from '../lib/lms-player3/admin-resume-credit';
+import type { Env } from '../types';
 
 export class Player3ResumeCreditWriteError extends Error {
   constructor(public readonly code: string) {
@@ -51,6 +52,18 @@ const positive = (n: number) => Number.isSafeInteger(n) && n > 0;
 const reject = (code: string): never => {
   throw new Player3ResumeCreditWriteError(`PLAYER3_RESUME_CREDIT_${code}`);
 };
+const tenantAllowed = (raw: string | undefined, tenant: number) =>
+  !!raw && !raw.includes('*') && raw.split(',').some(value => value.trim() === String(tenant));
+
+/** Independent staging-only gate; every absent/wildcard flag remains OFF. */
+export function canWritePlayer3ResumeCredit(env: Env, tenant: number): boolean {
+  return env.ENVIRONMENT === 'staging' && positive(tenant) &&
+    tenantAllowed(env.NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS, tenant) &&
+    tenantAllowed(env.NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS, tenant) &&
+    tenantAllowed(env.NATIVE_LEARNER_WRITE_ENABLED_TENANTS, tenant) &&
+    tenantAllowed(env.PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS, tenant) &&
+    tenantAllowed(env.PLAYER3_RESUME_CREDIT_WRITE_ENABLED_TENANTS, tenant);
+}
 
 const rowsEqual = (row: Stored, intent: ResumeCreditIntent, bindingId: number) =>
   row.idempotency_key === intent.front_c_decision_key &&
@@ -90,12 +103,14 @@ function asReceipt(row: Stored, state: Player3ResumeCreditReceipt['state']): Pla
  * is acknowledged only when every immutable field matches the prior receipt.
  */
 export async function applyPlayer3ResumeCredit(input: {
+  env: Env;
   db: D1Database;
   intent: ResumeCreditIntent;
   bindingId: number;
 }): Promise<Player3ResumeCreditReceipt> {
-  const { db, intent, bindingId } = input;
+  const { env, db, intent, bindingId } = input;
   if (!intent || intent.kind !== 'AIRTRUST_PLAYER3_ADMIN_RESUME_CREDIT_V1' ||
+      !canWritePlayer3ResumeCredit(env, intent.empresa_id) ||
       !positive(intent.empresa_id) || !positive(intent.curso_id) ||
       !positive(intent.matricula_id) || !positive(intent.ciclo_id) ||
       !positive(intent.funcionario_id) || !positive(bindingId) ||
