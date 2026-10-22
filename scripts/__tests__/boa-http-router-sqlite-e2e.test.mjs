@@ -241,13 +241,37 @@ test('signed JWT and actual auth + tenant middleware protect BOA checkin and cas
   assert.equal((await request(admin,'GET','/casos')).status,403);
   assert.equal((await request(manager,'GET','/casos')).status,200);
   assert.equal(count(),2);
+  for(let uid=102;uid<=106;uid++){
+   const jwt=await realJwt(uid,'student',130);
+   assert.equal((await request(jwt,'POST','/checkin',checkin)).status,201);
+  }
+  assert.equal(count(),12);
+  const caseId=encodeURIComponent(payload.data.case_id);
+  assert.equal((await request(manager,'GET','/casos/'+caseId+'/evidencias')).status,200);
+  assert.equal((await request(manager,'PUT','/casos/'+caseId+'/tratamento',treatment)).status,200);
+  assert.equal((await request(manager,'PUT','/casos/'+caseId+'/resolver',efficacy)).status,200);
+  assert.equal(count(),14);
+  const month=new Intl.DateTimeFormat('en-CA',{
+   timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',
+  }).format(new Date()).slice(0,7);
+  const report=await request(admin,'GET','/relatorios/gerencial-tecnico-previa?mes='+month);
+  assert.equal(report.status,200,'signed JWT monthly report '+await report.clone().text());
+  const data=(await report.json()).data;
+  assert.equal(data.current.checkin_receipts,6);
+  assert.equal(data.current.cases.privacy,'SMALL_CELL_SUPPRESSED');
   sqlite.exec('DELETE FROM usuarios_empresas WHERE usuario_id=101 AND empresa_id=130');
   assert.equal((await request(token,'GET','/checkin/status')).status,401);
   assert.equal((await request(token,'POST','/checkin',checkin)).status,401);
-  assert.equal(count(),2);
+  assert.equal(count(),14);
   const cross=await realJwt(101,'student',6);
   assert.equal((await request(cross,'GET','/checkin/status')).status,401);
   assert.equal((await actualAuth('production')(manager,'GET','/casos')).status,200);
   assert.equal((await actualAuth('production')(admin,'POST','/checkin',checkin)).status,403);
+  const jwtMetadata=JSON.parse(Buffer.from(manager.split('.')[1],'base64url').toString());
+  sqlite.prepare('INSERT INTO token_blocklist VALUES(?,?)')
+    .run(jwtMetadata.jti,'9999-12-31 23:59:59');
+  assert.equal((await request(manager,'GET','/casos')).status,401,
+    'authenticated BOA manager must lose access to an explicitly revoked JWT');
+  assert.equal(count(),14);
  }finally{sqlite.close();}
 });
