@@ -2,7 +2,7 @@ import {describe,expect,it} from 'vitest';
 import {assessScoreF5StudyEvidence,type ScoreF5StudyEvidenceInput} from '../../services/lms-score-f5-study-evidence';
 const edition='AIRTRUST-SCORE-F5-EXTERNAL-20261021-V4_17-cca677fb0bde-A11Y-RM1';
 const ids=Array.from({length:16},(_,i)=>'nr20_'+String(i+1).padStart(2,'0'));
-const required=[2,7,11,14]; // synthetic test positions (package-private authoring config).
+const required=[2,7,10,12]; // From NR-20 Score F5 private reference scenario indices.
 const make=(d:number[],f:number[],study:boolean,rev=edition,status='incomplete')=>
  JSON.stringify({'cmi.core.lesson_location':'16/16','cmi.core.lesson_status':status,
   'cmi.suspend_data':JSON.stringify({v:1,p:rev,c:15,a:15,d,f,study})});
@@ -23,7 +23,7 @@ describe('Score F5 study evidence is not a certificate',()=>{
  });
  it('rejects a missing formative decision',()=>{
    expect(assessScoreF5StudyEvidence({...base,cmiJson:make(
-     Array.from({length:16},(_,i)=>i),[2,7,11],true)}))
+     Array.from({length:16},(_,i)=>i),[2,7,10],true)}))
      .toMatchObject({code:'FORMATIVE_INTERACTIONS_MISSING'});
  });
  it('rejects an untrusted finish or different cycle package',()=>{
