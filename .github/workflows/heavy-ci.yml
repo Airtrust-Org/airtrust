@@ -125,6 +125,7 @@ jobs:
             scripts/__tests__/boa-monthly-sqlite-integrity.test.mjs \
             scripts/__tests__/boa-case-queue-sqlite-integrity.test.mjs \
             scripts/__tests__/boa-case-evidence-sqlite-integrity.test.mjs \
+            scripts/__tests__/boa-operational-end-to-end-sqlite.test.mjs \
             scripts/__tests__/boa-checkin-membership-sqlite-integrity.test.mjs \
             scripts/__tests__/boa-staging-130-readonly.test.mjs \
             scripts/__tests__/boa-demo-dataset.test.mjs \
