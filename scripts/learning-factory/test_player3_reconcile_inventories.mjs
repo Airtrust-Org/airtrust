@@ -219,8 +219,11 @@ test('private CLI reconciles encrypted T0/T1 end-to-end without overwrite or PII
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 test('rejects reversed T0/T1 time, changed key identity, and older SCORM commit',()=>{
-  const t0=open([make(881,80)]),t1=open([make(881,99)]);
-  assert.throws(()=>reconcileInventories({...t0,extracted_utc:'2026-10-15T00:00:00Z'},t1),
+  // sealInventory stamps wall-clock extraction time; pin both decrypted fixture
+  // timestamps so the order assertion stays deterministic on every runner.
+  const t0={...open([make(881,80)]),extracted_utc:'2026-10-15T00:00:00Z'};
+  const t1={...open([make(881,99)]),extracted_utc:'2026-10-14T13:00:00Z'};
+  assert.throws(()=>reconcileInventories(t0,t1),
     /SNAPSHOT_ORDER_INVALID/);
   assert.throws(()=>reconcileInventories(t0,{...t1,key_id:'other-key'}),
     /KEY_ID_CHANGED/);
