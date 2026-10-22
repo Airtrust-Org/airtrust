@@ -31,13 +31,15 @@ export type ScormActiveResumePlan = Readonly<{
   targetSlideId: string | null;
   targetPosition: number;
   activeTotal: number;
+  /** Historical matches used only to choose an active-edition navigation anchor. */
   matchedNavigationUnitIds: readonly string[];
   /**
-   * Active-package units with no historical visited unit mapped to them.
-   * This is navigation-coverage metadata only: it does not mean that a unit
-   * was completed, earned credit, or is exempt from learner review.
+   * Active-package units without a historical visited unit mapped to them.
+   * Navigation coverage only; never use this list to grant credit or skip review.
    */
-  pendingUnitIds: readonly string[];
+  unmatchedNavigationUnitIds: readonly string[];
+  /** Every active-package unit still requiring learner review in this edition. */
+  pendingReviewUnitIds: readonly string[];
   reviewRequired: boolean;
   canTransferScore: false;
   canMarkComplete: false;
@@ -65,7 +67,8 @@ export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiv
     return {
       ...metadata,
       status: 'INVALID_ACTIVE_PACKAGE', targetSlideId: null,
-      targetPosition: 1, activeTotal: 0, matchedNavigationUnitIds: [], pendingUnitIds: [],
+      targetPosition: 1, activeTotal: 0, matchedNavigationUnitIds: [],
+      unmatchedNavigationUnitIds: [], pendingReviewUnitIds: [],
       reviewRequired: true, canTransferScore: false, canMarkComplete: false,
     };
   }
@@ -99,10 +102,10 @@ export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiv
     }
   }
   const matchedNavigationUnitIds = active.filter((id) => matchedForNavigation.has(id));
-  // Despite the legacy field name, this is only the complement of historical
-  // navigation coverage. Every active unit still requires review in this
-  // edition, including IDs that match a previously visited unit.
-  const pendingUnitIds = active.filter((id) => !matchedForNavigation.has(id));
+  const unmatchedNavigationUnitIds = active.filter((id) => !matchedForNavigation.has(id));
+  // A historical ID match can locate the bookmark only. Nothing is reviewed
+  // or credited in the active edition until the learner completes it there.
+  const pendingReviewUnitIds = active;
 
   let chosen: string | null = null;
   if (previousSet && typeof input.previousCursorId === 'string' &&
@@ -122,7 +125,8 @@ export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiv
       ...metadata,
       status: 'MATCHED_ANCHOR', targetSlideId: chosen,
       targetPosition: active.indexOf(chosen) + 1, activeTotal: active.length,
-      matchedNavigationUnitIds, pendingUnitIds, reviewRequired: true,
+      matchedNavigationUnitIds, unmatchedNavigationUnitIds, pendingReviewUnitIds,
+      reviewRequired: true,
       canTransferScore: false, canMarkComplete: false,
     };
   }
@@ -139,7 +143,8 @@ export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiv
     ...metadata,
     status: index === 0 ? 'START_ACTIVE' : 'SUGGESTED_ANCHOR',
     targetSlideId: active[index], targetPosition: index + 1,
-    activeTotal: active.length, matchedNavigationUnitIds, pendingUnitIds,
+    activeTotal: active.length, matchedNavigationUnitIds,
+    unmatchedNavigationUnitIds, pendingReviewUnitIds,
     reviewRequired: true, canTransferScore: false, canMarkComplete: false,
   };
 }

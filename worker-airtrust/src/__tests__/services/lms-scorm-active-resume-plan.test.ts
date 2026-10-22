@@ -16,9 +16,10 @@ describe('SCORM active-edition resume (navigation is not certification)', () => 
       cycleId:812,activePackageSha256:'b'.repeat(64),previousPackageSha256:'a'.repeat(64),
       reviewRequired:true, canTransferScore:false, canMarkComplete:false,
     });
-    expect(plan.pendingUnitIds).toContain('new-threat');
+    expect(plan.unmatchedNavigationUnitIds).toContain('new-threat');
     expect(plan.matchedNavigationUnitIds).toContain('cfit-32');
-    expect(plan.pendingUnitIds).not.toContain('cfit-32');
+    expect(plan.unmatchedNavigationUnitIds).not.toContain('cfit-32');
+    expect(plan.pendingReviewUnitIds).toContain('cfit-32');
     expect(plan.reviewRequired).toBe(true);
     expect(plan.canMarkComplete).toBe(false);
   });
@@ -31,7 +32,8 @@ describe('SCORM active-edition resume (navigation is not certification)', () => 
       previousCursorId:'final', previousPosition:3, previousTotal:3,
     });
     expect(result.targetSlideId).toBe('final');
-    expect(result.pendingUnitIds).toContain('new-assessment');
+    expect(result.unmatchedNavigationUnitIds).toContain('new-assessment');
+    expect(result.pendingReviewUnitIds).toEqual(['intro','revision','review','new-assessment','final']);
     expect(result.canMarkComplete).toBe(false);
     expect(result.canTransferScore).toBe(false);
   });
@@ -44,7 +46,8 @@ describe('SCORM active-edition resume (navigation is not certification)', () => 
     expect(result.status).toBe('SUGGESTED_ANCHOR');
     expect(result.targetPosition).toBe(2);
     expect(result.matchedNavigationUnitIds).toEqual([]);
-    expect(result.pendingUnitIds).toHaveLength(72);
+    expect(result.unmatchedNavigationUnitIds).toHaveLength(72);
+    expect(result.pendingReviewUnitIds).toHaveLength(72);
     expect(result.canMarkComplete).toBe(false);
   });
 

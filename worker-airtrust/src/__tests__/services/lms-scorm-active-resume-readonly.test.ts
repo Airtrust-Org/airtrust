@@ -33,7 +33,8 @@ describe('read-only ACTIVE SCORM resume',()=>{
     expect(result).toMatchObject({status:'MATCHED_ANCHOR',targetSlideId:'unit32',
       targetPosition:34,cycleId:812,activePackageSha256:'b'.repeat(64),
       previousPackageSha256:'a'.repeat(64),canMarkComplete:false,canTransferScore:false});
-    expect(result?.pendingUnitIds).toContain('new1');
+    expect(result?.unmatchedNavigationUnitIds).toContain('new1');
+    expect(result?.pendingReviewUnitIds).toContain('unit32');
     expect(db.prepare).toHaveBeenCalledTimes(2);
   });
 
