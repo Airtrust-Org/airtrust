@@ -2,8 +2,8 @@
  * Read-only planning for resuming an existing SCORM enrollment in the ACTIVE
  * course package. Never copy old CMI, scores or completion to the new edition.
  *
- * Navigation is independent from certification: a suggested bookmark does NOT
- * prove that any new or changed training unit was completed.
+ * Navigation is independent from certification: a suggested bookmark or a
+ * matching stable ID does NOT prove semantic equivalence or earned unit credit.
  */
 export type ScormActiveResumeInput = Readonly<{
   activeSlideIds: readonly string[];
@@ -21,11 +21,11 @@ export type ScormActiveResumeInput = Readonly<{
 }>;
 
 export type ScormActiveResumePlan = Readonly<{
-  status: 'VERIFIED_ANCHOR' | 'SUGGESTED_ANCHOR' | 'START_ACTIVE' | 'INVALID_ACTIVE_PACKAGE';
+  status: 'MATCHED_ANCHOR' | 'SUGGESTED_ANCHOR' | 'START_ACTIVE' | 'INVALID_ACTIVE_PACKAGE';
   targetSlideId: string | null;
   targetPosition: number;
   activeTotal: number;
-  verifiedUnitIds: readonly string[];
+  matchedNavigationUnitIds: readonly string[];
   pendingUnitIds: readonly string[];
   reviewRequired: boolean;
   canTransferScore: false;
@@ -45,7 +45,7 @@ export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiv
   if (!safeIds(active)) {
     return {
       status: 'INVALID_ACTIVE_PACKAGE', targetSlideId: null,
-      targetPosition: 1, activeTotal: 0, verifiedUnitIds: [], pendingUnitIds: [],
+      targetPosition: 1, activeTotal: 0, matchedNavigationUnitIds: [], pendingUnitIds: [],
       reviewRequired: true, canTransferScore: false, canMarkComplete: false,
     };
   }
@@ -69,18 +69,17 @@ export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiv
     return activeSet.has(id) ? id : null;
   }
 
-  // Visit evidence is kept separate from learner navigation. Even IDs that
-  // match are merely eligible for server-side equivalence validation; they
-  // do not constitute a passing score or course completion.
-  const verified = new Set<string>();
+  // Stable IDs may locate the navigation anchor; credit requires separate
+  // server-side equivalence validation bound to package hashes.
+  const matchedForNavigation = new Set<string>();
   if (previousSet) {
     for (const id of visited) {
       const matched = toActive(id);
-      if (matched) verified.add(matched);
+      if (matched) matchedForNavigation.add(matched);
     }
   }
-  const verifiedUnitIds = active.filter((id) => verified.has(id));
-  const pendingUnitIds = active.filter((id) => !verified.has(id));
+  const matchedNavigationUnitIds = active.filter((id) => matchedForNavigation.has(id));
+  const pendingUnitIds = active.filter((id) => !matchedForNavigation.has(id));
 
   let chosen: string | null = null;
   if (previousSet && typeof input.previousCursorId === 'string' &&
@@ -97,9 +96,9 @@ export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiv
 
   if (chosen) {
     return {
-      status: 'VERIFIED_ANCHOR', targetSlideId: chosen,
+      status: 'MATCHED_ANCHOR', targetSlideId: chosen,
       targetPosition: active.indexOf(chosen) + 1, activeTotal: active.length,
-      verifiedUnitIds, pendingUnitIds, reviewRequired: pendingUnitIds.length > 0,
+      matchedNavigationUnitIds, pendingUnitIds, reviewRequired: true,
       canTransferScore: false, canMarkComplete: false,
     };
   }
@@ -115,7 +114,7 @@ export function planScormActiveResume(input: ScormActiveResumeInput): ScormActiv
   return {
     status: index === 0 ? 'START_ACTIVE' : 'SUGGESTED_ANCHOR',
     targetSlideId: active[index], targetPosition: index + 1,
-    activeTotal: active.length, verifiedUnitIds, pendingUnitIds,
+    activeTotal: active.length, matchedNavigationUnitIds, pendingUnitIds,
     reviewRequired: true, canTransferScore: false, canMarkComplete: false,
   };
 }

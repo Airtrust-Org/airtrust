@@ -11,7 +11,7 @@ describe('SCORM active-edition resume (navigation is not certification)', () => 
       previousPosition:32, previousTotal:37,
     });
     expect(plan).toMatchObject({
-      status:'VERIFIED_ANCHOR', targetSlideId:'cfit-32', targetPosition:34,
+      status:'MATCHED_ANCHOR', targetSlideId:'cfit-32', targetPosition:34,
       reviewRequired:true, canTransferScore:false, canMarkComplete:false,
     });
     expect(plan.pendingUnitIds).toContain('new-threat');
@@ -37,7 +37,7 @@ describe('SCORM active-edition resume (navigation is not certification)', () => 
     });
     expect(result.status).toBe('SUGGESTED_ANCHOR');
     expect(result.targetPosition).toBe(2);
-    expect(result.verifiedUnitIds).toEqual([]);
+    expect(result.matchedNavigationUnitIds).toEqual([]);
     expect(result.pendingUnitIds).toHaveLength(72);
     expect(result.canMarkComplete).toBe(false);
   });
@@ -50,8 +50,8 @@ describe('SCORM active-edition resume (navigation is not certification)', () => 
       previousCursorId:'old-training',
       reviewedEquivalence:{'old-start':'new-start','old-training':'new-training'},
     });
-    expect(result).toMatchObject({status:'VERIFIED_ANCHOR',targetPosition:2});
-    expect(result.verifiedUnitIds).toEqual(['new-start','new-training']);
+    expect(result).toMatchObject({status:'MATCHED_ANCHOR',targetPosition:2});
+    expect(result.matchedNavigationUnitIds).toEqual(['new-start','new-training']);
   });
 
   it('does not trust an ambiguous crosswalk mapping two old slides to one new slide', () => {
@@ -62,7 +62,7 @@ describe('SCORM active-edition resume (navigation is not certification)', () => 
       reviewedEquivalence:{old1:'new1',old2:'new1'},
     });
     expect(result.status).toBe('SUGGESTED_ANCHOR');
-    expect(result.verifiedUnitIds).toEqual([]);
+    expect(result.matchedNavigationUnitIds).toEqual([]);
   });
 
   it('rejects malformed active manifests with duplicate IDs', () => {
@@ -76,7 +76,7 @@ describe('SCORM active-edition resume (navigation is not certification)', () => 
       previousVisitedIds:['a','b','c'],previousCursorId:'c',
       previousPosition:3,previousTotal:4,
     });
-    expect(result).toMatchObject({status:'VERIFIED_ANCHOR',targetSlideId:'b',targetPosition:2});
+    expect(result).toMatchObject({status:'MATCHED_ANCHOR',targetSlideId:'b',targetPosition:2});
   });
 
   it('begins at active start without usable old evidence', () => {
