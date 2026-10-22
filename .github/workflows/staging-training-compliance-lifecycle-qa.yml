@@ -164,7 +164,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  renewal_fixture:
+  d1_renewal_fixture:
     name: Expire only the completed synthetic qualification
     needs: [d1_fixture, browser]
     if: needs.browser.result == 'success'
@@ -189,10 +189,10 @@ jobs:
       - name: Set a due date on this run's completed synthetic evidence
         run: node scripts/staging/qa-training-compliance-cycle-evidence.mjs --expire --apply
 
-  renewal_browser:
+  d1_renewal_browser:
     name: Authenticated renewal and certificate PDF E2E
-    needs: [guard, renewal_fixture]
-    if: needs.renewal_fixture.result == 'success'
+    needs: [guard, d1_renewal_fixture]
+    if: needs.d1_renewal_fixture.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment: staging
@@ -233,7 +233,7 @@ jobs:
 
   d1_cleanup:
     name: Cleanup Isolated Compliance Lifecycle Fixture
-    needs: [d1_fixture, browser, renewal_fixture, renewal_browser]
+    needs: [d1_fixture, browser, d1_renewal_fixture, d1_renewal_browser]
     if: always() && needs.d1_fixture.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -273,7 +273,7 @@ jobs:
 
   summary:
     name: Compliance Lifecycle QA Summary
-    needs: [guard, d1_fixture, browser, renewal_fixture, renewal_browser, d1_cleanup]
+    needs: [guard, d1_fixture, browser, d1_renewal_fixture, d1_renewal_browser, d1_cleanup]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -283,8 +283,8 @@ jobs:
           GUARD_RESULT: ${{ needs.guard.result }}
           FIXTURE_RESULT: ${{ needs.d1_fixture.result }}
           LIFECYCLE_RESULT: ${{ needs.browser.result }}
-          RENEWAL_FIXTURE_RESULT: ${{ needs.renewal_fixture.result }}
-          RENEWAL_BROWSER_RESULT: ${{ needs.renewal_browser.result }}
+          RENEWAL_FIXTURE_RESULT: ${{ needs.d1_renewal_fixture.result }}
+          RENEWAL_BROWSER_RESULT: ${{ needs.d1_renewal_browser.result }}
           CLEANUP_RESULT: ${{ needs.d1_cleanup.result }}
         run: |
           {

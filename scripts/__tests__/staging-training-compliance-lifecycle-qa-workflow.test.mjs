@@ -29,7 +29,7 @@ test('lifecycle workflow is main-only, staging-only, exact-SHA guarded and alway
   assert.match(workflow, /--rollback --apply/);
   assert.match(workflow, /airtrust-staging-mutations-and-scorm-qa/);
   assert.match(workflow, /expired synthetic evidence renews cycle two and issues an authorized PDF/);
-  assert.match(workflow, /needs\.renewal_browser\.result/);
+  assert.match(workflow, /needs\.d1_renewal_browser\.result/);
 });
 
 test('lifecycle fixture is reserved to the canonical synthetic tenant and fails closed', () => {
