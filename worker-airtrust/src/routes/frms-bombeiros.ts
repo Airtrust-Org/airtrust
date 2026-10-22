@@ -262,6 +262,88 @@ frmsBombeiros.get('/equipe', requireRole('admin'), safe(async (c) => {
 
 
 /**
+ * Read-only staging QA readiness for a tenant-scoped BOA administrator.
+ * This checks configuration/roster rows, NOT scientific, LGPD or PoC approval.
+ */
+frmsBombeiros.get('/qa/prontidao', requireRole('admin'), safe(async c => {
+  const tenant = getTenantContext(c);
+  if (!isAuthorizedBombeirosFrmsTenant(tenant)) {
+    return c.json({ success: false, code: 'BOMBEIROS_TENANT_REQUIRED' }, 403);
+  }
+  if (c.env.ENVIRONMENT !== 'staging' && c.env.ENVIRONMENT !== 'development') {
+    return c.json({ success: false, code: 'BOA_QA_STAGING_ONLY' }, 404);
+  }
+  type Counts = {
+    member_accounts: number;
+    crew_links: number;
+    manager_roles: number;
+    admin_roles: number;
+  };
+  // Current membership aggregates, no person IDs, health values or writes.
+  let roster: Counts | null;
+  try {
+    roster = await c.env.DB.prepare(`SELECT
+       COUNT(DISTINCT ue.usuario_id) AS member_accounts,
+       COUNT(DISTINCT CASE WHEN LOWER(TRIM(ue.role)) IN ('student','editor','instructor')
+         AND f.id IS NOT NULL THEN ue.usuario_id END) AS crew_links,
+       COUNT(DISTINCT CASE WHEN LOWER(TRIM(ue.role)) IN
+         ('manager','gestor','supervisor','coordenador','coordinator')
+         THEN ue.usuario_id END) AS manager_roles,
+       COUNT(DISTINCT CASE WHEN LOWER(TRIM(ue.role)) IN ('admin','administrador')
+         THEN ue.usuario_id END) AS admin_roles
+     FROM usuarios_empresas ue
+     JOIN usuarios u ON u.id = ue.usuario_id AND u.deleted_at IS NULL
+     LEFT JOIN funcionarios f ON f.id = u.funcionario_id
+       AND f.empresa_id = ue.empresa_id
+       AND f.ativo = 1 AND f.deleted_at IS NULL
+     WHERE ue.empresa_id = ?`)
+      .bind(tenant.empresaId).first<Counts>();
+  } catch {
+    return c.json({ success: false, code: 'BOA_QA_ROSTER_READ_UNAVAILABLE' }, 503);
+  }
+  if (!roster || !Object.values(roster).every(v => Number.isSafeInteger(v) && v >= 0)
+    || roster.crew_links > roster.member_accounts) {
+    return c.json({ success: false, code: 'BOA_QA_ROSTER_INTEGRITY_ERROR' }, 503);
+  }
+  let configurationResolves = false;
+  try {
+    await resolveBombeirosReadiness(c.env.DB, tenant.empresaId);
+    configurationResolves = true;
+  } catch {
+    // No offshore fallback: missing effective governance remains unresolved.
+  }
+  const exactWriteGate = boaSensitiveQaWriteAllowed(c.env, tenant.empresaId);
+  const cohortOf130 = roster.member_accounts === 130
+    && roster.crew_links > 0 && roster.manager_roles > 0 && roster.admin_roles > 0;
+  return c.json({
+    success: true,
+    data: {
+      status: configurationResolves && cohortOf130 && exactWriteGate
+        ? 'CONFIGURATION_CHECKS_PASSED_NOT_AUTHORIZED'
+        : 'QA_PRECONDITIONS_INCOMPLETE',
+      accounts: roster,
+      intended_user_count: 130,
+      cohort_130_structurally_present: cohortOf130,
+      firefighter_profile_configuration_resolves: configurationResolves,
+      synthetic_tenant_write_gate_matches: exactWriteGate,
+      official_boa_source: 'NOT_VERIFIED',
+      scientific_validation: 'NOT_ATTESTED',
+      privacy_authorization: 'NOT_ATTESTED',
+      interactive_qa_login: 'NOT_TESTED',
+      real_d1_checkin: 'NOT_TESTED',
+      production_release: 'NOT_AUTHORIZED',
+      operational_poc_accepted: false,
+    },
+    meta: {
+      tenant_id: tenant.empresaId,
+      evidence: 'READ_ONLY_CURRENT_MEMBERSHIP_SNAPSHOT',
+      no_private_health_data: true,
+      write_performed: false,
+    },
+  });
+}));
+
+/**
  * Preflight for a purely fictitious BOA duty export. No database or object
  * storage write is authorized; this checks payload integrity only.
  * An approved source, tenant/employee mapping and exposure denominator are
