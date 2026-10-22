@@ -21,14 +21,14 @@ const DB='airtrust-db-staging-baseline-20260701';
 const BUCKET='airtrust-storage-staging';
 const PROJECT='qa-player3-staging';
 const ORIGIN='https://qa-player3-staging.pages.dev';
-const AR='0dcbbb7d50235d2e37d2c1ddda16c1f55cb2482551a6cf3a3a420829cf642b8f';
-const SO='2c3794a87fa914370594f1871f2e43d0d2e3fc0995db86372b516f49fa3baa29';
-const PO='e576d02331a43c02b5027bc543b10f208b8fc13eb111367f589eb53cd0f74d72';
-const BA='17a61f5914a6ce1d4e853525ef8b2daefde8cf65ff5fe65be6a29cb42e1d1875';
+const AR='07d9a165a7840b548aee339354054885d437d19909537ead6e5eab4b71449c8e';
+const SO='71fdbe8714a10b965507490fdd5d148a2bbb205185615ed4f6a0c8e82e7c4ea9';
+const PO='20f10008389fb08db6abb73ae0f00908ad3cd457cb730e16086af4cefc3cd7c6';
+const BA='b6317fb1a187fababb7a909943a65aa822741dc7a327433412e06f5e67a69216';
 const PIN={
- 'scripts/learning-factory/generate_player3_technical_zip.py':'9a18f21c60c05c3173f03ad365d6ee1df5b1519202f513e88aea34f6e038f7e5',
- 'worker-airtrust/package-lock.json':'0516921fa9eddea097711828b9f5b406391828cb12bb88dbe46b90ffd5562235',
- 'scripts/staging/build_player3_qa_catalog_sql_plan.py':'210c707548362e7130bf7205ef6ef010498c3aeb55ae288468a2bf0ebd8d2986',
+ 'scripts/learning-factory/generate_player3_technical_zip.py':'a6c178bbddf132088007989300ec9f7c0ebd4943d68a53e7736066dfabd22bca',
+ 'worker-airtrust/package-lock.json':'6b5f8dbed586c6e67ebbf16dda5c157d5e16be621a81e136f530896cc69c45f6',
+ 'scripts/staging/build_player3_qa_catalog_sql_plan.py':'9637574efffad9b2ac6dcc344595482dc295777b5986d9d2613a642641b9813b',
  'scripts/staging/player3-qa-governed-publisher.py':'a9d279306411c5af9063cd5f85de4fd4e6d78f3910ea07cfcca92a410f6224a0',
  'scripts/learning-factory/prepare_player3_technical_candidate.py':'1cf8cbe4e19e06115c511d091e01fa0854ae663c5c1b5fb22259617217f80a4b',
  'scripts/learning-factory/build_player3_qa_publication_plan.py':'e517317068f4bbab4f61ab8896f0cdcc03f4934f6feeeeee87d2fc0b14a7df92'
@@ -94,31 +94,46 @@ function readD1(statement){
         Array.isArray(data[0].results),'PLAYER3_D1_NOT_PROVEN_READONLY');
  return data[0].results;
 }
+// This workflow provisions a SECOND QA course. Never rebind old course 327.
+export function assertV2QaSnapshot(r,phase,courseId){
+ demand(r?.tenant===1&&r.s61===1&&r.s62===1&&
+        r.v1_course===1&&r.v1_marker===1&&
+        r.v1_edition===1&&r.v1_policy===1,
+        'PLAYER3_V1_IMMUTABLE_QA_BASELINE_MISSING');
+ if(phase==='bootstrap'){
+  demand(courseId===0&&r.types===0&&r.courses===0&&r.course_id===0&&
+         r.markers===0&&r.editions===0&&r.policies===0&&r.enrolled===0,
+         'PLAYER3_V2_BOOTSTRAP_NOT_FRESH');
+ }else{
+  demand((phase==='publish'||phase==='edition')&&
+         Number.isSafeInteger(courseId)&&courseId>0&&
+         r.types===1&&r.courses===1&&r.course_id===courseId&&r.markers===1&&
+         r.editions===0&&r.policies===0&&r.enrolled===0,
+         'PLAYER3_V2_PUBLISH_OR_EDITION_STATE_DRIFT');
+ }
+ return r;
+}
 function snapshot(){
  const q=[
  "SELECT",
  "(SELECT COUNT(*) FROM empresas WHERE id=999006 AND codigo='qa_examiner_training' AND ativo=1 AND deleted_at IS NULL) AS tenant,",
  "(SELECT COUNT(*) FROM airtrust_schema_changes_v2 WHERE change_id='lms-native-catalog-activation-0561') AS s61,",
  "(SELECT COUNT(*) FROM airtrust_schema_changes_v2 WHERE change_id='lms-player3-canonical-terminal-0562') AS s62,",
- "(SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=999006 AND codigo='QA-PLAYER3-NATIVE-TYPE' AND ativo=1 AND deleted_at IS NULL) AS types,",
- "(SELECT COUNT(*) FROM lms_cursos WHERE empresa_id=999006 AND titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC' AND version_tag='qa-player3-native-synthetic-v1' AND deleted_at IS NULL) AS courses,",
- "(SELECT COALESCE(MAX(id),0) FROM lms_cursos WHERE empresa_id=999006 AND titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC' AND version_tag='qa-player3-native-synthetic-v1' AND deleted_at IS NULL) AS course_id,",
- "(SELECT COUNT(*) FROM lms_native_catalog_activation WHERE empresa_id=999006) AS markers,",
- "(SELECT COUNT(*) FROM lms_native_edicoes WHERE empresa_id=999006) AS editions,",
- "(SELECT COUNT(*) FROM lms_player3_politicas WHERE empresa_id=999006) AS policies,",
- "(SELECT COUNT(*) FROM lms_matriculas WHERE empresa_id=999006 AND curso_id="+CID+") AS enrolled"
+ "(SELECT COUNT(*) FROM lms_cursos WHERE id=327 AND empresa_id=999006 AND titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC' AND version_tag='qa-player3-native-synthetic-v1' AND tipo_conteudo='scorm' AND deleted_at IS NULL) AS v1_course,",
+ "(SELECT COUNT(*) FROM lms_native_catalog_activation WHERE empresa_id=999006 AND curso_id=327) AS v1_marker,",
+ "(SELECT COUNT(*) FROM lms_native_edicoes WHERE empresa_id=999006 AND curso_id=327 AND artifact_sha256='0dcbbb7d50235d2e37d2c1ddda16c1f55cb2482551a6cf3a3a420829cf642b8f' AND status='PUBLISHED') AS v1_edition,",
+ "(SELECT COUNT(*) FROM lms_player3_politicas WHERE empresa_id=999006 AND curso_id=327 AND estado='APPROVED') AS v1_policy,",
+ "(SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=999006 AND codigo='QA-PLAYER3-NATIVE-TYPE-V2' AND ativo=1 AND deleted_at IS NULL) AS types,",
+ "(SELECT COUNT(*) FROM lms_cursos WHERE empresa_id=999006 AND titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC-V2' AND version_tag='qa-player3-native-synthetic-v2' AND deleted_at IS NULL) AS courses,",
+ "(SELECT COALESCE(MAX(id),0) FROM lms_cursos WHERE empresa_id=999006 AND titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC-V2' AND version_tag='qa-player3-native-synthetic-v2' AND deleted_at IS NULL) AS course_id,",
+ "(SELECT COUNT(*) FROM lms_native_catalog_activation a JOIN lms_cursos c ON c.id=a.curso_id AND c.empresa_id=a.empresa_id WHERE a.empresa_id=999006 AND c.titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC-V2' AND c.version_tag='qa-player3-native-synthetic-v2' AND c.deleted_at IS NULL) AS markers,",
+ "(SELECT COUNT(*) FROM lms_native_edicoes ed JOIN lms_cursos c ON c.id=ed.curso_id AND c.empresa_id=ed.empresa_id WHERE ed.empresa_id=999006 AND c.titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC-V2' AND c.version_tag='qa-player3-native-synthetic-v2') AS editions,",
+ "(SELECT COUNT(*) FROM lms_player3_politicas p JOIN lms_cursos c ON c.id=p.curso_id AND c.empresa_id=p.empresa_id WHERE p.empresa_id=999006 AND c.titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC-V2' AND c.version_tag='qa-player3-native-synthetic-v2') AS policies,",
+ "(SELECT COUNT(*) FROM lms_matriculas m JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id WHERE m.empresa_id=999006 AND c.titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC-V2' AND c.version_tag='qa-player3-native-synthetic-v2') AS enrolled"
  ].join(' ');
- const rows=readD1(q);demand(rows.length===1,'PLAYER3_QA_DB_NOT_UNIQUE');
- const r=rows[0];demand(r.tenant===1&&r.s61===1&&r.s62===1,'PLAYER3_SCHEMA_TENANT_NOT_READY');
- if(PH==='bootstrap'){
-  demand(r.types===0&&r.courses===0&&r.markers===0&&r.editions===0&&r.policies===0,
-         'PLAYER3_BOOTSTRAP_DIRTY_STAGING_STATE');
- }else{
-  demand(r.types===1&&r.courses===1&&r.course_id===CID&&r.markers===1&&
-         r.editions===0&&r.policies===0&&r.enrolled===0,
-         'PLAYER3_PUBLISH_OR_EDITION_STATE_DRIFT');
- }
- return r;
+ const rows=readD1(q);
+ demand(rows.length===1,'PLAYER3_QA_DB_NOT_UNIQUE');
+ return assertV2QaSnapshot(rows[0],PH,CID);
 }
 function hasVerifiedBookmark(value){
  if(!value || typeof value!=='object')return false;
@@ -230,8 +245,12 @@ async function doVerify(){
  console.log('PLAYER3_PRIVATE_R2_AND_THIRD_ORIGIN_VERIFIED');
 }
 function postD1(){
+ // An immutable original course and its historical learner pins must survive.
+ const original=readD1("SELECT (SELECT COUNT(*) FROM lms_cursos WHERE id=327 AND empresa_id=999006 AND titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC' AND version_tag='qa-player3-native-synthetic-v1') AS course, (SELECT COUNT(*) FROM lms_native_catalog_activation WHERE empresa_id=999006 AND curso_id=327) AS marker, (SELECT COUNT(*) FROM lms_native_edicoes WHERE empresa_id=999006 AND curso_id=327 AND artifact_sha256='0dcbbb7d50235d2e37d2c1ddda16c1f55cb2482551a6cf3a3a420829cf642b8f' AND status='PUBLISHED') AS edition, (SELECT COUNT(*) FROM lms_player3_politicas WHERE empresa_id=999006 AND curso_id=327 AND estado='APPROVED') AS policy");
+ demand(original.length===1&&original[0].course===1&&original[0].marker===1&&original[0].edition===1&&original[0].policy===1,'PLAYER3_V1_BASELINE_CHANGED');
+
  if(PH==='bootstrap'){
-  const rows=readD1("SELECT c.id FROM lms_cursos c JOIN lms_native_catalog_activation a ON a.curso_id=c.id AND a.empresa_id=c.empresa_id JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id JOIN qualificacoes_categorias qc ON qc.id=qt.categoria_id AND qc.empresa_id=qt.empresa_id WHERE c.empresa_id=999006 AND c.titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC' AND c.tipo_conteudo='scorm' AND c.scorm_launch_file IS NULL AND c.scorm_package_r2_prefix IS NULL AND qc.lms_integrada=1 AND qt.codigo='QA-PLAYER3-NATIVE-TYPE'");
+  const rows=readD1("SELECT c.id FROM lms_cursos c JOIN lms_native_catalog_activation a ON a.curso_id=c.id AND a.empresa_id=c.empresa_id JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id JOIN qualificacoes_categorias qc ON qc.id=qt.categoria_id AND qc.empresa_id=qt.empresa_id WHERE c.empresa_id=999006 AND c.titulo='QA-PLAYER3-NATIVE-ONLY-SYNTHETIC-V2' AND c.version_tag='qa-player3-native-synthetic-v2' AND c.tipo_conteudo='scorm' AND c.scorm_launch_file IS NULL AND c.scorm_package_r2_prefix IS NULL AND qc.lms_integrada=1 AND qt.codigo='QA-PLAYER3-NATIVE-TYPE-V2'");
   demand(rows.length===1&&Number.isSafeInteger(rows[0].id),
          'PLAYER3_BOOTSTRAP_PHYSICAL_READBACK_MISSING');
   console.log('PLAYER3_QA_PHYSICAL_COURSE_ID='+rows[0].id);
