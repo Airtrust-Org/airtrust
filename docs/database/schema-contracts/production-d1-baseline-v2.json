@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-18",
     "last_reconciled_against": "0554 simulator, 0557 LMS, 0560 simulator pending; 0563 Pilot fueling identity review-only, not applied",
-    "schema_v2_digest": "7b52728b60189df7ed887ca6806e384ea5902d28fa8bc1b3f953f7611c7f379e",
+    "schema_v2_digest": "2b581de8214089852a77e68affa9b5fdec3d72950e4eae247272c50917e9bf58",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1635,6 +1635,20 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
       "reviewed_manifest": null
+    },
+    {
+      "change_file": "0566_lms_scorm_edition_handoffs.sql",
+      "change_id": "lms-scorm-edition-handoff-0566",
+      "sha256": "ebfcb95de6f2a6fee7e07e155697d67157ed96821f23c1cc36b15c5caf352fba",
+      "targets": [
+        "lms_scorm_edition_handoffs"
+      ],
+      "domain": "LMS SCORM: immutable in-cycle edition handoff evidence",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-scorm-edition-handoff-0566.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-edition-handoff-0566.md",
+      "note": "DDL only, no archive/reset/user write. Writer default-off until governed schema, authenticated handoff and end-to-end browser validation."
     }
   ]
 }
