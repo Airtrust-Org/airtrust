@@ -29,7 +29,7 @@ const mockPaths={
  'employee-sector-access':/services\/employee-sector-access$/,
  'report-access':/lib\/frms\/report-access$/,
 };
-const output=esbuild.buildSync({
+const output=(await esbuild.build({
  entryPoints:[join(root,'worker-airtrust/src/routes/frms-bombeiros.ts')],
  bundle:true,platform:'node',format:'cjs',write:false,
  plugins:[{name:'BOA-QA-scoped-stubs',setup(build){
@@ -43,7 +43,7 @@ const output=esbuild.buildSync({
    contents:stubs[args.path],loader:'js',
   }));
  }}],
-}).outputFiles[0].text;
+})).outputFiles[0].text;
 const filename='/tmp/airtrust-boa-hono-real-sqlite-qa.cjs';
 const mod=new Module(filename);
 mod.filename=filename;mod.paths=Module._nodeModulePaths(dirname(filename));
