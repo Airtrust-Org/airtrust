@@ -74,10 +74,72 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/staging/player3-qa-approval-guard.mjs
 
-  verify-r2-pages:
-    name: Verify private R2 and isolated QA Pages before D1 edition
+  access-qa-pages:
+    name: Verify existing Pages token on isolated QA project
     needs: guard
-    if: ${{ inputs.phase == 'edition' && needs.guard.result == 'success' }}
+    if: ${{ needs.guard.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v7
+        with:
+          path: trusted
+          persist-credentials: false
+      - name: Checkout exact reviewed F4 SHA as data
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          path: trusted/release
+          persist-credentials: false
+      - name: Recheck current F0 grant
+        working-directory: trusted
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging/player3-qa-approval-guard.mjs
+      - name: Read only QA Pages project metadata
+        working-directory: trusted
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+        run: node scripts/staging/player3-qa-trusted-executor.mjs access-pages
+
+  access-qa-r2:
+    name: Verify existing Worker credential can read private QA R2
+    needs: guard
+    if: ${{ needs.guard.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v7
+        with:
+          path: trusted
+          persist-credentials: false
+      - name: Checkout exact reviewed F4 SHA as data
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          path: trusted/release
+          persist-credentials: false
+      - name: Recheck current F0 grant
+        working-directory: trusted
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging/player3-qa-approval-guard.mjs
+      - name: Read only scoped R2 bucket metadata
+        working-directory: trusted
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+        run: node scripts/staging/player3-qa-trusted-executor.mjs access-r2
+
+  verify-r2-https:
+    name: Verify immutable private R2 and HTTPS QA origin before D1 edition
+    needs: [guard, access-qa-pages, access-qa-r2]
+    if: ${{ inputs.phase == 'edition' && needs.guard.result == 'success' && needs.access-qa-pages.result == 'success' && needs.access-qa-r2.result == 'success' }}
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 25
@@ -105,12 +167,12 @@ jobs:
         run: node scripts/staging/player3-qa-trusted-executor.mjs prepare
       - name: Install reviewed Wrangler without package lifecycle scripts
         run: npm --prefix trusted/release/worker-airtrust ci --ignore-scripts
-      - name: Verify immutable private R2 bytes and HTTPS origin without any D1 credential
+      - name: Verify R2 bytes by Worker token and HTTPS origin without any D1 credential
         id: verify
         working-directory: trusted
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.PLAYER3_QA_R2_PAGES_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
         run: node scripts/staging/player3-qa-trusted-executor.mjs verify
       - name: Erase temporary publication candidate
         if: always()
@@ -118,12 +180,14 @@ jobs:
 
   d1-schema-operation:
     name: Governed staging D1 schema preflight and scoped SQL
-    needs: [guard, verify-r2-pages]
+    needs: [guard, access-qa-pages, access-qa-r2, verify-r2-https]
     if: >-
       ${{
         always() &&
         needs.guard.result == 'success' &&
-        (inputs.phase != 'edition' || needs.verify-r2-pages.result == 'success')
+        needs.access-qa-pages.result == 'success' &&
+        needs.access-qa-r2.result == 'success' &&
+        (inputs.phase != 'edition' || needs.verify-r2-https.result == 'success')
       }}
     runs-on: ubuntu-latest
     environment: staging
@@ -165,14 +229,14 @@ jobs:
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
-          QA_R2_VERIFIED_PLAN_SHA: ${{ needs.verify-r2-pages.outputs.verified_plan_sha }}
+          QA_R2_VERIFIED_PLAN_SHA: ${{ needs.verify-r2-https.outputs.verified_plan_sha }}
         run: node scripts/staging/player3-qa-trusted-executor.mjs apply
       - name: Erase private preimage, SQL and Time Travel receipt
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/player3-qa"
 
-  publish-r2-pages:
-    name: Publish only scoped synthetic R2 and isolated QA Pages
+  publish-qa-artifacts:
+    name: Publish approved QA artifacts with per-step scoped tokens
     needs: [guard, d1-schema-operation]
     if: >-
       ${{
@@ -206,11 +270,11 @@ jobs:
         run: node scripts/staging/player3-qa-trusted-executor.mjs prepare
       - name: Install reviewed Wrangler without package lifecycle scripts
         run: npm --prefix trusted/release/worker-airtrust ci --ignore-scripts
-      - name: Publish only R2 and isolated Pages after successful D1 preflight
+      - name: Publish and verify only immutable tenant-scoped private R2 with Worker token
         working-directory: trusted
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.PLAYER3_QA_R2_PAGES_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
           QA_D1_PREFLIGHT_OK: ${{ needs.d1-schema-operation.outputs.d1_ready }}
           PLAYER3_QA_APPROVED_SHA: ${{ inputs.release_sha }}
           PLAYER3_QA_LOCK_GRANTED: airtrust-staging-mutations-and-scorm-qa
@@ -219,14 +283,28 @@ jobs:
           PLAYER3_QA_PAGES_PROJECT: qa-player3-staging
           PLAYER3_QA_R2_BUCKET: airtrust-storage-staging
           CONFIRM_STAGING_PLAYER3_QA_PUBLISH: AIRTRUST_STAGING_PLAYER3_SYNTHETIC_PUBLISH
-        run: node scripts/staging/player3-qa-trusted-executor.mjs apply
+        run: node scripts/staging/player3-qa-trusted-executor.mjs publish-r2
+      - name: Publish only reviewed browser assets on isolated QA Pages with Pages token
+        working-directory: trusted
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          QA_D1_PREFLIGHT_OK: ${{ needs.d1-schema-operation.outputs.d1_ready }}
+          PLAYER3_QA_APPROVED_SHA: ${{ inputs.release_sha }}
+          PLAYER3_QA_LOCK_GRANTED: airtrust-staging-mutations-and-scorm-qa
+          PLAYER3_QA_PHYSICAL_COURSE_VERIFIED: 'true'
+          PLAYER3_QA_RECOVERY_POINT_VERIFIED: 'true'
+          PLAYER3_QA_PAGES_PROJECT: qa-player3-staging
+          PLAYER3_QA_R2_BUCKET: airtrust-storage-staging
+          CONFIRM_STAGING_PLAYER3_QA_PUBLISH: AIRTRUST_STAGING_PLAYER3_SYNTHETIC_PUBLISH
+        run: node scripts/staging/player3-qa-trusted-executor.mjs publish-pages
       - name: Erase temporary private publication files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/player3-qa"
 
   summary:
     name: Record bounded staging QA operation results
-    needs: [guard, verify-r2-pages, d1-schema-operation, publish-r2-pages]
+    needs: [guard, access-qa-pages, access-qa-r2, verify-r2-https, d1-schema-operation, publish-qa-artifacts]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -234,12 +312,14 @@ jobs:
         shell: bash
         env:
           GUARD: ${{ needs.guard.result }}
-          VERIFY: ${{ needs.verify-r2-pages.result }}
+          PAGES_ACCESS: ${{ needs.access-qa-pages.result }}
+          R2_ACCESS: ${{ needs.access-qa-r2.result }}
+          VERIFY: ${{ needs.verify-r2-https.result }}
           D1: ${{ needs.d1-schema-operation.result }}
-          R2: ${{ needs.publish-r2-pages.result }}
+          R2: ${{ needs.publish-qa-artifacts.result }}
         run: |
           set -euo pipefail
-          [[ "$GUARD" == success && "$D1" == success ]] || exit 1
+          [[ "$GUARD" == success && "$PAGES_ACCESS" == success && "$R2_ACCESS" == success && "$D1" == success ]] || exit 1
           if [[ "$QA_PHASE" == edition ]]; then
             [[ "$VERIFY" == success && "$R2" == skipped ]] || exit 1
           elif [[ "$QA_PHASE" == publish ]]; then
