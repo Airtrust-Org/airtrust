@@ -202,7 +202,7 @@ test('trusted executor also pins transitive Python loader and Wrangler lockfile'
    ['scripts/learning-factory/generate_player3_technical_zip.py',
     'a6c178bbddf132088007989300ec9f7c0ebd4943d68a53e7736066dfabd22bca'],
    ['worker-airtrust/package-lock.json',
-    '0516921fa9eddea097711828b9f5b406391828cb12bb88dbe46b90ffd5562235']
+    '6b5f8dbed586c6e67ebbf16dda5c157d5e16be621a81e136f530896cc69c45f6']
  ]){
    assert.ok(source.includes("'"+file+"':'"+sha+"'"),'missing pinned dependency '+file);
  }
