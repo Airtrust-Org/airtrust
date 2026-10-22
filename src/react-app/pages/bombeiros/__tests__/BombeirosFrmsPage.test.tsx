@@ -12,6 +12,9 @@ vi.mock('@/react-app/components/AppLayout', () => ({
 vi.mock('../BombeirosMethodologyDemo', () => ({
   default: () => <div data-testid="boa-methodology-consumer">Método BOA</div>,
 }));
+vi.mock('../BombeirosQaReadinessPanel', () => ({
+  default: () => <div data-testid="boa-qa-readiness">Prontidão QA</div>,
+}));
 vi.mock('../BombeirosDutySourcePreflight', () => ({
   default: () => <div data-testid="boa-duty-source-preflight">Pré-validação BOA QA</div>,
 }));
@@ -41,6 +44,7 @@ describe('Portal separado BOA/CBMMG', () => {
     expect(screen.queryByTestId('boa-monthly-management-preview')).not.toBeInTheDocument();
     expect(screen.queryByTestId('boa-workforce-consumer')).not.toBeInTheDocument();
     expect(screen.queryByTestId('boa-duty-source-preflight')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('boa-qa-readiness')).not.toBeInTheDocument();
     expect(screen.queryByTestId('boa-methodology-consumer')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Cadastro de funcionários/i })).not.toBeInTheDocument();
   });
@@ -55,6 +59,7 @@ describe('Portal separado BOA/CBMMG', () => {
     expect(screen.getByTestId('boa-monthly-management-preview')).toBeInTheDocument();
     expect(screen.getByTestId('boa-workforce-consumer')).toBeInTheDocument();
     expect(screen.getByTestId('boa-duty-source-preflight')).toBeInTheDocument();
+    expect(screen.getByTestId('boa-qa-readiness')).toBeInTheDocument();
     expect(screen.queryByTestId('boa-methodology-consumer')).not.toBeInTheDocument();
     expect(screen.getByText(/Dados operacionais autenticados/)).toBeInTheDocument();
     expect(screen.getByText(/Esta tela não importa/)).toBeInTheDocument();
