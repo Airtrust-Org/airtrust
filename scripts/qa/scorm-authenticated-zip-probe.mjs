@@ -79,14 +79,32 @@ async function run(name,type){
     await sco.getByRole('button',{name:action.value,exact:true}).click({timeout:20000});
   }
   let previous;
+  const expectedCounter=driver.resume.assertion?.state==='text'&&
+   driver.resume.assertion?.selector==='#counterText'?
+   /^(\d+)\s*\/\s*(\d+)$/.exec(String(driver.resume.assertion.value||'')):null;
+  const expectedCursor=expectedCounter?Number(expectedCounter[1])-1:null;
   for(let i=0;i<35;i++){
    previous=readState(enrollment);
+   let cursorReached=true;
+   if(expectedCursor!==null&&previous?.suspend_data){
+    try{
+     const checkpoint=JSON.parse(previous.suspend_data);
+     if(checkpoint?.v===1&&typeof checkpoint.p==='string'&&
+       Number.isSafeInteger(checkpoint.c)&&Number.isSafeInteger(checkpoint.a))
+      cursorReached=checkpoint.c===expectedCursor&&checkpoint.a===expectedCursor;
+    }catch{cursorReached=false;}
+   }
    if(previous?.cmi_json&&previous.suspend_data&&
-     previous.suspend_data!==baselineSuspend)break;
+     previous.suspend_data!==baselineSuspend&&cursorReached)break;
    await page.waitForTimeout(400);
   }
   requireCondition(!!previous?.cmi_json&&!!previous?.suspend_data&&
     previous.suspend_data!==baselineSuspend,'ACTION_NOT_PERSISTED_TO_CMI');
+  if(expectedCursor!==null){
+   const checkpoint=JSON.parse(previous.suspend_data);
+   requireCondition(checkpoint.c===expectedCursor&&checkpoint.a===expectedCursor,
+    'EXPECTED_CURSOR_NOT_PERSISTED_TO_CMI');
+  }
   result.persistedCmi='PASS';
   result.cmiSha256=hash(Buffer.from(previous.cmi_json));
   result.suspendBytes=Buffer.byteLength(previous.suspend_data,'utf8');
