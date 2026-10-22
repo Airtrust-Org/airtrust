@@ -89,7 +89,7 @@ function fixture(){
     empresaNome:'BOA QA',role,plano:'qa',permissions:[]});
    await next();
   });
-  app.onError(()=>new Response(JSON.stringify({success:false,code:'QA_ROUTE_ERROR'}),{status:500}));
+  app.onError(error=>new Response(JSON.stringify({success:false,code:'QA_ROUTE_ERROR'}),{status:error.statusCode??error.status??500}));
   app.route('/api/bombeiros/frms',router);
   return(method,path,body)=>app.fetch(new Request('http://localhost/api/bombeiros/frms'+path,{
    method,headers:body?{'Content-Type':'application/json'}:{},
