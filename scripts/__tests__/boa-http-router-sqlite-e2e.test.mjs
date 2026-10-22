@@ -277,3 +277,30 @@ test('signed JWT and actual auth + tenant middleware protect BOA checkin and cas
   assert.equal(count(),14);
  }finally{sqlite.close();}
 });
+
+test('signed admin JWT reads actual SQLite QA roster readiness without write or implied approval',async()=>{
+ const {sqlite,actualAuth,realJwt,count}=fixture();
+ try {
+  const request=actualAuth();
+  const admin=await realJwt(200,'admin',130);
+  const manager=await realJwt(190,'manager',130);
+  const coastal=await realJwt(600,'student',6);
+  assert.equal((await request(null,'GET','/qa/prontidao')).status,401);
+  assert.equal((await request(manager,'GET','/qa/prontidao')).status,403);
+  assert.equal((await request(coastal,'GET','/qa/prontidao')).status,403);
+  assert.equal((await actualAuth('production')(admin,'GET','/qa/prontidao')).status,404);
+  const ready=await request(admin,'GET','/qa/prontidao');
+  assert.equal(ready.status,200,'staging QA readiness '+await ready.clone().text());
+  const payload=await ready.json();
+  assert.deepEqual(payload.data.accounts,{
+    member_accounts:9,crew_links:6,manager_roles:2,admin_roles:1,
+  });
+  assert.equal(payload.data.status,'QA_PRECONDITIONS_INCOMPLETE');
+  assert.equal(payload.data.official_boa_source,'NOT_VERIFIED');
+  assert.equal(payload.data.scientific_validation,'NOT_ATTESTED');
+  assert.equal(payload.data.operational_poc_accepted,false);
+  assert.equal(payload.meta.write_performed,false);
+  assert.doesNotMatch(JSON.stringify(payload),/funcionario_id|sleep_hours_24h|kss_reported/);
+  assert.equal(count(),0);
+ }finally{sqlite.close();}
+});
