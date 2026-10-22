@@ -1,6 +1,6 @@
 # AirTrust Player 2.0 — arquitetura de encerramento canônico (RFC operacional)
 
-**Status:** implementação incremental e fail-closed; **não** é autorização para publicar cursos, migrar D1/R2 ou emitir certificados.  
+**Status:** implementação incremental e fail-closed; **não** é autorização para publicar cursos, migrar D1/R2 ou emitir certificados.
 **Autoridade:** GitHub `main`, workflows e Schema V2 vigente. Requisitos definidos após a auditoria de matrículas em 99–100% e falha `PROGRESS_EVIDENCE_MISSING`.
 
 ## Decisão arquitetural

@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-player3-module-attempts-0559",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0559_lms_player3_module_attempts.sql",
+  "fileHash": "a8c56c0bce48476f48e20bd5d5d33befe6c0becc98d2af309c4fc78d5d18d775",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0559.md",
+  "planHash": "8b2c0be03e82a39edd06191b570e6ff21e7f56d6125eeac30ba329d13611b9b2"
+}

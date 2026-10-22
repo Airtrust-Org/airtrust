@@ -26,6 +26,7 @@ import { useAuth } from '@/react-app/hooks/useAuth';
 import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/useLms';
 import { formatMinutes } from './lmsUi';
 import { describeScormClosureMissing } from './lmsScormClosureReasons';
+import {isScormStudyTerminalMessage} from './lmsScormStudyMessages';
 import {
   parseGranularDiagnostic,
   type LmsGranularDiagnostic,
@@ -188,7 +189,7 @@ function parseSlideLocation(
   return null;
 }
 
-export default function LmsPlayer() {
+export default function LmsPlayer({scormStudyOnly=false}:{scormStudyOnly?:boolean}={}) {
   const { matriculaId } = useParams<{ matriculaId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -266,7 +267,7 @@ export default function LmsPlayer() {
     inferredPersistedLocationProgress ?? 0,
   );
   const editionMismatch = (matricula as (typeof matricula & {
-    edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' | 'PACKAGE_SHA_CHANGED' } | null;
+    edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' | 'PACKAGE_SHA_CHANGED' | 'EDITION_HISTORY_UNAVAILABLE' } | null;
   }) | undefined)?.edition_mismatch ?? null;
   const newEditionRequired = editionMismatch?.required === true;
   const isTenantAdmin = ['admin', 'administrador'].includes(
@@ -284,7 +285,7 @@ export default function LmsPlayer() {
     mergedProgress,
   });
   const isScormContent = (matricula?.tipo_conteudo ?? 'scorm') === 'scorm';
-  const shouldReconcilePassedScorm = canReconcilePersistedScormCompletion({
+  const shouldReconcilePassedScorm = !scormStudyOnly && canReconcilePersistedScormCompletion({
     reviewMode: effectiveReviewMode,
     isScormContent,
     matriculaStatus: matricula?.status,
@@ -334,14 +335,14 @@ export default function LmsPlayer() {
   // and mastery score. Never demand a second, proprietary per-page checklist
   // in the player. FORMATIVE retains its real coverage requirement.
   const canRequestScormCompletion =
-    isScormContent && !newEditionRequired && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
+    !scormStudyOnly && isScormContent && !newEditionRequired && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
     (isScoredScorm
       ? closureReadiness?.eligible_for_server_verification === true
       : allSlidesVisited && (granularDiagnostic
         ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
           granularDiagnostic.assessment.passed !== false)
         : Boolean(legacyFinalSlide && legacyAssessmentEvidence)));
-  const canRequestCompletion = !newEditionRequired &&
+  const canRequestCompletion = !scormStudyOnly && !newEditionRequired &&
     (canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm);
 
   // The SCO owns its own assessment/submission control. The LMS never opens
@@ -349,7 +350,7 @@ export default function LmsPlayer() {
   // reconcile the server result automatically, or offer one explicit retry
   // only if reconciliation fails.
   const showScormRegistrationRetry =
-    isScormContent && !effectiveReviewMode && completionState === 'error';
+    !scormStudyOnly && isScormContent && !effectiveReviewMode && completionState === 'error';
 
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
@@ -753,14 +754,11 @@ export default function LmsPlayer() {
         return;
       }
 
-      if (
-        effectiveReviewMode &&
-        event.data &&
-        typeof event.data === 'object' &&
-        (event.data.type === 'lms:completed' ||
-          event.data.type === 'lms:completion-pending' ||
-          event.data.type === 'lms:completion-error')
-      ) {
+      // The SCO is allowed to report study progress, never terminal approval
+      // in a Worker-admitted SCORM study-only session. Its postMessage data
+      // cannot change the canonical enrollment or generate a success toast.
+      if ((effectiveReviewMode || scormStudyOnly) &&
+          isScormStudyTerminalMessage(event.data)) {
         return;
       }
       if (
@@ -843,7 +841,7 @@ export default function LmsPlayer() {
         if (typeof event.data.slide_current === 'number' && Number.isFinite(event.data.slide_current)) {
           setMaxVisitedSlide((prev) => Math.max(prev, event.data.slide_current));
         }
-        if (shouldVerifyCanonicalProgress(event.data.novo_status) && !effectiveReviewMode) {
+        if (shouldVerifyCanonicalProgress(event.data.novo_status) && !effectiveReviewMode && !scormStudyOnly) {
           verifyCanonicalAndReturn();
           return;
         }
@@ -872,7 +870,7 @@ export default function LmsPlayer() {
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, queryClient, closureReadiness?.slide_coverage?.recorded]);
+  }, [effectiveReviewMode, scormStudyOnly, id, launchOrigin, navigate, refetchMatricula, queryClient, closureReadiness?.slide_coverage?.recorded]);
 
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
@@ -1147,6 +1145,12 @@ export default function LmsPlayer() {
     );
   }
 
+  // Never mount the legacy SCORM runtime or manual completion controls for Native.
+  // The separate page is backed by staging-only server admission and is read-only.
+  if (matricula.tipo_conteudo === 'native') {
+    navigate(`/lms/player/native/${id}`, { replace: true });
+    return null;
+  }
   // Redirect non-SCORM types to their own players
   if (matricula.tipo_conteudo === 'h5p') {
     navigate(`/lms/player/h5p/${id}`, { replace: true });
@@ -1213,21 +1217,36 @@ export default function LmsPlayer() {
         </div>
       </header>
 
+      {scormStudyOnly && (
+        <div role="status" className="border-b border-blue-500/30 bg-blue-950 px-4 py-2 text-xs text-blue-100">
+          Modo de estudo SCORM 1.2: navegação e retomada permitidas.
+          Este percurso não emite nota, aprovação, qualificação ou certificado.
+        </div>
+      )}
+
       {newEditionRequired && editionMismatch && !effectiveReviewMode && (
         <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100">
           <AlertTriangle className="h-5 w-5 shrink-0 text-amber-300" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Nova edição do curso — matrícula anterior incompatível</p>
+            <p className="text-sm font-semibold">
+              {editionMismatch.reason === 'EDITION_HISTORY_UNAVAILABLE'
+                ? 'Histórico da edição precisa de reconciliação'
+                : 'Nova edição do curso — matrícula anterior incompatível'}
+            </p>
             <p className="text-xs text-amber-200/90">
-              {editionMismatch.reason === 'PACKAGE_VERSION_CHANGED' || editionMismatch.reason === 'SLIDE_IDS_CHANGED'
-                ? 'A versão ou a identidade das unidades mudou, mesmo que a quantidade de telas seja igual. '
-                : `O pacote anterior registra ${editionMismatch.previous_total} unidades e a edição ativa exige ${editionMismatch.active_total}. `}
-              O progresso de {displayProgress}% pertence ao ciclo anterior e não representa o avanço
-              na nova edição. As evidências serão preservadas; não é permitido reaproveitar
-              automaticamente essa conclusão. É necessário iniciar um novo ciclo auditado.
+              {editionMismatch.reason === 'EDITION_HISTORY_UNAVAILABLE'
+                ? 'Não foi possível comprovar qual edição pertence a este ciclo. O progresso foi preservado; solicite a reconciliação pela equipe responsável antes de retomar.'
+                : editionMismatch.reason === 'PACKAGE_VERSION_CHANGED' || editionMismatch.reason === 'SLIDE_IDS_CHANGED'
+                  ? 'A versão ou a identidade das unidades mudou, mesmo que a quantidade de telas seja igual. '
+                  : `O pacote anterior registra ${editionMismatch.previous_total} unidades e a edição ativa exige ${editionMismatch.active_total}. `}
+              {editionMismatch.reason !== 'EDITION_HISTORY_UNAVAILABLE' && (
+                <>O progresso de {displayProgress}% pertence ao ciclo anterior e não representa o avanço
+                na nova edição. As evidências serão preservadas; não é permitido reaproveitar
+                automaticamente essa conclusão. É necessário iniciar um novo ciclo auditado.</>
+              )}
             </p>
           </div>
-          {isTenantAdmin ? (
+          {isTenantAdmin && editionMismatch.reason !== 'EDITION_HISTORY_UNAVAILABLE' ? (
             <button
               onClick={() => void startVerifiedNewEdition()}
               disabled={startingNewEdition}

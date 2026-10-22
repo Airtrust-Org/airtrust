@@ -58,3 +58,20 @@ test('never downgrades the CFIT completed flag',()=>{
  const first=state({sc:{scenario7:true},c:true});
  assert.equal(observeMonotonicSuspend(first,state({sc:{scenario7:true},c:false})).ok,false);
 });
+
+const f5=(overrides={})=>JSON.stringify({
+ v:1,p:'AIRTRUST-SCORE-F5-TEST',c:2,a:2,m:2,d:[0,1],f:[],study:false,
+ ...overrides,
+});
+test('accepts exact F5 Unified Score cursor and monotonic checkpoint',()=>{
+ assert.deepEqual(observeMonotonicSuspend(f5(),f5({d:[0,1,2],m:3})),{
+  ok:true,reason:'MONOTONIC_F5_CHECKPOINT'});
+});
+test('rejects F5 cursor, package, or visited-state regression',()=>{
+ const first=f5({f:[3],study:true});
+ for(const after of [
+  f5({c:0,a:0,f:[3],study:true}),f5({p:'other-package',f:[3],study:true}),
+  f5({m:1,f:[3],study:true}),f5({d:[1],f:[3],study:true}),
+  f5({f:[],study:true}),f5({f:[3],study:false}),
+ ]) assert.equal(observeMonotonicSuspend(first,after).ok,false);
+});

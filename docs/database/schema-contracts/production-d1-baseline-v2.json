@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-18",
-    "last_reconciled_against": "0554 simulator, 0557 LMS, 0560 simulator pending; 0563 Pilot fueling identity review-only, not applied",
-    "schema_v2_digest": "7b52728b60189df7ed887ca6806e384ea5902d28fa8bc1b3f953f7611c7f379e",
+    "last_reconciled_against": "0558/0559 physical staging applied; 0561/0562 versioned REVIEW-ONLY (not applied); 0560 simulator and 0563 Pilot classified; no production release claimed",
+    "schema_v2_digest": "c1654a6e2dbed3bea4971f9430d326d49d5a6c61bc782fea5c48760dab182fbf",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1597,6 +1597,38 @@
       "note": "Additive DDL only. Runtime atomic enrollment/cycle reset is gated on migration 0557 and consumes only active-cycle xAPI. No production D1 data write or production schema application claimed; requires SHA-specific governance and recovery. Immutable audit storage is enforced by D1 triggers: archive snapshots and attributed xAPI cannot be updated/deleted, and tenant/cycle mismatch aborts attribution."
     },
     {
+      "change_file": "0558_lms_native_v1_evidence.sql",
+      "change_id": "lms-native-v1-evidence-0558",
+      "sha256": "b0f5b51f26f2428d23468751f575fdfb03ce1583635ef980c33d9ae27b204f57",
+      "targets": [
+        "lms_native_edicoes",
+        "lms_native_eventos",
+        "lms_native_matricula_edicoes",
+        "lms_native_tentativas"
+      ],
+      "domain": "LMS Native V1 — course edition, enrollment-cycle pin, evidence event ledger, immutable private grading attempts",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-native-v1-evidence-0558.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-native-v1-evidence-0558.md",
+      "note": "Versioned additive candidate for Player 3, pending governed Schema V2 preflight and recovery point. No staging/production migration, student data writes, or course publication has occurred."
+    },
+    {
+      "change_file": "0559_lms_player3_module_attempts.sql",
+      "change_id": "lms-player3-module-attempts-0559",
+      "sha256": "a8c56c0bce48476f48e20bd5d5d33befe6c0becc98d2af309c4fc78d5d18d775",
+      "targets": [
+        "lms_player3_politicas",
+        "lms_player3_tentativas_modulares"
+      ],
+      "domain": "Player3 certifying module policies and immutable per-stage attempt ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-player3-module-attempts-0559.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-player3-module-attempts-0559.md",
+      "note": "Additive staged candidate dependent on 0558; no D1/production mutation or certificate issued. Requires governed schema workflow and actual staging E2E."
+    },
+    {
       "change_file": "0560_simulator_individual_check_delete_guard.sql",
       "change_id": "simulator-individual-check-delete-guard-0560",
       "sha256": "5fe67c81dda03681d9a73eec4cc51989bd92270e4eca6b41b1eb1028b58b9e56",
@@ -1609,6 +1641,47 @@
       "reviewed_manifest": "simulator-individual-check-delete-guard-0560.json",
       "evidence": "worker-airtrust/schema-v2/plans/simulator-individual-check-delete-guard-0560.md",
       "note": "Additive trigger; no D1/Compliance/history modifications. Apply separately after 0554; blocks all physical deletion of individual check evidence."
+    },
+    {
+      "change_file": "0561_native_catalog_activation.sql",
+      "change_id": "lms-native-catalog-activation-0561",
+      "sha256": "7eda46951e34b2a7552948e7dec07d1473f0ed96cdf7e0b0fea4e40a1cc8e8a6",
+      "targets": [
+        "lms_cursos",
+        "lms_matricula_ciclos",
+        "lms_matriculas",
+        "lms_native_catalog_activation",
+        "lms_native_edicoes",
+        "lms_native_enrollment_intents",
+        "lms_native_eventos",
+        "lms_native_matricula_edicoes",
+        "lms_native_tentativas",
+        "lms_player3_tentativas_modulares",
+        "lms_scorm_package_versions"
+      ],
+      "domain": "LMS Native/Player3 governed staging catalog activation, immutable marker and transactional enrollment intent",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-native-catalog-activation-0561.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-native-catalog-activation-0561.md",
+      "note": "SQL versioned for technical review ONLY; manifest reviewStatus=REVIEW_ONLY_NO_REMOTE_APPLY; NO STAGING/PRODUCTION APPLY, no real course activation or enrollment. Requires explicit reviewed staging approval, hashes/recovery and exact 0558/0559 physical ledger; workflow must fail closed until promotion."
+    },
+    {
+      "change_file": "0562_player3_canonical_terminal.sql",
+      "change_id": "lms-player3-canonical-terminal-0562",
+      "sha256": "b460d410788ae1f9eb2090ffcf7806ba3ed96f3facbc9bfb0a7c0e8a069a7ccd",
+      "targets": [
+        "lms_matricula_ciclos",
+        "lms_matriculas",
+        "lms_native_completion_intents",
+        "lms_player3_completion_intents"
+      ],
+      "domain": "Player3/Native mutually isolated atomic terminal intents and guarded status transitions",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-player3-canonical-terminal-0562.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-player3-canonical-terminal-0562.md",
+      "note": "SQL versioned for technical review ONLY; manifest reviewStatus=REVIEW_ONLY_NO_REMOTE_APPLY; NO STAGING/PRODUCTION APPLY or certificate issued. Requires reviewed/applied 0561 on exact staging D1, rollback evidence, 8 CI gates and explicit release authorization."
     },
     {
       "change_file": "0563_controle_voos_pilot_fueling_identity.sql",

@@ -12,6 +12,31 @@ export function observeMonotonicSuspend(beforeRaw,afterRaw){
   }catch{return {ok:false,reason:'SUSPEND_NOT_VALID_JSON'};}
   if(!before||!after||typeof before!=='object'||typeof after!=='object')
     return {ok:false,reason:'SUSPEND_NOT_OBJECT'};
+  // AirTrust Unified Score F5 uses a strict cursor contract that differs from
+  // the s/d/sc fields used by other authored SCORM packages.
+  if(before.v===1&&after.v===1&&typeof before.p==='string'&&
+    typeof after.p==='string'&&Number.isSafeInteger(before.c)&&
+    Number.isSafeInteger(after.c)&&Number.isSafeInteger(before.a)&&
+    Number.isSafeInteger(after.a)&&Number.isSafeInteger(before.m)&&
+    Number.isSafeInteger(after.m)&&Array.isArray(before.d)&&
+    Array.isArray(after.d)&&Array.isArray(before.f)&&Array.isArray(after.f)&&
+    typeof before.study==='boolean'&&typeof after.study==='boolean'){
+    if(before.c!==after.c||before.a!==after.a||before.c<0||before.a<0)
+      return {ok:false,reason:'RESUME_CURSOR_DRIFT'};
+    if(before.p!==after.p)
+      return {ok:false,reason:'PACKAGE_VERSION_DRIFT_P'};
+    if(after.m<before.m)
+      return {ok:false,reason:'VISITED_CURSOR_DECREASED'};
+    for(const key of ['d','f']){
+      if(before[key].some(id=>!Number.isSafeInteger(id)||id<0||
+        !after[key].includes(id)))
+        return {ok:false,reason:'COMPLETION_LOST_'+key.toUpperCase()};
+    }
+    if(before.study===true&&after.study!==true)
+      return {ok:false,reason:'STUDY_MODE_DOWNGRADE'};
+    return {ok:true,reason:beforeRaw===afterRaw?
+      'BYTE_IDENTICAL':'MONOTONIC_F5_CHECKPOINT'};
+  }
   if(!Number.isSafeInteger(before.s)||!Number.isSafeInteger(after.s)||
       before.s!==after.s||before.s<0)
     return {ok:false,reason:'RESUME_CURSOR_DRIFT'};

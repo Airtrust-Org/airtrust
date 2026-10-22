@@ -3,6 +3,7 @@ import { buildTrainingComplianceRosterPlan, type RosterPlan, type RosterEnrollme
 import { canReuseMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from './training-compliance-evidence-profile';
 import { registrarAuditoria } from '../utils/auditoria';
+import { canUseLegacyAutomatedLmsCourse, hasLiveNativeLmsActivationTable } from './training-compliance-native-lms-evidence';
 import { createComplianceEnrollmentAtomic } from './training-compliance-create-enrollment';
 import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
 
@@ -20,11 +21,17 @@ export async function readTrainingRosterPlan(
   db: D1Database, empresaId: number, buildSnapshot: BuildRosterSnapshot,
 ) {
   if (empresaId !== ROSTER_RECONCILIATION_TENANT) throw new Error('ROSTER_TENANT_NOT_AUTHORIZED');
+  const activationTable = await hasLiveNativeLmsActivationTable(db);
+  const nativeMarkerExclusion = activationTable
+    ? 'AND NOT EXISTS (SELECT 1 FROM lms_native_catalog_activation a WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id)'
+    : '';
   const [snapshot, courses, enrollments] = await Promise.all([
     buildSnapshot(db, empresaId, ALL_ACCESS),
     db.prepare(`SELECT c.id,c.qualificacao_tipo_id,c.ativo,c.publicado FROM lms_cursos c
       JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id
       WHERE c.empresa_id=? AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL
+        AND LOWER(TRIM(COALESCE(c.tipo_conteudo,''))) <> 'native'
+        ${nativeMarkerExclusion}
         AND qt.ativo=1 AND qt.deleted_at IS NULL
         AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')`)
       .bind(empresaId).all<RosterCourse>(),
@@ -83,6 +90,11 @@ export async function readTrainingRosterPlan(
 }
 
 async function retireUnusedEnrollment(db: D1Database, empresaId: number, id: number, reason: string) {
+  // A zero-progress Native cycle is still Native and cannot be silently
+  // cancelled as a stray SCORM row by this legacy roster reconciler.
+  const target = await db.prepare('SELECT curso_id FROM lms_matriculas WHERE id=? AND empresa_id=?')
+    .bind(id, empresaId).first<{curso_id:number}>();
+  if (!target || !(await canUseLegacyAutomatedLmsCourse(db,empresaId,target.curso_id))) return false;
   // A single D1 batch binds the row-state preflight, soft removal and audit together.
   // Never remove any SCORM/xAPI, LMS progress, diagnostic or qualification evidence.
   const batch = await db.batch([
@@ -120,6 +132,7 @@ async function retireUnusedEnrollment(db: D1Database, empresaId: number, id: num
 async function ensureRequiredEnrollment(
   db:D1Database, empresaId:number, action:RosterPlan['enroll'][number],
 ) {
+  if (!(await canUseLegacyAutomatedLmsCourse(db,empresaId,action.cursoId))) return false;
   const existing = await db.prepare(`SELECT id,status,deleted_at FROM lms_matriculas
     WHERE empresa_id=? AND funcionario_id=? AND curso_id=?
     ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END,id DESC LIMIT 1`)

@@ -15,6 +15,8 @@ import {
   type LmsStructuredContentType,
 } from '../lib/lms/lms-package-validator';
 import { getLmsSchemaSnapshot } from '../lib/lms/lms-schema-state';
+import {extractScormStaticGateMetadata} from '../lib/lms/lms-package-validator';
+import {scormStudyQaTenantEnabled,assertScormV3StudyOnlyManifest,matchesExpectedScormZipSha} from '../lib/lms/lms-scorm-study-qa-intake';
 import { ApiError } from '../middleware/error-handler';
 import { requirePermission } from '../middleware/rbac';
 import type { Env } from '../types';
@@ -30,13 +32,13 @@ import {
 
 const app = new Hono<{ Bindings: Env }>();
 
-const InitSchema = z.object({
+const InitSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   idempotency_key: z.string().trim().min(1).max(200).optional(),
   skip_purge: z.boolean().optional(),
 });
 
-const CompleteSchema = z.object({
+const CompleteSchema = z.object({ native_pilot_format: z.never().optional(), nativePilotFormat: z.never().optional(),
   tipo_conteudo: z.enum(['scorm', 'h5p']),
   upload_id: z
     .string()
@@ -190,6 +192,45 @@ async function handleDirectPackageUpload(
   });
   return c.json({ success: true, data: result });
 }
+
+/**
+ * Manually upload an isolated Score V3 QA candidate; never activate the
+ * active course pointer, edit a real enrollment, or create a certificate.
+ * Server staging-tenant flag defaults OFF. The exact SHA is checked BEFORE
+ * creating the immutable R2/D1 candidate and a privileged role is mandatory.
+ */
+app.post('/:id/scorm-study-qa-candidate',
+  requirePermission('lms','editar','admin','manager'),
+  requireOperacoesCurso('update'),
+  async c=>{
+    const empresaId=getEmpresaIdSafe(c);
+    if(!scormStudyQaTenantEnabled(c.env,empresaId)){
+      return c.json({success:false,code:'SCORM_STUDY_QA_NOT_ENABLED'},404);
+    }
+    const cursoId=Number(c.req.param('id'));
+    if(!Number.isSafeInteger(cursoId)||cursoId<1)
+      throw new ApiError('Curso inválido',400);
+    const {bytes,arquivoNome}=await readPackageRequest(c,'scorm');
+    const expected=c.req.header('x-airtrust-expected-zip-sha256')||null;
+    if(!(await matchesExpectedScormZipSha(bytes,expected)))
+      throw new ApiError('SHA-256 do ZIP não confere',400);
+    const metadata=extractScormStaticGateMetadata(bytes);
+    const item=metadata.entries.find(x=>x.path==='airtrust-completion-manifest.json');
+    let manifest:unknown;
+    try{manifest=item?JSON.parse(new TextDecoder().decode(item.data)):null;}
+    catch{throw new ApiError('Manifesto de estudo inválido',400);}
+    try{assertScormV3StudyOnlyManifest(manifest);}
+    catch{throw new ApiError('Pacote não é SCORM de estudo com prova externa',400);}
+    const result=await createScormPackageCandidate({
+      db:c.env.DB,bucket:c.env.BUCKET,empresaId,cursoId,
+      userId:Number((c.get as (key:string)=>unknown)('userId'))||null,
+      bytes,arquivoNome,
+    });
+    return c.json({success:true,data:{
+      packageId:result.packageId,packageSha256:result.packageSha256,
+      status:result.status,studyOnlyQaCandidate:true,activeCourseUnchanged:true,
+    }},202);
+  });
 
 // Inline package creation used to insert the course and then mutate R2/D1 in
 // a non-atomic tail. Metadata creation remains available as JSON; packages use

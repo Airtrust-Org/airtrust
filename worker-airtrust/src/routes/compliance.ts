@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { parseISO, differenceInDays } from 'date-fns';
 import { getTableColumns, getFicha360 } from './ficha360';
+import { loadVerifiedComplianceLmsEnrollments } from '../services/training-compliance-native-lms-evidence';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
@@ -208,12 +209,9 @@ app.get('/funcionarios/:id/compliance', auth(), async (c: Context<{ Bindings: En
     }
 
     // Buscar matrículas LMS do funcionário (para verificar cursos obrigatórios)
-    const lmsMatriculas = await c.env.DB.prepare(
-      `SELECT curso_id, status, data_expiracao FROM lms_matriculas
-       WHERE funcionario_id = ? AND empresa_id = ? AND deleted_at IS NULL`,
-    )
-      .bind(id, empresaId)
-      .all<Record<string, unknown>>();
+    const lmsMatriculas = await loadVerifiedComplianceLmsEnrollments(
+      c.env.DB, empresaId, [id],
+    );
 
     const hoje = parseISO(getTodayIsoSaoPaulo());
     const thresholdDias = await getQualificacoesAlertaDias(c.env.DB, empresaId);
@@ -225,7 +223,7 @@ app.get('/funcionarios/:id/compliance', auth(), async (c: Context<{ Bindings: En
         ficha.licencas as Array<Record<string, unknown>>,
         hoje,
         thresholdDias,
-        lmsMatriculas.results ?? [],
+        lmsMatriculas,
       ),
     );
 
@@ -393,13 +391,10 @@ app.get('/compliance/funcionarios', auth(), async (c: Context<{ Bindings: Env }>
     // 5.1 Buscar matrículas LMS de todos os funcionários (para verificar cursos obrigatórios)
     const lmsByEmployee = new Map<number, Array<Record<string, unknown>>>();
     try {
-      const lmsRaw = await c.env.DB.prepare(
-        `SELECT funcionario_id, curso_id, status, data_expiracao FROM lms_matriculas
-         WHERE funcionario_id IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
-      )
-        .bind(...ids, empresaId)
-        .all();
-      for (const m of lmsRaw.results || []) {
+      const lmsRows = await loadVerifiedComplianceLmsEnrollments(
+        c.env.DB, empresaId, ids,
+      );
+      for (const m of lmsRows) {
         const row = m as Record<string, unknown>;
         const empId = Number(row.funcionario_id);
         if (!lmsByEmployee.has(empId)) lmsByEmployee.set(empId, []);

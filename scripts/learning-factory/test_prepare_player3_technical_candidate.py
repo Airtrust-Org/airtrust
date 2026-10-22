@@ -37,7 +37,7 @@ class TechnicalCandidateTest(unittest.TestCase):
             self.assertRegex(artifact["packageVersion"], r"^n-[0-9a-f]{32}$")
             self.assertEqual(artifact["schema"], "AIRTRUST_NATIVE_COURSE_V1")
             self.assertEqual([u["kind"] for u in artifact["units"]],
-                             ["lesson", "lesson", "assessment", "lesson", "lesson"])
+                             ["lesson", "lesson", "lesson", "lesson", "assessment"])
             self.assertEqual(manifest["lessonCount"], 4)
             self.assertEqual(len(artifact["questions"]), 10)
             self.assertEqual(artifact["policy"], {"mode": "SCORED", "masteryScore": 70,
@@ -49,7 +49,7 @@ class TechnicalCandidateTest(unittest.TestCase):
             self.assertEqual(policy["editionSha256"], manifest["editionSha256"])
             self.assertEqual(policy["stages"][0]["stageId"], "qa-stage-1")
             self.assertEqual(policy["stages"][0]["requiredQuestionIds"],
-                             artifact["units"][2]["questionIds"])
+                             artifact["units"][-1]["questionIds"])
             self.assertEqual(policy["learnerContent"]["sourceSha256"], manifest["sourceZipSha256"])
             self.assertTrue(bank["PRIVATE_NEVER_SERVE_TO_BROWSER"])
             self.assertFalse(manifest["remoteWrites"])

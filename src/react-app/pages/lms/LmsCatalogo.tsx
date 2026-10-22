@@ -61,6 +61,9 @@ import {
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
 import { uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
+import {defaultNewScormAssessmentPolicy,initialAssessmentPolicyForEditor,describeCourseFinalAssessment} from './lmsAssessmentModes';
+import { createNativeEnrollment } from './lmsNativeEnrollment';
+import { getLmsPlayerRoute } from './lmsPlayerRoute';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -283,7 +286,7 @@ async function fetchFreshQualificacaoTipoById(
   return tipos.find((tipo) => sameTipoId(tipo.id, qualificacaoTipoId)) ?? null;
 }
 
-function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
+function buildInitialForm(initial?: Partial<LmsCurso>,canConfigureAssessment=false): CreateCursoDTO {
   return {
     titulo: initial?.titulo ?? '',
     descricao: initial?.descricao ?? '',
@@ -298,7 +301,7 @@ function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
     qualificacao_area_id: null,
     gerar_qualificacao_ao_concluir: initial?.gerar_qualificacao_ao_concluir ?? 0,
     scorm_mastery_score: initial?.scorm_mastery_score ?? 70,
-    scorm_assessment_policy: initial?.scorm_assessment_policy ?? 'SCORED',
+    scorm_assessment_policy: initialAssessmentPolicyForEditor(initial?.scorm_assessment_policy,Boolean(initial?.id),canConfigureAssessment),
     scorm_versao: initial?.scorm_versao ?? '1.2',
     tipo_conteudo: initial?.tipo_conteudo ?? 'scorm',
     publicado: initial?.publicado ?? 0,
@@ -312,8 +315,8 @@ function validateForm(form: CreateCursoDTO) {
     e.qualificacao_tipo_id = 'Selecione o tipo de qualificação.';
   if (form.gerar_qualificacao_ao_concluir === 1 && !form.qualificacao_area_id)
     e.qualificacao_area_id = 'Selecione a Área da Qualificação.';
-  if (form.scorm_assessment_policy !== 'FORMATIVE' && ((form.scorm_mastery_score ?? 70) < 0 || (form.scorm_mastery_score ?? 70) > 100))
-    e.scorm_mastery_score = 'Nota mínima entre 0 e 100.';
+  if (form.scorm_assessment_policy !== 'FORMATIVE' && ((form.scorm_mastery_score ?? 70) <= 0 || (form.scorm_mastery_score ?? 70) > 100))
+    e.scorm_mastery_score = 'Nota mínima entre 1 e 100.';
   return e;
 }
 
@@ -684,6 +687,7 @@ function CourseDrawer({
   uploadProgress,
   uploadStatus,
   availableAreas,
+  canConfigureAssessment,
 }: {
   initial?: LmsCurso;
   onClose: () => void;
@@ -696,12 +700,13 @@ function CourseDrawer({
   uploadProgress: number;
   uploadStatus: string;
   availableAreas: { id: number; nome: string; codigo?: string | null }[];
+  canConfigureAssessment: boolean;
 }) {
   const { tipos: qualTipos } = useQualificacaoTipos(true, 500);
   const { data: latestCourse } = useLmsCurso(initial?.id ?? 0);
   const courseSnapshot = latestCourse ?? initial;
   const storedThumbPreview = useLmsCourseThumbnailUrl(courseSnapshot);
-  const [form, setForm] = useState<CreateCursoDTO>(() => buildInitialForm(initial));
+  const [form, setForm] = useState<CreateCursoDTO>(() => buildInitialForm(initial,canConfigureAssessment));
   const [contentFile, setContentFile] = useState<File | null>(null);
   const [skipPurge, setSkipPurge] = useState(false);
   const [thumbFile, setThumbFile] = useState<File | null>(null);
@@ -862,7 +867,7 @@ function CourseDrawer({
                               ...c,
                               tipo_conteudo: e.target.value as TipoConteudo,
                               scorm_assessment_policy: e.target.value === 'scorm'
-                                ? (c.scorm_assessment_policy ?? 'SCORED')
+                                ? (c.scorm_assessment_policy ?? defaultNewScormAssessmentPolicy())
                                 : 'SCORED',
                               scorm_versao:
                                 e.target.value === 'video' ? null : (c.scorm_versao ?? '1.2'),
@@ -922,22 +927,29 @@ function CourseDrawer({
                         />
                       </div>
                       <div className="space-y-2">
-                        <FieldLabel label="Versão / critério de conclusão" />
-                        <select
-                          aria-label="Critério de conclusão SCORM"
-                          disabled={form.tipo_conteudo !== 'scorm'}
-                          value={form.scorm_assessment_policy ?? 'SCORED'}
-                          onChange={(e) =>
-                            setForm((c) => ({
-                              ...c,
-                              scorm_assessment_policy: e.target.value as 'SCORED' | 'FORMATIVE',
-                            }))
-                          }
-                          className={fieldCls}
-                        >
-                          <option value="SCORED">Avaliação com nota mínima obrigatória</option>
-                          <option value="FORMATIVE">Participação integral — avaliação formativa, sem nota eliminatória</option>
-                        </select>
+                        <fieldset aria-label="Avaliação final do treinamento" disabled={form.tipo_conteudo !== 'scorm' || !canConfigureAssessment}>
+                          <legend className="mb-2 text-sm font-semibold text-slate-800">Avaliação final</legend>
+                          <div className="grid gap-2">
+                            {([
+                              ['FORMATIVE', 'Sem avaliação final', 'Percorrer slides, interações e questões de fixação antes de concluir; sem prova eliminatória.'],
+                              ['SCORED', 'Com avaliação final', 'Exige aprovação na avaliação. A integração da prova externa será realizada posteriormente.'],
+                            ] as const).map(([value, label, description]) => (
+                              <label key={value} className="flex cursor-pointer gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                                <input type="radio" name="scorm-final-assessment-mode" value={value}
+                                  checked={form.scorm_assessment_policy === value}
+                                  onChange={() => setForm((c) => ({ ...c, scorm_assessment_policy: value }))}
+                                  className="mt-1" />
+                                <span>
+                                  <strong className="block text-slate-900">{label}</strong>
+                                  <span className="text-slate-600">{description}</span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+                        {!canConfigureAssessment && form.tipo_conteudo==='scorm' ? (
+                          <p className="text-xs text-amber-700">Somente administradores podem alterar o modo de avaliação final. A configuração existente será preservada.</p>
+                        ) : null}
                         <div className="grid grid-cols-2 gap-3">
                           <select
                             value={form.scorm_versao ?? '1.2'}
@@ -955,7 +967,7 @@ function CourseDrawer({
                           </select>
                           <input
                             type="number"
-                            min={0}
+                            min={1}
                             max={100}
                             value={form.scorm_mastery_score ?? 70}
                             disabled={form.scorm_assessment_policy === 'FORMATIVE'}
@@ -971,9 +983,7 @@ function CourseDrawer({
                         </div>
                         <FieldError message={errors.scorm_mastery_score} />
                         <p className="text-xs text-slate-600">
-                          {form.scorm_assessment_policy === 'FORMATIVE'
-                            ? 'A conclusão depende da evidência SCORM persistida e da sessão válida, sem exigir nota. Não confundir com aprovação em prova.'
-                            : 'A conclusão exige uma nota SCORM real igual ou superior à mínima configurada.'}
+                          {describeCourseFinalAssessment(form.scorm_assessment_policy ?? defaultNewScormAssessmentPolicy())}
                         </p>
                       </div>
                     </div>
@@ -1844,19 +1854,7 @@ export default function LmsCatalogo() {
   });
 
   function navPlayer(curso: LmsCurso, matriculaId: number) {
-    if (curso.tipo_conteudo === 'h5p') {
-      navigate(`/lms/player/h5p/${matriculaId}`);
-      return;
-    }
-    if (curso.tipo_conteudo === 'pdf') {
-      navigate(`/lms/player/pdf/${matriculaId}`);
-      return;
-    }
-    if (curso.tipo_conteudo === 'pptx') {
-      navigate(`/lms/player/pptx/${matriculaId}`);
-      return;
-    }
-    navigate(`/lms/player/${matriculaId}`);
+    navigate(getLmsPlayerRoute(curso.tipo_conteudo, matriculaId));
   }
 
   async function handleCardAction(curso: LmsCurso) {
@@ -1867,15 +1865,7 @@ export default function LmsCatalogo() {
     const mat = matriculasByCurso.get(curso.id);
     if (mat && mat.status !== 'CANCELADO') {
       if (mat.status === 'CONCLUIDO') {
-        const base =
-          curso.tipo_conteudo === 'h5p'
-            ? `/lms/player/h5p/${mat.id}`
-            : curso.tipo_conteudo === 'pdf'
-              ? `/lms/player/pdf/${mat.id}`
-              : curso.tipo_conteudo === 'pptx'
-                ? `/lms/player/pptx/${mat.id}`
-                : `/lms/player/${mat.id}`;
-        navigate(`${base}?review=1`);
+        navigate(getLmsPlayerRoute(curso.tipo_conteudo, mat.id, true));
         return;
       } else navPlayer(curso, mat.id);
       return;
@@ -1885,6 +1875,13 @@ export default function LmsCatalogo() {
       return;
     }
     try {
+      if (curso.tipo_conteudo === 'native') {
+        const matriculaId = await createNativeEnrollment(curso.id);
+        void qc.invalidateQueries({ queryKey: lmsKeys.minhasMatriculas() });
+        void qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
+        navPlayer(curso, matriculaId);
+        return;
+      }
       const created = await matricular.mutateAsync({
         funcionario_id: funcionarioId,
         curso_id: curso.id,
@@ -2171,6 +2168,7 @@ export default function LmsCatalogo() {
                 <MultiSelect
                   options={[
                     { value: 'scorm', label: 'SCORM' },
+                    { value: 'native', label: 'Native' },
                     { value: 'h5p', label: 'H5P' },
                     { value: 'video', label: 'Vídeo' },
                     { value: 'pdf', label: 'PDF' },
@@ -2329,6 +2327,7 @@ export default function LmsCatalogo() {
           uploadProgress={uploadProgress}
           uploadStatus={uploadStatus}
           availableAreas={areas}
+          canConfigureAssessment={isAdmin}
         />
       ) : null}
     </AppLayout>

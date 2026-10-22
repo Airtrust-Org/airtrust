@@ -66,6 +66,11 @@ export function buildReviewedSchemaApply({
     }
   }
 
+  // Versioned review artifacts are never authority for remote D1 apply.
+  if (manifest.reviewStatus === 'REVIEW_ONLY_NO_REMOTE_APPLY') {
+    fail('SCHEMA_V2_REVIEW_ONLY_CANDIDATE_NOT_APPROVED');
+  }
+
   if (manifest.changeId !== expectedChangeId) fail('manifest changeId mismatch');
   assertSafeId(manifest.changeId, 'manifest.changeId');
   assertSafeId(manifest.baselineId, 'manifest.baselineId');

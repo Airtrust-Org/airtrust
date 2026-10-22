@@ -190,7 +190,7 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
       expect(text).toContain('Empresa não identificada');
     });
 
-    it('uses the current active package for an in-progress enrollment after a course update', async () => {
+    it('uses the package activated before the in-progress enrollment cycle', async () => {
       verifyJWTMock.mockResolvedValue({
         empresa_id: 6,
         funcionario_id: 42,
@@ -211,9 +211,17 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
               ativo: 1,
               publicado: 1,
               scorm_package_r2_prefix: currentPrefix,
+              scorm_launch_file: 'index.html',
+              scorm_versao: '1.2',
+              cycle_started_at: '2026-09-14T14:46:16Z',
             }),
           },
         ],
+        ['lms_scorm_package_audit_log', { all: () => ({ results: [{
+          package_id: 'package-current', package_sha256: 'a'.repeat(64), r2_prefix: currentPrefix,
+          launch_file: 'index.html', scorm_versao: '1.2', package_status: 'ACTIVE',
+          activated_at: '2026-09-10T00:00:00Z',
+        }] }) }],
       ]);
 
       const response = await createApp().fetch(
@@ -238,13 +246,17 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
       );
     });
 
-    it('uses the current active package when reviewing a completed enrollment', async () => {
+    it('uses the package activated before a completed enrollment cycle', async () => {
       verifyJWTMock.mockResolvedValue({ empresa_id: 6, funcionario_id: 42, role: 'admin', sub: '42' });
       const currentPrefix = 'lms/scorm/6/99/_candidates/current-package/';
       const db = createMockDb([[
         'FROM lms_matriculas m',
-        { first: () => ({ id: 77, funcionario_id: 42, empresa_id: 6, status: 'CONCLUIDO', curso_id: 99, data_inicio: '2026-09-14 14:46:16', ativo: 1, publicado: 1, scorm_package_r2_prefix: currentPrefix }) },
-      ]]);
+        { first: () => ({ id: 77, funcionario_id: 42, empresa_id: 6, status: 'CONCLUIDO', curso_id: 99, data_inicio: '2026-09-14 14:46:16', cycle_started_at: '2026-09-14T14:46:16Z', ativo: 1, publicado: 1, scorm_package_r2_prefix: currentPrefix, scorm_launch_file: 'index.html', scorm_versao: '1.2' }) },
+      ], ['lms_scorm_package_audit_log', { all: () => ({ results: [{
+        package_id: 'package-current', package_sha256: 'a'.repeat(64), r2_prefix: currentPrefix,
+        launch_file: 'index.html', scorm_versao: '1.2', package_status: 'ACTIVE',
+        activated_at: '2026-09-10T00:00:00Z',
+      }] }) }]]);
 
       const response = await createApp().fetch(
         new Request('https://airtrust-api-staging.airtrust.workers.dev/assets/session', {
@@ -395,5 +407,119 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
 
       expect(response.status).toBe(401);
     });
+  });
+});
+
+describe('Native V1 isolation from legacy SCORM assets', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    verifyJWTMock.mockResolvedValue({
+      empresa_id: 6, funcionario_id: 42, role: 'admin', sub: '42',
+    });
+  });
+
+  it('does not mint a legacy media token for a Native enrollment', async () => {
+    const db = createMockDb([['FROM lms_matriculas m', { first: () => ({
+      id: 77, curso_id: 99, funcionario_id: 42, status: 'EM_ANDAMENTO',
+      ativo: 1, publicado: 1, tipo_conteudo: 'native',
+      scorm_package_r2_prefix: null,
+    }) }]]);
+    const env = makeEnv(db);
+    const response = await createApp().fetch(new Request('https://api.example.com/assets/session', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test.jwt.token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ matricula_id: 77 }),
+    }), env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    expect(generateJWTMock).not.toHaveBeenCalled();
+    expect(env.BUCKET.get).not.toHaveBeenCalled();
+  });
+
+  it('denies direct legacy SCORM media for Native, including admin access', async () => {
+    const db = createMockDb([['FROM lms_cursos', { first: () => ({
+      id: 99, empresa_id: 6, ativo: 1, publicado: 1,
+      tipo_conteudo: 'native', scorm_package_r2_prefix: null,
+    }) }]]);
+    const env = makeEnv(db);
+    const response = await createApp().fetch(new Request(
+      'https://api.example.com/scorm/assets/6/99/index.html',
+      { headers: { Authorization: 'Bearer test.jwt.token' } },
+    ), env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    expect(env.BUCKET.get).not.toHaveBeenCalled();
+  });
+
+
+  it('blocks staging-activated SCORM-physical course assets even for an admin', async () => {
+    const db = createMockDb([
+      ['FROM lms_native_catalog_activation', { first: () => ({ curso_id: 99 }) }],
+      ['FROM lms_cursos', { first: () => ({
+        id: 99, empresa_id: 6, ativo: 1, publicado: 1,
+        tipo_conteudo: 'scorm', scorm_package_r2_prefix: null,
+      }) }],
+    ]);
+    const env = { ...makeEnv(db), ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6' } as Env;
+    const response = await createApp().fetch(new Request(
+      'https://api.example.com/scorm/assets/6/99/index.html',
+      { headers: { Authorization: 'Bearer test.jwt.token' } },
+    ), env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    expect(env.BUCKET.get).not.toHaveBeenCalled();
+  });
+
+  it('does not mint a SCORM session for a staging-marked Native course', async () => {
+    const db = createMockDb([
+      ['FROM lms_native_catalog_activation', { first: () => ({ curso_id: 99 }) }],
+      ['FROM lms_matriculas m', { first: () => ({
+        id: 77, curso_id: 99, funcionario_id: 42, status: 'EM_ANDAMENTO',
+        ativo: 1, publicado: 1, tipo_conteudo: 'scorm',
+        scorm_package_r2_prefix: null,
+      }) }],
+    ]);
+    const env = { ...makeEnv(db), ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6' } as Env;
+    const response = await createApp().fetch(new Request('https://api.example.com/assets/session', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test.jwt.token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ matricula_id: 77 }),
+    }), env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    expect(generateJWTMock).not.toHaveBeenCalled();
+    expect(env.BUCKET.get).not.toHaveBeenCalled();
+  });
+
+  it('fails closed if staging activation-table lookup cannot be completed', async () => {
+    const db = createMockDb([['FROM lms_cursos', { first: () => ({
+      id: 99, empresa_id: 6, titulo: 'Native ativado',
+      tipo_conteudo: 'scorm', scorm_launch_file: 'index.html',
+      scorm_package_r2_prefix: null,
+    }) }]]);
+    const env = { ...makeEnv(db), ENVIRONMENT: 'staging',
+      NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS: '6' } as Env;
+    const response = await createApp().fetch(new Request(
+      'https://api.example.com/scorm/preview/99',
+      { headers: { Authorization: 'Bearer test.jwt.token' } },
+    ), env, {} as ExecutionContext);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'NATIVE_CATALOG_ACTIVATION_LOOKUP_FAILED',
+    });
+    expect(env.BUCKET.get).not.toHaveBeenCalled();
+  });
+
+  it('denies Native in SCORM administrative preview without reading R2', async () => {
+    const db = createMockDb([['FROM lms_cursos', { first: () => ({
+      id: 99, empresa_id: 6, titulo: 'Native', tipo_conteudo: 'native',
+      scorm_versao: '1.2', scorm_launch_file: 'index.html',
+      scorm_package_r2_prefix: null,
+    }) }]]);
+    const env = makeEnv(db);
+    const response = await createApp().fetch(new Request(
+      'https://api.example.com/scorm/preview/99',
+      { headers: { Authorization: 'Bearer test.jwt.token' } },
+    ), env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    expect(env.BUCKET.get).not.toHaveBeenCalled();
   });
 });

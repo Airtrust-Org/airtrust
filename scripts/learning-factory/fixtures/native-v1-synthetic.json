@@ -1,0 +1,111 @@
+{
+  "schema": "AIRTRUST_NATIVE_COURSE_V1",
+  "courseId": "training",
+  "packageVersion": "n-74b62b661a6ed4334474cab1c6109c28",
+  "title": "Treinamento de referência",
+  "locale": "pt-BR",
+  "policy": {
+    "mode": "SCORED",
+    "masteryScore": 80
+  },
+  "assets": [
+    {
+      "id": "asset-d4b0d3e6854553a92be9",
+      "path": "media/hero.webp",
+      "sha256": "c409327b39c8de16932363e147f9904590a80b0c989f9f9fc27f572f2600c35c",
+      "mime": "image/webp"
+    }
+  ],
+  "units": [
+    {
+      "id": "opening",
+      "title": "Abertura",
+      "kind": "lesson",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Introdução."
+        },
+        {
+          "type": "image",
+          "assetId": "asset-d4b0d3e6854553a92be9",
+          "alt": "Ambiente de treinamento"
+        }
+      ],
+      "questionIds": [],
+      "sourceRefs": [
+        "NR6"
+      ]
+    },
+    {
+      "id": "choice",
+      "title": "Cenário",
+      "kind": "scenario",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Um risco observado."
+        }
+      ],
+      "questionIds": [
+        "choice-question-001"
+      ]
+    },
+    {
+      "id": "exam",
+      "title": "Avaliação",
+      "kind": "assessment",
+      "blocks": [],
+      "questionIds": [
+        "exam-question-001"
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "choice-question-001",
+      "prompt": "Qual conduta?",
+      "options": [
+        {
+          "id": "option-1",
+          "text": "Ignorar"
+        },
+        {
+          "id": "option-2",
+          "text": "Interromper"
+        }
+      ],
+      "correctOptionId": "option-2",
+      "feedbackCorrect": "Correto",
+      "feedbackIncorrect": "Não atende"
+    },
+    {
+      "id": "exam-question-001",
+      "prompt": "Qual alternativa?",
+      "options": [
+        {
+          "id": "option-1",
+          "text": "A"
+        },
+        {
+          "id": "option-2",
+          "text": "B"
+        },
+        {
+          "id": "option-3",
+          "text": "C"
+        }
+      ],
+      "correctOptionId": "option-2",
+      "feedbackCorrect": "Justificativa normativa",
+      "feedbackIncorrect": "Justificativa normativa"
+    }
+  ],
+  "references": [
+    {
+      "id": "ref-001",
+      "label": "NR-6",
+      "detail": "Regulamento técnico"
+    }
+  ]
+}

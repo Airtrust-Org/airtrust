@@ -166,6 +166,26 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
     syncMatriculaCycleFromMatriculaMock.mockResolvedValue(undefined);
   });
 
+  it('SCORM commit incomplete cannot poison a Native enrollment with legacy progress', async () => {
+    const writes = vi.fn();
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', {
+        first: () => ({ ...MATRICULA_EM_ANDAMENTO_BASE, tipo_conteudo: 'native' }),
+      }],
+      ['FROM lms_progresso_scorm', { first: () => null }],
+      ['INSERT INTO lms_progresso_scorm', { run: writes }],
+      ['UPDATE lms_matriculas', { run: writes }],
+    ]);
+    const response = await app.fetch(
+      makeCommit({ matricula_id: 1, lesson_status: 'incomplete' }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(writes).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+  });
+
   it('SCORM commit: LmsCompletionRejectedError nunca vira 200 — matrícula não é marcada CONCLUIDO', async () => {
     completeLmsMatriculaMock.mockRejectedValue(
       new LmsCompletionRejectedError('Falha ao concluir matrícula: qualificação não pôde ser garantida'),

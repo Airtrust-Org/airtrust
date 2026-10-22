@@ -46,7 +46,7 @@ def safe_origin(raw: str) -> str:
 def units() -> list[dict]:
     sequence = []
     for n in range(1, UNIT_COUNT + 1):
-        if n == 3:
+        if n == UNIT_COUNT:
             sequence.append({
                 "id": "qa-stage-1", "kind": "assessment", "visualCue": "Technical assessment",
                 "official": {"stageId": "qa-stage-1", "questions": [
@@ -123,7 +123,7 @@ function render(){
       const gate=document.createElement('button');gate.dataset.gate='1';gate.textContent='Interação';
       gate.onclick=()=>{gate.disabled=true};node.append(gate);
       u.practice.options.forEach((label,i)=>{const b=document.createElement('button');b.dataset.opt=String(i);
-        b.textContent=label;b.onclick=()=>{if(i===1){practiced=true;next.disabled=false}else{status.textContent='Tente novamente'}};node.append(b)});
+        b.textContent=label;b.onclick=()=>{practiced=true;next.disabled=false;status.textContent=i===1?'Resposta correta para fixação.':'Resposta incorreta: revise o conceito e prossiga.'};node.append(b)});
       next.disabled=!practiced;
     }
   }

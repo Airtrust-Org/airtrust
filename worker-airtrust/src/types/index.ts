@@ -39,6 +39,49 @@ export interface Env {
   EDB_SHADOW_PILOT_TENANTS?: string;
   // Conhecimento Ativo: fail-closed. Use 'all' ou CSV de empresa_id após homologação técnica.
   CONHECIMENTO_ATIVO_ENABLED_TENANTS?: string;
+  // Staging-only pilot for Native V1 read-only learner course projection.
+  // Exact CSV tenant IDs, absent/empty means OFF. Never enabled in production.
+  NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS?: string;
+  /** Explicit release/tenant/edition pinned STUDY_ONLY production; default off. */
+  /** Governed synthetic staging acceptance, separate from production. */
+  /** Staging-only QA upload for private SCORM Score V3 candidates; default off. */
+  /** Player3 SCORM explicit tenant/course/ZIP release allowlists; default off. */
+  SCORM_PLAYER3_STAGING_TENANTS?: string;
+  SCORM_PLAYER3_STAGING_COURSES?: string;
+  SCORM_PLAYER3_STAGING_PACKAGES?: string;
+  SCORM_PLAYER3_STAGING_RELEASE_SHA?: string;
+  SCORM_PLAYER3_PRODUCTION_TENANTS?: string;
+  SCORM_PLAYER3_PRODUCTION_COURSES?: string;
+  SCORM_PLAYER3_PRODUCTION_PACKAGES?: string;
+  SCORM_PLAYER3_PRODUCTION_RELEASE_SHA?: string;
+  SCORM_STUDY_QA_ENABLED_TENANTS?: string;
+  NATIVE_STUDY_ONLY_STAGING_TENANTS?: string;
+  NATIVE_STUDY_ONLY_STAGING_RELEASE_SHA?: string;
+  NATIVE_STUDY_ONLY_STAGING_EDITIONS?: string;
+  NATIVE_STUDY_ONLY_PRODUCTION_TENANTS?: string;
+  NATIVE_STUDY_ONLY_PRODUCTION_RELEASE_SHA?: string;
+  NATIVE_STUDY_ONLY_PRODUCTION_EDITIONS?: string;
+  // Independent opt-in for synthetic Native checkpoints/quiz writes in staging.
+  // Defaults OFF. An allowlisted tenant also requires Preview, Schema V2 and R2 pin.
+  // Do not activate without governed staging authorization and E2E validation.
+  NATIVE_LEARNER_WRITE_ENABLED_TENANTS?: string;
+  /** OFF until governed catalog side-table exists; staged legacy-path read barrier only. */
+  NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS?: string;
+  NATIVE_LEARNER_ENROLLMENT_CREATE_ENABLED_TENANTS?: string;
+  NATIVE_COMPLETION_PREFLIGHT_ENABLED_TENANTS?: string;
+  NATIVE_COMPLETION_WRITE_ENABLED_TENANTS?: string;
+  // Independent staging-only gate for module-scoped Player3 grading; default OFF.
+  PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS?: string;
+  /** Optional staging-only, exact-tenant read-only evidence projection for QA. */
+  PLAYER3_QA_READ_ENABLED_TENANTS?: string;
+  // Extra terminal gate; not equal to grading access. Staging only, default OFF.
+  PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS?: string;
+  // Independent staging-only gate for reviewed legacy resume credits; default OFF.
+  PLAYER3_RESUME_CREDIT_WRITE_ENABLED_TENANTS?: string;
+  // Independent authored HTML5 staging launch gate; absent means OFF.
+  PLAYER3_AUTHORED_LAUNCH_ENABLED_TENANTS?: string;
+  // Isolated HTTPS content origin; never accept a URL/host from the learner.
+  PLAYER3_AUTHORED_CONTENT_ORIGIN?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';

@@ -5,7 +5,7 @@ import type { Env } from '../../types';
 
 const { sessionMock } = vi.hoisted(() => ({ sessionMock: vi.fn(() => true) }));
 vi.mock('../../lib/lms/lms-asset-session', () => ({
-  readCourseAssetSessionPayload: vi.fn(async () => ({ token: 'test-only' })),
+  readCourseAssetSessionPayload: vi.fn(async () => ({ token: 'test-only', asset_scorm_package_prefix: 'lms/scorm/6/119/package/' })),
   assetSessionMatchesEnrollment: sessionMock,
 }));
 

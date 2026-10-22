@@ -46,6 +46,7 @@ vi.mock('../../utils/db', () => ({
 
 import lmsProgressoRoutes from '../../routes/lms-progresso';
 import { LmsCompletionRejectedError } from '../../services/lms-completion';
+import { ApiError } from '../../middleware/error-handler';
 
 type QueryHandler = {
   first?: (args: unknown[]) => Promise<unknown> | unknown;
@@ -103,6 +104,91 @@ describe('lms progresso xapi router', () => {
     });
     syncMatriculaCycleFromMatriculaMock.mockResolvedValue(undefined);
     logAuditMock.mockResolvedValue(undefined);
+  });
+
+  it('does not expose legacy SCORM suspend_data for a Native enrollment', async () => {
+    const legacyReads = vi.fn(async () => ({
+      suspend_data: 'OLD_SCORM_RESUME_SHOULD_NOT_BE_RETURNED',
+    }));
+    const { db, calls } = createMockDb([
+      ['FROM lms_matriculas m JOIN lms_cursos c', { first: () => ({
+        id: 10, status: 'EM_ANDAMENTO', funcionario_id: 77, tipo_conteudo: 'native',
+      }) }],
+      ['FROM lms_progresso_scorm', { first: legacyReads }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    // Production mounts the shared ApiError handler; mirror its HTTP status
+    // mapping here rather than letting isolated Hono return generic 500.
+    app.onError((error, c) => error instanceof ApiError
+      ? c.json({ success: false, error: error.message }, error.statusCode as 409)
+      : c.json({ success: false }, 500));
+    app.route('/', lmsProgressoRoutes);
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/state/10'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    expect(JSON.stringify(await response.json())).not.toContain('OLD_SCORM_RESUME_SHOULD_NOT_BE_RETURNED');
+    expect(legacyReads).not.toHaveBeenCalled();
+    expect(calls[0]?.query).toContain('c.empresa_id = m.empresa_id');
+    expect(calls[0]?.args).toEqual([10, 1]);
+  });
+
+  it('preserves normal SCORM resume for a valid legacy enrollment', async () => {
+    const { db, calls } = createMockDb([
+      ['FROM lms_matriculas m JOIN lms_cursos c', { first: () => ({
+        id: 10, status: 'EM_ANDAMENTO', funcionario_id: 77, tipo_conteudo: 'scorm',
+      }) }],
+      ['FROM lms_progresso_scorm', { first: () => ({
+        suspend_data: 'LEGACY_LEARNER_PROGRESS',
+      }) }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+    const response = await app.fetch(
+      new Request('http://localhost/scorm/state/10'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      success: true, data: { progresso: { suspend_data: 'LEGACY_LEARNER_PROGRESS' } },
+    });
+    expect(calls).toHaveLength(2);
+  });
+
+  it('xAPI nonterminal statements cannot poison a Native enrollment', async () => {
+    const writes = vi.fn();
+    const { db, calls } = createMockDb([
+      ['FROM lms_matriculas m', { first: () => ({
+        id: 10, funcionario_id: 77, status: 'EM_ANDAMENTO',
+        empresa_id: 1, tipo_conteudo: 'native',
+        qualificacao_historico_id: null, gerar_qualificacao_ao_concluir: 0,
+      }) }],
+      ['INSERT INTO lms_xapi_statements', { run: writes }],
+      ['UPDATE lms_matriculas', { run: writes }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsProgressoRoutes);
+    const response = await app.fetch(
+      new Request('http://localhost/xapi/statements', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_id: 10,
+          actor: { mbox: 'mailto:aluno@example.invalid' },
+          verb: { id: 'http://adlnet.gov/expapi/verbs/experienced' },
+          object: { id: 'h5p:20' },
+        }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(writes).not.toHaveBeenCalled();
+    expect(calls.some((entry) => entry.method === 'run')).toBe(false);
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   it('concludes on completed verb even when xAPI result flags are omitted', async () => {

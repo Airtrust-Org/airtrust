@@ -14,6 +14,12 @@ vi.mock('../../lib/lms/lms-asset-session', () => ({
 vi.mock('../../services/lms-edition-mismatch', () => ({
   detectLmsEditionMismatch: detectEdition,
 }));
+vi.mock('../../services/lms-scorm-enrollment-edition', () => ({
+  resolveScormEnrollmentEdition: vi.fn(async (params: { currentPrefix: string | null; currentLaunchFile: string | null; currentScormVersion: string | null }) => ({
+    status: 'LEGACY', r2Prefix: params.currentPrefix ?? undefined,
+    launchFile: params.currentLaunchFile ?? undefined, scormVersion: params.currentScormVersion ?? undefined,
+  })),
+}));
 vi.mock('../../middleware/rbac', () => ({ hasRole: () => true }));
 
 import { enforceLmsCompletionIntegrity } from '../../middleware/lms-completion-integrity';
@@ -67,7 +73,7 @@ describe('Player 2.0 structural split: evidence persistence versus approval', ()
   beforeEach(() => {
     vi.clearAllMocks();
     detectEdition.mockResolvedValue(null);
-    readSession.mockResolvedValue({ matriculaId: 911, cursoId: 57, empresaId: 6 });
+  readSession.mockResolvedValue({ matriculaId: 911, cursoId: 57, empresaId: 6, asset_scorm_package_prefix: courseEvidence.scorm_package_r2_prefix });
     matchSession.mockReturnValue(true);
   });
 

@@ -9,7 +9,7 @@ export function registerScormCandidateQaRoutes(
   deps: {
     authenticateLmsAssetRequest: (env: Env, request: Request) => Promise<JwtPayload>;
     isPreviewAllowedRole: (role: unknown) => boolean;
-    ensureCourseAssetAccess: (db: D1Database, payload: JwtPayload, empresaId: number, cursoId: number) => Promise<unknown>;
+    ensureCourseAssetAccess: (db: D1Database, payload: JwtPayload, empresaId: number, cursoId: number, env: Env) => Promise<unknown>;
     extractAssetPathFromRequest: (pathname: string, prefix: string) => string;
     resolveScormObject: (
       bucket: R2Bucket, empresaId: string | number, cursoId: string | number,
@@ -46,7 +46,7 @@ export function registerScormCandidateQaRoutes(
       empresaId, cursoId, packageId: c.req.param('candidate_id'),
     });
     assertCandidateQaScope(payload, { empresaId, cursoId, candidate });
-    await ensureCourseAssetAccess(c.env.DB, payload, empresaId, cursoId);
+    await ensureCourseAssetAccess(c.env.DB, payload, empresaId, cursoId, c.env);
     const wildcard = extractAssetPathFromRequest(new URL(c.req.url).pathname,
       `/api/lms/scorm/qa-assets/${empresaId}/${cursoId}/${candidate.id}`);
     const { object } = await resolveScormObject(c.env.BUCKET, empresaId, cursoId, wildcard,
@@ -70,7 +70,7 @@ export function registerScormCandidateQaRoutes(
       empresaId, cursoId, packageId: c.req.param('candidate_id'),
     });
     assertCandidateQaScope(payload, { empresaId, cursoId, candidate });
-    await ensureCourseAssetAccess(c.env.DB, payload, empresaId, cursoId);
+    await ensureCourseAssetAccess(c.env.DB, payload, empresaId, cursoId, c.env);
     const launchFile = await resolveScormLaunchFile(c.env.BUCKET, empresaId, cursoId,
       candidate.launch_file, { activePrefix: candidate.r2_prefix });
     if (!launchFile) throw new ApiError('Launch da edição candidata não encontrado', 404);

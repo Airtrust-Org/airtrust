@@ -4,6 +4,8 @@
  * GET  /api/lms/scorm/state/:matriculaId   — retorna suspend_data + cmi_json para retomar curso
  * POST /api/lms/xapi/statements            — recebe statement xAPI, salva e pode disparar qualificação
  */
+import { isNativeForLegacyLmsPath } from '../services/lms-native-catalog-legacy-guard';
+import { resolveScormPlayer3Admission } from '../services/lms-scorm-player3-admission';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -175,15 +177,21 @@ app.get('/scorm/state/:matriculaId', async (c) => {
   // Verificar que a matrícula pertence à empresa (multi-tenancy)
   const matricula = await db
     .prepare(
-      'SELECT id, status, funcionario_id FROM lms_matriculas WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      'SELECT m.id, m.status, m.funcionario_id, c.id AS curso_id, c.tipo_conteudo FROM lms_matriculas m JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL AND c.deleted_at IS NULL',
     )
     .bind(matriculaId, empresaId)
-    .first<{ id: number; status: string; funcionario_id: number }>();
+    .first<{ id: number; status: string; funcionario_id: number; curso_id: number; tipo_conteudo: string }>();
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
   if (!canManage) {
     if (!callerFuncionarioId || matricula.funcionario_id !== callerFuncionarioId) {
       throw new ApiError('Acesso negado', 403);
     }
+  }
+
+  // A Native edition must never receive SCORM suspend_data from an
+  // obsolete player session, including read-only resume by a manager.
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo)) {
+    throw new ApiError('Curso nativo exige sessão do player próprio.', 409);
   }
 
   const progresso = await db
@@ -224,7 +232,8 @@ app.post('/xapi/statements', async (c) => {
       `
       SELECT m.id, m.funcionario_id, m.status, m.empresa_id, m.progresso_pct, m.score_final,
         m.qualificacao_historico_id,
-        c.id AS curso_id, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
+        c.id AS curso_id, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
+        c.scorm_versao, c.scorm_package_r2_prefix,
         c.titulo AS curso_titulo,
         c.scorm_mastery_score,
         qt.codigo AS qualificacao_codigo,
@@ -249,6 +258,9 @@ app.post('/xapi/statements', async (c) => {
       score_final: number | null;
       qualificacao_historico_id: number | null;
       curso_id: number;
+      tipo_conteudo: string | null;
+      scorm_versao: string | null;
+      scorm_package_r2_prefix: string | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       curso_titulo: string;
@@ -266,6 +278,26 @@ app.post('/xapi/statements', async (c) => {
     if (!callerFuncionarioId || matricula.funcionario_id !== callerFuncionarioId) {
       throw new ApiError('Acesso negado', 403);
     }
+  }
+  // A non-terminal xAPI statement is still a write. It must not modify the
+  // private Native enrollment ledger or indirectly alter its LMS status.
+  if (await isNativeForLegacyLmsPath(c.env, empresaId, matricula.curso_id, matricula.tipo_conteudo)) {
+    throw new ApiError('Curso nativo exige eventos e avaliações do player próprio.', 409);
+  }
+
+  // Original Score SCORM uses only the authenticated SCORM 1.2 wrapper.
+  // xAPI completion/passed events cannot bypass its study-only policy or
+  // mint a qualification from caller-supplied statements.
+  if (String(matricula.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm') {
+    const studyAdmission = await resolveScormPlayer3Admission({
+      env: c.env, db, bucket: c.env.BUCKET, tenant: empresaId,
+      course: matricula.curso_id, scormVersion: matricula.scorm_versao,
+      contentType: matricula.tipo_conteudo,
+      activePrefix: matricula.scorm_package_r2_prefix,
+      reviewedForProduction: false,
+    });
+    if (studyAdmission.kind !== 'LEGACY')
+      return c.json({success: false, code: 'SCORM_STUDY_REQUIRES_SCORM_COMMIT'}, 409);
   }
 
   const verbId = stmt.verb.id;

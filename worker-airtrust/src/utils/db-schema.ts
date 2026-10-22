@@ -45,12 +45,12 @@ function cacheForDb<T>(caches: WeakMap<D1Database, Map<string, T>>, db: D1Databa
   return cache;
 }
 
-export async function hasSchemaTable(db: D1Database, tableName: string): Promise<boolean> {
+export async function hasSchemaTable(db: D1Database, tableName: string, options?: { fresh?: boolean }): Promise<boolean> {
   const normalizedTableName = String(tableName || '').trim().toLowerCase();
   if (!normalizedTableName) return false;
   const cache = cacheForDb(_tableExistenceCacheByDb, db);
   const cached = cache.get(normalizedTableName);
-  if (cached !== undefined) return cached;
+  if (!options?.fresh && cached !== undefined) return cached;
   const result = await db
     .prepare("SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
     .bind(normalizedTableName)

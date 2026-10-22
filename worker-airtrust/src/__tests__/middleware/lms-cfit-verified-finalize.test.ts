@@ -101,7 +101,7 @@ async function submitFinalize(overrides: Evidence = {}) {
 describe('CFIT: confirmação de SCORM aprovado e persistido', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    readSession.mockResolvedValue({ matriculaId: 863, cursoId: 41, empresaId: 1 });
+    readSession.mockResolvedValue({ matriculaId: 863, cursoId: 41, empresaId: 1, asset_scorm_package_prefix: 'tenant-1/course-41/package-active/' });
     matchSession.mockReturnValue(true);
   });
 

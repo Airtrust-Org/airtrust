@@ -10,7 +10,7 @@ import { safeLmsResponseErrorText } from '@/react-app/lib/lms-safe-error-respons
 
 export type ScormVersao = '1.2' | '2004' | null;
 export type ScormAssessmentPolicy = 'SCORED' | 'FORMATIVE';
-export type TipoConteudo = 'scorm' | 'h5p' | 'video' | 'pdf' | 'pptx';
+export type TipoConteudo = 'scorm' | 'h5p' | 'video' | 'pdf' | 'pptx' | 'native';
 export type MatriculaStatus =
   'NAO_INICIADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'REPROVADO' | 'CANCELADO';
 
@@ -337,6 +337,7 @@ function sanitizeUpdateCursoPayload(dto: UpdateCursoDTO): UpdateCursoDTO {
     payload.gerar_qualificacao_ao_concluir = dto.gerar_qualificacao_ao_concluir;
   }
   if ('scorm_mastery_score' in dto) payload.scorm_mastery_score = dto.scorm_mastery_score;
+  if ('scorm_assessment_policy' in dto) payload.scorm_assessment_policy = dto.scorm_assessment_policy;
   if ('scorm_versao' in dto) payload.scorm_versao = dto.scorm_versao ?? null;
   if ('tipo_conteudo' in dto) payload.tipo_conteudo = dto.tipo_conteudo;
   if ('publicado' in dto) payload.publicado = dto.publicado;

@@ -10,6 +10,9 @@ function fixture() {
   const db=new SqliteD1Database();dbs.push(db);
   db.database.exec(`
     ALTER TABLE qualificacoes_historico ADD COLUMN lms_matricula_id INTEGER;
+    CREATE TABLE lms_cursos(id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL,
+      tipo_conteudo TEXT NOT NULL DEFAULT 'scorm',deleted_at TEXT);
+    INSERT INTO lms_cursos(id,empresa_id,tipo_conteudo) VALUES(56,6,'scorm');
     CREATE TABLE lms_matriculas (
       id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, funcionario_id INTEGER NOT NULL,
       curso_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'NAO_INICIADO',deleted_at TEXT,
@@ -93,6 +96,16 @@ describe('Governed all-course cleanup D1 — transactional and tenant-scoped',()
     expect(result.removed).toBe(0);
     expect(db.database.prepare('SELECT deleted_at FROM lms_matriculas WHERE id=10').get())
       .toMatchObject({deleted_at:null});
+  });
+  it('never cancels a Native-marked zero-progress enrollment as a ghost SCORM row',async()=>{
+    const db=fixture();
+    db.database.exec(`CREATE TABLE lms_native_catalog_activation(empresa_id INTEGER,curso_id INTEGER);
+      INSERT INTO lms_native_catalog_activation VALUES(6,56);`);
+    const result=await applyTrainingRosterPlan(db.asD1(),6,plan([10]),4);
+    expect(result).toMatchObject({removed:0,ignored:1});
+    expect(db.database.prepare('SELECT deleted_at FROM lms_matriculas WHERE id=10').get())
+      .toMatchObject({deleted_at:null});
+    expect(db.database.prepare('SELECT COUNT(*) n FROM audit_logs').get()).toMatchObject({n:0});
   });
   it('rejects an attempt to write another tenant',async()=>{
     const db=fixture();

@@ -5,6 +5,7 @@ import {
   resetMatriculaForNewCycle,
 } from '../../services/lms-matricula-cycle';
 import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
+import { canUseLegacyAutomatedLmsCourse } from '../../services/training-compliance-native-lms-evidence';
 import { trainingComplianceEffectiveRequirementPredicateSql } from '../../services/training-compliance-rule-engine';
 import {
   enqueueCronJobItem,
@@ -205,6 +206,9 @@ async function ensureRenewalMatricula(
   db: D1Database,
   payload: RenewalPayload,
 ): Promise<{ matriculaId: number; created: boolean; active: boolean }> {
+  if (!(await canUseLegacyAutomatedLmsCourse(db,payload.empresa_id,payload.curso_id))) {
+    throw new Error('NATIVE_LEGACY_AUTO_ENROLLMENT_DENIED');
+  }
   let existing = await findLatestMatricula(db, payload);
   if (existing) {
     return ensureExistingRenewalMatricula(db, existing, payload.empresa_id);
@@ -337,6 +341,15 @@ export async function runEadRenewalJob(db: D1Database, logger: CronJobLogger) {
           if (result.created) created++;
           else repaired++;
         } catch (error) {
+          if (error instanceof Error && error.message === 'NATIVE_LEGACY_AUTO_ENROLLMENT_DENIED') {
+            // A Native course is not eligible for repeated SCORM renewal retries.
+            await markCronJobItemSucceeded(db, {
+              jobName: JOB_NAME, scopeKey: SCOPE_KEY,
+              itemKey: item.item_key, stage: 'NATIVE_PLAYER_RENEWAL_DEFERRED',
+            });
+            processed++;
+            continue;
+          }
           failed++;
           await markCronJobItemFailed(db, {
             jobName: JOB_NAME,

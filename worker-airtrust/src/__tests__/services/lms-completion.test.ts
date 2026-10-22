@@ -15,7 +15,7 @@ vi.mock('../../services/ensure-certificate', () => ({
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../../services/lms-completion';
 
 function makeFakeDb(options: {
-  historicoLookup?: () => { id: number } | null;
+  historicoLookup?: () => { id: number; status?: string | null } | null;
   cycleLookup?: () => { id: number } | null;
   maxCiclo?: number;
   typeCategoryId?: number | null;
@@ -45,6 +45,7 @@ function makeFakeDb(options: {
         return { results: [] };
       },
       bind: () => ({
+        __sql: sql,
         first: async () => {
           if (sql.includes('FROM qualificacoes_tipos')) {
             return {
@@ -127,6 +128,169 @@ describe('completeLmsMatricula', () => {
     ensureCertificateForQualificationMock.mockResolvedValue({ state: 'CREATED', documentoId: 321 });
   });
 
+  const nativeAnchor=(qualificacao:boolean)=>({
+    empresaId:6,matriculaId:1,cicloId:1001,cursoId:31,
+    actorUserId:42,funcionarioId:77,edicaoId:7,editionHash:'a'.repeat(64),
+    bindingId:13,latestAttemptId:8,latestAttemptNumber:2,
+    answersHash:'b'.repeat(64),scorePct:85,eventCount:4,distinctLessonCount:4,
+    gerarQualificacaoAoConcluir:qualificacao,
+    qualificacaoTipoId:qualificacao?55:null,qualificacaoCategoriaId:qualificacao?13:null,
+  });
+  const nativeEnv=()=>({
+    ENVIRONMENT:'staging',
+    NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS:'6',
+    NATIVE_LEARNER_PREVIEW_ENABLED_TENANTS:'6',
+    NATIVE_LEARNER_WRITE_ENABLED_TENANTS:'6',
+  });
+
+  it.each([false,true])('Native canonical batch prepends the SQL evidence guard (qualification=%s)',async qual=>{
+    let n=0;
+    const db=makeFakeDb({ historicoLookup:()=> ++n===1 ? null : {id:901} });
+    await completeLmsMatricula(baseParams(db,{
+      env:nativeEnv(),cursoId:31,gerarQualificacaoAoConcluir:qual,
+      qualificacaoTipoId:qual?55:null,qualificacaoCategoriaId:qual?13:null,
+      scoreFinal:85,progressoPct:100,action:'LMS_NATIVE_CANONICAL_CONCLUIDA',
+      nativeTerminalAnchor:nativeAnchor(qual),
+    }) as never);
+    const calls=(db.prepare as ReturnType<typeof vi.fn>).mock.calls
+      .map((args:unknown[])=>String(args[0]));
+    const firstGuard=calls.findIndex(x=>x.startsWith('SELECT json(CASE WHEN')&&
+      x.includes('NATIVE_TERMINAL_STATE_CHANGED'));
+    const firstMutation=calls.findIndex(x=>x.includes('UPDATE lms_matriculas'));
+    expect(firstGuard).toBeGreaterThanOrEqual(0);
+    expect(firstMutation).toBeGreaterThan(firstGuard);
+    expect(db.batch).toHaveBeenCalledTimes(1);
+    const intent=calls.findIndex(x=>x.includes('INSERT INTO lms_native_completion_intents'));
+    const consume=calls.findIndex(x=>x.includes('DELETE FROM lms_native_completion_intents'));
+    expect(intent).toBe(firstGuard+1);
+    expect(firstMutation).toBeGreaterThan(intent);
+    expect(consume).toBeGreaterThan(firstMutation);
+    // Both D1-bound intent operations must remain in this ONE batch.
+    const batchCalls=(db as unknown as {__batchCalls:unknown[][]}).__batchCalls;
+    expect(batchCalls).toHaveLength(1);
+    expect(batchCalls[0].length).toBeGreaterThan(4);
+  });
+
+  it('Native obtém recibo do INSERT mesmo após guard e intent no batch', async () => {
+    let reads = 0;
+    const db = makeFakeDb({
+      historicoLookup: () => {
+        if (++reads > 1) throw new Error('post-commit read must not run');
+        return null;
+      },
+      batchImpl: async statements => statements.map(statement => ({
+        meta: { changes: 1, last_row_id:
+          String((statement as { __sql?: string }).__sql ?? '')
+            .includes('INSERT INTO qualificacoes_historico (') ? 905 : 0 },
+      })),
+    });
+    const result = await completeLmsMatricula(baseParams(db, {
+      env: nativeEnv(), cursoId: 31, scoreFinal: 85, progressoPct: 100,
+      action: 'LMS_NATIVE_CANONICAL_CONCLUIDA',
+      nativeTerminalAnchor: nativeAnchor(true),
+    }) as never);
+    expect(result.qualificacaoHistoricoId).toBe(905);
+    expect(reads).toBe(1);
+    expect(db.batch).toHaveBeenCalledTimes(1);
+  });
+
+  it('Native refuses the wrong actor, score, course, progress, action or missing staging flags before batch',async()=>{
+    const db=makeFakeDb({});
+    const base={
+      env:nativeEnv(),cursoId:31,gerarQualificacaoAoConcluir:false,
+      qualificacaoTipoId:null,qualificacaoCategoriaId:null,
+      scoreFinal:85,progressoPct:100,action:'LMS_NATIVE_CANONICAL_CONCLUIDA',
+      nativeTerminalAnchor:nativeAnchor(false),
+    };
+    for (const patch of [
+      {actorUserId:41},{cursoId:32},{scoreFinal:99},
+      {progressoPct:50},{action:'LMS_MATRICULA_CONCLUIDA'},
+      {env:{...nativeEnv(),ENVIRONMENT:'production'}},
+    ]) {
+      await expect(completeLmsMatricula(baseParams(db,{...base,...patch}) as never))
+        .rejects.toMatchObject({code:'NATIVE_TERMINAL_ANCHOR_MISMATCH'});
+    }
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
+  const player3Anchor=(qualificacao:boolean)=>({
+    empresaId:6,matriculaId:1,cursoId:31,cicloId:1001,
+    funcionarioId:77,actorUserId:42,bindingId:13,edicaoId:7,
+    politicaId:25,editionHash:'a'.repeat(64),
+    sourceHash:'b'.repeat(64),bankHash:'c'.repeat(64),
+    policyHash:'d'.repeat(64),
+    requiredLessonIds:['welcome','lastLesson'],recordedEventCount:2,
+    officialStages:[
+      {stageId:'module1',attemptId:10,attemptNumber:1,
+        answersHash:'e'.repeat(64),scorePct:80},
+      {stageId:'module2',attemptId:11,attemptNumber:2,
+        answersHash:'f'.repeat(64),scorePct:100},
+    ],
+    gerarQualificacaoAoConcluir:qualificacao,
+    qualificacaoTipoId:qualificacao?55:null,
+    qualificacaoCategoriaId:qualificacao?13:null,
+  });
+  const player3Env=()=>({
+    ...nativeEnv(),PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:'6',
+    PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS:'6',
+  });
+
+  it.each([false,true])('Player3 guarded batch starts with exact content+modular SQL (qualification=%s)',async qual=>{
+    let lookups=0;
+    const db=makeFakeDb({historicoLookup:()=>++lookups===1?null:{id:901}});
+    await completeLmsMatricula(baseParams(db,{
+      env:player3Env(),cursoId:31,gerarQualificacaoAoConcluir:qual,
+      qualificacaoTipoId:qual?55:null,qualificacaoCategoriaId:qual?13:null,
+      scoreFinal:null,progressoPct:100,
+      action:'LMS_PLAYER3_CANONICAL_CONCLUIDA',
+      player3TerminalAnchor:player3Anchor(qual),
+    }) as never);
+    const calls=(db.prepare as ReturnType<typeof vi.fn>).mock.calls
+      .map((a:unknown[])=>String(a[0]));
+    const firstGuard=calls.findIndex(s=>s.startsWith('SELECT json(CASE WHEN')&&
+      s.includes('PLAYER3_TERMINAL_EVIDENCE_CHANGED'));
+    const firstMutation=calls.findIndex(s=>s.includes('UPDATE lms_matriculas'));
+    expect(firstGuard).toBeGreaterThanOrEqual(0);
+    expect(firstMutation).toBeGreaterThan(firstGuard);
+    expect(calls[firstGuard]).toContain('lms_player3_tentativas_modulares');
+    const insertIntent=calls.findIndex(s=>s.includes('INSERT INTO lms_player3_completion_intents'));
+    const consumeIntent=calls.findIndex(s=>s.includes('DELETE FROM lms_player3_completion_intents'));
+    expect(insertIntent).toBe(firstGuard+1);
+    expect(firstMutation).toBeGreaterThan(insertIntent);
+    expect(consumeIntent).toBeGreaterThan(firstMutation);
+    expect(calls[insertIntent]).toContain('official_stage_receipts_json');
+    expect(db.batch).toHaveBeenCalledTimes(1);
+    const batches=(db as unknown as {__batchCalls:unknown[][]}).__batchCalls;
+    expect(batches).toHaveLength(1);
+    expect(batches[0].length).toBeGreaterThan(2);
+    expect(calls.find(s=>s.includes('INSERT INTO lms_native_completion_intents'))).toBeUndefined();
+  });
+  it('Player3 rejects mixed authorities, invalid scopes or missing staging flags before batch',async()=>{
+    const db=makeFakeDb({});
+    const base={
+      env:player3Env(),cursoId:31,gerarQualificacaoAoConcluir:false,
+      qualificacaoTipoId:null,qualificacaoCategoriaId:null,
+      scoreFinal:null,progressoPct:100,action:'LMS_PLAYER3_CANONICAL_CONCLUIDA',
+      player3TerminalAnchor:player3Anchor(false),
+    };
+    for(const patch of [
+      {actorUserId:43},{cursoId:32},{scoreFinal:99},
+      {progressoPct:99},{action:'LMS_MATRICULA_CONCLUIDA'},
+      {env:{...player3Env(),ENVIRONMENT:'production'}},
+      {env:{...player3Env(),PLAYER3_MODULE_ATTEMPTS_ENABLED_TENANTS:undefined}},
+      {env:{...player3Env(),PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS:undefined}},
+      {env:{...player3Env(),PLAYER3_TERMINAL_WRITE_ENABLED_TENANTS:'*'}},
+      {env:{...player3Env(),NATIVE_CATALOG_ACTIVATION_READ_ENABLED_TENANTS:undefined}},
+    ]){
+      await expect(completeLmsMatricula(baseParams(db,{...base,...patch}) as never))
+        .rejects.toMatchObject({code:'PLAYER3_TERMINAL_ANCHOR_MISMATCH'});
+    }
+    await expect(completeLmsMatricula(baseParams(db,{
+      ...base,nativeTerminalAnchor:nativeAnchor(false),
+    }) as never)).rejects.toMatchObject({code:'PLAYER3_DUAL_TERMINAL_DENIED'});
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
   it('curso sem qualificação exigida: outcome qualification_not_required, um único batch', async () => {
     const db = makeFakeDb({});
     const result = await completeLmsMatricula(
@@ -155,7 +319,7 @@ describe('completeLmsMatricula', () => {
   });
 
   it('Histórico já vinculado (existingHistoricoId): outcome qualification_reused, sem novo lookup pré-batch', async () => {
-    const db = makeFakeDb({ historicoLookup: () => ({ id: 777 }) });
+    const db = makeFakeDb({ historicoLookup: () => ({ id: 777, status: 'CONCLUIDA' }) });
 
     const result = await completeLmsMatricula(
       baseParams(db, { existingHistoricoId: 777 }) as never,
@@ -164,6 +328,112 @@ describe('completeLmsMatricula', () => {
     expect(result.outcome).toBe('qualification_reused');
     expect(result.qualificacaoHistoricoId).toBe(777);
   });
+
+  it('novo histórico usa recibo D1 do INSERT sem leitura pós-commit', async () => {
+    let reads = 0;
+    const db = makeFakeDb({
+      historicoLookup: () => {
+        if (++reads > 1) throw new Error('post-commit read must not run');
+        return null;
+      },
+      batchImpl: async statements => statements.map(statement => ({
+        meta: { changes: 1, last_row_id:
+          String((statement as { __sql?: string }).__sql ?? '')
+            .includes('INSERT INTO qualificacoes_historico (') ? 904 : 0 },
+      })),
+    });
+    const result = await completeLmsMatricula(baseParams(db) as never);
+    expect(result).toMatchObject({
+      outcome: 'qualification_created', qualificacaoHistoricoId: 904,
+    });
+    expect(reads).toBe(1);
+    expect(db.batch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([0, 2, undefined])(
+    'ignora last_row_id residual quando INSERT changes=%s', async changes => {
+      let reads = 0;
+      const db = makeFakeDb({
+        historicoLookup: () => ++reads === 1 ? null : { id: 912 },
+        batchImpl: async statements => statements.map(statement => ({
+          meta: {
+            changes,
+            last_row_id: String((statement as { __sql?: string }).__sql ?? '')
+              .includes('INSERT INTO qualificacoes_historico (') ? 999 : 0,
+          },
+        })),
+      });
+      const result = await completeLmsMatricula(baseParams(db) as never);
+      expect(result.qualificacaoHistoricoId).toBe(912);
+      expect(reads).toBe(2);
+      expect(ensureCertificateForQualificationMock).toHaveBeenCalledWith(
+        expect.anything(), 912, 6, { actorUserId: 42 },
+      );
+    },
+  );
+
+  it('não emite certificado para recibo residual sem histórico verificável', async () => {
+    const db = makeFakeDb({
+      historicoLookup: () => null,
+      batchImpl: async statements => statements.map(statement => ({
+        meta: {
+          changes: 0,
+          last_row_id: String((statement as { __sql?: string }).__sql ?? '')
+            .includes('INSERT INTO qualificacoes_historico (') ? 999 : 0,
+        },
+      })),
+    });
+    await expect(completeLmsMatricula(baseParams(db) as never)).rejects.toMatchObject({
+      code: 'LMS_QUALIFICATION_COMPLETION_FAILED',
+    });
+    expect(ensureCertificateForQualificationMock).not.toHaveBeenCalled();
+  });
+
+  it('reuso confirmado não depende de consulta após o commit', async () => {
+    let reads = 0;
+    const db = makeFakeDb({ historicoLookup: () => {
+      if (++reads > 1) throw new Error('post-commit read must not run');
+      return { id: 777, status: 'CONCLUIDA' };
+    }});
+    const result = await completeLmsMatricula(
+      baseParams(db, { existingHistoricoId: 777 }) as never,
+    );
+    expect(result.qualificacaoHistoricoId).toBe(777);
+    expect(reads).toBe(1);
+  });
+
+  it.each(['CANCELADA', 'RENOVADA', null])(
+    'rejeita histórico existente com status não reutilizável (%s)', async (status) => {
+      const db = makeFakeDb({
+        historicoLookup: () => ({ id: 777, status }),
+      });
+      await expect(completeLmsMatricula(
+        baseParams(db, { existingHistoricoId: 777 }) as never,
+      )).rejects.toMatchObject({ code: 'LMS_QUALIFICATION_STATUS_INCOMPATIBLE' });
+      expect(db.batch).not.toHaveBeenCalled();
+      expect(ensureCertificateForQualificationMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['CANCELADA', 'RENOVADA', null])(
+    'corrida UNIQUE não reaproveita histórico inválido (%s)', async (status) => {
+      let lookupCount = 0;
+      const db = makeFakeDb({
+        historicoLookup: () => ++lookupCount === 1
+          ? null : { id: 999, status },
+        batchImpl: async () => {
+          throw new Error(
+            'D1_ERROR: UNIQUE constraint failed: qualificacoes_historico.funcionario_id, qualificacoes_historico.qualificacao_codigo, qualificacoes_historico.data_conclusao',
+          );
+        },
+      });
+      await expect(completeLmsMatricula(baseParams(db) as never))
+        .rejects.toMatchObject({ code: 'LMS_QUALIFICATION_STATUS_INCOMPATIBLE' });
+      // Rejection audit is allowed; no second terminal D1.batch may run.
+      expect(db.batch).toHaveBeenCalledTimes(1);
+      expect(ensureCertificateForQualificationMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('gera certificado automaticamente quando a categoria canônica é EAD', async () => {
     let lookupCount = 0;
@@ -219,7 +489,7 @@ describe('completeLmsMatricula', () => {
     const db = makeFakeDb({
       historicoLookup: () => {
         lookupCount += 1;
-        return lookupCount === 1 ? null : { id: 999 };
+        return lookupCount === 1 ? null : { id: 999, status: 'CONCLUIDA' };
       },
       batchImpl: async () => {
         attempt += 1;
@@ -288,7 +558,7 @@ describe('completeLmsMatricula', () => {
         lookupCount += 1;
         // 1ª leitura (pré-batch da 1ª tentativa): ainda não existe.
         // 2ª leitura (pré-batch do retry): a concorrente já inseriu.
-        return lookupCount === 1 ? null : { id: 999 };
+        return lookupCount === 1 ? null : { id: 999, status: 'CONCLUIDA' };
       },
       batchImpl: async () => {
         batchAttempt += 1;

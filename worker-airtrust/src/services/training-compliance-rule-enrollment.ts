@@ -1,6 +1,7 @@
 import { canReuseMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from './training-compliance-evidence-profile';
 import { trainingComplianceNeedsImmediateEnrollmentOnRuleSave } from './training-compliance-enrollment-policy';
+import { isNativeLmsComplianceCourse } from './training-compliance-native-lms-evidence';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import { createComplianceEnrollmentAtomic } from './training-compliance-create-enrollment';
 
@@ -63,19 +64,25 @@ async function performComplianceRuleEnrollment<TAccess>(
   if (!pending.length) return summary;
 
   const courses = await db.prepare(
-    `SELECT c.id FROM lms_cursos c
+    `SELECT c.id, c.tipo_conteudo FROM lms_cursos c
       JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id
         AND qt.ativo=1 AND qt.deleted_at IS NULL
         AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
       WHERE c.empresa_id=? AND c.qualificacao_tipo_id=? AND c.ativo=1 AND c.publicado=1
         AND c.deleted_at IS NULL ORDER BY c.id LIMIT 2`,
-  ).bind(empresaId, rule.qualificacao_tipo_id).all<{ id: number }>();
+  ).bind(empresaId, rule.qualificacao_tipo_id).all<{ id: number; tipo_conteudo: string | null }>();
   // A course/model relation must be unambiguous; never guess by title.
   if ((courses.results || []).length !== 1) {
     summary.unavailable_course = pending.length;
     return summary;
   }
   const cursoId = Number(courses.results[0].id);
+  if (await isNativeLmsComplianceCourse(db, empresaId, cursoId, courses.results[0].tipo_conteudo)) {
+    // A marked Native edition must only be enrolled through its canonical
+    // provisioner, not an automatic SCORM reset of the student's cycle.
+    summary.unavailable_course = pending.length;
+    return summary;
+  }
   for (const person of pending) {
     const existing = await db.prepare(
       `SELECT id,status,deleted_at FROM lms_matriculas

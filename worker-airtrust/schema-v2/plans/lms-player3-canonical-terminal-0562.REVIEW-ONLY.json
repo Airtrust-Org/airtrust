@@ -1,0 +1,13 @@
+{
+  "reviewOnly": true,
+  "notDeployable": true,
+  "proposedChangeId": "lms-player3-canonical-terminal-0562",
+  "candidateSqlPath": "worker-airtrust/schema-v2/plans/lms-player3-canonical-terminal-0562.REVIEW-ONLY.sql.txt",
+  "candidateSqlSha256": "b460d410788ae1f9eb2090ffcf7806ba3ed96f3facbc9bfb0a7c0e8a069a7ccd",
+  "candidatePlanPath": "worker-airtrust/schema-v2/plans/lms-player3-canonical-terminal-0562.md",
+  "candidatePlanSha256": "2eddb3a11a29220e0969eaa56c2e564f8b82a15d3fe452c08aeada70da242cec",
+  "dependsOn": [
+    "lms-native-catalog-activation-0561"
+  ],
+  "remoteApplied": false
+}
