@@ -164,8 +164,11 @@ test('simulated BOA actor hits real Hono checkin, events, case and report with S
   assert.equal(report.status,200,'report '+await report.clone().text());
   const data=await report.json();
   assert.equal(data.data.current.checkin_receipts,6);
-  assert.equal(data.data.current.cases.opened,6);
-  assert.equal(data.data.current.cases.closed_with_efficacy,1);
+  // One closure out of six would disclose a small cell. The real report
+  // correctly suppresses every case bucket, but preserves receipt coverage.
+  assert.equal(data.data.current.cases.privacy,'SMALL_CELL_SUPPRESSED');
+  assert.equal(data.data.current.cases.opened,null);
+  assert.equal(data.data.current.cases.closed_with_efficacy,null);
   assert.equal(data.meta.signature,'NOT_SIGNED');
   assert.equal(data.meta.checksum_only_not_signature,true);
   assert.doesNotMatch(JSON.stringify(data),/sleep_hours_24h|kss_reported|funcionario_id/);
