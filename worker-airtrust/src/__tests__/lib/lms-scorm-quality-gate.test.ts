@@ -32,6 +32,36 @@ describe('SCORM package quality gate', () => {
     expect(result.publishable).toBe(false);
   });
 
+  it('accepts an external-exam formative package only with Worker-owned completion', () => {
+    const formative = {
+      ...validManifest,
+      assessment: {
+        mode: 'EXTERNAL', requiredInteractions: [], scoringBySCORM: false, externalExamIssue: 1661,
+      },
+      completion: {
+        strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1', passStatusFromSCORM: false,
+        workerApprovalRequired: true,
+      },
+    };
+    const valid = validateScormPackageQuality(pkg(formative));
+    expect(valid.completionManifest.status).toBe('PASS');
+    expect(valid.publishable).toBe(false); // Static evidence never certifies a course.
+
+    const cases = [
+      { assessment: { ...formative.assessment, scoringBySCORM: true } },
+      { assessment: { ...formative.assessment, scoringBySCORM: undefined } },
+      { assessment: { ...formative.assessment, requiredInteractions: ['quiz-1'] } },
+      { assessment: { ...formative.assessment, masteryScore: 80 } },
+      { completion: { ...formative.completion, passStatusFromSCORM: true } },
+      { completion: { ...formative.completion, workerApprovalRequired: false } },
+    ];
+    for (const change of cases) {
+      const invalid = validateScormPackageQuality(pkg({ ...formative, ...change }));
+      expect(invalid.completionManifest.status).toBe('FAIL');
+      expect(invalid.publishable).toBe(false);
+    }
+  });
+
   it('rejects duplicate required IDs and diagnostics that expose answers', () => {
     const result = validateScormPackageQuality(pkg({ ...validManifest, content: { requiredSlides: ['slide-1', 'SLIDE-1'] }, diagnostics: { ...validManifest.diagnostics, correctAnswers: true } }));
     expect(result.completionManifest.status).toBe('FAIL');
