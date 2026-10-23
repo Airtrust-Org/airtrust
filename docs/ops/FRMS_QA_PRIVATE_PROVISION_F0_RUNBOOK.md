@@ -58,6 +58,23 @@ no momento autorizado deve parar, nunca motivar outro token ou bypass.
 A opção `dedicated` mantém o contrato V1 inalterado. Nenhuma operação
 remota foi autorizada pelo simples registro desta alternativa.
 
+**Opção V3 em análise — deploy do Worker sem novo token de deploy:**
+`credential_mode=existing_staging_worker_deploy_only` reutiliza
+`CLOUDFLARE_WORKER_API_TOKEN` **somente no job efêmero de implantação**
+para fazer GET da configuração e publicar **exclusivamente** o Worker
+`airtrust-frms-qa-repair-staging-private`. Exige uma concessão administrativa
+**V3** (`AIRTRUST_FRMS_QA_PROVISION_V3`) nova, não editada e vinculada ao
+SHA atual, à fase `worker`, aos recursos privados fixos e ao prazo de 12h.
+O verificador rejeita V3 na fase `bucket`, V2 na fase `worker`, mudança
+não autorizada de configuração e grants V1/V2 reaproveitados. O token amplo
+permanece apenas no runner de Actions; **não** é gravado em secret/runtime
+nem substitui `FRMS_QA_D1_READ_TOKEN`. A publicação continua bloqueada se
+não houver a credencial D1 read-only de runtime, autoridade pública Ed25519
+independente, bucket privado comprovado e concessão V3 específica.
+Esta exceção amplia temporariamente a autoridade da credencial no *runner*
+e exige revisão explícita de risco; não equivale a credencial de deploy
+com escopo mínimo e **não constitui autorização para despachar a fase**.
+
 Cada fase precisa de **comentário novo e não editado** por administrador
 autorizado na issue #776, com idade máxima de 12h. O dispatcher também
 precisa ser administrador. Não é permitido reaproveitar a concessão de
@@ -84,6 +101,7 @@ Inputs por dispatch:
 - `phase=bucket` ou `phase=worker`;
 - `credential_mode=dedicated` (V1), ou
   `credential_mode=existing_staging_worker_bucket_only` (somente bucket, V2).
+- `credential_mode=existing_staging_worker_deploy_only` (somente worker, V3; exige revisão de risco e grant novo).
 
 A operação `bucket` vem primeiro, isolada da implantação do Worker.
 O provisionador verifica D1 existente com GET e bucket privado. Se o
