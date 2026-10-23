@@ -5,6 +5,7 @@
  * inventory and hold the global staging mutex through external signer/readback.
  * Cloudflare bearer tokens exist only in the ephemeral runner (never Worker).
  */
+import {createHmac,timingSafeEqual} from 'node:crypto';
 import {TARGET} from '../../scripts/staging/frms-qa-cases-repair-plan.mjs';
 import {verifyPrivateQueueReply} from './queue-prepare-transport.mjs';
 
@@ -23,9 +24,10 @@ const canonical64=(value,maxLength)=>typeof value==='string'&&
   Buffer.from(value,'base64').toString('base64')===value;
 
 /** Restricted to a reviewed Queue UUID; accepts no arbitrary endpoint or verb. */
-export function privateQueueRunnerApi({accountId,queueId,releaseSha,token,fetcher=fetch}={}){
+export function privateQueueRunnerApi({accountId,queueId,releaseSha,keyHex,
+  token,fetcher=fetch}={}){
   if(!HEX32.test(accountId||'')||!HEX32.test(queueId||'')||
-     !HEX40.test(releaseSha||'')||
+     !HEX40.test(releaseSha||'')||!HEX64.test(keyHex||'')||
      typeof token!=='string'||!token.trim()||typeof fetcher!=='function')deny();
   const endpoint='https://api.cloudflare.com/client/v4/accounts/'+accountId+
     '/queues/'+queueId+'/messages';
@@ -72,6 +74,13 @@ export function privateQueueRunnerApi({accountId,queueId,releaseSha,token,fetche
          !canonical64(message.payloadEnvelope.ciphertext,100000)||
          Buffer.from(message.payloadEnvelope.ciphertext,'base64').length===0)
         deny();
+      const toSign=Object.fromEntries(MESSAGE_FIELDS.filter(k=>k!=='mac')
+        .map(k=>[k,message[k]]));
+      const expectedMac=createHmac('sha256',Buffer.from(keyHex,'hex'))
+        .update(JSON.stringify(toSign)).digest();
+      const gotMac=Buffer.from(message.mac,'hex');
+      if(gotMac.length!==expectedMac.length||
+         !timingSafeEqual(gotMac,expectedMac))deny();
       const result=await request('',{body:message,content_type:'json'});
       // Push success never proves a private Worker executed the operation.
       return Object.freeze({queued:true,queueMessagesWritten:1,d1Writes:0,
