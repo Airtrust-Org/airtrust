@@ -21,6 +21,26 @@ type EnrollmentSummary = {
 };
 
 /**
+ * Classify only stable, non-sensitive database failure categories for logs.
+ * Do not log raw D1 messages: driver text can contain query or row details.
+ */
+export function classifyComplianceEnrollmentFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  if (message === 'COMPLIANCE_ATOMIC_SCHEMA_MISSING') return 'SCHEMA_REQUIRED_TABLE_MISSING';
+  if (message === 'COMPLIANCE_ATOMIC_POSTCHECK_FAILED') return 'ATOMIC_POSTCHECK_FAILED';
+  if (message === 'COMPLIANCE_ATOMIC_ID_MISSING') return 'ATOMIC_ID_MISSING';
+  if (/no such table:/i.test(message)) return 'DB_SCHEMA_TABLE_MISSING';
+  if (/no such column:/i.test(message)) return 'DB_SCHEMA_COLUMN_MISSING';
+  if (/unique constraint failed/i.test(message)) return 'DB_UNIQUE_CONSTRAINT';
+  if (/foreign key constraint failed/i.test(message)) return 'DB_FOREIGN_KEY_CONSTRAINT';
+  if (/not null constraint failed/i.test(message)) return 'DB_NOT_NULL_CONSTRAINT';
+  if (/check constraint failed/i.test(message)) return 'DB_CHECK_CONSTRAINT';
+  if (/database is locked|database is busy/i.test(message)) return 'DB_BUSY';
+  if (/^D1_ERROR\b/i.test(message)) return 'D1_ERROR';
+  return 'UNCLASSIFIED';
+}
+
+/**
  * A change to an obligatory Compliance rule must immediately reconcile the
  * corresponding published LMS course. Never dispatch email or push invitations
  * in this path; existing valid evidence and in-progress cycles are preserved.
@@ -40,6 +60,24 @@ async function performComplianceRuleEnrollment<TAccess>(
     skipped_valid_evidence: 0,
     unavailable_course: 0,
   };
+  // Only build the expensive effective-evidence snapshot when the persisted
+  // tenant-scoped rule actually authorizes immediate EAD enrollment. Saving
+  // an opt-out or a non-EAD requirement is a valid no-op, not a deferred sync.
+  // The atomic writer still rechecks policy in D1 before any new enrollment.
+  const persistedRule = await db.prepare(
+    `SELECT obrigatoriedade, auto_matricular_ead, modalidade_requerida
+       FROM treinamento_requisitos
+      WHERE id=? AND empresa_id=? AND ativo=1 AND deleted_at IS NULL
+      LIMIT 1`,
+  ).bind(ruleId, empresaId).first<{
+    obrigatoriedade: string;
+    auto_matricular_ead: number | null;
+    modalidade_requerida: string | null;
+  }>();
+  if (!persistedRule || persistedRule.obrigatoriedade !== 'OBRIGATORIA'
+    || persistedRule.auto_matricular_ead !== 1
+    || persistedRule.modalidade_requerida !== 'EAD') return summary;
+
   const snapshot = await buildSnapshot(db, empresaId, access);
   const rule = snapshot.rules.find((candidate) => candidate.id === ruleId);
   if (!rule || rule.obrigatoriedade !== 'OBRIGATORIA' || rule.auto_matricular_ead !== 1) return summary;
@@ -140,10 +178,12 @@ export async function reconcileTrainingComplianceRuleEnrollment<TAccess>(
       auto_enrollment: summary,
       auto_enrollment_warning: summary.unavailable_course ? 'LMS_COURSE_MAPPING_UNAVAILABLE' : null,
     };
-  } catch {
+  } catch (error) {
     // Saving a requirement is durable. The caller must not claim a successful
     // enrollment sync after a partial failure; the operation is idempotent on retry.
-    console.error('[TRAINING_COMPLIANCE] Falha na sincronização após salvar requisito');
+    console.error('[TRAINING_COMPLIANCE] Falha na sincronização após salvar requisito', {
+      code: classifyComplianceEnrollmentFailure(error),
+    });
     return { auto_enrollment: null, auto_enrollment_warning: 'AUTO_ENROLLMENT_DEFERRED' };
   }
 }

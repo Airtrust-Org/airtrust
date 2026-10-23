@@ -4,8 +4,6 @@
 // operational_decision: STAGING_ONLY; targets only qa_examiner_training on the canonical staging D1.
 // dry_run_required: default mode never writes; --apply requires explicit staging confirmation.
 // rollback_plan_required: --rollback --apply soft-deletes only artifacts identified by this run's reserved QA codes.
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -39,7 +37,6 @@ const functionCode = `${code}-FUN`;
 const invalidFunctionCode = `${code}-ALT`;
 const employee1Code = `${code}-E1`;
 const employee2Code = `${code}-E2`;
-const categoryCode = `${code}-CAT`;
 const requiredTypeCode = `${code}-REQ`;
 const orphanTypeCode = `${code}-ORPH`;
 const sectorName = `${code} Setor`;
@@ -69,6 +66,7 @@ const employee2Id = `(SELECT id FROM funcionarios WHERE empresa_id=${tenantId} A
 const requiredTypeId = `(SELECT id FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo=${esc(requiredTypeCode)} AND deleted_at IS NULL LIMIT 1)`;
 const orphanTypeId = `(SELECT id FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo=${esc(orphanTypeCode)} AND deleted_at IS NULL LIMIT 1)`;
 const orphanCourseId = `(SELECT id FROM lms_cursos WHERE empresa_id=${tenantId} AND titulo=${esc(orphanCourseTitle)} AND deleted_at IS NULL LIMIT 1)`;
+const lmsCategoryId = `(SELECT id FROM qualificacoes_categorias WHERE empresa_id=${tenantId} AND lms_integrada=1 AND ativo=1 AND deleted_at IS NULL LIMIT 1)`;
 
 const seedSql = `
 CREATE TABLE IF NOT EXISTS _qa_compliance_lifecycle_guard(ok INTEGER NOT NULL CHECK(ok=1));
@@ -79,6 +77,7 @@ SELECT CASE WHEN (SELECT COUNT(*) FROM empresas WHERE codigo=${esc(TENANT)} AND 
  AND NOT EXISTS (SELECT 1 FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(sectorCode)} AND deleted_at IS NULL)
  AND NOT EXISTS (SELECT 1 FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL)
  AND NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL)
+ AND (SELECT COUNT(*) FROM qualificacoes_categorias WHERE empresa_id=${tenantId} AND lms_integrada=1 AND ativo=1 AND deleted_at IS NULL)=1
 THEN 1 ELSE 0 END;
 DROP TABLE _qa_compliance_lifecycle_guard;
 
@@ -115,15 +114,12 @@ VALUES (${esc(employee1Name)},${esc(employee1Code)},${esc(functionName)},${esc(f
 INSERT INTO funcionarios(nome,matricula,cargo,funcao,setor,setor_id,funcao_id,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
 VALUES (${esc(employee2Name)},${esc(employee2Code)},${esc(functionName)},${esc(functionName)},${esc(sectorName)},${sectorId},${functionId},'ATIVO',0,0,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
 
-INSERT INTO qualificacoes_categorias(nome,codigo,descricao,cor,ativo,empresa_id,dominio_codigo,lms_integrada,created_at,updated_at,deleted_at)
-SELECT ${esc(`${code} Categoria`)},${esc(categoryCode)},${esc(marker)},'#64748b',1,id,'OPERACOES',1,datetime('now'),datetime('now'),NULL FROM empresas WHERE id=${tenantId};
-
 INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria_id,categoria,carga_horaria,validade,vencimento_fim_mes,observacoes,ativo,empresa_id,created_at,updated_at,deleted_at)
 SELECT 'TREINAMENTO',${esc(requiredTypeCode)},${esc(requiredTypeName)},${esc(marker)},qc.id,'EAD',1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
-FROM qualificacoes_categorias qc WHERE qc.empresa_id=${tenantId} AND qc.codigo=${esc(categoryCode)} AND qc.deleted_at IS NULL;
+FROM qualificacoes_categorias qc WHERE qc.id=${lmsCategoryId} AND qc.empresa_id=${tenantId};
 INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria_id,categoria,carga_horaria,validade,vencimento_fim_mes,observacoes,ativo,empresa_id,created_at,updated_at,deleted_at)
 SELECT 'TREINAMENTO',${esc(orphanTypeCode)},${esc(orphanTypeName)},${esc(marker)},qc.id,'EAD',1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
-FROM qualificacoes_categorias qc WHERE qc.empresa_id=${tenantId} AND qc.codigo=${esc(categoryCode)} AND qc.deleted_at IS NULL;
+FROM qualificacoes_categorias qc WHERE qc.id=${lmsCategoryId} AND qc.empresa_id=${tenantId};
 
 INSERT INTO lms_cursos(empresa_id,titulo,descricao,categoria,carga_horaria_minutos,qualificacao_tipo_id,gerar_qualificacao_ao_concluir,ativo,publicado,version_tag,tipo_conteudo,scorm_package_r2_prefix,observacoes,created_at,updated_at,deleted_at)
 VALUES (${tenantId},${esc(requiredCourseTitle)},${esc(marker)},'EAD',60,${requiredTypeId},1,1,1,${esc(code)},'h5p',${esc(requiredPackagePrefix)},${esc(marker)},datetime('now'),datetime('now'),NULL);
@@ -287,9 +283,6 @@ UPDATE setores SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updat
 WHERE empresa_id=${tenantId} AND codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)});
 UPDATE qualificacoes_tipos SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
 WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)});
-UPDATE qualificacoes_categorias SET ativo=0,deleted_at=COALESCE(deleted_at,datetime('now')),updated_at=datetime('now')
-WHERE empresa_id=${tenantId} AND codigo=${esc(categoryCode)} AND descricao=${esc(marker)};
-
 CREATE TABLE IF NOT EXISTS _qa_compliance_lifecycle_cleanup(active_count INTEGER NOT NULL CHECK(active_count=0));
 DELETE FROM _qa_compliance_lifecycle_cleanup;
 INSERT INTO _qa_compliance_lifecycle_cleanup(active_count)
@@ -339,18 +332,14 @@ if (!apply) {
   console.log(JSON.stringify({ mode: 'DRY_RUN', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker }));
   process.exit(0);
 }
-const dir = mkdtempSync(join(tmpdir(), 'airtrust-compliance-lifecycle-'));
-const file = join(dir, 'fixture.sql');
-try {
-  writeFileSync(file, sql, { encoding: 'utf8', mode: 0o600 });
-  const r = spawnSync('npx', ['wrangler', 'd1', 'execute', db, '--remote', `--file=${file}`], {
-    cwd: join(process.cwd(), 'worker-airtrust'), encoding: 'utf8', env: process.env,
-  });
-  if (r.status !== 0) {
-    process.stderr.write(r.stderr || r.stdout);
-    process.exit(r.status || 1);
-  }
-  console.log(JSON.stringify({ mode: 'APPLY', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker, status: 'PASS' }));
-} finally {
-  rmSync(dir, { recursive: true, force: true });
+// Keep this bounded fixture on D1's normal query path. Remote --file routes
+// through Wrangler's bulk-import/reset endpoint and can fail closed with
+// D1_RESET_DO before executing otherwise valid fixture SQL.
+const r = spawnSync('npx', ['wrangler', 'd1', 'execute', db, '--remote', '--command', sql, '--json'], {
+  cwd: join(process.cwd(), 'worker-airtrust'), encoding: 'utf8', env: process.env,
+});
+if (r.status !== 0) {
+  process.stderr.write(r.stderr || r.stdout);
+  process.exit(r.status || 1);
 }
+console.log(JSON.stringify({ mode: 'APPLY', target: db, operation: rollback ? 'ROLLBACK' : 'SEED', code, marker, status: 'PASS' }));
