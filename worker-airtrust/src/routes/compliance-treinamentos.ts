@@ -127,6 +127,7 @@ type Evidence = {
   origem_id: number | null;
   origem_titulo: string | null;
   lms_status?: string | null;
+  progresso_pct?: number | null;
   modalidade?: string | null;
   // undefined = schema anterior a 0519 (compatibilidade de rollout); null = evidência sem perfil gravado.
   perfil_competencia?: string | null;
@@ -460,7 +461,7 @@ async function loadLmsEvidence(
   const { results } = await db
     .prepare(
       `SELECT m.id, m.funcionario_id, c.qualificacao_tipo_id AS tipo_id,
-              m.status, m.data_conclusao, m.updated_at, c.titulo, 'EAD' AS modalidade,
+              m.status, m.progresso_pct, m.data_conclusao, m.updated_at, c.titulo, 'EAD' AS modalidade,
               ${profileSelect} AS perfil_competencia
          FROM lms_matriculas m
          JOIN lms_cursos c
@@ -480,6 +481,7 @@ async function loadLmsEvidence(
       funcionario_id: number;
       tipo_id: number;
       status: string;
+      progresso_pct: number | null;
       data_conclusao: string | null;
       titulo: string | null;
       modalidade: string | null;
@@ -497,6 +499,7 @@ async function loadLmsEvidence(
       origem_id: row.id,
       origem_titulo: row.titulo,
       lms_status: row.status,
+      progresso_pct: row.progresso_pct,
       modalidade: row.modalidade || 'EAD',
       perfil_competencia: hasProfile ? row.perfil_competencia || null : undefined,
     });
@@ -670,6 +673,9 @@ function computeRequirement(
     evidencia_pendente_motivo: evidenceReviewReason,
     evidencia_id: evidence?.origem_id ?? null,
     curso_ead_titulo: currentLms?.origem_titulo ?? evidence?.origem_titulo ?? null,
+    progresso_pct: status_compliance === 'EM_ANDAMENTO' && currentLms?.progresso_pct != null && Number.isFinite(Number(currentLms.progresso_pct))
+      ? Math.max(0, Math.min(100, Math.round(Number(currentLms.progresso_pct))))
+      : null,
     lms_status:
       currentLms?.lms_status ?? newestEvidence(completedLmsForProfile)?.lms_status ?? null,
   };
