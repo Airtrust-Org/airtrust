@@ -75,10 +75,10 @@ test('unknown API permissions/status and missing credentials reject without any 
     /QA_PRIVATE_READONLY_CREDENTIAL_MISSING/);
   const h=harness();
   h.fetcher=async()=>new Response(null,{status:403});
-  await assert.rejects(check(h),/QA_PRIVATE_CF_READ_FAILED/);
+  await assert.rejects(check(h),/QA_PRIVATE_D1_HTTP_FAILED/);
   const h2=harness();
   h2.fetcher=async()=>Response.json({success:false,result:{}});
-  await assert.rejects(check(h2),/QA_PRIVATE_CF_READ_FAILED/);
+  await assert.rejects(check(h2),/QA_PRIVATE_D1_RESPONSE_FAILED/);
 });
 
 // Existing staging Worker credential is reused only by the GET-only readiness job.
