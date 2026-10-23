@@ -24,6 +24,14 @@ function fixture() {
       conteudo_arquivo_nome TEXT, updated_at TEXT, deleted_at TEXT,
       PRIMARY KEY(empresa_id,id)
     );
+    CREATE TABLE lms_scorm_package_audit_log (
+      id TEXT PRIMARY KEY, empresa_id INTEGER, curso_id INTEGER,
+      package_id TEXT, action TEXT, actor_id INTEGER, created_at TEXT
+    );
+    CREATE TABLE lms_completion_diagnostics_snapshots (
+      id INTEGER PRIMARY KEY, empresa_id INTEGER,
+      curso_id INTEGER, matricula_id INTEGER, diagnostics_json TEXT
+    );
   `);
   const packageInsert = db.database.prepare(`INSERT INTO lms_scorm_package_versions
     (id,empresa_id,curso_id,package_sha256,r2_prefix,status,validation_result_json)
@@ -37,18 +45,27 @@ function fixture() {
     VALUES(?,?,'scorm',?,'index.html','1.2')`);
   courseInsert.run(41, 6, prefix('a'));
   courseInsert.run(41, 7, 'lms/scorm/7/41/a/');
+  db.database.prepare(`INSERT INTO lms_completion_diagnostics_snapshots
+    VALUES(1,6,41,100,'{"pct":90}'),(2,7,41,200,'{"pct":50}'),(3,6,42,300,'{"pct":30}')`).run();
   return db;
 }
 function candidate(db: SqliteD1Database, id = 'b') {
   return {
     db: db.asD1(), empresaId: 6, cursoId: 41, packageId: id,
     packageSha256: sha(id), prefix: prefix(id), launchFile: 'index.html',
-    originalFilename: `${id}.zip`, actorId: 10, validationJson: json,
+    originalFilename: `${id}.zip`, actorId: 10, auditId: `audit-${id}`, validationJson: json,
   };
 }
 function states(db: SqliteD1Database) {
   return db.database.prepare(`SELECT id,status FROM lms_scorm_package_versions
     WHERE empresa_id=6 AND curso_id=41 ORDER BY id`).all();
+}
+function auditCount(db: SqliteD1Database) {
+  return (db.database.prepare('SELECT COUNT(*) AS n FROM lms_scorm_package_audit_log').get() as {n:number}).n;
+}
+function diagnosticIds(db: SqliteD1Database) {
+  return (db.database.prepare('SELECT id FROM lms_completion_diagnostics_snapshots ORDER BY id')
+    .all() as Array<{id:number}>).map(row => row.id);
 }
 function coursePrefix(db: SqliteD1Database, tenant = 6) {
   return (db.database.prepare('SELECT scorm_package_r2_prefix FROM lms_cursos WHERE empresa_id=? AND id=41')
@@ -63,6 +80,8 @@ describe('certified SCORM package activation — atomic SQLite/D1 transition', (
       {id:'a',status:'SUPERSEDED'}, {id:'b',status:'ACTIVE'}, {id:'c',status:'VALIDATED'},
     ]);
     expect(coursePrefix(db)).toBe(prefix('b'));
+    expect(auditCount(db)).toBe(1);
+    expect(diagnosticIds(db)).toEqual([2,3]);
     expect(coursePrefix(db,7)).toBe('lms/scorm/7/41/a/');
     expect(db.database.prepare(`SELECT status FROM lms_scorm_package_versions
       WHERE id='other-tenant'`).get()).toEqual({status:'ACTIVE'});
@@ -77,6 +96,8 @@ describe('certified SCORM package activation — atomic SQLite/D1 transition', (
       {id:'a',status:'SUPERSEDED'}, {id:'b',status:'ACTIVE'}, {id:'c',status:'VALIDATED'},
     ]);
     expect(coursePrefix(db)).toBe(prefix('b'));
+    expect(auditCount(db)).toBe(1);
+    expect(diagnosticIds(db)).toEqual([2,3]);
   });
 
   it('preserves existing ACTIVE state if attestation JSON changes after preflight', async () => {
@@ -86,6 +107,8 @@ describe('certified SCORM package activation — atomic SQLite/D1 transition', (
     expect(await commitCertifiedScormActivation(preflight)).toBe(false);
     expect(states(db)[0]).toEqual({id:'a',status:'ACTIVE'});
     expect(coursePrefix(db)).toBe(prefix('a'));
+    expect(auditCount(db)).toBe(0);
+    expect(diagnosticIds(db)).toEqual([1,2,3]);
   });
 
   it('preserves active course if candidate becomes REJECTED before its batch', async () => {
@@ -104,6 +127,8 @@ describe('certified SCORM package activation — atomic SQLite/D1 transition', (
       {id:'a',status:'SUPERSEDED'}, {id:'b',status:'SUPERSEDED'}, {id:'c',status:'ACTIVE'},
     ]);
     expect(coursePrefix(db)).toBe(prefix('c'));
+    expect(auditCount(db)).toBe(2);
+    expect(diagnosticIds(db)).toEqual([2,3]);
   });
 
   it('does not demote or activate a candidate when its course was deleted', async () => {
@@ -112,6 +137,19 @@ describe('certified SCORM package activation — atomic SQLite/D1 transition', (
     expect(await commitCertifiedScormActivation(preflight)).toBe(false);
     expect(states(db)[0]).toEqual({id:'a',status:'ACTIVE'});
     expect(coursePrefix(db)).toBe(prefix('a'));
+  });
+
+  it('rolls back activation and diagnostics if the audit receipt cannot be persisted', async () => {
+    const db = fixture();
+    db.database.exec(`CREATE TRIGGER reject_audit BEFORE INSERT ON lms_scorm_package_audit_log
+      BEGIN SELECT RAISE(ABORT,'SIMULATED_SCORM_AUDIT_FAILURE'); END;`);
+    await expect(commitCertifiedScormActivation(candidate(db)))
+      .rejects.toThrow('SIMULATED_SCORM_AUDIT_FAILURE');
+    expect(states(db)[0]).toEqual({id:'a',status:'ACTIVE'});
+    expect(states(db)[1]).toEqual({id:'b',status:'VALIDATED'});
+    expect(coursePrefix(db)).toBe(prefix('a'));
+    expect(auditCount(db)).toBe(0);
+    expect(diagnosticIds(db)).toEqual([1,2,3]);
   });
 
   it('rolls back the demotion if the candidate promotion fails inside the batch', async () => {
