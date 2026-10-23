@@ -125,6 +125,10 @@ test('existing workflow has no token input nor mutating verbs',()=>{
   const workflow=readFileSync('.github/workflows/staging-frms-existing-token-capabilities.yml','utf8');
   const entry=readFileSync('ops/frms-qa-repair/probe-existing-staging-tokens.mjs','utf8');
   assert.match(workflow,/FRMS_EXISTING_STAGING_READONLY/);
+  assert.match(workflow,/expected_main_sha:/);
+  assert.match(workflow,/EXPECTED_SHA: \${{ inputs\.expected_main_sha }}/);
+  assert.match(workflow,/test "\$GITHUB_SHA" = "\$EXPECTED_SHA"/);
+  assert.match(workflow,/gh api repos\/Airtrust-Org\/airtrust\/branches\/main/);
   assert.match(workflow,/environment: staging/);
   assert.match(workflow,/group: airtrust-staging-mutations-and-scorm-qa/);
   assert.match(entry,/probeExistingTokenPolicy/);
