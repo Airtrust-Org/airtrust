@@ -297,6 +297,9 @@ test('SCORM commits reject an actual prior enrollment cycle without changing lea
     try{return {
       enrollment:readDb.prepare(`SELECT status,progresso_pct,qualificacao_historico_id
         FROM lms_matriculas WHERE id=? AND empresa_id=?`).get(id,fixture.companyId),
+      cycles:readDb.prepare(`SELECT id,numero_ciclo,status,ciclo_atual
+        FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL
+        ORDER BY numero_ciclo,id`).all(id,fixture.companyId),
       progress:readDb.prepare(`SELECT lesson_status,score_raw,cmi_json,suspend_data
         FROM lms_progresso_scorm WHERE matricula_id=? AND empresa_id=?`).get(id,fixture.companyId),
       histories:readDb.prepare(`SELECT COUNT(*) AS n FROM qualificacoes_historico
@@ -313,6 +316,9 @@ test('SCORM commits reject an actual prior enrollment cycle without changing lea
     try{return {
       enrollment:readDb.prepare(`SELECT status,progresso_pct,qualificacao_historico_id
         FROM lms_matriculas WHERE id=? AND empresa_id=?`).get(id,fixture.companyId),
+      cycles:readDb.prepare(`SELECT id,numero_ciclo,status,ciclo_atual
+        FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL
+        ORDER BY numero_ciclo,id`).all(id,fixture.companyId),
       progress:readDb.prepare(`SELECT lesson_status,score_raw,cmi_json,suspend_data
         FROM lms_progresso_scorm WHERE matricula_id=? AND empresa_id=?`).get(id,fixture.companyId),
       histories:readDb.prepare(`SELECT COUNT(*) AS n FROM qualificacoes_historico
