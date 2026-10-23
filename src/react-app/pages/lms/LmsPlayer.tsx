@@ -549,8 +549,22 @@ export default function LmsPlayer() {
           return;
         }
 
-        // A failed refresh cannot destroy an already running SCORM iframe.
-        // Only an initial failure keeps the player blocked from launching.
+        // A 409 means the server rejected this session's handoff/cycle scope.
+        // Unlike a transient refresh failure, this must unmount the old SCO:
+        // otherwise it could keep displaying (and attempting to commit) stale
+        // edition state after the server has invalidated its asset session.
+        if (response.status === 409) {
+          assetSessionKeyRef.current = null;
+          sessionKeyRef.current = null;
+          stableLaunchUrlRef.current = null;
+          setAssetSessionReady(false);
+          setIframeLoaded(false);
+          void refetchMatricula();
+          return;
+        }
+
+        // For transient connectivity failures, keep an existing cookie/session
+        // alive; only initial asset-session failure blocks first launch.
         if (assetSessionKeyRef.current !== sessionKey) {
           setAssetSessionReady(false);
         }
@@ -568,7 +582,7 @@ export default function LmsPlayer() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeHandoffId, assetContentType, assetMatriculaId, id, playerToken, sessionKey]);
+  }, [activeHandoffId, assetContentType, assetMatriculaId, id, playerToken, refetchMatricula, sessionKey]);
 
   useEffect(() => {
     const persisted = parseSlideLocation(persistedLocation);
