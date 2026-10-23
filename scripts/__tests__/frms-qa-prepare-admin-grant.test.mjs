@@ -150,7 +150,10 @@ test('strict read-only GitHub API accepts only GET on fixed host without redirec
   assert.equal(calls[0].options.method,'GET');
   assert.equal(calls[0].options.redirect,'manual');
   for(const path of ['https://attacker.test','repos/other/repo/branches/main',
-    'repos/'+REPO+'/../evil','repos/'+REPO+'/branch%2f..']){
+    'repos/'+REPO+'/../evil','repos/'+REPO+'/branch%2f..',
+    'repos/'+REPO+'/actions/secrets',
+    'repos/'+REPO+'/contents/.github/workflows',
+    'repos/'+REPO+'/issues/comments/0']){
     await assert.rejects(api(path),/FRMS_QA_PREPARE_ADMIN_GRANT_DENIED/);
   }
   assert.equal(calls.length,1);
