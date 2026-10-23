@@ -6,6 +6,7 @@ import {readFile} from 'node:fs/promises';
 import {createTrustedQueuePrepareMessage,consumeTrustedQueuePrepare} from
   '../../ops/frms-qa-repair/queue-prepare-transport.mjs';
 import {exactPreparePlan} from '../../ops/frms-qa-repair/verify-prepare-admin-grant.mjs';
+import {durableCoordinator} from '../../ops/frms-qa-repair/adapters.mjs';
 
 const SHA='b'.repeat(40),KEY='a'.repeat(64),GRANT='6374255192',
   RUN='40019815631',TOKEN='fixture-only-never-forward';
@@ -171,6 +172,28 @@ test('runtime HMAC key pin mismatch denies before binding invocation',async()=>{
     /FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
   assert.equal(calls,0);
   assert.equal(db.map.size,0);
+});
+
+test('durable coordinator treats every present lock value as occupied',async()=>{
+  for(const corrupt of [null,false,0,'']){
+    const db=storage();
+    db.map.set('lock',corrupt);
+    const coordinator=durableCoordinator(db);
+    assert.deepEqual(await coordinator.acquireLock('airtrust-staging-mutations-and-scorm-qa'),{held:false});
+    assert.equal(db.map.get('lock'),corrupt);
+    assert.equal(db.map.size,1);
+  }
+});
+test('durable coordinator treats every present nonce value as consumed',async()=>{
+  const nonce='e'.repeat(64);
+  for(const corrupt of [null,false,0,'']){
+    const db=storage();
+    db.map.set('nonce:'+nonce,corrupt);
+    const coordinator=durableCoordinator(db);
+    assert.equal(await coordinator.reserveNonce({nonce,sha:SHA,scope:'prepare'}),false);
+    assert.equal(db.map.get('nonce:'+nonce),corrupt);
+    assert.equal(db.map.size,1);
+  }
 });
 
 test('tampering, wrong env or expiration fails closed before private RPC',async()=>{
