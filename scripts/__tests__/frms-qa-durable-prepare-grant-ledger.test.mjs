@@ -76,6 +76,18 @@ test('wrong tenant/phase-shaped key or malformed grant metadata fails without pe
   assert.equal(storage.persisted.size,0);
 });
 
+test('corrupt or falsy persisted grant records fail closed without overwrite',async()=>{
+  const storage=disposableStorage(),ledger=durablePrepareGrantLedger(storage);
+  for(const persisted of [null,false,0,'',{}, {...claim,phase:'apply'}]){
+    storage.persisted.set(key,persisted);
+    await assert.rejects(reserve(ledger),/QA_PREPARE_DURABLE_GRANT_LEDGER_DENIED/);
+    assert.equal(storage.persisted.get(key),persisted);
+    assert.equal(storage.persisted.size,1);
+  }
+  storage.persisted.clear();
+  assert.equal(await reserve(ledger),true);
+});
+
 test('rejected transaction after put rolls back and never marks grant used',async()=>{
   const storage=disposableStorage(),ledger=durablePrepareGrantLedger(storage);
   await assert.rejects(ledger.transaction(async tx=>{

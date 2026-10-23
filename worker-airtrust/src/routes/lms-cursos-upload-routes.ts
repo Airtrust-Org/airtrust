@@ -23,10 +23,21 @@ import { requireOperacoesCurso } from './lms-cursos-rbac';
 import {
   activateScormPackageVersion,
   createScormPackageCandidate,
+  createScormPackageCandidateFromR2Intake,
   importScormFunctionalAttestation,
   listScormPackageVersions,
   runScormPackageConformance,
 } from '../lib/lms/lms-scorm-package-version-service';
+import {
+  abortF5StreamedIntake,
+  authorizeF5IntakeOperation,
+  beginF5StreamedIntake,
+  cleanupF5StreamedIntake,
+  completeF5StreamedIntake,
+  F5_STREAMED_ZIP_LIMITS,
+  parseF5Grant,
+  putF5StreamedIntakePart,
+} from '../lib/lms/lms-scorm-streamed-intake';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -51,6 +62,40 @@ const CompleteSchema = z.object({
   files_uploaded: z.number().int().positive().optional(),
   uploaded_paths: z.array(z.string()).optional(),
 });
+
+const F5StreamedInitSchema = z.object({
+  operation_id: z.string().regex(/^[a-f0-9-]{36}$/i),
+  expected_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  zip_bytes: z.number().int().min(22).max(F5_STREAMED_ZIP_LIMITS.zipBytes),
+  arquivo_nome: z.string().trim().min(1).max(255).regex(/\.zip$/i),
+});
+
+function validCourseId(c: Context<{ Bindings: Env }>) {
+  const id = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) throw new ApiError('Curso inválido', 400);
+  return id;
+}
+
+function f5Grant(c: Context<{ Bindings: Env }>, empresaId: number, cursoId: number, sha256: string, bytes: number) {
+  return parseF5Grant(c.env.SCORM_F5_STREAMED_INTAKE_GRANT, {
+    environment: c.env.ENVIRONMENT,
+    runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
+    tenantId: empresaId, courseId: cursoId, packageSha256: sha256, zipBytes: bytes,
+  });
+}
+
+function authorizeF5Operation(c: Context<{ Bindings: Env }>, empresaId: number, cursoId: number, allowExpiredForRecovery = false) {
+  return authorizeF5IntakeOperation({
+    bucket: c.env.BUCKET,
+    rawGrant: c.env.SCORM_F5_STREAMED_INTAKE_GRANT,
+    environment: c.env.ENVIRONMENT,
+    runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
+    tenantId: empresaId,
+    courseId: cursoId,
+    operationId: c.req.param('operationId') ?? '',
+    allowExpiredForRecovery,
+  });
+}
 
 function hasH5pBindingColumn(c: Parameters<typeof getLmsSchemaSnapshot>[0]) {
   return getLmsSchemaSnapshot(c).lmsCursosColumns.h5p_conteudo_id === 'present';
@@ -257,6 +302,80 @@ app.get('/:id/scorm-package-versions', requirePermission('lms', 'editar', 'admin
   if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
   return c.json({ success: true, data: await listScormPackageVersions(c.env.DB, getEmpresaIdSafe(c), cursoId) });
 });
+
+// Large F5 ZIPs use a separately granted staging-only multipart protocol.
+// Each part streams directly to R2; only a fully read-back, hash-checked ZIP
+// can enter the existing SCORM Quality Gate as an inactive version candidate.
+app.post('/:id/scorm-upload/streamed/init',
+  requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    assertContentLengthWithinLimit(c.req.raw, 4096, 'Solicitação de intake');
+    const parsed = F5StreamedInitSchema.safeParse(await c.req.json<unknown>().catch(() => null));
+    if (!parsed.success) throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
+    const empresaId = getEmpresaIdSafe(c), cursoId = validCourseId(c);
+    const grant = f5Grant(c, empresaId, cursoId, parsed.data.expected_sha256, parsed.data.zip_bytes);
+    const course = await c.env.DB.prepare(
+      'SELECT id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+    ).bind(cursoId, empresaId).first<{ id: number }>();
+    if (!course) throw new ApiError('Curso não encontrado', 404);
+    const data = await beginF5StreamedIntake({
+      bucket: c.env.BUCKET, grantId: grant.grantId, runtimeSha: grant.runtimeSha,
+      operationId: parsed.data.operation_id,
+      tenantId: empresaId, courseId: cursoId,
+      packageSha256: parsed.data.expected_sha256, zipBytes: parsed.data.zip_bytes,
+      arquivoNome: parsed.data.arquivo_nome,
+    });
+    return c.json({ success: true, data }, 201);
+  });
+
+app.put('/:id/scorm-upload/streamed/:operationId/parts/:partNumber',
+  requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    const empresaId = getEmpresaIdSafe(c), cursoId = validCourseId(c);
+    await authorizeF5Operation(c, empresaId, cursoId);
+    const partNumber = Number(c.req.param('partNumber'));
+    const contentLength = contentLengthWithinLimit(c.req.raw, F5_STREAMED_ZIP_LIMITS.partBytes, 'Parte SCORM');
+    if (!c.req.raw.body) throw new ApiError('Corpo da parte SCORM ausente', 400);
+    const data = await putF5StreamedIntakePart({
+      bucket: c.env.BUCKET, tenantId: empresaId, courseId: cursoId,
+      operationId: c.req.param('operationId'), partNumber, contentLength, body: c.req.raw.body,
+    });
+    return c.json({ success: true, data });
+  });
+
+app.post('/:id/scorm-upload/streamed/:operationId/complete',
+  requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    const empresaId = getEmpresaIdSafe(c), cursoId = validCourseId(c);
+    const marker = await authorizeF5Operation(c, empresaId, cursoId);
+    try {
+      const completed = await completeF5StreamedIntake({
+        bucket: c.env.BUCKET, tenantId: empresaId, courseId: cursoId,
+        operationId: c.req.param('operationId'),
+      });
+      const data = await createScormPackageCandidateFromR2Intake({
+        db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
+        userId: Number((c.get as (key: string) => unknown)('userId')) || null,
+        operationId: marker.operationId, expectedSha256: marker.packageSha256,
+        arquivoNome: marker.arquivoNome,
+      });
+      return c.json({ success: true, data: { ...data, zipBytes: completed.size } }, 202);
+    } finally {
+      await cleanupF5StreamedIntake(c.env.BUCKET, empresaId, cursoId, marker.operationId);
+    }
+  });
+
+app.post('/:id/scorm-upload/streamed/:operationId/abort',
+  requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    const empresaId = getEmpresaIdSafe(c), cursoId = validCourseId(c);
+    await authorizeF5Operation(c, empresaId, cursoId, true);
+    const data = await abortF5StreamedIntake({
+      bucket: c.env.BUCKET, tenantId: empresaId, courseId: cursoId,
+      operationId: c.req.param('operationId'),
+    });
+    return c.json({ success: true, data });
+  });
 
 // Only protected staging QA administrators with a dedicated F0-provisioned
 // readback secret. No public learner or candidate preview route obtains this.
