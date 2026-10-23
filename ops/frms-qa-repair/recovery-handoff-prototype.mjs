@@ -87,7 +87,7 @@ export async function verifyRecoveryHandoff({proof,keyHex,expected,storage,
   try{
     fresh=await storage.transaction(async tx=>{
       const key='recovery-handoff-nonce:'+c.nonce;
-      if(await tx.get(key))return false;
+      if((await tx.get(key))!==undefined)return false;
       await tx.put(key,{sha:c.releaseSha,operation:c.operation,runId:c.runId,
         issuedAt:c.issuedAt});
       return true;
