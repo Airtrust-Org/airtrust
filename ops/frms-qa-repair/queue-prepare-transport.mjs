@@ -207,6 +207,10 @@ export async function consumeTrustedQueuePrepare({message,env={},storage,binding
         response.receipt?.dbId!==TARGET.db_id||
         response.receipt?.tenantId!==999013||response.receipt?.writes!==0)
         deny();
+      // Never publish a signed receipt while the caller's durable outcome
+      // has not been recorded. A failed DO put must leave zero replies.
+      await storage.put(outcomeKey,{status:'RECEIPT_VALIDATED',sha:body.sha,
+        grantId:body.grantId,runId:body.runId,runAttempt:body.runAttempt});
       if(responseQueue?.send){
         const reply={schema:'AIRTRUST_FRMS_QA_PRIVATE_REPLY_V1',operation:'prepare',
           sha:body.sha,grantId:body.grantId,runId:body.runId,
@@ -219,9 +223,11 @@ export async function consumeTrustedQueuePrepare({message,env={},storage,binding
       }
       status='RECEIPT_VALIDATED';
     }finally{
-      // Never persist the recovery bookmark, encrypted preimage or raw receipt.
-      await storage.put(outcomeKey,{status,sha:body.sha,grantId:body.grantId,
-        runId:body.runId,runAttempt:body.runAttempt});
+      // Only failures need a second write. Do not jeopardize an already
+      // published validated receipt by attempting a redundant DO mutation.
+      if(status!=='RECEIPT_VALIDATED')
+        await storage.put(outcomeKey,{status:'INDETERMINATE',sha:body.sha,
+          grantId:body.grantId,runId:body.runId,runAttempt:body.runAttempt});
     }
     // Even a valid RPC is not a physical independent staging readback.
     return Object.freeze({status,sha:body.sha,grantId:body.grantId,
@@ -298,6 +304,10 @@ export async function consumeTrustedQueueApply({message,env={},storage,binding,
         recoveryProof,manifest:m,receiptId,signatureBase64});
       if(outcome?.status!=='QA_STAGING_REPAIR_VALIDATED'||outcome?.valid!==4||
          outcome?.updatedRows!==8||outcome?.sha!==body.sha)deny();
+      // A success reply must never race ahead of Durable Object custody.
+      await storage.put('outcome:'+grantKey,{status:'APPLY_VALIDATED',
+        sha:body.sha,grantId:body.grantId,runId:body.runId,
+        runAttempt:body.runAttempt});
       if(responseQueue?.send){
         const reply={schema:'AIRTRUST_FRMS_QA_PRIVATE_REPLY_V1',operation:'apply',
           sha:body.sha,grantId:body.grantId,runId:body.runId,
@@ -309,8 +319,10 @@ export async function consumeTrustedQueueApply({message,env={},storage,binding,
       }
       status='APPLY_VALIDATED';
     }finally{
-      await storage.put('outcome:'+grantKey,{status,sha:body.sha,
-        grantId:body.grantId,runId:body.runId,runAttempt:body.runAttempt});
+      if(status!=='APPLY_VALIDATED')
+        await storage.put('outcome:'+grantKey,{status:'INDETERMINATE',
+          sha:body.sha,grantId:body.grantId,runId:body.runId,
+          runAttempt:body.runAttempt});
     }
     return Object.freeze({status,sha:body.sha,grantId:body.grantId,
       valid:4,updatedRows:8});
