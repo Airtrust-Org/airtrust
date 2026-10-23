@@ -69,7 +69,12 @@ test('protected runner pushes one pinned encrypted request with no generic API m
     token:TOKEN,fetcher:f.fetcher});
   const request={schema:'AIRTRUST_FRMS_QA_QUEUE_PREPARE_V1',
     sha:SHA,dbId:DB,tenantId:999013,mac:'f'.repeat(64),
-    payloadEnvelope:{version:1,ciphertext:'opaque'}};
+    grantId:GRANT,runId:RUN,runAttempt:1,
+    issuedAt:new Date(NOW).toISOString(),expiresAt:new Date(NOW+90000).toISOString(),
+    callerAuth:{claims:{operation:'prepare'}},
+    payloadEnvelope:{version:1,iv:Buffer.alloc(12,1).toString('base64'),
+      ciphertext:Buffer.from('encrypted-synthetic').toString('base64'),
+      tag:Buffer.alloc(16,2).toString('base64')}};
   assert.equal((await api.pushSigned(request)).queued,true);
   assert.equal(f.calls.length,1);
   assert.equal(f.calls[0].path,'');
@@ -79,7 +84,12 @@ test('protected runner pushes one pinned encrypted request with no generic API m
   assert.equal(api.purge,undefined);
   assert.equal(JSON.stringify(f.calls).includes(TOKEN),false);
   for(const invalid of [{...request,tenantId:6},{...request,dbId:'wrong'},
-    {...request,sha:'0'.repeat(40)},{...request,mac:''}]){
+    {...request,sha:'0'.repeat(40)},{...request,mac:''},
+    {...request,GITHUB_TOKEN:'FORBIDDEN_SECRET'},
+    {...request,recoveryBookmark:'FORBIDDEN_PLAINTEXT'},
+    {...request,payloadEnvelope:{...request.payloadEnvelope,iv:'invalid'}},
+    {...request,payloadEnvelope:{...request.payloadEnvelope,tag:''}},
+    {...request,payloadEnvelope:{...request.payloadEnvelope,token:'forbidden'}}]){
     await assert.rejects(api.pushSigned(invalid),/FRMS_QA_QUEUE_RUNNER_API_DENIED/);
   }
   assert.equal(f.calls.length,1);
