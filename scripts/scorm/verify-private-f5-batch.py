@@ -3,7 +3,8 @@
 
 No private ZIPs or indexes are committed. Input index must be normalized to:
 {"courses":[{"course_id":"id","source_file":"a.zip","source_sha256":"64hex",
-"candidate_file":"b.zip","candidate_sha256":"64hex"}]}.
+"candidate_file":"b.zip","candidate_sha256":"64hex",
+"approved_added_members":{"assets/restored.png":"64hex"} (optional)}]}.
 This verifier does NOT certify SCORM behavior or authorize activation.
 """
 import argparse
@@ -108,13 +109,24 @@ def verify(index, source_dir, candidate_dir, allow_patterns, expected_count=43):
         require(digest_file(sp) == source_sha, f"source SHA mismatch: {cid}")
         require(digest_file(cp) == candidate_sha, f"candidate SHA mismatch: {cid}")
         old, new = inspect_zip(sp), inspect_zip(cp)
-        require(old.keys() == new.keys(), f"ZIP member set changed: {cid}")
-        changed = sorted(k for k in old if old[k] != new[k])
-        require(changed, f"no changes in candidate: {cid}")
+        removed = set(old) - set(new)
+        added = set(new) - set(old)
+        require(not removed, f"ZIP members removed: {cid}: {sorted(removed)}")
+        approved = row.get("approved_added_members", {})
+        require(isinstance(approved, dict) and all(
+            isinstance(k, str) and isinstance(v, str) and HEX64.fullmatch(v)
+            for k, v in approved.items()), f"invalid approved additions: {cid}")
+        require(added == set(approved),
+                f"unapproved/missing ZIP additions: {cid}: {sorted(added ^ set(approved))}")
+        require(all(new[k] == approved[k] for k in added),
+                f"added member digest mismatch: {cid}")
+        changed = sorted(k for k in old if k in new and old[k] != new[k])
+        require(changed or added, f"no changes in candidate: {cid}")
         require(all(any(fnmatch.fnmatchcase(k, pattern) for pattern in allow_patterns)
                     for k in changed), f"unapproved ZIP member changed: {cid}")
         report.append({"course_id": cid, "candidate_sha256": candidate_sha,
-                       "changed_members": changed, "unchanged_members": len(old) - len(changed)})
+                       "changed_members": changed, "added_members": sorted(added),
+                       "unchanged_members": len(old) - len(changed)})
     return {"status": "PASS_STATIC_ONLY_NOT_CERTIFIED", "courses": len(report), "results": report}
 
 
@@ -177,6 +189,20 @@ def self_test():
         replace_entries([("engine.js", "v4"), ("lesson.html", "same"),
                          (link, "target")])
         expect_reject("symlink")
+
+        # Restored media must be listed per course with exact member SHA-256.
+        replace_entries([("engine.js", "v4"), ("lesson.html", "same"),
+                         ("assets/restored.png", "media")])
+        expect_reject("unapproved media addition")
+        index["courses"][0]["approved_added_members"] = {
+            "assets/restored.png": "0" * 64}
+        expect_reject("incorrect approved media digest")
+        index["courses"][0]["approved_added_members"] = {
+            "assets/restored.png": hashlib.sha256(b"media").hexdigest()}
+        require(check()["courses"] == 1, "approved media addition rejected")
+        replace_entries([("engine.js", "v4")])
+        expect_reject("pedagogical member removal")
+        index["courses"][0].pop("approved_added_members")
     print("SELF_TEST_PASS")
 
 
