@@ -58,6 +58,7 @@ try{
  assert.equal(result.r2Writes,0);
  assert.equal(bucket.counters().writeCalls,0);
  assert(bucket.counters().reads>=4);
+ assert(bucket.counters().reads<=6,'R2 GET budget exceeded');
  await assert.rejects(()=>validateF5R2ArchiveReadOnly({bucket,key:'lms/scorm/6/43/_intake/other/package.zip',expectedPrefix:scope,expectedSha256:sha}),/SCOPED_KEY_REQUIRED/);
  await assert.rejects(()=>validateF5R2ArchiveReadOnly({bucket,key,expectedPrefix:'lms/scorm/6/42/',expectedSha256:sha}),/SCOPED_PREFIX_REQUIRED/);
  await assert.rejects(()=>validateF5R2ArchiveReadOnly({bucket:key?fakeBucket():null,key,expectedPrefix:scope,expectedSha256:'0'.repeat(64)}),/ZIP_SHA256_MISMATCH/);
