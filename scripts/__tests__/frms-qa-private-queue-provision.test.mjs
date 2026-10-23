@@ -103,7 +103,8 @@ test('forged, edited, old, non-admin, wrong workflow, main or gates fail closed'
     await assert.rejects(verify({},bad),/FRMS_QA_QUEUE_PROVISION_DENIED/);
 });
 function cfHarness({existing=[],failPostName='',badInventory=false,
-  badExistingRetention=false,badConsumer=false}={}){
+  badExistingRetention=false,badConsumer=false,callerDeployed=false,
+  foreignPrepareConsumer=false}={}){
   const items=new Map(),calls=[];
   const idFor=name=>name===NAMES[0]?'1'.repeat(32):'2'.repeat(32);
   const knownId=id=>[...items.values()].find(q=>q.queue_id===id);
@@ -113,6 +114,10 @@ function cfHarness({existing=[],failPostName='',badInventory=false,
       consumers:name===NAMES[1]?[{
         type:badConsumer?'worker':'http_pull',queue_name:name,
         settings:{batch_size:1,visibility_timeout_ms:30000},
+      }]:callerDeployed||foreignPrepareConsumer?[{
+        type:'worker',queue_name:name,settings:{batch_size:1},
+        script_name:foreignPrepareConsumer?'unreviewed-other-worker':
+          'airtrust-frms-qa-caller-staging-private',
       }]:[]});
   }
   const fetcher=async(uri,opts)=>{
@@ -176,6 +181,13 @@ test('existing private Queues require only fixed metadata GETs, no mutation',asy
   assert.equal(r.d1Writes,0);
   assert.ok(f.calls.every(x=>x.method==='GET'));
 });
+test('exact preexisting caller Worker is safe for GET-only Queue revalidation',async()=>{
+  const f=cfHarness({existing:NAMES,callerDeployed:true});
+  const r=await ensurePrivateQueues({accountId:ACCOUNT,token:CF,fetcher:f.fetcher});
+  assert.equal(r.queuesCreated,0);
+  assert.equal(r.queueHttpPullConfigured,true);
+  assert.ok(f.calls.every(x=>x.method==='GET'));
+});
 test('create exactly two missing private Queues under explicitly verified grant',async()=>{
   const f=cfHarness();
   const r=await ensurePrivateQueues({accountId:ACCOUNT,token:CF,fetcher:f.fetcher});
@@ -198,7 +210,7 @@ test('partial provisioning remains quarantined; no broad delete or retry',async(
   assert.equal(f.calls.filter(x=>x.method==='PUT').length,1);
 });
 test('existing Queues with long retention or foreign consumer fail closed before mutations',async()=>{
-  for(const opts of [{badExistingRetention:true},{badConsumer:true}]){
+  for(const opts of [{badExistingRetention:true},{badConsumer:true},{foreignPrepareConsumer:true}]){
     const f=cfHarness({existing:NAMES,...opts});
     await assert.rejects(ensurePrivateQueues({accountId:ACCOUNT,token:CF,
       fetcher:f.fetcher}),/FRMS_QA_QUEUE_PROVISION_DENIED/);

@@ -194,7 +194,17 @@ export async function ensurePrivateQueues({accountId,token,fetcher=fetch}={}){
          current.consumers[0]?.settings?.batch_size!==1||
          current.consumers[0]?.settings?.visibility_timeout_ms!==30000)
         fail();
-    }else if(current.consumers?.length)fail();
+    }else{
+      // A later diagnostic/review can see an already deployed, private
+      // prepare consumer. Accept only the exact caller Worker contract;
+      // never delete, replace or retarget another team's consumer.
+      if(!Array.isArray(current.consumers)||current.consumers.length>1)fail();
+      if(current.consumers.length===1){
+        const c=current.consumers[0];
+        if(c.type!=='worker'||c.script_name!=='airtrust-frms-qa-caller-staging-private'||
+           c.queue_name!==name||c.settings?.batch_size!==1)fail();
+      }
+    }
   }
   existing=await inventory();
   if(!NAMES.every(name=>existing.has(name)))fail();
