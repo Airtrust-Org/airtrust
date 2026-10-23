@@ -11,8 +11,6 @@ import {verifyPrivateQueueReply} from './queue-prepare-transport.mjs';
 const HEX32=/^[0-9a-f]{32}$/,HEX40=/^[0-9a-f]{40}$/,HEX64=/^[0-9a-f]{64}$/;
 const SCHEMAS=['AIRTRUST_FRMS_QA_QUEUE_PREPARE_V1','AIRTRUST_FRMS_QA_QUEUE_APPLY_V1'];
 const deny=()=>{throw Error('FRMS_QA_QUEUE_RUNNER_API_DENIED');};
-const shape=(obj,keys)=>obj&&typeof obj==='object'&&!Array.isArray(obj)&&
-  Object.keys(obj).sort().join('|')===keys.slice().sort().join('|');
 
 /** Restricted to a reviewed Queue UUID; accepts no arbitrary endpoint or verb. */
 export function privateQueueRunnerApi({accountId,queueId,token,fetcher=fetch}={}){
@@ -36,6 +34,14 @@ export function privateQueueRunnerApi({accountId,queueId,token,fetcher=fetch}={}
       deny();
     return doc.result;
   };
+  // Not exposed as a public method: callers cannot acknowledge a Queue lease
+  // without passing the authenticated correlation check below.
+  const ackVerified=async leaseId=>{
+    if(typeof leaseId!=='string'||leaseId.length<16||leaseId.length>4096)deny();
+    const result=await request('/ack',{acks:[{lease_id:leaseId}],retries:[]});
+    if(result.ackCount!==1||result.retryCount!==0||
+       (result.warnings&&Object.keys(result.warnings).length))deny();
+  };
   return Object.freeze({
     /** One signed request produced only by an independently verified F0 grant. */
     async pushSigned(message){
@@ -47,7 +53,7 @@ export function privateQueueRunnerApi({accountId,queueId,token,fetcher=fetch}={}
         deny();
       const result=await request('',{body:message,content_type:'json'});
       // Push success never proves a private Worker executed the operation.
-      return Object.freeze({queued:true,d1WritesConfirmed:0,
+      return Object.freeze({queued:true,remoteWritesExecutedByRunner:0,
         receiptConfirmed:false,remoteMessageMetadataPresent:!!result.metadata});
     },
     /** Exactly one result at a time. Cloudflare lease is never logged. */
@@ -65,15 +71,6 @@ export function privateQueueRunnerApi({accountId,queueId,token,fetcher=fetch}={}
       if(!reply||typeof reply!=='object'||Array.isArray(reply))deny();
       return Object.freeze({leaseId:item.lease_id,reply});
     },
-    /** Acknowledge only one independently authenticated, consumed lease. */
-    async ackVerified(leaseId){
-      if(typeof leaseId!=='string'||leaseId.length<16||leaseId.length>4096)
-        deny();
-      const result=await request('/ack',{acks:[{lease_id:leaseId}],retries:[]});
-      if(result.ackCount!==1||result.retryCount!==0||
-         (result.warnings&&Object.keys(result.warnings).length))deny();
-      return Object.freeze({acknowledged:1});
-    },
     /**
      * No response is acked unless it matches run, operation, grant, nonce,
      * SHA, receipt digest and TTL. Malformed replies require reconciliation.
@@ -84,7 +81,7 @@ export function privateQueueRunnerApi({accountId,queueId,token,fetcher=fetch}={}
       if(!pulled)return null;
       const validated=verifyPrivateQueueReply({
         reply:pulled.reply,keyHex,expected,now});
-      await this.ackVerified(pulled.leaseId);
+      await ackVerified(pulled.leaseId);
       return validated;
     },
   });
