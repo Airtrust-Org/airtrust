@@ -3,7 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
-import {createTrustedQueuePrepareMessage,consumeTrustedQueuePrepare} from
+import {createTrustedQueuePrepareMessage,consumeTrustedQueuePrepare,
+  createTrustedQueueApplyMessage,consumeTrustedQueueApply,
+  verifyPrivateQueueReply} from
   '../../ops/frms-qa-repair/queue-prepare-transport.mjs';
 import {exactPreparePlan} from '../../ops/frms-qa-repair/verify-prepare-admin-grant.mjs';
 import {durableCoordinator} from '../../ops/frms-qa-repair/adapters.mjs';
@@ -21,6 +23,8 @@ const env={
   FRMS_QA_PREPARE_CONFIRM:'AIRTRUST_FRMS_QA_PREPARE_ONLY_F0_APPROVED',
   FRMS_QA_PREPARE_EXPECTED_SHA:SHA,FRMS_QA_PREPARE_GRANT_ID:GRANT,
   GITHUB_TOKEN:TOKEN,FRMS_QA_CALLER_KEY_HEX:KEY,
+  CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),
+  CLOUDFLARE_WORKER_API_TOKEN:'fixture-cloudflare-get-only-token',
 };
 const runtime={
   ENVIRONMENT:'staging',D1_ID:DB,RELEASE_SHA:SHA,
@@ -35,8 +39,10 @@ function fixture(change={}){
   const fetcher=async(uri,options)=>{
     requests.push(uri);
     assert.equal(options.method,'GET');
-    assert.equal(options.headers.Authorization,'Bearer '+TOKEN);
-    const path=new URL(uri).pathname;
+    const parsed=new URL(uri),path=parsed.pathname;
+    assert.equal(options.headers.Authorization,'Bearer '+
+      (parsed.hostname==='api.cloudflare.com'?
+        env.CLOUDFLARE_WORKER_API_TOKEN:TOKEN));
     if(path.endsWith('/branches/main'))
       return Response.json({commit:{sha:change.mainSha??SHA}});
     if(path.endsWith('/actions/runs/'+RUN))
@@ -51,6 +57,8 @@ function fixture(change={}){
           JSON.stringify(change.forged?{approved:true}:plan)});
     if(path.endsWith('/permission'))
       return Response.json({permission:change.permission??'admin'});
+    if(path.endsWith('/time_travel/bookmark'))
+      return Response.json({success:true,result:{bookmark:'bookmark-'+RUN}});
     if(path.endsWith('/check-runs')){
       const name=new URL(uri).searchParams.get('check_name');
       return Response.json({check_runs:change.badGate===name?[]:[{
@@ -85,6 +93,21 @@ const message=async(change)=>createTrustedQueuePrepareMessage({
   env,fetcher:fixture(change).fetcher,now:clock});
 const consume=(m,db,binding,options={})=>consumeTrustedQueuePrepare({
   message:m,env:runtime,storage:db,binding,now:clock,...options});
+const manifest=()=>({authority:'AIRTRUST_RELEASE_COORDINATION',coordinationIssue:776,
+  scope:'FRMS_QA_999013_4_CASES_4_JOURNEYS',sha:SHA,environment:'staging',
+  dbId:DB,tenantId:999013,
+  planSha256:'38a81ed05821919d87b424ddfc7b731bfc8d7d759dadebbb6a21d11edb349ed3',
+  authorizedIds:Array.from({length:8},(_,i)=>`synthetic-${i}`),
+  receiptSha256:'5'.repeat(64),preimageSha256:'2'.repeat(64),
+  artifactSha256:'3'.repeat(64),recoveryBookmark:'bookmark-123',
+  nonce:'4'.repeat(64),issuedAt:new Date(clock-1000).toISOString(),
+  expiresAt:new Date(clock+60000).toISOString()});
+const applyMessage=()=>createTrustedQueueApplyMessage({env:{...env,
+  FRMS_QA_APPLY_GRANT_ID:GRANT},manifest:manifest(),receiptId:'5'.repeat(64),
+  signatureBase64:Buffer.alloc(64,7).toString('base64'),
+  fetcher:fixture().fetcher,now:clock});
+const consumeApply=(m,db,binding,options={})=>consumeTrustedQueueApply({
+  message:m,env:runtime,storage:db,binding,now:clock,...options});
 
 test('trusted producer reconstructs exact authenticated GitHub grant and omits secrets',async()=>{
   const f=fixture();
@@ -93,6 +116,9 @@ test('trusted producer reconstructs exact authenticated GitHub grant and omits s
   assert.equal(m.dbId,DB);
   assert.equal(m.tenantId,999013);
   assert.equal(m.callerAuth.claims.operation,'prepare');
+  assert.equal(Object.hasOwn(m,'recoveryProof'),false);
+  assert.equal(JSON.stringify(m).includes('bookmark-'+RUN),false);
+  assert.equal(JSON.stringify(m).includes(env.CLOUDFLARE_WORKER_API_TOKEN),false);
   assert.equal(f.requests.filter(x=>x.includes('check-runs')).length,8);
   assert.equal(JSON.stringify(m).includes(TOKEN),false);
   assert.equal(JSON.stringify(m).includes(KEY),false);
@@ -110,7 +136,8 @@ test('private queue consumer accepts only one signed prepare and persists minima
   let calls=0;
   const binding={prepare:async args=>{
     calls++;
-    assert.deepEqual(Object.keys(args),['callerAuth']);
+    assert.deepEqual(Object.keys(args),['callerAuth','recoveryProof']);
+    assert.equal(args.recoveryProof.claims.callerNonce,m.callerAuth.claims.nonce);
     return {receiptId:'c'.repeat(64),receipt:{dbId:DB,tenantId:999013,
       writes:0,recoveryBookmark:'DO_NOT_EXPOSE'}};
   }};
@@ -174,6 +201,80 @@ test('runtime HMAC key pin mismatch denies before binding invocation',async()=>{
   assert.equal(db.map.size,0);
 });
 
+test('trusted apply message binds the exact staging manifest and hides runner credentials',async()=>{
+  const m=await applyMessage();
+  assert.equal(m.schema,'AIRTRUST_FRMS_QA_QUEUE_APPLY_V1');
+  assert.equal(m.callerAuth.claims.operation,'apply');
+  assert.equal(Object.hasOwn(m,'manifest'),false);
+  assert.equal(Object.hasOwn(m,'receiptId'),false);
+  assert.equal(JSON.stringify(m).includes('bookmark-123'),false);
+  assert.equal(JSON.stringify(m).includes(TOKEN),false);
+  assert.equal(JSON.stringify(m).includes(KEY),false);
+  await assert.rejects(createTrustedQueueApplyMessage({env:{...env,
+    FRMS_QA_APPLY_GRANT_ID:GRANT},manifest:{...manifest(),tenantId:2},
+    receiptId:'5'.repeat(64),signatureBase64:Buffer.alloc(64).toString('base64'),
+    fetcher:fixture().fetcher,now:clock}),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+});
+test('private apply transport reserves grant and manifest nonce before one RPC',async()=>{
+  const m=await applyMessage(),db=storage();let calls=0;
+  const binding={apply:async args=>{
+    calls++;
+    assert.deepEqual(Object.keys(args),['callerAuth','recoveryProof','manifest','receiptId','signatureBase64']);
+    assert.equal(args.receiptId,'5'.repeat(64));
+    return {status:'QA_STAGING_REPAIR_VALIDATED',valid:4,updatedRows:8,sha:SHA};
+  }};
+  const outcome=await consumeApply(m,db,binding);
+  assert.deepEqual(outcome,{status:'APPLY_VALIDATED',sha:SHA,grantId:GRANT,
+    valid:4,updatedRows:8});
+  await assert.rejects(consumeApply(m,db,binding),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+  assert.equal(calls,1);
+  assert.equal(db.map.get('outcome:frms-qa-apply-grant:'+SHA+':'+GRANT).status,
+    'APPLY_VALIDATED');
+});
+test('concurrent apply messages with distinct caller nonces reserve one signed grant',async()=>{
+  const messages=await Promise.all(Array.from({length:16},()=>applyMessage()));
+  const db=storage();let calls=0;
+  const binding={apply:async()=>{calls++;return {
+    status:'QA_STAGING_REPAIR_VALIDATED',valid:4,updatedRows:8,sha:SHA};}};
+  const results=await Promise.allSettled(messages.map(m=>consumeApply(m,db,binding)));
+  assert.equal(results.filter(x=>x.status==='fulfilled').length,1);
+  assert.equal(calls,1);
+  assert.equal([...db.map.keys()].filter(k=>k.startsWith('frms-qa-apply-grant:')).length,1);
+  assert.equal([...db.map.keys()].filter(k=>k.startsWith('frms-qa-apply-manifest:')).length,1);
+});
+test('prepare receipt returns only through a correlated signed private reply',async()=>{
+  const m=await message(),db=storage(),sent=[];
+  const receipt={environment:'staging',dbId:DB,tenantId:999013,writes:0,
+    preimageSha256:'a'.repeat(64),artifactSha256:'b'.repeat(64),
+    recoveryBookmark:'bookmark-private'};
+  const outcome=await consumeTrustedQueuePrepare({message:m,env:runtime,
+    storage:db,binding:{prepare:async()=>({receiptId:'c'.repeat(64),receipt})},
+    responseQueue:{send:async x=>sent.push(x)},now:clock});
+  assert.equal(outcome.status,'RECEIPT_VALIDATED');
+  const reply=verifyPrivateQueueReply({reply:sent[0],keyHex:KEY,
+    expected:{sha:SHA,runId:RUN,runAttempt:1,
+      requestNonce:m.callerAuth.claims.nonce}});
+  assert.equal(reply.receiptId,'c'.repeat(64));
+  assert.equal(reply.receipt.recoveryBookmark,'bookmark-private');
+  assert.equal(JSON.stringify(sent[0]).includes('bookmark-private'),false);
+  assert.equal(JSON.stringify([...db.map]).includes('bookmark-private'),false);
+  await assert.rejects(Promise.resolve().then(()=>verifyPrivateQueueReply({
+    reply:sent[0],keyHex:KEY,expected:{sha:SHA,runId:RUN,runAttempt:1,
+      requestNonce:'f'.repeat(64)}})),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+});
+test('indeterminate apply burns capability and never retries private RPC',async()=>{
+  const m=await applyMessage(),db=storage();let calls=0;
+  const binding={apply:async()=>{calls++;throw Error('DO_NOT_LEAK');}};
+  await assert.rejects(consumeApply(m,db,binding),
+    /FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+  assert.equal(calls,1);
+  assert.equal(db.map.get('outcome:frms-qa-apply-grant:'+SHA+':'+GRANT).status,
+    'INDETERMINATE');
+  await assert.rejects(consumeApply(m,db,binding),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+  assert.equal(calls,1);
+  assert.doesNotMatch(JSON.stringify([...db.map]),/DO_NOT_LEAK/);
+});
+
 test('durable coordinator treats every present lock value as occupied',async()=>{
   for(const corrupt of [null,false,0,'']){
     const db=storage();
@@ -223,6 +324,7 @@ test('inactive caller configuration has no public route or automatic deploy work
   assert.match(config,/preview_urls = false/);
   assert.match(config,/max_batch_size = 1/);
   assert.match(config,/binding = "REPAIR"/);
+  assert.match(config,/binding = "RESULTS"/);
   assert.match(config,/class_name = "FrmsQaCallerLedger"/);
   assert.doesNotMatch(config,/^routes?\s*=/m);
   assert.doesNotMatch(worker,/async fetch\s*\(/);

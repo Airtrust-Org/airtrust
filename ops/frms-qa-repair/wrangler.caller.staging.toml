@@ -1,5 +1,5 @@
-# INACTIVE private Queue consumer. No deploy/queue provisioning is authorized
-# by the presence of this file. Separate F0 grant and scoped credentials needed.
+# INACTIVE private prepare/apply transport. No deploy/queue provisioning is
+# authorized by this file. Separate exact F0 grants and scoped credentials are required.
 name = "airtrust-frms-qa-caller-staging-private"
 main = "queue-caller-worker.mjs"
 compatibility_date = "2026-10-19"
@@ -10,6 +10,7 @@ preview_urls = false
 [vars]
 ENVIRONMENT = "staging"
 D1_ID = "bf9963f4-eb12-439b-a830-20bbf577ac22"
+REQUIRE_PRIVATE_RESPONSE = "true"
 # RELEASE_SHA and caller HMAC/pin are installed via separately approved secrets.
 
 [[services]]
@@ -20,6 +21,12 @@ service = "airtrust-frms-qa-repair-staging-private"
 name = "CALLER_LEDGER"
 class_name = "FrmsQaCallerLedger"
 
+[[queues.producers]]
+queue = "airtrust-frms-qa-private-results-staging"
+binding = "RESULTS"
+# Provision the results Queue with <= 900s retention and an HTTP pull consumer.
+# Its read/write token is runner-only, ephemeral and must be separately granted.
+
 [[migrations]]
 tag = "frms-qa-queue-caller-v1"
 new_sqlite_classes = ["FrmsQaCallerLedger"]
@@ -28,4 +35,4 @@ new_sqlite_classes = ["FrmsQaCallerLedger"]
 queue = "airtrust-frms-qa-private-prepare-staging"
 max_batch_size = 1
 max_batch_timeout = 1
-# Deliberate ack-on-failure: no automatic reissue of a prepare grant.
+# Deliberate ack-on-failure: no automatic reissue of a prepare/apply grant.

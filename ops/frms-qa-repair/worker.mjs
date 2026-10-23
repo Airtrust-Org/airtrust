@@ -4,9 +4,10 @@ import { createHash } from 'node:crypto';
 import { prepareQaEvidence, executeApprovedQaStagingRepair } from '../../scripts/staging/frms-qa-repair-controller.mjs';
 import { buildReviewPlan, TARGET } from '../../scripts/staging/frms-qa-cases-repair-plan.mjs';
 import { expectedQaCases } from '../../scripts/staging/inspect-frms-ux-cases.mjs';
-import { durableCoordinator, privateR2Store, d1ScopeAdapter, timeTravelReader, LOCK } from './adapters.mjs';
+import { durableCoordinator, privateR2Store, d1ScopeAdapter, LOCK } from './adapters.mjs';
 import { authorizePrivateCaller } from './caller-auth.mjs';
 import { assertPrivateApprovalAnchor } from './assert-private-approval-anchor.mjs';
+import { deriveRecoveryBridgeKey, verifyRecoveryHandoff } from './recovery-handoff-prototype.mjs';
 
 const DAYS = Array.from({ length: 30 }, (_, i) => ({
   day: new Date(Date.parse('2026-09-14T00:00:00Z') + i * 86400000).toISOString().slice(0, 10),
@@ -36,20 +37,30 @@ export class FrmsQaCoordinator extends DurableObject {
       expectedSha256:env.APPROVAL_KEY_SHA256});
     if (!['prepare', 'apply'].includes(operation)) throw new Error('QA_OPERATION_REJECTED');
     // Input never chooses an ID, SQL statement, binding or authorization anchor.
-    const fields = operation === 'prepare' ? ['callerAuth'] :
-      ['callerAuth', 'manifest', 'receiptId', 'signatureBase64'];
+    const fields = operation === 'prepare' ? ['callerAuth', 'recoveryProof'] :
+      ['callerAuth', 'manifest', 'receiptId', 'signatureBase64', 'recoveryProof'];
     if (!input || typeof input !== 'object' || Array.isArray(input) ||
       Object.keys(input).some(key => !fields.includes(key)))
       throw new Error('QA_CALLER_INPUT_REJECTED');
     const caller = await authorizePrivateCaller({
       auth: input.callerAuth, operation, env, storage: this.ctx.storage,
     });
+    const recovery = await verifyRecoveryHandoff({proof:input.recoveryProof,
+      keyHex:deriveRecoveryBridgeKey(env.CALLER_KEY_HEX),
+      expected:{accountId:env.CLOUDFLARE_ACCOUNT_ID,releaseSha:env.RELEASE_SHA,
+        operation,runId:caller.runId,runAttempt:caller.runAttempt,
+        callerNonce:input.callerAuth.claims.nonce},
+      storage:this.ctx.storage});
     const plan = reviewedPlan();
     const adapters = {
       ...durableCoordinator(this.ctx.storage),
       ...privateR2Store(env.PREIMAGES),
       ...d1ScopeAdapter({ db: env.DB, plan, expected: expectedQaCases(DAYS) }),
-      captureTimeTravel: timeTravelReader({ accountId: env.CLOUDFLARE_ACCOUNT_ID, token: env.D1_READ_TOKEN }),
+      captureTimeTravel: async dbId => {
+        if(dbId!==TARGET.db_id||recovery.dbId!==TARGET.db_id)
+          throw new Error('QA_RECOVERY_BRIDGE_DENIED');
+        return {dbId,bookmark:recovery.bookmark,capturedAt:recovery.capturedAt};
+      },
     };
     const key = Buffer.from(env.PREIMAGE_KEY_HEX, 'hex');
     try {
