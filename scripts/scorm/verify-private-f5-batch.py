@@ -121,7 +121,8 @@ def normalize_native_indices(source, candidate):
     new = records_by_id(candidate, "candidate", "courseCount")
     require(old.keys() == new.keys(), "native source/candidate courseId sets differ")
     for key in ("slides", "formative", "requiredGates"):
-        require(type(source.get(key)) is int and source[key] == candidate.get(key),
+        require(type(source.get(key)) is int and type(candidate.get(key)) is int
+                and source[key] == candidate[key],
                 f"native aggregate pedagogy mismatch: {key}")
     old_engine, new_engine = source.get("engineSha256"), candidate.get("engineNewSha256")
     require(isinstance(old_engine, str) and HEX64.fullmatch(old_engine)
@@ -142,7 +143,8 @@ def normalize_native_indices(source, candidate):
                 "unknown/duplicate restored media courseId")
         assets = item.get("assets")
         require(isinstance(assets, list) and assets, f"invalid media assets: {cid}")
-        require(item.get("mediaCount") == len(assets), f"media count mismatch: {cid}")
+        require(type(item.get("mediaCount")) is int and item["mediaCount"] == len(assets),
+                f"media count mismatch: {cid}")
         require(item.get("sourceSha256") == old[cid].get("sourceSha256"),
                 f"media original source SHA mismatch: {cid}")
         require(item.get("newZipSha256") == new[cid].get("newZipSha256"),
@@ -159,18 +161,24 @@ def normalize_native_indices(source, candidate):
         approved_by_id[cid] = paths
         asset_total += len(paths)
     if "courses" in media:
-        require(media["courses"] == len(restored), "media restored course count mismatch")
+        require(type(media["courses"]) is int and media["courses"] == len(restored),
+                "media restored course count mismatch")
     if "assets" in media:
-        require(media["assets"] == asset_total, "media restored asset count mismatch")
+        require(type(media["assets"]) is int and media["assets"] == asset_total,
+                "media restored asset count mismatch")
 
     result = []
     for cid in sorted(old):
         src, dst = old[cid], new[cid]
+        require(isinstance(src.get("sourceSha256"), str)
+                and HEX64.fullmatch(src["sourceSha256"]),
+                f"native original source SHA missing/invalid: {cid}")
         require(dst.get("oldZip") == src.get("file")
                 and dst.get("oldZipSha256") == src.get("sha256"),
                 f"native source provenance mismatch: {cid}")
         for key in ("slides", "formative", "requiredGates"):
-            require(type(src.get(key)) is int and src[key] == dst.get(key),
+            require(type(src.get(key)) is int and type(dst.get(key)) is int
+                    and src[key] == dst[key],
                     f"native course pedagogy mismatch: {cid}: {key}")
         changed = dst.get("changedMembers")
         require(isinstance(changed, list) and changed
@@ -299,6 +307,23 @@ def self_test():
         converted["courses"][0]["engine_member"] = "engine.js"
         require(verify(converted, src.parent, dst.parent, ["engine.js"], 1)["courses"] == 1,
                 "native index conversion rejected valid candidate")
+        # Native provenance and pedagogy must reject missing digests and bool-as-int.
+        saved_original_sha = native_source["records"][0].pop("sourceSha256")
+        try:
+            normalize_native_indices(native_source, native_candidate)
+        except VerificationError:
+            pass
+        else:
+            raise AssertionError("missing original source SHA accepted")
+        native_source["records"][0]["sourceSha256"] = saved_original_sha
+        native_candidate["records"][0]["slides"] = True
+        try:
+            normalize_native_indices(native_source, native_candidate)
+        except VerificationError:
+            pass
+        else:
+            raise AssertionError("boolean native pedagogy count accepted")
+        native_candidate["records"][0]["slides"] = 1
         native_candidate["records"][0]["courseId"] = "other"
         try:
             normalize_native_indices(native_source, native_candidate)
@@ -381,6 +406,14 @@ def self_test():
                 "newZipSha256": digest_file(dst),
                 "assets": [{"path": "assets/restored.png",
                             "sha256": hashlib.sha256(b"media").hexdigest()}]}]}
+        native_candidate["mediaRestoration"]["restored"][0]["mediaCount"] = True
+        try:
+            normalize_native_indices(native_source, native_candidate)
+        except VerificationError:
+            pass
+        else:
+            raise AssertionError("boolean restored media count accepted")
+        native_candidate["mediaRestoration"]["restored"][0]["mediaCount"] = 1
         native_index = normalize_native_indices(native_source, native_candidate)
         native_index["courses"][0]["engine_member"] = "engine.js"
         require(verify(native_index, src.parent, dst.parent, ["engine.js"], 1)["courses"] == 1,
