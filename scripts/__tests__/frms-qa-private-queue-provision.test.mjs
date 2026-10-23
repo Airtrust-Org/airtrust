@@ -75,6 +75,8 @@ test('plan is fixed to two Queues, existing Worker token, staging and zero D1/R2
   assert.equal(PLAN.d1_writes_authorized,0);
   assert.equal(PLAN.r2_writes_authorized,0);
   assert.equal(PLAN.workflow_path,WORKFLOW);
+  assert.equal(PLAN.max_queue_retention_seconds,900);
+  assert.equal(PLAN.results_http_pull_consumer_authorized,true);
 });
 test('protected main runner verifies fresh unedited F0 admin and eight Actions gates',async()=>{
   const f=github();
@@ -100,35 +102,77 @@ test('forged, edited, old, non-admin, wrong workflow, main or gates fail closed'
     {GITHUB_TOKEN:''}])
     await assert.rejects(verify({},bad),/FRMS_QA_QUEUE_PROVISION_DENIED/);
 });
-function cfHarness({existing=[],failPostName='',badInventory=false}={}){
-  const names=new Set(existing),calls=[];
+function cfHarness({existing=[],failPostName='',badInventory=false,
+  badExistingRetention=false,badConsumer=false}={}){
+  const items=new Map(),calls=[];
+  const idFor=name=>name===NAMES[0]?'1'.repeat(32):'2'.repeat(32);
+  const knownId=id=>[...items.values()].find(q=>q.queue_id===id);
+  for(const name of existing){
+    items.set(name,{queue_id:idFor(name),queue_name:name,
+      settings:{message_retention_period:badExistingRetention?345600:900},
+      consumers:name===NAMES[1]?[{
+        type:badConsumer?'worker':'http_pull',queue_name:name,
+        settings:{batch_size:1,visibility_timeout_ms:30000},
+      }]:[]});
+  }
   const fetcher=async(uri,opts)=>{
-    const p=new URL(uri).pathname;
-    calls.push({method:opts.method,path:p,body:opts.body});
+    const path=new URL(uri).pathname,method=opts.method;
+    calls.push({method,path,body:opts.body});
     assert.equal(opts.headers.Authorization,'Bearer '+CF);
-    if(opts.method==='GET'&&uri.endsWith('/queues?per_page=100')){
+    assert.equal(opts.redirect,'manual');
+    if(method==='GET'&&uri.endsWith('/queues?per_page=100')){
       return Response.json({success:true,result:badInventory?[{}]:
-        [...names].map(queue_name=>({queue_name})),
-        result_info:{total_count:names.size}});
+        [...items.values()].map(q=>({queue_name:q.queue_name,queue_id:q.queue_id})),
+        result_info:{total_count:items.size}});
     }
-    if(opts.method==='POST'&&p.endsWith('/queues')){
+    if(method==='GET'&&/\/queues\/[0-9a-f]{32}$/.test(path)){
+      const item=knownId(path.split('/').at(-1));
+      assert.ok(item);
+      return Response.json({success:true,result:item});
+    }
+    if(method==='POST'&&path.endsWith('/queues')){
       const data=JSON.parse(opts.body);
-      assert.equal(Object.keys(data).join('|'),'queue_name');
+      assert.deepEqual(Object.keys(data),['queue_name']);
       assert.ok(NAMES.includes(data.queue_name));
-      if(data.queue_name===failPostName)return Response.json({success:false},{status:403});
-      names.add(data.queue_name);
-      return Response.json({success:true,result:{queue_name:data.queue_name}});
+      if(data.queue_name===failPostName)
+        return Response.json({success:false},{status:403});
+      const item={queue_id:idFor(data.queue_name),queue_name:data.queue_name,
+        settings:{message_retention_period:345600},consumers:[]};
+      items.set(data.queue_name,item);
+      return Response.json({success:true,result:item});
+    }
+    if(method==='PUT'&&/\/queues\/[0-9a-f]{32}$/.test(path)){
+      const item=knownId(path.split('/').at(-1));
+      assert.ok(item);
+      const data=JSON.parse(opts.body);
+      assert.equal(data.queue_name,item.queue_name);
+      assert.deepEqual(data.settings,{delivery_delay:0,delivery_paused:false,
+        message_retention_period:900});
+      item.settings={...data.settings};
+      return Response.json({success:true,result:item});
+    }
+    if(method==='POST'&&/\/queues\/[0-9a-f]{32}\/consumers$/.test(path)){
+      const item=knownId(path.split('/').at(-2));
+      assert.equal(item?.queue_name,NAMES[1]);
+      const data=JSON.parse(opts.body);
+      assert.deepEqual(data,{type:'http_pull',settings:{
+        batch_size:1,visibility_timeout_ms:30000,max_retries:1,
+      }});
+      const consumer={...data,queue_name:item.queue_name};
+      item.consumers.push(consumer);
+      return Response.json({success:true,result:consumer});
     }
     throw Error('unexpected Cloudflare request');
   };
-  return {names,calls,fetcher};
+  return {items,calls,fetcher};
 }
 test('existing private Queues require only fixed metadata GETs, no mutation',async()=>{
   const f=cfHarness({existing:NAMES});
   const r=await ensurePrivateQueues({accountId:ACCOUNT,token:CF,fetcher:f.fetcher});
   assert.equal(r.queuesCreated,0);
   assert.equal(r.queueNamesPresent,2);
-  assert.equal(r.queueHttpPullConfigured,false);
+  assert.equal(r.queueHttpPullConfigured,true);
+  assert.equal(r.maxQueueRetentionSeconds,900);
   assert.equal(r.d1Writes,0);
   assert.ok(f.calls.every(x=>x.method==='GET'));
 });
@@ -136,10 +180,14 @@ test('create exactly two missing private Queues under explicitly verified grant'
   const f=cfHarness();
   const r=await ensurePrivateQueues({accountId:ACCOUNT,token:CF,fetcher:f.fetcher});
   assert.equal(r.queuesCreated,2);
-  assert.deepEqual([...f.names].sort(),[...NAMES].sort());
-  assert.equal(f.calls.filter(x=>x.method==='POST').length,2);
-  assert.equal(f.calls.filter(x=>x.method==='GET').length,2);
-  assert.ok(f.calls.every(x=>x.method==='GET'||x.method==='POST'));
+  assert.equal(r.retentionUpdates,2);
+  assert.equal(r.httpPullCreated,1);
+  assert.equal(r.queueHttpPullConfigured,true);
+  assert.deepEqual([...f.items.keys()].sort(),[...NAMES].sort());
+  assert.equal(f.calls.filter(x=>x.method==='POST').length,3);
+  assert.equal(f.calls.filter(x=>x.method==='PUT').length,2);
+  assert.equal(f.calls.filter(x=>x.method==='GET').length,5);
+  assert.ok(f.calls.every(x=>['GET','POST','PUT'].includes(x.method)));
 });
 test('partial provisioning remains quarantined; no broad delete or retry',async()=>{
   const f=cfHarness({failPostName:NAMES[1]});
@@ -147,7 +195,15 @@ test('partial provisioning remains quarantined; no broad delete or retry',async(
     accountId:ACCOUNT,token:CF,fetcher:f.fetcher}),/FRMS_QA_QUEUE_PROVISION_DENIED/);
   assert.equal(f.calls.filter(x=>x.method==='POST').length,2);
   assert.equal(f.calls.filter(x=>x.method==='DELETE').length,0);
-  assert.equal(f.calls.filter(x=>x.method==='PUT').length,0);
+  assert.equal(f.calls.filter(x=>x.method==='PUT').length,1);
+});
+test('existing Queues with long retention or foreign consumer fail closed before mutations',async()=>{
+  for(const opts of [{badExistingRetention:true},{badConsumer:true}]){
+    const f=cfHarness({existing:NAMES,...opts});
+    await assert.rejects(ensurePrivateQueues({accountId:ACCOUNT,token:CF,
+      fetcher:f.fetcher}),/FRMS_QA_QUEUE_PROVISION_DENIED/);
+    assert.ok(f.calls.every(c=>c.method==='GET'));
+  }
 });
 test('bad Queue inventory or missing token stops before all write attempts',async()=>{
   const f=cfHarness({badInventory:true});
