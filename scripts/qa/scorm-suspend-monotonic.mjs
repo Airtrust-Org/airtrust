@@ -12,8 +12,18 @@ export function observeMonotonicSuspend(beforeRaw,afterRaw){
   }catch{return {ok:false,reason:'SUSPEND_NOT_VALID_JSON'};}
   if(!before||!after||typeof before!=='object'||typeof after!=='object')
     return {ok:false,reason:'SUSPEND_NOT_OBJECT'};
-  if(!Number.isSafeInteger(before.s)||!Number.isSafeInteger(after.s)||
-      before.s!==after.s||before.s<0)
+  // Two real on-wire schemas are supported. Newer certification fixtures use
+  // `s` as cursor while F5 Unified packages persist the 0-based cursor in
+  // numeric `c`. In CFIT, `c` is instead a boolean completion flag, so
+  // prefer `s` whenever it exists and never reinterpret boolean `c`.
+  const cursor=(state)=>{
+    if(Object.prototype.hasOwnProperty.call(state,'s'))
+      return Number.isSafeInteger(state.s)&&state.s>=0?{key:'s',value:state.s}:null;
+    return Number.isSafeInteger(state.c)&&state.c>=0?{key:'c',value:state.c}:null;
+  };
+  const beforeCursor=cursor(before),afterCursor=cursor(after);
+  if(!beforeCursor||!afterCursor||beforeCursor.key!==afterCursor.key||
+      beforeCursor.value!==afterCursor.value)
     return {ok:false,reason:'RESUME_CURSOR_DRIFT'};
   if(before.v!==after.v)return {ok:false,reason:'SUSPEND_VERSION_DRIFT'};
   // Real ZIPs differ in on-wire serialization: course #15 uses an array
