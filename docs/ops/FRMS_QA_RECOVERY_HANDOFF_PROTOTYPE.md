@@ -88,3 +88,28 @@ boundaries, failure/replay recovery, provenance, run mutex and Ed25519
 independent sign-off. A runtime change would require its own new protected PR,
 staging validation and exact per-phase authorization. No existing bucket-only
 grant may be reused.
+
+## Governed staging READ-ONLY proof (no persistent bridge trust anchor)
+
+The optional manual workflow `.github/workflows/staging-frms-qa-bookmark-local-readonly.yml`
+pins the current `main` SHA, requires an explicit GET-only confirmation and
+serializes on the shared staging mutex. Within one ephemeral GitHub Actions
+job it uses the **already installed** `CLOUDFLARE_WORKER_API_TOKEN` and
+the existing caller key to obtain a real Time Travel GET from the exact
+staging D1 UUID. A newly randomized **ephemeral HMAC proof key** distinct
+from the caller key is used only for immediate local verification, together
+with a disposable in-memory replay ledger.
+
+Only a sanitized PASS/FAIL is permitted in the job log. No bookmark, account
+secret, HMAC key, MAC, private row, token or proof payload is printed or
+persisted. The GET uses the existing Cloudflare token; it does not issue or
+rotate a token. There is no POST/PUT/PATCH/DELETE, D1 SQL or R2 operation.
+The tool cannot deploy or invoke the private FRMS Worker.
+
+**This test deliberately does not establish an independently controlled,
+persistent bridge trust anchor or a secure cross-service transport.** The
+ephemeral HMAC key and replay ledger vanish with the job; this proof cannot
+authorize `prepare` or `apply`. The independent Ed25519 authority,
+runtime least-privilege architecture, governed service-binding caller and
+specific F0 phase grant remain unsatisfied. Execution is permitted only as
+diagnostic read-only verification; do not call the Worker operational.
