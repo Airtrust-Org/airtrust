@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - scripts/scorm/verify-private-f5-batch.py
+      - scripts/scorm/verify-f5-worker-intake-limits.py
       - .github/workflows/f5-private-batch-static.yml
   workflow_dispatch:
 
@@ -21,3 +22,5 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/scorm/verify-private-f5-batch.py
           python3 scripts/scorm/verify-private-f5-batch.py --self-test
+          python3 -m py_compile scripts/scorm/verify-f5-worker-intake-limits.py
+          python3 scripts/scorm/verify-f5-worker-intake-limits.py --self-test
