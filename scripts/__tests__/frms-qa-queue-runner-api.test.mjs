@@ -47,7 +47,8 @@ function fixture({body=reply(),failPath='',failStatus=403,ackCount=1,
     calls.push({path,body:request});
     if(path===failPath)return Response.json({success:false},{status:failStatus});
     if(path==='/pull')return Response.json({success:true,result:{
-      messages:[{lease_id:LEASE,body:malformed?'not-json':JSON.stringify(body)}]}});
+      messages:[{lease_id:LEASE,body:malformed?'not-base64':
+        Buffer.from(JSON.stringify(body),'utf8').toString('base64')}]}});
     if(path==='/ack')return Response.json({success:true,result:{
       ackCount,retryCount:0,warnings:{}}});
     if(path==='')return Response.json({success:true,result:{metadata:{}}});
@@ -116,6 +117,16 @@ test('invalid response, malformed body and failed ack are sanitized and fail clo
       queueId:QUEUE,releaseSha:SHA,token:TOKEN,fetcher:f.fetcher});
     await assert.rejects(api.consumeExpectedReply({keyHex:KEY,
       expected,now:NOW}),/FRMS_QA_QUEUE_RUNNER_API_DENIED/);
+  }
+});
+test('malformed Base64 and raw JSON are rejected before receipt acknowledgement',async()=>{
+  for(const body of ['e30', 'e30=', JSON.stringify(reply()),
+    Buffer.from(JSON.stringify(reply()),'utf8').toString('base64').slice(0,-2)+'$']){
+    const f=fixture({body}),api=privateQueueRunnerApi({accountId:ACCOUNT,
+      queueId:QUEUE,releaseSha:SHA,token:TOKEN,fetcher:f.fetcher});
+    await assert.rejects(api.consumeExpectedReply({keyHex:KEY,expected,now:NOW}),
+      /FRMS_QA_QUEUE_RUNNER_API_DENIED/);
+    assert.deepEqual(f.calls.map(x=>x.path),['/pull']);
   }
 });
 test('empty Queue is not treated as a receipt or as physical staging acceptance',async()=>{
