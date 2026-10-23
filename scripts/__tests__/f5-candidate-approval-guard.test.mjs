@@ -112,12 +112,20 @@ test('rejects edited/wrong issue, stale authorization, draft PR and non-admin ac
 
 test('readiness workflow requires the scoped grant before its explicit non-pass blocker', () => {
   const workflow = readFileSync('.github/workflows/staging-scorm-f5-readiness.yml', 'utf8');
+  const guard = readFileSync('scripts/staging/f5-candidate-approval-guard.mjs', 'utf8');
   for (const required of ['grant_id:', 'tenant_id:', 'course_id:', 'package_sha256:',
     'zip_bytes:', 'operation_id:', 'f5-candidate-approval-guard.mjs',
     'F5_INCONCLUSIVE:', 'candidate upload', 'recovery/cleanup receipt']) {
     assert.ok(workflow.includes(required), `missing workflow contract: ${required}`);
   }
-  assert.match(workflow, /Type AIRTRUST_F5_STAGING_CANDIDATE/);
+  const promptConfirmation = workflow.match(/description: 'Type ([A-Z0-9_]+)'/)?.[1];
+  const shellConfirmation = workflow.match(/\[\[ "\$CONFIRMATION" == ([A-Z0-9_]+) \]\]/)?.[1];
+  const scriptConfirmation = guard.match(/confirmation !== '([A-Z0-9_]+)'/)?.[1];
+  assert.ok(promptConfirmation, 'workflow prompt confirmation is declared');
+  assert.ok(shellConfirmation, 'workflow shell confirmation is declared');
+  assert.ok(scriptConfirmation, 'guard confirmation is declared');
+  assert.equal(promptConfirmation, shellConfirmation);
+  assert.equal(shellConfirmation, scriptConfirmation);
   assert.match(workflow, /issues: read/);
   assert.ok(workflow.indexOf('f5-candidate-approval-guard.mjs') <
     workflow.indexOf('Keep F5 blocked until governed intake'));

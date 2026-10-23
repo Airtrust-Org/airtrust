@@ -62,7 +62,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == refs/heads/main ]]
-          [[ "$CONFIRMATION" == AIRTRUST_F5_STAGING_EVIDENCE ]]
+          [[ "$CONFIRMATION" == AIRTRUST_F5_STAGING_CANDIDATE ]]
           [[ "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
       - uses: actions/checkout@v7
         with:
