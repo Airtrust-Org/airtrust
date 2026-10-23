@@ -18,7 +18,9 @@ import sys
 import tempfile
 import zipfile
 
-HEX64 = re.compile(r"[0-9a-f]{64}\Z")
+HEX64 = re.compile(r"[0-9a-f]{64}\\Z")
+MAX_ZIP_MEMBERS = 8192
+MAX_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 
 
 class VerificationError(Exception):
@@ -47,17 +49,28 @@ def digest_file(path):
 def inspect_zip(path):
     require(zipfile.is_zipfile(path), f"not ZIP: {path.name}")
     with zipfile.ZipFile(path) as archive:
-        entries = {}
-        for item in archive.infolist():
+        infos = archive.infolist()
+        require(len(infos) <= MAX_ZIP_MEMBERS, f"too many ZIP members: {path.name}")
+        entries, seen_paths = {}, set()
+        total_uncompressed = 0
+        for item in infos:
             name = item.filename
-            posix = PurePosixPath(name)
-            require(name and "\\" not in name and "\x00" not in name, f"invalid ZIP entry: {name!r}")
-            require(not posix.is_absolute() and ".." not in posix.parts, f"ZIP traversal: {name}")
-            require(name not in entries, f"duplicate ZIP entry: {name}")
+            require(name and "\\" not in name and "\x00" not in name,
+                    f"invalid ZIP entry: {name!r}")
+            canonical = name[:-1] if item.is_dir() else name
+            posix = PurePosixPath(canonical)
+            require(canonical not in ("", ".", "..") and not posix.is_absolute()
+                    and str(posix) == canonical and ".." not in posix.parts
+                    and ":" not in canonical.split("/")[0],
+                    f"noncanonical/unsafe ZIP entry: {name!r}")
+            require(canonical not in seen_paths, f"duplicate ZIP path: {name}")
+            seen_paths.add(canonical)
             require(not stat.S_ISLNK(item.external_attr >> 16), f"ZIP symlink: {name}")
+            total_uncompressed += item.file_size
+            require(total_uncompressed <= MAX_UNCOMPRESSED_BYTES,
+                    f"ZIP uncompressed size limit exceeded: {path.name}")
             if item.is_dir():
                 continue
-            require(item.file_size <= 512 * 1024 * 1024, f"oversized ZIP entry: {name}")
             h = hashlib.sha256()
             with archive.open(item) as stream:
                 for block in iter(lambda: stream.read(1024 * 1024), b""):
@@ -121,15 +134,49 @@ def self_test():
         index = {"courses": [{"course_id": "demo", "source_file": "a.zip",
             "source_sha256": digest_file(src), "candidate_file": "a.zip",
             "candidate_sha256": digest_file(dst)}]}
-        assert verify(index, src.parent, dst.parent, ["engine.js"], 1)["courses"] == 1
+        def check():
+            return verify(index, src.parent, dst.parent, ["engine.js"], 1)
+
+        def expect_reject(label):
+            try:
+                check()
+            except VerificationError:
+                return
+            raise AssertionError(f"unsafe candidate accepted: {label}")
+
+        require(check()["courses"] == 1, "valid candidate rejected")
+        index["courses"][0]["candidate_sha256"] = "0" * 64
+        expect_reject("SHA mismatch")
         write_zip(dst, "v4", "tampered")
         index["courses"][0]["candidate_sha256"] = digest_file(dst)
-        try:
-            verify(index, src.parent, dst.parent, ["engine.js"], 1)
-        except VerificationError:
-            pass
-        else:
-            raise AssertionError("unexpected pedagogical content change accepted")
+        expect_reject("pedagogical modification")
+
+        def replace_entries(entries):
+            with zipfile.ZipFile(dst, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                for name, data in entries:
+                    z.writestr(name, data)
+            index["courses"][0]["candidate_sha256"] = digest_file(dst)
+
+        replace_entries([("engine.js", "v4"), ("lesson.html", "same"), ("../evil", "x")])
+        expect_reject("traversal")
+        replace_entries([("engine.js", "v4"), ("lesson.html", "same"), ("a/./b", "x")])
+        expect_reject("noncanonical alias")
+        replace_entries([("engine.js", "v4"), ("lesson.html", "same"), ("a//b", "x")])
+        expect_reject("empty path component")
+        replace_entries([("engine.js", "v4"), ("lesson.html", "same"), ("C:/evil", "x")])
+        expect_reject("Windows drive path")
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            replace_entries([("engine.js", "v4"), ("lesson.html", "same"),
+                             ("engine.js", "v4")])
+        expect_reject("duplicate member")
+        link = zipfile.ZipInfo("link")
+        link.create_system = 3
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        replace_entries([("engine.js", "v4"), ("lesson.html", "same"),
+                         (link, "target")])
+        expect_reject("symlink")
     print("SELF_TEST_PASS")
 
 
