@@ -8,12 +8,19 @@ import {createTrustedQueuePrepareMessage,consumeTrustedQueuePrepare,
   verifyPrivateQueueReply} from
   '../../ops/frms-qa-repair/queue-prepare-transport.mjs';
 import {exactPreparePlan} from '../../ops/frms-qa-repair/verify-prepare-admin-grant.mjs';
+import {exactApplyGrantPlan} from '../../ops/frms-qa-repair/verify-apply-admin-grant.mjs';
+import {buildReviewPlan} from '../../scripts/staging/frms-qa-cases-repair-plan.mjs';
 import {durableCoordinator} from '../../ops/frms-qa-repair/adapters.mjs';
 
 const SHA='b'.repeat(40),KEY='a'.repeat(64),GRANT='6374255192',
   RUN='40019815631',TOKEN='fixture-only-never-forward';
 const REPO='Airtrust-Org/airtrust';
 const WORKFLOW='.github/workflows/staging-frms-qa-private-prepare.yml';
+const APPLY_WORKFLOW='.github/workflows/staging-frms-qa-private-transaction.yml';
+const SIGNATURE=Buffer.alloc(64,7).toString('base64');
+const REVIEWED_IDS=buildReviewPlan(Array.from({length:30},(_,i)=>({
+  day:new Date(Date.parse('2026-09-14T00:00:00Z')+i*86400000).toISOString().slice(0,10),
+  jornadas:i===29?'0':'5-9'}))).operations.map(op=>op.id);
 const DB='bf9963f4-eb12-439b-a830-20bbf577ac22';
 const env={
   GITHUB_ACTIONS:'true',GITHUB_REPOSITORY:REPO,
@@ -32,10 +39,13 @@ const runtime={
     createHash('sha256').update(Buffer.from(KEY,'hex')).digest('hex'),
 };
 const clock=Date.now();
-function fixture(change={}){
+function fixture(change={},phase='prepare'){
+  const applying=phase==='apply';
+  const workflow=applying?APPLY_WORKFLOW:WORKFLOW;
   let requests=[];
   const stamp=new Date(clock-1000).toISOString();
-  const plan=exactPreparePlan({sha:SHA});
+  const plan=applying?exactApplyGrantPlan({sha:SHA,manifest:manifest(),
+    receiptId:'5'.repeat(64),signatureBase64:SIGNATURE}):exactPreparePlan({sha:SHA});
   const fetcher=async(uri,options)=>{
     requests.push(uri);
     assert.equal(options.method,'GET');
@@ -47,13 +57,14 @@ function fixture(change={}){
       return Response.json({commit:{sha:change.mainSha??SHA}});
     if(path.endsWith('/actions/runs/'+RUN))
       return Response.json({id:Number(RUN),head_sha:SHA,head_branch:'main',
-        event:'workflow_dispatch',run_attempt:1,path:WORKFLOW,
+        event:'workflow_dispatch',run_attempt:1,path:workflow,
         status:'in_progress',actor:{login:'f0-admin'}});
     if(path.endsWith('/issues/comments/'+GRANT))
       return Response.json({id:Number(GRANT),user:{login:'f0-admin'},
         issue_url:'https://api.github.com/repos/'+REPO+'/issues/776',
         created_at:stamp,updated_at:stamp,
-        body:'AIRTRUST_FRMS_QA_PREPARE_GRANT_V1\n'+
+        body:(applying?'AIRTRUST_FRMS_QA_APPLY_GRANT_V1\n':
+          'AIRTRUST_FRMS_QA_PREPARE_GRANT_V1\n')+
           JSON.stringify(change.forged?{approved:true}:plan)});
     if(path.endsWith('/permission'))
       return Response.json({permission:change.permission??'admin'});
@@ -97,15 +108,18 @@ const manifest=()=>({authority:'AIRTRUST_RELEASE_COORDINATION',coordinationIssue
   scope:'FRMS_QA_999013_4_CASES_4_JOURNEYS',sha:SHA,environment:'staging',
   dbId:DB,tenantId:999013,
   planSha256:'38a81ed05821919d87b424ddfc7b731bfc8d7d759dadebbb6a21d11edb349ed3',
-  authorizedIds:Array.from({length:8},(_,i)=>`synthetic-${i}`),
+  authorizedIds:REVIEWED_IDS,
   receiptSha256:'5'.repeat(64),preimageSha256:'2'.repeat(64),
   artifactSha256:'3'.repeat(64),recoveryBookmark:'bookmark-123',
   nonce:'4'.repeat(64),issuedAt:new Date(clock-1000).toISOString(),
   expiresAt:new Date(clock+60000).toISOString()});
-const applyMessage=()=>createTrustedQueueApplyMessage({env:{...env,
-  FRMS_QA_APPLY_GRANT_ID:GRANT},manifest:manifest(),receiptId:'5'.repeat(64),
-  signatureBase64:Buffer.alloc(64,7).toString('base64'),
-  fetcher:fixture().fetcher,now:clock});
+const applyEnv={...env,FRMS_QA_APPLY_GRANT_ID:GRANT,
+  FRMS_QA_APPLY_CONFIRM:'AIRTRUST_FRMS_QA_APPLY_F0_APPROVED',
+  FRMS_QA_APPLY_EXPECTED_SHA:SHA,
+  GITHUB_WORKFLOW_REF:REPO+'/'+APPLY_WORKFLOW+'@refs/heads/main'};
+const applyMessage=(change={},overrides={})=>createTrustedQueueApplyMessage({
+  env:{...applyEnv,...overrides},manifest:manifest(),receiptId:'5'.repeat(64),
+  signatureBase64:SIGNATURE,fetcher:fixture(change,'apply').fetcher,now:clock});
 const consumeApply=(m,db,binding,options={})=>consumeTrustedQueueApply({
   message:m,env:runtime,storage:db,binding,now:clock,...options});
 
@@ -210,10 +224,24 @@ test('trusted apply message binds the exact staging manifest and hides runner cr
   assert.equal(JSON.stringify(m).includes('bookmark-123'),false);
   assert.equal(JSON.stringify(m).includes(TOKEN),false);
   assert.equal(JSON.stringify(m).includes(KEY),false);
-  await assert.rejects(createTrustedQueueApplyMessage({env:{...env,
-    FRMS_QA_APPLY_GRANT_ID:GRANT},manifest:{...manifest(),tenantId:2},
-    receiptId:'5'.repeat(64),signatureBase64:Buffer.alloc(64).toString('base64'),
-    fetcher:fixture().fetcher,now:clock}),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+  await assert.rejects(createTrustedQueueApplyMessage({env:applyEnv,
+    manifest:{...manifest(),tenantId:2},receiptId:'5'.repeat(64),
+    signatureBase64:SIGNATURE,fetcher:fixture({},'apply').fetcher,now:clock}),
+    /FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+});
+test('apply producer rejects forged, non-admin, stale main and missing gate grants',async()=>{
+  for(const change of [{forged:true},{permission:'write'},
+    {badGate:'worker-tests-2'},{mainSha:'f'.repeat(40)}]){
+    await assert.rejects(applyMessage(change),
+      /FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+  }
+  for(const overrides of [{GITHUB_TOKEN:''},{FRMS_QA_APPLY_GRANT_ID:'0'},
+    {GITHUB_WORKFLOW_REF:REPO+'/'+WORKFLOW+'@refs/heads/main'},
+    {FRMS_QA_APPLY_CONFIRM:'unapproved'},
+    {FRMS_QA_APPLY_EXPECTED_SHA:'f'.repeat(40)}]){
+    await assert.rejects(applyMessage({},overrides),
+      /FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+  }
 });
 test('private apply transport reserves grant and manifest nonce before one RPC',async()=>{
   const m=await applyMessage(),db=storage();let calls=0;
