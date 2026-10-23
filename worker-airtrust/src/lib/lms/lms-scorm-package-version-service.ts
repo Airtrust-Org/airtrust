@@ -220,27 +220,14 @@ export async function activateScormPackageVersion(params: { db: D1Database; empr
     packageId: candidate.id, packageSha256: candidate.package_sha256,
     prefix: candidate.r2_prefix, launchFile: candidate.launch_file,
     originalFilename, actorId: params.userId,
+    auditId: crypto.randomUUID(),
     validationJson: candidate.validation_result_json,
   });
   if (!activated) {
     throw new ApiError('A edição SCORM mudou durante a ativação; revalide o pacote', 409);
   }
-  await params.db.prepare(
-    `INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, created_at)
-     VALUES (?, ?, ?, ?, 'ACTIVATED', ?, datetime('now'))`,
-  ).bind(crypto.randomUUID(), params.empresaId, params.cursoId, candidate.id, params.userId).run();
-  // O snapshot informativo de diagnóstico (lms_completion_diagnostics_snapshots)
-  // é chaveado por empresa/matrícula/curso/tentativa — não por identidade do
-  // pacote. Ao trocar efetivamente o pacote SCORM ativo, invalidamos os
-  // snapshots do curso (tenant-scoped) para que um 68% antigo não fique preso ao
-  // novo pacote. É read model puramente informativo: não toca matrícula,
-  // progresso, conclusão nem qualificação.
-  await params.db
-    .prepare(
-      `DELETE FROM lms_completion_diagnostics_snapshots WHERE empresa_id = ? AND curso_id = ?`,
-    )
-    .bind(params.empresaId, params.cursoId)
-    .run();
+  // Activation receipt and tenant-scoped diagnostic invalidation were already
+  // committed in the same D1 batch as the certified course pointer switch.
   return packageReadModel({ ...candidate, status: 'ACTIVE' });
 }
 
