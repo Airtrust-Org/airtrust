@@ -44,6 +44,20 @@ além dos oito gates e do mutex compartilhado. A aprovação manual do
 environment é opcional e não substitui a concessão por fase. Nunca executar
 uma operação de dados real apenas com aprovação do environment.
 
+**Opção sem emissão de token adicional (exclusiva fase `bucket`):** o
+`credential_mode=existing_staging_worker_bucket_only` reutiliza o secret
+`CLOUDFLARE_WORKER_API_TOKEN` **apenas no job efêmero Actions de bucket**.
+A concessão deve ser **V2** (`AIRTRUST_FRMS_QA_PROVISION_V2`), incluindo
+`credential_mode`, SHA e recursos exatos. O workflow de `worker` rejeita
+esse modo; o token jamais entra em secret/runtime do Worker privado.
+É uma exceção controlada ao privilégio mínimo da *credencial*: as
+operações permanecem limitadas pelo código às URLs e payloads fixos de
+bucket staging, com grant administrativo vigente, oito gates e mutex.
+A leitura R2 200 anterior não comprova permissão POST/PUT: um HTTP 403
+no momento autorizado deve parar, nunca motivar outro token ou bypass.
+A opção `dedicated` mantém o contrato V1 inalterado. Nenhuma operação
+remota foi autorizada pelo simples registro desta alternativa.
+
 Cada fase precisa de **comentário novo e não editado** por administrador
 autorizado na issue #776, com idade máxima de 12h. O dispatcher também
 precisa ser administrador. Não é permitido reaproveitar a concessão de
@@ -67,7 +81,9 @@ Inputs por dispatch:
 - `confirmation=AIRTRUST_FRMS_QA_PRIVATE_STAGING_PROVISION`;
 - `expected_main_sha=<SHA EXATO DA MAIN APÓS MERGE>`;
 - `grant_id=<ID REAL DO COMENTÁRIO F0 EM #776>`;
-- `phase=bucket` ou `phase=worker`.
+- `phase=bucket` ou `phase=worker`;
+- `credential_mode=dedicated` (V1), ou
+  `credential_mode=existing_staging_worker_bucket_only` (somente bucket, V2).
 
 A operação `bucket` vem primeiro, isolada da implantação do Worker.
 O provisionador verifica D1 existente com GET e bucket privado. Se o
@@ -104,6 +120,19 @@ porque o bucket ainda não existe. F0 deve limitar conta, API, duração
 e armazenamento do token ao mínimo viável; **não** usar token de
 produção ou migrator D1. A existência dos nomes de secrets não
 comprova sua emissão/escopo.
+
+**Exceção estritamente diagnóstica e sem token novo (23/10/2026):**
+o workflow `staging-frms-qa-private-readiness.yml` usa o secret **já
+cadastrado** `CLOUDFLARE_WORKER_API_TOKEN` exclusivamente no passo de
+atestado remoto GET-only, no runner efêmero de staging. Esse acesso foi
+comprovado em #39892777613 para metadata D1, listagem R2 e bookmark,
+mas não autoriza gravação e não prova que o bucket FRMS exista.
+Não copiar, renomear ou injetar esse token no Worker privado, nem usá-lo
+como `FRMS_QA_D1_READ_TOKEN` de runtime. O workflow de **provisionamento**
+continua exigindo grants por fase e tokens com escopo independente;
+a exceção não o modifica. Um `GET_404` do bucket mantém readiness FAIL
+closed, não permite criar ou reutilizar bucket compartilhado.
+
 
 ## Comprovantes físicos e sequência posterior
 
