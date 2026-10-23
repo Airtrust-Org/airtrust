@@ -83,8 +83,18 @@ async function openCourseEditor(page: Page, course: QaCourse) {
   }, { timeout: 45_000 });
   await page.goto('/lms/cursos', { waitUntil: 'domcontentloaded' });
   const draftResponse = await draftQuery;
+  // A 200 HTML shell (Pages fallback/redirect) is not a valid Worker catalog.
+  // Require the actual trusted staging API origin, never a same-path proxy.
+  const draftUrl = new URL(draftResponse.url());
+  if (draftUrl.protocol !== 'https:' || draftUrl.hostname !== STAGING_API_HOST) {
+    throw new Error('QA_SCORM_DRAFT_CATALOG_UNTRUSTED_ORIGIN');
+  }
   if (draftResponse.status() !== 200) {
     throw new Error('QA_SCORM_DRAFT_CATALOG_API_HTTP_' + draftResponse.status());
+  }
+  const responseType = (draftResponse.headers()['content-type'] ?? '').toLowerCase();
+  if (!/(?:^|[+\/])json(?:[;\s]|$)/.test(responseType)) {
+    throw new Error('QA_SCORM_DRAFT_CATALOG_NON_JSON_200');
   }
   const draftPayload = await draftResponse.json().catch(() => null) as {
     success?: boolean;
@@ -92,7 +102,19 @@ async function openCourseEditor(page: Page, course: QaCourse) {
     pagination?: { total?: number };
   } | null;
   if (!draftPayload?.success || !Array.isArray(draftPayload.data)) {
-    throw new Error('QA_SCORM_DRAFT_CATALOG_API_INVALID');
+    // Emit only a bounded schema classification; never catalog data, tenant IDs,
+    // course names, response bodies, auth headers, or backend error strings.
+    const successClass = draftPayload?.success === true ? 'true'
+      : draftPayload?.success === false ? 'false' : 'missing';
+    const dataValue: unknown = draftPayload?.data;
+    const dataClass = Array.isArray(dataValue) ? 'array'
+      : dataValue === null ? 'null'
+      : dataValue === undefined ? 'missing'
+      : typeof dataValue === 'object' ? 'object' : 'scalar';
+    throw new Error(
+      'QA_SCORM_DRAFT_CATALOG_API_INVALID:success_' + successClass +
+      ':data_' + dataClass,
+    );
   }
   if (!draftPayload.data.some((item) => Number(item.id) === Number(course.id))) {
     // Only sanitized aggregate dimensions and a reason code; no employee or
