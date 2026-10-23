@@ -154,6 +154,10 @@ test('checks full Worker SHA and exact Pages short SHA provenance independently'
 test('runner refuses to start when the private F0 adapter/source bundle is not provisioned', async () => {
   await assert.rejects(runF5InactiveCandidateFromEnvironment({}),
     /PRIVATE_PLAN_SOURCE_OR_PINNED_F0_ADAPTER_NOT_PROVISIONED/);
+  await assert.rejects(runF5InactiveCandidateFromEnvironment({
+    F5_EXECUTOR_PLAN_PATH: '/private/plan.json', F5_PRIVATE_ZIP_PATH: '/private/package.zip',
+    F5_F0_ADAPTER_MODULE: '/private/f0-adapter.mjs', F5_F0_ADAPTER_SHA256: 'a'.repeat(64),
+  }), /F0_ADAPTER_FILE_UNAVAILABLE/);
 });
 
 test('opens the private ZIP by bounded ranges without buffering the archive', async () => {
