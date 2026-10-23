@@ -21,7 +21,7 @@ export function assertRunIdentity(code, marker) {
     throw Error('QA_RUN_ID_MISMATCH');
 }
 
-export function ownedPdfKey(row, code) {
+export function ownedPdfKey(row, code, marker) {
   const tenant = Number(row.empresa_id);
   const employee = Number(row.funcionario_id);
   const history = Number(row.historico_id);
@@ -30,7 +30,7 @@ export function ownedPdfKey(row, code) {
     throw Error('QA_PDF_SCOPE_INVALID');
   if (row.tenant_code !== QA_TENANT ||
       ![code + '-E1', code + '-E2'].includes(row.employee_code) ||
-      row.course_marker !== row.expected_marker ||
+      row.course_marker !== marker || row.expected_marker !== marker ||
       !/^QA_ONLY_TRAINING_COMPLIANCE_LIFECYCLE_[0-9]{3,32}$/.test(row.expected_marker))
     throw Error('QA_PDF_OWNER_MISMATCH');
   const prefix = `certificados/empresa-${tenant}/funcionario-${employee}/historico-${history}/`;
@@ -68,7 +68,7 @@ export function buildOwnedPdfSql(code, marker) {
 export async function cleanupOwnedPdfs(rows, code, marker, storage, apply = false) {
   assertRunIdentity(code, marker);
   if (!Array.isArray(rows) || rows.length > 16) throw Error('QA_PDF_COUNT_REJECTED');
-  const keys = rows.map(row => ownedPdfKey(row, code));
+  const keys = rows.map(row => ownedPdfKey(row, code, marker));
   if (new Set(keys).size !== keys.length) throw Error('QA_PDF_DUPLICATE_KEY');
   // Validate EVERY candidate before the first write. Dry-run never invokes storage.
   if (!apply) return { checked: keys.length, deleted: 0, dryRun: true };
@@ -176,7 +176,7 @@ export function validateR2CleanupPlan(plan, code, marker) {
   if (!plan || plan.code !== code || plan.marker !== marker ||
       !Array.isArray(plan.rows) || plan.rows.length > 16)
     throw Error('QA_R2_RUN_PLAN_INVALID');
-  const keys = plan.rows.map(row => ownedPdfKey(row, code));
+  const keys = plan.rows.map(row => ownedPdfKey(row, code, marker));
   if (new Set(keys).size !== keys.length) throw Error('QA_PDF_DUPLICATE_KEY');
   return plan.rows;
 }

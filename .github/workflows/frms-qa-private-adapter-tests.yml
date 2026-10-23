@@ -9,6 +9,12 @@ on:
       - 'scripts/staging/frms-qa-*.mjs'
       - 'scripts/staging/seed-frms-ux-30d.mjs'
       - 'scripts/__tests__/frms-qa-*.test.mjs'
+      - 'scripts/__tests__/frms-private-worker-prerequisites.test.mjs'
+      - '.github/workflows/staging-frms-private-worker-prerequisites.yml'
+      - '.github/workflows/staging-frms-qa-bookmark-local-readonly.yml'
+      - '.github/workflows/staging-frms-qa-cases-current-state.yml'
+      - 'scripts/staging/inspect-frms-ux-cases.mjs'
+      - 'scripts/__tests__/inspect-frms-ux-cases.test.mjs'
       - '.github/workflows/frms-qa-private-adapter-tests.yml'
 permissions:
   contents: read
@@ -27,4 +33,4 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Disposable Workerd, D1, R2, Durable Object and private ACL integration
-        run: node --test scripts/__tests__/frms-qa-private-adapter.test.mjs scripts/__tests__/frms-qa-repair-controller.test.mjs scripts/__tests__/frms-qa-cases-atomic-executor.test.mjs scripts/__tests__/frms-qa-cases-repair-plan.test.mjs scripts/__tests__/frms-qa-private-readiness.test.mjs scripts/__tests__/frms-qa-provision-private-resources.test.mjs
+        run: node --test scripts/__tests__/frms-qa-private-adapter.test.mjs scripts/__tests__/frms-qa-repair-controller.test.mjs scripts/__tests__/frms-qa-cases-atomic-executor.test.mjs scripts/__tests__/frms-qa-cases-repair-plan.test.mjs scripts/__tests__/frms-qa-private-readiness.test.mjs scripts/__tests__/frms-qa-provision-private-resources.test.mjs scripts/__tests__/frms-private-worker-prerequisites.test.mjs scripts/__tests__/frms-qa-recovery-handoff.test.mjs scripts/__tests__/frms-qa-trusted-runner-bookmark-acquisition.test.mjs scripts/__tests__/frms-qa-staging-bookmark-get-local-proof.test.mjs scripts/__tests__/inspect-frms-ux-cases.test.mjs scripts/__tests__/frms-qa-prepare-admin-grant.test.mjs
