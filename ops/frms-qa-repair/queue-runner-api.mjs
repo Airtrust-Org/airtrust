@@ -17,7 +17,8 @@ const deny=()=>{throw Error('FRMS_QA_QUEUE_RUNNER_API_DENIED');};
 const exact=(value,keys)=>value&&typeof value==='object'&&
   !Array.isArray(value)&&
   Object.keys(value).sort().join('|')===keys.slice().sort().join('|');
-const canonical64=value=>typeof value==='string'&&value.length>0&&
+const canonical64=(value,maxLength)=>typeof value==='string'&&
+  value.length>0&&value.length<=maxLength&&
   /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)&&
   Buffer.from(value,'base64').toString('base64')===value;
 
@@ -64,11 +65,11 @@ export function privateQueueRunnerApi({accountId,queueId,releaseSha,token,fetche
          message.dbId!==TARGET.db_id||message.tenantId!==999013||
          !exact(message.payloadEnvelope,ENVELOPE_FIELDS)||
          message.payloadEnvelope.version!==1||
-         !canonical64(message.payloadEnvelope.iv)||
+         !canonical64(message.payloadEnvelope.iv,16)||
          Buffer.from(message.payloadEnvelope.iv,'base64').length!==12||
-         !canonical64(message.payloadEnvelope.tag)||
+         !canonical64(message.payloadEnvelope.tag,24)||
          Buffer.from(message.payloadEnvelope.tag,'base64').length!==16||
-         !canonical64(message.payloadEnvelope.ciphertext)||
+         !canonical64(message.payloadEnvelope.ciphertext,100000)||
          Buffer.from(message.payloadEnvelope.ciphertext,'base64').length===0)
         deny();
       const result=await request('',{body:message,content_type:'json'});
