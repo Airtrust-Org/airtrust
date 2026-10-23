@@ -132,6 +132,9 @@ export interface Env {
   // Shared only between governed staging QA attestation signer and Worker;
   // missing secret fails closed; never inject in browser/frontend.
   SCORM_QA_ATTESTATION_SECRET?: string;
+  // Exact, short-lived F5 staging grant. A missing or malformed grant keeps
+  // streamed large-package intake closed; it is never enabled in production.
+  SCORM_F5_STREAMED_INTAKE_GRANT?: string;
   // Dedicated F5 staging readback; never share with signer or client.
   SCORM_QA_READBACK_SECRET?: string;
   SCORM_QA_SYNTHETIC_TENANT_ID?: string;

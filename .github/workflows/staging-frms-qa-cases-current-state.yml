@@ -1,0 +1,74 @@
+name: Staging FRMS Four Synthetic Cases Current State (GET Only)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type FRMS_QA_REVIEWED_4CASE_STATUS_READONLY
+        required: true
+        type: string
+      expected_main_sha:
+        description: Full SHA on main; status-only, not acceptance or apply
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fix main SHA and read-only historical-source mode
+        env:
+          CONFIRM: ${{ inputs.confirmation }}
+          EXPECTED: ${{ inputs.expected_main_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == Airtrust-Org/airtrust ]]
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$CONFIRM" == FRMS_QA_REVIEWED_4CASE_STATUS_READONLY ]]
+          [[ "$EXPECTED" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED" ]]
+          [[ "$(gh api repos/Airtrust-Org/airtrust/branches/main --jq .commit.sha)" == "$EXPECTED" ]]
+  d1-read-current-status:
+    name: Staging D1 synthetic case SELECT-only current-state preflight
+    needs: guard
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install fixed staging D1 tooling
+        run: npm --prefix worker-airtrust ci
+      - name: Verify historical-source mode and SELECT-only contract
+        run: node --test scripts/__tests__/inspect-frms-ux-cases.test.mjs
+      - name: Read fixed synthetic tenant 999013 case state only
+        env:
+          GITHUB_ACTIONS: 'true'
+          FRMS_QA_EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          FRMS_QA_FIXED_STATUS_ONLY: ${{ inputs.confirmation }}
+          CONFIRM_FRMS_QA_CASES_INSPECT: AIRTRUST_STAGING_FRMS_CASES_READONLY
+          STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+          STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+          test -z "${SOURCE_AGGREGATE_SHA:-}"
+          test -z "${SANITIZED_AGGREGATE_PATH:-}"
+          node scripts/staging/inspect-frms-ux-cases.mjs --reviewed-fixed-status-only
+      - name: Explicitly distinguish status from acceptance
+        run: |
+          echo 'FRMS four-case QA: STATUS ONLY with historically reviewed fixed synthetic IDs/dates.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No expired aggregate is needed for this diagnostic. This does not revalidate the source or authorize data repair.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Writes: 0; apply: NOT AUTHORIZED; 4/4 acceptance: NOT CLAIMED BY WORKFLOW.' >> "$GITHUB_STEP_SUMMARY"

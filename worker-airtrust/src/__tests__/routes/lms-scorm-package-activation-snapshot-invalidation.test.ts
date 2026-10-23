@@ -84,14 +84,19 @@ describe('completion-diagnostics snapshot invalidation on package activation', (
       resolve(process.cwd(), 'src/lib/lms/lms-scorm-package-version-service.ts'),
       'utf8',
     );
-    expect(svc).toContain(
-      'DELETE FROM lms_completion_diagnostics_snapshots WHERE empresa_id = ? AND curso_id = ?',
+    const transaction = readFileSync(
+      resolve(process.cwd(), 'src/lib/lms/lms-scorm-package-activation.ts'),
+      'utf8',
     );
+    expect(transaction).toContain('DELETE FROM lms_completion_diagnostics_snapshots');
+    expect(transaction).toContain('WHERE empresa_id=? AND curso_id=?');
+    expect(transaction).toContain('.bind(empresaId, cursoId, auditId, empresaId, cursoId, packageId)');
+    expect(transaction).toContain("a.action='ACTIVATED'");
     const activateBody = svc.slice(
       svc.indexOf('export async function activateScormPackageVersion'),
       svc.indexOf('async function candidateAssets'),
     );
-    expect(activateBody).toContain('.bind(params.empresaId, params.cursoId)');
+    expect(activateBody).toContain('commitCertifiedScormActivation({');
     expect(activateBody).not.toMatch(/UPDATE lms_matriculas|qualificac|data_conclusao|lms_completion_events/i);
   });
 });
