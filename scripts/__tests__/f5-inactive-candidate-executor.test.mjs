@@ -71,7 +71,7 @@ function adaptersFor(plan, overrides = {}) {
     active: false, completionWritten: false, certificateIssued: false,
     zipBytes: plan.candidate.zipBytes,
     structural: { status: 'PASS' }, completionManifest: { status: 'PASS' },
-    diagnostics: { status: 'NOT_APPLICABLE' },
+    diagnostics: { status: 'PASS' },
     r2Prefix: `lms/scorm/${plan.candidate.tenantId}/${plan.candidate.courseId}/_candidates/223e4567-e89b-12d3-a456-426614174000/`,
     launchFile: 'index.html',
     r2Readback: {
