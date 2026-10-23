@@ -13,8 +13,9 @@ const SCHEMAS=['AIRTRUST_FRMS_QA_QUEUE_PREPARE_V1','AIRTRUST_FRMS_QA_QUEUE_APPLY
 const deny=()=>{throw Error('FRMS_QA_QUEUE_RUNNER_API_DENIED');};
 
 /** Restricted to a reviewed Queue UUID; accepts no arbitrary endpoint or verb. */
-export function privateQueueRunnerApi({accountId,queueId,token,fetcher=fetch}={}){
+export function privateQueueRunnerApi({accountId,queueId,releaseSha,token,fetcher=fetch}={}){
   if(!HEX32.test(accountId||'')||!HEX32.test(queueId||'')||
+     !HEX40.test(releaseSha||'')||
      typeof token!=='string'||!token.trim()||typeof fetcher!=='function')deny();
   const endpoint='https://api.cloudflare.com/client/v4/accounts/'+accountId+
     '/queues/'+queueId+'/messages';
@@ -47,7 +48,7 @@ export function privateQueueRunnerApi({accountId,queueId,token,fetcher=fetch}={}
     async pushSigned(message){
       if(!message||typeof message!=='object'||Array.isArray(message)||
          !SCHEMAS.includes(message.schema)||!HEX64.test(message.mac||'')||
-         !HEX40.test(message.sha||'')||
+         message.sha!==releaseSha||
          message.dbId!==TARGET.db_id||message.tenantId!==999013||
          !message.payloadEnvelope||typeof message.payloadEnvelope!=='object')
         deny();
