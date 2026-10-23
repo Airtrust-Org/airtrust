@@ -60,6 +60,24 @@ async function performComplianceRuleEnrollment<TAccess>(
     skipped_valid_evidence: 0,
     unavailable_course: 0,
   };
+  // Only build the expensive effective-evidence snapshot when the persisted
+  // tenant-scoped rule actually authorizes immediate EAD enrollment. Saving
+  // an opt-out or a non-EAD requirement is a valid no-op, not a deferred sync.
+  // The atomic writer still rechecks policy in D1 before any new enrollment.
+  const persistedRule = await db.prepare(
+    `SELECT obrigatoriedade, auto_matricular_ead, modalidade_requerida
+       FROM treinamento_requisitos
+      WHERE id=? AND empresa_id=? AND ativo=1 AND deleted_at IS NULL
+      LIMIT 1`,
+  ).bind(ruleId, empresaId).first<{
+    obrigatoriedade: string;
+    auto_matricular_ead: number | null;
+    modalidade_requerida: string | null;
+  }>();
+  if (!persistedRule || persistedRule.obrigatoriedade !== 'OBRIGATORIA'
+    || persistedRule.auto_matricular_ead !== 1
+    || persistedRule.modalidade_requerida !== 'EAD') return summary;
+
   const snapshot = await buildSnapshot(db, empresaId, access);
   const rule = snapshot.rules.find((candidate) => candidate.id === ruleId);
   if (!rule || rule.obrigatoriedade !== 'OBRIGATORIA' || rule.auto_matricular_ead !== 1) return summary;
