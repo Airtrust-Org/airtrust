@@ -40,6 +40,8 @@ export function exactQueueProvisionPlan({sha,accountId,callerConfig}={}){
     workflow_path:WORKFLOW,production_authorized:false,
     d1_writes_authorized:0,r2_writes_authorized:0,
     private_worker_deploy_authorized:false,apply_authorized:false,
+    max_queue_retention_seconds:900,
+    results_http_pull_consumer_authorized:true,
   });
 }
 
@@ -121,6 +123,16 @@ export async function ensurePrivateQueues({accountId,token,fetcher=fetch}={}){
     if(doc?.success!==true||doc.result===undefined)fail();
     return doc;
   };
+  // Existing Queues are not changed. A newly created Queue is configured
+  // before any Worker can publish messages to it. No public HTTP Worker route.
+  const inspect=async id=>{
+    if(!HEX32.test(id||''))fail();
+    const doc=await call('GET','/'+id);
+    const q=doc.result;
+    if(!q||typeof q!=='object'||q.queue_id!==id||
+       typeof q.queue_name!=='string')fail();
+    return q;
+  };
   const inventory=async()=>{
     const result=await call('GET','?per_page=100');
     if(!Array.isArray(result.result)||result.result.length>100||
@@ -134,17 +146,62 @@ export async function ensurePrivateQueues({accountId,token,fetcher=fetch}={}){
     return map;
   };
   let existing=await inventory();
-  let writes=0;
+  let creates=0,retentionWrites=0,httpPullWrites=0;
   for(const name of NAMES){
-    if(existing.has(name))continue;
-    const created=await call('POST','',{queue_name:name});
-    if(created.result?.queue_name!==name)fail();
-    writes++;
+    const before=existing.get(name);
+    let id=before?.queue_id;
+    let newlyCreated=false;
+    if(!before){
+      const created=await call('POST','',{queue_name:name});
+      id=created.result?.queue_id;
+      if(created.result?.queue_name!==name||!HEX32.test(id||''))fail();
+      creates++;
+      newlyCreated=true;
+    }
+    // A Queue already in use by another executor must never be rewritten.
+    // Cloudflare PUT is a full replacement, so only freshly-created Queues
+    // can have their retention policy set by this F0 operation.
+    if(newlyCreated){
+      const cfg=await call('PUT','/'+id,{
+        queue_name:name,settings:{
+          delivery_delay:0,delivery_paused:false,message_retention_period:900,
+        },
+      });
+      if(cfg.result?.queue_name!==name)fail();
+      retentionWrites++;
+    }
+    let current=await inspect(id);
+    if(current.queue_name!==name||
+       !Number.isInteger(current.settings?.message_retention_period)||
+       current.settings.message_retention_period<60||
+       current.settings.message_retention_period>900)fail();
+    if(name===NAMES[1]){
+      if(!Array.isArray(current.consumers))fail();
+      if(current.consumers.length===0){
+        const response=await call('POST','/'+id+'/consumers',{
+          type:'http_pull',settings:{
+            batch_size:1,visibility_timeout_ms:30000,max_retries:1,
+          },
+        });
+        if(response.result?.type!=='http_pull'||
+           response.result.queue_name!==name)fail();
+        httpPullWrites++;
+        current=await inspect(id);
+      }
+      if(current.consumers?.length!==1||
+         current.consumers[0]?.type!=='http_pull'||
+         current.consumers[0]?.queue_name!==name||
+         current.consumers[0]?.settings?.batch_size!==1||
+         current.consumers[0]?.settings?.visibility_timeout_ms!==30000)
+        fail();
+    }else if(current.consumers?.length)fail();
   }
   existing=await inventory();
   if(!NAMES.every(name=>existing.has(name)))fail();
-  return Object.freeze({verdict:'PRIVATE_STAGING_QUEUES_METADATA_VERIFIED',
-    queueNamesPresent:2,queueNamesExpected:2,queuesCreated:writes,
+  return Object.freeze({verdict:'PRIVATE_STAGING_QUEUES_AND_PULL_METADATA_VERIFIED',
+    queueNamesPresent:2,queueNamesExpected:2,queuesCreated:creates,
+    retentionUpdates:retentionWrites,httpPullCreated:httpPullWrites,
+    maxQueueRetentionSeconds:900,
     d1Writes:0,r2Writes:0,workerDeploys:0,productionWrites:0,
-    queueHttpPullConfigured:false});
+    queueHttpPullConfigured:true});
 }
