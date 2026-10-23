@@ -59,22 +59,23 @@ function fixture({body=reply(),failPath='',failStatus=403,ackCount=1,
 test('refuses missing, wrong or unbounded Queue credentials and IDs',()=>{
   for(const bad of [
     {},{accountId:ACCOUNT,queueId:'not-an-id',token:TOKEN},
-    {accountId:'wrong',queueId:QUEUE,releaseSha:SHA,token:TOKEN},
-    {accountId:ACCOUNT,queueId:QUEUE,releaseSha:SHA,token:''},
+    {accountId:'wrong',queueId:QUEUE,releaseSha:SHA,keyHex:KEY,token:TOKEN},
+    {accountId:ACCOUNT,queueId:QUEUE,releaseSha:SHA,keyHex:KEY,token:''},
   ])assert.throws(()=>privateQueueRunnerApi(bad),/FRMS_QA_QUEUE_RUNNER_API_DENIED/);
 });
 test('protected runner pushes one pinned encrypted request with no generic API methods',async()=>{
   const f=fixture();
-  const api=privateQueueRunnerApi({accountId:ACCOUNT,queueId:QUEUE,releaseSha:SHA,
+  const api=privateQueueRunnerApi({accountId:ACCOUNT,queueId:QUEUE,releaseSha:SHA,keyHex:KEY,
     token:TOKEN,fetcher:f.fetcher});
-  const request={schema:'AIRTRUST_FRMS_QA_QUEUE_PREPARE_V1',
-    sha:SHA,dbId:DB,tenantId:999013,mac:'f'.repeat(64),
+  const requestFields={schema:'AIRTRUST_FRMS_QA_QUEUE_PREPARE_V1',
+    sha:SHA,dbId:DB,tenantId:999013,
     grantId:GRANT,runId:RUN,runAttempt:1,
     issuedAt:new Date(NOW).toISOString(),expiresAt:new Date(NOW+90000).toISOString(),
     callerAuth:{claims:{operation:'prepare'}},
     payloadEnvelope:{version:1,iv:Buffer.alloc(12,1).toString('base64'),
       ciphertext:Buffer.from('encrypted-synthetic').toString('base64'),
       tag:Buffer.alloc(16,2).toString('base64')}};
+  const request={...requestFields,mac:mac(requestFields)};
   assert.equal((await api.pushSigned(request)).queued,true);
   assert.equal(f.calls.length,1);
   assert.equal(f.calls[0].path,'');
@@ -85,6 +86,7 @@ test('protected runner pushes one pinned encrypted request with no generic API m
   assert.equal(JSON.stringify(f.calls).includes(TOKEN),false);
   for(const invalid of [{...request,tenantId:6},{...request,dbId:'wrong'},
     {...request,sha:'0'.repeat(40)},{...request,mac:''},
+    {...request,mac:'0'.repeat(64)},
     {...request,GITHUB_TOKEN:'FORBIDDEN_SECRET'},
     {...request,recoveryBookmark:'FORBIDDEN_PLAINTEXT'},
     {...request,payloadEnvelope:{...request.payloadEnvelope,iv:'invalid'}},
@@ -96,7 +98,7 @@ test('protected runner pushes one pinned encrypted request with no generic API m
 });
 test('only authenticated correlated reply is acknowledged; plaintext never sent back',async()=>{
   const f=fixture();
-  const api=privateQueueRunnerApi({accountId:ACCOUNT,queueId:QUEUE,releaseSha:SHA,
+  const api=privateQueueRunnerApi({accountId:ACCOUNT,queueId:QUEUE,releaseSha:SHA,keyHex:KEY,
     token:TOKEN,fetcher:f.fetcher});
   const outcome=await api.consumeExpectedReply({keyHex:KEY,expected,now:NOW});
   assert.equal(outcome.receipt.recoveryBookmark,'private-bookmark-no-logs');
@@ -109,14 +111,14 @@ test('wrong grant, run, operation or expired reply leaves lease unacknowledged',
   for(const override of [{grantId:'1'.repeat(10)},{operation:'apply'},
     {requestNonce:'0'.repeat(64)}]){
     const f=fixture(),api=privateQueueRunnerApi({accountId:ACCOUNT,
-      queueId:QUEUE,releaseSha:SHA,token:TOKEN,fetcher:f.fetcher});
+      queueId:QUEUE,releaseSha:SHA,keyHex:KEY,token:TOKEN,fetcher:f.fetcher});
     await assert.rejects(api.consumeExpectedReply({keyHex:KEY,
       expected:{...expected,...override},now:NOW}),
       /FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
     assert.deepEqual(f.calls.map(c=>c.path),['/pull']);
   }
   const f=fixture(),api=privateQueueRunnerApi({accountId:ACCOUNT,
-    queueId:QUEUE,releaseSha:SHA,token:TOKEN,fetcher:f.fetcher});
+    queueId:QUEUE,releaseSha:SHA,keyHex:KEY,token:TOKEN,fetcher:f.fetcher});
   await assert.rejects(api.consumeExpectedReply({keyHex:KEY,
     expected,now:NOW+90001}),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
   assert.equal(f.calls.length,1);
@@ -124,7 +126,7 @@ test('wrong grant, run, operation or expired reply leaves lease unacknowledged',
 test('invalid response, malformed body and failed ack are sanitized and fail closed',async()=>{
   for(const setup of [{failPath:'/pull'},{malformed:true},{ackCount:0}]){
     const f=fixture(setup),api=privateQueueRunnerApi({accountId:ACCOUNT,
-      queueId:QUEUE,releaseSha:SHA,token:TOKEN,fetcher:f.fetcher});
+      queueId:QUEUE,releaseSha:SHA,keyHex:KEY,token:TOKEN,fetcher:f.fetcher});
     await assert.rejects(api.consumeExpectedReply({keyHex:KEY,
       expected,now:NOW}),/FRMS_QA_QUEUE_RUNNER_API_DENIED/);
   }
@@ -133,7 +135,7 @@ test('malformed Base64 and raw JSON are rejected before receipt acknowledgement'
   for(const body of ['e30', 'e30===', JSON.stringify(reply()),
     Buffer.from(JSON.stringify(reply()),'utf8').toString('base64').slice(0,-2)+'$']){
     const f=fixture({body}),api=privateQueueRunnerApi({accountId:ACCOUNT,
-      queueId:QUEUE,releaseSha:SHA,token:TOKEN,fetcher:f.fetcher});
+      queueId:QUEUE,releaseSha:SHA,keyHex:KEY,token:TOKEN,fetcher:f.fetcher});
     await assert.rejects(api.consumeExpectedReply({keyHex:KEY,expected,now:NOW}),
       /FRMS_QA_QUEUE_RUNNER_API_DENIED/);
     assert.deepEqual(f.calls.map(x=>x.path),['/pull']);
@@ -141,7 +143,7 @@ test('malformed Base64 and raw JSON are rejected before receipt acknowledgement'
 });
 test('empty Queue is not treated as a receipt or as physical staging acceptance',async()=>{
   const calls=[];
-  const api=privateQueueRunnerApi({accountId:ACCOUNT,queueId:QUEUE,releaseSha:SHA,token:TOKEN,
+  const api=privateQueueRunnerApi({accountId:ACCOUNT,queueId:QUEUE,releaseSha:SHA,keyHex:KEY,token:TOKEN,
     fetcher:async(u,o)=>{calls.push(u);return Response.json({
       success:true,result:{messages:[]}});}});
   assert.equal(await api.consumeExpectedReply({keyHex:KEY,expected,now:NOW}),null);
