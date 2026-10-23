@@ -33,7 +33,8 @@ jobs:
           [[ "$EXPECTED" =~ ^[0-9a-f]{40}$ ]]
           [[ "$GITHUB_SHA" == "$EXPECTED" ]]
           [[ "$(gh api repos/Airtrust-Org/airtrust/branches/main --jq .commit.sha)" == "$EXPECTED" ]]
-  read-current-status:
+  d1-read-current-status:
+    name: Staging D1 synthetic case SELECT-only current-state preflight
     needs: guard
     environment: staging
     runs-on: ubuntu-latest
