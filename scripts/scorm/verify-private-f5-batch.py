@@ -18,7 +18,7 @@ import sys
 import tempfile
 import zipfile
 
-HEX64 = re.compile(r"[0-9a-f]{64}\\Z")
+HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 MAX_ZIP_MEMBERS = 8192
 MAX_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 
