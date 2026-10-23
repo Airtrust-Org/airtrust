@@ -88,7 +88,7 @@ jobs:
             echo "- exact F4 SHA: $SHA"
             echo "- trusted guard: $GUARD_STATUS"
             echo "- existing learner readback: $INSPECT_STATUS"
-            echo '- tenant 999006 / Native course 327; no D1/R2 writes'
+            echo '- tenant 999006 / Native V2 course 328, exact edition; no D1/R2 writes'
             echo '- Browser UI, 80% resume and external SCORM: NOT TESTED'
             echo '- Six journeys, attempts, terminal, PDF: NOT ATTESTED'
             echo '- Production: NO ACTION'

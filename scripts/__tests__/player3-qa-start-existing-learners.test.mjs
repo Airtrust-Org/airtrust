@@ -2,10 +2,11 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {CONFIRM,EXPLANATION,assertGrant,assertFresh,assertStarted,
   assertRuntime,checkedGuard,applyStart} from '../staging/player3-qa-start-existing-learners.mjs';
-import {LEARNERS,GATES} from '../staging/player3-qa-existing-learner-readback.mjs';
-const sha='a'.repeat(40),edition='b'.repeat(64),actor='qa-admin';
+import {LEARNERS,GATES,COURSE,NATIVE_QA_EDITION_SHA256}
+  from '../staging/player3-qa-existing-learner-readback.mjs';
+const sha='a'.repeat(40),edition=NATIVE_QA_EDITION_SHA256,actor='qa-admin';
 const row=(i)=>({
-  email:LEARNERS[i].email,empresa_id:999006,curso_id:327,
+  email:LEARNERS[i].email,empresa_id:999006,curso_id:COURSE,
   funcionario_id:800+i,matricula_id:300+i,ciclo_id:900+i,
   edition_sha256:edition,status:'NAO_INICIADO',ciclo_status:'NAO_INICIADO',
   ciclo_atual:1,edition_status:'PUBLISHED',

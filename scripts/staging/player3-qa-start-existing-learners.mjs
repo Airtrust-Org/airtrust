@@ -15,7 +15,7 @@ import {
 } from './player3-qa-existing-learner-readback.mjs';
 
 export const CONFIRM='AIRTRUST_PLAYER3_QA_START_EXISTING_V1';
-export const EXPLANATION='tenant=999006 course=327 learners=2 staging-only';
+export const EXPLANATION='tenant=999006 course=328 learners=2 staging-only';
 const sha40=/^[0-9a-f]{40}$/;
 const sha64=/^[0-9a-f]{64}$/;
 const err=code=>{throw Error('PLAYER3_QA_START_'+code)};

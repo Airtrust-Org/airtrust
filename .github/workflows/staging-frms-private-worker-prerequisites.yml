@@ -1,0 +1,62 @@
+name: FRMS Private Worker Deployment Prerequisites (No Writes)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_FRMS_PRIVATE_WORKER_PREFLIGHT_READONLY
+        required: true
+        type: string
+      expected_main_sha:
+        description: Exact current main SHA reviewed for worker prerequisites
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require current main and explicit read-only selection
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == "Airtrust-Org/airtrust" ]]
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$CONFIRMATION" == AIRTRUST_FRMS_PRIVATE_WORKER_PREFLIGHT_READONLY ]]
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]]
+          [[ "$(gh api repos/Airtrust-Org/airtrust/branches/main --jq .commit.sha)" == "$EXPECTED_SHA" ]]
+  credentials:
+    needs: guard
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Verify fail-closed prerequisite diagnostic with synthetic fixtures
+        run: node --test scripts/__tests__/frms-private-worker-prerequisites.test.mjs
+      - name: Inspect staging Worker input contracts without printing secrets
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_FRMS_QA_READ_API_TOKEN: ${{ secrets.CLOUDFLARE_FRMS_QA_READ_API_TOKEN }}
+          CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN: ${{ secrets.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN }}
+          FRMS_QA_D1_READ_TOKEN: ${{ secrets.FRMS_QA_D1_READ_TOKEN }}
+          FRMS_QA_CALLER_KEY_HEX: ${{ secrets.FRMS_QA_CALLER_KEY_HEX }}
+          FRMS_QA_PREIMAGE_KEY_HEX: ${{ secrets.FRMS_QA_PREIMAGE_KEY_HEX }}
+          FRMS_QA_APPROVAL_PUBLIC_KEY_PEM: ${{ secrets.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM }}
+        run: node ops/frms-qa-repair/verify-worker-deployment-prerequisites.mjs
+      - name: Record read-only result boundary
+        run: |
+          echo 'FRMS worker prerequisite inventory complete: no Cloudflare call, no SQL, no secrets printed, no grant, no deploy' >> "$GITHUB_STEP_SUMMARY"
+          echo "Main SHA: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

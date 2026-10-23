@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createTrainingComplianceReconciliationActions, loadReconciliationDecisions, type LmsEnrollment, type ReconciliationDecision } from './compliance-treinamentos-reconciliation-actions';
-import { reconcileTrainingComplianceRuleEnrollment } from '../services/training-compliance-rule-enrollment';
+import { reconcileTrainingComplianceRuleEnrollment, sanitizeComplianceEnrollmentResponse } from '../services/training-compliance-rule-enrollment';
 import { reconcileFdmMaintenance72 } from '../services/training-compliance-fdm72-reconciliation';
 import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModalitySql } from '../services/training-compliance-history-identity';
 import { auth } from '../middleware/auth';
@@ -1189,7 +1189,8 @@ app.post('/regras', requireRole('admin', 'manager'), async (c) => {
     dados_novos: { empresa_id: empresaId, ...data },
     ...extrairUsuarioAuditoria(c),
   });
-  const enrollment = await reconcileTrainingComplianceRuleEnrollment(db, empresaId, id, access, extrairUsuarioAuditoria(c), buildSnapshot);
+  const rawEnrollment = await reconcileTrainingComplianceRuleEnrollment(db, empresaId, id, access, extrairUsuarioAuditoria(c), buildSnapshot);
+  const enrollment = sanitizeComplianceEnrollmentResponse(rawEnrollment, c.env.ENVIRONMENT);
   return c.json({ success: true, data: { id, ...enrollment } }, 201);
 });
 
@@ -1228,9 +1229,10 @@ app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
     dados_novos: { empresa_id: empresaId, ...data },
     ...extrairUsuarioAuditoria(c),
   });
-  const enrollment = await reconcileTrainingComplianceRuleEnrollment(
+  const rawEnrollment = await reconcileTrainingComplianceRuleEnrollment(
     db, empresaId, id, access, extrairUsuarioAuditoria(c), buildSnapshot,
   );
+  const enrollment = sanitizeComplianceEnrollmentResponse(rawEnrollment, c.env.ENVIRONMENT);
   return c.json({ success: true, data: enrollment });
 });
 
