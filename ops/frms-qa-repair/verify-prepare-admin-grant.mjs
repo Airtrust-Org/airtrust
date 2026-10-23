@@ -32,6 +32,8 @@ export function exactPreparePlan({sha}={}){
     d1_name:TARGET.db_name,reviewed_plan_sha256:PLAN_SHA,
     worker:EXPECTED.worker,r2_bucket:EXPECTED.bucket,
     r2_prefix:EXPECTED.prefix,global_mutex:MUTEX,
+    r2_preimage_object_write_authorized:true,
+    r2_lifecycle_max_age_seconds:86400,
     workflow_path:WORKFLOW,
     operation:'ENCRYPTED_PREIMAGE_PREPARE_ONLY',
     d1_writes_authorized:0,apply_authorized:false,
