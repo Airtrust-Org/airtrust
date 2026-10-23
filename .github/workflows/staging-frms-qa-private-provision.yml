@@ -22,13 +22,14 @@ on:
           - bucket
           - worker
       credential_mode:
-        description: Bucket only; existing Worker credential requires exact V2 admin grant
+        description: Existing credential exception needs a fresh phase-specific V2/V3 admin grant
         required: true
         default: dedicated
         type: choice
         options:
           - dedicated
           - existing_staging_worker_bucket_only
+          - existing_staging_worker_deploy_only
 permissions:
   contents: read
   checks: read
@@ -108,8 +109,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_FRMS_QA_READ_API_TOKEN: ${{ secrets.CLOUDFLARE_FRMS_QA_READ_API_TOKEN }}
-          CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN: ${{ secrets.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN }}
+          # V3 exception: existing Worker token is ephemeral in this protected
+          # Actions job only; never included in Worker runtime secret bulk.
+          # The provisioner revalidates SHA, gates, exact admin grant, phase,
+          # credential equality, fixed config and private R2 before deploy.
+          CLOUDFLARE_FRMS_QA_READ_API_TOKEN: ${{ inputs.credential_mode == 'existing_staging_worker_deploy_only' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_FRMS_QA_READ_API_TOKEN }}
+          CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN: ${{ inputs.credential_mode == 'existing_staging_worker_deploy_only' && secrets.CLOUDFLARE_WORKER_API_TOKEN || secrets.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN }}
           FRMS_QA_PREIMAGE_KEY_HEX: ${{ secrets.FRMS_QA_PREIMAGE_KEY_HEX }}
           FRMS_QA_CALLER_KEY_HEX: ${{ secrets.FRMS_QA_CALLER_KEY_HEX }}
           FRMS_QA_APPROVAL_PUBLIC_KEY_PEM: ${{ secrets.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM }}
