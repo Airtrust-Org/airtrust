@@ -28,7 +28,7 @@ export type ScormQualityGateResult = {
   conformance: { status: GateStatus; tests: ConformanceTest[] };
   /** Independent browser E2E attestation, not SCORM protocol conformance. */
   functionalCertification: ScormFunctionalCertification;
-  /** Author-declared review is a release safeguard, not independent SME approval. */
+  /** Untrusted author-declared review: informational ONLY, never an SME release approval. */
   authoringReview?: { externalExam: boolean; reviewed: boolean };
   publishable: boolean;
 };
@@ -451,7 +451,9 @@ export function applyRuntimeConformance(
     conformance,
     functionalCertification,
     publishable: functionalCertification.status === 'CERTIFIED' &&
-      !(staticResult.authoringReview?.externalExam && !staticResult.authoringReview.reviewed) &&
+      // The ZIP may claim release.reviewed=true; independent SME approval has no
+      // verified backend release ledger yet. Fail closed for ALL external exams.
+      !staticResult.authoringReview?.externalExam &&
       functionalCertification.packageSha256 === expectedSha256 &&
       shaMatches && staticResult.structural.status === 'PASS' &&
       staticResult.completionManifest.status === 'PASS' &&
@@ -466,9 +468,10 @@ export function canActivateCertifiedScormPackage(
   expectedSha256: string,
 ): boolean {
   const certificate = quality?.functionalCertification;
-  // An author-declared PRIVATE/UNREVIEWED external course can be tested but
-  // must not be activated, even with a complete browser certification ledger.
-  if (quality?.authoringReview?.externalExam && quality.authoringReview.reviewed !== true) return false;
+  // Never treat release.reviewed=true inside a user-uploaded ZIP as independent
+  // SME consent. External-certification packages remain non-activatable until
+  // a separate backend-owned, SHA-bound approval gate is implemented.
+  if (quality?.authoringReview?.externalExam) return false;
   // A stored CERTIFIED summary without underlying browser cases is not proof.
   // Re-evaluate the case ledger independently when activating a version.
   if (!certificate || !Array.isArray(certificate.runs) ||
