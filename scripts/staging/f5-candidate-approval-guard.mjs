@@ -87,18 +87,26 @@ export async function verify(v, token, get, now = Date.now()) {
   if (!token) throw Error('F5_GITHUB_READ_TOKEN_REQUIRED');
   const pr = await get(`pulls/${PR}`);
   const isReviewedOpenHead = pr.state === 'open' && !pr.draft && pr.head?.sha === v.sha;
-  const isMergedRelease = pr.state === 'closed' && pr.merged === true && pr.merge_commit_sha === v.sha;
-  if ((!isReviewedOpenHead && !isMergedRelease) || pr.base?.ref !== 'main' ||
+  const isMergedPr = pr.state === 'closed' && pr.merged === true &&
+    hex40.test(pr.merge_commit_sha ?? '');
+  if ((!isReviewedOpenHead && !isMergedPr) || pr.base?.ref !== 'main' ||
       pr.head?.repo?.full_name !== REPO || pr.head?.repo?.fork === true) {
     throw Error('F5_PR_HEAD_CHANGED_DRAFT_OR_FORKED');
   }
-  // GitHub associates the required pull-request gates with the reviewed PR
-  // head, not with the synthetic merge commit written to main. The merged
-  // release SHA is pinned above to PR.merge_commit_sha. That API association
-  // supports merge-commit, squash and rebase strategies; the exact reviewed
-  // head of the same merged PR supplies the eight gates and PR check. The
-  // readiness workflow separately requires release SHA to be an ancestor of
-  // current main before any staging operation.
+  // Later protected main merges retain the original F5 code. Require proof
+  // that the exact release SHA descends from this PR's merge commit instead
+  // of pinning all future staging runs to the historical merge SHA.
+  if (isMergedPr && pr.merge_commit_sha !== v.sha) {
+    const ancestry = await get(`compare/${pr.merge_commit_sha}...${v.sha}`);
+    if (ancestry.status !== 'ahead' || ancestry.behind_by !== 0 ||
+        ancestry.base_commit?.sha !== pr.merge_commit_sha ||
+        ancestry.merge_base_commit?.sha !== pr.merge_commit_sha) {
+      throw Error('F5_RELEASE_NOT_DESCENDANT_OF_MERGED_PR');
+    }
+  }
+  // GitHub attaches PR checks to the reviewed head, not the merge commit.
+  // Check these gates here; the trusted-main workflow independently requires
+  // the release SHA to be on main and to have all eight release gates.
   const checkedSha = pr.head.sha;
   if (!hex40.test(checkedSha ?? '')) throw Error('F5_PR_HEAD_SHA_UNAVAILABLE');
   const checks = await get(`commits/${checkedSha}/check-runs?per_page=100`);
