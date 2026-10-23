@@ -45,7 +45,7 @@ function fixture({body=reply(),failPath='',failStatus=403,ackCount=1,
     assert.equal(opts.headers.Authorization,'Bearer '+TOKEN);
     const path=uri.slice(URL.length),request=JSON.parse(opts.body);
     calls.push({path,body:request});
-    if(path===failPath)return Response.json({success:false},{status:failStatus});
+    if(failPath&&path===failPath)return Response.json({success:false},{status:failStatus});
     if(path==='/pull')return Response.json({success:true,result:{
       messages:[{lease_id:LEASE,body:malformed?'not-base64':
         Buffer.from(JSON.stringify(body),'utf8').toString('base64')}]}});
