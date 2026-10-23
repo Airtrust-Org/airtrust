@@ -49,3 +49,11 @@ test('a broad pre-existing Worker token does not replace dedicated runtime and s
   assert.equal(r.checks.publicApprovalKey,'MISSING');
   assert.equal(r.verdict,'BLOCKED_MISSING_OR_INVALID_INPUT');
 });
+
+test('caller HMAC and AES preimage keys must be distinct without disclosing either',()=>{
+  const e=valid();e.FRMS_QA_PREIMAGE_KEY_HEX=e.FRMS_QA_CALLER_KEY_HEX;
+  const r=inspect(e);
+  assert.equal(r.checks.keySeparation,'MISSING_OR_NOT_DISTINCT');
+  assert.equal(r.verdict,'BLOCKED_MISSING_OR_INVALID_INPUT');
+  assert.equal(JSON.stringify(r).includes(e.FRMS_QA_CALLER_KEY_HEX),false);
+});
