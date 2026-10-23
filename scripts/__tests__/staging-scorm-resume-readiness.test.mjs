@@ -14,7 +14,7 @@ test('fail closed when a QA active package is unavailable or ambiguous',()=>{
 });
 test('staging-only trusted main, mutex and no fixture mutation',()=>{
  assert.match(workflow,/refs\/heads\/main/);
- assert.match(workflow,/"\$GITHUB_SHA" == "\$RELEASE_SHA"/);
+ assert.match(workflow,/git merge-base --is-ancestor "\$RELEASE_SHA" HEAD/);
  assert.match(workflow,/environment: staging/);
  assert.match(workflow,/airtrust-staging-mutations-and-scorm-qa/);
  assert.match(workflow,/verify-release-gates.mjs/);
