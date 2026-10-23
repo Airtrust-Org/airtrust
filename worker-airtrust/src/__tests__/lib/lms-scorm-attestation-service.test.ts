@@ -83,7 +83,7 @@ function fixture(){
         bind?:never; // implementation of D1 mock records through SQL strings below
       };
       void statement;
-      return [];
+      return statements.map(() => ({ success:true, results:[], meta:{changes:1} }));
     },
   };
   // Capture bound statements accurately to simulate D1's update.
@@ -107,7 +107,7 @@ function fixture(){
       if(sql.includes('SET validation_result_json'))row.validation_result_json=String(args[0]);
       if(sql.includes("SET status = 'ACTIVE'"))row.status='ACTIVE';
     }
-    return [];
+    return (statements as unknown[]).map(() => ({ success:true, results:[], meta:{changes:1} }));
   };
   return {db:db as unknown as D1Database,row,writes,
     get batchCalls(){return batchCalls;}};
