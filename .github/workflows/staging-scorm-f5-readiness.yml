@@ -136,3 +136,20 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/staging/run-f5-inactive-candidate.mjs
+      - name: Sanitize successful private F5 evidence for audit
+        shell: bash
+        env:
+          F5_EVIDENCE_OUTPUT_PATH: ${{ runner.temp }}/f5-inactive-candidate-evidence.json
+          F5_SANITIZED_EVIDENCE_PATH: ${{ runner.temp }}/f5-inactive-candidate-summary.json
+          F5_RELEASE_SHA: ${{ inputs.release_sha }}
+          F5_PACKAGE_SHA256: ${{ inputs.package_sha256 }}
+          F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
+          F5_OPERATION_ID: ${{ inputs.operation_id }}
+        run: node scripts/staging/f5-sanitize-execution-evidence.mjs
+      - name: Upload sanitized inactive candidate evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: f5-inactive-candidate-summary-${{ github.run_id }}
+          path: ${{ runner.temp }}/f5-inactive-candidate-summary.json
+          if-no-files-found: error
+          retention-days: 30
