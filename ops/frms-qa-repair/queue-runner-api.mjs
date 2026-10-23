@@ -118,6 +118,19 @@ export function privateQueueRunnerApi({accountId,queueId,releaseSha,keyHex,
      * This does NOT assert physical R2 readback or D1 4/4 acceptance.
      */
     async consumeExpectedReply({keyHex,expected,now=Date.now()}={}){
+      // Do not even lease a result before the trusted runner has pinned the
+      // exact correlation. Otherwise an invalid invocation could hide a
+      // legitimate one-use receipt until Cloudflare's visibility timeout.
+      if(!HEX64.test(keyHex||'')||
+         !exact(expected,['operation','sha','runId','runAttempt',
+           'grantId','requestNonce'])||
+         expected.sha!==releaseSha||
+         !['prepare','apply'].includes(expected.operation)||
+         !/^[1-9][0-9]{5,13}$/.test(expected.grantId||'')||
+         !/^[1-9][0-9]{7,13}$/.test(String(expected.runId||''))||
+         !Number.isSafeInteger(expected.runAttempt)||expected.runAttempt<1||
+         !HEX64.test(expected.requestNonce||'')||
+         !Number.isFinite(now))deny();
       const pulled=await this.pullOne();
       if(!pulled)return null;
       const validated=verifyPrivateQueueReply({
