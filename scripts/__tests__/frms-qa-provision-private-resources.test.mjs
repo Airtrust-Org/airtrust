@@ -283,13 +283,70 @@ test('V2 exact grant binds existing Worker credential to bucket phase only',asyn
     FRMS_QA_CREDENTIAL_MODE:credentialMode},api:apiFor(plan),now,configText}),
     /CREDENTIAL_MODE_DENIED/);
 });
-test('existing-token exception cannot enter private Worker deployment',async()=>{
-  const {readFileSync}=await import('node:fs');
+test('V2 remains bucket-only and V3 existing token remains Worker-only with exact fresh grant',async()=>{
+  const {createHash}=await import('node:crypto');
+  const configSha=createHash('sha256').update(configText).digest('hex');
+  const mode='existing_staging_worker_deploy_only';
+  const plan=provisionPlan({sha,phase:'worker',configSha,credentialMode:mode});
+  assert.equal(plan.schema,'AIRTRUST_FRMS_QA_PROVISION_V3');
+  assert.equal(plan.credential_mode,mode);
+  assertProvisionComment(body(plan),plan);
+  assert.equal((await authorize({env:{...env,FRMS_QA_PHASE:'worker',
+    FRMS_QA_CREDENTIAL_MODE:mode},api:apiFor(plan),now,configText})).phase,'worker');
+  assert.throws(()=>provisionPlan({sha,phase:'bucket',configSha,credentialMode:mode}),
+    /CREDENTIAL_MODE_DENIED/);
+  assert.throws(()=>provisionPlan({sha,phase:'worker',configSha,
+    credentialMode:'existing_staging_worker_bucket_only'}),/CREDENTIAL_MODE_DENIED/);
+  for(const invalid of [
+    {...plan,phase:'bucket'}, {...plan,release_sha:'b'.repeat(40)},
+    {...plan,credential_mode:'dedicated'}, {...plan,worker:'public-worker'},
+  ])assert.throws(()=>assertProvisionComment(body(invalid),plan),/NOT_EXACT/);
+  assert.throws(()=>assertProvisionComment(body(provisionPlan({sha,
+    phase:'worker',configSha})),plan),/GRANT_MISSING/);
+  await assert.rejects(authorize({env:{...env,FRMS_QA_PHASE:'worker',
+    FRMS_QA_CREDENTIAL_MODE:mode},api:apiFor(plan),now:now+13*3600000,
+    configText}),/EXPIRED/);
+});
+test('V3 uses existing Worker token only in ephemeral Worker phase, never runtime secret bulk',()=>{
   const w=readFileSync('.github/workflows/staging-frms-qa-private-provision.yml','utf8');
   const bucket=w.split('  provision-private-r2:')[1]?.split('  provision-private-worker:')[0];
   const worker=w.split('  provision-private-worker:')[1];
   assert.match(bucket,/existing_staging_worker_bucket_only/);
   assert.match(bucket,/secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
-  assert.doesNotMatch(worker,/secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
+  assert.doesNotMatch(bucket,/existing_staging_worker_deploy_only/);
+  assert.match(worker,/existing_staging_worker_deploy_only/);
+  assert.match(worker,/secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
   assert.match(worker,/secrets\.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN/);
+  assert.match(worker,/secrets\.FRMS_QA_D1_READ_TOKEN/);
+  assert.match(worker,/secrets\.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM/);
+  const {publicKey}=generateKeyPairSync('ed25519');
+  const secrets=buildPrivateRuntimeSecrets({sha,env:{
+    CLOUDFLARE_ACCOUNT_ID:'b'.repeat(32),
+    CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN:'broad-deploy-token',
+    CLOUDFLARE_FRMS_QA_READ_API_TOKEN:'broad-deploy-token',
+    FRMS_QA_D1_READ_TOKEN:'distinct-runtime-read',
+    FRMS_QA_CALLER_KEY_HEX:'a'.repeat(64),FRMS_QA_PREIMAGE_KEY_HEX:'c'.repeat(64),
+    FRMS_QA_APPROVAL_PUBLIC_KEY_PEM:publicKey.export({type:'spki',format:'pem'}),
+  }});
+  assert.equal(JSON.stringify(secrets).includes('broad-deploy-token'),false);
+  assert.equal(secrets.D1_READ_TOKEN,'distinct-runtime-read');
+  assert.equal(Object.prototype.hasOwnProperty.call(secrets,'CLOUDFLARE_API_TOKEN'),false);
+});
+
+test('V3 fails closed if broad Worker deployment credential is reused for runtime recovery',()=>{
+  const {publicKey}=generateKeyPairSync('ed25519');
+  const e={
+    CLOUDFLARE_ACCOUNT_ID:'b'.repeat(32),
+    CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN:'already-existing-staging-worker',
+    CLOUDFLARE_FRMS_QA_READ_API_TOKEN:'already-existing-staging-worker',
+    FRMS_QA_D1_READ_TOKEN:'already-existing-staging-worker',
+    FRMS_QA_CALLER_KEY_HEX:'a'.repeat(64),
+    FRMS_QA_PREIMAGE_KEY_HEX:'c'.repeat(64),
+    FRMS_QA_APPROVAL_PUBLIC_KEY_PEM:publicKey.export({type:'spki',format:'pem'}),
+  };
+  assert.throws(()=>buildPrivateRuntimeSecrets({env:e,sha}),/RUNTIME_TOKEN_MUST_BE_INDEPENDENT/);
+  assert.throws(()=>buildPrivateRuntimeSecrets({env:{...e,
+    CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN:'deploy',
+    CLOUDFLARE_FRMS_QA_READ_API_TOKEN:'read',
+    FRMS_QA_D1_READ_TOKEN:'read'},sha}),/RUNTIME_TOKEN_MUST_BE_INDEPENDENT/);
 });
