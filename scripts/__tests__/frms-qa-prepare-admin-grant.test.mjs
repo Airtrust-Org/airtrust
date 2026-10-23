@@ -60,6 +60,8 @@ test('strict prepare grant pins exact four-case synthetic tenant, phase and zero
   assert.equal(plan.tenant_id,999013);
   assert.equal(plan.phase,'prepare');
   assert.equal(plan.d1_writes_authorized,0);
+  assert.equal(plan.r2_preimage_object_write_authorized,true);
+  assert.equal(plan.r2_lifecycle_max_age_seconds,86400);
   assert.equal(plan.apply_authorized,false);
   assert.equal(plan.worker_deploy_authorized,false);
   assert.equal(plan.production_authorized,false);
@@ -69,6 +71,8 @@ test('strict prepare grant pins exact four-case synthetic tenant, phase and zero
     {apply_authorized:true},{phase:'apply'},
     {tenant_id:6},{release_sha:'b'.repeat(40)},
     {d1_writes_authorized:8},{worker_deploy_authorized:true},
+    {r2_preimage_object_write_authorized:false},
+    {r2_lifecycle_max_age_seconds:2592000},
     {extra:'unexpected'},{workflow_path:'other'},
   ])assert.throws(()=>assertPrepareGrantBody(body({...plan,...change}),plan),
     /FRMS_QA_PREPARE_ADMIN_GRANT_DENIED/);
