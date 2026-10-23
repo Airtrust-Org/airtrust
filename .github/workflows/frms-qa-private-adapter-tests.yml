@@ -32,6 +32,9 @@ jobs:
           node-version-file: '.node-version'
           cache: npm
       - run: npm ci
+      - name: Validate private Queue consumer bundle only (Wrangler offline dry-run)
+        run: |
+          npx wrangler deploy --dry-run --config ops/frms-qa-repair/wrangler.caller.staging.toml --outdir "$RUNNER_TEMP/frms-qa-queue-caller-dryrun"
       - name: Authenticate GitHub F0 admin grant before one-use private prepare RPC (offline fixtures)
         run: node --test scripts/__tests__/frms-qa-trusted-prepare-admission.test.mjs scripts/__tests__/frms-qa-private-queue-transport.test.mjs
       - name: Disposable DO SQLite grant persistence and restart contract
