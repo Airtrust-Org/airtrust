@@ -21,10 +21,10 @@ export async function readLmsScormEditionState(params:{
     enrollmentStartedAt:typeof m.data_inicio==='string'?m.data_inicio:null,
   });
   const cycleId=Number(m.active_lms_cycle_id)||null;
-  const proposal=contentType==='scorm'&&mismatch
+  const proposal=contentType==='scorm'&&mismatch&&cycleId!==null
     ? await readScormActiveResumeProposal({
         db:params.db,bucket:params.bucket,empresaId:params.empresaId,cursoId,
-        cycleId,activePrefix,
+        matriculaId:params.matriculaId,cycleId,activePrefix,
         cycleStartedAt:typeof m.active_lms_cycle_started_at==='string'
           ? m.active_lms_cycle_started_at:null,cmiJson,
         handoffHistoryEnabled:params.handoffEnabled,

@@ -7,21 +7,53 @@ import { planScormActiveResume, type ScormActiveResumePlan } from './lms-scorm-a
  */
 export async function readScormActiveResumeProposal(params: {
   db: D1Database; bucket: R2Bucket | null | undefined;
-  empresaId: number; cursoId: number;
-  cycleId?: number | null;
+  empresaId: number; cursoId: number; matriculaId: number;
+  cycleId: number;
   activePrefix: string | null;
   cycleStartedAt: string | null | undefined;
   cmiJson: string | null | undefined;
   /** Read append-only handoff provenance only when the governed schema is enabled. */
   handoffHistoryEnabled?: boolean;
 }): Promise<ScormActiveResumePlan | null> {
-  const { empresaId, cursoId, bucket, activePrefix } = params;
+  const { empresaId, cursoId, matriculaId, cycleId, bucket, activePrefix } = params;
   const root = 'lms/scorm/' + empresaId + '/' + cursoId + '/';
-  if (!Number.isSafeInteger(empresaId) || empresaId <= 0 ||
-      !Number.isSafeInteger(cursoId) || cursoId <= 0 ||
+  const isPositiveId = (id: number) => Number.isSafeInteger(id) && id > 0;
+  if (!isPositiveId(empresaId) || !isPositiveId(cursoId) ||
+      !isPositiveId(matriculaId) || !isPositiveId(cycleId) ||
       !bucket || !activePrefix || !activePrefix.startsWith(root) ||
       activePrefix.includes('..') || activePrefix.includes('\\') ||
       !activePrefix.endsWith('/')) return null;
+
+  // Confirm the exact tenant/enrollment/course/current-cycle/active-edition
+  // tuple before reading any R2 manifest. A valid prefix alone is not scope.
+  let activePackageSha256: string | null = null;
+  try {
+    const activePackage = await params.db.prepare(`
+      SELECT p.package_sha256
+      FROM lms_matriculas m
+      JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+        AND cy.curso_id=m.curso_id
+      JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+        AND c.deleted_at IS NULL AND c.tipo_conteudo='scorm'
+      JOIN lms_scorm_package_versions p ON p.empresa_id=c.empresa_id
+        AND p.curso_id=c.id AND p.r2_prefix=c.scorm_package_r2_prefix
+        AND p.status='ACTIVE'
+      WHERE m.id=? AND m.empresa_id=? AND m.curso_id=? AND m.deleted_at IS NULL
+        AND m.status IN ('NAO_INICIADO','EM_ANDAMENTO')
+        AND m.qualificacao_historico_id IS NULL
+        AND cy.id=? AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+        AND c.scorm_package_r2_prefix=?
+      ORDER BY p.id DESC LIMIT 1`,
+    ).bind(matriculaId, empresaId, cursoId, cycleId, activePrefix)
+      .first<{package_sha256:string|null}>();
+    if (typeof activePackage?.package_sha256 === 'string' &&
+        /^[a-f0-9]{64}$/.test(activePackage.package_sha256)) {
+      activePackageSha256 = activePackage.package_sha256;
+    }
+  } catch {
+    return null;
+  }
+  if (!activePackageSha256) return null;
 
   async function readSlides(prefix: string): Promise<string[] | null> {
     if (!prefix.startsWith(root) || !prefix.endsWith('/') ||
@@ -45,17 +77,6 @@ export async function readScormActiveResumeProposal(params: {
 
   const activeSlideIds = await readSlides(activePrefix);
   if (!activeSlideIds) return null;
-  let activePackageSha256: string | null = null;
-  try {
-    const row = await params.db.prepare(
-      `SELECT package_sha256 FROM lms_scorm_package_versions
-       WHERE empresa_id=? AND curso_id=? AND r2_prefix=? AND status='ACTIVE' LIMIT 1`,
-    ).bind(empresaId, cursoId, activePrefix)
-      .first<{package_sha256:string|null}>();
-    activePackageSha256 = row?.package_sha256 ?? null;
-  } catch {
-    activePackageSha256 = null;
-  }
   let cmi: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(params.cmiJson || 'null') as unknown;
@@ -72,14 +93,14 @@ export async function readScormActiveResumeProposal(params: {
   let previousPrefix: string | null = null;
   let previousPackageSha256: string | null = null;
   let handoffHistoryUnavailable = false;
-  if (params.handoffHistoryEnabled && params.cycleId) {
+  if (params.handoffHistoryEnabled) {
     try {
       const handoff = await params.db.prepare(
         `SELECT target_package_prefix AS r2_prefix,target_package_sha256 AS package_sha256
          FROM lms_scorm_edition_handoffs
          WHERE empresa_id=? AND curso_id=? AND matricula_id=? AND ciclo_id=?
          ORDER BY id DESC LIMIT 1`,
-      ).bind(empresaId, cursoId, Number(params.cycleId))
+      ).bind(empresaId, cursoId, matriculaId, cycleId)
         .first<{r2_prefix:string;package_sha256:string}>();
       if (handoff) {
         if (handoff.r2_prefix.startsWith(root) && handoff.r2_prefix.endsWith('/') &&

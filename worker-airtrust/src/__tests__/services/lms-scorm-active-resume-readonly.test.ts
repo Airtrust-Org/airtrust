@@ -13,10 +13,11 @@ function database(prefix:string|null, error=false, handoff:{r2_prefix:string;pac
       if(handoffError)throw new Error('handoff history unavailable');
       return handoff;
     }
-    if(error)throw new Error('history unavailable');
-    if(sql.includes('FROM lms_scorm_package_audit_log'))return prefix
-      ? {r2_prefix:prefix,package_sha256:'a'.repeat(64)} : null;
-    if(sql.includes('FROM lms_scorm_package_versions'))return {package_sha256:'b'.repeat(64)};
+    if(sql.includes('SELECT p.package_sha256'))return {package_sha256:'b'.repeat(64)};
+    if(sql.includes('FROM lms_scorm_package_audit_log')) {
+      if(error)throw new Error('history unavailable');
+      return prefix ? {r2_prefix:prefix,package_sha256:'a'.repeat(64)} : null;
+    }
     return null;
   })}))}))} as unknown as D1Database;
 }
@@ -29,7 +30,7 @@ describe('read-only ACTIVE SCORM resume',()=>{
     const db=database(root+'old/');
     const result=await readScormActiveResumeProposal({
       db,bucket,empresaId:6,cursoId:119,activePrefix:root+'new/',
-      cycleId:812,
+      matriculaId:100,cycleId:812,
       cycleStartedAt:'2026-09-01T10:00:00Z',
       handoffHistoryEnabled:true,
       cmiJson:JSON.stringify({'cmi.core.lesson_location':'32/37',
@@ -48,7 +49,7 @@ describe('read-only ACTIVE SCORM resume',()=>{
     const result=await readScormActiveResumeProposal({
       db:database(null,true),
       bucket:bucketWith({[root+'new/airtrust-completion-manifest.json']:active}),
-      empresaId:6,cursoId:119,activePrefix:root+'new/',
+      empresaId:6,cursoId:119,matriculaId:100,cycleId:812,activePrefix:root+'new/',
       cycleStartedAt:'2026-09-01',cmiJson:JSON.stringify({
         'cmi.core.lesson_location':'2/61'}),
     });
@@ -67,7 +68,7 @@ describe('read-only ACTIVE SCORM resume',()=>{
     const db=database(root+'prior/',false,{r2_prefix:root+'middle/',package_sha256:'c'.repeat(64)});
     const result=await readScormActiveResumeProposal({
       db,bucket,empresaId:6,cursoId:119,activePrefix:root+'active/',
-      cycleId:812,cycleStartedAt:'2026-09-01T10:00:00Z',handoffHistoryEnabled:true,
+      matriculaId:100,cycleId:812,cycleStartedAt:'2026-09-01T10:00:00Z',handoffHistoryEnabled:true,
       cmiJson:JSON.stringify({'cmi.core.lesson_location':'2/3','airtrust.viewed_slides':[1,2]}),
     });
     expect(result).toMatchObject({status:'MATCHED_ANCHOR',targetSlideId:'unit2',
@@ -82,7 +83,7 @@ describe('read-only ACTIVE SCORM resume',()=>{
     });
     const result=await readScormActiveResumeProposal({
       db:database(root+'prior/',false,null,true),bucket,empresaId:6,cursoId:119,
-      activePrefix:root+'active/',cycleId:812,cycleStartedAt:'2026-09-01',
+      activePrefix:root+'active/',matriculaId:100,cycleId:812,cycleStartedAt:'2026-09-01',
       handoffHistoryEnabled:true,
       cmiJson:JSON.stringify({'cmi.core.lesson_location':'2/3','airtrust.viewed_slides':[1,2]}),
     });
@@ -95,6 +96,7 @@ describe('read-only ACTIVE SCORM resume',()=>{
     const bucket=bucketWith({});
     const result=await readScormActiveResumeProposal({
       db:database(null),bucket,empresaId:6,cursoId:119,
+      matriculaId:100,cycleId:812,
       activePrefix:'lms/scorm/7/119/_candidates/evil/',
       cycleStartedAt:null,cmiJson:null,
     });
