@@ -6,6 +6,10 @@ on:
         description: Type FRMS_EXISTING_STAGING_READONLY
         required: true
         type: string
+      expected_main_sha:
+        description: Exact reviewed main SHA for read-only Cloudflare token probes
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -18,9 +22,14 @@ jobs:
       - name: Reject incorrect environment or confirmation
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           test "$GITHUB_REF" = refs/heads/main
           test "$CONFIRMATION" = FRMS_EXISTING_STAGING_READONLY
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          test "$(gh api repos/Airtrust-Org/airtrust/branches/main --jq .commit.sha)" = "$EXPECTED_SHA"
   worker_probe:
     needs: guard
     runs-on: ubuntu-latest
@@ -32,6 +41,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
+      - name: Test sanitized token-policy GET contracts (offline fixtures)
+        run: node --test scripts/__tests__/frms-existing-token-policy.test.mjs
       - name: Probe preexisting staging tokens via read-only Cloudflare GET
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
