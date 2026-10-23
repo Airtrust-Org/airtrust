@@ -1,0 +1,140 @@
+name: SCORM Resume Local Authenticated Worker Browser
+on:
+  pull_request:
+    paths:
+      - scripts/qa/build-scorm-resume-synthetic.py
+      - scripts/qa/fixtures/scorm-resume/**
+      - scripts/qa/make-scorm-resume-local-driver.mjs
+      - scripts/__tests__/scorm-resume-local-driver.test.mjs
+      - .github/workflows/scorm-resume-local-worker-browser.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/qa/build-scorm-resume-synthetic.py
+      - scripts/qa/fixtures/scorm-resume/**
+      - scripts/qa/make-scorm-resume-local-driver.mjs
+      - scripts/__tests__/scorm-resume-local-driver.test.mjs
+      - .github/workflows/scorm-resume-local-worker-browser.yml
+permissions:
+  contents: read
+concurrency:
+  group: scorm-resume-local-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  scorm-resume-local-worker-browser:
+    name: scorm-resume-local-worker-browser
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/playwright:v1.58.2-noble
+    timeout-minutes: 30
+    env:
+      EXPECTED_RESUME_SHA: a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Verify exact SHA and deny remote credentials
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(printenv CLOUDFLARE_API_TOKEN || true)"
+          test -z "$(printenv AIRTRUST_REMOTE_DB || true)"
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker-airtrust/package-lock.json
+      - name: Install pinned deps and SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sqlite3
+          npm ci
+          npm --prefix worker-airtrust ci
+      - name: Verify exact ZIP and external local driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test scripts/__tests__/scorm-resume-local-driver.test.mjs
+          python3 scripts/qa/build-scorm-resume-synthetic.py \
+            --output "$RUNNER_TEMP/scorm-resume-uncertified.zip" \
+            --json-output "$RUNNER_TEMP/scorm-resume-metadata.json"
+          test "$(sha256sum "$RUNNER_TEMP/scorm-resume-uncertified.zip" | cut -d' ' -f1)" = "$EXPECTED_RESUME_SHA"
+          node scripts/qa/make-scorm-resume-local-driver.mjs \
+            "$RUNNER_TEMP/scorm-resume-uncertified.zip" \
+            "$RUNNER_TEMP/scorm-resume-driver.json"
+      - name: Real local Worker D1 R2 Chromium and WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORKER_PID=0
+          cleanup() {
+            if [[ "$WORKER_PID" -gt 0 ]]; then kill "$WORKER_PID" 2>/dev/null || true; fi
+            rm -f worker-airtrust/.dev.vars
+            rm -rf worker-airtrust/.wrangler/scorm-browser-qa
+          }
+          trap cleanup EXIT
+          bash scripts/setup-local-lms-smoke-db.sh --reset
+          node scripts/qa/prepare-local-lms-auth.mjs
+          RUNTIME_JWT_SECRET="$(openssl rand -hex 32)"
+          {
+            printf '%s=%s\n' JWT_SECRET "$RUNTIME_JWT_SECRET"
+            printf '%s=%s\n' ENABLE_DEV_AUTH_BYPASS false
+          } > worker-airtrust/.dev.vars
+          npm run dev:worker:local -- --ip 127.0.0.1 > "$RUNNER_TEMP/worker-local.log" 2>&1 &
+          WORKER_PID=$!
+          ready=0
+          for i in $(seq 1 35); do
+            if curl --fail --silent --connect-timeout 2 --max-time 4 \
+              http://127.0.0.1:8787/api/health >/dev/null 2>&1; then ready=1; break; fi
+            if ! kill -0 "$WORKER_PID" 2>/dev/null; then
+              tail -n 100 "$RUNNER_TEMP/worker-local.log" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "$ready" != 1 ]]; then
+            tail -n 100 "$RUNNER_TEMP/worker-local.log" >&2
+            exit 1
+          fi
+          AIRTRUST_SCORM_QA_ZIP_PATH="$RUNNER_TEMP/scorm-resume-uncertified.zip" \
+          AIRTRUST_SCORM_QA_DRIVER_PATH="$RUNNER_TEMP/scorm-resume-driver.json" \
+            node scripts/qa/prepare-local-scorm-browser.mjs
+          timeout --signal=TERM 8m node scripts/qa/scorm-authenticated-zip-probe.mjs
+          node --input-type=module <<'NODE'
+          import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+          const r=JSON.parse(readFileSync(
+            'worker-airtrust/.wrangler/scorm-browser-qa/authenticated-exact-zip-observations.json','utf8'));
+          if(r.scope!=='DISPOSABLE_LOCAL_WORKER_D1_R2'||r.status!=='UNCERTIFIED'||
+            r.packageSha256!==process.env.EXPECTED_RESUME_SHA||r.activationAuthorized!==false||
+            !Array.isArray(r.browsers)||r.browsers.length!==2||
+            !['CHROMIUM','WEBKIT'].every(name=>r.browsers.some(x=>
+              x.browser===name&&x.outcome==='LOCAL_DIAGNOSTIC_PASS_NOT_CERTIFIED'&&
+              x.persistedCmi==='PASS'&&x.suspendResume==='PASS'&&x.tenantIsolation==='PASS')))
+            throw Error('SCORM_RESUME_LOCAL_PERSISTENCE_UNPROVEN');
+          const result={scope:r.scope,packageSha256:r.packageSha256,status:r.status,
+            activationAuthorized:false,
+            browsers:r.browsers.map(x=>({browser:x.browser,outcome:x.outcome,
+              tenantIsolation:x.tenantIsolation,persistedCmi:x.persistedCmi,
+              suspendResume:x.suspendResume,suspendComparison:x.suspendComparison})),
+            remoteWrites:0,certificationIssued:false};
+          mkdirSync('qa-state',{recursive:true});
+          writeFileSync('qa-state/scorm-resume-local-worker-browser-summary.json',
+            JSON.stringify(result,null,2)+'\n',{mode:0o600});
+          console.log(JSON.stringify(result));
+          NODE
+      - name: Upload sanitized local-only evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scorm-resume-local-RUN_${{ github.event.pull_request.head.sha || github.sha }}
+          path: qa-state/scorm-resume-local-worker-browser-summary.json
+          if-no-files-found: ignore
+          retention-days: 14
