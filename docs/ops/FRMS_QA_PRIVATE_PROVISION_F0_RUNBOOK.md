@@ -105,6 +105,19 @@ e armazenamento do token ao mínimo viável; **não** usar token de
 produção ou migrator D1. A existência dos nomes de secrets não
 comprova sua emissão/escopo.
 
+**Exceção estritamente diagnóstica e sem token novo (23/10/2026):**
+o workflow `staging-frms-qa-private-readiness.yml` usa o secret **já
+cadastrado** `CLOUDFLARE_WORKER_API_TOKEN` exclusivamente no passo de
+atestado remoto GET-only, no runner efêmero de staging. Esse acesso foi
+comprovado em #39892777613 para metadata D1, listagem R2 e bookmark,
+mas não autoriza gravação e não prova que o bucket FRMS exista.
+Não copiar, renomear ou injetar esse token no Worker privado, nem usá-lo
+como `FRMS_QA_D1_READ_TOKEN` de runtime. O workflow de **provisionamento**
+continua exigindo grants por fase e tokens com escopo independente;
+a exceção não o modifica. Um `GET_404` do bucket mantém readiness FAIL
+closed, não permite criar ou reutilizar bucket compartilhado.
+
+
 ## Comprovantes físicos e sequência posterior
 
 1. F0 integra a PR de infraestrutura somente com 8/8 checks, revisão,
