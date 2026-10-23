@@ -44,6 +44,20 @@ além dos oito gates e do mutex compartilhado. A aprovação manual do
 environment é opcional e não substitui a concessão por fase. Nunca executar
 uma operação de dados real apenas com aprovação do environment.
 
+**Opção sem emissão de token adicional (exclusiva fase `bucket`):** o
+`credential_mode=existing_staging_worker_bucket_only` reutiliza o secret
+`CLOUDFLARE_WORKER_API_TOKEN` **apenas no job efêmero Actions de bucket**.
+A concessão deve ser **V2** (`AIRTRUST_FRMS_QA_PROVISION_V2`), incluindo
+`credential_mode`, SHA e recursos exatos. O workflow de `worker` rejeita
+esse modo; o token jamais entra em secret/runtime do Worker privado.
+É uma exceção controlada ao privilégio mínimo da *credencial*: as
+operações permanecem limitadas pelo código às URLs e payloads fixos de
+bucket staging, com grant administrativo vigente, oito gates e mutex.
+A leitura R2 200 anterior não comprova permissão POST/PUT: um HTTP 403
+no momento autorizado deve parar, nunca motivar outro token ou bypass.
+A opção `dedicated` mantém o contrato V1 inalterado. Nenhuma operação
+remota foi autorizada pelo simples registro desta alternativa.
+
 Cada fase precisa de **comentário novo e não editado** por administrador
 autorizado na issue #776, com idade máxima de 12h. O dispatcher também
 precisa ser administrador. Não é permitido reaproveitar a concessão de
@@ -67,7 +81,9 @@ Inputs por dispatch:
 - `confirmation=AIRTRUST_FRMS_QA_PRIVATE_STAGING_PROVISION`;
 - `expected_main_sha=<SHA EXATO DA MAIN APÓS MERGE>`;
 - `grant_id=<ID REAL DO COMENTÁRIO F0 EM #776>`;
-- `phase=bucket` ou `phase=worker`.
+- `phase=bucket` ou `phase=worker`;
+- `credential_mode=dedicated` (V1), ou
+  `credential_mode=existing_staging_worker_bucket_only` (somente bucket, V2).
 
 A operação `bucket` vem primeiro, isolada da implantação do Worker.
 O provisionador verifica D1 existente com GET e bucket privado. Se o

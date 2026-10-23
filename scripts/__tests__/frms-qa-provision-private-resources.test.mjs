@@ -20,7 +20,7 @@ const env={
   FRMS_QA_EXPECTED_SHA:sha,
   FRMS_QA_CONFIRM:'AIRTRUST_FRMS_QA_PRIVATE_STAGING_PROVISION',
 };
-const body=p=>'AIRTRUST_FRMS_QA_PROVISION_V1\n'+JSON.stringify(p);
+const body=p=>p.schema+'\n'+JSON.stringify(p);
 function apiFor(plan,{permission='admin',gates=true,extraGrant={}}={}){
   return async path=>{
     if(path.endsWith('/branches/main'))return {commit:{sha}};
@@ -259,4 +259,37 @@ test('Worker provisioning requires scoped token and independently verified priva
     throw Error('No Cloudflare proof');},exec:()=>{executed=true;}}),
     /No Cloudflare proof/);
   assert.equal(executed,false);
+});
+
+// Only a new grant V2 may explicitly opt into the existing staging Worker token
+// for the short-lived Actions R2 bucket provisioning job. No Worker deploy or
+// runtime credential receives this exception.
+test('V2 exact grant binds existing Worker credential to bucket phase only',async()=>{
+  const {createHash}=await import('node:crypto');
+  const configSha=createHash('sha256').update(configText).digest('hex');
+  const credentialMode='existing_staging_worker_bucket_only';
+  const plan=provisionPlan({sha,phase:'bucket',configSha,credentialMode});
+  assert.equal(plan.schema,'AIRTRUST_FRMS_QA_PROVISION_V2');
+  assert.equal(plan.credential_mode,credentialMode);
+  assertProvisionComment(body(plan),plan);
+  const permitted=await authorize({env:{...env,FRMS_QA_CREDENTIAL_MODE:credentialMode},
+    api:apiFor(plan),now,configText});
+  assert.equal(permitted.credential_mode,credentialMode);
+  const old=provisionPlan({sha,phase:'bucket',configSha});
+  assert.throws(()=>assertProvisionComment(body(old),plan),/GRANT_MISSING/);
+  assert.throws(()=>assertProvisionComment(body({...plan,credential_mode:'dedicated'}),plan),/NOT_EXACT/);
+  assert.throws(()=>provisionPlan({sha,phase:'worker',configSha,credentialMode}),/CREDENTIAL_MODE_DENIED/);
+  await assert.rejects(authorize({env:{...env,FRMS_QA_PHASE:'worker',
+    FRMS_QA_CREDENTIAL_MODE:credentialMode},api:apiFor(plan),now,configText}),
+    /CREDENTIAL_MODE_DENIED/);
+});
+test('existing-token exception cannot enter private Worker deployment',async()=>{
+  const {readFileSync}=await import('node:fs');
+  const w=readFileSync('.github/workflows/staging-frms-qa-private-provision.yml','utf8');
+  const bucket=w.split('  provision-private-r2:')[1]?.split('  provision-private-worker:')[0];
+  const worker=w.split('  provision-private-worker:')[1];
+  assert.match(bucket,/existing_staging_worker_bucket_only/);
+  assert.match(bucket,/secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
+  assert.doesNotMatch(worker,/secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
+  assert.match(worker,/secrets\.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN/);
 });
