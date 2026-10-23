@@ -1,0 +1,61 @@
+name: Staging SCORM Resume Prerequisite (Read-only)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_SCORM_RESUME_READINESS
+        required: true
+        type: string
+      release_sha:
+        description: Exact deployed staging source SHA
+        required: true
+        type: string
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 8
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - name: Check exact trusted main
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]]
+          [[ "$CONFIRMATION" == 'AIRTRUST_SCORM_RESUME_READINESS' ]]
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$RELEASE_SHA" ]]
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Require release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - run: npm ci
+      - name: Prove Pages SHA
+        run: node --input-type=module -e "const m=await import('./e2e/lib/live-sha-guard.mjs'); await m.assertLiveFrontendShaFromOrigin('https://staging.airtrust.pages.dev',process.env.RELEASE_SHA.slice(0,7));"
+      - name: Inspect QA tenant and active synthetic SCORM package without data writes
+        run: node scripts/staging/lms-scorm-resume-readiness.mjs
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: scorm-resume-readiness
+          path: qa-state/staging-lms-scorm/resume-readiness.json
+          if-no-files-found: ignore
+          retention-days: 14
