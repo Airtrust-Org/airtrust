@@ -53,8 +53,106 @@ export function assertPrepareGrantBody(body,plan){
 export function githubPrepareReadOnlyApi({token,fetcher=fetch}={}){
   if(typeof token!=='string'||!token.trim()||typeof fetcher!=='function')deny();
   return async path=>{
-    if(typeof path!=='string'||!/^repos\/Airtrust-Org\/airtrust\//.test(path)||
-       /\.\.|#|\s|\\|%2f|%5c/i.test(path))deny();
+    const prefix='repos/'+REPO+'/';
+    const suffix=typeof path==='string'&&path.startsWith(prefix)?
+      path.slice(prefix.length):'';
+    const checkNames=GATES.map(encodeURIComponent).join('|');
+    const allow=suffix==='branches/main'||
+      /^actions\/runs\/[1-9][0-9]{7,13}$/.test(suffix)||
+      /^issues\/comments\/[1-9][0-9]{0,15}$/.test(suffix)||
+      /^collaborators\/[a-zA-Z0-9-]{1,39}\/permission$/.test(suffix)||
+      new RegExp('^commits/[a-f0-9]{40}/check-runs\\?check_name=('+
+        checkNames+')&filter=latest&per_page=100
+    let response,data;
+    try{
+      response=await fetcher('https://api.github.com/'+path,{
+        method:'GET',redirect:'manual',
+        headers:{Authorization:'Bearer '+token,
+          Accept:'application/vnd.github+json',
+          'X-GitHub-Api-Version':'2022-11-28'},
+        signal:AbortSignal.timeout(15000),
+      });
+      if(response?.status!==200||response.redirected)deny();
+      data=await response.json();
+    }catch{deny();}
+    if(!data||typeof data!=='object'||Array.isArray(data))deny();
+    return data;
+  };
+}
+
+/**
+ * Intended for a F0-controlled GitHub Actions runner only. A forged env or
+ * injected api callback is NOT authentication. The trusted runner must own
+ * the GitHub token and pin the workflow SHA, mutex and caller implementation.
+ *
+ * Run ID cannot be known when the admin writes the authorization comment;
+ * instead verify run identity through authenticated GitHub Actions GET.
+ */
+export async function verifyPrepareAdminGrant({
+  env={},api,now=Date.now(),
+}={}){
+  const sha=env.GITHUB_SHA,grantId=String(env.FRMS_QA_PREPARE_GRANT_ID||''),
+    runId=String(env.GITHUB_RUN_ID||''),attempt=Number(env.GITHUB_RUN_ATTEMPT);
+  if(env.GITHUB_ACTIONS!=='true'||
+     env.GITHUB_EVENT_NAME!=='workflow_dispatch'||
+     env.GITHUB_REF!=='refs/heads/main'||
+     env.GITHUB_REPOSITORY!==REPO||
+     env.GITHUB_WORKFLOW_REF!==WORKFLOW_REF||
+     env.FRMS_QA_PREPARE_CONFIRM!=='AIRTRUST_FRMS_QA_PREPARE_ONLY_F0_APPROVED'||
+     env.FRMS_QA_PREPARE_EXPECTED_SHA!==sha||
+     !SHA.test(sha||'')||!POS.test(grantId)||!POS.test(runId)||
+     !Number.isSafeInteger(attempt)||attempt<1||
+     !USER.test(env.GITHUB_ACTOR||'')||
+     !Number.isFinite(now)||typeof api!=='function')deny();
+  const plan=exactPreparePlan({sha});
+  let main,run,comment;
+  try{
+    [main,run,comment]=await Promise.all([
+      api('repos/'+REPO+'/branches/main'),
+      api('repos/'+REPO+'/actions/runs/'+runId),
+      api('repos/'+REPO+'/issues/comments/'+grantId),
+    ]);
+  }catch{deny();}
+  if(main?.commit?.sha!==sha||
+     run?.id!==Number(runId)||run?.head_sha!==sha||
+     run?.head_branch!=='main'||run?.event!=='workflow_dispatch'||
+     run?.path!==WORKFLOW||run?.run_attempt!==attempt||
+     run?.actor?.login!==env.GITHUB_ACTOR||
+     !['queued','in_progress','waiting','requested'].includes(run?.status))
+    deny();
+  if(comment?.id!==Number(grantId)||
+     comment?.issue_url!=='https://api.github.com/repos/'+REPO+'/issues/'+ISSUE||
+     comment.created_at!==comment.updated_at||
+     !USER.test(comment?.user?.login||''))deny();
+  const age=now-Date.parse(comment.created_at);
+  if(!Number.isFinite(age)||age<0||age>2*3600000)deny();
+  assertPrepareGrantBody(comment.body,plan);
+  const admins=new Set([comment.user.login,env.GITHUB_ACTOR]);
+  let responses;
+  try{
+    responses=await Promise.all([
+      ...[...admins].map(login=>api('repos/'+REPO+'/collaborators/'+login+'/permission')),
+      ...GATES.map(name=>api('repos/'+REPO+'/commits/'+sha+
+        '/check-runs?check_name='+encodeURIComponent(name)+'&filter=latest&per_page=100')),
+    ]);
+  }catch{deny();}
+  const perms=responses.slice(0,admins.size),
+    gates=responses.slice(admins.size);
+  if(!perms.every(p=>p?.permission==='admin')||
+     !gates.every((group,index)=>group&&Array.isArray(group.check_runs)&&
+       group.check_runs.some(c=>c.name===GATES[index]&&
+         c.head_sha===sha&&c.status==='completed'&&
+         c.conclusion==='success'&&c.app?.slug==='github-actions')))
+    deny();
+  return Object.freeze({
+    schema:'AIRTRUST_FRMS_QA_PREPARE_GRANT_VERIFIED_V1',
+    status:'VERIFIED_BY_INDEPENDENT_GITHUB_ADMIN_CHECK',
+    sha,dbId:TARGET.db_id,tenantId:999013,
+    grantId,runId,runAttempt:attempt,
+  });
+}
+).test(suffix);
+    if(!allow)deny();
     let response,data;
     try{
       response=await fetcher('https://api.github.com/'+path,{
