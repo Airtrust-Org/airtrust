@@ -116,6 +116,46 @@ test('accepts exact merged release SHA using required gates on the associated PR
   assert.ok(!calls.includes(`commits/${mergeSha}/check-runs?per_page=100`));
 });
 
+test('accepts newer main release only with authenticated ancestry from original F5 merge', async () => {
+  const now = Date.now();
+  const mergeSha = 'd'.repeat(40), releaseSha = 'f'.repeat(40);
+  const reviewedHeadSha = 'e'.repeat(40);
+  const current = { ...base, sha: releaseSha };
+  const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'];
+  const request = `compare/${mergeSha}...${releaseSha}`;
+  const get = async (path) => {
+    if (path === `pulls/${PR}`) return {
+      state: 'closed', merged: true, merge_commit_sha: mergeSha,
+      base: { ref: 'main' }, head: { sha: reviewedHeadSha, repo: { full_name: REPO, fork: false } }
+    };
+    if (path === request) return { status: 'ahead', behind_by: 0,
+      base_commit: { sha: mergeSha }, merge_base_commit: { sha: mergeSha } };
+    if (path === `commits/${reviewedHeadSha}/check-runs?per_page=100`) return { check_runs:
+      names.map(name => ({ name, head_sha: reviewedHeadSha,
+        status: 'completed', conclusion: 'success' })) };
+    if (path === `issues/comments/${base.grantId}`) return {
+      issue_url: `https://api.github.com/repos/${REPO}/issues/776`,
+      created_at: new Date(now - 1000).toISOString(),
+      updated_at: new Date(now - 1000).toISOString(),
+      body: grantBody(current), user: { login: 'owner-user' }
+    };
+    if (path.startsWith('collaborators/')) return { permission: 'admin' };
+    throw new Error(`unexpected request ${path}`);
+  };
+  assert.equal(await verify(current, 'read-token', get, now), true);
+  for (const ancestry of [
+    { status: 'diverged', behind_by: 1, base_commit: { sha: mergeSha }, merge_base_commit: { sha: mergeSha } },
+    { status: 'ahead', behind_by: 0, base_commit: { sha: mergeSha }, merge_base_commit: { sha: '0'.repeat(40) } },
+    { status: 'ahead', behind_by: 0, base_commit: { sha: '0'.repeat(40) }, merge_base_commit: { sha: mergeSha } },
+    { status: 'behind', behind_by: 1, base_commit: { sha: mergeSha }, merge_base_commit: { sha: mergeSha } },
+  ]) {
+    const invalid = path => path === request ? Promise.resolve(ancestry) : get(path);
+    await assert.rejects(verify(current, 'read-token', invalid, now),
+      /F5_RELEASE_NOT_DESCENDANT_OF_MERGED_PR/);
+  }
+});
+
 test('rejects a merged SHA not associated to the PR or checks from a different PR head', async () => {
   const now = Date.now();
   const mergeSha = 'd'.repeat(40);
@@ -132,6 +172,11 @@ test('rejects a merged SHA not associated to the PR or checks from a different P
         name, head_sha: checkSha, status: 'completed', conclusion: 'success'
       }))
     };
+    if (path === `compare/${associatedMergeSha}...${merged.sha}`) return {
+      status: 'diverged', behind_by: 1,
+      base_commit: { sha: associatedMergeSha },
+      merge_base_commit: { sha: '0'.repeat(40) }
+    };
     if (path === `issues/comments/${base.grantId}`) return {
       issue_url: `https://api.github.com/repos/${REPO}/issues/776`,
       created_at: new Date(now - 1000).toISOString(), updated_at: new Date(now - 1000).toISOString(),
@@ -141,7 +186,7 @@ test('rejects a merged SHA not associated to the PR or checks from a different P
     throw new Error(`unexpected request ${path}`);
   };
   await assert.rejects(verify(merged, 'read-token', setup({ associatedMergeSha: 'f'.repeat(40) }), now),
-    /F5_PR_HEAD_CHANGED_DRAFT_OR_FORKED/);
+    /F5_RELEASE_NOT_DESCENDANT_OF_MERGED_PR/);
   await assert.rejects(verify(merged, 'read-token', setup({ checkSha: mergeSha }), now),
     /F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN/);
 });
