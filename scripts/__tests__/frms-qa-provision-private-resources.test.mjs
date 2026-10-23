@@ -332,3 +332,21 @@ test('V3 uses existing Worker token only in ephemeral Worker phase, never runtim
   assert.equal(secrets.D1_READ_TOKEN,'distinct-runtime-read');
   assert.equal(Object.prototype.hasOwnProperty.call(secrets,'CLOUDFLARE_API_TOKEN'),false);
 });
+
+test('V3 fails closed if broad Worker deployment credential is reused for runtime recovery',()=>{
+  const {publicKey}=generateKeyPairSync('ed25519');
+  const e={
+    CLOUDFLARE_ACCOUNT_ID:'b'.repeat(32),
+    CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN:'already-existing-staging-worker',
+    CLOUDFLARE_FRMS_QA_READ_API_TOKEN:'already-existing-staging-worker',
+    FRMS_QA_D1_READ_TOKEN:'already-existing-staging-worker',
+    FRMS_QA_CALLER_KEY_HEX:'a'.repeat(64),
+    FRMS_QA_PREIMAGE_KEY_HEX:'c'.repeat(64),
+    FRMS_QA_APPROVAL_PUBLIC_KEY_PEM:publicKey.export({type:'spki',format:'pem'}),
+  };
+  assert.throws(()=>buildPrivateRuntimeSecrets({env:e,sha}),/RUNTIME_TOKEN_MUST_BE_INDEPENDENT/);
+  assert.throws(()=>buildPrivateRuntimeSecrets({env:{...e,
+    CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN:'deploy',
+    CLOUDFLARE_FRMS_QA_READ_API_TOKEN:'read',
+    FRMS_QA_D1_READ_TOKEN:'read'},sha}),/RUNTIME_TOKEN_MUST_BE_INDEPENDENT/);
+});
