@@ -74,7 +74,7 @@ export function privateQueueRunnerApi({accountId,queueId,releaseSha,token,fetche
         deny();
       const result=await request('',{body:message,content_type:'json'});
       // Push success never proves a private Worker executed the operation.
-      return Object.freeze({queued:true,remoteWritesExecutedByRunner:0,
+      return Object.freeze({queued:true,queueMessagesWritten:1,d1Writes:0,
         receiptConfirmed:false,remoteMessageMetadataPresent:!!result.metadata});
     },
     /** Exactly one result at a time. Cloudflare lease is never logged. */
