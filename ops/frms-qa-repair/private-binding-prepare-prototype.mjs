@@ -56,7 +56,9 @@ export async function prepareViaPrivateServiceBinding({
   try{
     acquired=await grantLedger.transaction(async tx=>{
       const scope='frms-qa-prepare-grant:'+sha+':'+grantId;
-      if(await tx.get(scope))return false;
+      // Presence, not truthiness, consumes a grant. Null/false/empty
+      // records must never be treated as unused.
+      if((await tx.get(scope))!==undefined)return false;
       await tx.put(scope,{runId,runAttempt:attempt,sha,phase:'prepare'});
       return true;
     });
