@@ -199,6 +199,36 @@ describe('POST /:id/scorm-edition-handoff', () => {
     expect(mocks.writeHandoff).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['cycle identity', { cycleId: 903 }],
+    ['required learner review', { reviewRequired: false }],
+    ['navigation position', { targetPosition: 44 }],
+  ])('rejects a resume proposal with invalid %s before the writer', async (_field, change) => {
+    const { db } = createDb({
+      id: 74,
+      curso_id: 33,
+      status: 'EM_ANDAMENTO',
+      data_inicio: '2026-10-01T00:00:00Z',
+      qualificacao_historico_id: null,
+      ciclo_id: 902,
+      cycle_started_at: '2026-10-01T00:00:00Z',
+      tipo_conteudo: 'scorm',
+      scorm_package_r2_prefix: 'lms/scorm/17/33/active/',
+      package_sha256: packageSha256,
+      cmi_json: '{"cmi.core.lesson_location":"32/37"}',
+    });
+    mocks.readProposal.mockResolvedValueOnce({ ...proposal, ...change });
+
+    const response = await createApp().request(
+      '/74/scorm-edition-handoff',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      createEnv(db, 'true'),
+    );
+
+    expect(response.status).toBe(409);
+    expect(mocks.writeHandoff).not.toHaveBeenCalled();
+  });
+
   it('does not resolve or mutate an otherwise eligible enrollment from another tenant', async () => {
     const { db, calls } = createDb({
       id: 74,

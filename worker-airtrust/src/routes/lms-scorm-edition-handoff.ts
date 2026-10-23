@@ -56,7 +56,12 @@ export function registerLmsScormEditionHandoffRoute(app: Hono<{Bindings:Env}>): 
       cycleId:Number(row.ciclo_id),activePrefix:row.scorm_package_r2_prefix,
       cycleStartedAt:row.cycle_started_at,cmiJson:row.cmi_json,
     });
-    if (!proposal || proposal.status === 'INVALID_ACTIVE_PACKAGE' ||
+    const validResumeStatuses = ['MATCHED_ANCHOR','SUGGESTED_ANCHOR','START_ACTIVE'];
+    if (!proposal || !validResumeStatuses.includes(proposal.status) ||
+        proposal.cycleId !== Number(row.ciclo_id) || proposal.reviewRequired !== true ||
+        !Number.isSafeInteger(proposal.activeTotal) || proposal.activeTotal < 1 ||
+        !Number.isSafeInteger(proposal.targetPosition) || proposal.targetPosition < 1 ||
+        proposal.targetPosition > proposal.activeTotal ||
         proposal.activePackageSha256 !== row.package_sha256 ||
         proposal.canMarkComplete !== false || proposal.canTransferScore !== false) {
       throw new ApiError('Plano de retomada ou hash do pacote ativo não pôde ser verificado', 409);
