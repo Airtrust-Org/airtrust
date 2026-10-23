@@ -317,6 +317,42 @@ test('correlated encrypted reply rejects a signed but inconsistent receipt diges
     /FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
 });
 
+test('prepare and apply never publish a reply when durable outcome persistence fails',async()=>{
+  for(const operation of ['prepare','apply']){
+    const request=operation==='prepare'?await message():await applyMessage();
+    const db=storage(),sent=[];
+    const put=db.put;
+    db.put=async(k,v)=>{
+      if(k.startsWith('outcome:'))throw Error('SYNTHETIC_DO_WRITE_FAILED');
+      return put(k,v);
+    };
+    const binding=operation==='prepare'?{prepare:async()=>({
+      receiptId:'c'.repeat(64),receipt:{dbId:DB,tenantId:999013,writes:0},
+    })}:{apply:async()=>({status:'QA_STAGING_REPAIR_VALIDATED',
+      valid:4,updatedRows:8,sha:SHA})};
+    const options={message:request,env:runtime,storage:db,binding,
+      responseQueue:{send:async x=>sent.push(x)},now:clock};
+    const consumeOne=operation==='prepare'?consumeTrustedQueuePrepare:consumeTrustedQueueApply;
+    await assert.rejects(consumeOne(options),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+    assert.equal(sent.length,0);
+    assert.equal([...db.map.keys()].filter(k=>
+      k.startsWith('frms-qa-'+operation+'-grant:')).length,1);
+  }
+});
+test('durable outcome is committed before a prepare reply becomes visible',async()=>{
+  const request=await message(),db=storage(),order=[];
+  const put=db.put;
+  db.put=async(k,v)=>{
+    if(k.startsWith('outcome:'))order.push('persist:'+v.status);
+    return put(k,v);
+  };
+  await consumeTrustedQueuePrepare({message:request,env:runtime,storage:db,
+    binding:{prepare:async()=>({receiptId:'a'.repeat(64),
+      receipt:{dbId:DB,tenantId:999013,writes:0}})},
+    responseQueue:{send:async()=>order.push('send')},now:clock});
+  assert.deepEqual(order,['persist:RECEIPT_VALIDATED','send']);
+});
+
 test('indeterminate apply burns capability and never retries private RPC',async()=>{
   const m=await applyMessage(),db=storage();let calls=0;
   const binding={apply:async()=>{calls++;throw Error('DO_NOT_LEAK');}};
