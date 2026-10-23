@@ -385,6 +385,47 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     expect(body.cmi_json).toContain('airtrust.viewed_slides');
   });
 
+  it('a finalização explícita SCORM 2004 preserva seus campos e não envia status 1.2', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const html = buildLaunchPage({
+      matriculaId: 347,
+      titulo: 'Curso SCORM 2004',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/120/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: '',
+      isScorm2004: true,
+      initialCmiJson: JSON.stringify({
+        'cmi.completion_status': 'completed',
+        'cmi.success_status': 'passed',
+        'cmi.score.raw': '96',
+        'cmi.location': '37/37',
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API_1484_11 as Record<string, (...args: unknown[]) => unknown>;
+    api.Initialize('');
+    g.window.dispatchEvent(new g.MessageEvent('message', {
+      origin: '',
+      source: g.window.parent,
+      data: { type: 'lms:request-completion', matriculaId: 347 },
+    }));
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
+    expect(body).toMatchObject({
+      matricula_id: 347,
+      commit_event: 'SCORM_USER_FINALIZE',
+      completion_candidate: true,
+      completion_status: 'completed',
+      success_status: 'passed',
+      score_raw: 96,
+    });
+    expect(body.lesson_status).toBeUndefined();
+    expect(body.completion_observed_at).toEqual(expect.any(String));
+  });
+
   it('não deixa eventos de saída rebaixarem um SCORM_FINISH enfileirado durante autosave', async () => {
     const matriculaId = 987654;
     let releaseAutosave: (response: unknown) => void = () => {};
