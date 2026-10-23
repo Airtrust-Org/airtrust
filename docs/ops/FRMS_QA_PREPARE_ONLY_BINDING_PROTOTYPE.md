@@ -61,9 +61,18 @@ consistente, nem apenas variáveis do job.
 uso operacional, uma implementação confiável deve comprovar, via API
 autenticada do GitHub e sob mutex governado: comentário inalterado,
 autor admin F0, idade, fase, SHA, recursos, workflow/run, exigências dos
-oito gates, sem reutilizar o grant V2 do bucket. O código de verificação existe, mas **não está instalado num executor
-confiável**, não fornece a implementação de transporte entre GitHub e
-Cloudflare e não está conectado ao CI de provisionamento. Em particular, um caller que controle a injeção
+oito gates, sem reutilizar o grant V2 do bucket. O verificador de concessão foi ligado ao workflow protegido
+`.github/workflows/staging-frms-qa-private-prepare.yml` **somente para
+preflight GET-only de GitHub**. Esse workflow exige comentário F0 novo,
+inalterado, SHA/ator/run atuais, oito gates e mutex de staging. Sua saída
+`FRMS_QA_PREPARE_ADMIN_GRANT_READONLY_VERIFIED` significa apenas que a
+concessão foi autenticada naquele run; **não cria preimagem R2, não chama
+`binding.prepare`, não consome grant no ledger persistente e não autoriza
+`apply`**. Não recebe credenciais Cloudflare, não faz deploy nem SQL.
+
+O verificador ainda **não está instalado num chamador operacional privado**,
+não fornece o transporte entre GitHub e Cloudflare e não está conectado
+à execução de prepare no Worker. Em particular, um caller que controle a injeção
 poderia falsificar seu retorno, portanto o protótipo não deve ser
 promovido a um serviço confiável sem essa fronteira externa.
 
