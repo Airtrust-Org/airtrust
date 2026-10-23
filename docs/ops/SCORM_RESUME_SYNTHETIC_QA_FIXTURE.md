@@ -45,3 +45,7 @@ inconsistência entre `lesson_location` e `suspend_data`, e **nunca** define
 O único aceite final é teste autenticado do Worker/Player real, com launch,
 commit, fechamento, reabertura, readback e isolamento verificáveis, sem alunos
 reais e com cleanup concluído. A PR desta fixture não executa esses writes.
+
+## Browser and backend regression (local only)
+
+The `scorm-resume-local-worker-browser.yml` workflow runs a SHA-pinned synthetic ZIP with a non-certifying navigation driver against a **disposable** local Worker, SQLite D1, Wrangler R2, and real Chromium/WebKit. It checks an actual authenticated asset session, Next/Commit, Finish, resume after relaunch, stored CMI, and denied cross-tenant access. The source SHA, ZIP SHA and sanitized result are bound to GitHub Actions; credentials for remote Cloudflare are denied. This is **not** trusted staging certification, authorization to activate, or a substitute for the official staging fixture prerequisite.

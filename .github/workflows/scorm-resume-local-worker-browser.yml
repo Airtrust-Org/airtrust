@@ -134,7 +134,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: scorm-resume-local-RUN_${{ github.event.pull_request.head.sha || github.sha }}
+          name: scorm-resume-local-${{ github.sha }}
           path: qa-state/scorm-resume-local-worker-browser-summary.json
           if-no-files-found: ignore
           retention-days: 14
