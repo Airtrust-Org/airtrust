@@ -35,6 +35,7 @@ test('rejects mismatched run ID, tenant, employee, marker and key before deletin
     {...pdf(1),empresa_id:999015},
     {...pdf(1),employee_code:'real_employee'},
     {...pdf(1),course_marker:'real_course'},
+    {...pdf(1),course_marker:marker+'1',expected_marker:marker+'1'},
     {...pdf(1),r2_key:'certificados/empresa-999014/funcionario-201/historico-301/forged.pdf'},
   ];
   for (const x of variants) {
@@ -205,6 +206,7 @@ test('D1 plan is bound to exact run marker and ownership before R2-scoped cleanu
   assert.throws(()=>validateR2CleanupPlan({...plan,marker:marker+'1'},code,marker),/QA_R2_RUN_PLAN_INVALID/);
   assert.throws(()=>validateR2CleanupPlan({...plan,rows:[pdf(1),pdf(1)]},code,marker),/QA_PDF_DUPLICATE_KEY/);
   assert.throws(()=>validateR2CleanupPlan({...plan,rows:[pdf(1),{...pdf(2),tenant_code:'other'}]},code,marker),/QA_PDF_OWNER_MISMATCH/);
+  assert.throws(()=>validateR2CleanupPlan({...plan,rows:[{...pdf(1),course_marker:marker+'1',expected_marker:marker+'1'}]},code,marker),/QA_PDF_OWNER_MISMATCH/);
 });
 
 test('R2 canary is compensated if PUT persists remotely but the reply times out',async()=>{
