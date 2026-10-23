@@ -21,7 +21,7 @@ function fixture() {
     CREATE TABLE lms_cursos (
       id INTEGER, empresa_id INTEGER, tipo_conteudo TEXT,
       scorm_package_r2_prefix TEXT, scorm_launch_file TEXT, scorm_versao TEXT,
-      conteudo_arquivo_nome TEXT, updated_at TEXT,
+      conteudo_arquivo_nome TEXT, updated_at TEXT, deleted_at TEXT,
       PRIMARY KEY(empresa_id,id)
     );
   `);
@@ -104,6 +104,14 @@ describe('certified SCORM package activation — atomic SQLite/D1 transition', (
       {id:'a',status:'SUPERSEDED'}, {id:'b',status:'SUPERSEDED'}, {id:'c',status:'ACTIVE'},
     ]);
     expect(coursePrefix(db)).toBe(prefix('c'));
+  });
+
+  it('does not demote or activate a candidate when its course was deleted', async () => {
+    const db = fixture(), preflight = candidate(db);
+    db.database.prepare("UPDATE lms_cursos SET deleted_at='2026-10-23' WHERE empresa_id=6 AND id=41").run();
+    expect(await commitCertifiedScormActivation(preflight)).toBe(false);
+    expect(states(db)[0]).toEqual({id:'a',status:'ACTIVE'});
+    expect(coursePrefix(db)).toBe(prefix('a'));
   });
 
   it('rolls back the demotion if the candidate promotion fails inside the batch', async () => {
