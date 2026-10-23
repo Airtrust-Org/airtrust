@@ -144,6 +144,35 @@ test('transport exception consumes grant and records indeterminate outcome witho
   await assert.rejects(consume(m,db,binding),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
   assert.equal(calls,1);
 });
+test('malformed private prepare response quarantines spent grant without exposing receipt',async()=>{
+  const m=await message(),db=storage();
+  let calls=0;
+  const binding={prepare:async()=>{
+    calls++;
+    return {receiptId:'a'.repeat(64),receipt:{
+      dbId:DB,tenantId:999013,writes:1,internalBookmark:'SECRET_BOOKMARK'}};
+  }};
+  await assert.rejects(consume(m,db,binding),
+    /FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+  assert.equal(calls,1);
+  const persisted=JSON.stringify([...db.map]);
+  assert.match(persisted,/INDETERMINATE/);
+  assert.doesNotMatch(persisted,/SECRET_BOOKMARK/);
+  assert.equal([...db.map.keys()].filter(k=>k.startsWith('frms-qa-prepare-grant:')).length,1);
+  await assert.rejects(consume(m,db,binding),
+    /FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+  assert.equal(calls,1);
+});
+test('runtime HMAC key pin mismatch denies before binding invocation',async()=>{
+  const m=await message(),db=storage();
+  let calls=0;
+  await assert.rejects(consume(m,db,{prepare:async()=>{calls++;}},
+    {env:{...runtime,CALLER_KEY_SHA256:'0'.repeat(64)}}),
+    /FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+  assert.equal(calls,0);
+  assert.equal(db.map.size,0);
+});
+
 test('tampering, wrong env or expiration fails closed before private RPC',async()=>{
   const m=await message();
   for(const changes of [
