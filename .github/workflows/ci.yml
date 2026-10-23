@@ -90,7 +90,7 @@ jobs:
       - name: validate SCORM 0566 staging schema trusted workflow and physical guards
         run: node --test scripts/__tests__/staging-scorm-handoff-0566-workflow.test.mjs
       - name: validate F5 single-candidate staging authorization guard
-        run: node --test scripts/__tests__/f5-candidate-approval-guard.test.mjs
+        run: node --test scripts/__tests__/f5-candidate-approval-guard.test.mjs scripts/__tests__/f5-inactive-candidate-executor.test.mjs
       - name: validate CI schema bootstrap provenance / staleness
         run: |
           node --test scripts/ci/check-ci-schema-bootstrap.test.mjs

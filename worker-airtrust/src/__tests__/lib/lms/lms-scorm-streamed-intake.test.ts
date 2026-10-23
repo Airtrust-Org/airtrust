@@ -195,8 +195,13 @@ describe('F5 streamed SCORM candidate intake', () => {
       empresaId: f.tenantId, cursoId: f.courseId, userId: 99,
       operationId: intake.operationId, expectedSha256: packageSha256, arquivoNome: 'synthetic.zip',
     });
-    expect(result).toMatchObject({ status: 'VALIDATED', packageSha256, active: false,
-      completionWritten: false, certificateIssued: false });
+    expect(result).toMatchObject({ status: 'VALIDATED', packageId: f.operationId,
+      packageSha256, active: false, createdByOperation: true, alreadyExisted: false,
+      completionWritten: false, certificateIssued: false,
+      r2Readback: { source: 'WORKER_R2_STREAMED_ZIP_READBACK', zipSha256: packageSha256,
+        zipBytes: f.bytes.length, etagStable: true, memberIntegrityVerified: true,
+        launchAssetSha256: expect.stringMatching(/^[a-f0-9]{64}$/) },
+    });
     expect(result.publishable).toBe(false);
     expect(result.conformance?.status).toBe('NOT_SUPPORTED');
     expect(f.db.candidate).toMatchObject({ empresa_id: 77, curso_id: 12, status: 'VALIDATED' });

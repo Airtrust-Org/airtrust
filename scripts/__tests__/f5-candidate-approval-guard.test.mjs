@@ -85,6 +85,67 @@ test('verifies open exact PR, fresh immutable issue grant and both repository ad
   assert.deepEqual(calls.slice(-2), ['issues/comments/12345', 'collaborators/owner-user/permission']);
 });
 
+test('accepts exact merged release SHA using required gates on the associated PR head', async () => {
+  const now = Date.now();
+  const mergeSha = 'd'.repeat(40);
+  const reviewedHeadSha = 'e'.repeat(40);
+  const merged = { ...base, sha: mergeSha };
+  const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'];
+  const calls = [];
+  const get = async path => {
+    calls.push(path);
+    if (path === `pulls/${PR}`) return {
+      state: 'closed', merged: true, merge_commit_sha: mergeSha,
+      base: { ref: 'main' }, head: { sha: reviewedHeadSha, repo: { full_name: REPO, fork: false } }
+    };
+    if (path === `commits/${reviewedHeadSha}/check-runs?per_page=100`) return {
+      check_runs: names.map(name => ({ name, head_sha: reviewedHeadSha,
+        status: 'completed', conclusion: 'success' }))
+    };
+    if (path === `issues/comments/${base.grantId}`) return {
+      issue_url: `https://api.github.com/repos/${REPO}/issues/776`,
+      created_at: new Date(now - 1000).toISOString(), updated_at: new Date(now - 1000).toISOString(),
+      body: grantBody(merged), user: { login: 'owner-user' }
+    };
+    if (path.startsWith('collaborators/')) return { permission: 'admin' };
+    throw new Error(`unexpected request ${path}`);
+  };
+  assert.equal(await verify(merged, 'read-token', get, now), true);
+  assert.ok(calls.includes(`commits/${reviewedHeadSha}/check-runs?per_page=100`));
+  assert.ok(!calls.includes(`commits/${mergeSha}/check-runs?per_page=100`));
+});
+
+test('rejects a merged SHA not associated to the PR or checks from a different PR head', async () => {
+  const now = Date.now();
+  const mergeSha = 'd'.repeat(40);
+  const reviewedHeadSha = 'e'.repeat(40);
+  const merged = { ...base, sha: mergeSha };
+  const setup = ({ associatedMergeSha = mergeSha, checkSha = reviewedHeadSha } = {}) => async path => {
+    if (path === `pulls/${PR}`) return {
+      state: 'closed', merged: true, merge_commit_sha: associatedMergeSha,
+      base: { ref: 'main' }, head: { sha: reviewedHeadSha, repo: { full_name: REPO, fork: false } }
+    };
+    if (path === `commits/${reviewedHeadSha}/check-runs?per_page=100`) return {
+      check_runs: ['lint','build-content-gates','worker-typecheck','frontend-coverage',
+        'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'].map(name => ({
+        name, head_sha: checkSha, status: 'completed', conclusion: 'success'
+      }))
+    };
+    if (path === `issues/comments/${base.grantId}`) return {
+      issue_url: `https://api.github.com/repos/${REPO}/issues/776`,
+      created_at: new Date(now - 1000).toISOString(), updated_at: new Date(now - 1000).toISOString(),
+      body: grantBody(merged), user: { login: 'owner-user' }
+    };
+    if (path.startsWith('collaborators/')) return { permission: 'admin' };
+    throw new Error(`unexpected request ${path}`);
+  };
+  await assert.rejects(verify(merged, 'read-token', setup({ associatedMergeSha: 'f'.repeat(40) }), now),
+    /F5_PR_HEAD_CHANGED_DRAFT_OR_FORKED/);
+  await assert.rejects(verify(merged, 'read-token', setup({ checkSha: mergeSha }), now),
+    /F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN/);
+});
+
 test('rejects edited/wrong issue, stale authorization, draft PR and non-admin actor', async () => {
   const now = Date.now();
   const setup = overrides => async path => {

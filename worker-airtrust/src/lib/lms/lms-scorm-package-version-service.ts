@@ -19,6 +19,7 @@ import {
 type PackageRow = {
   id: string; empresa_id: number; curso_id: number; package_sha256: string; r2_prefix: string;
   launch_file: string; status: string; validation_result_json: string | null;
+  active_prefix?: string | null;
 };
 
 // Large SCORM packages can contain hundreds of small visual assets. Serial R2
@@ -216,6 +217,7 @@ export async function createScormPackageCandidateFromR2Intake(params: {
   const id = params.operationId;
   const prefix = `lms/scorm/${params.empresaId}/${params.cursoId}/_candidates/${id}/`;
   const descriptors: Array<{ path: string; size: number }> = [];
+  const memberSha256ByPath = new Map<string, string>();
   const qualityEntries: Array<{ path: string; data: Uint8Array }> = [];
   let qualityBytes = 0;
   const MAX_QUALITY_GATE_BYTES = 32 * 1024 * 1024;
@@ -230,6 +232,7 @@ export async function createScormPackageCandidateFromR2Intake(params: {
         const path = normalizeLmsArchivePath(member.path);
         if (!path) return;
         descriptors.push({ path, size: member.bytes });
+        memberSha256ByPath.set(path, member.sha256);
         const basename = path.slice(path.lastIndexOf('/') + 1).toLowerCase();
         const qualityInput = basename === 'imsmanifest.xml' ||
           basename === 'airtrust-completion-manifest.json' ||
@@ -270,6 +273,10 @@ export async function createScormPackageCandidateFromR2Intake(params: {
       tipoH5p: null,
     };
     const quality = validateScormPackageQuality(pkg);
+    const launchAssetSha256 = memberSha256ByPath.get(metadata.launchFile);
+    if (!launchAssetSha256 || !/^[a-f0-9]{64}$/.test(launchAssetSha256)) {
+      throw new ApiError('Readback R2 do launch SCORM não comprovado', 409);
+    }
     const rejected = quality.structural.status === 'FAIL' ||
       quality.completionManifest.status === 'FAIL' || quality.diagnostics.status === 'FAIL';
     const status = rejected ? 'REJECTED' : 'VALIDATED';
@@ -312,13 +319,21 @@ export async function createScormPackageCandidateFromR2Intake(params: {
       if (duplicate) {
         const objects = await params.bucket.list({ prefix });
         if (objects.objects.length) await params.bucket.delete(objects.objects.map((item) => item.key));
-        return { ...packageReadModel(duplicate), alreadyExisted: true, active: duplicate.status === 'ACTIVE' };
+        return { ...packageReadModel(duplicate), alreadyExisted: true,
+          createdByOperation: false, active: duplicate.status === 'ACTIVE' };
       }
       throw error;
     }
     return { packageId: id, packageSha256: params.expectedSha256, status, ...quality,
+      alreadyExisted: false, createdByOperation: true,
+      r2Prefix: prefix, launchFile: metadata.launchFile,
       arquivoNome: originalFilename, zipBytes: result.zipBytes, expandedBytes: result.expandedBytes,
       members: result.members, r2ReadStats: result.r2ReadStats,
+      r2Readback: {
+        source: 'WORKER_R2_STREAMED_ZIP_READBACK', zipSha256: result.zipSha256,
+        zipBytes: result.zipBytes, rangeRequests: result.r2ReadStats.rangeRequests,
+        etagStable: true, memberIntegrityVerified: true, launchAssetSha256,
+      },
       active: false, completionWritten: false, certificateIssued: false };
   } catch (error) {
     if (!registered) {
@@ -347,10 +362,18 @@ export function packageReadModel(row: PackageRow) {
 
 export async function listScormPackageVersions(db: D1Database, empresaId: number, cursoId: number) {
   const rows = await db.prepare(
-    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json
-       FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? ORDER BY uploaded_at DESC`,
+    `SELECT p.id, p.empresa_id, p.curso_id, p.package_sha256, p.r2_prefix,
+            p.launch_file, p.status, p.validation_result_json,
+            c.scorm_package_r2_prefix AS active_prefix
+       FROM lms_scorm_package_versions p
+       JOIN lms_cursos c ON c.id = p.curso_id AND c.empresa_id = p.empresa_id
+      WHERE p.empresa_id = ? AND p.curso_id = ? AND c.deleted_at IS NULL
+      ORDER BY p.uploaded_at DESC`,
   ).bind(empresaId, cursoId).all<PackageRow>();
-  return (rows.results ?? []).map(packageReadModel);
+  return (rows.results ?? []).map((row) => ({
+    ...packageReadModel(row),
+    active: row.status === 'ACTIVE' || row.r2_prefix === row.active_prefix,
+  }));
 }
 
 export async function activateScormPackageVersion(params: { db: D1Database; empresaId: number; cursoId: number; packageId: string; userId: number | null; attestationSecret?: string; runtimeSha?: string }) {

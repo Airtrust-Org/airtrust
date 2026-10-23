@@ -92,8 +92,17 @@ export async function verify(v, token, get, now = Date.now()) {
       pr.head?.repo?.full_name !== REPO || pr.head?.repo?.fork === true) {
     throw Error('F5_PR_HEAD_CHANGED_DRAFT_OR_FORKED');
   }
-  const checks = await get(`commits/${v.sha}/check-runs?per_page=100`);
-  checkReleaseChecks(checks.check_runs, v.sha);
+  // GitHub associates the required pull-request gates with the reviewed PR
+  // head, not with the synthetic merge commit written to main. The merged
+  // release SHA is pinned above to PR.merge_commit_sha. That API association
+  // supports merge-commit, squash and rebase strategies; the exact reviewed
+  // head of the same merged PR supplies the eight gates and PR check. The
+  // readiness workflow separately requires release SHA to be an ancestor of
+  // current main before any staging operation.
+  const checkedSha = pr.head.sha;
+  if (!hex40.test(checkedSha ?? '')) throw Error('F5_PR_HEAD_SHA_UNAVAILABLE');
+  const checks = await get(`commits/${checkedSha}/check-runs?per_page=100`);
+  checkReleaseChecks(checks.check_runs, checkedSha);
   const grant = await get(`issues/comments/${v.grantId}`);
   if (grant.issue_url !== `https://api.github.com/repos/${REPO}/issues/776` ||
       grant.created_at !== grant.updated_at) {
