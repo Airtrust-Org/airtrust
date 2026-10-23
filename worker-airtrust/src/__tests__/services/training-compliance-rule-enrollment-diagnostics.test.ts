@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { classifyComplianceEnrollmentFailure, reconcileTrainingComplianceRuleEnrollment } from '../../services/training-compliance-rule-enrollment';
+import { classifyComplianceEnrollmentFailure, reconcileTrainingComplianceRuleEnrollment, sanitizeComplianceEnrollmentResponse } from '../../services/training-compliance-rule-enrollment';
 
 describe('Compliance enrollment diagnostic classification', () => {
   it.each([
@@ -75,5 +75,48 @@ describe('Compliance no-op save enrollment preflight', () => {
     );
     expect(snapshot).toHaveBeenCalledOnce();
     expect(result).toEqual({ auto_enrollment: empty, auto_enrollment_warning: null });
+  });
+});
+
+
+describe('staging-only sanitized Compliance diagnostics', () => {
+  const deferred = {
+    auto_enrollment: null,
+    auto_enrollment_warning: 'AUTO_ENROLLMENT_DEFERRED',
+    auto_enrollment_diagnostic_code: 'ATOMIC_POSTCHECK_FAILED',
+  };
+  it('returns only allowlisted stable codes in staging', () => {
+    expect(sanitizeComplianceEnrollmentResponse(deferred, 'staging')).toEqual(deferred);
+  });
+  it.each(['production', 'development', '', 'STAGING', 'staging '])(
+    'keeps the stable production response in %s', environment => {
+      expect(sanitizeComplianceEnrollmentResponse(deferred, environment)).toEqual({
+        auto_enrollment: null,
+        auto_enrollment_warning: 'AUTO_ENROLLMENT_DEFERRED',
+      });
+    },
+  );
+  it('rejects unrecognized and potentially sensitive codes even in staging', () => {
+    expect(sanitizeComplianceEnrollmentResponse(
+      { ...deferred, auto_enrollment_diagnostic_code: 'PRIVATE_EMAIL_example.invalid' },
+      'staging',
+    )).toEqual({ auto_enrollment: null, auto_enrollment_warning: 'AUTO_ENROLLMENT_DEFERRED' });
+  });
+  it('turns an authorized EAD snapshot error into an allowlisted internal code', async () => {
+    const first = vi.fn().mockResolvedValue({
+      obrigatoriedade: 'OBRIGATORIA', auto_matricular_ead: 1, modalidade_requerida: 'EAD',
+    });
+    const db = { prepare: () => ({ bind: () => ({ first }) }) } as unknown as D1Database;
+    const snapshot = vi.fn().mockRejectedValue(new Error('COMPLIANCE_ATOMIC_POSTCHECK_FAILED'));
+    const result = await reconcileTrainingComplianceRuleEnrollment(
+      db, 999006, 91, {}, {} as never, snapshot,
+    );
+    expect(result.auto_enrollment_warning).toBe('AUTO_ENROLLMENT_DEFERRED');
+    expect(sanitizeComplianceEnrollmentResponse(result, 'staging')).toMatchObject({
+      auto_enrollment_diagnostic_code: 'ATOMIC_POSTCHECK_FAILED',
+    });
+    expect(sanitizeComplianceEnrollmentResponse(result, 'production')).not.toHaveProperty(
+      'auto_enrollment_diagnostic_code',
+    );
   });
 });
