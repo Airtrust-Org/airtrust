@@ -1,11 +1,34 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildScormPlayerSessionKey,
   canReconcilePersistedScormCompletion,
   resolveLmsDisplayProgress,
+  shouldRefreshMatriculaAfterScormSaveError,
   shouldShowScormClosureDetails,
   shouldVerifyCanonicalProgress,
 } from '../LmsPlayer';
+
+describe('SCORM player session identity', () => {
+  const session = {
+    matriculaId: 91,
+    reviewMode: false,
+    userId: 17,
+    empresaId: 6,
+    activeCycleId: 3,
+    handoffId: null,
+  };
+
+  it('changes when the active enrollment cycle changes', () => {
+    expect(buildScormPlayerSessionKey(session)).not.toBe(
+      buildScormPlayerSessionKey({ ...session, activeCycleId: 4 }),
+    );
+  });
+
+  it('keys the iframe by matrícula, review, user, tenant, cycle, and handoff only', () => {
+    expect(buildScormPlayerSessionKey(session)).toBe('91:normal:17:6:3:none');
+  });
+});
 
 describe('resolveLmsDisplayProgress', () => {
   it('keeps an incomplete SCORM enrollment at 99% even at its final location', () => {
@@ -33,6 +56,12 @@ describe('SCORM progress event reconciliation', () => {
 
   it('verifies the canonical matrícula only when progress reports completion', () => {
     expect(shouldVerifyCanonicalProgress('CONCLUIDO')).toBe(true);
+  });
+
+  it('refreshes the matrícula after a stale-cycle 409, not for ordinary save failures', () => {
+    expect(shouldRefreshMatriculaAfterScormSaveError('http-409')).toBe(true);
+    expect(shouldRefreshMatriculaAfterScormSaveError('network-error')).toBe(false);
+    expect(shouldRefreshMatriculaAfterScormSaveError('http-500')).toBe(false);
   });
 });
 

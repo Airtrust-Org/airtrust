@@ -4,9 +4,9 @@ import { z } from 'zod';
 // active enrollment cycle against D1 before mutating learning evidence.
 export const ScormCommitSchema = z.object({
   matricula_id: z.number().int().positive(),
-  // Current wrapper is cycle-bound; legacy integrations without a cycle ID
-  // continue through the pre-existing guarded path until upgraded.
-  ciclo_id: z.number().int().positive().optional(),
+  // Every SCORM write must identify the cycle rendered by its server launch.
+  // Unscoped legacy writes could arrive late from a prior enrollment cycle.
+  ciclo_id: z.number().int().positive(),
   // SCORM 1.2
   lesson_status: z.string().optional().nullable(),
   // SCORM 2004

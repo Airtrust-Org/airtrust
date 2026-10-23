@@ -1024,9 +1024,10 @@ export const openApiSpec = {
       },
       LmsScormCommitInput: {
         type: 'object',
-        required: ['matricula_id'],
+        required: ['matricula_id', 'ciclo_id'],
         properties: {
           matricula_id: { type: 'integer', minimum: 1 },
+          ciclo_id: { type: 'integer', minimum: 1, description: 'Ciclo ativo incluído na sessão server-side do Player SCORM.' },
           lesson_status: { type: 'string', nullable: true },
           completion_status: { type: 'string', nullable: true },
           success_status: { type: 'string', nullable: true },

@@ -76,17 +76,18 @@ import {
 } from '../services/lms-matricula-runtime-domain';
 import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '../repositories/lms-matricula-queries';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
+import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
-import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard';
 import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
 import { activeXapiFirst } from '../services/lms-active-xapi-read';
+import { registerLmsScormEditionHandoffRoute } from './lms-scorm-edition-handoff';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 app.route('/convites', lmsMatriculasConvitesRoutes);
+registerLmsScormEditionHandoffRoute(app);
 app.route('/', lmsMatriculasEmAndamentoRoutes);
-
 function getCallerFuncionarioId(c: Context): number | null {
   const raw = c.get('funcionarioId' as never) as unknown;
   const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
@@ -515,6 +516,12 @@ app.get('/:id', async (c) => {
     .prepare(
       `
       SELECT m.*, c.titulo, c.tipo_conteudo, c.scorm_versao, c.scorm_launch_file, c.scorm_package_r2_prefix,
+          (SELECT cy.id FROM lms_matricula_ciclos cy
+            WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+              AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL LIMIT 1) AS active_lms_cycle_id,
+          (SELECT cy.data_inicio FROM lms_matricula_ciclos cy
+            WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+              AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL LIMIT 1) AS active_lms_cycle_started_at,
           c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
           qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
           qt.validade AS qualificacao_validade, qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes, h.id AS h5p_conteudo_id,
@@ -631,8 +638,11 @@ app.get('/:id', async (c) => {
   const scormClosureReadiness = tipoConteudo === 'scorm'
     ? buildPersistedScormClosureReadiness(matricula, progressoScorm)
     : null;
-  const editionMismatch = await detectLmsEditionMismatch({
-    bucket: c.env.BUCKET, contentType: matricula.status === 'CONCLUIDO' ? null : tipoConteudo, activePrefix: matricula.scorm_package_r2_prefix, empresaId, cursoId: Number(matricula.curso_id), cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data, db, enrollmentStartedAt: matricula.data_inicio });
+  const {mismatch:editionMismatch,proposal:activeResumeProposal,handoffId:activeHandoffId,
+    handoffBookmark:activeHandoffBookmark,handoffAvailable}=await readLmsScormEditionState({
+      db,bucket:c.env.BUCKET,empresaId,matriculaId,matricula,progressoScorm,
+      handoffEnabled:c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED==='true',
+    });
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: matricula.status as string | null,
     progressoBruto: matricula.progresso_pct as number | null,
@@ -650,6 +660,10 @@ app.get('/:id', async (c) => {
       completion_diagnostic: completionDiagnostic,
       closure_readiness: scormClosureReadiness,
       edition_mismatch: editionMismatch,
+      active_resume_proposal: activeResumeProposal,
+      active_scorm_handoff_id: activeHandoffId,
+      active_scorm_resume_position: activeHandoffBookmark,
+      scorm_handoff_available: handoffAvailable,
     },
   });
 });
