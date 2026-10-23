@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Staging-only, READ-ONLY readiness check for physical SCORM resume QA.
+// Staging-only prerequisite: no operational LMS fixture writes; authentication may persist session tokens.
 import fs from 'node:fs';
 import { assertAllowedStagingBaseUrl, extractAccessToken, fetchJson, login } from '../smoke-auth-common.mjs';
 const API=assertAllowedStagingBaseUrl('https://airtrust-api-staging.airtrust.workers.dev');
@@ -58,7 +58,7 @@ async function run(){
   assert(active===1,active===0?'BLOCKED_NO_ACTIVE_QA_SCORM_PACKAGE':
     'BLOCKED_AMBIGUOUS_QA_SCORM_PACKAGE');
   const result={ready:true,synthetic_active_courses:active,
-    learner:'QA-PARTICIPANTE-ALFA',sha:SHA,staging_only:true,remote_data_writes:0,
+    learner:'QA-PARTICIPANTE-ALFA',sha:SHA,staging_only:true,lms_fixture_writes:0,
     next:'SCOPED_ENROLLMENT_LAUNCH_COMMIT_RESUME_AND_CLEANUP'};
   fs.mkdirSync('qa-state/staging-lms-scorm',{recursive:true});
   fs.writeFileSync('qa-state/staging-lms-scorm/resume-readiness.json',
