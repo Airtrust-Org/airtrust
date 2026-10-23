@@ -210,7 +210,9 @@ export async function createScormPackageCandidateFromR2Intake(params: {
   const originalFilename = normalizeScormUploadFilename(params.arquivoNome);
   const intakePrefix = `lms/scorm/${params.empresaId}/${params.cursoId}/_intake/${params.operationId}/`;
   const intakeKey = `${intakePrefix}package.zip`;
-  const id = params.operationId;
+  // Intake operation UUID scopes transient R2 data; package ID is an independent
+  // server-issued identity, just as in the regular candidate creation path.
+  const id = crypto.randomUUID();
   const prefix = `lms/scorm/${params.empresaId}/${params.cursoId}/_candidates/${id}/`;
   const descriptors: Array<{ path: string; size: number }> = [];
   const memberSha256ByPath = new Map<string, string>();

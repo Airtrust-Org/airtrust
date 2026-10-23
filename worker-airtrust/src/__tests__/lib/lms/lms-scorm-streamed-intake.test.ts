@@ -42,6 +42,7 @@ function candidateZip() {
 class MemoryBucket {
   objects = new Map<string, { bytes: Uint8Array; etag: string; customMetadata?: Record<string, string>; httpMetadata?: { contentType?: string; cacheControl?: string } }>();
   failKey: string | null = null;
+  failKeySuffix: string | null = null;
   puts: string[] = [];
   uploads = new Map<string, { key: string; customMetadata?: Record<string, string>; parts: Map<number, Uint8Array>; aborted: boolean }>();
   async put(key: string, value: ArrayBuffer | ArrayBufferView | string, options?: {
@@ -49,7 +50,9 @@ class MemoryBucket {
     httpMetadata?: { contentType?: string; cacheControl?: string };
     onlyIf?: { etagMatches?: string; etagDoesNotMatch?: string };
   }) {
-    if (key === this.failKey) throw new Error('simulated member write interruption');
+    if (key === this.failKey || (this.failKeySuffix !== null && key.endsWith(this.failKeySuffix))) {
+      throw new Error('simulated member write interruption');
+    }
     const bytes = typeof value === 'string' ? encode(value) : value instanceof ArrayBuffer
       ? new Uint8Array(value) : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
     const prior = this.objects.get(key);
@@ -199,19 +202,21 @@ describe('F5 streamed SCORM candidate intake', () => {
       empresaId: f.tenantId, cursoId: f.courseId, userId: 99,
       operationId: intake.operationId, expectedSha256: packageSha256, arquivoNome: 'synthetic.zip',
     });
-    expect(result).toMatchObject({ status: 'VALIDATED', packageId: f.operationId,
+    expect(result).toMatchObject({ status: 'VALIDATED',
+      packageId: expect.stringMatching(/^[0-9a-f-]{36}$/),
       packageSha256, active: false, createdByOperation: true, alreadyExisted: false,
       completionWritten: false, certificateIssued: false,
       r2Readback: { source: 'WORKER_R2_STREAMED_ZIP_READBACK', zipSha256: packageSha256,
         zipBytes: f.bytes.length, etagStable: true, memberIntegrityVerified: true,
         launchAssetSha256: expect.stringMatching(/^[a-f0-9]{64}$/) },
     });
+    expect(result.packageId).not.toBe(f.operationId);
     expect(result.publishable).toBe(false);
     expect(result.conformance?.status).toBe('NOT_SUPPORTED');
     expect(f.db.candidate).toMatchObject({ empresa_id: 77, curso_id: 12, status: 'VALIDATED' });
     expect(f.db.statements.join('\n')).toContain('lms_scorm_package_audit_log');
     expect(f.db.statements.join('\n')).not.toMatch(/UPDATE lms_cursos|completion|certificate/i);
-    const candidatePrefix = `lms/scorm/${f.tenantId}/${f.courseId}/_candidates/${intake.operationId}/`;
+    const candidatePrefix = `lms/scorm/${f.tenantId}/${f.courseId}/_candidates/${result.packageId}/`;
     expect([...f.bucket.objects.keys()].some((key) => key.startsWith(candidatePrefix))).toBe(true);
     const originalMembers = unzipSync(f.bytes);
     for (const [path, original] of Object.entries(originalMembers)) {
@@ -248,7 +253,8 @@ describe('F5 streamed SCORM candidate intake', () => {
     const f = intakeFixture();
     const packageSha256 = await sha(f.bytes);
     await f.bucket.put(f.key, f.bytes);
-    f.bucket.failKey = `lms/scorm/${f.tenantId}/${f.courseId}/_candidates/${f.operationId}/app.js`;
+    // Package identity is server-generated; fail a candidate member by its suffix.
+    f.bucket.failKeySuffix = '/app.js';
     await expect(createScormPackageCandidateFromR2Intake({
       db: f.db as unknown as D1Database, bucket: f.bucket as unknown as R2Bucket,
       empresaId: f.tenantId, cursoId: f.courseId, userId: 99,
