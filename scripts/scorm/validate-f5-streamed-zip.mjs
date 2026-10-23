@@ -21,11 +21,10 @@ const crcTable=Uint32Array.from({length:256},(_,i)=>{
 });
 const crcAdd=(sum,bytes)=>{for(const v of bytes)sum=crcTable[(sum^v)&255]^(sum>>>8);return sum>>>0};
 const u16=(b,i)=>b.readUInt16LE(i),u32=(b,i)=>b.readUInt32LE(i);
-async function read(fd,start,len,size){
- if(start<0||len<0||start+len>size)bad('INVALID_RANGE');
- const b=Buffer.allocUnsafe(len);
- const {bytesRead}=await fd.read(b,0,len,start);
- if(bytesRead!==len)bad('TRUNCATED');
+async function read(source,start,len,size){
+ if(!Number.isSafeInteger(start)||!Number.isSafeInteger(len)||start<0||len<0||start+len>size)bad('INVALID_RANGE');
+ const b=Buffer.from(await source.read(start,len));
+ if(b.length!==len)bad('TRUNCATED');
  return b;
 }
 function safeName(raw){
@@ -37,19 +36,92 @@ function safeName(raw){
  if(Buffer.byteLength(s,'utf8')>LIMIT.pathBytes||s.split('/').length>LIMIT.pathDepth)bad('ZIP_PATH_LIMIT');
  return s;
 }
-async function checksumZip(path){
+async function checksumZip(source){
  const h=createHash('sha256');let count=0;
- for await(const data of createReadStream(path,{highWaterMark:128*1024})){count+=data.length;h.update(data)}
+ for await(const data of source.stream(0,source.size)){count+=data.length;h.update(data);if(count>source.size)bad('ZIP_SOURCE_OVERFLOW')}
  return {sha:h.digest('hex'),bytes:count};
 }
-export async function validateStreamedZip(path,expectedSha){
- if(!SHA.test(expectedSha))bad('EXPECTED_SHA_REQUIRED');
- const fp=resolve(path),fd=await open(fp,'r');
+// Same bounded validator works with a local file or an explicitly scoped
+// read-only R2 range source. No package activation or remote writes.
+// Consume local headers and compressed payloads in one sequential object
+// stream. It avoids hundreds of R2 range requests for media-heavy courses.
+async function createZipCursor(stream){
+ const iterator=stream[Symbol.asyncIterator]();
+ let pending=Buffer.alloc(0),position=0;
+ async function* pull(bytes){
+  if(!Number.isSafeInteger(bytes)||bytes<0)bad('CURSOR_BYTES_INVALID');
+  while(bytes>0){
+   if(!pending.length){
+    const item=await iterator.next();
+    if(item.done)bad('ZIP_STREAM_TRUNCATED');
+    pending=Buffer.from(item.value);
+    if(!pending.length)bad('ZIP_EMPTY_CHUNK');
+   }
+   const size=Math.min(bytes,pending.length);
+   const piece=pending.subarray(0,size);
+   pending=pending.subarray(size);
+   bytes-=size;position+=size;
+   yield piece;
+  }
+ }
+ async function small(bytes){
+  if(bytes>128*1024)bad('CURSOR_HEADER_LIMIT');
+  const chunks=[];
+  for await(const part of pull(bytes))chunks.push(part);
+  return Buffer.concat(chunks,bytes);
+ }
+ async function skip(to){
+  if(to<position)bad('ZIP_OVERLAPPING_LOCAL_HEADERS');
+  for await(const ignored of pull(to-position)){}
+ }
+ return {pull,small,skip,position:()=>position,
+  close:async()=>{await iterator.return?.()}};
+}
+async function validateSequentialZipSource(source,entries,cdOffset,total,expectedSha){
+ const actual=await checksumZip(source);
+ if(actual.bytes!==source.size||actual.sha!==expectedSha)bad('ZIP_SHA256_MISMATCH');
+ const ordered=entries.slice().sort((a,b)=>a.localOffset-b.localOffset);
+ const cursor=await createZipCursor(source.stream(0,cdOffset));
+ const summaries=[];
  try{
-  const {size}=await fd.stat();
+  for(const e of ordered){
+   await cursor.skip(e.localOffset);
+   const h=await cursor.small(30);
+   if(u32(h,0)!==0x04034b50||u16(h,8)!==e.method||u16(h,6)!==e.flags)bad('LOCAL_MISMATCH');
+   const len=u16(h,26),ext=u16(h,28);
+   if(!len)bad('LOCAL_NAME_MISSING');
+   const localName=await cursor.small(len);
+   if(safeName(localName)!==e.name)bad('LOCAL_NAME_MISMATCH');
+   if(ext)await cursor.skip(cursor.position()+ext);
+   const end=cursor.position()+e.compressed;
+   if(end>cdOffset)bad('LOCAL_PAYLOAD_RANGE');
+   let length=0,crc=0xffffffff;
+   const hash=createHash('sha256');
+   const sink=new Writable({write(chunk,_enc,done){
+    length+=chunk.length;
+    if(length>e.expanded||length>LIMIT.member)
+     return done(Error('F5_STREAMED_ZIP_MEMBER_OVERFLOW'));
+    hash.update(chunk);crc=crcAdd(crc,chunk);done();
+   }});
+   if(e.compressed>0){
+    if(e.method===8)await pipeline(cursor.pull(e.compressed),createInflateRaw(),sink);
+    else await pipeline(cursor.pull(e.compressed),sink);
+   }
+   if(length!==e.expanded||((crc^0xffffffff)>>>0)!==e.crc)bad('ZIP_CRC_OR_SIZE_MISMATCH');
+   summaries.push({path:e.name,sha256:hash.digest('hex'),bytes:length});
+  }
+ }finally{await cursor.close()}
+ return {status:'STREAMED_READ_ONLY_PASS_NOT_UPLOAD',zipSha256:actual.sha,zipBytes:actual.bytes,
+  expandedBytes:total,members:summaries.length,items:summaries,
+  r2Writes:0,d1Writes:0,certificationAuthorized:false};
+}
+export async function validateZipReader(source,expectedSha){
+ if(!SHA.test(expectedSha))bad('EXPECTED_SHA_REQUIRED');
+ if(!source||!Number.isSafeInteger(source.size)||typeof source.read!=='function'||typeof source.stream!=='function')bad('READER_INVALID');
+ const size=source.size;
   if(size<22||size>LIMIT.zip)bad('COMPRESSED_LIMIT');
   const tailStart=Math.max(0,size-65557);
-  const tail=await read(fd,tailStart,size-tailStart,size);
+  const tail=await read(source,tailStart,size-tailStart,size);
   let eocd=-1;
   for(let i=tail.length-22;i>=0;i--){
    if(u32(tail,i)===0x06054b50&&i+22+u16(tail,i+20)===tail.length){eocd=i;break}
@@ -59,7 +131,7 @@ export async function validateStreamedZip(path,expectedSha){
   const count=u16(tail,eocd+10),cdSize=u32(tail,eocd+12),cdOffset=u32(tail,eocd+16);
   if(count<1||count>LIMIT.entries||count===0xffff||cdOffset===0xffffffff||cdSize===0xffffffff)bad('ZIP64_OR_ENTRIES');
   if(cdSize>6*MiB||cdOffset+cdSize>tailStart+eocd)bad('CENTRAL_DIRECTORY_LIMIT');
-  const cd=await read(fd,cdOffset,cdSize,size);let pos=0,total=0;
+  const cd=await read(source,cdOffset,cdSize,size);let pos=0,total=0;
   const entries=[],paths=new Set();
   for(let j=0;j<count;j++){
    if(pos+46>cd.length||u32(cd,pos)!==0x02014b50)bad('CENTRAL_SIGNATURE');
@@ -84,19 +156,20 @@ export async function validateStreamedZip(path,expectedSha){
    pos=end;
   }
   if(pos!==cd.length)bad('CENTRAL_TRAILING_BYTES');
+  if(source.sequential===true){return validateSequentialZipSource(source,entries,cdOffset,total,expectedSha)}
   for(const e of entries){
-   const h=await read(fd,e.localOffset,30,size);
+   const h=await read(source,e.localOffset,30,size);
    if(u32(h,0)!==0x04034b50||u16(h,8)!==e.method||u16(h,6)!==e.flags)bad('LOCAL_MISMATCH');
    const len=u16(h,26),ext=u16(h,28);
    if(len<1)bad('LOCAL_NAME_MISSING');
-   const localName=await read(fd,e.localOffset+30,len,size);
+   const localName=await read(source,e.localOffset+30,len,size);
    if(safeName(localName)!==e.name)bad('LOCAL_NAME_MISMATCH');
    e.start=e.localOffset+30+len+ext;e.end=e.start+e.compressed;
    if(e.end>cdOffset)bad('LOCAL_PAYLOAD_RANGE');
   }
   const intervals=entries.map(e=>[e.start,e.end]).sort((a,b)=>a[0]-b[0]);
   for(let i=1;i<intervals.length;i++)if(intervals[i][0]<intervals[i-1][1])bad('OVERLAPPING_PAYLOAD');
-  const actual=await checksumZip(fp);
+  const actual=await checksumZip(source);
   if(actual.bytes!==size||actual.sha!==expectedSha)bad('ZIP_SHA256_MISMATCH');
   const summaries=[];
   for(const e of entries){
@@ -107,7 +180,7 @@ export async function validateStreamedZip(path,expectedSha){
     h.update(chunk);crc=crcAdd(crc,chunk);done();
    }});
    if(e.compressed>0){
-    const stream=createReadStream(fp,{start:e.start,end:e.end-1,highWaterMark:64*1024});
+    const stream=source.stream(e.start,e.compressed);
     if(e.method===8)await pipeline(stream,createInflateRaw(),sink);
     else await pipeline(stream,sink);
    }
@@ -117,6 +190,25 @@ export async function validateStreamedZip(path,expectedSha){
   return {status:'STREAMED_READ_ONLY_PASS_NOT_UPLOAD',zipSha256:actual.sha,zipBytes:actual.bytes,
    expandedBytes:total,members:summaries.length,items:summaries,
    r2Writes:0,d1Writes:0,certificationAuthorized:false};
+}
+export async function validateStreamedZip(path,expectedSha){
+ const fp=resolve(path),fd=await open(fp,'r');
+ try{
+  const {size}=await fd.stat();
+  const source={
+   size,
+   async read(start,len){
+    const b=Buffer.allocUnsafe(len);
+    const {bytesRead}=await fd.read(b,0,len,start);
+    if(bytesRead!==len)bad('TRUNCATED');
+    return b;
+   },
+   stream(start,len){
+    if(!Number.isSafeInteger(start)||!Number.isSafeInteger(len)||start<0||len<0||start+len>size)bad('INVALID_RANGE');
+    return createReadStream(fp,{start,end:start+len-1,highWaterMark:64*1024});
+   }
+  };
+  return await validateZipReader(source,expectedSha);
  }finally{await fd.close()}
 }
 const direct=process.argv[1]&&fileURLToPath(import.meta.url)===resolve(process.argv[1]);
