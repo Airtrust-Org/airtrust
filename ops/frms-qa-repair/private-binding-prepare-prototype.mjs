@@ -13,7 +13,7 @@ const deny=()=>{throw Error('QA_PRIVATE_CALLER_TRANSPORT_DENIED');};
 const HEX40=/^[0-9a-f]{40}$/,HEX64=/^[0-9a-f]{64}$/;
 const EXACT=['status','schema','sha','dbId','tenantId','grantId','runId','runAttempt'];
 export async function prepareViaPrivateServiceBinding({
-  env={},binding,independentGrantVerifier,
+  env={},binding,independentGrantVerifier,grantLedger,
 }={}){
   const sha=env.GITHUB_SHA,runId=String(env.GITHUB_RUN_ID||''),
     attempt=Number(env.GITHUB_RUN_ATTEMPT);
@@ -28,6 +28,7 @@ export async function prepareViaPrivateServiceBinding({
      !HEX64.test(env.FRMS_QA_CALLER_KEY_HEX||'')||
      !/^[1-9][0-9]{5,13}$/.test(String(env.FRMS_QA_PREPARE_GRANT_ID||''))||
      !binding||typeof binding.prepare!=='function'||
+     !grantLedger||typeof grantLedger.transaction!=='function'||
      typeof independentGrantVerifier!=='function')deny();
   const grantId=String(env.FRMS_QA_PREPARE_GRANT_ID);
   let verified;
@@ -48,6 +49,19 @@ export async function prepareViaPrivateServiceBinding({
      verified.sha!==sha||verified.dbId!==TARGET.db_id||
      verified.tenantId!==999013||String(verified.grantId)!==grantId||
      verified.runId!==runId||verified.runAttempt!==attempt)deny();
+  // A grant is single-use, even when a fresh HMAC caller nonce is minted.
+  // Mark it spent before contacting a remote binding. A failed invocation
+  // stays quarantined until independent reconciliation, never auto-retry.
+  let acquired=false;
+  try{
+    acquired=await grantLedger.transaction(async tx=>{
+      const scope='frms-qa-prepare-grant:'+sha+':'+grantId;
+      if(await tx.get(scope))return false;
+      await tx.put(scope,{runId,runAttempt:attempt,sha,phase:'prepare'});
+      return true;
+    });
+  }catch{deny();}
+  if(acquired!==true)deny();
   let result;
   try{
     const callerAuth=signPrivateCaller({
