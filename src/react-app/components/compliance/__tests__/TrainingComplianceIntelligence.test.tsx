@@ -120,8 +120,8 @@ describe('TrainingComplianceIntelligence', () => {
     });
     renderWithClient(<TrainingComplianceIntelligence mode="pendencias" {...props} />);
     await screen.findByText('Aluno A');
-    expect(screen.getByText('37% concluído')).toBeInTheDocument();
-    expect(screen.getByText('82% concluído')).toBeInTheDocument();
+    expect(screen.getByText('37% de progresso')).toBeInTheDocument();
+    expect(screen.getByText('82% de progresso')).toBeInTheDocument();
     expect(screen.getByText('Progresso indisponível')).toBeInTheDocument();
     expect(screen.getAllByText('Em andamento')).toHaveLength(3);
     expect(screen.getByLabelText('Progresso do treinamento: 37%')).toBeInTheDocument();
