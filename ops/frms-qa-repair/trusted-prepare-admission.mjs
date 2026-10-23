@@ -42,8 +42,8 @@ export async function runTrustedPrepareAdmission({
     return Object.freeze({
       status:'FRMS_QA_PRIVATE_PREPARE_RECEIPT_VALIDATED',
       sha:env.GITHUB_SHA,tenantId:999013,d1Writes:0,
-      r2PreimageCreated:true,applyAuthorized:false,
-      productionAuthorized:false,
+      receiptValidated:true,physicalR2ReadbackConfirmed:false,
+      applyAuthorized:false,productionAuthorized:false,
     });
   }catch{deny();}
 }
