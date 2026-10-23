@@ -53,8 +53,22 @@ O protótipo exige também um `grantLedger.transaction` que reserva de forma
 atômica **o par SHA + ID da concessão** antes do RPC. Reutilização do grant
 é negada mesmo com HMAC e nonce novos. Se o RPC falhar depois da reserva,
 o grant permanece gasto até uma reconciliação especificamente aprovada;
-não há retry automático. Em testes o ledger é um `Map` sintético; nenhuma
-persistência real foi provisionada. A futura implantação precisa de um
+não há retry automático.
+
+**Contrato de persistência implementado, sem implantação:**
+`ops/frms-qa-repair/durable-prepare-grant-ledger.mjs` adapta a transação
+forte do `DurableObjectStorage` de um **futuro chamador privado confiável**,
+com chave exata por SHA/ID do grant, somente metadados de run/attempt/fase,
+sem bearer tokens, SQL ou PII. Rejeita formas inesperadas, tentativas de
+escrita duplicada e retornos falsos após escrita (rollback obrigatório).
+Sete testes focados validam concorrência (24 reservas, uma vencedora),
+instâncias de adaptador sucessivas, falha de persistência, rollback e
+quarentena após RPC malsucedido **num simulador de transações descartável**.
+Isso ainda **não comprova persistência real em Cloudflare**, pois o
+storage/host não foi provisionado e o módulo não está conectado a um
+caller de produção. A ligação a um único DO confiável compartilhado,
+o teste de restart/replay no DO real e auditoria independente do grant
+continuam pré-requisitos obrigatórios. A futura implantação precisa de um
 ledger durável compartilhado entre instâncias, não KV eventualmente
 consistente, nem apenas variáveis do job.
  Antes de qualquer
