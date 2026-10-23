@@ -87,6 +87,8 @@ test('authenticated GitHub GET-only gates allow one scoped private prepare',asyn
   const result=await execute(f);
   assert.equal(result.status,'FRMS_QA_PRIVATE_PREPARE_RECEIPT_VALIDATED');
   assert.equal(result.d1Writes,0);
+  assert.equal(result.receiptValidated,true);
+  assert.equal(result.physicalR2ReadbackConfirmed,false);
   assert.equal(result.applyAuthorized,false);
   assert.equal(result.productionAuthorized,false);
   assert.equal(f.bound,1);
