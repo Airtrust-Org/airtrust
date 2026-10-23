@@ -109,6 +109,25 @@ describe('TrainingComplianceIntelligence', () => {
     expect(screen.getByText('E-mail')).toBeInTheDocument();
   });
 
+  it('shows each LMS enrollment percentage without treating progress as compliance completion', async () => {
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (url.includes('/pendencias')) return ok([
+        { ...pending, funcionario_id: 11, funcionario_nome: 'Aluno A', status_compliance: 'EM_ANDAMENTO', progresso_pct: 37 },
+        { ...pending, funcionario_id: 12, funcionario_nome: 'Aluno B', status_compliance: 'EM_ANDAMENTO', progresso_pct: 82 },
+        { ...pending, funcionario_id: 13, funcionario_nome: 'Aluno C', status_compliance: 'EM_ANDAMENTO', progresso_pct: null },
+      ]);
+      throw new Error(`unexpected ${url}`);
+    });
+    renderWithClient(<TrainingComplianceIntelligence mode="pendencias" {...props} />);
+    await screen.findByText('Aluno A');
+    expect(screen.getByText('37% concluído')).toBeInTheDocument();
+    expect(screen.getByText('82% concluído')).toBeInTheDocument();
+    expect(screen.getByText('Progresso indisponível')).toBeInTheDocument();
+    expect(screen.getAllByText('Em andamento')).toHaveLength(3);
+    expect(screen.getByLabelText('Progresso do treinamento: 37%')).toBeInTheDocument();
+    expect(screen.getByLabelText('Progresso do treinamento: 82%')).toBeInTheDocument();
+  });
+
   it('shows deterministic report trend and recurrent pending items', async () => {
     fetchWithAuthMock.mockImplementation(async (url: string) => {
       if (url.includes('/pendencias')) return ok([pending]);
