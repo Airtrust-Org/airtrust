@@ -27,6 +27,16 @@
   function set(field, value) {
     if (!good(api.LMSSetValue(field, String(value))) || !checkError()) throw Error('WRITE_FAILED_' + field);
   }
+  function emitDiagnostics() {
+    if (state.locked || !window.parent || typeof window.parent.postMessage !== 'function') return;
+    window.parent.postMessage({
+      type: 'AIRTRUST_COMPLETION_DIAGNOSTICS_V1',
+      payload: { currentSlide: 'qa-pos-' + state.position,
+        slides: { completed: state.position === 2 ? 1 : 0, total: 2 },
+        assessment: { approved: false }, packageStatus: 'incomplete',
+        updatedAt: new Date().toISOString() }
+    }, '*');
+  }
   function render() {
     title.textContent = 'Posição ' + state.position + ' de 2';
     title.dataset.qaPosition = String(state.position);
@@ -35,6 +45,7 @@
     next.disabled = state.locked || state.ended || state.position === 2;
     finish.disabled = state.locked || state.ended;
     diagnostic.textContent = state.ended ? 'Sessão encerrada.' : state.locked ? 'Falha: sem avanço até nova sessão.' : 'Sessão aberta.';
+    if (!state.ended) emitDiagnostics();
   }
   function save(destination) {
     if (state.locked || state.ended || ![1, 2].includes(destination)) return;

@@ -18,7 +18,8 @@ python3 -m unittest discover -s scripts/qa/tests \
   -p test_scorm_resume_synthetic.py -v
 ```
 
-O gerador é determinístico e documenta SHA-256 e tamanho dos bytes. O arquivo
+O gerador é determinístico e documenta SHA-256 e tamanho dos bytes. O pacote inclui `airtrust-completion-manifest.json` no contrato estático do Worker,
+com `assessment.mode=EXTERNAL`, `workerApprovalRequired=true` e `release.reviewed=false`; a API do SCO nunca atribui aprovação. O arquivo
 `imsmanifest.xml` contém um SCO SCORM 1.2. O runtime exige API 1.2 verdadeira,
 lê CMI ao abrir, não avança sem `LMSCommit`, bloqueia erro de leitura e
 inconsistência entre `lesson_location` e `suspend_data`, e **nunca** define
