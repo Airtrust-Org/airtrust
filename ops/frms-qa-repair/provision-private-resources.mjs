@@ -31,10 +31,13 @@ const HEX40=/^[a-f0-9]{40}$/;
 const HEX64=/^[a-f0-9]{64}$/;
 const ACCOUNT=/^[a-f0-9]{32}$/;
 
-export function provisionPlan({sha,phase,configSha}){
+export function provisionPlan({sha,phase,configSha,credentialMode='dedicated'}){
   if(!HEX40.test(sha)||!PHASES.includes(phase)||!HEX64.test(configSha))
     fail('FRMS_QA_PROVISION_INPUT_DENIED');
-  return {
+  if(!['dedicated','existing_staging_worker_bucket_only'].includes(credentialMode)||
+      (credentialMode==='existing_staging_worker_bucket_only'&&phase!=='bucket'))
+    fail('FRMS_QA_CREDENTIAL_MODE_DENIED');
+  const plan={
     schema:'AIRTRUST_FRMS_QA_PROVISION_V1',
     repository:REPO,issue:776,frms_issue:1426,
     release_sha:sha,phase,tenant_id:999013,
@@ -48,13 +51,20 @@ export function provisionPlan({sha,phase,configSha}){
     rollout:'STAGING_ONLY_NO_REPAIR_APPLY',
     cleanup:'SEPARATE_F0_AUTHORIZATION_REQUIRED',
   };
+  if(credentialMode==='existing_staging_worker_bucket_only'){
+    return {...plan,schema:'AIRTRUST_FRMS_QA_PROVISION_V2',
+      credential_mode:credentialMode};
+  }
+  return plan;
 }
 
 export function assertProvisionComment(body,plan){
-  if(typeof body!=='string'||!body.startsWith('AIRTRUST_FRMS_QA_PROVISION_V1\n'))
+  const prefix=plan.schema+'\n';
+  if(!['AIRTRUST_FRMS_QA_PROVISION_V1','AIRTRUST_FRMS_QA_PROVISION_V2'].includes(plan.schema)||
+      typeof body!=='string'||!body.startsWith(prefix))
     fail('FRMS_QA_F0_GRANT_MISSING');
   let data;
-  try{data=JSON.parse(body.slice('AIRTRUST_FRMS_QA_PROVISION_V1\n'.length));}
+  try{data=JSON.parse(body.slice(prefix.length));}
   catch{fail('FRMS_QA_F0_GRANT_INVALID');}
   if(!data||typeof data!=='object'||Array.isArray(data)||
     Object.keys(data).sort().join('|')!==Object.keys(plan).sort().join('|')||
@@ -71,7 +81,8 @@ export async function authorize({env,api,now=Date.now(),configText}){
      !/^[1-9][0-9]{0,15}$/.test(grantId||''))
     fail('FRMS_QA_TRUSTED_MAIN_AND_GRANT_REQUIRED');
   assertPrivateConfig(configText);
-  const plan=provisionPlan({sha,phase,configSha:hash(configText)});
+  const credentialMode=env.FRMS_QA_CREDENTIAL_MODE||'dedicated';
+  const plan=provisionPlan({sha,phase,configSha:hash(configText),credentialMode});
   const main=await api('repos/'+REPO+'/branches/main');
   if(main?.commit?.sha!==sha)fail('FRMS_QA_CURRENT_MAIN_SHA_CHANGED');
   // A busy main may have >100 incidental check runs. A single unfiltered
@@ -231,10 +242,16 @@ async function main(){
     // before any external API mutation.
     if(mode!==plan.phase)fail('FRMS_QA_PHASE_MODE_MISMATCH');
     let result;
-    if(mode==='bucket')result=await createPrivateBucket({
-      accountId:env.CLOUDFLARE_ACCOUNT_ID,
-      token:env.CLOUDFLARE_FRMS_QA_R2_PROVISION_API_TOKEN,
-      readToken:env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN});
+    if(mode==='bucket'){
+      if(plan.credential_mode==='existing_staging_worker_bucket_only'&&
+         (!env.CLOUDFLARE_FRMS_QA_R2_PROVISION_API_TOKEN||
+          env.CLOUDFLARE_FRMS_QA_R2_PROVISION_API_TOKEN!==env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN))
+        fail('FRMS_QA_EXISTING_TOKEN_MISMATCH');
+      result=await createPrivateBucket({
+        accountId:env.CLOUDFLARE_ACCOUNT_ID,
+        token:env.CLOUDFLARE_FRMS_QA_R2_PROVISION_API_TOKEN,
+        readToken:env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN});
+    }
     else result=await publishPrivateWorker({env});
     console.log(JSON.stringify(result));
   }catch(err){
