@@ -26,19 +26,24 @@ export async function commitCertifiedScormActivation(input: CertifiedScormActiva
       WHERE empresa_id=? AND curso_id=? AND status='ACTIVE'
       AND EXISTS(SELECT 1 FROM lms_scorm_package_versions v
         WHERE v.id=? AND v.empresa_id=? AND v.curso_id=? AND v.package_sha256=?
-          AND v.r2_prefix=? AND v.status='VALIDATED' AND v.validation_result_json=?)`)
-      .bind(empresaId, cursoId, packageId, empresaId, cursoId, packageSha256, prefix, validationJson),
+          AND v.r2_prefix=? AND v.status='VALIDATED' AND v.validation_result_json=?)
+      AND EXISTS(SELECT 1 FROM lms_cursos c WHERE c.id=? AND c.empresa_id=?
+        AND c.deleted_at IS NULL)`)
+      .bind(empresaId, cursoId, packageId, empresaId, cursoId, packageSha256, prefix, validationJson, cursoId, empresaId),
     db.prepare(`UPDATE lms_scorm_package_versions
       SET status='ACTIVE', activated_at=datetime('now'), activated_by=?
       WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?
-        AND r2_prefix=? AND status='VALIDATED' AND validation_result_json=?`)
-      .bind(actorId, packageId, empresaId, cursoId, packageSha256, prefix, validationJson),
+        AND r2_prefix=? AND status='VALIDATED' AND validation_result_json=?
+        AND EXISTS(SELECT 1 FROM lms_cursos c WHERE c.id=? AND c.empresa_id=?
+          AND c.deleted_at IS NULL)`)
+      .bind(actorId, packageId, empresaId, cursoId, packageSha256, prefix, validationJson,
+        cursoId, empresaId),
     // changes() is the candidate UPDATE row count from the preceding statement
     // on the same SQLite connection/transaction. Never move a pointer on zero writes.
     db.prepare(`UPDATE lms_cursos SET tipo_conteudo='scorm',
       scorm_package_r2_prefix=?, scorm_launch_file=?, scorm_versao='1.2',
       conteudo_arquivo_nome=COALESCE(?,conteudo_arquivo_nome),updated_at=datetime('now')
-      WHERE id=? AND empresa_id=? AND changes()=1
+      WHERE id=? AND empresa_id=? AND deleted_at IS NULL AND changes()=1
         AND EXISTS(SELECT 1 FROM lms_scorm_package_versions p
           WHERE p.id=? AND p.empresa_id=? AND p.curso_id=?
             AND p.package_sha256=? AND p.r2_prefix=? AND p.status='ACTIVE')`)
