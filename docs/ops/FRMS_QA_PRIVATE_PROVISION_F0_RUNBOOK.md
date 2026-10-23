@@ -1,6 +1,31 @@
 # F2 FRMS QA 999013 — governança de recursos Cloudflare privados
 
 **Status deste documento: revisão e integração, não autorização de execução.**
+
+## Atualização do contrato vigente — recovery proof sem bearer no Worker
+
+A arquitetura de código da PR #1724 substituiu a antiga dependência de
+`FRMS_QA_D1_READ_TOKEN` em runtime pelo `recoveryProof` de uso único,
+originado por GET Time Travel no **runner protegido**, autenticado por HMAC
+e vinculado ao SHA/tenant/DB/run/nonce/operação. O Worker privado verifica
+o proof e mantém replay ledger no Durable Object. A obtenção da prova depende
+de proveniência e identidade do runner, não apenas da posse de um HMAC.
+
+O provisionador de Worker agora **rejeita `FRMS_QA_D1_READ_TOKEN` preenchido**
+e jamais inclui `D1_READ_TOKEN` no `wrangler secret bulk`.
+O secret `CLOUDFLARE_WORKER_API_TOKEN` existente pode ser usado somente no
+runner efêmero, nos GETs fixos permitidos, sob grant exato; jamais no Worker.
+A chave pública Ed25519 independente e seu pin continuam obrigatórios, assim
+como o mutex contínuo, o transportador Queue/pull/ack com credenciais restritas,
+a custódia segura do receipt e a assinatura separada do apply.
+
+Trechos históricos abaixo que exigem `FRMS_QA_D1_READ_TOKEN` em runtime
+descrevem a arquitetura **anterior** à #1724 e não devem ser executados
+sobre a versão nova. Esta mudança de código ainda **não** equivale a
+aprovação de segurança de rede nem implantação física. A PR permanece DRAFT;
+não executar `prepare`, `apply` ou produção sem grants, recursos implantados,
+signer independente e workflow que mantenha o mutex até readback 4/4.
+
 Referência: issues #776 / #1426; #1476 é científica e permanece isolada.
 Código-base: PR #1631 já integrada. Este processo não atualiza casos FRMS
 nem libera operador, não aplica Schema V2, não mexe em D1 e não altera o LMS.
