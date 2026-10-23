@@ -83,7 +83,7 @@ function fixture(){
         bind?:never; // implementation of D1 mock records through SQL strings below
       };
       void statement;
-      return [];
+      return statements.map(() => ({ success:true, results:[], meta:{changes:1} }));
     },
   };
   // Capture bound statements accurately to simulate D1's update.
