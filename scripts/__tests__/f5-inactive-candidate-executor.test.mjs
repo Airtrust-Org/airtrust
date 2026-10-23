@@ -317,3 +317,26 @@ test('does not delete an existing idempotent candidate returned for a duplicate 
     /CANDIDATE_NOT_VALIDATED_INACTIVE/);
   assert.ok(!calls.includes('remove-candidate'));
 });
+
+test('rejects NOT_APPLICABLE, absent or failing F5 static gates before D1/R2 QA', async () => {
+  const bytes = Buffer.from('valid-synthetic-fixture-source');
+  const plan = planFor(bytes);
+  const fields = ['structural', 'completionManifest', 'diagnostics'];
+  const base = adaptersFor(plan).candidate;
+  for (const field of fields) {
+    for (const status of ['NOT_APPLICABLE', 'FAIL', undefined]) {
+      const changedSection = status === undefined ? undefined : { status };
+      const candidate = { ...base, [field]: changedSection };
+      const { calls, adapters } = adaptersFor(plan, {
+        async completeIntake() { calls.push('complete'); return candidate; },
+      });
+      await assert.rejects(executeF5InactiveCandidate({
+        plan, source: sourceFor(bytes), adapters,
+      }), /QUALITY_GATE_EVIDENCE_INCOMPLETE/, `${field}=${status}`);
+      assert.equal(calls.includes('d1-candidate'), false);
+      assert.equal(calls.includes('r2-candidate'), false);
+      assert.equal(calls.includes('execute'), false);
+      assert.equal(calls.includes('remove-candidate'), true);
+    }
+  }
+});

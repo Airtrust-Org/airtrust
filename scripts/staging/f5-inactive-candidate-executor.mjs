@@ -67,9 +67,11 @@ function verifyInactiveQualityGate(candidate, plan) {
       candidate.certificateIssued !== false || candidate.zipBytes !== plan.candidate.zipBytes) {
     fail('CANDIDATE_NOT_VALIDATED_INACTIVE');
   }
-  const states = [candidate.structural?.status, candidate.completionManifest?.status,
-    candidate.diagnostics?.status];
-  if (states.some(status => !['PASS', 'NOT_APPLICABLE'].includes(status))) {
+  // The canonical SCORM quality gate requires all three static sections to
+  // pass. An optional/not-run diagnostic is not proof of an intact F5 package.
+  if (candidate.structural?.status !== 'PASS' ||
+      candidate.completionManifest?.status !== 'PASS' ||
+      candidate.diagnostics?.status !== 'PASS') {
     fail('QUALITY_GATE_EVIDENCE_INCOMPLETE');
   }
   const r2 = candidate.r2Readback;
