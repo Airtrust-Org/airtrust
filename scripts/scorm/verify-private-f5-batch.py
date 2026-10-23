@@ -120,6 +120,15 @@ def normalize_native_indices(source, candidate):
     old = records_by_id(source, "source", "courses")
     new = records_by_id(candidate, "candidate", "courseCount")
     require(old.keys() == new.keys(), "native source/candidate courseId sets differ")
+    for key in ("slides", "formative", "requiredGates"):
+        require(type(source.get(key)) is int and source[key] == candidate.get(key),
+                f"native aggregate pedagogy mismatch: {key}")
+    old_engine, new_engine = source.get("engineSha256"), candidate.get("engineNewSha256")
+    require(isinstance(old_engine, str) and HEX64.fullmatch(old_engine)
+            and candidate.get("engineOldSha256") == old_engine,
+            "native source engine SHA mismatch")
+    require(isinstance(new_engine, str) and HEX64.fullmatch(new_engine),
+            "invalid native candidate engine SHA")
     media = candidate.get("mediaRestoration", {})
     require(isinstance(media, dict), "invalid mediaRestoration")
     restored = media.get("restored", [])
@@ -160,6 +169,9 @@ def normalize_native_indices(source, candidate):
         require(dst.get("oldZip") == src.get("file")
                 and dst.get("oldZipSha256") == src.get("sha256"),
                 f"native source provenance mismatch: {cid}")
+        for key in ("slides", "formative", "requiredGates"):
+            require(type(src.get(key)) is int and src[key] == dst.get(key),
+                    f"native course pedagogy mismatch: {cid}: {key}")
         changed = dst.get("changedMembers")
         require(isinstance(changed, list) and changed
                 and all(isinstance(x, str) and x for x in changed)
@@ -173,6 +185,9 @@ def normalize_native_indices(source, candidate):
             "candidate_sha256": dst.get("newZipSha256"),
             "approved_added_members": approved_by_id.get(cid, {}),
             "expected_changed_members": changed,
+            "engine_member": "airtrust-score-unified-engine.js",
+            "expected_source_engine_sha256": old_engine,
+            "expected_candidate_engine_sha256": new_engine,
         })
     return {"courses": result}
 
@@ -204,6 +219,13 @@ def verify(index, source_dir, candidate_dir, allow_patterns, expected_count=43):
         require(digest_file(sp) == source_sha, f"source SHA mismatch: {cid}")
         require(digest_file(cp) == candidate_sha, f"candidate SHA mismatch: {cid}")
         old, new = inspect_zip(sp), inspect_zip(cp)
+        engine_member = row.get("engine_member", "airtrust-score-unified-engine.js")
+        if "expected_source_engine_sha256" in row:
+            require(old.get(engine_member) == row["expected_source_engine_sha256"],
+                    f"source ZIP engine digest mismatch: {cid}")
+        if "expected_candidate_engine_sha256" in row:
+            require(new.get(engine_member) == row["expected_candidate_engine_sha256"],
+                    f"candidate ZIP engine digest mismatch: {cid}")
         removed = set(old) - set(new)
         added = set(new) - set(old)
         require(not removed, f"ZIP members removed: {cid}: {sorted(removed)}")
@@ -259,14 +281,22 @@ def self_test():
             raise AssertionError(f"unsafe candidate accepted: {label}")
 
         require(check()["courses"] == 1, "valid candidate rejected")
-        native_source = {"courses": 1, "records": [
-            {"courseId": "demo", "file": "a.zip", "sha256": digest_file(src),
-             "sourceSha256": digest_file(src)}]}
-        native_candidate = {"courseCount": 1, "records": [
-            {"courseId": "demo", "oldZip": "a.zip", "oldZipSha256": digest_file(src),
-             "newZip": "a.zip", "newZipSha256": digest_file(dst),
-             "changedMembers": ["engine.js"]}]}
+        native_source = {
+            "courses": 1, "slides": 1, "formative": 0, "requiredGates": 0,
+            "engineSha256": hashlib.sha256(b"v2").hexdigest(),
+            "records": [{"courseId": "demo", "file": "a.zip",
+                         "sha256": digest_file(src), "sourceSha256": digest_file(src),
+                         "slides": 1, "formative": 0, "requiredGates": 0}]}
+        native_candidate = {
+            "courseCount": 1, "slides": 1, "formative": 0, "requiredGates": 0,
+            "engineOldSha256": hashlib.sha256(b"v2").hexdigest(),
+            "engineNewSha256": hashlib.sha256(b"v4").hexdigest(),
+            "records": [{"courseId": "demo", "oldZip": "a.zip",
+                         "oldZipSha256": digest_file(src), "newZip": "a.zip",
+                         "newZipSha256": digest_file(dst), "changedMembers": ["engine.js"],
+                         "slides": 1, "formative": 0, "requiredGates": 0}]}
         converted = normalize_native_indices(native_source, native_candidate)
+        converted["courses"][0]["engine_member"] = "engine.js"
         require(verify(converted, src.parent, dst.parent, ["engine.js"], 1)["courses"] == 1,
                 "native index conversion rejected valid candidate")
         native_candidate["records"][0]["courseId"] = "other"
@@ -352,12 +382,14 @@ def self_test():
                 "assets": [{"path": "assets/restored.png",
                             "sha256": hashlib.sha256(b"media").hexdigest()}]}]}
         native_index = normalize_native_indices(native_source, native_candidate)
+        native_index["courses"][0]["engine_member"] = "engine.js"
         require(verify(native_index, src.parent, dst.parent, ["engine.js"], 1)["courses"] == 1,
                 "native V4A restored media rejected")
         native_candidate["records"][0]["changedMembers"] = ["engine.js"]
         try:
-            verify(normalize_native_indices(native_source, native_candidate),
-                   src.parent, dst.parent, ["engine.js"], 1)
+            invalid_native = normalize_native_indices(native_source, native_candidate)
+            invalid_native["courses"][0]["engine_member"] = "engine.js"
+            verify(invalid_native, src.parent, dst.parent, ["engine.js"], 1)
         except VerificationError:
             pass
         else:
