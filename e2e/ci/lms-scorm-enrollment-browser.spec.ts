@@ -162,6 +162,13 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   });
   expect(staleCommit.status()).toBe(409);
   expect(stored()).toEqual(resumed);
+  // A legacy iframe with no cycle claim is just as stale/ambiguous as one
+  // claiming a different cycle. It must not mutate the newly resumed cycle.
+  const unscopedCommit=await page.request.post(api+'/lms/matriculas/scorm/commit',{
+    headers,data:{matricula_id:id,commit_event:'SCORM_COMMIT',lesson_status:'passed',score_raw:100},
+  });
+  expect(unscopedCommit.status()).toBe(400);
+  expect(stored()).toEqual(resumed);
   sco=await open();
   await expect(sco.locator('#submitAssessment')).toBeDisabled();
   expect(stored().history.n).toBe(0);

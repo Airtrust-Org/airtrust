@@ -1165,6 +1165,7 @@ export interface PostXapiStatementResult {
 
 export interface PostScormCommitDTO {
   matricula_id: number;
+  ciclo_id: number;
   lesson_status?: string | null;
   completion_status?: string | null;
   success_status?: string | null;

@@ -94,9 +94,10 @@ function makeTestEnv(handlers: Array<[string, QueryHandler]>) {
   const db = {
     prepare: vi.fn((query: string) => {
       const entry = handlers.find(([matcher]) => query.includes(matcher));
-      if (!entry) throw new Error(`Unhandled query: ${query.slice(0, 160)}`);
-
-      const handler = entry[1];
+      const handler = entry?.[1] ?? (query.includes('SELECT id FROM lms_matricula_ciclos')
+        ? { first: () => ({ id: 202 }) }
+        : undefined);
+      if (!handler) throw new Error(`Unhandled query: ${query.slice(0, 160)}`);
       return {
         bind: (...args: unknown[]) => ({
           first: async () => (handler.first ? handler.first(args) : null),
@@ -136,6 +137,7 @@ function makeCommit(body: Record<string, unknown>) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      ciclo_id: 202,
       commit_event: 'SCORM_USER_FINALIZE',
       cmi_json: JSON.stringify({
         'cmi.core.lesson_location': '3/3',
