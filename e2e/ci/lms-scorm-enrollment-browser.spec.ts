@@ -342,6 +342,64 @@ test('SCORM commits reject an actual prior enrollment cycle without changing lea
   const currentLaunch=await page.request.get(api+'/lms/scorm/launch/'+id);
   expect(currentLaunch.status()).toBe(200);
 
+  function finishStored(){
+    const readDb=new DatabaseSync(fixture.dbFile,{readOnly:true});
+    try{return {
+      enrollment:readDb.prepare(`SELECT status,progresso_pct,qualificacao_historico_id
+        FROM lms_matriculas WHERE id=? AND empresa_id=?`).get(id,fixture.companyId) as {
+          status:string;progresso_pct:number;qualificacao_historico_id:number|null;
+        },
+      scorm:readDb.prepare(`SELECT lesson_status,score_raw,cmi_json
+        FROM lms_progresso_scorm WHERE matricula_id=? AND empresa_id=?`).get(id,fixture.companyId) as {
+          lesson_status:string;score_raw:number|null;cmi_json:string;
+        }|undefined,
+      histories:readDb.prepare(`SELECT COUNT(*) AS n FROM qualificacoes_historico
+        WHERE lms_matricula_id=? AND empresa_id=? AND deleted_at IS NULL`).get(id,fixture.companyId) as {n:number},
+    };}finally{readDb.close();}
+  }
+
+  // Exercise the SCORM API's actual LMSFinish path. The synthetic enrollment
+  // remains incomplete: Finish must persist the last CMI location without
+  // manufacturing a score, completion, or qualification.
+  await page.goto(api+'/health');
+  await page.setContent('<iframe id="outer" title="SCORM Finish QA" src="'+
+    api+'/lms/scorm/launch/'+id+'" style="height:90vh;width:100vw"></iframe>');
+  const finishOuter=page.frameLocator('#outer');
+  const finishSco=finishOuter.frameLocator('#scorm-frame');
+  await expect(finishSco.getByRole('heading',{name:'Avaliação QA'})).toBeVisible({timeout:25000});
+
+  const finishRequests:Array<Record<string,unknown>>=[];
+  page.on('request',request=>{
+    if(request.method()!=='POST'||!request.url().endsWith('/lms/matriculas/scorm/commit'))return;
+    const body=request.postDataJSON() as Record<string,unknown>;
+    if(body.commit_event==='SCORM_FINISH')finishRequests.push(body);
+  });
+  const finishLocation='QA-FINISH-PROBE-'+id;
+  const finishResult=await finishOuter.locator('body').evaluate((body,location)=>{
+    const api=(body.ownerDocument.defaultView as (Window & {API?:{
+      LMSInitialize:()=>string;LMSSetValue:(element:string,value:string)=>string;
+      LMSFinish:(parameter:string)=>string;
+    }})|null)?.API;
+    if(!api)return null;
+    api.LMSInitialize();
+    api.LMSSetValue('cmi.core.lesson_location',location);
+    api.LMSSetValue('cmi.core.lesson_status','incomplete');
+    return api.LMSFinish('');
+  },finishLocation);
+  expect(finishResult).toBe('true');
+  await expect.poll(()=>finishRequests.length,{timeout:15000}).toBe(1);
+  expect(finishRequests[0]).toMatchObject({
+    matricula_id:id,ciclo_id:currentCycleId,commit_event:'SCORM_FINISH',
+    lesson_status:'incomplete',
+  });
+  await expect.poll(()=>finishStored().scorm?.cmi_json?.includes(finishLocation),{timeout:15000}).toBe(true);
+  const finishState=finishStored();
+  expect(finishState.enrollment.status).toBe('EM_ANDAMENTO');
+  expect(finishState.enrollment.qualificacao_historico_id).toBeNull();
+  expect(finishState.histories.n).toBe(0);
+  expect(finishState.scorm?.lesson_status).toBe('incomplete');
+  expect(finishState.scorm?.score_raw).toBeNull();
+
   const evidenceBrowser=testInfo.project.name==='chromium'?'chromium':'webkit';
   const evidencePath=join('worker-airtrust/.wrangler/scorm-browser-qa',
     'evidence-'+evidenceBrowser+'.json');
