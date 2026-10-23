@@ -951,7 +951,7 @@ export default function LmsPlayer() {
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
     const confirmed = window.confirm(
-      `Esta é uma reinscrição excepcional, e NÃO a retomada normal. Deseja abrir um novo ciclo auditado? A matrícula anterior manterá seu histórico, mas o progresso (${displayProgress}%) não será creditado automaticamente na nova edição com ${editionMismatch.active_total} unidades.`, 
+      `Esta é uma reinscrição excepcional, e NÃO a retomada normal. Deseja abrir um novo ciclo auditado? A matrícula anterior manterá seu histórico, mas o progresso (${displayProgress}%) não será creditado automaticamente na nova edição com ${editionMismatch.active_total} unidades.`,
     );
     if (!confirmed) return;
     setStartingNewEdition(true);
