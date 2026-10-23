@@ -6,6 +6,9 @@ const bucket='airtrust-frms-qa-preimages-staging-private';
 const kind=process.env.FRMS_PROBE_KIND;
 const endpoints=[
   ['d1_metadata',`/d1/database/${id}`],
+  ['d1_time_travel_bookmark',`/d1/database/${id}/time_travel/bookmark`],
+  ['r2_bucket_list','/r2/buckets'],
+  ['staging_worker_settings','/workers/scripts/airtrust-api-staging/settings'],
   ['r2_bucket',`/r2/buckets/${bucket}`],
   ['r2_custom_domains',`/r2/buckets/${bucket}/domains/custom`],
   ['r2_managed_domain',`/r2/buckets/${bucket}/domains/managed`],
@@ -26,7 +29,7 @@ for(const [name,path] of endpoints){
       headers:{Authorization:`Bearer ${token}`},
       signal:AbortSignal.timeout(12000),
     });
-    // Deliberately do not print response body or sensitive resource fields.
+    // Deliberately do not read/print response body, bookmarks, token values or sensitive resource fields.
     checks[name]=response.status===200?'GET_200':response.status===404?'GET_404':
       response.status===403?'GET_403':response.status===401?'GET_401':'GET_OTHER';
   }catch {checks[name]='GET_NETWORK_ERROR';}
