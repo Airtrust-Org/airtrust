@@ -16,7 +16,10 @@ try{
     accountId:verified.accountId,token:process.env.CLOUDFLARE_WORKER_API_TOKEN});
   console.log(JSON.stringify({verdict:result.verdict,queueNamesPresent:result.queueNamesPresent,
     queueNamesExpected:result.queueNamesExpected,queuesCreated:result.queuesCreated,
-    queueHttpPullConfigured:false,d1Writes:0,r2Writes:0,workerDeploys:0,
+    retentionUpdates:result.retentionUpdates,httpPullCreated:result.httpPullCreated,
+    maxQueueRetentionSeconds:result.maxQueueRetentionSeconds,
+    queueHttpPullConfigured:result.queueHttpPullConfigured,
+    d1Writes:0,r2Writes:0,workerDeploys:0,
     productionWrites:0,remainingApproval:'PRIVATE_CALLER_DEPLOY_AND_ED25519_SIGNER'}));
 }catch{
   console.error('FRMS_QA_PRIVATE_QUEUES_PROVISION_FAILED_CLOSED');
