@@ -1,0 +1,23 @@
+name: F5 Private ZIP Batch Static Verifier
+
+on:
+  pull_request:
+    paths:
+      - scripts/scorm/verify-private-f5-batch.py
+      - .github/workflows/f5-private-batch-static.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  f5-static-self-test:
+    name: f5-static-self-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax and fail-closed synthetic cases
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/scorm/verify-private-f5-batch.py
+          python3 scripts/scorm/verify-private-f5-batch.py --self-test
