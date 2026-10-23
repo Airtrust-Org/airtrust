@@ -29,7 +29,27 @@ MANIFEST = '''<?xml version="1.0" encoding="UTF-8"?>
 def build_zip(output: Path) -> dict:
     output.parent.mkdir(parents=True, exist_ok=True)
     # Reproducible archive: sorted member names, fixed timestamp, no global state.
-    members = {'imsmanifest.xml': MANIFEST.encode('utf-8')}
+    completion = {
+        'schemaVersion': 1,
+        'diagnosticsVersion': 'AIRTRUST_COMPLETION_DIAGNOSTICS_V1',
+        'scormVersion': '1.2',
+        'courseId': 'qa-scorm-resume-two-position',
+        'packageVersion': 'qa-resume-v1',
+        'content': {'requiredSlides': ['qa-pos-1', 'qa-pos-2']},
+        'assessment': {'mode': 'EXTERNAL', 'scoringBySCORM': False,
+                       'requiredInteractions': []},
+        'completion': {'strategy': 'AIRTRUST_COMPLETION_CONTRACT_V1',
+                       'passStatusFromSCORM': False, 'workerApprovalRequired': True},
+        'diagnostics': {'currentSlide': True, 'slides': True,
+                        'assessment': True, 'packageStatus': True, 'updatedAt': True},
+        'release': {'reviewed': False},
+    }
+    members = {
+        'imsmanifest.xml': MANIFEST.encode('utf-8'),
+        'airtrust-completion-manifest.json':
+            (json.dumps(completion, ensure_ascii=False, sort_keys=True,
+                        separators=(',', ':')) + '\n').encode('utf-8'),
+    }
     members.update({name: (ROOT / name).read_bytes() for name in ('index.html', 'resume-runtime.js')})
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for name in sorted(members):

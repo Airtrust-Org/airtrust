@@ -27,14 +27,25 @@ class ResumeFixtureTests(unittest.TestCase):
             self.assertFalse(r1['stagingWritesAuthorized'])
             with zipfile.ZipFile(one) as z:
                 self.assertIsNone(z.testzip())
-                self.assertEqual(sorted(z.namelist()), ['imsmanifest.xml', 'index.html', 'resume-runtime.js'])
+                self.assertEqual(sorted(z.namelist()), ['airtrust-completion-manifest.json', 'imsmanifest.xml', 'index.html', 'resume-runtime.js'])
                 root = ET.fromstring(z.read('imsmanifest.xml'))
                 ns = '{http://www.imsproject.org/xsd/imscp_rootv1p1p2}'
                 self.assertEqual(root.find(f'{ns}metadata/{ns}schemaversion').text, '1.2')
                 sco = root.find(f'{ns}resources/{ns}resource')
                 self.assertEqual(sco.attrib['{http://www.adlnet.org/xsd/adlcp_rootv1p2}scormtype'], 'sco')
                 self.assertEqual(sco.attrib['href'], 'index.html')
+                import json
+                m = json.loads(z.read('airtrust-completion-manifest.json'))
+                self.assertEqual(m['diagnosticsVersion'], 'AIRTRUST_COMPLETION_DIAGNOSTICS_V1')
+                self.assertEqual(m['content']['requiredSlides'], ['qa-pos-1', 'qa-pos-2'])
+                self.assertEqual(m['assessment']['mode'], 'EXTERNAL')
+                self.assertFalse(m['assessment']['scoringBySCORM'])
+                self.assertFalse(m['completion']['passStatusFromSCORM'])
+                self.assertTrue(m['completion']['workerApprovalRequired'])
+                self.assertFalse(m['release']['reviewed'])
+                self.assertTrue(all(m['diagnostics'].values()))
                 script = z.read('resume-runtime.js').decode()
+                self.assertIn('AIRTRUST_COMPLETION_DIAGNOSTICS_V1', script)
                 for field in ('cmi.core.lesson_location', 'cmi.suspend_data'):
                     self.assertIn(field, script)
                 self.assertNotIn('cmi.core.score.raw', script)
