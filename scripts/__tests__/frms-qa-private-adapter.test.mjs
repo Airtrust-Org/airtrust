@@ -239,7 +239,15 @@ const syntheticGrantVerifier=async req=>({
   grantId:req.grantId,runId:req.runId,runAttempt:req.runAttempt,
 });
 test('private binding-only prepare prototype uses real disposable Worker RPC, never D1 writes',async t=>{
-  const s=await setup(t),binding=await s.mf.getWorker('repair');
+  const s=await setup(t);
+  // The existing disposable caller Worker owns the actual Miniflare
+  // REPAIR service binding. A Node-side stub delegates only to that RPC;
+  // getWorker('repair') by itself is not the configured caller transport.
+  const binding={prepare:async input=>{
+    const result=await s.rawCall('prepare',input);
+    if(result.error)throw Error(result.error);
+    return result;
+  }};
   const before=await rows(s.db);
   const prepared=await prepareViaPrivateServiceBinding({
     env:prepareContext(s.callerKey),binding,
@@ -255,7 +263,8 @@ test('private binding-only prepare prototype uses real disposable Worker RPC, ne
   const cipher=await (await bucket.get(prepared.receipt.artifactReference)).text();
   assert.equal(cipher.includes('QA-FRMS-UX-01'),false);
   assert.equal(cipher.includes('tripulante_id'),false);
-  assert.equal((await binding.fetch('https://local.invalid/prepare',{method:'POST'})).status,404);
+  const direct=await s.mf.getWorker('repair');
+  assert.equal((await direct.fetch('https://local.invalid/prepare',{method:'POST'})).status,404);
 });
 test('binding transport never calls private RPC without external verified prepare-only grant',async()=>{
   let calls=0;const binding={prepare:async()=>{calls++;return {receiptId:'f'.repeat(64),
