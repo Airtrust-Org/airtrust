@@ -52,6 +52,13 @@ describe('Compliance requirement save enrollment synchronization', () => {
     expect(body).not.toMatch(/sendMatriculaEmail|enviar_convite_email|convites\/lote|sendEmail/);
   });
 
+  it('exposes classified diagnostics only through staging-authenticated rule routes', () => {
+    expect(post).toContain('sanitizeComplianceEnrollmentResponse(rawEnrollment, c.env.ENVIRONMENT)');
+    expect(put).toContain('sanitizeComplianceEnrollmentResponse(rawEnrollment, c.env.ENVIRONMENT)');
+    expect(source).toContain("app.post('/regras', requireRole('admin', 'manager')");
+    expect(source).toContain("app.put('/regras/:id', requireRole('admin', 'manager')");
+  });
+
   it('reports deferred synchronization rather than claiming complete success', () => {
     expect(enrollmentService).toContain('AUTO_ENROLLMENT_DEFERRED');
     expect(enrollmentService).toContain('LMS_COURSE_MAPPING_UNAVAILABLE');

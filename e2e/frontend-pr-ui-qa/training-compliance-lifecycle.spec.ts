@@ -177,7 +177,11 @@ async function setExplicitEadEnrollment(page: Page, ruleId: number, enabled: boo
     body: { auto_matricular_ead: enabled, modalidade_requerida: modality },
   });
   expect(result.ok, JSON.stringify(result.json)).toBe(true);
-  expect(result.json.data?.auto_enrollment_warning, `EAD opt-in phase: ${phase}`).toBeNull();
+  const diagnostic = String(result.json.data?.auto_enrollment_diagnostic_code || 'NOT_AVAILABLE');
+  expect(
+    result.json.data?.auto_enrollment_warning,
+    `EAD opt-in phase: ${phase}; sanitized diagnostic: ${diagnostic}`,
+  ).toBeNull();
   return result;
 }
 
