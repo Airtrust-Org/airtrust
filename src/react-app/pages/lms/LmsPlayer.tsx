@@ -107,6 +107,10 @@ export function shouldVerifyCanonicalProgress(status: string | null | undefined)
   return status === 'CONCLUIDO';
 }
 
+export function shouldRefreshMatriculaAfterScormSaveError(reason: unknown) {
+  return reason === 'http-409';
+}
+
 /** A ciclo renewal must recreate the SCORM iframe so its next launch is bound to the active cycle. */
 export function buildScormPlayerSessionKey(params: {
   matriculaId: number;
@@ -818,6 +822,21 @@ export default function LmsPlayer() {
       ) {
         return;
       }
+
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
+        event.data.type === 'lms:save-error' &&
+        event.data.matriculaId === id
+      ) {
+        // A stale-cycle commit returns 409. Refresh the authoritative cycle so
+        // the session identity can replace the old iframe and relaunch safely.
+        if (shouldRefreshMatriculaAfterScormSaveError(event.data.reason)) {
+          void refetchMatricula();
+        }
+        return;
+      }
+
       if (
         event.data &&
         typeof event.data === 'object' &&

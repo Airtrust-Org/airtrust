@@ -4,6 +4,7 @@ import {
   buildScormPlayerSessionKey,
   canReconcilePersistedScormCompletion,
   resolveLmsDisplayProgress,
+  shouldRefreshMatriculaAfterScormSaveError,
   shouldShowScormClosureDetails,
   shouldVerifyCanonicalProgress,
 } from '../LmsPlayer';
@@ -55,6 +56,12 @@ describe('SCORM progress event reconciliation', () => {
 
   it('verifies the canonical matrícula only when progress reports completion', () => {
     expect(shouldVerifyCanonicalProgress('CONCLUIDO')).toBe(true);
+  });
+
+  it('refreshes the matrícula after a stale-cycle 409, not for ordinary save failures', () => {
+    expect(shouldRefreshMatriculaAfterScormSaveError('http-409')).toBe(true);
+    expect(shouldRefreshMatriculaAfterScormSaveError('network-error')).toBe(false);
+    expect(shouldRefreshMatriculaAfterScormSaveError('http-500')).toBe(false);
   });
 });
 
