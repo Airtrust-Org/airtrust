@@ -5,6 +5,8 @@ on:
     paths:
       - scripts/scorm/verify-private-f5-batch.py
       - scripts/scorm/verify-f5-worker-intake-limits.py
+      - scripts/scorm/validate-f5-streamed-zip.mjs
+      - scripts/scorm/test-f5-streamed-zip.py
       - .github/workflows/f5-private-batch-static.yml
   workflow_dispatch:
 
@@ -24,3 +26,6 @@ jobs:
           python3 scripts/scorm/verify-private-f5-batch.py --self-test
           python3 -m py_compile scripts/scorm/verify-f5-worker-intake-limits.py
           python3 scripts/scorm/verify-f5-worker-intake-limits.py --self-test
+          node --check scripts/scorm/validate-f5-streamed-zip.mjs
+          python3 -m py_compile scripts/scorm/test-f5-streamed-zip.py
+          python3 scripts/scorm/test-f5-streamed-zip.py
