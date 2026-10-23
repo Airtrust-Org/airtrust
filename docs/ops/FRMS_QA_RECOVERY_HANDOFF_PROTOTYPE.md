@@ -56,3 +56,35 @@ token or issue authorization. The next valid step is independent code and
 threat-model review of the proposed trusted-runner/bookmark provenance,
 followed by an isolated integration test. **No remote write or Worker
 deployment is permitted on this evidence.**
+
+## Increment: isolated trusted-runner fixed-endpoint acquisition
+
+`ops/frms-qa-repair/trusted-runner-bookmark-acquisition.mjs` adds
+`captureTrustedRunnerRecoveryHandoff` for a **future, separately authorized
+trusted runner only**. It pins the exact HTTPS Cloudflare D1 Time Travel bookmark
+GET URL for the known staging DB, uses redirects disabled, enforces a successful
+JSON API envelope with a bounded bookmark, and then signs the acquired value
+using the already-reviewed HMAC claim contract. Scope is checked **before**
+any GET. Its bridge HMAC key is required to be distinct from the private caller
+HMAC key; neither must be derived from a Cloudflare API token or copied into
+an unauthorized transport. Tests explicitly confirm that a caller-supplied
+bookmark is ignored, redirect/403/errors are denied, token values are absent
+from returned proof, and replay/operation mismatch are rejected.
+
+The code is **not** wired into GitHub Actions dispatch, a private
+service-binding transport, `worker.mjs`, `adapters.mjs`, or a Cloudflare
+deployment. No real Cloudflare requests are made in CI; tests inject an
+in-memory fetcher. The existing Worker continues requiring
+`FRMS_QA_D1_READ_TOKEN`; this experiment does **not** remove that requirement.
+A genuine trusted runner must pin the GitHub run identity and `GITHUB_SHA`
+outside this API, never accept account/DB from an untrusted actor,
+keep the bridge key separate, and avoid printing the raw bookmark or claim.
+The HMAC alone does **not** independently prove Cloudflare provenance;
+TLS/runner attestation, lifecycle and audit need review. No new token is created
+or requested by this increment.
+
+**Mandatory gate before runtime integration:** security review of trust
+boundaries, failure/replay recovery, provenance, run mutex and Ed25519
+independent sign-off. A runtime change would require its own new protected PR,
+staging validation and exact per-phase authorization. No existing bucket-only
+grant may be reused.
