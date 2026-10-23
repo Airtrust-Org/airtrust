@@ -107,10 +107,11 @@ def verify_completion_contract(path, cid, expected_engine_sha):
             return
         require(f5 <= files, f"incomplete F5 model/manifest pair: {cid}")
         source = archive.read("airtrust-course-data.js").decode("utf-8")
-        prefix = "window.AIRTRUST_F5_MODEL = "
-        require(source.startswith(prefix) and source.rstrip().endswith(";"),
+        heading, sep, payload = source.partition("=")
+        require(sep and heading.strip() == "window.AIRTRUST_F5_MODEL"
+                and payload.rstrip().endswith(";"),
                 f"unparseable F5 course model: {cid}")
-        model = json.loads(source[len(prefix):].strip().rstrip(";"))
+        model = json.loads(payload.strip()[:-1])
         manifest = json.loads(archive.read("airtrust-completion-manifest.json"))
         require(isinstance(model, dict) and isinstance(manifest, dict),
                 f"invalid F5 model/manifest: {cid}")
