@@ -62,6 +62,39 @@ export function expectedQaCases(days) {
   }));
 }
 
+/**
+ * Reviewed synthetic fixture is an immutable test cohort (9–12 Oct 2026).
+ * A newer 30-day aggregate can confirm that these four dates still meet
+ * the eligibility band; it must NOT silently reassign case IDs to 10–13 Oct.
+ * Caller must first authenticate and validate the fresh aggregate source.
+ * This does not revalidate the expired original source or authorize writes.
+ */
+export function expectedReviewedFixtureCases(days) {
+  if (!Array.isArray(days) || days.length !== 30 ||
+      new Set(days.map(d=>d?.day)).size !== 30)
+    throw new Error('QA_REVIEWED_SOURCE_DAYS_INVALID');
+  for (const fixture of REVIEWED_READONLY_CASE_SNAPSHOT) {
+    const found=days.find(d=>d?.day===fixture.date);
+    if (!found || approximation(found.jornadas) < 2)
+      throw new Error('QA_REVIEWED_FIXTURE_DATE_INELIGIBLE');
+  }
+  return REVIEWED_READONLY_CASE_SNAPSHOT;
+}
+
+function requireReviewedSourceMode(env=process.env) {
+  if (env.GITHUB_ACTIONS!=='true' ||
+      env.GITHUB_REPOSITORY!=='Airtrust-Org/airtrust' ||
+      env.GITHUB_REF!=='refs/heads/main' ||
+      env.CONFIRM_FRMS_QA_CASES_INSPECT!=='AIRTRUST_STAGING_FRMS_CASES_READONLY' ||
+      env.FRMS_QA_CASE_SCOPE!=='reviewed_historical_4case' ||
+      !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA||'') ||
+      env.FRMS_QA_EXPECTED_MAIN_SHA!==env.GITHUB_SHA ||
+      !/^[a-f0-9]{40}$/.test(env.SOURCE_AGGREGATE_SHA||'') ||
+      !env.SANITIZED_AGGREGATE_PATH) {
+    throw new Error('FRMS_QA_REVIEWED_SOURCE_MODE_DENIED');
+  }
+}
+
 /** Never return crew names, documents, emails, tokens or raw database rows. */
 export function evaluateQaCases(rows, expected) {
   if (!Array.isArray(rows) || !Array.isArray(expected) || expected.length !== 4)
@@ -180,10 +213,16 @@ function verifyTarget() {
 export async function main() {
   verifyTarget();
   const statusOnly=process.argv.includes('--reviewed-fixed-status-only');
+  const reviewedSourceMode=process.argv.includes('--reviewed-current-source');
+  if (reviewedSourceMode && (statusOnly ||
+      process.argv.slice(2).some(arg=>arg!=='--reviewed-current-source')))
+    throw new Error('FRMS_QA_REVIEWED_SOURCE_MODE_DENIED');
+  if (reviewedSourceMode) requireReviewedSourceMode();
   const expected=statusOnly?expectedReadonlyCaseSnapshot({env:process.env}):(
-    expectedQaCases(validateSource(JSON.parse(readFileSync(
-      String(process.env.SANITIZED_AGGREGATE_PATH || ''), 'utf8')),
-      String(process.env.SOURCE_AGGREGATE_SHA || ''))));
+    (reviewedSourceMode?expectedReviewedFixtureCases:expectedQaCases)(
+      validateSource(JSON.parse(readFileSync(
+        String(process.env.SANITIZED_AGGREGATE_PATH || ''), 'utf8')),
+        String(process.env.SOURCE_AGGREGATE_SHA || ''))));
   const ids=CASE_IDS.map(id => "'"+id+"'").join(',');
   // Only fixed synthetic identifiers, a hard-coded tenant, and QA-only columns.
   const sql=`SELECT a.id,a.tipo_limite,a.nivel,a.created_at,a.mensagem,a.valor_limite_min,a.valor_atual_min,a.jornada_id,a.resolvido,
@@ -200,7 +239,8 @@ export async function main() {
   const rows=queryReadOnly(sql);
   const result=evaluateQaCases(rows,expected);
   console.log((statusOnly?'FRMS_QA_REVIEWED_FIXED_STATUS_ONLY=':
-    'FRMS_QA_CASES_READONLY_PREFLIGHT=')+JSON.stringify(result));
+    reviewedSourceMode?'FRMS_QA_REVIEWED_SCOPE_FRESH_SOURCE_READONLY=':
+      'FRMS_QA_CASES_READONLY_PREFLIGHT=')+JSON.stringify(result));
   if(result.verdict!=='READONLY_ACCEPTANCE_READY') {
     const ids=expected.map(want =>
       "'qa-frms-ux-j-"+want.date+"-"+want.matricula+"'").join(',');
@@ -214,9 +254,13 @@ export async function main() {
     const targetJourneys=queryReadOnly(targetSql);
     const diagnostic=diagnoseLegacyRepairPreflight(rows,targetJourneys,expected);
     console.log('FRMS_QA_LEGACY_REPAIR_READONLY_DIAGNOSTIC='+JSON.stringify(diagnostic));
-    // Status-only reports historical fixture drift without failing the
-    // diagnostic, but NEVER asserts acceptance or authorizes a write.
-    if(!statusOnly)process.exitCode=2;
+    // Reviewed-source mode is strictly a *cohort compatibility* check.
+    // PASS requires all four unchanged legacy alerts and old journeys,
+    // not a 4/4 product QA acceptance, signed grant, or authorization to write.
+    if(reviewedSourceMode &&
+       diagnostic.verdict!=='LEGACY_FIXTURE_PROVEN_READY_FOR_REVIEW')
+      process.exitCode=2;
+    if(!statusOnly && !reviewedSourceMode)process.exitCode=2;
   }
 }
 
