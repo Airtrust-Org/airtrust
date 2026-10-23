@@ -97,6 +97,36 @@ de garantir que a rota HTTP do Worker permanece 404. Testes negativos
 cobrem falta de verificador, divergência de SHA, runner, escopo e grant;
 um caller sem segredo HMAC não consegue preparar o recibo.
 
+## Composição autenticada do plano de controle — ainda não operacional
+
+O módulo `ops/frms-qa-repair/trusted-prepare-admission.mjs` une, em um
+único processo **confiável e ainda não implantado**, o cliente GitHub
+GET-only restrito, `verifyPrepareAdminGrant`, a reserva única
+`grantLedger.transaction` e o RPC `binding.prepare`. A API externa
+não aceita como entrada um marcador arbitrário de concessão validada:
+a prova precisa ser reconstruída a partir da própria conta autenticada
+do runner, comentário da issue #776, identidade do run, oito gates e
+SHA da main. Um veredicto inválido impede que o ledger seja consumido;
+depois de reservar, erro de transporte mantém o grant gasto. O retorno
+não inclui o bookmark, artefato R2, corpo do grant ou token GitHub;
+registra somente o recibo validado, **sem declarar readback físico de R2**.
+
+Testes GET sintéticos rejeitam comentário forjado, falta de admin,
+gate incompleto, SHA divergente e configuração de runner falsa, além
+de testar o replay e a falha após reserva. O parâmetro de teste
+`fetcher` **não pode** ser controlado por um `workflow_dispatch`, pela
+requisição do Worker ou pela fonte de dados. Ele representa exclusivamente
+a API externa mockada na suíte, e não autenticação independente em
+ambiente real.
+
+**Sem integração operacional:** o runner não possui um transporte
+privado autorizado para chamar o Worker. Não há Durable Object de caller
+remoto implantado/atestável, nem execução de `prepare` real. O workflow
+de preflight continua GET-only e **não utiliza** o módulo para escrever
+preimagens nem para disparar RPC. Instalar em staging exigirá aprovação
+administrativa nova e exata para Worker, independentemente do grant
+`prepare`, segregação de credencial D1 e autoridade Ed25519.
+
 ## Bloqueios reais para produção de staging
 
 Mesmo com o RPC exercitado localmente, o GitHub Actions runner
