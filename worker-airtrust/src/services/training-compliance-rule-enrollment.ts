@@ -162,6 +162,34 @@ async function performComplianceRuleEnrollment<TAccess>(
 }
 
 
+/**
+ * Return only stable diagnostic identifiers to the authorized, authenticated
+ * staging QA route. Never leak the raw D1 error, even during a staging failure.
+ * Production and non-staging hosts always receive the unchanged API contract.
+ */
+const COMPLIANCE_STAGING_DIAGNOSTICS = new Set([
+  'SCHEMA_REQUIRED_TABLE_MISSING', 'ATOMIC_POSTCHECK_FAILED',
+  'ATOMIC_ID_MISSING', 'DB_SCHEMA_TABLE_MISSING', 'DB_SCHEMA_COLUMN_MISSING',
+  'DB_UNIQUE_CONSTRAINT', 'DB_FOREIGN_KEY_CONSTRAINT',
+  'DB_NOT_NULL_CONSTRAINT', 'DB_CHECK_CONSTRAINT', 'DB_BUSY',
+  'D1_ERROR', 'UNCLASSIFIED',
+]);
+
+export function sanitizeComplianceEnrollmentResponse(
+  enrollment: {
+    auto_enrollment: EnrollmentSummary | null;
+    auto_enrollment_warning: string | null;
+    auto_enrollment_diagnostic_code?: string;
+  },
+  environment: string,
+) {
+  const { auto_enrollment_diagnostic_code: diagnosticCode, ...publicEnrollment } = enrollment;
+  if (environment === 'staging' && diagnosticCode && COMPLIANCE_STAGING_DIAGNOSTICS.has(diagnosticCode)) {
+    return { ...publicEnrollment, auto_enrollment_diagnostic_code: diagnosticCode };
+  }
+  return publicEnrollment;
+}
+
 export async function reconcileTrainingComplianceRuleEnrollment<TAccess>(
   db: D1Database,
   empresaId: number,
@@ -169,7 +197,7 @@ export async function reconcileTrainingComplianceRuleEnrollment<TAccess>(
   access: TAccess,
   audit: ReturnType<typeof extrairUsuarioAuditoria>,
   buildSnapshot: (db: D1Database, empresaId: number, access: TAccess) => Promise<EnrollmentSnapshot>,
-): Promise<{ auto_enrollment: EnrollmentSummary | null; auto_enrollment_warning: string | null }> {
+): Promise<{ auto_enrollment: EnrollmentSummary | null; auto_enrollment_warning: string | null; auto_enrollment_diagnostic_code?: string }> {
   try {
     const summary = await performComplianceRuleEnrollment(
       db, empresaId, ruleId, access, audit, buildSnapshot,
@@ -181,9 +209,12 @@ export async function reconcileTrainingComplianceRuleEnrollment<TAccess>(
   } catch (error) {
     // Saving a requirement is durable. The caller must not claim a successful
     // enrollment sync after a partial failure; the operation is idempotent on retry.
-    console.error('[TRAINING_COMPLIANCE] Falha na sincronização após salvar requisito', {
-      code: classifyComplianceEnrollmentFailure(error),
-    });
-    return { auto_enrollment: null, auto_enrollment_warning: 'AUTO_ENROLLMENT_DEFERRED' };
+    const code = classifyComplianceEnrollmentFailure(error);
+    console.error('[TRAINING_COMPLIANCE] Falha na sincronização após salvar requisito', { code });
+    return {
+      auto_enrollment: null,
+      auto_enrollment_warning: 'AUTO_ENROLLMENT_DEFERRED',
+      auto_enrollment_diagnostic_code: code,
+    };
   }
 }
