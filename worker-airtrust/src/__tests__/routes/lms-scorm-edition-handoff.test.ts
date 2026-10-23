@@ -168,4 +168,34 @@ describe('POST /:id/scorm-edition-handoff', () => {
     expect(calls).toHaveLength(0);
     expect(mocks.writeHandoff).not.toHaveBeenCalled();
   });
+
+  it('rejects a resume proposal whose package hash differs from the active enrollment package', async () => {
+    const { db, calls } = createDb({
+      id: 74,
+      curso_id: 33,
+      status: 'EM_ANDAMENTO',
+      data_inicio: '2026-10-01T00:00:00Z',
+      qualificacao_historico_id: null,
+      ciclo_id: 902,
+      cycle_started_at: '2026-10-01T00:00:00Z',
+      tipo_conteudo: 'scorm',
+      scorm_package_r2_prefix: 'lms/scorm/17/33/active/',
+      package_sha256: packageSha256,
+      cmi_json: '{"cmi.core.lesson_location":"32/37"}',
+    });
+    mocks.readProposal.mockResolvedValueOnce({
+      ...proposal,
+      activePackageSha256: 'c'.repeat(64),
+    });
+
+    const response = await createApp().request(
+      '/74/scorm-edition-handoff',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      createEnv(db, 'true'),
+    );
+
+    expect(response.status).toBe(409);
+    expect(calls).toHaveLength(1);
+    expect(mocks.writeHandoff).not.toHaveBeenCalled();
+  });
 });
