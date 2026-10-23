@@ -163,8 +163,7 @@ script opcional `probe-existing-token-policy.mjs` consulta somente
 Apenas o veredicto sanitizado aparece nos logs: **jamais** token, ID,
 políticas, e-mail ou nome. Cloudflare pode responder 403 ao GET de detalhes:
 nesse caso o escopo fica **não atestado**, sem tentativa de alterar as
-permissões ou gerar tokens novos. <escape>Os resultados não autorizam deploy
-ou uso no runtime.</escape>
+permissões ou gerar tokens novos. **Os resultados não autorizam deploy nem uso no runtime.**
 
 Um candidato de leitura requer exclusivamente `D1 Read`, um único
 recurso de conta explícito e token ativo. Mesmo o veredicto
