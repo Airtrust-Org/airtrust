@@ -19,6 +19,36 @@ Há uma dependência proposital `independentGrantVerifier`:
 o retorno de um callback injetado **NÃO é evidência de autorização**.
 Nos testes, ele é **inteiramente falso/sintético**.
 
+A verificação GET-only agora também tem **implementação de contrato real** em
+`ops/frms-qa-repair/verify-prepare-admin-grant.mjs`, ainda não instalada em
+um chamador operacional. O verificador usa o GitHub REST autenticado,
+consulta `main` e SHA exato, a identidade de run `workflow_dispatch`
+no caminho fixo `staging-frms-qa-private-prepare.yml`, e as oito
+conclusões oficiais com origem `github-actions`. Consulta comentário
+novo e não editado na issue #776, com conteúdo JSON de campos fechados,
+publicado por identidade administrativa do GitHub; o ator do job
+precisa também ter permissão `admin`. Expira 2 horas após criação.
+A fase é `prepare`, com **D1 writes=0** e
+`apply_authorized=false`, mas permite **exclusivamente armazenar a
+preimagem cifrada** no bucket privado R2 já aprovado, no prefixo
+`frms-qa/999013/`, com retenção máxima de 24 horas. Essa gravação R2
+exige um NOVO grant exato da fase `prepare`; o grant V2 que criou o
+bucket não autoriza armazenar preimagens. O
+antigo grant V2 do bucket ou assinaturas de apply não satisfazem o
+contrato. Os testes percorrem os caminhos reais do verificador com
+respostas **sintéticas**, incluindo recusa de 403, redirect, grant editado,
+idade, SHA, run, permissão não administrativa e oito gates incompletos.
+
+O comentário administrativo antecede a criação do `runId`, portanto o
+plano fixa SHA, fase, recursos e arquivo do workflow, enquanto o
+**run ID real é atestado separadamente pela API de GitHub Actions**.
+Não inventar nem preatribuir número de run em comentário, e nunca
+aceitar que o próprio chamador controle o provedor da API autenticada.
+O `GITHUB_TOKEN` deve permanecer exclusivo do runner governado,
+sem ser transmitido no RPC do Worker. A validação de concessão não
+substitui o ledger durável de uso único nem o mutex staging.
+
+
 O protótipo exige também um `grantLedger.transaction` que reserva de forma
 atômica **o par SHA + ID da concessão** antes do RPC. Reutilização do grant
 é negada mesmo com HMAC e nonce novos. Se o RPC falhar depois da reserva,
@@ -31,9 +61,9 @@ consistente, nem apenas variáveis do job.
 uso operacional, uma implementação confiável deve comprovar, via API
 autenticada do GitHub e sob mutex governado: comentário inalterado,
 autor admin F0, idade, fase, SHA, recursos, workflow/run, exigências dos
-oito gates, sem reutilizar o grant V2 do bucket. O código não fornece
-essa implementação, não a presume e não está conectado ao CI de
-provisionamento. Em particular, um caller que controle a injeção
+oito gates, sem reutilizar o grant V2 do bucket. O código de verificação existe, mas **não está instalado num executor
+confiável**, não fornece a implementação de transporte entre GitHub e
+Cloudflare e não está conectado ao CI de provisionamento. Em particular, um caller que controle a injeção
 poderia falsificar seu retorno, portanto o protótipo não deve ser
 promovido a um serviço confiável sem essa fronteira externa.
 

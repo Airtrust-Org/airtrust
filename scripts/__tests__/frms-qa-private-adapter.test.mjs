@@ -14,6 +14,7 @@ import { d1ScopeAdapter, timeTravelReader } from '../../ops/frms-qa-repair/adapt
 import { prepareQaEvidence } from '../staging/frms-qa-repair-controller.mjs';
 import { signPrivateCaller } from '../../ops/frms-qa-repair/caller-auth.mjs';
 import { prepareViaPrivateServiceBinding } from '../../ops/frms-qa-repair/private-binding-prepare-prototype.mjs';
+import {verifyPrepareAdminGrant,exactPreparePlan} from '../../ops/frms-qa-repair/verify-prepare-admin-grant.mjs';
 
 const days = Array.from({length:30},(_,i)=>({day:new Date(Date.parse('2026-09-14T00:00:00Z')+i*86400000).toISOString().slice(0,10),jornadas:i===29?'0':'5-9'}));
 const plan = buildReviewPlan(days), sha = 'c'.repeat(40);
@@ -362,4 +363,60 @@ test('failed transactional ledger never contacts binding or retries a grant',asy
     }),/QA_PRIVATE_CALLER_TRANSPORT_DENIED/);
   }
   assert.equal(calls,0);
+});
+
+test('real GitHub verifier contract gates disposable prepare RPC (all upstream API mocked)',async t=>{
+  const s=await setup(t),before=await rows(s.db);
+  const now=Date.now(),createdAt=new Date(now-10000).toISOString();
+  const workflow='.github/workflows/staging-frms-qa-private-prepare.yml';
+  const context={
+    ...prepareContext(s.callerKey),GITHUB_ACTOR:'f0-admin',
+    GITHUB_WORKFLOW_REF:'Airtrust-Org/airtrust/'+workflow+'@refs/heads/main',
+    FRMS_QA_PREPARE_EXPECTED_SHA:sha,
+  };
+  const plan=exactPreparePlan({sha});
+  const requested=[];
+  const api=async path=>{
+    requested.push(path);
+    if(path.endsWith('/branches/main'))return {commit:{sha}};
+    if(path.includes('/actions/runs/'))return {
+      id:Number(PREPARE_RUN),head_sha:sha,head_branch:'main',
+      event:'workflow_dispatch',run_attempt:1,path:workflow,
+      status:'in_progress',actor:{login:'f0-admin'},
+    };
+    if(path.includes('/issues/comments/'))return {
+      id:Number(PREPARE_GRANT),
+      issue_url:'https://api.github.com/repos/Airtrust-Org/airtrust/issues/776',
+      user:{login:'f0-admin'},created_at:createdAt,updated_at:createdAt,
+      body:'AIRTRUST_FRMS_QA_PREPARE_GRANT_V1\n'+JSON.stringify(plan),
+    };
+    if(path.endsWith('/permission'))return {permission:'admin'};
+    if(path.includes('/check-runs?')){
+      const name=new URL('https://api.github.com/'+path).searchParams.get('check_name');
+      return {check_runs:[{
+        name,head_sha:sha,status:'completed',conclusion:'success',
+        app:{slug:'github-actions'},
+      }]};
+    }
+    throw Error('unexpected synthetic GitHub endpoint');
+  };
+  const ledger=disposableGrantLedger();
+  const binding={prepare:async input=>{
+    const result=await s.rawCall('prepare',input);
+    if(result.error)throw Error(result.error);
+    return result;
+  }};
+  const independentGrantVerifier=async req=>{
+    assert.equal(req.sha,sha);
+    return verifyPrepareAdminGrant({env:context,api,now});
+  };
+  const first=await prepareViaPrivateServiceBinding({
+    env:context,binding,independentGrantVerifier,grantLedger:ledger});
+  assert.equal(first.receipt.writes,0);
+  assert.equal(first.receipt.dbId,plan.d1_uuid);
+  assert.deepEqual(await rows(s.db),before);
+  assert.equal(requested.filter(x=>x.includes('/check-runs?')).length,8);
+  await assert.rejects(prepareViaPrivateServiceBinding({
+    env:context,binding,independentGrantVerifier,grantLedger:ledger}),
+    /QA_PRIVATE_CALLER_TRANSPORT_DENIED/);
 });
