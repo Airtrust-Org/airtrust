@@ -171,13 +171,13 @@ async function changeMatrixRule(page: Page, code: string, value: string, method:
   return row;
 }
 
-async function setExplicitEadEnrollment(page: Page, ruleId: number, enabled: boolean, modality: string | null) {
+async function setExplicitEadEnrollment(page: Page, ruleId: number, enabled: boolean, modality: string | null, phase: string) {
   const result = await api(page, `/api/compliance-treinamentos/regras/${ruleId}`, {
     method: 'PUT',
     body: { auto_matricular_ead: enabled, modalidade_requerida: modality },
   });
   expect(result.ok, JSON.stringify(result.json)).toBe(true);
-  expect(result.json.data?.auto_enrollment_warning).toBeNull();
+  expect(result.json.data?.auto_enrollment_warning, `EAD opt-in phase: ${phase}`).toBeNull();
   return result;
 }
 
@@ -325,13 +325,13 @@ test('full training compliance lifecycle recalculates organization, enrollments 
       employeeIds.includes(Number(row.funcionario_id))).length;
   };
   expect(await enrolledCount(), 'mandatory alone cannot auto-enroll').toBe(0);
-  const onlyOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, null);
+  const onlyOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, null, 'opt-in with NULL modality');
   expect(onlyOptIn.json.data.auto_enrollment.created).toBe(0);
   expect(await enrolledCount(), 'NULL modality must fail closed').toBe(0);
-  const onlyModality = await setExplicitEadEnrollment(page, sectorRuleId, false, 'EAD');
+  const onlyModality = await setExplicitEadEnrollment(page, sectorRuleId, false, 'EAD', 'opt-out with EAD modality');
   expect(onlyModality.json.data.auto_enrollment.created).toBe(0);
   expect(await enrolledCount(), 'opt-in=0 must fail closed').toBe(0);
-  const authorized = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD');
+  const authorized = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD', 'authorized EAD or idempotent repeat');
   expect(authorized.json.data.auto_enrollment.created).toBe(2);
 
   await expect.poll(async () => {
@@ -345,7 +345,7 @@ test('full training compliance lifecycle recalculates organization, enrollments 
     employeeIds.includes(Number(row.funcionario_id)),
   );
   expect(automaticRows).toHaveLength(2);
-  const repeatedOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD');
+  const repeatedOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD', 'authorized EAD or idempotent repeat');
   expect(repeatedOptIn.json.data.auto_enrollment.created).toBe(0);
   expect(await enrolledCount(), 'repeated eligible rule must not duplicate').toBe(2);
   for (const row of automaticRows) {
@@ -560,7 +560,7 @@ test('full training compliance lifecycle recalculates organization, enrollments 
     rule.escopo === 'SETOR_FUNCAO' && Number(rule.setor_id) === sector.id
       && Number(rule.funcao_id) === fn.id);
   expect(linkedRule).toBeTruthy();
-  const orphanOptIn = await setExplicitEadEnrollment(page, Number(linkedRule.id), true, 'EAD');
+  const orphanOptIn = await setExplicitEadEnrollment(page, Number(linkedRule.id), true, 'EAD', 'orphan reconciliation');
   expect(orphanOptIn.json.data.auto_enrollment.created).toBe(1);
   await expect.poll(async () => {
     const response = await api(page, `/api/lms/matriculas/curso/${orphanCourseId}?limit=20`);
@@ -590,4 +590,140 @@ test('full training compliance lifecycle recalculates organization, enrollments 
     expect(requirement(person, requiredTypeCode)?.status_compliance).toBe('CONFORME');
     expect(requirement(person, orphanTypeCode)?.status_compliance).toBe('NAO_REALIZADO');
   }
+
+  // Switch the synthetic rule to its recorded-evidence expiry source while
+  // both completions are still valid. The later controlled expiry then exercises
+  // VENCIDO from the canonical evidence date, not a modified requirement window.
+  const evidenceValidity = await api(page, `/api/compliance-treinamentos/regras/${sectorRuleId}`, {
+    method: 'PUT',
+    body: { validade_fonte: 'EVIDENCIA', modalidade_requerida: 'EAD', auto_matricular_ead: true },
+  });
+  expect(evidenceValidity.ok, JSON.stringify(evidenceValidity.json)).toBe(true);
+  for (const id of employeeIds) {
+    expect(requirement(await employeeSnapshot(page, id), requiredTypeCode)?.status_compliance)
+      .toBe('CONFORME');
+  }
+});
+
+test('expired synthetic evidence renews cycle two and issues an authorized PDF', async ({ page }) => {
+  expect(CODE).toMatch(/^QA-COMP-LIFE-/);
+  await page.route('**/*', async (route) => {
+    const host = new URL(route.request().url()).hostname.toLowerCase();
+    if (
+      host === 'airtrust.online' || host === 'api.airtrust.online' ||
+      host === 'airtrust.pages.dev' || host === 'airtrust-api.airtrust.workers.dev' ||
+      host === 'airtrust-api-production.airtrust.workers.dev'
+    ) {
+      await route.abort('blockedbyclient');
+      throw new Error(`PRODUCTION_TARGET_REJECTED:${host}`);
+    }
+    await route.continue();
+  });
+
+  await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
+  if (SHORT_SHA) await assertLiveFrontendShaFromPage(page, SHORT_SHA, 'training-compliance-cycle-two');
+  await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
+
+  const catalogs = await api(page, '/api/compliance-treinamentos/catalogos');
+  expect(catalogs.ok).toBe(true);
+  const sector = catalogs.json.data.setores.find((item: any) => item.nome === sectorName);
+  const fn = catalogs.json.data.funcoes.find((item: any) => item.nome === functionName);
+  expect(sector).toBeTruthy();
+  expect(fn).toBeTruthy();
+  const people = await api(page, `/api/compliance-treinamentos/pessoas?setor_id=${sector.id}&funcao_id=${fn.id}`);
+  expect(people.ok).toBe(true);
+  const employee = people.json.data.find((item: any) => item.nome === employee1Name);
+  expect(employee).toBeTruthy();
+  const employeeId = Number(employee.id);
+  const before = requirement(await employeeSnapshot(page, employeeId), requiredTypeCode);
+  expect(before).toMatchObject({ status_compliance: 'VENCIDO', evidencia_modalidade: 'EAD' });
+  const firstHistoryId = Number(before.evidencia_id);
+  const ruleId = Number(before.regra_id);
+  expect(firstHistoryId).toBeGreaterThan(0);
+  expect(ruleId).toBeGreaterThan(0);
+
+  const courseResults = await api(page, `/api/lms/cursos?q=${encodeURIComponent(requiredCourseTitle)}&limit=20`);
+  expect(courseResults.ok).toBe(true);
+  const course = courseResults.json.data.find((item: any) => item.titulo === requiredCourseTitle);
+  expect(course).toBeTruthy();
+  const courseId = Number(course.id);
+
+  // Saving the already authorized rule re-evaluates expired evidence through
+  // the real Compliance enrollment service; it must open only one new cycle.
+  const renewed = await api(page, `/api/compliance-treinamentos/regras/${ruleId}`, {
+    method: 'PUT',
+    body: { validade_fonte: 'EVIDENCIA', modalidade_requerida: 'EAD', auto_matricular_ead: true },
+  });
+  expect(renewed.ok, JSON.stringify(renewed.json)).toBe(true);
+  expect(renewed.json.data.auto_enrollment).toMatchObject({ reactivated: 1, created: 0 });
+
+  const enrollments = await api(page, `/api/lms/matriculas/curso/${courseId}?status=NAO_INICIADO&limit=20`);
+  expect(enrollments.ok).toBe(true);
+  const active = enrollments.json.data.find((item: any) => Number(item.funcionario_id) === employeeId);
+  expect(active).toBeTruthy();
+  const enrollmentId = Number(active.id);
+  const cycleTwo = await api(page, `/api/lms/matriculas/${enrollmentId}`);
+  expect(cycleTwo.ok).toBe(true);
+  expect(cycleTwo.json.data).toMatchObject({ status: 'NAO_INICIADO', progresso_pct: 0 });
+  expect(cycleTwo.json.data.xapi_summary?.total_statements ?? 0).toBe(0);
+
+  const repeated = await api(page, `/api/compliance-treinamentos/regras/${ruleId}`, {
+    method: 'PUT',
+    body: { validade_fonte: 'EVIDENCIA', modalidade_requerida: 'EAD', auto_matricular_ead: true },
+  });
+  expect(repeated.ok).toBe(true);
+  expect(repeated.json.data.auto_enrollment.created).toBe(0);
+  expect(repeated.json.data.auto_enrollment.reactivated).toBe(0);
+  const afterRepeat = await api(page, `/api/lms/matriculas/curso/${courseId}?status=NAO_INICIADO&limit=20`);
+  expect(afterRepeat.json.data.filter((item: any) => Number(item.funcionario_id) === employeeId)).toHaveLength(1);
+
+  const progress = await api(page, `/api/lms/matriculas/${enrollmentId}/progresso`, {
+    method: 'PATCH', body: { progresso_pct: 45 },
+  });
+  expect(progress.ok, JSON.stringify(progress.json)).toBe(true);
+  const currentXapi = await api(page, `/api/lms/matriculas/${enrollmentId}`);
+  expect(currentXapi.json.data.progresso_pct).toBe(45);
+  expect(currentXapi.json.data.xapi_summary?.total_statements ?? 0).toBe(0);
+
+  const completion = await completeViaXapi(page, enrollmentId, 'renewal-cycle-2');
+  expect(completion.ok, JSON.stringify(completion.json)).toBe(true);
+  await expect.poll(async () => requirement(await employeeSnapshot(page, employeeId), requiredTypeCode)?.status_compliance)
+    .toBe('CONFORME');
+  const secondEvidence = requirement(await employeeSnapshot(page, employeeId), requiredTypeCode);
+  const secondHistoryId = Number(secondEvidence.evidencia_id);
+  expect(secondHistoryId).toBeGreaterThan(0);
+  expect(secondHistoryId).not.toBe(firstHistoryId);
+
+  const certificate = await api(page, `/api/qualificacoes/historico/${secondHistoryId}/certificados/gerar`, {
+    method: 'POST', body: {},
+  });
+  expect(certificate.ok, JSON.stringify(certificate.json)).toBe(true);
+  expect(certificate.json.data).toMatchObject({ id: expect.any(Number), r2_key: expect.any(String) });
+  expect(certificate.json.data.r2_key).toMatch(/^certificados\/empresa-\d+\/funcionario-\d+\/historico-\d+\/[0-9a-f-]+\.pdf$/i);
+
+  const listed = await api(page, `/api/qualificacoes/historico/${secondHistoryId}/certificados`);
+  expect(listed.ok).toBe(true);
+  expect(listed.json.data.some((item: any) => Number(item.documento_id || item.id) === Number(certificate.json.data.id))).toBe(true);
+
+  const pdf = await page.evaluate(async ({ apiBase, documentId }) => {
+    const token = window.sessionStorage.getItem('airtrust_token') || window.localStorage.getItem('airtrust_token');
+    if (!token) throw new Error('QA_AUTH_TOKEN_MISSING');
+    const response = await fetch(`${apiBase}/api/pasta-virtual/stream/${documentId}`, {
+      credentials: 'include', headers: { Authorization: `Bearer ${token}` },
+    });
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const hash = await crypto.subtle.digest('SHA-256', bytes);
+    const sha256 = Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return { status: response.status, contentType: response.headers.get('Content-Type'),
+      signature: new TextDecoder().decode(bytes.slice(0, 5)), sha256 };
+  }, { apiBase: API_BASE, documentId: Number(certificate.json.data.id) });
+  expect(pdf.status).toBe(200);
+  expect(pdf.contentType?.toLowerCase()).toContain('application/pdf');
+  expect(pdf.signature).toBe('%PDF-');
+  expect(pdf.sha256).toMatch(/^[a-f0-9]{64}$/);
+
+  // A user who can operate Compliance may read the exact tenant-scoped
+  // document; an unrelated id must not disclose whether another certificate exists.
+  const unavailable = await api(page, '/api/pasta-virtual/stream/2147483000');
+  expect(unavailable.status).toBe(404);
 });

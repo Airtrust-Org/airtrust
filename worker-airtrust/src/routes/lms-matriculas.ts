@@ -76,6 +76,7 @@ import {
 } from '../services/lms-matricula-runtime-domain';
 import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '../repositories/lms-matricula-queries';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
+import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard';
 import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
@@ -84,6 +85,7 @@ import { activeXapiFirst } from '../services/lms-active-xapi-read';
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 app.route('/convites', lmsMatriculasConvitesRoutes);
+app.route('/', lmsMatriculasEmAndamentoRoutes);
 
 function getCallerFuncionarioId(c: Context): number | null {
   const raw = c.get('funcionarioId' as never) as unknown;
