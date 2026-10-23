@@ -197,8 +197,15 @@ describe('SCORM package quality gate', () => {
       ...externalManifest, release: { reviewed: true },
     }));
     expect(declaredReviewed.authoringReview).toEqual({ externalExam: true, reviewed: true });
-    expect(applyRuntimeConformance(declaredReviewed, formative, 'sha-a', withoutScoredAssessment)
-      .publishable).toBe(true); // Still needs all browser cases and governed SME approval.
+    // Untrusted ZIP metadata is NOT an independent SME approval.
+    const selfReviewed = applyRuntimeConformance(
+      declaredReviewed, formative, 'sha-a', withoutScoredAssessment,
+    );
+    expect(selfReviewed.functionalCertification.status).toBe('CERTIFIED');
+    expect(selfReviewed.publishable).toBe(false);
+    expect(canActivateCertifiedScormPackage(selfReviewed, 'sha-a')).toBe(false);
+    expect(canActivateCertifiedScormPackage({ ...selfReviewed, publishable: true }, 'sha-a'))
+      .toBe(false);
     const missingReview = validateScormPackageQuality(pkg({
       ...externalManifest, release: undefined,
     }));
