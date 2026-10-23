@@ -108,7 +108,8 @@ a prova precisa ser reconstruída a partir da própria conta autenticada
 do runner, comentário da issue #776, identidade do run, oito gates e
 SHA da main. Um veredicto inválido impede que o ledger seja consumido;
 depois de reservar, erro de transporte mantém o grant gasto. O retorno
-não inclui o bookmark, artefato R2, corpo do grant ou token GitHub.
+não inclui o bookmark, artefato R2, corpo do grant ou token GitHub;
+registra somente o recibo validado, **sem declarar readback físico de R2**.
 
 Testes GET sintéticos rejeitam comentário forjado, falta de admin,
 gate incompleto, SHA divergente e configuração de runner falsa, além
