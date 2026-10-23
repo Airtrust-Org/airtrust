@@ -10,7 +10,16 @@ import {verifyPrivateQueueReply} from './queue-prepare-transport.mjs';
 
 const HEX32=/^[0-9a-f]{32}$/,HEX40=/^[0-9a-f]{40}$/,HEX64=/^[0-9a-f]{64}$/;
 const SCHEMAS=['AIRTRUST_FRMS_QA_QUEUE_PREPARE_V1','AIRTRUST_FRMS_QA_QUEUE_APPLY_V1'];
+const MESSAGE_FIELDS=['schema','sha','dbId','tenantId','grantId','runId',
+  'runAttempt','issuedAt','expiresAt','callerAuth','payloadEnvelope','mac'];
+const ENVELOPE_FIELDS=['version','iv','ciphertext','tag'];
 const deny=()=>{throw Error('FRMS_QA_QUEUE_RUNNER_API_DENIED');};
+const exact=(value,keys)=>value&&typeof value==='object'&&
+  !Array.isArray(value)&&
+  Object.keys(value).sort().join('|')===keys.slice().sort().join('|');
+const canonical64=value=>typeof value==='string'&&value.length>0&&
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)&&
+  Buffer.from(value,'base64').toString('base64')===value;
 
 /** Restricted to a reviewed Queue UUID; accepts no arbitrary endpoint or verb. */
 export function privateQueueRunnerApi({accountId,queueId,releaseSha,token,fetcher=fetch}={}){
@@ -46,11 +55,21 @@ export function privateQueueRunnerApi({accountId,queueId,releaseSha,token,fetche
   return Object.freeze({
     /** One signed request produced only by an independently verified F0 grant. */
     async pushSigned(message){
-      if(!message||typeof message!=='object'||Array.isArray(message)||
+      // The Queue itself is not an encryption boundary. Reject all extra
+      // fields, including accidentally forwarded tokens, raw manifest,
+      // receipts, recovery bookmarks or arbitrary input.
+      if(!exact(message,MESSAGE_FIELDS)||
          !SCHEMAS.includes(message.schema)||!HEX64.test(message.mac||'')||
          message.sha!==releaseSha||
          message.dbId!==TARGET.db_id||message.tenantId!==999013||
-         !message.payloadEnvelope||typeof message.payloadEnvelope!=='object')
+         !exact(message.payloadEnvelope,ENVELOPE_FIELDS)||
+         message.payloadEnvelope.version!==1||
+         !canonical64(message.payloadEnvelope.iv)||
+         Buffer.from(message.payloadEnvelope.iv,'base64').length!==12||
+         !canonical64(message.payloadEnvelope.tag)||
+         Buffer.from(message.payloadEnvelope.tag,'base64').length!==16||
+         !canonical64(message.payloadEnvelope.ciphertext)||
+         Buffer.from(message.payloadEnvelope.ciphertext,'base64').length===0)
         deny();
       const result=await request('',{body:message,content_type:'json'});
       // Push success never proves a private Worker executed the operation.
