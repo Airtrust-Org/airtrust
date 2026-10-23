@@ -67,8 +67,19 @@ export function privateQueueRunnerApi({accountId,queueId,releaseSha,token,fetche
       if(!item||typeof item.lease_id!=='string'||
          item.lease_id.length<16||item.lease_id.length>4096||
          typeof item.body!=='string'||item.body.length>100000)deny();
+      // Cloudflare HTTP pull serializes content_type=json as RFC4648 Base64,
+      // not a raw JSON body. A UTF-8 JSON.parse directly on item.body would
+      // quarantine every legitimate result even when HMAC/AES-GCM are valid.
+      if(!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(item.body))deny();
       let reply;
-      try{reply=JSON.parse(item.body);}catch{deny();}
+      try{
+        const decoded=Buffer.from(item.body,'base64');
+        if(!decoded.length||decoded.toString('base64')!==item.body||
+           decoded.length>75000)deny();
+        const text=decoded.toString('utf8');
+        if(!Buffer.from(text,'utf8').equals(decoded))deny();
+        reply=JSON.parse(text);
+      }catch{deny();}
       if(!reply||typeof reply!=='object'||Array.isArray(reply))deny();
       return Object.freeze({leaseId:item.lease_id,reply});
     },
