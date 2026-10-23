@@ -27,10 +27,12 @@ export async function createR2ReadOnlyZipSource({bucket,key,expectedPrefix}){
  const size=obj.size;
  const etag=typeof obj.httpEtag==='string'&&obj.httpEtag.trim()?obj.httpEtag:null;
  if(!etag)fail('OBJECT_ETAG_REQUIRED');
+ const MAX_RANGE_REQUESTS=6; // EOCD, central directory, SHA scan, sequential member scan
  let calls=0,readBytes=0;
  async function* stream(offset,length){
   bounds(offset,length,size);
   if(!length)return;
+  if(calls>=MAX_RANGE_REQUESTS)fail('RANGE_REQUEST_BUDGET_EXCEEDED');
   const response=await bucket.get(key,{range:{offset,length}});
   calls++;
   if(!response||response.httpEtag!==etag)fail('OBJECT_REPLACED_OR_MISSING');
@@ -66,6 +68,7 @@ export async function validateF5R2ArchiveReadOnly({bucket,key,expectedPrefix,exp
   fail('EXPECTED_SHA_REQUIRED');
  const reader=await createR2ReadOnlyZipSource({bucket,key,expectedPrefix});
  const outcome=await validateZipReader(reader,expectedSha256);
+ if(reader.stats().rangeRequests>6)fail('RANGE_REQUEST_BUDGET_EXCEEDED');
  // Detect mutation during validation. Never accept data from changed keys.
  const last=await bucket.head(key);
  if(!last||last.size!==reader.size||last.httpEtag!==reader.etag)fail('OBJECT_CHANGED_DURING_READ');
