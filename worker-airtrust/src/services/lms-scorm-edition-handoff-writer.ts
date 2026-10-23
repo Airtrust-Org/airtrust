@@ -50,7 +50,17 @@ export async function writeScormEditionHandoff(
      AND p.status='ACTIVE' AND p.package_sha256=?`)
      .bind(input.matriculaId,input.empresaId,input.targetSha256).first<ScopeRow>();
   if(!scope?.ciclo_id||!scope.target_prefix)throw new Error('SCORM_HANDOFF_TARGET_OR_CYCLE_NOT_VERIFIED');
-  const previousPackage=scope.cycle_started_at
+  // After the first in-cycle handoff, current CMI belongs to that handoff's
+  // target edition. The cycle start audit is only the fallback for the first
+  // handoff; using it again would mislabel later snapshots with a stale SHA.
+  const previousHandoff=await db.prepare(`
+    SELECT target_package_prefix AS r2_prefix,target_package_sha256 AS package_sha256
+    FROM lms_scorm_edition_handoffs
+    WHERE empresa_id=? AND matricula_id=? AND curso_id=? AND ciclo_id=?
+    ORDER BY id DESC LIMIT 1`)
+    .bind(input.empresaId,input.matriculaId,scope.curso_id,scope.ciclo_id)
+    .first<{r2_prefix:string;package_sha256:string}>();
+  const previousPackage=previousHandoff ?? (scope.cycle_started_at
     ? await db.prepare(`
       SELECT p.r2_prefix,p.package_sha256
       FROM lms_scorm_package_audit_log a
@@ -61,7 +71,7 @@ export async function writeScormEditionHandoff(
       ORDER BY a.created_at DESC,a.id DESC LIMIT 1`)
       .bind(input.empresaId,scope.curso_id,scope.cycle_started_at)
       .first<{r2_prefix:string;package_sha256:string}>()
-    : null;
+    : null);
   const findReceipt=()=>db.prepare(`
     SELECT id,ciclo_id,target_package_sha256,operation_id
     FROM lms_scorm_edition_handoffs

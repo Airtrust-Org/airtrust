@@ -55,6 +55,7 @@ export function registerLmsScormEditionHandoffRoute(app: Hono<{Bindings:Env}>): 
       db,bucket:c.env.BUCKET,empresaId,cursoId:Number(row.curso_id),
       cycleId:Number(row.ciclo_id),activePrefix:row.scorm_package_r2_prefix,
       cycleStartedAt:row.cycle_started_at,cmiJson:row.cmi_json,
+      handoffHistoryEnabled:true,
     });
     const validResumeStatuses = ['MATCHED_ANCHOR','SUGGESTED_ANCHOR','START_ACTIVE'];
     if (!proposal || !validResumeStatuses.includes(proposal.status) ||

@@ -7,8 +7,12 @@ function bucketWith(slides: Record<string,string[]>) {
     ? {size:200,text:async()=>JSON.stringify({content:{requiredSlides:slides[key]}})}
     : null)} as unknown as R2Bucket;
 }
-function database(prefix:string|null, error=false) {
+function database(prefix:string|null, error=false, handoff:{r2_prefix:string;package_sha256:string}|null=null, handoffError=false) {
   return {prepare:vi.fn((sql:string)=>({bind:vi.fn(()=>({first:vi.fn(async()=>{
+    if(sql.includes('FROM lms_scorm_edition_handoffs')) {
+      if(handoffError)throw new Error('handoff history unavailable');
+      return handoff;
+    }
     if(error)throw new Error('history unavailable');
     if(sql.includes('FROM lms_scorm_package_audit_log'))return prefix
       ? {r2_prefix:prefix,package_sha256:'a'.repeat(64)} : null;
@@ -27,6 +31,7 @@ describe('read-only ACTIVE SCORM resume',()=>{
       db,bucket,empresaId:6,cursoId:119,activePrefix:root+'new/',
       cycleId:812,
       cycleStartedAt:'2026-09-01T10:00:00Z',
+      handoffHistoryEnabled:true,
       cmiJson:JSON.stringify({'cmi.core.lesson_location':'32/37',
         'airtrust.viewed_slides':Array.from({length:32},(_,i)=>i+1)}),
     });
@@ -35,7 +40,7 @@ describe('read-only ACTIVE SCORM resume',()=>{
       previousPackageSha256:'a'.repeat(64),canMarkComplete:false,canTransferScore:false});
     expect(result?.unmatchedNavigationUnitIds).toContain('new1');
     expect(result?.pendingReviewUnitIds).toContain('unit32');
-    expect(db.prepare).toHaveBeenCalledTimes(2);
+    expect(db.prepare).toHaveBeenCalledTimes(3);
   });
 
   it('suggests navigation only when historical package metadata is unavailable',async()=>{
@@ -50,6 +55,40 @@ describe('read-only ACTIVE SCORM resume',()=>{
     expect(result).toMatchObject({status:'SUGGESTED_ANCHOR',targetPosition:2,
       canTransferScore:false,canMarkComplete:false});
     expect(result?.matchedNavigationUnitIds).toEqual([]);
+  });
+
+  it('uses the previous handoff target, not cycle-start package, after a second edition update',async()=>{
+    const active=['unit1','unit2','unit3'];
+    const bucket=bucketWith({
+      [root+'prior/airtrust-completion-manifest.json']:['old1','old2','old3'],
+      [root+'middle/airtrust-completion-manifest.json']:['unit1','unit2','unit3'],
+      [root+'active/airtrust-completion-manifest.json']:active,
+    });
+    const db=database(root+'prior/',false,{r2_prefix:root+'middle/',package_sha256:'c'.repeat(64)});
+    const result=await readScormActiveResumeProposal({
+      db,bucket,empresaId:6,cursoId:119,activePrefix:root+'active/',
+      cycleId:812,cycleStartedAt:'2026-09-01T10:00:00Z',handoffHistoryEnabled:true,
+      cmiJson:JSON.stringify({'cmi.core.lesson_location':'2/3','airtrust.viewed_slides':[1,2]}),
+    });
+    expect(result).toMatchObject({status:'MATCHED_ANCHOR',targetSlideId:'unit2',
+      previousPackageSha256:'c'.repeat(64),activePackageSha256:'b'.repeat(64)});
+    expect(bucket.get).toHaveBeenCalledWith(root+'middle/airtrust-completion-manifest.json');
+  });
+
+  it('does not infer the cycle-start edition when enabled handoff provenance is unreadable',async()=>{
+    const bucket=bucketWith({
+      [root+'prior/airtrust-completion-manifest.json']:['unit1','unit2','unit3'],
+      [root+'active/airtrust-completion-manifest.json']:['unit1','unit2','unit3'],
+    });
+    const result=await readScormActiveResumeProposal({
+      db:database(root+'prior/',false,null,true),bucket,empresaId:6,cursoId:119,
+      activePrefix:root+'active/',cycleId:812,cycleStartedAt:'2026-09-01',
+      handoffHistoryEnabled:true,
+      cmiJson:JSON.stringify({'cmi.core.lesson_location':'2/3','airtrust.viewed_slides':[1,2]}),
+    });
+    expect(result).toMatchObject({status:'SUGGESTED_ANCHOR',targetPosition:2,
+      previousPackageSha256:null,canTransferScore:false,canMarkComplete:false});
+    expect(bucket.get).not.toHaveBeenCalledWith(root+'prior/airtrust-completion-manifest.json');
   });
 
   it('rejects a foreign tenant prefix before any R2 read',async()=>{

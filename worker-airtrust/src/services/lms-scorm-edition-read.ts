@@ -27,6 +27,7 @@ export async function readLmsScormEditionState(params:{
         cycleId,activePrefix,
         cycleStartedAt:typeof m.active_lms_cycle_started_at==='string'
           ? m.active_lms_cycle_started_at:null,cmiJson,
+        handoffHistoryEnabled:params.handoffEnabled,
       })
     : null;
   const handoff=await readActiveScormHandoff({db:params.db,enabled:params.handoffEnabled,

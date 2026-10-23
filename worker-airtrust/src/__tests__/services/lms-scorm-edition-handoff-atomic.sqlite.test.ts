@@ -68,6 +68,28 @@ const input=(targetSha256:string)=>({empresaId:6,matriculaId:100,actorId:9,
 const row=(db:SqliteD1Database,sql:string)=>db.database.prepare(sql).get() as Record<string,unknown>;
 
 describe('SCORM edition handoff — D1 batch rollback with SQLite',()=>{
+  it('archives CMI against the immediately previous edition after a second in-cycle package update',async()=>{
+    const {db,activeSha}=fixture();
+    const middleSha='c'.repeat(64);
+    db.database.prepare(`INSERT INTO lms_scorm_edition_handoffs
+      (empresa_id,matricula_id,ciclo_id,curso_id,funcionario_id,operation_id,actor_id,
+       previous_enrollment_json,target_package_sha256,target_package_prefix,resume_plan_json)
+      VALUES(6,100,17,88,48,'first_handoff_operation',9,'{}',?,'lms/scorm/6/88/active/','{}')`)
+      .run(activeSha);
+    db.database.prepare(`UPDATE lms_scorm_package_versions SET status='ARCHIVED' WHERE id=2`).run();
+    db.database.prepare(`INSERT INTO lms_scorm_package_versions
+      VALUES(3,6,88,'lms/scorm/6/88/next/',?,'ACTIVE')`).run(middleSha);
+    db.database.prepare(`UPDATE lms_cursos SET scorm_package_r2_prefix='lms/scorm/6/88/next/' WHERE id=88`).run();
+
+    const receipt=await writeScormEditionHandoff(db.asD1(),input(middleSha));
+
+    expect(receipt.alreadyApplied).toBe(false);
+    const archive=row(db,'SELECT previous_package_prefix FROM lms_scorm_edition_handoffs WHERE id=2');
+    expect(archive.previous_package_prefix).toBe('lms/scorm/6/88/active/');
+    const enrollment=JSON.parse(String(row(db,'SELECT previous_enrollment_json FROM lms_scorm_edition_handoffs WHERE id=2').previous_enrollment_json));
+    expect(enrollment.previous_package_sha256).toBe(activeSha);
+  });
+
   it('archives all previous evidence and resets only the current runtime in one transaction',async()=>{
     const {db,activeSha}=fixture();
     const receipt=await writeScormEditionHandoff(db.asD1(),input(activeSha));

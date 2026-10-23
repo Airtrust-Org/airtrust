@@ -12,6 +12,8 @@ export async function readScormActiveResumeProposal(params: {
   activePrefix: string | null;
   cycleStartedAt: string | null | undefined;
   cmiJson: string | null | undefined;
+  /** Read append-only handoff provenance only when the governed schema is enabled. */
+  handoffHistoryEnabled?: boolean;
 }): Promise<ScormActiveResumePlan | null> {
   const { empresaId, cursoId, bucket, activePrefix } = params;
   const root = 'lms/scorm/' + empresaId + '/' + cursoId + '/';
@@ -69,7 +71,34 @@ export async function readScormActiveResumeProposal(params: {
 
   let previousPrefix: string | null = null;
   let previousPackageSha256: string | null = null;
-  if (typeof params.cycleStartedAt === 'string' && params.cycleStartedAt.trim()) {
+  let handoffHistoryUnavailable = false;
+  if (params.handoffHistoryEnabled && params.cycleId) {
+    try {
+      const handoff = await params.db.prepare(
+        `SELECT target_package_prefix AS r2_prefix,target_package_sha256 AS package_sha256
+         FROM lms_scorm_edition_handoffs
+         WHERE empresa_id=? AND curso_id=? AND matricula_id=? AND ciclo_id=?
+         ORDER BY id DESC LIMIT 1`,
+      ).bind(empresaId, cursoId, Number(params.cycleId))
+        .first<{r2_prefix:string;package_sha256:string}>();
+      if (handoff) {
+        if (handoff.r2_prefix.startsWith(root) && handoff.r2_prefix.endsWith('/') &&
+            !handoff.r2_prefix.includes('..') && !handoff.r2_prefix.includes('\\') &&
+            /^[a-f0-9]{64}$/.test(handoff.package_sha256)) {
+          previousPrefix = handoff.r2_prefix;
+          previousPackageSha256 = handoff.package_sha256;
+        } else {
+          handoffHistoryUnavailable = true;
+        }
+      }
+    } catch {
+      // If the enabled handoff ledger cannot be read, never infer a stale
+      // cycle-start package as the source of CMI written after a handoff.
+      handoffHistoryUnavailable = true;
+    }
+  }
+  if (!previousPrefix && !handoffHistoryUnavailable &&
+      typeof params.cycleStartedAt === 'string' && params.cycleStartedAt.trim()) {
     try {
       const row = await params.db.prepare(
         'SELECT p.r2_prefix,p.package_sha256 FROM lms_scorm_package_audit_log a ' +
