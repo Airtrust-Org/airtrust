@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Read-only, fail-closed verifier for a private SCORM ZIP candidate batch.
 
-No private ZIPs or indexes are committed. Input index must be normalized to:
+No private ZIPs or indexes are committed. Accept a normalized --index or a pair
+of native --source-index / --candidate-index files (records with courseId,
+file and sha256). Native indexes are joined by exact courseId, never by order.
+Normalized input shape:
 {"courses":[{"course_id":"id","source_file":"a.zip","source_sha256":"64hex",
 "candidate_file":"b.zip","candidate_sha256":"64hex"}]}.
 For media restoration, each course may additionally declare
@@ -79,7 +82,56 @@ def inspect_zip(path):
                     h.update(block)  # Streaming read also verifies each member's CRC.
             entries[name] = h.hexdigest()
         require(entries, f"empty ZIP: {path.name}")
+        # A ZIP may contain both a file named 'a' and another member 'a/b'.
+        # Extraction semantics differ by platform; reject ambiguous layouts.
+        file_paths = set(entries)
+        for member in seen_paths:
+            parts = member.split("/")
+            for depth in range(1, len(parts)):
+                require("/".join(parts[:depth]) not in file_paths,
+                        f"ZIP file/directory collision: {member}")
         return entries
+
+
+def normalize_native_indices(source, candidate):
+    """Bind two private factory indexes by courseId without trusting record order.
+
+    Source/candidate indexes use {"courses":43,"records":[{"courseId":...,
+    "file":...,"sha256":...}]}. Missing/extra/duplicate course IDs fail closed.
+    Optional per-member media approval must be present on candidate records.
+    """
+    def records_by_id(index, label):
+        require(isinstance(index, dict) and isinstance(index.get("records"), list),
+                f"{label} native records missing")
+        rows = index["records"]
+        require(isinstance(index.get("courses"), int)
+                and not isinstance(index["courses"], bool)
+                and index["courses"] == len(rows),
+                f"{label} native course count mismatch")
+        by_id = {}
+        for row in rows:
+            require(isinstance(row, dict), f"{label} invalid record")
+            cid = row.get("courseId")
+            require(isinstance(cid, str) and cid and cid not in by_id,
+                    f"{label} duplicate/invalid courseId")
+            by_id[cid] = row
+        return by_id
+
+    old = records_by_id(source, "source")
+    new = records_by_id(candidate, "candidate")
+    require(old.keys() == new.keys(), "native source/candidate courseId sets differ")
+    result = []
+    for cid in sorted(old):
+        src, dst = old[cid], new[cid]
+        row = {"course_id": cid, "source_file": src.get("file"),
+               "source_sha256": src.get("sha256"),
+               "candidate_file": dst.get("file"),
+               "candidate_sha256": dst.get("sha256")}
+        approved = dst.get("approved_added_members",
+                           dst.get("approvedAddedMembers", {}))
+        row["approved_added_members"] = approved
+        result.append(row)
+    return {"courses": result}
 
 
 def verify(index, source_dir, candidate_dir, allow_patterns, expected_count=43):
@@ -158,6 +210,31 @@ def self_test():
             raise AssertionError(f"unsafe candidate accepted: {label}")
 
         require(check()["courses"] == 1, "valid candidate rejected")
+        native_source = {"courses": 1, "records": [
+            {"courseId": "demo", "file": "a.zip", "sha256": digest_file(src)}]}
+        native_candidate = {"courses": 1, "records": [
+            {"courseId": "demo", "file": "a.zip", "sha256": digest_file(dst)}]}
+        converted = normalize_native_indices(native_source, native_candidate)
+        require(verify(converted, src.parent, dst.parent, ["engine.js"], 1)["courses"] == 1,
+                "native index conversion rejected valid candidate")
+        native_candidate["records"][0]["courseId"] = "other"
+        try:
+            normalize_native_indices(native_source, native_candidate)
+        except VerificationError:
+            pass
+        else:
+            raise AssertionError("mismatched native courseId sets accepted")
+        native_candidate["records"][0]["courseId"] = "demo"
+        native_candidate["records"].append(dict(native_candidate["records"][0]))
+        native_candidate["courses"] = 2
+        try:
+            normalize_native_indices(native_source, native_candidate)
+        except VerificationError:
+            pass
+        else:
+            raise AssertionError("duplicate native courseId accepted")
+        native_candidate["records"].pop()
+        native_candidate["courses"] = 1
         index["courses"][0]["candidate_sha256"] = "0" * 64
         expect_reject("SHA mismatch")
         write_zip(dst, "v4", "tampered")
@@ -190,6 +267,9 @@ def self_test():
         replace_entries([("engine.js", "v4"), ("lesson.html", "same"),
                          (link, "target")])
         expect_reject("symlink")
+        replace_entries([("engine.js", "v4"), ("lesson.html", "same"),
+                         ("assets", "file"), ("assets/image.png", "image")])
+        expect_reject("file/directory collision")
 
         # Restored media must be listed per course with exact member SHA-256.
         replace_entries([("engine.js", "v4"), ("lesson.html", "same"),
@@ -210,6 +290,8 @@ def self_test():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--index", type=Path)
+    parser.add_argument("--source-index", type=Path)
+    parser.add_argument("--candidate-index", type=Path)
     parser.add_argument("--source-dir", type=Path)
     parser.add_argument("--candidate-dir", type=Path)
     parser.add_argument("--allow-change", action="append", default=[])
@@ -219,10 +301,19 @@ def main():
     if args.self_test:
         self_test()
         return
-    require(args.index and args.source_dir and args.candidate_dir, "index and directories required")
+    require(args.source_dir and args.candidate_dir, "source/candidate directories required")
     require(args.expected_count > 0, "invalid expected-count")
-    result = verify(json.loads(args.index.read_text(encoding="utf-8")),
-                    args.source_dir, args.candidate_dir,
+    if args.index:
+        require(not args.source_index and not args.candidate_index,
+                "choose normalized --index OR native index pair")
+        index = json.loads(args.index.read_text(encoding="utf-8"))
+    else:
+        require(args.source_index and args.candidate_index,
+                "both native --source-index and --candidate-index required")
+        index = normalize_native_indices(
+            json.loads(args.source_index.read_text(encoding="utf-8")),
+            json.loads(args.candidate_index.read_text(encoding="utf-8")))
+    result = verify(index, args.source_dir, args.candidate_dir,
                     args.allow_change, args.expected_count)
     print(json.dumps(result, sort_keys=True, ensure_ascii=False))
 
