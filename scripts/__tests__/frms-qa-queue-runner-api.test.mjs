@@ -131,6 +131,21 @@ test('invalid response, malformed body and failed ack are sanitized and fail clo
       expected,now:NOW}),/FRMS_QA_QUEUE_RUNNER_API_DENIED/);
   }
 });
+test('untrusted run correlation fails before leasing any Cloudflare Queue result',async()=>{
+  const f=fixture(),api=privateQueueRunnerApi({accountId:ACCOUNT,
+    queueId:QUEUE,releaseSha:SHA,keyHex:KEY,token:TOKEN,fetcher:f.fetcher});
+  for(const bad of [null,{},
+    {...expected,sha:'0'.repeat(40)},
+    {...expected,grantId:'123'},
+    {...expected,operation:'repair'},
+    {...expected,requestNonce:'invalid'},
+    {...expected,runAttempt:0},
+    {...expected,GITHUB_TOKEN:'FORBIDDEN_PLAINTEXT'}]){
+    await assert.rejects(api.consumeExpectedReply({keyHex:KEY,
+      expected:bad,now:NOW}),/FRMS_QA_QUEUE_RUNNER_API_DENIED/);
+  }
+  assert.equal(f.calls.length,0);
+});
 test('malformed Base64 and raw JSON are rejected before receipt acknowledgement',async()=>{
   for(const body of ['e30', 'e30===', JSON.stringify(reply()),
     Buffer.from(JSON.stringify(reply()),'utf8').toString('base64').slice(0,-2)+'$']){
