@@ -10,6 +10,28 @@ import {
 } from './seed-frms-ux-30d.mjs';
 
 export const CASE_IDS = [1, 2, 3, 4].map(n => 'qa-frms-ux-case-'+n);
+// Historical, de-identified four-case source reference from successful guard
+// and real staging SELECT run #39301760305 (2026-10-19), source aggregate
+// #38452591092 @ 3f4017dd..., NOT a substitute for current source artifact
+// and NEVER sufficient to authorize repair, apply, staging release or 4/4 QA.
+export const REVIEWED_READONLY_CASE_SNAPSHOT = Object.freeze([
+  {id:'qa-frms-ux-case-1',date:'2026-10-12',matricula:'QA-FRMS-UX-01',kind:'REPOUSO'},
+  {id:'qa-frms-ux-case-2',date:'2026-10-11',matricula:'QA-FRMS-UX-02',kind:'FDP_DIARIO'},
+  {id:'qa-frms-ux-case-3',date:'2026-10-10',matricula:'QA-FRMS-UX-01',kind:'HV_7D'},
+  {id:'qa-frms-ux-case-4',date:'2026-10-09',matricula:'QA-FRMS-UX-02',kind:'REPOUSO'},
+].map(x=>Object.freeze(x)));
+
+export function expectedReadonlyCaseSnapshot({env={}}={}){
+  if(env.GITHUB_ACTIONS!=='true'||env.GITHUB_REPOSITORY!=='Airtrust-Org/airtrust'||
+     env.GITHUB_REF!=='refs/heads/main'||
+     env.CONFIRM_FRMS_QA_CASES_INSPECT!=='AIRTRUST_STAGING_FRMS_CASES_READONLY'||
+     env.FRMS_QA_FIXED_STATUS_ONLY!=='FRMS_QA_REVIEWED_4CASE_STATUS_READONLY'||
+     !/^[0-9a-f]{40}$/.test(env.GITHUB_SHA||'')||
+     env.FRMS_QA_EXPECTED_MAIN_SHA!==env.GITHUB_SHA||
+     env.SOURCE_AGGREGATE_SHA||env.SANITIZED_AGGREGATE_PATH)
+    throw new Error('FRMS_QA_STATUS_ONLY_GUARD_DENIED');
+  return REVIEWED_READONLY_CASE_SNAPSHOT;
+}
 const CASE_CONFIG = [
   { n: 1, crew: 1, kind: 'REPOUSO', daySlot: 3 },
   { n: 2, crew: 2, kind: 'FDP_DIARIO', daySlot: 2 },
@@ -157,10 +179,11 @@ function verifyTarget() {
 
 export async function main() {
   verifyTarget();
-  const sha=String(process.env.SOURCE_AGGREGATE_SHA || '');
-  const source=validateSource(JSON.parse(readFileSync(
-    String(process.env.SANITIZED_AGGREGATE_PATH || ''), 'utf8')), sha);
-  const expected=expectedQaCases(source);
+  const statusOnly=process.argv.includes('--reviewed-fixed-status-only');
+  const expected=statusOnly?expectedReadonlyCaseSnapshot({env:process.env}):(
+    expectedQaCases(validateSource(JSON.parse(readFileSync(
+      String(process.env.SANITIZED_AGGREGATE_PATH || ''), 'utf8')),
+      String(process.env.SOURCE_AGGREGATE_SHA || ''))));
   const ids=CASE_IDS.map(id => "'"+id+"'").join(',');
   // Only fixed synthetic identifiers, a hard-coded tenant, and QA-only columns.
   const sql=`SELECT a.id,a.tipo_limite,a.nivel,a.created_at,a.mensagem,a.valor_limite_min,a.valor_atual_min,a.jornada_id,a.resolvido,
@@ -176,7 +199,8 @@ export async function main() {
     WHERE a.deleted_at IS NULL AND a.id IN (${ids})`;
   const rows=queryReadOnly(sql);
   const result=evaluateQaCases(rows,expected);
-  console.log('FRMS_QA_CASES_READONLY_PREFLIGHT='+JSON.stringify(result));
+  console.log((statusOnly?'FRMS_QA_REVIEWED_FIXED_STATUS_ONLY=':
+    'FRMS_QA_CASES_READONLY_PREFLIGHT=')+JSON.stringify(result));
   if(result.verdict!=='READONLY_ACCEPTANCE_READY') {
     const ids=expected.map(want =>
       "'qa-frms-ux-j-"+want.date+"-"+want.matricula+"'").join(',');
@@ -190,7 +214,9 @@ export async function main() {
     const targetJourneys=queryReadOnly(targetSql);
     const diagnostic=diagnoseLegacyRepairPreflight(rows,targetJourneys,expected);
     console.log('FRMS_QA_LEGACY_REPAIR_READONLY_DIAGNOSTIC='+JSON.stringify(diagnostic));
-    process.exitCode=2;
+    // Status-only reports historical fixture drift without failing the
+    // diagnostic, but NEVER asserts acceptance or authorizes a write.
+    if(!statusOnly)process.exitCode=2;
   }
 }
 
