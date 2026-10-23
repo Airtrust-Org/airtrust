@@ -13,6 +13,7 @@ import { expectedQaCases } from '../staging/inspect-frms-ux-cases.mjs';
 import { d1ScopeAdapter, timeTravelReader } from '../../ops/frms-qa-repair/adapters.mjs';
 import { prepareQaEvidence } from '../staging/frms-qa-repair-controller.mjs';
 import { signPrivateCaller } from '../../ops/frms-qa-repair/caller-auth.mjs';
+import { prepareViaPrivateServiceBinding } from '../../ops/frms-qa-repair/private-binding-prepare-prototype.mjs';
 
 const days = Array.from({length:30},(_,i)=>({day:new Date(Date.parse('2026-09-14T00:00:00Z')+i*86400000).toISOString().slice(0,10),jornadas:i===29?'0':'5-9'}));
 const plan = buildReviewPlan(days), sha = 'c'.repeat(40);
@@ -220,4 +221,145 @@ test('private service binding rejects missing, forged and replayed runner capabi
 test('private worker rejects caller key drift even with a valid formerly signed request',async t=>{
   const s=await setup(t,{CALLER_KEY_SHA256:'b'.repeat(64)});
   assert.match((await s.call('prepare')).error,/QA_CALLER_AUTH_REJECTED/);
+});
+
+const PREPARE_RUN='39977611720',PREPARE_GRANT='99999000000';
+const prepareContext=callerKey=>({
+  GITHUB_ACTIONS:'true',GITHUB_REPOSITORY:'Airtrust-Org/airtrust',
+  GITHUB_REF:'refs/heads/main',GITHUB_EVENT_NAME:'workflow_dispatch',
+  GITHUB_SHA:sha,GITHUB_RUN_ID:PREPARE_RUN,GITHUB_RUN_ATTEMPT:'1',
+  FRMS_QA_PREPARE_CONFIRM:'AIRTRUST_FRMS_QA_PREPARE_ONLY_F0_APPROVED',
+  FRMS_QA_PREPARE_GRANT_ID:PREPARE_GRANT,
+  FRMS_QA_CALLER_KEY_HEX:callerKey,
+});
+const disposableGrantLedger=()=>{
+  const grants=new Map();
+  return {grants,transaction:async fn=>fn({
+    get:async k=>grants.get(k),
+    put:async(k,v)=>{grants.set(k,v);},
+  })};
+};
+const syntheticGrantVerifier=async req=>({
+  status:'VERIFIED_BY_INDEPENDENT_GITHUB_ADMIN_CHECK',
+  schema:'AIRTRUST_FRMS_QA_PREPARE_GRANT_VERIFIED_V1',
+  sha:req.sha,dbId:req.dbId,tenantId:req.tenantId,
+  grantId:req.grantId,runId:req.runId,runAttempt:req.runAttempt,
+});
+test('private binding-only prepare prototype uses real disposable Worker RPC, never D1 writes',async t=>{
+  const s=await setup(t);
+  // The existing disposable caller Worker owns the actual Miniflare
+  // REPAIR service binding. A Node-side stub delegates only to that RPC;
+  // getWorker('repair') by itself is not the configured caller transport.
+  const binding={prepare:async input=>{
+    const result=await s.rawCall('prepare',input);
+    if(result.error)throw Error(result.error);
+    return result;
+  }};
+  const before=await rows(s.db);
+  const prepared=await prepareViaPrivateServiceBinding({
+    env:prepareContext(s.callerKey),binding,
+    independentGrantVerifier:syntheticGrantVerifier,
+    grantLedger:disposableGrantLedger(),
+  });
+  assert.match(prepared.receiptId,/^[0-9a-f]{64}$/);
+  assert.equal(prepared.receipt.writes,0);
+  assert.equal(prepared.receipt.dbId,plan.target.db_id);
+  assert.equal(prepared.receipt.tenantId,999013);
+  assert.equal(s.recoveryCalls,1);
+  assert.deepEqual(await rows(s.db),before);
+  const bucket=await s.mf.getR2Bucket('PREIMAGES','repair');
+  const cipher=await (await bucket.get(prepared.receipt.artifactReference)).text();
+  assert.equal(cipher.includes('QA-FRMS-UX-01'),false);
+  assert.equal(cipher.includes('tripulante_id'),false);
+  const direct=await s.mf.getWorker('repair');
+  assert.equal((await direct.fetch('https://local.invalid/prepare',{method:'POST'})).status,404);
+});
+test('binding transport never calls private RPC without external verified prepare-only grant',async()=>{
+  let calls=0;const binding={prepare:async()=>{calls++;return {receiptId:'f'.repeat(64),
+    receipt:{dbId:plan.target.db_id,tenantId:999013,writes:0}}}};
+  const env=prepareContext('a'.repeat(64));
+  for(const override of [
+    {GITHUB_ACTIONS:'false'},{GITHUB_REPOSITORY:'attacker/repo'},
+    {GITHUB_EVENT_NAME:'push'},{GITHUB_REF:'refs/heads/other'},
+    {GITHUB_SHA:'notsha'},{GITHUB_RUN_ATTEMPT:'0'},
+    {FRMS_QA_PREPARE_CONFIRM:'wrong'},{FRMS_QA_CALLER_KEY_HEX:'short'},
+    {FRMS_QA_PREPARE_GRANT_ID:'broken'},
+  ]){
+    await assert.rejects(prepareViaPrivateServiceBinding({
+      env:{...env,...override},binding,
+      independentGrantVerifier:syntheticGrantVerifier,
+      grantLedger:disposableGrantLedger(),
+    }),/QA_PRIVATE_CALLER_TRANSPORT_DENIED/);
+  }
+  for(const verifier of [
+    undefined,async()=>({approved:true}),async req=>({
+      ...await syntheticGrantVerifier(req),tenantId:6}),
+    async()=>{throw Error('sensitive internal GitHub failure');},
+  ]){
+    await assert.rejects(prepareViaPrivateServiceBinding({
+      env,binding,independentGrantVerifier:verifier,
+      grantLedger:disposableGrantLedger(),
+    }),/QA_PRIVATE_CALLER_TRANSPORT_DENIED/);
+  }
+  assert.equal(calls,0);
+});
+test('synthetic binding caller only sends scoped HMAC: no bookmark, bearer token or SQL',async()=>{
+  const key='a'.repeat(64),env=prepareContext(key);
+  const marker='SYNTHETIC_BEARER_DO_NOT_PASS';
+  env.CLOUDFLARE_WORKER_API_TOKEN=marker;
+  let captured;
+  const binding={prepare:async p=>{
+    captured=p;
+    return {receiptId:'f'.repeat(64),receipt:{
+      dbId:plan.target.db_id,tenantId:999013,writes:0}};
+  }};
+  const result=await prepareViaPrivateServiceBinding({
+    env,binding,independentGrantVerifier:syntheticGrantVerifier,
+    grantLedger:disposableGrantLedger()});
+  assert.ok(result);
+  assert.deepEqual(Object.keys(captured),['callerAuth']);
+  assert.equal(captured.callerAuth.claims.operation,'prepare');
+  assert.equal(captured.callerAuth.claims.tenantId,999013);
+  assert.equal(captured.callerAuth.claims.dbId,plan.target.db_id);
+  assert.equal(captured.callerAuth.claims.sha,sha);
+  assert.equal(JSON.stringify(captured).includes(key),false);
+  assert.equal(JSON.stringify(captured).includes(marker),false);
+  assert.equal(JSON.stringify(captured).includes('signatureBase64'),false);
+  assert.equal(JSON.stringify(captured).includes('bookmark'),false);
+});
+
+test('prepare grant is transactionally one-use even when caller HMAC changes',async()=>{
+  let calls=0;
+  const grantLedger=disposableGrantLedger();
+  const args={
+    env:prepareContext('a'.repeat(64)),
+    binding:{prepare:async()=>{
+      calls++;
+      return {receiptId:'f'.repeat(64),receipt:{
+        dbId:plan.target.db_id,tenantId:999013,writes:0}};
+    }},
+    independentGrantVerifier:syntheticGrantVerifier,grantLedger,
+  };
+  await prepareViaPrivateServiceBinding(args);
+  assert.equal(calls,1);
+  assert.equal(grantLedger.grants.size,1);
+  await assert.rejects(prepareViaPrivateServiceBinding(args),
+    /QA_PRIVATE_CALLER_TRANSPORT_DENIED/);
+  assert.equal(calls,1);
+  assert.equal(grantLedger.grants.size,1);
+});
+test('failed transactional ledger never contacts binding or retries a grant',async()=>{
+  let calls=0;
+  const env=prepareContext('a'.repeat(64));
+  for(const ledger of [
+    null,
+    {transaction:async()=>{throw Error('synthetic-storage-unavailable')}},
+    {transaction:async()=>false},
+  ]){
+    await assert.rejects(prepareViaPrivateServiceBinding({
+      env,independentGrantVerifier:syntheticGrantVerifier,
+      grantLedger:ledger,binding:{prepare:async()=>{calls++;}},
+    }),/QA_PRIVATE_CALLER_TRANSPORT_DENIED/);
+  }
+  assert.equal(calls,0);
 });
