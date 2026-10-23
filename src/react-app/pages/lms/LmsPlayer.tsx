@@ -107,6 +107,18 @@ export function shouldVerifyCanonicalProgress(status: string | null | undefined)
   return status === 'CONCLUIDO';
 }
 
+/** A ciclo renewal must recreate the SCORM iframe so its next launch is bound to the active cycle. */
+export function buildScormPlayerSessionKey(params: {
+  matriculaId: number;
+  reviewMode: boolean;
+  userId: number | string | null | undefined;
+  empresaId: number | null | undefined;
+  activeCycleId: number | null | undefined;
+  handoffId: number | null | undefined;
+}) {
+  return `${params.matriculaId}:${params.reviewMode ? 'review' : 'normal'}:${params.userId ?? 'anon'}:${params.empresaId ?? 'none'}:${params.activeCycleId ?? 'none'}:${params.handoffId ?? 'none'}`;
+}
+
 /**
  * Quantas reconsultas canônicas toleramos após o SCORM sinalizar conclusão.
  * Se a mesma resposta `candidate` permanecer após esse limite, o player sai
@@ -386,7 +398,7 @@ export default function LmsPlayer() {
   // recreated during progress saves, refetches, or token rotations.
   //
   // Included in identity:
-  //   - matricula ID
+  //   - matricula ID and active cycle (a cycle renewal must replace the old SCO)
   //   - review mode
   //   - authenticated user ID
   //   - current tenant (empresa)
@@ -397,7 +409,17 @@ export default function LmsPlayer() {
   const activeHandoffId = (matricula as (typeof matricula & {
     active_scorm_handoff_id?: number | null;
   }) | undefined)?.active_scorm_handoff_id ?? null;
-  const sessionKey = `${id}:${reviewParam ? 'review' : 'normal'}:${user?.id ?? 'anon'}:${empresaAtualId ?? 'none'}:${activeHandoffId ?? 'none'}`;
+  const activeCycleId = (matricula as (typeof matricula & {
+    active_lms_cycle_id?: number | null;
+  }) | undefined)?.active_lms_cycle_id ?? null;
+  const sessionKey = buildScormPlayerSessionKey({
+    matriculaId: id,
+    reviewMode: reviewParam,
+    userId: user?.id,
+    empresaId: empresaAtualId,
+    activeCycleId,
+    handoffId: activeHandoffId,
+  });
   const sessionKeyRef = useRef<string | null>(null);
   const stableLaunchUrlRef = useRef<string | null>(null);
   const assetSessionKeyRef = useRef<string | null>(null);

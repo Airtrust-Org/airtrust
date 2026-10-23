@@ -1,11 +1,33 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildScormPlayerSessionKey,
   canReconcilePersistedScormCompletion,
   resolveLmsDisplayProgress,
   shouldShowScormClosureDetails,
   shouldVerifyCanonicalProgress,
 } from '../LmsPlayer';
+
+describe('SCORM player session identity', () => {
+  const session = {
+    matriculaId: 91,
+    reviewMode: false,
+    userId: 17,
+    empresaId: 6,
+    activeCycleId: 3,
+    handoffId: null,
+  };
+
+  it('changes when the active enrollment cycle changes', () => {
+    expect(buildScormPlayerSessionKey(session)).not.toBe(
+      buildScormPlayerSessionKey({ ...session, activeCycleId: 4 }),
+    );
+  });
+
+  it('keys the iframe by matrícula, review, user, tenant, cycle, and handoff only', () => {
+    expect(buildScormPlayerSessionKey(session)).toBe('91:normal:17:6:3:none');
+  });
+});
 
 describe('resolveLmsDisplayProgress', () => {
   it('keeps an incomplete SCORM enrollment at 99% even at its final location', () => {
