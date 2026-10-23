@@ -171,13 +171,13 @@ async function changeMatrixRule(page: Page, code: string, value: string, method:
   return row;
 }
 
-async function setExplicitEadEnrollment(page: Page, ruleId: number, enabled: boolean, modality: string | null) {
+async function setExplicitEadEnrollment(page: Page, ruleId: number, enabled: boolean, modality: string | null, phase: string) {
   const result = await api(page, `/api/compliance-treinamentos/regras/${ruleId}`, {
     method: 'PUT',
     body: { auto_matricular_ead: enabled, modalidade_requerida: modality },
   });
   expect(result.ok, JSON.stringify(result.json)).toBe(true);
-  expect(result.json.data?.auto_enrollment_warning).toBeNull();
+  expect(result.json.data?.auto_enrollment_warning, `EAD opt-in phase: ${phase}`).toBeNull();
   return result;
 }
 
@@ -325,13 +325,13 @@ test('full training compliance lifecycle recalculates organization, enrollments 
       employeeIds.includes(Number(row.funcionario_id))).length;
   };
   expect(await enrolledCount(), 'mandatory alone cannot auto-enroll').toBe(0);
-  const onlyOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, null);
+  const onlyOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, null, 'opt-in with NULL modality');
   expect(onlyOptIn.json.data.auto_enrollment.created).toBe(0);
   expect(await enrolledCount(), 'NULL modality must fail closed').toBe(0);
-  const onlyModality = await setExplicitEadEnrollment(page, sectorRuleId, false, 'EAD');
+  const onlyModality = await setExplicitEadEnrollment(page, sectorRuleId, false, 'EAD', 'opt-out with EAD modality');
   expect(onlyModality.json.data.auto_enrollment.created).toBe(0);
   expect(await enrolledCount(), 'opt-in=0 must fail closed').toBe(0);
-  const authorized = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD');
+  const authorized = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD', 'authorized EAD or idempotent repeat');
   expect(authorized.json.data.auto_enrollment.created).toBe(2);
 
   await expect.poll(async () => {
@@ -345,7 +345,7 @@ test('full training compliance lifecycle recalculates organization, enrollments 
     employeeIds.includes(Number(row.funcionario_id)),
   );
   expect(automaticRows).toHaveLength(2);
-  const repeatedOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD');
+  const repeatedOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD', 'authorized EAD or idempotent repeat');
   expect(repeatedOptIn.json.data.auto_enrollment.created).toBe(0);
   expect(await enrolledCount(), 'repeated eligible rule must not duplicate').toBe(2);
   for (const row of automaticRows) {
@@ -560,7 +560,7 @@ test('full training compliance lifecycle recalculates organization, enrollments 
     rule.escopo === 'SETOR_FUNCAO' && Number(rule.setor_id) === sector.id
       && Number(rule.funcao_id) === fn.id);
   expect(linkedRule).toBeTruthy();
-  const orphanOptIn = await setExplicitEadEnrollment(page, Number(linkedRule.id), true, 'EAD');
+  const orphanOptIn = await setExplicitEadEnrollment(page, Number(linkedRule.id), true, 'EAD', 'orphan reconciliation');
   expect(orphanOptIn.json.data.auto_enrollment.created).toBe(1);
   await expect.poll(async () => {
     const response = await api(page, `/api/lms/matriculas/curso/${orphanCourseId}?limit=20`);
