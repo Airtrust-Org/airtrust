@@ -100,6 +100,8 @@ jobs:
         run: node --test scripts/__tests__/staging-frms-schema-doctor.test.mjs
       - name: validate staging FRMS 0464 bootstrap repair governance
         run: node --test scripts/__tests__/staging-frms-0464-bootstrap-repair.test.mjs
+      - name: validate FRMS staging QA uses the shared mutation mutex
+        run: node --test scripts/__tests__/staging-frms-auth-qa.test.mjs
       - name: validate production release read-only preflight contract
         run: node --test scripts/__tests__/production-release-readonly-preflight.test.mjs
       - name: validate production LMS SCORM enrollment review read-only contract
