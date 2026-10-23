@@ -177,6 +177,11 @@ export function buildPrivateRuntimeSecrets({env,sha}){
      !HEX64.test(preimage||'')||!d1read||!approved||
      !ACCOUNT.test(env.CLOUDFLARE_ACCOUNT_ID||''))
     fail('FRMS_QA_PRIVATE_RUNTIME_SECRETS_MISSING');
+  // Never install the deployment/metadata API credential as the D1 runtime
+  // recovery credential, including when a V3 grant permits ephemeral reuse.
+  if(d1read===env.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN||
+     d1read===env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN)
+    fail('FRMS_QA_RUNTIME_TOKEN_MUST_BE_INDEPENDENT');
   let der;
   try{der=createPublicKey(approved).export({type:'spki',format:'der'});}
   catch{fail('FRMS_QA_ED25519_PUBLIC_KEY_INVALID');}
