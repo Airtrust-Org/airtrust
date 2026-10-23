@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-scorm-qa-evidence-bindings-0568",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0568_lms_scorm_qa_evidence_bindings.sql",
+  "fileHash": "107fe9b4757d73b92a3468f8e6c69a2524be455d1774533387dca1ea8381a910",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-scorm-qa-evidence-bindings-0568.md",
+  "planHash": "a27558b4e2d7f2d0e12c5e69500085d6be317b96c7729e92cd225e1ec9081423"
+}
