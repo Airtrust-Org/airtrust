@@ -120,7 +120,7 @@ test('invalid response, malformed body and failed ack are sanitized and fail clo
   }
 });
 test('malformed Base64 and raw JSON are rejected before receipt acknowledgement',async()=>{
-  for(const body of ['e30', 'e30=', JSON.stringify(reply()),
+  for(const body of ['e30', 'e30===', JSON.stringify(reply()),
     Buffer.from(JSON.stringify(reply()),'utf8').toString('base64').slice(0,-2)+'$']){
     const f=fixture({body}),api=privateQueueRunnerApi({accountId:ACCOUNT,
       queueId:QUEUE,releaseSha:SHA,token:TOKEN,fetcher:f.fetcher});
