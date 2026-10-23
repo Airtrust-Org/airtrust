@@ -451,9 +451,10 @@ export function applyRuntimeConformance(
     conformance,
     functionalCertification,
     publishable: functionalCertification.status === 'CERTIFIED' &&
-      // The ZIP may claim release.reviewed=true; independent SME approval has no
-      // verified backend release ledger yet. Fail closed for ALL external exams.
-      !staticResult.authoringReview?.externalExam &&
+      // Historical validation blobs may predate the release-review marker.
+      // They cannot prove the ZIP is not an EXTERNAL self-approved package.
+      // Require fresh server-side validation before accepting certification.
+      staticResult.authoringReview?.externalExam === false &&
       functionalCertification.packageSha256 === expectedSha256 &&
       shaMatches && staticResult.structural.status === 'PASS' &&
       staticResult.completionManifest.status === 'PASS' &&
@@ -471,7 +472,9 @@ export function canActivateCertifiedScormPackage(
   // Never treat release.reviewed=true inside a user-uploaded ZIP as independent
   // SME consent. External-certification packages remain non-activatable until
   // a separate backend-owned, SHA-bound approval gate is implemented.
-  if (quality?.authoringReview?.externalExam) return false;
+  // A legacy persisted blob without this server-derived marker is ambiguous:
+  // it may predate the EXTERNAL validation gate. Re-upload/revalidate it first.
+  if (quality?.authoringReview?.externalExam !== false) return false;
   // A stored CERTIFIED summary without underlying browser cases is not proof.
   // Re-evaluate the case ledger independently when activating a version.
   if (!certificate || !Array.isArray(certificate.runs) ||

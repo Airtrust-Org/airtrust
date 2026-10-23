@@ -30,6 +30,8 @@ function quality(){
     completionManifest:{status:'PASS',errors:[],warnings:[]},
     diagnostics:{status:'PASS',errors:[],warnings:[]},
     conformance:{status:'PASS',tests:[]},runtime,
+    // Validated server-side as a non-EXTERNAL scored training.
+    authoringReview:{externalExam:false,reviewed:true},
     functionalCertification:{status:'UNCERTIFIED',packageSha256:sha,
       missing:['CHROMIUM:RUN_REQUIRED_UNIQUE'],requiresAssessment:true,runs:[]},
     publishable:false,
@@ -120,6 +122,18 @@ describe('SCORM imported certification and activation trust boundary',()=>{
     await expect(importScormFunctionalAttestation({
       ...base,db:f.db,attestation:{payload:seal().payload},
     })).rejects.toMatchObject({statusCode:409});
+    expect(f.batchCalls).toBe(0);
+    await expect(activateScormPackageVersion({...base,db:f.db}))
+      .rejects.toMatchObject({statusCode:409});
+    expect(f.batchCalls).toBe(0);
+  });
+  it('rejects signed proof on historical blobs without a trusted classification',async()=>{
+    const f=fixture();
+    const legacy=JSON.parse(f.row.validation_result_json);
+    delete legacy.authoringReview;
+    f.row.validation_result_json=JSON.stringify(legacy);
+    await expect(importScormFunctionalAttestation({...base,db:f.db,attestation:seal()}))
+      .rejects.toMatchObject({statusCode:409});
     expect(f.batchCalls).toBe(0);
     await expect(activateScormPackageVersion({...base,db:f.db}))
       .rejects.toMatchObject({statusCode:409});
