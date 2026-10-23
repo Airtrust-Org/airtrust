@@ -859,7 +859,7 @@ export function TrainingComplianceIntelligence({
                     </span>
                     {row.status_compliance === 'EM_ANDAMENTO' && row.progresso_pct != null && Number.isFinite(row.progresso_pct) ? (
                       <div className="mt-1.5 w-28" aria-label={`Progresso do treinamento: ${row.progresso_pct}%`}>
-                        <div className="mb-1 text-xs font-semibold text-blue-700">{row.progresso_pct}% concluído</div>
+                        <div className="mb-1 text-xs font-semibold text-blue-700">{row.progresso_pct}% de progresso</div>
                         <div className="h-1.5 overflow-hidden rounded-full bg-blue-100">
                           <div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.max(0, Math.min(100, row.progresso_pct))}%` }} />
                         </div>
