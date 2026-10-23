@@ -10,10 +10,16 @@ Validar o Pilot App em hardware real, contra um SHA exato já publicado em stagi
 
 Os testes automatizados de browser são complementares. Eles não substituem esta matriz física.
 
+## Vínculo com a publicação de produção
+
+O workflow oficial de produção compara o SHA candidato com o SHA efetivamente publicado no Worker de produção (via `/api/version`, sem parâmetro livre). Se os arquivos do Pilot ou de componentes compartilhados críticos mudaram, exige evidência física vinculada ao SHA publicado em staging. Mudanças comprovadamente independentes (como módulos isolados de Compliance/FRMS/LMS, documentação ou testes) podem seguir os gates e aprovações normais sem refazer o aceite Pilot. Quando o endpoint, histórico Git ou escopo forem ambíguos, o guard falha fechado.
+
+O workflow oficial de produção valida a evidência física vinculada ao SHA publicado em staging antes de publicar Worker ou Pages. O SHA de staging precisa ser ancestral do release de produção, e o único delta **pertinente ao Pilot** entre staging e produção é o JSON `docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json`; alterações independentes de outros módulos são permitidas, mas qualquer alteração adicional do Pilot ou componente compartilhado crítico bloqueia a publicação. Assim, o commit posterior que registra os resultados físicos não altera o código que foi homologado.
+
 ## Pré-condições
 
 - usar apenas staging;
-- registrar o SHA exato da release validada;
+- registrar o SHA exato do codigo publicado em staging, antes de registrar a evidencia fisica;
 - usar usuário/tenant de QA autorizado, sem inserir credenciais ou payload operacional sensível na evidência;
 - confirmar que o Pilot App, Worker e frontend de staging correspondem ao mesmo release SHA;
 - não executar promoção de produção durante esta validação.
@@ -62,16 +68,22 @@ Partir do arquivo `PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.example.json` e substit
 O registro deve conter, no mínimo:
 
 - `status` global;
-- `staging_release_sha` com 40 caracteres hexadecimais;
+- `staging_release_sha`, `worker_source_sha` e `pages_source_sha` iguais ao SHA do codigo publicado em staging (40 caracteres hexadecimais);
+- `staging_pages_url` com o HTTPS do preview oficial `*.airtrust.pages.dev`;
 - `validated_at` em ISO 8601;
 - modelo do dispositivo;
 - versão do sistema operacional;
 - navegador ou modo PWA;
 - orientação;
-- resultado de cada linha;
+- resultado de cada linha e referencia saneada de evidencia fisica (`evidence_ref`);
 - resultado dos 15 cenários, com observação curta quando necessário.
 
 Screenshots ou vídeos podem ser referenciados quando úteis, mas não devem conter credenciais, tokens, dados pessoais ou payload operacional sensível.
+
+## Vinculo entre o SHA publicado e o commit de evidência
+Apos publicar o codigo exato em staging e realizar os testes fisicos, adicionar os resultados em um **commit de evidência** posterior, alterando **somente o arquivo EVIDENCE.json**. O SHA desse commit sera diferente do SHA da release, porque um commit Git nao pode conter seu proprio SHA sem alterar o SHA.
+
+O workflow read-only passa a iniciar em `pull_request` quando a PR recebe o arquivo de evidencia: verifica o HEAD da PR de mesma origem, exige que o SHA publicado seja antepassado do commit da evidencia, proibe qualquer delta de runtime entre eles, valida 6 x 15 PASS e confere o Worker /api/version e assets Pages com o SHA publicado. Se o codigo mudar apos staging, publicar um novo candidato e refazer o aceite fisico. Isso **nao** libera schema, deploy, merge, flag ou producao.
 
 ## Regra de PASS
 
@@ -79,7 +91,7 @@ Uma linha só pode ter `result: "PASS"` se todos os cenários obrigatórios apli
 
 O `status` global só pode ser `PASS` se as seis linhas obrigatórias estiverem presentes e em PASS.
 
-O teste `src/__tests__/pilot-production-real-device-gate.test.ts` faz fail-closed caso produção seja reativada sem o arquivo de evidência com status PASS, SHA válido e as seis linhas obrigatórias.
+O gate read-only `.github/workflows/pilot-real-device-acceptance.yml` valida o SHA exato, o Worker de staging e o asset do Pilot App publicado em Pages, além dos 15 cenários em cada uma das seis linhas; somente depois da execução real pode existir evidência PASS. O teste `src/__tests__/pilot-production-real-device-gate.test.ts` faz fail-closed caso produção seja reativada sem o arquivo de evidência com status PASS, SHA válido e as seis linhas obrigatórias.
 
 ## Falha e reteste
 

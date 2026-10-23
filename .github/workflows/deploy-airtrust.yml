@@ -66,6 +66,8 @@ jobs:
     steps:
       - name: Checkout trusted production pipeline
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Validate production dispatch inputs
         shell: bash
@@ -88,6 +90,12 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           RELEASE_SHA: ${{ github.sha }}
         run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Verify Pilot real-device acceptance for production release
+        if: ${{ inputs.deploy_worker || inputs.deploy_pages }}
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/pilot-production-release-guard.mjs --release-sha "$RELEASE_SHA"
 
       - name: Compute release version
         id: version
