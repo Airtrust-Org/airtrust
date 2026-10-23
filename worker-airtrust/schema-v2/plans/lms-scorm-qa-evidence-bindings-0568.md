@@ -13,6 +13,9 @@ edits learner progress, or authorizes a database change.
 - Package/tenant/cycle/release/approval/expiry identity is immutable.
 - Launch and commit SHA witnesses can only be written once, with the commit
   matching the launched candidate. Revocation/expiry is irreversible; no DELETE.
+- Expiration is validated by SQLite `julianday()` for ISO-8601 UTC and
+  SQLite datetime inputs. Lexicographic TEXT comparisons of mixed formats
+  are forbidden in both insertion guards and Worker protected readback.
 - The binding row is not proof that the browser really launched or committed:
   protected F0 execution and backend readback must establish that separately.
 

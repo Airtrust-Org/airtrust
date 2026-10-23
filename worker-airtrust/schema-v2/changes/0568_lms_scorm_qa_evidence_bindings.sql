@@ -32,7 +32,8 @@ CREATE INDEX idx_lms_scorm_qa_scope
 CREATE TRIGGER trg_lms_scorm_qa_binding_insert_scope
 BEFORE INSERT ON lms_scorm_qa_evidence_bindings
 BEGIN
- SELECT CASE WHEN NEW.status!='ACTIVE' OR NEW.expires_at<=datetime('now')
+ SELECT CASE WHEN NEW.status!='ACTIVE' OR julianday(NEW.expires_at) IS NULL
+   OR julianday(NEW.expires_at)<=julianday('now')
    OR (NEW.launched_package_sha256 IS NOT NULL AND NEW.launched_package_sha256!=NEW.package_sha256)
    OR (NEW.last_committed_package_sha256 IS NOT NULL AND
        (NEW.launched_package_sha256 IS NULL OR NEW.last_committed_package_sha256!=NEW.package_sha256))

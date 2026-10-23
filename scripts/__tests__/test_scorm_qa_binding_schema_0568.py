@@ -70,6 +70,30 @@ class BindingTests(unittest.TestCase):
         self.db.execute("UPDATE lms_scorm_qa_evidence_bindings SET status='REVOKED'")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("UPDATE lms_scorm_qa_evidence_bindings SET status='ACTIVE'")
+    def test_iso_expiry_fails_closed(self):
+        # A past ISO UTC timestamp compares lexically *after* a newer
+        # SQLite space-separated datetime. The trigger must compare real dates.
+        for expires in (
+            '2000-01-01T00:00:00Z',
+            'not-an-expiry',
+            self.db.execute("SELECT strftime('%Y-%m-%dT%H:%M:%SZ','now','-1 minute')").fetchone()[0],
+        ):
+            with self.subTest(expires=expires):
+                with self.assertRaises(sqlite3.IntegrityError):
+                    self.insert(expires_at=expires)
+        valid=self.db.execute(
+            "SELECT strftime('%Y-%m-%dT%H:%M:%SZ','now','+1 hour')"
+        ).fetchone()[0]
+        self.insert(expires_at=valid)
+        self.assertEqual(self.db.execute(
+            "SELECT COUNT(*) FROM lms_scorm_qa_evidence_bindings"
+            " WHERE julianday(expires_at)>julianday('now')"
+        ).fetchone()[0], 1)
+        self.assertEqual(self.db.execute(
+            "SELECT julianday(?)>julianday(?)",
+            ('2026-10-23T20:00:00Z','2026-10-23 21:00:00')
+        ).fetchone()[0], 0)
+
     def test_manifest_byte_hashes(self):
         m=json.loads(M.read_text())
         self.assertEqual(m['changeId'],'lms-scorm-qa-evidence-bindings-0568')

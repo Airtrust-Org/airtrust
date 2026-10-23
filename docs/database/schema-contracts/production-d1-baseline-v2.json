@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-10-23",
-    "last_reconciled_against": "0568 SCORM F5 QA binding schema registered as remote apply pending, NOT applied; prior 0554/0557/0560/0563 statuses unchanged",
-    "schema_v2_digest": "9a3aef467ec150b2c7366df13b23bb00a0696663776c4471e46dee3491381d71",
+    "last_reconciled_against": "0568 SCORM F5 staging-only binding with ISO-safe expiration; 0554/0557/0560/0563 status unchanged, no apply",
+    "schema_v2_digest": "4398fdcb852a1af13689ebff1fc6e7bab4294d029eb79cd976162d8d06f9eb29",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1627,7 +1627,7 @@
     {
       "change_file": "0568_lms_scorm_qa_evidence_bindings.sql",
       "change_id": "lms-scorm-qa-evidence-bindings-0568",
-      "sha256": "107fe9b4757d73b92a3468f8e6c69a2524be455d1774533387dca1ea8381a910",
+      "sha256": "1fe19109a3b181b6c14f6da5d3c116d4967d73fa28df40dd7918db1d553e4251",
       "targets": [
         "lms_scorm_qa_evidence_bindings"
       ],
