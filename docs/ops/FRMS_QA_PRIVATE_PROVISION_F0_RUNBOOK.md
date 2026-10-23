@@ -152,6 +152,28 @@ a exceção não o modifica. Um `GET_404` do bucket mantém readiness FAIL
 closed, não permite criar ou reutilizar bucket compartilhado.
 
 
+## Auditoria opcional das políticas dos tokens já existentes — GET-only
+
+O workflow `.github/workflows/staging-frms-existing-token-capabilities.yml`
+é estritamente diagnóstico. Além dos GETs de D1/R2, para os secrets staging
+`CLOUDFLARE_WORKER_API_TOKEN` e `CLOUDFLARE_D1_BACKUP_API_TOKEN`, o
+script opcional `probe-existing-token-policy.mjs` consulta somente
+`GET /accounts/{account}/tokens/verify` ou `GET /user/tokens/verify` e
+`GET .../tokens/{id}`, quando os privilégios de leitura de token permitem.
+Apenas o veredicto sanitizado aparece nos logs: **jamais** token, ID,
+políticas, e-mail ou nome. Cloudflare pode responder 403 ao GET de detalhes:
+nesse caso o escopo fica **não atestado**, sem tentativa de alterar as
+permissões ou gerar tokens novos. **Os resultados não autorizam deploy nem uso no runtime.**
+
+Um candidato de leitura requer exclusivamente `D1 Read`, um único
+recurso de conta explícito e token ativo. Mesmo o veredicto
+`D1_READ_ONLY_CANDIDATE_REQUIRES_INDEPENDENT_ATTESTATION` é somente
+indício para análise externa, não comprova isolamento no banco único,
+não autoriza copiar bearer para o Worker, não substitui assinatura Ed25519,
+nem concede prepare/apply. Mistura de permissões, outro recurso, erro,
+redirect ou API 403 falham fechado. Todos os testes negativos usam tokens
+sintéticos e fetcher em memória; nenhum token real é exibido.
+
 ## Comprovantes físicos e sequência posterior
 
 1. F0 integra a PR de infraestrutura somente com 8/8 checks, revisão,
