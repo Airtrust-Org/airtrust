@@ -5,6 +5,7 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { executeF5InactiveCandidate } from './f5-inactive-candidate-executor.mjs';
+import { assertF5RunnerDispatchScope } from './f5-runner-dispatch-scope.mjs';
 import { createF5WorkerAdapters, openF5PrivateZipSource } from './f5-worker-adapters.mjs';
 
 const fail = code => { throw new Error(`F5_RUNNER_${code}`); };
@@ -28,10 +29,6 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   }
   const actualF0Sha = createHash('sha256').update(f0Bytes).digest('hex');
   if (actualF0Sha !== f0ModuleSha256) fail('F0_ADAPTER_SHA_MISMATCH');
-  let f0;
-  try { f0 = await import(pathToFileURL(resolve(f0ModulePath)).href); }
-  catch { fail('F0_ADAPTER_LOAD_FAILED'); }
-  if (typeof f0.createF0Adapters !== 'function') fail('F0_ADAPTER_CONTRACT_MISSING');
   let plan;
   try {
     const planStat = await stat(planPath);
@@ -41,6 +38,13 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
     if (String(error?.message || error).startsWith('F5_RUNNER_')) throw error;
     fail('PRIVATE_PLAN_UNAVAILABLE_OR_INVALID');
   }
+  // Validate all workflow-dispatch IDs before importing any executable F0 module
+  // or reading/uploading the private ZIP. The later GitHub grant check remains mandatory.
+  assertF5RunnerDispatchScope(plan, env);
+  let f0;
+  try { f0 = await import(pathToFileURL(resolve(f0ModulePath)).href); }
+  catch { fail('F0_ADAPTER_LOAD_FAILED'); }
+  if (typeof f0.createF0Adapters !== 'function') fail('F0_ADAPTER_CONTRACT_MISSING');
   let source;
   try { source = await openF5PrivateZipSource(sourcePath); }
   catch { fail('PRIVATE_ZIP_SOURCE_UNAVAILABLE'); }
