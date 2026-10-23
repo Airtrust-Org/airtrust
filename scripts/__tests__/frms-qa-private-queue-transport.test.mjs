@@ -247,21 +247,48 @@ test('prepare receipt returns only through a correlated signed private reply',as
   const receipt={environment:'staging',dbId:DB,tenantId:999013,writes:0,
     preimageSha256:'a'.repeat(64),artifactSha256:'b'.repeat(64),
     recoveryBookmark:'bookmark-private'};
+  const receiptId=createHash('sha256').update(JSON.stringify(receipt)).digest('hex');
   const outcome=await consumeTrustedQueuePrepare({message:m,env:runtime,
-    storage:db,binding:{prepare:async()=>({receiptId:'c'.repeat(64),receipt})},
+    storage:db,binding:{prepare:async()=>({receiptId,receipt})},
     responseQueue:{send:async x=>sent.push(x)},now:clock});
   assert.equal(outcome.status,'RECEIPT_VALIDATED');
   const reply=verifyPrivateQueueReply({reply:sent[0],keyHex:KEY,
-    expected:{sha:SHA,runId:RUN,runAttempt:1,
-      requestNonce:m.callerAuth.claims.nonce}});
-  assert.equal(reply.receiptId,'c'.repeat(64));
+    expected:{sha:SHA,runId:RUN,runAttempt:1,grantId:GRANT,
+      operation:'prepare',requestNonce:m.callerAuth.claims.nonce},now:clock});
+  assert.equal(reply.receiptId,receiptId);
   assert.equal(reply.receipt.recoveryBookmark,'bookmark-private');
   assert.equal(JSON.stringify(sent[0]).includes('bookmark-private'),false);
   assert.equal(JSON.stringify([...db.map]).includes('bookmark-private'),false);
   await assert.rejects(Promise.resolve().then(()=>verifyPrivateQueueReply({
     reply:sent[0],keyHex:KEY,expected:{sha:SHA,runId:RUN,runAttempt:1,
-      requestNonce:'f'.repeat(64)}})),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+      grantId:GRANT,operation:'prepare',requestNonce:'f'.repeat(64)},
+    now:clock})),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+  for(const wrong of [{grantId:'1234567890'},{operation:'apply'}]){
+    assert.throws(()=>verifyPrivateQueueReply({reply:sent[0],keyHex:KEY,
+      expected:{sha:SHA,runId:RUN,runAttempt:1,grantId:GRANT,
+        operation:'prepare',requestNonce:m.callerAuth.claims.nonce,...wrong},
+      now:clock}),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+  }
+  assert.throws(()=>verifyPrivateQueueReply({reply:sent[0],keyHex:KEY,
+    expected:{sha:SHA,runId:RUN,runAttempt:1,grantId:GRANT,
+      operation:'prepare',requestNonce:m.callerAuth.claims.nonce},
+    now:clock+90001}),/FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
 });
+test('correlated encrypted reply rejects a signed but inconsistent receipt digest',async()=>{
+  const m=await message(),db=storage(),sent=[];
+  const receipt={environment:'staging',dbId:DB,tenantId:999013,writes:0,
+    preimageSha256:'a'.repeat(64),artifactSha256:'b'.repeat(64),
+    recoveryBookmark:'bookmark-private'};
+  await consumeTrustedQueuePrepare({message:m,env:runtime,
+    storage:db,binding:{prepare:async()=>({receiptId:'c'.repeat(64),receipt})},
+    responseQueue:{send:async x=>sent.push(x)},now:clock});
+  assert.equal(sent.length,1);
+  assert.throws(()=>verifyPrivateQueueReply({reply:sent[0],keyHex:KEY,
+    expected:{sha:SHA,runId:RUN,runAttempt:1,grantId:GRANT,
+      operation:'prepare',requestNonce:m.callerAuth.claims.nonce},now:clock}),
+    /FRMS_QA_PRIVATE_QUEUE_PREPARE_DENIED/);
+});
+
 test('indeterminate apply burns capability and never retries private RPC',async()=>{
   const m=await applyMessage(),db=storage();let calls=0;
   const binding={apply:async()=>{calls++;throw Error('DO_NOT_LEAK');}};
