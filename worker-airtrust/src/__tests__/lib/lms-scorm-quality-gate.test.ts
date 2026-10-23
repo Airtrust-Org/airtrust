@@ -114,6 +114,19 @@ describe('SCORM package quality gate', () => {
     expect(fullyCertified.publishable).toBe(true);
     expect(canActivateCertifiedScormPackage(fullyCertified, 'sha-a')).toBe(true);
     expect(canActivateCertifiedScormPackage(fullyCertified, 'sha-b')).toBe(false);
+
+    // Before the EXTERNAL intake gate, persisted quality JSON had no
+    // server-derived authoringReview marker. It might describe a self-reviewed
+    // external exam and cannot be trusted for a new certification/activation.
+    const legacyUnclassified = { ...staticResult, authoringReview: undefined };
+    const oldCertified = applyRuntimeConformance(legacyUnclassified, passed, 'sha-a', [chromium, webkit]);
+    expect(oldCertified.functionalCertification.status).toBe('CERTIFIED');
+    expect(oldCertified.publishable).toBe(false);
+    expect(canActivateCertifiedScormPackage({ ...fullyCertified, authoringReview: undefined }, 'sha-a'))
+      .toBe(false);
+    expect(canActivateCertifiedScormPackage({
+      ...oldCertified, publishable: true,
+    }, 'sha-a')).toBe(false);
     // A CERTIFIED summary is not sufficient if the stored browser ledger
     // is absent or has been altered.
     expect(canActivateCertifiedScormPackage({
