@@ -139,6 +139,24 @@ def verify_completion_contract(path, cid, expected_engine_sha):
         require(model.get("examMode") == "EXTERNAL_WORKER_ONLY"
                 and model.get("learningMode") == "FORMATIVE",
                 f"F5 model exam/learning policy mismatch: {cid}")
+        # ZIP integrity alone does not prove slide media is packaged. A model
+        # may reference missing assets (observed on private SGSO: 39 missing).
+        # Validate both legacy string and modern object-array media layouts.
+        for slide in slides:
+            media = slide.get("media")
+            if media is None:
+                continue
+            if isinstance(media, str):
+                refs = [media]
+            else:
+                require(isinstance(media, list) and all(
+                    isinstance(item, dict) and isinstance(item.get("src"), str)
+                    for item in media),
+                    f"invalid F5 slide media contract: {cid}: {slide['id']}")
+                refs = [item["src"] for item in media]
+            for ref in refs:
+                require(bool(ref) and ref in files,
+                        f"F5 slide media asset missing/remote: {cid}: {slide['id']}: {ref}")
         for slide in slides:
             if slide.get("kind") != "scenario":
                 continue
@@ -562,13 +580,15 @@ def self_test():
                 "assessment": {"mode": "EXTERNAL", "scoringBySCORM": False},
                 "completion": {"workerApprovalRequired": True},
                 "release": {"reviewed": False}}
-            def validate_policy(modified_model, changed_manifest):
+            def validate_policy(modified_model, changed_manifest, extra_members=None):
                 with zipfile.ZipFile(candidate, "w") as z:
                     z.writestr("airtrust-course-data.js",
                         "window.AIRTRUST_F5_MODEL=" +
                         json.dumps(modified_model, ensure_ascii=False) + ";")
                     z.writestr("airtrust-completion-manifest.json",
                         json.dumps(changed_manifest))
+                    for name, data in (extra_members or {}).items():
+                        z.writestr(name, data)
                 verify_completion_contract(candidate, "demo",
                     hashlib.sha256(b"v4").hexdigest())
             def reject_policy(modified_model, changed_manifest, reason):
@@ -578,6 +598,22 @@ def self_test():
                     return
                 raise AssertionError(f"unsafe F5 policy accepted: {reason}")
             validate_policy(original_model, original_manifest)
+            # A slide can use a string path or an array of media records.
+            # Neither case may silently publish a broken image or remote URL.
+            valid_media = json.loads(json.dumps(original_model))
+            valid_media["slides"][0]["media"] = [{"src": "assets/image.webp"}]
+            validate_policy(valid_media, original_manifest,
+                            {"assets/image.webp": b"synthetic"})
+            reject_policy(valid_media, original_manifest,
+                          "missing local image in media array")
+            remote_media = json.loads(json.dumps(original_model))
+            remote_media["slides"][0]["media"] = "https://example.invalid/image.webp"
+            reject_policy(remote_media, original_manifest, "remote media")
+            string_media = json.loads(json.dumps(original_model))
+            string_media["slides"][0]["media"] = "assets/image.webp"
+            validate_policy(string_media, original_manifest,
+                            {"assets/image.webp": b"synthetic"})
+            reject_policy(string_media, original_manifest, "missing string media path")
             for key, invalid in (("examMode", "NO_FINAL_EXAM"),
                                  ("learningMode", "CERTIFICATION")):
                 bad = dict(original_model)
