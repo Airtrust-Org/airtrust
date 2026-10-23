@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-18",
-    "last_reconciled_against": "0554 simulator, 0557 LMS, 0560 simulator pending; 0563 Pilot fueling identity review-only, not applied",
-    "schema_v2_digest": "7b52728b60189df7ed887ca6806e384ea5902d28fa8bc1b3f953f7611c7f379e",
+    "last_reconciled_at": "2026-10-23",
+    "last_reconciled_against": "0568 SCORM F5 QA binding schema registered as remote apply pending, NOT applied; prior 0554/0557/0560/0563 statuses unchanged",
+    "schema_v2_digest": "9a3aef467ec150b2c7366df13b23bb00a0696663776c4471e46dee3491381d71",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1623,6 +1623,20 @@
       "reviewed_manifest": "controle-voos-pilot-fueling-identity-0563.json",
       "evidence": "worker-airtrust/schema-v2/plans/controle-voos-pilot-fueling-identity-0563.md",
       "note": "Additive nullable event identity, tenant-flight unique index and immutable guards; legacy/manual fuelings left NULL. Candidate review-only until explicitly authorized trusted-main workflow, D1 recovery, staging postchecks and separate Worker rollout. No staging or production apply asserted."
+    },
+    {
+      "change_file": "0568_lms_scorm_qa_evidence_bindings.sql",
+      "change_id": "lms-scorm-qa-evidence-bindings-0568",
+      "sha256": "107fe9b4757d73b92a3468f8e6c69a2524be455d1774533387dca1ea8381a910",
+      "targets": [
+        "lms_scorm_qa_evidence_bindings"
+      ],
+      "domain": "SCORM F5 synthetic QA: staging-only immutable candidate/enrollment/cycle evidence",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-scorm-qa-evidence-bindings-0568.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-qa-evidence-bindings-0568.md",
+      "note": "Additive staging-only DDL, not a production schema claim. No D1 apply, grants, ZIP intake or activation. Review F0 staging target/recovery/postconditions and exact authorization before a governed dispatch."
     },
     {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
