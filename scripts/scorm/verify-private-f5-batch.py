@@ -133,6 +133,25 @@ def verify_completion_contract(path, cid, expected_engine_sha):
                 f"F5 package edition mismatch: {cid}")
         require(manifest.get("engineSha256") == expected_engine_sha,
                 f"F5 engine manifest hash mismatch: {cid}")
+        # The model used by the browser must agree with the backend manifest.
+        # Otherwise a future edit could silently enable self-graded completion
+        # while leaving the external Worker contract apparently unchanged.
+        require(model.get("examMode") == "EXTERNAL_WORKER_ONLY"
+                and model.get("learningMode") == "FORMATIVE",
+                f"F5 model exam/learning policy mismatch: {cid}")
+        for slide in slides:
+            if slide.get("kind") != "scenario":
+                continue
+            options = slide.get("formativeChoices")
+            require(isinstance(options, list) and 2 <= len(options) <= 8
+                    and all(isinstance(option, dict)
+                            and isinstance(option.get("text"), str)
+                            and option["text"].strip()
+                            and type(option.get("correct")) is bool
+                            for option in options)
+                    and len({option["text"].strip() for option in options}) == len(options)
+                    and sum(option["correct"] for option in options) == 1,
+                    f"F5 formative answer contract invalid: {cid}: {slide['id']}")
         assessment = manifest.get("assessment")
         completion = manifest.get("completion")
         release = manifest.get("release")
@@ -479,8 +498,9 @@ def self_test():
             raise AssertionError("native undeclared restored media accepted")
         with tempfile.TemporaryDirectory() as f5tmp:
             d = Path(f5tmp)
-            model = {"courseId": "demo", "edition": "v4", "slides": [
-                {"id": "first", "kind": "lesson"},
+            model = {"courseId": "demo", "edition": "v4",
+                "examMode": "EXTERNAL_WORKER_ONLY", "learningMode": "FORMATIVE",
+                "slides": [{"id": "first", "kind": "lesson"},
                 {"id": "review", "kind": "review"}]}
             manifest = {"courseId": "demo", "packageVersion": "v4",
                 "engineSha256": hashlib.sha256(b"v4").hexdigest(),
@@ -524,6 +544,54 @@ def self_test():
                 pass
             else:
                 raise AssertionError("graded F5 assessment accepted")
+        # Contract-specific regressions, directly verifying the extracted
+        # manifest/model without relying on changed-member rejection.
+        with tempfile.TemporaryDirectory() as policy_tmp:
+            candidate = Path(policy_tmp) / "f5_policy.zip"
+            original_model = {"courseId": "demo", "edition": "v4",
+                "examMode": "EXTERNAL_WORKER_ONLY", "learningMode": "FORMATIVE",
+                "slides": [{"id": "intro", "kind": "lesson"},
+                           {"id": "question", "kind": "scenario",
+                            "formativeChoices": [
+                                {"text": "A", "correct": True},
+                                {"text": "B", "correct": False}]},
+                           {"id": "review", "kind": "review"}]}
+            original_manifest = {"courseId": "demo", "packageVersion": "v4",
+                "engineSha256": hashlib.sha256(b"v4").hexdigest(),
+                "content": {"requiredSlides": ["intro", "question", "review"]},
+                "assessment": {"mode": "EXTERNAL", "scoringBySCORM": False},
+                "completion": {"workerApprovalRequired": True},
+                "release": {"reviewed": False}}
+            def validate_policy(modified_model, changed_manifest):
+                with zipfile.ZipFile(candidate, "w") as z:
+                    z.writestr("airtrust-course-data.js",
+                        "window.AIRTRUST_F5_MODEL=" +
+                        json.dumps(modified_model, ensure_ascii=False) + ";")
+                    z.writestr("airtrust-completion-manifest.json",
+                        json.dumps(changed_manifest))
+                verify_completion_contract(candidate, "demo",
+                    hashlib.sha256(b"v4").hexdigest())
+            def reject_policy(modified_model, changed_manifest, reason):
+                try:
+                    validate_policy(modified_model, changed_manifest)
+                except VerificationError:
+                    return
+                raise AssertionError(f"unsafe F5 policy accepted: {reason}")
+            validate_policy(original_model, original_manifest)
+            for key, invalid in (("examMode", "NO_FINAL_EXAM"),
+                                 ("learningMode", "CERTIFICATION")):
+                bad = dict(original_model)
+                bad[key] = invalid
+                reject_policy(bad, original_manifest, key)
+            bad_model = json.loads(json.dumps(original_model))
+            bad_model["slides"][1]["formativeChoices"][1]["correct"] = True
+            reject_policy(bad_model, original_manifest, "two correct answers")
+            bad_model = json.loads(json.dumps(original_model))
+            bad_model["slides"][1]["formativeChoices"][1]["text"] = "A"
+            reject_policy(bad_model, original_manifest, "duplicate answer")
+            bad_model = json.loads(json.dumps(original_model))
+            bad_model["slides"][1]["formativeChoices"][1]["correct"] = 0
+            reject_policy(bad_model, original_manifest, "non-boolean answer")
         replace_entries([("engine.js", "v4")])
         expect_reject("pedagogical member removal")
         index["courses"][0].pop("approved_added_members")
