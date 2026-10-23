@@ -203,6 +203,21 @@ test('deployment without approved staging bindings is closed; HTTP never applies
 });
 
 
+test('private Worker refuses prepare before any D1/R2 access if approval key pin drifts',async t=>{
+  for(const overrides of [
+    {APPROVAL_KEY_SHA256:'0'.repeat(64)},
+    {APPROVAL_PUBLIC_KEY_PEM:'not an Ed25519 key'},
+  ]){
+    const s=await setup(t,overrides),before=await rows(s.db);
+    const result=await s.call('prepare');
+    assert.match(result.error,/QA_DEPLOYMENT_NOT_READY/);
+    assert.equal(s.recoveryCalls,0);
+    assert.deepEqual(await rows(s.db),before);
+    const bucket=await s.mf.getR2Bucket('PREIMAGES','repair');
+    assert.equal((await bucket.list({prefix:'frms-qa/999013/'})).objects.length,0);
+  }
+});
+
 test('private service binding rejects missing, forged and replayed runner capabilities',async t=>{
   const s=await setup(t);
   assert.match((await s.rawCall('prepare',{})).error,/QA_CALLER_AUTH_REJECTED/);
