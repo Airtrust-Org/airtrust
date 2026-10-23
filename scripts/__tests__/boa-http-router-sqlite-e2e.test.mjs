@@ -110,7 +110,7 @@ function fixture(){
  const realJwt=(user,role='student',tenant=130)=>generateJWT({
    sub:user,email:'qa-only@example.invalid',role,empresa_id:tenant,token_type:'access',
   },jwtSecret,600).then(x=>x.token);
- const actualAuth=(environment='staging',gate='130',documentary=true)=>{
+ const actualAuth=(environment='staging',gate='130',documentary=true,leaseExpiresAt)=>{
   const app=new Hono();
   app.use('*',async(c,next)=>{
    c.env={DB:d1,ENVIRONMENT:environment,JWT_SECRET:jwtSecret,
@@ -118,7 +118,8 @@ function fixture(){
     BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID:gate,
     BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256:documentary?'a'.repeat(64):undefined,
     BOA_FRMS_QA_REVIEWED_REVISION_ID:documentary?'qa-revision-130':undefined,
-    BOA_FRMS_QA_REVIEWED_EXPIRES_AT:documentary?new Date(Date.now()+3600000).toISOString():undefined};
+    BOA_FRMS_QA_REVIEWED_EXPIRES_AT:documentary?
+      (leaseExpiresAt===undefined?new Date(Date.now()+3600000).toISOString():leaseExpiresAt):undefined};
    return auth()(c,async()=>tenantMiddleware()(c,next));
   });
   app.onError(error=>new Response(JSON.stringify({success:false,
@@ -388,4 +389,48 @@ test('QA document and scientific review bindings are mandatory before any health
   assert.equal(id,200);
   assert.equal(count(),2);
  }finally{sqlite.close();}
+});
+
+test('signed JWT + Hono + SQLite deny expired, invalid and oversized QA documentary leases without event writes',async()=>{
+  const {sqlite,actualAuth,realJwt,count}=fixture();
+  try {
+    const crew=await realJwt(101,'student',130);
+    const otherCrew=await realJwt(102,'student',130);
+    const manager=await realJwt(190,'manager',130);
+    const admin=await realJwt(200,'admin',130);
+    const live=actualAuth();
+    const created=await live(crew,'POST','/checkin',checkin);
+    assert.equal(created.status,201,'valid synthetic QA lease permits intake only in isolated SQLite');
+    const caseId=encodeURIComponent((await created.json()).data.case_id);
+    assert.equal((await live(manager,'PUT','/casos/'+caseId+'/tratamento',treatment)).status,200);
+    assert.equal(count(),3,'one receipt, one human-review case, one treatment');
+
+    const invalidLeases=[
+      ['missing',null],
+      ['empty',''],
+      ['expired',new Date(Date.now()-60_000).toISOString()],
+      ['excessive',new Date(Date.now()+25*3600_000).toISOString()],
+      ['invalid-format','2026-10-22 23:00:00'],
+    ];
+    for(const [reason,expiresAt] of invalidLeases){
+      const request=actualAuth('staging','130',true,expiresAt);
+      const denied=await request(otherCrew,'POST','/checkin',checkin);
+      assert.equal(denied.status,503,reason+' should block sensitive intake');
+      assert.equal((await denied.json()).code,'BOMBEIROS_FRMS_POLICY_NOT_READY');
+      assert.equal((await request(manager,'PUT','/casos/'+caseId+'/resolver',efficacy)).status,503,
+        reason+' should block sensitive case closure');
+      assert.equal((await request(manager,'GET','/casos?limit=5')).status,200,
+        'lease expiry must not hide an authorized sanitized case queue');
+      assert.equal((await request(crew,'GET','/checkin/status')).status,200,
+        'lease expiry must not hide an authorized existing receipt');
+      const ready=await request(admin,'GET','/qa/prontidao');
+      assert.equal(ready.status,200);
+      const status=(await ready.json()).data;
+      assert.equal(status.documentary_review_binding_matches,false);
+      assert.equal(status.operational_poc_accepted,false);
+      assert.equal(count(),3,reason+' must never append a BOA event');
+    }
+    assert.equal((await live(manager,'PUT','/casos/'+caseId+'/resolver',efficacy)).status,200);
+    assert.equal(count(),4,'only a still-valid synthetic lease may append the closing event');
+  } finally { sqlite.close(); }
 });
