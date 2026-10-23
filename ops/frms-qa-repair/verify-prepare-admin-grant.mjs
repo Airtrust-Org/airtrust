@@ -62,7 +62,8 @@ export function githubPrepareReadOnlyApi({token,fetcher=fetch}={}){
       /^issues\/comments\/[1-9][0-9]{0,15}$/.test(suffix)||
       /^collaborators\/[a-zA-Z0-9-]{1,39}\/permission$/.test(suffix)||
       new RegExp('^commits/[a-f0-9]{40}/check-runs\\?check_name=('+
-        checkNames+')&filter=latest&per_page=100
+        checkNames+')&filter=latest&per_page=100$').test(suffix);
+    if(!allow)deny();
     let response,data;
     try{
       response=await fetcher('https://api.github.com/'+path,{
