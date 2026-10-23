@@ -220,6 +220,7 @@ def verify(index, source_dir, candidate_dir, allow_patterns, expected_count=43):
         expected_changed = row.get("expected_changed_members")
         if expected_changed is not None:
             require(isinstance(expected_changed, list)
+                    and all(isinstance(x, str) and x for x in expected_changed)
                     and len(expected_changed) == len(set(expected_changed))
                     and set(expected_changed) == (set(changed) | added),
                     f"native declared changes differ from actual ZIP delta: {cid}")
@@ -277,7 +278,7 @@ def self_test():
             raise AssertionError("mismatched native courseId sets accepted")
         native_candidate["records"][0]["courseId"] = "demo"
         native_candidate["records"].append(dict(native_candidate["records"][0]))
-        native_candidate["courses"] = 2
+        native_candidate["courseCount"] = 2
         try:
             normalize_native_indices(native_source, native_candidate)
         except VerificationError:
