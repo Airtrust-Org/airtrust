@@ -75,10 +75,10 @@ test('unknown API permissions/status and missing credentials reject without any 
     /QA_PRIVATE_READONLY_CREDENTIAL_MISSING/);
   const h=harness();
   h.fetcher=async()=>new Response(null,{status:403});
-  await assert.rejects(check(h),/QA_PRIVATE_CF_READ_FAILED/);
+  await assert.rejects(check(h),/QA_PRIVATE_D1_HTTP_FAILED/);
   const h2=harness();
   h2.fetcher=async()=>Response.json({success:false,result:{}});
-  await assert.rejects(check(h2),/QA_PRIVATE_CF_READ_FAILED/);
+  await assert.rejects(check(h2),/QA_PRIVATE_D1_RESPONSE_FAILED/);
 });
 
 // Existing staging Worker credential is reused only by the GET-only readiness job.
@@ -94,4 +94,31 @@ test('readiness uses existing Worker credential only in GET-only Cloudflare step
   const body=readFileSync('ops/frms-qa-repair/verify-readiness.mjs','utf8');
   assert.match(body,/method:'GET',redirect:'manual'/);
   assert.doesNotMatch(body,/method:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]/);
+});
+
+test('staging Cloudflare readiness reports safe fixed endpoint and failure class',async()=>{
+  const paths=[
+    ['/d1/database/','D1'],
+    ['/domains/custom','R2_CUSTOM'],
+    ['/domains/managed','R2_MANAGED'],
+    ['/lifecycle','R2_LIFECYCLE'],
+  ];
+  for(const [match,label] of paths){
+    const h=harness();
+    const original=h.fetcher;
+    h.fetcher=async(url,opts)=>url.includes(match)?new Response(null,{status:403}):original(url,opts);
+    await assert.rejects(check(h),new RegExp('QA_PRIVATE_'+label+'_HTTP_FAILED'));
+  }
+  const h=harness();
+  const base=h.fetcher;
+  h.fetcher=async(url,opts)=>url.includes('/r2/buckets/')&&
+    !url.includes('/domains/')&&!url.includes('/lifecycle')?
+    new Response('not json',{status:200}):base(url,opts);
+  await assert.rejects(check(h),/QA_PRIVATE_R2_BUCKET_JSON_FAILED/);
+  const network=harness(),original=network.fetcher;
+  network.fetcher=async(url,opts)=>{
+    if(url.includes('/d1/database/'))throw new Error('NO_LOG_SECRET_EXAMPLE');
+    return original(url,opts);
+  };
+  await assert.rejects(check(network),/QA_PRIVATE_D1_TRANSPORT_FAILED/);
 });
