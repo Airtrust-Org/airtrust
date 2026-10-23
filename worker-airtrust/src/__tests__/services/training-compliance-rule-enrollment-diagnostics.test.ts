@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { classifyComplianceEnrollmentFailure } from '../../services/training-compliance-rule-enrollment';
+import { describe, expect, it, vi } from 'vitest';
+import { classifyComplianceEnrollmentFailure, reconcileTrainingComplianceRuleEnrollment } from '../../services/training-compliance-rule-enrollment';
 
 describe('Compliance enrollment diagnostic classification', () => {
   it.each([
@@ -25,5 +25,55 @@ describe('Compliance enrollment diagnostic classification', () => {
       .toBe('UNCLASSIFIED');
     expect(classifyComplianceEnrollmentFailure('no such table: private_table'))
       .toBe('UNCLASSIFIED');
+  });
+});
+
+
+// This is a policy preflight, not a privilege bypass: only the canonical
+// snapshot + atomic writer can authorize an actual enrollment.
+describe('Compliance no-op save enrollment preflight', () => {
+  const empty = {
+    created: 0, reactivated: 0, preserved: 0,
+    skipped_valid_evidence: 0, unavailable_course: 0,
+  };
+  it.each([
+    ['no matching active rule', null],
+    ['opt-out is disabled', { obrigatoriedade: 'OBRIGATORIA', auto_matricular_ead: 0, modalidade_requerida: 'EAD' }],
+    ['NULL modality', { obrigatoriedade: 'OBRIGATORIA', auto_matricular_ead: 1, modalidade_requerida: null }],
+    ['presencial modality', { obrigatoriedade: 'OBRIGATORIA', auto_matricular_ead: 1, modalidade_requerida: 'PRESENCIAL' }],
+    ['non-mandatory', { obrigatoriedade: 'RECOMENDADA', auto_matricular_ead: 1, modalidade_requerida: 'EAD' }],
+  ])('skips %s without computing snapshots or claiming deferred sync', async (_label, persisted) => {
+    const first = vi.fn().mockResolvedValue(persisted);
+    const bind = vi.fn().mockReturnValue({ first });
+    const prepare = vi.fn().mockReturnValue({ bind });
+    const db = { prepare } as unknown as D1Database;
+    const snapshot = vi.fn().mockRejectedValue(new Error('snapshot should not run'));
+    const result = await reconcileTrainingComplianceRuleEnrollment(
+      db, 999006, 91, {}, {} as never, snapshot,
+    );
+    expect(result).toEqual({ auto_enrollment: empty, auto_enrollment_warning: null });
+    expect(snapshot).not.toHaveBeenCalled();
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(prepare.mock.calls[0][0]).toContain('empresa_id=?');
+    expect(bind).toHaveBeenCalledWith(91, 999006);
+  });
+
+  it('keeps the effective snapshot and its fail-closed guards for real EAD opt-in', async () => {
+    const first = vi.fn().mockResolvedValue({
+      obrigatoriedade: 'OBRIGATORIA', auto_matricular_ead: 1, modalidade_requerida: 'EAD',
+    });
+    const db = {
+      prepare: () => ({ bind: () => ({ first }) }),
+    } as unknown as D1Database;
+    const snapshot = vi.fn().mockResolvedValue({
+      rules: [{ id: 91, obrigatoriedade: 'OBRIGATORIA', auto_matricular_ead: 1,
+        modalidade_requerida: 'EAD', qualificacao_tipo_id: 400 }],
+      people: [],
+    });
+    const result = await reconcileTrainingComplianceRuleEnrollment(
+      db, 999006, 91, {}, {} as never, snapshot,
+    );
+    expect(snapshot).toHaveBeenCalledOnce();
+    expect(result).toEqual({ auto_enrollment: empty, auto_enrollment_warning: null });
   });
 });
