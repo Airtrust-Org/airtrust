@@ -15,7 +15,7 @@ describe('LmsPlayer SCORM handoff session invalidation', () => {
     expect(conflict).toContain('stableLaunchUrlRef.current = null');
     expect(conflict).toContain('setAssetSessionReady(false)');
     expect(conflict).toContain('setIframeLoaded(false)');
-    expect(conflict).toContain('void refetchMatricula()');
+    expect(conflict).toContain('void refetchMatriculaRef.current()');
     expect(conflict).toMatch(/return;\s*}/);
   });
 

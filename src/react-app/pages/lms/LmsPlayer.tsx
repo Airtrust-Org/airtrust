@@ -242,6 +242,12 @@ export default function LmsPlayer() {
     isLoading: matriculaLoading,
     refetch: refetchMatricula,
   } = useMatriculaDetalhe(id);
+  // Keep the asset-session effect scoped to session identity. Query hook
+  // implementations or test doubles may expose a fresh refetch function per
+  // render; the 409 recovery path still needs the latest function without
+  // restarting the asset-session request on unrelated renders.
+  const refetchMatriculaRef = useRef(refetchMatricula);
+  refetchMatriculaRef.current = refetchMatricula;
   const { data: curso } = useLmsCurso(matricula?.curso_id ?? 0);
   const reviewParam = searchParams.get('review') === '1';
   const effectiveReviewMode = reviewParam || matricula?.status === 'CONCLUIDO';
@@ -559,7 +565,7 @@ export default function LmsPlayer() {
           stableLaunchUrlRef.current = null;
           setAssetSessionReady(false);
           setIframeLoaded(false);
-          void refetchMatricula();
+          void refetchMatriculaRef.current();
           return;
         }
 
@@ -582,7 +588,7 @@ export default function LmsPlayer() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeHandoffId, assetContentType, assetMatriculaId, id, playerToken, refetchMatricula, sessionKey]);
+  }, [activeHandoffId, assetContentType, assetMatriculaId, id, playerToken, sessionKey]);
 
   useEffect(() => {
     const persisted = parseSlideLocation(persistedLocation);
