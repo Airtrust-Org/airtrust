@@ -124,11 +124,17 @@ export async function writeScormEditionHandoff(
        AND m.qualificacao_historico_id IS NULL
        AND EXISTS(SELECT 1 FROM lms_matricula_ciclos cy
          WHERE cy.id=? AND cy.empresa_id=m.empresa_id AND cy.matricula_id=m.id
-          AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL)`)
+          AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL)
+       AND EXISTS(SELECT 1 FROM lms_cursos c
+         JOIN lms_scorm_package_versions p ON p.empresa_id=c.empresa_id
+          AND p.curso_id=c.id AND p.r2_prefix=c.scorm_package_r2_prefix
+         WHERE c.id=m.curso_id AND c.empresa_id=m.empresa_id
+          AND c.tipo_conteudo='scorm' AND c.deleted_at IS NULL
+          AND p.status='ACTIVE' AND p.package_sha256=? AND p.r2_prefix=?)`)
       .bind(scope.ciclo_id,input.operationId,input.actorId,scope.ciclo_id,
         previousPackage?.package_sha256 ?? null,previousPackage?.r2_prefix ?? null,
         input.targetSha256,scope.target_prefix,input.resumePlanJson,
-        input.matriculaId,input.empresaId,scope.ciclo_id),
+        input.matriculaId,input.empresaId,scope.ciclo_id,input.targetSha256,scope.target_prefix),
     db.prepare(`UPDATE lms_progresso_scorm
       SET lesson_status=NULL,completion_status=NULL,success_status=NULL,
        score_raw=NULL,score_max=NULL,score_min=NULL,score_scaled=NULL,

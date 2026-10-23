@@ -147,4 +147,32 @@ describe('SCORM edition handoff — D1 batch rollback with SQLite',()=>{
     expect(row(db,"SELECT COUNT(*) AS n FROM audit_logs WHERE action='SCORM_EDITION_IN_CYCLE_HANDOFF'"))
       .toEqual({n:1});
   });
+
+  it('refuses a package that stopped being active between preflight and the atomic write',async()=>{
+    const {db,activeSha}=fixture();
+    const d1=db.asD1();
+    const nextSha='c'.repeat(64);
+    const racingDb={
+      prepare:d1.prepare.bind(d1),
+      batch:async(statements:Parameters<D1Database['batch']>[0])=>{
+        // Simulate another package activation after the writer's reads but
+        // immediately before its transaction begins.
+        db.database.prepare(`UPDATE lms_scorm_package_versions SET status='ARCHIVED' WHERE id=2`).run();
+        db.database.prepare(`INSERT INTO lms_scorm_package_versions
+          VALUES(3,6,88,'lms/scorm/6/88/next/',?,'ACTIVE')`).run(nextSha);
+        db.database.prepare(`UPDATE lms_cursos SET scorm_package_r2_prefix='lms/scorm/6/88/next/' WHERE id=88`).run();
+        return d1.batch(statements);
+      },
+    } as D1Database;
+
+    await expect(writeScormEditionHandoff(racingDb,input(activeSha)))
+      .rejects.toThrow('SCORM_HANDOFF_BATCH_POSTCHECK_FAILED');
+    expect(row(db,'SELECT status,progresso_pct,score_final,tentativas FROM lms_matriculas WHERE id=100'))
+      .toEqual({status:'EM_ANDAMENTO',progresso_pct:75,score_final:82,tentativas:3});
+    expect(row(db,'SELECT lesson_status,cmi_json,session_count FROM lms_progresso_scorm WHERE matricula_id=100'))
+      .toMatchObject({lesson_status:'incomplete',session_count:3,cmi_json:'{"cmi.location":"30/37"}'});
+    expect(row(db,'SELECT COUNT(*) AS n FROM lms_scorm_edition_handoffs')).toEqual({n:0});
+    expect(row(db,"SELECT COUNT(*) AS n FROM audit_logs WHERE action='SCORM_EDITION_IN_CYCLE_HANDOFF'"))
+      .toEqual({n:0});
+  });
 });
