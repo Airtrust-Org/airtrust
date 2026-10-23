@@ -131,6 +131,7 @@ describe('POST /:id/scorm-edition-handoff', () => {
     expect(mocks.readProposal).toHaveBeenCalledWith(expect.objectContaining({
       empresaId: 17,
       cursoId: 33,
+      matriculaId: 74,
       cycleId: 902,
       activePrefix: 'lms/scorm/17/33/active/',
     }));
