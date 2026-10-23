@@ -68,3 +68,42 @@ test('diagnoses four legacy synthetic owners and four untouched target journeys 
   assert.equal(diagnoseLegacyRepairPreflight(oldRows.map((r,i)=>i===0?{...r,jornada_id:'already-linked'}:r),journeys,expected).cases[0].legacy_case,'LEGACY_CASE_STATE_DRIFT');
   assert.equal(diagnoseLegacyRepairPreflight(oldRows,journeys.map((r,i)=>i===0?{...r,origem:'REAL'}:r),expected).cases[0].target_journey,'TARGET_JOURNEY_SOURCE_DRIFT');
 });
+
+// A historical fixed-source status check is useful when the GitHub artifact
+// has expired; it is explicitly NOT source revalidation or an apply grant.
+test('fixed four-case snapshot only under exact guarded read-only staging run',async()=>{
+  const {expectedReadonlyCaseSnapshot,REVIEWED_READONLY_CASE_SNAPSHOT}=await import(
+    '../staging/inspect-frms-ux-cases.mjs');
+  const env={GITHUB_ACTIONS:'true',GITHUB_REPOSITORY:'Airtrust-Org/airtrust',
+    GITHUB_REF:'refs/heads/main',GITHUB_SHA:'a'.repeat(40),
+    FRMS_QA_EXPECTED_MAIN_SHA:'a'.repeat(40),
+    CONFIRM_FRMS_QA_CASES_INSPECT:'AIRTRUST_STAGING_FRMS_CASES_READONLY',
+    FRMS_QA_FIXED_STATUS_ONLY:'FRMS_QA_REVIEWED_4CASE_STATUS_READONLY'};
+  const observed=expectedReadonlyCaseSnapshot({env});
+  assert.equal(observed,REVIEWED_READONLY_CASE_SNAPSHOT);
+  assert.deepEqual(observed.map(x=>x.date),[
+    '2026-10-12','2026-10-11','2026-10-10','2026-10-09']);
+  assert.deepEqual(observed.map(x=>x.id),CASE_IDS);
+  assert.equal(Object.isFrozen(observed[0]),true);
+  for(const changed of [
+    {GITHUB_ACTIONS:'false'}, {GITHUB_REPOSITORY:'other/repo'},
+    {GITHUB_REF:'refs/heads/other'},{GITHUB_SHA:'bad'},
+    {FRMS_QA_EXPECTED_MAIN_SHA:'b'.repeat(40)},
+    {FRMS_QA_FIXED_STATUS_ONLY:'apply'},
+    {CONFIRM_FRMS_QA_CASES_INSPECT:'wrong'},
+    {SANITIZED_AGGREGATE_PATH:'/tmp/forged.json'},
+    {SOURCE_AGGREGATE_SHA:'b'.repeat(40)},
+  ])assert.throws(()=>expectedReadonlyCaseSnapshot({env:{...env,...changed}}),
+    /FRMS_QA_STATUS_ONLY_GUARD_DENIED/);
+});
+test('snapshot-only readout cannot declare 4/4 unless current scoped join matches',async()=>{
+  const {REVIEWED_READONLY_CASE_SNAPSHOT:want}=await import(
+    '../staging/inspect-frms-ux-cases.mjs');
+  const valid=evaluateQaCases([],want);
+  assert.equal(valid.valid,0);
+  assert.equal(valid.verdict,'GOVERNED_INCREMENTAL_REPAIR_REQUIRED');
+  assert.equal(valid.writes,0);
+  const code=readFileSync(new URL('../staging/inspect-frms-ux-cases.mjs',import.meta.url),'utf8');
+  assert.match(code,/if\(!statusOnly\)process\.exitCode=2/);
+  assert.doesNotMatch(code,/--apply|--rollback|UPDATE frms_|DELETE FROM frms_/);
+});
