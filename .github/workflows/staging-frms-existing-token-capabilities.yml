@@ -32,6 +32,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
+      - name: Test sanitized token-policy GET contracts (offline fixtures)
+        run: node --test scripts/__tests__/frms-existing-token-policy.test.mjs
       - name: Probe preexisting staging tokens via read-only Cloudflare GET
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
