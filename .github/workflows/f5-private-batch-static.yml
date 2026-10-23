@@ -7,6 +7,8 @@ on:
       - scripts/scorm/verify-f5-worker-intake-limits.py
       - scripts/scorm/validate-f5-streamed-zip.mjs
       - scripts/scorm/test-f5-streamed-zip.py
+      - scripts/scorm/validate-f5-r2-archive.mjs
+      - scripts/scorm/test-f5-r2-reader.mjs
       - .github/workflows/f5-private-batch-static.yml
   workflow_dispatch:
 
@@ -29,3 +31,6 @@ jobs:
           node --check scripts/scorm/validate-f5-streamed-zip.mjs
           python3 -m py_compile scripts/scorm/test-f5-streamed-zip.py
           python3 scripts/scorm/test-f5-streamed-zip.py
+          node --check scripts/scorm/validate-f5-r2-archive.mjs
+          node --check scripts/scorm/test-f5-r2-reader.mjs
+          node scripts/scorm/test-f5-r2-reader.mjs
