@@ -4,11 +4,34 @@ on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: 'Type AIRTRUST_F5_STAGING_EVIDENCE'
+        description: 'Type AIRTRUST_F5_STAGING_CANDIDATE'
         required: true
         type: string
       release_sha:
         description: 'Exact already deployed Worker/Pages SHA'
+        required: true
+        type: string
+      grant_id:
+        description: 'Fresh, unedited single-candidate F0 authorization comment ID from issue 776'
+        required: true
+        type: string
+      tenant_id:
+        description: 'Authorized staging tenant ID for exactly one candidate'
+        required: true
+        type: string
+      course_id:
+        description: 'Authorized staging course ID for exactly one candidate'
+        required: true
+      package_sha256:
+        description: 'Original private ZIP SHA-256 from the transfer manifest'
+        required: true
+        type: string
+      zip_bytes:
+        description: 'Original private ZIP byte length from the transfer manifest'
+        required: true
+        type: string
+      operation_id:
+        description: 'Fresh UUID for the single governed candidate operation'
         required: true
         type: string
 
@@ -23,10 +46,11 @@ permissions:
   actions: read
   statuses: read
   pull-requests: read
+  issues: read
 
 jobs:
   guard:
-    name: Fail closed until F0 proves synthetic staging prerequisites
+    name: Verify exact one-candidate F0 authorization and staging provenance
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -71,9 +95,21 @@ jobs:
           await assertLiveFrontendShaFromOrigin(process.env.STAGING_FRONTEND_BASE_URL,
             process.env.RELEASE_SHA.slice(0,7));
           NODE
-      - name: Block until F0 provisions protected candidate enrollment and cleanup
+      - name: Verify exact single-candidate F0 authorization (GitHub reads only)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          F5_CONFIRMATION: ${{ inputs.confirmation }}
+          F5_RELEASE_SHA: ${{ inputs.release_sha }}
+          F5_GRANT_ID: ${{ inputs.grant_id }}
+          F5_TENANT_ID: ${{ inputs.tenant_id }}
+          F5_COURSE_ID: ${{ inputs.course_id }}
+          F5_PACKAGE_SHA256: ${{ inputs.package_sha256 }}
+          F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
+          F5_OPERATION_ID: ${{ inputs.operation_id }}
+        run: node scripts/staging/f5-candidate-approval-guard.mjs
+      - name: Keep F5 blocked until governed intake and candidate-bound readback are integrated
         shell: bash
         run: |
           set -euo pipefail
-          echo '::error::F5_INCONCLUSIVE: protected candidate-bound D1 readback, approved external reviewer, synthetic staging enrollment, recovery and cleanup are not yet integrated.'
+          echo '::error::F5_INCONCLUSIVE: no staging candidate upload, D1/R2 candidate readback, synthetic enrollment journey, or verified recovery/cleanup receipt was executed by this workflow.'
           exit 2
