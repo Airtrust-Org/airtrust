@@ -7,6 +7,7 @@
  */
 import {createCipheriv,createDecipheriv,createHmac,createHash,randomBytes,timingSafeEqual} from 'node:crypto';
 import {githubPrepareReadOnlyApi,verifyPrepareAdminGrant} from './verify-prepare-admin-grant.mjs';
+import {verifyApplyAdminGrant} from './verify-apply-admin-grant.mjs';
 import {signPrivateCaller,authorizePrivateCaller} from './caller-auth.mjs';
 import {durablePrepareGrantLedger} from './durable-prepare-grant-ledger.mjs';
 import {deriveRecoveryBridgeKey} from './recovery-handoff-prototype.mjs';
@@ -119,6 +120,16 @@ export async function createTrustedQueueApplyMessage({env={},manifest,receiptId,
   if(!Number.isFinite(issued)||!Number.isFinite(expires)||
     expires<=issued||expires-issued>900000||now<issued-60000||now>expires||
     signature.length!==64||signature.toString('base64')!==signatureBase64)deny();
+  // Do not publish a signed apply request on the strength of an arbitrary
+  // numeric grant ID. A separate, unedited F0 administrator comment must
+  // authorize this exact receipt, manifest, signer signature and main SHA.
+  try{
+    const approved=await verifyApplyAdminGrant({env,manifest,receiptId,
+      signatureBase64,fetcher,now});
+    if(approved.status!=='VERIFIED_BY_INDEPENDENT_GITHUB_ADMIN_CHECK'||
+       approved.grantId!==grantId||approved.sha!==env.GITHUB_SHA||
+       approved.dbId!==TARGET.db_id||approved.tenantId!==999013)deny();
+  }catch{deny();}
   const issuedAt=new Date(now).toISOString();
   const expiresAt=new Date(now+90000).toISOString();
   const callerAuth=signPrivateCaller({keyHex:key,operation:'apply',
