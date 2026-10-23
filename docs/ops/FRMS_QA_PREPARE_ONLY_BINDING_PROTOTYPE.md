@@ -17,7 +17,17 @@ O método `apply` não faz parte desse protótipo.
 
 Há uma dependência proposital `independentGrantVerifier`:
 o retorno de um callback injetado **NÃO é evidência de autorização**.
-Nos testes, ele é **inteiramente falso/sintético**. Antes de qualquer
+Nos testes, ele é **inteiramente falso/sintético**.
+
+O protótipo exige também um `grantLedger.transaction` que reserva de forma
+atômica **o par SHA + ID da concessão** antes do RPC. Reutilização do grant
+é negada mesmo com HMAC e nonce novos. Se o RPC falhar depois da reserva,
+o grant permanece gasto até uma reconciliação especificamente aprovada;
+não há retry automático. Em testes o ledger é um `Map` sintético; nenhuma
+persistência real foi provisionada. A futura implantação precisa de um
+ledger durável compartilhado entre instâncias, não KV eventualmente
+consistente, nem apenas variáveis do job.
+ Antes de qualquer
 uso operacional, uma implementação confiável deve comprovar, via API
 autenticada do GitHub e sob mutex governado: comentário inalterado,
 autor admin F0, idade, fase, SHA, recursos, workflow/run, exigências dos
