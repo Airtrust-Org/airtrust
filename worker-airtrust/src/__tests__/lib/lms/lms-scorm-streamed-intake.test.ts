@@ -33,16 +33,20 @@ function candidateZip() {
     'app.js': encode("LMSGetLastError(); LMSGetErrorString('0'); LMSGetDiagnostic('0'); window.parent.postMessage({type:'AIRTRUST_COMPLETION_DIAGNOSTICS_V1'}, '*');"),
     'styles.css': encode('.body{font-size:14px}'),
     'assets/s001.svg': encode('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+    'assets/figure.avif': encode('synthetic-avif'),
+    'assets/speech.wav': encode('synthetic-wav'),
+    'captions/pt-BR.vtt': encode('WEBVTT'),
   }, { level: 0 });
 }
 
 class MemoryBucket {
-  objects = new Map<string, { bytes: Uint8Array; etag: string; customMetadata?: Record<string, string> }>();
+  objects = new Map<string, { bytes: Uint8Array; etag: string; customMetadata?: Record<string, string>; httpMetadata?: { contentType?: string; cacheControl?: string } }>();
   failKey: string | null = null;
   puts: string[] = [];
   uploads = new Map<string, { key: string; customMetadata?: Record<string, string>; parts: Map<number, Uint8Array>; aborted: boolean }>();
   async put(key: string, value: ArrayBuffer | ArrayBufferView | string, options?: {
     sha256?: string; customMetadata?: Record<string, string>;
+    httpMetadata?: { contentType?: string; cacheControl?: string };
     onlyIf?: { etagMatches?: string; etagDoesNotMatch?: string };
   }) {
     if (key === this.failKey) throw new Error('simulated member write interruption');
@@ -55,7 +59,7 @@ class MemoryBucket {
       if (condition?.etagMatches && prior?.etag !== condition.etagMatches) return null;
     }
     const etag = `"${this.objects.size + 1}"`;
-    this.objects.set(key, { bytes: new Uint8Array(bytes), etag, customMetadata: options?.customMetadata });
+    this.objects.set(key, { bytes: new Uint8Array(bytes), etag, customMetadata: options?.customMetadata, httpMetadata: options?.httpMetadata });
     this.puts.push(key);
     return { key, size: bytes.length, httpEtag: etag, etag };
   }
@@ -213,6 +217,15 @@ describe('F5 streamed SCORM candidate intake', () => {
     for (const [path, original] of Object.entries(originalMembers)) {
       const stored = f.bucket.objects.get(`${candidatePrefix}${path}`)?.bytes;
       expect(stored).toEqual(original);
+    }
+    for (const [asset, contentType] of Object.entries({
+      'assets/figure.avif': 'image/avif',
+      'assets/speech.wav': 'audio/wav',
+      'captions/pt-BR.vtt': 'text/vtt; charset=utf-8',
+      'assets/s001.svg': 'image/svg+xml',
+      'index.html': 'text/html; charset=utf-8',
+    })) {
+      expect(f.bucket.objects.get(`${candidatePrefix}${asset}`)?.httpMetadata?.contentType).toBe(contentType);
     }
     expect(f.bucket.objects.has(f.key)).toBe(false);
   });

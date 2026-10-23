@@ -1,4 +1,5 @@
 import { ApiError } from '../../middleware/error-handler';
+import { guessMime } from '../../routes/lms-scorm-asset-paths';
 import { extractAndValidateLmsPackage, extractScormStaticGateMetadata, normalizeLmsArchivePath, validateStructuredScormMetadata } from './lms-package-validator';
 import { canActivateCertifiedScormPackage, validateScormPackageQuality, type ScormQualityGateResult } from './lms-scorm-quality-gate';
 import { applyRuntimeConformance } from './lms-scorm-quality-gate';
@@ -35,11 +36,6 @@ function hex(bytes: ArrayBuffer) {
 
 async function sha256(bytes: Uint8Array) {
   return hex(await crypto.subtle.digest('SHA-256', bytes));
-}
-
-function mimeType(path: string) {
-  const extension = path.split('.').pop()?.toLowerCase();
-  return extension === 'html' ? 'text/html; charset=utf-8' : extension === 'js' ? 'application/javascript' : extension === 'css' ? 'text/css' : extension === 'xml' ? 'application/xml' : extension === 'json' ? 'application/json' : 'application/octet-stream';
 }
 
 function sha256Bytes(hexDigest: string) {
@@ -143,7 +139,7 @@ export async function createScormPackageCandidate(params: {
           batch.map((item) =>
             params.bucket.put(`${prefix}${item.path}`, item.data, {
               httpMetadata: {
-                contentType: mimeType(item.path),
+                contentType: guessMime(item.path),
                 cacheControl: 'public, max-age=86400',
               },
             }),
@@ -249,7 +245,7 @@ export async function createScormPackageCandidateFromR2Intake(params: {
         qualityEntries.push({ path, data });
         await params.bucket.put(`${prefix}${path}`, member.data, {
           sha256: sha256Bytes(member.sha256),
-          httpMetadata: { contentType: mimeType(path), cacheControl: 'public, max-age=86400' },
+          httpMetadata: { contentType: guessMime(path), cacheControl: 'public, max-age=86400' },
         });
       },
     });
