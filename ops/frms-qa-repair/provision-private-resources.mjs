@@ -34,8 +34,9 @@ const ACCOUNT=/^[a-f0-9]{32}$/;
 export function provisionPlan({sha,phase,configSha,credentialMode='dedicated'}){
   if(!HEX40.test(sha)||!PHASES.includes(phase)||!HEX64.test(configSha))
     fail('FRMS_QA_PROVISION_INPUT_DENIED');
-  if(!['dedicated','existing_staging_worker_bucket_only'].includes(credentialMode)||
-      (credentialMode==='existing_staging_worker_bucket_only'&&phase!=='bucket'))
+  if(!['dedicated','existing_staging_worker_bucket_only','existing_staging_worker_deploy_only'].includes(credentialMode)||
+      (credentialMode==='existing_staging_worker_bucket_only'&&phase!=='bucket')||
+      (credentialMode==='existing_staging_worker_deploy_only'&&phase!=='worker'))
     fail('FRMS_QA_CREDENTIAL_MODE_DENIED');
   const plan={
     schema:'AIRTRUST_FRMS_QA_PROVISION_V1',
@@ -55,12 +56,16 @@ export function provisionPlan({sha,phase,configSha,credentialMode='dedicated'}){
     return {...plan,schema:'AIRTRUST_FRMS_QA_PROVISION_V2',
       credential_mode:credentialMode};
   }
+  if(credentialMode==='existing_staging_worker_deploy_only'){
+    return {...plan,schema:'AIRTRUST_FRMS_QA_PROVISION_V3',
+      credential_mode:credentialMode};
+  }
   return plan;
 }
 
 export function assertProvisionComment(body,plan){
   const prefix=plan.schema+'\n';
-  if(!['AIRTRUST_FRMS_QA_PROVISION_V1','AIRTRUST_FRMS_QA_PROVISION_V2'].includes(plan.schema)||
+  if(!['AIRTRUST_FRMS_QA_PROVISION_V1','AIRTRUST_FRMS_QA_PROVISION_V2','AIRTRUST_FRMS_QA_PROVISION_V3'].includes(plan.schema)||
       typeof body!=='string'||!body.startsWith(prefix))
     fail('FRMS_QA_F0_GRANT_MISSING');
   let data;
@@ -252,7 +257,13 @@ async function main(){
         token:env.CLOUDFLARE_FRMS_QA_R2_PROVISION_API_TOKEN,
         readToken:env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN});
     }
-    else result=await publishPrivateWorker({env});
+    else {
+      if(plan.credential_mode==='existing_staging_worker_deploy_only'&&
+        (!env.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN||
+         env.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN!==env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN))
+        fail('FRMS_QA_EXISTING_WORKER_TOKEN_MISMATCH');
+      result=await publishPrivateWorker({env});
+    }
     console.log(JSON.stringify(result));
   }catch(err){
     const code=/^FRMS_QA_[A-Z0-9_]+$/.test(err?.message||'')?
