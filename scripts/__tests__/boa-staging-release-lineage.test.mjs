@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { evaluateBoaStagingCandidate } from '../staging/check-boa-staging-release-lineage.mjs';
 
 const H = {
@@ -57,4 +58,21 @@ test('fail closed on missing hashes, git errors, missing callback or ambiguous a
   assert.equal(evaluateBoaStagingCandidate({
     ...H,isAncestor:()=>{throw Error('Git status 128');},
   }).canDeploy,false);
+});
+
+test('BOA staging provenance workflow is branch-scoped, no secrets and GET-only', () => {
+  const workflow = readFileSync(new URL(
+    '../../.github/workflows/boa-staging-source-readback.yml', import.meta.url,
+  ), 'utf8');
+  assert.match(workflow, /name: BOA Staging Source Lineage \(Read Only\)/);
+  assert.match(workflow, /  push:\n    branches:\n      - feat\/frms-boa-mensal-consolidado-20261020/);
+  assert.match(workflow, /permissions:\n  contents: read/);
+  assert.match(workflow, /persist-credentials: false/);
+  assert.match(workflow, /git fetch origin main --quiet/);
+  assert.match(workflow, /check-boa-staging-release-lineage\.mjs/);
+  assert.match(workflow, /BOA_MAIN_SHA/);
+  assert.match(workflow, /BOA_CANDIDATE_SHA/);
+  assert.match(workflow, /if: always\(\)/);
+  assert.match(workflow, /deploy authorized: \*\*NO\*\*/);
+  assert.doesNotMatch(workflow, /secrets\.|CLOUDFLARE_API_TOKEN|wrangler|--apply|git push|curl\s+-X\s+(?:POST|PUT|DELETE)/i);
 });
