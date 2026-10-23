@@ -26,9 +26,14 @@ consulta `main` e SHA exato, a identidade de run `workflow_dispatch`
 no caminho fixo `staging-frms-qa-private-prepare.yml`, e as oito
 conclusões oficiais com origem `github-actions`. Consulta comentário
 novo e não editado na issue #776, com conteúdo JSON de campos fechados,
-assinado pela identidade administrativa de GitHub; o ator do job
+publicado por identidade administrativa do GitHub; o ator do job
 precisa também ter permissão `admin`. Expira 2 horas após criação.
-A fase é `prepare` com D1 writes=0 e `apply_authorized=false`; o
+A fase é `prepare`, com **D1 writes=0** e
+`apply_authorized=false`, mas permite **exclusivamente armazenar a
+preimagem cifrada** no bucket privado R2 já aprovado, no prefixo
+`frms-qa/999013/`, com retenção máxima de 24 horas. Essa gravação R2
+exige um NOVO grant exato da fase `prepare`; o grant V2 que criou o
+bucket não autoriza armazenar preimagens. O
 antigo grant V2 do bucket ou assinaturas de apply não satisfazem o
 contrato. Os testes percorrem os caminhos reais do verificador com
 respostas **sintéticas**, incluindo recusa de 403, redirect, grant editado,
