@@ -1,0 +1,42 @@
+name: FRMS Existing Staging Token Capabilities (GET Only)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type FRMS_EXISTING_STAGING_READONLY
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject incorrect environment or confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$CONFIRMATION" = FRMS_EXISTING_STAGING_READONLY
+  probe:
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Probe preexisting staging tokens via read-only Cloudflare GET
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FRMS_PROBE_WORKER_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          FRMS_PROBE_D1_BACKUP_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          FRMS_PROBE_D1_MIGRATION_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          FRMS_PROBE_PAGES_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+        run: node ops/frms-qa-repair/probe-existing-staging-tokens.mjs
