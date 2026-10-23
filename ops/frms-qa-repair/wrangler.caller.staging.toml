@@ -1,0 +1,31 @@
+# INACTIVE private Queue consumer. No deploy/queue provisioning is authorized
+# by the presence of this file. Separate F0 grant and scoped credentials needed.
+name = "airtrust-frms-qa-caller-staging-private"
+main = "queue-caller-worker.mjs"
+compatibility_date = "2026-10-19"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[vars]
+ENVIRONMENT = "staging"
+D1_ID = "bf9963f4-eb12-439b-a830-20bbf577ac22"
+# RELEASE_SHA and caller HMAC/pin are installed via separately approved secrets.
+
+[[services]]
+binding = "REPAIR"
+service = "airtrust-frms-qa-repair-staging-private"
+
+[[durable_objects.bindings]]
+name = "CALLER_LEDGER"
+class_name = "FrmsQaCallerLedger"
+
+[[migrations]]
+tag = "frms-qa-queue-caller-v1"
+new_sqlite_classes = ["FrmsQaCallerLedger"]
+
+[[queues.consumers]]
+queue = "airtrust-frms-qa-private-prepare-staging"
+max_batch_size = 1
+max_batch_timeout = 1
+# Deliberate ack-on-failure: no automatic reissue of a prepare grant.
