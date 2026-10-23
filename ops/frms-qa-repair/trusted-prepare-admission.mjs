@@ -34,7 +34,7 @@ export async function runTrustedPrepareAdmission({
       return verifyPrepareAdminGrant({env,api});
     };
     const receipt=await prepareViaPrivateServiceBinding({
-      env,binding,grantLedger,independentGrantVerifier,
+      env,binding,grantLedger,independentGrantVerifier,fetcher,
     });
     // No receipt, bookmark, token, R2 path or approval signature in result.
     // Receipt custody requires a future independently authorized transport.
