@@ -2,8 +2,9 @@
 """Read-only, fail-closed verifier for a private SCORM ZIP candidate batch.
 
 No private ZIPs or indexes are committed. Accept a normalized --index or a pair
-of native --source-index / --candidate-index files (records with courseId,
-file and sha256). Native indexes are joined by exact courseId, never by order.
+of native --source-index (V2 records with courseId/file/sha256) and
+--candidate-index (V4/V4A records with oldZip/newZip and SHA-256) files.
+Native indexes are joined by exact courseId, never by record order.
 Normalized input shape:
 {"courses":[{"course_id":"id","source_file":"a.zip","source_sha256":"64hex",
 "candidate_file":"b.zip","candidate_sha256":"64hex"}]}.
@@ -94,19 +95,18 @@ def inspect_zip(path):
 
 
 def normalize_native_indices(source, candidate):
-    """Bind two private factory indexes by courseId without trusting record order.
+    """Join native V2 source and V4/V4A candidate indexes by exact courseId.
 
-    Source/candidate indexes use {"courses":43,"records":[{"courseId":...,
-    "file":...,"sha256":...}]}. Missing/extra/duplicate course IDs fail closed.
-    Optional per-member media approval must be present on candidate records.
+    V2 records: courseId, file, sha256, sourceSha256.
+    V4/V4A records: courseId, oldZip, oldZipSha256, newZip,
+    newZipSha256, changedMembers. V4A mediaRestoration.restored supplies
+    per-member SHA-256 approvals for original media, never wildcard approval.
     """
-    def records_by_id(index, label):
+    def records_by_id(index, label, count_key):
         require(isinstance(index, dict) and isinstance(index.get("records"), list),
                 f"{label} native records missing")
         rows = index["records"]
-        require(isinstance(index.get("courses"), int)
-                and not isinstance(index["courses"], bool)
-                and index["courses"] == len(rows),
+        require(type(index.get(count_key)) is int and index[count_key] == len(rows),
                 f"{label} native course count mismatch")
         by_id = {}
         for row in rows:
@@ -117,22 +117,64 @@ def normalize_native_indices(source, candidate):
             by_id[cid] = row
         return by_id
 
-    old = records_by_id(source, "source")
-    new = records_by_id(candidate, "candidate")
+    old = records_by_id(source, "source", "courses")
+    new = records_by_id(candidate, "candidate", "courseCount")
     require(old.keys() == new.keys(), "native source/candidate courseId sets differ")
+    media = candidate.get("mediaRestoration", {})
+    require(isinstance(media, dict), "invalid mediaRestoration")
+    restored = media.get("restored", [])
+    require(isinstance(restored, list), "invalid mediaRestoration.restored")
+    approved_by_id = {}
+    asset_total = 0
+    for item in restored:
+        require(isinstance(item, dict), "invalid media restoration record")
+        cid = item.get("courseId")
+        require(isinstance(cid, str) and cid in old and cid not in approved_by_id,
+                "unknown/duplicate restored media courseId")
+        assets = item.get("assets")
+        require(isinstance(assets, list) and assets, f"invalid media assets: {cid}")
+        require(item.get("mediaCount") == len(assets), f"media count mismatch: {cid}")
+        require(item.get("sourceSha256") == old[cid].get("sourceSha256"),
+                f"media original source SHA mismatch: {cid}")
+        require(item.get("newZipSha256") == new[cid].get("newZipSha256"),
+                f"media candidate SHA mismatch: {cid}")
+        paths = {}
+        for asset in assets:
+            require(isinstance(asset, dict), f"invalid media asset: {cid}")
+            name, sha = asset.get("path"), asset.get("sha256")
+            require(isinstance(name, str) and name and name not in paths,
+                    f"duplicate/invalid media path: {cid}")
+            require(isinstance(sha, str) and HEX64.fullmatch(sha),
+                    f"invalid media SHA: {cid}: {name}")
+            paths[name] = sha
+        approved_by_id[cid] = paths
+        asset_total += len(paths)
+    if "courses" in media:
+        require(media["courses"] == len(restored), "media restored course count mismatch")
+    if "assets" in media:
+        require(media["assets"] == asset_total, "media restored asset count mismatch")
+
     result = []
     for cid in sorted(old):
         src, dst = old[cid], new[cid]
-        row = {"course_id": cid, "source_file": src.get("file"),
-               "source_sha256": src.get("sha256"),
-               "candidate_file": dst.get("file"),
-               "candidate_sha256": dst.get("sha256")}
-        approved = dst.get("approved_added_members",
-                           dst.get("approvedAddedMembers", {}))
-        row["approved_added_members"] = approved
-        result.append(row)
+        require(dst.get("oldZip") == src.get("file")
+                and dst.get("oldZipSha256") == src.get("sha256"),
+                f"native source provenance mismatch: {cid}")
+        changed = dst.get("changedMembers")
+        require(isinstance(changed, list) and changed
+                and all(isinstance(x, str) and x for x in changed)
+                and len(set(changed)) == len(changed),
+                f"invalid declared changedMembers: {cid}")
+        result.append({
+            "course_id": cid,
+            "source_file": src.get("file"),
+            "source_sha256": src.get("sha256"),
+            "candidate_file": dst.get("newZip"),
+            "candidate_sha256": dst.get("newZipSha256"),
+            "approved_added_members": approved_by_id.get(cid, {}),
+            "expected_changed_members": changed,
+        })
     return {"courses": result}
-
 
 def verify(index, source_dir, candidate_dir, allow_patterns, expected_count=43):
     require(isinstance(index, dict) and isinstance(index.get("courses"), list), "index.courses missing")
@@ -175,6 +217,12 @@ def verify(index, source_dir, candidate_dir, allow_patterns, expected_count=43):
                 f"added member digest mismatch: {cid}")
         changed = sorted(k for k in old if k in new and old[k] != new[k])
         require(changed or added, f"no changes in candidate: {cid}")
+        expected_changed = row.get("expected_changed_members")
+        if expected_changed is not None:
+            require(isinstance(expected_changed, list)
+                    and len(expected_changed) == len(set(expected_changed))
+                    and set(expected_changed) == (set(changed) | added),
+                    f"native declared changes differ from actual ZIP delta: {cid}")
         require(all(any(fnmatch.fnmatchcase(k, pattern) for pattern in allow_patterns)
                     for k in changed), f"unapproved ZIP member changed: {cid}")
         report.append({"course_id": cid, "candidate_sha256": candidate_sha,
@@ -211,9 +259,12 @@ def self_test():
 
         require(check()["courses"] == 1, "valid candidate rejected")
         native_source = {"courses": 1, "records": [
-            {"courseId": "demo", "file": "a.zip", "sha256": digest_file(src)}]}
-        native_candidate = {"courses": 1, "records": [
-            {"courseId": "demo", "file": "a.zip", "sha256": digest_file(dst)}]}
+            {"courseId": "demo", "file": "a.zip", "sha256": digest_file(src),
+             "sourceSha256": digest_file(src)}]}
+        native_candidate = {"courseCount": 1, "records": [
+            {"courseId": "demo", "oldZip": "a.zip", "oldZipSha256": digest_file(src),
+             "newZip": "a.zip", "newZipSha256": digest_file(dst),
+             "changedMembers": ["engine.js"]}]}
         converted = normalize_native_indices(native_source, native_candidate)
         require(verify(converted, src.parent, dst.parent, ["engine.js"], 1)["courses"] == 1,
                 "native index conversion rejected valid candidate")
@@ -234,7 +285,15 @@ def self_test():
         else:
             raise AssertionError("duplicate native courseId accepted")
         native_candidate["records"].pop()
-        native_candidate["courses"] = 1
+        native_candidate["courseCount"] = 1
+        native_candidate["records"][0]["oldZipSha256"] = "0" * 64
+        try:
+            normalize_native_indices(native_source, native_candidate)
+        except VerificationError:
+            pass
+        else:
+            raise AssertionError("native source provenance mismatch accepted")
+        native_candidate["records"][0]["oldZipSha256"] = digest_file(src)
         index["courses"][0]["candidate_sha256"] = "0" * 64
         expect_reject("SHA mismatch")
         write_zip(dst, "v4", "tampered")
@@ -281,6 +340,27 @@ def self_test():
         index["courses"][0]["approved_added_members"] = {
             "assets/restored.png": hashlib.sha256(b"media").hexdigest()}
         require(check()["courses"] == 1, "approved media addition rejected")
+        native_candidate["records"][0]["newZipSha256"] = digest_file(dst)
+        native_candidate["records"][0]["changedMembers"] = [
+            "engine.js", "assets/restored.png"]
+        native_candidate["mediaRestoration"] = {
+            "courses": 1, "assets": 1, "restored": [{
+                "courseId": "demo", "mediaCount": 1,
+                "sourceSha256": digest_file(src),
+                "newZipSha256": digest_file(dst),
+                "assets": [{"path": "assets/restored.png",
+                            "sha256": hashlib.sha256(b"media").hexdigest()}]}]}
+        native_index = normalize_native_indices(native_source, native_candidate)
+        require(verify(native_index, src.parent, dst.parent, ["engine.js"], 1)["courses"] == 1,
+                "native V4A restored media rejected")
+        native_candidate["records"][0]["changedMembers"] = ["engine.js"]
+        try:
+            verify(normalize_native_indices(native_source, native_candidate),
+                   src.parent, dst.parent, ["engine.js"], 1)
+        except VerificationError:
+            pass
+        else:
+            raise AssertionError("native undeclared restored media accepted")
         replace_entries([("engine.js", "v4")])
         expect_reject("pedagogical member removal")
         index["courses"][0].pop("approved_added_members")
