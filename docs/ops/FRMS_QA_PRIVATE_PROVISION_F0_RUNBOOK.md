@@ -36,8 +36,13 @@ nem libera operador, não aplica Schema V2, não mexe em D1 e não altera o LMS.
 `environment: staging`, mutex global
 `airtrust-staging-mutations-and-scorm-qa`, `cancel-in-progress=false`.
 Os oito gates oficiais do SHA corrente são exigidos no guard do workflow.
-A F0 precisa confirmar controle de reviewers do environment; se não
-houver aprovação humana exigida, não disparar a operação até configurá-la.
+O environment `staging` pode manter deploys rotineiros sem `Required reviewers`.
+A autorização para este provisionamento não depende dessa opção global:
+o workflow exige um comentário administrativo específico, novo e não editado
+na issue #776, validado por SHA, fase, recursos, identidade e prazo de 12h,
+além dos oito gates e do mutex compartilhado. A aprovação manual do
+environment é opcional e não substitui a concessão por fase. Nunca executar
+uma operação de dados real apenas com aprovação do environment.
 
 Cada fase precisa de **comentário novo e não editado** por administrador
 autorizado na issue #776, com idade máxima de 12h. O dispatcher também
