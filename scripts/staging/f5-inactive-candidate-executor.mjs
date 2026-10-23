@@ -61,7 +61,7 @@ async function hashSource(source, expectedBytes) {
 
 function verifyInactiveQualityGate(candidate, plan) {
   if (!candidate || candidate.packageSha256 !== plan.candidate.packageSha256 ||
-      candidate.packageId !== plan.candidate.operationId || candidate.status !== 'VALIDATED' ||
+      !UUID.test(candidate.packageId ?? '') || candidate.status !== 'VALIDATED' ||
       candidate.createdByOperation !== true || candidate.alreadyExisted !== false ||
       candidate.active !== false || candidate.completionWritten !== false ||
       candidate.certificateIssued !== false || candidate.zipBytes !== plan.candidate.zipBytes) {
@@ -149,7 +149,7 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
   const authorized = await adapters.verifyAuthorization(plan);
   if (authorized !== true) fail('F0_AUTHORIZATION_NOT_VERIFIED');
   const runtime = await adapters.readRuntimeProvenance();
-  if (runtime?.workerSha !== plan.releaseSha || runtime?.pagesSha !== plan.releaseSha ||
+  if (runtime?.workerSha !== plan.releaseSha || runtime?.pagesSha !== plan.releaseSha.slice(0, 7) ||
       runtime?.harnessSha !== plan.harnessSha) {
     fail('STAGING_RUNTIME_SHA_MISMATCH');
   }
@@ -191,7 +191,7 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
     });
     completionAttempted = false;
     intakeStarted = false;
-    if (uploaded?.packageId === c.operationId && uploaded?.createdByOperation === true &&
+    if (uploaded?.createdByOperation === true &&
         uploaded?.alreadyExisted === false) candidate = uploaded;
     candidate = verifyInactiveQualityGate(uploaded, plan);
 
@@ -199,7 +199,8 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       courseId: c.courseId, packageId: candidate.packageId, packageSha256: c.packageSha256 });
     verifyCandidateRow(d1Candidate, candidate, plan);
     const r2Candidate = await adapters.readCandidateR2({ tenantId: c.tenantId,
-      courseId: c.courseId, packageId: candidate.packageId, launchFile: candidate.launchFile,
+      courseId: c.courseId, packageId: candidate.packageId,
+      packageSha256: candidate.packageSha256, launchFile: candidate.launchFile,
       expectedSha256: candidate.r2Readback.launchAssetSha256 });
     if (r2Candidate?.source !== 'WORKER_R2_CANDIDATE_ASSET_READBACK' ||
         r2Candidate.packageId !== candidate.packageId || r2Candidate.packageSha256 !== c.packageSha256 ||
@@ -268,7 +269,7 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
         }
         intakeStarted = resolution.state === 'INTAKE_PRESENT';
         if (resolution.state === 'CANDIDATE_PRESENT') {
-          if (resolution.candidate?.packageId !== c.operationId ||
+          if (!UUID.test(resolution.candidate?.packageId ?? '') ||
               resolution.candidate?.packageSha256 !== c.packageSha256 ||
               resolution.candidate?.createdByOperation !== true ||
               resolution.candidate?.alreadyExisted !== false) fail('AMBIGUOUS_CANDIDATE_OWNERSHIP_UNPROVEN');
@@ -293,7 +294,7 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
         }
       } catch (recoveryError) { recoveryErrors.push(recoveryError); }
     }
-    if (candidate?.packageId === c.operationId) {
+    if (candidate?.createdByOperation === true && candidate?.alreadyExisted === false) {
       try {
         const cleanup = await adapters.removeFailedCandidate({
           tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,

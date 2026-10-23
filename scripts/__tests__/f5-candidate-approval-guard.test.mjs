@@ -171,12 +171,14 @@ test('rejects edited/wrong issue, stale authorization, draft PR and non-admin ac
   await assert.rejects(verify(base, 'token', setup({ permission: 'write' }), now), /F5_REPOSITORY_ADMIN_REQUIRED/);
 });
 
-test('readiness workflow requires the scoped grant before its explicit non-pass blocker', () => {
+test('readiness workflow invokes the pinned F0 executor only after exact grant and provenance guards', () => {
   const workflow = readFileSync('.github/workflows/staging-scorm-f5-readiness.yml', 'utf8');
   const guard = readFileSync('scripts/staging/f5-candidate-approval-guard.mjs', 'utf8');
   for (const required of ['grant_id:', 'tenant_id:', 'course_id:', 'package_sha256:',
     'zip_bytes:', 'operation_id:', 'f5-candidate-approval-guard.mjs',
-    'F5_INCONCLUSIVE:', 'candidate upload', 'recovery/cleanup receipt']) {
+    'run-f5-inactive-candidate.mjs', 'F5_F0_ADAPTER_MODULE',
+    'F5_F0_ADAPTER_SHA256', 'SCORM_QA_ACCESS_TOKEN',
+    'SCORM_QA_READBACK_SECRET']) {
     assert.ok(workflow.includes(required), `missing workflow contract: ${required}`);
   }
   const promptConfirmation = workflow.match(/description: 'Type ([A-Z0-9_]+)'/)?.[1];
@@ -189,6 +191,7 @@ test('readiness workflow requires the scoped grant before its explicit non-pass 
   assert.equal(shellConfirmation, scriptConfirmation);
   assert.match(workflow, /issues: read/);
   assert.ok(workflow.indexOf('f5-candidate-approval-guard.mjs') <
-    workflow.indexOf('Keep F5 blocked until governed intake'));
+    workflow.indexOf('run-f5-inactive-candidate.mjs'));
   assert.match(workflow, /group: airtrust-staging-mutations-and-scorm-qa/);
+  assert.doesNotMatch(workflow, /F5_INCONCLUSIVE/);
 });

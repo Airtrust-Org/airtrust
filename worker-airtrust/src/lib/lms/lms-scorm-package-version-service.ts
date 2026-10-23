@@ -372,6 +372,10 @@ export async function listScormPackageVersions(db: D1Database, empresaId: number
   ).bind(empresaId, cursoId).all<PackageRow>();
   return (rows.results ?? []).map((row) => ({
     ...packageReadModel(row),
+    // Keep candidate readback self-describing for authenticated staging
+    // verification; both IDs came from the tenant-filtered D1 row above.
+    empresaId: row.empresa_id,
+    cursoId: row.curso_id,
     active: row.status === 'ACTIVE' || row.r2_prefix === row.active_prefix,
   }));
 }

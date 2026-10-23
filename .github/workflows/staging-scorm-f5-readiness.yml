@@ -107,9 +107,32 @@ jobs:
           F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
           F5_OPERATION_ID: ${{ inputs.operation_id }}
         run: node scripts/staging/f5-candidate-approval-guard.mjs
-      - name: Keep F5 blocked until governed intake and candidate-bound readback are integrated
+      - name: Execute one inactive candidate through the pinned F0 adapters
         shell: bash
+        env:
+          F5_EXECUTOR_PLAN_PATH: ${{ vars.F5_EXECUTOR_PLAN_PATH }}
+          F5_PRIVATE_ZIP_PATH: ${{ vars.F5_PRIVATE_ZIP_PATH }}
+          F5_F0_ADAPTER_MODULE: ${{ vars.F5_F0_ADAPTER_MODULE }}
+          F5_F0_ADAPTER_SHA256: ${{ vars.F5_F0_ADAPTER_SHA256 }}
+          F5_EVIDENCE_OUTPUT_PATH: ${{ runner.temp }}/f5-inactive-candidate-evidence.json
+          SCORM_QA_ACCESS_TOKEN: ${{ secrets.SCORM_QA_ACCESS_TOKEN }}
+          SCORM_QA_READBACK_SECRET: ${{ secrets.SCORM_QA_READBACK_SECRET }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_SHA: ${{ github.sha }}
+          F5_CONFIRMATION: ${{ inputs.confirmation }}
+          F5_RELEASE_SHA: ${{ inputs.release_sha }}
+          F5_GRANT_ID: ${{ inputs.grant_id }}
+          F5_TENANT_ID: ${{ inputs.tenant_id }}
+          F5_COURSE_ID: ${{ inputs.course_id }}
+          F5_PACKAGE_SHA256: ${{ inputs.package_sha256 }}
+          F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
+          F5_OPERATION_ID: ${{ inputs.operation_id }}
+          F5_STAGING_API_ORIGIN: https://airtrust-api-staging.airtrust.workers.dev
+          F5_STAGING_PAGES_ORIGIN: https://staging.airtrust.pages.dev
         run: |
           set -euo pipefail
-          echo '::error::F5_INCONCLUSIVE: no staging candidate upload, D1/R2 candidate readback, synthetic enrollment journey, or verified recovery/cleanup receipt was executed by this workflow.'
-          exit 2
+          node scripts/staging/run-f5-inactive-candidate.mjs

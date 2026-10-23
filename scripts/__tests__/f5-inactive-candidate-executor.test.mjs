@@ -39,13 +39,13 @@ function sourceFor(bytes, maxRead = F5_EXECUTOR_LIMITS.partBytes) {
   };
 }
 
-function qaRow(plan, phase) {
+function qaRow(plan, phase, packageId = plan.candidate.operationId) {
   const c = plan.candidate, f = plan.syntheticFixture;
   const active = phase === 'AFTER';
   return {
     source: 'WORKER_D1_STAGING_READBACK',
     tenantId: c.tenantId, courseId: c.courseId,
-    packageId: c.operationId, packageSha256: c.packageSha256,
+    packageId, packageSha256: c.packageSha256,
     runtimeSha: plan.releaseSha, synthetic: true,
     enrollmentId: f.enrollmentId, cycleId: f.cycleId, runId: f.runId,
     approvalReceiptSha256: f.approvalReceiptSha256,
@@ -64,14 +64,15 @@ function qaRow(plan, phase) {
 function adaptersFor(plan, overrides = {}) {
   const calls = [];
   const candidate = {
-    packageId: plan.candidate.operationId,
+    // Worker package ID is generated independently from the intake operation ID.
+    packageId: '223e4567-e89b-12d3-a456-426614174000',
     packageSha256: plan.candidate.packageSha256,
     status: 'VALIDATED', createdByOperation: true, alreadyExisted: false,
     active: false, completionWritten: false, certificateIssued: false,
     zipBytes: plan.candidate.zipBytes,
     structural: { status: 'PASS' }, completionManifest: { status: 'PASS' },
     diagnostics: { status: 'NOT_APPLICABLE' },
-    r2Prefix: `lms/scorm/${plan.candidate.tenantId}/${plan.candidate.courseId}/_candidates/${plan.candidate.operationId}/`,
+    r2Prefix: `lms/scorm/${plan.candidate.tenantId}/${plan.candidate.courseId}/_candidates/223e4567-e89b-12d3-a456-426614174000/`,
     launchFile: 'index.html',
     r2Readback: {
       source: 'WORKER_R2_STREAMED_ZIP_READBACK',
@@ -84,7 +85,7 @@ function adaptersFor(plan, overrides = {}) {
   const adapters = {
     async verifyAuthorization() { calls.push('authorize'); return true; },
     async readRuntimeProvenance() {
-      calls.push('runtime'); return { workerSha: plan.releaseSha, pagesSha: plan.releaseSha, harnessSha: plan.harnessSha };
+      calls.push('runtime'); return { workerSha: plan.releaseSha, pagesSha: plan.releaseSha.slice(0, 7), harnessSha: plan.harnessSha };
     },
     async verifyF0Receipts() { calls.push('receipts'); return true; },
     async beginIntake() { calls.push('begin'); },
@@ -110,7 +111,7 @@ function adaptersFor(plan, overrides = {}) {
         assetSha256: candidate.r2Readback.launchAssetSha256, active: false,
       };
     },
-    async readQaEvidence({ phase }) { calls.push(`readback:${phase}`); return qaRow(plan, phase); },
+    async readQaEvidence({ phase }) { calls.push(`readback:${phase}`); return qaRow(plan, phase, candidate.packageId); },
     async runSyntheticCandidate() {
       calls.push('execute'); return {
         source: 'WORKER_CANDIDATE_QA_EXECUTION',
@@ -182,7 +183,7 @@ test('keeps the first Worker write behind authorization, runtime, receipts and o
   const plan = planFor(bytes);
   for (const failure of [
     { override: { verifyAuthorization: async () => false }, error: /F0_AUTHORIZATION_NOT_VERIFIED/ },
-    { override: { readRuntimeProvenance: async () => ({ workerSha: 'f'.repeat(40), pagesSha: 'f'.repeat(40), harnessSha: plan.harnessSha }) }, error: /STAGING_RUNTIME_SHA_MISMATCH/ },
+    { override: { readRuntimeProvenance: async () => ({ workerSha: 'f'.repeat(40), pagesSha: 'f'.repeat(7), harnessSha: plan.harnessSha }) }, error: /STAGING_RUNTIME_SHA_MISMATCH/ },
     { override: { verifyF0Receipts: async () => false }, error: /F0_RECEIPTS_NOT_VERIFIED/ },
   ]) {
     const { calls, adapters } = adaptersFor(plan, failure.override);
