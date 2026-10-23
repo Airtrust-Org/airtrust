@@ -43,14 +43,19 @@ export function durablePrepareGrantLedger(storage){
               if(!active||read||writes)deny();
               grantKey(key);
               read=true;current=key;
-              return tx.get(key);
+              const existing=await tx.get(key);
+              // Only an absent key is unused. A malformed or falsy stored
+              // value indicates corruption, not an unspent grant.
+              if(existing!==undefined)validateValue(existing,grantKey(key));
+              return existing;
             },
             async put(key,value){
               if(!active||!read||writes||key!==current)deny();
               const parsed=grantKey(key);
               validateValue(value,parsed);
               // All reads/writes participate in the SAME atomic DO transaction.
-              if(await tx.get(key))deny();
+              // A persisted null/false/empty value must never be overwritten.
+              if((await tx.get(key))!==undefined)deny();
               await tx.put(key,{sha:value.sha,phase:'prepare',
                 runId:String(value.runId),runAttempt:value.runAttempt});
               writes=1;
