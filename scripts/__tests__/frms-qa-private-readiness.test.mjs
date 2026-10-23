@@ -80,3 +80,18 @@ test('unknown API permissions/status and missing credentials reject without any 
   h2.fetcher=async()=>Response.json({success:false,result:{}});
   await assert.rejects(check(h2),/QA_PRIVATE_CF_READ_FAILED/);
 });
+
+// Existing staging Worker credential is reused only by the GET-only readiness job.
+// In particular, never promote this exception to provisioning or runtime secrets.
+test('readiness uses existing Worker credential only in GET-only Cloudflare step',async()=>{
+  const {readFileSync}=await import('node:fs');
+  const workflow=readFileSync('.github/workflows/staging-frms-qa-private-readiness.yml','utf8');
+  const provisioning=readFileSync('.github/workflows/staging-frms-qa-private-provision.yml','utf8');
+  const block=workflow.split('- name: Verify actual staging D1 UUID and private R2 domain and lifecycle using GET only')[1]?.split('- name: Record strictly read-only evidence')[0];
+  assert.ok(block);
+  assert.match(block,/CLOUDFLARE_FRMS_QA_READ_API_TOKEN:\s*\$\{\{ secrets\.CLOUDFLARE_WORKER_API_TOKEN \}\}/);
+  assert.doesNotMatch(provisioning,/CLOUDFLARE_FRMS_QA_(?:READ|R2_PROVISION|WORKER_DEPLOY)_API_TOKEN:\s*\$\{\{ secrets\.CLOUDFLARE_WORKER_API_TOKEN \}\}/);
+  const body=readFileSync('ops/frms-qa-repair/verify-readiness.mjs','utf8');
+  assert.match(body,/method:'GET',redirect:'manual'/);
+  assert.doesNotMatch(body,/method:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]/);
+});
