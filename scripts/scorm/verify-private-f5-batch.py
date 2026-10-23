@@ -3,15 +3,16 @@
 
 No private ZIPs or indexes are committed. Input index must be normalized to:
 {"courses":[{"course_id":"id","source_file":"a.zip","source_sha256":"64hex",
-"candidate_file":"b.zip","candidate_sha256":"64hex",
-"approved_added_members":{"assets/restored.png":"64hex"} (optional)}]}.
+"candidate_file":"b.zip","candidate_sha256":"64hex"}]}.
+For media restoration, each course may additionally declare
+"approved_added_members":{"assets/restored.png":"actual-64hex-member-digest"}.
+Unlisted additions and all removals are rejected.
 This verifier does NOT certify SCORM behavior or authorize activation.
 """
 import argparse
 import fnmatch
 import hashlib
 import json
-import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
