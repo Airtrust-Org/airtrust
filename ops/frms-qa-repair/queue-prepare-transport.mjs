@@ -200,6 +200,7 @@ export async function consumeTrustedQueuePrepare({message,env={},storage,binding
         const reply={schema:'AIRTRUST_FRMS_QA_PRIVATE_REPLY_V1',operation:'prepare',
           sha:body.sha,grantId:body.grantId,runId:body.runId,
           runAttempt:body.runAttempt,requestNonce:body.callerAuth.claims.nonce,
+          issuedAt:new Date(now).toISOString(),expiresAt:new Date(now+90000).toISOString(),
           payloadEnvelope:sealPayload(key,{receiptId:response.receiptId,
             receipt:response.receipt})};
         await responseQueue.send({...reply,mac:digest(key,reply)},
@@ -290,6 +291,7 @@ export async function consumeTrustedQueueApply({message,env={},storage,binding,
         const reply={schema:'AIRTRUST_FRMS_QA_PRIVATE_REPLY_V1',operation:'apply',
           sha:body.sha,grantId:body.grantId,runId:body.runId,
           runAttempt:body.runAttempt,requestNonce:body.callerAuth.claims.nonce,
+          issuedAt:new Date(now).toISOString(),expiresAt:new Date(now+90000).toISOString(),
           payloadEnvelope:sealPayload(key,{status:'APPLY_VALIDATED',valid:4,updatedRows:8})};
         await responseQueue.send({...reply,mac:digest(key,reply)},
           {contentType:'json'});
@@ -306,17 +308,24 @@ export async function consumeTrustedQueueApply({message,env={},storage,binding,
 
 /** Trusted runner verifies reply provenance and correlation before using a
  * prepare receipt to construct the independently signed apply manifest. */
-export function verifyPrivateQueueReply({reply,keyHex,expected}={}){
-  if(!HEX64.test(keyHex||'')||!expected||!reply||typeof reply!=='object'||
+export function verifyPrivateQueueReply({reply,keyHex,expected,now=Date.now()}={}){
+  if(!HEX64.test(keyHex||'')||!exact(expected,['sha','runId','runAttempt',
+    'requestNonce','operation','grantId'])||!Number.isFinite(now)||
+     !reply||typeof reply!=='object'||
      Array.isArray(reply)||!HEX64.test(reply.mac||''))deny();
   const body=Object.fromEntries(Object.entries(reply).filter(([key])=>key!=='mac'));
   if(!exact(body,['schema','operation','sha','grantId','runId','runAttempt',
-    'requestNonce','payloadEnvelope']))deny();
+    'requestNonce','issuedAt','expiresAt','payloadEnvelope']))deny();
   const want=Buffer.from(digest(keyHex,body),'hex');
   const got=Buffer.from(reply.mac,'hex');
+  const from=Date.parse(body.issuedAt),to=Date.parse(body.expiresAt);
   if(got.length!==want.length||!timingSafeEqual(got,want)||
+     !Number.isFinite(from)||!Number.isFinite(to)||to-from!==90000||
+     now<from-30000||now>to||
      body.schema!=='AIRTRUST_FRMS_QA_PRIVATE_REPLY_V1'||
-     body.sha!==expected.sha||body.runId!==String(expected.runId)||
+     body.sha!==expected.sha||body.operation!==expected.operation||
+     body.grantId!==expected.grantId||
+     body.runId!==String(expected.runId)||
      body.runAttempt!==expected.runAttempt||
      body.requestNonce!==expected.requestNonce||
      !SHA.test(body.sha||'')||!GRANT.test(body.grantId||'')||
@@ -327,6 +336,8 @@ export function verifyPrivateQueueReply({reply,keyHex,expected}={}){
      !HEX64.test(payload.receiptId||'')||
      payload.receipt?.dbId!==TARGET.db_id||payload.receipt?.tenantId!==999013||
      payload.receipt?.writes!==0||payload.receipt?.environment!=='staging'||
+     createHash('sha256').update(JSON.stringify(payload.receipt)).digest('hex')!==
+       payload.receiptId||
      !HEX64.test(payload.receipt?.preimageSha256||'')||
      !HEX64.test(payload.receipt?.artifactSha256||'')||
      !String(payload.receipt?.recoveryBookmark||'').trim()))deny();
