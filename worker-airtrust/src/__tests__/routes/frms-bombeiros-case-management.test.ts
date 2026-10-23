@@ -39,7 +39,8 @@ function createApp(empresaId = 130, code = 'bombeiros', role = 'manager', enviro
     c.env = { ENVIRONMENT: environment, DB: { prepare: vi.fn() },
       BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID: approved,
       BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256: 'a'.repeat(64),
-      BOA_FRMS_QA_REVIEWED_REVISION_ID: 'boa-r1' };
+      BOA_FRMS_QA_REVIEWED_REVISION_ID: 'boa-r1',
+      BOA_FRMS_QA_REVIEWED_EXPIRES_AT: new Date(Date.now() + 3600000).toISOString() };
     c.set('userId', 90);
     c.set('userRole', role);
     c.set('empresaId', empresaId);
@@ -75,7 +76,7 @@ describe('BOA case event-stream route — security and lifecycle boundaries', ()
       regulatoryProfileId: 'boa-profile', revision: { id: 'boa-r1', policy_version: 'BOA-QA',
         empresa_id: 130, profile_code: 'FIREFIGHTER_AVIATION',
         regulatory_profile_id: 'boa-profile',
-        source_type: 'APPROVED_OPERATIONAL_POLICY',
+        status: 'ACTIVE', source_type: 'APPROVED_OPERATIONAL_POLICY',
         source_reference: 'QA-SYNTHETIC-REVIEW-ONLY',
       },
     });

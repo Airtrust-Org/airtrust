@@ -269,6 +269,11 @@ de Worker, **ausentes por padrão**:
 - `BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256` — digest de documento efetivamente
   revisado e autorizado por responsável competente para a finalidade QA.
 - `BOA_FRMS_QA_REVIEWED_REVISION_ID` — ID exato da revisão D1 revisada.
+- `BOA_FRMS_QA_REVIEWED_EXPIRES_AT` — expiração UTC ISO 8601 (`...Z`)
+  da janela de QA, obrigatória e no máximo **24 horas no futuro** na
+  verificação de cada requisição. Ausente, inválida, expirada ou com janela
+  excessiva = bloqueio 503, sem escrita. Renovar exige nova autorização
+  humana governada, não prorrogação automática.
 
 **Nenhum valor deve ser copiado das fixtures sintéticas de teste para o
 Cloudflare.** Configuração desses bindings e da flag de escrita exige o
@@ -286,8 +291,8 @@ correspondência, o estado permanece `QA_PRECONDITIONS_INCOMPLETE`
 mesmo com 130 contas, configuração vigente e flag de escrita presentes.
 A tela continua mostrando `scientific_validation: NOT_ATTESTED` e
 `privacy_authorization: NOT_ATTESTED`: revisão técnica e aprovação
-jurídico-operacional precisam de evidência externa. Revogar ou trocar o
-documento/revisão cancela imediatamente a capacidade de criar novos
+jurídico-operacional precisam de evidência externa. Revogar, expirar ou trocar o
+documento/revisão cancela a capacidade de criar novos
 eventos na rota BOA, sem apagar registros históricos.
 
 Prova no teste SQL local `boa-http-router-sqlite-e2e.test.mjs`:

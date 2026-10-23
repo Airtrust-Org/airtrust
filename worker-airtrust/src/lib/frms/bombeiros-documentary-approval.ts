@@ -9,6 +9,7 @@ import type { FrmsRegulatoryProfileEvidence, FrmsConfigRevision } from './parame
 export interface BoaDocumentaryBindings {
   BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256?: string;
   BOA_FRMS_QA_REVIEWED_REVISION_ID?: string;
+  BOA_FRMS_QA_REVIEWED_EXPIRES_AT?: string;
 }
 export function hasBoaQaDocumentaryReleaseBinding(
   evidence: FrmsRegulatoryProfileEvidence,
@@ -17,13 +18,23 @@ export function hasBoaQaDocumentaryReleaseBinding(
 ): boolean {
   const approvedHash = env.BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256;
   const approvedRevision = env.BOA_FRMS_QA_REVIEWED_REVISION_ID;
+  // The independent QA documentary grant must be short-lived and UTC-pinned.
+  const expiry = env.BOA_FRMS_QA_REVIEWED_EXPIRES_AT;
+  const expiresAt = typeof expiry === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(expiry)
+    ? Date.parse(expiry) : NaN;
+  const remainingMs = expiresAt - Date.now();
   const documentHash = evidence.sourceDocumentHash;
   const reference = evidence.approvalReference?.trim();
   const version = evidence.policyVersion?.trim();
   const category = evidence.serviceCategory?.trim();
   const sourceReference = revision.source_reference?.trim();
   return Boolean(
-    typeof approvedHash === 'string' && /^[a-f0-9]{64}$/.test(approvedHash)
+    Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs <= 24 * 60 * 60 * 1000
+    && evidence.empresaId > 0 && evidence.empresaId !== 6
+    && evidence.profileCode === 'FIREFIGHTER_AVIATION'
+    && revision.status === 'ACTIVE'
+    && typeof approvedHash === 'string' && /^[a-f0-9]{64}$/.test(approvedHash)
     && typeof documentHash === 'string' && documentHash === approvedHash
     && typeof approvedRevision === 'string' && approvedRevision.length > 0
     && approvedRevision === revision.id

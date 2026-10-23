@@ -38,7 +38,8 @@ function makeApp({
     c.env = { ENVIRONMENT: env, DB: db,
       BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID: approved,
       BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256: 'a'.repeat(64),
-      BOA_FRMS_QA_REVIEWED_REVISION_ID: 'boa-r1' };
+      BOA_FRMS_QA_REVIEWED_REVISION_ID: 'boa-r1',
+      BOA_FRMS_QA_REVIEWED_EXPIRES_AT: new Date(Date.now() + 3600000).toISOString() };
     c.set('userId', 101);
     c.set('userRole', role);
     c.set('empresaId', id);
@@ -76,7 +77,7 @@ describe('BOA crew check-in API — real employee link, independent tenant and p
       revision: { id: 'boa-r1', policy_version: 'BOA-QA-P1',
         empresa_id: 130, profile_code: 'FIREFIGHTER_AVIATION',
         regulatory_profile_id: 'boa-policy',
-        source_type: 'APPROVED_OPERATIONAL_POLICY',
+        status: 'ACTIVE', source_type: 'APPROVED_OPERATIONAL_POLICY',
         source_reference: 'QA-SYNTHETIC-REVIEW-ONLY',
       },
     });

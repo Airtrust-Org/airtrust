@@ -32,6 +32,7 @@ const revision: FrmsConfigRevision = {
 const binding = {
   BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256: 'a'.repeat(64),
   BOA_FRMS_QA_REVIEWED_REVISION_ID: 'qa-revision-1',
+  BOA_FRMS_QA_REVIEWED_EXPIRES_AT: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
 };
 describe('BOA documentary QA write binding — fail closed', () => {
   it('blocks when operator did not independently bind document + revision', () => {
@@ -68,6 +69,21 @@ describe('BOA documentary QA write binding — fail closed', () => {
       {...revision,empresa_id:null},
       {...revision,profile_code:'HELICOPTER_OFFSHORE'},
     ]) expect(hasBoaQaDocumentaryReleaseBinding(evidence,candidate,binding)).toBe(false);
+  });
+  it('requires a live UTC lease no longer than 24h and an ACTIVE BOA revision', () => {
+    for (const expiresAt of [undefined, '', 'not-a-timestamp',
+      new Date(Date.now() - 60_000).toISOString(),
+      new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString(),
+    ]) {
+      expect(hasBoaQaDocumentaryReleaseBinding(evidence, revision, {
+        ...binding, BOA_FRMS_QA_REVIEWED_EXPIRES_AT: expiresAt,
+      })).toBe(false);
+    }
+    for (const status of ['DRAFT', 'SUPERSEDED', 'RETIRED'] as const) {
+      expect(hasBoaQaDocumentaryReleaseBinding(evidence, { ...revision, status }, binding)).toBe(false);
+    }
+    expect(hasBoaQaDocumentaryReleaseBinding({ ...evidence, profileCode: 'HELICOPTER_OFFSHORE' }, revision, binding)).toBe(false);
+    expect(hasBoaQaDocumentaryReleaseBinding(evidence, revision, binding)).toBe(true);
   });
   it('matching data is ONLY a technical grant check, not clinical certification', () => {
     expect(hasBoaQaDocumentaryReleaseBinding(evidence,revision,binding)).toBe(true);

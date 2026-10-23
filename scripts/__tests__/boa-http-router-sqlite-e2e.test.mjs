@@ -117,7 +117,8 @@ function fixture(){
     ENABLE_DEV_AUTH_BYPASS:'false',
     BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID:gate,
     BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256:documentary?'a'.repeat(64):undefined,
-    BOA_FRMS_QA_REVIEWED_REVISION_ID:documentary?'qa-revision-130':undefined};
+    BOA_FRMS_QA_REVIEWED_REVISION_ID:documentary?'qa-revision-130':undefined,
+    BOA_FRMS_QA_REVIEWED_EXPIRES_AT:documentary?new Date(Date.now()+3600000).toISOString():undefined};
    return auth()(c,async()=>tenantMiddleware()(c,next));
   });
   app.onError(error=>new Response(JSON.stringify({success:false,
@@ -138,7 +139,8 @@ function fixture(){
   app.use('*',async(c,next)=>{
    c.env={DB:d1,ENVIRONMENT:environment,BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID:gate,
     BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256:'a'.repeat(64),
-    BOA_FRMS_QA_REVIEWED_REVISION_ID:'qa-revision-130'};
+    BOA_FRMS_QA_REVIEWED_REVISION_ID:'qa-revision-130',
+    BOA_FRMS_QA_REVIEWED_EXPIRES_AT:new Date(Date.now()+3600000).toISOString()};
    c.set('userId',user);c.set('userRole',role);c.set('empresaId',tenant);
    c.set('tenantContext',{empresaId:tenant,
     empresaCodigo:tenant===130?'bombeiros':'costadosol',

@@ -102,6 +102,8 @@ export interface Env {
   // revision must be the current persisted approved-policy revision.
   BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256?: string;
   BOA_FRMS_QA_REVIEWED_REVISION_ID?: string;
+  // UTC ISO expiry; an absent, expired or >24h lease disables sensitive QA writes.
+  BOA_FRMS_QA_REVIEWED_EXPIRES_AT?: string;
 
 
   // CORS Origins (pode ser string separada por vírgula)

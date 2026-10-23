@@ -34,7 +34,8 @@ function appFor(options?: {
     c.env = { DB: db, ENVIRONMENT: options?.env ?? 'staging',
       BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID: options?.gate ?? '',
       BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256: 'a'.repeat(64),
-      BOA_FRMS_QA_REVIEWED_REVISION_ID: 'qa-only' };
+      BOA_FRMS_QA_REVIEWED_REVISION_ID: 'qa-only',
+      BOA_FRMS_QA_REVIEWED_EXPIRES_AT: new Date(Date.now() + 3600000).toISOString() };
     c.set('userId', 200);
     c.set('userRole', options?.role ?? 'admin');
     c.set('tenantContext', {
@@ -68,7 +69,7 @@ describe('BOA read-only staging readiness, no clinical data or approval', () => 
       revision: { id: 'qa-only', policy_version: 'QA_NOT_APPROVED',
         empresa_id: 130, profile_code: 'FIREFIGHTER_AVIATION',
         regulatory_profile_id: 'qa-unapproved-profile',
-        source_type: 'APPROVED_OPERATIONAL_POLICY',
+        status: 'ACTIVE', source_type: 'APPROVED_OPERATIONAL_POLICY',
         source_reference: 'QA-SYNTHETIC-SOURCE-ONLY',
       },
     });
