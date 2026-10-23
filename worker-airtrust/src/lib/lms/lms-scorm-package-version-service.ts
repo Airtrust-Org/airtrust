@@ -3,6 +3,7 @@ import { extractAndValidateLmsPackage, extractScormStaticGateMetadata } from './
 import { canActivateCertifiedScormPackage, validateScormPackageQuality, type ScormQualityGateResult } from './lms-scorm-quality-gate';
 import { applyRuntimeConformance } from './lms-scorm-quality-gate';
 import { runScormBrowserConformance } from './lms-scorm-browser-run';
+import { commitCertifiedScormActivation } from './lms-scorm-package-activation';
 import {
   verifyTrustedScormAttestation,
   type TrustedScormAttestation,
@@ -212,28 +213,21 @@ export async function activateScormPackageVersion(params: { db: D1Database; empr
     throw new ApiError('Pacote não pode ser ativado: todos os gates obrigatórios devem passar', 409);
   }
   const originalFilename = readScormUploadFilename(quality);
-  // Atomic D1 batch switches the course pointer only after the stored, exact SHA result is publishable.
-  await params.db.batch([
-    params.db.prepare(`UPDATE lms_scorm_package_versions SET status = 'SUPERSEDED' WHERE empresa_id = ? AND curso_id = ? AND status = 'ACTIVE'`).bind(params.empresaId, params.cursoId),
-    params.db.prepare(`UPDATE lms_scorm_package_versions SET status = 'ACTIVE', activated_at = datetime('now'), activated_by = ? WHERE id = ? AND empresa_id = ? AND curso_id = ? AND package_sha256 = ? AND status = 'VALIDATED'`).bind(params.userId, candidate.id, params.empresaId, params.cursoId, candidate.package_sha256),
-    params.db.prepare(`UPDATE lms_cursos SET tipo_conteudo = 'scorm', scorm_package_r2_prefix = ?, scorm_launch_file = ?, scorm_versao = '1.2', conteudo_arquivo_nome = COALESCE(?, conteudo_arquivo_nome), updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`).bind(candidate.r2_prefix, candidate.launch_file, originalFilename, params.cursoId, params.empresaId),
-  ]);
-  await params.db.prepare(
-    `INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, created_at)
-     VALUES (?, ?, ?, ?, 'ACTIVATED', ?, datetime('now'))`,
-  ).bind(crypto.randomUUID(), params.empresaId, params.cursoId, candidate.id, params.userId).run();
-  // O snapshot informativo de diagnóstico (lms_completion_diagnostics_snapshots)
-  // é chaveado por empresa/matrícula/curso/tentativa — não por identidade do
-  // pacote. Ao trocar efetivamente o pacote SCORM ativo, invalidamos os
-  // snapshots do curso (tenant-scoped) para que um 68% antigo não fique preso ao
-  // novo pacote. É read model puramente informativo: não toca matrícula,
-  // progresso, conclusão nem qualificação.
-  await params.db
-    .prepare(
-      `DELETE FROM lms_completion_diagnostics_snapshots WHERE empresa_id = ? AND curso_id = ?`,
-    )
-    .bind(params.empresaId, params.cursoId)
-    .run();
+  // The preflight can race with another activation of the same certified ZIP.
+  // Enforce a second immutable validation check inside the D1 transaction.
+  const activated = await commitCertifiedScormActivation({
+    db: params.db, empresaId: params.empresaId, cursoId: params.cursoId,
+    packageId: candidate.id, packageSha256: candidate.package_sha256,
+    prefix: candidate.r2_prefix, launchFile: candidate.launch_file,
+    originalFilename, actorId: params.userId,
+    auditId: crypto.randomUUID(),
+    validationJson: candidate.validation_result_json,
+  });
+  if (!activated) {
+    throw new ApiError('A edição SCORM mudou durante a ativação; revalide o pacote', 409);
+  }
+  // Activation receipt and tenant-scoped diagnostic invalidation were already
+  // committed in the same D1 batch as the certified course pointer switch.
   return packageReadModel({ ...candidate, status: 'ACTIVE' });
 }
 
