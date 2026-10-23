@@ -194,14 +194,15 @@ test('worker secrets derive cryptographic fingerprints; release is SHA-pinned',(
   const pub=publicKey.export({type:'spki',format:'pem'});
   const e={CLOUDFLARE_ACCOUNT_ID:'b'.repeat(32),
     FRMS_QA_CALLER_KEY_HEX:'a'.repeat(64),FRMS_QA_PREIMAGE_KEY_HEX:'c'.repeat(64),
-    FRMS_QA_APPROVAL_PUBLIC_KEY_PEM:pub,FRMS_QA_D1_READ_TOKEN:'read-token'};
+    FRMS_QA_APPROVAL_PUBLIC_KEY_PEM:pub};
   const v=buildPrivateRuntimeSecrets({env:e,sha});
   assert.equal(v.RELEASE_SHA,sha);
   assert.match(v.APPROVAL_KEY_SHA256,/^[a-f0-9]{64}$/);
   assert.match(v.CALLER_KEY_SHA256,/^[a-f0-9]{64}$/);
   assert.equal(v.PRIVATE_STORAGE_VERIFIED,'restricted-r2-lifecycle-1d');
-  assert.throws(()=>buildPrivateRuntimeSecrets({env:{...e,FRMS_QA_D1_READ_TOKEN:''},sha}),
-    /SECRETS_MISSING/);
+  assert.equal(Object.hasOwn(v,'D1_READ_TOKEN'),false);
+  assert.throws(()=>buildPrivateRuntimeSecrets({env:{...e,FRMS_QA_D1_READ_TOKEN:'read-token'},sha}),
+    /RUNTIME_CLOUDFLARE_TOKEN_FORBIDDEN/);
 });
 
 test('reviewed Worker deploy sends private keys only through bulk stdin, no public route',async()=>{
@@ -212,7 +213,6 @@ test('reviewed Worker deploy sends private keys only through bulk stdin, no publ
     CLOUDFLARE_FRMS_QA_READ_API_TOKEN:'metadata-only',
     FRMS_QA_CALLER_KEY_HEX:'a'.repeat(64),FRMS_QA_PREIMAGE_KEY_HEX:'c'.repeat(64),
     FRMS_QA_APPROVAL_PUBLIC_KEY_PEM:publicKey.export({type:'spki',format:'pem'}),
-    FRMS_QA_D1_READ_TOKEN:'timetravel-read-only',
   };
   let commands=[],secretKeys=[];
   const mocked=(exe,args,opts)=>{
@@ -226,6 +226,7 @@ test('reviewed Worker deploy sends private keys only through bulk stdin, no publ
       secretKeys=Object.keys(obj);
       assert.equal(obj.PRIVATE_STORAGE_VERIFIED,'restricted-r2-lifecycle-1d');
       assert.equal(obj.RELEASE_SHA,sha);
+      assert.equal(Object.hasOwn(obj,'D1_READ_TOKEN'),false);
       return '';
     }
     if(args[0]==='secret'&&args[1]==='list'){
@@ -253,7 +254,7 @@ test('Worker provisioning requires scoped token and independently verified priva
     CLOUDFLARE_FRMS_QA_READ_API_TOKEN:'read',
     FRMS_QA_CALLER_KEY_HEX:'a'.repeat(64),FRMS_QA_PREIMAGE_KEY_HEX:'c'.repeat(64),
     FRMS_QA_APPROVAL_PUBLIC_KEY_PEM:publicKey.export({type:'spki',format:'pem'}),
-    FRMS_QA_D1_READ_TOKEN:'read-only'};
+    };
   let executed=false;
   await assert.rejects(publishPrivateWorker({env:e,readiness:async()=>{
     throw Error('No Cloudflare proof');},exec:()=>{executed=true;}}),
@@ -317,23 +318,22 @@ test('V3 uses existing Worker token only in ephemeral Worker phase, never runtim
   assert.match(worker,/existing_staging_worker_deploy_only/);
   assert.match(worker,/secrets\.CLOUDFLARE_WORKER_API_TOKEN/);
   assert.match(worker,/secrets\.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN/);
-  assert.match(worker,/secrets\.FRMS_QA_D1_READ_TOKEN/);
+  assert.doesNotMatch(worker,/secrets\.FRMS_QA_D1_READ_TOKEN/);
   assert.match(worker,/secrets\.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM/);
   const {publicKey}=generateKeyPairSync('ed25519');
   const secrets=buildPrivateRuntimeSecrets({sha,env:{
     CLOUDFLARE_ACCOUNT_ID:'b'.repeat(32),
     CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN:'broad-deploy-token',
     CLOUDFLARE_FRMS_QA_READ_API_TOKEN:'broad-deploy-token',
-    FRMS_QA_D1_READ_TOKEN:'distinct-runtime-read',
     FRMS_QA_CALLER_KEY_HEX:'a'.repeat(64),FRMS_QA_PREIMAGE_KEY_HEX:'c'.repeat(64),
     FRMS_QA_APPROVAL_PUBLIC_KEY_PEM:publicKey.export({type:'spki',format:'pem'}),
   }});
   assert.equal(JSON.stringify(secrets).includes('broad-deploy-token'),false);
-  assert.equal(secrets.D1_READ_TOKEN,'distinct-runtime-read');
+  assert.equal(Object.hasOwn(secrets,'D1_READ_TOKEN'),false);
   assert.equal(Object.prototype.hasOwnProperty.call(secrets,'CLOUDFLARE_API_TOKEN'),false);
 });
 
-test('V3 fails closed if broad Worker deployment credential is reused for runtime recovery',()=>{
+test('any Cloudflare bearer in Worker runtime is forbidden even when otherwise scoped',()=>{
   const {publicKey}=generateKeyPairSync('ed25519');
   const e={
     CLOUDFLARE_ACCOUNT_ID:'b'.repeat(32),
@@ -344,9 +344,9 @@ test('V3 fails closed if broad Worker deployment credential is reused for runtim
     FRMS_QA_PREIMAGE_KEY_HEX:'c'.repeat(64),
     FRMS_QA_APPROVAL_PUBLIC_KEY_PEM:publicKey.export({type:'spki',format:'pem'}),
   };
-  assert.throws(()=>buildPrivateRuntimeSecrets({env:e,sha}),/RUNTIME_TOKEN_MUST_BE_INDEPENDENT/);
+  assert.throws(()=>buildPrivateRuntimeSecrets({env:e,sha}),/RUNTIME_CLOUDFLARE_TOKEN_FORBIDDEN/);
   assert.throws(()=>buildPrivateRuntimeSecrets({env:{...e,
     CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN:'deploy',
     CLOUDFLARE_FRMS_QA_READ_API_TOKEN:'read',
-    FRMS_QA_D1_READ_TOKEN:'read'},sha}),/RUNTIME_TOKEN_MUST_BE_INDEPENDENT/);
+    FRMS_QA_D1_READ_TOKEN:'read'},sha}),/RUNTIME_CLOUDFLARE_TOKEN_FORBIDDEN/);
 });
