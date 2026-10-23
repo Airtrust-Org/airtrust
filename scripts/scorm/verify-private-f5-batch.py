@@ -94,6 +94,54 @@ def inspect_zip(path):
         return entries
 
 
+def verify_completion_contract(path, cid, expected_engine_sha):
+    """Validate completion manifest and authored slide order (never grant credit).
+
+    Only active for ZIPs containing F5 model/manifest members; the generic
+    verifier self-tests use minimal synthetic ZIPs without SCORM materials.
+    """
+    with zipfile.ZipFile(path) as archive:
+        files = set(archive.namelist())
+        f5 = {"airtrust-course-data.js", "airtrust-completion-manifest.json"}
+        if not (files & f5):
+            return
+        require(f5 <= files, f"incomplete F5 model/manifest pair: {cid}")
+        source = archive.read("airtrust-course-data.js").decode("utf-8")
+        prefix = "window.AIRTRUST_F5_MODEL = "
+        require(source.startswith(prefix) and source.rstrip().endswith(";"),
+                f"unparseable F5 course model: {cid}")
+        model = json.loads(source[len(prefix):].strip().rstrip(";"))
+        manifest = json.loads(archive.read("airtrust-completion-manifest.json"))
+        require(isinstance(model, dict) and isinstance(manifest, dict),
+                f"invalid F5 model/manifest: {cid}")
+        slides = model.get("slides")
+        require(isinstance(slides, list) and 1 <= len(slides) <= 1000
+                and all(isinstance(s, dict) and isinstance(s.get("id"), str)
+                        and 0 < len(s["id"]) <= 256 for s in slides),
+                f"invalid F5 slides: {cid}")
+        ids = [s["id"] for s in slides]
+        require(len(ids) == len(set(ids)), f"duplicate F5 slide IDs: {cid}")
+        content = manifest.get("content")
+        required = content.get("requiredSlides") if isinstance(content, dict) else None
+        require(isinstance(required, list) and required == ids,
+                f"F5 requiredSlides do not match authored slide IDs: {cid}")
+        require(model.get("courseId") == cid and manifest.get("courseId") == cid,
+                f"F5 courseId mismatch: {cid}")
+        require(isinstance(model.get("edition"), str) and model["edition"]
+                and manifest.get("packageVersion") == model["edition"],
+                f"F5 package edition mismatch: {cid}")
+        require(manifest.get("engineSha256") == expected_engine_sha,
+                f"F5 engine manifest hash mismatch: {cid}")
+        assessment = manifest.get("assessment")
+        completion = manifest.get("completion")
+        release = manifest.get("release")
+        require(isinstance(assessment, dict) and assessment.get("mode") == "EXTERNAL"
+                and assessment.get("scoringBySCORM") is False
+                and isinstance(completion, dict) and completion.get("workerApprovalRequired") is True
+                and isinstance(release, dict) and release.get("reviewed") is False,
+                f"F5 non-certifying assessment/release contract violated: {cid}")
+
+
 def normalize_native_indices(source, candidate):
     """Join native V2 source and V4/V4A candidate indexes by exact courseId.
 
@@ -234,6 +282,7 @@ def verify(index, source_dir, candidate_dir, allow_patterns, expected_count=43):
         if "expected_candidate_engine_sha256" in row:
             require(new.get(engine_member) == row["expected_candidate_engine_sha256"],
                     f"candidate ZIP engine digest mismatch: {cid}")
+        verify_completion_contract(cp, cid, new.get(engine_member))
         removed = set(old) - set(new)
         added = set(new) - set(old)
         require(not removed, f"ZIP members removed: {cid}: {sorted(removed)}")
@@ -427,6 +476,53 @@ def self_test():
             pass
         else:
             raise AssertionError("native undeclared restored media accepted")
+        with tempfile.TemporaryDirectory() as f5tmp:
+            d = Path(f5tmp)
+            model = {"courseId": "demo", "edition": "v4", "slides": [
+                {"id": "first", "kind": "lesson"},
+                {"id": "review", "kind": "review"}]}
+            manifest = {"courseId": "demo", "packageVersion": "v4",
+                "engineSha256": hashlib.sha256(b"v4").hexdigest(),
+                "content": {"requiredSlides": ["first", "review"]},
+                "assessment": {"mode": "EXTERNAL", "scoringBySCORM": False},
+                "completion": {"workerApprovalRequired": True},
+                "release": {"reviewed": False}}
+            f5src, f5dst = d / "source.zip", d / "candidate.zip"
+            def write_f5(path, engine, data):
+                with zipfile.ZipFile(path, "w") as z:
+                    z.writestr("engine.js", engine)
+                    z.writestr("airtrust-course-data.js",
+                        "window.AIRTRUST_F5_MODEL = " + json.dumps(model) + ";")
+                    z.writestr("airtrust-completion-manifest.json", json.dumps(data))
+            write_f5(f5src, "v2", manifest)
+            write_f5(f5dst, "v4", manifest)
+            trial = {"courses": [{"course_id": "demo",
+                "source_file": f5src.name,"source_sha256": digest_file(f5src),
+                "candidate_file": f5dst.name,"candidate_sha256": digest_file(f5dst),
+                "engine_member": "engine.js"}]}
+            def check_contract():
+                return verify(trial, d, d, ["engine.js"], 1)
+            require(check_contract()["courses"] == 1,
+                "valid F5 completion contract unexpectedly rejected")
+            manifest["content"]["requiredSlides"] = ["first"]
+            write_f5(f5dst, "v4", manifest)
+            trial["courses"][0]["candidate_sha256"] = digest_file(f5dst)
+            try:
+                check_contract()
+            except VerificationError:
+                pass
+            else:
+                raise AssertionError("partial F5 requiredSlides accepted")
+            manifest["content"]["requiredSlides"] = ["first", "review"]
+            manifest["assessment"]["scoringBySCORM"] = True
+            write_f5(f5dst, "v4", manifest)
+            trial["courses"][0]["candidate_sha256"] = digest_file(f5dst)
+            try:
+                check_contract()
+            except VerificationError:
+                pass
+            else:
+                raise AssertionError("graded F5 assessment accepted")
         replace_entries([("engine.js", "v4")])
         expect_reject("pedagogical member removal")
         index["courses"][0].pop("approved_added_members")
