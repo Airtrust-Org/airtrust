@@ -18,6 +18,9 @@ export function inspectPrivateWorkerPrerequisites(env={}){
     runtimeD1ReadToken:status(env.FRMS_QA_D1_READ_TOKEN),
     callerHmacKey:HEX64.test(env.FRMS_QA_CALLER_KEY_HEX||'')?'FORMAT_VALID':'MISSING_OR_INVALID',
     preimageAesKey:HEX64.test(env.FRMS_QA_PREIMAGE_KEY_HEX||'')?'FORMAT_VALID':'MISSING_OR_INVALID',
+    keySeparation:HEX64.test(env.FRMS_QA_CALLER_KEY_HEX||'')&&
+      HEX64.test(env.FRMS_QA_PREIMAGE_KEY_HEX||'')&&
+      env.FRMS_QA_CALLER_KEY_HEX!==env.FRMS_QA_PREIMAGE_KEY_HEX?'DISTINCT':'MISSING_OR_NOT_DISTINCT',
     publicApprovalKey:'MISSING',
   };
   if(present(env.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM)){
@@ -28,6 +31,7 @@ export function inspectPrivateWorkerPrerequisites(env={}){
   }
   const formatReady=checks.accountId==='FORMAT_VALID'&&
     checks.callerHmacKey==='FORMAT_VALID'&&checks.preimageAesKey==='FORMAT_VALID'&&
+    checks.keySeparation==='DISTINCT'&&
     checks.publicApprovalKey==='ED25519_FORMAT_VALID'&&
     checks.metadataReadToken==='PRESENT_SCOPE_NOT_ATTESTED'&&
     checks.workerDeployToken==='PRESENT_SCOPE_NOT_ATTESTED'&&
