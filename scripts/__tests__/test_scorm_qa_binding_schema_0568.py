@@ -24,7 +24,7 @@ INSERT INTO lms_matricula_ciclos VALUES(555,997,15,88,1,NULL),(556,998,16,89,1,N
 COLUMNS=['id','empresa_id','curso_id','package_id','package_sha256','matricula_id','ciclo_id',
          'staging_runtime_sha','approval_receipt_sha256','run_id','expires_at']
 BASE=['binding-a',997,15,'123e4567-e89b-42d3-a456-426614174001','c'*64,88,555,
-      'b'*40,'f'*64,'run-1','2999-01-01 00:00:00']
+      'b'*40,'f'*64,'123e4567-e89b-42d3-a456-426614174099','2999-01-01 00:00:00']
 
 class BindingTests(unittest.TestCase):
     def setUp(self):
@@ -46,7 +46,7 @@ class BindingTests(unittest.TestCase):
         self.insert()
     def test_no_reused_active_enrollment(self):
         self.insert()
-        with self.assertRaises(sqlite3.IntegrityError):self.insert(id='binding-b',run_id='run-2')
+        with self.assertRaises(sqlite3.IntegrityError):self.insert(id='binding-b',run_id='123e4567-e89b-42d3-a456-426614174098')
     def test_never_bind_active_package(self):
         self.db.execute("UPDATE lms_scorm_package_versions SET status='ACTIVE'")
         with self.assertRaises(sqlite3.IntegrityError):self.insert()
@@ -70,6 +70,32 @@ class BindingTests(unittest.TestCase):
         self.db.execute("UPDATE lms_scorm_qa_evidence_bindings SET status='REVOKED'")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("UPDATE lms_scorm_qa_evidence_bindings SET status='ACTIVE'")
+    def test_reject_non_hex_hashes_and_malformed_run_uuid(self):
+        for invalid in (
+            {'package_sha256':'G'*64},
+            {'package_sha256':'C'*64},
+            {'staging_runtime_sha':'-'*40},
+            {'approval_receipt_sha256':'x'*64},
+            {'run_id':'not-a-uuid'},
+            {'run_id':'123e4567-e89b-42d3-a456-42661417409-'},
+            {'run_id':'123e4567-e89b-42d3-a456-42661417409g'},
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(sqlite3.IntegrityError):self.insert(**invalid)
+        self.insert()
+
+    def test_reject_invalid_witness_hex(self):
+        self.insert()
+        for witness in ('launched_package_sha256','last_committed_package_sha256'):
+            with self.subTest(witness=witness):
+                with self.assertRaises(sqlite3.IntegrityError):
+                    self.db.execute('UPDATE lms_scorm_qa_evidence_bindings SET '+witness+'=?',
+                                    ('x'*64,))
+        self.assertEqual(self.db.execute(
+            'SELECT launched_package_sha256,last_committed_package_sha256 '
+            'FROM lms_scorm_qa_evidence_bindings'
+        ).fetchone(), (None,None))
+
     def test_iso_expiry_fails_closed(self):
         # A past ISO UTC timestamp compares lexically *after* a newer
         # SQLite space-separated datetime. The trigger must compare real dates.

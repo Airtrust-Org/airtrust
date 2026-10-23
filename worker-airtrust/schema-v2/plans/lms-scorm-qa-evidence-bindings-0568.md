@@ -13,6 +13,9 @@ edits learner progress, or authorizes a database change.
 - Package/tenant/cycle/release/approval/expiry identity is immutable.
 - Launch and commit SHA witnesses can only be written once, with the commit
   matching the launched candidate. Revocation/expiry is irreversible; no DELETE.
+- D1 rejects non-hexadecimal lower-case-only SHA256/SHA1 identifiers and
+  requires the executor's canonical 36-character lowercase UUID `run_id`.
+  Length-only hashes must never become binding evidence.
 - Expiration is validated by SQLite `julianday()` for ISO-8601 UTC and
   SQLite datetime inputs. Lexicographic TEXT comparisons of mixed formats
   are forbidden in both insertion guards and Worker protected readback.

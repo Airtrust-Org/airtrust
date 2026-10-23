@@ -5,15 +5,20 @@ CREATE TABLE lms_scorm_qa_evidence_bindings (
   empresa_id INTEGER NOT NULL,
   curso_id INTEGER NOT NULL,
   package_id TEXT NOT NULL,
-  package_sha256 TEXT NOT NULL CHECK(length(package_sha256)=64),
+  package_sha256 TEXT NOT NULL CHECK(length(package_sha256)=64 AND package_sha256 NOT GLOB '*[^0-9a-f]*'),
   matricula_id INTEGER NOT NULL,
   ciclo_id INTEGER NOT NULL,
-  staging_runtime_sha TEXT NOT NULL CHECK(length(staging_runtime_sha)=40),
-  approval_receipt_sha256 TEXT NOT NULL CHECK(length(approval_receipt_sha256)=64),
-  run_id TEXT NOT NULL,
+  staging_runtime_sha TEXT NOT NULL CHECK(length(staging_runtime_sha)=40 AND staging_runtime_sha NOT GLOB '*[^0-9a-f]*'),
+  approval_receipt_sha256 TEXT NOT NULL CHECK(length(approval_receipt_sha256)=64 AND approval_receipt_sha256 NOT GLOB '*[^0-9a-f]*'),
+  run_id TEXT NOT NULL CHECK(
+    length(run_id)=36 AND substr(run_id,9,1)='-' AND substr(run_id,14,1)='-'
+    AND substr(run_id,19,1)='-' AND substr(run_id,24,1)='-'
+    AND length(replace(run_id,'-',''))=32
+    AND replace(run_id,'-','') NOT GLOB '*[^0-9a-f]*'
+  ),
   expires_at TEXT NOT NULL,
-  launched_package_sha256 TEXT CHECK(launched_package_sha256 IS NULL OR length(launched_package_sha256)=64),
-  last_committed_package_sha256 TEXT CHECK(last_committed_package_sha256 IS NULL OR length(last_committed_package_sha256)=64),
+  launched_package_sha256 TEXT CHECK(launched_package_sha256 IS NULL OR (length(launched_package_sha256)=64 AND launched_package_sha256 NOT GLOB '*[^0-9a-f]*')),
+  last_committed_package_sha256 TEXT CHECK(last_committed_package_sha256 IS NULL OR (length(last_committed_package_sha256)=64 AND last_committed_package_sha256 NOT GLOB '*[^0-9a-f]*')),
   status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','REVOKED','EXPIRED')),
   synthetic INTEGER NOT NULL DEFAULT 1 CHECK(synthetic=1),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
