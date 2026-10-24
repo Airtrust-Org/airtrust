@@ -67,6 +67,30 @@ SELECT curso_id, COUNT(*) AS pending_99,
        SUM(archived_scorm_terminal) AS archived_scorm_terminal,
        SUM(archived_numeric_score) AS archived_numeric_score
   FROM indicators GROUP BY curso_id ORDER BY curso_id`;
+
+export const SCHEMA_PROBE_SQL = `SELECT 'lms_matriculas' AS check_name,
+ EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='lms_matriculas') AS present
+UNION ALL SELECT 'lms_cursos', EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='lms_cursos')
+UNION ALL SELECT 'lms_matricula_ciclos', EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='lms_matricula_ciclos')
+UNION ALL SELECT 'lms_ciclo_evidencias', EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='lms_ciclo_evidencias')
+UNION ALL SELECT 'lms_ciclo_evidencias.scorm_json', EXISTS(SELECT 1 FROM pragma_table_info('lms_ciclo_evidencias') WHERE name='scorm_json')
+UNION ALL SELECT 'lms_ciclo_evidencias.enrollment_json', EXISTS(SELECT 1 FROM pragma_table_info('lms_ciclo_evidencias') WHERE name='enrollment_json')
+UNION ALL SELECT 'lms_matricula_ciclos.ciclo_atual', EXISTS(SELECT 1 FROM pragma_table_info('lms_matricula_ciclos') WHERE name='ciclo_atual')
+UNION ALL SELECT 'lms_matriculas.progresso_pct', EXISTS(SELECT 1 FROM pragma_table_info('lms_matriculas') WHERE name='progresso_pct')`;
+export function validateSchemaRows(rows) {
+ const names=['lms_matriculas','lms_cursos','lms_matricula_ciclos','lms_ciclo_evidencias',
+ 'lms_ciclo_evidencias.scorm_json','lms_ciclo_evidencias.enrollment_json',
+ 'lms_matricula_ciclos.ciclo_atual','lms_matriculas.progresso_pct'];
+ if(!Array.isArray(rows)||rows.length!==names.length)reject('SCHEMA_ROW_COUNT');
+ const map=new Map();
+ for(const row of rows){
+  if(!names.includes(row.check_name)||map.has(row.check_name)||![0,1].includes(row.present))
+   reject('SCHEMA_RESULT_INVALID');
+  map.set(row.check_name,row.present);
+ }
+ return names.map(name=>({check_name:name,present:map.get(name)}));
+}
+
 export function validateQuery(statement=ARCHIVE_SQL){
  if(!/^\s*WITH\s+pending\s+AS/i.test(statement) || !/m\.empresa_id=6/.test(statement) ||
  !/m\.deleted_at IS NULL/.test(statement) || !/GROUP BY curso_id/.test(statement) ||
@@ -105,19 +129,22 @@ export function safePublicError(error){
  const s=String(error?.message??'');
  return /^LMS99_HISTORY_[A-Z0-9_]+$/.test(s)?s:'LMS99_HISTORY_FAILED';
 }
-function d1(){
- validateQuery();
+function d1(statement=ARCHIVE_SQL){
+ if(statement===ARCHIVE_SQL)validateQuery();
+ else if(statement!==SCHEMA_PROBE_SQL)reject('SQL_NOT_REVIEWED');
  // Mirror the D1 client transport proven by production-lms99-embedded-cmi-readonly (#40099058169).
  // Do not broaden the SQL contract or add a mutation fallback.
  const cwd=fileURLToPath(new URL('../../worker-airtrust/',import.meta.url));
  const r=spawnSync('npx',['wrangler','d1','execute','airtrust-db',
-   '--env','production','--remote','--json','--command',ARCHIVE_SQL],{
+   '--env','production','--remote','--json','--command',statement],{
    cwd,encoding:'utf8',env:process.env,timeout:120000,maxBuffer:5*1024*1024
  });
  if(r.error)reject('D1_EXECUTOR_ERROR');
- if(r.status!==0)reject(classifyD1Failure(r.stderr));
+ if(r.status!==0)reject(classifyD1Failure((r.stderr||'')+'\n'+(r.stdout||'')));
+ // Never echo raw provider output: it can contain SQL text, personal data or secrets.
  let parsed;try{parsed=JSON.parse(r.stdout)}catch{reject('D1_JSON')}
- return validateRows((Array.isArray(parsed)?parsed[0]:parsed)?.results);
+ const rows=(Array.isArray(parsed)?parsed[0]:parsed)?.results;
+ return statement===SCHEMA_PROBE_SQL?validateSchemaRows(rows):validateRows(rows);
 }
 async function main(){
  const src=String(process.env.EXPECTED_MAIN_SHA||'').toLowerCase();
@@ -131,6 +158,16 @@ async function main(){
  if(!response.ok)reject('PROD_VERSION');
  const version=await response.json();
  if(String(version?.data?.sourceSha??'').toLowerCase()!==prod)reject('PROD_SHA_DRIFT');
+ const mode=String(process.env.LMS99_HISTORY_MODE||'read');
+ if(!['read','schema-probe'].includes(mode))reject('MODE_INVALID');
+ if(mode==='schema-probe'){
+  const checks=d1(SCHEMA_PROBE_SQL);
+  process.stdout.write(JSON.stringify({schema_version:1,source_sha:src,production_sha:prod,
+   tenant:6,mode:'schema-probe',writes:0,personal_data:false,
+   missing_required:checks.filter(x=>x.present===0).map(x=>x.check_name),
+   checks},null,2)+'\n');
+  return;
+ }
  const rows=d1();
  const totals=Object.fromEntries(fields.map(k=>[k,rows.reduce((n,r)=>n+r[k],0)]));
  process.stdout.write(JSON.stringify({schema_version:1,source_sha:src,production_sha:prod,
