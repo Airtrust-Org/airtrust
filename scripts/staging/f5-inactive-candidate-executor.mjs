@@ -129,6 +129,8 @@ function verifyExecutionEvidence(evidence, plan, candidate) {
       evidence.qualificationHistoryCount !== 0 || evidence.certificateDocument !== null ||
       evidence.runtimeVersion !== candidate.scormVersion || evidence.locationPersisted !== true ||
       evidence.suspendDataPersisted !== true || evidence.resumeVerified !== true ||
+      !Array.isArray(evidence.browserEngines) || evidence.browserEngines.length !== 2 ||
+      evidence.browserEngines[0] !== 'chromium' || evidence.browserEngines[1] !== 'webkit' ||
       evidence.assessmentAttempted !== false || evidence.assessmentApproved !== false ||
       evidence.externalAssessmentApproved !== false || evidence.certificateIssued !== false) {
     fail('CANDIDATE_EXECUTION_EVIDENCE_INVALID');
