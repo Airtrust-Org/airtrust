@@ -75,6 +75,7 @@ test('F5 physical candidate QA chains sequential Chromium and WebKit on the same
       suspendSha256: engine === 'chromium' ? 'b'.repeat(64) : 'c'.repeat(64),
       initialResumeWitnessSha256: engine === 'chromium' ? '1'.repeat(64) : '2'.repeat(64),
       committedResumeWitnessSha256: engine === 'chromium' ? '2'.repeat(64) : '3'.repeat(64),
+      navigationMode: 'FORWARD',
     };
   });
   assert.deepEqual(engines, ['chromium', 'webkit']);
@@ -118,7 +119,7 @@ test('F5 browser pair rejects a WebKit resume disconnected from Chromium committ
     committedPackageSha256: 'a'.repeat(64), enrollmentId: 17, cycleId: 19,
     runId: '123e4567-e89b-12d3-a456-426614174001',
     runtimeVersion: '1.2', resumeVerified: true, locationPersisted: true,
-    suspendDataPersisted: true,
+    suspendDataPersisted: true, navigationMode: 'FORWARD',
   };
   const browser = async ({ engine }) => engine === 'chromium'
     ? { ...scope, sessionCount: 1, suspendSha256: 'b'.repeat(64),
@@ -143,6 +144,46 @@ test('F5 browser pair rejects a WebKit resume disconnected from Chromium committ
           committedResumeWitnessSha256: '2'.repeat(64) } : state;
   }), /BROWSER_PAIR_RESUME_CHAIN_MISMATCH/,
   'WebKit cannot claim success without its own new rendered bookmark');
+});
+
+test('F5 browser pair permits only authenticated resume-only evidence at locked authored slide', async () => {
+  const scope = {
+    source: 'WORKER_CANDIDATE_QA_EXECUTION', candidateId: 'candidate-1',
+    packageSha256: 'a'.repeat(64), servedPackageSha256: 'a'.repeat(64),
+    committedPackageSha256: 'a'.repeat(64), enrollmentId: 17, cycleId: 19,
+    runId: '123e4567-e89b-12d3-a456-426614174001',
+    runtimeVersion: '1.2', resumeVerified: true, locationPersisted: true,
+    suspendDataPersisted: true,
+  };
+  const chromium = { ...scope, sessionCount: 1, suspendSha256: 'b'.repeat(64),
+    initialResumeWitnessSha256: '1'.repeat(64),
+    committedResumeWitnessSha256: '2'.repeat(64), navigationMode: 'FORWARD' };
+  const webkit = { ...scope, sessionCount: 2, suspendSha256: 'b'.repeat(64),
+    initialResumeWitnessSha256: '2'.repeat(64),
+    committedResumeWitnessSha256: '2'.repeat(64),
+    navigationMode: 'RESUME_ONLY_AUTHORED_INTERACTION',
+    interactionRequiredWitness: true, witnessedResumeIndex: 1 };
+  const run = async ({ engine }) => engine === 'chromium' ? chromium : webkit;
+  const paired = await runF5BrowserPair(run);
+  assert.equal(paired.navigationMode, 'RESUME_ONLY_AUTHORED_INTERACTION');
+  for (const changes of [
+    { interactionRequiredWitness: false },
+    { witnessedResumeIndex: 0 },
+    { witnessedResumeIndex: null },
+    { navigationMode: 'FORWARD' },
+    { committedResumeWitnessSha256: '3'.repeat(64) },
+    { suspendSha256: 'c'.repeat(64) },
+    { initialResumeWitnessSha256: '9'.repeat(64) },
+    { sessionCount: 1 },
+  ]) {
+    await assert.rejects(runF5BrowserPair(async ({ engine }) =>
+      engine === 'chromium' ? chromium : { ...webkit, ...changes }),
+    /BROWSER_PAIR_(RESUME_CHAIN_MISMATCH|READBACK_REGRESSION)/);
+  }
+  await assert.rejects(runF5BrowserPair(async ({ engine }) =>
+    engine === 'chromium' ? { ...chromium,
+      navigationMode: 'RESUME_ONLY_AUTHORED_INTERACTION' } : webkit),
+  /BROWSER_PAIR_RESUME_CHAIN_MISMATCH/);
 });
 
 test('F5 browser writes all CMI values before Commit for SCORM 1.2 and 2004', () => {
@@ -416,11 +457,12 @@ test('Score F5 guard requires authored CMI to change on actual Next navigation',
       previousSuspend: f5Suspend(0) }), /VISUAL_RESUME_WITNESS_INVALID/);
 });
 
-test('Score F5 uses authored Prev only for an interaction-locked resumed slide', () => {
+test('Score F5 holds a locked authored slide for real Commit/Finish without regress', () => {
   const locked = { ...f5Visual(1), interactionRequired: true };
   const args = { nextVisible: true, nextEnabled: false,
     prevEnabled: true, initialRendered: locked };
-  assert.equal(chooseF5ScoreNavigation(args), -1);
+  assert.equal(chooseF5ScoreNavigation(args), 0,
+    'authored interaction must not be bypassed by regressing the Worker location');
   assert.equal(chooseF5ScoreNavigation({ ...args, nextEnabled: true }), 1);
   for (const changes of [
     { nextVisible: false }, { prevEnabled: false },
@@ -429,25 +471,17 @@ test('Score F5 uses authored Prev only for an interaction-locked resumed slide',
     { initialRendered: { ...locked, index: null } },
   ]) assert.throws(() => chooseF5ScoreNavigation({ ...args, ...changes }),
     /F5_VISUAL_NAVIGATION_UNAVAILABLE/);
-  assert.deepEqual(requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(0),
-    { previousIndex: 1, previousDirection: -1, previousLocation: '2/5',
-      previousSuspend: f5Suspend(1) }), { index: 0, total: 5 });
-  for (const direction of [-2, 0, 2, 1]) {
-    assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(0),
-      { previousIndex: 1, previousDirection: direction, previousLocation: '2/5',
-        previousSuspend: f5Suspend(1) }), /F5_VISUAL_RESUME_WITNESS_INVALID/);
-  }
-  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(1),
-    { previousIndex: 1, previousDirection: -1, previousLocation: '2/5',
-      previousSuspend: f5Suspend(1) }), /F5_VISUAL_RESUME_WITNESS_INVALID/);
-  assert.equal(requireF5ScoreResumeMatch(f5Visual(0), f5Visual(0),
-    { navigatedFromIndex: 1 }), true);
-  for (const from of [null, 0, 2]) {
-    assert.throws(() => requireF5ScoreResumeMatch(f5Visual(0), f5Visual(0),
-      { navigatedFromIndex: from }), /F5_VISUAL_RESUME_WITNESS_INVALID/);
-  }
-  assert.throws(() => requireF5ScoreResumeMatch(f5Visual(0), f5Visual(1),
-    { navigatedFromIndex: 1 }), /F5_VISUAL_RESUME_WITNESS_INVALID/);
+  assert.deepEqual(requireF5ScoreVisualState(locked, '2/5', f5Suspend(1)),
+    { index: 1, total: 5 });
+  assert.equal(requireF5ScoreResumeMatch(locked, locked), true);
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(0),
+    { previousIndex: 1, previousLocation: '2/5', previousSuspend: f5Suspend(1) }),
+    /F5_VISUAL_RESUME_WITNESS_INVALID/,
+  'regression from slide 2 to 1 is never proof of an advanced state');
+  assert.throws(() => requireF5ScoreResumeMatch(f5Visual(0), f5Visual(0)),
+    /F5_VISUAL_RESUME_WITNESS_INVALID/);
+  assert.throws(() => requireF5ScoreResumeMatch(locked, f5Visual(0)),
+    /F5_VISUAL_RESUME_WITNESS_INVALID/);
 });
 
 test('Score F5 cross-context guard rejects persisted bookmark with first slide rendered', () => {

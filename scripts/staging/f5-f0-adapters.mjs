@@ -64,20 +64,19 @@ export function captureF5ScoreVisualState() {
   };
 }
 
-/** The SCO's authored required interaction may block Next. Prev is never a
- * substitute unless the real rendered Score slide explicitly requires it. */
+/** A locked authored interaction is evidence of a visible resume, not
+ * permission to regress the persisted bookmark or answer the question. */
 export function chooseF5ScoreNavigation({ nextVisible, nextEnabled, prevEnabled, initialRendered }) {
   if (nextVisible === true && nextEnabled === true) return 1;
   if (nextVisible === true && nextEnabled === false && prevEnabled === true &&
       initialRendered?.interactionRequired === true &&
-      Number.isSafeInteger(initialRendered.index) && initialRendered.index > 0) return -1;
+      Number.isSafeInteger(initialRendered.index) && initialRendered.index > 0) return 0;
   throw Error('F5_VISUAL_NAVIGATION_UNAVAILABLE');
 }
 
 /** Bind rendered slide title + counter + active navigation to authored CMI. */
 export function requireF5ScoreVisualState(visual, location, suspend, {
   previousIndex = null, previousLocation = null, previousSuspend = null,
-  previousDirection = 1,
 } = {}) {
   const valid = visual?.contract === 'F5_SCORE_RENDERED_DOM_V1' &&
     Number.isSafeInteger(visual.index) && visual.index >= 0 &&
@@ -90,8 +89,7 @@ export function requireF5ScoreVisualState(visual, location, suspend, {
     location === String(visual.index + 1) + '/' + String(visual.total) &&
     typeof suspend === 'string' && suspend.trim().length > 0 &&
     (previousIndex === null || (Number.isSafeInteger(previousIndex) &&
-      (previousDirection === 1 || previousDirection === -1) &&
-      visual.index === previousIndex + previousDirection &&
+      visual.index === previousIndex + 1 &&
       location !== previousLocation && suspend !== previousSuspend));
   // SCORM bookmark encoding belongs to the authored SCO. Treat it as opaque;
   // prove navigation changed authored CMI and that the rendered slide survives
@@ -102,12 +100,10 @@ export function requireF5ScoreVisualState(visual, location, suspend, {
 
 
 /** Reject a fresh-context render that disagrees with the pre-close slide. */
-export function requireF5ScoreResumeMatch(before, after, { navigatedFromIndex = null } = {}) {
-  // The only accepted first-slide resume follows a proved, authored retreat
-  // from slide two. A cold launch on slide one is never resume evidence.
-  const provedRetreat = before?.index === 0 && navigatedFromIndex === 1;
+export function requireF5ScoreResumeMatch(before, after) {
+  // A fresh launch on the first slide is not a resumed lesson.
   if (!before || !after || !Number.isSafeInteger(before.index) ||
-      (before.index < 1 && !provedRetreat) || before.index !== after.index ||
+      before.index < 1 || before.index !== after.index ||
       before.total !== after.total || before.modelLength !== after.modelLength) {
     throw Error('F5_VISUAL_RESUME_WITNESS_INVALID');
   }
@@ -120,9 +116,8 @@ async function waitForF5ScoreVisualState({ frame, page, location, suspend, previ
     try {
       requireF5ScoreVisualState(visual, location, suspend, previous
         ? { previousIndex: previous.index, previousLocation: previous.location,
-            previousSuspend: previous.suspend, previousDirection: previous.direction ?? 1 } : {});
-      if (previous?.rendered) requireF5ScoreResumeMatch(previous.rendered, visual,
-        { navigatedFromIndex: previous.navigatedFromIndex ?? null });
+            previousSuspend: previous.suspend } : {});
+      if (previous?.rendered) requireF5ScoreResumeMatch(previous.rendered, visual);
       return visual;
     } catch {
       if (attempt === 29) fail('VISUAL_RESUME_WITNESS_INVALID');
@@ -349,21 +344,26 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       prevEnabled: await prev.isVisible() && await prev.isEnabled(),
       initialRendered,
     });
-    // A real learner can retreat from an interaction-locked slide without
-    // answering it. Do not fake progress or bypass the authored gate.
-    await (direction === 1 ? next : prev).click({ timeout: 15_000 });
-    await page.waitForFunction(({ is2004, previousLocation, previousSuspend }) => {
-      const api = is2004 ? window.API_1484_11 : window.API;
-      const get = is2004 ? api?.GetValue : api?.LMSGetValue;
-      if (typeof get !== 'function') return false;
-      try {
-        const location = get.call(api, is2004 ? 'cmi.location' : 'cmi.core.lesson_location');
-        const suspend = get.call(api, 'cmi.suspend_data');
-        return typeof location === 'string' && typeof suspend === 'string' &&
-          (location !== previousLocation || suspend !== previousSuspend);
-      } catch { return false; }
-    }, { is2004, previousLocation: initial.marker, previousSuspend: initial.suspend },
-    { timeout: 15_000 });
+    // When an authored formative gate blocks Next, do not click Prev: the
+    // Worker preserves the larger lesson_location and a regressive click
+    // would desynchronize its CMI from the SCO's suspend_data cursor.
+    // Instead witness the unlocked Chromium advance and perform a real
+    // WebKit Commit/Finish + fresh-context visual resume at the locked slide.
+    if (direction === 1) {
+      await next.click({ timeout: 15_000 });
+      await page.waitForFunction(({ is2004, previousLocation, previousSuspend }) => {
+        const api = is2004 ? window.API_1484_11 : window.API;
+        const get = is2004 ? api?.GetValue : api?.LMSGetValue;
+        if (typeof get !== 'function') return false;
+        try {
+          const location = get.call(api, is2004 ? 'cmi.location' : 'cmi.core.lesson_location');
+          const suspend = get.call(api, 'cmi.suspend_data');
+          return typeof location === 'string' && typeof suspend === 'string' &&
+            location !== previousLocation && suspend !== previousSuspend;
+        } catch { return false; }
+      }, { is2004, previousLocation: initial.marker, previousSuspend: initial.suspend },
+      { timeout: 15_000 });
+    }
     const moved = await page.evaluate(is2004 => {
       const api = is2004 ? window.API_1484_11 : window.API;
       const get = is2004 ? api?.GetValue : api?.LMSGetValue;
@@ -372,11 +372,15 @@ async function browserExecution({ plan, params, request, env, browserType }) {
         suspend: get.call(api, 'cmi.suspend_data') };
     }, is2004);
     const { marker, suspend } = requireAuthoredF5State(moved?.location, moved?.suspend);
+    if (direction === 0 && (marker !== initial.marker || suspend !== initial.suspend)) {
+      fail('VISUAL_INTERACTION_LOCK_STATE_CHANGED');
+    }
     const advancedRendered = await waitForF5ScoreVisualState({
       frame, page, location: marker, suspend,
-      previous: { index: startingCursor.index, location: initial.marker,
-        suspend: initial.suspend, direction },
+      previous: direction === 1 ? { index: startingCursor.index,
+        location: initial.marker, suspend: initial.suspend } : null,
     });
+    if (direction === 0) requireF5ScoreResumeMatch(initialRendered, advancedRendered);
     const responsePromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
       { timeout: 30_000 });
@@ -433,8 +437,7 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     await waitForF5ScoreVisualState({
       frame: resumedPage.frameLocator('#scorm-frame'), page: resumedPage,
       location: resumed.location, suspend: resumed.suspend,
-      previous: { rendered: advancedRendered,
-        navigatedFromIndex: direction === -1 ? startingCursor.index : null },
+      previous: { rendered: advancedRendered },
     });
     const final = await json(`/api/lms/cursos/${params.courseId}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, { method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': env.SCORM_QA_READBACK_SECRET } });
     assertReadback(final, params, first, plan.releaseSha);
@@ -455,7 +458,9 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       assessmentApproved: false, externalAssessmentApproved: false, certificateIssued: false,
       runtimeVersion: first.apiVersion, locationPersisted: true, suspendDataPersisted: true,
       resumeVerified: true,
-      navigationMode: direction === -1 ? 'BACKWARD_REQUIRED_INTERACTION' : 'FORWARD',
+      navigationMode: direction === 0 ? 'RESUME_ONLY_AUTHORED_INTERACTION' : 'FORWARD',
+      interactionRequiredWitness: direction === 0 && initialRendered.interactionRequired === true,
+      witnessedResumeIndex: direction === 0 ? initialRendered.index : null,
     };
   } finally {
     await browser.close();
@@ -534,19 +539,29 @@ export async function runF5BrowserPair(runBrowser) {
       webkitEvidence.sessionCount <= chromiumEvidence.sessionCount) {
     fail('BROWSER_PAIR_READBACK_REGRESSION');
   }
-  // Both engines advance the SAME synthetic enrollment serially. Their
-  // suspend digests MUST differ, but WebKit's initial location+suspend must
-  // exactly equal Chromium's authenticated committed location+suspend.
+  // Chromium must advance. WebKit must resume the exact committed CMI;
+  // it may either advance normally, or Commit/Finish without navigation
+  // when an authored formative interaction explicitly locks Next.
   const a = chromiumEvidence, b = webkitEvidence;
   if (!HEX64.test(a.initialResumeWitnessSha256 ?? '') ||
       !HEX64.test(a.committedResumeWitnessSha256 ?? '') ||
       !HEX64.test(b.initialResumeWitnessSha256 ?? '') ||
       !HEX64.test(b.committedResumeWitnessSha256 ?? '') ||
       !HEX64.test(a.suspendSha256 ?? '') || !HEX64.test(b.suspendSha256 ?? '') ||
+      a.navigationMode !== 'FORWARD' ||
       a.initialResumeWitnessSha256 === a.committedResumeWitnessSha256 ||
-      b.initialResumeWitnessSha256 !== a.committedResumeWitnessSha256 ||
-      b.initialResumeWitnessSha256 === b.committedResumeWitnessSha256 ||
-      b.suspendSha256 === a.suspendSha256) {
+      b.initialResumeWitnessSha256 !== a.committedResumeWitnessSha256) {
+    fail('BROWSER_PAIR_RESUME_CHAIN_MISMATCH');
+  }
+  const webkitMoved = b.navigationMode === 'FORWARD' &&
+    b.initialResumeWitnessSha256 !== b.committedResumeWitnessSha256 &&
+    b.suspendSha256 !== a.suspendSha256;
+  const webkitLocked = b.navigationMode === 'RESUME_ONLY_AUTHORED_INTERACTION' &&
+    b.interactionRequiredWitness === true &&
+    Number.isSafeInteger(b.witnessedResumeIndex) && b.witnessedResumeIndex > 0 &&
+    b.initialResumeWitnessSha256 === b.committedResumeWitnessSha256 &&
+    b.suspendSha256 === a.suspendSha256;
+  if (!webkitMoved && !webkitLocked) {
     fail('BROWSER_PAIR_RESUME_CHAIN_MISMATCH');
   }
   return { ...webkitEvidence, browserEngines: ['chromium', 'webkit'] };
