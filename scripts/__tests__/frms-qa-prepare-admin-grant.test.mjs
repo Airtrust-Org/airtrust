@@ -91,6 +91,36 @@ test('independent GET-only verifier checks exact issue admin, main, run and all 
   assert.equal(calls.filter(path=>path.endsWith('/permission')).length,1);
   assert.ok(Object.isFrozen(verified));
 });
+test('transaction workflow can own prepare under a NEW exact prepare-phase grant',async()=>{
+  const tx='.github/workflows/staging-frms-qa-private-transaction.yml';
+  const transactionPlan=exactPreparePlan({sha:SHA,workflowPath:tx});
+  const transactionEnv={...env,GITHUB_WORKFLOW_REF:REPO+'/'+tx+'@refs/heads/main'};
+  const fx=fixture({run:{path:tx},comment:{body:body(transactionPlan)}});
+  const verified=await verifyPrepareAdminGrant({
+    env:transactionEnv,api:fx.api,now:NOW,
+  });
+  assert.equal(verified.status,'VERIFIED_BY_INDEPENDENT_GITHUB_ADMIN_CHECK');
+  assert.equal(verified.sha,SHA);
+  assert.equal(transactionPlan.workflow_path,tx);
+  assert.equal(transactionPlan.phase,'prepare');
+  assert.equal(transactionPlan.d1_writes_authorized,0);
+  assert.equal(transactionPlan.apply_authorized,false);
+  assert.equal(transactionPlan.production_authorized,false);
+  // Never inherit the prepare-only grant of a different workflow/run.
+  for(const invalid of [
+    {run:{path:tx},comment:{body:body(plan)}},
+    {run:{path:WORKFLOW},comment:{body:body(transactionPlan)}},
+    {run:{path:tx},comment:{body:body({...transactionPlan,apply_authorized:true})}},
+  ]){
+    const bad=fixture(invalid);
+    await assert.rejects(verifyPrepareAdminGrant({
+      env:transactionEnv,api:bad.api,now:NOW,
+    }),/FRMS_QA_PREPARE_ADMIN_GRANT_DENIED/);
+  }
+  assert.throws(()=>exactPreparePlan({
+    sha:SHA,workflowPath:'.github/workflows/arbitrary.yml',
+  }),/FRMS_QA_PREPARE_ADMIN_GRANT_DENIED/);
+});
 test('rejects wrong run, actor, branch, workflow path, attempt and status',async()=>{
   const alternatives=[
     {run:{id:Number(RUN)+1}},{run:{head_sha:'b'.repeat(40)}},

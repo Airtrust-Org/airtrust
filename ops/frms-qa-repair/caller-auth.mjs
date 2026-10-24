@@ -62,7 +62,8 @@ export async function authorizePrivateCaller({auth, operation, env, storage,
   if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) fail();
   const consumed = await storage.transaction(async tx => {
     const key = 'caller-nonce:' + auth.claims.nonce;
-    if (await tx.get(key)) return false;
+    // Presence is consumption, even if the stored record is corrupt/falsy.
+    if ((await tx.get(key)) !== undefined) return false;
     await tx.put(key, {
       operation, sha: env.RELEASE_SHA, runId: auth.claims.runId,
       runAttempt: auth.claims.runAttempt,
