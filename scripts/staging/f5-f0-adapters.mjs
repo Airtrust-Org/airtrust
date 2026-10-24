@@ -35,16 +35,22 @@ const canonical = value => {
  */
 export function captureF5ScoreVisualState() {
   const slides = window.COURSE_DATA?.slides;
-  const counterText = document.querySelector('#counter')?.textContent?.trim() ?? '';
-  const counterMatch = /^([1-9]\d*)\s*\/\s*([1-9]\d*)$/.exec(counterText);
+  // These selectors come from the unmodified Costa do Sol Score engine (R4),
+  // not from a synthetic harness DOM. Keep the SCO's slide model read-only.
+  const counterText = document.querySelector('#counterText[data-slide-counter="true"]')
+    ?.textContent?.trim() ?? '';
+  const counterMatch = /^([1-9]\\d*)\\s*\\/\\s*([1-9]\\d*)$/.exec(counterText);
   const index = counterMatch ? Number(counterMatch[1]) - 1 : null;
   const total = counterMatch ? Number(counterMatch[2]) : null;
-  const active = document.querySelector('#chapters [aria-current="step"][data-slide]');
-  const navIndexText = active?.getAttribute('data-slide');
-  const navIndex = navIndexText != null && /^(0|[1-9]\d*)$/.test(navIndexText)
-    ? Number(navIndexText) : null;
-  const stage = document.querySelector('#stage > article.slide');
-  const heading = stage?.querySelector('.slideHead h1');
+  const navigation = Array.from(document.querySelectorAll(
+    '.score-sidebar-list button.score-nav-item'));
+  const selected = navigation.filter(button => button.getAttribute('aria-current') === 'step');
+  // The authored Score engine emits positional buttons, not data-slide/slideId.
+  // An extra/missing button or multiple current buttons is inconclusive.
+  const navIndex = selected.length === 1 && navigation.length === slides?.length
+    ? navigation.indexOf(selected[0]) : null;
+  const stage = document.querySelector('#airtrust-app .score-stage-scroll');
+  const heading = stage?.querySelector('.score-title-block h1');
   const bounds = stage?.getBoundingClientRect();
   const title = Number.isSafeInteger(index) && Array.isArray(slides)
     ? slides[index]?.title : null;
