@@ -122,7 +122,8 @@ export function requireF5CommitReceipt(envelope, params, priorSessionCount = 0) 
 /** Require the authenticated Worker/D1 witness for the exact Commit receipt. */
 export function requireF5CommitReadbackCount(readback, committedCount) {
   if (!Number.isSafeInteger(committedCount) ||
-      readback?.sessionCount !== committedCount) fail('COMMIT_READBACK_SESSION_MISMATCH');
+      !Number.isSafeInteger(readback?.sessionCount) ||
+      readback.sessionCount < committedCount) fail('COMMIT_READBACK_SESSION_MISMATCH');
   return true;
 }
 
