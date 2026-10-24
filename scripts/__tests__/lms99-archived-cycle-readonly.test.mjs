@@ -140,6 +140,7 @@ test('cycles-only aggregate validator rejects conflicts, invalid bounds, duplica
  assert.deepEqual(validateCycleRows([valid]),[valid]);
  assert.throws(()=>validateCycleRows([{...valid,prior_dated_completed:3}]),/CYCLE_BOUNDS/);
  assert.throws(()=>validateCycleRows([{...valid,prior_score_recorded:501}]),/CYCLE_METRIC_INVALID/);
+ assert.throws(()=>validateCycleRows([{...valid,email:'must-not-escape'}]),/CYCLE_RESULT_SHAPE/);
  assert.throws(()=>validateCycleRows([valid,{...valid}]),/CYCLE_ID_INVALID/);
  assert.throws(()=>validateCycleRows(Array.from({length:101},(_,i)=>({...valid,curso_id:i+1,pending_99:1,prior_score_recorded:0}))),/CYCLE_ROW_LIMIT/);
  assert.throws(()=>validateCycleRows([{...valid,pending_99:501,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0}]),/CYCLE_METRIC_INVALID/);

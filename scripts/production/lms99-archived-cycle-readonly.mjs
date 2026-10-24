@@ -135,6 +135,8 @@ export function validateCycleRows(rows){
  'prior_score_recorded','prior_qualification_link'];
  const seen=new Set();let total=0;
  for(const row of rows){
+  if(!row||Object.keys(row).length!==6||Object.keys(row).some(key=>!['curso_id',...names].includes(key)))
+   reject('CYCLE_RESULT_SHAPE');
   if(!Number.isSafeInteger(row.curso_id)||row.curso_id<1||seen.has(row.curso_id))reject('CYCLE_ID_INVALID');
   seen.add(row.curso_id);
   for(const key of names){
