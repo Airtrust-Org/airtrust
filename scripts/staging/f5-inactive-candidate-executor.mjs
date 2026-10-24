@@ -206,11 +206,14 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
     const uploaded = await adapters.completeIntake({
       tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId,
     });
-    completionAttempted = false;
-    intakeStarted = false;
+    // HTTP 200 can still contain an incomplete or untrusted candidate receipt.
+    // Keep the operation ambiguous until ownership and static gates are proven;
+    // compensation must resolve it by operation ID before deciding what to remove.
     if (uploaded?.createdByOperation === true &&
         uploaded?.alreadyExisted === false) candidate = uploaded;
     candidate = verifyInactiveQualityGate(uploaded, plan);
+    completionAttempted = false;
+    intakeStarted = false;
 
     const d1Candidate = await adapters.readCandidateD1({ tenantId: c.tenantId,
       courseId: c.courseId, packageId: candidate.packageId, packageSha256: c.packageSha256 });
