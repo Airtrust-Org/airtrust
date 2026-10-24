@@ -29,8 +29,8 @@ export async function verifyF5ProvisionedExecution(env, read = { lstat, readFile
   // A workflow input must never redirect a protected plan/module path to a
   // production, a repo file, or a symlink; runner-owned private mount only.
   const runnerTemp = resolve(env.RUNNER_TEMP || '/');
-  if (runnerTemp === '/' || !env.F5_EXECUTOR_PLAN_PATH.startsWith(runnerTemp + '/') ||
-      !env.F5_F0_ADAPTER_MODULE.startsWith(runnerTemp + '/')) {
+  if (runnerTemp === '/' || !resolve(env.F5_EXECUTOR_PLAN_PATH).startsWith(runnerTemp + '/') ||
+      !resolve(env.F5_F0_ADAPTER_MODULE).startsWith(runnerTemp + '/')) {
     fail('PRIVATE_RUNNER_SCOPE_REQUIRED');
   }
   async function file(path, maxBytes) {
