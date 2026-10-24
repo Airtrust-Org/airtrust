@@ -123,10 +123,14 @@ export function requireF5CommitReceipt(envelope, params, expectedSuspendSha256, 
 }
 
 /** Require the authenticated Worker/D1 witness for the exact Commit receipt. */
-export function requireF5CommitReadbackCount(readback, committedCount) {
+export function requireF5CommitReadbackCount(readback, committedCount, committedCmiSha256) {
   if (!Number.isSafeInteger(committedCount) ||
       !Number.isSafeInteger(readback?.sessionCount) ||
       readback.sessionCount < committedCount) fail('COMMIT_READBACK_SESSION_MISMATCH');
+  // A strictly advancing session counter does not prove the CMI persisted.
+  // Bind each Worker Commit/Finish receipt to the authenticated D1 digest.
+  if (!HEX64.test(committedCmiSha256 ?? '') ||
+      readback?.cmiSha256 !== committedCmiSha256) fail('COMMIT_READBACK_CMI_MISMATCH');
   return true;
 }
 
@@ -209,10 +213,11 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       fail('WORKER_COMMIT_HTTP_FAILED');
     }
     const expectedSuspendSha256 = sha256(first.suspend);
-    const firstSessionCount = requireF5CommitReceipt(await firstCommit.json(), params, expectedSuspendSha256);
+    const firstCommitReceipt = await firstCommit.json();
+    const firstSessionCount = requireF5CommitReceipt(firstCommitReceipt, params, expectedSuspendSha256);
     const firstReadback = await json(`/api/lms/cursos/${params.courseId}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, { method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': env.SCORM_QA_READBACK_SECRET } });
     assertReadback(firstReadback, params, first, plan.releaseSha);
-    requireF5CommitReadbackCount(firstReadback, firstSessionCount);
+    requireF5CommitReadbackCount(firstReadback, firstSessionCount, firstCommitReceipt.data.cmiSha256);
     const finishPromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
       { timeout: 30_000 });
@@ -226,7 +231,8 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       console.error('[FINISH_COMMIT_FAIL_DIAGNOSTIC]', safeF5HttpFailure(finishCommit));
       fail('WORKER_FINISH_COMMIT_HTTP_FAILED');
     }
-    const finishSessionCount = requireF5CommitReceipt(await finishCommit.json(), params, expectedSuspendSha256, firstSessionCount);
+    const finishCommitReceipt = await finishCommit.json();
+    const finishSessionCount = requireF5CommitReceipt(finishCommitReceipt, params, expectedSuspendSha256, firstSessionCount);
     await page.close();
 
     // A fresh context rules out local storage as the source of a successful
@@ -262,7 +268,7 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     }
     const final = await json(`/api/lms/cursos/${params.courseId}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, { method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': env.SCORM_QA_READBACK_SECRET } });
     assertReadback(final, params, first, plan.releaseSha);
-    requireF5CommitReadbackCount(final, finishSessionCount);
+    requireF5CommitReadbackCount(final, finishSessionCount, finishCommitReceipt.data.cmiSha256);
     return {
       source: 'WORKER_CANDIDATE_QA_EXECUTION', candidateId: params.packageId,
       packageSha256: params.packageSha256, enrollmentId: params.enrollmentId,
