@@ -268,10 +268,11 @@ export async function putF5StreamedIntakePart(params: {
     if (!written) fail('Parte já registrada; recupere o recibo existente', 409);
     await params.bucket.delete(partLockKey);
     return receipt;
-  } catch (error: any) {
+  } catch (error: unknown) {
     await params.bucket.delete(partLockKey).catch(() => {});
     await upload.abort().catch(() => {});
-    if (error?.message && /FixedLengthStream|truncada/i.test(error.message)) {
+    const msg = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+    if (msg && /FixedLengthStream|truncada/i.test(msg)) {
       fail('Parte SCORM truncada; multipart abortado', 400);
     }
     throw error;
