@@ -3795,6 +3795,7 @@ function createEditorField({
   wide = false,
   readOnly = false,
   note,
+  templates = [],
   onInput,
   onBlur,
 }) {
@@ -3832,26 +3833,20 @@ function createEditorField({
   });
   if (onBlur) input.addEventListener('blur', () => onBlur(input.value, input));
   wrapper.append(title, input);
-  if (type === 'textarea' && !readOnly && typeof onInput === 'function') {
-    // Phrases are opt-in; never invent an occurrence or overwrite the pilot's record.
-    // No text is sent to external grammar/AI services.
-    const templates = [
-      ['Retorno antecipado', 'Retorno à base antes de concluir a rota planejada. Motivo: '],
-      ['Interrupção da operação', 'Operação interrompida. Motivo: '],
-      ['Divergência operacional', 'Divergência em relação ao planejamento: '],
-      ['Informação complementar', 'Informação complementar: '],
-    ];
+  if (type === 'textarea' && !readOnly && typeof onInput === 'function' && templates.length > 0) {
+    // Textos opcionais são cadastrados pela Coordenação no catálogo do tenant.
+    // Nenhum campo livre é enviado a serviços externos de IA.
     const select = document.createElement('select');
     select.setAttribute('aria-label', 'Inserir observação predefinida em ' + label);
     const empty = document.createElement('option');
     empty.value = '';
     empty.textContent = 'Inserir texto predefinido (opcional)';
     select.append(empty);
-    for (const [name, value] of templates) {
+    for (const item of templates) {
       const option = document.createElement('option');
-      option.value = value;
-      option.textContent = name;
-      select.append(option);
+      option.value = String(item?.descricao || item?.nome || '').trim();
+      option.textContent = String(item?.nome || item?.codigo || '').trim();
+      if (option.value) select.append(option);
     }
     select.disabled = operationalSyncInFlight;
     select.addEventListener('change', () => {
@@ -4425,6 +4420,9 @@ function renderRdvFormFields() {
       value: form.ocorrencias || '',
       type: 'textarea',
       wide: true,
+      templates: Array.isArray(packageData?.catalogos?.observacoes_predefinidas)
+        ? packageData.catalogos.observacoes_predefinidas
+        : [],
       onInput: (value) => { form.ocorrencias = value; scheduleOperationalSave(); },
       onBlur: () => void flushOperationalSave(),
     }),
