@@ -1277,11 +1277,11 @@ function renderCachedPackages() {
         badge: 'Disponível offline',
         buttonText: 'Abrir voo',
         onClick: async () => {
-          openPackageRecord(record);
-          if (!isFlightClosedForEditing(record.value?.package)) {
-            await openExistingOperationalDraft();
+          if (isFlightClosedForEditing(record.value?.package)) {
+            openCompletedFlightForConsultation(record);
           } else {
-            setSessionMessage('Voo concluído: consulta disponível somente para leitura.', 'ok');
+            openPackageRecord(record);
+            await openExistingOperationalDraft();
           }
         },
       }),
@@ -1644,9 +1644,18 @@ function isFlightClosedForEditing(packageData) {
   const rdv = packageData?.rdv;
   return Boolean(rdv && (
     rdv.status === 'preenchimento_finalizado' ||
-    !['rascunho', 'devolvido'].includes(String(rdv.workflow_status || '')) ||
-    rdv.workflow_status === 'enviado'
+    !['rascunho', 'devolvido'].includes(String(rdv.workflow_status || ''))
   ));
+}
+
+function openCompletedFlightForConsultation(record) {
+  openPackageRecord(record, 'summary');
+  // A consulta não solicita lease de edição e não altera os dados enviados.
+  flightDetailCard.classList.add('read-only-flight');
+  flightDetailCard.classList.remove('hidden');
+  setFlightSelectionVisible(false);
+  rdvEditorCard.classList.add('hidden');
+  setSessionMessage('Voo concluído: consulta somente para leitura.', 'ok');
 }
 
 async function openAuthorizedFlight(flightId) {
@@ -1654,8 +1663,7 @@ async function openAuthorizedFlight(flightId) {
   if (!record) return false;
   if (isFlightClosedForEditing(record.value?.package)) {
     // O lease é exclusivo para edição; RDVs enviados continuam consultáveis.
-    openPackageRecord(record);
-    setSessionMessage('Voo concluído: consulta disponível somente para leitura.', 'ok');
+    openCompletedFlightForConsultation(record);
     return true;
   }
 
@@ -5297,6 +5305,7 @@ function openPackageRecord(record, initialWorkspaceTab = 'summary') {
   ]);
 
   flightDetailCard.classList.add('hidden');
+  flightDetailCard.classList.remove('read-only-flight');
   void refreshLeaseControls(record);
   void refreshCoordinationControls();
 }
@@ -5307,6 +5316,7 @@ function closePackageDetail() {
   activePackageRecord = null;
   activeVerifiedLease = null;
   flightDetailCard.classList.add('hidden');
+  flightDetailCard.classList.remove('read-only-flight');
   flightDetail.replaceChildren();
   pilotWorkspaceView.replaceChildren();
   prepareEditOfflineButton.disabled = true;
