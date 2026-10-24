@@ -127,6 +127,7 @@ describe('migration governance', () => {
     // 0525 normalizes the governed tenant-6 organizational structure; 0526 aligns the reviewed training matrix.
     // 0527 bootstraps a missing tenant-6 LOFT model without rewriting the reviewed 0526 change.
     // 0528 separates sector Compliance alert responsibility from operational sector access.
+    // 0529 adds the tenant-scoped HFA bridge; remote schema apply remains pending.
     // 0530 adds the governed placeholder qualification models for planned EAD packages.
     // 0531 repairs the reviewed tenant-6 NR-20 HIBRIDO requirement modality after 0526.
     // 0533 adds governed metadata; 0534 aligns the final matrix; 0535 repairs INTEGRA; 0536 adds reviewed FDM audiences; 0537 reconciles source-backed metadata; 0538 adds Gestor/NR-05 policy; 0539 repairs Doutrinação; 0540 restores missing Maintenance manual identities.
