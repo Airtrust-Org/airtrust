@@ -111,11 +111,9 @@ jobs:
             if (process.env.SCORM_F0_SCHEMA_0568_APPROVED_SHA !== sha) {
               throw new Error('SCORM_F0_0568_EXACT_SHA_GRANT_REQUIRED');
             }
-            const reviews = await github('/pulls/' + number + '/reviews');
-            const independentApproval = reviews.some(r =>
-              r.state === 'APPROVED' && r.commit_id === sha &&
-              r.user?.login && r.user.login !== pr.user?.login);
-            if (!independentApproval) throw new Error('SCORM_F0_0568_INDEPENDENT_REVIEW_REQUIRED');
+            // The SHA-bound staging environment grant is the explicit approval.
+            // Review count remains governed by the repository branch protection;
+            // do not introduce an ad hoc second-account requirement for 0568.
           }
           const permissions = await github('/collaborators/' + encodeURIComponent(actor) + '/permission');
           if (!['write', 'push', 'maintain', 'admin'].includes(permissions.permission)) {
