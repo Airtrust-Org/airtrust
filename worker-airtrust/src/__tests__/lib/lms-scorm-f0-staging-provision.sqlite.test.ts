@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 const SqliteDatabaseSync = createRequire(import.meta.url)('node:sqlite').DatabaseSync as { new (path: string): DatabaseSync };
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { provisionScormF0QaBinding, type ScormF0ProvisionRequest } from '../../lib/lms/lms-scorm-f0-staging-provision';
 
 const id = '12345678-1234-1234-1234-123456789abc';
@@ -55,7 +56,7 @@ function fixture() {
       old_values TEXT, new_values TEXT, empresa_id INTEGER, created_at TEXT
     );
   `);
-  db.exec(readFileSync(new URL('../../../schema-v2/changes/0568_lms_scorm_qa_evidence_bindings.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(fileURLToPath(new URL('../../../schema-v2/changes/0568_lms_scorm_qa_evidence_bindings.sql', import.meta.url).href), 'utf8'));
   db.prepare('INSERT INTO lms_cursos(id,empresa_id,titulo,publicado,ativo) VALUES(15,111,?,0,1)')
     .run('QA SCORM F0 staging synthetic');
   db.prepare('INSERT INTO funcionarios(id,empresa_id,nome) VALUES(41,111,?)')
