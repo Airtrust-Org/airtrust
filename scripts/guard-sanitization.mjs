@@ -24,9 +24,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
-function gitGrep(pattern, pathspecs = []) {
+function gitGrep(pattern, pathspecs = [], { nullDelimited = false } = {}) {
   const result = spawnSync('git', [
-    'grep', '-nEI', '--',
+    'grep', '-nEI', ...(nullDelimited ? ['-z'] : []), '--',
     pattern,
     ...pathspecs,
   ], { cwd: ROOT, encoding: 'utf8' });
@@ -164,7 +164,7 @@ check(
 // sem imprimir ou retornar valores encontrados. Placeholder so vale se for
 // exatamente o valor da atribuicao, nao outra palavra no mesmo comentario.
 {
-  const raw = gitGrep('R2_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|ACCOUNT_ID)', []);
+  const raw = gitGrep('R2_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|ACCOUNT_ID)', [], { nullDelimited: true });
   const findings = raw
     ? raw.split('\n').map(findR2LiteralAssignment).filter(Boolean)
     : [];
