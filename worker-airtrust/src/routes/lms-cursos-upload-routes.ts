@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import {assertScormQaReadbackAccess, readScormQaBackendEvidence} from '../lib/lms/lms-scorm-staging-readback';
+import { readScormQaCandidate } from '../lib/lms/lms-scorm-candidate-preview';
+import { provisionScormF0QaBinding } from '../lib/lms/lms-scorm-f0-staging-provision';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
@@ -376,6 +378,69 @@ app.post('/:id/scorm-upload/streamed/:operationId/abort',
     });
     return c.json({ success: true, data });
   });
+
+
+const F0StagingProvisionSchema = z.object({
+  enrollmentId: z.number().int().positive(),
+  cycleId: z.number().int().positive(),
+  packageSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  approvalReceiptSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  runId: z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/),
+  expiresAt: z.string().min(20).max(35),
+}).strict();
+
+// F0 binding is restricted to the protected staging QA tenant, single
+// candidate Worker grant, tenant admin and dedicated QA readback secret.
+// This endpoint CANNOT activate a course, fabricate a commit or certify a ZIP.
+app.post('/:id/scorm-package-versions/:packageId/qa-f0/bind',
+  requirePermission('lms', 'editar', 'admin'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const tenantId = getEmpresaIdSafe(c);
+    const courseId = validCourseId(c);
+    assertScormQaReadbackAccess({
+      environment: c.env.ENVIRONMENT, tenantId,
+      authorizedTenant: c.env.SCORM_QA_SYNTHETIC_TENANT_ID,
+      secret: c.env.SCORM_QA_READBACK_SECRET,
+      providedSecret: c.req.header('X-Airtrust-F5-QA-Readback'),
+      runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
+    });
+    const parsed = F0StagingProvisionSchema.safeParse(await c.req.json<unknown>().catch(() => null));
+    if (!parsed.success) throw new ApiError('Escopo de vínculo F0 inválido', 400);
+    const payload = parsed.data;
+    const candidate = await readScormQaCandidate(c.env.DB, {
+      empresaId: tenantId, cursoId: courseId,
+      packageId: c.req.param('packageId'),
+      expectedSha: payload.packageSha256,
+    });
+    const source = await c.env.DB.prepare(
+      `SELECT zip_size_bytes FROM lms_scorm_package_versions
+         WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?
+           AND status='VALIDATED'`,
+    ).bind(candidate.id, tenantId, courseId, candidate.package_sha256)
+      .first<{ zip_size_bytes: number }>();
+    if (!Number.isSafeInteger(source?.zip_size_bytes) || Number(source?.zip_size_bytes) < 22) {
+      throw new ApiError('Pacote F0 inválido', 409);
+    }
+    const grant = parseF5Grant(c.env.SCORM_F5_STREAMED_INTAKE_GRANT, {
+      environment: c.env.ENVIRONMENT,
+      runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
+      tenantId, courseId, packageSha256: candidate.package_sha256,
+      zipBytes: Number(source!.zip_size_bytes),
+    });
+    const actorId = Number(c.get('userId' as never));
+    const bound = await provisionScormF0QaBinding(c.env.DB, {
+      tenantId, courseId, packageId: candidate.id,
+      packageSha256: candidate.package_sha256,
+      enrollmentId: payload.enrollmentId, cycleId: payload.cycleId,
+      runId: payload.runId, approvalReceiptSha256: payload.approvalReceiptSha256,
+      runtimeSha: c.env.AIRTRUST_SOURCE_SHA ?? '',
+      expiresAt: payload.expiresAt, grantId: grant.grantId, actorId,
+    });
+    c.header('Cache-Control', 'private, no-store');
+    return c.json({ success: true, data: bound }, 201);
+  },
+);
 
 // Only protected staging QA administrators with a dedicated F0-provisioned
 // readback secret. No public learner or candidate preview route obtains this.
