@@ -328,6 +328,111 @@ test.describe('Completed RDV online consultation with mocked authorization', () 
   await expect(page.locator('#flight-detail-card')).toHaveClass(/read-only-flight/);
   expect(editLeaseRequests).toBe(0);
   });
+
+  test('keeps finalized RDV send-only after failed handoff, exit, reopen and retry', async ({ page }) => {
+    await page.goto('/');
+    const supportsEncryptedVault = await page.evaluate(async () => {
+      const key = await crypto.subtle.generateKey(
+        { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+      );
+      const request = indexedDB.open('pilot-qa-send-retry-probe', 1);
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onupgradeneeded = () => request.result.createObjectStore('meta');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const supported = await new Promise<boolean>((resolve) => {
+        const tx = db.transaction('meta', 'readwrite');
+        tx.oncomplete = () => resolve(true);
+        tx.onabort = () => resolve(false);
+        tx.onerror = () => resolve(false);
+        try { tx.objectStore('meta').put({ key }, 'key'); }
+        catch { try { tx.abort(); } catch {}; resolve(false); }
+      });
+      db.close();
+      indexedDB.deleteDatabase('pilot-qa-send-retry-probe');
+      return supported;
+    });
+    test.skip(!supportsEncryptedVault, 'WebKit environment cannot securely persist CryptoKey in IndexedDB');
+
+    const today = await page.evaluate(() => {
+      const d = new Date();
+      return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+    });
+    let leaseRequests = 0;
+    let sendAttempts = 0;
+    let workflow = 'rascunho';
+    await page.addInitScript(() => localStorage.setItem('airtrust_token', 'synthetic-access'));
+    await page.route('**/api/controle-voos/voos/meus', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: [{
+        id: 42, prefixo: 'PR-QA', numero_voo: 'QA-SEND',
+        data_programacao: today, origem_id: 1, destino_id: 2,
+        versao: 4, rdv_versao: 2,
+      }] }),
+    }));
+    await page.route('**/api/controle-voos/voos/42/offline-lease', (route) => {
+      leaseRequests += 1;
+      return route.fulfill({ status: 409, contentType: 'application/json',
+        body: JSON.stringify({ success: false }) });
+    });
+    await page.route('**/api/controle-voos/voos/42/offline-package', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: {
+        contract: { name: 'airtrust-pilot-offline-package', version: 1,
+          read_only: true, sync_supported: true, regulated_edb: false, package_id: 'qa-send-42-v4' },
+        identity: { tenant_id: 7, user_id: 70, funcionario_id: 77 },
+        voo: { id: 42, prefixo: 'PR-QA', numero_voo: 'QA-SEND',
+          data_programacao: today, origem_id: 1, destino_id: 2,
+          status: 'concluido_operacionalmente', versao: 4 },
+        rdv: { id: 90, numero: 'RDV-QA-SEND', status: 'preenchimento_finalizado',
+          workflow_status: workflow, versao: workflow === 'enviado' ? 3 : 2 },
+        origem: { codigo_icao: 'SBME' }, destino: { codigo_icao: 'SBAA' },
+        tripulantes: [], etapas: [], abastecimentos: [], aeronave: { modelo: 'QA' },
+        workspace: { contract: { name: 'airtrust-pilot-workspace' }, planning: { documentos: [] } },
+      } }),
+    }));
+    await page.route('**/api/controle-voos/voos/42/rdv/alertas', (route) => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: [] }),
+    }));
+    await page.route('**/api/controle-voos/voos/42/rdv/enviar', (route) => {
+      sendAttempts += 1;
+      if (sendAttempts === 1) {
+        return route.fulfill({ status: 503, contentType: 'application/json',
+          body: JSON.stringify({ success: false, code: 'TEMPORARY_FAILURE', error: 'Retry later' }) });
+      }
+      workflow = 'enviado';
+      return route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: {
+          id: 90, numero: 'RDV-QA-SEND', versao: 3, status: 'preenchimento_finalizado',
+          workflow_status: 'enviado', enviado_em: '2026-10-24T19:00:00.000Z',
+        } }) });
+    });
+    page.on('dialog', (dialog) => void dialog.accept());
+
+    await page.goto('/pilot/');
+    await expect(page.locator('#workspace')).toBeVisible();
+    await page.locator('#authorized-flight-date').fill(today);
+    await page.locator('#authorized-flight-date').dispatchEvent('change');
+    await page.getByRole('button', { name: 'Abrir voo' }).click();
+    await expect(page.locator('#rdv-editor-card')).toBeHidden();
+    const retryAction = page.getByRole('button', { name: 'Atualizar status e reenviar à Coordenação' });
+    await expect(retryAction).toBeVisible();
+    await retryAction.click();
+    await expect(page.locator('#session-status')).toContainText('Recebimento não confirmado');
+    expect(sendAttempts).toBe(1);
+    expect(leaseRequests).toBe(0);
+
+    await page.locator('#close-detail').click();
+    await expect(page.locator('#flight-detail-card')).toBeHidden();
+    await page.getByRole('button', { name: 'Abrir voo' }).click();
+    await expect(page.locator('#rdv-editor-card')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Atualizar status e reenviar à Coordenação' })).toBeVisible();
+    await page.getByRole('button', { name: 'Atualizar status e reenviar à Coordenação' }).click();
+    await expect(page.locator('#handoff-success-card')).toBeVisible();
+    expect(sendAttempts).toBe(2);
+    expect(leaseRequests).toBe(0);
+  });
 });
 
 test('skips the legacy PIN prompt only when old encrypted stores are empty', async ({ page }) => {
