@@ -395,20 +395,36 @@ test('Score F5 DOM witness reads visible course title, counter and active slide'
   const originalWindow = globalThis.window, originalDocument = globalThis.document;
   const stage = { querySelector: () => ({ textContent: 'Segurança' }),
     getBoundingClientRect: () => ({ width: 400, height: 270 }) };
+  const nav = Array.from({ length: 5 }, (_, i) => ({
+    getAttribute: name => name === 'aria-current' ? (i === 1 ? 'step' : 'false') : null,
+  }));
   globalThis.window = { COURSE_DATA: { slides: [
     { title: 'Início' }, { title: 'Segurança' }, { title: 'Encerramento' },
     { title: 'Revisão' }, { title: 'Fim' }] } };
-  globalThis.document = { querySelector: selector => ({
-    '#counter': { textContent: '2 / 5' },
-    '#chapters [aria-current="step"][data-slide]': {
-      getAttribute: () => '1' },
-    '#stage > article.slide': stage,
-  })[selector] ?? null };
+  globalThis.document = {
+    querySelector: selector => ({
+      '#counterText[data-slide-counter="true"]': { textContent: '2 / 5' },
+      '#airtrust-app .score-stage-scroll': stage,
+    })[selector] ?? null,
+    querySelectorAll: selector => selector === '.score-sidebar-list button.score-nav-item'
+      ? nav : [],
+  };
   try {
     assert.deepEqual(requireF5ScoreVisualState(captureF5ScoreVisualState(),
       '2/5', f5Suspend(1)), { index: 1, total: 5 });
     stage.querySelector = () => ({ textContent: 'Início' });
     assert.throws(() => requireF5ScoreVisualState(captureF5ScoreVisualState(),
       '2/5', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/);
+    stage.querySelector = () => ({ textContent: 'Segurança' });
+    nav[0].getAttribute = name => name === 'aria-current' ? 'step' : null;
+    assert.throws(() => requireF5ScoreVisualState(captureF5ScoreVisualState(),
+      '2/5', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/,
+    'two current sidebar buttons must not yield a synthetic cursor');
+    nav[0].getAttribute = name => name === 'aria-current' ? 'false' : null;
+    const fullNav = globalThis.document.querySelectorAll;
+    globalThis.document.querySelectorAll = selector => fullNav(selector).slice(0, 4);
+    assert.throws(() => requireF5ScoreVisualState(captureF5ScoreVisualState(),
+      '2/5', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/,
+    'missing real navigation buttons must fail closed');
   } finally { globalThis.window = originalWindow; globalThis.document = originalDocument; }
 });
