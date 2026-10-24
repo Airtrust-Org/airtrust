@@ -324,119 +324,71 @@ export default function OperationalVigilanceTest({
   const secondsRemaining = Math.max(0, Math.ceil((durationMs - elapsedMs) / 1000));
   const feedback = trialFeedback ? feedbackCopy(trialFeedback) : null;
 
-  if (phase === 'instructions') {
-    return (
-      <section
-        className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-        aria-labelledby="vigilance-title"
-      >
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Etapa objetiva</p>
-          <h2 id="vigilance-title" className="mt-1 text-xl font-semibold text-slate-900">
-            Teste breve de vigilância psicomotora (PVT-B)
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Um retângulo com borda vermelha fica visível sobre fundo preto. Quando um contador amarelo
-            aparecer dentro dele, toque ou clique o mais rápido possível — o contador mostra os
-            milissegundos que estão passando. Não responda antes do contador aparecer. O resultado
-            complementa o check-in de fadiga e não determina aptidão para voo de forma isolada.
-          </p>
-        </div>
-        <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-          <p className="font-semibold text-slate-800">Protocolo AirTrust {PVTB_V2_PROTOCOL.version}</p>
-          <p className="mt-1 text-xs leading-5">
-            Janela de amostragem: {Math.round(PVTB_V2_PROTOCOL.defaultDurationMs / 1000)} s · lapso: ≥ {PVTB_V2_PROTOCOL.lapseThresholdMs} ms ·
-            antecipação: &lt; {PVTB_V2_PROTOCOL.falseStartThresholdMs} ms · resposta ausente: lapso de {PVTB_V2_PROTOCOL.responseWindowMs / 1000} s.
-            O backend revalida tempos e sequência; o baseline individual usa somente sessões do mesmo protocolo.
-          </p>
-          <p className="mt-2 text-xs leading-5">
-            Use navegador moderno com toque ou clique e mantenha esta aba em primeiro plano. Trocar de aba, ocultar a janela ou interromper a medição invalida a sessão.
-            Esta é uma implementação independente AirTrust do paradigma PVT-B e não corresponde a um software externo específico.
-          </p>
-        </div>
-        <p className="text-xs leading-5 text-slate-500">
-          Referência científica: Psychomotor Vigilance Task (PVT) —{' '}
-          <a
-            href="https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/"
-            target="_blank"
-            rel="noreferrer"
-            className="font-semibold text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
-          >
-            NASA Ames Fatigue Countermeasures Laboratory
-          </a>
-          .
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Button onClick={start}>Iniciar teste</Button>
-          {onCancel ? (
-            <Button variant="secondary" onClick={onCancel}>
-              Cancelar
-            </Button>
-          ) : null}
-        </div>
-      </section>
-    );
-  }
 
-  if (phase === 'invalidated') {
-    return (
-      <section className="space-y-4 rounded-2xl border border-amber-300 bg-amber-50 p-5" role="alert">
-        <div>
-          <p className="font-semibold text-amber-900">Teste interrompido</p>
-          <p className="mt-1 text-sm text-amber-800">
-            {invalidReason || 'O teste perdeu as condições necessárias de medição.'}
-          </p>
-          <p className="mt-2 text-xs text-amber-700">
-            Nenhum resultado parcial será usado. Reinicie quando puder manter esta tela ativa até o
-            final.
-          </p>
-        </div>
-        <Button onClick={start}>Reiniciar teste</Button>
-      </section>
-    );
-  }
-
-  if (phase === 'complete') {
-    return (
-      <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-        <p className="font-semibold text-emerald-900">Teste concluído</p>
-        <p className="mt-1 text-sm text-emerald-800">
-          O resultado está pronto para ser enviado junto com o check-in desta jornada.
-        </p>
-      </section>
-    );
-  }
+  // Keep the stimulus surface mounted and at a fixed position throughout the
+  // session. Replacing instructions with the test used to shift the viewport
+  // precisely when the pilot needed to respond.
+  const running = phase === 'waiting' || phase === 'stimulus';
+  const finished = phase === 'complete';
+  const interrupted = phase === 'invalidated';
 
   return (
-    <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between text-sm text-slate-600">
-        <span>Teste em andamento</span>
-        <span>{secondsRemaining}s restantes</span>
+    <section
+      className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+      aria-labelledby="vigilance-title"
+    >
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Etapa objetiva</p>
+        <h2 id="vigilance-title" className="mt-1 text-lg font-semibold text-slate-900">
+          Teste breve de vigilância psicomotora (PVT-B)
+        </h2>
+        <p className="mt-1 text-sm leading-5 text-slate-600">
+          Um retângulo com borda vermelha fica visível sobre fundo preto. Quando um contador amarelo
+          aparecer dentro dele, toque ou clique o mais rápido possível. Não responda antes do contador aparecer.
+          O teste complementa o check-in e não determina aptidão isoladamente.
+        </p>
       </div>
-      <div
-        className="h-2 overflow-hidden rounded-full bg-slate-100"
-        aria-label={`Progresso ${progress}%`}
-      >
-        <div className="h-full bg-red-600 transition-[width]" style={{ width: `${progress}%` }} />
+
+      <div className="flex min-h-10 flex-wrap items-center gap-3">
+        <Button
+          onClick={start}
+          disabled={running || finished}
+        >
+          {running ? 'Teste em andamento' : interrupted ? 'Reiniciar teste' : finished ? 'Teste concluído' : 'Iniciar teste'}
+        </Button>
+        {phase === 'instructions' && onCancel ? (
+          <Button variant="secondary" onClick={onCancel}>Cancelar</Button>
+        ) : null}
+        <span className="text-sm text-slate-600" aria-live="polite">
+          {running ? String(secondsRemaining) + 's restantes' : finished ? 'Concluído' : '60 segundos de atenção'}
+        </span>
       </div>
+
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100" aria-label={'Progresso ' + progress + '%'}>
+        <div className="h-full bg-red-600 transition-[width]" style={{ width: String(progress) + '%' }} />
+      </div>
+
       <button
         type="button"
         onPointerDown={(event) => {
           event.preventDefault();
-          respond();
+          if (running) respond();
         }}
         onKeyDown={(event) => {
           if (event.key !== 'Enter' && event.key !== ' ') return;
           event.preventDefault();
-          respond();
+          if (running) respond();
         }}
         data-testid="pvtb-box"
         data-phase={phase}
-        className="flex min-h-72 w-full items-center justify-center rounded-xl border border-slate-800 bg-black p-6 transition-colors focus:outline-none focus:ring-4 focus:ring-red-200"
+        aria-disabled={!running}
+        className="flex h-72 min-h-72 w-full items-center justify-center rounded-xl border border-slate-800 bg-black p-6 focus:outline-none focus:ring-4 focus:ring-red-200"
         aria-label={
           phase === 'stimulus'
             ? 'Contador em andamento; responda agora'
-            : 'Área do teste; aguarde o contador amarelo'
+            : running
+              ? 'Área do teste; aguarde o contador amarelo'
+              : 'Área do teste pronta; pressione Iniciar teste para começar'
         }
       >
         <span
@@ -451,9 +403,9 @@ export default function OperationalVigilanceTest({
             >
               {counterMs}
             </span>
-          ) : feedback ? (
+          ) : running && feedback ? (
             <span className="text-center" aria-live="polite">
-              <span className={`block text-4xl font-bold tabular-nums ${feedback.className}`}>
+              <span className={['block text-4xl font-bold tabular-nums', feedback.className].join(' ')}>
                 {feedback.value}
               </span>
               <span className="mt-2 block text-xs font-medium text-slate-300">{feedback.helper}</span>
@@ -461,9 +413,45 @@ export default function OperationalVigilanceTest({
           ) : null}
         </span>
       </button>
-      <p className="text-center text-xs text-slate-500">
-        Responda assim que o contador amarelo aparecer. O tempo é medido em milissegundos.
-      </p>
+
+      <div className="min-h-10 text-center text-xs leading-5 text-slate-500" aria-live="polite">
+        {interrupted ? (
+          <div role="alert" className="text-amber-800">
+            <strong>Teste interrompido.</strong> {invalidReason || 'O teste perdeu as condições necessárias de medição.'}
+            {' '}Nenhum resultado parcial será usado. Reinicie quando puder manter esta tela ativa até o final.
+          </div>
+        ) : finished ? (
+          <p className="text-emerald-800">Teste concluído. O resultado será enviado junto ao check-in.</p>
+        ) : (
+          <p>Responda assim que o contador amarelo aparecer. O tempo é medido em milissegundos.</p>
+        )}
+      </div>
+
+      <details className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+        <summary className="cursor-pointer font-semibold text-slate-700">Protocolo e referência científica</summary>
+        <p className="mt-2">
+          Protocolo AirTrust {PVTB_V2_PROTOCOL.version}. Janela de amostragem: {Math.round(PVTB_V2_PROTOCOL.defaultDurationMs / 1000)} s;
+          lapso: ≥ {PVTB_V2_PROTOCOL.lapseThresholdMs} ms; antecipação: &lt; {PVTB_V2_PROTOCOL.falseStartThresholdMs} ms;
+          resposta ausente: lapso de {PVTB_V2_PROTOCOL.responseWindowMs / 1000} s.
+          O backend revalida tempos e sequência; o baseline individual usa apenas sessões do mesmo protocolo.
+        </p>
+        <p className="mt-2">
+          Mantenha esta aba em primeiro plano. Trocar de aba, ocultar a janela ou interromper a medição
+          invalida a sessão. Implementação independente AirTrust do paradigma PVT-B.
+        </p>
+        <p className="mt-2">
+          Referência científica: Psychomotor Vigilance Task (PVT) —{' '}
+          <a
+            href="https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/"
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-slate-700 underline"
+          >
+            NASA Ames Fatigue Countermeasures Laboratory
+          </a>
+          .
+        </p>
+      </details>
     </section>
   );
 }
