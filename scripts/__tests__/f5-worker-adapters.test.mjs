@@ -246,6 +246,7 @@ test('runs the executor end to end through real Worker adapters against an isola
         completionStatus: 'EM_ANDAMENTO', qualificationHistoryCount: 0, certificateDocument: null,
         runtimeVersion: '1.2', locationPersisted: true,
         suspendDataPersisted: true, resumeVerified: true,
+        browserEngines: ['chromium', 'webkit'],
         assessmentAttempted: false, assessmentApproved: false, externalAssessmentApproved: false,
         certificateIssued: false }),
       cleanupSyntheticCandidate: async () => ({ verified: true, syntheticFixtureCleaned: true,
