@@ -67,7 +67,7 @@ type DualWeightInputProps = {
   fieldClass: string;
 };
 
-function DualWeightInput({ label, valueLb, onChangeLb, readOnly = false, fieldClass }: DualWeightInputProps) {
+export function DualWeightInput({ label, valueLb, onChangeLb, readOnly = false, fieldClass }: DualWeightInputProps) {
   return (
     <div className="text-sm">
       <span className="block">{label}</span>
@@ -181,6 +181,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
     pax_planejado: '',
     peso_passageiros: '',
     peso_bagagem: '',
+    peso_carga: '',
     unidade_peso_planejado: 'LB',
     combustivel_solicitado: '',
     unidade_combustivel_solicitado: 'LB',
@@ -414,7 +415,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
       const common = {
         aeronave_id: Number(form.aeronave_id),
         prefixo: form.prefixo.trim().toUpperCase(),
-        data_programacao: form.data_programacao,
+        data_programacao: mode === 'coordenacao' ? form.horario_previsto_partida.slice(0, 10) : form.data_programacao,
         numero_voo: form.numero_voo.trim() || null,
         ...(mode === 'pilot' ? { numero_db: form.numero_db.trim() || null } : {}),
         contrato_id: Number(form.contrato_id),
@@ -437,6 +438,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
             pax_planejado: form.pax_planejado === '' ? null : Number(form.pax_planejado),
             peso_passageiros: form.peso_passageiros === '' ? null : Number(form.peso_passageiros),
             peso_bagagem: form.peso_bagagem === '' ? null : Number(form.peso_bagagem),
+            peso_carga: form.peso_carga === '' ? null : Number(form.peso_carga),
             unidade_peso_planejado: 'LB',
             combustivel_solicitado: form.combustivel_solicitado === '' ? null : Number(form.combustivel_solicitado),
             unidade_combustivel_solicitado: form.unidade_combustivel_solicitado,
@@ -520,9 +522,9 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
   const sicOptions = eligibleCrew.filter((member) => String(member.id) !== form.pic_funcionario_id);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true">
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl dark:bg-slate-900">
-        <div className="mb-4 flex items-start justify-between gap-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-2 sm:p-4" role="dialog" aria-modal="true">
+      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl bg-white p-4 shadow-xl sm:max-h-[calc(100dvh-2rem)] sm:p-5 dark:bg-slate-900">
+        <div className="mb-3 flex shrink-0 items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{mode === 'pilot' ? 'Criar meu voo' : 'Novo voo'}</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">A ID interna é gerada automaticamente pelo AirTrust ao salvar.</p>
@@ -530,7 +532,9 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
           <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Fechar"><X className="h-5 w-5" /></button>
         </div>
 
-        <form onSubmit={submit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1" data-testid="flight-create-scroll-region">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <label className="text-sm">Número do voo<input className={fieldClass} value={form.numero_voo} onChange={(e) => set('numero_voo', e.target.value)} placeholder={mode === 'pilot' ? 'Preencha se a Coordenação não informou' : 'Número operacional do voo'} /></label>
           {mode === 'pilot' && (
             <label className="text-sm">Relatório de voo<input className={fieldClass} value={form.numero_db} onChange={(e) => set('numero_db', e.target.value)} placeholder="Número do relatório de voo" /></label>
@@ -555,9 +559,9 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
               {aeronaves.map((aeronave) => <option key={aeronave.id} value={aeronave.id}>{aeronave.prefixo || aeronave.codigo || 'Sem prefixo'}{aeronave.modelo ? ` · ${aeronave.modelo}` : ''}</option>)}
             </select>
           </label>
-          <label className="text-sm">Data<input type="date" className={fieldClass} value={form.data_programacao} onChange={(e) => set('data_programacao', e.target.value)} required /></label>
+          {mode === 'pilot' && <label className="text-sm">Data do voo<input type="date" className={fieldClass} value={form.data_programacao} onChange={(e) => set('data_programacao', e.target.value)} required /></label>}
 
-          <div className="md:col-span-2 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+          <div className="md:col-span-2 xl:col-span-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Rota e etapas</h3>
@@ -575,7 +579,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
               />
               <span><strong>Retorna ao mesmo aeródromo</strong><span className="ml-1 text-xs text-slate-500">— destino final acompanha a origem</span></span>
             </label>
-            <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {routeIds.map((routeId, index) => {
                 const isFirst = index === 0;
                 const isLast = index === routeIds.length - 1;
@@ -609,7 +613,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
           </div>
 
           {mode === 'coordenacao' ? (
-            <>
+            <div className="grid gap-3 md:col-span-2 md:grid-cols-2 xl:col-span-3 xl:grid-cols-4">
               <label className="text-sm">Tripulante — posto PIC
                 <select className={fieldClass} value={form.pic_funcionario_id} onChange={(e) => set('pic_funcionario_id', e.target.value)} disabled={!form.aeronave_id || loadingCrew} required>
                   <option value="">{loadingCrew ? 'Carregando…' : 'Selecione'}</option>{picOptions.map((member) => <option key={member.id} value={member.id}>{member.nome_guerra || member.nome}</option>)}
@@ -626,16 +630,18 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
               <label className="text-sm">Função a bordo — posto SIC
                 <select className={fieldClass} value={form.sic_funcao_bordo_id} onChange={(e) => set('sic_funcao_bordo_id', e.target.value)} required><option value="">Selecione</option>{funcoesBordo.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select>
               </label>
-            </>
+            </div>
           ) : (
-            <div className="text-sm md:col-span-2">
+            <div className="text-sm md:col-span-2 xl:col-span-3">
               <div className="flex items-center justify-between gap-2"><label htmlFor="controle-voos-funcao-bordo">Minha função a bordo</label><Link to="/controle-voos/tabelas" className="text-xs font-medium text-cyan-700 hover:underline dark:text-cyan-300">Gerenciar funções</Link></div>
               <select id="controle-voos-funcao-bordo" className={fieldClass} value={form.funcao_bordo_id} onChange={(e) => set('funcao_bordo_id', e.target.value)} required><option value="">Selecione</option>{funcoesBordo.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select>
             </div>
           )}
 
-          <label className="text-sm">{mode === 'coordenacao' ? 'Decolagem estimada' : 'Saída prevista'}<input type={mode === 'pilot' ? 'time' : 'datetime-local'} className={fieldClass} value={form.horario_previsto_partida} onChange={(e) => setPlannedDeparture(e.target.value)} required /></label>
-          <label className="text-sm">{mode === 'coordenacao' ? 'Retorno estimado' : 'Chegada prevista'}<input type={mode === 'pilot' ? 'time' : 'datetime-local'} className={fieldClass} value={form.horario_previsto_chegada} onChange={(e) => setPlannedArrival(e.target.value)} required /></label>
+          <div className="grid gap-3 md:col-span-2 md:grid-cols-2 xl:col-span-2">
+          <label className="text-sm">{mode === 'coordenacao' ? 'Partida prevista' : 'Saída prevista'}<input type={mode === 'pilot' ? 'time' : 'datetime-local'} className={fieldClass} value={form.horario_previsto_partida} onChange={(e) => setPlannedDeparture(e.target.value)} required /></label>
+          <label className="text-sm">Chegada prevista<input type={mode === 'pilot' ? 'time' : 'datetime-local'} className={fieldClass} value={form.horario_previsto_chegada} onChange={(e) => setPlannedArrival(e.target.value)} required /></label>
+          </div>
           {mode === 'coordenacao' && (
             <label className="text-sm">Tempo total de voo
               <input
@@ -682,6 +688,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
                 onChangeLb={(value) => set('peso_bagagem', value)}
                 fieldClass={fieldClass}
               />
+              <DualWeightInput label="Peso da carga" valueLb={form.peso_carga} onChangeLb={(value) => set('peso_carga', value)} fieldClass={fieldClass} />
               <label className="text-sm">Combustível solicitado
                 <div className="flex gap-2">
                   <input type="number" min="0" step="0.1" className={fieldClass} value={form.combustivel_solicitado} onChange={(e) => set('combustivel_solicitado', e.target.value)} placeholder="Quantidade solicitada" />
@@ -693,7 +700,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
             </>
           )}
           {mode === 'coordenacao' && (
-            <div className="md:col-span-2 rounded-xl border border-cyan-200 bg-cyan-50/60 p-3 dark:border-cyan-900 dark:bg-cyan-950/20">
+            <div className="md:col-span-2 xl:col-span-3 rounded-xl border border-cyan-200 bg-cyan-50/60 p-3 dark:border-cyan-900 dark:bg-cyan-950/20">
               <div className="flex items-start gap-3">
                 <FileText className="mt-0.5 h-5 w-5 shrink-0 text-cyan-700 dark:text-cyan-300" />
                 <div className="min-w-0 flex-1">
@@ -736,7 +743,7 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
           <label className="text-sm md:col-span-2">Observações<textarea className={fieldClass} rows={3} value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} /></label>
 
           {mode === 'coordenacao' && (
-            <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/30">
+            <div className="md:col-span-2 xl:col-span-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/30">
               <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Enviar para os tripulantes</p>
               <div className="mt-2 flex flex-wrap gap-5 text-sm text-slate-700 dark:text-slate-300">
                 <label className="flex items-center gap-2">
@@ -751,9 +758,11 @@ export default function ControleVoosNovoVooDialog({ open, mode, onClose, onCreat
               <p className="mt-2 text-xs text-slate-500">Selecione um ou os dois canais. Se houver planejamento prévio em PDF, ele acompanha a comunicação aos tripulantes.</p>
             </div>
           )}
-          {error && <div className="md:col-span-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">{error}</div>}
-          {loadingCatalogos && <p className="md:col-span-2 text-sm text-slate-500">Carregando cadastros operacionais…</p>}
-          <div className="md:col-span-2 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+          {error && <div className="md:col-span-2 xl:col-span-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">{error}</div>}
+          {loadingCatalogos && <p className="md:col-span-2 xl:col-span-3 text-sm text-slate-500">Carregando cadastros operacionais…</p>}
+          </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
             <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm dark:border-slate-700">Cancelar</button>
             {mode === 'coordenacao' && (
               <button type="submit" name="submit_intent" value="share_whatsapp" disabled={saving || loadingCatalogos || aeronaves.length === 0} className="rounded-lg border border-emerald-600 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 disabled:opacity-50 dark:bg-emerald-950/20 dark:text-emerald-300">

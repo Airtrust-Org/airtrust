@@ -55,7 +55,7 @@ describe('governed session close wiring', () => {
   });
 
   it('preserves completion-error code/reason for diagnostics', () => {
-    expect(SOURCE).toContain('setCompletionErrorInfo({ code, reason, message: baseMessage })');
+    expect(SOURCE).toContain('setCompletionErrorInfo({ code, reason, message: actionableMessage })');
     expect(SOURCE).toContain('const code = sanitizeDiagnosticCode(event.data.code)');
     expect(SOURCE).toContain('(código: ${code})');
     expect(SOURCE).toContain('Código de diagnóstico:');

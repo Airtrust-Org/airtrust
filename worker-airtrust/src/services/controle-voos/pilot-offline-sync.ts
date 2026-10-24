@@ -413,7 +413,10 @@ export function buildOfflineSyncReceiptInsert(
   },
 ): D1PreparedStatement {
   const selectPrefix = input.requirePriorChange
-    ? `SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now') WHERE (SELECT changes()) > 0`
+    // Abort the entire D1 batch when the RDV CAS loses. Skipping the receipt
+    // alone is unsafe: a competing writer may already have created the target
+    // RDV version, allowing subsequent stage/fueling statements to run.
+    ? `SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN (SELECT changes()) > 0 THEN ? ELSE NULL END, ?, ?, datetime('now'), datetime('now')`
     : `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`;
 
   return db
@@ -561,8 +564,8 @@ export function buildAcceptedReceiptForCreatedRdv(
             ORDER BY id DESC
             LIMIT 1
           ),
-          ?, ?, 1, 'accepted', NULL, NULL, datetime('now'), datetime('now')
-        WHERE (SELECT changes()) > 0
+          ?, ?, 1, CASE WHEN (SELECT changes()) > 0 THEN 'accepted' ELSE NULL END,
+          NULL, NULL, datetime('now'), datetime('now')
       `,
     )
     .bind(

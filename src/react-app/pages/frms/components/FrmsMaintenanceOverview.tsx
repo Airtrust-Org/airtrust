@@ -21,7 +21,7 @@ const BUCKET_STYLE: Record<MaintenanceDecisionBucket, { label: string; className
     dot: 'bg-orange-500',
   },
   PENDING: {
-    label: 'Pendente',
+    label: 'Evidência insuficiente',
     className:
       'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200',
     dot: 'bg-amber-400',
@@ -96,7 +96,7 @@ export default function FrmsMaintenanceOverview({ items, counts, isLoading, erro
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Resumo de manutenção">
         <MetricCard label="Revisão imediata" value={counts.CRITICAL} helper="sinal crítico de fadiga ou prontidão" />
         <MetricCard label="Atenção" value={counts.ATTENTION} helper="requer avaliação e mitigação" />
-        <MetricCard label="Pendentes" value={counts.PENDING} helper="check-in ou PVT ainda não registrado" />
+        <MetricCard label="Evidência insuficiente" value={counts.PENDING} helper="check-in, PVT ou baseline individual não confirmado" />
         <MetricCard label="Sem pendência" value={counts.NORMAL} helper="monitoramento normal" />
       </section>
 
@@ -110,7 +110,7 @@ export default function FrmsMaintenanceOverview({ items, counts, isLoading, erro
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
           <div>
             <h2 className="font-bold text-slate-950 dark:text-white">Equipe de manutenção</h2>
-            <p className="text-xs text-slate-500">A prioridade considera fadiga diária e prontidão objetiva.</p>
+            <p className="text-xs text-slate-500">A prioridade considera sinais de fadiga e evidência de prontidão; baseline em formação não comprova condição normal.</p>
           </div>
           <span className="text-xs font-semibold text-slate-500">{items.length} profissional(is)</span>
         </div>
@@ -165,7 +165,7 @@ export default function FrmsMaintenanceOverview({ items, counts, isLoading, erro
                     </td>
                     <td className="px-4 py-3"><DecisionBadge bucket={bucket} /></td>
                     <td className="max-w-sm px-4 py-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                      {maintenanceActionText(bucket)}
+                      {maintenanceActionText(bucket, item)}
                     </td>
                   </tr>
                 ))}
@@ -193,8 +193,8 @@ export default function FrmsMaintenanceOverview({ items, counts, isLoading, erro
         <div className="flex gap-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <Clock3 className="h-5 w-5 flex-none text-amber-500" />
           <div>
-            <p className="text-sm font-bold text-slate-900 dark:text-white">Pendente</p>
-            <p className="text-xs text-slate-500">Ausência de dado não é tratada como condição normal.</p>
+            <p className="text-sm font-bold text-slate-900 dark:text-white">Evidência insuficiente</p>
+            <p className="text-xs text-slate-500">Ausência de check-in, PVT ou baseline confirmado não é tratada como condição normal.</p>
           </div>
         </div>
       </div>

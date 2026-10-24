@@ -41,6 +41,7 @@ function createCompatDb(options: {
   hasCursoSetores: boolean;
   hasQualificacaoTipoSetores: boolean;
   failSchemaQuery?: boolean;
+  parallelProbe?: { pageStarted: boolean };
 }) {
   const queries: string[] = [];
   const db = {
@@ -75,10 +76,19 @@ function createCompatDb(options: {
         };
       }
       if (query.includes('SELECT COUNT(*) as n FROM lms_cursos c')) {
-        return { bind: () => ({ first: async () => ({ n: 0 }) }) };
+        return { bind: () => ({ first: async () => {
+          await Promise.resolve();
+          if (options.parallelProbe && !options.parallelProbe.pageStarted) {
+            throw new Error('LMS_COURSE_READS_SEQUENTIAL');
+          }
+          return { n: 0 };
+        } }) };
       }
       if (query.includes('FROM lms_cursos c') && query.includes('ORDER BY c.titulo ASC')) {
-        return { bind: () => ({ all: async () => ({ results: [] }) }) };
+        return { bind: () => ({ all: async () => {
+          if (options.parallelProbe) options.parallelProbe.pageStarted = true;
+          return { results: [] };
+        } }) };
       }
       if (query.includes('INSERT INTO lms_cursos')) {
         return { bind: () => ({ run: async () => ({ meta: { changes: 1, last_row_id: 21 } }) }) };
@@ -152,6 +162,26 @@ describe('lms cursos schema compatibility', () => {
     expect(queries.find((sql) => sql.includes('SELECT COUNT(*) as n FROM lms_cursos c'))).toContain(
       'AND 1 = 0',
     );
+  });
+
+  it('carrega count e página em paralelo sem ampliar escopo do tenant', async () => {
+    authState.role = 'admin';
+    const parallelProbe = { pageStarted: false };
+    const { db, queries } = createCompatDb({
+      hasCursoSetores: false,
+      hasQualificacaoTipoSetores: false,
+      parallelProbe,
+    });
+    const response = await createTestApp().request('/cursos?limit=5', { method: 'GET' }, {
+      DB: db,
+    } as Env);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true, data: [], pagination: { total: 0, limit: 5 },
+    });
+    expect(parallelProbe.pageStarted).toBe(true);
+    expect(queries.some((sql) => sql.includes('SELECT COUNT(*) as n FROM lms_cursos c'))).toBe(true);
+    expect(queries.some((sql) => sql.includes('ORDER BY c.titulo ASC'))).toBe(true);
   });
 
   it('detalhe continua disponível para admin com setores vazios quando tabelas não existem', async () => {

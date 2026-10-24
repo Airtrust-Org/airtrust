@@ -561,40 +561,144 @@ app.post('/sessoes/:id/checks/resultados', requireOperacoesFicha('create'), asyn
       return c.json({ success: false, error: 'Sessão não é do tipo check' }, 400);
     }
 
-    const resultadosSalvos = [];
+    // Legacy results are session-wide. They cannot safely represent a check
+    // made by just one employee if this session ever had multiple employees.
+    // Include soft-deleted roster/fichas: deleting another participant must not
+    // convert a group result into individual evidence.
+    const roster = await c.env.DB.prepare(
+      `SELECT COUNT(DISTINCT funcionario_id) AS unique_people,
+              SUM(CASE WHEN funcionario_id IS NULL THEN 1 ELSE 0 END) AS missing_identity
+         FROM (
+           SELECT sp.funcionario_id
+             FROM sessoes_participantes sp WHERE sp.sessao_id = ?
+           UNION ALL
+           SELECT fs.colaborador_id_aluno AS funcionario_id
+             FROM fichas_sessao fs
+            WHERE fs.agendamento_slot_id = ? AND fs.empresa_id = ?
+           UNION ALL
+           SELECT sa.funcionario_id AS funcionario_id
+             FROM simulador_agendamentos sa
+            WHERE sa.id = ? AND sa.empresa_id = ? AND sa.funcionario_id IS NOT NULL
+         )`,
+    )
+      .bind(sessao_id, sessao_id, empresaId, sessao_id, empresaId)
+      .first<{ unique_people: number; missing_identity: number }>();
+    if (!roster || Number(roster.unique_people) !== 1 ||
+        Number(roster.missing_identity || 0) !== 0) {
+      return c.json({
+        success: false,
+        code: 'INDIVIDUAL_CHECK_EVIDENCE_REQUIRED',
+        error: 'Sessão compartilhada ou sem participante inequívoco: registre checks por funcionário.',
+      }, 409);
+    }
 
+    // A session being scoped is insufficient: a client may submit the ID of a
+    // check from another session/tenant. Validate the entire batch BEFORE any
+    // write, then keep the same predicate on each write (fail closed).
+    if (resultados.length === 0 || resultados.length > 100) {
+      return c.json({ success: false, error: 'Quantidade de resultados inválida' }, 400);
+    }
+
+    const checkIds = new Set<number>();
+    const validated: Array<{
+      sessao_check_id: number;
+      aprovado: boolean;
+      observacoes: string | null;
+    }> = [];
     for (const res of resultados) {
-      const { sessao_check_id, aprovado, observacoes } = res;
-
-      if (typeof aprovado !== 'boolean') {
-        continue;
+      const checkId = res?.sessao_check_id;
+      if (
+        !Number.isSafeInteger(checkId) ||
+        checkId <= 0 ||
+        checkIds.has(checkId) ||
+        typeof res?.aprovado !== 'boolean' ||
+        (res.observacoes != null &&
+          (typeof res.observacoes !== 'string' || res.observacoes.length > 2000))
+      ) {
+        return c.json({ success: false, error: 'Resultado de check inválido' }, 400);
       }
+      checkIds.add(checkId);
+      validated.push({
+        sessao_check_id: checkId,
+        aprovado: res.aprovado,
+        observacoes: res.observacoes || null,
+      });
+    }
 
+    const placeholders = validated.map(() => '?').join(', ');
+    const scopedChecks = await c.env.DB.prepare(
+      `SELECT sc.id
+         FROM sessoes_checks sc
+         INNER JOIN simulador_agendamentos sa
+           ON sa.id = sc.sessao_id
+          AND sa.empresa_id = ?
+          AND sa.deleted_at IS NULL
+        WHERE sc.sessao_id = ?
+          AND sc.deleted_at IS NULL
+          AND sc.id IN (${placeholders})`,
+    )
+      .bind(empresaId, sessao_id, ...validated.map((result) => result.sessao_check_id))
+      .all<{ id: number }>();
+
+    const allowedIds = new Set((scopedChecks.results || []).map((row) => Number(row.id)));
+    if (allowedIds.size !== checkIds.size ||
+        validated.some((result) => !allowedIds.has(result.sessao_check_id))) {
+      return c.json({ success: false, error: 'Check não pertence à sessão' }, 400);
+    }
+
+    const statements: D1PreparedStatement[] = [];
+    for (const result of validated) {
+      const { sessao_check_id, aprovado, observacoes } = result;
       const existente = await c.env.DB.prepare(
-        'SELECT id FROM sessoes_checks_resultados WHERE sessao_check_id = ? AND deleted_at IS NULL',
+        `SELECT scr.id
+           FROM sessoes_checks_resultados scr
+           JOIN sessoes_checks sc ON sc.id = scr.sessao_check_id
+           JOIN simulador_agendamentos sa
+             ON sa.id = sc.sessao_id AND sa.empresa_id = ? AND sa.deleted_at IS NULL
+          WHERE scr.sessao_check_id = ? AND sc.sessao_id = ?
+            AND scr.deleted_at IS NULL AND sc.deleted_at IS NULL`,
       )
-        .bind(sessao_check_id)
-        .first();
+        .bind(empresaId, sessao_check_id, sessao_id)
+        .first<{ id: number }>();
 
       if (existente) {
-        await c.env.DB.prepare(
-          `UPDATE sessoes_checks_resultados
-           SET aprovado = ?, observacoes = ?, updated_at = datetime('now')
-           WHERE id = ?`,
-        )
-          .bind(aprovado ? 1 : 0, observacoes || null, existente.id)
-          .run();
+        statements.push(
+          c.env.DB.prepare(
+            `UPDATE sessoes_checks_resultados
+                SET aprovado = ?, observacoes = ?, updated_at = datetime('now')
+              WHERE id = ? AND deleted_at IS NULL
+                AND EXISTS (
+                  SELECT 1 FROM sessoes_checks sc
+                  JOIN simulador_agendamentos sa
+                    ON sa.id = sc.sessao_id AND sa.empresa_id = ? AND sa.deleted_at IS NULL
+                  WHERE sc.id = sessoes_checks_resultados.sessao_check_id
+                    AND sc.id = ? AND sc.sessao_id = ? AND sc.deleted_at IS NULL
+                )`,
+          ).bind(aprovado ? 1 : 0, observacoes, existente.id, empresaId, sessao_check_id, sessao_id),
+        );
       } else {
-        await c.env.DB.prepare(
-          `INSERT INTO sessoes_checks_resultados (sessao_check_id, aprovado, observacoes, created_at, updated_at)
-           VALUES (?, ?, ?, datetime('now'), datetime('now'))`,
-        )
-          .bind(sessao_check_id, aprovado ? 1 : 0, observacoes || null)
-          .run();
+        statements.push(
+          c.env.DB.prepare(
+            `INSERT INTO sessoes_checks_resultados
+               (sessao_check_id, aprovado, observacoes, created_at, updated_at)
+             SELECT sc.id, ?, ?, datetime('now'), datetime('now')
+               FROM sessoes_checks sc
+               JOIN simulador_agendamentos sa
+                 ON sa.id = sc.sessao_id AND sa.empresa_id = ? AND sa.deleted_at IS NULL
+              WHERE sc.id = ? AND sc.sessao_id = ? AND sc.deleted_at IS NULL`,
+          ).bind(aprovado ? 1 : 0, observacoes, empresaId, sessao_check_id, sessao_id),
+        );
       }
-
-      resultadosSalvos.push({ sessao_check_id, aprovado });
     }
+
+    const writes = await c.env.DB.batch(statements);
+    if (writes.some((write) => !write.success || Number(write.meta.changes) !== 1)) {
+      throw new Error('CHECK_RESULT_WRITE_INCOMPLETE');
+    }
+    const resultadosSalvos = validated.map(({ sessao_check_id, aprovado }) => ({
+      sessao_check_id,
+      aprovado,
+    }));
 
     return c.json({
       success: true,

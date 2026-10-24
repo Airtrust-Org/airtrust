@@ -169,6 +169,29 @@ export function extractScormLocationFromCmiJson(cmiJson: Nullable<string>) {
   }
 }
 
+/**
+ * Server-side confirmation that the wrapper observed every distinct slide.
+ * A max-position marker alone is not sufficient (1 -> 45 would otherwise pass).
+ * This record is scoped to the enrollment's persisted SCORM runtime state.
+ */
+export function hasCompleteScormSlideCoverage(cmiJson: string | null | undefined): boolean {
+  if (!cmiJson) return false;
+  try {
+    const state = JSON.parse(cmiJson) as Record<string, unknown>;
+    if (!state || typeof state !== 'object' || Array.isArray(state)) return false;
+    const marker = parseScormLocationPair(
+      state['cmi.location'] ?? state['cmi.core.lesson_location'],
+    );
+    if (!marker || marker.total > 1000 || marker.current < marker.total) return false;
+    const visited = state['airtrust.viewed_slides'];
+    return Number(state['airtrust.total_slides']) === marker.total &&
+      Array.isArray(visited) && visited.length === marker.total &&
+      visited.every((number, index) => number === index + 1);
+  } catch {
+    return false;
+  }
+}
+
 /** Aceita o fallback SCORM 1.2 apenas com as evidências finais emitidas pelo wrapper. */
 export function isTrustedScorm12Finish(data: {
   lesson_status?: Nullable<string>;
@@ -180,7 +203,7 @@ export function isTrustedScorm12Finish(data: {
   const location = extractScormLocationFromCmiJson(data.cmi_json);
   return (
     normalizeScormToken(data.lesson_status) === 'incomplete' &&
-    normalizeCommitEvent(data.commit_event) === 'SCORM_FINISH' &&
+    ['SCORM_FINISH', 'SCORM_USER_FINALIZE'].includes(normalizeCommitEvent(data.commit_event) || '') &&
     data.completion_candidate === true &&
     Number.isFinite(Date.parse(String(data.completion_observed_at ?? ''))) &&
     location?.total != null &&
@@ -318,6 +341,55 @@ function isRegressiveScormLocation(
   return true;
 }
 
+/**
+ * Resume/SCORM autosave may send a delta CMI snapshot without the old slide
+ * array. Only union slide IDs *actually reported* by the package for the same
+ * declared total. Never infer visited pages from location (3/3 is not proof
+ * of 1/3 or 2/3), and never carry coverage between different slide totals.
+ * Enrollment, tenant and edition checks are enforced by the calling route.
+ */
+/**
+ * Merge ONLY visits actually reported by a wrapper in the same slide-total
+ * lineage, even when a reopened SCO downgrades its lesson status.
+ * The terminal status/score/suspend_data remain protected separately.
+ * A last-page bookmark alone never becomes evidence for prior visits.
+ */
+function preserveObservedScormSlides(
+  previous: Record<string, unknown> | null,
+  incoming: Record<string, unknown> | null,
+  merged: Record<string, unknown> | null,
+): void {
+  if (!previous || !incoming || !merged) return;
+  const previousMarker = parseScormLocationMarker(readScormLocationValue(previous));
+  const incomingMarker = parseScormLocationMarker(readScormLocationValue(incoming));
+  const oldDeclared = previous['airtrust.total_slides'];
+  const newDeclared = incoming['airtrust.total_slides'];
+  const oldTotal = oldDeclared == null ? previousMarker?.total : oldDeclared;
+  const newTotal = newDeclared == null ? incomingMarker?.total : newDeclared;
+  if (typeof oldTotal !== 'number' || !Number.isSafeInteger(oldTotal) ||
+    oldTotal < 1 || oldTotal > 1000 || newTotal !== oldTotal) return;
+  if (previousMarker?.total != null && previousMarker.total !== oldTotal) return;
+  if (incomingMarker?.total != null && incomingMarker.total !== oldTotal) return;
+
+  const oldSlides = previous['airtrust.viewed_slides'];
+  const newSlides = incoming['airtrust.viewed_slides'];
+  if (oldSlides == null && newSlides == null) return;
+  if (oldSlides != null && !Array.isArray(oldSlides)) return;
+  if (newSlides != null && !Array.isArray(newSlides)) return;
+  const valid = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) &&
+    value >= 1 && value <= oldTotal;
+  const oldList = (oldSlides ?? []) as unknown[];
+  const newList = (newSlides ?? []) as unknown[];
+  if (!oldList.every(valid) || !newList.every(valid) ||
+    new Set(oldList).size !== oldList.length ||
+    new Set(newList).size !== newList.length) return;
+
+  merged['airtrust.total_slides'] = oldTotal;
+  merged['airtrust.viewed_slides'] =
+    [...new Set([...oldList, ...newList])].sort((x, y) => (x as number) - (y as number));
+}
+
 export function mergeScormRuntimeState(params: {
   currentCmiJson?: Nullable<string>;
   incomingCmiJson?: Nullable<string>;
@@ -326,7 +398,25 @@ export function mergeScormRuntimeState(params: {
 }) {
   const currentCmi = parseScormCmiJson(params.currentCmiJson);
   const incomingCmi = parseScormCmiJson(params.incomingCmiJson);
-  const mergedCmi = incomingCmi ? { ...incomingCmi } : currentCmi ? { ...currentCmi } : null;
+  const isTerminalCmi = (cmi: Record<string, unknown> | null) =>
+    scormStatusIndicatesCompletion({
+      lessonStatus: typeof cmi?.['cmi.core.lesson_status'] === 'string'
+        ? cmi['cmi.core.lesson_status'] : null,
+      completionStatus: typeof cmi?.['cmi.completion_status'] === 'string'
+        ? cmi['cmi.completion_status'] : null,
+      successStatus: typeof cmi?.['cmi.success_status'] === 'string'
+        ? cmi['cmi.success_status'] : null,
+    });
+  // The SCORM package can reset lesson_status/score/location when reopening
+  // a passed lesson. Never replace an already terminal CMI snapshot with
+  // incomplete runtime state before the student's explicit confirmation.
+  // Ordinary incomplete sessions and genuine terminal updates still merge.
+  const blockedTerminalRegression = Boolean(
+    currentCmi && incomingCmi && isTerminalCmi(currentCmi) && !isTerminalCmi(incomingCmi),
+  );
+  const mergedCmi = blockedTerminalRegression
+    ? { ...currentCmi }
+    : incomingCmi ? { ...incomingCmi } : currentCmi ? { ...currentCmi } : null;
 
   const currentLocationValue = readScormLocationValue(currentCmi);
   const incomingLocationValue = readScormLocationValue(incomingCmi);
@@ -336,7 +426,7 @@ export function mergeScormRuntimeState(params: {
   const blockedLocationRegression = isRegressiveScormLocation(currentLocation, incomingLocation);
   const preservedLocationFromCurrent =
     Boolean(currentLocationValue) && (!incomingLocationValue || blockedLocationRegression);
-  const mergedLocationValue = preservedLocationFromCurrent
+  const mergedLocationValue = blockedTerminalRegression || preservedLocationFromCurrent
     ? currentLocationValue
     : (incomingLocationValue ?? currentLocationValue);
 
@@ -355,12 +445,15 @@ export function mergeScormRuntimeState(params: {
       currentSuspendData.length < SUSPEND_DATA_NEAR_LIMIT_THRESHOLD,
   );
   const mergedSuspendData: string | null = (() => {
-    if (blockedEmptySuspendData || blockedShorterSuspendData) {
+    if (blockedTerminalRegression || blockedEmptySuspendData || blockedShorterSuspendData) {
       return currentSuspendData ?? null;
     }
     return incomingSuspendData ?? currentSuspendData ?? null;
   })();
 
+  // Even a reopened, regressive SCO may report newly visited missing slides.
+  // Preserve only the visit union, NEVER its downgraded status or score.
+  preserveObservedScormSlides(currentCmi, incomingCmi, mergedCmi);
   if (mergedCmi && mergedLocationValue) {
     writeScormLocationValue(mergedCmi, mergedLocationValue);
   }
@@ -378,6 +471,7 @@ export function mergeScormRuntimeState(params: {
       blockedLocationRegression,
       blockedEmptySuspendData,
       blockedShorterSuspendData,
+      blockedTerminalRegression,
       preservedLocationFromCurrent,
     },
   };
@@ -464,6 +558,7 @@ export function buildScormCompletionDiagnostic(params: {
   const commitEvent = params.commitEvent ?? params.commit?.commit_event;
   const finalCommitObserved = [
     'SCORM_FINISH',
+    'SCORM_USER_FINALIZE',
     'SCORM_COMPLETION_CANDIDATE',
     'SCORM_BEFORE_UNLOAD_COMMIT',
     'SCORM_VISIBILITY_COMMIT',

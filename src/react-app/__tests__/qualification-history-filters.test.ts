@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   COMPLETE_QUALIFICATION_HISTORY_STATUSES,
+  DEFAULT_QUALIFICATION_HISTORY_STATUSES,
   createDefaultQualificationHistoryStatusSet,
   normalizeQualificationHistoryStatuses,
   normalizeQualificationHistorySectorFilter,
@@ -8,9 +9,24 @@ import {
 } from '@/react-app/lib/qualificationHistoryFilters';
 
 describe('qualification history filters', () => {
-  it('abre o historico com todos os status visiveis', () => {
-    expect([...createDefaultQualificationHistoryStatusSet()]).toEqual([
-      ...COMPLETE_QUALIFICATION_HISTORY_STATUSES,
+  it('abre o historico com renovadas, planejadas e canceladas desmarcadas por padrao', () => {
+    const defaultStatuses = [...createDefaultQualificationHistoryStatusSet()];
+
+    expect(defaultStatuses).toEqual([...DEFAULT_QUALIFICATION_HISTORY_STATUSES]);
+    expect(defaultStatuses).toEqual(['VALIDA', 'VENCIDA', 'VENCENDO_30']);
+    expect(defaultStatuses).not.toContain('RENOVADA');
+    expect(defaultStatuses).not.toContain('PLANEJADA');
+    expect(defaultStatuses).not.toContain('CANCELADA');
+  });
+
+  it('mantem todos os status disponiveis para escolha do usuario', () => {
+    expect(COMPLETE_QUALIFICATION_HISTORY_STATUSES).toEqual([
+      'VALIDA',
+      'VENCIDA',
+      'VENCENDO_30',
+      'RENOVADA',
+      'PLANEJADA',
+      'CANCELADA',
     ]);
   });
 

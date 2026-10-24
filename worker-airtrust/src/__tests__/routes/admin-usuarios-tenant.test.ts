@@ -620,6 +620,26 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
     });
   });
 
+  describe('GESTOR não delega privilégios globais', () => {
+    it('nega GRANT admin.multiempresa a usuário comum da própria empresa', async () => {
+      const response = await adminRequest('PUT', '/200/permissoes', {
+        callerId: 10, callerRole: 'GESTOR', callerEmpresaId: 1,
+        body: { permissoes: [{ permissao: 'admin.multiempresa', tipo: 'GRANT' as const }] },
+        db: createDb({ targetExists: true, targetPerfil: 'ALUNO', targetEmpresaId: 1, targetHasVinculo: true }),
+      });
+      expect(response.status).toBe(403);
+    });
+
+    it('permite atualizar permissões operacionais de aluno na própria empresa', async () => {
+      const response = await adminRequest('PUT', '/200/permissoes', {
+        callerId: 10, callerRole: 'GESTOR', callerEmpresaId: 1,
+        body: { permissoes: [{ permissao: 'frms.view', tipo: 'GRANT' as const }] },
+        db: createDb({ targetExists: true, targetPerfil: 'ALUNO', targetEmpresaId: 1, targetHasVinculo: true }),
+      });
+      expect(response.status).toBe(200);
+    });
+  });
+
   // ────────────────────────────────────────────
   // Platform admin cross-tenant
   // ────────────────────────────────────────────
@@ -673,6 +693,24 @@ describe('admin-usuarios tenant isolation (BUG-002)', () => {
       });
 
       expect(response.status).toBe(200);
+    });
+  });
+
+  describe('proteção de credenciais do administrador global', () => {
+    it('administrador de empresa não redefine senha do administrador de plataforma', async () => {
+      const response = await adminRequest('PATCH', '/99/reset-senha', {
+        callerId: 10,
+        callerRole: 'ADMINISTRADOR',
+        callerEmpresaId: 1,
+        body: { nova_senha: 'SenhaDeTesteForte!2026' },
+        db: createDb({
+          targetExists: true,
+          targetPerfil: 'ADMINISTRADOR',
+          targetEmpresaId: 1,
+          targetHasVinculo: true,
+        }),
+      });
+      expect(response.status).toBe(403);
     });
   });
 
@@ -815,6 +853,25 @@ describe('Administrador da Empresa privilege boundary', () => {
       }),
     });
     expect(response.status).toBe(403);
+  });
+
+  it('GESTOR não pode remover acesso nem alterar permissões de uma Coordenação de Voo', async () => {
+    const companyTarget = () => createDb({
+      targetExists: true,
+      targetPerfil: 'COORDENACAO_VOO',
+      targetEmpresaId: 1,
+      targetHasVinculo: true,
+    });
+    const deletion = await adminRequest('DELETE', '/200', {
+      callerId: 10, callerRole: 'GESTOR', callerEmpresaId: 1, db: companyTarget(),
+    });
+    expect(deletion.status).toBe(403);
+    const permissions = await adminRequest('PUT', '/200/permissoes', {
+      callerId: 10, callerRole: 'GESTOR', callerEmpresaId: 1,
+      body: { permissoes: [{ permissao: 'controle_voos.edit', tipo: 'GRANT' as const }] },
+      db: companyTarget(),
+    });
+    expect(permissions.status).toBe(403);
   });
 
   it('GESTOR não pode remover acesso de outro Administrador da Empresa', async () => {

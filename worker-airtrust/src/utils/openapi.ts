@@ -518,11 +518,15 @@ export const openApiSpec = {
     '/api/lms/matriculas/convites/lote': {
       post: {
         tags: ['LMS'],
-        summary: 'Enviar ou reenviar convite por e-mail para matrículas existentes',
+        summary: 'Enviar convite ou alerta de matrícula por e-mail e/ou WhatsApp',
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
-          content: { 'application/json': { schema: { $ref: '#/components/schemas/LmsMatriculaConviteLoteInput' } } },
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/LmsMatriculaConviteLoteInput' },
+            },
+          },
         },
         responses: {
           '200': { description: 'Convites processados' },
@@ -862,6 +866,7 @@ export const openApiSpec = {
           carga_horaria_recorrente_horas: { type: 'number', nullable: true },
           conteudo_programatico: { type: 'string', nullable: true },
           observacoes: { type: 'string', nullable: true },
+          referencias: { type: 'string', nullable: true },
           thumbnail_r2_key: { type: 'string', nullable: true },
           total_matriculas: { type: 'integer', nullable: true },
           total_concluidos: { type: 'integer', nullable: true },
@@ -879,6 +884,7 @@ export const openApiSpec = {
           carga_horaria_minutos: { type: 'integer', minimum: 0, default: 0 },
           conteudo_programatico: { type: 'string', nullable: true },
           observacoes: { type: 'string', nullable: true },
+          referencias: { type: 'string', nullable: true },
           carga_horaria_inicial_horas: { type: 'number', nullable: true, minimum: 0 },
           carga_horaria_recorrente_horas: { type: 'number', nullable: true, minimum: 0 },
           idioma: { type: 'string', default: 'pt-BR' },
@@ -899,6 +905,7 @@ export const openApiSpec = {
           carga_horaria_minutos: { type: 'integer', minimum: 0 },
           conteudo_programatico: { type: 'string', nullable: true },
           observacoes: { type: 'string', nullable: true },
+          referencias: { type: 'string', nullable: true },
           carga_horaria_inicial_horas: { type: 'number', nullable: true, minimum: 0 },
           carga_horaria_recorrente_horas: { type: 'number', nullable: true, minimum: 0 },
           idioma: { type: 'string' },
@@ -995,14 +1002,32 @@ export const openApiSpec = {
         type: 'object',
         required: ['matricula_ids'],
         properties: {
-          matricula_ids: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'integer', minimum: 1 } },
+          matricula_ids: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 200,
+            items: { type: 'integer', minimum: 1 },
+          },
+          modo: {
+            type: 'string',
+            enum: ['convite', 'alerta'],
+            default: 'convite',
+          },
+          canais: {
+            type: 'object',
+            properties: {
+              email: { type: 'boolean' },
+              whatsapp: { type: 'boolean' },
+            },
+          },
         },
       },
       LmsScormCommitInput: {
         type: 'object',
-        required: ['matricula_id'],
+        required: ['matricula_id', 'ciclo_id'],
         properties: {
           matricula_id: { type: 'integer', minimum: 1 },
+          ciclo_id: { type: 'integer', minimum: 1, description: 'Ciclo ativo incluído na sessão server-side do Player SCORM.' },
           lesson_status: { type: 'string', nullable: true },
           completion_status: { type: 'string', nullable: true },
           success_status: { type: 'string', nullable: true },

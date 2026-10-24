@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import { useMatriculaDetalhe, usePostXapiStatement } from '@/react-app/hooks/useLms';
-import type { PostXapiStatementResult } from '@/react-app/hooks/useLms';
+import type { PostXapiStatementDTO } from '@/react-app/hooks/useLms';
 import {
   API_BASE_URL,
   AUTH_TOKEN_CHANGED_EVENT,
@@ -34,7 +34,7 @@ interface H5PStatement {
   actor?: Record<string, unknown>;
   verb?: { id?: string; display?: Record<string, string> };
   object?: { id?: string; objectType?: string };
-  result?: PostXapiStatementResult | Record<string, unknown>;
+  result?: PostXapiStatementDTO['result'] | Record<string, unknown>;
   context?: Record<string, unknown>;
   timestamp?: string;
 }
@@ -98,6 +98,11 @@ export default function LmsPlayerH5p() {
   const initializedRef = useRef(false);
 
   const [completed, setCompleted] = useState(false);
+  const [completionReady, setCompletionReady] = useState(false);
+  const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  const [completionSubmitting, setCompletionSubmitting] = useState(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  const pendingTerminalStatementRef = useRef<null | (() => Promise<void>)>(null);
   const [completionInfo, setCompletionInfo] = useState<CompletionInfo | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
@@ -230,24 +235,37 @@ export default function LmsPlayerH5p() {
                 id: stmt.object?.id ?? `h5p:${h5pId}`,
                 objectType: stmt.object?.objectType ?? 'Activity',
               },
-              result: stmt.result as PostXapiStatementResult | undefined,
+              result: stmt.result as PostXapiStatementDTO['result'],
               context: stmt.context,
               timestamp: stmt.timestamp ?? new Date().toISOString(),
             };
 
-            postStatement
-              .mutateAsync(dto)
-              .then((res) => {
-                if (res.novo_status === 'CONCLUIDO' && !completed) {
-                  setCompleted(true);
-                  setCompletionInfo({
-                    qualificacao: !!res.qualificacao_gerada,
-                    qualificacao_id: (res.qualificacao_gerada as Record<string, unknown>)
-                      ?.qualificacao_id as number | undefined,
-                  });
+            const terminalVerb = /\/(passed|completed)$/i.test(stmt.verb.id);
+            const explicitFailure = (stmt.result as { success?: boolean } | undefined)?.success === false ||
+              /\/failed$/i.test(stmt.verb.id);
+            if (terminalVerb && !explicitFailure) {
+              // H5P does not have a standardized internal "Concluir curso"
+              // button. Keep its terminal statement pending until the student
+              // confirms in the AirTrust dialog. Intermediate xAPI statements
+              // continue to be saved without granting completion.
+              pendingTerminalStatementRef.current = async () => {
+                const res = await postStatement.mutateAsync({ ...dto, completion_intent: 'USER_CONFIRMED' });
+                if (res.novo_status !== 'CONCLUIDO') {
+                  throw new Error('O servidor ainda não confirmou a conclusão.');
                 }
-              })
-              .catch(() => undefined);
+                setCompleted(true);
+                setCompletionInfo({
+                  qualificacao: !!res.qualificacao_gerada,
+                  qualificacao_id: (res.qualificacao_gerada as Record<string, unknown>)
+                    ?.qualificacao_id as number | undefined,
+                });
+              };
+              setCompletionError(null);
+              setCompletionReady(true);
+              setCompletionDialogOpen(true);
+              return;
+            }
+            postStatement.mutateAsync(dto).catch(() => undefined);
           } catch {
             return;
           }
@@ -256,7 +274,7 @@ export default function LmsPlayerH5p() {
         // H5P.externalDispatcher is available after instance init
         const checkDispatcher = () => {
           if (win.H5P?.externalDispatcher) {
-            win.H5P.externalDispatcher.on('xAPI', onXapiEvent);
+            win.H5P.externalDispatcher.on?.('xAPI', onXapiEvent);
           } else {
             dispatcherPollTimer = window.setTimeout(checkDispatcher, 300);
           }
@@ -300,6 +318,22 @@ export default function LmsPlayerH5p() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetSessionReady, h5pId, id, isLoading, matricula, playerToken, postStatement]);
+
+  async function confirmH5pCompletion() {
+    const action = pendingTerminalStatementRef.current;
+    if (!action || completionSubmitting || completed) return;
+    setCompletionSubmitting(true);
+    try {
+      await action();
+      setCompletionDialogOpen(false);
+      pendingTerminalStatementRef.current = null;
+    } catch {
+      setCompletionError('Não foi possível validar a conclusão. Verifique as atividades e tente novamente.');
+      setCompletionDialogOpen(true);
+    } finally {
+      setCompletionSubmitting(false);
+    }
+  }
 
   // ── Token guard ─────────────────────────────────────────────────────────────
 
@@ -364,6 +398,41 @@ export default function LmsPlayerH5p() {
           )}
         </div>
       </div>
+
+      {!completed && matricula.status !== 'CONCLUIDO' && (
+        <div className="border-b border-white/10 bg-slate-900 px-4 py-2 text-right">
+          <button type="button" disabled={!completionReady || completionSubmitting}
+            onClick={() => setCompletionDialogOpen(true)}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
+            Concluir curso
+          </button>
+        </div>
+      )}
+
+      {completionDialogOpen && !completed && matricula.status !== 'CONCLUIDO' && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4">
+          <section role="dialog" aria-modal="true" aria-labelledby="h5p-finish-heading"
+            className="w-full max-w-md rounded-2xl bg-slate-900 p-6 text-white shadow-2xl">
+            <h2 id="h5p-finish-heading" className="text-xl font-semibold">Concluir curso</h2>
+            <p className="mt-3 text-sm text-slate-200">
+              O conteúdo enviou a evidência de finalização. Confirme para validar
+              todas as atividades e registrar a conclusão no AirTrust.
+            </p>
+            {completionError && (
+              <p role="alert" className="mt-3 text-sm text-amber-300">{completionError}</p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setCompletionDialogOpen(false)}
+                className="rounded-lg bg-white/10 px-4 py-2 text-sm">Voltar ao curso</button>
+              <button onClick={() => void confirmH5pCompletion()}
+                disabled={!completionReady || completionSubmitting}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold disabled:opacity-40">
+                {completionSubmitting ? 'Validando...' : 'Confirmar conclusão'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* H5P container */}
       <div className="flex-1 relative overflow-auto bg-white">

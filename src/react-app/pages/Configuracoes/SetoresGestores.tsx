@@ -218,7 +218,7 @@ export function SetoresGestores() {
               <div className="mb-4 max-h-[350px] space-y-2 overflow-y-auto">
                 {usuariosGestores.length === 0 ? (
                   <p className="text-sm text-slate-500">
-                    Nenhum Administrador da Empresa encontrado para esta empresa.
+                    Nenhum Gestor encontrado para esta empresa.
                   </p>
                 ) : (
                   usuariosGestores.map((usuario) => {
@@ -314,7 +314,7 @@ export function SetoresGestores() {
               <tr className="border-b border-slate-200">
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Setor</th>
                 <th className="px-4 py-2 text-left font-medium text-slate-600">
-                  Administrador da Empresa
+                  Gestor
                 </th>
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Perfil</th>
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Status</th>
@@ -338,8 +338,8 @@ export function SetoresGestores() {
                     </td>
                     <td className="px-4 py-3 text-slate-600">
                       {sg.gestor_perfil === 'GESTOR' || sg.gestor_perfil === 'MANAGER'
-                        ? 'Administrador da Empresa'
-                        : sg.gestor_perfil || 'Administrador da Empresa'}
+                        ? 'Gestor'
+                        : sg.gestor_perfil || 'Gestor'}
                     </td>
                     <td className="px-4 py-3">
                       <span

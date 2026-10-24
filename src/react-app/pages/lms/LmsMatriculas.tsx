@@ -1,3 +1,4 @@
+import { LmsCourseComplianceMetrics, useLmsCourseCompliance } from './LmsCourseComplianceMetrics';
 /**
  * LmsMatriculas — Gestão de matrículas de um curso específico
  * Rota: /lms/matriculas/:cursoId
@@ -18,6 +19,7 @@ import {
   XCircle,
   Loader2,
   ChevronDown,
+  BellRing,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
@@ -34,10 +36,15 @@ import {
 } from '@/react-app/hooks/useLms';
 import { useDebounce } from '@/react-app/hooks/useDebounce';
 import { useFuncionariosRQ } from '@/react-app/hooks/useFuncionarios';
-import type { LmsMatricula, MatriculaStatus } from '@/react-app/hooks/useLms';
+import type { LmsMatricula, MatriculaStatus, MatricularLoteResult } from '@/react-app/hooks/useLms';
 import type { Funcionario } from '@/react-app/hooks/useFuncionarios';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { LmsMetricCard, LmsModuleTabs, LmsSurface, LmsCourseMiniMeta, LmsPageShell } from './lmsUi';
+import {
+  isLmsEnrollmentAlertable,
+  LmsEnrollmentAlertModal,
+} from './LmsEnrollmentAlertModal';
+import { shouldShowLmsEnrollmentDeadline } from './lmsEnrollmentDeadline';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -80,7 +87,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
 
   if (diffDays < 0) {
     return {
-      label: `Vencido há ${Math.abs(diffDays)}d`,
+      label: `Prazo da matrícula vencido há ${Math.abs(diffDays)}d`,
       className: 'bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200',
       pulseClassName: '',
       icon: <AlertCircle className="h-3 w-3" />,
@@ -89,7 +96,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
 
   if (diffDays <= 7) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-200',
       pulseClassName: 'animate-pulse',
       icon: <Clock className="h-3 w-3" />,
@@ -98,7 +105,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
 
   if (diffDays <= 30) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200',
       pulseClassName: '',
       icon: <Clock className="h-3 w-3" />,
@@ -106,7 +113,7 @@ function getDeadlineMeta(dataExpiracao: string | null | undefined) {
   }
 
   return {
-    label: `Vence em ${diffDays}d`,
+    label: `Prazo da matrícula: ${diffDays}d restantes`,
     className: 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200',
     pulseClassName: '',
     icon: <Calendar className="h-3 w-3" />,
@@ -168,7 +175,8 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-function DeadlineBadge({ dataExpiracao }: { dataExpiracao: string | null | undefined }) {
+function DeadlineBadge({ status, dataExpiracao }: { status: MatriculaStatus; dataExpiracao: string | null | undefined }) {
+  if (!shouldShowLmsEnrollmentDeadline(status, dataExpiracao)) return null;
   const meta = getDeadlineMeta(dataExpiracao);
 
   if (!meta) return null;
@@ -192,7 +200,7 @@ interface ModalMatricularProps {
   onClose: () => void;
 }
 
-function ModalMatricular({
+export function ModalMatricular({
   cursoId,
   activeFuncionarioIds,
   onMatriculasChanged,
@@ -203,6 +211,8 @@ function ModalMatricular({
   const [prazo, setPrazo] = useState('');
   const [funcaoFilter, setFuncaoFilter] = useState('');
   const [baseFilter, setBaseFilter] = useState('');
+  const [batchErrors, setBatchErrors] = useState<NonNullable<MatricularLoteResult['detalhes_erros']>>([]);
+  const [batchErrorSummary, setBatchErrorSummary] = useState('');
   const debouncedSearch = useDebounce(search.trim(), 300);
 
   const {
@@ -280,21 +290,37 @@ function ModalMatricular({
       return;
     }
     try {
+      setBatchErrors([]);
+      setBatchErrorSummary('');
       const result = await matricularLote.mutateAsync({
         funcionario_ids: [...selected],
         curso_id: cursoId,
         data_expiracao: prazo || null,
       });
-      const summary = `${result.criadas} matrícula(s) criada(s)${result.ignoradas > 0 ? `, ${result.ignoradas} já existente(s)` : ''}${result.erros > 0 ? `, ${result.erros} erro(s)` : ''}`;
+      const summary = `${result.criadas} matrícula(s) ${result.erros > 0 ? 'confirmada(s)' : 'criada(s)'}${result.ignoradas > 0 ? `, ${result.ignoradas} já existente(s)` : ''}${result.erros > 0 ? `, ${result.erros} erro(s)` : ''}`;
       if (result.erros > 0) {
         toast.warning(summary);
+        setBatchErrorSummary(summary);
+        setBatchErrors(result.detalhes_erros ?? []);
+        // A failed step may follow a successful write. Refresh and require an
+        // explicit new selection rather than silently retrying a partial batch.
+        setSelected(new Set());
       } else {
         toast.success(summary);
       }
       await onMatriculasChanged(result.matriculas ?? []);
-      onClose();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao matricular');
+      if (result.erros === 0) onClose();
+    } catch {
+      // A lost response does not prove a failed write. Never auto-retry.
+      setSelected(new Set());
+      setBatchErrors([]);
+      setBatchErrorSummary('Não foi possível confirmar o resultado da operação. Atualize a lista e confira as matrículas antes de selecionar novamente.');
+      toast.warning('Resultado da matrícula não confirmado. Confira a lista antes de tentar novamente.');
+      try {
+        await onMatriculasChanged([]);
+      } catch {
+        // Refresh is best-effort; keep the uncertain-state warning visible.
+      }
     }
   }
 
@@ -394,6 +420,27 @@ function ModalMatricular({
 
         {/* Lista */}
         <div className="px-6 pt-3 pb-2 overflow-y-auto flex-1 min-h-0">
+          {batchErrorSummary && (
+            <div role="alert" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+              <p className="font-semibold">{batchErrorSummary}</p>
+              {batchErrors.length ? (
+                <ul className="mt-2 space-y-2">
+                  {batchErrors.map((item) => (
+                    <li key={item.funcionario_id}>
+                      <strong>{item.funcionario_nome}:</strong>{' '}
+                      {item.codigo === 'NEW_EDITION_REQUIRED'
+                        ? 'O curso mudou de edição. O progresso anterior foi preservado; solicite o início auditado da nova edição.'
+                        : item.codigo === 'NOT_ELIGIBLE'
+                          ? 'A matrícula anterior não pode ser reativada. Revise seu histórico e estado atual.'
+                          : 'Não foi possível confirmar o resultado. Verifique o estado da matrícula antes de tentar novamente.'}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2">Não foi possível identificar o motivo. Verifique o estado das matrículas antes de tentar novamente.</p>
+              )}
+            </div>
+          )}
           {activeFuncionarioIds.size > 0 ? (
             <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
               {activeFuncionarioIds.size} funcionário(s) com matrícula ativa já foram ocultados
@@ -490,6 +537,7 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
 export default function LmsMatriculas() {
   const { cursoId: cursoIdParam } = useParams<{ cursoId: string }>();
   const navigate = useNavigate();
+  const { data: complianceRows } = useLmsCourseCompliance();
   const cursoId = Number(cursoIdParam);
 
   const [showModal, setShowModal] = useState(false);
@@ -497,6 +545,8 @@ export default function LmsMatriculas() {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [optimisticMatriculas, setOptimisticMatriculas] = useState<LmsMatricula[]>([]);
+  const [selectedAlertIds, setSelectedAlertIds] = useState<Set<number>>(new Set());
+  const [alertTargetIds, setAlertTargetIds] = useState<number[]>([]);
 
   const { data: cursosRes, isLoading: loadingCursosIndex } = useLmsCursos(
     { limit: 300 },
@@ -515,7 +565,13 @@ export default function LmsMatriculas() {
 
   useEffect(() => {
     setOptimisticMatriculas([]);
+    setSelectedAlertIds(new Set());
+    setAlertTargetIds([]);
   }, [cursoId]);
+
+  useEffect(() => {
+    setSelectedAlertIds(new Set());
+  }, [search, statusFilter]);
 
   const todasMatriculas: LmsMatricula[] = (() => {
     const merged = new Map<number, LmsMatricula>();
@@ -546,6 +602,45 @@ export default function LmsMatriculas() {
         (m.funcionario_nome ?? '').toLowerCase().includes(search.toLowerCase()),
       )
     : todasMatriculas;
+
+  const alertableMatriculas = matriculas.filter(isLmsEnrollmentAlertable);
+  const selectedAlertTargets = todasMatriculas.filter(
+    (matricula) => alertTargetIds.includes(matricula.id) && isLmsEnrollmentAlertable(matricula),
+  );
+  const selectedAlertCount = [...selectedAlertIds].filter((id) =>
+    todasMatriculas.some((matricula) => matricula.id === id && isLmsEnrollmentAlertable(matricula)),
+  ).length;
+  const allVisibleAlertableSelected =
+    alertableMatriculas.length > 0 &&
+    alertableMatriculas.every((matricula) => selectedAlertIds.has(matricula.id));
+
+  function toggleAlertSelection(matriculaId: number) {
+    setSelectedAlertIds((current) => {
+      const next = new Set(current);
+      if (next.has(matriculaId)) next.delete(matriculaId);
+      else next.add(matriculaId);
+      return next;
+    });
+  }
+
+  function toggleAllVisibleAlerts() {
+    setSelectedAlertIds((current) => {
+      const next = new Set(current);
+      if (allVisibleAlertableSelected) {
+        alertableMatriculas.forEach((matricula) => next.delete(matricula.id));
+      } else {
+        alertableMatriculas.forEach((matricula) => next.add(matricula.id));
+      }
+      return next;
+    });
+  }
+
+  function openSelectedAlerts() {
+    const ids = [...selectedAlertIds].filter((id) =>
+      todasMatriculas.some((matricula) => matricula.id === id && isLmsEnrollmentAlertable(matricula)),
+    );
+    setAlertTargetIds(ids);
+  }
 
   async function handleCancelarConfirmado() {
     if (!cancelTarget) return;
@@ -642,10 +737,8 @@ export default function LmsMatriculas() {
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                           {cursoItem.categoria ?? 'Sem categoria'}
                         </p>
-                        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                          {(cursoItem.total_matriculas ?? 0).toString()} matrícula(s) ·{' '}
-                          {(cursoItem.total_concluidos ?? 0).toString()} concluída(s)
-                        </p>
+
+                        <LmsCourseComplianceMetrics curso={cursoItem} rows={complianceRows} compact />
                       </button>
                     ))}
                   </div>
@@ -661,8 +754,8 @@ export default function LmsMatriculas() {
   const isLoading = loadingCurso || loadingMat;
 
   // Estatísticas rápidas
-  const total = todasMatriculas.length;
-  const concluidos = todasMatriculas.filter((m) => m.status === 'CONCLUIDO').length;
+  const total = matriculasRes?.total ?? todasMatriculas.length;
+  const reprovados = todasMatriculas.filter((m) => m.status === 'REPROVADO').length;
   const emAndamento = todasMatriculas.filter((m) => m.status === 'EM_ANDAMENTO').length;
   const naoIniciados = todasMatriculas.filter((m) => m.status === 'NAO_INICIADO').length;
   const activeFuncionarioIds = new Set(
@@ -674,7 +767,7 @@ export default function LmsMatriculas() {
       <LmsPageShell>
         <PageHeader
           title={loadingCurso ? 'Carregando matrículas...' : (curso?.titulo ?? 'Matrículas')}
-          subtitle={`Gerenciamento de matrículas${curso ? ` · ${total} aluno(s) vinculados` : ''}`}
+          subtitle={`Gerenciamento de matrículas${curso ? ` · ${total} ${statusFilter ? 'registro(s) filtrado(s)' : 'matrícula(s) operacional(is)'}` : ''}`}
           actions={
             <div className="flex gap-2">
               <Button variant="secondary" onClick={() => navigate('/lms/admin/cursos')}>
@@ -696,7 +789,7 @@ export default function LmsMatriculas() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-2xl space-y-2">
                 <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">
-                  Acompanhe distribuição, conclusão e pendências do curso em uma única grade.
+                  Acompanhe as matrículas necessárias e as pendências do curso em uma única grade.
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
                   Consulte o estado das matrículas, identifique atrasos e abra novas atribuições sem
@@ -708,18 +801,25 @@ export default function LmsMatriculas() {
           </div>
         </section>
 
+        {curso ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+            <h3 className="mb-2 font-semibold">Indicadores do treinamento</h3>
+            <LmsCourseComplianceMetrics curso={curso} rows={complianceRows} />
+          </div>
+        ) : null}
+
         <div className="grid gap-4 lg:grid-cols-4">
           <LmsMetricCard
             title="Total"
             value={total}
-            description="Matrículas ativas no curso"
+            description={statusFilter ? 'Registros no filtro selecionado' : 'Pessoas que precisam realizar o curso'}
             icon={<Users className="h-5 w-5" />}
             accent="bg-slate-100 text-slate-700"
           />
           <LmsMetricCard
-            title="Concluídos"
-            value={concluidos}
-            description="Treinamentos finalizados"
+            title="Reprovados"
+            value={reprovados}
+            description="Necessitam nova tentativa"
             icon={<CheckCircle2 className="h-5 w-5" />}
             accent="bg-emerald-100 text-emerald-700"
           />
@@ -770,6 +870,14 @@ export default function LmsMatriculas() {
               </select>
               <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             </div>
+            <Button
+              variant="secondary"
+              onClick={openSelectedAlerts}
+              disabled={selectedAlertCount === 0}
+            >
+              <BellRing className="h-4 w-4" />
+              Enviar alertas{selectedAlertCount > 0 ? ` (${selectedAlertCount})` : ''}
+            </Button>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
@@ -797,6 +905,16 @@ export default function LmsMatriculas() {
                 <table className="w-full text-sm">
                   <thead className="border-b border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800">
                     <tr>
+                      <th className="w-10 px-3 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          aria-label="Selecionar matrículas pendentes visíveis"
+                          checked={allVisibleAlertableSelected}
+                          disabled={alertableMatriculas.length === 0}
+                          onChange={toggleAllVisibleAlerts}
+                          className="rounded"
+                        />
+                      </th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">
                         Funcionário
                       </th>
@@ -829,6 +947,16 @@ export default function LmsMatriculas() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {matriculas.map((m) => (
                       <tr key={m.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="w-10 px-3 py-3 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Selecionar matrícula de ${m.funcionario_nome ?? `ID ${m.funcionario_id}`}`}
+                            checked={selectedAlertIds.has(m.id)}
+                            disabled={!isLmsEnrollmentAlertable(m)}
+                            onChange={() => toggleAlertSelection(m.id)}
+                            className="rounded"
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           <FuncionarioLink
                             funcionarioId={m.funcionario_id}
@@ -843,7 +971,7 @@ export default function LmsMatriculas() {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <StatusBadge status={m.status} />
-                            <DeadlineBadge dataExpiracao={m.data_expiracao} />
+                            <DeadlineBadge status={m.status} dataExpiracao={m.data_expiracao} />
                           </div>
                         </td>
                         <td className="hidden px-4 py-3 md:table-cell">
@@ -871,14 +999,14 @@ export default function LmsMatriculas() {
                             <div className="space-y-1">
                               <span
                                 className={`block text-xs ${
-                                  new Date(m.data_expiracao) < new Date()
+                                  shouldShowLmsEnrollmentDeadline(m.status, m.data_expiracao) && new Date(m.data_expiracao) < new Date()
                                     ? 'font-medium text-red-600'
                                     : 'text-slate-500'
                                 }`}
                               >
                                 {formatDate(m.data_expiracao)}
                               </span>
-                              <DeadlineBadge dataExpiracao={m.data_expiracao} />
+                              <DeadlineBadge status={m.status} dataExpiracao={m.data_expiracao} />
                             </div>
                           ) : (
                             <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
@@ -889,6 +1017,15 @@ export default function LmsMatriculas() {
                             <RowActionsMenu
                               label={`Mais ações para a matrícula de ${m.funcionario_nome ?? 'funcionário'}`}
                               actions={[
+                                ...(isLmsEnrollmentAlertable(m)
+                                  ? [
+                                      {
+                                        label: 'Enviar alerta',
+                                        icon: BellRing,
+                                        onSelect: () => setAlertTargetIds([m.id]),
+                                      },
+                                    ]
+                                  : []),
                                 {
                                   label: 'Cancelar matrícula',
                                   destructive: true,
@@ -908,6 +1045,14 @@ export default function LmsMatriculas() {
             )}
           </div>
         </LmsSurface>
+
+        <LmsEnrollmentAlertModal
+          isOpen={alertTargetIds.length > 0}
+          onClose={() => setAlertTargetIds([])}
+          targets={selectedAlertTargets}
+          cursoTitulo={curso?.titulo ?? 'Treinamento'}
+          onSent={() => setSelectedAlertIds(new Set())}
+        />
 
         {showModal && (
           <ModalMatricular

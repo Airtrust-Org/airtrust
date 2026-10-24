@@ -1,0 +1,413 @@
+/**
+ * Authenticated Worker/D1/R2 SCORM learner closure in disposable LOCAL fixtures.
+ * Proves browser actions reach the actual backend, unlike API-only SCO probes.
+ * This test is local SHA-bound evidence, not a production ZIP certification.
+ * Staging package certification and certificate issuance remain unproven.
+ */
+import {expect,test} from '@playwright/test';
+import {readFileSync,writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {join} from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
+
+type Fixture={
+  origin:string;companyId:number;courseId:number;dbFile:string;
+  packageSha256:string;zipPath:string;fixtureKind:'LOCAL_DISPOSABLE_ZIP';
+  enrollments:Record<string,number>;
+  employeeIds:Record<string,number>;
+  passEnrollments:Record<string,number>;
+  foreignTenant:{empresaId:number;courseId:number;matriculaId:number};
+};
+test('SCORM wrong answer, resume, pass, explicit completion and qualification',async({page},testInfo)=>{
+  test.setTimeout(120000);
+  const fixture=JSON.parse(readFileSync('worker-airtrust/.wrangler/scorm-browser-qa/fixture.json','utf8')) as Fixture;
+  expect(fixture.origin).toBe('http://127.0.0.1:8787');
+  expect(fixture.fixtureKind).toBe('LOCAL_DISPOSABLE_ZIP');
+  const localZipDigest=createHash('sha256').update(readFileSync(fixture.zipPath)).digest('hex');
+  expect(localZipDigest).toMatch(/^[0-9a-f]{64}$/);
+  expect(localZipDigest).toBe(fixture.packageSha256);
+  let id=fixture.enrollments[testInfo.project.name];
+  const failedEnrollmentId=id;
+  expect(id).toBeGreaterThan(0);
+  const api=fixture.origin+'/api';
+  // Reuse the short-lived token from the *authenticated* fixture seeding.
+  // Repeated test logins otherwise hit the real 5/min auth rate limit.
+  const auth=JSON.parse(readFileSync(
+    'worker-airtrust/.wrangler/scorm-browser-qa/local-auth.json','utf8'));
+  expect(auth.origin).toBe(fixture.origin);
+  expect(auth.packageSha256).toBe(localZipDigest);
+  const token=auth.accessToken as string;
+  expect(token).toMatch(/^[^.]+\.[^.]+\.[^.]+$/);
+  const headers={Authorization:'Bearer '+token};
+
+  // Exercise backend tenant isolation, not merely a direct SQL predicate.
+  // The session is authenticated as company 6 and must not receive a token
+  // for the independent synthetic company.
+  const foreign=fixture.foreignTenant;
+  expect(foreign.empresaId).not.toBe(fixture.companyId);
+  expect(foreign.matriculaId).not.toBe(id);
+  const deniedSession=await page.request.post(api+'/lms/assets/session',{
+    headers,data:{matricula_id:foreign.matriculaId},
+  });
+  expect(deniedSession.status()).toBe(404);
+  const deniedEnrollment=await page.request.get(
+    api+'/lms/matriculas/'+foreign.matriculaId,{headers});
+  expect(deniedEnrollment.status()).toBe(404);
+  const deniedCourse=await page.request.get(api+'/lms/cursos/'+foreign.courseId,{headers});
+  expect([403,404]).toContain(deniedCourse.status());
+  const deniedLaunch=await page.request.get(
+    api+'/lms/scorm/launch/'+foreign.matriculaId,{headers});
+  expect([401,403,404]).toContain(deniedLaunch.status());
+
+  async function enrollment(){
+    const res=await page.request.get(api+'/lms/matriculas/'+id,{headers});
+    expect(res.ok()).toBe(true);
+    return (await res.json()).data as {status:string;qualificacao_historico_id:number|null};
+  }
+  function stored(){
+    const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
+    try{return {
+      m:db.prepare('SELECT status, qualificacao_historico_id, progresso_pct FROM lms_matriculas WHERE id=? AND empresa_id=?').get(id,fixture.companyId) as {status:string;qualificacao_historico_id:number|null;progresso_pct:number},
+      scorm:db.prepare('SELECT lesson_status, score_raw, cmi_json FROM lms_progresso_scorm WHERE matricula_id=? AND empresa_id=?').get(id,fixture.companyId) as {lesson_status:string;score_raw:number;cmi_json:string}|undefined,
+      history:db.prepare('SELECT COUNT(*) AS n FROM qualificacoes_historico WHERE lms_matricula_id=? AND empresa_id=? AND deleted_at IS NULL').get(id,fixture.companyId) as {n:number},
+    };}finally{db.close();}
+  }
+  async function open(){
+    const sess=await page.request.post(api+'/lms/assets/session',{data:{matricula_id:id},headers});
+    expect(sess.ok()).toBe(true);
+    await page.goto(api+'/health');
+    await page.setContent('<iframe id="outer" title="SCORM real" src="'+api+'/lms/scorm/launch/'+id+'" style="height:90vh;width:100vw"></iframe>');
+    const outer=page.frameLocator('#outer');
+    const sco=outer.frameLocator('#scorm-frame');
+    await expect(sco.getByRole('heading',{name:'Avaliação QA'})).toBeVisible({timeout:25000});
+    return sco;
+  }
+
+  const otherId=Object.values(fixture.enrollments).find(candidate=>candidate!==id);
+  expect(otherId).toBeGreaterThan(0);
+  function otherEnrollmentSnapshot(){
+    const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
+    try {
+      return {
+        enrollment:db.prepare('SELECT status, progresso_pct, qualificacao_historico_id FROM lms_matriculas WHERE id=? AND empresa_id=?').get(otherId,fixture.companyId),
+        history:db.prepare('SELECT COUNT(*) AS n FROM qualificacoes_historico WHERE lms_matricula_id=? AND empresa_id=? AND deleted_at IS NULL').get(otherId,fixture.companyId),
+      };
+    } finally { db.close(); }
+  }
+  const otherBefore=otherEnrollmentSnapshot();
+  const foreignBefore=(()=>{
+    const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
+    try {return db.prepare(
+      'SELECT status, progresso_pct, qualificacao_historico_id FROM lms_matriculas WHERE id=? AND empresa_id=?',
+    ).get(foreign.matriculaId,foreign.empresaId);}
+    finally {db.close();}
+  })();
+
+  let sco=await open();
+  await expect(sco.locator('#submitAssessment')).toBeDisabled();
+  expect(stored().history.n).toBe(0);
+  // Distinct from reopening: the learner must leave an unfinished answer in
+  // actual persisted suspend_data and recover the enabled assessment control.
+  await sco.locator('button[data-answer="1"]').click();
+  await expect.poll(()=>stored().scorm?.cmi_json?.includes('qa-interaction-1'),{timeout:25000}).toBe(true);
+  sco=await open();
+  await expect(sco.locator('#submitAssessment')).toBeEnabled();
+  expect(stored().m.status).not.toBe('CONCLUIDO');
+
+  // A wrong answer still fails and does not create qualification/history.
+  await sco.locator('button[data-answer="0"]').click();
+  await sco.locator('#submitAssessment').click();
+  await expect.poll(()=>stored().scorm?.lesson_status,{timeout:25000}).toBe('failed');
+  expect(stored().m.status).not.toBe('CONCLUIDO');
+  expect(stored().history.n).toBe(0);
+
+  // A failed/unqualified first cycle is canceled, then explicitly rematriculated.
+  // A completed/qualified cycle must NEVER be silently reset or reactivated.
+  const deleteResult=await page.request.delete(api+'/lms/matriculas/'+id,{headers});
+  expect(deleteResult.status()).toBe(200);
+  // Normal POST must reject canceled enrollment; the separate, audited
+  // rematriculation endpoint is the only authorized lifecycle transition.
+  const normalReEnroll=await page.request.post(api+'/lms/matriculas',{
+    headers,data:{curso_id:fixture.courseId,
+      funcionario_id:fixture.employeeIds[testInfo.project.name],
+      enviar_convite_email:false},
+  });
+  expect(normalReEnroll.status()).toBe(409);
+  expect((await normalReEnroll.json()).code).toBe('LMS_REMATRICULATION_REQUIRED');
+  const reEnroll=await page.request.post(api+'/lms/matriculas/'+id+'/rematricular',{
+    headers,data:{reason:'QA sintético: verificar isolamento do novo ciclo de aprendizagem'},
+  });
+  const reEnrolled=await reEnroll.json().catch(()=>null);
+  expect(reEnroll.ok(), 'LOCAL_REMATRICULATE_HTTP_'+reEnroll.status()+'_CODE_'+String(reEnrolled?.code||'none')).toBe(true);
+  expect(Number(reEnrolled.data.matricula_id)).toBe(id);
+  expect(reEnrolled.data.new_edition).toBe(false);
+  expect(reEnrolled.data.preserved_progress).toBe(true);
+  // Rematriculation in the same edition resumes rather than erasing a failed attempt.
+  const resumed=stored();
+  expect(resumed.m.status).toBe('EM_ANDAMENTO');
+  expect(resumed.scorm?.lesson_status).toBe('failed');
+  expect(resumed.scorm?.score_raw).toBe(0);
+  expect(resumed.scorm?.cmi_json).toContain('assessmentEvaluated');
+  expect(resumed.history.n).toBe(0);
+  const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
+  let activeCycleId:number;
+  try {
+    const cycles=db.prepare('SELECT id,ciclo_atual FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL').all(id,fixture.companyId) as Array<{id:number;ciclo_atual:number}>;
+    expect(cycles).toHaveLength(1);
+    expect(cycles[0].ciclo_atual).toBe(1);
+    activeCycleId=cycles[0].id;
+  } finally {db.close();}
+  const staleCommit=await page.request.post(api+'/lms/matriculas/scorm/commit',{
+    headers,data:{matricula_id:id,ciclo_id:activeCycleId+100000,commit_event:'SCORM_COMMIT',lesson_status:'passed',score_raw:100},
+  });
+  expect(staleCommit.status()).toBe(409);
+  expect(stored()).toEqual(resumed);
+  // A legacy iframe with no cycle claim is just as stale/ambiguous as one
+  // claiming a different cycle. It must not mutate the newly resumed cycle.
+  const unscopedCommit=await page.request.post(api+'/lms/matriculas/scorm/commit',{
+    headers,data:{matricula_id:id,commit_event:'SCORM_COMMIT',lesson_status:'passed',score_raw:100},
+  });
+  expect(unscopedCommit.status()).toBe(400);
+  expect(stored()).toEqual(resumed);
+  sco=await open();
+  await expect(sco.locator('#submitAssessment')).toBeDisabled();
+  expect(stored().history.n).toBe(0);
+  // Do not make a failed learner pass by resetting their CMI.
+  // Another synthetic learner follows the passing path independently.
+  id=fixture.passEnrollments[testInfo.project.name];
+  expect(id).toBeGreaterThan(0);
+  expect(id).not.toBe(failedEnrollmentId);
+  expect(stored().m.status).toBe('NAO_INICIADO');
+  expect(stored().history.n).toBe(0);
+  expect(otherEnrollmentSnapshot()).toEqual(otherBefore);
+  sco=await open();
+  await expect(sco.locator('#submitAssessment')).toBeDisabled();
+  await expect(sco.locator('#completeCourse')).toBeHidden();
+  expect((await enrollment()).status).not.toBe('CONCLUIDO');
+
+  // A separate learner now passes through genuine DOM interaction.
+  sco=await open();
+  await sco.locator('button[data-answer="1"]').click();
+  await sco.locator('#submitAssessment').click();
+  await expect(sco.locator('#completeCourse')).toBeVisible();
+  await sco.locator('#completeCourse').click();
+  await expect.poll(()=>stored().scorm?.lesson_status,{timeout:25000}).toBe('passed');
+  expect((await enrollment()).status).not.toBe('CONCLUIDO');
+
+  // React's explicit, user-confirmed finalization message (never synthetic CMI).
+  await page.evaluate(matId=>{
+    const iframe=document.getElementById('outer') as HTMLIFrameElement;
+    iframe.contentWindow!.postMessage({type:'lms:request-completion',matriculaId:matId},location.origin);
+  },id);
+  await expect.poll(()=>enrollment(),{timeout:35000}).toMatchObject({status:'CONCLUIDO'});
+  const final=stored();
+  const failedRow=new DatabaseSync(fixture.dbFile,{readOnly:true});
+  try {expect(failedRow.prepare('SELECT status, qualificacao_historico_id FROM lms_matriculas WHERE id=? AND empresa_id=?').get(failedEnrollmentId,fixture.companyId)).toMatchObject({status:'REPROVADO',qualificacao_historico_id:null});} finally {failedRow.close();}
+  expect(final.m.qualificacao_historico_id).toBeGreaterThan(0);
+  expect(final.m.progresso_pct).toBe(100);
+  expect(final.history.n).toBe(1);
+  expect(final.scorm?.score_raw).toBe(100);
+
+  await open();
+  const reopened=stored();
+  expect(reopened.m.status).toBe('CONCLUIDO');
+  expect(reopened.m.qualificacao_historico_id).toBe(final.m.qualificacao_historico_id);
+  expect(reopened.history.n).toBe(1);
+  // Replaying an explicit request must not issue duplicate qualification.
+  await page.evaluate(matId=>{
+    const iframe=document.getElementById('outer') as HTMLIFrameElement;
+    iframe.contentWindow!.postMessage({type:'lms:request-completion',matriculaId:matId},location.origin);
+  },id);
+  await page.waitForTimeout(1000);
+  const replayed=stored();
+  expect(replayed.m.status).toBe('CONCLUIDO');
+  expect(replayed.m.qualificacao_historico_id).toBe(final.m.qualificacao_historico_id);
+  expect(replayed.history.n).toBe(1);
+  // A sibling enrollment is never mutated by this learner's pass/fail/reopen.
+  expect(otherEnrollmentSnapshot()).toEqual(otherBefore);
+  const foreignAfter=(()=>{
+    const db=new DatabaseSync(fixture.dbFile,{readOnly:true});
+    try {return db.prepare(
+      'SELECT status, progresso_pct, qualificacao_historico_id FROM lms_matriculas WHERE id=? AND empresa_id=?',
+    ).get(foreign.matriculaId,foreign.empresaId);}
+    finally {db.close();}
+  })();
+  expect(foreignAfter).toEqual(foreignBefore);
+  // Local diagnostics only: this must not be imported as trusted certification.
+  const browser=testInfo.project.name==='chromium'?'CHROMIUM':'WEBKIT';
+  const proven=['FIRST_ACCESS','SUSPEND_RESUME','ASSESSMENT_INSUFFICIENT',
+    'ASSESSMENT_APPROVED','EXPLICIT_FINALIZATION','REOPEN_COMPLETED',
+    'NO_STATUS_DOWNGRADE'];
+  const evidence={source:'LOCAL_DISPOSABLE_D1_R2_ONLY',browser,
+    packageSha256:localZipDigest,enrollmentIsolation:'SAME_TENANT_ONLY',
+    certificateDocument:'INCONCLUSIVE',crossTenantAccess:'PASS',cycleIsolation:'INCONCLUSIVE',
+    cases:proven.map(name=>({name,status:'PASS'}))};
+  writeFileSync(join('worker-airtrust/.wrangler/scorm-browser-qa',
+    'evidence-'+browser.toLowerCase()+'.json'),
+    JSON.stringify(evidence,null,2)+'\n',{mode:0o600});
+});
+
+test('SCORM commits reject an actual prior enrollment cycle without changing learner state',async({page},testInfo)=>{
+  test.setTimeout(60000);
+  const fixture=JSON.parse(readFileSync('worker-airtrust/.wrangler/scorm-browser-qa/fixture.json','utf8')) as Fixture & {
+    cycleIsolationEnrollments:Record<string,number>;
+  };
+  const id=fixture.cycleIsolationEnrollments[testInfo.project.name];
+  expect(id).toBeGreaterThan(0);
+  const api=fixture.origin+'/api';
+  const token=JSON.parse(readFileSync(
+    'worker-airtrust/.wrangler/scorm-browser-qa/local-auth.json','utf8')).accessToken as string;
+  const headers={Authorization:'Bearer '+token};
+
+  const anonymous=await page.request.post(api+'/lms/assets/session',{
+    data:{matricula_id:id},
+  });
+  expect(anonymous.status()).toBe(401);
+
+  const session=await page.request.post(api+'/lms/assets/session',{
+    headers,data:{matricula_id:id},
+  });
+  expect(session.status()).toBe(200);
+  const initialLaunch=await page.request.get(api+'/lms/scorm/launch/'+id);
+  expect(initialLaunch.status()).toBe(200);
+
+  const db=new DatabaseSync(fixture.dbFile);
+  let previousCycleId:number;
+  let currentCycleId:number;
+  try {
+    const active=db.prepare(`SELECT id,numero_ciclo FROM lms_matricula_ciclos
+      WHERE matricula_id=? AND empresa_id=? AND ciclo_atual=1 AND deleted_at IS NULL`).get(
+      id,fixture.companyId) as {id:number;numero_ciclo:number}|undefined;
+    expect(active?.id).toBeGreaterThan(0);
+    previousCycleId=active!.id;
+    db.exec('BEGIN IMMEDIATE');
+    db.prepare(`UPDATE lms_matricula_ciclos SET ciclo_atual=0,status='CANCELADO',
+      updated_at=datetime('now') WHERE id=? AND matricula_id=? AND empresa_id=? AND ciclo_atual=1`)
+      .run(previousCycleId,id,fixture.companyId);
+    const inserted=db.prepare(`INSERT INTO lms_matricula_ciclos
+      (empresa_id,matricula_id,curso_id,funcionario_id,numero_ciclo,origem,status,ciclo_atual,
+       data_matricula,created_at,updated_at)
+      SELECT empresa_id,id,curso_id,funcionario_id,?,'LMS','EM_ANDAMENTO',1,
+       datetime('now'),datetime('now'),datetime('now')
+      FROM lms_matriculas WHERE id=? AND empresa_id=?`).run(
+      active!.numero_ciclo+1,id,fixture.companyId);
+    currentCycleId=Number(inserted.lastInsertRowid);
+    expect(currentCycleId).toBeGreaterThan(previousCycleId);
+    db.exec('COMMIT');
+  } catch(error) {
+    try {db.exec('ROLLBACK');} catch {}
+    throw error;
+  } finally {db.close();}
+
+  const before=(()=>{
+    const readDb=new DatabaseSync(fixture.dbFile,{readOnly:true});
+    try{return {
+      enrollment:readDb.prepare(`SELECT status,progresso_pct,qualificacao_historico_id
+        FROM lms_matriculas WHERE id=? AND empresa_id=?`).get(id,fixture.companyId),
+      cycles:readDb.prepare(`SELECT id,numero_ciclo,status,ciclo_atual
+        FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL
+        ORDER BY numero_ciclo,id`).all(id,fixture.companyId),
+      progress:readDb.prepare(`SELECT lesson_status,score_raw,cmi_json,suspend_data
+        FROM lms_progresso_scorm WHERE matricula_id=? AND empresa_id=?`).get(id,fixture.companyId),
+      histories:readDb.prepare(`SELECT COUNT(*) AS n FROM qualificacoes_historico
+        WHERE lms_matricula_id=? AND empresa_id=? AND deleted_at IS NULL`).get(id,fixture.companyId),
+    };}finally{readDb.close();}
+  })();
+  const staleCommit=await page.request.post(api+'/lms/matriculas/scorm/commit',{
+    headers,data:{matricula_id:id,ciclo_id:previousCycleId,commit_event:'SCORM_COMMIT',
+      lesson_status:'passed',score_raw:100},
+  });
+  expect(staleCommit.status()).toBe(409);
+  const after=(()=>{
+    const readDb=new DatabaseSync(fixture.dbFile,{readOnly:true});
+    try{return {
+      enrollment:readDb.prepare(`SELECT status,progresso_pct,qualificacao_historico_id
+        FROM lms_matriculas WHERE id=? AND empresa_id=?`).get(id,fixture.companyId),
+      cycles:readDb.prepare(`SELECT id,numero_ciclo,status,ciclo_atual
+        FROM lms_matricula_ciclos WHERE matricula_id=? AND empresa_id=? AND deleted_at IS NULL
+        ORDER BY numero_ciclo,id`).all(id,fixture.companyId),
+      progress:readDb.prepare(`SELECT lesson_status,score_raw,cmi_json,suspend_data
+        FROM lms_progresso_scorm WHERE matricula_id=? AND empresa_id=?`).get(id,fixture.companyId),
+      histories:readDb.prepare(`SELECT COUNT(*) AS n FROM qualificacoes_historico
+        WHERE lms_matricula_id=? AND empresa_id=? AND deleted_at IS NULL`).get(id,fixture.companyId),
+    };}finally{readDb.close();}
+  })();
+  expect(after).toEqual(before);
+
+  // A newly authenticated session and launch remain available for cycle 2.
+  const refreshed=await page.request.post(api+'/lms/assets/session',{
+    headers,data:{matricula_id:id},
+  });
+  expect(refreshed.status()).toBe(200);
+  const currentLaunch=await page.request.get(api+'/lms/scorm/launch/'+id);
+  expect(currentLaunch.status()).toBe(200);
+
+  function finishStored(){
+    const readDb=new DatabaseSync(fixture.dbFile,{readOnly:true});
+    try{return {
+      enrollment:readDb.prepare(`SELECT status,progresso_pct,qualificacao_historico_id
+        FROM lms_matriculas WHERE id=? AND empresa_id=?`).get(id,fixture.companyId) as {
+          status:string;progresso_pct:number;qualificacao_historico_id:number|null;
+        },
+      scorm:readDb.prepare(`SELECT lesson_status,score_raw,cmi_json
+        FROM lms_progresso_scorm WHERE matricula_id=? AND empresa_id=?`).get(id,fixture.companyId) as {
+          lesson_status:string;score_raw:number|null;cmi_json:string;
+        }|undefined,
+      histories:readDb.prepare(`SELECT COUNT(*) AS n FROM qualificacoes_historico
+        WHERE lms_matricula_id=? AND empresa_id=? AND deleted_at IS NULL`).get(id,fixture.companyId) as {n:number},
+    };}finally{readDb.close();}
+  }
+
+  // Exercise the SCORM API's actual LMSFinish path. The synthetic enrollment
+  // remains incomplete: Finish must persist the last CMI location without
+  // manufacturing a score, completion, or qualification.
+  await page.goto(api+'/health');
+  await page.setContent('<iframe id="outer" title="SCORM Finish QA" src="'+
+    api+'/lms/scorm/launch/'+id+'" style="height:90vh;width:100vw"></iframe>');
+  const finishOuter=page.frameLocator('#outer');
+  const finishSco=finishOuter.frameLocator('#scorm-frame');
+  await expect(finishSco.getByRole('heading',{name:'Avaliação QA'})).toBeVisible({timeout:25000});
+
+  const finishRequests:Array<Record<string,unknown>>=[];
+  page.on('request',request=>{
+    if(request.method()!=='POST'||!request.url().endsWith('/lms/matriculas/scorm/commit'))return;
+    const body=request.postDataJSON() as Record<string,unknown>;
+    if(body.commit_event==='SCORM_FINISH')finishRequests.push(body);
+  });
+  const finishLocation='QA-FINISH-PROBE-'+id;
+  const finishResult=await finishOuter.locator('body').evaluate((body,location)=>{
+    const api=(body.ownerDocument.defaultView as (Window & {API?:{
+      LMSInitialize:()=>string;LMSSetValue:(element:string,value:string)=>string;
+      LMSFinish:(parameter:string)=>string;
+    }})|null)?.API;
+    if(!api)return null;
+    api.LMSInitialize();
+    api.LMSSetValue('cmi.core.lesson_location',location);
+    api.LMSSetValue('cmi.core.lesson_status','incomplete');
+    return api.LMSFinish('');
+  },finishLocation);
+  expect(finishResult).toBe('true');
+  await expect.poll(()=>finishRequests.length,{timeout:15000}).toBe(1);
+  expect(finishRequests[0]).toMatchObject({
+    matricula_id:id,ciclo_id:currentCycleId,commit_event:'SCORM_FINISH',
+    lesson_status:'incomplete',
+  });
+  await expect.poll(()=>finishStored().scorm?.cmi_json?.includes(finishLocation),{timeout:15000}).toBe(true);
+  const finishState=finishStored();
+  expect(finishState.enrollment.status).toBe('EM_ANDAMENTO');
+  expect(finishState.enrollment.qualificacao_historico_id).toBeNull();
+  expect(finishState.histories.n).toBe(0);
+  expect(finishState.scorm?.lesson_status).toBe('incomplete');
+  expect(finishState.scorm?.score_raw).toBeNull();
+
+  const evidenceBrowser=testInfo.project.name==='chromium'?'chromium':'webkit';
+  const evidencePath=join('worker-airtrust/.wrangler/scorm-browser-qa',
+    'evidence-'+evidenceBrowser+'.json');
+  const evidence=JSON.parse(readFileSync(evidencePath,'utf8')) as Record<string,unknown>;
+  expect(evidence.source).toBe('LOCAL_DISPOSABLE_D1_R2_ONLY');
+  writeFileSync(evidencePath,JSON.stringify({...evidence,
+    cycleIsolation:'INCONCLUSIVE',
+    cycleCommitIsolation:'PASS',
+    cycleCommitIsolationEvidence:'ACTUAL_ARCHIVED_CYCLE_REJECTED_WITH_ZERO_STATE_DELTA',
+  },null,2)+'\n',{mode:0o600});
+});

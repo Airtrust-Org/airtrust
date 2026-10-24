@@ -1,0 +1,52 @@
+name: FRMS private QA adapter integration
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ops/frms-qa-repair/**'
+      - '.github/workflows/staging-frms-qa-private-readiness.yml'
+      - '.github/workflows/staging-frms-qa-private-provision.yml'
+      - '.github/workflows/staging-frms-qa-private-queues.yml'
+      - '.github/workflows/staging-frms-qa-private-caller.yml'
+      - '.github/workflows/staging-frms-qa-private-transaction.yml'
+      - '.github/workflows/staging-frms-existing-token-capabilities.yml'
+      - 'scripts/__tests__/frms-existing-queue-access.test.mjs'
+      - 'scripts/staging/frms-qa-*.mjs'
+      - 'scripts/staging/seed-frms-ux-30d.mjs'
+      - 'scripts/__tests__/frms-qa-*.test.mjs'
+      - 'scripts/__tests__/frms-private-worker-prerequisites.test.mjs'
+      - '.github/workflows/staging-frms-private-worker-prerequisites.yml'
+      - '.github/workflows/staging-frms-qa-bookmark-local-readonly.yml'
+      - '.github/workflows/staging-frms-qa-cases-current-state.yml'
+      - 'scripts/staging/inspect-frms-ux-cases.mjs'
+      - 'scripts/__tests__/inspect-frms-ux-cases.test.mjs'
+      - '.github/workflows/frms-qa-private-adapter-tests.yml'
+permissions:
+  contents: read
+concurrency:
+  group: frms-private-adapter-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  frms-private-d1-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+      - run: npm ci
+      - name: Validate private Queue consumer bundle only (Wrangler offline dry-run)
+        run: |
+          npx wrangler deploy --dry-run --config ops/frms-qa-repair/wrangler.caller.staging.toml --outdir "$RUNNER_TEMP/frms-qa-queue-caller-dryrun"
+      - name: Authenticate GitHub F0 admin grant before one-use private prepare RPC (offline fixtures)
+        run: node --test scripts/__tests__/frms-qa-trusted-prepare-admission.test.mjs scripts/__tests__/frms-qa-apply-admin-grant.test.mjs scripts/__tests__/frms-qa-private-queue-transport.test.mjs
+      - name: Prove exact existing-token Queue provisioning grant without remote writes
+        run: node --test scripts/__tests__/frms-qa-private-queue-provision.test.mjs scripts/__tests__/frms-qa-private-caller-provision.test.mjs scripts/__tests__/frms-existing-queue-access.test.mjs
+      - name: Verify one-mutex transaction protocol and independent Ed25519 signing (synthetic only)
+        run: node --test scripts/__tests__/frms-qa-private-transaction-controller.test.mjs scripts/__tests__/frms-qa-private-transaction-runner.test.mjs scripts/__tests__/frms-qa-private-transaction-readback.test.mjs scripts/__tests__/frms-qa-external-approval-signer.test.mjs scripts/__tests__/frms-qa-private-d1-postcondition.test.mjs
+      - name: Disposable DO SQLite grant persistence and restart contract
+        run: node --test scripts/__tests__/frms-qa-durable-prepare-grant-ledger.test.mjs scripts/__tests__/frms-qa-durable-ledger-do-persistence.test.mjs
+      - name: Disposable Workerd, D1, R2, Durable Object and private ACL integration
+        run: node --test scripts/__tests__/frms-qa-private-adapter.test.mjs scripts/__tests__/frms-qa-repair-controller.test.mjs scripts/__tests__/frms-qa-cases-atomic-executor.test.mjs scripts/__tests__/frms-qa-cases-repair-plan.test.mjs scripts/__tests__/frms-qa-private-readiness.test.mjs scripts/__tests__/frms-qa-provision-private-resources.test.mjs scripts/__tests__/frms-private-worker-prerequisites.test.mjs scripts/__tests__/frms-qa-recovery-handoff.test.mjs scripts/__tests__/frms-qa-trusted-runner-bookmark-acquisition.test.mjs scripts/__tests__/frms-qa-staging-bookmark-get-local-proof.test.mjs scripts/__tests__/inspect-frms-ux-cases.test.mjs scripts/__tests__/frms-qa-prepare-admin-grant.test.mjs

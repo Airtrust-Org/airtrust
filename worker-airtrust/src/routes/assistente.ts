@@ -4,10 +4,11 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import {
   getAtividadesRecentes,
-  getComplianceScore,
   getDashboardAlerts,
   getDashboardMetrics,
+  getQualificationComplianceSummary,
 } from '../services/dashboardService';
+import { buildSnapshot as buildTrainingComplianceSnapshot } from './compliance-treinamentos';
 import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
 import type { EmployeeSectorAccess } from '../services/employee-sector-access';
 
@@ -45,10 +46,21 @@ interface HomeAssistantContext {
     demandaFutura30Dias: number;
   };
   compliance: {
-    scoreGeral: number;
-    metaOrganizacional: number;
-    qualificacoesValidas: number;
-    totalQualificacoes: number;
+    treinamentos: {
+      percentual: number | null;
+      conformes: number;
+      requisitos: number;
+      cobertura: 'COMPLETA' | 'PARCIAL' | 'NAO_CONFIGURADA';
+    };
+    qualificacoes: {
+      percentual: number | null;
+      conformes: number;
+      requisitos: number;
+      vencendo: number;
+      vencidos: number;
+      naoRealizados: number;
+      cobertura: 'COMPLETA' | 'PARCIAL' | 'NAO_CONFIGURADA';
+    };
   };
   alertasCriticos: Array<{
     criticidade: string;
@@ -572,14 +584,24 @@ function buildFallbackAnswer(message: string, context: HomeAssistantContext): st
     normalized.includes('conformidade') ||
     normalized.includes('qualifica')
   ) {
-    const percentualValido =
-      context.compliance.totalQualificacoes > 0
-        ? Math.round(
-            (context.compliance.qualificacoesValidas / context.compliance.totalQualificacoes) * 100,
-          )
-        : 100;
+    const treinamento = context.compliance.treinamentos;
+    const qualificacao = context.compliance.qualificacoes;
+    const treinamentoLabel =
+      treinamento.percentual == null
+        ? 'não configurado'
+        : `${treinamento.percentual}%${treinamento.cobertura === 'PARCIAL' ? ' (cobertura parcial)' : ''}`;
+    const qualificacaoLabel =
+      qualificacao.percentual == null
+        ? 'não configurado'
+        : `${qualificacao.percentual}%${qualificacao.cobertura === 'PARCIAL' ? ' (cobertura parcial)' : ''}`;
 
-    return `A conformidade geral está em ${context.compliance.scoreGeral}%, com meta de ${context.compliance.metaOrganizacional}%. Hoje existem ${context.dashboard.qualificacoesVencidas} qualificações vencidas, ${context.dashboard.qualificacoesAVencer} a vencer e ${percentualValido}% do estoque atual está válido.`;
+    if (normalized.includes('trein')) {
+      return `O Compliance de Treinamentos está em ${treinamentoLabel}: ${treinamento.conformes} de ${treinamento.requisitos} obrigações aplicáveis estão cumpridas. Esse indicador reúne EAD, presencial, simulador e demais modalidades de treinamento.`;
+    }
+    if (normalized.includes('qualifica')) {
+      return `O Compliance de Qualificações está em ${qualificacaoLabel}: ${qualificacao.conformes} de ${qualificacao.requisitos} requisitos aplicáveis estão válidos. Há ${qualificacao.vencidos} vencido(s), ${qualificacao.vencendo} vencendo e ${qualificacao.naoRealizados} sem evidência válida.`;
+    }
+    return `Os indicadores são separados: Compliance de Treinamentos ${treinamentoLabel} (${treinamento.conformes}/${treinamento.requisitos}) e Compliance de Qualificações ${qualificacaoLabel} (${qualificacao.conformes}/${qualificacao.requisitos}). Não há média global entre eles.`;
   }
 
   if (
@@ -662,7 +684,9 @@ function buildFallbackAnswer(message: string, context: HomeAssistantContext): st
     return `A demanda operacional mostra ${context.dashboard.demandaFutura30Dias} sessão(ões) previstas para os próximos 30 dias. Posso detalhar risco, fichas pendentes ou pressão de qualificações.`;
   }
 
-  return `Resumo operacional: conformidade em ${context.compliance.scoreGeral}%, ${context.dashboard.qualificacoesVencidas} qualificações vencidas, ${context.dashboard.qualificacoesAVencer} a vencer, ${context.dashboard.demandaFutura30Dias} sessões nos próximos 30 dias e ${totalPendentes} ficha(s) pendente(s) para assinatura.`;
+  const treinamento = context.compliance.treinamentos.percentual;
+  const qualificacao = context.compliance.qualificacoes.percentual;
+  return `Resumo operacional: Compliance de Treinamentos ${treinamento == null ? 'não configurado' : `${treinamento}%`}; Compliance de Qualificações ${qualificacao == null ? 'não configurado' : `${qualificacao}%`}; ${context.dashboard.qualificacoesVencidas} qualificações vencidas, ${context.dashboard.qualificacoesAVencer} a vencer, ${context.dashboard.demandaFutura30Dias} sessões nos próximos 30 dias e ${totalPendentes} ficha(s) pendente(s) para assinatura.`;
 }
 
 async function gerarRespostaAssistente(
@@ -685,7 +709,7 @@ async function gerarRespostaAssistente(
     const systemPrompt =
       'Você é o Assistente AirTrust da tela inicial. Responda em português do Brasil, com objetividade, usando SOMENTE os dados fornecidos. ' +
       'Nunca invente informações, nunca mencione outras empresas, nunca exponha dados fora do contexto do usuário autenticado. ' +
-      'Você pode responder sobre operação, compliance, qualificações, alertas, atividades recentes, fichas e consultas de vencimento de qualificação por colaborador quando esses dados estiverem presentes. Se não houver dado, diga isso claramente.';
+      'Você pode responder sobre operação, Compliance de Treinamentos, Compliance de Qualificações, alertas, atividades recentes, fichas e consultas de vencimento de qualificação por colaborador quando esses dados estiverem presentes. Nunca agregue os dois compliances em uma média geral. Se não houver dado, diga isso claramente.';
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = (await (env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
@@ -764,28 +788,54 @@ app.post('/home-perfil/chat', async (c) => {
   const roleNormalizado = normalizarRole(userRole);
   const funcionario = await getFuncionarioContext(c.env.DB, String(userId), String(empresaId));
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const [metrics, compliance, alertas, atividades, resumoFichas, consultaQualificacoes] =
-    await Promise.all([
-      getDashboardMetrics(c.env.DB, empresaId, access),
-      getComplianceScore(c.env.DB, empresaId, access),
-      getDashboardAlerts(c.env.DB, empresaId, access),
-      getAtividadesRecentes(c.env.DB, empresaId, access),
-      funcionario
-        ? carregarResumoFichas(c.env.DB, String(empresaId), funcionario.funcionarioId)
-        : Promise.resolve({
-            pendentesAluno: 0,
-            pendentesInstrutor: 0,
-            pendentes: [],
-            concluidasRecentes: [],
-          }),
-      consultarQualificacoesRelacionadas(
-        c.env.DB,
-        String(empresaId),
-        parsed.data.message,
-        access,
-        funcionario,
-      ),
-    ]);
+  const [
+    metrics,
+    trainingSnapshot,
+    qualificationCompliance,
+    alertas,
+    atividades,
+    resumoFichas,
+    consultaQualificacoes,
+  ] = await Promise.all([
+    getDashboardMetrics(c.env.DB, empresaId, access),
+    buildTrainingComplianceSnapshot(c.env.DB, empresaId, access),
+    getQualificationComplianceSummary(c.env.DB, empresaId, access),
+    getDashboardAlerts(c.env.DB, empresaId, access),
+    getAtividadesRecentes(c.env.DB, empresaId, access),
+    funcionario
+      ? carregarResumoFichas(c.env.DB, String(empresaId), funcionario.funcionarioId)
+      : Promise.resolve({
+          pendentesAluno: 0,
+          pendentesInstrutor: 0,
+          pendentes: [],
+          concluidasRecentes: [],
+        }),
+    consultarQualificacoesRelacionadas(
+      c.env.DB,
+      String(empresaId),
+      parsed.data.message,
+      access,
+      funcionario,
+    ),
+  ]);
+
+  const trainingRequirements = trainingSnapshot.people.reduce(
+    (sum, person) => sum + person.total_obrigatorios,
+    0,
+  );
+  const trainingConforming = trainingSnapshot.people.reduce(
+    (sum, person) => sum + person.conformes,
+    0,
+  );
+  const trainingUnconfigured = trainingSnapshot.people.filter(
+    (person) => !person.configurado,
+  ).length;
+  const trainingCoverage: HomeAssistantContext['compliance']['treinamentos']['cobertura'] =
+    trainingRequirements === 0
+      ? 'NAO_CONFIGURADA'
+      : trainingUnconfigured > 0
+        ? 'PARCIAL'
+        : 'COMPLETA';
 
   const context: HomeAssistantContext = {
     funcionarioNome: funcionario?.nome,
@@ -797,10 +847,24 @@ app.post('/home-perfil/chat', async (c) => {
       demandaFutura30Dias: metrics.demandaFutura30Dias,
     },
     compliance: {
-      scoreGeral: compliance.scoreGeral,
-      metaOrganizacional: compliance.metaOrganizacional,
-      qualificacoesValidas: compliance.qualificacoesValidas ?? 0,
-      totalQualificacoes: compliance.totalQualificacoes ?? 0,
+      treinamentos: {
+        percentual:
+          trainingRequirements > 0
+            ? Math.round((trainingConforming / trainingRequirements) * 1000) / 10
+            : null,
+        conformes: trainingConforming,
+        requisitos: trainingRequirements,
+        cobertura: trainingCoverage,
+      },
+      qualificacoes: {
+        percentual: qualificationCompliance.compliance_pct,
+        conformes: qualificationCompliance.conformes,
+        requisitos: qualificationCompliance.requisitos_obrigatorios,
+        vencendo: qualificationCompliance.vencendo,
+        vencidos: qualificationCompliance.vencidos,
+        naoRealizados: qualificationCompliance.nao_realizados,
+        cobertura: qualificationCompliance.cobertura,
+      },
     },
     alertasCriticos: alertas.slice(0, 5).map((alerta) => ({
       criticidade: alerta.criticidade,

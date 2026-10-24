@@ -1,3 +1,4 @@
+import { getLmsCourseCompliance, LmsCourseComplianceMetrics, useLmsCourseCompliance } from './LmsCourseComplianceMetrics';
 import { useMemo, useState } from 'react';
 import { useApi } from '@/react-app/hooks/useApi';
 import { useNavigate } from 'react-router-dom';
@@ -64,18 +65,14 @@ function contentTypeLabel(type: TipoConteudo) {
   }
 }
 
-function completionRate(curso: Pick<LmsCurso, 'total_matriculas' | 'total_concluidos'>) {
-  const total = curso.total_matriculas ?? 0;
-  const completed = curso.total_concluidos ?? 0;
-  if (!total) return 0;
-  return Math.round((completed / total) * 100);
-}
+
 
 const adminActionButtonClass =
   'inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900';
 
 export default function LmsAdminCursos() {
   const navigate = useNavigate();
+  const { data: complianceRows } = useLmsCourseCompliance();
   const syncEad = useSyncEadCursos();
   const updateCurso = useUpdateCurso();
   const deleteCurso = useDeleteCurso();
@@ -444,7 +441,7 @@ export default function LmsAdminCursos() {
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {visibleCourses.map((curso) => {
-                            const taxa = completionRate(curso);
+                            const taxa = getLmsCourseCompliance(curso, complianceRows)?.compliance ?? null;
                             const statusMeta = getMatriculaStatusMeta(
                               curso.publicado ? 'PUBLICADO' : 'RASCUNHO',
                             );
@@ -532,27 +529,23 @@ export default function LmsAdminCursos() {
                                 </td>
                                 <td className="px-4 py-3 align-top">
                                   <div className="min-w-[150px] space-y-2">
-                                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                      {curso.total_matriculas ?? 0} matrícula(s)
-                                    </p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                                      {curso.total_concluidos ?? 0} concluído(s)
-                                    </p>
+
+                                    <LmsCourseComplianceMetrics curso={curso} rows={complianceRows} compact />
                                     <div className="flex items-center gap-2">
                                       <div className="h-1.5 flex-1 rounded-full bg-slate-100 dark:bg-slate-700">
                                         <div
                                           className={`h-1.5 rounded-full ${
-                                            taxa >= 80
+                                            (taxa ?? 0) >= 80
                                               ? 'bg-emerald-500'
-                                              : taxa >= 40
+                                              : (taxa ?? 0) >= 40
                                                 ? 'bg-amber-500'
                                                 : 'bg-rose-400'
                                           }`}
-                                          style={{ width: `${taxa}%` }}
+                                          style={{ width: `${taxa ?? 0}%` }}
                                         />
                                       </div>
                                       <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                                        {taxa}%
+                                        {taxa === null ? '—' : `${taxa}%`}
                                       </span>
                                     </div>
                                   </div>

@@ -83,10 +83,22 @@ function item(overrides: Partial<FrmsOperationalSnapshotItem> = {}): FrmsOperati
 }
 
 describe('resolveDailyFatigueSignal', () => {
-  it('RECEBIDO → verde "Realizada"', () => {
+  it('check-in recebido é coleta informativa, nunca liberação', () => {
     const s = resolveDailyFatigueSignal(item({ checkin_status: 'RECEBIDO' }));
-    expect(s.tone).toBe('ok');
-    expect(s.value).toBe('Realizada');
+    expect(s.tone).toBe('info');
+    expect(s.value).toBe('Recebido');
+    expect(s.detail).toContain('não comprova baixa fadiga nem autoriza liberação');
+  });
+
+  it('mantém a coleta informativa mesmo com KSS alto', () => {
+    const s = resolveDailyFatigueSignal(item({
+      checkin_status: 'RECEBIDO',
+      kss_score: 8,
+      alertas: ['KSS_ALTO'],
+      snapshot_status: 'ATENCAO',
+    }));
+    expect(s.tone).toBe('info');
+    expect(s.detail).toContain('KSS 8');
   });
 
   it('AUSENTE → vermelho e nunca verde', () => {
@@ -185,6 +197,40 @@ describe('resolveEffectivenessSignal', () => {
       item({ effectiveness_pct: 62.4, alertas: ['EFETIVIDADE_BAIXA'], estado_operacional: 'ATENCAO' }),
     );
     expect(s.tone).toBe('warning');
+  });
+
+  it('preserva a faixa canônica de atenção do motor mesmo sem alerta crítico', () => {
+    const s = resolveEffectivenessSignal(
+      item({ effectiveness_pct: 85.6, nivel_fadiga_calculado: 'ATENCAO', alertas: [] }),
+    );
+    expect(s.value).toBe('85,6%');
+    expect(s.tone).toBe('warning');
+    expect(s.detail).toContain('Faixa de efetividade informada pelo motor: ATENCAO');
+  });
+
+  it('trata os rótulos canônicos amarelo e transição como faixa de atenção', () => {
+    for (const nivel of ['amarelo', 'transição']) {
+      const s = resolveEffectivenessSignal(
+        item({ effectiveness_pct: 70, nivel_fadiga_calculado: nivel, alertas: [] }),
+      );
+      expect(s.tone).toBe('warning');
+    }
+  });
+
+  it('preserva a faixa crítica do motor mesmo sem alerta de snapshot', () => {
+    const s = resolveEffectivenessSignal(
+      item({ effectiveness_pct: 64, nivel_fadiga_calculado: 'VERMELHO', alertas: [] }),
+    );
+    expect(s.tone).toBe('critical');
+  });
+
+  it('usa faixa desconhecida quando o snapshot não informa a classificação', () => {
+    const s = resolveEffectivenessSignal(
+      item({ effectiveness_pct: 85.6, nivel_fadiga_calculado: null, alertas: [] }),
+    );
+    expect(s.value).toBe('85,6%');
+    expect(s.tone).toBe('unknown');
+    expect(s.detail).toContain('Faixa de efetividade não informada');
   });
 
   it('estado crítico → vermelho', () => {

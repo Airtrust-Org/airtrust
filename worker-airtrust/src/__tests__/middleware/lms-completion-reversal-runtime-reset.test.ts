@@ -20,7 +20,7 @@ describe('LMS completion reversal runtime reset', () => {
       'suspend_data = NULL',
       'launch_data = NULL',
       'cmi_json = NULL',
-      'last_commit_at = NULL',
+      "last_commit_at = datetime('now')",
     ]) {
       expect(source).toContain(field);
     }

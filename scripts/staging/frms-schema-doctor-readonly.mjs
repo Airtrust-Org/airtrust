@@ -193,6 +193,100 @@ function probeRuntimeQuery(dbName, sql) {
   }
 }
 
+// FRMS coordinator UX diagnostic: read-only, scoped counts only (no employee PII).
+// These two QA tenant IDs are distinct from production (where id=6 is Costa do Sol).
+const FRMS_QA_REFERENCE_DATE = '2026-10-13';
+const FRMS_QA_WINDOW_FROM = '2026-09-14';
+const FRMS_QA_TENANTS = Object.freeze([
+  { id: 6, label: 'edb_pilot_smoke' },
+  { id: 999006, label: 'qa_examiner_training' },
+]);
+
+function countScopedRows(dbName, tableName, empresaId) {
+  if (!SAFE_IDENTIFIER.test(tableName)) throw new Error('UNSAFE_TABLE_NAME');
+  if (!tableExists(dbName, tableName)) return { state: 'TABLE_ABSENT', last30d: null };
+  const columns = tableColumns(dbName, tableName);
+  if (!columns.has('empresa_id')) return { state: 'TENANT_COLUMN_ABSENT', last30d: null };
+  // The actual date column is discovered from the staging schema, not guessed.
+  const dateColumn = ['data', 'data_checkin', 'data_referencia', 'data_fato', 'data_jornada']
+    .find((candidate) => columns.has(candidate));
+  if (!dateColumn) return { state: 'DATE_COLUMN_ABSENT', last30d: null };
+  const deleted = columns.has('deleted_at') ? ' AND deleted_at IS NULL' : '';
+  const sql = `SELECT COUNT(*) AS total FROM ${tableName}
+    WHERE empresa_id = ${empresaId} AND ${dateColumn} BETWEEN '${FRMS_QA_WINDOW_FROM}'
+      AND '${FRMS_QA_REFERENCE_DATE}'${deleted}`;
+  return { state: 'READABLE', last30d: countScalar(dbName, sql) };
+}
+
+function inspectQaTenant(dbName, tenant, requiredKeys) {
+  const empresaId = tenant.id;
+  const date = FRMS_QA_REFERENCE_DATE;
+  const exists = countScalar(dbName, `SELECT COUNT(*) AS total FROM empresas
+    WHERE id = ${empresaId} AND deleted_at IS NULL`) === 1;
+  const assignments = runWranglerReadOnly(dbName,
+    `SELECT a.profile_code, a.regulatory_profile_id
+      FROM frms_profile_assignments a JOIN frms_regulatory_profiles p
+        ON p.id = a.regulatory_profile_id
+      WHERE a.empresa_id = ${empresaId} AND a.status = 'ACTIVE'
+        AND a.effective_from <= '${date}' AND (a.effective_to IS NULL OR a.effective_to >= '${date}')
+        AND p.empresa_id = ${empresaId} AND p.active = 1 AND p.deleted_at IS NULL
+        AND p.profile_code = a.profile_code
+        AND p.effective_from <= '${date}' AND (p.effective_to IS NULL OR p.effective_to >= '${date}')`);
+  const result = {
+    tenantLabel: tenant.label, tenantId: empresaId,
+    date, from: FRMS_QA_WINDOW_FROM,
+    exists, effectiveAssignmentCount: assignments.length,
+    profileCode: assignments.length === 1 ? assignments[0].profile_code : null,
+    revisionState: 'NOT_EVALUATED', revisionParameterKeys: null,
+    requiredKeysFound: null,
+    journeys: countScopedRows(dbName, 'frms_jornada', empresaId),
+    checkins: countScopedRows(dbName, 'frms_fadiga_checkin', empresaId),
+    cases: countScopedRows(dbName, 'frms_alerta', empresaId),
+  };
+  if (assignments.length !== 1) {
+    result.revisionState = assignments.length === 0 ? 'ASSIGNMENT_MISSING' : 'ASSIGNMENT_AMBIGUOUS';
+    return result;
+  }
+
+  const code = assignments[0].profile_code;
+  // profile_code is read from database: SQL quote is escaped, not interpolated raw.
+  const quotedCode = "'" + String(code).replaceAll("'", "''") + "'";
+  const revisions = runWranglerReadOnly(dbName,
+    `SELECT id, empresa_id, revision_number, effective_from FROM frms_config_revisions
+     WHERE profile_code = ${quotedCode} AND status = 'ACTIVE'
+       AND (empresa_id = ${empresaId} OR empresa_id IS NULL)
+       AND effective_from <= '${date}' AND (effective_to IS NULL OR effective_to >= '${date}')
+     ORDER BY CASE WHEN empresa_id = ${empresaId} THEN 0 ELSE 1 END,
+       revision_number DESC, effective_from DESC`);
+  if (revisions.length === 0) {
+    result.revisionState = 'REVISION_MISSING';
+    return result;
+  }
+  const preferred = revisions[0];
+  const matching = revisions.filter((row) =>
+    row.empresa_id === preferred.empresa_id &&
+    row.revision_number === preferred.revision_number &&
+    row.effective_from === preferred.effective_from);
+  if (matching.length !== 1) {
+    result.revisionState = 'REVISION_AMBIGUOUS';
+    return result;
+  }
+  const quotedRevisionId = "'" + String(preferred.id).replaceAll("'", "''") + "'";
+  const keys = requiredKeys.map((key) => "'" + key.replaceAll("'", "''") + "'").join(', ');
+  result.revisionParameterKeys = countScalar(dbName,
+    `SELECT COUNT(DISTINCT parameter_key) AS total FROM frms_config_parameters
+      WHERE revision_id = ${quotedRevisionId}`);
+  result.requiredKeysFound = countScalar(dbName,
+    `SELECT COUNT(DISTINCT parameter_key) AS total FROM frms_config_parameters
+      WHERE revision_id = ${quotedRevisionId} AND numeric_value IS NOT NULL
+        AND parameter_key IN (${keys})`);
+  result.revisionState = result.requiredKeysFound === requiredKeys.length
+    ? 'BASE_REQUIRED_KEYS_PRESENT' : 'REQUIRED_KEYS_MISSING';
+  // The additional bio-mathematical and fortnight policies are not certified by
+  // this count; backend readiness and authenticated FRMS response remain authoritative.
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -347,6 +441,9 @@ function main() {
   // 0464 bootstrap — the legacy governed revision + its parameter coverage.
   const requiredKeys = parseLimitesDefaultKeys();
   report.bootstrap.requiredParameterKeyCount = requiredKeys.length;
+  report.operationalTenants = schema0463Ok && schema0464Ok
+    ? FRMS_QA_TENANTS.map((tenant) => inspectQaTenant(dbName, tenant, requiredKeys))
+    : { state: 'SCHEMA_NOT_READY', tenants: [] };
 
   let legacyActiveRevisionCount = null;
   let legacyParameterCount = null;

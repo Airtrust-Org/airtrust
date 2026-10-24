@@ -1,0 +1,98 @@
+name: Production LMS99 Private Admin Roster Readonly
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: Exact main SHA with release gates green
+        required: true
+        type: string
+      expected_production_sha:
+        description: Exact Worker production SHA
+        required: true
+        type: string
+      public_key_spki_der_b64:
+        description: Recipient RSA-3072 public key only; never submit the private key
+        required: true
+        type: string
+      confirmation:
+        description: AIRTRUST_LMS99_PRIVATE_ROSTER_READONLY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-lms99-private-admin-roster-readonly
+  cancel-in-progress: false
+
+jobs:
+  review:
+    name: Privileged read-only roster with encrypted artifact
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 25
+    env:
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+      REVIEW_PUBLIC_KEY_SPKI_DER_B64: ${{ inputs.public_key_spki_der_b64 }}
+      REVIEW_CONFIRMATION: ${{ inputs.confirmation }}
+      PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL }}
+      PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+      PROD_API_BASE_URL: https://api.airtrust.online
+      EXPECTED_PENDING_COUNT: '12'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify exact readonly scope and canonical gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_MAIN_SHA" ]]
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$REVIEW_CONFIRMATION" == AIRTRUST_LMS99_PRIVATE_ROSTER_READONLY ]]
+          node scripts/ci/verify-release-gates.mjs
+      - name: Validate private read-only contract
+        run: |
+          set -euo pipefail
+          node --check scripts/production/lms99-private-admin-roster-readonly.mjs
+          node --test scripts/__tests__/lms99-private-admin-roster-readonly.test.mjs
+      - name: Read roster and encrypt immediately
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/production/lms99-private-admin-roster-readonly.mjs
+          test -s "$RUNNER_TEMP/lms99-roster.enc.json"
+          jq -e --arg sha "$GITHUB_SHA" --arg prod "$EXPECTED_PRODUCTION_SHA" '
+            .version == 1 and .main_sha == $sha and .production_sha == $prod and
+            .tenant == 6 and .count == 12 and .contains_personal_data_encrypted == true and
+            (.encrypted_key | length > 300) and (.ciphertext | length > 100)
+          ' "$RUNNER_TEMP/lms99-roster.enc.json" >/dev/null
+      - name: Summary without learner data
+        if: always()
+        run: |
+          echo '## LMS99 private admin roster (read-only)' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Sensitive names and enrollment numbers are never published in logs.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Only an RSA-OAEP/AES-256-GCM encrypted artifact is uploaded.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No enrollment, qualification, score, certificate, D1, or R2 writes.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload encrypted roster only
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lms99-private-roster-${{ github.sha }}
+          path: ${{ runner.temp }}/lms99-roster.enc.json
+          if-no-files-found: error
+          retention-days: 1

@@ -46,8 +46,6 @@ import {
   buscarAcumuloTripulante,
   buscarAcumuloFrota,
   buscarAlertas,
-  marcarAlertaVisualizado,
-  marcarAlertaResolvido,
   salvarEscala,
   buscarEscalas,
   deletarEscala,
@@ -101,13 +99,13 @@ import {
   type FrmsExplanationViewOrigin,
   type FrmsTraceWindowWorst,
 } from '../lib/frms/day-explanation-domain';
-import { buildFrmsCaseResolutionNotes } from '../lib/frms/case-resolution';
 import { buildFrmsEffectivenessComparison, buildFrmsSimulationComparison, COMPLETE_FRMS_CHECKIN_EXISTS_SQL, maskFrmsTimelineRows } from '../lib/frms/effectiveness-read-policy';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
 import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../services/employee-sector-access';
 import fadigaAcumulada from './frms-fadiga-acumulada';
 import firaRoutes from './frms-fira';
 import frmsRelatoriosConfig from './frms-relatorios-config';
+import frmsCaseRoutes from './frms-cases';
 import {
   type FrmsAppContext,
   safe,
@@ -116,7 +114,6 @@ import {
   auditFrms,
   assertTripulanteEmpresa,
   assertJornadaEmpresa,
-  assertAlertaEmpresa,
   resolveFuncionarioId,
 } from './frms-shared';
 const frmsRoutes = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
@@ -929,6 +926,10 @@ frmsRoutes.get(
   safe(async (c) => {
     const funcionarioId = c.req.param('funcionarioid') ?? '';
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso ao score negado.',
+    }, 403);
 
     if (empresaId) {
       const func = await c.env.DB.prepare(
@@ -1777,6 +1778,10 @@ frmsRoutes.get(
   '/ultimo-mes',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso às jornadas negado.',
+    }, 403);
     const row = await c.env.DB.prepare(
       `SELECT strftime('%Y-%m', j.data) as mes
        FROM frms_jornada j
@@ -1785,11 +1790,11 @@ frmsRoutes.get(
          AND f.deleted_at IS NULL
          AND COALESCE(f.ativo, 1) = 1
          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-         AND (? IS NULL OR f.empresa_id = ?)
+         AND f.empresa_id = ?
        ORDER BY j.data DESC
        LIMIT 1`,
     )
-      .bind(empresaId ?? null, empresaId ?? null)
+      .bind(empresaId)
       .first<{ mes: string }>();
 
     const mesAtual = new Date().toISOString().slice(0, 7);
@@ -2798,6 +2803,10 @@ frmsRoutes.get(
   '/alertas',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso aos alertas negado.',
+    }, 403);
     const filtro = {
       tripulante_id: c.req.query('tripulante_id') ?? undefined,
       nivel: (c.req.query('nivel') as (typeof NIVEIS_ALERTA)[number]) ?? undefined,
@@ -2827,6 +2836,10 @@ frmsRoutes.get(
   '/alertas/count',
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({
+      success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED',
+      error: 'Contexto de empresa ausente. Acesso ao contador negado.',
+    }, 403);
     const row = await c.env.DB.prepare(
       `SELECT COUNT(*) as count
          FROM frms_alerta a
@@ -2837,9 +2850,9 @@ frmsRoutes.get(
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-          AND (? IS NULL OR f.empresa_id = ?)`,
+          AND f.empresa_id = ?`,
     )
-      .bind(empresaId ?? null, empresaId ?? null)
+      .bind(empresaId)
       .first<{ count: number }>();
     return c.json({ success: true, data: { count: row?.count ?? 0 } });
   }),
@@ -3043,45 +3056,6 @@ frmsRoutes.post(
 
       return c.json({ success: false, error: mensagemErro, code: 'ALERTA_MANUAL_FAILED' }, 500);
     }
-  }),
-);
-
-/**
- * PUT /api/frms/alertas/:id/visualizar
- */
-frmsRoutes.put(
-  '/alertas/:id/visualizar',
-  safe(async (c) => {
-    const id = c.req.param('id') ?? '';
-    const denied = await assertAlertaEmpresa(c, id);
-    if (denied) return denied;
-
-    const userId = String(c.get('userId') || 'system');
-    await marcarAlertaVisualizado(c.env.DB, id, userId);
-    return c.json({ success: true });
-  }),
-);
-
-/**
- * PUT /api/frms/alertas/:id/resolver
- */
-frmsRoutes.put(
-  '/alertas/:id/resolver',
-  safe(async (c) => {
-    const id = c.req.param('id') ?? '';
-    const denied = await assertAlertaEmpresa(c, id);
-    if (denied) return denied;
-
-    const userId = String(c.get('userId') || 'system');
-    const notasResolucao = buildFrmsCaseResolutionNotes(
-      await c.req.json().catch(() => null),
-      userId,
-    );
-    if (!notasResolucao) {
-      return c.json({ success: false, error: 'A resolução exige responsável, prazo, mitigação, justificativa e avaliação de eficácia.', code: 'FRMS_CASE_RESOLUTION_INCOMPLETE' }, 400);
-    }
-    await marcarAlertaResolvido(c.env.DB, id, userId, notasResolucao);
-    return c.json({ success: true });
   }),
 );
 
@@ -3374,6 +3348,7 @@ frmsRoutes.post(
 );
 
 // --- Relatórios, Configurações e Notificações ---
+frmsRoutes.route('/', frmsCaseRoutes);
 frmsRoutes.route('/', frmsRelatoriosConfig);
 
 // --- FIRA importação + Heatmap/Timeline ---

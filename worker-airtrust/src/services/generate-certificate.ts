@@ -28,6 +28,7 @@ import {
   resolveFuncionarioInstrutorNaEmpresa,
 } from '../routes/qualificacoes-certificados-helpers';
 import { generateCertificateValidationHash } from '../utils/certificate-validation-hash';
+import { isCertificateEligibleQualificationRecord } from '../lib/status/status-codes';
 
 // ── Erros tipados ──────────────────────────────────────────────────────────────
 
@@ -50,21 +51,6 @@ export const CERTIFICATE_ERROR_CODES = [
   'CERTIFICATE_PERSISTENCE_FAILED',
   'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE',
 ] as const;
-
-/**
- * A certificate can only ever represent a real realization. PLANEJADA has
- * no data_conclusao yet (nothing happened); CANCELADA explicitly did not
- * happen. CONCLUIDA/VENCIDA/RENOVADA are historical realizations that did
- * happen and remain eligible for (re)emission of the same historical
- * document even if the qualification's current operational status has
- * since expired or been superseded — document authenticity is independent
- * of current operational validity. Anything else fails closed.
- */
-const CERTIFICATE_ELIGIBLE_STATUSES = new Set([
-  'CONCLUIDA',
-  'VENCIDA',
-  'RENOVADA',
-]);
 
 export type CertificateErrorCode = (typeof CERTIFICATE_ERROR_CODES)[number];
 
@@ -293,14 +279,44 @@ export async function generateCertificateForHistorico(
   const qualificacaoStatus = String(qualificacao.status || '')
     .trim()
     .toUpperCase();
-  if (!CERTIFICATE_ELIGIBLE_STATUSES.has(qualificacaoStatus)) {
+  if (!isCertificateEligibleQualificationRecord({
+    status: qualificacao.status,
+    dataConclusao: qualificacao.data_conclusao,
+    dataVencimento: qualificacao.data_vencimento,
+  })) {
+    // The history listing displays a date-derived operational status, while
+    // this service validates the stored one. Expose only a bounded status code
+    // (never employee identifiers) so legacy mismatches can be diagnosed.
+    const recordedStatus = !qualificacaoStatus
+      ? 'SEM_STATUS'
+      : /^[A-Z0-9_ÁÉÍÓÚÇ -]{1,32}$/.test(qualificacaoStatus)
+      ? qualificacaoStatus
+      : 'DESCONHECIDO';
     throw new CertificateGenerationError(
       'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE',
       qualificacaoStatus === 'PLANEJADA' || qualificacaoStatus === 'PLANEJADO'
         ? 'Qualificação ainda não realizada (PLANEJADA); não é possível emitir certificado.'
         : qualificacaoStatus === 'CANCELADA' || qualificacaoStatus === 'CANCELADO'
           ? 'Qualificação cancelada; não é possível emitir certificado.'
-          : 'Status da qualificação não permite emissão de certificado.',
+          : `Status registrado da qualificação (${recordedStatus || 'VAZIO'}) não permite emissão de certificado.`,
+    );
+  }
+
+  // Expiry status alone does not prove a course/qualification happened. In
+  // particular, legacy INDETERMINADA may have no expiry: require a recorded
+  // completion date, not a generated PDF dated "today" via fallback.
+  const dataRealizacao = String(qualificacao.data_conclusao || '').trim().slice(0, 10);
+  const isIsoDate = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(dataRealizacao);
+  const parsedRealizacao = isIsoDate ? new Date(`${dataRealizacao}T00:00:00Z`) : null;
+  if (
+    !parsedRealizacao ||
+    Number.isNaN(parsedRealizacao.getTime()) ||
+    parsedRealizacao.toISOString().slice(0, 10) !== dataRealizacao ||
+    dataRealizacao > new Date().toISOString().slice(0, 10)
+  ) {
+    throw new CertificateGenerationError(
+      'CERTIFICATE_QUALIFICATION_STATUS_INELIGIBLE',
+      'Qualificação sem data de realização válida e comprovada; não é possível emitir certificado.',
     );
   }
 

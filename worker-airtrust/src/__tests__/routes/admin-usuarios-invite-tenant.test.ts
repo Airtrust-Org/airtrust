@@ -67,9 +67,168 @@ function createDb() {
   return { db, queries };
 }
 
+function createInstructorDb(options: { existing?: boolean; legacyInstructorAlias?: boolean } = {}) {
+  const writes: Array<{ sql: string; args: unknown[] }> = [];
+  const db = {
+    prepare(sql: string) {
+      const statement = {
+        args: [] as unknown[],
+        bind(...args: unknown[]) { statement.args = args; return statement; },
+        async first() {
+          if (!options.existing) return null;
+          if (sql.includes('SELECT role FROM usuarios_empresas')) {
+            return options.legacyInstructorAlias ? { role: 'instructor' } : null;
+          }
+          if (sql.includes('FROM usuarios u') && sql.includes('WHERE u.id = ?')) {
+            return { id: 101, email: 'instrutor@tenant.test', nome: 'Instrutor de Teste',
+              perfil: 'INSTRUTOR', active: 1, funcionario_id: 44,
+              empresa_id: 6, funcionario_nome: 'Instrutor de Teste' };
+          }
+          if (sql.includes('FROM usuarios u') && sql.includes('WHERE u.id = ?')) return { id: 101, perfil: 'INSTRUTOR' };
+          if (sql.includes('SELECT u.id, u.perfil FROM usuarios')) {
+            return { id: 101, perfil: 'INSTRUTOR' };
+          }
+          if (sql.includes('SELECT 1 FROM usuarios_empresas')) return { active: 1 };
+          if (sql.includes("perfil = 'INSTRUTOR'")) {
+            return options.legacyInstructorAlias ? null : { active: 1 };
+          }
+          return null;
+        },
+        async all() { return { results: [] }; },
+        async run() {
+          writes.push({ sql, args: statement.args });
+          if (sql.includes('INSERT INTO usuarios (')) return { meta: { last_row_id: 101, changes: 1 } };
+          return { meta: { changes: 1 } };
+        },
+      };
+      return statement;
+    },
+    async batch(statements: Array<{ run: () => Promise<unknown> }>) {
+      return Promise.all(statements.map((statement) => statement.run()));
+    },
+  } as unknown as D1Database;
+  return { db, writes };
+}
+
 describe('admin usuarios invite tenant boundary', () => {
   beforeEach(() => {
     tenantContext = { empresaId: 6, empresaCodigo: 'costa-do-sol' };
+  });
+
+  it('persists Instrutor and Aluno explicitly in the same tenant when requested', async () => {
+    const { db, writes } = createInstructorDb();
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/admin/usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test' },
+        body: JSON.stringify({
+          email: 'instrutor@tenant.test', nome: 'Instrutor de Teste',
+          perfil: 'INSTRUTOR', aluno_tambem: true, funcionario_id: 44,
+        }),
+      }),
+      { DB: db, JWT_SECRET: 'test-secret', ENVIRONMENT: 'test' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(201);
+    const explicit = writes.filter((row) => row.sql.includes('INSERT INTO usuarios_empresas_perfis'));
+    expect(explicit).toHaveLength(2);
+    expect(explicit.map((row) => row.args)).toEqual([
+      [101, 6, 'INSTRUTOR'],
+      [101, 6, 'ALUNO'],
+    ]);
+    expect(writes.some((row) => row.sql.includes('INSERT OR IGNORE INTO usuarios_empresas') &&
+      row.args[1] === 6)).toBe(true);
+  });
+
+  it('adds student mode to an existing Instructor without replacing tenant roles', async () => {
+    const { db, writes } = createInstructorDb({ existing: true });
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/admin/usuarios/101', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test' },
+        body: JSON.stringify({ nome: 'Instrutor Atualizado', aluno_tambem: true }),
+      }),
+      { DB: db, JWT_SECRET: 'test-secret', ENVIRONMENT: 'test' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    const explicit = writes.filter((row) => row.sql.includes('INSERT INTO usuarios_empresas_perfis'));
+    expect(explicit.map((row) => row.args)).toEqual([
+      [101, 6, 'INSTRUTOR'], [101, 6, 'ALUNO'],
+    ]);
+    expect(writes.some((row) => row.sql.includes('DELETE FROM usuarios_empresas_perfis'))).toBe(false);
+  });
+
+  it('existing legacy instructor membership can add ALUNO without rewriting company or global identity role', async () => {
+    const { db, writes } = createInstructorDb({ existing: true, legacyInstructorAlias: true });
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/admin/usuarios/101', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test' },
+        body: JSON.stringify({ aluno_tambem: true }),
+      }),
+      { DB: db, JWT_SECRET: 'test-secret', ENVIRONMENT: 'test' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    expect(writes.filter((row) => row.sql.includes('INSERT INTO usuarios_empresas_perfis')).map((row) => row.args))
+      .toEqual([[101, 6, 'INSTRUTOR'], [101, 6, 'ALUNO']]);
+    expect(writes.some((row) => /UPDATE usuarios_empresas SET role/.test(row.sql))).toBe(false);
+  });
+
+  it('disables only student mode in the current tenant when Instructor option is unchecked', async () => {
+    const { db, writes } = createInstructorDb({ existing: true });
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/admin/usuarios/101', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test' },
+        body: JSON.stringify({ nome: 'Instrutor Atualizado', aluno_tambem: false }),
+      }),
+      { DB: db, JWT_SECRET: 'test-secret', ENVIRONMENT: 'test' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    const updates = writes.filter((row) => row.sql.includes('UPDATE usuarios_empresas_perfis'));
+    expect(updates).toHaveLength(1);
+    expect(updates[0].args).toEqual([101, 6]);
+    expect(updates[0].sql).toContain("perfil = 'ALUNO'");
+  });
+
+  it('rejects an additional student flag when the selected role is not Instrutor', async () => {
+    const { db, writes } = createInstructorDb();
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/admin/usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test' },
+        body: JSON.stringify({
+          email: 'aluno@tenant.test', nome: 'Aluno de Teste',
+          perfil: 'ALUNO', aluno_tambem: true, funcionario_id: 44,
+        }),
+      }),
+      { DB: db, JWT_SECRET: 'test-secret', ENVIRONMENT: 'test' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(400);
+    expect(writes).toHaveLength(0);
+  });
+
+  it('does not treat a Gestor in the airtrust tenant as platform administrator', async () => {
+    tenantContext = { empresaId: 1, empresaCodigo: 'airtrust' };
+    const { db, queries } = createDb();
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/admin/usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test' },
+        body: JSON.stringify({
+          email: 'outsider@test.invalid', nome: 'Conta de Teste',
+          perfil: 'INSTRUTOR', aluno_tambem: true, empresa_id: 7,
+        }),
+      }),
+      { DB: db, JWT_SECRET: 'test-secret', ENVIRONMENT: 'test' } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(403);
+    expect(queries.every((sql) => !/^\\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(sql))).toBe(true);
   });
 
   it('blocks tenant admins/managers from inviting users into a different empresa_id', async () => {
@@ -99,6 +258,6 @@ describe('admin usuarios invite tenant boundary', () => {
       code: 'WRONG_TENANT',
       error: 'Sem permissão para convidar usuários para outra empresa',
     });
-    expect(queries).toHaveLength(0);
+    expect(queries.every((sql) => !/^\\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(sql))).toBe(true);
   });
 });

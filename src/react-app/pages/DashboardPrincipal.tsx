@@ -19,7 +19,7 @@ import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
 import { canSeeAdministrativeDashboard } from '../lib/development-module-nav';
 import { canAccessModule } from '../lib/module-access';
-import { formatDisplayDate, formatRelativeTime, safePct } from './dashboard/helpers';
+import { formatDisplayDate, formatRelativeTime } from './dashboard/helpers';
 import { DashboardSkeleton } from './dashboard/DashboardSkeleton';
 import {
   type DashboardSectorOption,
@@ -79,6 +79,8 @@ const SOURCE_LABELS: Record<string, string> = {
   escalas: 'Escalas',
   simuladores_sessoes: 'Agenda de simuladores',
   simuladores_pendencias: 'Pendências de simuladores',
+  compliance_treinamentos: 'Compliance de Treinamentos',
+  compliance_qualificacoes: 'Compliance de Qualificações',
 };
 
 function storageKey(userId: number | string | undefined, empresaId: number | null): string {
@@ -492,6 +494,8 @@ export default function DashboardPrincipal() {
   const scales = summary?.escalas ?? [];
   const sessions = summary?.sessoes ?? [];
   const simulatorAlerts = summary?.simuladoresAlertas ?? null;
+  const trainingCompliance = summary?.trainingCompliance ?? null;
+  const qualificationCompliance = summary?.qualificationCompliance ?? null;
   const unavailableSources = summary?.unavailableSources ?? [];
   const sectorOptions = summary?.scope.sectorOptions ?? [];
 
@@ -562,18 +566,32 @@ export default function DashboardPrincipal() {
       });
     }
 
-    const lmsPending = alerts.filter(
-      (alert) => String(alert.tipo || '').toLowerCase() === 'lms_curso_pendente',
-    );
-    if (lmsPending.length > 0) {
+    if (qualificationCompliance?.nao_realizados) {
       actions.push({
-        id: 'lms-pending',
-        severity: 'attention',
-        title: `${lmsPending.length} curso(s) obrigatório(s) pendente(s)`,
-        detail: 'Existem requisitos de LMS ainda não concluídos no escopo selecionado.',
-        route: '/lms',
-        actionLabel: 'Acompanhar',
+        id: 'qualification-missing',
+        severity: 'critical',
+        title: `${qualificationCompliance.nao_realizados} requisito(s) de qualificação sem evidência`,
+        detail: 'Licença, habilitação, CMA ou cheque obrigatório ainda sem comprovação válida.',
+        route: '/qualificacoes',
+        actionLabel: 'Ver requisitos',
       });
+    }
+
+    if (trainingCompliance) {
+      const trainingPending =
+        trainingCompliance.vencidos +
+        trainingCompliance.nao_realizados +
+        trainingCompliance.em_andamento;
+      if (trainingPending > 0) {
+        actions.push({
+          id: 'training-compliance-pending',
+          severity: trainingCompliance.vencidos > 0 ? 'critical' : 'attention',
+          title: `${trainingPending} requisito(s) de treinamento pendente(s)`,
+          detail: `${trainingCompliance.vencidos} vencido(s) · ${trainingCompliance.nao_realizados} não realizado(s) · ${trainingCompliance.em_andamento} em andamento`,
+          route: '/treinamentos/compliance',
+          actionLabel: 'Acompanhar',
+        });
+      }
     }
   }
 
@@ -696,14 +714,15 @@ export default function DashboardPrincipal() {
   }
 
   const activeCrew = metrics?.tripulantesAtivos ?? null;
-  const crewWithoutExpired = metrics
-    ? Math.max(metrics.tripulantesAtivos - metrics.tripulantesComQualificacoesVencidas, 0)
-    : null;
-  const qualificationCoverage =
-    metrics && crewWithoutExpired !== null
-      ? safePct(crewWithoutExpired, metrics.tripulantesAtivos)
-      : null;
   const simulatorPendingTotal = sumSimulatorPending(simulatorAlerts);
+  const trainingComplianceLabel =
+    trainingCompliance?.compliance_pct == null
+      ? 'Não configurado'
+      : `${trainingCompliance.compliance_pct}%${trainingCompliance.cobertura === 'PARCIAL' ? ' (parcial)' : ''}`;
+  const qualificationComplianceLabel =
+    qualificationCompliance?.compliance_pct == null
+      ? 'Não configurado'
+      : `${qualificationCompliance.compliance_pct}%${qualificationCompliance.cobertura === 'PARCIAL' ? ' (parcial)' : ''}`;
 
   const applySectorFilter = () => {
     const normalized = [...new Set(draftSectorIds)].sort((a, b) => a - b);
@@ -866,7 +885,7 @@ export default function DashboardPrincipal() {
               <div className="flex items-center justify-between py-3">
                 <dt className="text-sm text-slate-500 dark:text-slate-400">Fontes disponíveis</dt>
                 <dd className="text-sm font-black text-slate-900 dark:text-slate-100">
-                  {6 - unavailableSources.length}/6
+                  {8 - unavailableSources.length}/8
                 </dd>
               </div>
             </dl>
@@ -910,22 +929,30 @@ export default function DashboardPrincipal() {
               helper="Somente pessoas ativas no escopo"
             />
             <MetricCard
-              icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
-              label="Sem qualificação vencida"
-              value={qualificationCoverage === null ? '—' : `${qualificationCoverage}%`}
-              helper="Indicador específico de qualificações"
+              icon={<GraduationCap className="h-4 w-4" aria-hidden="true" />}
+              label="Compliance de Treinamentos"
+              value={trainingCompliance ? trainingComplianceLabel : '—'}
+              helper={
+                trainingCompliance
+                  ? `${trainingCompliance.conformes}/${trainingCompliance.requisitos_obrigatorios} obrigações cumpridas · EAD, presencial, simulador e demais modalidades`
+                  : 'Fonte de Compliance de Treinamentos indisponível'
+              }
             />
             <MetricCard
-              icon={<GraduationCap className="h-4 w-4" aria-hidden="true" />}
+              icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
+              label="Compliance de Qualificações"
+              value={qualificationCompliance ? qualificationComplianceLabel : '—'}
+              helper={
+                qualificationCompliance
+                  ? `${qualificationCompliance.conformes}/${qualificationCompliance.requisitos_obrigatorios} requisitos válidos · licenças, habilitações, CMA e cheques`
+                  : 'Fonte de Compliance de Qualificações indisponível'
+              }
+            />
+            <MetricCard
+              icon={<CalendarClock className="h-4 w-4" aria-hidden="true" />}
               label="Treinamentos em 30 dias"
               value={metrics ? String(metrics.demandaFutura30Dias || 0) : '—'}
               helper="Demanda futura já prevista"
-            />
-            <MetricCard
-              icon={<Activity className="h-4 w-4" aria-hidden="true" />}
-              label="LMS em andamento"
-              value={metrics?.lms ? String(metrics.lms.emAndamento || 0) : '—'}
-              helper="Matrículas ainda não concluídas"
             />
           </div>
         </section>

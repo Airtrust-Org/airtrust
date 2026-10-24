@@ -17,8 +17,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { resolveFrmsRegulatoryProfileEvidence } from '../lib/frms/parameter-governance';
 import { requireRole } from '../middleware/rbac';
+import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
 import {
   relatorioIndividual,
   relatorioCompliance,
@@ -53,6 +56,20 @@ import {
 
 const frmsRelatoriosConfig = new Hono<{ Bindings: Env; Variables: { userId?: string } }>();
 
+// All report requests re-evaluate the existing sector policy against the current
+// session. No report/response cache may outlive a permission or tenant change.
+frmsRelatoriosConfig.use('/relatorios/*', async (c, next) => {
+  c.header('Cache-Control', 'private, no-store, max-age=0');
+  c.header('Vary', 'Authorization, Cookie');
+  await next();
+});
+
+async function resolveReportCrewScope(c: FrmsAppContext, empresaId: number) {
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const { scope, ids } = await loadFrmsReportCrewScope(c.env.DB, empresaId, access);
+  return { access, scope, ids };
+}
+
 const GOVERNED_SOURCE_TYPES = [
   'REGULATORY',
   'REGULATORY_CONTEXT_BASELINE',
@@ -62,7 +79,14 @@ const GOVERNED_SOURCE_TYPES = [
 ] as const;
 
 function isoDateToday(): string {
-  return new Date().toISOString().slice(0, 10);
+  // A data operacional do FRMS da Costa do Sol é a de Brasília,
+  // inclusive no intervalo em que UTC já virou o dia.
+  return getTodayIsoSaoPaulo();
+}
+
+function reportMonth(value: string | undefined): string | null {
+  const month = value ?? isoDateToday().slice(0, 7);
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : null;
 }
 
 function frmsConfigurationUnavailable(c: FrmsAppContext, error: unknown) {
@@ -85,9 +109,11 @@ async function buildFrmsReportMeta(
   period: string,
   source: string,
 ) {
-  const effective = await loadEffectiveFrmsConfiguration(db, empresaId, isoDateToday());
+  const referenceAt = isoDateToday();
+  const effective = await loadEffectiveFrmsConfiguration(db, empresaId, referenceAt);
   return {
     generated_at: new Date().toISOString(),
+    policy_reference_date: referenceAt,
     tenant_id: empresaId,
     period,
     source,
@@ -102,6 +128,7 @@ async function buildFrmsReportMeta(
     limitations: [
       'Relatório de suporte ao FRMS; não constitui diagnóstico médico nem decisão automática de aptidão.',
       'Resultados dependem da completude, atualidade e proveniência dos dados operacionais disponíveis.',
+      'Versão da política identificada na data de emissão; não comprova, isoladamente, qual revisão estava vigente em cada dia histórico.',
     ],
   };
 }
@@ -133,7 +160,12 @@ frmsRelatoriosConfig.get(
     if (denied) return denied;
 
     const empresaId = getEmpresaIdSafe(c);
-    const mes = c.req.query('mes') || new Date().toISOString().slice(0, 7);
+    const crewScope = await resolveReportCrewScope(c, empresaId!);
+    if (!Number.isSafeInteger(Number(tripulanteId)) || !crewScope.ids.has(Number(tripulanteId))) {
+      return c.json({ success: false, code: 'FRMS_EMPLOYEE_SCOPE_DENIED', error: 'Acesso ao tripulante não autorizado.' }, 403);
+    }
+    const mes = reportMonth(c.req.query('mes'));
+    if (!mes) return c.json({ success: false, code: 'FRMS_INVALID_REPORT_MONTH', error: 'Período deve estar em AAAA-MM.' }, 400);
     const result = await relatorioIndividual(c.env.DB, tripulanteId, mes, empresaId);
     return c.json({ success: true, data: result });
   }),
@@ -148,15 +180,20 @@ frmsRelatoriosConfig.get(
   safe(async (c) => {
     const empresaId = getEmpresaIdSafe(c);
     if (!empresaId) return c.json({ success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' }, 403);
-    const mes = c.req.query('mes') || new Date().toISOString().slice(0, 7);
+    const mes = reportMonth(c.req.query('mes'));
+    if (!mes) return c.json({ success: false, code: 'FRMS_INVALID_REPORT_MONTH', error: 'Período deve estar em AAAA-MM.' }, 400);
     let meta;
     try {
       meta = await buildFrmsReportMeta(c.env.DB, empresaId, mes, 'FRMS_COMPLIANCE');
     } catch (error) {
       return frmsConfigurationUnavailable(c, error);
     }
-    const result = await relatorioCompliance(c.env.DB, mes, empresaId);
-    return c.json({ success: true, data: result, meta });
+    const crewScope = await resolveReportCrewScope(c, empresaId);
+    const result = await relatorioCompliance(c.env.DB, mes, empresaId, crewScope.ids);
+    return c.json({ success: true, data: result, meta: {
+      ...meta, scope: crewScope.access.mode,
+      coverage: { authorized_crew: crewScope.ids.size, rows_returned: result.length, state: 'NOT_DETERMINED' },
+    } });
   }),
 );
 
@@ -170,16 +207,18 @@ frmsRelatoriosConfig.get(
     if (!empresaId) {
       return c.json({ success: false, error: 'Tenant context ausente.', code: 'FRMS_CONTEXT_UNAVAILABLE' }, 403);
     }
-    c.header('Cache-Control', 'private, max-age=3600');
-    c.header('Vary', 'Authorization');
     let meta;
     try {
       meta = await buildFrmsReportMeta(c.env.DB, empresaId, 'rolling/current', 'FRMS_MAPA_FADIGA');
     } catch (error) {
       return frmsConfigurationUnavailable(c, error);
     }
-    const result = await relatorioMapaFadiga(c.env.DB, empresaId);
-    return c.json({ success: true, data: result, meta });
+    const crewScope = await resolveReportCrewScope(c, empresaId);
+    const result = await relatorioMapaFadiga(c.env.DB, empresaId, crewScope.access);
+    return c.json({ success: true, data: result, meta: {
+      ...meta, scope: crewScope.access.mode,
+      coverage: { authorized_crew: crewScope.ids.size, rows_returned: result.length, state: 'NOT_DETERMINED' },
+    } });
   }),
 );
 
@@ -205,12 +244,18 @@ frmsRelatoriosConfig.get(
     } catch (error) {
       return frmsConfigurationUnavailable(c, error);
     }
+    const crewScope = await resolveReportCrewScope(c, empresaId);
     const result = await buscarAlertas(
       c.env.DB,
       { data_inicio: dataInicio, data_fim: dataFim, limit: 500 },
       empresaId,
+      crewScope.scope,
     );
-    return c.json({ success: true, data: result.alertas, total: result.total, meta });
+    return c.json({ success: true, data: result.alertas, total: result.total, meta: {
+      ...meta, scope: crewScope.access.mode,
+      coverage: { authorized_crew: crewScope.ids.size, rows_returned: result.alertas.length,
+        total_matching: result.total, state: result.total > result.alertas.length ? 'PARTIAL' : 'NOT_DETERMINED' },
+    } });
   }),
 );
 

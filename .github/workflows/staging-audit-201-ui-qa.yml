@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       expected_sha:
-        description: 'Exact current main SHA already deployed to staging'
+        description: 'Exact gated staging release SHA (may be an ancestor of current main)'
         required: true
         type: string
 
@@ -18,6 +18,8 @@ concurrency:
 
 permissions:
   contents: read
+  checks: read
+  statuses: read
 
 env:
   NODE_VERSION: '24'
@@ -41,11 +43,25 @@ jobs:
           [[ "$EVENT_REF" == 'refs/heads/main' ]] || { echo 'MAIN_ONLY' >&2; exit 1; }
           [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_AUDIT_201_QA' ]] || { echo 'CONFIRMATION_REJECTED' >&2; exit 1; }
           [[ "$EXPECTED_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo 'EXPECTED_SHA_INVALID' >&2; exit 1; }
-          [[ "${EXPECTED_SHA,,}" == "${EVENT_SHA,,}" ]] || { echo 'EXPECTED_SHA_NOT_CURRENT_MAIN' >&2; exit 1; }
           [[ "$STAGING_API_BASE_URL" == 'https://airtrust-api-staging.airtrust.workers.dev' ]] || exit 1
           [[ "$STAGING_FRONTEND_BASE_URL" == 'https://staging.airtrust.pages.dev' ]] || exit 1
 
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Require gated immutable staging release ancestor
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EVENT_SHA: ${{ github.sha }}
+          RELEASE_SHA: ${{ inputs.expected_sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$EXPECTED_SHA" "$EVENT_SHA" || { echo 'RELEASE_SHA_NOT_MAIN_ANCESTOR' >&2; exit 1; }
+          node scripts/ci/verify-release-gates.mjs
 
       - name: Require Worker and frontend provenance to match expected SHA
         shell: bash
@@ -110,6 +126,26 @@ jobs:
 
       - name: Traverse audit surface exhaustively read-only
         run: npx playwright test e2e/staging-audit-201.spec.ts e2e/staging-audit-201-tab-links.spec.ts --project=chromium
+
+      - name: Revalidate same immutable Worker and Pages after browser traversal
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const expected = process.env.EXPECTED_SHA.toLowerCase();
+          const worker = await fetch(process.env.STAGING_API_BASE_URL + '/api/version', { headers: { 'Cache-Control': 'no-cache' } });
+          if (!worker.ok) throw new Error('POST_AUDIT_WORKER_VERSION_UNAVAILABLE');
+          const workerBody = await worker.json();
+          const actual = String(workerBody?.sourceSha ?? workerBody?.data?.sourceSha ?? '').toLowerCase();
+          if (actual !== expected) throw new Error('POST_AUDIT_WORKER_SHA_CHANGED');
+          const pages = await fetch(process.env.STAGING_FRONTEND_BASE_URL + '/?sha=' + expected.slice(0, 7), { headers: { 'Cache-Control': 'no-cache' } });
+          if (!pages.ok || !(await pages.text()).toLowerCase().includes(expected.slice(0, 7))) {
+            throw new Error('POST_AUDIT_FRONTEND_SHA_CHANGED');
+          }
+          console.log('POST_AUDIT_STAGING_RELEASE_SHA_STILL_MATCHES');
+          NODE
 
       - name: Publish sanitized audit summary
         if: success()

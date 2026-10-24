@@ -33,8 +33,9 @@ export type SimulatorTrainingSessionBlock = {
   equipment: string;
   duration_minutes: number;
   target_date: string;
-  pairing: 'MESMO_TREINAMENTO' | 'TREINAMENTOS_COMPATIVEIS' | 'SEM_DUPLA';
+  pairing: 'MESMO_TREINAMENTO' | 'TREINAMENTOS_COMPATIVEIS' | 'APOIO_SEM_RENOVACAO' | 'SEM_DUPLA';
   sessions: SimulatorTrainingSessionNeed[];
+  support?: Pick<SimulatorTrainingSessionNeed, 'employee_id' | 'employee_name' | 'employee_role'>;
 };
 
 export type SimulatorTrainingClass = {
@@ -128,7 +129,7 @@ export function canManuallyShareSimulatorTrainingSessions(
 function partnerScore(
   primary: SimulatorTrainingSessionNeed,
   partner: SimulatorTrainingSessionNeed,
-): [number, number, number, number, number, number] {
+): number[] {
   const sameTraining = primary.qualification_type_id === partner.qualification_type_id;
   const sameRequirement =
     requirementQualificationTypeId(primary) === requirementQualificationTypeId(partner);
@@ -136,12 +137,17 @@ function partnerScore(
   const complementaryRole =
     (roleKind(primary.employee_role) === 'PIC' && roleKind(partner.employee_role) === 'SIC') ||
     (roleKind(primary.employee_role) === 'SIC' && roleKind(partner.employee_role) === 'PIC');
+  const distance = daysDistance(primary.expiry_date, partner.expiry_date);
   return [
+    // Prefer proximity over a perfect curricular match many weeks ahead.
+    // This is a preference, not a new regulatory validity window.
+    distance > 60 ? 1 : 0,
     sameTraining ? 0 : 1,
     sameRequirement ? 0 : 1,
     sameModel ? 0 : 1,
+    distance,
+    // Two commanders or two copilots are allowed; role is only a tie-breaker.
     complementaryRole ? 0 : 1,
-    daysDistance(primary.expiry_date, partner.expiry_date),
     partner.employee_id,
   ];
 }
@@ -207,24 +213,57 @@ export function pairSimulatorTrainingSessions(
       a.need_id.localeCompare(b.need_id),
   );
   const blocks: SimulatorTrainingSessionBlock[] = [];
+  const priorPartners = new Map<string, number>();
+  const partnershipKey = (a: number, b: number) => [a, b].sort((x, y) => x - y).join(':');
+  const pairAllowed = (left: SimulatorTrainingSessionNeed, right: SimulatorTrainingSessionNeed) => {
+    const [earlier, later] = [left, right].sort(
+      (a, b) => a.expiry_date.localeCompare(b.expiry_date) || a.need_id.localeCompare(b.need_id),
+    );
+    return (
+      (allowCrossTraining || earlier.qualification_type_id === later.qualification_type_id) &&
+      canShareSimulatorTrainingSessions(earlier, later) &&
+      daysDistance(earlier.expiry_date, later.expiry_date) <= Math.max(0, maxAnticipationDays) &&
+      (!pairEligibility || pairEligibility(earlier, later))
+    );
+  };
+  const createPairBlock = (
+    left: SimulatorTrainingSessionNeed,
+    right: SimulatorTrainingSessionNeed,
+  ): SimulatorTrainingSessionBlock => {
+    const sessions = [left, right].sort(
+      (a, b) => a.expiry_date.localeCompare(b.expiry_date) || a.need_id.localeCompare(b.need_id),
+    );
+    return {
+      block_id: sessions.map((session) => session.need_id).sort().join('+'),
+      equipment: sessions[0].equipment,
+      duration_minutes: sessions[0].duration_minutes,
+      target_date: sessions[0].expiry_date,
+      pairing: sessions[0].qualification_type_id === sessions[1].qualification_type_id
+        ? 'MESMO_TREINAMENTO'
+        : 'TREINAMENTOS_COMPATIVEIS',
+      sessions,
+    };
+  };
 
   while (remaining.length > 0) {
     const primary = remaining.shift() as SimulatorTrainingSessionNeed;
     const candidates = remaining
       .map((partner, index) => ({ partner, index }))
       .filter(({ partner }) => {
-        const crossTraining = primary.qualification_type_id !== partner.qualification_type_id;
-        return (
-          (!crossTraining || allowCrossTraining) &&
-          canShareSimulatorTrainingSessions(primary, partner) &&
-          daysDistance(primary.expiry_date, partner.expiry_date) <=
-            Math.max(0, maxAnticipationDays) &&
-          (!pairEligibility || pairEligibility(primary, partner))
-        );
+        return pairAllowed(primary, partner);
       })
-      .sort((a, b) =>
-        compareTuple(partnerScore(primary, a.partner), partnerScore(primary, b.partner)),
-      );
+      .sort((a, b) => {
+        const score = (candidate: SimulatorTrainingSessionNeed) => {
+          const tuple = partnerScore(primary, candidate);
+          // Stable diversification only after proximity/curriculum fit: rotate 3+ pilots
+          // across different sessions without changing any individual obligation.
+          tuple.splice(tuple.length - 2, 0,
+            priorPartners.get(partnershipKey(primary.employee_id, candidate.employee_id)) || 0,
+          );
+          return tuple;
+        };
+        return compareTuple(score(a.partner), score(b.partner));
+      });
 
     const selected = candidates[0];
     const sessions = [primary];
@@ -232,6 +271,8 @@ export function pairSimulatorTrainingSessions(
     if (selected) {
       const partner = remaining.splice(selected.index, 1)[0];
       sessions.push(partner);
+      const key = partnershipKey(primary.employee_id, partner.employee_id);
+      priorPartners.set(key, (priorPartners.get(key) || 0) + 1);
       pairing =
         primary.qualification_type_id === partner.qualification_type_id
           ? 'MESMO_TREINAMENTO'
@@ -252,15 +293,109 @@ export function pairSimulatorTrainingSessions(
     });
   }
 
-  return blocks;
+  // A greedy first pass can strand two pilots even though an existing pair
+  // can be reorganized into two compatible pairs. Repair only when it reduces
+  // the number of unmatched sessions; never change the required curricula.
+  let repaired = true;
+  while (repaired) {
+    repaired = false;
+    const singles = blocks.filter((block) => block.pairing === 'SEM_DUPLA');
+    const paired = blocks.filter((block) => block.pairing !== 'SEM_DUPLA');
+    repair: for (const current of paired) {
+      for (let i = 0; i < singles.length; i += 1) {
+        for (let j = i + 1; j < singles.length; j += 1) {
+          const a = current.sessions[0];
+          const b = current.sessions[1];
+          const x = singles[i].sessions[0];
+          const y = singles[j].sessions[0];
+          const options: Array<[[SimulatorTrainingSessionNeed, SimulatorTrainingSessionNeed], [SimulatorTrainingSessionNeed, SimulatorTrainingSessionNeed]]> = [
+            [[a, x], [b, y]],
+            [[a, y], [b, x]],
+          ];
+          const replacement = options.find(([[p, q], [r, t]]) =>
+            pairAllowed(p, q) && pairAllowed(r, t),
+          );
+          if (!replacement) continue;
+          const surviving = blocks.filter(
+            (block) => block !== current && block !== singles[i] && block !== singles[j],
+          );
+          blocks.splice(0, blocks.length, ...surviving,
+            createPairBlock(...replacement[0]),
+            createPairBlock(...replacement[1]));
+          repaired = true;
+          break repair;
+        }
+      }
+    }
+  }
+
+  return blocks.sort(
+    (a, b) => a.target_date.localeCompare(b.target_date) || a.block_id.localeCompare(b.block_id),
+  );
+}
+
+/**
+ * A pilot in the same tenant-scoped proposal may occupy the second cockpit seat
+ * as operational support. This is NOT a qualification requirement: no need ID,
+ * training completion, check or expiry is generated for that person.
+ * Selection is explicit, and subsequent scheduling must verify roster.
+ */
+export function attachSimulatorSupportCrew(params: {
+  blocks: SimulatorTrainingSessionBlock[];
+  needs: SimulatorTrainingSessionNeed[];
+  assignments: Array<{ anchor_need_id: string; support_employee_id: number }>;
+}): SimulatorTrainingSessionBlock[] {
+  const indexed = new Map(params.blocks.flatMap((block) =>
+    block.sessions.map((need) => [need.need_id, block] as const),
+  ));
+  const selected = new Set<string>();
+  const additions = new Map<SimulatorTrainingSessionBlock, SimulatorTrainingSessionBlock>();
+  for (const item of params.assignments) {
+    const key = String(item.anchor_need_id || '');
+    const employeeId = Number(item.support_employee_id);
+    const block = indexed.get(key);
+    if (
+      !block ||
+      block.sessions.length !== 1 ||
+      block.sessions[0].need_id !== key ||
+      selected.has(key) ||
+      !Number.isInteger(employeeId) ||
+      employeeId <= 0
+    ) throw new Error('Apoio operacional exige sessão individual válida e não duplicada.');
+    const need = block.sessions[0];
+    const eligible = params.needs.find((candidate) =>
+      candidate.employee_id === employeeId &&
+      candidate.employee_id !== need.employee_id &&
+      candidate.equipment === need.equipment,
+    );
+    if (!eligible) throw new Error('Piloto de apoio não pertence à proposta/equipamento.');
+    selected.add(key);
+    additions.set(block, {
+      ...block,
+      pairing: 'APOIO_SEM_RENOVACAO',
+      support: {
+        employee_id: eligible.employee_id,
+        employee_name: eligible.employee_name,
+        employee_role: eligible.employee_role,
+      },
+    });
+  }
+  return params.blocks.map((block) => additions.get(block) || block);
 }
 
 function blocksShareCrew(
   left: SimulatorTrainingSessionBlock,
   right: SimulatorTrainingSessionBlock,
 ): boolean {
-  const leftEmployees = new Set(left.sessions.map((session) => session.employee_id));
-  return right.sessions.some((session) => leftEmployees.has(session.employee_id));
+  const leftEmployees = new Set([
+    ...left.sessions.map((session) => session.employee_id),
+    ...(left.support ? [left.support.employee_id] : []),
+  ]);
+  const rightEmployees = [
+    ...right.sessions.map((session) => session.employee_id),
+    ...(right.support ? [right.support.employee_id] : []),
+  ];
+  return rightEmployees.some((employeeId) => leftEmployees.has(employeeId));
 }
 
 /**

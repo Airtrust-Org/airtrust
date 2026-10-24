@@ -18,6 +18,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useLanguage } from '@/react-app/i18n/useLanguage';
 import { SettingsSectionIntro } from './components/SettingsSectionIntro';
+import { BombeirosFrmsDemo } from './BombeirosFrmsDemo';
+import { mayPreviewBombeirosFrmsDemo } from './bombeirosFrmsDemoData';
 
 interface Empresa {
   id: number;
@@ -63,7 +65,7 @@ function getEmpresaInitials(nome?: string): string {
 }
 
 export function GestaoEmpresas() {
-  const { user, refreshEmpresas, empresaAtualId } = useAuth();
+  const { user, refreshEmpresas, empresaAtualId, empresas: sessionEmpresas } = useAuth();
   const { isAdmin, can } = usePermissions();
   const { t } = useLanguage();
   const isSuperAdmin = isAdmin || can('admin.multiempresa') || user?.id === 1;
@@ -74,6 +76,16 @@ export function GestaoEmpresas() {
   const [showModal, setShowModal] = useState(false);
   const [editando, setEditando] = useState<Empresa | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Empresa | null>(null);
+  const [showBombeirosDemo, setShowBombeirosDemo] = useState(false);
+  // Only the AirTrust platform context can preview the isolated synthetic tenant.
+  // A Costa do Sol session must NEVER expose Bombeiros in its operational menu.
+  const activeCompany = sessionEmpresas.find(e => e.id === empresaAtualId);
+  const canPreviewBombeiros = mayPreviewBombeirosFrmsDemo(
+    isSuperAdmin,
+    activeCompany?.codigo,
+    typeof window !== 'undefined' ? window.location.hostname : '',
+  );
+
 
   const fetchEmpresas = async () => {
     try {
@@ -249,6 +261,24 @@ export function GestaoEmpresas() {
           </div>
         </div>
       </SettingsSectionIntro>
+
+      {canPreviewBombeiros && (
+        <section className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-bold text-indigo-950">Prévia isolada · Aviação dos Bombeiros</h2>
+              <p className="text-sm text-indigo-900">Cinco casos sintéticos, sem criar dados no banco ou interferir na Costa do Sol.</p>
+            </div>
+            <button type="button" onClick={() => setShowBombeirosDemo(value => !value)}
+              className="rounded-lg bg-indigo-800 px-4 py-2 text-sm font-semibold text-white">
+              {showBombeirosDemo ? 'Ocultar demonstração' : 'Ver exemplos do FRMS'}
+            </button>
+          </div>
+        </section>
+      )}
+      {canPreviewBombeiros && showBombeirosDemo && (
+        <BombeirosFrmsDemo onClose={() => setShowBombeirosDemo(false)} />
+      )}
 
       {!isSuperAdmin && (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-4 text-sm text-amber-900">

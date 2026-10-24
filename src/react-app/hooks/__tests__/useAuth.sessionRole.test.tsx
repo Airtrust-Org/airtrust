@@ -30,7 +30,7 @@ describe('perfil ativo de sessão no cliente', () => {
     expect(readActiveSessionRole()).toBeNull();
   });
 
-  it('useAuth reflete o perfil selecionado no user.role sem alterar o contexto base', () => {
+  it('useAuth não confia em cookie alterável para mudar user.role', () => {
     const baseUser = { id: 1, nome: 'Fulano', role: 'GESTOR', email: 'f@x.io' };
     const logout = vi.fn();
     const selectEmpresa = vi.fn().mockResolvedValue(undefined);
@@ -47,9 +47,9 @@ describe('perfil ativo de sessão no cliente', () => {
       <AuthContext.Provider value={ctx}>{children}</AuthContext.Provider>
     );
 
-    setCookie('INSTRUTOR');
+    setCookie('ADMINISTRADOR');
     const { result } = renderHook(() => useAuth(), { wrapper });
-    expect(result.current.user?.role).toBe('INSTRUTOR');
+    expect(result.current.user?.role).toBe('GESTOR');
     expect(baseUser.role).toBe('GESTOR');
   });
 

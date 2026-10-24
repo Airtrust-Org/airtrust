@@ -145,6 +145,9 @@
       .small-list { margin: 8px 0 0; padding-left: 20px; line-height: 1.6; }
       .signin-link { color: #12356a; font-weight: 800; }
       .editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px 14px; align-items: start; }
+      .pilot-standard-weight-toggle { display:flex; align-items:center; gap:12px; padding:12px 14px; margin:12px 0; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; }
+      .pilot-standard-weight-toggle input { width:22px; height:22px; flex-shrink:0; accent-color:#1d4ed8; cursor:pointer; }
+      .pilot-standard-weight-toggle span { line-height:1.4; }
       .editor-grid > * { min-width: 0; }
       .editor-grid label {
         display: flex;
@@ -798,6 +801,17 @@
         </div>
       </header>
 
+      <section id="legacy-vault-card" class="card warning hidden" aria-labelledby="legacy-vault-heading">
+        <h2 id="legacy-vault-heading">Recuperação obrigatória do armazenamento antigo</h2>
+        <p class="muted">Este dispositivo contém dados offline protegidos pelo PIN anterior. Para evitar perda de rascunhos ou envios pendentes, o Pilot App permanecerá bloqueado até verificar a recuperação. Nenhum dado antigo será apagado.</p>
+        <form id="legacy-vault-form">
+          <label for="legacy-vault-pin">PIN offline antigo</label>
+          <input id="legacy-vault-pin" type="password" minlength="6" autocomplete="off" required />
+          <div class="actions"><button id="legacy-vault-recover" type="submit" class="primary">Recuperar dados e verificar</button></div>
+        </form>
+        <p id="legacy-vault-status" class="statusline attention" role="status" aria-live="polite">Se não souber o PIN, não limpe os dados do navegador. Contate a Coordenação.</p>
+      </section>
+
       <div id="workspace" class="hidden">
         <section id="flight-selection-card" class="card">
           <div class="section-head">
@@ -972,11 +986,11 @@
           <section class="card" style="margin-top:24px">
             <h3>Concluir o voo</h3>
             <p class="muted">
-              O preenchimento é salvo automaticamente no tablet. Quando terminar, envie os dados ao AirTrust.
+              O preenchimento fica salvo no tablet, inclusive sem internet. Ao terminar, use “Enviar informações do voo” para transmitir. Depois, conclua e envie à Coordenação.
             </p>
             <div class="actions">
               <button id="sync-rdv-now" class="secondary" type="button" disabled>
-                Sincronizar dados com o AirTrust
+                Enviar informações do voo
               </button>
             </div>
             <div id="rdv-sync-status" class="statusline attention" aria-live="polite">
@@ -1041,6 +1055,7 @@
             <div><span class="muted">Armazenamento</span><strong id="storage">Verificando…</strong></div>
             <div><span class="muted">Modo</span><strong>Offline protegido</strong></div>
           </div>
+          <p id="storage-retention-status" class="statusline attention" aria-live="polite">Verificando se o navegador permite retenção persistente…</p>
           <p class="muted">
             Campo sintético mantido apenas para validar persistência contínua: após “Salvo no
             tablet”, refresh ou modo avião deve preservar exatamente o texto.

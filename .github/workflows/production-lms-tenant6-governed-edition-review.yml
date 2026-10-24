@@ -1,0 +1,169 @@
+name: Production LMS Tenant6 Governed Edition Review
+on:
+  workflow_dispatch:
+    inputs:
+      mode: {required: true, type: choice, default: preflight, options: [preflight, apply]}
+      expected_main_sha: {required: true, type: string}
+      expected_production_sha: {required: true, type: string}
+      target_name_sha256: {required: true, type: string}
+      confirmation: {required: true, type: string}
+      report_public_key_der_b64: {required: false, type: string}
+      target_enrollment_ids: {required: false, type: string}
+      reviewed_preflight_run_id: {required: false, type: string}
+permissions: {contents: read, checks: read, statuses: read, actions: read}
+concurrency: {group: production-lms-tenant6-new-edition-governed, cancel-in-progress: false}
+jobs:
+  d1_recovery:
+    name: D1 production recovery isolated gate
+    if: ${{ inputs.mode == 'apply' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - name: Verify pinned main, scope and production Worker before privileged D1 check
+        shell: bash
+        env:
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          TARGET_HASH: ${{ inputs.target_name_sha256 }}
+          TARGET_IDS: ${{ inputs.target_enrollment_ids }}
+          REVIEWED_PREFLIGHT: ${{ inputs.reviewed_preflight_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_MAIN_SHA" && "$EXPECTED_MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ && "$TARGET_HASH" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$CONFIRMATION" == AIRTRUST_LMS_EDITION_TARGET_APPLY ]]
+          [[ -n "$TARGET_IDS" && "$REVIEWED_PREFLIGHT" =~ ^[1-9][0-9]*$ ]]
+          source_sha="$(curl --silent --show-error --fail --max-time 15 https://api.airtrust.online/api/version | jq -er '.data.sourceSha // .sourceSha')"
+          [[ "${source_sha,,}" == "$EXPECTED_PRODUCTION_SHA" ]]
+      - name: Verify official eight release gates for candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Verify D1 Time Travel recovery before administrative mutation
+        working-directory: worker-airtrust
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+          npm ci --ignore-scripts >/dev/null
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$RUNNER_TEMP/d1-recovery.txt"
+          test -s "$RUNNER_TEMP/d1-recovery.txt"
+          rm -f "$RUNNER_TEMP/d1-recovery.txt"
+  govern:
+    needs: [d1_recovery]
+    if: ${{ always() && (inputs.mode == 'preflight' || needs.d1_recovery.result == 'success') }}
+    name: Scoped new edition review and audited admin reset
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 70
+    env:
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+      LMS_EDITION_TARGET_MODE: ${{ inputs.mode }}
+      LMS_EDITION_TARGET_CONFIRMATION: ${{ inputs.confirmation }}
+      LMS_EDITION_TARGET_NAME_SHA256: ${{ inputs.target_name_sha256 }}
+      LMS_EDITION_TARGET_TARGET_IDS: ${{ inputs.target_enrollment_ids }}
+      LMS_EDITION_TARGET_PUBLIC_KEY_DER_B64: ${{ inputs.report_public_key_der_b64 }}
+      PROD_API_BASE_URL: https://api.airtrust.online
+      PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - name: Verify main SHA, Worker release and exact scope confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_MAIN_SHA" && "$EXPECTED_MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$LMS_EDITION_TARGET_NAME_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          if [[ "$LMS_EDITION_TARGET_MODE" == preflight ]]; then
+            [[ "$LMS_EDITION_TARGET_CONFIRMATION" == AIRTRUST_LMS_EDITION_TARGET_PREFLIGHT ]]
+            [[ -n "$LMS_EDITION_TARGET_PUBLIC_KEY_DER_B64" && -z "$LMS_EDITION_TARGET_TARGET_IDS" ]]
+          else
+            [[ "$LMS_EDITION_TARGET_MODE" == apply && "$LMS_EDITION_TARGET_CONFIRMATION" == AIRTRUST_LMS_EDITION_TARGET_APPLY ]]
+            [[ -n "$LMS_EDITION_TARGET_TARGET_IDS" ]]
+          fi
+      - name: Verify official eight release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Verify code and tests
+        run: |
+          node --check scripts/production/lms-tenant6-target-edition-reconciliation.mjs
+          node --test scripts/__tests__/lms-tenant6-target-edition-reconciliation.test.mjs
+      - name: Verify reviewed successful same-SHA preflight before any production writes
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_RUN: ${{ inputs.reviewed_preflight_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]]
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
+          [[ "$(jq -r .name <<< "$run")" == "Production LMS Tenant6 Governed Edition Review" ]]
+          [[ "$(jq -r .conclusion <<< "$run")" == success && "$(jq -r .head_sha <<< "$run")" == "$GITHUB_SHA" ]]
+          # A different authorized human must initiate apply, not the operator
+          # who submitted or re-ran the confidential preflight.
+          [[ "$(jq -r .event <<< "$run")" == workflow_dispatch ]]
+          [[ "$(jq -r .head_branch <<< "$run")" == main ]]
+          [[ "$(jq -r .actor.type <<< "$run")" == User ]]
+          caller="${GITHUB_ACTOR,,}"
+          preflight_actor="$(jq -er '.actor.login | ascii_downcase' <<< "$run")"
+          preflight_trigger="$(jq -er '(.triggering_actor.login // .actor.login) | ascii_downcase' <<< "$run")"
+          [[ -n "$caller" && "$caller" != *'[bot]' ]]
+          [[ "$caller" != "$preflight_actor" && "$caller" != "$preflight_trigger" ]]
+          for reviewer in "$caller" "$preflight_actor"; do
+            permission="$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$reviewer/permission" --jq '.permission')"
+            [[ "$permission" == write || "$permission" == maintain || "$permission" == admin ]]
+          done
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" --name "lms-target-edition-preflight-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
+          jq -e --arg sha "$GITHUB_SHA" --arg prod "$EXPECTED_PRODUCTION_SHA" '
+            .schema_version==1 and .tenant==6 and .mode=="preflight" and
+            .main_sha==$sha and .production_sha==$prod and
+            .writes==0 and .personal_data==false and
+            (.cohort_proof|test("^[0-9a-f]{64}$")) and .blocked_count>0
+          ' "$RUNNER_TEMP/reviewed/lms-employee-plan.json" >/dev/null
+          echo "REVIEWED_LMS_EDITION_TARGET_PROOF=$(jq -r .cohort_proof "$RUNNER_TEMP/reviewed/lms-employee-plan.json")" >> "$GITHUB_ENV"
+      - name: Read confidential scoped details or execute canonical admin new edition
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/production/lms-tenant6-target-edition-reconciliation.mjs > "$RUNNER_TEMP/result.json"
+          jq -e --arg mode "$LMS_EDITION_TARGET_MODE" '.mode==$mode and .tenant==6 and .personal_data==false' "$RUNNER_TEMP/result.json" >/dev/null
+          jq '{mode,tenant,scanned_count,blocked_count,applied,write_count,writes,personal_data}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload confidential encrypted review
+        if: ${{ inputs.mode == 'preflight' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: lms-target-edition-private-${{ github.sha }}
+          path: ${{ runner.temp }}/lms-employee-private.json
+          retention-days: 7
+          if-no-files-found: error
+      - name: Upload cohort hash without names or raw identifiers
+        if: ${{ inputs.mode == 'preflight' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: lms-target-edition-preflight-${{ github.sha }}
+          path: ${{ runner.temp }}/lms-employee-plan.json
+          retention-days: 7
+          if-no-files-found: error

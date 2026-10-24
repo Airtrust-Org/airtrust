@@ -49,8 +49,10 @@ on:
         required: true
         type: string
 
+# Serialize staging D1 migrations, Worker/Pages deploys and browser SCORM QA.
+# Mixed runtime SHA would invalidate the QA and can expose partially deployed state.
 concurrency:
-  group: deploy-airtrust-staging
+  group: airtrust-staging-mutations-and-scorm-qa
   cancel-in-progress: false
 
 permissions:
@@ -58,6 +60,7 @@ permissions:
   pull-requests: read
   checks: read
   statuses: read
+  issues: read
 
 env:
   NODE_VERSION: '24'
@@ -81,6 +84,11 @@ jobs:
       app_version: ${{ steps.release.outputs.app_version }}
       build_time: ${{ steps.release.outputs.build_time }}
     steps:
+      - name: Checkout trusted pipeline (main SHA pinned)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - name: Validate staging dispatch inputs
         shell: bash
         env:
@@ -182,18 +190,47 @@ jobs:
           }
           const commit = await get(`/repos/${repo}/git/commits/${releaseSha}`);
           if (!commit?.sha) throw new Error('release_sha does not exist in this repository.');
-          const permission = await get(`/repos/${repo}/collaborators/${actor}/permission`);
-          if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) {
-            throw new Error('Workflow actor must have write, maintain, or admin permission.');
+          // GitHub workflow_dispatch has a hard limit of TEN inputs. The
+          // existing audited release_reason carries the issue comment ID;
+          // parse only this exact generated value, never arbitrary text.
+          const f0RequestMatch = /^F0 Player3 synthetic QA staging runtime, issue 776 comment ([1-9][0-9]*), no migrations or production$/.exec(process.env.RELEASE_REASON||'');
+          const f0Id = f0RequestMatch?.[1];
+          if (actor==='github-actions[bot]') {
+            // Ephemeral GITHUB_TOKEN is deliberately a bot identity. Prove the
+            // human-admin source of this SPECIFIC dispatch rather than relaxing
+            // all workflows to accept bots as authorized release actors.
+            if (!/^[1-9][0-9]*$/.test(f0Id||'')) {
+              throw new Error('F0_STAGING_DELEGATION_COMMENT_ID_REQUIRED');
+            }
+            const comment = await get(`/repos/${repo}/issues/comments/${f0Id}`);
+            const authorLogin = comment?.user?.login;
+            if (!/^[A-Za-z0-9-]{1,39}$/.test(authorLogin||'')) {
+              throw new Error('F0_STAGING_DELEGATION_COMMENT_AUTHOR_INVALID');
+            }
+            const creator = await get(`/repos/${repo}/collaborators/${encodeURIComponent(authorLogin)}/permission`);
+            const {validateF0DelegatedStaging} =
+              await import('./scripts/staging/f0-delegated-staging-attestation.mjs');
+            validateF0DelegatedStaging({
+              actor, commentId:f0Id, releaseSha, prNumber,
+              deployWorker:process.env.DEPLOY_WORKER,
+              deployFrontend:process.env.DEPLOY_FRONTEND,
+              applyMigrations:process.env.APPLY_MIGRATIONS,
+              approvedMigrations:process.env.APPROVED_MIGRATIONS,
+              runSmoke:process.env.RUN_SMOKE,
+              comment, adminPermission:creator.permission
+            });
+          } else {
+            if (f0Id) throw new Error('F0_STAGING_DELEGATION_HUMAN_DISPATCH_MUST_NOT_IMPERSONATE');
+            const permission = await get(`/repos/${repo}/collaborators/${actor}/permission`);
+            if (!['write', 'push', 'maintain', 'admin'].includes(permission.permission)) {
+              throw new Error('Workflow actor must have write, maintain, or admin permission.');
+            }
           }
           })().catch((error) => {
             console.error(`Reviewed PR release guard failed: ${error.message}`);
             process.exit(1);
           });
           NODE
-
-      - name: Checkout trusted pipeline
-        uses: actions/checkout@v7
 
       - name: Verify official release gates
         env:
@@ -921,6 +958,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CONFIRM_STAGING_QA_SEED: AIRTRUST_STAGING_QA_SEED
+          # The scoped QA user enters the UI as Gestor, never by falsely
+          # granting platform ADMINISTRADOR. Restore its exact manager-to-sector
+          # grant after each synthetic reseed using the already-governed script.
+          STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+          STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+          CONFIRM_STAGING_QA_GRANT: AIRTRUST_STAGING_QA_GRANT
           QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
           QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.STAGING_SMOKE_PASSWORD }}
         run: |
@@ -928,6 +971,9 @@ jobs:
           npm ci
           npm --prefix worker-airtrust ci
           node scripts/staging/seed-qa-examiner-training.mjs --apply
+          # Idempotent, allowlisted synthetic-only D1 write; requires matching
+          # tenant, user, sector and admin membership, validates postconditions.
+          node scripts/staging/seed-qa-admin-operational-grant.mjs --apply
 
   smoke:
     name: Authenticated Staging Smoke

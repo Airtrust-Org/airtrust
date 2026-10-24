@@ -328,6 +328,13 @@ async function resolveAuthRoleForUser(
 ): Promise<string> {
   const fallback = normalizeAuthRole(fallbackRole);
 
+  // A role efetiva do administrador global não depende da role da empresa
+  // atualmente selecionada. A concessão de plataforma deve estar persistida,
+  // ativa e não revogada; nunca derivar esse poder de e-mail ou JWT.
+  if (isPlatformAdminAccess(await resolvePlatformAccessState(db, userId))) {
+    return 'ADMINISTRADOR';
+  }
+
   if (!(await hasUsuariosEmpresasTable(db))) {
     return fallback;
   }
@@ -1431,15 +1438,10 @@ authRoutes.get('/me', auth(), async (c) => {
       throw unauthorized('Usuário não encontrado', 'USER_NOT_FOUND');
     }
 
-    const empresaIdRaw = c.get('empresaId');
-    const empresaId =
-      typeof empresaIdRaw === 'string' ? Number(empresaIdRaw) : Number(empresaIdRaw || 0);
-    const resolvedRole = await resolveAuthRoleForUser(
-      db,
-      (user as NonNullable<MeRow>).id,
-      empresaId,
-      (user as NonNullable<MeRow>).perfil,
-    );
+    // auth() já revalidou contra D1 a role ativa da sessão (incluindo
+    // Aluno/Instrutor ou Gestor). Não sobrescrever essa escolha ao restaurar
+    // o contexto React após o login ou o refresh de página.
+    const resolvedRole = normalizeAuthRole((c.get as (key: string) => unknown)('userRole'));
 
     return c.json({
       success: true,

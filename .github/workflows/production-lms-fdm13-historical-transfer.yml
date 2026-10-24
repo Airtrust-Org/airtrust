@@ -1,0 +1,157 @@
+name: Production FDM13 Historical Administrative Transfer
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact reviewed current main SHA
+        required: true
+        type: string
+      mode:
+        description: dry-run (read only) or apply (specific authorized historical transfer)
+        required: true
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      confirmation:
+        description: Explicit reviewed operation confirmation
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Required for apply; successful read-only dry-run on same SHA
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-lms-fdm13-historical-transfer
+  cancel-in-progress: false
+
+jobs:
+  d1_transfer:
+    name: Governed D1 FDM13 historical equivalence tenant 6
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 35
+    steps:
+      - name: Confirm operation and SHA
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_REQUIRED >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo SHA_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo SOURCE_SHA_MISMATCH >&2; exit 1; }
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_FDM13_TRANSFER_DRY_RUN ]] || { echo DRYRUN_CONFIRMATION_INVALID >&2; exit 1; }
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_FDM13_TRANSFER_APPLY_ADMIN_EQUIVALENCE_99_NO_SCORM_NO_EMAIL ]] || { echo APPLY_CONFIRMATION_INVALID >&2; exit 1; }
+          else
+            echo MODE_INVALID >&2; exit 1
+          fi
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - name: Verify eight canonical release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - run: npm --prefix worker-airtrust ci
+      - name: Verify approved read-only predecessor and candidate hash
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]] || { echo DRYRUN_RUN_ID_REQUIRED >&2; exit 1; }
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
+          [[ "$(jq -r .name <<<"$run_json")" == 'Production FDM13 Historical Administrative Transfer' ]] || { echo DRYRUN_WORKFLOW_INVALID >&2; exit 1; }
+          [[ "$(jq -r .conclusion <<<"$run_json")" == success ]] || { echo DRYRUN_NOT_SUCCESSFUL >&2; exit 1; }
+          [[ "$(jq -r .head_sha <<<"$run_json")" == "$EXPECTED_SHA" ]] || { echo DRYRUN_SHA_CHANGED >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "fdm13-transfer-dry-run-$EXPECTED_SHA" --dir "$RUNNER_TEMP/reviewed"
+          evidence="$RUNNER_TEMP/reviewed/result.json"
+          [[ -s "$evidence" ]] || { echo REVIEWED_EVIDENCE_MISSING >&2; exit 1; }
+          [[ "$(jq -r .mode "$evidence")" == dry-run ]] || { echo DRYRUN_MODE_INVALID >&2; exit 1; }
+          [[ "$(jq -r .source_sha "$evidence")" == "$EXPECTED_SHA" ]] || { echo DRYRUN_EVIDENCE_SHA_INVALID >&2; exit 1; }
+          [[ "$(jq -r .candidates "$evidence")" == 21 ]] || { echo DRYRUN_COHORT_CHANGED >&2; exit 1; }
+          [[ "$(jq -r .out_of_scope "$evidence")" == 6 ]] || { echo DRYRUN_EXCLUSIONS_CHANGED >&2; exit 1; }
+          [[ "$(jq -r .already_transferred "$evidence")" == 0 ]] || { echo DRYRUN_PARTIAL_TRANSFER >&2; exit 1; }
+          hash="$(jq -r .candidate_hash "$evidence")"
+          [[ "$hash" =~ ^[a-f0-9]{64}$ ]] || { echo DRYRUN_HASH_INVALID >&2; exit 1; }
+          echo "FDM13_EXPECTED_COUNT=21" >> "$GITHUB_ENV"
+          echo "FDM13_EXPECTED_HASH=$hash" >> "$GITHUB_ENV"
+          echo "Reviewed dry-run: $REVIEWED_RUN" >> "$GITHUB_STEP_SUMMARY"
+      - name: Capture production D1 Time Travel recovery
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo D1_CREDENTIALS_MISSING >&2; exit 1; }
+          recovery_time="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$recovery_time" > "$RUNNER_TEMP/recovery.txt"
+          test -s "$RUNNER_TEMP/recovery.txt"
+          echo "D1_RECOVERY_UTC=$recovery_time" >> "$GITHUB_STEP_SUMMARY"
+          echo "FDM13_RECOVERY_READY=yes" >> "$GITHUB_ENV"
+          rm -f "$RUNNER_TEMP/recovery.txt"
+      - name: Execute reviewed transfer or read-only dry-run
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FDM13_TRANSFER_MODE: ${{ inputs.mode }}
+          FDM13_TRANSFER_CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
+          TARGET_COMPANY_ID: '6'
+        run: |
+          set -euo pipefail
+          node scripts/production/lms-fdm13-transfer-governed.mjs > "$RUNNER_TEMP/result.json"
+          test -s "$RUNNER_TEMP/result.json"
+      - name: Post-check authenticated LMS API and course counters
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          PROD_API_BASE_URL: https://api.airtrust.online
+          PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          FDM13_APPLY_REPORT: ${{ runner.temp }}/result.json
+        run: |
+          set -euo pipefail
+          [[ -n "$PROD_SMOKE_EMAIL" && -n "$PROD_SMOKE_PASSWORD" ]] || { echo PRODUCTION_CREDENTIALS_MISSING >&2; exit 1; }
+          node scripts/production/lms-fdm13-postcheck-api.mjs > "$RUNNER_TEMP/api-postcheck.json"
+          jq -e '.api_postconditions_verified == true and .contains_personal_data == false' "$RUNNER_TEMP/api-postcheck.json" >/dev/null
+          jq '{mode,source_sha,tenant,course_71,course_72,api_postconditions_verified,contains_personal_data}' "$RUNNER_TEMP/api-postcheck.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish sanitized aggregate report
+        if: always()
+        run: |
+          set -euo pipefail
+          [[ -s "$RUNNER_TEMP/result.json" ]] || exit 0
+          jq '{mode,source_sha,empresa_id,source_canceled,tripulacao,manutencao,out_of_scope,credited_at_99,needs_fresh_training,already_transferred,candidates,candidate_hash,write_count,historical_source_preserved,committee_73_untouched,emails_sent,scorm_progress_written,certificate_issued,mutation_executed,created_enrollments,post_transferred,post_pending,postconditions_verified,contains_personal_data}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload aggregate evidence only
+        uses: actions/upload-artifact@v7
+        with:
+          name: fdm13-transfer-${{ inputs.mode }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/result.json
+            ${{ runner.temp }}/api-postcheck.json
+          retention-days: 30
+          if-no-files-found: error

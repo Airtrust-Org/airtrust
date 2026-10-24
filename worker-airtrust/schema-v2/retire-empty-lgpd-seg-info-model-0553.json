@@ -1,0 +1,8 @@
+{
+  "changeId": "retire-empty-lgpd-seg-info-model-0553",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0553_retire_empty_lgpd_seg_info_model.sql",
+  "fileHash": "63528601b365117d1f7d0aeaa46eb2ffffc912a091c4591001167dd1b4690610",
+  "planPath": "worker-airtrust/schema-v2/plans/retire-empty-lgpd-seg-info-model-0553.md",
+  "planHash": "785da2888f93cd63bd594e8af0e8ecd7cc9c1198009926aab8ce6a2c8331d82e"
+}

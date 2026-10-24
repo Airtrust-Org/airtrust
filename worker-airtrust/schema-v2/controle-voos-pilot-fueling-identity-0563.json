@@ -1,0 +1,8 @@
+{
+  "changeId": "controle-voos-pilot-fueling-identity-0563",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0563_controle_voos_pilot_fueling_identity.sql",
+  "fileHash": "f920e8b75faab568c7abeaace086606d19904bc1a4b16fc010238d63fd572456",
+  "planPath": "worker-airtrust/schema-v2/plans/controle-voos-pilot-fueling-identity-0563.md",
+  "planHash": "1be9c128e3f56e03f72a35702cd239735476460ba24209801d32bf10e44296ae"
+}

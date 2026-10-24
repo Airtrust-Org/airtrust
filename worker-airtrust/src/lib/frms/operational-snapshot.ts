@@ -40,6 +40,7 @@ import { deriveFrmsOperationalDecision, type FrmsDecisaoOperacionalEstado } from
 import { loadPreferredOperationalJourneys, type FrmsOperationalDataSource } from './preferred-operational-source';
 import { buildActiveFortnightRosterRows, buildMissionRosterRows, normalizeMissionPeriods, type MissionPeriodRow } from './mission-periods';
 import { addDaysIso, maxIso, minIso } from './iso-date';
+import { clockToMinutes, minutesToClock, projectSleepStart } from './operational-clock';
 
 export type { MissionPeriodRow } from './mission-periods';
 import { collectByBindChunks } from '../../utils/d1-bind-chunks';
@@ -72,6 +73,8 @@ export interface FrmsOperationalSnapshotItem {
   aeronave: string | null;
 
   escalado: boolean;
+  /** Evidência de escala vigente na quinzena, independentemente de fatorização disponível. */
+  na_quinzena_ativa?: boolean;
   /** Há atividade/declaração operacional no dia; presença na quinzena não basta. */
   operacao_requer_decisao?: boolean;
   escala_source: 'SIGVOOS' | 'MANUAL' | 'EVD' | 'AUSENTE';
@@ -92,6 +95,8 @@ export interface FrmsOperationalSnapshotItem {
 
   checkin_status: 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
   checkin_horario: string | null;
+  /** Instante UTC de envio, para exibição no fuso operacional. */
+  checkin_submitted_at?: string | null;
   kss_score: number | null;
   horas_sono: number | null;
   qualidade_sono: number | null;
@@ -217,6 +222,7 @@ interface CheckinSnapshotRow {
   data_operacional: string;
   funcionario_id: number;
   hora_checkin: string | null;
+  submitted_at?: string | null;
   hora_apresentacao?: string | null;
   kss_score: number | null;
   horas_sono: number | null;
@@ -259,24 +265,6 @@ function normalizeText(value: unknown): string | null {
 function asNumber(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function clockToMinutes(value: string | null | undefined): number | null {
-  if (!value || !/^\d{2}:\d{2}$/.test(value)) return null;
-  const [hours, minutes] = value.split(':').map(Number);
-  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
-  return hours * 60 + minutes;
-}
-
-function minutesToClock(value: number): string {
-  const normalized = ((Math.round(value) % 1440) + 1440) % 1440;
-  return `${String(Math.floor(normalized / 60)).padStart(2, '0')}:${String(normalized % 60).padStart(2, '0')}`;
-}
-
-function projectSleepStart(wakeTime: string, sleepHours: number): string | null {
-  const wake = clockToMinutes(wakeTime);
-  if (wake == null || !Number.isFinite(sleepHours) || sleepHours <= 0 || sleepHours > 24) return null;
-  return minutesToClock(wake - Math.round(sleepHours * 60));
 }
 
 export function calculateMorningEffectivenessProjection(input: {
@@ -717,15 +705,16 @@ export function buildFrmsOperationalSnapshot(
     activityMap.set(key, current);
   }
 
+  const rosterKeys = new Set(
+    (input.rows.roster ?? []).map((row) => `${row.data_operacional}::${asNumber(row.funcionario_id)}`),
+  );
   const keys = new Set<string>([
     ...escalaMap.keys(),
     ...jornadaMap.keys(),
     ...checkinMap.keys(),
     ...effectivenessMap.keys(),
     ...activityMap.keys(),
-    ...(input.rows.roster ?? []).map(
-      (row) => `${row.data_operacional}::${asNumber(row.funcionario_id)}`,
-    ),
+    ...rosterKeys,
   ]);
 
   const items: FrmsOperationalSnapshotItem[] = [];
@@ -743,6 +732,7 @@ export function buildFrmsOperationalSnapshot(
     if (!funcionario) continue;
 
     const escalado = Boolean(escala);
+    const pertenceQuinzenaAtiva = rosterKeys.has(key);
     const teveJornada =
       Boolean(jornada) &&
       asNumber(jornada?.has_operational_data) === 1 &&
@@ -784,7 +774,7 @@ export function buildFrmsOperationalSnapshot(
 
     const checkinStatus: FrmsOperationalSnapshotItem['checkin_status'] = checkin
       ? 'RECEBIDO'
-      : escalado || teveAtividadeFrms
+      : pertenceQuinzenaAtiva || escalado || teveAtividadeFrms
         ? 'PENDENTE'
         : 'NAO_APLICAVEL';
 
@@ -834,7 +824,7 @@ export function buildFrmsOperationalSnapshot(
 
     const alertas: FrmsOperationalSnapshotAlertCode[] = [];
 
-    if ((escalado || teveAtividadeFrms) && !checkin) {
+    if ((pertenceQuinzenaAtiva || escalado || teveAtividadeFrms) && !checkin) {
       alertas.push('CHECKIN_PENDENTE');
     }
 
@@ -911,6 +901,7 @@ export function buildFrmsOperationalSnapshot(
         normalizeText(funcionario?.aeronave),
 
       escalado,
+      na_quinzena_ativa: pertenceQuinzenaAtiva,
       operacao_requer_decisao: operacaoRequerDecisao,
       escala_source: escalado
         ? 'EVD'
@@ -936,6 +927,7 @@ export function buildFrmsOperationalSnapshot(
 
       checkin_status: checkinStatus,
       checkin_horario: normalizeText(checkin?.hora_checkin),
+      checkin_submitted_at: normalizeText(checkin?.submitted_at),
       kss_score: kss,
       horas_sono: horasSono,
       qualidade_sono: checkin ? asNumber(checkin.qualidade_sono, 0) : null,
@@ -1145,6 +1137,7 @@ async function loadOperationalSnapshotRows(
            ch.data_checkin AS data_operacional,
            CAST(ch.funcionario_id AS INTEGER) AS funcionario_id,
            ch.hora_checkin,
+           ch.submitted_at,
            ch.jornada_inicio_prevista AS hora_apresentacao,
            ch.kss_score,
            ch.horas_sono,

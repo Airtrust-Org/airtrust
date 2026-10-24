@@ -448,7 +448,14 @@ describe('PATCH /:id/status — qualification gate', () => {
           lesson_status: 'passed', completion_status: null, success_status: null,
           score_raw: 90, score_max: 100, score_scaled: 0.9,
           session_time: '01:00:00', total_time: '01:30:00',
-          suspend_data: null, cmi_json: null,
+          suspend_data: null,
+          // A manager can complete non-qualifying SCORM only with the same
+          // learner evidence required for qualifying courses.
+          cmi_json: JSON.stringify({
+            'cmi.core.lesson_location': '3/3',
+            'airtrust.total_slides': 3,
+            'airtrust.viewed_slides': [1, 2, 3],
+          }),
         }),
       }],
       ['SELECT * FROM lms_matriculas WHERE id = ? AND empresa_id = ?', { first: () => updatedSemQual }],

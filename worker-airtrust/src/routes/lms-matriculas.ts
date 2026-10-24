@@ -14,11 +14,14 @@ import { hasRole, requirePermission, requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
+import { describeLmsQualificationFailure } from '../services/lms-qualification-failure-domain';
+import { resolveLmsCompletionScorePct } from '../services/lms-completion-evidence';
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import {
   ensureMatriculaCycle,
   hasActiveMatriculaCycle,
   resetMatriculaForNewCycle,
+  reactivateCancelledMatriculaPreservingProgress,
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
 import {
@@ -29,11 +32,10 @@ import {
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
   preferScormValue,
-  requiresExplicitScormCompletion,
   resolveLmsEffectiveProgress,
   shouldPreferIncomingScormState,
 } from '../services/lms-progress-guardrails';
-import { logAudit } from '../utils/db';
+import { getCallerUserId, logLmsMatriculaAudit } from './lms-matriculas-audit';
 import type { Env } from '../types';
 import {
   assertFuncionarioInScope,
@@ -60,23 +62,32 @@ import {
   type ProgressRecoveryStateSnapshot,
 } from '../services/lms-progress-recovery-domain';
 import {
+  canFinalizeScormEnrollment,
+  buildPersistedScormClosureReadiness,
   clampPct,
   extractProgressPctFromCmiJson,
   formatScormLocationTelemetry,
   isMatriculaUniqueConstraintError,
   isScormFailed,
-  isScormSuccess,
   parsePositiveInt,
   requiresServerValidatedNonScormEvidence,
   resolveScormScorePct,
   summarizeScormTextPayload,
 } from '../services/lms-matricula-runtime-domain';
+import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '../repositories/lms-matricula-queries';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
+import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
+import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
+import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard';
+import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
+import { activeXapiFirst } from '../services/lms-active-xapi-read';
+import { registerLmsScormEditionHandoffRoute } from './lms-scorm-edition-handoff';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 app.route('/convites', lmsMatriculasConvitesRoutes);
-
+registerLmsScormEditionHandoffRoute(app);
+app.route('/', lmsMatriculasEmAndamentoRoutes);
 function getCallerFuncionarioId(c: Context): number | null {
   const raw = c.get('funcionarioId' as never) as unknown;
   const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
@@ -102,42 +113,6 @@ async function resolveCallerFuncionarioId(c: Context, db: D1Database): Promise<n
 
   const parsed = row?.funcionario_id;
   return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : null;
-}
-
-function getCallerUserId(c: Context): number | undefined {
-  const raw = c.get('userId' as never) as unknown;
-  const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
-  return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : undefined;
-}
-
-async function logLmsMatriculaAudit(
-  db: D1Database,
-  c: Context,
-  params: {
-    action: string;
-    matriculaId: number;
-    oldValues?: Record<string, unknown>;
-    newValues?: Record<string, unknown>;
-  },
-) {
-  try {
-    await logAudit(db, {
-      userId: getCallerUserId(c),
-      action: params.action,
-      entityType: 'lms_matriculas',
-      entityId: params.matriculaId,
-      oldValues: params.oldValues,
-      newValues: params.newValues,
-      empresaId: getEmpresaIdSafe(c),
-      ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
-      userAgent: c.req.header('user-agent') ?? undefined,
-    });
-  } catch (error) {
-    createLogger(c, 'LmsMatriculas.audit').error('lms_matricula_audit_failed', toError(error), {
-      matriculaId: params.matriculaId,
-      action: params.action,
-    });
-  }
 }
 
 async function createLmsInAppNotification(
@@ -183,47 +158,6 @@ async function createLmsInAppNotification(
     .run();
 }
 
-async function findLatestMatriculaForFuncionario(
-  db: D1Database,
-  params: { cursoId: number; funcionarioId: number; empresaId: number },
-) {
-  return db
-    .prepare(
-      `SELECT id, status, deleted_at
-         FROM lms_matriculas
-        WHERE curso_id = ?
-          AND funcionario_id = ?
-          AND empresa_id = ?
-        ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END, id DESC
-        LIMIT 1`,
-    )
-    .bind(params.cursoId, params.funcionarioId, params.empresaId)
-    .first<{ id: number; status: string; deleted_at: string | null }>();
-}
-
-async function readMatriculaForCourseList(
-  db: D1Database,
-  params: { matriculaId: number; empresaId: number },
-) {
-  return db
-    .prepare(
-      `SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula
-         FROM lms_matriculas m
-         LEFT JOIN funcionarios f
-           ON f.id = m.funcionario_id
-          AND f.empresa_id = m.empresa_id
-          AND f.deleted_at IS NULL
-          AND COALESCE(f.ativo, 1) = 1
-          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-        WHERE m.id = ?
-          AND m.empresa_id = ?
-          AND m.deleted_at IS NULL
-        LIMIT 1`,
-    )
-    .bind(params.matriculaId, params.empresaId)
-    .first<Record<string, unknown>>();
-}
-
 // ── Schemas ──────────────────────────────────────────────────────────────────
 
 const MatriculaCreateSchema = z.object({
@@ -250,32 +184,6 @@ const MatriculaLoteSchema = z.object({
   enviar_convite_email: z.boolean().optional().default(true),
 });
 
-const ScormCommitSchema = z.object({
-  matricula_id: z.number().int().positive(),
-  // SCORM 1.2
-  lesson_status: z.string().optional().nullable(),
-  // SCORM 2004
-  completion_status: z.string().optional().nullable(),
-  success_status: z.string().optional().nullable(),
-  // Scores
-  score_raw: z.number().optional().nullable(),
-  score_max: z.number().optional().nullable(),
-  score_min: z.number().optional().nullable(),
-  score_scaled: z.number().optional().nullable(),
-  // Tempo
-  session_time: z.string().optional().nullable(),
-  total_time: z.string().optional().nullable(),
-  // Dados de estado
-  suspend_data: z.string().max(65535).optional().nullable(),
-  launch_data: z.string().optional().nullable(),
-  // CMI completo (JSON stringified)
-  cmi_json: z.string().optional().nullable(),
-  // Metadados do wrapper AirTrust
-  commit_event: z.string().optional().nullable(),
-  completion_candidate: z.boolean().optional().nullable(),
-  completion_observed_at: z.string().optional().nullable(),
-});
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function emitScormCommitTelemetry(
@@ -294,24 +202,23 @@ function emitScormCommitTelemetry(
       blockedLocationRegression: boolean;
       blockedEmptySuspendData: boolean;
       blockedShorterSuspendData: boolean;
+      blockedTerminalRegression: boolean;
       preservedLocationFromCurrent: boolean;
     };
   },
 ) {
-  const blocked =
-    params.decisions.blockedLocationRegression ||
-    params.decisions.blockedEmptySuspendData ||
-    params.decisions.blockedShorterSuspendData;
+  const { blockedLocationRegression, blockedEmptySuspendData, blockedShorterSuspendData, blockedTerminalRegression } = params.decisions;
+  const blocked = blockedLocationRegression || blockedEmptySuspendData ||
+    blockedShorterSuspendData || blockedTerminalRegression;
 
   const event = blocked ? 'SCORM_REGRESSION_BLOCKED' : 'SCORM_COMMIT';
   const reason = [
     params.decisions.blockedLocationRegression ? 'location-regression' : null,
     params.decisions.blockedEmptySuspendData ? 'empty-suspend-data' : null,
     params.decisions.blockedShorterSuspendData ? 'shorter-suspend-data' : null,
+    params.decisions.blockedTerminalRegression ? 'terminal-status-regression' : null,
     !blocked && params.decisions.preservedLocationFromCurrent ? 'preserved-current-location' : null,
-  ]
-    .filter(Boolean)
-    .join(',');
+  ].filter(Boolean).join(',');
 
   createLogger(c, 'LmsMatriculas.scorm').info('lms_scorm_commit_telemetry', {
     matriculaId: params.matriculaId,
@@ -541,9 +448,13 @@ app.get(
                       AND ${funcionarioScope.clause}
                  )`;
     const binds: (string | number)[] = [cursoId, empresaId, ...funcionarioScope.bindings];
+    // A grade operacional não é o histórico: só possui ciclos que ainda
+    // exigem treinamento. Concluídos/cancelados continuam auditáveis por filtro.
     if (status) {
       where += ' AND m.status = ?';
       binds.push(status);
+    } else {
+      where += " AND UPPER(TRIM(COALESCE(m.status,''))) IN ('NAO_INICIADO','EM_ANDAMENTO','REPROVADO')";
     }
 
     const total = await db
@@ -605,7 +516,13 @@ app.get('/:id', async (c) => {
     .prepare(
       `
       SELECT m.*, c.titulo, c.tipo_conteudo, c.scorm_versao, c.scorm_launch_file, c.scorm_package_r2_prefix,
-          c.scorm_mastery_score, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
+          (SELECT cy.id FROM lms_matricula_ciclos cy
+            WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+              AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL LIMIT 1) AS active_lms_cycle_id,
+          (SELECT cy.data_inicio FROM lms_matricula_ciclos cy
+            WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+              AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL LIMIT 1) AS active_lms_cycle_started_at,
+          c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
           qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
           qt.validade AS qualificacao_validade, qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes, h.id AS h5p_conteudo_id,
         f.nome AS funcionario_nome
@@ -669,18 +586,14 @@ app.get('/:id', async (c) => {
         .first<Record<string, unknown>>()) ?? null;
   } else if (tipoConteudo === 'h5p') {
     // Para H5P: retornar resumo de statements xAPI
-    const xapiRows = await db
-      .prepare(
+    const xapiRows = await activeXapiFirst<{ total_statements: number; last_verb: string; last_timestamp: string }>(db,
         `
         SELECT COUNT(*) AS total_statements,
-          (SELECT verb_id FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? ORDER BY created_at DESC LIMIT 1) AS last_verb,
-          (SELECT timestamp FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? ORDER BY created_at DESC LIMIT 1) AS last_timestamp
+          (SELECT verb_id FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? AND archived_cycle_id IS NULL ORDER BY created_at DESC LIMIT 1) AS last_verb,
+          (SELECT timestamp FROM lms_xapi_statements WHERE matricula_id = ? AND empresa_id = ? AND archived_cycle_id IS NULL ORDER BY created_at DESC LIMIT 1) AS last_timestamp
         FROM lms_xapi_statements
-        WHERE matricula_id = ? AND empresa_id = ?
-      `,
-      )
-      .bind(matriculaId, empresaId, matriculaId, empresaId, matriculaId, empresaId)
-      .first<{ total_statements: number; last_verb: string; last_timestamp: string }>();
+        WHERE matricula_id = ? AND empresa_id = ? AND archived_cycle_id IS NULL
+      `, [matriculaId, empresaId, matriculaId, empresaId, matriculaId, empresaId]);
     xapiSummary = xapiRows ?? { total_statements: 0 };
   }
 
@@ -722,12 +635,18 @@ app.get('/:id', async (c) => {
                 },
         })
       : null;
-
+  const scormClosureReadiness = tipoConteudo === 'scorm'
+    ? buildPersistedScormClosureReadiness(matricula, progressoScorm)
+    : null;
+  const {mismatch:editionMismatch,proposal:activeResumeProposal,handoffId:activeHandoffId,
+    handoffBookmark:activeHandoffBookmark,handoffAvailable}=await readLmsScormEditionState({
+      db,bucket:c.env.BUCKET,empresaId,matriculaId,matricula,progressoScorm,
+      handoffEnabled:c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED==='true',
+    });
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: matricula.status as string | null,
     progressoBruto: matricula.progresso_pct as number | null,
   });
-
   return c.json({
     success: true,
     data: {
@@ -739,6 +658,12 @@ app.get('/:id', async (c) => {
       scorm_progresso: progressoScorm,
       xapi_summary: xapiSummary,
       completion_diagnostic: completionDiagnostic,
+      closure_readiness: scormClosureReadiness,
+      edition_mismatch: editionMismatch,
+      active_resume_proposal: activeResumeProposal,
+      active_scorm_handoff_id: activeHandoffId,
+      active_scorm_resume_position: activeHandoffBookmark,
+      scorm_handoff_available: handoffAvailable,
     },
   });
 });
@@ -813,14 +738,22 @@ app.post('/', async (c) => {
     const reativavel =
       Boolean(existente.deleted_at) || String(existente.status || '').toUpperCase() === 'CANCELADO';
     if (reativavel) {
-      await resetMatriculaForNewCycle(db, {
+      const resume = await reactivateCancelledMatriculaPreservingProgress(db, {
         matriculaId: existente.id,
         dataExpiracao: data_expiracao ?? null,
         observacoes: observacoes ?? null,
         matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
-        origin: 'MANUAL',
-        empresaId,
+        empresaId, bucket: c.env.BUCKET,
       });
+      if (resume === 'NEW_EDITION_REQUIRED') {
+        throw new ApiError(
+          'O curso mudou de edição. O progresso anterior foi preservado; peça ao administrador o início auditado da nova edição.',
+          409,
+        );
+      }
+      if (resume === 'NOT_ELIGIBLE') {
+        throw new ApiError('Esta matrícula não pode ser reativada; revise o estado atual.', 409);
+      }
       await stampLmsEnrollmentEvidenceProfile(db, {
         empresaId,
         matriculaId: existente.id,
@@ -840,7 +773,9 @@ app.post('/', async (c) => {
         action: 'LMS_MATRICULA_REATIVADA',
         matriculaId: existente.id,
         oldValues: { status: existente.status, deleted_at: existente.deleted_at },
-        newValues: { curso_id, funcionario_id, data_expiracao: data_expiracao ?? null },
+        newValues: { curso_id, funcionario_id, data_expiracao: data_expiracao ?? null,
+          preserved_progress: true, preserved_scorm_state: resume.scormPreserved,
+          resumed_status: resume.status, resumed_progress_pct: resume.progressoPct },
       });
       if (enviar_convite_email)
         await sendMatriculaEmail(c, c.env, db, {
@@ -1090,12 +1025,22 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
 
   const results = { criadas: 0, ignoradas: 0, erros: 0 };
   const matriculasCriadas: Record<string, unknown>[] = [];
+  const detalhesErros: Array<{ funcionario_id: number; funcionario_nome: string; codigo: string }> = [];
+  const recordError = (funcionarioId: number, codigo: string) => {
+    results.erros++;
+    detalhesErros.push({
+      funcionario_id: funcionarioId,
+      funcionario_nome: funcionariosPorId.get(funcionarioId)?.nome ?? `Funcionário ${funcionarioId}`,
+      codigo,
+    });
+  };
 
   for (const funcionarioId of funcionarioIdsUnicos) {
+    let etapa = 'consulta';
     try {
       const funcionario = funcionariosPorId.get(funcionarioId);
       if (!funcionario) {
-        results.erros++;
+        recordError(funcionarioId, 'ESTADO_NAO_CONFIRMADO');
         continue;
       }
 
@@ -1113,20 +1058,28 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           results.ignoradas++;
           continue;
         }
-        await resetMatriculaForNewCycle(db, {
+        etapa = 'reativacao';
+        const resume = await reactivateCancelledMatriculaPreservingProgress(db, {
           matriculaId: existente.id,
           dataExpiracao: data_expiracao ?? null,
           observacoes: observacoes ?? null,
           matriculadoPor: Number.isFinite(userId) && userId > 0 ? userId : null,
-          origin: 'MANUAL',
-          empresaId,
+          empresaId, bucket: c.env.BUCKET,
         });
+        if (resume === 'NEW_EDITION_REQUIRED' || resume === 'NOT_ELIGIBLE') {
+          // Batch is per learner: do not erase the old SCORM state and do not
+          // count an incompatible course as successfully re-enrolled.
+          recordError(funcionarioId, resume);
+          continue;
+        }
+        etapa = 'perfil_evidencia';
         await stampLmsEnrollmentEvidenceProfile(db, {
           empresaId,
           matriculaId: existente.id,
           funcionarioId,
           qualificacaoTipoId: curso.qualificacao_tipo_id,
         });
+        etapa = 'notificacao';
         await createLmsInAppNotification(db, {
           funcionarioId,
           empresaId,
@@ -1144,8 +1097,11 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
             curso_id,
             funcionario_id: funcionarioId,
             data_expiracao: data_expiracao ?? null,
+            preserved_progress: true, preserved_scorm_state: resume.scormPreserved,
+            resumed_status: resume.status, resumed_progress_pct: resume.progressoPct,
           },
         });
+        etapa = 'convite';
         if (enviar_convite_email)
           await sendMatriculaEmail(c, c.env, db, {
             funcionarioId,
@@ -1155,6 +1111,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
             dataExpiracao: data_expiracao ?? null,
             isNovoCiclo: false,
           });
+        etapa = 'leitura';
         const matriculaReativada = await readMatriculaForCourseList(db, {
           matriculaId: existente.id,
           empresaId,
@@ -1163,6 +1120,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         results.criadas++;
         continue;
       }
+      etapa = 'insercao';
       const insertResult = await db
         .prepare(
           'INSERT INTO lms_matriculas (empresa_id, curso_id, funcionario_id, data_expiracao, observacoes, matriculado_por) VALUES (?,?,?,?,?,?)',
@@ -1177,17 +1135,20 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         )
         .run();
       const matriculaId = Number(insertResult.meta.last_row_id);
+      etapa = 'perfil_evidencia';
       await stampLmsEnrollmentEvidenceProfile(db, {
         empresaId,
         matriculaId,
         funcionarioId,
         qualificacaoTipoId: curso.qualificacao_tipo_id,
       });
+      etapa = 'ciclo';
       await ensureMatriculaCycle(db, {
         matriculaId,
         origin: 'MANUAL',
         empresaId,
       });
+      etapa = 'notificacao';
       await createLmsInAppNotification(db, {
         funcionarioId,
         empresaId,
@@ -1209,6 +1170,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           observacoes: observacoes ?? null,
         },
       });
+      etapa = 'convite';
       if (enviar_convite_email)
         await sendMatriculaEmail(c, c.env, db, {
           funcionarioId,
@@ -1219,6 +1181,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           isNovoCiclo: false,
         });
 
+      etapa = 'leitura';
       const matriculaCriada = await readMatriculaForCourseList(db, {
         matriculaId,
         empresaId,
@@ -1228,8 +1191,11 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
       }
       results.criadas++;
     } catch (error) {
-      if (!isMatriculaUniqueConstraintError(error)) {
-        results.erros++;
+      if (etapa !== 'insercao' || !isMatriculaUniqueConstraintError(error)) {
+        createLogger(c, 'LmsMatriculas.lote').error('lms_matricula_lote_failed', undefined, {
+          cursoId: curso_id, funcionarioId, etapa,
+        });
+        recordError(funcionarioId, 'ESTADO_NAO_CONFIRMADO');
         continue;
       }
 
@@ -1243,11 +1209,11 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         results.ignoradas++;
         continue;
       }
-      results.erros++;
+      recordError(funcionarioId, 'ESTADO_NAO_CONFIRMADO');
     }
   }
 
-  return c.json({ success: true, data: { ...results, matriculas: matriculasCriadas } });
+  return c.json({ success: true, data: { ...results, matriculas: matriculasCriadas, detalhes_erros: detalhesErros } });
 });
 
 // ── Cancelar matrícula ────────────────────────────────────────────────────────
@@ -1324,7 +1290,7 @@ app.post('/scorm/commit', async (c) => {
       `
       SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.tentativas,
         m.qualificacao_historico_id,
-        c.id AS curso_id, c.scorm_mastery_score, c.gerar_qualificacao_ao_concluir,
+        c.id AS curso_id, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
         c.qualificacao_tipo_id, c.titulo AS curso_titulo,
         qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
         qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1345,7 +1311,8 @@ app.post('/scorm/commit', async (c) => {
       tentativas: number;
       qualificacao_historico_id: number | null;
       curso_id: number;
-      scorm_mastery_score: number;
+      scorm_mastery_score: number | null;
+      scorm_assessment_policy: 'FORMATIVE' | 'SCORED' | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       curso_titulo: string;
@@ -1386,6 +1353,8 @@ app.post('/scorm/commit', async (c) => {
       throw new ApiError('Acesso negado', 403);
     }
   }
+
+  await assertScormCommitCycle(db, empresaId, d.matricula_id, d.ciclo_id);
 
   // ─── Guard: prevent CONCLUIDO downgrade via SCORM commit ─────────────────
   // Completed enrollments must never be downgraded to incomplete/failed/not attempted.
@@ -1441,17 +1410,17 @@ app.post('/scorm/commit', async (c) => {
     scormAtual?.score_scaled ?? null,
     d.score_scaled ?? null,
   );
-  const effectiveScorePct = resolveScormScorePct({
+  const effectiveScorePct = resolveLmsCompletionScorePct({
     scoreRaw: effectiveScoreRaw,
+    scoreMin: mergeMonotonicNumber(scormAtual?.score_min ?? null, d.score_min ?? null),
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
-  // "Rever" replay: nunca recomputar sucesso/falha (preserva data_conclusao/tentativas).
-  const sucesso =
-    !matriculaWasConcluido &&
-    isScormSuccess(d, { masteryScore: matricula.scorm_mastery_score, effectiveScorePct });
+  const sucesso = canFinalizeScormEnrollment({
+    commit: d, wasCompleted: matriculaWasConcluido, cmiJson: mergedCmiJson,
+    location: mergedLocation, policy: matricula.scorm_assessment_policy,
+    masteryScore: matricula.scorm_mastery_score, scorePct: effectiveScorePct });
   const falha = !matriculaWasConcluido && isScormFailed(d);
-
   let progressoPct = progressoAnterior;
   if (sucesso) {
     progressoPct = 100;
@@ -1628,13 +1597,13 @@ app.post('/scorm/commit', async (c) => {
     dataConclusao = new Date().toISOString().slice(0, 10);
   }
 
-  // GUARD: conclusão já existente não repete qualificação/certificado. Em nova
-  // conclusão, certificado é manual salvo a exceção EAD do serviço canônico.
+  // Evita reemitir qualificação e certificado.
   const isNewCompletion =
     novoStatus === 'CONCLUIDO' && statusAnterior !== 'CONCLUIDO' && Boolean(dataConclusao);
 
   let qualificacaoGerada: Record<string, unknown> | null = null;
   let qualificationFailed = false;
+  let qualificationFailure: ReturnType<typeof describeLmsQualificationFailure> | null = null;
   let statusFinal = novoStatus;
   let dataConclusaoFinal = dataConclusao;
 
@@ -1673,10 +1642,9 @@ app.post('/scorm/commit', async (c) => {
       }
     } catch (e) {
       if (!(e instanceof LmsCompletionRejectedError)) throw e;
-      // Qualificação exigida e não garantida: o batch inteiro reverteu — a
-      // matrícula permanece no status pré-conclusão, sem qualquer efeito
-      // parcial. Retry idempotente no próximo commit.
+      // Rollback atômico preserva a matrícula para nova tentativa idempotente.
       qualificationFailed = true;
+      qualificationFailure = describeLmsQualificationFailure(e);
       statusFinal = statusSemConclusao;
       dataConclusaoFinal = null;
       createLogger(c, 'LmsMatriculas.scorm').error('lms_scorm_completion_rejected', toError(e), {
@@ -1816,10 +1784,11 @@ app.post('/scorm/commit', async (c) => {
     return c.json(
       {
         success: false,
-        error:
+        error: qualificationFailure?.message ??
           'Não foi possível confirmar a qualificação exigida por este curso. A matrícula não foi concluída — tente novamente.',
         code: 'LMS_QUALIFICATION_COMPLETION_FAILED',
         data: {
+          qualification_failure_code: qualificationFailure?.reasonCode ?? 'LMS_QUALIFICATION_COMPLETION_FAILED',
           matricula_id: d.matricula_id,
           novo_status: novoStatus,
           progresso_bruto: effectiveProgress.progresso_bruto,
@@ -1863,7 +1832,7 @@ app.post('/:id/finalizar', async (c) => {
     .prepare(
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct,
               m.qualificacao_historico_id,
-              c.id AS curso_id, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score,
+              c.id AS curso_id, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score, c.scorm_assessment_policy,
               c.titulo AS curso_titulo,
               qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1886,6 +1855,7 @@ app.post('/:id/finalizar', async (c) => {
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       scorm_mastery_score: number | null;
+      scorm_assessment_policy: 'SCORED' | 'FORMATIVE' | null;
       curso_titulo: string;
       qualificacao_codigo: string | null;
       qualificacao_nome: string | null;
@@ -1897,7 +1867,7 @@ app.post('/:id/finalizar', async (c) => {
   const scormAtual = await db
     .prepare(
       `SELECT lesson_status, completion_status, success_status,
-              score_raw, score_max, score_scaled,
+              score_raw, score_max, score_min, score_scaled,
               session_time, total_time, suspend_data, cmi_json
          FROM lms_progresso_scorm
         WHERE matricula_id = ?
@@ -1910,6 +1880,7 @@ app.post('/:id/finalizar', async (c) => {
       success_status: string | null;
       score_raw: number | null;
       score_max: number | null;
+      score_min: number | null;
       score_scaled: number | null;
       session_time: string | null;
       total_time: string | null;
@@ -1943,21 +1914,31 @@ app.post('/:id/finalizar', async (c) => {
     });
   }
 
-  if (requiresExplicitScormCompletion(matricula.tipo_conteudo, completionDiagnostic)) {
+  // Defense in depth: the route and middleware MUST use the same server
+  // readiness verdict. A SCORM 'passed' bit, high score or 99/100% progress
+  // alone is insufficient to mint a qualification through this endpoint.
+  // No new schema or existing enrollment is mutated by a rejected verdict.
+  const scormClosure = String(matricula.tipo_conteudo ?? 'scorm').toLowerCase() === 'scorm'
+    ? buildPersistedScormClosureReadiness({
+      status: matricula.status,
+      scorm_assessment_policy: matricula.scorm_assessment_policy,
+      scorm_mastery_score: matricula.scorm_mastery_score,
+    }, scormAtual)
+    : null;
+  if (scormClosure && !scormClosure.eligible_for_server_verification) {
     await logLmsMatriculaAudit(db, c, {
       action: 'SCORM_COMPLETION_REJECTED',
       matriculaId,
       newValues: {
         origem: 'manual-finalize-endpoint',
-        completion_diagnostic: completionDiagnostic,
+        closure_code: scormClosure.code,
+        missing_requirements: scormClosure.missing,
       },
     });
-
     return c.json(
       {
         success: false,
-        error:
-          'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis. Cursos SCORM exigem status final explicito passed/completed.',
+        error: 'Conclusão SCORM ainda não elegível: consulte os requisitos pendentes.',
         code: 'SCORM_COMPLETION_REJECTED',
         data: {
           matricula_id: matriculaId,
@@ -1965,6 +1946,7 @@ app.post('/:id/finalizar', async (c) => {
           progresso_pct: matricula.progresso_pct,
           qualificacao_gerada: null,
           completion_diagnostic: completionDiagnostic,
+          closure_readiness: scormClosure,
         },
       },
       409,
@@ -2044,13 +2026,14 @@ app.post('/:id/finalizar', async (c) => {
       },
     });
 
+    const failure = describeLmsQualificationFailure(error);
     return c.json(
       {
         success: false,
-        error:
-          'Não foi possível confirmar a qualificação exigida por este curso. A matrícula não foi concluída — tente novamente.',
+        error: failure.message,
         code: 'LMS_QUALIFICATION_COMPLETION_FAILED',
         data: {
+          qualification_failure_code: failure.reasonCode,
           matricula_id: matriculaId,
           novo_status: matricula.status,
           progresso_pct: matricula.progresso_pct,
@@ -2135,7 +2118,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
     .prepare(
       `SELECT m.id, m.status, m.progresso_pct, m.funcionario_id, m.qualificacao_historico_id,
               c.id AS curso_id, c.titulo AS curso_titulo, c.qualificacao_tipo_id,
-              c.tipo_conteudo, c.scorm_mastery_score, c.gerar_qualificacao_ao_concluir,
+              c.tipo_conteudo, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
               qt.nome AS qualificacao_nome, qt.codigo AS qualificacao_codigo,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
               qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
@@ -2156,6 +2139,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       qualificacao_tipo_id: number | null;
       tipo_conteudo: string | null;
       scorm_mastery_score: number | null;
+      scorm_assessment_policy: 'SCORED' | 'FORMATIVE' | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_nome: string | null;
       qualificacao_codigo: string | null;
@@ -2193,7 +2177,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       const scormAtual = await db
         .prepare(
           `SELECT lesson_status, completion_status, success_status,
-                  score_raw, score_max, score_scaled,
+                  score_raw, score_max, score_min, score_scaled,
                   session_time, total_time, suspend_data, cmi_json
              FROM lms_progresso_scorm
             WHERE matricula_id = ? AND empresa_id = ?`,
@@ -2205,6 +2189,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
           success_status: string | null;
           score_raw: number | null;
           score_max: number | null;
+          score_min: number | null;
           score_scaled: number | null;
           session_time: string | null;
           total_time: string | null;
@@ -2219,7 +2204,15 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         scorm: scormAtual,
       });
 
-      if (requiresExplicitScormCompletion(existing.tipo_conteudo, completionDiagnostic)) {
+      const scormClosure = buildPersistedScormClosureReadiness({
+        status: existing.status,
+        scorm_assessment_policy: existing.scorm_assessment_policy,
+        scorm_mastery_score: existing.scorm_mastery_score,
+      }, scormAtual);
+      // The only exception is a separately governed administrative override:
+      // real SCORM completion still uses the exact same closure verdict as
+      // commit and learner finalization. Overrides are never SCORM PASS.
+      if (!scormClosure.eligible_for_server_verification) {
         const administrativeReason = typeof observacoes === 'string' ? observacoes.trim() : '',
           governedAdministrativeCompletion =
             hasRole(c, 'admin') && administrativeReason.length >= 10;
@@ -2230,6 +2223,8 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
             newValues: {
               origem: 'admin-patch-status-endpoint',
               completion_diagnostic: completionDiagnostic,
+              closure_code: scormClosure.code,
+              missing_requirements: scormClosure.missing,
             },
           });
           return c.json(
@@ -2238,7 +2233,10 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
               error:
                 'Nao foi possivel confirmar a conclusao com os dados SCORM disponiveis. Cursos SCORM exigem status final explicito passed/completed ou conclusao administrativa governada.',
               code: 'SCORM_COMPLETION_REJECTED',
-              data: { completion_diagnostic: completionDiagnostic },
+              data: {
+                completion_diagnostic: completionDiagnostic,
+                closure_readiness: scormClosure,
+              },
             },
             409,
           );
@@ -2250,6 +2248,8 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
             origem: 'admin-patch-status-endpoint',
             administrative_reason: administrativeReason,
             completion_diagnostic: completionDiagnostic,
+            closure_code: scormClosure.code,
+            administrative_override: true,
           },
         });
       }

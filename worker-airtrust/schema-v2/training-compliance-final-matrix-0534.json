@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-final-matrix-0534",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0534_training_compliance_final_matrix.sql",
+  "fileHash": "31366ebd2e3ba20dda8040ab1a5f34a0c67ae0bae116028dfec7d81df67c33f0",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-final-matrix-0534.md",
+  "planHash": "4ac612fa6669bf9fe8dace17ac93f6adda17b4fc7b4bb39b3f7599ab8c2005b2"
+}

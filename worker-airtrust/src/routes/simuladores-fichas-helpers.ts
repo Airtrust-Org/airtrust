@@ -5,6 +5,7 @@
  */
 
 import { audit } from './simuladores-shared';
+import { hasSchemaTable } from '../utils/db-schema';
 import { upsertQualificacaoHistoricoDaFicha } from '../services/qualificacoes-historico-ficha';
 import { realizarG1SemPendente } from '../services/qualificacoes-g1-sem';
 import {
@@ -44,12 +45,14 @@ type QualificationGenerationFichaRow = {
   aluno_nome: string;
   empresa_id: number;
   agendamento_slot_id: number | null;
+  is_check?: number | null;
   tipo_curricular_codigo: string | null;
   tipo_curricular_nome: string | null;
   modelo_id: number | null;
 };
 
 type QualificationCheckRow = {
+  evidencia_ids?: string | null;
   qualificacao_tipo_id: number;
   qt_codigo: string;
   qt_nome: string;
@@ -172,8 +175,40 @@ export async function gerarQualificacaoDaFicha(
   const hoje = new Date().toISOString().split('T')[0];
   const qualificacaoStatus = dataConclusao > hoje ? 'PLANEJADA' : 'CONCLUIDA';
 
+  // When 0554 is active a completed fiche in a check session is not
+  // sufficient evidence for ANY automatic qualification, including the
+  // principal model. Every configured check requires explicit employee proof.
+  const individualSchema = f.agendamento_slot_id
+    ? await hasSchemaTable(db, 'sessoes_checks_resultados_individuais')
+    : false;
+  let principalHasIndividualEvidence = true;
+  if (individualSchema && f.agendamento_slot_id) {
+    const coverage = await db.prepare(`
+      SELECT COUNT(*) AS total,
+             SUM(CASE WHEN EXISTS (
+               SELECT 1 FROM sessoes_checks_resultados_individuais proof
+                WHERE proof.sessao_check_id=sc.id AND proof.empresa_id=?
+                  AND proof.ficha_id=? AND proof.funcionario_id=?
+                  AND proof.estado='CONFIRMADO' AND proof.aprovado=1
+                  AND proof.deleted_at IS NULL
+             ) THEN 1 ELSE 0 END) AS confirmed
+        FROM sessoes_checks sc
+        JOIN simulador_agendamentos sa
+          ON sa.id=sc.sessao_id AND sa.empresa_id=? AND sa.deleted_at IS NULL
+       WHERE sc.sessao_id=? AND sc.deleted_at IS NULL
+    `).bind(f.empresa_id, fid, colaboradorId, f.empresa_id, f.agendamento_slot_id)
+      .first<{ total: number; confirmed: number | null }>();
+    // A signed CHECK fiche with no configured checks must never generate a
+    // principal qualification by vacuous truth (zero checks == zero passes).
+    // Non-check sessions preserve their ordinary principal qualification flow.
+    const configured = Number(coverage?.total || 0);
+    principalHasIndividualEvidence =
+      (configured > 0 || Number(f.is_check) !== 1) &&
+      Number(coverage?.confirmed || 0) === configured;
+  }
+
   let qid: number | null = null;
-  if (tipoQualifId) {
+  if (tipoQualifId && principalHasIndividualEvidence) {
     const principalResult = await upsertQualificacaoHistoricoDaFicha(db, {
       fichaId: fid,
       funcionarioId: colaboradorId,
@@ -212,8 +247,49 @@ export async function gerarQualificacaoDaFicha(
   let fichaTemCheckSemestral = false;
 
   if (f.agendamento_slot_id) {
-    const checksMarcados = await db
-      .prepare(
+    // Schema 0554 is optional until the governed per-environment application.
+    // When available, only CONFIRMADO signed evidence for THIS employee/fiche
+    // can issue an individual FAP. Legacy shared outcomes cannot satisfy it.
+    const checksMarcados = individualSchema
+      ? await db.prepare(`
+          SELECT sc.qualificacao_tipo_id,
+                 qt.codigo AS qt_codigo, qt.nome AS qt_nome,
+                 qt.validade AS qt_validade,
+                 GROUP_CONCAT(DISTINCT evidence.id) AS evidencia_ids
+            FROM sessoes_checks sc
+            JOIN simulador_agendamentos sa
+              ON sa.id=sc.sessao_id AND sa.empresa_id=? AND sa.deleted_at IS NULL
+            JOIN qualificacoes_tipos qt
+              ON qt.id=sc.qualificacao_tipo_id AND qt.empresa_id=?
+               AND qt.deleted_at IS NULL AND qt.ativo=1
+            JOIN sessoes_checks_resultados_individuais evidence
+              ON evidence.sessao_check_id=sc.id AND evidence.empresa_id=?
+               AND evidence.ficha_id=? AND evidence.funcionario_id=?
+               AND evidence.estado='CONFIRMADO' AND evidence.aprovado=1
+               AND evidence.deleted_at IS NULL
+           WHERE sc.sessao_id=? AND sc.deleted_at IS NULL
+             AND sc.qualificacao_tipo_id IS NOT NULL
+             -- Multiple mandatory checks for the same qualification are
+             -- conjunctive: one failed/missing/draft check blocks the FAP.
+             AND NOT EXISTS (
+               SELECT 1 FROM sessoes_checks other
+                WHERE other.sessao_id=sc.sessao_id
+                  AND other.qualificacao_tipo_id=sc.qualificacao_tipo_id
+                  AND other.deleted_at IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM sessoes_checks_resultados_individuais passed
+                     WHERE passed.sessao_check_id=other.id
+                       AND passed.empresa_id=? AND passed.ficha_id=?
+                       AND passed.funcionario_id=? AND passed.estado='CONFIRMADO'
+                       AND passed.aprovado=1 AND passed.deleted_at IS NULL
+                  )
+             )
+           GROUP BY sc.qualificacao_tipo_id, qt.codigo, qt.nome, qt.validade
+        `).bind(f.empresa_id, f.empresa_id, f.empresa_id, fid,
+          colaboradorId, f.agendamento_slot_id, f.empresa_id, fid, colaboradorId)
+        .all<QualificationCheckRow>()
+      : await db
+        .prepare(
         `SELECT DISTINCT
                 sc.qualificacao_tipo_id,
                 qt.codigo as qt_codigo,
@@ -230,37 +306,39 @@ export async function gerarQualificacaoDaFicha(
           AND qt.deleted_at IS NULL
          WHERE sc.sessao_id = ? AND sc.deleted_at IS NULL
            AND sc.qualificacao_tipo_id IS NOT NULL
-           AND NOT EXISTS (
-             SELECT 1 FROM sessoes_checks_resultados scr2
-             WHERE scr2.sessao_check_id = sc.id
-               AND scr2.aprovado = 0
-               AND scr2.deleted_at IS NULL
+           -- A check with no explicit result is not evidence of approval.
+           -- Any conflicting/rejected result also blocks issuance.
+           AND EXISTS (
+             SELECT 1 FROM sessoes_checks_resultados scr_pass
+             WHERE scr_pass.sessao_check_id = sc.id
+               AND scr_pass.aprovado = 1
+               AND scr_pass.deleted_at IS NULL
            )
-           AND (
-             EXISTS (
-               SELECT 1 FROM sessoes_checks_resultados scr3
-               WHERE scr3.sessao_check_id = sc.id
-                 AND scr3.aprovado = 1
-                 AND scr3.deleted_at IS NULL
-             )
-             OR NOT EXISTS (
-               SELECT 1 FROM sessoes_checks_resultados scr4
-               WHERE scr4.sessao_check_id = sc.id
-                 AND scr4.deleted_at IS NULL
-             )
+           AND NOT EXISTS (
+             SELECT 1 FROM sessoes_checks_resultados scr_fail
+             WHERE scr_fail.sessao_check_id = sc.id
+               AND (scr_fail.aprovado IS NULL OR scr_fail.aprovado <> 1)
+               AND scr_fail.deleted_at IS NULL
+           )
+           -- Results are currently session-wide, not participant-specific.
+           -- Only an unambiguous single-employee session may automatically
+           -- generate an individual FAP. Shared sessions need individual proof.
+           -- A former participant/ficha is still evidence that this was a
+           -- shared session. Soft deletion must never promote a group check
+           -- into an individual approval retroactively.
+           AND NOT EXISTS (
+             SELECT 1 FROM sessoes_participantes sp
+             WHERE sp.sessao_id = sc.sessao_id
+               AND (sp.funcionario_id IS NULL OR sp.funcionario_id <> ?)
            )
            AND NOT EXISTS (
              SELECT 1 FROM fichas_sessao f2
              WHERE f2.agendamento_slot_id = sc.sessao_id
-               AND f2.colaborador_id_aluno != ?
-               AND f2.deleted_at IS NULL
-               AND (
-                 (qt.codigo LIKE 'FAP13%' AND f2.tipo_sessao = 'CRED-EXA')
-                 OR (qt.codigo LIKE 'FAP07%' AND f2.tipo_sessao = 'TRE-INST')
-               )
-           )`,
+               AND f2.empresa_id = ?
+               AND (f2.colaborador_id_aluno IS NULL OR f2.colaborador_id_aluno <> ?)
+           )`
       )
-      .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, colaboradorId)
+      .bind(f.empresa_id, f.empresa_id, f.agendamento_slot_id, colaboradorId, f.empresa_id, colaboradorId)
       .all<QualificationCheckRow>();
 
     for (const check of checksMarcados.results || []) {
@@ -277,7 +355,9 @@ export async function gerarQualificacaoDaFicha(
         qualificacaoCodigo: check.qt_codigo,
         dataConclusao,
         dataVencimento: dataVencimentoFap,
-        observacoes: `FAP gerada da ficha #${fid} (check aprovado)`,
+        observacoes: check.evidencia_ids
+          ? `FAP da ficha #${fid} — evidências individuais confirmadas #${check.evidencia_ids}`
+          : `FAP gerada da ficha #${fid} (check legado inequívoco)`,
         empresaId: alunoEmpresaId,
         status: qualificacaoStatus,
       });
@@ -305,6 +385,81 @@ export async function gerarQualificacaoDaFicha(
         valida_ate: dataVencimentoFap,
         tipo: 'fap',
       });
+    }
+
+    if (individualSchema && alunoEmpresaId) {
+      const approvedQualifIds = new Set<number>(
+        (checksMarcados.results || []).map((c) => Number(c.qualificacao_tipo_id)),
+      );
+      if (qid && tipoQualifId) {
+        approvedQualifIds.add(Number(tipoQualifId));
+      }
+      const existingFromFicha = await db
+        .prepare(
+          `SELECT id, qualificacao_id, qualificacao_codigo, observacoes
+             FROM qualificacoes_historico
+            WHERE funcionario_id = ?
+              AND empresa_id = ?
+              AND deleted_at IS NULL
+              AND (
+                observacoes = ?
+                OR observacoes LIKE ?
+                OR observacoes LIKE ?
+                OR observacoes LIKE ?
+              )`,
+        )
+        .bind(
+          colaboradorId,
+          alunoEmpresaId,
+          `Gerado da ficha #${fid}`,
+          `Gerado da ficha #${fid} |%`,
+          `FAP da ficha #${fid} —%`,
+          `FAP gerada da ficha #${fid}%`,
+        )
+        .all<{
+          id: number;
+          qualificacao_id: number | null;
+          qualificacao_codigo: string | null;
+          observacoes: string | null;
+        }>();
+
+      for (const row of existingFromFicha.results || []) {
+        if (!approvedQualifIds.has(Number(row.qualificacao_id || 0))) {
+          const obsRevogada = `${row.observacoes || ''} | Revogada após revisão de evidência individual da ficha #${fid}`;
+          await db
+            .prepare(
+              `UPDATE qualificacoes_historico SET deleted_at = datetime('now'), status = 'CANCELADA', observacoes = ?, updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`,
+            )
+            .bind(obsRevogada, row.id, alunoEmpresaId)
+            .run();
+          if (row.qualificacao_id != null) {
+            await db
+              .prepare(
+                `UPDATE qualificacoes_historico SET renovada = 0, status = 'CONCLUIDA', updated_at = datetime('now') WHERE funcionario_id = ? AND empresa_id = ? AND qualificacao_id = ? AND deleted_at IS NULL AND renovada = 1 AND observacoes LIKE ?`,
+              )
+              .bind(
+                colaboradorId,
+                alunoEmpresaId,
+                row.qualificacao_id,
+                `%Renovada via ficha #${fid}%`,
+              )
+              .run();
+          }
+          await audit(db, {
+            tabela: 'qualificacoes_historico',
+            acao: 'DELETE',
+            registro_id: row.id,
+            dados_anteriores: row,
+            dados_novos: {
+              id: row.id,
+              qualificacao_id: row.qualificacao_id,
+              qualificacao_codigo: row.qualificacao_codigo,
+              status: 'CANCELADA',
+              motivo: `Evidência individual não aprovada na ficha #${fid}`,
+            },
+          });
+        }
+      }
     }
   }
 

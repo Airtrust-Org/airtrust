@@ -268,6 +268,34 @@ describe('frms fortnight indicator', () => {
     expect(withCredit?.score_acumulado).toBeCloseTo((withoutCredit?.score_acumulado ?? 0) - 4, 5);
   });
 
+  it('inclui check-in pendente de dia sem fatorizacao comprovado por periodo vizinho, sem contar dias futuros', () => {
+    const items = [
+      seed('2026-05-01', 1),
+      seed('2026-05-02', 2, {
+        dia_periodo_embarcado: null,
+        total_dias_periodo: null,
+        checkin_status: 'PENDENTE',
+        teve_jornada: false,
+        teve_atividade_frms: false,
+        duracao_jornada_minutos: 0,
+        horas_voo_minutos: 0,
+      }),
+      seed('2026-05-03', 3),
+      seed('2026-05-04', 4, { checkin_status: 'PENDENTE' }),
+    ];
+    const indicators = buildFrmsFortnightIndicatorMap({
+      windowStart: '2026-05-01',
+      windowEnd: '2026-05-14',
+      today: '2026-05-03',
+      items,
+    });
+    expect(indicators.get('2026-05-02::10')?.periodo_inicio).toBe('2026-05-01');
+    expect(indicators.get('2026-05-01::10')?.dias_com_checkin_pendente).toBe(0);
+    expect(indicators.get('2026-05-03::10')?.dias_com_checkin_pendente).toBe(1);
+    expect(indicators.get('2026-05-03::10')?.agravantes_aplicados.map((item) => item.codigo))
+      .toContain('CHECKIN_PENDENTE_NO_PERIODO');
+  });
+
   it('rotula apenas data futura como PROJECAO', () => {
     const indicator = buildFrmsFortnightIndicatorMap({
       windowStart: '2026-05-01',

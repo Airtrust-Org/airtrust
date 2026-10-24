@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { analyzeTrace } from '../../lib/lms/lms-scorm-browser-run';
+import { analyzeTrace, classifyScormBrowserError, runScormBrowserConformance, scormBrowserFailureCode } from '../../lib/lms/lms-scorm-browser-run';
 
 const startedAt = '2026-08-22T00:00:00.000Z';
 const lifecycle = [
@@ -9,6 +9,71 @@ const lifecycle = [
   { method: 'LMSCommit' },
   { method: 'LMSFinish' },
 ];
+
+describe('SCORM Browser Run failure reporting', () => {
+  it('classifies a browser connection failure without exporting the raw error', () => {
+    expect(classifyScormBrowserError(new Error('WebSocket disconnected from internal worker endpoint'))).toBe('BROWSER_CONNECTION');
+  });
+  it('classifies quota and access errors as stable categories', () => {
+    expect(classifyScormBrowserError(new Error('429 Too many requests'))).toBe('BROWSER_QUOTA');
+    expect(classifyScormBrowserError(new Error('403 Forbidden'))).toBe('BROWSER_ACCESS');
+  });
+  it('does not echo sensitive or unknown exception messages', () => {
+    expect(classifyScormBrowserError(new Error('sensitive@example.invalid token=secret'))).toBe('BROWSER_OTHER');
+  });
+});
+
+describe('SCORM Browser Rendering staging infrastructure failure boundaries', () => {
+  const fixture = {
+    browserBinding: {},
+    candidateSha256: 'a'.repeat(64),
+    launchFile: 'index.html',
+    assets: [{ path: 'index.html', data: new TextEncoder().encode('<html><body>QA</body></html>') }],
+  };
+  it('retries one recoverable browser connection launch and never persists raw exceptions', async () => {
+    let launchCount = 0;
+    const secret = 'authorization=Bearer sensitive-personal-token@example.com';
+    const runtime = await runScormBrowserConformance({
+      ...fixture,
+      launchBrowser: async () => {
+        launchCount++;
+        throw new Error('WebSocket disconnected ' + secret);
+      },
+    });
+    expect(launchCount).toBe(2);
+    expect(runtime).toMatchObject({
+      status: 'ERROR',
+      failureStage: 'BROWSER_LAUNCH',
+      failureCategory: 'BROWSER_CONNECTION',
+      failureCode: 'GENERIC_ERROR',
+      errors: ['SCORM_BROWSER_INFRASTRUCTURE_ERROR'],
+    });
+    expect(JSON.stringify(runtime)).not.toContain(secret);
+    expect(JSON.stringify(runtime)).not.toContain('sensitive-personal-token');
+  });
+
+  it.each(['403 Forbidden', '429 Too many requests'])(
+    'never retries access/quota failures: %s',
+    async message => {
+      let launchCount = 0;
+      const runtime = await runScormBrowserConformance({
+        ...fixture,
+        launchBrowser: async () => { launchCount++; throw new Error(message); },
+      });
+      expect(launchCount).toBe(1);
+      expect(runtime.status).toBe('ERROR');
+      expect(runtime.failureCategory).toMatch(/^BROWSER_(ACCESS|QUOTA)$/);
+      expect(runtime.errors).toEqual(['SCORM_BROWSER_INFRASTRUCTURE_ERROR']);
+    },
+  );
+
+  it('keeps exception names and codes on a finite allowlist', () => {
+    expect(scormBrowserFailureCode(Object.assign(new Error('token=bad'), { code: 'ECONNRESET' }))).toBe('ECONNRESET');
+    expect(scormBrowserFailureCode(Object.assign(new Error('token=bad'), { code: 'secret-embedded-code' }))).toBe('GENERIC_ERROR');
+    expect(scormBrowserFailureCode({ name: 'UnexpectedPersonalName', code: 'secret-embedded-code' })).toBe('UNKNOWN_ERROR');
+    expect(scormBrowserFailureCode(new TypeError('some private URL'))).toBe('TYPE_ERROR');
+  });
+});
 
 describe('SCORM Browser Run trace analysis', () => {
   it('accepts lifecycle with incomplete as a runtime PASS, without claiming completion', () => {
@@ -66,6 +131,24 @@ describe('SCORM Browser Run trace analysis', () => {
     ['Finish', lifecycle.slice(0, -1), true, false],
   ])('fails when %s is absent', (_name, trace, initialized, finished) => {
     expect(analyzeTrace('sha-a', startedAt, trace, {}, initialized, finished, '0').status).toBe('FAIL');
+  });
+
+  it('redacts authored SCORM suspend_data and interaction values from published runtime traces', () => {
+    const confidential = '{"answers":[1,2,3],"employee":"synthetic"}';
+    const trace = [
+      { method: 'LMSInitialize' },
+      { method: 'LMSSetValue', key: 'cmi.suspend_data', value: confidential },
+      { method: 'LMSCommit' },
+      { method: 'LMSFinish' },
+    ];
+    const result = analyzeTrace('sha-a', startedAt, trace,
+      { 'cmi.core.lesson_status': 'incomplete' }, true, true, '0');
+    expect(result.status).toBe('PASS');
+    expect(JSON.stringify(result.trace)).not.toContain('answers');
+    expect(JSON.stringify(result.trace)).not.toContain('employee');
+    expect(result.trace[1]).toMatchObject({
+      method: 'LMSSetValue', key: 'cmi.suspend_data', value: '[redacted]',
+    });
   });
 
   it('fails a mutation after finish', () => {

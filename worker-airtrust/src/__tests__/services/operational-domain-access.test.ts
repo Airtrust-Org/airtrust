@@ -182,7 +182,7 @@ describe('resolveOperationalAccess', () => {
     expect(access.domains).toEqual([]);
   });
 
-  it('administrador sistêmico sem atribuição não recebe acesso operacional', async () => {
+  it('administrador sem atribuição recebe todos os setores ativos do seu tenant', async () => {
     const db = makeDb();
     const access = await resolveOperationalAccess({
       db: db as unknown as D1Database,
@@ -191,10 +191,12 @@ describe('resolveOperationalAccess', () => {
       userRole: 'admin',
     });
     expect(access.enabled).toBe(true);
-    expect(access.domains).toEqual([]);
+    expect(access.domains).toEqual(expect.arrayContaining(['OPERACOES', 'MANUTENCAO']));
+    expect(access.setorIds).toEqual(expect.arrayContaining([10, 11, 14]));
+    expect(access.setorIds).not.toContain(20);
   });
 
-  it('administrador também gestor recebe apenas o domínio do seu setor atribuído', async () => {
+  it('administrador com atribuição parcial mantém acesso aos demais setores do tenant', async () => {
     const db = makeDb();
     const access = await resolveOperationalAccess({
       db: db as unknown as D1Database,
@@ -203,7 +205,7 @@ describe('resolveOperationalAccess', () => {
       userRole: 'admin',
     });
     expect(access.enabled).toBe(true);
-    expect(access.domains).toEqual(['OPERACOES']);
+    expect(access.domains).toEqual(expect.arrayContaining(['OPERACOES', 'MANUTENCAO']));
   });
 
   it('setor inativo não concede acesso', async () => {
@@ -338,7 +340,7 @@ describe('resolveOperationalAccess role gate (Bloqueador 2)', () => {
       userId: 104,
       userRole: 'admin',
     });
-    expect(access.domains).toEqual(['OPERACOES']);
+    expect(access.domains).toEqual(expect.arrayContaining(['OPERACOES', 'MANUTENCAO']));
   });
 });
 
@@ -779,16 +781,10 @@ describe('assertOperationalAccess', () => {
 });
 
 describe('qualificacao_certificado — contrato admin/gestor preservado (sem carve-out)', () => {
-  // Regressão explícita do incidente de revisão da PR: um bypass de RBAC
-  // para admin em 'qualificacao_certificado' foi implementado e REMOVIDO
-  // após revisão independente apontar que contradizia
-  // docs/rbac/gestor-operational-autonomy.md (administrador sem atribuição
-  // de setor não recebe NENHUM acesso operacional; quando atribuído, recebe
-  // exatamente o mesmo escopo do gestor — nunca mais). Estes testes provam
-  // que o contrato documentado está intacto para este resourceType
-  // especificamente, o mesmo que foi indevidamente amplia do antes.
+  // Novo contrato: admins possuem escopo completo nos setores ativos do próprio tenant.
+  // A validação de domínio classificado e o isolamento por empresa continuam obrigatórios.
 
-  it('administrador sistêmico sem atribuição NÃO recebe acesso a qualificacao_certificado', async () => {
+  it('administrador sem atribuição pode emitir certificado classificado no próprio tenant', async () => {
     const db = makeDb();
     await expect(
       assertOperationalAccess({
@@ -800,10 +796,10 @@ describe('qualificacao_certificado — contrato admin/gestor preservado (sem car
         resourceType: 'qualificacao_certificado',
         resourceId: 1000, // OPERACOES, setor 10 — classificado normalmente
       }),
-    ).rejects.toMatchObject({ statusCode: 403, code: 'OPERATIONAL_DOMAIN_ACCESS_DENIED' });
+    ).resolves.toBeDefined();
   });
 
-  it('administrador também gestor recebe exatamente o escopo do gestor (nunca mais)', async () => {
+  it('administrador com setor atribuído pode emitir também em outro setor do tenant', async () => {
     const db = makeDb();
     // userId 104: admin também gestor do setor 10 (OPERACOES) apenas.
     await expect(
@@ -828,7 +824,7 @@ describe('qualificacao_certificado — contrato admin/gestor preservado (sem car
         resourceType: 'qualificacao_certificado',
         resourceId: 1001, // MANUTENCAO — fora do escopo do admin/gestor 104
       }),
-    ).rejects.toMatchObject({ statusCode: 403, code: 'OPERATIONAL_DOMAIN_ACCESS_DENIED' });
+    ).resolves.toBeDefined();
   });
 
   it('gestor (não admin) fail-closed para domínio não classificado — igual para admin', async () => {
@@ -1116,7 +1112,7 @@ describe('resolveResourceDomain — override explícito por tipo (migration 0454
     ).rejects.toMatchObject({ statusCode: 403 });
   });
 
-  it('admin sem setores_gestores continua sem wildcard mesmo com o tipo classificado via override', async () => {
+  it('admin sem setores_gestores aceita tipo classificado do mesmo tenant', async () => {
     const db = createFixtureDb(fixturesComCategoriaMista());
     await expect(
       assertOperationalAccess({
@@ -1128,7 +1124,7 @@ describe('resolveResourceDomain — override explícito por tipo (migration 0454
         resourceType: 'qualificacao_certificado',
         resourceId: 2010,
       }),
-    ).rejects.toMatchObject({ statusCode: 403, code: 'OPERATIONAL_DOMAIN_ACCESS_DENIED' });
+    ).resolves.toBeDefined();
   });
 
   it('tenant que ainda não aplicou a migration 0454 (coluna ausente) não quebra — a query nunca referencia qt.dominio_codigo', async () => {

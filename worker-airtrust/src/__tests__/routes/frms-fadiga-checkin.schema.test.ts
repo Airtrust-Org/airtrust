@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { CheckinCreateSchema } from '../../routes/frms-fadiga-checkin.schema';
 
@@ -107,5 +109,90 @@ describe('frms-fadiga-checkin schema', () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  it('não confunde oportunidade de sono com sono efetivo', () => {
+    const base = {
+      wake_time: '05:30',
+      hora_apresentacao: '06:30',
+      horas_sono_24h: 5,
+      oportunidade_sono_horas_24h: 8,
+      qualidade_sono: 2,
+      kss_score: 6,
+      fit_for_duty: true,
+    };
+    const valid = CheckinCreateSchema.safeParse(base);
+    expect(valid.success).toBe(true);
+    if (valid.success) {
+      expect(valid.data.horas_sono_24h).toBe(5);
+      expect(valid.data.oportunidade_sono_horas_24h).toBe(8);
+    }
+    // Sleep may include a nap outside the applicable regulatory rest opportunity.
+    // The two measures are separate; do not invent a cross-field constraint.
+    expect(CheckinCreateSchema.safeParse({
+      ...base, horas_sono_24h: 8, oportunidade_sono_horas_24h: 5,
+    }).success).toBe(true);
+  });
+
+  it('não inventa oportunidade de sono para clientes legados', () => {
+    const result = CheckinCreateSchema.safeParse({
+      wake_time: '05:30', horas_sono_24h: 7, kss_score: 3, fit_for_duty: true,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.oportunidade_sono_horas_24h).toBeUndefined();
+  });
+  it('executa o UPDATE real no SQLite e apaga oportunidade obsoleta sem alterar sono efetivo', () => {
+    // Vitest 2 (Vite) cannot resolve node:sqlite via dynamic import; native Node require bypasses bundling.
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
+    const source = readFileSync('src/routes/frms-fadiga-checkin-legacy.ts', 'utf8');
+    const sql = source.match(/`UPDATE frms_fadiga_checkin\s+SET[\s\S]*?WHERE id = \? AND empresa_id = \? AND funcionario_id = \? AND data_checkin = \? AND deleted_at IS NULL`/)?.[0].slice(1, -1);
+    expect(sql).toBeTruthy();
+
+    // Executa exatamente o UPDATE do handler, não uma cópia simplificada do SQL.
+    const setBody = sql!.split(/\s+SET\s+/)[1].split(/\s+WHERE id = \?/)[0];
+    const columns = [...setBody.matchAll(/(?:^|,)\s*([a-z0-9_]+)\s*=/g)].map((match) => match[1]);
+    const placeholders = [...setBody.matchAll(/([a-z0-9_]+)\s*=\s*\?/g)].map((match) => match[1]);
+    expect(columns).toContain('oportunidade_sono_horas_24h');
+    expect(placeholders).toContain('oportunidade_sono_horas_24h');
+
+    const db = new DatabaseSync(':memory:');
+    try {
+      db.exec(`CREATE TABLE frms_fadiga_checkin (id TEXT PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER, data_checkin TEXT, deleted_at TEXT, ${columns.map((column) =>
+        `${column} ${column === 'oportunidade_sono_horas_24h' ? 'REAL' : 'TEXT'}`,
+      ).join(', ')})`);
+      db.prepare('INSERT INTO frms_fadiga_checkin (id, empresa_id, funcionario_id, data_checkin, horas_sono, oportunidade_sono_horas_24h) VALUES (?, ?, ?, ?, ?, ?)')
+        .run('checkin-qa', 7, 70, '2026-10-16', 5, 8);
+
+      const update = (opportunity: number | null) => db.prepare(sql!).run(
+        ...placeholders.map((column) => column === 'oportunidade_sono_horas_24h' ? opportunity
+          : column === 'horas_sono' ? 5
+            : column === 'kss_score' ? 6
+              : null),
+        'checkin-qa', 7, 70, '2026-10-16',
+      );
+      // Cliente remove oportunidade do standby; ausência tem semântica NULL.
+      update(null);
+      const afterOmission = db.prepare(
+        'SELECT horas_sono, oportunidade_sono_horas_24h FROM frms_fadiga_checkin WHERE id = ?',
+      ).get('checkin-qa') as { horas_sono: string | number; oportunidade_sono_horas_24h: number | null };
+      expect(afterOmission.oportunidade_sono_horas_24h).toBeNull();
+      expect(Number(afterOmission.horas_sono)).toBe(5);
+
+      update(6);
+      expect(db.prepare(
+        'SELECT oportunidade_sono_horas_24h FROM frms_fadiga_checkin WHERE id = ?',
+      ).get('checkin-qa')?.oportunidade_sono_horas_24h).toBe(6);
+
+      const badTenant = db.prepare(sql!).run(
+        ...placeholders.map((column) => column === 'oportunidade_sono_horas_24h' ? 9 : null),
+        'checkin-qa', 999, 70, '2026-10-16',
+      );
+      expect(badTenant.changes).toBe(0);
+      expect(db.prepare(
+        'SELECT oportunidade_sono_horas_24h FROM frms_fadiga_checkin WHERE id = ?',
+      ).get('checkin-qa')?.oportunidade_sono_horas_24h).toBe(6);
+    } finally {
+      db.close();
+    }
   });
 });

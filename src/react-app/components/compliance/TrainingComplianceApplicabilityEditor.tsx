@@ -4,6 +4,7 @@ import { AlertTriangle, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { showToast } from '@/react-app/utils/toast';
+import { notifyComplianceSaveWithEnrollment } from './complianceEnrollmentFeedback';
 
 type Scope = 'EMPRESA' | 'SETOR' | 'FUNCAO' | 'SETOR_FUNCAO' | 'FUNCIONARIO';
 type Obrigatoriedade = 'OBRIGATORIA' | 'RECOMENDADA' | 'NAO_APLICA';
@@ -275,8 +276,8 @@ export function TrainingComplianceApplicabilityEditor({
       });
       return readJson<{ id: number }>(response);
     },
-    onSuccess: async () => {
-      showToast.success('Aplicabilidade de compliance atualizada.');
+    onSuccess: async (result) => {
+      notifyComplianceSaveWithEnrollment(result, 'Aplicabilidade de compliance atualizada.');
       setReferencia('');
       setJustificativa('');
       setPerfilCompetencia('');
@@ -297,9 +298,12 @@ export function TrainingComplianceApplicabilityEditor({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       });
-      await readJson<Record<string, never>>(response);
+      return readJson(response);
     },
-    onSuccess: invalidate,
+    onSuccess: async (result) => {
+      notifyComplianceSaveWithEnrollment(result, 'Requisito atualizado.');
+      await invalidate();
+    },
     onError: (error) =>
       showToast.error(error instanceof Error ? error.message : 'Erro ao atualizar requisito'),
   });
@@ -654,11 +658,11 @@ export function TrainingComplianceApplicabilityEditor({
           return (
             <div
               key={rule.id}
-              className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 md:flex-row md:items-center"
+              className="flex flex-col rounded-lg border border-slate-200 bg-slate-50 p-3"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold text-slate-800">{scopeLabel(rule)}</span>
+                  <span className="break-words text-sm font-semibold text-slate-800">{scopeLabel(rule)}</span>
                   {rule.critico_operacional ? (
                     <span className="rounded bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
                       Crítico
@@ -716,13 +720,14 @@ export function TrainingComplianceApplicabilityEditor({
                   </p>
                 ) : null}
               </div>
-              <select
-                value={rule.obrigatoriedade}
+              <div className="mt-3 flex items-center gap-2 border-t border-slate-200 pt-3">
+                <select
+                  value={rule.obrigatoriedade}
                 disabled={editBlocked || updateRule.isPending}
                 onChange={(event) =>
                   updateRule.mutate({ id: rule.id, patch: { obrigatoriedade: event.target.value } })
                 }
-                className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs disabled:bg-slate-100"
+                className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs disabled:bg-slate-100"
               >
                 <option value="OBRIGATORIA">Incluir · obrigatório</option>
                 <option value="RECOMENDADA">Incluir · recomendado</option>
@@ -732,11 +737,12 @@ export function TrainingComplianceApplicabilityEditor({
                 type="button"
                 disabled={editBlocked || deleteRule.isPending}
                 onClick={() => deleteRule.mutate(rule.id)}
-                className="inline-flex items-center justify-center rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                className="inline-flex shrink-0 items-center justify-center rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
                 aria-label="Remover requisito"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
+              </div>
             </div>
           );
         })}

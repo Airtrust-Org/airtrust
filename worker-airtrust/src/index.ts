@@ -103,9 +103,7 @@ import controleVoosRdvEtapasRoutes from './routes/controle-voos-rdv-etapas';
 import controleVoosPilotOfflineRoutes from './routes/controle-voos-pilot-offline';
 import controleVoosFrmsContractRoutes from './routes/controle-voos-frms-contract';
 import controleVoosFlightPlanRoutes from './routes/controle-voos-flight-plan';
-import controleVoosFrmsDispatchGateRoutes, {
-  controleVoosDispatchGateGuard,
-} from './routes/controle-voos-frms-dispatch-gate';
+import controleVoosFrmsDispatchGateRoutes from './routes/controle-voos-frms-dispatch-gate';
 // Multi-Tenant (Empresas)
 import { empresasRoutes } from './routes/empresas';
 // Assets (R2)
@@ -186,6 +184,7 @@ app.use('/api/escalas', noCacheMiddleware());
 app.use('/api/escalas/*', noCacheMiddleware());
 app.use('/api/qualificacoes/historico', noCacheMiddleware());
 app.use('/api/qualificacoes/historico/*', noCacheMiddleware());
+app.use('/api/qualificacoes/funcionario/*', noCacheMiddleware());
 app.use('/api/certificados', noCacheMiddleware());
 app.use('/api/certificados/*', noCacheMiddleware());
 // FRMS, SGSO e EVD são dados operacionais de segurança de voo — nunca servir cache.
@@ -275,6 +274,11 @@ app.use('/api/*', async (c, next) => {
     pathname.startsWith('/api/lms/scorm/assets-by-curso/') ||
     pathname.startsWith('/api/lms/scorm/launch/') ||
     pathname.startsWith('/api/lms/scorm/preview/') ||
+    // The QA candidate handlers perform their own scoped, revocation-aware
+    // asset-cookie authentication. Never open arbitrary /api/lms paths.
+    pathname.startsWith('/api/lms/scorm/qa-preview/') ||
+    pathname.startsWith('/api/lms/scorm/qa-assets/') ||
+    pathname.startsWith('/api/lms/scorm/qa-f0/') ||
     pathname.startsWith('/api/lms/h5p/assets/') ||
     pathname.startsWith('/api/lms/pptx/asset/') ||
     pathname === '/api/certificados/validar' ||
@@ -720,11 +724,9 @@ app.route('/api/integracoes/sigvoos', sigvoosRouter);
 app.route('/api/public/controle-voos', controleVoosPublicRoutes);
 
 // Controle de Voos N1 - endpoints operacionais internos
-// Guard do gate de despacho FRMS: precisa rodar ANTES do handler real de
-// POST /voos/:id/status (montado dentro de controleVoosRoutes) para poder
-// bloquear a transicao planejado -> liberado_operacionalmente com 409
-// quando houver pendencia. Registrado por path exato, nao por prefixo.
-app.use('/api/controle-voos/voos/:id/status', controleVoosDispatchGateGuard());
+// FRMS permanece disponivel para consulta e alertas na Coordenacao, mas nao
+// intercepta a liberacao de voos. Permissoes, versao e transicoes seguem
+// validadas pelo handler autentico de controle-voos.
 // Rotas estáticas/específicas do workflow (incluindo /voos/meus) devem ser
 // montadas antes do CRUD genérico /voos/:id para evitar captura de "meus" como id.
 app.route('/api/controle-voos', controleVoosRdvWorkflowRoutes);

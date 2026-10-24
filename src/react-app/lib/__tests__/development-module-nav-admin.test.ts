@@ -18,6 +18,14 @@ describe('development module administrator access', () => {
     expect(canSeeControleVoosDevelopmentModule({ email: 'coordenacao@example.test', role })).toBe(true);
   });
 
+  it('permits COORDENACAO_VOO only into the Controle de Voos surface, not privileged dashboards', () => {
+    const user = { role: 'COORDENACAO_VOO' };
+    expect(canSeeControleVoosDevelopmentModule(user)).toBe(true);
+    expect(canSeeOperationalDashboard(user)).toBe(false);
+    expect(canSeeAdministrativeDashboard(user)).toBe(false);
+    expect(canSeeDevelopmentModules(user)).toBe(false);
+  });
+
   it('allows explicit Controle de Voos grant for a common role', () => {
     expect(
       canSeeControleVoosDevelopmentModule({
@@ -44,10 +52,18 @@ describe('development module administrator access', () => {
     expect(isPrimaryAdmin({ email: 'admin@example.test', role: 'ADMINISTRADOR' })).toBe(false);
   });
 
-  it('keeps operational dashboard access aligned with manager roles', () => {
+  it('keeps operational dashboard roles while restricting the administrative dashboard to the primary admin', () => {
     expect(canSeeOperationalDashboard(null)).toBe(false);
     expect(canSeeOperationalDashboard({ role: 'GESTOR' })).toBe(true);
     expect(canSeeOperationalDashboard({ role: 'ALUNO' })).toBe(false);
-    expect(canSeeAdministrativeDashboard({ role: 'MANAGER' })).toBe(true);
+
+    expect(canSeeAdministrativeDashboard({ email: 'manager@example.test', role: 'MANAGER' })).toBe(false);
+    expect(canSeeAdministrativeDashboard({ email: 'admin@example.test', role: 'ADMINISTRADOR' })).toBe(false);
+    expect(
+      canSeeAdministrativeDashboard({
+        email: 'filipe.daumas@icloud.com',
+        role: 'ADMINISTRADOR',
+      }),
+    ).toBe(true);
   });
 });

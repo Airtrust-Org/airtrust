@@ -61,11 +61,10 @@ vi.mock('../../middleware/rate-limit', () => ({
 }));
 
 vi.mock('../../middleware/rbac', () => ({
-  requireRole:
-    () =>
-    async (_c: any, next: () => Promise<void>) => {
-      await next();
-    },
+  // This fixture mocks authentication/RBAC only; tenant ownership is checked
+  // by the real FRMS handlers under test.
+  requireRole: () => async (_c: any, next: () => Promise<void>) => { await next(); },
+  requirePermission: () => async (_c: any, next: () => Promise<void>) => { await next(); },
 }));
 
 vi.mock('../../utils/logger', () => ({

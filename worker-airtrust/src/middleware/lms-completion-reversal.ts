@@ -185,7 +185,7 @@ export async function enforceLmsCompletionReversal(
                 suspend_data = NULL,
                 launch_data = NULL,
                 cmi_json = NULL,
-                last_commit_at = NULL,
+                last_commit_at = datetime('now'),
                 updated_at = datetime('now')
           WHERE matricula_id = ? AND empresa_id = ?`,
     ).bind(matriculaId, empresaId),

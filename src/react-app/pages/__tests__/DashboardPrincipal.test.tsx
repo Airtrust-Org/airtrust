@@ -107,6 +107,30 @@ function buildSummary(selectable = true) {
       edicoes_pendentes: 0,
       janela_sessoes_proximas_horas: 24,
     },
+    trainingCompliance: {
+      pessoas: 12,
+      pessoas_sem_configuracao: 0,
+      requisitos_obrigatorios: 40,
+      conformes: 32,
+      vencendo: 2,
+      vencidos: 2,
+      nao_realizados: 4,
+      em_andamento: 2,
+      compliance_pct: 80,
+      cobertura: 'COMPLETA' as const,
+    },
+    qualificationCompliance: {
+      pessoas: 12,
+      pessoas_sem_configuracao: 1,
+      requisitos_obrigatorios: 24,
+      conformes: 21,
+      vencendo: 2,
+      vencidos: 1,
+      nao_realizados: 2,
+      compliance_pct: 87.5,
+      cobertura: 'PARCIAL' as const,
+      escopo_modelo: 'MATRIZ_CANONICA' as const,
+    },
     unavailableSources: [],
   };
 }
@@ -160,6 +184,18 @@ describe('DashboardPrincipal setorial', () => {
     expect(screen.queryByText('Módulos do sistema')).toBeNull();
   });
 
+  it('separa Compliance de Treinamentos de Compliance de Qualificações sem score global', () => {
+    renderDashboard();
+
+    expect(screen.getByText('Compliance de Treinamentos')).toBeInTheDocument();
+    expect(screen.getByText('80%')).toBeInTheDocument();
+    expect(screen.getByText(/32\/40 obrigações cumpridas/)).toBeInTheDocument();
+    expect(screen.getByText('Compliance de Qualificações')).toBeInTheDocument();
+    expect(screen.getByText('87.5% (parcial)')).toBeInTheDocument();
+    expect(screen.getByText(/21\/24 requisitos válidos/)).toBeInTheDocument();
+    expect(screen.queryByText('Score de Compliance')).toBeNull();
+  });
+
   it('só aplica a seleção do administrador quando ele confirma o filtro', () => {
     renderDashboard();
 
@@ -174,7 +210,7 @@ describe('DashboardPrincipal setorial', () => {
     expect(window.localStorage.getItem('airtrust.dashboard.sectors.v2:1:1')).toBe('[2]');
   });
 
-  it('mostra ao gestor um escopo fixo e mantém acesso à Home', () => {
+  it('redireciona gestor para Funcionários e bloqueia o Painel Principal', () => {
     useAuthMock.mockReturnValue(buildAuthContext('GESTOR'));
     usePermissionsMock.mockReturnValue({
       can: () => true,
@@ -187,10 +223,10 @@ describe('DashboardPrincipal setorial', () => {
 
     renderDashboard();
 
-    expect(screen.getAllByText('Operações').length).toBeGreaterThan(0);
+    expect(screen.getByText('funcionarios-page')).toBeInTheDocument();
+    expect(screen.queryByText('Operações')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Aplicar filtro' })).toBeNull();
-    expect(screen.queryByText('funcionarios-page')).toBeNull();
-    expect(useOperationalSummaryMock).toHaveBeenCalledWith([], true);
+    expect(useOperationalSummaryMock).toHaveBeenCalledWith([], false);
   });
 
   it('informa falha parcial sem tratar a fonte ausente como normal', () => {

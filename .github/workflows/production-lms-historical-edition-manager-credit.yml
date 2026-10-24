@@ -1,0 +1,137 @@
+name: Production LMS Historical Edition Manager Credit
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        required: true
+        options: [dry-run, apply]
+        default: dry-run
+      expected_main_sha: {type: string, required: true}
+      expected_production_sha: {type: string, required: true}
+      confirmation: {type: string, required: true}
+      reviewed_dry_run_id: {type: string, required: false}
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-tenant6-lms-historical-credit
+  cancel-in-progress: false
+jobs:
+  d1_credit:
+    name: Reviewed production D1 tenant-6 historical-edition administrative credits
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      TARGET_COMPANY_ID: '6'
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+      HISTORIC_CREDIT_MODE: ${{ inputs.mode }}
+      HISTORIC_CREDIT_CONFIRMATION: ${{ inputs.confirmation }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - name: Require reviewed source SHA and exact operational approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_MAIN_SHA" && "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$HISTORIC_CREDIT_MODE" == dry-run ]]; then
+            [[ "$HISTORIC_CREDIT_CONFIRMATION" == AIRTRUST_HISTORIC_EDITION_DRY-RUN ]]
+          else
+            [[ "$HISTORIC_CREDIT_MODE" == apply ]]
+            [[ "$HISTORIC_CREDIT_CONFIRMATION" == AIRTRUST_HISTORIC_EDITION_APPLY ]]
+          fi
+      - name: Require eight official GitHub release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Install governed D1 client
+        run: npm --prefix worker-airtrust ci
+      - name: Verify source and tests before production access
+        run: |
+          set -euo pipefail
+          node --check scripts/production/lms-ten-historical-edition-credit.mjs
+          node --test scripts/__tests__/lms-ten-historical-edition-credit.test.mjs
+      - name: Verify unchanged reviewed dry-run
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_ID: ${{ inputs.reviewed_dry_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$DRY_ID" =~ ^[1-9][0-9]*$ ]]
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$DRY_ID")"
+          [[ "$(jq -r .name <<<"$run")" == "Production LMS Historical Edition Manager Credit" ]]
+          [[ "$(jq -r .event <<<"$run")" == workflow_dispatch ]]
+          [[ "$(jq -r .conclusion <<<"$run")" == success ]]
+          [[ "$(jq -r .head_sha <<<"$run")" == "$GITHUB_SHA" ]]
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$DRY_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "lms-historical-ten-dry-run-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
+          jq -e --arg sha "$GITHUB_SHA" --arg worker "$EXPECTED_PRODUCTION_SHA" '
+            .mode=="dry-run" and .source_sha==$sha and .worker_sha==$worker and
+            .tenant==6 and .targets==10 and .candidates==10 and .blocked==[] and
+            .writes==0 and .personal_data==false and
+            .administrative_credit_only==true and .certificates_issued==false and
+            (.hash|test("^[a-f0-9]{64}$"))
+          ' "$RUNNER_TEMP/reviewed/result.json" >/dev/null
+          echo "HISTORIC_CREDIT_REVIEWED_HASH=$(jq -r .hash "$RUNNER_TEMP/reviewed/result.json")" >> "$GITHUB_ENV"
+      - name: Verify D1 Time Travel recovery point before tenant data correction
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        working-directory: worker-airtrust
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+          timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$timestamp" > "$RUNNER_TEMP/recovery.txt"
+          test -s "$RUNNER_TEMP/recovery.txt"
+          echo "Historical-credit recovery timestamp: $timestamp" >> "$GITHUB_STEP_SUMMARY"
+          echo "HISTORIC_CREDIT_RECOVERY_READY=yes" >> "$GITHUB_ENV"
+          rm -f "$RUNNER_TEMP/recovery.txt"
+      - name: Read production baseline or apply reviewed ten credits
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/production/lms-ten-historical-edition-credit.mjs > "$RUNNER_TEMP/result.json"
+          test -s "$RUNNER_TEMP/result.json"
+          jq -e --arg mode "$HISTORIC_CREDIT_MODE" '
+            .mode==$mode and .tenant==6 and .targets==10 and
+            .personal_data==false and .scorm_written==false and
+            .certificates_issued==false and .administrative_credit_only==true and
+            (.mode=="dry-run" or (.writes==10 and .postconditions_verified==true))
+          ' "$RUNNER_TEMP/result.json" >/dev/null
+      - name: Publish sanitized administrative ledger report
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -s "$RUNNER_TEMP/result.json" ]]; then
+            jq '{mode,tenant,targets,candidates,blocked,qualification_scope,hash,
+              writes,postconditions_verified,scorm_written,certificates_issued,
+              administrative_credit_only,personal_data,completed_ids}' \
+              "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: lms-historical-ten-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          retention-days: 30
+          if-no-files-found: warn

@@ -78,7 +78,8 @@ export function buildHomeAccessCards(params: {
   const isMaintenanceHome = homeProfile === 'STUDENT_MANUTENCAO';
   const isFlightCrewHome = homeProfile === 'STUDENT_TRIPULACAO';
   const isRestrictedOperationalRole = ['ALUNO', 'INSTRUTOR', 'USUARIO'].includes(role);
-  const isLearnerRole = role === 'ALUNO' || role === 'USUARIO';
+  // Instrutor continua aluno: sua área reúne ações pessoais e de instrução.
+  const isLearnerRole = role === 'ALUNO' || role === 'USUARIO' || role === 'INSTRUTOR';
   const isInstructorRole = role === 'INSTRUTOR';
 
   if (isMaintenanceHome) {
@@ -241,7 +242,7 @@ export default function HomePerfil({ homeProfile, funcionarioContext = null }: H
 
   const nome = user?.nome?.split(' ')[0] ?? 'Usuário';
   const perfilLabel =
-    role === 'INSTRUTOR' ? 'Instrutor' : role === 'ALUNO' ? 'Aluno' : (role ?? 'Usuário');
+    role === 'INSTRUTOR' ? 'Aluno / Instrutor' : role === 'ALUNO' ? 'Aluno' : (role ?? 'Usuário');
   const subtitle = getHomeProfileSubtitle(homeProfile);
 
   const cards = buildHomeAccessCards({

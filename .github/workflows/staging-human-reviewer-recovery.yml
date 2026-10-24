@@ -1,0 +1,69 @@
+name: Staging Human Reviewer Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_REVIEWER_RECOVER'
+        required: true
+        type: string
+      expected_staging_source_sha:
+        description: 'Exact deployed staging Worker source SHA'
+        required: true
+        type: string
+      resend:
+        description: 'Send NEW single-use invitation ONLY for existing QA reviewer; otherwise read-only audit'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: airtrust-staging-human-reviewer-invite
+  cancel-in-progress: false
+
+jobs:
+  reviewer-recovery:
+    name: Recover existing staging reviewer safely
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+      STAGING_NATIVE_REVIEWER_EMAIL: ${{ secrets.STAGING_NATIVE_REVIEWER_EMAIL }}
+      STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_WORKER_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+      EXPECTED_STAGING_SOURCE_SHA: ${{ inputs.expected_staging_source_sha }}
+      STAGING_REVIEWER_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Check main, confirmations and private environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo 'REVIEWER_MAIN_ONLY'; exit 1; }
+          [[ "$STAGING_REVIEWER_CONFIRMATION" == 'AIRTRUST_STAGING_REVIEWER_RECOVER' ]] || { echo 'REVIEWER_CONFIRMATION_INVALID'; exit 1; }
+          [[ "$EXPECTED_STAGING_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo 'REVIEWER_SHA_INVALID'; exit 1; }
+          [[ -n "$STAGING_NATIVE_REVIEWER_EMAIL" && -n "$STAGING_SMOKE_PASSWORD" ]] || { echo 'REVIEWER_PRIVATE_SECRET_MISSING'; exit 1; }
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Validate staging target configuration at deployed SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "${EXPECTED_STAGING_SOURCE_SHA}^{commit}" || { echo 'REVIEWER_DEPLOYED_SHA_UNKNOWN'; exit 1; }
+          git merge-base --is-ancestor "$EXPECTED_STAGING_SOURCE_SHA" HEAD || { echo 'REVIEWER_DEPLOYED_SHA_NOT_MAIN_ANCESTOR'; exit 1; }
+          git show "${EXPECTED_STAGING_SOURCE_SHA}:worker-airtrust/wrangler.toml" |
+            grep -Fx 'FRONTEND_URL = "https://staging.airtrust.pages.dev"' >/dev/null ||
+            { echo 'REVIEWER_INVITE_URL_NOT_STAGING'; exit 1; }
+      - name: Verify existing reviewer in QA tenant, read only
+        run: node scripts/staging/recover-native-human-reviewer.mjs
+      - name: Resend only if Brevo is configured and existing account verified
+        if: inputs.resend == true
+        run: node scripts/staging/recover-native-human-reviewer.mjs --resend

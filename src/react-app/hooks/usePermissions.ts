@@ -48,6 +48,12 @@ const ROLE_DEFAULTS_BUILTIN: Record<string, string[] | null> = {
   ADMINISTRADOR: null, // wildcard
   ADMIN: null, // alias legado
   GESTOR: null,
+  COORDENACAO_VOO: [
+    'controle_voos.view', 'controle_voos.edit',
+    'voos.rdv.visualizar_todos', 'voos.rdv.revisar', 'voos.rdv.corrigir',
+    'voos.rdv.devolver', 'voos.rdv.aprovar_coordenacao', 'voos.rdv.reabrir',
+    'voos.rdv.exportar_petrobras',
+  ],
   INSTRUTOR: [
     'simuladores.view',
     'simuladores.evaluate',

@@ -286,7 +286,9 @@ adminUsuariosRoutes.get('/', async (c) => {
           u.id,
           u.email,
           u.nome,
-          COALESCE(ue.role, u.perfil) AS perfil,
+          COALESCE((SELECT p.perfil FROM usuarios_empresas_perfis p
+            WHERE p.usuario_id = u.id AND p.empresa_id = ue.empresa_id
+              AND p.perfil = 'COORDENACAO_VOO' AND p.ativo = 1 LIMIT 1), ue.role, u.perfil) AS perfil,
           u.active,
           u.funcionario_id,
           f.nome AS funcionario_nome,
@@ -316,7 +318,9 @@ adminUsuariosRoutes.get('/', async (c) => {
           u.id,
           u.email,
           u.nome,
-          COALESCE(ue.role, u.perfil) AS perfil,
+          COALESCE((SELECT p.perfil FROM usuarios_empresas_perfis p
+            WHERE p.usuario_id = u.id AND p.empresa_id = ue.empresa_id
+              AND p.perfil = 'COORDENACAO_VOO' AND p.ativo = 1 LIMIT 1), ue.role, u.perfil) AS perfil,
           u.active,
           u.funcionario_id,
           f.nome AS funcionario_nome,
@@ -414,7 +418,7 @@ adminUsuariosRoutes.post('/', async (c) => {
   const callerId = getCallerId(c);
   const callerRole = getCallerRole(c);
   const tenantCtx = getTenantContext(c);
-  const { empresaId, empresaCodigo } = tenantCtx;
+  const { empresaId } = tenantCtx;
   const db = c.env.DB;
   const logger = createLogger(c, 'AdminUsuarios.create');
 
@@ -425,6 +429,7 @@ adminUsuariosRoutes.post('/', async (c) => {
     funcionario_id?: number | null;
     empresa_id?: number;
     setor_ids?: number[];
+    aluno_tambem?: boolean;
   }>();
 
   const email = String(body?.email || '')
@@ -435,6 +440,15 @@ adminUsuariosRoutes.post('/', async (c) => {
   const funcionarioId = body?.funcionario_id ?? null;
   const targetEmpresaId = Number(body?.empresa_id ?? empresaId);
   const isManager = isManagerPerfil(perfil);
+  const coordinator = perfil === 'COORDENACAO_VOO';
+  // usuarios.perfil and usuarios_empresas.role still have legacy CHECK constraints.
+  // Store coordination exclusively in the tenant-scoped, session-authoritative profile table.
+  const storedUserPerfil = coordinator ? 'ALUNO' : perfil;
+  const storedCompanyRole = coordinator ? 'USER' : perfil;
+  if (body?.aluno_tambem !== undefined &&
+      (typeof body.aluno_tambem !== 'boolean' || perfil !== 'INSTRUTOR')) {
+    throw badRequest('Perfil adicional Aluno exige Instrutor', 'INVALID_ADDITIONAL_PROFILE');
+  }
 
   if (!email || !nome) {
     throw badRequest('email e nome são obrigatórios', 'MISSING_FIELDS');
@@ -444,14 +458,17 @@ adminUsuariosRoutes.post('/', async (c) => {
     throw badRequest('empresa_id inválido', 'INVALID_EMPRESA_ID');
   }
 
-  if (empresaCodigo !== 'airtrust' && targetEmpresaId !== empresaId) {
-    throw forbidden('Sem permissão para convidar usuários para outra empresa', 'WRONG_TENANT');
+  if (targetEmpresaId !== empresaId) {
+    const state = await resolvePlatformAccessState(db, callerId);
+    if (!isPlatformAdminAccess(state)) {
+      throw forbidden('Sem permissão para convidar usuários para outra empresa', 'WRONG_TENANT');
+    }
   }
 
   // Somente o Administrador Geral pode conceder um perfil administrativo.
   // Administradores da Empresa podem criar/gerenciar usuários operacionais,
   // mas não criar pares nem elevar alguém ao próprio nível.
-  if (perfil === 'ADMINISTRADOR' || perfil === 'ADMIN' || isManager) {
+  if (perfil === 'ADMINISTRADOR' || perfil === 'ADMIN' || isManager || perfil === 'COORDENACAO_VOO') {
     requireAdmin(callerRole, 'criar perfil administrativo');
   }
 
@@ -497,7 +514,7 @@ adminUsuariosRoutes.post('/', async (c) => {
         `INSERT INTO usuarios (email, password_hash, nome, perfil, funcionario_id, active)
          VALUES (?, ?, ?, ?, ?, 0)`,
       )
-      .bind(email, placeholderHash, nome, perfil, funcionarioId)
+      .bind(email, placeholderHash, nome, storedUserPerfil, funcionarioId)
       .run();
   } catch (insertError) {
     if (
@@ -529,7 +546,7 @@ adminUsuariosRoutes.post('/', async (c) => {
           `INSERT OR IGNORE INTO usuarios_empresas (usuario_id, empresa_id, is_primary, role)
            VALUES (?, ?, 1, ?)`,
         )
-        .bind(novoUsuarioId, targetEmpresaId, perfil),
+        .bind(novoUsuarioId, targetEmpresaId, storedCompanyRole),
       ...setorStatements,
     ]);
   } else {
@@ -538,8 +555,30 @@ adminUsuariosRoutes.post('/', async (c) => {
         `INSERT OR IGNORE INTO usuarios_empresas (usuario_id, empresa_id, is_primary, role)
          VALUES (?, ?, 1, ?)`,
       )
-      .bind(novoUsuarioId, targetEmpresaId, perfil)
+      .bind(novoUsuarioId, targetEmpresaId, storedCompanyRole)
       .run();
+  }
+
+  if (body?.aluno_tambem === true) {
+    // Both session roles must be persisted: one explicit ALUNO row alone
+    // would suppress the legacy INSTRUTOR role in the authoritative resolver.
+    await db.batch(['INSTRUTOR', 'ALUNO'].map((sessionRole) =>
+      db.prepare(`INSERT INTO usuarios_empresas_perfis
+        (usuario_id, empresa_id, perfil, ativo, created_at, updated_at)
+        VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+        ON CONFLICT(usuario_id, empresa_id, perfil)
+        DO UPDATE SET ativo = 1, updated_at = datetime('now')`)
+        .bind(novoUsuarioId, targetEmpresaId, sessionRole),
+    ));
+  }
+
+  if (coordinator) {
+    // 0473/0475 profile membership is the authority for selecting this role in-session.
+    await db.prepare(`INSERT INTO usuarios_empresas_perfis
+      (usuario_id, empresa_id, perfil, ativo, created_at, updated_at)
+      VALUES (?, ?, 'COORDENACAO_VOO', 1, datetime('now'), datetime('now'))
+      ON CONFLICT(usuario_id, empresa_id, perfil) DO UPDATE SET ativo = 1, updated_at = datetime('now')`)
+      .bind(novoUsuarioId, targetEmpresaId).run();
   }
 
   // Vínculo automático por e-mail: se já existe um funcionário com o mesmo
@@ -620,6 +659,7 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     funcionario_id?: number | null;
     active?: boolean;
     setor_ids?: number[];
+    aluno_tambem?: boolean;
   }>();
 
   // Verificar que usuário existe
@@ -638,14 +678,46 @@ adminUsuariosRoutes.put('/:id', async (c) => {
 
   // Somente o Administrador Geral pode editar um perfil administrativo ou
   // promover um usuário a Administrador da Empresa.
-  const targetPerfil = body?.perfil?.toUpperCase() || existente.perfil.toUpperCase();
+  const existingCoordinator = await db.prepare(`SELECT 1 AS active FROM usuarios_empresas_perfis
+    WHERE usuario_id = ? AND empresa_id = ? AND perfil = 'COORDENACAO_VOO' AND ativo = 1 LIMIT 1`)
+    .bind(id, empresaId).first<{active: number}>();
+  // User identity profile is global/legacy; management scope is per tenant.
+  // Read the current membership so editing an existing manager's sectors works
+  // even when usuarios.perfil still says ALUNO from another company.
+  const membership = await db.prepare(`SELECT role FROM usuarios_empresas
+    WHERE usuario_id = ? AND empresa_id = ? LIMIT 1`)
+    .bind(id, empresaId).first<{ role: string }>();
+  const currentTenantPerfil = existingCoordinator
+    ? 'COORDENACAO_VOO'
+    : String(membership?.role || existente.perfil).toUpperCase();
+  const targetPerfil = body?.perfil?.toUpperCase() || currentTenantPerfil;
+  if (body?.aluno_tambem !== undefined) {
+    if (typeof body.aluno_tambem !== 'boolean') {
+      throw badRequest('Opção Aluno deve ser booleana', 'INVALID_ADDITIONAL_PROFILE');
+    }
+    const instructorRole = await db.prepare(`SELECT 1 AS active
+        FROM usuarios_empresas_perfis
+        WHERE usuario_id = ? AND empresa_id = ?
+          AND UPPER(perfil) IN ('INSTRUCTOR', 'INSTRUTOR') AND ativo = 1
+        LIMIT 1`)
+      .bind(id, empresaId).first<{ active: number }>();
+    // Historic memberships use the English alias 'instructor'. Do not force a
+    // global identity-role rewrite merely to add this user's Aluno mode.
+    const tenantInstructor = targetPerfil === 'INSTRUTOR' || targetPerfil === 'INSTRUCTOR';
+    if (!tenantInstructor && !instructorRole) {
+      throw badRequest('Perfil adicional Aluno exige Instrutor no tenant', 'INVALID_ADDITIONAL_PROFILE');
+    }
+  }
   const targetPrivilegiado =
     existente.perfil.toUpperCase() === 'ADMINISTRADOR' ||
     existente.perfil.toUpperCase() === 'ADMIN' ||
     isManagerPerfil(existente.perfil) ||
+    isManagerPerfil(currentTenantPerfil) ||
+    Boolean(existingCoordinator) ||
     targetPerfil === 'ADMINISTRADOR' ||
     targetPerfil === 'ADMIN' ||
-    isManagerPerfil(targetPerfil);
+    isManagerPerfil(targetPerfil) ||
+    targetPerfil === 'COORDENACAO_VOO';
   if (targetPrivilegiado && callerRole !== 'ADMINISTRADOR' && callerRole !== 'ADMIN') {
     throw forbidden('Apenas ADMINISTRADOR pode editar perfis administrativos', 'INSUFFICIENT_ROLE');
   }
@@ -656,7 +728,11 @@ adminUsuariosRoutes.put('/:id', async (c) => {
   const ativandoGestor = body?.active === true && isManagerPerfil(targetPerfil);
   let setorStatementsParaGestor: D1PreparedStatement[] = [];
 
-  if (tornandoSeGestor || ativandoGestor) {
+  // Existing managers can extend their tenant-scoped sector assignments
+  // without a role change. The same strict tenant validation still applies.
+  const editandoSetoresGestor =
+    isManagerPerfil(targetPerfil) && Array.isArray(body?.setor_ids) && body.setor_ids.length > 0;
+  if (tornandoSeGestor || ativandoGestor || editandoSetoresGestor) {
     if (Array.isArray(body?.setor_ids) && body.setor_ids.length > 0) {
       try {
         setorStatementsParaGestor = await buildManagerSetorInsertStatements(
@@ -698,16 +774,50 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     binds.push(body.nome.trim());
   }
   if (body?.perfil) {
-    updates.push('perfil = ?');
-    binds.push(body.perfil.toUpperCase());
-    // Sincronizar role em usuarios_empresas na mesma transação da UPDATE
-    // de usuarios abaixo — não deixar perfil e role divergentes.
+    const selected = body.perfil.toUpperCase();
+    const coordination = selected === 'COORDENACAO_VOO';
+    // Do not write COORDENACAO_VOO into CHECK-constrained legacy role columns.
+    // The explicit per-tenant profile is authoritative for session role switching.
+    if (!coordination) {
+      updates.push('perfil = ?');
+      binds.push(selected);
+    }
     statementsAdicionais.push(
-      db
-        .prepare(`UPDATE usuarios_empresas SET role = ? WHERE usuario_id = ? AND empresa_id = ?`)
-        .bind(body.perfil.toUpperCase(), id, empresaId),
+      db.prepare('UPDATE usuarios_empresas SET role = ? WHERE usuario_id = ? AND empresa_id = ?')
+        .bind(coordination ? 'USER' : selected, id, empresaId),
+      db.prepare(`INSERT INTO usuarios_empresas_perfis
+        (usuario_id, empresa_id, perfil, ativo, created_at, updated_at)
+        VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+        ON CONFLICT(usuario_id, empresa_id, perfil) DO UPDATE SET ativo = 1, updated_at = datetime('now')`)
+        .bind(id, empresaId, selected),
     );
+    if (!coordination) {
+      // Revocation must precede session role validation on the next request.
+      statementsAdicionais.push(db.prepare(`UPDATE usuarios_empresas_perfis
+        SET ativo = 0, updated_at = datetime('now')
+        WHERE usuario_id = ? AND empresa_id = ? AND perfil = 'COORDENACAO_VOO'`).bind(id, empresaId));
+    }
   }
+  if (body?.aluno_tambem !== undefined) {
+    if (body.aluno_tambem) {
+      // Retain every existing role and make the two requested session modes
+      // explicit for this tenant. Never overwrite unrelated tenant records.
+      for (const sessionRole of ['INSTRUTOR', 'ALUNO']) {
+        statementsAdicionais.push(db.prepare(`INSERT INTO usuarios_empresas_perfis
+          (usuario_id, empresa_id, perfil, ativo, created_at, updated_at)
+          VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+          ON CONFLICT(usuario_id, empresa_id, perfil)
+          DO UPDATE SET ativo = 1, updated_at = datetime('now')`)
+          .bind(id, empresaId, sessionRole));
+      }
+    } else {
+      statementsAdicionais.push(db.prepare(`UPDATE usuarios_empresas_perfis
+        SET ativo = 0, updated_at = datetime('now')
+        WHERE usuario_id = ? AND empresa_id = ? AND perfil = 'ALUNO'`)
+        .bind(id, empresaId));
+    }
+  }
+
   if (body?.funcionario_id !== undefined) {
     updates.push('funcionario_id = ?');
     binds.push(body.funcionario_id);
@@ -717,7 +827,7 @@ adminUsuariosRoutes.put('/:id', async (c) => {
     binds.push(body.active ? 1 : 0);
   }
 
-  if (updates.length === 0) {
+  if (updates.length === 0 && statementsAdicionais.length === 0) {
     throw badRequest('Nenhum campo para atualizar', 'NO_FIELDS');
   }
 
@@ -739,7 +849,11 @@ adminUsuariosRoutes.put('/:id', async (c) => {
 
   const atualizado = await db
     .prepare(
-      `SELECT u.id, u.email, u.nome, u.perfil, u.active, u.funcionario_id, f.nome AS funcionario_nome,
+      `SELECT u.id, u.email, u.nome,
+              COALESCE((SELECT p.perfil FROM usuarios_empresas_perfis p
+                WHERE p.usuario_id = u.id AND p.empresa_id = ue.empresa_id
+                  AND p.perfil = 'COORDENACAO_VOO' AND p.ativo = 1 LIMIT 1), ue.role, u.perfil) AS perfil,
+              u.active, u.funcionario_id, f.nome AS funcionario_nome,
               ue.empresa_id, e.nome AS empresa_nome, ue.is_primary, u.created_at, u.last_login
        FROM usuarios u
        INNER JOIN usuarios_empresas ue ON ue.usuario_id = u.id AND ue.empresa_id = ?

@@ -427,7 +427,8 @@ export function EmpresaForm({
          Se for admin, pode editar tudo.
       */
 
-      const empresaPayload: Record<string, string | number | null | undefined> = {
+      const savedCompanyExists = Boolean(data.id || empresaId || isSelfEdit);
+      const empresaPayload: Record<string, string | number | string[] | null | undefined> = {
         nome: data.nome,
         cnpj: data.cnpj,
         dominio: data.dominio,
@@ -440,6 +441,8 @@ export function EmpresaForm({
         empresaPayload.max_funcionarios = data.max_funcionarios;
         empresaPayload.max_storage_mb = data.max_storage_mb;
         empresaPayload.ativo = data.ativo;
+        // Atomic initial module gate: never create an unrestricted tenant first.
+        if (!savedCompanyExists) empresaPayload.modulos_ativos = data.modulos_ativos;
       }
 
       // Criar ou Atualizar Empresa Base
@@ -823,6 +826,51 @@ export function EmpresaForm({
                 />
               </div>
             </div>
+            {!empresaId && (
+              <fieldset className="rounded-lg border border-slate-200 p-4 space-y-3">
+                <legend className="px-2 text-sm font-semibold text-slate-800">Módulos iniciais da nova empresa</legend>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={data.modulos_ativos !== undefined}
+                    onChange={(event) => setData({
+                      ...data,
+                      modulos_ativos: event.target.checked ? [] : undefined,
+                    })}
+                  />
+                  Definir explicitamente (recomendado para tenant isolado)
+                </label>
+                {data.modulos_ativos !== undefined && (
+                  <>
+                    <p className="text-xs text-slate-600">
+                      Nenhum módulo fica visível se todas as opções estiverem desmarcadas.
+                      O FRMS exige perfil e revisão regulatória próprios antes de operar.
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {([
+                        ['dashboard', 'Dashboard'],
+                        ['funcionarios', 'Funcionários'],
+                        ['frms', 'FRMS / Fadiga'],
+                      ] as const).map(([key, label]) => (
+                        <label key={key} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={data.modulos_ativos?.includes(key) ?? false}
+                            onChange={(event) => setData((previous) => ({
+                              ...previous,
+                              modulos_ativos: event.target.checked
+                                ? [...(previous.modulos_ativos ?? []), key]
+                                : (previous.modulos_ativos ?? []).filter((module) => module !== key),
+                            }))}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </fieldset>
+            )}
           </div>
         )}
 

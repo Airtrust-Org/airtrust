@@ -28,6 +28,7 @@ type ParsedBlock = {
   start_time: string;
   end_time: string;
   sessions: ParsedSession[];
+  support?: { employee_id: number; employee_name: string; employee_role: string | null };
 };
 
 function normalizeEquipment(value: unknown): string {
@@ -57,7 +58,8 @@ function marker(draftId: string, blockId: string): string {
   return `[sim-v3:${draftId}:${blockId}]`;
 }
 
-function parseScheduledBlocks(proposal: Record<string, unknown>): ParsedBlock[] {
+function parseScheduledBlocks(proposal: Record<string, unknown>, baseNeeds: unknown): ParsedBlock[] {
+  const authorizedNeeds = Array.isArray(baseNeeds) ? baseNeeds : [];
   const classes = Array.isArray(proposal.classes) ? proposal.classes : [];
   const blocks: ParsedBlock[] = [];
   for (const rawClass of classes) {
@@ -97,6 +99,24 @@ function parseScheduledBlocks(proposal: Record<string, unknown>): ParsedBlock[] 
           } satisfies ParsedSession;
         })
         .filter((item): item is ParsedSession => Boolean(item));
+      const rawSupport = block.support && typeof block.support === 'object' && !Array.isArray(block.support)
+        ? block.support as Record<string, unknown>
+        : null;
+      const supportId = Number(rawSupport?.employee_id || 0);
+      const matchingSupport = rawSupport && authorizedNeeds.find((item) => {
+        if (!item || typeof item !== 'object') return false;
+        const need = item as Record<string, unknown>;
+        return Number(need.employee_id) === supportId &&
+          normalizeEquipment(need.equipment) === normalizeEquipment(block.equipment) &&
+          !sessions.some((s) => s.employee_id === supportId);
+      }) as Record<string, unknown> | undefined;
+      if (rawSupport && (!Number.isInteger(supportId) || !matchingSupport || sessions.length !== 1))
+        continue;
+      const support = matchingSupport ? {
+        employee_id: supportId,
+        employee_name: String(matchingSupport.employee_name || ''),
+        employee_role: matchingSupport.employee_role == null ? null : String(matchingSupport.employee_role),
+      } : undefined;
       const blockId = String(block.block_id || '').trim();
       const equipment = normalizeEquipment(block.equipment);
       const date = String(slotRow.date || '').slice(0, 10);
@@ -120,6 +140,7 @@ function parseScheduledBlocks(proposal: Record<string, unknown>): ParsedBlock[] 
         start_time: start,
         end_time: end,
         sessions,
+        ...(support ? { support } : {}),
       });
     }
   }
@@ -233,7 +254,7 @@ export async function materializeSimulatorPlanningV3Draft(params: {
       error: instructor.reason,
     };
   }
-  const blocks = parseScheduledBlocks(snapshot.proposal);
+  const blocks = parseScheduledBlocks(snapshot.proposal, snapshot.base_needs);
   const allProposalBlocks = (
     Array.isArray(snapshot.proposal.classes) ? snapshot.proposal.classes : []
   ).flatMap((rawClass) => {
@@ -275,7 +296,50 @@ export async function materializeSimulatorPlanningV3Draft(params: {
         (session) => session.session_model_id === block.sessions[0].session_model_id,
       );
       let sessionId: number;
-      if (block.sessions.length === 1 || sameModel) {
+      if (block.support) {
+        // Operational support occupies the second seat but must never generate a
+        // training credit, ficha, qualification or synthetic curriculum need.
+        const trainee = block.sessions[0];
+        const support = block.support;
+        const primaryRole = roleKind(trainee.employee_role);
+        const payload = validateAndNormalizeSharedSessionRequest({
+          data: block.date,
+          hora_inicio: block.start_time,
+          hora_fim: block.end_time,
+          simulador_id: simulatorId,
+          instrutor_id: params.instructorId,
+          observacoes: notes,
+          tema_sessao: block.class_name,
+          participantes: [
+            { funcionario_id: trainee.employee_id, cumpre_treinamento: true, gera_ficha: true, modelo_sessao_id: trainee.session_model_id },
+            { funcionario_id: support.employee_id, cumpre_treinamento: false, gera_ficha: false, modelo_sessao_id: null },
+          ],
+          segmentos: [{
+            inicio: block.start_time,
+            fim: block.end_time,
+            atribuicao_funcionario_ids: [trainee.employee_id],
+            finalidade_codigo: 'SOP_NORMAL',
+            participantes: [
+              {
+                funcionario_id: trainee.employee_id,
+                funcao: primaryRole === 'SIC' ? 'PM' : 'PF',
+                cumpre_treinamento: true,
+                gera_ficha: true,
+                modelo_sessao_id: trainee.session_model_id,
+              },
+              {
+                funcionario_id: support.employee_id,
+                funcao: primaryRole === 'SIC' ? 'PF' : 'PM',
+                cumpre_treinamento: false,
+                gera_ficha: false,
+                modelo_sessao_id: null,
+              },
+            ],
+          }],
+        });
+        const createdSession = await executeSharedSessionCreation(db, empresaId, payload);
+        sessionId = createdSession.created.sessaoId;
+      } else if (block.sessions.length === 1 || sameModel) {
         const createdSession = await executeNormalSessionCreation(db, empresaId, {
           date: block.date,
           start_time: block.start_time,

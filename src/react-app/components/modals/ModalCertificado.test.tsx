@@ -209,6 +209,9 @@ describe('ModalCertificado', () => {
     await waitFor(() =>
       expect(uploadedProfiles).toEqual(['AVSEC_TRIPULANTE', 'AVSEC_OPERACOES_SOLO']),
     );
+
+    // A delayed upload may finish after the modal is unmounted; the component
+    // must ignore its final state update rather than crash the React renderer.
   });
 
   describe('Gerar Certificado — contrato de erro do backend', () => {

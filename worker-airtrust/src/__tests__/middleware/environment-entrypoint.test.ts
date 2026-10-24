@@ -123,6 +123,36 @@ describe('environment entrypoint origin isolation', () => {
     }
   });
 
+  it('permits only the exact same-origin SCORM POST to reach signed asset-cookie auth', async () => {
+    const target = 'https://airtrust-api.airtrust.workers.dev';
+    const path = '/api/lms/matriculas/scorm/commit';
+    const allowed = await environmentEntrypoint.fetch(
+      new Request(target + path, { method: 'POST', headers: { Origin: target } }),
+      env(PROD_ORIGINS, 'production'),
+      {} as ExecutionContext,
+    );
+    expect(allowed.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledOnce();
+
+    for (const [origin, method, route] of [
+      [target, 'OPTIONS', path],
+      [target, 'GET', path],
+      [target, 'POST', '/api/lms/matriculas/10/finalizar'],
+      [target, 'POST', '/api/lms/matriculas/scorm/commit/'],
+      ['https://evil.example', 'POST', path],
+      ['http://airtrust-api.airtrust.workers.dev', 'POST', path],
+      ['https://airtrust-api.airtrust.workers.dev.evil.example', 'POST', path],
+    ] as const) {
+      const denied = await environmentEntrypoint.fetch(
+        new Request(target + route, { method, headers: { Origin: origin } }),
+        env(PROD_ORIGINS, 'production'),
+        {} as ExecutionContext,
+      );
+      expect(denied.status).toBe(403);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects a disallowed preflight before Hono', async () => {
     const denied = await environmentEntrypoint.fetch(
       request('https://unreviewed.airtrust.pages.dev', 'OPTIONS'),

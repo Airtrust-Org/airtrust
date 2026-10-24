@@ -80,6 +80,20 @@ describe('service worker cache guard', () => {
     expect(bootSource).not.toContain('airtrust_user');
   });
 
+  it('nao reinicia login por falha transitoria de CSS, mantendo recuperacao de modulos JS', () => {
+    const bootStart = indexHtmlSource.indexOf("const BOOT_RECOVERY_KEY = 'airtrust-app-boot-recovery-v1';");
+    const bootSource = indexHtmlSource.slice(bootStart, indexHtmlSource.indexOf('</script>', bootStart));
+    const criticalTargetStart = bootSource.indexOf('const isCriticalAssetTarget = (target) => {');
+    const criticalTargetEnd = bootSource.indexOf('const visibleUrl', criticalTargetStart);
+    const criticalTarget = bootSource.slice(criticalTargetStart, criticalTargetEnd);
+
+    expect(criticalTargetStart).toBeGreaterThan(0);
+    expect(criticalTarget).toContain('target instanceof HTMLScriptElement');
+    expect(criticalTarget).not.toContain('target instanceof HTMLLinkElement');
+    expect(bootSource).toContain('CSS chunk load failed');
+    expect(bootSource).toContain('BOOT_ERROR_PATTERN.test(message)');
+  });
+
   it('versiona URLs de assets por release para escapar de cache HTML envenenado', () => {
     expect(viteConfigSource).toContain('const BUILD_ASSET_TAG =');
     expect(viteConfigSource).toContain('assets/[name]-${BUILD_ASSET_TAG}-[hash].js');

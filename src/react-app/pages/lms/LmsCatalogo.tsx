@@ -9,8 +9,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   BadgeCheck,
-  BookOpen,
-  CheckCircle2,
   Clock,
   Eye,
   EyeOff,
@@ -30,6 +28,7 @@ import AppLayout from '@/react-app/components/AppLayout';
 import Button from '@/react-app/components/Button';
 import { TrainingComplianceApplicabilityEditor } from '@/react-app/components/compliance/TrainingComplianceApplicabilityEditor';
 import PageHeader from '@/react-app/components/PageHeader';
+import { MultiSelect } from '@/react-app/components/UI/MultiSelect';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { useApi } from '@/react-app/hooks/useApi';
@@ -46,7 +45,6 @@ import {
   lmsKeys,
   type LmsCurso,
   type LmsMatricula,
-  type MatriculaStatus,
   type TipoConteudo,
   useLmsCurso,
   useCreateCurso,
@@ -67,7 +65,6 @@ import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAr
 import {
   formatMinutes,
   getTypeMeta,
-  getLmsCourseThumbnailUrl,
   useLmsCourseThumbnailUrl,
   getMatriculaStatusMeta,
   getLmsGridCardBorderClasses,
@@ -76,7 +73,6 @@ import {
   getLmsProgressBarFillClasses,
   getLmsProgressLabel,
   LmsCourseArtwork,
-  LmsCourseMiniMeta,
   LmsEmptyState,
   LmsModuleTabs,
   LmsPageShell,
@@ -86,6 +82,12 @@ import {
   getAdminCoursePreviewPath,
   supportsAdminCoursePreview as supportsContentPreview,
 } from './lmsAdminPreview';
+import { shouldShowLmsEnrollmentDeadline } from './lmsEnrollmentDeadline';
+import {
+  LmsCourseMandatoryPill,
+  useLmsCourseCompliance,
+  type ComplianceRow,
+} from './LmsCourseComplianceMetrics';
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
@@ -103,6 +105,7 @@ const DEFAULT_CATEGORIES = [
 ];
 const EAD_QUALIFICACAO_CATEGORIAS = new Set(['EAD', 'TREINAMENTO EAD']);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function resolveLmsCatalogRoleView(params: {
   canManage: boolean;
   restrictToEnrolledCourses: boolean;
@@ -113,7 +116,7 @@ export function resolveLmsCatalogRoleView(params: {
     title: canManage
       ? 'Catálogo LMS'
       : restrictToEnrolledCourses
-        ? 'Meus treinamentos'
+        ? 'Cursos matriculados'
         : 'Catálogo de treinamentos',
   };
 }
@@ -135,6 +138,7 @@ type LmsCourseMutationAccess = {
  * authoritative; this prevents the catalog from offering an action that will
  * be rejected after a destructive confirmation.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function canMutateLmsCourse({
   canManage,
   operationalAccessReady,
@@ -222,6 +226,7 @@ function applyQualTemplate(
   if (overwrite || !toNullableText(n.conteudo_programatico))
     n.conteudo_programatico = tipo.conteudo_programatico ?? '';
   if (overwrite || !toNullableText(n.observacoes)) n.observacoes = tipo.observacoes ?? '';
+  if (overwrite || !toNullableText(n.referencias)) n.referencias = tipo.referencias ?? '';
   if (overwrite || n.carga_horaria_inicial_horas == null)
     n.carga_horaria_inicial_horas = tipo.carga_horaria_inicial ?? null;
   if (overwrite || n.carga_horaria_recorrente_horas == null)
@@ -286,12 +291,14 @@ function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
     carga_horaria_minutos: initial?.carga_horaria_minutos ?? null,
     conteudo_programatico: initial?.conteudo_programatico ?? '',
     observacoes: initial?.observacoes ?? '',
+    referencias: initial?.referencias ?? '',
     carga_horaria_inicial_horas: initial?.carga_horaria_inicial_horas ?? null,
     carga_horaria_recorrente_horas: initial?.carga_horaria_recorrente_horas ?? null,
     qualificacao_tipo_id: initial?.qualificacao_tipo_id ?? null,
     qualificacao_area_id: null,
     gerar_qualificacao_ao_concluir: initial?.gerar_qualificacao_ao_concluir ?? 0,
     scorm_mastery_score: initial?.scorm_mastery_score ?? 70,
+    scorm_assessment_policy: initial?.scorm_assessment_policy ?? 'SCORED',
     scorm_versao: initial?.scorm_versao ?? '1.2',
     tipo_conteudo: initial?.tipo_conteudo ?? 'scorm',
     publicado: initial?.publicado ?? 0,
@@ -305,7 +312,7 @@ function validateForm(form: CreateCursoDTO) {
     e.qualificacao_tipo_id = 'Selecione o tipo de qualificação.';
   if (form.gerar_qualificacao_ao_concluir === 1 && !form.qualificacao_area_id)
     e.qualificacao_area_id = 'Selecione a Área da Qualificação.';
-  if ((form.scorm_mastery_score ?? 70) < 0 || (form.scorm_mastery_score ?? 70) > 100)
+  if (form.scorm_assessment_policy !== 'FORMATIVE' && ((form.scorm_mastery_score ?? 70) < 0 || (form.scorm_mastery_score ?? 70) > 100))
     e.scorm_mastery_score = 'Nota mínima entre 0 e 100.';
   return e;
 }
@@ -380,7 +387,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays < 0) {
     return {
-      label: `Vencido há ${Math.abs(diffDays)}d`,
+      label: `Prazo da matrícula vencido há ${Math.abs(diffDays)}d`,
       className: 'border-rose-200 bg-rose-50 text-rose-700',
       pulseClassName: '',
       icon: <AlertCircle className="h-3 w-3" />,
@@ -389,7 +396,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays <= 7) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'border-orange-200 bg-orange-50 text-orange-700',
       pulseClassName: 'animate-pulse',
       icon: <Clock className="h-3 w-3" />,
@@ -398,7 +405,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
 
   if (diffDays <= 30) {
     return {
-      label: `Vence em ${diffDays}d`,
+      label: `Prazo da matrícula: ${diffDays}d restantes`,
       className: 'border-amber-200 bg-amber-50 text-amber-700',
       pulseClassName: '',
       icon: <Clock className="h-3 w-3" />,
@@ -406,7 +413,7 @@ function getEnrollmentDeadlineMeta(dataExpiracao?: string | null) {
   }
 
   return {
-    label: `Vence em ${diffDays}d`,
+    label: `Prazo da matrícula: ${diffDays}d restantes`,
     className: 'border-slate-200 bg-slate-50 text-slate-600',
     pulseClassName: '',
     icon: <Clock className="h-3 w-3" />,
@@ -717,7 +724,7 @@ function CourseDrawer({
         ? current
         : { ...current, qualificacao_area_id: nextAreaId },
     );
-  }, [curTipo?.id, curTipo?.area_id]);
+  }, [curTipo]);
   const hasLegacy =
     form.gerar_qualificacao_ao_concluir === 1 && Boolean(curTipo) && !isEadTipo(curTipo!);
   const storedContentLabel = getStoredContentLabel(courseSnapshot);
@@ -854,6 +861,9 @@ function CourseDrawer({
                             setForm((c) => ({
                               ...c,
                               tipo_conteudo: e.target.value as TipoConteudo,
+                              scorm_assessment_policy: e.target.value === 'scorm'
+                                ? (c.scorm_assessment_policy ?? 'SCORED')
+                                : 'SCORED',
                               scorm_versao:
                                 e.target.value === 'video' ? null : (c.scorm_versao ?? '1.2'),
                             }))
@@ -912,7 +922,22 @@ function CourseDrawer({
                         />
                       </div>
                       <div className="space-y-2">
-                        <FieldLabel label="Versão / nota mínima" />
+                        <FieldLabel label="Versão / critério de conclusão" />
+                        <select
+                          aria-label="Critério de conclusão SCORM"
+                          disabled={form.tipo_conteudo !== 'scorm'}
+                          value={form.scorm_assessment_policy ?? 'SCORED'}
+                          onChange={(e) =>
+                            setForm((c) => ({
+                              ...c,
+                              scorm_assessment_policy: e.target.value as 'SCORED' | 'FORMATIVE',
+                            }))
+                          }
+                          className={fieldCls}
+                        >
+                          <option value="SCORED">Avaliação com nota mínima obrigatória</option>
+                          <option value="FORMATIVE">Participação integral — avaliação formativa, sem nota eliminatória</option>
+                        </select>
                         <div className="grid grid-cols-2 gap-3">
                           <select
                             value={form.scorm_versao ?? '1.2'}
@@ -933,6 +958,8 @@ function CourseDrawer({
                             min={0}
                             max={100}
                             value={form.scorm_mastery_score ?? 70}
+                            disabled={form.scorm_assessment_policy === 'FORMATIVE'}
+                            aria-label="Nota mínima SCORM"
                             onChange={(e) =>
                               setForm((c) => ({
                                 ...c,
@@ -943,6 +970,11 @@ function CourseDrawer({
                           />
                         </div>
                         <FieldError message={errors.scorm_mastery_score} />
+                        <p className="text-xs text-slate-600">
+                          {form.scorm_assessment_policy === 'FORMATIVE'
+                            ? 'A conclusão depende da evidência SCORM persistida e da sessão válida, sem exigir nota. Não confundir com aprovação em prova.'
+                            : 'A conclusão exige uma nota SCORM real igual ou superior à mínima configurada.'}
+                        </p>
                       </div>
                     </div>
                     {availableAreas.length > 0 && (
@@ -1091,6 +1123,16 @@ function CourseDrawer({
                           rows={3}
                           value={form.observacoes ?? ''}
                           onChange={(e) => setForm((c) => ({ ...c, observacoes: e.target.value }))}
+                          className={textareaCls}
+                        />
+                      </div>
+                      <div className="space-y-2 lg:col-span-2">
+                        <FieldLabel label="Referências" />
+                        <textarea
+                          rows={4}
+                          value={form.referencias ?? ''}
+                          onChange={(e) => setForm((c) => ({ ...c, referencias: e.target.value }))}
+                          placeholder="Normas, regulamentos, manuais, programas e procedimentos aplicáveis — uma referência por linha."
                           className={textareaCls}
                         />
                       </div>
@@ -1374,6 +1416,7 @@ function CourseCardSkeleton() {
 function CourseCard({
   curso,
   matricula,
+  complianceRows,
   canManage,
   canUpdateCourse,
   canDeleteCourse,
@@ -1389,6 +1432,7 @@ function CourseCard({
 }: {
   curso: LmsCurso;
   matricula?: LmsMatricula;
+  complianceRows?: ComplianceRow[];
   canManage: boolean;
   canUpdateCourse: boolean;
   canDeleteCourse: boolean;
@@ -1406,7 +1450,9 @@ function CourseCard({
   const typeMeta = getTypeMeta(curso.tipo_conteudo);
   const previewPath = canManage ? getAdminCoursePreviewPath(curso) : null;
   const enrollmentProgress = getEnrollmentProgress(matricula);
-  const deadlineMeta = !canManage ? getEnrollmentDeadlineMeta(matricula?.data_expiracao) : null;
+  const deadlineMeta = !canManage && shouldShowLmsEnrollmentDeadline(matricula?.status, matricula?.data_expiracao)
+    ? getEnrollmentDeadlineMeta(matricula?.data_expiracao)
+    : null;
   const statusMeta = canManage
     ? getMatriculaStatusMeta(curso.publicado ? 'PUBLICADO' : 'RASCUNHO')
     : !matricula || matricula.status === 'CANCELADO'
@@ -1519,6 +1565,7 @@ function CourseCard({
           ) : null}
           {canManage ? (
             <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+              <LmsCourseMandatoryPill curso={curso} rows={complianceRows} />
               <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {curso.total_matriculas ?? 0} matrícula(s)
               </span>
@@ -1660,17 +1707,16 @@ export default function LmsCatalogo() {
   // fluxo de aluno (iniciar/continuar/concluir), mantendo a gestão na aba "Catálogo".
   const gestorStudentMode = isGestor && tab === 'meus';
   const studentMode = restrictToEnrolledCourses || gestorStudentMode;
+  // Reuse the canonical training-compliance query once for the whole admin catalog.
+  const { data: complianceRows } = useLmsCourseCompliance(canManage && !studentMode);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'all' | TipoConteudo>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | MatriculaStatus>('all');
-  const [complianceFilter, setComplianceFilter] = useState<'all' | 'critical'>('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [sectorFilter, setSectorFilter] = useState('all');
-  const { data: setoresData } = useApi<{ id: number; nome: string }[]>('/setores');
-  const setores = setoresData ?? [];
+  const [areaFilter, setAreaFilter] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<TipoConteudo[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const { tipos: qualificacaoTipos } = useQualificacaoTipos(showAdministrativeFilters, 500);
   const { data: areasData } = useApi<Array<{ id: number; nome: string; codigo?: string | null }>>(
     '/qualificacoes/areas',
-    { enabled: canManage, requireAuth: true, staleTime: 60_000 },
+    { enabled: showAdministrativeFilters, requireAuth: true, staleTime: 60_000 },
   );
   const areas = areasData ?? [];
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -1680,17 +1726,14 @@ export default function LmsCatalogo() {
   const [uploadStatus, setUploadStatus] = useState('');
   const [isSavingCourse, setIsSavingCourse] = useState(false);
 
-  const catalogSetor_ids = sectorFilter !== 'all' ? [Number(sectorFilter)] : undefined;
   const { data: publishedCoursesResponse, isLoading: loadingPublishedCourses } = useLmsCursos({
     publicados: true,
     limit: 300,
-    setor_ids: catalogSetor_ids,
   });
   const { data: draftCoursesResponse, isLoading: loadingDraftCourses } = useLmsCursos(
     {
       publicados: false,
       limit: 300,
-      setor_ids: catalogSetor_ids,
     },
     { enabled: canManage },
   );
@@ -1725,10 +1768,17 @@ export default function LmsCatalogo() {
   const enrolledIds = new Set(
     myMatriculas.filter((m) => m.status !== 'CANCELADO').map((m) => m.curso_id),
   );
-  const categories = useMemo(
-    () => [...new Set(courses.map((c) => c.categoria).filter(Boolean))],
-    [courses],
-  );
+  const areaIdByQualificacaoTipoId = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const tipo of qualificacaoTipos) {
+      const tipoId = Number(tipo.id);
+      const areaId = Number(tipo.area_id);
+      if (Number.isInteger(tipoId) && tipoId > 0 && Number.isInteger(areaId) && areaId > 0) {
+        map.set(tipoId, areaId);
+      }
+    }
+    return map;
+  }, [qualificacaoTipos]);
 
   const editCourseParam = searchParams.get('edit');
 
@@ -1768,19 +1818,29 @@ export default function LmsCatalogo() {
       : tab === 'catalogo' || enrolledIds.has(curso.id);
     const matchSearch =
       !search ||
-      [curso.titulo, curso.descricao ?? '', curso.categoria ?? '']
+      [curso.titulo, curso.descricao ?? '']
         .join(' ')
         .toLowerCase()
         .includes(search.toLowerCase());
-    const matchType = typeFilter === 'all' || curso.tipo_conteudo === typeFilter;
-    const matchCat = categoryFilter === 'all' || curso.categoria === categoryFilter;
-    const matchCompliance = complianceFilter === 'all' || impactsCompliance(curso);
+    const courseAreaId = curso.qualificacao_tipo_id
+      ? areaIdByQualificacaoTipoId.get(Number(curso.qualificacao_tipo_id))
+      : undefined;
+    const matchArea =
+      areaFilter.length === 0 ||
+      (courseAreaId !== undefined && areaFilter.includes(String(courseAreaId)));
+    const matchType = typeFilter.length === 0 || typeFilter.includes(curso.tipo_conteudo);
     const matchStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'NAO_INICIADO'
-        ? !mat || mat.status === 'NAO_INICIADO'
-        : mat?.status === statusFilter);
-    return matchTab && matchSearch && matchType && matchCat && matchCompliance && matchStatus;
+      statusFilter.length === 0 ||
+      (canManage
+        ? statusFilter.some((status) =>
+            status === 'PUBLICADO' ? curso.publicado === 1 : status === 'RASCUNHO' && curso.publicado === 0,
+          )
+        : statusFilter.some((status) =>
+            status === 'NAO_INICIADO'
+              ? !mat || mat.status === 'NAO_INICIADO'
+              : mat?.status === status,
+          ));
+    return matchTab && matchSearch && matchArea && matchType && matchStatus;
   });
 
   function navPlayer(curso: LmsCurso, matriculaId: number) {
@@ -1976,6 +2036,12 @@ export default function LmsCatalogo() {
 
   const managementActions = (
     <>
+      {window.location.hostname === 'staging.airtrust.pages.dev' && (
+        <Link to="/lms/native/revisao"
+          className="inline-flex min-h-10 items-center rounded-lg border border-[#dfb58a] bg-[#fff4e8] px-3 text-sm font-bold text-[#9c490f] hover:bg-[#ffe3c8]">
+          Homologar Native (9 cursos)
+        </Link>
+      )}
       <Button
         variant="secondary"
         onClick={() =>
@@ -2081,7 +2147,7 @@ export default function LmsCatalogo() {
 
           {showAdministrativeFilters && !studentMode ? (
             <div className="border-b border-slate-100 bg-slate-50/40 px-5 py-3 sm:px-6 dark:border-slate-800 dark:bg-slate-950/60">
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr]">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr]">
                 <label className="relative block">
                   <span className="sr-only">Buscar cursos</span>
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -2089,86 +2155,53 @@ export default function LmsCatalogo() {
                     type="search"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar por título, categoria ou descrição"
-                    aria-label="Buscar cursos por título, categoria ou descrição"
+                    placeholder="Buscar por título ou descrição"
+                    aria-label="Buscar cursos por título ou descrição"
                     className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
                   />
                 </label>
-                <label className="block">
-                  <span className="sr-only">Filtrar por setor</span>
-                  <select
-                    value={sectorFilter}
-                    onChange={(e) => setSectorFilter(e.target.value)}
-                    aria-label="Filtrar por setor"
-                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  >
-                    <option value="all">Todos os setores</option>
-                    {setores.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.nome}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="sr-only">Filtrar por tipo de conteúdo</span>
-                  <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value as 'all' | TipoConteudo)}
-                    aria-label="Filtrar por tipo de conteúdo"
-                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  >
-                    <option value="all">Todos os tipos</option>
-                    <option value="scorm">SCORM</option>
-                    <option value="h5p">H5P</option>
-                    <option value="video">Vídeo</option>
-                    <option value="pdf">PDF</option>
-                    <option value="pptx">PowerPoint</option>
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="sr-only">Filtrar por categoria</span>
-                  <select
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    aria-label="Filtrar por categoria"
-                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  >
-                    <option value="all">Todas as categorias</option>
-                    {categories.map((c) => (
-                      <option key={c ?? 'SEM_CATEGORIA'} value={c ?? ''}>
-                        {c || 'Sem categoria'}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="sr-only">Filtrar por compliance</span>
-                  <select
-                    value={complianceFilter}
-                    onChange={(e) => setComplianceFilter(e.target.value as 'all' | 'critical')}
-                    aria-label="Filtrar por impacto em compliance"
-                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  >
-                    <option value="all">Todos os cursos</option>
-                    <option value="critical">Impactam compliance</option>
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="sr-only">Filtrar por status</span>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value as 'all' | MatriculaStatus)}
-                    aria-label="Filtrar por status da matrícula"
-                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  >
-                    <option value="all">Todos os status</option>
-                    {!canManage ? <option value="NAO_INICIADO">Não iniciado</option> : null}
-                    <option value="EM_ANDAMENTO">Em andamento</option>
-                    <option value="CONCLUIDO">Concluído</option>
-                    <option value="REPROVADO">Reprovado</option>
-                  </select>
-                </label>
+                <MultiSelect
+                  options={areas.map((area) => ({ value: String(area.id), label: area.nome }))}
+                  selected={areaFilter}
+                  onChange={setAreaFilter}
+                  placeholder="Todas as áreas"
+                  allLabel="Todas as áreas"
+                  className="w-full [&>button]:h-10 [&>button]:w-full [&>button]:justify-between [&>button]:rounded-lg"
+                />
+                <MultiSelect
+                  options={[
+                    { value: 'scorm', label: 'SCORM' },
+                    { value: 'h5p', label: 'H5P' },
+                    { value: 'video', label: 'Vídeo' },
+                    { value: 'pdf', label: 'PDF' },
+                    { value: 'pptx', label: 'PowerPoint' },
+                  ]}
+                  selected={typeFilter}
+                  onChange={(selected) => setTypeFilter(selected as TipoConteudo[])}
+                  placeholder="Todos os Formatos"
+                  allLabel="Todos os Formatos"
+                  className="w-full [&>button]:h-10 [&>button]:w-full [&>button]:justify-between [&>button]:rounded-lg"
+                />
+                <MultiSelect
+                  options={
+                    canManage
+                      ? [
+                          { value: 'PUBLICADO', label: 'Publicado' },
+                          { value: 'RASCUNHO', label: 'Rascunho' },
+                        ]
+                      : [
+                          { value: 'NAO_INICIADO', label: 'Não iniciado' },
+                          { value: 'EM_ANDAMENTO', label: 'Em andamento' },
+                          { value: 'CONCLUIDO', label: 'Concluído' },
+                          { value: 'REPROVADO', label: 'Reprovado' },
+                        ]
+                  }
+                  selected={statusFilter}
+                  onChange={setStatusFilter}
+                  placeholder="Todos os status"
+                  allLabel="Todos os status"
+                  className="w-full [&>button]:h-10 [&>button]:w-full [&>button]:justify-between [&>button]:rounded-lg"
+                />
               </div>
             </div>
           ) : null}
@@ -2185,10 +2218,7 @@ export default function LmsCatalogo() {
               <LmsEmptyState
                 icon={<FileArchive className="h-8 w-8" />}
                 title={
-                  search ||
-                  typeFilter !== 'all' ||
-                  categoryFilter !== 'all' ||
-                  statusFilter !== 'all'
+                  search || areaFilter.length > 0 || typeFilter.length > 0 || statusFilter.length > 0
                     ? 'Nenhum curso encontrado com os filtros'
                     : 'Nenhum curso disponível nesta visão'
                 }
@@ -2244,6 +2274,7 @@ export default function LmsCatalogo() {
                         key={curso.id}
                         curso={curso}
                         matricula={matriculasByCurso.get(curso.id)}
+                        complianceRows={courseManagementEnabled ? complianceRows : undefined}
                         canManage={courseManagementEnabled}
                         canUpdateCourse={canUpdateCourse}
                         canDeleteCourse={canDeleteCourse}

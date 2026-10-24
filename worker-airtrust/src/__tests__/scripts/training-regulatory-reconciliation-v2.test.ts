@@ -15,23 +15,18 @@ function dryRun() {
 }
 
 describe('training regulatory reconciliation v2', () => {
-  it('é staging-only, fixa o D1 correto e exige autorização + hash exato para apply', () => {
+  it('é staging-only e foi aposentado como superfície de escrita', () => {
     expect(source).toContain("const STAGING_DB = 'airtrust-db-staging-baseline-20260701'");
-    expect(source).toContain('AIRTRUST_STAGING_RECONCILIATION_AUTH');
-    expect(source).toContain('STAGING_RECONCILIATION_AUTH_REQUIRED');
-    expect(source).toContain('EXPECTED_RECONCILIATION_SHA256_MISMATCH');
     expect(source).toContain('V2_RECONCILIATION_STAGING_ONLY');
+    expect(source).toContain('V2_RECONCILIATION_APPLY_SUPERSEDED_BY_V3_SCHEMA_0526');
+    expect(source).not.toContain('AIRTRUST_STAGING_RECONCILIATION_AUTH');
+    expect(source).not.toContain('STAGING_RECONCILIATION_AUTH_REQUIRED');
+    expect(source).not.toContain('CLOUDFLARE_API_TOKEN');
+    expect(source).not.toContain("'./node_modules/.bin/wrangler'");
     expect(source).not.toContain("production: 'airtrust-db'");
   });
 
-  it('usa o Wrangler instalado em worker-airtrust no executor e no validator', () => {
-    expect(source).toContain("'./node_modules/.bin/wrangler'");
-    expect(source).not.toContain("'../node_modules/.bin/wrangler'");
-    expect(validatorSource).toContain("'./node_modules/.bin/wrangler'");
-    expect(validatorSource).not.toContain("'../node_modules/.bin/wrangler'");
-  });
-
-  it('substitui SETOR TRI por condição PTAP explícita sem matrícula automática', () => {
+  it('mantém apenas dry-run histórico e metadados compatíveis com a 0526', () => {
     const output = dryRun();
     expect(output).toContain('BASE_RECONCILIATION_SHA256=38f5912b3f4890a3c3acc956c8192d5cacfe259394fd6037571dc5889ea2bc75');
     expect(output).toMatch(/RECONCILIATION_SHA256=[0-9a-f]{64}/);
@@ -39,7 +34,9 @@ describe('training regulatory reconciliation v2', () => {
     expect(output).toContain('MODE=DRY_RUN');
     expect(output).toContain('STATEMENTS=65');
     expect(output).toContain("'D1','AVSEC','Teórico',24,4");
-    expect(output).toContain("'NR-35 - Trabalho em Altura','EAD',24,8");
+    expect(output).toContain("'NR-20 - Intermediário sobre Inflamáveis e Combustíveis','EAD',24,16");
+    expect(output).toContain("'NR-35 - Trabalho em Altura','Presencial',24,8");
+    expect(output).toContain("'PRE - Plano de Resposta à Emergências','EAD',12,2");
     expect(output).toContain("UPPER('TREINAMENTO_OPERACIONAL')");
     const sql = output.split('STATEMENTS=65\n')[1];
     expect(sql).toBeTruthy();
@@ -54,20 +51,17 @@ describe('training regulatory reconciliation v2', () => {
     expect(output).not.toMatch(/auto_matricular_ead\s*=\s*1/i);
   });
 
-  it('recusa produção e recusa apply de staging sem confirmação explícita', () => {
+  it('recusa produção e recusa qualquer tentativa de apply por estar superseded', () => {
     const production = spawnSync(process.execPath, [scriptPath, '--env=production'], { encoding: 'utf8' });
     expect(production.status).not.toBe(0);
     expect(production.stderr).toContain('V2_RECONCILIATION_STAGING_ONLY');
 
-    const output = dryRun();
-    const hash = output.match(/RECONCILIATION_SHA256=([0-9a-f]{64})/)?.[1];
-    expect(hash).toBeTruthy();
     const apply = spawnSync(
       process.execPath,
-      [scriptPath, '--apply', '--env=staging', `--expected-sha256=${hash}`],
+      [scriptPath, '--apply', '--env=staging'],
       { encoding: 'utf8' },
     );
     expect(apply.status).not.toBe(0);
-    expect(apply.stderr).toContain('STAGING_RECONCILIATION_AUTH_REQUIRED');
+    expect(apply.stderr).toContain('V2_RECONCILIATION_APPLY_SUPERSEDED_BY_V3_SCHEMA_0526');
   });
 });

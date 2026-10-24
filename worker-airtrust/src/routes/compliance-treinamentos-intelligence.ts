@@ -101,7 +101,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     const targets: ComplianceNotificationTarget[] = [];
     for (const person of snapshot.people) {
       for (const requirement of person.requisitos) {
-        if (requirement.obrigatoriedade !== 'OBRIGATORIA') continue;
+        if (requirement.obrigatoriedade !== 'OBRIGATORIA' || requirement.evidencia_pendente_validacao) continue;
         const key = `${person.id}:${requirement.qualificacao_tipo_id}`;
         if (!requestedKeys.has(key)) continue;
         targets.push(notificationTargetFrom(empresaId, person, requirement));
@@ -292,9 +292,12 @@ export function createTrainingComplianceIntelligenceRoutes({
               data_validade: requirement.data_validade,
               dias_para_vencer: requirement.dias_para_vencer,
               ultima_data: requirement.ultima_data,
+              evidencia_pendente_validacao: requirement.evidencia_pendente_validacao,
+              evidencia_pendente_motivo: requirement.evidencia_pendente_motivo,
               critico_operacional: requirement.critico_operacional,
               referencia_normativa: requirement.referencia_normativa,
               curso_ead_titulo: requirement.curso_ead_titulo,
+              progresso_pct: requirement.progresso_pct,
               tem_email: Boolean(person.email),
               tem_whatsapp: Boolean(person.telefone),
               avisos_enviados: stats?.count || 0,

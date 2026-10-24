@@ -31,6 +31,7 @@ export type FrmsMaintenanceTeamItem = {
   setor_nome: string | null;
   checkin_id: string | null;
   hora_checkin: string | null;
+  checkin_submitted_at?: string | null;
   horas_sono: number | null;
   qualidade_sono: number | null;
   kss_score: number | null;

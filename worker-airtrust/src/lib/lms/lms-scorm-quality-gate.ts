@@ -1,6 +1,11 @@
 import { strFromU8 } from 'fflate';
 
 import type { ValidatedLmsPackage } from './lms-package-validator';
+import {
+  evaluateScormFunctionalCertification,
+  type ScormFunctionalBrowserRun,
+  type ScormFunctionalCertification,
+} from './lms-scorm-functional-certification';
 
 export const SCORM_QUALITY_GATE_VERSION = 'AIRTRUST_SCORM_PACKAGE_QUALITY_GATE_V1';
 export const COMPLETION_CONTRACT = 'AIRTRUST_COMPLETION_CONTRACT_V1';
@@ -21,6 +26,10 @@ export type ScormQualityGateResult = {
   completionManifest: GateSection;
   diagnostics: GateSection;
   conformance: { status: GateStatus; tests: ConformanceTest[] };
+  /** Independent browser E2E attestation, not SCORM protocol conformance. */
+  functionalCertification: ScormFunctionalCertification;
+  /** Untrusted author-declared review: informational ONLY, never an SME release approval. */
+  authoringReview?: { externalExam: boolean; reviewed: boolean };
   publishable: boolean;
 };
 
@@ -40,6 +49,14 @@ export type ScormRuntimeConformance = {
   trace: Array<{ method: string; key?: string; value?: string }>;
   errors: string[];
   runnerVersion: string;
+  failureStage?: string;
+  failureCategory?: string;
+  /** Stable, allowlisted infrastructure exception family. Never a raw error string. */
+  failureCode?: string;
+  functionalCompletionVerified?: boolean;
+  functionalCompletionReason?: string | null;
+  expectedSuccessStatus?: string | null;
+  requiresAssessmentEvidence?: boolean;
 };
 
 function pass(): GateSection {
@@ -279,6 +296,24 @@ function completionManifest(pkg: ValidatedLmsPackage): GateSection {
     uniqueStrings(assessment.requiredInteractions, 'assessment.requiredInteractions', errors);
     if (assessment.masteryScore !== undefined && (typeof assessment.masteryScore !== 'number' || assessment.masteryScore < 0 || assessment.masteryScore > 100)) errors.push('assessment.masteryScore inválido');
     for (const key of ['successStatus', 'failureStatus']) if (assessment[key] !== undefined && !['passed', 'completed', 'failed', 'incomplete'].includes(String(assessment[key]))) errors.push(`assessment.${key} inválido`);
+
+    // Opt-in safeguard for formative SCORM packages whose certifying exam is
+    // exclusively external. Do not change legacy/graded packages implicitly.
+    // An EXTERNAL declaration must never coexist with a SCORM pass/score gate.
+    if (assessment.mode === 'EXTERNAL') {
+      if (assessment.scoringBySCORM !== false) {
+        errors.push('assessment.mode=EXTERNAL exige scoringBySCORM=false');
+      }
+      if (!Array.isArray(assessment.requiredInteractions) || assessment.requiredInteractions.length !== 0) {
+        errors.push('assessment.mode=EXTERNAL exige requiredInteractions=[]');
+      }
+      if (assessment.masteryScore !== undefined) {
+        errors.push('assessment.mode=EXTERNAL não admite masteryScore no SCORM');
+      }
+      if (completion?.passStatusFromSCORM !== false || completion?.workerApprovalRequired !== true) {
+        errors.push('assessment.mode=EXTERNAL exige conclusão governada pelo Worker, sem passStatusFromSCORM');
+      }
+    }
   }
   if (!completion || completion.strategy !== COMPLETION_CONTRACT) errors.push(`completion.strategy deve ser ${COMPLETION_CONTRACT}`);
   return errors.length ? fail(...errors) : pass();
@@ -347,13 +382,18 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
   const completion = completionManifest(pkg);
   const diagnostic = diagnostics(pkg);
   const conformance = conformanceNotSupported();
+  const manifest = parseJsonEntry(pkg, 'airtrust-completion-manifest.json');
+  const externalExam = asRecord(manifest?.assessment)?.mode === 'EXTERNAL';
+  const declaredReviewed = asRecord(manifest?.release)?.reviewed === true;
   return {
     validatorVersion: SCORM_QUALITY_GATE_VERSION,
     structural,
     completionManifest: completion,
     diagnostics: diagnostic,
     conformance,
-    publishable: structural.status === 'PASS' && completion.status === 'PASS' && diagnostic.status === 'PASS' && conformance.status === 'PASS',
+    functionalCertification: evaluateScormFunctionalCertification('', []),
+    authoringReview: { externalExam, reviewed: !externalExam || declaredReviewed },
+    publishable: false,
   };
 }
 
@@ -361,16 +401,103 @@ export function applyRuntimeConformance(
   staticResult: ScormQualityGateResult,
   runtime: ScormRuntimeConformance,
   expectedSha256: string,
+  trustedFunctionalRuns: readonly ScormFunctionalBrowserRun[] = [],
 ): ScormQualityGateResult {
   const shaMatches = runtime.candidateSha256 === expectedSha256;
+  const actualScore = Number(runtime.scoreRaw);
+  const hasMastery = typeof runtime.masteryScore === 'string' && runtime.masteryScore.trim() !== '';
+  const mastery = hasMastery ? Number(runtime.masteryScore) : null;
+  // Missing score/mastery cannot prove an approved certifying assessment.
+  // A package that explicitly declares no required interactions may complete
+  // without a scored assessment. Never infer that from missing metadata.
+  const scoreProven = runtime.requiresAssessmentEvidence === false ||
+    (hasMastery && Number.isFinite(mastery) && mastery !== null &&
+      mastery >= 0 && mastery <= 100 &&
+      runtime.scoreRaw !== null && runtime.scoreRaw !== '' &&
+      Number.isFinite(actualScore) && actualScore >= mastery);
+  const actualStatus = String(runtime.lessonStatus ?? '').toLowerCase();
+  const expectedStatus = String(runtime.expectedSuccessStatus ??
+    (runtime.requiresAssessmentEvidence === false ? 'completed' : 'passed')).toLowerCase();
+  const statusProven = ['passed', 'completed'].includes(expectedStatus) &&
+    actualStatus === expectedStatus;
+  const functionalProven = runtime.functionalCompletionVerified === true &&
+    runtime.completionReached === true && statusProven && scoreProven;
+  const verdict = !shaMatches ? 'ERROR' as const :
+    runtime.status === 'PASS' && !functionalProven ? 'FAIL' as const : runtime.status;
   const conformance = {
-    status: shaMatches ? runtime.status : 'ERROR' as const,
-    tests: runtime.trace.map((item) => ({ name: item.method, status: shaMatches ? runtime.status : 'ERROR' as GateStatus, detail: item.key ? `${item.key}${item.value === undefined ? '' : `=${item.value}`}` : '' })),
+    status: verdict,
+    tests: runtime.trace.map((item) => ({
+      name: item.method,
+      status: shaMatches ? runtime.status : 'ERROR' as GateStatus,
+      detail: item.key ? String(item.key).slice(0, 120) : '',
+    })),
   };
-  if (!shaMatches) conformance.tests.push({ name: 'CANDIDATE_SHA256', status: 'ERROR', detail: 'Resultado pertence a SHA diferente' });
+  conformance.tests.push({
+    name: 'FUNCTIONAL_COMPLETION_EVIDENCE',
+    status: shaMatches ? (functionalProven ? 'PASS' : 'FAIL') : 'ERROR' as GateStatus,
+    detail: functionalProven ? 'Interações e avaliação concluídas no navegador isolado' :
+      (!scoreProven ? 'SCORE_EVIDENCE_MISSING_OR_BELOW_MASTERY' :
+        !statusProven ? 'SUCCESS_STATUS_MISMATCH' :
+          (runtime.functionalCompletionReason ?? 'Conclusão pedagógica não demonstrada')),
+  });
+  if (!shaMatches) conformance.tests.push({
+    name: 'CANDIDATE_SHA256', status: 'ERROR',
+    detail: 'Resultado pertence a SHA diferente',
+  });
+  const functionalCertification = evaluateScormFunctionalCertification(
+    expectedSha256, trustedFunctionalRuns,
+    { requiresAssessment: runtime.requiresAssessmentEvidence !== false },
+  );
   return {
     ...staticResult,
     conformance,
-    publishable: shaMatches && staticResult.structural.status === 'PASS' && staticResult.completionManifest.status === 'PASS' && staticResult.diagnostics.status === 'PASS' && runtime.status === 'PASS',
+    functionalCertification,
+    publishable: functionalCertification.status === 'CERTIFIED' &&
+      // Historical validation blobs may predate the release-review marker.
+      // They cannot prove the ZIP is not an EXTERNAL self-approved package.
+      // Require fresh server-side validation before accepting certification.
+      staticResult.authoringReview?.externalExam === false &&
+      functionalCertification.packageSha256 === expectedSha256 &&
+      shaMatches && staticResult.structural.status === 'PASS' &&
+      staticResult.completionManifest.status === 'PASS' &&
+      staticResult.diagnostics.status === 'PASS' && verdict === 'PASS',
   };
+}
+
+/** The activation gate checks stored attestations again, including legacy JSON
+ * written when protocol conformance alone could set publishable=true. */
+export function canActivateCertifiedScormPackage(
+  quality: ScormQualityGateResult | null | undefined,
+  expectedSha256: string,
+): boolean {
+  const certificate = quality?.functionalCertification;
+  // Never treat release.reviewed=true inside a user-uploaded ZIP as independent
+  // SME consent. External-certification packages remain non-activatable until
+  // a separate backend-owned, SHA-bound approval gate is implemented.
+  // A legacy persisted blob without this server-derived marker is ambiguous:
+  // it may predate the EXTERNAL validation gate. Re-upload/revalidate it first.
+  if (quality?.authoringReview?.externalExam !== false) return false;
+  // A stored CERTIFIED summary without underlying browser cases is not proof.
+  // Re-evaluate the case ledger independently when activating a version.
+  if (!certificate || !Array.isArray(certificate.runs) ||
+      !Array.isArray(certificate.missing) ||
+      !certificate.runs.every(run => run && typeof run === 'object') ||
+      typeof certificate.requiresAssessment !== 'boolean') return false;
+  const replay = evaluateScormFunctionalCertification(expectedSha256, certificate.runs, {
+    requiresAssessment: certificate.requiresAssessment,
+  });
+  const storedRuntime = (quality as ScormQualityGateResult & { runtime?: ScormRuntimeConformance })?.runtime;
+  if (storedRuntime && (storedRuntime.candidateSha256 !== expectedSha256 ||
+      certificate.requiresAssessment !== (storedRuntime.requiresAssessmentEvidence !== false))) return false;
+  return Boolean(replay.status === 'CERTIFIED' &&
+    certificate.status === 'CERTIFIED' &&
+    certificate.missing.length === 0 &&
+    expectedSha256 && quality?.publishable === true &&
+    quality.structural?.status === 'PASS' &&
+    quality.completionManifest?.status === 'PASS' &&
+    quality.diagnostics?.status === 'PASS' &&
+    quality.conformance?.status === 'PASS' &&
+    quality.functionalCertification?.status === 'CERTIFIED' &&
+    quality.functionalCertification.packageSha256 === expectedSha256 &&
+    quality.functionalCertification.missing.length === 0);
 }

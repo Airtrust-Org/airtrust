@@ -29,15 +29,28 @@ if (apply && process.env.CONFIRM_STAGING_COMPLIANCE_QA !== CONFIRM)
 const catCode = `${code}-CAT`;
 const categoryName = 'QA Compliance de Treinamentos';
 const trainingName = 'QA Compliance — Nunca realizado';
+const managedSectorCode = 'QA-SETOR-EXA';
+const qaAdminEmail = 'qa-examiner-admin@staging.airtrust.invalid';
 const tenantId = `(SELECT id FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)`;
 const typeId = `(SELECT id FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND UPPER(codigo)=UPPER(${esc(code)}) AND deleted_at IS NULL LIMIT 1)`;
+const managedSectorId = `(SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(managedSectorCode)} AND ativo=1 AND deleted_at IS NULL)`;
 
 const seedSql = `
 CREATE TABLE IF NOT EXISTS _qa_training_compliance_guard(ok INTEGER NOT NULL CHECK(ok=1));
 DELETE FROM _qa_training_compliance_guard;
 INSERT INTO _qa_training_compliance_guard(ok)
 SELECT CASE WHEN (SELECT COUNT(*) FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)=1
- AND (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)>=1
+ AND (SELECT COUNT(*) FROM setores WHERE empresa_id=${tenantId}
+      AND codigo=${esc(managedSectorCode)} AND ativo=1 AND deleted_at IS NULL)=1
+ AND (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId}
+      AND setor_id=${managedSectorId} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)>=1
+ -- The browser uses an authenticated manager profile, not global admin.
+ -- Verify the genuine staging QA manager grant without broadening RBAC.
+ AND (SELECT COUNT(*) FROM setores_gestores sg JOIN usuarios u ON u.id=sg.usuario_id
+      WHERE sg.empresa_id=${tenantId} AND sg.setor_id=${managedSectorId}
+        AND sg.ativo=1 AND sg.deleted_at IS NULL
+        AND LOWER(TRIM(u.email))=${esc(qaAdminEmail)}
+        AND u.active=1 AND u.deleted_at IS NULL)>=1
  AND NOT EXISTS (SELECT 1 FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND UPPER(codigo)=UPPER(${esc(code)}))
 THEN 1 ELSE 0 END;
 DROP TABLE _qa_training_compliance_guard;
@@ -48,11 +61,11 @@ INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria_id,categori
 SELECT 'TREINAMENTO',${esc(code)},${esc(trainingName)},${esc('Fixture sintética staging para validar obrigação nunca realizada.')},qc.id,qc.nome,1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
 FROM qualificacoes_categorias qc WHERE qc.empresa_id=${tenantId} AND UPPER(qc.codigo)=UPPER(${esc(catCode)}) AND qc.deleted_at IS NULL;
 INSERT INTO treinamento_requisitos(empresa_id,qualificacao_tipo_id,escopo,setor_id,funcao_id,funcionario_id,obrigatoriedade,nivel_requerido,critico_operacional,origem,referencia_normativa,observacoes,vigencia_inicio,vigencia_fim,prazo_inicial_dias,auto_matricular_ead,ativo,created_at,updated_at,deleted_at)
-SELECT ${tenantId},${typeId},'EMPRESA',NULL,NULL,NULL,'OBRIGATORIA',NULL,0,'OUTRO','QA STAGING',${esc(marker)},date('now'),NULL,0,0,1,datetime('now'),datetime('now'),NULL;
+SELECT ${tenantId},${typeId},'SETOR',${managedSectorId},NULL,NULL,'OBRIGATORIA',NULL,0,'OUTRO','QA STAGING',${esc(marker)},date('now'),NULL,0,0,1,datetime('now'),datetime('now'),NULL;
 CREATE TABLE IF NOT EXISTS _qa_training_compliance_post(rule_count INTEGER NOT NULL CHECK(rule_count=1), history_count INTEGER NOT NULL CHECK(history_count=0));
 DELETE FROM _qa_training_compliance_post;
 INSERT INTO _qa_training_compliance_post(rule_count,history_count)
-SELECT (SELECT COUNT(*) FROM treinamento_requisitos WHERE empresa_id=${tenantId} AND qualificacao_tipo_id=${typeId} AND observacoes=${esc(marker)} AND ativo=1 AND deleted_at IS NULL),
+SELECT (SELECT COUNT(*) FROM treinamento_requisitos WHERE empresa_id=${tenantId} AND qualificacao_tipo_id=${typeId} AND escopo='SETOR' AND setor_id=${managedSectorId} AND auto_matricular_ead=0 AND observacoes=${esc(marker)} AND ativo=1 AND deleted_at IS NULL),
        (SELECT COUNT(*) FROM qualificacoes_historico WHERE empresa_id=${tenantId} AND qualificacao_id=${typeId} AND deleted_at IS NULL);
 DROP TABLE _qa_training_compliance_post;
 `;

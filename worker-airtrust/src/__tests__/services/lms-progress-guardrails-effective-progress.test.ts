@@ -10,8 +10,57 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildScormCompletionDiagnostic,
+  hasCompleteScormSlideCoverage,
+  mergeScormRuntimeState,
   resolveLmsEffectiveProgress,
 } from '../../services/lms-progress-guardrails';
+
+describe('SCORM CMI merge: visited-slide evidence survives partial autosaves', () => {
+  const snapshot = (slides: number[], total = 3, location = '2/3') => JSON.stringify({
+    'cmi.core.lesson_location': location,
+    'airtrust.total_slides': total,
+    'airtrust.viewed_slides': slides,
+  });
+
+  it('combines separately observed slides on the same enrollment without fabricating unseen slides', () => {
+    const merged = mergeScormRuntimeState({
+      currentCmiJson: snapshot([1, 2]),
+      incomingCmiJson: snapshot([3], 3, '3/3'),
+    });
+    const cmi = JSON.parse(merged.cmiJson!) as Record<string, unknown>;
+    expect(cmi['airtrust.viewed_slides']).toEqual([1, 2, 3]);
+    expect(hasCompleteScormSlideCoverage(merged.cmiJson)).toBe(true);
+    expect(merged.location?.current).toBe(3);
+  });
+
+  it('keeps prior partial observations when incoming CMI includes location but omits the coverage field', () => {
+    const merged = mergeScormRuntimeState({
+      currentCmiJson: snapshot([1, 2]),
+      incomingCmiJson: JSON.stringify({ 'cmi.core.lesson_location': '3/3', 'cmi.core.lesson_status': 'passed' }),
+    });
+    const cmi = JSON.parse(merged.cmiJson!) as Record<string, unknown>;
+    expect(cmi['airtrust.viewed_slides']).toEqual([1, 2]);
+    expect(hasCompleteScormSlideCoverage(merged.cmiJson)).toBe(false);
+  });
+
+  it('never reuses slide coverage across changed package totals or malformed incoming evidence', () => {
+    const totalChanged = mergeScormRuntimeState({
+      currentCmiJson: snapshot([1, 2, 3]),
+      incomingCmiJson: snapshot([4], 4, '4/4'),
+    });
+    expect(hasCompleteScormSlideCoverage(totalChanged.cmiJson)).toBe(false);
+    expect(JSON.parse(totalChanged.cmiJson!)['airtrust.viewed_slides']).toEqual([4]);
+    const malformed = mergeScormRuntimeState({
+      currentCmiJson: snapshot([1, 2]),
+      incomingCmiJson: JSON.stringify({
+        'cmi.core.lesson_location': '3/3', 'airtrust.total_slides': 3,
+        'airtrust.viewed_slides': [3, 9999],
+      }),
+    });
+    expect(hasCompleteScormSlideCoverage(malformed.cmiJson)).toBe(false);
+    expect(JSON.parse(malformed.cmiJson!)['airtrust.viewed_slides']).toEqual([3, 9999]);
+  });
+});
 
 describe('resolveLmsEffectiveProgress', () => {
   it('CONCLUIDO reporta progresso efetivo 100 independente do bruto', () => {

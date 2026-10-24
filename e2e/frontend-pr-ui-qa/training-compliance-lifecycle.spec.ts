@@ -84,22 +84,34 @@ async function completeViaXapi(page: Page, matriculaId: number, suffix: string) 
   expect(session.ok, JSON.stringify(session.json)).toBe(true);
   expect(session.json.data).toMatchObject({ active: true, matriculaId });
 
+  const terminalStatement = {
+    matricula_id: matriculaId,
+    actor: { name: `QA lifecycle ${CODE}` },
+    verb: {
+      id: 'http://adlnet.gov/expapi/verbs/completed',
+      display: { 'pt-BR': 'concluiu' },
+    },
+    object: { id: `urn:airtrust:qa:${CODE}:${suffix}`, objectType: 'Activity' },
+    result: {
+      success: true,
+      completion: true,
+      score: { raw: 85, max: 100, min: 0, scaled: 0.85 },
+    },
+  };
+  // A passive terminal signal must NOT mint a qualification: the learner's
+  // explicit confirmation from the H5P "Concluir curso" dialog is mandatory.
+  // Unit tests separately click that dialog; this isolated lifecycle fixture
+  // exercises the same authenticated command payload and its rejection gate.
+  const passive = await api(page, '/api/lms/xapi/statements', {
+    method: 'POST',
+    body: terminalStatement,
+  });
+  expect(passive.status).toBe(409);
+  expect(passive.json).toMatchObject({ code: 'USER_COMPLETION_REQUIRED' });
+
   return api(page, '/api/lms/xapi/statements', {
     method: 'POST',
-    body: {
-      matricula_id: matriculaId,
-      actor: { name: `QA lifecycle ${CODE}` },
-      verb: {
-        id: 'http://adlnet.gov/expapi/verbs/completed',
-        display: { 'pt-BR': 'concluiu' },
-      },
-      object: { id: `urn:airtrust:qa:${CODE}:${suffix}`, objectType: 'Activity' },
-      result: {
-        success: true,
-        completion: true,
-        score: { raw: 85, max: 100, min: 0, scaled: 0.85 },
-      },
-    },
+    body: { ...terminalStatement, completion_intent: 'USER_CONFIRMED' },
   });
 }
 
@@ -157,6 +169,20 @@ async function changeMatrixRule(page: Page, code: string, value: string, method:
   const response = await responseP;
   expect(response.ok(), `${method} ${response.url()} HTTP ${response.status()}`).toBe(true);
   return row;
+}
+
+async function setExplicitEadEnrollment(page: Page, ruleId: number, enabled: boolean, modality: string | null, phase: string) {
+  const result = await api(page, `/api/compliance-treinamentos/regras/${ruleId}`, {
+    method: 'PUT',
+    body: { auto_matricular_ead: enabled, modalidade_requerida: modality },
+  });
+  expect(result.ok, JSON.stringify(result.json)).toBe(true);
+  const diagnostic = String(result.json.data?.auto_enrollment_diagnostic_code || 'NOT_AVAILABLE');
+  expect(
+    result.json.data?.auto_enrollment_warning,
+    `EAD opt-in phase: ${phase}; sanitized diagnostic: ${diagnostic}`,
+  ).toBeNull();
+  return result;
 }
 
 test('full training compliance lifecycle recalculates organization, enrollments and evidence', async ({
@@ -279,33 +305,59 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   });
   expect(invalidPair.status).toBe(400);
 
-  // 3) Reconciliation finds both mandatory gaps and bulk-enrolls them only on explicit click.
+  // 3) Mandatory status alone must never enroll. A published EAD model,
+  // explicit modality AND opt-in are all required before automatic enrollment.
   await page.getByRole('button', { name: 'Matrículas', exact: true }).click();
-  let recon = await reconciliation(page, sector.id, fn.id);
-  let gap = recon.gaps_matricula.find((item: any) => item.qualificacao_tipo_codigo === requiredTypeCode);
-  expect(gap).toBeTruthy();
-  expect(gap.pessoas).toBe(2);
-  expect(gap.nunca_realizados).toBe(2);
-  expect(gap.cursos_ead).toHaveLength(1);
-  const requiredCourseId = Number(gap.cursos_ead[0].id);
+  const courseList = await api(page, `/api/lms/cursos?q=${encodeURIComponent(requiredCourseTitle)}&limit=20`);
+  expect(courseList.ok, JSON.stringify(courseList.json)).toBe(true);
+  const matchingCourses = courseList.json.data.filter((row: any) => row.titulo === requiredCourseTitle);
+  expect(matchingCourses).toHaveLength(1);
+  const requiredCourseId = Number(matchingCourses[0].id);
+  const sectorMatrix = await api(
+    page, `/api/compliance-treinamentos/matriz-organizacao?setor_id=${sector.id}`,
+  );
+  expect(sectorMatrix.ok).toBe(true);
+  const sectorRequirement = sectorMatrix.json.data.find(
+    (row: any) => row.qualificacao_tipo_codigo === requiredTypeCode,
+  );
+  expect(sectorRequirement.direta).toBeTruthy();
+  const sectorRuleId = Number(sectorRequirement.direta.id);
+  const enrolledCount = async () => {
+    const result = await api(page, `/api/lms/matriculas/curso/${requiredCourseId}?limit=20`);
+    expect(result.ok, JSON.stringify(result.json)).toBe(true);
+    return result.json.data.filter((row: any) =>
+      employeeIds.includes(Number(row.funcionario_id))).length;
+  };
+  expect(await enrolledCount(), 'mandatory alone cannot auto-enroll').toBe(0);
+  const onlyOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, null, 'opt-in with NULL modality');
+  expect(onlyOptIn.json.data.auto_enrollment.created).toBe(0);
+  expect(await enrolledCount(), 'NULL modality must fail closed').toBe(0);
+  const onlyModality = await setExplicitEadEnrollment(page, sectorRuleId, false, 'EAD', 'opt-out with EAD modality');
+  expect(onlyModality.json.data.auto_enrollment.created).toBe(0);
+  expect(await enrolledCount(), 'opt-in=0 must fail closed').toBe(0);
+  const authorized = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD', 'authorized EAD or idempotent repeat');
+  expect(authorized.json.data.auto_enrollment.created).toBe(2);
 
-  const gapRow = page.locator('tbody tr').filter({ hasText: requiredTypeCode }).first();
-  await expect(gapRow).toBeVisible();
-  const enrollResponseP = waitResponse(page, '/api/lms/matriculas/lote', 'POST');
-  await gapRow.getByRole('button', { name: 'Matricular gaps (sem e-mail)' }).click();
-  const enrollResponse = await enrollResponseP;
-  expect(enrollResponse.ok()).toBe(true);
-  const enrollPayload = await enrollResponse.json();
-  expect(enrollPayload.data).toMatchObject({ criadas: 2, ignoradas: 0, erros: 0 });
-  expect(enrollResponse.request().postDataJSON()).toMatchObject({
-    funcionario_ids: expect.arrayContaining(employeeIds),
-    curso_id: requiredCourseId,
-    enviar_convite_email: false,
-  });
   await expect.poll(async () => {
-    const current = await reconciliation(page, sector.id, fn.id);
-    return current.gaps_matricula.some((item: any) => item.qualificacao_tipo_codigo === requiredTypeCode);
-  }).toBe(false);
+    const response = await api(page, `/api/lms/matriculas/curso/${requiredCourseId}?limit=20`);
+    if (!response.ok) return -1;
+    return response.json.data.filter((row: any) => employeeIds.includes(Number(row.funcionario_id))).length;
+  }, { timeout: 15_000 }).toBe(2);
+  const enrolledAutomatically = await api(page, `/api/lms/matriculas/curso/${requiredCourseId}?limit=20`);
+  expect(enrolledAutomatically.ok).toBe(true);
+  const automaticRows = enrolledAutomatically.json.data.filter((row: any) =>
+    employeeIds.includes(Number(row.funcionario_id)),
+  );
+  expect(automaticRows).toHaveLength(2);
+  const repeatedOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, 'EAD', 'authorized EAD or idempotent repeat');
+  expect(repeatedOptIn.json.data.auto_enrollment.created).toBe(0);
+  expect(await enrolledCount(), 'repeated eligible rule must not duplicate').toBe(2);
+  for (const row of automaticRows) {
+    expect(String(row.observacoes || '')).toContain('sem e-mail');
+    expect(row.status).toBe('NAO_INICIADO');
+  }
+  let recon = await reconciliation(page, sector.id, fn.id);
+  expect(recon.gaps_matricula.some((item: any) => item.qualificacao_tipo_codigo === requiredTypeCode)).toBe(false);
 
   // Invitation is a separate explicit step. Synthetic employees have no e-mail, so no external mail is emitted.
   await page.getByRole('button', { name: /Convites/ }).click();
@@ -376,6 +428,19 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   const complete2 = await completeViaXapi(page, Number(e2EnrollmentId), 'completion-2');
   expect(complete2.ok, JSON.stringify(complete2.json)).toBe(true);
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).compliance_pct).toBe(100);
+  // A completed EAD course is compatible evidence and computes a real
+  // twelve-month validity period; never manufacture qualification status.
+  for (const id of employeeIds) {
+    const req = requirement(await employeeSnapshot(page, id), requiredTypeCode);
+    expect(req.modalidade_requerida).toBe('EAD');
+    expect(req.auto_matricular_ead).toBe(1);
+    expect(req.evidencia_modalidade).toBe('EAD');
+    expect(req.evidencia_origem).toBeTruthy();
+    expect(req.ultima_data).toMatch(/^\d{4}-\d{2}-\d{2}/);
+    expect(req.data_validade).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(req.dias_para_vencer).toBeGreaterThan(30);
+    expect(req.status_compliance).toBe('CONFORME');
+  }
 
   const trainings = await api(
     page,
@@ -408,11 +473,15 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   await changeMatrixRule(page, requiredTypeCode, 'NAO_APLICA', 'POST');
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).requisitos_obrigatorios).toBe(0);
   recon = await reconciliation(page, sector.id, fn.id);
+  // A completed enrollment is historical qualification evidence, not an
+  // actionable N/A enrollment to review or cancel. The roster intentionally
+  // omits completed cycles; restoring inheritance below proves evidence remains.
   expect(
     recon.matriculas_revisao.filter(
-      (row: any) => row.qualificacao_tipo_codigo === requiredTypeCode && row.situacao === 'NAO_APLICA_MATRICULADO',
+      (row: any) => row.qualificacao_tipo_codigo === requiredTypeCode,
     ),
-  ).toHaveLength(2);
+  ).toHaveLength(0);
+  expect(recon.resumo.nao_aplica_matriculados).toBe(0);
   await changeMatrixRule(page, requiredTypeCode, 'HERDAR', 'DELETE');
   await expect.poll(async () => (await filteredSummary(page, sector.id, fn.id)).compliance_pct).toBe(100);
 
@@ -468,25 +537,51 @@ test('full training compliance lifecycle recalculates organization, enrollments 
     const current = await reconciliation(page, sector.id, fn.id);
     return current.matriculas_revisao.some((row: any) => row.qualificacao_tipo_codigo === orphanTypeCode);
   }).toBe(false);
-  recon = await reconciliation(page, sector.id, fn.id);
-  gap = recon.gaps_matricula.find((item: any) => item.qualificacao_tipo_codigo === orphanTypeCode);
-  expect(gap).toBeTruthy();
-  expect(gap.pessoas).toBe(1);
-  expect(gap.funcionarios[0].nome).toBe(employee2Name);
-  expect(gap.cursos_ead).toHaveLength(1);
-
-  // Enroll the newly exposed peer gap. Historical enrollment is preserved and not duplicated.
-  await page.getByRole('button', { name: /A matricular/ }).click();
-  const orphanGapRow = page.locator('tbody tr').filter({ hasText: orphanTypeCode }).first();
-  const enrollPeerP = waitResponse(page, '/api/lms/matriculas/lote', 'POST');
-  await orphanGapRow.getByRole('button', { name: 'Matricular gaps (sem e-mail)' }).click();
-  const enrollPeer = await enrollPeerP;
-  expect(enrollPeer.ok()).toBe(true);
-  expect((await enrollPeer.json()).data).toMatchObject({ criadas: 1, ignoradas: 0, erros: 0 });
+  // Linking a historical enrollment to an obligation must NOT silently enroll
+  // the missing peer; this decision alone does not opt into automatic EAD.
+  const orphanCatalog = await api(page, `/api/lms/cursos?q=${encodeURIComponent(orphanCourseTitle)}&limit=20`);
+  expect(orphanCatalog.ok).toBe(true);
+  const orphanCourses = orphanCatalog.json.data.filter((row: any) => row.titulo === orphanCourseTitle);
+  expect(orphanCourses).toHaveLength(1);
+  const orphanCourseId = Number(orphanCourses[0].id);
+  const beforePeer = await api(page, `/api/lms/matriculas/curso/${orphanCourseId}?limit=20`);
+  expect(beforePeer.ok).toBe(true);
+  expect(beforePeer.json.data.filter((row: any) =>
+    employeeIds.includes(Number(row.funcionario_id)))).toHaveLength(1);
+  const orphanMatrix = await api(
+    page, `/api/compliance-treinamentos/matriz-organizacao?setor_id=${sector.id}&funcao_id=${fn.id}`,
+  );
+  expect(orphanMatrix.ok).toBe(true);
+  const orphanRequirement = orphanMatrix.json.data.find(
+    (row: any) => row.qualificacao_tipo_codigo === orphanTypeCode,
+  );
+  expect(orphanRequirement).toBeTruthy();
+  const linkedRules = await api(
+    page, `/api/compliance-treinamentos/regras?qualificacao_tipo_id=${orphanRequirement.qualificacao_tipo_id}`,
+  );
+  expect(linkedRules.ok).toBe(true);
+  const linkedRule = linkedRules.json.data.find((rule: any) =>
+    rule.escopo === 'SETOR_FUNCAO' && Number(rule.setor_id) === sector.id
+      && Number(rule.funcao_id) === fn.id);
+  expect(linkedRule).toBeTruthy();
+  const orphanOptIn = await setExplicitEadEnrollment(page, Number(linkedRule.id), true, 'EAD', 'orphan reconciliation');
+  expect(orphanOptIn.json.data.auto_enrollment.created).toBe(1);
   await expect.poll(async () => {
-    const current = await reconciliation(page, sector.id, fn.id);
-    return current.gaps_matricula.some((item: any) => item.qualificacao_tipo_codigo === orphanTypeCode);
-  }).toBe(false);
+    const response = await api(page, `/api/lms/matriculas/curso/${orphanCourseId}?limit=20`);
+    if (!response.ok) return -1;
+    return response.json.data.filter((row: any) => employeeIds.includes(Number(row.funcionario_id))).length;
+  }, { timeout: 15_000 }).toBe(2);
+  const peerEnrollments = await api(page, `/api/lms/matriculas/curso/${orphanCourseId}?limit=20`);
+  expect(peerEnrollments.ok).toBe(true);
+  const peerRows = peerEnrollments.json.data.filter((row: any) =>
+    employeeIds.includes(Number(row.funcionario_id)),
+  );
+  expect(peerRows.filter((row: any) => Number(row.id) === Number(orphanReview.matricula_id))).toHaveLength(1);
+  const newPeer = peerRows.find((row: any) => Number(row.funcionario_id) === employeeIds[1]);
+  expect(newPeer).toBeTruthy();
+  expect(String(newPeer.observacoes || '')).toContain('sem e-mail');
+  recon = await reconciliation(page, sector.id, fn.id);
+  expect(recon.gaps_matricula.some((item: any) => item.qualificacao_tipo_codigo === orphanTypeCode)).toBe(false);
 
   const finalRecon = await reconciliation(page, sector.id, fn.id);
   expect(finalRecon.resumo.gaps_matricula_acionaveis).toBe(0);
@@ -499,4 +594,140 @@ test('full training compliance lifecycle recalculates organization, enrollments 
     expect(requirement(person, requiredTypeCode)?.status_compliance).toBe('CONFORME');
     expect(requirement(person, orphanTypeCode)?.status_compliance).toBe('NAO_REALIZADO');
   }
+
+  // Switch the synthetic rule to its recorded-evidence expiry source while
+  // both completions are still valid. The later controlled expiry then exercises
+  // VENCIDO from the canonical evidence date, not a modified requirement window.
+  const evidenceValidity = await api(page, `/api/compliance-treinamentos/regras/${sectorRuleId}`, {
+    method: 'PUT',
+    body: { validade_fonte: 'EVIDENCIA', modalidade_requerida: 'EAD', auto_matricular_ead: true },
+  });
+  expect(evidenceValidity.ok, JSON.stringify(evidenceValidity.json)).toBe(true);
+  for (const id of employeeIds) {
+    expect(requirement(await employeeSnapshot(page, id), requiredTypeCode)?.status_compliance)
+      .toBe('CONFORME');
+  }
+});
+
+test('expired synthetic evidence renews cycle two and issues an authorized PDF', async ({ page }) => {
+  expect(CODE).toMatch(/^QA-COMP-LIFE-/);
+  await page.route('**/*', async (route) => {
+    const host = new URL(route.request().url()).hostname.toLowerCase();
+    if (
+      host === 'airtrust.online' || host === 'api.airtrust.online' ||
+      host === 'airtrust.pages.dev' || host === 'airtrust-api.airtrust.workers.dev' ||
+      host === 'airtrust-api-production.airtrust.workers.dev'
+    ) {
+      await route.abort('blockedbyclient');
+      throw new Error(`PRODUCTION_TARGET_REJECTED:${host}`);
+    }
+    await route.continue();
+  });
+
+  await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
+  if (SHORT_SHA) await assertLiveFrontendShaFromPage(page, SHORT_SHA, 'training-compliance-cycle-two');
+  await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
+
+  const catalogs = await api(page, '/api/compliance-treinamentos/catalogos');
+  expect(catalogs.ok).toBe(true);
+  const sector = catalogs.json.data.setores.find((item: any) => item.nome === sectorName);
+  const fn = catalogs.json.data.funcoes.find((item: any) => item.nome === functionName);
+  expect(sector).toBeTruthy();
+  expect(fn).toBeTruthy();
+  const people = await api(page, `/api/compliance-treinamentos/pessoas?setor_id=${sector.id}&funcao_id=${fn.id}`);
+  expect(people.ok).toBe(true);
+  const employee = people.json.data.find((item: any) => item.nome === employee1Name);
+  expect(employee).toBeTruthy();
+  const employeeId = Number(employee.id);
+  const before = requirement(await employeeSnapshot(page, employeeId), requiredTypeCode);
+  expect(before).toMatchObject({ status_compliance: 'VENCIDO', evidencia_modalidade: 'EAD' });
+  const firstHistoryId = Number(before.evidencia_id);
+  const ruleId = Number(before.regra_id);
+  expect(firstHistoryId).toBeGreaterThan(0);
+  expect(ruleId).toBeGreaterThan(0);
+
+  const courseResults = await api(page, `/api/lms/cursos?q=${encodeURIComponent(requiredCourseTitle)}&limit=20`);
+  expect(courseResults.ok).toBe(true);
+  const course = courseResults.json.data.find((item: any) => item.titulo === requiredCourseTitle);
+  expect(course).toBeTruthy();
+  const courseId = Number(course.id);
+
+  // Saving the already authorized rule re-evaluates expired evidence through
+  // the real Compliance enrollment service; it must open only one new cycle.
+  const renewed = await api(page, `/api/compliance-treinamentos/regras/${ruleId}`, {
+    method: 'PUT',
+    body: { validade_fonte: 'EVIDENCIA', modalidade_requerida: 'EAD', auto_matricular_ead: true },
+  });
+  expect(renewed.ok, JSON.stringify(renewed.json)).toBe(true);
+  expect(renewed.json.data.auto_enrollment).toMatchObject({ reactivated: 1, created: 0 });
+
+  const enrollments = await api(page, `/api/lms/matriculas/curso/${courseId}?status=NAO_INICIADO&limit=20`);
+  expect(enrollments.ok).toBe(true);
+  const active = enrollments.json.data.find((item: any) => Number(item.funcionario_id) === employeeId);
+  expect(active).toBeTruthy();
+  const enrollmentId = Number(active.id);
+  const cycleTwo = await api(page, `/api/lms/matriculas/${enrollmentId}`);
+  expect(cycleTwo.ok).toBe(true);
+  expect(cycleTwo.json.data).toMatchObject({ status: 'NAO_INICIADO', progresso_pct: 0 });
+  expect(cycleTwo.json.data.xapi_summary?.total_statements ?? 0).toBe(0);
+
+  const repeated = await api(page, `/api/compliance-treinamentos/regras/${ruleId}`, {
+    method: 'PUT',
+    body: { validade_fonte: 'EVIDENCIA', modalidade_requerida: 'EAD', auto_matricular_ead: true },
+  });
+  expect(repeated.ok).toBe(true);
+  expect(repeated.json.data.auto_enrollment.created).toBe(0);
+  expect(repeated.json.data.auto_enrollment.reactivated).toBe(0);
+  const afterRepeat = await api(page, `/api/lms/matriculas/curso/${courseId}?status=NAO_INICIADO&limit=20`);
+  expect(afterRepeat.json.data.filter((item: any) => Number(item.funcionario_id) === employeeId)).toHaveLength(1);
+
+  const progress = await api(page, `/api/lms/matriculas/${enrollmentId}/progresso`, {
+    method: 'PATCH', body: { progresso_pct: 45 },
+  });
+  expect(progress.ok, JSON.stringify(progress.json)).toBe(true);
+  const currentXapi = await api(page, `/api/lms/matriculas/${enrollmentId}`);
+  expect(currentXapi.json.data.progresso_pct).toBe(45);
+  expect(currentXapi.json.data.xapi_summary?.total_statements ?? 0).toBe(0);
+
+  const completion = await completeViaXapi(page, enrollmentId, 'renewal-cycle-2');
+  expect(completion.ok, JSON.stringify(completion.json)).toBe(true);
+  await expect.poll(async () => requirement(await employeeSnapshot(page, employeeId), requiredTypeCode)?.status_compliance)
+    .toBe('CONFORME');
+  const secondEvidence = requirement(await employeeSnapshot(page, employeeId), requiredTypeCode);
+  const secondHistoryId = Number(secondEvidence.evidencia_id);
+  expect(secondHistoryId).toBeGreaterThan(0);
+  expect(secondHistoryId).not.toBe(firstHistoryId);
+
+  const certificate = await api(page, `/api/qualificacoes/historico/${secondHistoryId}/certificados/gerar`, {
+    method: 'POST', body: {},
+  });
+  expect(certificate.ok, JSON.stringify(certificate.json)).toBe(true);
+  expect(certificate.json.data).toMatchObject({ id: expect.any(Number), r2_key: expect.any(String) });
+  expect(certificate.json.data.r2_key).toMatch(/^certificados\/empresa-\d+\/funcionario-\d+\/historico-\d+\/[0-9a-f-]+\.pdf$/i);
+
+  const listed = await api(page, `/api/qualificacoes/historico/${secondHistoryId}/certificados`);
+  expect(listed.ok).toBe(true);
+  expect(listed.json.data.some((item: any) => Number(item.documento_id || item.id) === Number(certificate.json.data.id))).toBe(true);
+
+  const pdf = await page.evaluate(async ({ apiBase, documentId }) => {
+    const token = window.sessionStorage.getItem('airtrust_token') || window.localStorage.getItem('airtrust_token');
+    if (!token) throw new Error('QA_AUTH_TOKEN_MISSING');
+    const response = await fetch(`${apiBase}/api/pasta-virtual/stream/${documentId}`, {
+      credentials: 'include', headers: { Authorization: `Bearer ${token}` },
+    });
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const hash = await crypto.subtle.digest('SHA-256', bytes);
+    const sha256 = Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return { status: response.status, contentType: response.headers.get('Content-Type'),
+      signature: new TextDecoder().decode(bytes.slice(0, 5)), sha256 };
+  }, { apiBase: API_BASE, documentId: Number(certificate.json.data.id) });
+  expect(pdf.status).toBe(200);
+  expect(pdf.contentType?.toLowerCase()).toContain('application/pdf');
+  expect(pdf.signature).toBe('%PDF-');
+  expect(pdf.sha256).toMatch(/^[a-f0-9]{64}$/);
+
+  // A user who can operate Compliance may read the exact tenant-scoped
+  // document; an unrelated id must not disclose whether another certificate exists.
+  const unavailable = await api(page, '/api/pasta-virtual/stream/2147483000');
+  expect(unavailable.status).toBe(404);
 });

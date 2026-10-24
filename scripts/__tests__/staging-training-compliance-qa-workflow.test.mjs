@@ -29,6 +29,16 @@ test('browser QA stays read-only and proves never-realized compliance', () => {
   assert.match(spec, /nao_realizados/);
   assert.match(spec, /toBe\(0\)/);
   assert.match(spec, /guard\.assertClean\(\)/);
+  // The admin credential genuinely selects Gestor in this QA tenant.
+  // Assert both positive managed access and negative API authorization.
+  assert.match(spec, /access_mode\)\.toBe\('restricted'\)/);
+  assert.match(spec, /QA-SETOR-EXA/);
+  assert.match(spec, /accessibleSectorIds\.has/);
+  assert.match(spec, /deniedStatus.*out-of-scope sectors/);
+  assert.match(spec, /\)\.toBe\(403\)/);
+  assert.match(seed, /'SETOR',\$\{managedSectorId\}/);
+  assert.match(seed, /auto_matricular_ead=0/);
+  assert.match(seed, /setores_gestores sg JOIN usuarios/);
   assert.doesNotMatch(spec, /request\.(post|put|patch|delete)/i);
 });
 
@@ -42,4 +52,14 @@ test('organizational, enrollment and intelligent-compliance schemas are validate
   assert.match(spec, /pendencias/);
   assert.match(spec, /tendencias/);
   assert.match(spec, /comunicacoes/);
+});
+
+test('unrelated issue comments do not manufacture a failed Compliance QA run', () => {
+  // guard=skipped is expected for comments that do not request a governed QA.
+  // Explicit QA dispatches and valid comments still fail closed on real errors.
+  assert.match(workflow, /if: always\(\) && needs\.guard\.result != 'skipped'/);
+  assert.match(workflow, /needs\.guard\.result/);
+  assert.match(workflow, /needs\.d1_fixture\.result/);
+  assert.match(workflow, /needs\.browser\.result/);
+  assert.match(workflow, /needs\.d1_cleanup\.result/);
 });

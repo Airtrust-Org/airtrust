@@ -131,9 +131,13 @@ export async function hasRdvCapability(
     tenantContext?.role || (c.get as (key: string) => unknown)('userRole') || 'viewer',
   ).toLowerCase();
 
+  const sessionRole = String((c.get as (key: string) => unknown)('userRole') || '').trim().toUpperCase();
   const override = await getUserPermissionOverride(c, capability);
   if (override === 'DENY') return false;
   if (override === 'GRANT') return true;
+  if (sessionRole === 'COORDENACAO_VOO' && COORDENACAO_CAPABILITIES.has(capability)) {
+    return (await getUserPermissionOverride(c, 'controle_voos.edit')) !== 'DENY';
+  }
 
   // A permissão operacional canônica da Coordenação também concede as
   // capabilities de RDV. Isso mantém frontend/backend alinhados para contas

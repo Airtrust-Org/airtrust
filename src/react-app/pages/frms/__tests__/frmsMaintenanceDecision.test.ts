@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FrmsMaintenanceTeamItem } from '@/react-app/hooks/useFrmsOperationalAccess';
-import { classifyMaintenanceItem, readinessLabel } from '../frmsMaintenanceDecision';
+import { classifyMaintenanceItem, readinessLabel, maintenanceActionText, formatMaintenanceEvidenceTime } from '../frmsMaintenanceDecision';
 
 function item(overrides: Partial<FrmsMaintenanceTeamItem> = {}): FrmsMaintenanceTeamItem {
   return {
@@ -12,6 +12,7 @@ function item(overrides: Partial<FrmsMaintenanceTeamItem> = {}): FrmsMaintenance
     setor_nome: 'Manutenção',
     checkin_id: 'checkin-1',
     hora_checkin: '06:00',
+    checkin_submitted_at: '2026-08-29T09:00:00.000Z',
     horas_sono: 7.5,
     qualidade_sono: 4,
     kss_score: 3,
@@ -48,12 +49,51 @@ describe('classifyMaintenanceItem', () => {
     expect(classifyMaintenanceItem(item({ readiness_id: null }))).toBe('PENDING');
   });
 
-  it('aceita baseline em formação como teste realizado, sem criar alerta artificial', () => {
+  it('mantém baseline em formação como evidência inconclusiva sem inventar alerta crítico', () => {
     expect(
       classifyMaintenanceItem(
         item({ readiness_classification: 'baseline_building', baseline_ready: 0, baseline_sessions: 2 }),
       ),
-    ).toBe('NORMAL');
+    ).toBe('PENDING');
     expect(readinessLabel('baseline_building')).toBe('Baseline em formação');
+    expect(maintenanceActionText('PENDING', item({
+      readiness_classification: 'baseline_building', baseline_ready: 0,
+    }))).toContain('prontidão inconclusiva');
+  });
+});
+
+describe('baseline de prontidão e prioridade operacional', () => {
+  it('não exibe sem pendência sem baseline, mesmo com check-in e PVT registrados', () => {
+    expect(classifyMaintenanceItem(item({ baseline_ready: 0 }))).toBe('PENDING');
+    expect(classifyMaintenanceItem(item({ baseline_ready: null }))).toBe('PENDING');
+    expect(classifyMaintenanceItem(item({ readiness_classification: null }))).toBe('PENDING');
+    expect(classifyMaintenanceItem(item({ readiness_classification: 'unknown', baseline_ready: 1 }))).toBe('PENDING');
+  });
+
+  it('preserva classificação positiva somente quando há baseline confirmado', () => {
+    expect(classifyMaintenanceItem(item({ baseline_ready: 1, readiness_classification: 'preserved' }))).toBe('NORMAL');
+  });
+
+  it('prioriza sinais críticos e de atenção mesmo durante formação de baseline', () => {
+    expect(classifyMaintenanceItem(item({
+      readiness_classification: 'operational_review', baseline_ready: 0,
+    }))).toBe('CRITICAL');
+    expect(classifyMaintenanceItem(item({
+      computed_risk_level: 'attention', baseline_ready: 0,
+    }))).toBe('ATTENTION');
+  });
+});
+
+describe('evidência operacional de manutenção', () => {
+  it('diferencia check-in e PVT/Readiness ausentes sem inferir condição normal', () => {
+    expect(maintenanceActionText('PENDING', item({ readiness_id: null }))).toContain('solicitar PVT/Readiness');
+    expect(maintenanceActionText('PENDING', item({ checkin_id: null }))).toContain('solicitar check-in');
+    expect(maintenanceActionText('PENDING', item({ readiness_id: null, checkin_id: null }))).toContain('check-in e PVT');
+  });
+  it('mostra evidência com timezone explícito em Brasília, sem converter horário legado sem fuso', () => {
+    expect(formatMaintenanceEvidenceTime('2026-08-29T09:00:00.000Z')).toContain('29/08/2026, 06:00 (Brasília)');
+    expect(formatMaintenanceEvidenceTime('2026-08-29 06:03:00')).toBe('29/08/2026, 06:03 (fuso não informado)');
+    expect(formatMaintenanceEvidenceTime(null)).toBeNull();
+    expect(formatMaintenanceEvidenceTime('indefinido')).toBeNull();
   });
 });

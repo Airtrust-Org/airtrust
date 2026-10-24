@@ -121,6 +121,36 @@ describe('Petrobras RVE XML', () => {
     expect(() => encodePetrobrasRveIso88591(escaped)).not.toThrow();
   });
 
+  it('rejeita calendario inexistente e horario fora de faixa sem normalizacao Date.UTC', () => {
+    const valid = {
+      equipamento: '30131647',
+      atendimento: '509573593',
+      escalaBase: 'SBME',
+      acionamento: { data: '28/02/2026', hora: '06:40:00' },
+      decolagem: { data: '28/02/2026', hora: '06:50:00' },
+      pouso: { data: '28/02/2026', hora: '07:34:00' },
+      corte: { data: '28/02/2026', hora: '07:39:00' },
+      etapas: [{ escala: 'SKNT', inicio: { data: '28/02/2026', hora: '06:50:00' },
+        fim: { data: '28/02/2026', hora: '07:34:00' } }],
+    };
+    for (const clock of [
+      { data: '31/02/2026', hora: '06:40:00' },
+      { data: '29/02/2026', hora: '06:40:00' },
+      { data: '28/02/2026', hora: '24:00:00' },
+      { data: '28/02/2026', hora: '23:60:00' },
+      { data: '28/02/2026', hora: '23:59:60' },
+    ]) {
+      expect(() => buildPetrobrasRveRecords([{ ...valid, acionamento: clock }]))
+        .toThrow('PETROBRAS_RVE_INVALID_CLOCK');
+    }
+    expect(() => buildPetrobrasRveRecords([{ ...valid, acionamento:
+      { data: '29/02/2028', hora: '06:40:00' },
+      decolagem: { data: '29/02/2028', hora: '06:50:00' },
+      pouso: { data: '29/02/2028', hora: '07:34:00' },
+      corte: { data: '29/02/2028', hora: '07:39:00' },
+      etapas: [] }])).not.toThrow();
+  });
+
   it('rejeita duracao negativa em vez de produzir XML incoerente', () => {
     expect(() =>
       buildPetrobrasRveRecords([

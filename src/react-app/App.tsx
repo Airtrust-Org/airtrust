@@ -20,6 +20,7 @@ import { syncRuntimeTranslation } from './i18n/runtimeTranslator';
 import { ThemeProvider } from './theme/ThemeProvider';
 import HomeRouter from './components/HomeRouter';
 import { resolveTrainingEntryPath } from './lib/training-entry';
+import { canonicalizeLegacyFrmsOperationalQuery } from './pages/frms/frmsLegacyOperationalQuery';
 import { CANONICAL_DUPLICATE_ROUTE_TARGETS } from './lib/canonical-duplicate-routes';
 
 // 🚀 LAZY LOADING: Páginas principais (code splitting)
@@ -106,9 +107,7 @@ function LegacyPastaVirtualRedirect() {
 }
 function LegacyFrmsOperationalRedirect() {
   const location = useLocation();
-  const params = new URLSearchParams(location.search);
-  params.set('origem', 'controle-operacional-legado');
-  const query = params.toString();
+  const query = canonicalizeLegacyFrmsOperationalQuery(location.search);
   return <Navigate to={'/frms' + (query ? '?' + query : '')} replace />;
 }
 
@@ -243,6 +242,7 @@ const LmsCursoDetalhe = lazyWithRetry(
 );
 const LmsAdminCursos = lazyWithRetry(() => import('./pages/lms/LmsAdminCursos'), 'LmsAdminCursos');
 const LmsPlayer = lazyWithRetry(() => import('./pages/lms/LmsPlayer'), 'LmsPlayer');
+const NativeReviewZipPilot = lazyWithRetry(() => import('./pages/lms/NativeReviewZipPilot'), 'NativeReviewZipPilot');
 const LmsPreviewPlayer = lazyWithRetry(
   () => import('./pages/lms/LmsPreviewPlayer'),
   'LmsPreviewPlayer',
@@ -256,7 +256,12 @@ const LmsHistoricoEdApp = lazyWithRetry(
   'LmsHistoricoEdApp',
 );
 const LmsDashboard = lazyWithRetry(() => import('./pages/lms/LmsDashboard'), 'LmsDashboard');
+const LmsMeusTreinamentos = lazyWithRetry(
+  () => import('./pages/lms/LmsMeusTreinamentos'),
+  'LmsMeusTreinamentos',
+);
 const LmsMatriculas = lazyWithRetry(() => import('./pages/lms/LmsMatriculas'), 'LmsMatriculas');
+const LmsEmAndamento = lazyWithRetry(() => import('./pages/LmsEmAndamento'), 'LmsEmAndamento');
 const ConhecimentoAtivoHome = lazyWithRetry(
   () => import('./pages/conhecimento-ativo/ConhecimentoAtivoHome'),
   'ConhecimentoAtivoHome',
@@ -350,12 +355,12 @@ function LmsEntryRouter() {
   const { user, isLoading } = useAuth();
   if (isLoading) return null;
   const role = user?.role?.toUpperCase() ?? '';
-  if (role === 'ALUNO' || role === 'STUDENT' || role === 'INSTRUTOR' || role === 'INSTRUCTOR') return <Navigate to="/lms/cursos" replace />;
+  if (role === 'ALUNO' || role === 'STUDENT' || role === 'INSTRUTOR' || role === 'INSTRUCTOR') return <LmsMeusTreinamentos />;
   return <LmsDashboard />;
 }
 
 function TreinamentosEntryRouter() {
-  const { user, isLoading, empresas, empresaAtualId } = useAuth();
+  const { isLoading, empresas, empresaAtualId } = useAuth();
   const { can, isAluno, isInstrutor } = usePermissions();
   if (isLoading) return null;
 
@@ -1126,6 +1131,14 @@ export default function App() {
                       }
                     />
                     <Route
+                      path="/lms/native/revisao"
+                      element={
+                        <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
+                          <NativeReviewZipPilot />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
                       path="/lms/cursos/:id"
                       element={
                         <ProtectedRoute>
@@ -1210,6 +1223,14 @@ export default function App() {
                       element={
                         <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
                           <LmsMatriculas />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/lms/matriculas/em-andamento"
+                      element={
+                        <ProtectedRoute requiredRole={['ADMIN', 'GESTOR']}>
+                          <LmsEmAndamento />
                         </ProtectedRoute>
                       }
                     />

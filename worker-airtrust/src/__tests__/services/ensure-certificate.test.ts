@@ -101,6 +101,85 @@ describe('ensureCertificateForQualification', () => {
     expect(result.documentoId).toBe(999);
   });
 
+  it.each(['VALIDA', 'VÁLIDA', 'VENCIDA', 'RENOVADA', 'PROXIMA_VENCIMENTO', 'VENCENDO', 'VENCENDO_30', 'ATENCAO', 'INDETERMINADA'])(
+    'permite certificado para qualificação realizada em estado operacional %s',
+    async (status) => {
+      const db = createDb({
+        id: 1,
+        certificado_arquivo_id: null,
+        data_conclusao: '2026-09-09',
+        status,
+        empresa_id: 10,
+      });
+
+      generateCertificateForHistoricoMock.mockResolvedValueOnce({ documentoId: 999 });
+
+      const result = await ensureCertificateForQualification(
+        { ...mockEnv, DB: db } as unknown as Env,
+        1,
+        10,
+      );
+
+      expect(result.state).toBe('CREATED');
+      expect(result.documentoId).toBe(999);
+      expect(generateCertificateForHistoricoMock).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('does not auto-generate for legacy undetermined status without completion evidence', async () => {
+    const db = createDb({
+      id: 1,
+      certificado_arquivo_id: null,
+      data_conclusao: null,
+      status: 'INDETERMINADA',
+      empresa_id: 10,
+    });
+
+    const result = await ensureCertificateForQualification(
+      { ...mockEnv, DB: db } as unknown as Env,
+      1,
+      10,
+    );
+
+    expect(result.state).toBe('SKIPPED');
+    expect(result.reason).toContain('sem data_conclusao');
+    expect(generateCertificateForHistoricoMock).not.toHaveBeenCalled();
+  });
+
+  it('permite histórico legado com status NULL e realização/vencimento comprovados', async () => {
+    const db = createDb({
+      id: 1,
+      certificado_arquivo_id: null,
+      status: null,
+      data_conclusao: '2026-01-23',
+      data_vencimento: '2027-01-23',
+      empresa_id: 10,
+    });
+    generateCertificateForHistoricoMock.mockResolvedValueOnce({ documentoId: 999 });
+    const result = await ensureCertificateForQualification(
+      { ...mockEnv, DB: db } as unknown as Env, 1, 10,
+    );
+    expect(result.state).toBe('CREATED');
+    expect(result.documentoId).toBe(999);
+    expect(generateCertificateForHistoricoMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('não permite geração automática de histórico NULL sem data de vencimento', async () => {
+    const db = createDb({
+      id: 1,
+      certificado_arquivo_id: null,
+      status: null,
+      data_conclusao: '2026-01-23',
+      data_vencimento: null,
+      empresa_id: 10,
+    });
+    const result = await ensureCertificateForQualification(
+      { ...mockEnv, DB: db } as unknown as Env, 1, 10,
+    );
+    expect(result.state).toBe('SKIPPED');
+    expect(generateCertificateForHistoricoMock).not.toHaveBeenCalled();
+  });
+
   it('bloqueia certificado para estado não concluído (PLANEJADA)', async () => {
     const db = createDb({
       id: 1,
@@ -117,7 +196,7 @@ describe('ensureCertificateForQualification', () => {
     );
 
     expect(result.state).toBe('SKIPPED');
-    expect(result.reason).toContain('não possui um status de conclusão válido');
+    expect(result.reason).toContain('não possui um status elegível para certificado');
     expect(generateCertificateForHistoricoMock).not.toHaveBeenCalled();
   });
 
@@ -137,7 +216,7 @@ describe('ensureCertificateForQualification', () => {
     );
 
     expect(result.state).toBe('SKIPPED');
-    expect(result.reason).toContain('não possui um status de conclusão válido');
+    expect(result.reason).toContain('não possui um status elegível para certificado');
   });
 
   it('bloqueia certificado para estado desconhecido (fail closed)', async () => {
@@ -156,7 +235,7 @@ describe('ensureCertificateForQualification', () => {
     );
 
     expect(result.state).toBe('SKIPPED');
-    expect(result.reason).toContain('não possui um status de conclusão válido');
+    expect(result.reason).toContain('não possui um status elegível para certificado');
   });
 
   it('bloqueia certificado para ausência de status (null) (fail closed)', async () => {
@@ -175,7 +254,7 @@ describe('ensureCertificateForQualification', () => {
     );
 
     expect(result.state).toBe('SKIPPED');
-    expect(result.reason).toContain('não possui um status de conclusão válido');
+    expect(result.reason).toContain('não possui um status elegível para certificado');
   });
 
   it('comportamento idempotente: retorna EXISTS se já tem certificado e não é forceRegenerate', async () => {

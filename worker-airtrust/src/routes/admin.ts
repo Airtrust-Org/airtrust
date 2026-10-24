@@ -168,6 +168,7 @@ app.post('/backfill-session-checks', auth(), adminOnly(), async (c) => {
       agendamentos_associados: resultado.agendamentos_linkados,
       checks_criados: resultado.checks_criados,
       resultados_criados: resultado.resultados_criados,
+      resultados_pendentes_revisao: resultado.resultados_pendentes_revisao,
       error_count: resultado.erros.length,
     };
     const auditMetadata = buildAuditMetadata(c, {

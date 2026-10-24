@@ -221,6 +221,9 @@ export function buildTrainingComplianceReportRows(
     .flatMap((person) =>
       person.requisitos
         .filter((requirement) => requirement.obrigatoriedade === 'OBRIGATORIA')
+        // A recorded completion awaiting modality/profile verification is not
+        // a never-completed training; exclude it from actionable manager reports.
+        .filter((requirement) => !requirement.evidencia_pendente_validacao)
         .filter((requirement) => statuses.has(requirement.status_compliance))
         .filter(
           (requirement) =>

@@ -321,9 +321,9 @@ describe('Qualificacoes - Filters and View State Characterization', () => {
     
     mainCalls = mockUseQualificacoesHistorico.mock.calls.filter((c: any) => c[1] !== 500);
     lastCall = mainCalls[mainCalls.length - 1];
-    // Ao restaurar todos os status, a visão volta a ser histórico completo:
-    // o hook omite o filtro server-side em vez de serializar os seis status.
-    expect(lastCall[9]).toEqual([]);
+    // Ao restaurar a seleção padrão, o backend recebe apenas os três status
+    // operacionais. Renovadas, planejadas e canceladas continuam desmarcadas.
+    expect(new Set(lastCall[9])).toEqual(new Set(['VALIDA', 'VENCIDA', 'VENCENDO_30']));
   });
 
   it('11. administrador com todos os setores salvos volta ao histórico completo sem setor_ids', () => {

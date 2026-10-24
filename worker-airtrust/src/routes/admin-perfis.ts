@@ -58,6 +58,8 @@ const MODULOS_VALIDOS = [
 ] as const;
 
 const ACOES_VALIDAS = ['visualizar', 'editar', 'criar', 'deletar'] as const;
+// 0340 perfis_permissoes CHECK only accepts GESTOR, INSTRUTOR and ALUNO.
+// Coordination capabilities are security-scoped in server RBAC, not editable here.
 const PERFIS_VALIDOS = ['GESTOR', 'INSTRUTOR', 'ALUNO'] as const;
 
 type PermissaoRow = {

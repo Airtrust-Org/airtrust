@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import {
   extractDdlTargets,
   extractMigrationReferences,
+  isReviewedCriticalChange,
   schemaV2ChangesAfter,
   validateContract,
 } from './check-ci-schema-bootstrap.mjs';
@@ -37,4 +39,13 @@ test('current repository CI bootstrap contract is internally consistent', () => 
   const result = validateContract();
   assert.ok(result.migrations > 0);
   assert.equal(result.consumers, 3);
+});
+
+test('does not implicitly trust a lower-numbered future Schema V2 critical change', () => {
+  const contents = 'ALTER TABLE lms_xapi_statements ADD COLUMN future TEXT;';
+  const digest = createHash('sha256').update(contents).digest('hex');
+  const reviewed = { '0557_lms_cycle_evidence_archive.sql': digest };
+  assert.equal(isReviewedCriticalChange('0553_lms_native_v1_evidence.sql', contents, reviewed), false);
+  assert.equal(isReviewedCriticalChange('0557_lms_cycle_evidence_archive.sql', contents, reviewed), true);
+  assert.equal(isReviewedCriticalChange('0557_lms_cycle_evidence_archive.sql', contents + ' -- drift', reviewed), false);
 });

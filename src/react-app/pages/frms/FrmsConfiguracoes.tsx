@@ -837,7 +837,7 @@ function DutyBoundaryConfigCard() {
           <h3 className="text-sm font-semibold text-gray-900">Regra canônica da jornada operacional</h3>
           <div className="mt-2 space-y-1 text-xs text-gray-600">
             <p><strong>Dia com voo:</strong> início = primeiro acionamento − 30 min; fim = último corte + 30 min.</p>
-            <p><strong>Dia sem voo:</strong> não existe horário padrão fabricado. A atividade/jornada real do dia anterior é informada no check-in seguinte.</p>
+            <p><strong>Dia sem voo:</strong> o tripulante informa o início previsto/declarado no check-in diário, que continua obrigatório na quinzena. Sem corte de motor, não há término automático nem duração presumida; o encerramento depende de evidência da atividade real, informada pelo fluxo de atividade sem voo.</p>
             <p><strong>Origem:</strong> Controle de Voos é a fonte primária; SIGVOOS é usado somente como fallback identificado.</p>
           </div>
         </div>

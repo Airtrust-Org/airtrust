@@ -84,6 +84,15 @@ describe('resolveCompletionExplanation — canonical precedence over stale granu
     expect(out.category).toBe('SCORE');
   });
 
+  it('never hides a real below-mastery score behind a contradictory accepted status', () => {
+    const out = resolveCompletionExplanation({
+      canonical: { ...canonicalPass, score_pct: 40, explicit_failure: false },
+      granular: granular(),
+    });
+    expect(out.registrationPending).not.toBe(true);
+    expect(out.category).toBe('SCORE');
+  });
+
   it('falls back to granular score only when canonical has no score', () => {
     const out = resolveCompletionExplanation({
       canonical: { status: 'rejected', can_finalize: false, explicit_failure: null, score_pct: null, mastery_score: null },

@@ -297,41 +297,17 @@ statements.push(
   `UPDATE treinamento_requisitos SET ativo=1,deleted_at=NULL,updated_at=datetime('now'),fundamento_tipo='REGULATORIO_DIRETO',fundamento_documento='RBAC 120; PRG-SSO-005',justificativa='Exceção individual auditada da população ARSO.' WHERE id=(SELECT MAX(r.id) FROM treinamento_requisitos r JOIN funcionarios f ON f.id=r.funcionario_id AND f.empresa_id=6 LEFT JOIN funcoes ff ON ff.id=f.funcao_id AND ff.empresa_id=6 WHERE r.empresa_id=6 AND r.qualificacao_tipo_id=${model('PPSP')} AND r.escopo='FUNCIONARIO' AND UPPER(TRIM(COALESCE(ff.nome,f.cargo,'')))=UPPER('Auxiliar de Serviços Gerais') AND r.deleted_at IS NOT NULL)`,
 );
 
-// 4) FDM-EAD é familiarização/conhecimento geral para a população auditada; designação cobre exceções.
+// 4) FDM-EAD: somente integrante formalmente designado da equipe FDM/HFDM.
+// Decisão da Gerência de Treinamento confirmada em 2026-10-05: FDM, LOSA, eDB e
+// treinamentos equivalentes de programa específico não são atribuídos por cargo amplo.
 deactivate('FDM-EAD');
-const fdmAwarenessFunctions = [
-  'Comandante',
-  'Copiloto',
-  'Mecânico',
-  'Auxiliar de Manutenção',
-  'Coordenador de Engenharia',
-  'Analista de CTM',
-  'Analista de CTM I',
-  'Auxiliar de CTM',
-  'Auxiliar de CTM I',
-  'Gerente de Operações',
-  'Assistente de Segurança Operacional',
-  'Auxiliar de QSMS',
-  'Técnico de Segurança do Trabalho',
-];
-for (const name of fdmAwarenessFunctions)
-  addFunctionRule({
-    code: 'FDM-EAD',
-    functionName: name,
-    origin: 'SGSO',
-    foundation: 'PROGRAMA_APROVADO',
-    document: 'Matriz auditada Costa do Sol; MNL-SSO-002',
-    reason:
-      'População de familiarização/conhecimento geral do programa FDM/HFDM definida pela matriz auditada.',
-  });
 addConditionalRule({
   code: 'FDM-EAD',
   condition: 'FDM_EQUIPE',
   origin: 'SGSO',
   foundation: 'DESIGNACAO',
   document: 'MNL-SSO-002',
-  reason:
-    'Exceção para integrante formal da equipe FDM/HFDM fora da população funcional já coberta pela matriz.',
+  reason: 'Aplicável somente a integrante formalmente designado para a equipe FDM/HFDM.',
 });
 
 // Funções/designações especiais.

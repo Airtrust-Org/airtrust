@@ -36,3 +36,19 @@ test('production compliance browser coverage is read-only and exercises canonica
   assert.match(guard, /mutation-method/);
   assert.doesNotMatch(spec, /request\.(post|put|patch|delete)\(/i);
 });
+
+test('production LMS course metrics match canonical compliance in admin and enrollment views', () => {
+  for (const expected of [
+    '/lms/admin/cursos',
+    '/lms/matriculas',
+    'Indicadores do treinamento',
+    'Obrigatórios:',
+    'Matriculados:',
+    'Concluídos:',
+    'Compliance:',
+    'publishedCoursesP.then(payload)',
+    'guard.assertClean()',
+  ]) {
+    assert.ok(spec.includes(expected), `Missing production LMS readonly coverage: ${expected}`);
+  }
+});

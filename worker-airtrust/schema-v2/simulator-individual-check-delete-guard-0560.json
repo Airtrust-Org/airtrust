@@ -1,0 +1,8 @@
+{
+  "changeId": "simulator-individual-check-delete-guard-0560",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0560_simulator_individual_check_delete_guard.sql",
+  "fileHash": "5fe67c81dda03681d9a73eec4cc51989bd92270e4eca6b41b1eb1028b58b9e56",
+  "planPath": "worker-airtrust/schema-v2/plans/simulator-individual-check-delete-guard-0560.md",
+  "planHash": "b00948f0821692fb322cd18dc795769d8f03b057db7af9c9b729747d9d2b1463"
+}

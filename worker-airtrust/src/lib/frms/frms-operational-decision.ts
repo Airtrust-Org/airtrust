@@ -160,7 +160,7 @@ const MOTIVO_POR_ALERTA: Record<FrmsOperationalSnapshotAlertCode, string> = {
   EFETIVIDADE_BAIXA: 'Efetividade cognitiva reduzida',
   SONO_INSUFICIENTE: 'Sono insuficiente (< 6h)',
   KSS_ALTO: 'Escala KSS elevada — sonolência reportada',
-  CHECKIN_PENDENTE: 'Check-in pendente para operação escalada',
+  CHECKIN_PENDENTE: 'Check-in diário obrigatório pendente',
   DADO_INCONSISTENTE: 'Inconsistência nos dados de jornada',
   JORNADA_SEM_FATORIZACAO: 'Jornada sem cálculo de fatorização FRMS',
   ESCALADO_SEM_JORNADA_FRMS: 'Escalado sem registro de jornada FRMS',
@@ -223,12 +223,18 @@ export function deriveFrmsOperationalDecision(
     };
   }
 
-  // A quinzena identifica quem deve ser acompanhado no período, mas não prova
-  // que haja operação naquele dia. Sem escala, jornada, atividade ou declaração
-  // de atividade, não há uma decisão de despacho a bloquear nem dados diários a
-  // cobrar. Mantemos a vigilância histórica sem transformar folga/ausência de
-  // programação em uma falsa pendência operacional.
+  // A quinzena não cria um despacho, mas exige o check-in diário mesmo sem voo.
+  // Não confundir a ausência de jornada realizada com ausência da obrigação de check-in.
   if (input.operacao_requer_decisao === false) {
+    if (input.alertas.includes('CHECKIN_PENDENTE')) {
+      return {
+        estado_operacional: 'NAO_AVALIADO',
+        motivos_principais: ['Check-in diário obrigatório pendente na quinzena ativa'],
+        acao_recomendada: 'COMPLETAR_INFORMACAO_NECESSARIA',
+        acao_recomendada_texto: 'Solicitar o check-in diário, mesmo sem voo programado.',
+        dados_complementares_ausentes: complementaresAusentes,
+      };
+    }
     return {
       estado_operacional: 'NORMAL',
       motivos_principais: [],

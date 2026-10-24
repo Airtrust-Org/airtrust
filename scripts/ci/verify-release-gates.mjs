@@ -70,6 +70,30 @@ async function githubGet(pathname, token) {
   return response.json();
 }
 
+export async function fetchAllCommitCheckRuns({ repository, sha, token, get = githubGet }) {
+  const checkRuns = [];
+  const encodedSha = encodeURIComponent(sha.toLowerCase());
+  // Busy main commits can accumulate over 100 unrelated workflow check runs.
+  // Never treat only the first page as the complete release-gate evidence.
+  for (let page = 1; page <= 100; page += 1) {
+    const payload = await get(
+      `/repos/${repository}/commits/${encodedSha}/check-runs?per_page=100&page=${page}`,
+      token,
+    );
+    if (
+      !Array.isArray(payload?.check_runs) ||
+      !Number.isSafeInteger(payload?.total_count) ||
+      payload.total_count < 0
+    ) {
+      throw new Error('RELEASE_CHECK_RUNS_UNAVAILABLE');
+    }
+    checkRuns.push(...payload.check_runs);
+    if (checkRuns.length >= payload.total_count) return checkRuns;
+    if (payload.check_runs.length === 0) throw new Error('RELEASE_CHECK_RUNS_INCOMPLETE');
+  }
+  throw new Error('RELEASE_CHECK_RUNS_PAGINATION_LIMIT');
+}
+
 export async function verifyReleaseGates({ repository, sha, token }) {
   if (!repository || !/^[^/]+\/[^/]+$/.test(repository)) {
     throw new Error('GITHUB_REPOSITORY_INVALID');
@@ -80,13 +104,13 @@ export async function verifyReleaseGates({ repository, sha, token }) {
   if (!token) throw new Error('GITHUB_TOKEN_MISSING');
 
   const encodedSha = encodeURIComponent(sha.toLowerCase());
-  const [checksPayload, statusPayload] = await Promise.all([
-    githubGet(`/repos/${repository}/commits/${encodedSha}/check-runs?per_page=100`, token),
+  const [checkRuns, statusPayload] = await Promise.all([
+    fetchAllCommitCheckRuns({ repository, sha, token }),
     githubGet(`/repos/${repository}/commits/${encodedSha}/status`, token),
   ]);
 
   return verifyReleaseGatePayloads({
-    checkRuns: checksPayload.check_runs,
+    checkRuns,
     statuses: statusPayload.statuses,
   });
 }

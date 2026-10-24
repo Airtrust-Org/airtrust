@@ -167,6 +167,15 @@ export function ModalCertificado({
     null,
   );
   const [deletandoId, setDeletandoId] = useState<number | null>(null);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const certificadosChangeRef = useRef(onCertificadosChange);
   const instrutorNome = String(qualificacao.instrutor || '').trim();
 
@@ -536,7 +545,9 @@ export function ModalCertificado({
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       toast.warning(`❌ Erro: ${msg}`);
     } finally {
-      setUploading(false);
+      // The upload path deliberately waits before refreshing data. If the user
+      // closes/navigates away, never dispatch React state after teardown.
+      if (mountedRef.current) setUploading(false);
     }
   };
 

@@ -107,6 +107,34 @@ function recordAad(storeName, id) {
   return new TextEncoder().encode(DB_NAME + ':' + storeName + ':' + id + ':v1');
 }
 
+const LEGACY_RECOVERY_PROOF_ID = 'legacy-pin-v1-recovery-proof';
+
+// Fingerprint only ciphertext and non-secret record metadata. The digest detects
+// changes in the legacy vault after a previously confirmed recovery, without PIN
+// access or exposing operational plaintext.
+async function legacyVaultFingerprint(database) {
+  const fingerprints = [];
+  for (const storeName of ['meta', ...PILOT_VAULT_STORES.filter((store) => store !== 'meta')]) {
+    const transaction = database.transaction(storeName, 'readonly');
+    const rows = await requestResult(transaction.objectStore(storeName).getAll());
+    await transactionDone(transaction);
+    for (const record of rows.sort((left, right) => String(left.id).localeCompare(String(right.id)))) {
+      const encrypted = record.ciphertext_bytes || record.ciphertext || record.wrapped_key || '';
+      const data = typeof encrypted === 'string'
+        ? new TextEncoder().encode(encrypted)
+        : new Uint8Array(encrypted);
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
+      fingerprints.push([storeName, String(record.id), record.local_revision ?? '',
+        record.updated_at ?? '', bytesToBase64(digest)].join(':'));
+    }
+  }
+  const finalDigest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(fingerprints.join('\n')),
+  );
+  return bytesToBase64(new Uint8Array(finalDigest));
+}
+
 export class PilotVault {
   constructor(database) {
     this.database = database;
@@ -119,13 +147,148 @@ export class PilotVault {
     const primaryConfig = await primaryVault.getVaultConfig();
 
     if (primaryConfig && Number(primaryConfig.version) < DEVICE_CONFIG_VERSION) {
-      // Keep every legacy encrypted record untouched. The current app uses a separate
-      // device-key vault so no legacy PIN prompt blocks the pilot workflow.
-      primaryDatabase.close();
-      return new PilotVault(await openPilotDatabase(DEVICE_DB_NAME));
+      // Never skip a PIN-encrypted vault. Copy verified records to V2 only with
+      // the operator's PIN. V1 is kept unchanged for recovery/rollback.
+      const sourceFingerprint = await legacyVaultFingerprint(primaryDatabase);
+      const current = new PilotVault(await openPilotDatabase(DEVICE_DB_NAME));
+      const proof = await current.getMetaRecord(LEGACY_RECOVERY_PROOF_ID);
+      if (proof?.source_fingerprint === sourceFingerprint && proof?.completed === true) {
+        primaryDatabase.close();
+      } else {
+        current.legacyVault = primaryVault;
+        current.legacyFingerprint = sourceFingerprint;
+      }
+      return current;
     }
 
     return primaryVault;
+  }
+
+  async getMetaRecord(id) {
+    const transaction = this.database.transaction('meta', 'readonly');
+    const record = await requestResult(transaction.objectStore('meta').get(id));
+    await transactionDone(transaction);
+    return record || null;
+  }
+
+  async recoverLegacyPin(pin) {
+    if (!this.legacyVault || !this.legacyFingerprint) {
+      throw new Error('Vault PIN antigo não está pendente de recuperação.');
+    }
+    // Wrong PIN must not provision V2, touch source records or dismiss readiness.
+    await this.legacyVault.unlock(pin);
+
+    const source = this.legacyVault;
+    const staged = [];
+    for (const storeName of PILOT_VAULT_STORES) {
+      const transaction = source.database.transaction(storeName, 'readonly');
+      const records = await requestResult(transaction.objectStore(storeName).getAll());
+      await transactionDone(transaction);
+      for (const record of records) {
+        if (storeName === 'meta' && record.id === VAULT_CONFIG_ID) continue;
+        if (storeName === 'meta') {
+          staged.push({ storeName, id: record.id, rawMeta: record });
+        } else if (record.payload_type === 'bytes-v1') {
+          const decrypted = await source.getBytes(storeName, record.id);
+          if (!decrypted) throw new Error('Anexo legado não pôde ser recuperado.');
+          staged.push({ storeName, id: record.id, bytes: decrypted.bytes,
+            localRevision: decrypted.localRevision });
+        } else {
+          const decrypted = await source.decryptRecord(storeName, record);
+          staged.push({ storeName, id: record.id, value: decrypted.value,
+            localRevision: decrypted.localRevision });
+        }
+      }
+    }
+
+    const config = await this.getVaultConfig();
+    if (!config) {
+      await this.provisionDeviceKey();
+    } else if (Number(config.version) >= DEVICE_CONFIG_VERSION && config.device_key) {
+      this.masterKey = config.device_key;
+    } else {
+      throw new Error('Vault atual inválido; recuperação bloqueada para proteger os dados.');
+    }
+
+    // Fail closed on a collision: never replace unsynced records already in V2.
+    const recordsToWrite = [];
+    for (const entry of staged) {
+      const transaction = this.database.transaction(entry.storeName, 'readonly');
+      const existing = await requestResult(transaction.objectStore(entry.storeName).get(entry.id));
+      await transactionDone(transaction);
+      if (existing) {
+        if (entry.storeName === 'meta') {
+          if (JSON.stringify(existing) !== JSON.stringify(entry.rawMeta)) {
+            throw new Error('Identidade local divergente entre vault antigo e atual; recuperação bloqueada.');
+          }
+        } else if (entry.bytes) {
+          const current = await this.getBytes(entry.storeName, entry.id);
+          const same = current?.localRevision === entry.localRevision &&
+            current?.bytes.length === entry.bytes.length &&
+            current.bytes.every((byte, index) => byte === entry.bytes[index]);
+          if (!same) throw new Error('Conflito com anexo offline existente no tablet.');
+        } else {
+          const current = await this.getJson(entry.storeName, entry.id);
+          if (current?.localRevision !== entry.localRevision ||
+              JSON.stringify(current.value) !== JSON.stringify(entry.value)) {
+            throw new Error('Conflito com rascunho/outbox já existente no tablet.');
+          }
+        }
+        continue;
+      }
+      const record = entry.storeName === 'meta'
+        ? entry.rawMeta
+        : entry.bytes
+          ? await this.encryptBytesRecord(entry.storeName, entry.id, entry.bytes, entry.localRevision)
+          : await this.encryptJsonRecord(entry.storeName, entry.id, entry.value, entry.localRevision);
+      recordsToWrite.push({ storeName: entry.storeName, record });
+    }
+
+    if (recordsToWrite.length) {
+      const stores = [...new Set(recordsToWrite.map((entry) => entry.storeName))];
+      const transaction = this.database.transaction(stores, 'readwrite');
+      for (const entry of recordsToWrite) transaction.objectStore(entry.storeName).put(entry.record);
+      await transactionDone(transaction);
+    }
+
+    // Only a complete decrypting read-back may mark the recovery as successful.
+    for (const entry of staged) {
+      if (entry.storeName === 'meta') {
+        const current = await this.getMetaRecord(entry.id);
+        if (JSON.stringify(current) !== JSON.stringify(entry.rawMeta)) {
+          throw new Error('Falha de verificação do metadado recuperado.');
+        }
+      } else if (entry.bytes) {
+        const current = await this.getBytes(entry.storeName, entry.id);
+        if (current?.localRevision !== entry.localRevision ||
+            current?.bytes.length !== entry.bytes.length ||
+            !current.bytes.every((byte, index) => byte === entry.bytes[index])) {
+          throw new Error('Falha no read-back do anexo recuperado.');
+        }
+      } else {
+        const current = await this.getJson(entry.storeName, entry.id);
+        if (current?.localRevision !== entry.localRevision ||
+            JSON.stringify(current.value) !== JSON.stringify(entry.value)) {
+          throw new Error('Falha no read-back do rascunho/outbox recuperado.');
+        }
+      }
+    }
+    const proof = { id: LEGACY_RECOVERY_PROOF_ID, completed: true,
+      source_fingerprint: this.legacyFingerprint, records_verified: staged.length,
+      completed_at: new Date().toISOString() };
+    const confirmation = this.database.transaction('meta', 'readwrite');
+    confirmation.objectStore('meta').put(proof);
+    await transactionDone(confirmation);
+    if ((await this.getMetaRecord(LEGACY_RECOVERY_PROOF_ID))?.source_fingerprint !==
+        this.legacyFingerprint) {
+      throw new Error('Confirmação da recuperação local não foi persistida.');
+    }
+
+    source.lock();
+    source.database.close();
+    this.legacyVault = null;
+    this.legacyFingerprint = null;
+    return { status: 'ready', migrated: true, recordsVerified: staged.length };
   }
 
   async isProvisioned() {
@@ -164,6 +327,7 @@ export class PilotVault {
   }
 
   async openAutomatically() {
+    if (this.legacyVault) return { status: 'legacy-pin-required', migrated: false };
     const config = await this.getVaultConfig();
     if (!config) {
       await this.provisionDeviceKey();
@@ -177,24 +341,9 @@ export class PilotVault {
   }
 
   async migrateLegacyPin(pin) {
-    const config = await this.getVaultConfig();
-    if (!config || Number(config.version) !== 1) {
-      throw new Error('Armazenamento antigo não encontrado.');
-    }
-    await this.unlock(pin);
-    const transaction = this.database.transaction('meta', 'readwrite');
-    transaction.objectStore('meta').put({
-      id: VAULT_CONFIG_ID,
-      version: DEVICE_CONFIG_VERSION,
-      cipher: 'AES-GCM-256',
-      key_protection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY',
-      device_key: this.masterKey,
-      migrated_from: 'PBKDF2_PIN_V1',
-      migrated_at: new Date().toISOString(),
-      created_at: config.created_at || new Date().toISOString(),
-    });
-    await transactionDone(transaction);
-    return { status: 'ready', migrated: true };
+    // Compatibility entrypoint: never rewrite the original PIN vault in place.
+    // The only permitted migration is a verified copy into V2.
+    return this.recoverLegacyPin(pin);
   }
 
   async getOrCreateDeviceId() {

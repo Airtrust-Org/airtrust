@@ -1,0 +1,63 @@
+name: SCORM F5 Private Source Readiness (Staging, Read Only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_F5_PRIVATE_SOURCE_READONLY'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+jobs:
+  verify-private-source:
+    name: Verify exact 40644-byte #15 source without LMS writes
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 10
+    steps:
+      - name: Validate staging-only main dispatch
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$CONFIRMATION" = AIRTRUST_F5_PRIVATE_SOURCE_READONLY
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.node-version'
+      - name: Verify exactly the canonical private F5 ZIP #15
+        env:
+          F5_ENVIRONMENT: staging
+          F5_CONFIRMATION: ${{ inputs.confirmation }}
+          F5_PACKAGE_SHA256: 6240d3d143d9f01d46daea96fb1b37e5d8f2793e5b6980cadedb7bb73b8ac83a
+          F5_ZIP_BYTES: 40644
+          F5_PRIVATE_ZIP_PATH: ${{ runner.temp }}/f5-private-candidate.zip
+          RUNNER_TEMP: ${{ runner.temp }}
+          F5_PRIVATE_ZIP_1_B64: ${{ secrets.F5_PRIVATE_ZIP_1_B64 }}
+          F5_PRIVATE_ZIP_2_B64: ${{ secrets.F5_PRIVATE_ZIP_2_B64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/staging/f5-materialize-private-zip.mjs
+          test "$(stat -c %s "$F5_PRIVATE_ZIP_PATH")" = "$F5_ZIP_BYTES"
+          python3 - "$F5_PRIVATE_ZIP_PATH" <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as z:
+              assert len(z.infolist()) == 7, 'PRIVATE_ZIP_MEMBER_COUNT_MISMATCH'
+              assert z.testzip() is None, 'PRIVATE_ZIP_CRC_ERROR'
+              assert 'imsmanifest.xml' in z.namelist(), 'SCORM_MANIFEST_MISSING'
+              assert 'airtrust-completion-manifest.json' in z.namelist(), 'COMPLETION_MANIFEST_MISSING'
+          print('SCORM_F5_PRIVATE_ZIP_STRUCTURE_PASS')
+          PY
+      - name: Clear ephemeral source even on failure
+        if: always()
+        run: rm -f "${{ runner.temp }}/f5-private-candidate.zip"

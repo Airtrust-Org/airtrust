@@ -189,7 +189,7 @@ def live_state(rows: list[dict]) -> tuple[list[dict], list[dict]]:
 
 
 def apply_rows(rows: list[dict]) -> None:
-    sql = ["PRAGMA foreign_keys=ON;", "BEGIN TRANSACTION;"]
+    sql = ["PRAGMA foreign_keys=ON;"]
     for row in rows:
         old_json = json.dumps({"nome_arquivo": row["expected_current_name"], "r2_key": row["expected_r2_key"]}, ensure_ascii=False, separators=(",", ":"))
         new_json = json.dumps({"nome_arquivo": row["new_name"], "r2_key": row["expected_r2_key"], "reason": row["reason"]}, ensure_ascii=False, separators=(",", ":"))
@@ -209,7 +209,6 @@ def apply_rows(rows: list[dict]) -> None:
             f"AND NOT EXISTS (SELECT 1 FROM audit_logs WHERE empresa_id={EMPRESA_ID} AND action={sql_text(AUDIT_ACTION)} "
             f"AND entity_type='documentos' AND entity_id={row['documento_id']});"
         )
-    sql.append("COMMIT;")
     with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False, encoding="utf-8") as handle:
         handle.write("\n".join(sql) + "\n")
         path = Path(handle.name)

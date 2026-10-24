@@ -561,8 +561,11 @@ function resolveDecisaoFromStatus(
   status: FrmsFortnightStatus,
   natureza: FrmsFortnightNaturezaDado,
 ): FrmsFortnightDecisaoCodigo {
+  // Um dia futuro é projeção, mesmo quando não há pendências vencidas;
+  // nunca apresentá-lo como situação consolidada.
+  if (natureza === 'PROJECAO') return 'ALERTA';
   if (status === 'OK') return 'INFORMA';
-  if (natureza === 'PROJECAO' || natureza === 'CHECKIN_SUBJETIVO') return 'ALERTA';
+  if (natureza === 'CHECKIN_SUBJETIVO') return 'ALERTA';
   if (status === 'CRITICO') return 'EXIGE_OVERRIDE';
   return 'ALERTA';
 }
@@ -703,11 +706,27 @@ export function buildFrmsFortnightIndicatorMap(
     if (!periodItems.has(periodKey)) {
       periodItems.set(periodKey, []);
     }
-    periodItems.get(periodKey)!.push(item);
     if (!periodAnchorsByEmployee.has(anchor.funcionario_id)) {
       periodAnchorsByEmployee.set(anchor.funcionario_id, []);
     }
     periodAnchorsByEmployee.get(anchor.funcionario_id)!.push(anchor);
+  }
+
+  // Um dia da quinzena sem fatorização pode não ter âncora própria.
+  // Ainda assim deve entrar no histórico do período quando um dia vizinho
+  // comprova o mesmo período embarcado. Sem evidência, não fabricamos vínculo.
+  for (const item of input.items) {
+    const directAnchor = resolvePeriodAnchor(item);
+    const anchor = directAnchor ??
+      (periodAnchorsByEmployee.get(item.funcionario_id) || []).find(
+        (candidate) =>
+          item.data_operacional >= candidate.periodo_inicio &&
+          item.data_operacional <= candidate.periodo_fim,
+      );
+    if (!anchor) continue;
+    const periodKey = `${anchor.funcionario_id}::${anchor.periodo_inicio}::${anchor.periodo_fim}`;
+    if (!periodItems.has(periodKey)) periodItems.set(periodKey, []);
+    periodItems.get(periodKey)!.push(item);
   }
 
   for (const item of input.items) {
@@ -738,7 +757,10 @@ export function buildFrmsFortnightIndicatorMap(
       periodItems.get(periodKey)?.filter(
         (entry) =>
           entry.data_operacional >= anchor.periodo_inicio &&
-          entry.data_operacional <= anchor.periodo_fim,
+          // Acumulado até a data analisada, nunca pendências de dias futuros.
+          entry.data_operacional <= anchor.periodo_fim &&
+          entry.data_operacional <= item.data_operacional &&
+          entry.data_operacional <= today,
       ) ?? [];
 
     const dutyTimePeriodoMin = scoped.reduce(

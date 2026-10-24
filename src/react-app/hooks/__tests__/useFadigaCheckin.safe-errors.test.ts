@@ -18,6 +18,17 @@ describe('flight fatigue visible errors', () => {
     }
   });
 
+  it('informa que a gravação ocorreu quando somente o pós-processamento falhou', () => {
+    const message = safeFadigaVisibleErrorMessage(
+      'daily-checkin-submit',
+      new Error('FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED'),
+    );
+    expect(message).toMatch(/check-in foi gravado/i);
+    expect(message).toMatch(/não envie novamente/i);
+    expect(message).toMatch(/coordenação/i);
+    expect(message).not.toContain('POST_PROCESSING_FAILED');
+  });
+
   it('mantém um timeout operacional compreensível sem detalhe técnico', () => {
     expect(TEAM_PANEL_TIMEOUT_MESSAGE).toMatch(/demorou além do esperado/i);
     expect(TEAM_PANEL_TIMEOUT_MESSAGE).not.toMatch(/SQLITE|worker\.ts|stack/i);

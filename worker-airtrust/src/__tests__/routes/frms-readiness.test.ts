@@ -41,6 +41,7 @@ type MockStatement = {
 function createDb(
   checkin: { id: string; kss_score: number; horas_sono: number } | null = null,
   readinessRows: Array<Record<string, unknown>> = [],
+  recoveryReadError?: Error,
 ) {
   const statements: Array<{ sql: string; binds: unknown[] }> = [];
   const db = {
@@ -60,6 +61,12 @@ function createDb(
             return { id: 70 } as T;
           }
           if (normalized.includes('FROM frms_fadiga_checkin')) return checkin as T | null;
+          // No prior recovery activity is normal. Do not simulate an unexpected
+          // SQL failure just because the readiness route rechecks that date.
+          if (normalized.includes('FROM frms_recovery_activity_day')) {
+            if (recoveryReadError) throw recoveryReadError;
+            return null;
+          }
           if (normalized.includes('FROM frms_readiness_assessment')) return readinessRows[0] as T | null;
           throw new Error(`Unexpected read query: ${normalized}`);
         },
@@ -183,6 +190,27 @@ describe('FRMS readiness route', () => {
         referenceDate: '2026-08-27',
       }),
     );
+  });
+
+  it('fails closed on a real recovery database error after readiness persistence', async () => {
+    const { db } = createDb(
+      { id: 'checkin-7-70', kss_score: 8, horas_sono: 4.5 },
+      [],
+      new Error('D1_ERROR: database is locked'),
+    );
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference_date: '2026-08-27', duration_ms: 60000, trials: validTrials }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({ success: false, error: 'readiness_persistence_failed' });
+    expect(persistReadinessAssessmentMock).toHaveBeenCalledTimes(1);
   });
 
   it('rejects malformed trial payloads before any readiness persistence', async () => {

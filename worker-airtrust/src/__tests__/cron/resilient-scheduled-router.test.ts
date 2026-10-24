@@ -41,6 +41,7 @@ describe('resilient scheduled router', () => {
       runDailyAlerts: false,
       runComplianceReports: true,
       runEadRenewal: true,
+      runComplianceRoster: true,
       runDailyFrms: false,
       runSigvoosFrms: true,
       runDomainEvents: true,
@@ -51,6 +52,7 @@ describe('resilient scheduled router', () => {
     const daily = getResilientCronPlan('0 8 * * *', atEightUtc);
     expect(daily.runDailyAlerts).toBe(true);
     expect(daily.runComplianceReports).toBe(true);
+    expect(daily.runComplianceRoster).toBe(true);
     expect(daily.runDailyFrms).toBe(true);
     expect(daily.runSigvoosFrms).toBe(false);
     expect(daily.runDomainEvents).toBe(false);
@@ -108,6 +110,7 @@ describe('resilient scheduled router', () => {
     expect(router).toContain('runDomainEventDispatchJob(env.DB, logger)');
     expect(router).toContain("await runStep('training-compliance-snapshots'");
     expect(router).toContain("await runStep('training-compliance-reports'");
+    expect(router).toContain("await runStep('lms-compliance-roster'");
     expect(router).toContain("await runStep('training-alerts'");
     expect(router).not.toContain("await runStep('lms-reminders'");
     expect(router).toContain("await runStep('sigvoos-frms'");

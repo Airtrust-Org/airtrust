@@ -8,7 +8,9 @@ describe('assistente home — escopo de funcionário e tenant', () => {
   it('usa o employee-sector access em todo contexto organizacional', () => {
     expect(source).toContain('const access = await getEmployeeSectorAccess(c, empresaId)');
     expect(source).toContain('getDashboardMetrics(c.env.DB, empresaId, access)');
-    expect(source).toContain('getComplianceScore(c.env.DB, empresaId, access)');
+    expect(source).toContain('buildTrainingComplianceSnapshot(c.env.DB, empresaId, access)');
+    expect(source).toContain('getQualificationComplianceSummary(c.env.DB, empresaId, access)');
+    expect(source).not.toContain('getComplianceScore(c.env.DB, empresaId, access)');
     expect(source).toContain('getDashboardAlerts(c.env.DB, empresaId, access)');
     expect(source).toContain('getAtividadesRecentes(c.env.DB, empresaId, access)');
   });

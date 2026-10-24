@@ -69,7 +69,7 @@ const {
   isPilotOfflineSyncEnabled: vi.fn(() => false),
   assertOfflineSyncCommandHash: vi.fn(async () => undefined),
   parseOfflineSyncBatch: vi.fn(),
-  applyPilotOfflineSnapshotCommand: vi.fn(async ({ command }: any) => ({
+  applyPilotOfflineSnapshotCommand: vi.fn(async ({ command }: any): Promise<import('../../services/controle-voos/pilot-offline-sync').PilotOfflineSyncCommandResult> => ({
     client_operation_id: command.client_operation_id,
     status: 'accepted',
     server_received_at: '2026-09-09T20:00:00.000Z',
@@ -136,6 +136,8 @@ vi.mock('../../services/controle-voos/pilot-offline-sync-apply', () => ({
 
 import pilotOfflineRoutes from '../../routes/controle-voos-pilot-offline';
 
+const documentEvents: Array<{ id: number; metadata_json: string; created_at: string }> = [];
+
 function statementFor(sql: string) {
   const normalized = sql.replace(/\s+/g, ' ').trim();
   const statement: any = {
@@ -145,6 +147,7 @@ function statementFor(sql: string) {
       return statement;
     },
     async all() {
+      if (normalized.includes('FROM cv_voo_eventos')) return { results: documentEvents };
       if (normalized.includes('FROM cv_voo_tripulantes')) {
         return {
           results: [
@@ -326,6 +329,7 @@ function createEnv() {
 describe('Pilot offline package', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    documentEvents.length = 0;
     getFlightOrThrow.mockResolvedValue({
       id: 42,
       empresa_id: 7,
@@ -528,6 +532,49 @@ describe('Pilot offline package', () => {
     expect(metDossier.integrity_state).toBe('EVIDENCE_UNAVAILABLE');
   });
 
+  it('inclui MTAs de embarque/desembarque e varios outros anexos na preparação offline', async () => {
+    const attachment = (id: number, type: string, fileName: string) => ({
+      id,
+      created_at: '2026-10-09T12:00:00Z',
+      metadata_json: JSON.stringify({
+        action: 'flight_attachment',
+        document_type: type,
+        file_name: fileName,
+        label: type,
+        content_type: 'application/pdf',
+        size: 512,
+        content_hash: String(id).padStart(64, '0'),
+        r2_key: 'controle-voos/7/42/documentos/' + type.toLowerCase() + '/secret.pdf',
+      }),
+    });
+    documentEvents.push(
+      attachment(25, 'OUTROS', 'briefing.pdf'),
+      attachment(24, 'OUTROS', 'mapa.pdf'),
+      attachment(23, 'MTA_DESEMBARQUE', 'mta-desembarque.pdf'),
+      attachment(22, 'MTA_EMBARQUE', 'mta-embarque.pdf'),
+      attachment(21, 'PLANO_VOO', 'planejamento.pdf'),
+      attachment(20, 'WEATHER_REPORT', 'weather.pdf'),
+      attachment(19, 'MTA_EMBARQUE', 'mta-antigo.pdf'),
+    );
+    const response = await createApp().request(
+      'http://localhost/api/controle-voos/voos/42/offline-package',
+      { headers: { Authorization: 'Bearer test' } },
+      createEnv(),
+    );
+    expect(response.status).toBe(200);
+    const { data } = await response.json() as any;
+    const docs = data.workspace.planning.documentos;
+    expect(docs.map((doc: any) => doc.type)).toEqual([
+      'WEATHER_REPORT', 'PLANO_VOO', 'MTA_EMBARQUE', 'MTA_DESEMBARQUE', 'OUTROS', 'OUTROS',
+    ]);
+    expect(docs.map((doc: any) => doc.file_name)).toContain('briefing.pdf');
+    expect(docs.map((doc: any) => doc.file_name)).not.toContain('mta-antigo.pdf');
+    expect(JSON.stringify(data)).not.toContain('secret.pdf');
+    expect(data.source_revision.documents).toHaveLength(6);
+    expect(data.workspace.dossier.entries.filter((entry: any) => entry.category === 'MTA')).toHaveLength(2);
+    expect(data.workspace.dossier.entries.filter((entry: any) => entry.category === 'outros')).toHaveLength(2);
+  });
+
   it('anuncia sync somente quando flag e schema 0488 estao prontos', async () => {
     isPilotOfflineSyncEnabled.mockReturnValueOnce(true);
     isOfflineSyncReceiptSchemaReady.mockResolvedValueOnce(true);
@@ -675,6 +722,92 @@ describe('Pilot offline package', () => {
       sync_contract: 'rdv_snapshot_upsert_v1',
       regulated_edb: false,
     });
+  });
+
+  it('retries the same HTTP operation after its committed response is lost, without duplicating canonical effects', async () => {
+    // The real route, authentication, crew and lease checks run here. Only the
+    // D1-backed apply/receipt store is emulated; this is not a staging or
+    // physical-device acceptance test.
+    const { replayReceipt } = await vi.importActual<
+      typeof import('../../services/controle-voos/pilot-offline-sync')
+    >('../../services/controle-voos/pilot-offline-sync');
+    const persistedReceipts = new Map<string, any>();
+    let canonicalMutations = 0;
+    const operationId = '123e4567-e89b-42d3-a456-426614174000';
+
+    applyPilotOfflineSnapshotCommand.mockImplementation(async ({ command }: any) => {
+      const prior = persistedReceipts.get(command.client_operation_id);
+      if (prior) return replayReceipt(prior, command);
+      canonicalMutations += 1;
+      const receipt = {
+        id: 1,
+        empresa_id: command.tenant_id,
+        client_operation_id: command.client_operation_id,
+        voo_id: command.flight_id,
+        usuario_id: command.user_id,
+        funcionario_id: 77,
+        device_id: command.device_id,
+        command_type: command.command_type,
+        entity_type: command.entity_type,
+        canonical_entity_id: '90',
+        payload_hash: command.payload_hash,
+        base_server_version: command.base_server_version,
+        server_entity_version: 4,
+        result_status: 'accepted' as const,
+        result_code: null,
+        result_json: null,
+        received_at: '2026-09-09T20:00:00.000Z',
+        updated_at: '2026-09-09T20:00:00.000Z',
+      };
+      persistedReceipts.set(command.client_operation_id, receipt);
+      return {
+        client_operation_id: command.client_operation_id,
+        status: 'accepted',
+        server_received_at: receipt.received_at,
+        server_entity_version: 4,
+        canonical_entity_id: '90',
+        error_code: null,
+        conflict: null,
+      };
+    });
+
+    const app = createApp();
+    const env = createEnv();
+    const sendSameOutboxCommand = () => app.request(
+      'http://localhost/api/controle-voos/pilot/offline-sync',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer test', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commands: [{}] }),
+      },
+      env,
+    );
+
+    // Server commits and persists a receipt, but a transport failure prevents
+    // the client from reading the first HTTP 200 response.
+    async function simulatePostCommitResponseLoss() {
+      const unobserved = await sendSameOutboxCommand();
+      expect(unobserved.status).toBe(200);
+      throw new TypeError('Failed to fetch: response lost after server commit');
+    }
+    await expect(simulatePostCommitResponseLoss()).rejects.toThrow('response lost');
+    expect(canonicalMutations).toBe(1);
+    expect(persistedReceipts.get(operationId)?.result_status).toBe('accepted');
+
+    // A pending outbox entry resends the identical client_operation_id/hash.
+    const retryResponse = await sendSameOutboxCommand();
+    expect(retryResponse.status).toBe(200);
+    const retryBody = (await retryResponse.json()) as any;
+    expect(retryBody.data.results).toHaveLength(1);
+    expect(retryBody.data.results[0]).toMatchObject({
+      client_operation_id: operationId,
+      status: 'already_accepted',
+      server_entity_version: 4,
+      canonical_entity_id: '90',
+    });
+    expect(canonicalMutations).toBe(1);
+    expect(persistedReceipts.size).toBe(1);
+    expect(verifyPilotOfflineLeaseEnvelope).toHaveBeenCalledTimes(2);
   });
 
   it('nao aplica nenhum comando se o lote contiver contexto diferente do usuario autenticado', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSigvoosOperationalHealth } from '../FrmsSourcePolicyBanner';
+import { resolveSigvoosOperationalHealth, buildBannerCopy } from '../FrmsSourcePolicyBanner';
 
 const configured = {
   username: 'configured-user',
@@ -96,5 +96,29 @@ describe('resolveSigvoosOperationalHealth', () => {
     });
 
     expect(health.status).toBe('UNAVAILABLE');
+  });
+});
+
+describe('proveniência SIGVOOS no FRMS', () => {
+  it('não trata a fonte alternativa como fonte canônica nem comprova uso no cálculo', () => {
+    const health = resolveSigvoosOperationalHealth({
+      config: configured, latestEvent: { status: 'SUCESSO' },
+      now: new Date('2026-08-26T22:00:00Z'),
+    });
+    const copy = buildBannerCopy(health);
+    expect(copy.title).toContain('fonte alternativa');
+    expect(copy.message).toContain('fallback do Controle de Voos');
+    expect(copy.message).toContain('não confirma que SIGVOOS foi usado');
+    expect(copy.message).not.toContain('Fonte operacional canônica ativa');
+    expect(copy.message).toContain('(Brasília)');
+  });
+
+  it('não sinaliza saudável sem evidência temporal de sincronização', () => {
+    const health = resolveSigvoosOperationalHealth({
+      config: { ...configured, last_sync_at: null },
+      now: new Date('2026-08-26T22:00:00Z'),
+    });
+    expect(health.status).toBe('UNAVAILABLE');
+    expect(buildBannerCopy(health).message).toContain('Não há confirmação suficiente');
   });
 });

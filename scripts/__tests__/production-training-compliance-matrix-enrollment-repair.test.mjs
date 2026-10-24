@@ -1,0 +1,147 @@
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+const script = readFileSync('scripts/production/training-compliance-matrix-enrollment-repair.mjs', 'utf8');
+const workflow = readFileSync('.github/workflows/production-training-compliance-matrix-enrollment-repair.yml', 'utf8');
+
+test('repair derives only mandatory EAD requirements from the current matrix', () => {
+  assert.match(script, /r\.obrigatoriedade='OBRIGATORIA'/);
+  assert.match(script, /IN \('EAD','TREINAMENTO EAD'\)/);
+  assert.match(script, /ROW_NUMBER\(\) OVER/);
+  assert.match(script, /prioridade DESC,regra_id DESC/);
+});
+
+
+test('active course mapping ignores an unpublished parallel draft', () => {
+  const match = script.match(/active_courses AS \(([^]*?)\n  \)/);
+  assert.ok(match, 'active_courses CTE absent');
+  assert.match(match[1], /deleted_at IS NULL AND COALESCE\(ativo,1\)=1\s+AND publicado=1\s+AND qualificacao_tipo_id IS NOT NULL/);
+  assert.match(match[1], /COUNT\(\*\) n_courses,MIN\(id\) course_id/);
+});
+
+test('missing enrollment target is organizational-role only and defers designation-specific training', () => {
+  assert.match(script, /enrollment_target AS/);
+  assert.match(script, /condicao_id IS NULL/);
+  assert.match(script, /escopo IN \('EMPRESA','SETOR','FUNCAO','SETOR_FUNCAO'\)/);
+  assert.ok(script.includes("UPPER(TRIM(COALESCE(fundamento_tipo,'')))<>'DESIGNACAO'"));
+  for (const code of ['I', 'L', 'FDM-EAD', 'GATEKEEPER', 'LOSA', 'PPSP_SUP', 'E8', 'NR-05', 'BRIGADA_INCENDIO', 'PRIMEIROS_SOCORROS', 'NR-12']) {
+    assert.match(script, new RegExp(`'${code.replaceAll('-', '\-')}'`));
+  }
+  assert.match(script, /FROM enrollment_target e/);
+  assert.match(script, /LEFT JOIN mandatory_applicable e ON e\.funcionario_id=a\.funcionario_id/);
+});
+
+
+test('repair uses canonical compliance evidence and expiry-only enrollment before enrolling', () => {
+  assert.match(script, /RENEWAL_WINDOW_DAYS = 0/);
+  assert.match(script, /\/api\/compliance-treinamentos\/funcionarios\/\$\{funcionarioId\}/);
+  assert.match(script, /status === 'CONFORME'/);
+  assert.match(script, /parsed <= RENEWAL_WINDOW_DAYS/);
+  assert.match(script, /CANONICAL_REQUIREMENT_AMBIGUOUS/);
+  assert.match(script, /CANONICAL_REQUIREMENT_MISSING/);
+  assert.match(script, /CANONICAL_FUTURE_EVIDENCE_REQUIRES_WORKER_FIX/);
+});
+
+test('completed historical evidence requiring validation is never automatically rematriculated', () => {
+  assert.match(script, /requirement\?\.evidencia_pendente_validacao === true/);
+  assert.match(script, /if \(!needsEnrollment\)/);
+});
+
+test('completed LMS with incompatible required modality is manual review, not duplicate enrollment', () => {
+  assert.match(script, /requirementNeedsManualModalityCompletion/);
+  assert.match(script, /evidencia_modalidade_incompativel === true/);
+  assert.match(script, /isCompletedEnrollmentStatus\(requirement\?\.lms_status\)/);
+  assert.match(script, /modality_manual_review_count/);
+});
+
+test('repair cancels only provably unstarted redundant enrollments satisfied by valid evidence', () => {
+  assert.match(script, /requirementSuppressesEnrollment/);
+  assert.match(script, /isProvablyUnstartedEnrollment/);
+  assert.match(script, /LMS_MATRICULA_REDUNDANT_VALID_EVIDENCE/);
+  assert.match(script, /requirement_satisfied_by_valid_evidence/);
+  assert.match(script, /redundant_manual_review_count/);
+  assert.match(script, /REDUNDANT_CANDIDATE_SET_CHANGED/);
+  assert.match(script, /cancelled_redundant_valid_evidence_enrollments/);
+  assert.match(script, /POST_REDUNDANT_VALID_EVIDENCE_ENROLLMENTS/);
+});
+
+test('production enrollment repair uses small API batches to stay within Worker request timeouts', () => {
+  assert.match(script, /employeeChunk of chunk\(\[\.\.\.new Set\(employeeIds\)\]\.sort\(\(a, b\) => a - b\), 10\)/);
+});
+
+test('production enrollment repair retries only timeout-like failures for idempotent no-email batch enrollment', () => {
+  assert.match(script, /retryTimeouts = retry\.retryTimeouts === true/);
+  assert.match(script, /name === 'TimeoutError' \|\| name === 'AbortError'/);
+  assert.match(script, /retryTimeouts: true, maxAttempts: 5, timeoutMs: 30000/);
+  assert.match(script, /enviar_convite_email: false/);
+});
+
+test('repair never sends enrollment e-mail or calls invitation endpoint', () => {
+  assert.match(script, /enviar_convite_email: false/);
+  assert.doesNotMatch(script, /\/api\/lms\/matriculas\/convites/);
+  assert.doesNotMatch(script, /enviar_convite_email:\s*true/);
+});
+
+test('global wrong enrollment audit covers all active employees and preserves explicit standalone decisions', () => {
+  assert.match(script, /treinamento_matricula_reconciliacoes/);
+  assert.match(script, /MANTER_AVULSA/);
+  assert.doesNotMatch(script, /m\.observacoes=\$\{JSON\.stringify\(PREVIOUS_BATCH_MARKER\)\}/);
+  assert.doesNotMatch(script, /WRONG_ENROLLMENTS_WITH_EVIDENCE_REQUIRE_MANUAL_REVIEW/);
+  assert.match(script, /lms_progresso_scorm/);
+  assert.match(script, /lms_xapi_statements/);
+  assert.match(script, /lms_completion_diagnostics_snapshots/);
+  assert.match(script, /qualificacoes_historico/);
+});
+
+test('non-EAD mandatory and historic/progress LMS records never become automated cancellations', () => {
+  assert.match(script, /mandatory_applicable AS/);
+  assert.match(script, /wrongEligible = topology\.wrongRows\.filter\(isProvablyUnstartedEnrollment\)/);
+  assert.match(script, /wrong_rows: wrongEligible/);
+  assert.match(script, /wrong_manual_review_count: unsafeWrong\.length/);
+  assert.match(script, /WRONG_ENROLLMENT_UNSTARTED_GUARD_CHANGED/);
+  assert.match(script, /recheck_wrong_unstarted_guard/);
+  assert.match(script, /unsafe_wrong_count: state\.unsafe_wrong_count/);
+  assert.match(script, /wrong_with_evidence_count: state\.unsafe_wrong_count/);
+  assert.match(script, /historical_evidence_preserved: true/);
+  assert.doesNotMatch(script, /SET status='CANCELADO',deleted_at=datetime\('now'\)/);
+  assert.match(script, /SET status='CANCELADO',updated_at=datetime\('now'\)/);
+  assert.match(script, /summary\.cancelled_wrong_with_evidence_enrollments = 0/);
+  assert.doesNotMatch(script, /summary\.cancelled_wrong_with_evidence_enrollments = before\.unsafe_wrong_count/);
+});
+
+test('workflow is exact-SHA, dry-run-first and recovery guarded', () => {
+  assert.match(workflow, /options: \[dry-run, apply\]/);
+  assert.match(workflow, /reviewed_dry_run_run_id/);
+  assert.match(workflow, /Verify official release gates on exact SHA/);
+  assert.match(workflow, /d1 time-travel info airtrust-db --env production/);
+  assert.match(workflow, /CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+  assert.match(workflow, /PROD_SMOKE_EMAIL \|\| secrets\.QA_EXAMINER_ADMIN_EMAIL/);
+  assert.match(workflow, /production-training-compliance-matrix-enrollment-repair-dry-run-/);
+  assert.match(workflow, /for key in missing wrong no_course redundant/);
+  assert.match(workflow, /APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_AND_REDUNDANT_VALID_EVIDENCE_NO_EMAIL/);
+  assert.doesNotMatch(workflow, /REVIEWED_UNSAFE_WRONG_NOT_ZERO/);
+});
+
+test('automatic enrollment requires explicit per-rule auto_matricular_ead opt-in', () => {
+  assert.match(script, /COALESCE\(tr\.auto_matricular_ead, 0\) auto_matricular_ead/);
+  assert.match(script, /e\.auto_matricular_ead/);
+  assert.match(script, /Number\(row\.auto_matricular_ead\) !== 1/);
+  assert.match(script, /policy_manual_review_count/);
+  assert.match(script, /policyManualReviewCount \+= 1/);
+});
+
+test('production repair never creates a placeholder or silently enrolls when no published course exists', () => {
+  assert.doesNotMatch(script, /ensureRequiredEadCourses/);
+  assert.doesNotMatch(script, /placeholder criado/i);
+  assert.doesNotMatch(script, /Placeholder EAD criado/);
+  assert.match(script, /if \(before\.no_course_count !== 0\) fail\('PUBLISHED_EAD_CONTENT_MISSING_MANUAL_REVIEW'\)/);
+  const noContentGuardIndex = script.indexOf("if (before.no_course_count !== 0) fail('PUBLISHED_EAD_CONTENT_MISSING_MANUAL_REVIEW')");
+  const mutationIndex = script.indexOf('const enrollmentResult = await enrollMissingPairs(token)');
+  assert.ok(noContentGuardIndex > 0 && noContentGuardIndex < mutationIndex);
+});
+
+
+test('pending independent validation is always reviewed manually without enrollment', () => {
+  assert.match(script, /status === 'EM_ANDAMENTO' \|\| status === 'PENDENTE_VALIDACAO'/);
+});

@@ -162,7 +162,14 @@ if [[ "$PPTX_STATUS" == "CONCLUIDO" || -n "$PPTX_HISTORICO_ID" ]]; then
   exit 1
 fi
 
-echo "[smoke:lms] OK — qualifying PDF/PPTX remain unqualified without server evidence"
+echo "[smoke:lms] Running positive SCORM completion/qualification smoke"
+AIRTRUST_LOCAL_DB_PATH="$DB_PATH" \
+  AIRTRUST_LOCAL_API_BASE="$API_BASE" \
+  AIRTRUST_LOCAL_LMS_EMAIL="$LOGIN_EMAIL" \
+  AIRTRUST_LOCAL_LMS_PASSWORD="$LOGIN_PASSWORD" \
+  bash "$ROOT_DIR/scripts/smoke-lms-scorm-completion-local.sh"
+
+echo "[smoke:lms] OK — PDF/PPTX fail closed without evidence and SCORM completes canonically"
 echo "PDF_CURSO_ID=$PDF_CURSO_ID"
 echo "PDF_MATRICULA_ID=$PDF_MATRICULA_ID"
 echo "PPTX_CURSO_ID=$PPTX_CURSO_ID"

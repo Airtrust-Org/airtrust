@@ -182,7 +182,7 @@ describe('LMS cursos domínio-agnósticos', () => {
     expect(response.status).toBe(500);
   });
 
-  it('não transforma o carve-out de exclusão em bypass genérico de escrita para admin', async () => {
+  it('administrador do tenant também pode atualizar curso operacional classificado', async () => {
     const db = makeDb();
     const app = new Hono<{ Bindings: Env }>();
     app.onError(errorHandler);
@@ -198,7 +198,7 @@ describe('LMS cursos domínio-agnósticos', () => {
       DB: db as unknown as D1Database,
     } as unknown as Env);
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
   });
 
   it('preserva fail-closed para históricos e certificados sem classificação', async () => {

@@ -93,6 +93,7 @@ export interface QualificacaoTipoDTO {
   carga_horaria_recorrente?: number | null;
   validade?: number | null;
   observacoes?: string | null;
+  referencias?: string | null;
   ativo?: number | boolean | null;
   is_check?: number | boolean | null;
   vencimento_fim_mes?: number | null;

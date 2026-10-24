@@ -29,6 +29,7 @@ export interface CheckinFormData {
   wake_time?: string;
   hora_apresentacao?: string;
   horas_sono_24h?: number;
+  oportunidade_sono_horas_24h?: number;
   horas_sono_48h?: number;
   qualidade_sono?: number;
   kss_score?: number;
@@ -145,6 +146,9 @@ export function safeFadigaVisibleErrorMessage(
     case 'team-checkins-load':
       return 'Não foi possível carregar os check-ins da equipe.';
     case 'daily-checkin-submit':
+      if (_technicalDetail instanceof Error && _technicalDetail.message === 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED') {
+        return 'O check-in foi gravado, mas houve falha nas atualizações operacionais. Não envie novamente; informe a coordenação para verificar o processamento e os alertas.';
+      }
       return 'Não foi possível registrar o check-in de fadiga. Tente novamente.';
   }
 }
@@ -279,6 +283,12 @@ export function useSubmitCheckin() {
           body: JSON.stringify(data),
         });
       } catch (error) {
+        if (error instanceof Error && error.message === 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED') {
+          // D1 confirmed the submission: refresh the persisted state, do not suggest resubmission.
+          void queryClient.invalidateQueries({ queryKey: ['fadiga-checkin-hoje'] });
+          void queryClient.invalidateQueries({ queryKey: ['fadiga-historico'] });
+          void queryClient.invalidateQueries({ queryKey: ['fadiga-painel'] });
+        }
         console.error('[FRMS fadiga] Falha ao registrar check-in diário', error);
         throw new Error(safeFadigaVisibleErrorMessage('daily-checkin-submit', error));
       }

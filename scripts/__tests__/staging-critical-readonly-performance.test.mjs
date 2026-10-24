@@ -36,3 +36,17 @@ test('official staging full smoke publishes the read-only performance baseline',
   assert.match(workflow, /PERF_BASELINE\(_TOTAL\)\?/);
   assert.match(workflow, /GITHUB_STEP_SUMMARY/);
 });
+
+test('standalone staging performance keeps strict provenance and secrets out of logs', () => {
+  const wf = readFileSync('.github/workflows/staging-readonly-performance.yml', 'utf8');
+  const perf = readFileSync('scripts/staging/qa-critical-readonly-performance.mjs', 'utf8');
+  assert.match(wf, /refs\/heads\/main/);
+  assert.match(wf, /verify-release-gates\.mjs/);
+  assert.match(wf, /STAGING_WORKER_SHA_MISMATCH/);
+  assert.match(wf, /assertLiveFrontendShaFromOrigin/);
+  assert.match(wf, /PERF_ATTEMPTS/);
+  assert.match(wf, /GITHUB_STEP_SUMMARY/);
+  assert.doesNotMatch(wf, /api\.airtrust\.online/);
+  assert.match(perf, /STAGING_READONLY_NON_JSON_RESPONSE_HTTP_/);
+  assert.doesNotMatch(perf, /\$\{url\} retornou corpo nao JSON/);
+});

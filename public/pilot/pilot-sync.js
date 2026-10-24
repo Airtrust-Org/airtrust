@@ -4,6 +4,7 @@ import {
   parseInteger,
   parseNumber,
   payloadToKg,
+  requireStableFuelingIdentity,
 } from '/pilot/pilot-rdv-draft.js';
 
 export const PILOT_SYNC_COMMAND_TYPE = 'rdv_snapshot_upsert_v1';
@@ -91,10 +92,8 @@ function rdvPayload(form) {
 }
 
 function fuelingPayload(fueling, flightDate) {
-  const time = optionalText(fueling?.hora);
   return {
-    client_local_id: optionalText(fueling?.local_id) || crypto.randomUUID(),
-    data_hora: time ? fromInputDateTime(time, flightDate) : new Date().toISOString(),
+    ...requireStableFuelingIdentity(fueling, flightDate),
     etapa_numero: parseInteger(fueling?.etapa_numero),
     empresa_abastecimento_codigo: optionalText(fueling?.empresa_abastecimento_codigo)?.toUpperCase() || null,
     numero_nota: optionalText(fueling?.numero_nota),
@@ -219,6 +218,12 @@ export async function buildOfflineSyncCommand({
           justificativa_codigo: optionalText(item?.justificativa_codigo)?.toUpperCase() || null,
           minutos: parseInteger(item?.minutos),
           observacao: optionalText(item?.observacao),
+        })),
+      removed_stages: (Array.isArray(rdvDraft.removed_stages) ? rdvDraft.removed_stages : [])
+        .map((stage) => ({
+          source_stage_id: Number(stage.source_stage_id),
+          source_stage_updated_at: String(stage.source_stage_updated_at),
+          numero_etapa: Number(stage.numero_etapa),
         })),
       stages: stageDrafts
         .slice()

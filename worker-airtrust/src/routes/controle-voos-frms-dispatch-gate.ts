@@ -1,28 +1,14 @@
 /**
- * Painel operacional da Coordenação (Controle Operacional FRMS / Gate de
- * Despacho V1) e o guard backend que bloqueia `POST /voos/:id/status`
- * quando a transição candidata é `planejado -> liberado_operacionalmente`
- * e o gate de despacho nao libera.
- *
- * Deliberadamente um arquivo separado de `routes/controle-voos.ts` (que
- * mantém um guard de arquitetura proibindo referências a FRMS/MRO/etc —
- * ver `nao referencia dominios externos fora do escopo da fase` em
- * `__tests__/routes/controle-voos.test.ts`). O guard de transição nao é
- * montado como sub-rota Hono (não há como interceptar uma rota já
- * definida em outro arquivo por prefixo) — é registrado em `index.ts`
- * como middleware global no path exato `/api/controle-voos/voos/:id/status`,
- * ANTES do mount de `controle-voos.ts`, para rodar antes do handler real.
- *
- * Protegido pela MESMA capability canônica já usada pela fila/alertas da
- * Coordenação (`voos.rdv.visualizar_todos`, ver
- * `services/controle-voos/rdv-workflow.ts`) — não é um role paralelo.
+ * Painel consultivo FRMS da Coordenação para voos programados.
+ * Os alertas FRMS nao bloqueiam POST /voos/:id/status: a transicao continua
+ * sob RBAC, tenant, versao e regras proprias do Controle de Voos.
+ * Este endpoint mantem somente dados operacionais sanitizados.
  */
 import { Hono } from 'hono';
-import type { MiddlewareHandler } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import { getEmpresaIdSafe, getFlightOrThrow } from '../repositories/controle-voos/rdv-repository';
+import { getEmpresaIdSafe } from '../repositories/controle-voos/rdv-repository';
 import { RDV_CAPABILITIES, requireRdvCapability } from '../services/controle-voos/rdv-workflow';
 import {
   assessFlightDispatchGate,
@@ -58,6 +44,7 @@ interface FlightRowForGate {
   data_programacao: string;
   horario_previsto_partida: string;
   aeronave_id: number | null;
+  modelo_aeronave: string | null;
 }
 
 /**
@@ -77,10 +64,13 @@ controleVoosDispatchGate.get(
     const data = normalizeDateParam(c.req.query('data'));
 
     const flightsResult = await c.env.DB.prepare(
-      `SELECT id, prefixo, status, data_programacao, horario_previsto_partida, aeronave_id
-       FROM cv_voos
-       WHERE empresa_id = ? AND data_programacao = ? AND deleted_at IS NULL
-       ORDER BY horario_previsto_partida ASC, id ASC`,
+      `SELECT v.id, v.prefixo, v.status, v.data_programacao, v.horario_previsto_partida, v.aeronave_id,
+         a.modelo AS modelo_aeronave
+       FROM cv_voos v
+       LEFT JOIN aeronaves a ON a.id = v.aeronave_id
+         AND a.empresa_id = v.empresa_id AND a.deleted_at IS NULL
+       WHERE v.empresa_id = ? AND v.data_programacao = ? AND v.deleted_at IS NULL
+       ORDER BY v.horario_previsto_partida ASC, v.id ASC`,
     )
       .bind(empresaId, data)
       .all<FlightRowForGate>();
@@ -101,6 +91,7 @@ controleVoosDispatchGate.get(
         return {
           voo_id: voo.id,
           prefixo: voo.prefixo,
+          modelo_aeronave: voo.modelo_aeronave,
           status: voo.status,
           horario_previsto_partida: voo.horario_previsto_partida,
           aeronave_id: voo.aeronave_id,
@@ -118,13 +109,15 @@ controleVoosDispatchGate.get(
 
     const resumo = {
       voos_nao_liberados: items.filter((item) => item.frms_status === 'NAO_LIBERADO').length,
-      tripulantes_checkin_pendente: items.reduce(
-        (acc, item) =>
-          acc +
-          item.tripulacao.filter((membro) => membro.reasons.includes('CHECKIN_DIARIO_PENDENTE'))
-            .length,
-        0,
-      ),
+      // Um tripulante pode aparecer em vários voos da data; o card conta
+      // pessoas distintas, não ocorrências de tripulação por voo.
+      tripulantes_checkin_pendente: new Set(
+        items.flatMap((item) =>
+          item.tripulacao
+            .filter((membro) => membro.checkin_status !== 'RECEBIDO')
+            .map((membro) => membro.funcionario_id),
+        ),
+      ).size,
       voos_requerem_revisao: items.filter((item) => item.frms_status === 'ATENCAO_COORDENACAO')
         .length,
       voos_liberaveis: items.filter((item) => item.frms_status === 'LIBERAVEL').length,
@@ -133,85 +126,5 @@ controleVoosDispatchGate.get(
     return c.json({ success: true, data: { data, resumo, voos: ordered } });
   },
 );
-
-/**
- * Guard obrigatório de transição — registrado em `index.ts` diretamente
- * no path `/api/controle-voos/voos/:id/status`. Não aceita `empresa_id`
- * do cliente (usa o mesmo `getEmpresaIdSafe` já resolvido pelo tenant
- * middleware global). Nao permite bypass por chamada direta à API: roda
- * antes do handler de `controle-voos.ts`, entao nenhuma rota alternativa
- * de escrita de status escapa dele.
- */
-export function controleVoosDispatchGateGuard(): MiddlewareHandler<{ Bindings: Env }> {
-  return async (c, next) => {
-    if (c.req.method !== 'POST') {
-      await next();
-      return;
-    }
-
-    const empresaId = getEmpresaIdSafe(c);
-    if (!empresaId) {
-      await next();
-      return;
-    }
-
-    const id = c.req.param('id') ?? '';
-
-    let payload: unknown;
-    try {
-      payload = await c.req.json();
-    } catch {
-      await next();
-      return;
-    }
-
-    const targetStatus =
-      payload && typeof payload === 'object' && 'status' in payload
-        ? String((payload as { status: unknown }).status || '')
-        : '';
-
-    if (targetStatus !== 'liberado_operacionalmente') {
-      await next();
-      return;
-    }
-
-    const flight = await getFlightOrThrow(c.env.DB, id, empresaId);
-    if (flight.status !== 'planejado') {
-      await next();
-      return;
-    }
-
-    const assessment = await assessFlightDispatchGate(
-      c.env.DB,
-      empresaId,
-      flight.id,
-      flight.data_programacao,
-    );
-
-    if (!assessment.can_release) {
-      return c.json(
-        {
-          success: false,
-          error: 'Liberacao operacional bloqueada por pendencia FRMS',
-          code: 'CONTROLE_VOOS_FRMS_RELEASE_BLOCKED',
-          data: {
-            frms_status: assessment.frms_status,
-            frms_primary_reason: assessment.frms_primary_reason,
-            tripulacao: assessment.crew.map((membro) => ({
-              funcionario_id: membro.funcionario_id,
-              nome: membro.nome,
-              funcao: membro.funcao,
-              frms_status: membro.frms_status,
-              reasons: membro.reasons,
-            })),
-          },
-        },
-        409,
-      );
-    }
-
-    await next();
-  };
-}
 
 export default controleVoosDispatchGate;

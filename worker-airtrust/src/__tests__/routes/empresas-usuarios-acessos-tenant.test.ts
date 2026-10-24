@@ -8,6 +8,7 @@ vi.mock('../../middleware/tenant', () => ({
     empresaId: Number(c.req.header('x-test-empresa-id')),
     empresaCodigo: c.req.header('x-test-platform-admin') === 'true' ? 'airtrust' : 'empresa-teste',
   }),
+  isPlatformAdminContext: (c: any) => c.req.header('x-test-platform-admin') === 'true',
   requireTenantRole: () => async (_c: any, next: () => Promise<void>) => next(),
 }));
 
@@ -162,6 +163,31 @@ describe('empresas usuários acessos tenant boundary', () => {
       write.sql.includes('INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary'),
     );
     expect(membershipInsert?.params[3]).toBe(0);
+  });
+
+  it('atribui STUDENT/ALUNO quando nenhum papel é informado, mas aceita VIEWER explícito', async () => {
+    const defaultAccess = await request('PUT', '/usuarios/200/acessos', {
+      empresaId: 1,
+      memberships: [1],
+      body: { acessos: [{ empresaId: 1 }] },
+    });
+    expect(defaultAccess.response.status).toBe(200);
+    expect(defaultAccess.writes.find((w) =>
+      w.sql.includes('INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary'),
+    )?.params[2]).toBe('student');
+    expect(defaultAccess.writes.some((w) =>
+      w.sql.includes('INSERT OR IGNORE INTO usuarios_empresas_perfis') && w.params.includes('ALUNO'),
+    )).toBe(true);
+
+    const explicitViewer = await request('PUT', '/usuarios/200/acessos', {
+      empresaId: 1,
+      memberships: [1],
+      body: { acessos: [{ empresaId: 1, role: 'viewer' }] },
+    });
+    expect(explicitViewer.response.status).toBe(200);
+    expect(explicitViewer.writes.find((w) =>
+      w.sql.includes('INSERT INTO usuarios_empresas (usuario_id, empresa_id, role, is_primary'),
+    )?.params[2]).toBe('viewer');
   });
 
   it('preserva o acesso cross-tenant do platform admin conforme o contrato atual', async () => {

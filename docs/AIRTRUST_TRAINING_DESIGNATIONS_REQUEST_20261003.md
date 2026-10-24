@@ -16,8 +16,8 @@ Não enviar senhas, documentos pessoais, dados médicos ou outras informações 
 | ARSO | Segurança Operacional / QSMS | Nome(s) dos ARSO formalmente designados | Não inferir por histórico PPSP. |
 | Supervisor ARSO | Segurança Operacional / QSMS | Nome(s) dos supervisores ARSO | Treinamento de supervisor permanece específico. |
 | Gatekeeper | Segurança Operacional / QSMS | Nome(s) dos Gatekeepers | Designação específica do programa. |
-| FDM — Administrador | Segurança Operacional / Operações | Nome(s) do(s) administrador(es) do FDM | Diferente do FDM EAD amplo da matriz. |
-| FDM — Comitê/equipe específica | Segurança Operacional / Operações | Nome(s) dos integrantes formalmente definidos | Não retirar FDM EAD amplo dos demais públicos previstos na matriz. |
+| FDM — Administrador | Segurança Operacional / Operações | Nome(s) do(s) administrador(es) do FDM | FDM é requisito por designação; não há público amplo automático por cargo. |
+| FDM — Comitê/equipe específica | Segurança Operacional / Operações | Nome(s) dos integrantes formalmente definidos | A designação formal é o gatilho para o FDM EAD. |
 | LOSA — Observador | Segurança Operacional | Nome(s) dos observadores LOSA | Papel específico. |
 | LOSA — Analista | Segurança Operacional | Nome(s) dos analistas LOSA | Papel específico. |
 | Auditor Comportamental | QSMS | Nome(s) dos auditores comportamentais designados | Não inferir por treinamento anterior. |
@@ -45,7 +45,7 @@ Pela decisão V4, **não solicitar designação individual** apenas para control
 - NR-20 — público amplo aplicável do ambiente operacional/manutenção;
 - NR-26 / Produtos Químicos / FDS — pessoal operacional;
 - NR-35 — público de Manutenção já previsto na matriz;
-- FDM EAD de familiarização — público amplo previsto na matriz.
+- FDM EAD — somente pessoas formalmente designadas para a equipe/programa FDM/HFDM.
 
 ## Formato de devolução sugerido
 

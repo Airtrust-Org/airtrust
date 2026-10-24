@@ -3,6 +3,7 @@ import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { requireActiveQualificationCategoryById } from './qualification-category-contract';
 import { ensureCertificateForQualification } from './ensure-certificate';
+import { hasApprovedScormCategoryLink } from './lms-scorm-category-compatibility';
 
 export type LmsCompletionOutcome =
   | 'qualification_created'
@@ -95,12 +96,28 @@ async function ensureEadCertificateAfterCompletion(
     return;
   }
 
-  const result = await ensureCertificateForQualification(
-    params.env,
-    historicoId,
-    params.empresaId,
-    { actorUserId: params.actorUserId },
-  );
+  // The canonical D1.batch has already committed. Certificate issuance is a
+  // separate service: an exception here cannot roll the completed enrollment
+  // back and must not make the HTTP caller retry an already committed course.
+  let result: Awaited<ReturnType<typeof ensureCertificateForQualification>>;
+  try {
+    result = await ensureCertificateForQualification(
+      params.env,
+      historicoId,
+      params.empresaId,
+      { actorUserId: params.actorUserId },
+    );
+  } catch {
+    // Never log arbitrary provider error details (they may contain secrets).
+    // A separate reconciliation must verify the certificate's actual state.
+    console.error(JSON.stringify({
+      event: 'LMS_EAD_CERTIFICATE_SERVICE_THROWN',
+      empresa_id: params.empresaId,
+      matricula_id: params.matriculaId,
+      qualificacao_historico_id: historicoId,
+    }));
+    return;
+  }
 
   if (result.state === 'ERROR' || result.state === 'SKIPPED') {
     console.error(
@@ -125,22 +142,21 @@ function isConcurrentQualificationUniqueConstraint(error: unknown): boolean {
   );
 }
 
-async function resolveCompletionCategory(
+export async function resolveCompletionCategory(
   db: D1Database,
-  empresaId: number,
-  qualificacaoTipoId: number,
+  params: CompleteLmsMatriculaParams,
 ) {
   const type = await db
     .prepare(
-      `SELECT id, categoria_id
+      `SELECT id, categoria_id, codigo
          FROM qualificacoes_tipos
         WHERE id = ?
           AND empresa_id = ?
           AND deleted_at IS NULL
         LIMIT 1`,
     )
-    .bind(qualificacaoTipoId, empresaId)
-    .first<{ id: number; categoria_id: number | null }>();
+    .bind(params.qualificacaoTipoId, params.empresaId)
+    .first<{ id: number; categoria_id: number | null; codigo: string }>();
 
   if (!type?.categoria_id) {
     throw new LmsCompletionRejectedError(
@@ -151,7 +167,7 @@ async function resolveCompletionCategory(
 
   let category;
   try {
-    category = await requireActiveQualificationCategoryById(db, empresaId, type.categoria_id);
+    category = await requireActiveQualificationCategoryById(db, params.empresaId, type.categoria_id);
   } catch (error) {
     throw new LmsCompletionRejectedError(
       'Categoria do tipo de qualificação não está ativa no tenant da matrícula',
@@ -160,7 +176,12 @@ async function resolveCompletionCategory(
     );
   }
 
-  if (!category.lmsIntegrada) {
+  if (!category.lmsIntegrada && !(await hasApprovedScormCategoryLink({
+    ...params,
+    qualificacaoTipoId: type.id,
+    qualificacaoTipoCodigo: type.codigo,
+    categoriaCodigo: category.codigo,
+  }))) {
     throw new LmsCompletionRejectedError(
       'Categoria do tipo de qualificação não está integrada ao LMS',
       'LMS_QUALIFICATION_CATEGORY_NOT_INTEGRATED',
@@ -674,7 +695,7 @@ export async function completeLmsMatricula(
 
   let category;
   try {
-    category = await resolveCompletionCategory(db, params.empresaId, params.qualificacaoTipoId);
+    category = await resolveCompletionCategory(db, params);
   } catch (error) {
     const rejected =
       error instanceof LmsCompletionRejectedError

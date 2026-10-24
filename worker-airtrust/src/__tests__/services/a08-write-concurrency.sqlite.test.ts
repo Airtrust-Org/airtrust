@@ -38,8 +38,9 @@ describe('A-08 local concurrency boundaries', () => {
       'utf8',
     );
 
-    expect(frmsSource).toContain('INSERT OR IGNORE INTO frms_fadiga_checkin');
-    expect(frmsSource).toMatch(/insertResult\.meta\.changes !== 1[\s\S]{0,500}409/);
+    expect(frmsSource).toContain('INSERT INTO frms_fadiga_checkin');
+    expect(frmsSource).toContain('await c.env.DB.batch([checkinWrite, ...readinessStatements, provenanceEvent])');
+    expect(frmsSource).toMatch(/if \(concurrent\?\.id\) \{[\s\S]{0,250}409/);
     expect(escalasSource).toMatch(/AND empresa_id = \?[\s\S]{0,250}AND status = \?[\s\S]{0,250}COALESCE\(numero_revisao, 0\) = \?/);
     expect(escalasSource).toMatch(/updateResult\.meta\.changes !== 1[\s\S]{0,500}409/);
   });
@@ -53,21 +54,24 @@ describe('A-08 local concurrency boundaries', () => {
        );
        CREATE UNIQUE INDEX idx_fadiga_checkin_unique_day
          ON frms_fadiga_checkin (empresa_id, funcionario_id, data_checkin)
-         WHERE deleted_at IS NULL;`,
+         WHERE deleted_at IS NULL;
+       CREATE TABLE frms_fadiga_evento (
+         id TEXT PRIMARY KEY, empresa_id INTEGER NOT NULL, checkin_id TEXT NOT NULL
+       );`,
     );
 
     execSql(
       dbPath,
-      "INSERT OR IGNORE INTO frms_fadiga_checkin VALUES ('first', 7, 42, '2026-09-08', NULL);",
+      "INSERT INTO frms_fadiga_checkin VALUES ('first', 7, 42, '2026-09-08', NULL);",
     );
     const second = execSql(
       dbPath,
-      "INSERT OR IGNORE INTO frms_fadiga_checkin VALUES ('second', 7, 42, '2026-09-08', NULL); SELECT changes() AS value;",
+      "BEGIN IMMEDIATE; INSERT INTO frms_fadiga_checkin VALUES ('second', 7, 42, '2026-09-08', NULL); INSERT INTO frms_fadiga_evento VALUES ('e2', 7, 'second'); COMMIT;",
     );
 
-    expect(second.committed).toBe(true);
+    expect(second.committed).toBe(false);
     expect(scalar('SELECT COUNT(*) AS value FROM frms_fadiga_checkin;')).toBe(1);
-    expect(second.stdout.trim()).toBe('0');
+    expect(scalar('SELECT COUNT(*) AS value FROM frms_fadiga_evento;')).toBe(0);
   });
 
   it('Escalas: only one publication can consume the observed status/revision', () => {

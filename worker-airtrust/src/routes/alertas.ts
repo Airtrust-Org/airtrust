@@ -39,7 +39,8 @@ import {
 } from '../utils/alert-whatsapp-templates-store';
 import {
   buildQualificacaoTemplateVariables,
-  buildTrainingTemplateStatusVariable,
+  buildTrainingStatusVencimento,
+  buildTrainingTemplateVariablesForDelivery,
   getAlertWhatsAppTemplateCatalog,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
@@ -871,19 +872,35 @@ Por favor, providencie a renovação o quanto antes.
         });
         const localTemplate = await getLocalWhatsAppTemplateRecord(db, templateKey);
         const templateDefinition = getAlertWhatsAppTemplateDefinition(templateKey);
-        const templateVariables = buildQualificacaoTemplateVariables({
-          funcionarioNome: String(r.funcionario_nome || '').trim(),
-          qualificacaoNome: String(r.tipo_nome || r.tipo_codigo || '').trim(),
-          dataVencimento: r.data_vencimento
-            ? formatDatePtBr(String(r.data_vencimento))
-            : 'Não se aplica',
-          statusVencimento:
-            isEAD && diasDiferenca !== null
-              ? buildTrainingTemplateStatusVariable(diasDiferenca, trainingUrl)
-              : statusVencimento,
-        });
-        const templateMessage = templateDefinition
-          ? renderTemplateBody(templateDefinition.bodyText, templateVariables)
+        const deliveryBodyText =
+          localTemplate?.twilio_content_sid && localTemplate.body_text
+            ? localTemplate.body_text
+            : templateDefinition?.bodyText || null;
+        const templateVariables = isEAD
+          ? buildTrainingTemplateVariablesForDelivery({
+              templateKey: templateKey as 'ead_expiring' | 'ead_expired',
+              templateBodyText: deliveryBodyText,
+              funcionarioNome: String(r.funcionario_nome || '').trim(),
+              qualificacaoNome: String(r.tipo_nome || r.tipo_codigo || '').trim(),
+              dataVencimento: r.data_vencimento
+                ? formatDatePtBr(String(r.data_vencimento))
+                : 'Não realizado',
+              statusVencimento:
+                diasDiferenca !== null
+                  ? buildTrainingStatusVencimento(diasDiferenca)
+                  : statusVencimento,
+              trainingUrl,
+            })
+          : buildQualificacaoTemplateVariables({
+              funcionarioNome: String(r.funcionario_nome || '').trim(),
+              qualificacaoNome: String(r.tipo_nome || r.tipo_codigo || '').trim(),
+              dataVencimento: r.data_vencimento
+                ? formatDatePtBr(String(r.data_vencimento))
+                : 'Não se aplica',
+              statusVencimento,
+            });
+        const templateMessage = deliveryBodyText
+          ? renderTemplateBody(deliveryBodyText, templateVariables)
           : null;
         const whatsappResult = await sendWhatsAppMessage(
           c.env,

@@ -522,7 +522,10 @@ export function extractAndValidateLmsPackage(
   };
 }
 
-export function validateUploadedEntryDescriptors(entries: UploadedEntryDescriptor[]): {
+export function validateUploadedEntryDescriptors(
+  entries: UploadedEntryDescriptor[],
+  limits: { maxFileBytes?: number; maxTotalBytes?: number } = {},
+): {
   normalized: UploadedEntryDescriptor[];
   totalBytes: number;
 } {
@@ -542,11 +545,13 @@ export function validateUploadedEntryDescriptors(entries: UploadedEntryDescripto
       invalidPackage(`Tamanho inválido para ${path}`);
     }
     assertNoPathCollision(path, seen);
-    if (entry.size > LMS_PACKAGE_LIMITS.maxFileBytes) {
+    const maxFileBytes = limits.maxFileBytes ?? LMS_PACKAGE_LIMITS.maxFileBytes;
+    const maxTotalBytes = limits.maxTotalBytes ?? LMS_PACKAGE_LIMITS.maxUncompressedBytes;
+    if (entry.size > maxFileBytes) {
       invalidPackage(`O arquivo ${path} excede o limite individual de 32 MB`, 413);
     }
     totalBytes += entry.size;
-    if (totalBytes > LMS_PACKAGE_LIMITS.maxUncompressedBytes) {
+    if (totalBytes > maxTotalBytes) {
       invalidPackage('Upload excede o limite total de 256 MB', 413);
     }
     normalized.push({ path, size: entry.size });
@@ -559,8 +564,9 @@ export function validateStructuredScormMetadata(params: {
   entries: UploadedEntryDescriptor[];
   manifestPath: string;
   manifestBytes: Uint8Array;
+  limits?: { maxFileBytes?: number; maxTotalBytes?: number };
 }): { launchFile: string; scormVersao: '1.2' | '2004' } {
-  const { normalized } = validateUploadedEntryDescriptors(params.entries);
+  const { normalized } = validateUploadedEntryDescriptors(params.entries, params.limits);
   if (params.manifestBytes.byteLength > LMS_PACKAGE_LIMITS.maxMetadataBytes) {
     invalidPackage('imsmanifest.xml excede o limite de metadados de 2 MB');
   }

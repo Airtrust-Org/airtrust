@@ -42,6 +42,7 @@ describe('FRMS duty boundary', () => {
 
     expect(result).toMatchObject({
       complete: false,
+      presentationTime: '08:00',
       dutyEndTime: null,
       durationMinutes: null,
       reason: 'NO_FLIGHT_REQUIRES_REPORTED_ACTIVITY',

@@ -10,7 +10,8 @@ import { normalizeWhatsAppPhone } from '../utils/whatsapp';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import {
   buildQualificacaoTemplateVariables,
-  buildTrainingTemplateStatusVariable,
+  buildTrainingStatusVencimento,
+  buildTrainingTemplateVariablesForDelivery,
   getAlertWhatsAppTemplateDefinition,
   renderTemplateBody,
   resolveQualificacaoAlertTemplateKey,
@@ -612,7 +613,14 @@ async function enviarNotificacao(
       ),
     };
     const corpoBase = interpolarTemplate(config.template, templateVars);
-    const corpo = trainingUrl ? `${corpoBase}\n\nAcesse o treinamento: ${trainingUrl}` : corpoBase;
+    const is30DayTrainingEmail =
+      tipoCanal === 'EMAIL' &&
+      inferTrainingAlertStageCode(config) === 'QUALIFICACAO_30D' &&
+      !isCmaQualificacao(qualificacao);
+    const corpoComPrazo = is30DayTrainingEmail
+      ? `${corpoBase}\n\nData de vencimento: ${templateVars.data_vencimento}.\nRestam ${diasAteVencimento} ${diasAteVencimento === 1 ? 'dia' : 'dias'} para renovar. Este treinamento é obrigatório para a função e deve ser realizado antes do vencimento, com prioridade.`
+      : corpoBase;
+    const corpo = trainingUrl ? `${corpoComPrazo}\n\nAcesse o treinamento: ${trainingUrl}` : corpoComPrazo;
 
     const urgenciaIcon = diasAteVencimento <= 7 ? '🚨' : diasAteVencimento <= 15 ? '⚠️' : '📅';
     const assuntoPadrao =
@@ -690,17 +698,28 @@ async function enviarNotificacao(
         throw new Error('WHATSAPP_TEMPLATE_NOT_APPROVED');
       }
 
-      const templateVariables = buildQualificacaoTemplateVariables({
-        funcionarioNome: qualificacao.funcionario_nome,
-        qualificacaoNome: qualificacao.qualificacao_nome,
-        dataVencimento: new Date(`${qualificacao.data_vencimento}T00:00:00`).toLocaleDateString(
-          'pt-BR',
-        ),
-        statusVencimento: isCmaQualificacao(qualificacao)
-          ? buildStatusVencimento(diasAteVencimento)
-          : buildTrainingTemplateStatusVariable(diasAteVencimento, trainingUrl),
-      });
-      const mensagemTemplate = renderTemplateBody(templateDefinition.bodyText, templateVariables);
+      const deliveryBodyText = localTemplate.body_text || templateDefinition.bodyText;
+      const templateVariables = isCmaQualificacao(qualificacao)
+        ? buildQualificacaoTemplateVariables({
+            funcionarioNome: qualificacao.funcionario_nome,
+            qualificacaoNome: qualificacao.qualificacao_nome,
+            dataVencimento: new Date(
+              `${qualificacao.data_vencimento}T00:00:00`,
+            ).toLocaleDateString('pt-BR'),
+            statusVencimento: buildStatusVencimento(diasAteVencimento),
+          })
+        : buildTrainingTemplateVariablesForDelivery({
+            templateKey: templateKey as 'ead_expiring' | 'ead_expired',
+            templateBodyText: deliveryBodyText,
+            funcionarioNome: qualificacao.funcionario_nome,
+            qualificacaoNome: qualificacao.qualificacao_nome,
+            dataVencimento: new Date(
+              `${qualificacao.data_vencimento}T00:00:00`,
+            ).toLocaleDateString('pt-BR'),
+            statusVencimento: buildTrainingStatusVencimento(diasAteVencimento),
+            trainingUrl,
+          });
+      const mensagemTemplate = renderTemplateBody(deliveryBodyText, templateVariables);
       const normalizedDestinations: string[] = [];
 
       for (const destinatario of destinatarios) {

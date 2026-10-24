@@ -45,6 +45,10 @@ const CreateEmpresaSchema = z.object({
   plano: z.enum(['basic', 'pro', 'enterprise']).default('basic'),
   max_funcionarios: z.number().int().positive().default(100),
   max_storage_mb: z.number().int().positive().default(1000),
+  // Restricted pilot tenants may be registered inactive, with only explicitly
+  // selected modules; absent fields keep the legacy creation contract.
+  ativo: z.union([z.literal(0), z.literal(1)]).default(1),
+  modulos_ativos: z.array(z.string().regex(/^[a-z0-9_]{2,40}$/)).max(30).optional(),
 });
 
 type EmpresaRecord = Record<string, unknown> & {
@@ -606,10 +610,9 @@ empresasRoutes.post('/', requireTenantRole('admin'), async (c) => {
     }
 
     const body = await c.req.json();
-    console.log('[EMPRESAS POST] Body recebido:', body);
-
     const data = CreateEmpresaSchema.parse(body);
-    console.log('[EMPRESAS POST] Dados validados:', data);
+    // Never log raw company registration, contact or future secret fields.
+    console.log('[EMPRESAS POST] Payload validado para criação restrita');
 
     // Verificar se código já existe (mesmo deletado)
     const existingEmpresa = await db
@@ -630,6 +633,9 @@ empresasRoutes.post('/', requireTenantRole('admin'), async (c) => {
         existingEmpresa.id,
       );
 
+      if (data.ativo === 0 || data.modulos_ativos !== undefined) {
+        throw new AppError('Tenant previamente removido exige revisão antes de reativação controlada', 409);
+      }
       await db
         .prepare(
           `
@@ -665,8 +671,8 @@ empresasRoutes.post('/', requireTenantRole('admin'), async (c) => {
     const result = await db
       .prepare(
         `
-      INSERT INTO empresas (nome, cnpj, codigo, logo_url, plano, max_funcionarios, max_storage_mb)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO empresas (nome, cnpj, codigo, logo_url, plano, max_funcionarios, max_storage_mb, ativo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .bind(
@@ -677,6 +683,7 @@ empresasRoutes.post('/', requireTenantRole('admin'), async (c) => {
         data.plano,
         data.max_funcionarios,
         data.max_storage_mb,
+        data.ativo,
       )
       .run();
 
@@ -692,7 +699,7 @@ empresasRoutes.post('/', requireTenantRole('admin'), async (c) => {
       VALUES (?, ?)
     `,
       )
-      .bind(empresaId, JSON.stringify(['treinamento', 'compliance']))
+      .bind(empresaId, JSON.stringify(data.modulos_ativos ?? ['treinamento', 'compliance']))
       .run();
 
     console.log('[EMPRESAS POST] Sucesso!');
@@ -710,7 +717,7 @@ empresasRoutes.post('/', requireTenantRole('admin'), async (c) => {
     return c.json(
       {
         success: true,
-        data: { id: empresaId, ...data },
+        data: { id: empresaId, ...data, modulos_ativos: data.modulos_ativos ?? ['treinamento', 'compliance'] },
         message: 'Empresa criada com sucesso',
       },
       201,

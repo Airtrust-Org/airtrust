@@ -10,6 +10,20 @@ function source(path: string) {
 }
 
 describe('simulator planning V3 priority, aircraft filter and report UX', () => {
+  it('honors the complete requested expiry year and explains an empty proposal', () => {
+    const page = source(PAGE);
+    const route = source(ROUTE);
+    expect(route).toContain('date(qh.data_vencimento) BETWEEN date(?) AND date(?)');
+    expect(route).not.toContain('isInsidePlanningHorizon');
+    expect(route).toContain('horizonDays: config.planning_horizon_days');
+    expect(route).toContain('qualification_candidates: planningQualifications.length');
+    expect(route).toContain('blocked_curricula: exceptions.length');
+    expect(page).toContain('Nenhuma turma encontrada no período informado');
+    expect(page).toContain('proposal.summary.qualification_candidates === 0');
+    expect(page).toContain('showToast.warning');
+    expect(page).toContain('proposal && proposal.summary.trainings > 0');
+  });
+
   it('exposes a dynamic aircraft filter and sends it to proposal generation', () => {
     const page = source(PAGE);
     const route = source(ROUTE);

@@ -7,6 +7,7 @@ const {
   ensureMatriculaCycleMock,
   syncMatriculaCycleFromMatriculaMock,
   resetMatriculaForNewCycleMock,
+  reactivateCancelledMatriculaMock,
   completeLmsMatriculaMock,
   logAuditMock,
   sendEmailMock,
@@ -15,6 +16,7 @@ const {
   ensureMatriculaCycleMock: vi.fn(),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
   resetMatriculaForNewCycleMock: vi.fn(),
+  reactivateCancelledMatriculaMock: vi.fn(),
   completeLmsMatriculaMock: vi.fn(),
   logAuditMock: vi.fn(),
   sendEmailMock: vi.fn(),
@@ -65,6 +67,7 @@ vi.mock('../../services/lms-matricula-cycle', () => ({
       ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(String(record.status)),
     ),
   resetMatriculaForNewCycle: resetMatriculaForNewCycleMock,
+  reactivateCancelledMatriculaPreservingProgress: reactivateCancelledMatriculaMock,
   syncMatriculaCycleFromMatricula: syncMatriculaCycleFromMatriculaMock,
 }));
 
@@ -101,11 +104,13 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
   const db = {
     prepare: vi.fn((query: string) => {
       const entry = handlers.find(([matcher]) => query.includes(matcher));
-      if (!entry) {
+      const handler = entry?.[1] ?? (query.includes('SELECT id FROM lms_matricula_ciclos')
+        ? { first: () => ({ id: 202 }) }
+        : undefined);
+      if (!handler) {
         throw new Error(`Unhandled query: ${query}`);
       }
 
-      const handler = entry[1];
       const executeFirst = async (args: unknown[]) => {
         calls.push({ query, args, method: 'first' });
         return handler.first ? handler.first(args) : null;
@@ -141,6 +146,7 @@ describe('lms matriculas progress integrity', () => {
     ensureMatriculaCycleMock.mockResolvedValue(undefined);
     syncMatriculaCycleFromMatriculaMock.mockResolvedValue(undefined);
     resetMatriculaForNewCycleMock.mockResolvedValue(9001);
+    reactivateCancelledMatriculaMock.mockResolvedValue({status:'EM_ANDAMENTO',progressoPct:85,scormPreserved:true});
     completeLmsMatriculaMock.mockResolvedValue({
       outcome: 'qualification_not_required',
       qualificacaoHistoricoId: null,
@@ -313,12 +319,59 @@ describe('lms matriculas progress integrity', () => {
     );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ success: true, data: { criadas: 1, ignoradas: 0, erros: 0 } });
-    expect(resetMatriculaForNewCycleMock).toHaveBeenCalledWith(
+    expect(reactivateCancelledMatriculaMock).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ matriculaId: 501, origin: 'MANUAL', empresaId: 1 }),
+      expect.objectContaining({ matriculaId: 501, empresaId: 1 }),
     );
+    expect(resetMatriculaForNewCycleMock).not.toHaveBeenCalled();
     expect(sendEmailMock).not.toHaveBeenCalled();
     expect(calls.some((call) => call.query.includes('INSERT INTO lms_matriculas'))).toBe(false);
+  });
+
+  it.each(['NEW_EDITION_REQUIRED', 'NOT_ELIGIBLE'] as const)(
+    'informa %s por funcionário e preserva a matrícula anterior', async (reason) => {
+      reactivateCancelledMatriculaMock.mockResolvedValue(reason);
+      const { db, calls } = createMockDb([
+        ['SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CFIT', qualificacao_tipo_id: null }) }],
+        ['SELECT id, nome, setor_id FROM funcionarios', { all: () => ({ results: [{ id: 77, nome: 'Aluno QA', setor_id: 1 }] }) }],
+        ['FROM lms_matriculas\n        WHERE curso_id = ?', { first: () => ({ id: 501, status: 'CANCELADO', deleted_at: '2026-09-15' }) }],
+      ]);
+      const app = new Hono<{ Bindings: Env }>();
+      app.route('/', lmsMatriculasRoutes);
+      const response = await app.fetch(new Request('http://localhost/lote', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ funcionario_ids: [77], curso_id: 9, enviar_convite_email: false }),
+      }), { DB: db } as Env, {} as ExecutionContext);
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ data: {
+        criadas: 0, erros: 1,
+        detalhes_erros: [{ funcionario_id: 77, funcionario_nome: 'Aluno QA', codigo: reason }],
+      } });
+      expect(resetMatriculaForNewCycleMock).not.toHaveBeenCalled();
+      expect(calls.some((call) => call.query.includes('INSERT INTO lms_matriculas'))).toBe(false);
+    },
+  );
+
+  it.each(['unavailable', 'UNIQUE constraint failed: lms_matriculas.empresa_id'])(
+    'não trata falha posterior ao insert como conflito de inserção: %s', async (message) => {
+    stampLmsEnrollmentEvidenceProfileMock.mockRejectedValue(new Error(message));
+    const { db, calls } = createMockDb([
+      ['SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CFIT', qualificacao_tipo_id: null }) }],
+      ['SELECT id, nome, setor_id FROM funcionarios', { all: () => ({ results: [{ id: 77, nome: 'Aluno QA', setor_id: 1 }] }) }],
+      ['FROM lms_matriculas\n        WHERE curso_id = ?', { first: () => null }],
+      ['INSERT INTO lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 777 } }) }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+    const response = await app.fetch(new Request('http://localhost/lote', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ funcionario_ids: [77], curso_id: 9, enviar_convite_email: false }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    await expect(response.json()).resolves.toMatchObject({ data: {
+      criadas: 0, erros: 1, detalhes_erros: [{ funcionario_id: 77, codigo: 'ESTADO_NAO_CONFIRMADO' }],
+    } });
+    expect(calls.some((call) => call.query.includes('INSERT INTO lms_matriculas'))).toBe(true);
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it('ignora commit SCORM stale e preserva cmi_json/suspend_data mais avançados', async () => {
@@ -396,6 +449,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 501,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 12,
           score_max: 100,
@@ -513,6 +567,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 326,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 100,
           cmi_json: staleCmi,
@@ -613,6 +668,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 912,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 62,
           score_max: 100,
@@ -713,6 +769,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 913,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 12,
           score_max: 100,
@@ -733,7 +790,7 @@ describe('lms matriculas progress integrity', () => {
     expect(mergedCmi['cmi.suspend_data']).toBe('quiz-checkpoint-state');
   });
 
-  it('conclui commit SCORM 1.2 quando lesson_status=completed e score atende mastery', async () => {
+  it('conclui SCORM 1.2 apenas no pedido explicito com slides vistos e mastery satisfeito', async () => {
     const { db } = createMockDb([
       [
         'FROM lms_matriculas m',
@@ -746,6 +803,7 @@ describe('lms matriculas progress integrity', () => {
             progresso_pct: 0,
             tentativas: 0,
             qualificacao_historico_id: null,
+            scorm_assessment_policy: 'SCORED',
             scorm_mastery_score: 70,
             gerar_qualificacao_ao_concluir: 1,
             qualificacao_tipo_id: 125,
@@ -792,11 +850,16 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 163,
+          ciclo_id: 202,
+          commit_event: 'SCORM_USER_FINALIZE',
           lesson_status: 'completed',
           score_raw: 85,
           score_max: 100,
           cmi_json: JSON.stringify({
             'cmi.core.lesson_status': 'completed',
+            'cmi.core.lesson_location': '3/3',
+            'airtrust.total_slides': 3,
+            'airtrust.viewed_slides': [1, 2, 3],
             'cmi.core.score.raw': '85',
           }),
         }),
@@ -827,7 +890,7 @@ describe('lms matriculas progress integrity', () => {
     );
   });
 
-  it('conclui commit SCORM 2004 quando completion_status=completed e success_status=passed', async () => {
+  it('conclui SCORM 2004 somente apos confirmacao explicita e todos os slides', async () => {
     const { db } = createMockDb([
       [
         'FROM lms_matriculas m',
@@ -840,6 +903,7 @@ describe('lms matriculas progress integrity', () => {
             progresso_pct: 40,
             tentativas: 0,
             qualificacao_historico_id: null,
+            scorm_assessment_policy: 'SCORED',
             scorm_mastery_score: 70,
             gerar_qualificacao_ao_concluir: 0,
             qualificacao_tipo_id: null,
@@ -880,6 +944,8 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 164,
+          ciclo_id: 202,
+          commit_event: 'SCORM_USER_FINALIZE',
           completion_status: 'completed',
           success_status: 'passed',
           score_raw: 92,
@@ -888,6 +954,9 @@ describe('lms matriculas progress integrity', () => {
           cmi_json: JSON.stringify({
             'cmi.completion_status': 'completed',
             'cmi.success_status': 'passed',
+            'cmi.location': '3/3',
+            'airtrust.total_slides': 3,
+            'airtrust.viewed_slides': [1, 2, 3],
             'cmi.score.raw': '92',
           }),
         }),
@@ -960,6 +1029,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 165,
+          ciclo_id: 202,
           lesson_status: 'completed',
           score_raw: 45,
           score_max: 100,
@@ -990,7 +1060,7 @@ describe('lms matriculas progress integrity', () => {
     expect(matriculaUpdate?.args[1]).toBe(55);
   });
 
-  it('conclui SCORM 1.2 no Finish confiavel quando mastery e slide final foram confirmados', async () => {
+  it('preserva progresso no LMSFinish, sem finalizar antes da confirmacao do aluno', async () => {
     const { db } = createMockDb([
       [
         'FROM lms_matriculas m',
@@ -1059,6 +1129,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 326,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 100,
           score_max: 100,
@@ -1084,7 +1155,7 @@ describe('lms matriculas progress integrity', () => {
       success: true,
       data: {
         matricula_id: 326,
-        novo_status: 'CONCLUIDO',
+        novo_status: 'EM_ANDAMENTO',
         qualificacao_gerada: null,
         completion_diagnostic: {
           status: 'accepted',
@@ -1095,14 +1166,7 @@ describe('lms matriculas progress integrity', () => {
         },
       },
     });
-    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
-    expect(logAuditMock).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        action: 'SCORM_COMPLETION_ACCEPTED',
-        entityId: 326,
-      }),
-    );
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
 
   it('trata Finish duplicado de matrícula já concluída como idempotente e não regride estado', async () => {
@@ -1159,6 +1223,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 326,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 96,
           score_max: 100,
@@ -1572,6 +1637,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 700,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 100,
           score_max: 100,
@@ -1641,6 +1707,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 701,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 40,
           score_max: 100,

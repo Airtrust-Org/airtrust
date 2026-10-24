@@ -60,6 +60,21 @@ APPROVED_MIGRATIONS=(
   "0526_training_compliance_matrix_alignment.sql"
   "0527_training_compliance_loft_bootstrap.sql"
   "0528_setor_compliance_responsibles.sql"
+  "0530_training_qualification_catalog_placeholders.sql"
+  "0531_training_compliance_nr20_modality_repair.sql"
+  "0532_training_compliance_fdm_designation_only.sql"
+  "0533_training_catalog_metadata_references.sql"
+  "0534_training_compliance_final_matrix.sql"
+  "0535_training_compliance_integra_bootstrap.sql"
+  "0536_training_compliance_fdm_three_audiences.sql"
+  "0537_training_catalog_source_backed_metadata.sql"
+  "0538_training_compliance_manager_designation_nr05.sql"
+  "0539_training_doutrinacao_bootstrap.sql"
+  "0540_training_maintenance_catalog_identities_bootstrap.sql"
+  "0541_training_operational_category_bootstrap.sql"
+  "0542_lms_scorm_formative_assessment_policy.sql"
+  "0545_training_compliance_canonical_pdf_alignment.sql"
+  "0546_training_compliance_canonical_category_repair.sql"
 )
 
 apply=false
@@ -274,6 +289,51 @@ validate_postconditions() {
     0528_setor_compliance_responsibles.sql)
       bash scripts/staging/validate-0528-postconditions.sh --target="$db_name"
       ;;
+    0530_training_qualification_catalog_placeholders.sql)
+      bash scripts/staging/validate-0530-postconditions.sh --target="$db_name"
+      ;;
+    0531_training_compliance_nr20_modality_repair.sql)
+      bash scripts/staging/validate-0531-postconditions.sh --target="$db_name"
+      ;;
+    0532_training_compliance_fdm_designation_only.sql)
+      bash scripts/staging/validate-0532-postconditions.sh --target="$db_name"
+      ;;
+    0533_training_catalog_metadata_references.sql)
+      bash scripts/staging/validate-0533-postconditions.sh --target="$db_name"
+      ;;
+    0534_training_compliance_final_matrix.sql)
+      bash scripts/staging/validate-0534-postconditions.sh --target="$db_name"
+      ;;
+    0535_training_compliance_integra_bootstrap.sql)
+      bash scripts/staging/validate-0535-postconditions.sh --target="$db_name"
+      ;;
+    0536_training_compliance_fdm_three_audiences.sql)
+      bash scripts/staging/validate-0536-postconditions.sh --target="$db_name"
+      ;;
+    0537_training_catalog_source_backed_metadata.sql)
+      bash scripts/staging/validate-0537-postconditions.sh --target="$db_name"
+      ;;
+    0538_training_compliance_manager_designation_nr05.sql)
+      bash scripts/staging/validate-0538-postconditions.sh --target="$db_name"
+      ;;
+    0539_training_doutrinacao_bootstrap.sql)
+      bash scripts/staging/validate-0539-postconditions.sh --target="$db_name"
+      ;;
+    0540_training_maintenance_catalog_identities_bootstrap.sql)
+      bash scripts/staging/validate-0540-postconditions.sh --target="$db_name"
+      ;;
+    0541_training_operational_category_bootstrap.sql)
+      bash scripts/staging/validate-0541-postconditions.sh --target="$db_name"
+      ;;
+    0542_lms_scorm_formative_assessment_policy.sql)
+      bash scripts/staging/validate-0542-postconditions.sh --target="$db_name"
+      ;;
+    0545_training_compliance_canonical_pdf_alignment.sql)
+      bash scripts/staging/validate-0545-postconditions.sh --target="$db_name"
+      ;;
+    0546_training_compliance_canonical_category_repair.sql)
+      bash scripts/staging/validate-0546-postconditions.sh --target="$db_name"
+      ;;
   esac
 }
 
@@ -399,6 +459,81 @@ fi
 if [[ "$migration_basename" == "0528_setor_compliance_responsibles.sql" && "$ledger_count" == "0" ]]; then
   bash scripts/staging/validate-0528-preflight.sh --target="$db_name"
   echo "SPECIALIZED_PREFLIGHT_0528_OK=true"
+fi
+
+if [[ "$migration_basename" == "0530_training_qualification_catalog_placeholders.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0530-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0530_OK=true"
+fi
+
+if [[ "$migration_basename" == "0531_training_compliance_nr20_modality_repair.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0531-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0531_OK=true"
+fi
+
+if [[ "$migration_basename" == "0532_training_compliance_fdm_designation_only.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0532-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0532_OK=true"
+fi
+
+if [[ "$migration_basename" == "0533_training_catalog_metadata_references.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0533-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0533_OK=true"
+fi
+
+if [[ "$migration_basename" == "0534_training_compliance_final_matrix.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0534-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0534_OK=true"
+fi
+
+if [[ "$migration_basename" == "0535_training_compliance_integra_bootstrap.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0535-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0535_OK=true"
+fi
+
+if [[ "$migration_basename" == "0536_training_compliance_fdm_three_audiences.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0536-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0536_OK=true"
+fi
+
+if [[ "$migration_basename" == "0537_training_catalog_source_backed_metadata.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0537-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0537_OK=true"
+fi
+
+if [[ "$migration_basename" == "0538_training_compliance_manager_designation_nr05.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0538-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0538_OK=true"
+fi
+
+if [[ "$migration_basename" == "0539_training_doutrinacao_bootstrap.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0539-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0539_OK=true"
+fi
+
+if [[ "$migration_basename" == "0540_training_maintenance_catalog_identities_bootstrap.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0540-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0540_OK=true"
+fi
+
+if [[ "$migration_basename" == "0541_training_operational_category_bootstrap.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0541-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0541_OK=true"
+fi
+
+if [[ "$migration_basename" == "0542_lms_scorm_formative_assessment_policy.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0542-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0542_OK=true"
+fi
+
+if [[ "$migration_basename" == "0545_training_compliance_canonical_pdf_alignment.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0545-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0545_OK=true"
+fi
+
+if [[ "$migration_basename" == "0546_training_compliance_canonical_category_repair.sql" && "$ledger_count" == "0" ]]; then
+  bash scripts/staging/validate-0546-preflight.sh --target="$db_name"
+  echo "SPECIALIZED_PREFLIGHT_0546_OK=true"
 fi
 
 if [[ "$migration_basename" == 0461_* || "$migration_basename" == 0462_* ]]; then
@@ -535,11 +670,75 @@ NODE
 echo "RECOVERY_TIMESTAMP_UTC=$recovery_timestamp"
 echo "RECOVERY_POINT_CAPTURED=true"
 
-apply_status=0
-(
-  cd worker-airtrust
-  npx wrangler d1 execute "$db_name" --remote --file="$combined_sql"
-) || apply_status=$?
+# 0534 is a bounded, reviewed data change. Cloudflare D1's bulk-import path
+# produced D1_RESET_DO twice after successful preflight and recovery capture.
+# Follow the existing governed Schema V2 query-transport precedent; preserve
+# the exact versioned SQL, the same combined migration+ledger, and postconditions.
+if [[ "$migration_basename" == "0534_training_compliance_final_matrix.sql" ]]; then
+  [[ "$sql_sha256" == "31366ebd2e3ba20dda8040ab1a5f34a0c67ae0bae116028dfec7d81df67c33f0" ]] || {
+    echo "ERROR: reviewed 0534 SQL hash mismatch." >&2
+    exit 1
+  }
+  sql_payload="$(cat "$combined_sql")"
+  [[ -n "$sql_payload" && ${#sql_payload} -le 100000 ]] || {
+    echo "ERROR: 0534 bounded combined SQL is empty or exceeds query transport." >&2
+    exit 1
+  }
+  # Keep query output off CI logs (may contain data), but preserve sanitized
+  # error diagnostics; the previous release dropped the --json response and
+  # masked the reason for a nonzero exit.
+  d1_query_output="$(mktemp -t airtrust-0534-query-output.XXXXXXXX)"
+  d1_query_error="$(mktemp -t airtrust-0534-query-error.XXXXXXXX)"
+  trap 'rm -f "$preflight_output" "$recovery_output" "$ledger_output" "$combined_sql" "$d1_query_output" "$d1_query_error"' EXIT
+  apply_status=0
+  (
+    cd worker-airtrust
+    npx wrangler d1 execute "$db_name" --env staging --remote --command="$sql_payload" --json \
+      >"$d1_query_output" 2>"$d1_query_error"
+  ) || apply_status=$?
+  node - "$d1_query_output" "$d1_query_error" "$apply_status" <<'NODE'
+const fs = require('node:fs');
+const [stdoutFile, stderrFile, exitCode] = process.argv.slice(2);
+const stdout = fs.readFileSync(stdoutFile, 'utf8');
+const stderr = fs.readFileSync(stderrFile, 'utf8');
+const text = stdout + '\n' + stderr;
+let json;
+try { json = JSON.parse(stdout); } catch { json = null; }
+const entries = Array.isArray(json) ? json : json ? [json] : [];
+const flattened = entries.flatMap((item) =>
+  Array.isArray(item?.results) ? [item] : [item]
+);
+const failures = flattened.filter((v) => v?.success === false);
+const hasExplicitSuccess = flattened.length > 0 && flattened.every((v) => v?.success === true);
+const classes = [
+  ['SQLITE_INCOMPLETE_INPUT', /incomplete input/i],
+  ['SQLITE_CONSTRAINT', /constraint failed|SQLITE_CONSTRAINT/i],
+  ['D1_RESET_DO', /D1_RESET_DO/i],
+  ['SQLITE_MISSING_OBJECT', /no such (?:table|column|function)/i],
+  ['SQLITE_SYNTAX', /syntax error/i],
+  ['SQLITE_LOCK', /database is locked|SQLITE_BUSY/i],
+  ['D1_QUERY_LIMIT', /too many|exceeds? (?:size|limit)|query.*large|SQLITE_TOOBIG/i],
+  ['D1_REQUEST_ERROR', /D1_ERROR|SQLITE_ERROR/i],
+  ['JSON_PARSE_ERROR', /unexpected token|invalid JSON/i],
+];
+const category = classes.find(([, re]) => re.test(text))?.[0] || 'UNCLASSIFIED';
+const ok = exitCode === '0' && failures.length === 0 && hasExplicitSuccess;
+console.log('REVIEWED_D1_QUERY_TRANSPORT=' + (ok ? 'PASS' : 'FAIL'));
+console.log('REVIEWED_D1_QUERY_ERROR_CLASS=' + (ok ? 'NONE' : category));
+console.log('REVIEWED_D1_QUERY_JSON_VALID=' + (json !== null));
+console.log('REVIEWED_D1_QUERY_RESULT_COUNT=' + entries.length);
+console.log('REVIEWED_D1_QUERY_STDERR_PRESENT=' + (stderr.trim().length > 0));
+if (!ok) process.exit(1);
+NODE
+  diagnostic_status=$?
+  if [[ "$diagnostic_status" -ne 0 ]]; then apply_status=1; fi
+else
+  apply_status=0
+  (
+    cd worker-airtrust
+    npx wrangler d1 execute "$db_name" --remote --file="$combined_sql"
+  ) || apply_status=$?
+fi
 if [[ $apply_status -ne 0 ]]; then
   echo "MIGRATION_FAILED=$migration_basename" >&2
   exit "$apply_status"

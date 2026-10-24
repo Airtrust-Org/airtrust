@@ -32,8 +32,19 @@ describe('FRMS canonical compliance report', () => {
       }),
     ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toEqual(expect.objectContaining({ dias_avaliados: 3, dias_conformes: 1, dias_violacao: 1, dias_nao_avaliados: 1 }));
+    expect(rows[0]).toEqual(expect.objectContaining({ dias_avaliados: 2, dias_conformes: 1, dias_violacao: 1, dias_nao_avaliados: 1 }));
+    expect(rows[0].dias_avaliados).toBe(rows[0].dias_conformes + rows[0].dias_violacao);
+    expect(rows[0].dias_avaliados + rows[0].dias_nao_avaliados).toBe(3);
     expect(rows[0].violacoes_normativas[0]).toContain('LAW_HELI_FLIGHT_MONTH_90H');
     expect(rows[0].fontes_normativas[0]).toContain('Lei 13.475/2017');
+  });
+  it('não considera dias UNKNOWN como avaliados, mesmo com linha operacional presente', () => {
+    const rows = aggregateCanonicalComplianceReport([
+      item({ compliance_status: 'UNKNOWN' }),
+      item({ data_operacional: '2026-09-02', compliance_status: 'UNKNOWN', estado_operacional: 'NAO_AVALIADO' }),
+    ]);
+    expect(rows[0]).toEqual(expect.objectContaining({
+      dias_avaliados: 0, dias_conformes: 0, dias_violacao: 0, dias_nao_avaliados: 2,
+    }));
   });
 });

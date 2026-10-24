@@ -16,6 +16,11 @@ type EligibleCrewMember = {
   funcao_nome: string;
 };
 
+function displayPresentationTime(value: string | null | undefined): string {
+  const match = String(value || '').match(/(?:^|T)([01]\d|2[0-3]):([0-5]\d)/);
+  return match ? `${match[1]}:${match[2]}` : '';
+}
+
 type Envelope<T> = { success: boolean; data?: T | { data?: T }; error?: string };
 
 function extract<T>(response: unknown): T {
@@ -42,9 +47,10 @@ export default function ControleVoosTripulacaoCard({
   const atualizar = useAtualizarTripulante();
   const [eligible, setEligible] = useState<EligibleCrewMember[]>([]);
   const [loadingEligible, setLoadingEligible] = useState(false);
-  const [dialog, setDialog] = useState<{ mode: 'add' | 'replace'; target?: CvTripulante } | null>(null);
+  const [dialog, setDialog] = useState<{ mode: 'add' | 'replace' | 'edit-time'; target?: CvTripulante } | null>(null);
   const [funcao, setFuncao] = useState<CvTripulante['funcao']>('PIC');
   const [funcionarioId, setFuncionarioId] = useState('');
+  const [horarioApresentacao, setHorarioApresentacao] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,6 +76,7 @@ export default function ControleVoosTripulacaoCard({
     const missingPic = !tripulantes.some((item) => item.funcao === 'PIC');
     setFuncao(missingPic ? 'PIC' : 'SIC');
     setFuncionarioId('');
+    setHorarioApresentacao('');
     setError(null);
     setDialog({ mode: 'add' });
   };
@@ -77,15 +84,29 @@ export default function ControleVoosTripulacaoCard({
   const openReplace = (target: CvTripulante) => {
     setFuncao(target.funcao);
     setFuncionarioId(String(target.funcionario_id));
+    setHorarioApresentacao(displayPresentationTime(target.horario_apresentacao));
     setError(null);
     setDialog({ mode: 'replace', target });
   };
 
+  const openPresentationTime = (target: CvTripulante) => {
+    setHorarioApresentacao(displayPresentationTime(target.horario_apresentacao));
+    setError(null);
+    setDialog({ mode: 'edit-time', target });
+  };
+
   const save = async () => {
-    if (!funcionarioId) return setError('Selecione o tripulante.');
+    if (dialog?.mode !== 'edit-time' && !funcionarioId) return setError('Selecione o tripulante.');
     setError(null);
     try {
-      if (dialog?.mode === 'replace' && dialog.target) {
+      if (dialog?.mode === 'edit-time' && dialog.target) {
+        await atualizar.mutateAsync({
+          vooId,
+          tripulanteId: dialog.target.id,
+          horario_apresentacao: horarioApresentacao || null,
+          ...(rdvVersion !== undefined ? { versao: rdvVersion } : {}),
+        });
+      } else if (dialog?.mode === 'replace' && dialog.target) {
         await atualizar.mutateAsync({
           vooId,
           tripulanteId: dialog.target.id,
@@ -94,7 +115,12 @@ export default function ControleVoosTripulacaoCard({
           ...(rdvVersion !== undefined ? { versao: rdvVersion } : {}),
         });
       } else {
-        await criar.mutateAsync({ vooId, funcionario_id: Number(funcionarioId), funcao });
+        await criar.mutateAsync({
+          vooId,
+          funcionario_id: Number(funcionarioId),
+          funcao,
+          horario_apresentacao: horarioApresentacao || null,
+        });
       }
       setDialog(null);
     } catch (err) {
@@ -126,10 +152,16 @@ export default function ControleVoosTripulacaoCard({
               <div>
                 <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{item.funcionario_nome || `Funcionário ${item.funcionario_id}`}</p>
                 <p className="text-xs text-slate-500">{item.funcao}{item.funcionario_codigo_anac ? ` · ANAC ${item.funcionario_codigo_anac}` : ''}</p>
+                <p className="text-xs text-slate-500">Apresentação: {displayPresentationTime(item.horario_apresentacao) || 'Não informada'}</p>
               </div>
-              <button type="button" onClick={() => openReplace(item)} disabled={!editable} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600">
-                <RefreshCw className="h-3.5 w-3.5" /> Trocar
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => openPresentationTime(item)} disabled={!editable} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600">
+                  Editar apresentação
+                </button>
+                <button type="button" onClick={() => openReplace(item)} disabled={!editable} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600">
+                  <RefreshCw className="h-3.5 w-3.5" /> Trocar
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -140,10 +172,11 @@ export default function ControleVoosTripulacaoCard({
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true">
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-900 dark:text-white">{dialog.mode === 'replace' ? 'Trocar tripulante' : 'Cadastrar tripulante'}</h3>
+              <h3 className="font-semibold text-slate-900 dark:text-white">{dialog.mode === 'edit-time' ? 'Hora de apresentação' : dialog.mode === 'replace' ? 'Trocar tripulante' : 'Cadastrar tripulante'}</h3>
               <button type="button" onClick={() => setDialog(null)} aria-label="Fechar"><X className="h-5 w-5" /></button>
             </div>
             <div className="space-y-4">
+              {dialog.mode !== 'edit-time' && (<>
               <label className="block text-sm">Função
                 <select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900" value={funcao} onChange={(e) => { setFuncao(e.target.value as CvTripulante['funcao']); setFuncionarioId(''); }} disabled={dialog.mode === 'replace'}>
                   <option value="PIC">PIC — Comandante</option><option value="SIC">SIC — Segundo em comando</option><option value="COM">Comissário</option><option value="MEC">Mecânico</option><option value="OUTRO">Outro</option>
@@ -155,10 +188,17 @@ export default function ControleVoosTripulacaoCard({
                   {options.map((item) => <option key={item.id} value={item.id}>{item.nome}{item.matricula ? ` · ${item.matricula}` : ''} · {item.funcao_nome}</option>)}
                 </select>
               </label>
+              </>)}
+              {dialog.mode !== 'replace' && (
+                <label className="block text-sm">Hora de apresentação (manual)
+                  <input type="time" value={horarioApresentacao} onChange={(e) => setHorarioApresentacao(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900" />
+                </label>
+              )}
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-700">
                 <button type="button" onClick={() => setDialog(null)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700">Cancelar</button>
-                <button type="button" onClick={save} disabled={criar.isPending || atualizar.isPending || !funcionarioId} className="rounded-lg bg-cyan-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">Salvar tripulação</button>
+                <button type="button" onClick={save} disabled={criar.isPending || atualizar.isPending || (dialog.mode !== 'edit-time' && !funcionarioId)} className="rounded-lg bg-cyan-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">Salvar tripulação</button>
               </div>
             </div>
           </div>

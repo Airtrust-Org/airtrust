@@ -1,0 +1,8 @@
+{
+  "changeId": "coordenacao-role-user-restore-0551",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0551_coordenacao_role_user_restore.sql",
+  "fileHash": "8a77552a043d5ed08625c938790f583de13d0cbf2ad4040dea1970556c95489f",
+  "planPath": "worker-airtrust/schema-v2/plans/coordenacao-role-user-restore-0551.md",
+  "planHash": "e3c69eb99adcceb7d11e3b75d813dde2015b0cf57a5a6560b95ec9d7cdd14998"
+}

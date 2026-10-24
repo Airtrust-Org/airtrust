@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-nr20-modality-repair-0531",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0531_training_compliance_nr20_modality_repair.sql",
+  "fileHash": "385fd0a8a532966813030cd946410d3c0837da25eabf7dfcf8d430f8c2fc4529",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-nr20-modality-repair-0531.md",
+  "planHash": "4d054766f229128ca4dc5f25664d7adb4fef8879c4f8619b807d69283e680b7b"
+}

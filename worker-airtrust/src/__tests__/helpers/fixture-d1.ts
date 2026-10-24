@@ -426,6 +426,16 @@ export function createFixtureDb(fixtures: Fixtures): TestD1 {
       };
     }
 
+    // Admin operational scope: all active sectors within the requested tenant.
+    if (sql.includes('SELECT id AS setor_id FROM setores')) {
+      const [empresaId] = args as number[];
+      return {
+        all: f.setores
+          .filter((sector) => sector.empresa_id === empresaId && sector.ativo === 1 && !sector.deleted_at)
+          .map((sector) => ({ setor_id: sector.id })),
+      };
+    }
+
     // operational-domain-access.ts: resolveOperationalReadScope's
     // classified-setores narrowing (Item 1)
     if (sql.includes('SELECT id FROM setores') && sql.includes('dominio_codigo IS NOT NULL')) {

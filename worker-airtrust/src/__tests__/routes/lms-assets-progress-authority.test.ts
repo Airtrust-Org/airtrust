@@ -224,6 +224,7 @@ describe('wrapper wiring', () => {
     expect(WRAPPER).toContain('event.source !== frame.contentWindow');
     expect(WRAPPER).toContain("data.type !== 'AIRTRUST_COMPLETION_DIAGNOSTICS_V1'");
     expect(WRAPPER).toContain('MAX_RELAYED_DIAGNOSTICS_CHARS');
+    expect(WRAPPER).toContain('if (diagnostics.version == null) diagnostics.version = 1;');
     expect(WRAPPER).toContain("type: 'lms:completion-diagnostics'");
   });
 

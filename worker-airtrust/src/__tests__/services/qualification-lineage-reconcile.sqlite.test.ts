@@ -188,6 +188,44 @@ describe('reconcileQualificationLineageAtomic', () => {
     expect(result.chain).toHaveLength(2);
   });
 
+  it('retroactive predecessor is RENOVADA and stale materialized flags are repaired', async () => {
+    const recent = insertHistory(db.database, { completionDate: '2026-08-10', status: 'CONCLUIDA' });
+    const older = insertHistory(db.database, { completionDate: '2023-05-10', status: 'CONCLUIDA' });
+
+    await reconcileQualificationLineageAtomic(db.asD1(), {
+      empresaId: 1,
+      funcionarioId: 1000,
+      qualificationCode: 'MNT-12',
+    });
+
+    expect(await readRow(db, older)).toMatchObject({
+      status: 'RENOVADA',
+      renovada: 1,
+      renovacao_de: null,
+      data_conclusao: '2023-05-10',
+    });
+    expect(await readRow(db, recent)).toMatchObject({
+      status: 'CONCLUIDA',
+      renovada: 0,
+      renovacao_de: older,
+      data_conclusao: '2026-08-10',
+    });
+
+    // Deliberately corrupt only the legacy materialized flags, leaving status and lineage intact.
+    db.database.prepare('UPDATE qualificacoes_historico SET renovada = 0 WHERE id = ?').run(older);
+    db.database.prepare('UPDATE qualificacoes_historico SET renovada = 1 WHERE id = ?').run(recent);
+
+    await reconcileQualificationLineageAtomic(db.asD1(), {
+      empresaId: 1,
+      funcionarioId: 1000,
+      qualificationCode: 'MNT-12',
+    });
+
+    expect((await readRow(db, older))?.renovada).toBe(1);
+    expect((await readRow(db, recent))?.renovada).toBe(0);
+    expect((await readRow(db, recent))?.renovacao_de).toBe(older);
+  });
+
   it('PLANEJADA and CANCELADA rows are excluded from the chain entirely', async () => {
     const a = insertHistory(db.database, { completionDate: '2024-01-01', status: 'CONCLUIDA' });
     insertHistory(db.database, {

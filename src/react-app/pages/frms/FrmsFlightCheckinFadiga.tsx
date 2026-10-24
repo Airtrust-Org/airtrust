@@ -28,6 +28,7 @@ import OperationalVigilanceTest, {
 } from './OperationalVigilanceTest';
 import RecoveryActivityCard from './RecoveryActivityCard';
 import { useReadinessBaseline, useReadinessToday } from '@/react-app/hooks/useOperationalReadiness';
+import { previousOperationalDate, useFrmsRecoveryContext, type RecoveryActivityType } from '@/react-app/hooks/useFrmsRecovery';
 import {
   clearFadigaCheckinDraft,
   fadigaCheckinDraftKey,
@@ -89,21 +90,22 @@ function statusEquipeLabel(row: Record<string, unknown>): string {
   }
 }
 
-type SonoOpcao = 'h4' | 'h5' | 'h6' | 'h7' | 'h8';
+type SonoOpcao = 'h4' | 'h5' | 'h6' | 'h7' | 'h8' | 'outro';
 
 type EscalaSeveridade = 'melhor' | 'boa' | 'intermediaria' | 'atencao' | 'critica';
 
 const SONO_OPCOES: {
   key: SonoOpcao;
   label: string;
-  horas: number;
+  horas: number | null;
   severidade: EscalaSeveridade;
 }[] = [
-  { key: 'h4', label: '4 horas ou menos', horas: 4, severidade: 'critica' },
+  { key: 'h4', label: '4 horas', horas: 4, severidade: 'critica' },
   { key: 'h5', label: '5 horas', horas: 5, severidade: 'critica' },
   { key: 'h6', label: '6 horas', horas: 6, severidade: 'atencao' },
   { key: 'h7', label: '7 horas', horas: 7, severidade: 'intermediaria' },
-  { key: 'h8', label: '8 horas ou mais', horas: 8, severidade: 'melhor' },
+  { key: 'h8', label: '8 horas', horas: 8, severidade: 'melhor' },
+  { key: 'outro', label: 'Outro valor', horas: null, severidade: 'intermediaria' },
 ];
 
 const KSS_OPCOES = [
@@ -214,6 +216,8 @@ function selectedScaleClasses(severidade: EscalaSeveridade): string {
 
 export function isFadigaCheckinSubmitReady(input: {
   sonoOpcao: SonoOpcao | null;
+  horasSonoPersonalizadas?: number | null;
+  repousoHoras?: number | null;
   presentationTime: string;
   wakeTime: string;
   qualidadeSono: number | null;
@@ -228,6 +232,13 @@ export function isFadigaCheckinSubmitReady(input: {
   const wakeTimeValid = isValidWakeTime(input.wakeTime);
   return (
     input.sonoOpcao !== null &&
+    (input.sonoOpcao !== 'outro' ||
+      (input.horasSonoPersonalizadas !== null &&
+        input.horasSonoPersonalizadas !== undefined &&
+        Number.isFinite(input.horasSonoPersonalizadas) &&
+        input.horasSonoPersonalizadas >= 0 && input.horasSonoPersonalizadas <= 24)) &&
+    (input.repousoHoras == null ||
+      (Number.isFinite(input.repousoHoras) && input.repousoHoras >= 0 && input.repousoHoras <= 24)) &&
     presentationTimeValid &&
     wakeTimeValid &&
     input.qualidadeSono !== null &&
@@ -301,12 +312,12 @@ function HistoricoTab({ collective }: { collective: boolean }) {
                         )}
                       </td>
                     )}
-                    <td className="py-2 text-slate-700">{r.kss_score}</td>
-                    <td className="py-2 text-slate-700">{Number(r.horas_sono ?? 0).toFixed(1)}</td>
+                    <td className="py-2 text-slate-700">{r.kss_score == null ? '—' : r.kss_score}</td>
+                    <td className="py-2 text-slate-700">{r.horas_sono == null ? '—' : Number(r.horas_sono).toFixed(1)}</td>
                     <td className="py-2 font-semibold text-slate-800">
-                      {Math.round(Number(r.score_fadiga ?? 0))}
+                      {r.score_fadiga == null ? '—' : Math.round(Number(r.score_fadiga))}
                     </td>
-                    <td className="py-2">{badgeNivel(r.nivel_fadiga)}</td>
+                    <td className="py-2">{r.nivel_fadiga ? badgeNivel(r.nivel_fadiga) : 'Não avaliado'}</td>
                     <td className="py-2 text-slate-600">
                       {statusOperacionalLabel(r.status_operacional)}
                     </td>
@@ -386,7 +397,7 @@ function PainelGestorTab() {
                     <td className="px-4 py-3 font-semibold text-slate-900">
                       {r.score_fadiga == null ? '—' : Math.round(Number(r.score_fadiga))}
                     </td>
-                    <td className="px-4 py-3">{badgeNivel(String(r.nivel_fadiga ?? ''))}</td>
+                    <td className="px-4 py-3">{r.nivel_fadiga == null || String(r.nivel_fadiga).trim() === '' ? 'Não avaliado' : badgeNivel(String(r.nivel_fadiga))}</td>
                     <td className="px-4 py-3 text-slate-600">
                       {statusEquipeLabel(r)}
                     </td>
@@ -522,6 +533,9 @@ export default function FrmsFlightCheckinFadiga() {
   const [sonoOpcao, setSonoOpcao] = useState<SonoOpcao | null>(
     (restoredDraft?.sonoOpcao as SonoOpcao | null) ?? null,
   );
+  const [horasSonoPersonalizadas, setHorasSonoPersonalizadas] = useState<number | null>(restoredDraft?.horasSonoPersonalizadas ?? null);
+  const [repousoHoras, setRepousoHoras] = useState<number | null>(restoredDraft?.repousoHoras ?? null);
+  const [selectedRecoveryActivity, setSelectedRecoveryActivity] = useState<RecoveryActivityType | null>(null);
   const [presentationTime, setPresentationTime] = useState(restoredDraft?.presentationTime ?? '');
   const [presentationTimeTouched, setPresentationTimeTouched] = useState(false);
   const [wakeTime, setWakeTime] = useState(restoredDraft?.wakeTime ?? '');
@@ -549,11 +563,19 @@ export default function FrmsFlightCheckinFadiga() {
   const submitMutation = useSubmitCheckin();
   const { data: readinessBaseline } = useReadinessBaseline(today);
   const { data: readinessToday } = useReadinessToday(today);
+  const { data: previousActivity } = useFrmsRecoveryContext(previousOperationalDate(today));
+  const recoveryActivityType = selectedRecoveryActivity ??
+    String(previousActivity?.activity?.activity_type ?? '');
+  const usesAbsoluteRestForRecovery =
+    !previousActivity?.flight?.detected &&
+    (recoveryActivityType === 'STANDBY_HOME_HOTEL' || recoveryActivityType === 'STANDBY_ONSITE');
 
   useEffect(() => {
     saveFadigaCheckinDraft(draftKey, {
-      version: 1,
+      version: 2,
       sonoOpcao,
+      horasSonoPersonalizadas,
+      repousoHoras,
       presentationTime,
       wakeTime,
       qualidadeSono,
@@ -579,6 +601,8 @@ export default function FrmsFlightCheckinFadiga() {
     presentationTime,
     qualidadeSono,
     sonoOpcao,
+    horasSonoPersonalizadas,
+    repousoHoras,
     vigilanceResult,
     vigilanceRunning,
     wakeTime,
@@ -596,6 +620,8 @@ export default function FrmsFlightCheckinFadiga() {
 
   const canSubmit = isFadigaCheckinSubmitReady({
     sonoOpcao,
+    horasSonoPersonalizadas,
+    repousoHoras,
     presentationTime,
     wakeTime,
     qualidadeSono,
@@ -620,7 +646,10 @@ export default function FrmsFlightCheckinFadiga() {
     (wakeTimeTouched || submitAttempted) && wakeTimeHasValue && !wakeTimeValid;
 
   const missingItems: string[] = [];
-  if (sonoOpcao === null) missingItems.push('Repouso absoluto nas últimas 24h');
+  if (sonoOpcao === null) missingItems.push('Sono efetivamente obtido');
+  if (sonoOpcao === 'outro' && (horasSonoPersonalizadas == null ||
+    !Number.isFinite(horasSonoPersonalizadas) || horasSonoPersonalizadas < 0 ||
+    horasSonoPersonalizadas > 24)) missingItems.push('Valor real de sono (0 a 24 horas)');
   if (!presentationTimeValid) {
     if (!presentationTimeHasValue) missingItems.push('Hora de apresentação');
     else missingItems.push('Horário inválido - corrija a hora de apresentação');
@@ -629,7 +658,7 @@ export default function FrmsFlightCheckinFadiga() {
     if (!wakeTimeHasValue) missingItems.push('Hora em que acordou');
     else missingItems.push('Horário inválido - corrija a hora em que acordou');
   }
-  if (qualidadeSono === null) missingItems.push('Qualidade do repouso absoluto');
+  if (qualidadeSono === null) missingItems.push('Qualidade do sono');
   if (kssScore === null) missingItems.push('Nível de sonolência (KSS)');
   if (vigilanceResult === null) missingItems.push('Teste breve de atenção e tempo de reação');
   if (fitForDutyChoice === null) missingItems.push('Condição para iniciar a jornada');
@@ -681,7 +710,11 @@ export default function FrmsFlightCheckinFadiga() {
         jornada_inicio_prevista: presentationTimeNormalized!,
         hora_acordou: wakeTimeNormalized!,
         wake_time: wakeTimeNormalized!,
-        horas_sono_24h: SONO_OPCOES.find((o) => o.key === sonoOpcao!)!.horas,
+        // Separate observed self-report of sleep from opportunity for sleep/rest.
+        horas_sono_24h: sonoOpcao === 'outro'
+          ? horasSonoPersonalizadas!
+          : SONO_OPCOES.find((o) => o.key === sonoOpcao!)!.horas!,
+        oportunidade_sono_horas_24h: usesAbsoluteRestForRecovery ? (repousoHoras ?? undefined) : undefined,
         qualidade_sono: qualidadeSono!,
         kss_score: kss,
         subjective_fatigue_level: subjectiveFatigueLevel,
@@ -819,16 +852,48 @@ export default function FrmsFlightCheckinFadiga() {
               </div>
             )}
 
-            <RecoveryActivityCard today={today} />
+            <RecoveryActivityCard
+              today={today}
+              onActivityTypeChange={(type) => {
+                setSelectedRecoveryActivity(type);
+                if (type !== 'STANDBY_HOME_HOTEL' && type !== 'STANDBY_ONSITE') {
+                  setRepousoHoras(null);
+                }
+              }}
+            />
 
             <div className="space-y-3">
-              <FormCard label="Bloco 1 - Repouso absoluto" hint="Informe seu descanso mais recente.">
+              <FormCard label="Bloco 1 - Repouso e sono" hint="Oportunidade de sono é tempo disponível para descansar em ambiente adequado, mesmo sem adormecer. Sono efetivo é o tempo realmente dormido.">
+                <div className="space-y-4">
+                  {usesAbsoluteRestForRecovery && (
+                  <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <summary className="cursor-pointer text-sm font-medium text-slate-700">
+                      Oportunidade de sono no standby — opcional
+                    </summary>
+                    <div className="mt-3">
+                    <label htmlFor="oportunidade-sono" className="mb-2 block text-sm font-medium text-slate-700">
+                      Oportunidade de sono (repouso absoluto) nas últimas 24h
+                    </label>
+                    <p className="mb-2 text-xs text-slate-600">
+                      Tempo livre de obrigações, em local adequado para dormir. Não pressupõe ter dormido.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input id="oportunidade-sono" type="number" min="0" max="24" step="any"
+                        inputMode="decimal" value={repousoHoras ?? ''}
+                        onChange={(event) => setRepousoHoras(event.target.value === '' ? null : Number(event.target.value))}
+                        className="w-28 min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-semibold" />
+                      <span className="text-sm text-slate-600">horas (valor informado)</span>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">Usada apenas para avaliar crédito de recuperação no standby de ontem, conforme política vigente. Não altera o score de fadiga diária. Sem declaração, não se presume tempo de repouso absoluto.</p>
+                    </div>
+                  </details>
+                  )}
                 <div className="space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
-                      Repouso absoluto nas últimas 24h
+                      Sono efetivamente obtido nas últimas 24h
                     </legend>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
                       {SONO_OPCOES.map((op) => {
                         const selected = sonoOpcao === op.key;
                         return (
@@ -836,7 +901,9 @@ export default function FrmsFlightCheckinFadiga() {
                             key={op.key}
                             className={`relative flex min-h-11 w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer select-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
                               selected
-                                ? selectedScaleClasses(op.severidade)
+                                ? op.key === 'outro'
+                                  ? 'border-blue-500 bg-blue-50 text-blue-900 ring-1 ring-blue-200'
+                                  : selectedScaleClasses(op.severidade)
                                 : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                             }`}
                           >
@@ -853,6 +920,34 @@ export default function FrmsFlightCheckinFadiga() {
                         );
                       })}
                     </div>
+                    {sonoOpcao === 'outro' && (
+                      <div className="mt-3">
+                        <label htmlFor="sono-horas-exatas" className="mb-1 block text-sm font-medium text-slate-700">
+                          Horas de sono efetivamente obtidas (0 a 24)
+                        </label>
+                        <input
+                          id="sono-horas-exatas"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          max="24"
+                          step="0.5"
+                          value={horasSonoPersonalizadas ?? ''}
+                          onChange={(event) => {
+                            const raw = event.currentTarget.value;
+                            setHorasSonoPersonalizadas(raw === '' ? null : Number(raw));
+                          }}
+                          aria-invalid={submitAttempted &&
+                            (horasSonoPersonalizadas == null || !Number.isFinite(horasSonoPersonalizadas) ||
+                              horasSonoPersonalizadas < 0 || horasSonoPersonalizadas > 24)}
+                          className="min-h-11 w-full max-w-52 rounded-xl border border-slate-300 px-3 py-2 text-base"
+                        />
+                        <p className="mt-1 text-xs text-slate-600">
+                          Informe o tempo efetivo, inclusive quando foi inferior a 4 ou superior a 8 horas.
+                          Uma faixa de horas não será convertida em uma duração exata.
+                        </p>
+                      </div>
+                    )}
                   </fieldset>
 
                   <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
@@ -926,9 +1021,9 @@ export default function FrmsFlightCheckinFadiga() {
 
                     <fieldset>
                       <legend className="mb-2 text-sm font-medium text-slate-700">
-                        Qualidade do repouso absoluto
+                        Qualidade do sono obtido
                       </legend>
-                      <div className="space-y-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                         {QUALIDADE_SONO_OPCOES.map((op) => {
                           const selected = qualidadeSono === op.value;
                           return (
@@ -962,6 +1057,7 @@ export default function FrmsFlightCheckinFadiga() {
                     </fieldset>
                   </div>
                 </div>
+                </div>
               </FormCard>
 
               <FormCard
@@ -972,7 +1068,7 @@ export default function FrmsFlightCheckinFadiga() {
                   <legend className="mb-3 text-xs font-medium text-slate-500">
                     Escala KSS (1-9)
                   </legend>
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {KSS_OPCOES.map((op) => {
                       const selected = kssScore === op.value;
                       const severidade: EscalaSeveridade =
@@ -1017,7 +1113,7 @@ export default function FrmsFlightCheckinFadiga() {
 
               <FormCard
                 label="Bloco 3 - Atenção e tempo de reação"
-                hint="Teste breve objetivo para complementar repouso absoluto, KSS e sua autoavaliação. O resultado não determina aptidão isoladamente."
+                hint="PVT diário (60 segundos): avalia atenção e reação. Complementa KSS e sono; não determina aptidão isoladamente."
               >
                 {interruptedPvtRecovered ? (
                   <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">
@@ -1155,8 +1251,9 @@ export default function FrmsFlightCheckinFadiga() {
                 </div>
               </FormCard>
 
-              <FormCard label="Bloco 5 - Fatores relevantes" hint="Esses itens são opcionais.">
-                <div className="space-y-4">
+              <details className="rounded-2xl border border-slate-200 bg-white p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-800">Fatores adicionais (opcional)</summary>
+                <div className="mt-4 space-y-4">
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-slate-700">
                       Medicação que pode causar sonolência
@@ -1179,7 +1276,7 @@ export default function FrmsFlightCheckinFadiga() {
                     />
                   </fieldset>
                 </div>
-              </FormCard>
+              </details>
 
               <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">

@@ -2,13 +2,14 @@
 
 import { existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
 // CANONICAL_ROOT is the expected deployment path for this repository.
-// Update this value if the repository is moved to a different location.
-const canonicalRoot = process.env.AIRTRUST_CANONICAL_ROOT || '/Users/filipedaumas/SAAS/Airtrust';
+// Override with AIRTRUST_CANONICAL_ROOT when using a nonstandard location.
+const canonicalRoot = process.env.AIRTRUST_CANONICAL_ROOT || path.join(homedir(), 'SAAS', 'Airtrust');
 const currentPath = realpathSync(process.cwd());
 
 function runGit(args, { allowFailure = false } = {}) {
@@ -93,6 +94,8 @@ const statusLines = listLines(runGit(['status', '--short', '--untracked-files=al
 const modifiedFiles = statusLines.filter((line) => !line.startsWith('??'));
 const untrackedFiles = statusLines.filter((line) => line.startsWith('??'));
 const worktrees = listLines(runGit(['worktree', 'list', '--porcelain'], { allowFailure: true }));
+const worktreeCount = worktrees.filter((line) => line.startsWith('worktree ')).length;
+const prunableWorktreeCount = worktrees.filter((line) => line.startsWith('prunable ')).length;
 const nodeModulesExists = existsSync(path.join(repoRoot, 'node_modules'));
 const workerNodeModulesExists = existsSync(path.join(repoRoot, 'worker-airtrust', 'node_modules'));
 const canonicalMatch = currentPath === canonicalRoot;
@@ -138,12 +141,16 @@ if (untrackedFiles.length === 0) {
 }
 console.log('');
 console.log('open_worktrees:');
-if (worktrees.length === 0) {
+console.log(`registered: ${worktreeCount}`);
+console.log(`prunable: ${prunableWorktreeCount}`);
+if (worktreeCount === 0) {
   console.log('(none)');
-} else {
+} else if (process.env.AIRTRUST_REPO_DOCTOR_VERBOSE_WORKTREES === '1') {
   for (const line of worktrees) {
     console.log(line);
   }
+} else {
+  console.log('(details omitted; set AIRTRUST_REPO_DOCTOR_VERBOSE_WORKTREES=1 to inspect)');
 }
 console.log('');
 console.log(`recommendation: ${recommendation}`);
