@@ -25,9 +25,9 @@ const env={
   FRMS_QA_PREPARE_GRANT_ID:GRANT,
   FRMS_QA_PREPARE_EXPECTED_SHA:SHA,
   FRMS_QA_PREPARE_CONFIRM:'AIRTRUST_FRMS_QA_PREPARE_ONLY_F0_APPROVED',
+  FRMS_QA_TRANSACTION_PHASE:'queue-apply',
   CLOUDFLARE_ACCOUNT_ID:'e'.repeat(32),
   CLOUDFLARE_WORKER_API_TOKEN:'existing-worker-token-synthetic',
-  CLOUDFLARE_D1_MIGRATION_API_TOKEN:'existing-d1-token-synthetic',
   FRMS_QA_APPROVAL_PUBLIC_KEY_PEM:'synthetic-non-operational-pem',
   FRMS_QA_APPROVAL_PUBLIC_KEY_SHA256:PIN,
   FRMS_QA_SIGNER_ORIGIN:HOST,FRMS_QA_SIGNER_ORIGIN_SHA256:hash(HOST),
@@ -76,6 +76,8 @@ test('entrypoint requires exact workflow/main/grant and all independent inputs',
     {FRMS_QA_SIGNER_ORIGIN:''},
     {FRMS_QA_APPROVAL_PUBLIC_KEY_PEM:''},
     {CLOUDFLARE_WORKER_API_TOKEN:''},
+    {CLOUDFLARE_D1_MIGRATION_API_TOKEN:'forbidden-cross-scope'},
+    {FRMS_QA_TRANSACTION_PHASE:'not-queue-apply'},
     {GITHUB_WORKFLOW_REF:'Airtrust-Org/airtrust/.github/workflows/other.yml@refs/heads/main'},
     {ACTIONS_ID_TOKEN_REQUEST_TOKEN:''},
     {FRMS_QA_APPROVAL_PRIVATE_KEY_PEM:'forbidden'},
@@ -139,7 +141,18 @@ test('single-run workflow holds staging mutex and never exposes an inline privat
   assert.match(yaml,/node ops\/frms-qa-repair\/run-protected-private-transaction.mjs/);
   assert.doesNotMatch(yaml,/FRMS_QA_APPROVAL_PRIVATE_KEY_PEM:/);
   assert.doesNotMatch(yaml,/\b(?:d1 execute|wrangler deploy --env production)\b/);
-  assert.equal((yaml.match(/\n  [a-z-]+:\n    runs-on:/g)||[]).length,1);
+  assert.equal((yaml.match(/\n  frms-(?:queue-apply|d1-readonly-postcondition):\n/g)||[]).length,2);
+  assert.match(yaml,/needs: \[frms-queue-apply\]/);
+  assert.match(yaml,/apply_validation:.*steps.queue_apply.outputs.apply_validation/);
+  assert.match(yaml,/FRMS_QA_APPLY_STAGE_RESULT:.*needs.frms-queue-apply.outputs.apply_validation/);
+  assert.match(yaml,/run: node ops\/frms-qa-repair\/run-protected-private-d1-readback.mjs/);
+  // A Worker token and D1 migration token must never coexist on one runner.
+  const queueJob=yaml.split('  frms-queue-apply:')[1].split('  frms-d1-readonly-postcondition:')[0];
+  const d1Job=yaml.split('  frms-d1-readonly-postcondition:')[1];
+  assert.match(queueJob,/secrets.CLOUDFLARE_WORKER_API_TOKEN/);
+  assert.doesNotMatch(queueJob,/secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+  assert.match(d1Job,/secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
+  assert.doesNotMatch(d1Job,/secrets.CLOUDFLARE_WORKER_API_TOKEN/);
 });
 test('wrong SHA, public pin, receipt or tenant fails before any OIDC',async()=>{
   const f=fake(),signer=create({env,fetcher:f.fetcher});
