@@ -58,20 +58,23 @@ export function captureF5ScoreVisualState() {
 }
 
 /** Bind rendered slide title + counter + active navigation to authored CMI. */
-export function requireF5ScoreVisualState(visual, location, suspend, { previousIndex = null } = {}) {
-  let state;
-  try { state = JSON.parse(suspend); } catch { state = null; }
+export function requireF5ScoreVisualState(visual, location, suspend, {
+  previousIndex = null, previousLocation = null, previousSuspend = null,
+} = {}) {
   const valid = visual?.contract === 'F5_SCORE_RENDERED_DOM_V1' &&
     Number.isSafeInteger(visual.index) && visual.index >= 0 &&
     Number.isSafeInteger(visual.total) && visual.total > 1 &&
     visual.index < visual.total && visual.modelLength === visual.total &&
     visual.navIndex === visual.index && visual.stageVisible === true &&
     visual.titleMatchesModel === true &&
-    location === (visual.index + 1) + '/' + visual.total &&
-    state?.v === 2 && state?.a === visual.index &&
-    Array.isArray(state.d) &&
+    typeof location === 'string' && location.trim().length > 0 &&
+    typeof suspend === 'string' && suspend.trim().length > 0 &&
     (previousIndex === null || (Number.isSafeInteger(previousIndex) &&
-      visual.index === previousIndex + 1));
+      visual.index === previousIndex + 1 &&
+      (location !== previousLocation || suspend !== previousSuspend)));
+  // SCORM bookmark encoding belongs to the authored SCO. Treat it as opaque;
+  // prove navigation changed authored CMI and that the rendered slide survives
+  // a fresh context, rather than inventing a private suspend_data schema.
   if (!valid) throw Error('F5_VISUAL_RESUME_WITNESS_INVALID');
   return { index: visual.index, total: visual.total };
 }
@@ -299,7 +302,8 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     const { marker, suspend } = requireAuthoredF5State(moved?.location, moved?.suspend);
     const advancedRendered = await frame.locator('body').evaluate(captureF5ScoreVisualState);
     try { requireF5ScoreVisualState(advancedRendered, marker, suspend,
-      { previousIndex: startingCursor.index }); }
+      { previousIndex: startingCursor.index, previousLocation: initial.marker,
+        previousSuspend: initial.suspend }); }
     catch { fail('VISUAL_RESUME_WITNESS_INVALID'); }
     const responsePromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
