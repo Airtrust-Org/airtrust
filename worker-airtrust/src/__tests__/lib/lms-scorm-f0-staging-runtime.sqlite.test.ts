@@ -206,6 +206,52 @@ describe('F0 staging-only real candidate launch/commit/resume with Schema V2 056
       expect(f.count('audit_logs')).toBe(4);
     }finally{f.db.close();}
   });
+  it('recovers synthetic CMI rows whose optional status columns are NULL',async()=>{
+    const f=fixture();
+    try {
+      await provisionScormF0QaBinding(f.d1,bindingInput,now);
+      const before=await readF0CandidateRuntimeState(f.d1,scope);
+      await witnessF0CandidateLaunch(f.d1,scope,before);
+      await commitF0CandidateSuspend(f.d1,scope,commitBody('1/2','suspend-state'));
+      // F0 recovery explicitly permits NULL incomplete status columns.
+      f.db.exec('UPDATE lms_progresso_scorm SET lesson_status=NULL,completion_status=NULL,success_status=NULL WHERE matricula_id=23');
+      await recoverF0CandidateFixture(f.d1,{...scope,cycleId:24,runId:run,recoveryReceiptSha256:'d'.repeat(64)});
+      expect(f.count('lms_progresso_scorm')).toBe(0);
+    } finally {f.db.close();}
+  });
+  it('does not attest idempotent cleanup while a stale synthetic CMI row remains',async()=>{
+    const f=fixture();
+    const params={...scope,cycleId:24,runId:run,recoveryReceiptSha256:'d'.repeat(64)};
+    try {
+      await provisionScormF0QaBinding(f.d1,bindingInput,now);
+      await recoverF0CandidateFixture(f.d1,params);
+      // A REVOKED binding is not proof of cleanup if a CMI row still exists.
+      f.db.exec('INSERT INTO lms_progresso_scorm(matricula_id,empresa_id) VALUES(23,111)');
+      await expect(recoverF0CandidateFixture(f.d1,params))
+        .rejects.toThrow('SCORM_F0_RECOVERY_PREIMAGE_OR_TERMINAL_STATE_INVALID');
+    } finally {f.db.close();}
+  });
+  it('cannot recover a foreign tenant, course, enrollment, cycle or run',async()=>{
+    const f=fixture();
+    const params={...scope,cycleId:24,runId:run,recoveryReceiptSha256:'d'.repeat(64)};
+    try {
+      await provisionScormF0QaBinding(f.d1,bindingInput,now);
+      const before=await readF0CandidateRuntimeState(f.d1,scope);
+      await witnessF0CandidateLaunch(f.d1,scope,before);
+      await commitF0CandidateSuspend(f.d1,scope,commitBody('1/2','synthetic-suspend'));
+      for (const changed of [
+        {tenantId:112},{courseId:16},{enrollmentId:24},{cycleId:25},
+        {runId:'12345678-1234-1234-1234-123456789abc'},
+      ]) {
+        await expect(recoverF0CandidateFixture(f.d1,{...params,...changed})).rejects.toThrow();
+        expect(f.count('lms_progresso_scorm')).toBe(1);
+        expect((f.db.prepare('SELECT status FROM lms_matriculas WHERE id=23').get() as {status:string}).status)
+          .toBe('EM_ANDAMENTO');
+      }
+      await recoverF0CandidateFixture(f.d1,params);
+      expect(f.count('lms_progresso_scorm')).toBe(0);
+    } finally {f.db.close();}
+  });
   it('rejects bad CMI payloads and enforces candidate edition immutability',()=>{
     expect(()=>validateF0IncompleteCommit({...commitBody('1/2','state'),cmi_json:'not-json'},23,24))
       .toThrow('SCORM_F0_CMI_INVALID');
