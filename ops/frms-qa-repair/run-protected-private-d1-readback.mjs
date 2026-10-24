@@ -11,6 +11,7 @@ export function validateD1PostconditionEntry(env={}){
   if(env.GITHUB_ACTIONS!=='true'||env.GITHUB_EVENT_NAME!=='workflow_dispatch'||
      env.GITHUB_REPOSITORY!=='Airtrust-Org/airtrust'||
      env.GITHUB_REF!=='refs/heads/main'||
+     env.GITHUB_JOB!=='frms-d1-readonly-postcondition'||
      env.GITHUB_WORKFLOW_REF!==
        'Airtrust-Org/airtrust/.github/workflows/staging-frms-qa-private-transaction.yml@refs/heads/main'||
      !SHA.test(env.GITHUB_SHA||'')||
