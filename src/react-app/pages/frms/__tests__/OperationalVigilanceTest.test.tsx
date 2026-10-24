@@ -63,11 +63,11 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
     expect(screen.getByText(/retângulo com borda vermelha fica visível sobre fundo preto/i)).toBeInTheDocument();
     expect(screen.getByText(/contador amarelo/i)).toBeInTheDocument();
     expect(screen.getByText(/referência científica: psychomotor vigilance task/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Protocolo e referência científica'));
     expect(screen.getByRole('link', { name: /NASA Ames Fatigue Countermeasures Laboratory/i })).toHaveAttribute(
       'href',
       'https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/',
     );
-    fireEvent.click(screen.getByText('Protocolo e referência científica'));
     expect(screen.queryByText(/PsyToolkit/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/NASA PVT\+/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/círculo azul/i)).not.toBeInTheDocument();
