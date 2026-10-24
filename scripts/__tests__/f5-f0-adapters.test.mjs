@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { commitIncompleteScormState, createF0Adapters, runF5BrowserPair } from '../staging/f5-f0-adapters.mjs';
+import { commitIncompleteScormState, createF0Adapters, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => {
@@ -136,4 +136,17 @@ test('F5 browser writes all CMI values before Commit for SCORM 1.2 and 2004', ()
     if (originalWindow === undefined) delete globalThis.window;
     else globalThis.window = originalWindow;
   }
+});
+
+test('F5 HTTP diagnostics expose only status and validated request id, never response body', () => {
+  const response = {
+    status: () => 409,
+    headers: () => ({ 'x-request-id': 'req-12345678' }),
+    text: () => { throw Error('BODY_MUST_NOT_BE_READ'); },
+  };
+  assert.deepEqual(safeF5HttpFailure(response), { status: 409, requestId: 'req-12345678' });
+  assert.deepEqual(safeF5HttpFailure({ ...response,
+    headers: () => ({ 'x-request-id': 'Bearer secret token with PII' }),
+  }), { status: 409, requestId: null });
+  assert.deepEqual(safeF5HttpFailure(null), { status: null, requestId: null });
 });

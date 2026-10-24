@@ -31,7 +31,8 @@ const canonical = value => {
 function checkedScope(plan, params) {
   const c = plan?.candidate, f = plan?.syntheticFixture;
   if (!c || !f || params.tenantId !== c.tenantId || params.courseId !== c.courseId ||
-      params.packageSha256 !== c.packageSha256 || params.enrollmentId !== f.enrollmentId ||
+      (params.packageSha256 !== undefined && params.packageSha256 !== c.packageSha256) ||
+      (params.enrollmentId !== undefined && params.enrollmentId !== f.enrollmentId) ||
       (params.cycleId !== undefined && params.cycleId !== f.cycleId) ||
       (params.runId !== undefined && params.runId !== f.runId)) fail('SCOPE_MISMATCH');
   if (!UUID.test(params.packageId ?? '') || !HEX64.test(c.packageSha256 ?? '') ||
@@ -89,6 +90,17 @@ export function commitIncompleteScormState({ is2004, marker, suspend }) {
   return { marker, suspend, apiVersion: is2004 ? '2004' : '1.2' };
 }
 
+/** Failure diagnostics must never log response bodies, tokens or learner state. */
+export function safeF5HttpFailure(response) {
+  const status = response?.status?.();
+  const rawRequestId = response?.headers?.()?.['x-request-id'];
+  return {
+    status: Number.isInteger(status) && status >= 100 && status <= 599 ? status : null,
+    requestId: typeof rawRequestId === 'string' &&
+      /^[A-Za-z0-9_-]{8,80}$/.test(rawRequestId) ? rawRequestId : null,
+  };
+}
+
 async function browserExecution({ plan, params, request, env, browserType }) {
   const origin = String(env.F5_STAGING_API_ORIGIN || 'https://airtrust-api-staging.airtrust.workers.dev').replace(/\/$/, '');
   const token = env.SCORM_QA_ACCESS_TOKEN;
@@ -124,7 +136,10 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       { timeout: 30_000 });
     const first = await page.evaluate(commitIncompleteScormState, { is2004, marker, suspend });
     const firstCommit = await responsePromise;
-    if (!firstCommit || !firstCommit.ok()) fail('WORKER_COMMIT_HTTP_FAILED');
+    if (!firstCommit || !firstCommit.ok()) {
+      console.error('[COMMIT_FAIL_DIAGNOSTIC]', safeF5HttpFailure(firstCommit));
+      fail('WORKER_COMMIT_HTTP_FAILED');
+    }
     const firstEnvelope = await firstCommit.json();
     if (firstEnvelope?.success !== true || firstEnvelope?.data?.completionWritten !== false ||
         firstEnvelope?.data?.certificateIssued !== false) fail('WORKER_COMMIT_RECEIPT_INVALID');
@@ -138,7 +153,11 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       const result = is2004 ? api.Terminate('') : api.LMSFinish('');
       if (result !== 'true') throw Error('SCORM_FINISH_REJECTED');
     }, is2004);
-    if (!(await finishPromise).ok()) fail('WORKER_FINISH_COMMIT_HTTP_FAILED');
+    const finishCommit = await finishPromise;
+    if (!finishCommit || !finishCommit.ok()) {
+      console.error('[FINISH_COMMIT_FAIL_DIAGNOSTIC]', safeF5HttpFailure(finishCommit));
+      fail('WORKER_FINISH_COMMIT_HTTP_FAILED');
+    }
     await page.close();
 
     // A fresh context rules out local storage as the source of a successful
