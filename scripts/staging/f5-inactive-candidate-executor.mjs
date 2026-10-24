@@ -281,6 +281,10 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
     primaryError = error;
     const recoveryErrors = [];
     if (completionAttempted) {
+      // The complete response may be HTTP 200 yet fail its quality/ownership
+      // gate. Never delete by an unverified packageId from that response.
+      // Only an operation-scoped Worker resolution can establish ownership.
+      candidate = null;
       try {
         const resolution = await adapters.resolveAmbiguousIntake({
           tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId,

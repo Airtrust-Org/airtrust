@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { captureF5ScoreVisualState, requireF5ScoreVisualState, requireF5ScoreResumeMatch, commitIncompleteScormState, createF0Adapters, hasAuthoredF5State, requireAuthoredF5State, requireF5CommitReceipt, requireF5CommitReadbackCount, readInitializedF5ResumeState, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
+import { captureF5ScoreVisualState, chooseF5ScoreNavigation, requireF5ScoreVisualState, requireF5ScoreResumeMatch, commitIncompleteScormState, createF0Adapters, hasAuthoredF5State, requireAuthoredF5State, requireF5CommitReceipt, requireF5CommitReadbackCount, readInitializedF5ResumeState, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => {
@@ -414,6 +414,40 @@ test('Score F5 guard requires authored CMI to change on actual Next navigation',
   assert.throws(() => requireF5ScoreVisualState(f5Visual(), '1/5', f5Suspend(0),
     { previousIndex: 0, previousLocation: '1/5',
       previousSuspend: f5Suspend(0) }), /VISUAL_RESUME_WITNESS_INVALID/);
+});
+
+test('Score F5 uses authored Prev only for an interaction-locked resumed slide', () => {
+  const locked = { ...f5Visual(1), interactionRequired: true };
+  const args = { nextVisible: true, nextEnabled: false,
+    prevEnabled: true, initialRendered: locked };
+  assert.equal(chooseF5ScoreNavigation(args), -1);
+  assert.equal(chooseF5ScoreNavigation({ ...args, nextEnabled: true }), 1);
+  for (const changes of [
+    { nextVisible: false }, { prevEnabled: false },
+    { initialRendered: { ...locked, interactionRequired: false } },
+    { initialRendered: { ...locked, index: 0 } },
+    { initialRendered: { ...locked, index: null } },
+  ]) assert.throws(() => chooseF5ScoreNavigation({ ...args, ...changes }),
+    /F5_VISUAL_NAVIGATION_UNAVAILABLE/);
+  assert.deepEqual(requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(0),
+    { previousIndex: 1, previousDirection: -1, previousLocation: '2/5',
+      previousSuspend: f5Suspend(1) }), { index: 0, total: 5 });
+  for (const direction of [-2, 0, 2, 1]) {
+    assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(0),
+      { previousIndex: 1, previousDirection: direction, previousLocation: '2/5',
+        previousSuspend: f5Suspend(1) }), /F5_VISUAL_RESUME_WITNESS_INVALID/);
+  }
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(1),
+    { previousIndex: 1, previousDirection: -1, previousLocation: '2/5',
+      previousSuspend: f5Suspend(1) }), /F5_VISUAL_RESUME_WITNESS_INVALID/);
+  assert.equal(requireF5ScoreResumeMatch(f5Visual(0), f5Visual(0),
+    { navigatedFromIndex: 1 }), true);
+  for (const from of [null, 0, 2]) {
+    assert.throws(() => requireF5ScoreResumeMatch(f5Visual(0), f5Visual(0),
+      { navigatedFromIndex: from }), /F5_VISUAL_RESUME_WITNESS_INVALID/);
+  }
+  assert.throws(() => requireF5ScoreResumeMatch(f5Visual(0), f5Visual(1),
+    { navigatedFromIndex: 1 }), /F5_VISUAL_RESUME_WITNESS_INVALID/);
 });
 
 test('Score F5 cross-context guard rejects persisted bookmark with first slide rendered', () => {

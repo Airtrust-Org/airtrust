@@ -60,12 +60,24 @@ export function captureF5ScoreVisualState() {
     titleMatchesModel: typeof title === 'string' && title.trim().length > 0 &&
       heading?.textContent?.trim() === title.trim(),
     modelLength: Array.isArray(slides) ? slides.length : null,
+    interactionRequired: slides?.[index]?.requiredInteraction === true,
   };
+}
+
+/** The SCO's authored required interaction may block Next. Prev is never a
+ * substitute unless the real rendered Score slide explicitly requires it. */
+export function chooseF5ScoreNavigation({ nextVisible, nextEnabled, prevEnabled, initialRendered }) {
+  if (nextVisible === true && nextEnabled === true) return 1;
+  if (nextVisible === true && nextEnabled === false && prevEnabled === true &&
+      initialRendered?.interactionRequired === true &&
+      Number.isSafeInteger(initialRendered.index) && initialRendered.index > 0) return -1;
+  throw Error('F5_VISUAL_NAVIGATION_UNAVAILABLE');
 }
 
 /** Bind rendered slide title + counter + active navigation to authored CMI. */
 export function requireF5ScoreVisualState(visual, location, suspend, {
   previousIndex = null, previousLocation = null, previousSuspend = null,
+  previousDirection = 1,
 } = {}) {
   const valid = visual?.contract === 'F5_SCORE_RENDERED_DOM_V1' &&
     Number.isSafeInteger(visual.index) && visual.index >= 0 &&
@@ -78,7 +90,8 @@ export function requireF5ScoreVisualState(visual, location, suspend, {
     location === String(visual.index + 1) + '/' + String(visual.total) &&
     typeof suspend === 'string' && suspend.trim().length > 0 &&
     (previousIndex === null || (Number.isSafeInteger(previousIndex) &&
-      visual.index === previousIndex + 1 &&
+      (previousDirection === 1 || previousDirection === -1) &&
+      visual.index === previousIndex + previousDirection &&
       location !== previousLocation && suspend !== previousSuspend));
   // SCORM bookmark encoding belongs to the authored SCO. Treat it as opaque;
   // prove navigation changed authored CMI and that the rendered slide survives
@@ -89,9 +102,12 @@ export function requireF5ScoreVisualState(visual, location, suspend, {
 
 
 /** Reject a fresh-context render that disagrees with the pre-close slide. */
-export function requireF5ScoreResumeMatch(before, after) {
+export function requireF5ScoreResumeMatch(before, after, { navigatedFromIndex = null } = {}) {
+  // The only accepted first-slide resume follows a proved, authored retreat
+  // from slide two. A cold launch on slide one is never resume evidence.
+  const provedRetreat = before?.index === 0 && navigatedFromIndex === 1;
   if (!before || !after || !Number.isSafeInteger(before.index) ||
-      before.index < 1 || before.index !== after.index ||
+      (before.index < 1 && !provedRetreat) || before.index !== after.index ||
       before.total !== after.total || before.modelLength !== after.modelLength) {
     throw Error('F5_VISUAL_RESUME_WITNESS_INVALID');
   }
@@ -104,8 +120,9 @@ async function waitForF5ScoreVisualState({ frame, page, location, suspend, previ
     try {
       requireF5ScoreVisualState(visual, location, suspend, previous
         ? { previousIndex: previous.index, previousLocation: previous.location,
-            previousSuspend: previous.suspend } : {});
-      if (previous?.rendered) requireF5ScoreResumeMatch(previous.rendered, visual);
+            previousSuspend: previous.suspend, previousDirection: previous.direction ?? 1 } : {});
+      if (previous?.rendered) requireF5ScoreResumeMatch(previous.rendered, visual,
+        { navigatedFromIndex: previous.navigatedFromIndex ?? null });
       return visual;
     } catch {
       if (attempt === 29) fail('VISUAL_RESUME_WITNESS_INVALID');
@@ -325,8 +342,16 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     });
     const startingCursor = { index: initialRendered.index };
     const next = frame.locator('#next');
-    if (!(await next.isVisible()) || !(await next.isEnabled())) fail('VISUAL_NAVIGATION_UNAVAILABLE');
-    await next.click({ timeout: 15_000 });
+    const prev = frame.locator('#prev');
+    const nextVisible = await next.isVisible();
+    const direction = chooseF5ScoreNavigation({
+      nextVisible, nextEnabled: nextVisible && await next.isEnabled(),
+      prevEnabled: await prev.isVisible() && await prev.isEnabled(),
+      initialRendered,
+    });
+    // A real learner can retreat from an interaction-locked slide without
+    // answering it. Do not fake progress or bypass the authored gate.
+    await (direction === 1 ? next : prev).click({ timeout: 15_000 });
     await page.waitForFunction(({ is2004, previousLocation, previousSuspend }) => {
       const api = is2004 ? window.API_1484_11 : window.API;
       const get = is2004 ? api?.GetValue : api?.LMSGetValue;
@@ -350,7 +375,7 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     const advancedRendered = await waitForF5ScoreVisualState({
       frame, page, location: marker, suspend,
       previous: { index: startingCursor.index, location: initial.marker,
-        suspend: initial.suspend },
+        suspend: initial.suspend, direction },
     });
     const responsePromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
@@ -408,7 +433,8 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     await waitForF5ScoreVisualState({
       frame: resumedPage.frameLocator('#scorm-frame'), page: resumedPage,
       location: resumed.location, suspend: resumed.suspend,
-      previous: { rendered: advancedRendered },
+      previous: { rendered: advancedRendered,
+        navigatedFromIndex: direction === -1 ? startingCursor.index : null },
     });
     const final = await json(`/api/lms/cursos/${params.courseId}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, { method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': env.SCORM_QA_READBACK_SECRET } });
     assertReadback(final, params, first, plan.releaseSha);
@@ -429,6 +455,7 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       assessmentApproved: false, externalAssessmentApproved: false, certificateIssued: false,
       runtimeVersion: first.apiVersion, locationPersisted: true, suspendDataPersisted: true,
       resumeVerified: true,
+      navigationMode: direction === -1 ? 'BACKWARD_REQUIRED_INTERACTION' : 'FORWARD',
     };
   } finally {
     await browser.close();

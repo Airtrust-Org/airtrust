@@ -309,6 +309,34 @@ test('resolves an HTTP 200 completion with incomplete candidate receipt before t
   assert.ok(!calls.includes('abort'), 'candidate already materialized');
 });
 
+test('never deletes an unverified HTTP 200 candidate if operation resolution is not CANDIDATE_PRESENT', async () => {
+  const bytes = Buffer.from('synthetic private ZIP HTTP 200 untrusted ownership');
+  const plan = planFor(bytes);
+  const fake = { ...adaptersFor(plan).candidate, status: 'REJECTED' };
+  for (const state of ['CLEAN', 'INTAKE_PRESENT', 'THROW', 'FOREIGN']) {
+    const { calls, adapters } = adaptersFor(plan, {
+      async completeIntake() { calls.push('complete'); return fake; },
+      async resolveAmbiguousIntake() {
+        calls.push('resolve-intake');
+        if (state === 'THROW') throw Error('resolver-unavailable');
+        if (state === 'FOREIGN') return { verified: true, state: 'CANDIDATE_PRESENT',
+          candidate: { ...fake, createdByOperation: false } };
+        return { verified: true, state };
+      },
+    });
+    await assert.rejects(executeF5InactiveCandidate({
+      plan, source: sourceFor(bytes), adapters,
+    }), state === 'THROW' || state === 'FOREIGN'
+      ? /F5_EXECUTOR_RECOVERY_REQUIRED/ : /CANDIDATE_NOT_VALIDATED_INACTIVE/);
+    assert.ok(calls.includes('resolve-intake'), state);
+    assert.ok(!calls.includes('remove-candidate'),
+      'untrusted completion receipt must never authorize deletion: ' + state);
+    if (state === 'INTAKE_PRESENT' || state === 'THROW')
+      assert.ok(calls.includes('abort'), 'unresolved multipart intake needs abort: ' + state);
+    else assert.ok(!calls.includes('abort'), 'CLEAN or foreign-owned candidate must not be aborted');
+  }
+});
+
 test('refuses to clean up a candidate with unproven operation ownership after lost completion', async () => {
   const bytes = Buffer.from('synthetic package bytes');
   const plan = planFor(bytes);
@@ -371,6 +399,10 @@ test('rejects NOT_APPLICABLE, absent or failing F5 static gates before D1/R2 QA'
       const candidate = { ...base, [field]: changedSection };
       const { calls, adapters } = adaptersFor(plan, {
         async completeIntake() { calls.push('complete'); return candidate; },
+        async resolveAmbiguousIntake() {
+          calls.push('resolve-intake');
+          return { verified: true, state: 'CANDIDATE_PRESENT', candidate: base };
+        },
       });
       await assert.rejects(executeF5InactiveCandidate({
         plan, source: sourceFor(bytes), adapters,
