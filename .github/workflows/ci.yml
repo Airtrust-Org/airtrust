@@ -120,6 +120,11 @@ jobs:
         run: node --test scripts/__tests__/staging-frms-auth-qa.test.mjs
       - name: validate production release read-only preflight contract
         run: node --test scripts/__tests__/production-release-readonly-preflight.test.mjs
+      - name: validate HFA 0529 production Schema V2 pre/post safety
+        run: |
+          bash -n scripts/schema-v2/validate-0529-production-preflight.sh
+          bash -n scripts/schema-v2/validate-0529-production-postconditions.sh
+          node --test scripts/__tests__/production-hfa-0529-schema-v2-guards.test.mjs
       - name: validate production LMS SCORM enrollment review read-only contract
         run: |
           node --test scripts/__tests__/lms-enrollment-readonly-review-helpers.test.mjs
