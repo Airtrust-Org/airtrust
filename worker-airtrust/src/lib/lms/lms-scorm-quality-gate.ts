@@ -51,6 +51,8 @@ export type ScormRuntimeConformance = {
   runnerVersion: string;
   failureStage?: string;
   failureCategory?: string;
+  /** Stable, allowlisted infrastructure exception family. Never a raw error string. */
+  failureCode?: string;
   functionalCompletionVerified?: boolean;
   functionalCompletionReason?: string | null;
   expectedSuccessStatus?: string | null;
