@@ -3,6 +3,14 @@
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import process from 'node:process';
+// SCORM serializes CMI numeric fields as JSON strings on many real packages.
+// Parse only decimal digits / a single dot, never arbitrary CAST('text')=>0.
+const numberFromCmi = (key) =>
+  `CASE WHEN ${key} IS NOT NULL
+    AND TRIM(CAST(${key} AS TEXT)) GLOB '*[0-9]*'
+    AND TRIM(CAST(${key} AS TEXT)) NOT GLOB '*[^0-9.]*'
+    AND LENGTH(TRIM(CAST(${key} AS TEXT)))-LENGTH(REPLACE(TRIM(CAST(${key} AS TEXT)),'.','')) <= 1
+    THEN CAST(${key} AS REAL) ELSE NULL END`;
 export const SQL=`WITH source AS (
  SELECT m.curso_id, COALESCE(NULLIF(c.scorm_mastery_score,0),NULL) AS mastery,
         UPPER(COALESCE(c.scorm_assessment_policy,'SCORED')) AS assessment_policy,
@@ -32,19 +40,20 @@ export const SQL=`WITH source AS (
   WHERE m.empresa_id=6 AND m.deleted_at IS NULL
     AND UPPER(COALESCE(m.status,'')) IN ('EM_ANDAMENTO','REPROVADO')
     AND COALESCE(m.progresso_pct,0)>=99 AND c.tipo_conteudo='scorm'
+), numeric_scorm AS (
+ SELECT *,
+        ${numberFromCmi('cmi_score_raw')} AS raw_n,
+        ${numberFromCmi('cmi_score_max')} AS max_n,
+        ${numberFromCmi('cmi_score_scaled')} AS scaled_n
+ FROM source
 ), evaluated AS (
  SELECT *,
-        CASE WHEN typeof(cmi_score_scaled) IN ('integer','real') AND cmi_score_scaled BETWEEN 0 AND 1
-               THEN cmi_score_scaled*100.0
-             WHEN typeof(cmi_score_raw) IN ('integer','real')
-                  AND typeof(cmi_score_max) IN ('integer','real') AND cmi_score_max>0
-                  AND cmi_score_raw BETWEEN 0 AND cmi_score_max
-               THEN cmi_score_raw*100.0/cmi_score_max
-             WHEN typeof(cmi_score_raw) IN ('integer','real') AND cmi_score_raw BETWEEN 0 AND 100
-                  AND cmi_score_max IS NULL THEN cmi_score_raw
+        CASE WHEN scaled_n BETWEEN 0 AND 1 THEN scaled_n*100.0
+             WHEN raw_n BETWEEN 0 AND max_n AND max_n>0 THEN raw_n*100.0/max_n
+             WHEN raw_n BETWEEN 0 AND 100 AND max_n IS NULL THEN raw_n
              ELSE NULL END AS cmi_score_pct,
         LOWER(TRIM(CAST(COALESCE(cmi_lesson,'') AS TEXT))) AS cmi_end
-   FROM source
+   FROM numeric_scorm
 )
 SELECT curso_id, COUNT(*) AS pending_99,
        SUM(valid_cmi) AS json_present,
