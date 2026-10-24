@@ -1,0 +1,84 @@
+// Synthetic GET-only private Queue resolution; no live queue messages or
+// bypass of security-restricted Queue REST consumer test execution.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {resolvePrivateTransactionQueues,runProtectedPrivateTransaction} from
+  '../../ops/frms-qa-repair/private-transaction-runner.mjs';
+
+const ACCOUNT='a'.repeat(32),TOKEN='synthetic-existing-worker-token';
+const PREPARE='airtrust-frms-qa-private-prepare-staging';
+const RESULTS='airtrust-frms-qa-private-results-staging';
+const P='1'.repeat(32),R='2'.repeat(32);
+function source({queues=[
+  {queue_name:PREPARE,queue_id:P},
+  {queue_name:RESULTS,queue_id:R},
+],status=200,success=true,redirected=false,total=queues.length}={}){
+  const calls=[];
+  const fetcher=async(uri,request)=>{
+    calls.push(uri);
+    assert.equal(uri,'https://api.cloudflare.com/client/v4/accounts/'+
+      ACCOUNT+'/queues?per_page=100');
+    assert.equal(request.method,'GET');
+    assert.equal(request.redirect,'manual');
+    assert.equal(request.headers.Authorization,'Bearer '+TOKEN);
+    return {status,redirected,json:async()=>({success,result:queues,
+      result_info:{total_count:total}})};
+  };
+  return {calls,fetcher};
+}
+test('pin exactly two distinct private queue IDs from GET-only inventory',async()=>{
+  const f=source(),resolved=await resolvePrivateTransactionQueues({
+    accountId:ACCOUNT,token:TOKEN,fetcher:f.fetcher});
+  assert.deepEqual(resolved,{prepareQueueId:P,resultsQueueId:R,namesPinned:true});
+  assert.equal(f.calls.length,1);
+  assert.equal(Object.isFrozen(resolved),true);
+  assert.equal(JSON.stringify(resolved).includes(TOKEN),false);
+  assert.equal(JSON.stringify(resolved).includes(ACCOUNT),false);
+});
+test('missing, duplicate, swapped, malformed or ambiguous queues fail closed',async()=>{
+  for(const queues of [
+    [],[{queue_name:PREPARE,queue_id:P}],
+    [{queue_name:RESULTS,queue_id:R}],
+    [{queue_name:PREPARE,queue_id:P},{queue_name:RESULTS,queue_id:P}],
+    [{queue_name:PREPARE,queue_id:'bad'},{queue_name:RESULTS,queue_id:R}],
+    [{queue_name:PREPARE,queue_id:P},{queue_name:PREPARE,queue_id:R},
+      {queue_name:RESULTS,queue_id:'3'.repeat(32)}],
+    [null],
+  ]){
+    const f=source({queues});
+    await assert.rejects(resolvePrivateTransactionQueues({
+      accountId:ACCOUNT,token:TOKEN,fetcher:f.fetcher}),
+    /FRMS_QA_TRANSACTION_RUNNER_DENIED/);
+  }
+});
+test('transport or token failures cannot emit a private queue message',async()=>{
+  for(const opts of [{status:403},{status:302,redirected:true},{success:false},
+    {total:101}]){
+    const f=source(opts);
+    await assert.rejects(resolvePrivateTransactionQueues({
+      accountId:ACCOUNT,token:TOKEN,fetcher:f.fetcher}),
+    /FRMS_QA_TRANSACTION_RUNNER_DENIED/);
+  }
+  await assert.rejects(resolvePrivateTransactionQueues({
+    accountId:ACCOUNT,token:''}),/FRMS_QA_TRANSACTION_RUNNER_DENIED/);
+});
+test('no external signer, readback or public Ed25519 key can start transaction',async()=>{
+  const f=source();
+  const env={
+    GITHUB_SHA:'b'.repeat(40),GITHUB_TOKEN:'synthetic-github',
+    CLOUDFLARE_ACCOUNT_ID:ACCOUNT,CLOUDFLARE_WORKER_API_TOKEN:TOKEN,
+    FRMS_QA_CALLER_KEY_HEX:'c'.repeat(64),
+  };
+  for(const extra of [
+    {},
+    {signer:{assertReady:async()=>({})}},
+    {signer:{signReceipt:async()=>({})}},
+    {signer:{assertReady:async()=>({}),signReceipt:async()=>({})}},
+    {signer:{assertReady:async()=>({}),signReceipt:async()=>({})},
+      readback:async()=>({}),env:{...env,FRMS_QA_D1_READ_TOKEN:'forbidden'}},
+  ]){
+    await assert.rejects(runProtectedPrivateTransaction({
+      env,fetcher:f.fetcher,...extra}),/FRMS_QA_TRANSACTION_RUNNER_DENIED/);
+  }
+  assert.equal(f.calls.length,0);
+});
