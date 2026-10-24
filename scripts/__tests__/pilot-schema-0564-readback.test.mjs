@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { SQL, EXPECTED, STAGING_DB_ID, readback, validateReadback } from '../staging/pilot-schema-0564-readback.mjs';
 const response=(row={...EXPECTED},meta={changed_db:false,rows_written:0,changes:0})=>({success:true,result:[{success:true,results:[row],meta}]});
@@ -41,4 +42,10 @@ test('no fallback token or caller SQL; failures sanitized',async()=>{
  await assert.rejects(readback({...env,RELEASE_SHA:'invalid'},request),/RELEASE_SHA_REQUIRED/);assert.equal(calls,0);
  await assert.rejects(readback(env,request),/^Error: PILOT_READBACK_TRANSPORT_FAILED$/);
  await assert.rejects(readback(env,async()=>({ok:false,status:403})),/HTTP_403/);
+});
+
+test('readback workflow uses only the dedicated D1 read-only credential',()=>{
+ const workflow=readFileSync(new URL('../../.github/workflows/staging-pilot-schema-0564-readback.yml',import.meta.url),'utf8');
+ assert.match(workflow,/CLOUDFLARE_D1_READONLY_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_D1_READONLY_API_TOKEN\s*\}\}/);
+ assert.doesNotMatch(workflow,/CLOUDFLARE_D1_BACKUP_API_TOKEN/);
 });

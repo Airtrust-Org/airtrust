@@ -73,6 +73,10 @@ jobs:
           node --test scripts/__tests__/scorm-duplicate-reference-inventory.test.mjs
       - name: validate legacy qualification comparison CLI compatibility
         run: node --test scripts/__tests__/legacy-qualification-comparison-entrypoint.test.mjs
+      - name: validate Pilot device gate and Schema V2 0564 contract (read-only)
+        run: |
+          node --test scripts/__tests__/pilot-real-device-evidence.test.mjs
+          node --test scripts/__tests__/pilot-supplier-history-0564.test.mjs
       - name: tenant mutations guard
         run: node scripts/guard-tenant-mutations.mjs
       - name: validate 0438 on disposable real-base SQLite
