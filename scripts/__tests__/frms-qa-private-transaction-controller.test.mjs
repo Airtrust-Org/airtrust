@@ -153,6 +153,34 @@ test('Queue missing reply never retries a message nor starts apply',async()=>{
     'signer-ready','verify-prepare-grant','queue-push:PREPARE','queue-pull:prepare',
   ]);
 });
+test('bounded short polling accepts an available reply inside 90s without resending',async()=>{
+  const f=fixture();
+  const pull=f.queue.consumeExpectedReply;
+  let attempts=0;
+  f.queue.consumeExpectedReply=async args=>{
+    attempts++;
+    return attempts<=5?null:pull(args);
+  };
+  let clock=NOW;
+  const outcome=await transact({env,publicKeyPem,publicKeySha256,
+    producer:f.producer,queue:f.queue,signer:f.signer,readback:f.readback,
+    now:()=>clock,sleep:async()=>{clock+=1000;},maxPolls:40});
+  assert.equal(outcome.valid,4);
+  assert.equal(attempts,7);
+  assert.equal(f.calls.filter(x=>x==='queue-push:PREPARE').length,1);
+  assert.equal(f.calls.filter(x=>x==='queue-push:APPLY').length,1);
+});
+test('reply TTL ends polling before acceptance even with many remaining attempts',async()=>{
+  const f=fixture(),calls=[];
+  f.queue.consumeExpectedReply=async ()=>{calls.push('pull');return null;};
+  let clock=NOW;
+  await assert.rejects(transact({env,publicKeyPem,publicKeySha256,
+    producer:f.producer,queue:f.queue,signer:f.signer,readback:f.readback,
+    now:()=>clock,sleep:async()=>{clock+=90001;},maxPolls:40}),
+    /FRMS_QA_PRIVATE_TRANSACTION_DENIED/);
+  assert.equal(calls.length,1);
+  assert.equal(f.calls.includes('verify-apply-grant'),false);
+});
 test('reported Queue apply validation is insufficient when physical readback fails',async()=>{
   const f=fixture({readbackReturn:{verdict:'READONLY_ACCEPTANCE_READY',
     valid:3,writes:0,tenantId:999013,dbId:DB,sha:SHA}});
