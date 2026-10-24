@@ -130,7 +130,8 @@ export const CANDIDATE_BREAKDOWN_SQL=`WITH pending AS (
       AND cy.deleted_at IS NULL AND UPPER(COALESCE(cy.status,''))='CONCLUIDO') AS prior_completed,
    EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.empresa_id=p.empresa_id
       AND cy.matricula_id=p.matricula_id AND cy.curso_id=p.curso_id AND cy.ciclo_atual=0
-      AND cy.deleted_at IS NULL AND cy.data_conclusao IS NOT NULL) AS prior_dated_completed,
+      AND cy.deleted_at IS NULL AND UPPER(COALESCE(cy.status,''))='CONCLUIDO'
+      AND cy.data_conclusao IS NOT NULL) AS prior_dated_completed,
    EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.empresa_id=p.empresa_id
       AND cy.matricula_id=p.matricula_id AND cy.curso_id=p.curso_id AND cy.ciclo_atual=0
       AND cy.deleted_at IS NULL AND cy.score_final IS NOT NULL) AS prior_score_recorded,

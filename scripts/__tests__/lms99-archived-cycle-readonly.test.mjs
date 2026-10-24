@@ -155,13 +155,14 @@ test('candidate-breakdown aggregates status and course state without exposing en
    CREATE TABLE lms_matricula_ciclos(empresa_id INTEGER,matricula_id INTEGER,curso_id INTEGER,status TEXT,ciclo_atual INTEGER,data_conclusao TEXT,score_final REAL,qualificacao_historico_id INTEGER,deleted_at TEXT);
    INSERT INTO lms_cursos VALUES(28,6,'scorm',1,1,NULL),(29,6,'scorm',0,0,NULL),(28,7,'scorm',1,1,NULL);
    INSERT INTO lms_matriculas VALUES(1,28,6,'EM_ANDAMENTO',99,NULL),(2,28,6,'REPROVADO',100,NULL),(3,29,6,'EM_ANDAMENTO',100,NULL),(4,28,7,'REPROVADO',100,NULL);
-   INSERT INTO lms_matricula_ciclos VALUES(6,1,28,'EM_ANDAMENTO',1,NULL,NULL,NULL,NULL),(6,2,28,'REPROVADO',1,NULL,NULL,NULL,NULL),(6,4,28,'CONCLUIDO',0,'2024-01-01',90,700,NULL);`);
+   INSERT INTO lms_matricula_ciclos VALUES(6,1,28,'EM_ANDAMENTO',1,NULL,NULL,NULL,NULL),(6,2,28,'REPROVADO',1,NULL,NULL,NULL,NULL),
+    (6,2,28,'REPROVADO',0,'2024-02-01',70,NULL,NULL),(6,4,28,'CONCLUIDO',0,'2024-01-01',90,700,NULL);`);
   assertSqlTransportScope(CANDIDATE_BREAKDOWN_SQL);
   assert.doesNotMatch(CANDIDATE_BREAKDOWN_SQL,/\b(INSERT|UPDATE|DELETE|PRAGMA)\b/i);
   const rows=validateCandidateBreakdownRows(db.prepare(CANDIDATE_BREAKDOWN_SQL).all().map(r=>({...r})));
   assert.deepEqual(rows,[
    {curso_id:28,enrollment_status:'EM_ANDAMENTO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0},
-   {curso_id:28,enrollment_status:'REPROVADO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0},
+   {curso_id:28,enrollment_status:'REPROVADO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:1,prior_qualification_link:0},
    {curso_id:29,enrollment_status:'EM_ANDAMENTO',course_active:0,course_published:0,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0},
   ]);
   assert.equal(rows.reduce((n,r)=>n+r.pending_99,0),3);
