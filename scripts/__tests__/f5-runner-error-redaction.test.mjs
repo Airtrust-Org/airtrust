@@ -13,7 +13,10 @@ test('F5 runner exposes only reviewed, fixed error identifiers', () => {
     'F5_F0_ADAPTER_SCORM_RESUME_STATE_MISMATCH'
   );
   for (const code of ['F5_F0_ADAPTER_AUTHORED_STATE_NOT_OBSERVED',
-    'F5_F0_ADAPTER_SCORM_INCOMPLETE_READBACK_MISMATCH']) {
+    'F5_F0_ADAPTER_SCORM_INCOMPLETE_READBACK_MISMATCH',
+    'F5_F0_ADAPTER_COMMIT_RECEIPT_INVALID',
+    'F5_F0_ADAPTER_COMMIT_READBACK_SESSION_MISMATCH',
+    'F5_F0_ADAPTER_BROWSER_PAIR_READBACK_REGRESSION']) {
     assert.equal(safeF5RunnerErrorCode(new Error(code)), code);
   }
   assert.equal(safeF5RunnerErrorCode(new Error('F5_WORKER_ADAPTER_WORKER_HTTP_500')),

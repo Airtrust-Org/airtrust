@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { commitIncompleteScormState, createF0Adapters, requireAuthoredF5State, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
+import { commitIncompleteScormState, createF0Adapters, requireAuthoredF5State, requireF5CommitReceipt, requireF5CommitReadbackCount, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => {
@@ -99,6 +99,10 @@ test('F5 candidate QA fails closed if WebKit fails or diverges from Chromium rea
   await assert.rejects(runF5BrowserPair(async ({ engine }) => ({
     ...baseline, sessionCount: engine === 'webkit' ? 0 : 1,
   })), /BROWSER_PAIR_READBACK_REGRESSION/);
+  // A second browser with no new persisted session is not a second proof.
+  await assert.rejects(runF5BrowserPair(async () => ({
+    ...baseline, sessionCount: 2,
+  })), /BROWSER_PAIR_READBACK_REGRESSION/);
 });
 
 test('F5 browser writes all CMI values before Commit for SCORM 1.2 and 2004', () => {
@@ -188,4 +192,34 @@ test('F5 readback diagnostics do not log CMI, enrollment scope or raw Worker pay
   assert.doesNotMatch(source, /console\.error\('\[ASSERT_READBACK_FAILURES\]', \{[\s\S]*?\bdata,\s*expected:/);
   assert.doesNotMatch(source, /checkpoint: 'tripulacao-1', resume: true/);
   assert.match(source, /if \(!authoredStateObserved\) fail\('AUTHORED_STATE_NOT_OBSERVED'\)/);
+});
+
+test('F5 requires scoped Commit and Finish receipts with strictly advancing D1 sessions', () => {
+  const params = {
+    packageSha256: 'a'.repeat(64), runId: '123e4567-e89b-12d3-a456-426614174001',
+    cycleId: 8201,
+  };
+  const receipt = sessionCount => ({ success: true, data: {
+    source: 'F0_CANDIDATE_INCOMPLETE_COMMIT_V1', ...params,
+    completionWritten: false, scoreWritten: false, certificateIssued: false,
+    sessionCount,
+  } });
+  assert.equal(requireF5CommitReceipt(receipt(1), params), 1);
+  assert.equal(requireF5CommitReceipt(receipt(2), params, 1), 2);
+  assert.equal(requireF5CommitReadbackCount({ sessionCount: 2 }, 2), true);
+  for (const bad of [
+    { ...receipt(2), success: false },
+    { ...receipt(2), data: { ...receipt(2).data, packageSha256: 'b'.repeat(64) } },
+    { ...receipt(2), data: { ...receipt(2).data, cycleId: 8202 } },
+    { ...receipt(2), data: { ...receipt(2).data, runId: 'wrong-run' } },
+    { ...receipt(2), data: { ...receipt(2).data, scoreWritten: true } },
+    { ...receipt(2), data: { ...receipt(2).data, completionWritten: true } },
+    { ...receipt(2), data: { ...receipt(2).data, certificateIssued: true } },
+    { ...receipt(2), data: { ...receipt(2).data, source: 'UNTRUSTED' } },
+    receipt(1), // Replayed Finish receipt after the first Commit.
+  ]) assert.throws(() => requireF5CommitReceipt(bad, params, 1), /COMMIT_RECEIPT_INVALID/);
+  assert.throws(() => requireF5CommitReadbackCount({ sessionCount: 1 }, 2),
+    /COMMIT_READBACK_SESSION_MISMATCH/);
+  // A SCO may legitimately auto-commit again before the readback.
+  assert.equal(requireF5CommitReadbackCount({ sessionCount: 3 }, 2), true);
 });
