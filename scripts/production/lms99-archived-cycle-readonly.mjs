@@ -75,6 +75,20 @@ UNION ALL SELECT 'lms_ciclo_evidencias.scorm_json', EXISTS(SELECT 1 FROM pragma_
 UNION ALL SELECT 'lms_ciclo_evidencias.enrollment_json', EXISTS(SELECT 1 FROM pragma_table_info('lms_ciclo_evidencias') WHERE name='enrollment_json')
 UNION ALL SELECT 'lms_matricula_ciclos.ciclo_atual', EXISTS(SELECT 1 FROM pragma_table_info('lms_matricula_ciclos') WHERE name='ciclo_atual')
 UNION ALL SELECT 'lms_matriculas.progresso_pct', EXISTS(SELECT 1 FROM pragma_table_info('lms_matriculas') WHERE name='progresso_pct')`;
+// Minimal D1 metadata probe: no UNION, virtual pragma table, learner rows, or private data.
+export const TABLES_PROBE_SQL="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('lms_matriculas','lms_cursos','lms_matricula_ciclos','lms_ciclo_evidencias') ORDER BY name";
+export function validateTableNames(rows) {
+ const allowed=['lms_matriculas','lms_cursos','lms_matricula_ciclos','lms_ciclo_evidencias'];
+ if(!Array.isArray(rows)||rows.length>allowed.length)reject('TABLE_ROW_LIMIT');
+ const found=new Set();
+ for(const row of rows) {
+  if(!row||Object.keys(row).length!==1||!allowed.includes(row.name)||found.has(row.name))
+   reject('TABLE_RESULT_INVALID');
+  found.add(row.name);
+ }
+ return allowed.map(name=>({check_name:name,present:found.has(name)?1:0}));
+}
+
 export function validateSchemaRows(rows) {
  const names=['lms_matriculas','lms_cursos','lms_matricula_ciclos','lms_ciclo_evidencias',
  'lms_ciclo_evidencias.scorm_json','lms_ciclo_evidencias.enrollment_json',
@@ -152,7 +166,7 @@ export const NON_PRODUCTION_D1_IDS=[
 ];
 export function assertSqlTransportScope(statement,databaseId=PRODUCTION_D1_ID){
  if(statement===ARCHIVE_SQL)validateQuery();
- else if(statement!==SCHEMA_PROBE_SQL)reject('SQL_NOT_REVIEWED');
+ else if(statement!==SCHEMA_PROBE_SQL && statement!==TABLES_PROBE_SQL)reject('SQL_NOT_REVIEWED');
  if(databaseId!==PRODUCTION_D1_ID||NON_PRODUCTION_D1_IDS.includes(databaseId))
   reject('D1_TARGET_DENIED');
  if(/;|\\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|ATTACH|DETACH|PRAGMA\\s+[\\w]+\\s*=)\\b/i.test(statement))
@@ -174,6 +188,7 @@ export async function d1(statement=ARCHIVE_SQL,{fetcher=fetch,accountId=process.
  if(!response.ok||data?.success!==true)reject(classifyD1RestRejection(response.status,data));
  const first=Array.isArray(data?.result)?data.result[0]:data?.result;
  if(!first||first.success===false||!Array.isArray(first.results))reject('D1_STATEMENT_REJECTED');
+ if(statement===TABLES_PROBE_SQL)return validateTableNames(first.results);
  return statement===SCHEMA_PROBE_SQL?validateSchemaRows(first.results):validateRows(first.results);
 }
 async function main(){
@@ -189,7 +204,14 @@ async function main(){
  const version=await response.json();
  if(String(version?.data?.sourceSha??'').toLowerCase()!==prod)reject('PROD_SHA_DRIFT');
  const mode=String(process.env.LMS99_HISTORY_MODE||'read');
- if(!['read','schema-probe'].includes(mode))reject('MODE_INVALID');
+ if(!['read','schema-probe','tables-probe'].includes(mode))reject('MODE_INVALID');
+ if(mode==='tables-probe'){
+  const checks=await d1(TABLES_PROBE_SQL);
+  process.stdout.write(JSON.stringify({schema_version:1,source_sha:src,production_sha:prod,
+   tenant:6,mode:'tables-probe',writes:0,personal_data:false,
+   missing_required:checks.filter(x=>x.present===0).map(x=>x.check_name),checks},null,2)+'\n');
+  return;
+ }
  if(mode==='schema-probe'){
   const checks=await d1(SCHEMA_PROBE_SQL);
   process.stdout.write(JSON.stringify({schema_version:1,source_sha:src,production_sha:prod,
