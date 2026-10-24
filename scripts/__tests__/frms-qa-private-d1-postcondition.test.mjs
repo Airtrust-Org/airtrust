@@ -12,6 +12,7 @@ const env={
   GITHUB_WORKFLOW_REF:
     'Airtrust-Org/airtrust/.github/workflows/staging-frms-qa-private-transaction.yml@refs/heads/main',
   GITHUB_SHA:SHA,FRMS_QA_EXPECTED_APPLY_SHA:SHA,
+  GITHUB_JOB:'frms-d1-readonly-postcondition',
   FRMS_QA_APPLY_STAGE_RESULT:'APPLY_REPORTED_PENDING_INDEPENDENT_READBACK',
   CLOUDFLARE_ACCOUNT_ID:'f'.repeat(32),
   CLOUDFLARE_D1_MIGRATION_API_TOKEN:'synthetic-existing-d1-read-token',
