@@ -44,7 +44,7 @@ jobs:
       - name: Prove exact existing-token Queue provisioning grant without remote writes
         run: node --test scripts/__tests__/frms-qa-private-queue-provision.test.mjs scripts/__tests__/frms-existing-queue-access.test.mjs
       - name: Verify one-mutex transaction protocol and independent Ed25519 signing (synthetic only)
-        run: node --test scripts/__tests__/frms-qa-private-transaction-controller.test.mjs
+        run: node --test scripts/__tests__/frms-qa-private-transaction-controller.test.mjs scripts/__tests__/frms-qa-private-transaction-runner.test.mjs
       - name: Disposable DO SQLite grant persistence and restart contract
         run: node --test scripts/__tests__/frms-qa-durable-prepare-grant-ledger.test.mjs scripts/__tests__/frms-qa-durable-ledger-do-persistence.test.mjs
       - name: Disposable Workerd, D1, R2, Durable Object and private ACL integration
