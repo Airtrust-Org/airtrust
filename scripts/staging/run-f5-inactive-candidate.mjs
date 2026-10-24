@@ -55,36 +55,44 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   assertF5RunnerDispatchScope(plan, env);
   const outputPath = env.F5_EVIDENCE_OUTPUT_PATH;
   const evidenceHandle = await reserveF5EvidenceOutput(outputPath);
-  let evidencePersisted = false;
+  // Only publish a successful QA artifact after source teardown and evidence
+  // close both succeed. A failed teardown must never leave a PASS-looking file.
+  let evidenceComplete = false;
   try {
-  let f0;
-  try { f0 = await import(pathToFileURL(resolve(f0ModulePath)).href); }
-  catch {
-    // Imported adapter exceptions may contain protected runner paths or secrets.
-    fail('F0_ADAPTER_LOAD_FAILED');
-  }
-  if (typeof f0.createF0Adapters !== 'function') fail('F0_ADAPTER_CONTRACT_MISSING');
-  let source;
-  try { source = await openF5PrivateZipSource(sourcePath); }
-  catch { fail('PRIVATE_ZIP_SOURCE_UNAVAILABLE'); }
-  try {
-    const f0Adapters = await f0.createF0Adapters({ plan, env });
-    if (!f0Adapters || typeof f0Adapters !== 'object') fail('F0_ADAPTERS_MISSING');
-    const adapters = createF5WorkerAdapters({ env, ...f0Adapters });
-    const evidence = await executeF5InactiveCandidate({ plan, source, adapters });
+    let f0;
+    try { f0 = await import(pathToFileURL(resolve(f0ModulePath)).href); }
+    catch {
+      // Imported adapter exceptions may contain protected runner paths or secrets.
+      fail('F0_ADAPTER_LOAD_FAILED');
+    }
+    if (typeof f0.createF0Adapters !== 'function') fail('F0_ADAPTER_CONTRACT_MISSING');
+    let source;
+    try { source = await openF5PrivateZipSource(sourcePath); }
+    catch { fail('PRIVATE_ZIP_SOURCE_UNAVAILABLE'); }
+    let evidence;
     try {
-      await evidenceHandle.writeFile(`${JSON.stringify(evidence, null, 2)}\n`);
+      const f0Adapters = await f0.createF0Adapters({ plan, env });
+      if (!f0Adapters || typeof f0Adapters !== 'object') fail('F0_ADAPTERS_MISSING');
+      const adapters = createF5WorkerAdapters({ env, ...f0Adapters });
+      evidence = await executeF5InactiveCandidate({ plan, source, adapters });
+    } finally {
+      // Closing the private source is part of successful teardown, not a
+      // post-success best effort. Never publish evidence if teardown fails.
+      await source.close();
+    }
+    try {
+      await evidenceHandle.writeFile(`${JSON.stringify(evidence, null, 2)}\\n`);
       await evidenceHandle.sync();
+      await evidenceHandle.close();
     } catch { fail('EVIDENCE_OUTPUT_FAILED'); }
-    evidencePersisted = true;
+    evidenceComplete = true;
     return evidence;
   } finally {
-    await source.close();
-  }
-  } finally {
-    await evidenceHandle.close();
-    // An unsuccessful run must not leave a partial or empty audit artifact.
-    if (!evidencePersisted) await unlink(outputPath).catch(() => {});
+    if (!evidenceComplete) {
+      // Closing can itself fail; still attempt removal of partial evidence.
+      await evidenceHandle.close().catch(() => {});
+      await unlink(outputPath).catch(() => {});
+    }
   }
 }
 
