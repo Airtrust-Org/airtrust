@@ -107,11 +107,29 @@ jobs:
           F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
           F5_OPERATION_ID: ${{ inputs.operation_id }}
         run: node scripts/staging/f5-candidate-approval-guard.mjs
+      # Only the exact first pilot ZIP uses the two-secrets bridge. Preserve
+      # the existing private runner mount contract for larger F5 candidates.
+      - name: Verify exact original ZIP from protected staging secrets
+        if: ${{ inputs.package_sha256 == '6240d3d143d9f01d46daea96fb1b37e5d8f2793e5b6980cadedb7bb73b8ac83a' && inputs.zip_bytes == '40644' }}
+        shell: bash
+        env:
+          F5_ENVIRONMENT: staging
+          GITHUB_REF: ${{ github.ref }}
+          F5_CONFIRMATION: ${{ inputs.confirmation }}
+          F5_PACKAGE_SHA256: ${{ inputs.package_sha256 }}
+          F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
+          F5_PRIVATE_ZIP_PATH: ${{ runner.temp }}/f5-private-candidate.zip
+          RUNNER_TEMP: ${{ runner.temp }}
+          F5_PRIVATE_ZIP_1_B64: ${{ secrets.F5_PRIVATE_ZIP_1_B64 }}
+          F5_PRIVATE_ZIP_2_B64: ${{ secrets.F5_PRIVATE_ZIP_2_B64 }}
+        run: |
+          set -euo pipefail
+          node scripts/staging/f5-materialize-private-zip.mjs
       - name: Execute one inactive candidate through the pinned F0 adapters
         shell: bash
         env:
           F5_EXECUTOR_PLAN_PATH: ${{ vars.F5_EXECUTOR_PLAN_PATH }}
-          F5_PRIVATE_ZIP_PATH: ${{ vars.F5_PRIVATE_ZIP_PATH }}
+          F5_PRIVATE_ZIP_PATH: ${{ inputs.package_sha256 == '6240d3d143d9f01d46daea96fb1b37e5d8f2793e5b6980cadedb7bb73b8ac83a' && inputs.zip_bytes == '40644' && format('{0}/f5-private-candidate.zip', runner.temp) || vars.F5_PRIVATE_ZIP_PATH }}
           F5_F0_ADAPTER_MODULE: ${{ vars.F5_F0_ADAPTER_MODULE }}
           F5_F0_ADAPTER_SHA256: ${{ vars.F5_F0_ADAPTER_SHA256 }}
           F5_EVIDENCE_OUTPUT_PATH: ${{ runner.temp }}/f5-inactive-candidate-evidence.json
@@ -153,3 +171,7 @@ jobs:
           path: ${{ runner.temp }}/f5-inactive-candidate-summary.json
           if-no-files-found: error
           retention-days: 30
+      - name: Destroy temporary private candidate source
+        if: always()
+        shell: bash
+        run: rm -f "${{ runner.temp }}/f5-private-candidate.zip"
