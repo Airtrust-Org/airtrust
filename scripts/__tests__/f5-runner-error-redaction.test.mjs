@@ -27,6 +27,16 @@ test('F5 runner exposes only reviewed, fixed error identifiers', () => {
   }
 });
 
+test('F5 executor recovery failures remain actionable without leaking compensation details', () => {
+  const error = new Error('F5_EXECUTOR_RECOVERY_REQUIRED');
+  error.cause = new Error('Bearer PRIVATE_TOKEN learnerId=8101');
+  assert.equal(safeF5RunnerErrorCode(error), 'F5_EXECUTOR_RECOVERY_REQUIRED');
+  assert.equal(
+    safeF5RunnerErrorCode(new Error('F5_EXECUTOR_RECOVERY_REQUIRED: Bearer PRIVATE_TOKEN')),
+    'F5_RUNNER_OPERATION_FAILED'
+  );
+});
+
 test('F5 runner never traverses exception causes or untrusted getters', () => {
   const error = {
     message: 'F5_RUNNER_F0_ADAPTER_LOAD_FAILED',
