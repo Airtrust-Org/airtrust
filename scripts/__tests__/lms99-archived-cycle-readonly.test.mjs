@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {ARCHIVE_SQL,SCHEMA_PROBE_SQL,PRODUCTION_D1_ID,NON_PRODUCTION_D1_IDS,assertSqlTransportScope,d1,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
+import {ARCHIVE_SQL,SCHEMA_PROBE_SQL,PRODUCTION_D1_ID,NON_PRODUCTION_D1_IDS,assertSqlTransportScope,d1,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,classifyD1RestRejection,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
 
 test('D1 REST transport is pinned to production database and reviewed SELECT statements',async()=>{
  assert.equal(PRODUCTION_D1_ID,'7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae');
@@ -30,6 +30,17 @@ test('D1 REST transport is pinned to production database and reviewed SELECT sta
  assert.match(seen.url,/\/d1\/database\/7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae\/query$/);
  assert.equal(seen.sql,SCHEMA_PROBE_SQL);
  await assert.rejects(d1(SCHEMA_PROBE_SQL,{fetcher:async()=>({ok:false,json:async()=>({errors:[{message:'SECRET_SHOULD_NOT_LOG'}]})}),accountId:'test-account',token:'test'}),/D1_READ_REJECTED/);
+});
+
+test('D1 rejection is classified without leaking token, SQL or provider messages',()=>{
+ assert.equal(classifyD1RestRejection(403,{errors:[{code:9109,message:'forbidden token=LEAK'}]}),'D1_ACCESS_DENIED');
+ assert.equal(classifyD1RestRejection(400,{errors:[{code:7500,message:'D1_ERROR: no such table: lms_ciclo_evidencias'}]}),'D1_SCHEMA_TABLE_MISSING');
+ assert.equal(classifyD1RestRejection(400,{errors:[{code:7500,message:'no such column: cy.ciclo_atual'}]}),'D1_SCHEMA_COLUMN_MISSING');
+ assert.equal(classifyD1RestRejection(400,{errors:[{code:7500,message:'near \"UNION\": syntax error'}]}),'D1_SQL_SYNTAX_REJECTED');
+ assert.equal(classifyD1RestRejection(429,{errors:[]}), 'D1_RATE_LIMITED');
+ assert.equal(classifyD1RestRejection(500,{errors:[{code:7500,message:'private detail'}]}),'D1_CF_CODE_7500');
+ assert.equal(classifyD1RestRejection(502,{errors:[{message:'sensitive'}]}),'D1_HTTP_502');
+ assert.equal(safePublicError(new Error('LMS99_HISTORY_D1_CF_CODE_7500')),'LMS99_HISTORY_D1_CF_CODE_7500');
 });
 
 test('protected schema probe reports only fixed table and column availability',()=>{
