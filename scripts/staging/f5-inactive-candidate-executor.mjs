@@ -258,6 +258,7 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       d1ReadbackSource: d1Candidate.source,
       syntheticEnrollmentId: f.enrollmentId,
       execution: { cmiSha256: execution.cmiSha256, suspendSha256: execution.suspendSha256,
+        browserEngines: execution.browserEngines,
         sessionCount: after.sessionCount, servedPackageSha256: after.servedPackageSha256,
         committedPackageSha256: after.committedPackageSha256 },
       cleanupReceiptSha256: cleanupReceipt.receiptSha256,
