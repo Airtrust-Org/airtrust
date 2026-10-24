@@ -90,6 +90,22 @@ export function requireF5ScoreResumeMatch(before, after) {
   return true;
 }
 
+async function waitForF5ScoreVisualState({ frame, page, location, suspend, previous = null }) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const visual = await frame.locator('body').evaluate(captureF5ScoreVisualState);
+    try {
+      requireF5ScoreVisualState(visual, location, suspend, previous
+        ? { previousIndex: previous.index, previousLocation: previous.location,
+            previousSuspend: previous.suspend } : {});
+      if (previous?.rendered) requireF5ScoreResumeMatch(previous.rendered, visual);
+      return visual;
+    } catch {
+      if (attempt === 29) fail('VISUAL_RESUME_WITNESS_INVALID');
+      await page.waitForTimeout(200);
+    }
+  }
+}
+
 function checkedScope(plan, params) {
   const c = plan?.candidate, f = plan?.syntheticFixture;
   if (!c || !f || params.tenantId !== c.tenantId || params.courseId !== c.courseId ||
@@ -296,13 +312,25 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     // Browser-first proof: do not commit a synthetic bookmark on the first page.
     // Advance with the SCO's own navigation so authored CMI and visible content move together.
     const initial = requireAuthoredF5State(initialLocation, initialSuspend);
-    const initialRendered = await frame.locator('body').evaluate(captureF5ScoreVisualState);
-    let startingCursor;
-    try { startingCursor = requireF5ScoreVisualState(initialRendered, initial.marker, initial.suspend); }
-    catch { fail('VISUAL_RESUME_WITNESS_INVALID'); }
+    const initialRendered = await waitForF5ScoreVisualState({
+      frame, page, location: initial.marker, suspend: initial.suspend,
+    });
+    const startingCursor = { index: initialRendered.index };
     const next = frame.locator('#next');
     if (!(await next.isVisible()) || !(await next.isEnabled())) fail('VISUAL_NAVIGATION_UNAVAILABLE');
     await next.click({ timeout: 15_000 });
+    await page.waitForFunction(({ is2004, previousLocation, previousSuspend }) => {
+      const api = is2004 ? window.API_1484_11 : window.API;
+      const get = is2004 ? api?.GetValue : api?.LMSGetValue;
+      if (typeof get !== 'function') return false;
+      try {
+        const location = get.call(api, is2004 ? 'cmi.location' : 'cmi.core.lesson_location');
+        const suspend = get.call(api, 'cmi.suspend_data');
+        return typeof location === 'string' && typeof suspend === 'string' &&
+          (location !== previousLocation || suspend !== previousSuspend);
+      } catch { return false; }
+    }, { is2004, previousLocation: initial.marker, previousSuspend: initial.suspend },
+    { timeout: 15_000 });
     const moved = await page.evaluate(is2004 => {
       const api = is2004 ? window.API_1484_11 : window.API;
       const get = is2004 ? api?.GetValue : api?.LMSGetValue;
@@ -311,11 +339,11 @@ async function browserExecution({ plan, params, request, env, browserType }) {
         suspend: get.call(api, 'cmi.suspend_data') };
     }, is2004);
     const { marker, suspend } = requireAuthoredF5State(moved?.location, moved?.suspend);
-    const advancedRendered = await frame.locator('body').evaluate(captureF5ScoreVisualState);
-    try { requireF5ScoreVisualState(advancedRendered, marker, suspend,
-      { previousIndex: startingCursor.index, previousLocation: initial.marker,
-        previousSuspend: initial.suspend }); }
-    catch { fail('VISUAL_RESUME_WITNESS_INVALID'); }
+    const advancedRendered = await waitForF5ScoreVisualState({
+      frame, page, location: marker, suspend,
+      previous: { index: startingCursor.index, location: initial.marker,
+        suspend: initial.suspend },
+    });
     const responsePromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
       { timeout: 30_000 });
@@ -366,15 +394,14 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     const resumed = await resumedPage.evaluate(readInitializedF5ResumeState, { is2004 });
     // A D1 bookmark can survive while the SCO visibly resets to page one.
     // Verify the rendered title, active menu selection and counter after relaunch.
-    const resumeRendered = await resumedPage.frameLocator('#scorm-frame')
-      .locator('body').evaluate(captureF5ScoreVisualState);
     if (resumed.location !== first.marker || resumed.suspend !== first.suspend) {
       fail('SCORM_RESUME_STATE_MISMATCH');
     }
-    try { requireF5ScoreVisualState(resumeRendered, resumed.location, resumed.suspend); }
-    catch { fail('VISUAL_RESUME_WITNESS_INVALID'); }
-    try { requireF5ScoreResumeMatch(advancedRendered, resumeRendered); }
-    catch { fail('VISUAL_RESUME_WITNESS_INVALID'); }
+    await waitForF5ScoreVisualState({
+      frame: resumedPage.frameLocator('#scorm-frame'), page: resumedPage,
+      location: resumed.location, suspend: resumed.suspend,
+      previous: { rendered: advancedRendered },
+    });
     const final = await json(`/api/lms/cursos/${params.courseId}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, { method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': env.SCORM_QA_READBACK_SECRET } });
     assertReadback(final, params, first, plan.releaseSha);
     requireF5CommitReadbackCount(final, finishSessionCount, finishCommitReceipt.data.cmiSha256);
