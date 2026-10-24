@@ -203,7 +203,48 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
 });
 
 
-test('reopens a completed flight for consultation without requesting an edit lease', async ({ page }) => {
+test('reopens a completed flight without edit lease when secure vault is supported; otherwise fails closed', async ({ page }) => {
+  // Playwright WebKit builds differ in whether IndexedDB can persist a non-extractable
+  // CryptoKey. Do not fake an encrypted vault or weaken production crypto to hide this.
+  await page.goto('/');
+  const canPersistDeviceKey = await page.evaluate(async () => {
+    const key = await crypto.subtle.generateKey(
+      { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+    );
+    const name = 'pilot-ci-crypto-key-probe';
+    const request = indexedDB.open(name, 1);
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onupgradeneeded = () => request.result.createObjectStore('meta');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const supported = await new Promise<boolean>((resolve) => {
+      const tx = db.transaction('meta', 'readwrite');
+      tx.oncomplete = () => resolve(true);
+      tx.onabort = () => resolve(false);
+      tx.onerror = () => resolve(false);
+      try {
+        tx.objectStore('meta').put({ key }, 'probe');
+      } catch {
+        try { tx.abort(); } catch {}
+        resolve(false);
+      }
+    });
+    db.close();
+    indexedDB.deleteDatabase(name);
+    return supported;
+  });
+  if (!canPersistDeviceKey) {
+    // This path is a real security assertion, not a skipped test: never proceed
+    // with an unprotected offline key in an incompatible browser.
+    await page.goto('/pilot/');
+    await expect(page.locator('#session-status')).toContainText(
+      'Este navegador não permite guardar com segurança a chave offline',
+    );
+    await expect(page.locator('#legacy-vault-card')).toBeHidden();
+    await expect(page.locator('#flight-detail-card')).toBeHidden();
+    return;
+  }
   const today = await page.evaluate(() => {
     const d = new Date();
     return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
@@ -243,6 +284,10 @@ test('reopens a completed flight for consultation without requesting an edit lea
   }));
   await page.goto('/pilot/');
   await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.locator('#session-status')).not.toContainText('Não foi possível iniciar o Pilot App');
+  // Normalize the selected day on WebKit regardless of browser timezone.
+  await page.locator('#authorized-flight-date').fill(today);
+  await page.locator('#authorized-flight-date').dispatchEvent('change');
   await expect(page.getByRole('button', { name: 'Abrir voo' })).toHaveCount(1);
 
   await page.getByRole('button', { name: 'Abrir voo' }).click();
