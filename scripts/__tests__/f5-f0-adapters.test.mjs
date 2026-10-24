@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { captureF5ScoreVisualState, requireF5ScoreVisualState, commitIncompleteScormState, createF0Adapters, hasAuthoredF5State, requireAuthoredF5State, requireF5CommitReceipt, requireF5CommitReadbackCount, readInitializedF5ResumeState, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
+import { captureF5ScoreVisualState, requireF5ScoreVisualState, requireF5ScoreResumeMatch, commitIncompleteScormState, createF0Adapters, hasAuthoredF5State, requireAuthoredF5State, requireF5CommitReceipt, requireF5CommitReadbackCount, readInitializedF5ResumeState, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => {
@@ -354,32 +354,39 @@ const f5Visual = (index = 1) => ({
   contract: 'F5_SCORE_RENDERED_DOM_V1', index, total: 5, navIndex: index,
   stageVisible: true, titleMatchesModel: true, modelLength: 5,
 });
-const f5Suspend = index => JSON.stringify({ v: 2, p: 'fixed-test-edition',
-  a: index, d: [0], f: [], x: 'AA', y: 'AA' });
+const f5Suspend = index => 'opaque-authored-suspend-' + index;
 
-test('Score F5 visual guard requires authored second slide after a real Next action', () => {
-  assert.deepEqual(requireF5ScoreVisualState(f5Visual(), '2/5', f5Suspend(1),
-    { previousIndex: 0 }), { index: 1, total: 5 });
-  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(0),
-    { previousIndex: 0 }), /VISUAL_RESUME_WITNESS_INVALID/);
+test('Score F5 guard requires authored CMI to change on actual Next navigation', () => {
+  assert.deepEqual(requireF5ScoreVisualState(f5Visual(), 'opaque-slide-2', f5Suspend(1),
+    { previousIndex: 0, previousLocation: 'opaque-slide-1',
+      previousSuspend: f5Suspend(0) }), { index: 1, total: 5 });
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), 'opaque-slide-1', f5Suspend(0),
+    { previousIndex: 0, previousLocation: 'opaque-slide-1',
+      previousSuspend: f5Suspend(0) }), /VISUAL_RESUME_WITNESS_INVALID/);
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(), 'opaque-slide-1', f5Suspend(0),
+    { previousIndex: 0, previousLocation: 'opaque-slide-1',
+      previousSuspend: f5Suspend(0) }), /VISUAL_RESUME_WITNESS_INVALID/);
 });
 
-test('Score F5 visual guard rejects persisted second bookmark with first slide rendered', () => {
-  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '2/5', f5Suspend(1)),
+test('Score F5 cross-context guard rejects persisted bookmark with first slide rendered', () => {
+  assert.equal(requireF5ScoreResumeMatch(f5Visual(), f5Visual()), true);
+  assert.throws(() => requireF5ScoreResumeMatch(f5Visual(), f5Visual(0)),
     /VISUAL_RESUME_WITNESS_INVALID/);
-  assert.throws(() => requireF5ScoreVisualState(f5Visual(), '2/5', f5Suspend(0)),
+  assert.throws(() => requireF5ScoreResumeMatch(f5Visual(), { ...f5Visual(), total: 6 }),
+    /VISUAL_RESUME_WITNESS_INVALID/);
+  assert.throws(() => requireF5ScoreResumeMatch(f5Visual(0), f5Visual(0)),
     /VISUAL_RESUME_WITNESS_INVALID/);
 });
 
-test('Score F5 visual guard requires correct navigation, visible stage, model title and total', () => {
+test('Score F5 guard requires correct navigation, visible stage, model title and total', () => {
   for (const modified of [{ navIndex: 0 }, { titleMatchesModel: false },
     { stageVisible: false }, { modelLength: 4 }, { total: 0 },
     { contract: 'NOT_SCORE' }, { index: null }]) {
     assert.throws(() => requireF5ScoreVisualState({ ...f5Visual(), ...modified },
-      '2/5', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/);
+      'opaque-slide-2', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/);
   }
-  for (const invalid of ['', '{}', 'not-json', f5Suspend(0)]) {
-    assert.throws(() => requireF5ScoreVisualState(f5Visual(), '2/5', invalid),
+  for (const invalid of ['', '  ', null, undefined]) {
+    assert.throws(() => requireF5ScoreVisualState(f5Visual(), 'opaque-slide-2', invalid),
       /VISUAL_RESUME_WITNESS_INVALID/);
   }
 });
