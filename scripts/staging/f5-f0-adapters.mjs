@@ -15,7 +15,7 @@ const require = createRequire(
     ? `${process.env.GITHUB_WORKSPACE}/package.json`
     : (process.cwd() + '/package.json')
 );
-const { chromium } = require('@playwright/test');
+const { chromium, webkit } = require('@playwright/test');
 
 const HEX64 = /^[a-f0-9]{64}$/;
 const HEX40 = /^[a-f0-9]{40}$/;
@@ -68,12 +68,45 @@ function verifyReceiptDocuments(plan) {
 function locationValue(api, is2004) {
   return api[is2004 ? 'GetValue' : 'LMSGetValue'](is2004 ? 'cmi.location' : 'cmi.core.lesson_location');
 }
-async function browserExecution({ plan, params, request, env }) {
+/**
+ * Browser-serializable SCORM write sequence. Commit MUST follow all SetValue
+ * calls; an early commit can return success while persisting stale CMI.
+ */
+export function commitIncompleteScormState({ is2004, marker, suspend }) {
+  const api = is2004 ? window.API_1484_11 : window.API;
+  if (!api) throw Error('SCORM_API_UNAVAILABLE');
+  const initialized = is2004 ? api.Initialize('') : api.LMSInitialize('');
+  if (initialized !== 'true') throw Error('SCORM_INITIALIZE_REJECTED');
+  const set = (key, value) => is2004 ? api.SetValue(key, value) : api.LMSSetValue(key, value);
+  const locationKey = is2004 ? 'cmi.location' : 'cmi.core.lesson_location';
+  const incompleteKey = is2004 ? 'cmi.completion_status' : 'cmi.core.lesson_status';
+  const exitKey = is2004 ? 'cmi.exit' : 'cmi.core.exit';
+  if (set(locationKey, marker) !== 'true' ||
+      set('cmi.suspend_data', suspend) !== 'true' ||
+      set(incompleteKey, 'incomplete') !== 'true' ||
+      set(exitKey, 'suspend') !== 'true') throw Error('SCORM_INCOMPLETE_SET_REJECTED');
+  const committed = is2004 ? api.Commit('') : api.LMSCommit('');
+  if (committed !== 'true') throw Error('SCORM_INCOMPLETE_COMMIT_REJECTED');
+  return { marker, suspend, apiVersion: is2004 ? '2004' : '1.2' };
+}
+
+/** Failure diagnostics must never log response bodies, tokens or learner state. */
+export function safeF5HttpFailure(response) {
+  const status = response?.status?.();
+  const rawRequestId = response?.headers?.()?.['x-request-id'];
+  return {
+    status: Number.isInteger(status) && status >= 100 && status <= 599 ? status : null,
+    requestId: typeof rawRequestId === 'string' &&
+      /^[A-Za-z0-9_-]{8,80}$/.test(rawRequestId) ? rawRequestId : null,
+  };
+}
+
+async function browserExecution({ plan, params, request, env, browserType }) {
   const origin = String(env.F5_STAGING_API_ORIGIN || 'https://airtrust-api-staging.airtrust.workers.dev').replace(/\/$/, '');
   const token = env.SCORM_QA_ACCESS_TOKEN;
   if (!token || token.length <= 40) fail('STAGING_ADMIN_TOKEN_NOT_PROVISIONED');
   const path = `/api/lms/scorm/qa-f0/launch/${params.courseId}/${encodeURIComponent(params.packageId)}/${params.enrollmentId}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   try {
     const context = await browser.newContext({ serviceWorkers: 'block' });
     const assetSession = await request('/api/lms/assets/session', { method: 'POST', body: {
@@ -101,26 +134,10 @@ async function browserExecution({ plan, params, request, env }) {
     const responsePromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
       { timeout: 30_000 });
-    const first = await page.evaluate(({ is2004, marker, suspend }) => {
-      const api = is2004 ? window.API_1484_11 : window.API;
-      if (!api) throw Error('SCORM_API_UNAVAILABLE');
-      const initialized = is2004 ? api.Initialize('') : api.LMSInitialize('');
-      const set = (key, value) => is2004 ? api.SetValue(key, value) : api.LMSSetValue(key, value);
-      const commit = is2004 ? api.Commit('') : api.LMSCommit('');
-      const locationKey = is2004 ? 'cmi.location' : 'cmi.core.lesson_location';
-      const incompleteKey = is2004 ? 'cmi.completion_status' : 'cmi.core.lesson_status';
-      const exitKey = is2004 ? 'cmi.exit' : 'cmi.core.exit';
-      if (initialized !== 'true' || set(locationKey, marker) !== 'true' ||
-          set('cmi.suspend_data', suspend) !== 'true' ||
-          set(incompleteKey, 'incomplete') !== 'true' || set(exitKey, 'suspend') !== 'true' ||
-          commit !== 'true') throw Error('SCORM_INCOMPLETE_COMMIT_REJECTED');
-      return { marker, suspend, apiVersion: is2004 ? '2004' : '1.2' };
-    }, { is2004, marker, suspend });
+    const first = await page.evaluate(commitIncompleteScormState, { is2004, marker, suspend });
     const firstCommit = await responsePromise;
     if (!firstCommit || !firstCommit.ok()) {
-      const status = firstCommit?.status();
-      const body = await firstCommit?.text().catch(() => '');
-      console.error('[COMMIT_FAIL_DIAGNOSTIC]', { status, body });
+      console.error('[COMMIT_FAIL_DIAGNOSTIC]', safeF5HttpFailure(firstCommit));
       fail('WORKER_COMMIT_HTTP_FAILED');
     }
     const firstEnvelope = await firstCommit.json();
@@ -138,9 +155,7 @@ async function browserExecution({ plan, params, request, env }) {
     }, is2004);
     const finishCommit = await finishPromise;
     if (!finishCommit || !finishCommit.ok()) {
-      const status = finishCommit?.status();
-      const body = await finishCommit?.text().catch(() => '');
-      console.error('[FINISH_COMMIT_FAIL_DIAGNOSTIC]', { status, body });
+      console.error('[FINISH_COMMIT_FAIL_DIAGNOSTIC]', safeF5HttpFailure(finishCommit));
       fail('WORKER_FINISH_COMMIT_HTTP_FAILED');
     }
     await page.close();
@@ -215,6 +230,37 @@ function assertReadback(data, params, expected, runtimeSha) {
   return data;
 }
 
+
+/**
+ * Both browser engines must exercise the same candidate against the staging
+ * Worker. Each invocation performs its own Commit, Finish, fresh-context
+ * resume and authenticated D1 readback. One engine passing is insufficient.
+ */
+export async function runF5BrowserPair(runBrowser) {
+  const results = [];
+  for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]) {
+    const evidence = await runBrowser({ engine, browserType });
+    if (evidence?.source !== 'WORKER_CANDIDATE_QA_EXECUTION' ||
+        evidence?.resumeVerified !== true ||
+        evidence?.locationPersisted !== true ||
+        evidence?.suspendDataPersisted !== true) fail('BROWSER_' + engine.toUpperCase() + '_EVIDENCE_INVALID');
+    results.push(evidence);
+  }
+  const [chromiumEvidence, webkitEvidence] = results;
+  for (const key of [
+    'source', 'candidateId', 'packageSha256', 'enrollmentId', 'cycleId', 'runId',
+    'servedPackageSha256', 'committedPackageSha256', 'suspendSha256', 'runtimeVersion',
+  ]) {
+    if (chromiumEvidence[key] !== webkitEvidence[key]) fail('BROWSER_PAIR_SCOPE_MISMATCH');
+  }
+  if (!Number.isSafeInteger(chromiumEvidence.sessionCount) ||
+      !Number.isSafeInteger(webkitEvidence.sessionCount) ||
+      webkitEvidence.sessionCount < chromiumEvidence.sessionCount) {
+    fail('BROWSER_PAIR_READBACK_REGRESSION');
+  }
+  return { ...webkitEvidence, browserEngines: ['chromium', 'webkit'] };
+}
+
 /** Creates actual production callbacks; absent recovery/cleanup routes fail closed. */
 export async function createF0Adapters({ plan, env = process.env }) {
   return {
@@ -241,7 +287,7 @@ export async function createF0Adapters({ plan, env = process.env }) {
     },
     async runSyntheticCandidate(params, { request }) {
       checkedScope(plan, params);
-      return browserExecution({ plan, params, request, env });
+      return runF5BrowserPair(({ browserType }) => browserExecution({ plan, params, request, env, browserType }));
     },
     async recoverSyntheticCandidate(params, { json }) {
       checkedScope(plan, params);

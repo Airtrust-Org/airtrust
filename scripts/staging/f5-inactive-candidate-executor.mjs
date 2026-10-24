@@ -129,6 +129,8 @@ function verifyExecutionEvidence(evidence, plan, candidate) {
       evidence.qualificationHistoryCount !== 0 || evidence.certificateDocument !== null ||
       evidence.runtimeVersion !== candidate.scormVersion || evidence.locationPersisted !== true ||
       evidence.suspendDataPersisted !== true || evidence.resumeVerified !== true ||
+      !Array.isArray(evidence.browserEngines) || evidence.browserEngines.length !== 2 ||
+      evidence.browserEngines[0] !== 'chromium' || evidence.browserEngines[1] !== 'webkit' ||
       evidence.assessmentAttempted !== false || evidence.assessmentApproved !== false ||
       evidence.externalAssessmentApproved !== false || evidence.certificateIssued !== false) {
     fail('CANDIDATE_EXECUTION_EVIDENCE_INVALID');
@@ -256,6 +258,7 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       d1ReadbackSource: d1Candidate.source,
       syntheticEnrollmentId: f.enrollmentId,
       execution: { cmiSha256: execution.cmiSha256, suspendSha256: execution.suspendSha256,
+        browserEngines: execution.browserEngines,
         sessionCount: after.sessionCount, servedPackageSha256: after.servedPackageSha256,
         committedPackageSha256: after.committedPackageSha256 },
       cleanupReceiptSha256: cleanupReceipt.receiptSha256,

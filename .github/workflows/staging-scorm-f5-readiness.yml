@@ -75,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --ignore-scripts --no-audit --no-fund
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
       - name: Verify main ancestry and eight canonical release gates
         shell: bash
         env:
