@@ -43,8 +43,8 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   assertF5RunnerDispatchScope(plan, env);
   let f0;
   try { f0 = await import(pathToFileURL(resolve(f0ModulePath)).href); }
-  catch (err) {
-    console.error('[F0_ADAPTER_LOAD_ERROR]', err);
+  catch {
+    // Imported adapter exceptions may contain protected runner paths or secrets.
     fail('F0_ADAPTER_LOAD_FAILED');
   }
   if (typeof f0.createF0Adapters !== 'function') fail('F0_ADAPTER_CONTRACT_MISSING');
@@ -66,22 +66,47 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   }
 }
 
+// Only these reviewed, fixed identifiers may appear in public Actions logs.
+// Never stringify exceptions or print nested causes: they can carry tokens,
+// learner state, request bodies, or runner-local private file paths.
+const PUBLIC_RUNNER_FAILURE_CODES = new Set([
+  'F5_RUNNER_PRIVATE_PLAN_SOURCE_OR_PINNED_F0_ADAPTER_NOT_PROVISIONED',
+  'F5_RUNNER_F0_ADAPTER_FILE_UNAVAILABLE',
+  'F5_RUNNER_F0_ADAPTER_SHA_MISMATCH',
+  'F5_RUNNER_PLAN_FILE_INVALID',
+  'F5_RUNNER_PRIVATE_PLAN_UNAVAILABLE_OR_INVALID',
+  'F5_RUNNER_F0_ADAPTER_LOAD_FAILED',
+  'F5_RUNNER_PRIVATE_ZIP_SOURCE_UNAVAILABLE',
+  'F5_RUNNER_EVIDENCE_OUTPUT_FAILED',
+  'F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED',
+  'F5_EXECUTOR_STAGING_RUNTIME_SHA_MISMATCH',
+  'F5_EXECUTOR_F0_RECEIPTS_NOT_VERIFIED',
+  'F5_EXECUTOR_D1_EXECUTION_EVIDENCE_NOT_PERSISTED',
+  'F5_EXECUTOR_SYNTHETIC_CLEANUP_RECEIPT_INVALID',
+  'F5_F0_ADAPTER_WORKER_COMMIT_HTTP_FAILED',
+  'F5_F0_ADAPTER_WORKER_FINISH_COMMIT_HTTP_FAILED',
+  'F5_F0_ADAPTER_SCORM_RESUME_STATE_MISMATCH',
+  'F5_F0_ADAPTER_D1_READBACK_SCOPE_OR_STATE_INVALID',
+  'F5_F0_ADAPTER_BROWSER_PAIR_SCOPE_MISMATCH',
+]);
+
+export function safeF5RunnerErrorCode(error) {
+  try {
+    return PUBLIC_RUNNER_FAILURE_CODES.has(error?.message)
+      ? error.message
+      : 'F5_RUNNER_OPERATION_FAILED';
+  } catch {
+    return 'F5_RUNNER_OPERATION_FAILED';
+  }
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   try {
     const evidence = await runF5InactiveCandidateFromEnvironment();
     process.stdout.write(`${JSON.stringify({ status: evidence.status,
       packageSha256: evidence.candidate.packageSha256, active: evidence.candidate.active })}\n`);
   } catch (error) {
-    console.error('[F5_RUNNER_ERROR_DETAILS]', error);
-    if (error?.cause) {
-      console.error('[F5_RUNNER_CAUSE]', error.cause);
-      if (error.cause.errors) {
-        for (const sub of error.cause.errors) console.error('[F5_SUB_ERROR]', sub);
-      }
-    }
-    const message = String(error?.message || error);
-    const safeCode = /^F5_[A-Z0-9_]{1,180}$/.test(message) ? message : 'F5_RUNNER_OPERATION_FAILED';
-    process.stderr.write(`${safeCode}\n`);
+    process.stderr.write(`${safeF5RunnerErrorCode(error)}\n`);
     process.exitCode = 2;
   }
 }
