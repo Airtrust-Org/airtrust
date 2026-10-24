@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { ApiError } from '../middleware/error-handler';
 import { assertCandidateQaScope, assertScormCandidateQaEnvironment, readScormQaCandidate } from '../lib/lms/lms-scorm-candidate-preview';
 import { readF0CandidateRuntimeState, witnessF0CandidateLaunch, commitF0CandidateSuspend } from '../lib/lms/lms-scorm-f0-staging-runtime';
@@ -91,7 +92,7 @@ export function registerScormCandidateQaRoutes(
   // Staging-only, inactive-candidate runtime for a governed synthetic F0
   // enrollment. This is a deliberately incomplete/suspend-only path and
   // cannot create course completion, grades or certificates.
-  async function authorizedF0Context(c: Parameters<Parameters<typeof app.get>[1]>[0]) {
+  async function authorizedF0Context(c: Context<{ Bindings: Env }>) {
     if (c.env.ENVIRONMENT !== 'staging') throw new ApiError('F0 indisponível', 403);
     const payload = (await authenticateLmsAssetRequest(c.env,c.req.raw)) as JwtPayload & {
       asset_qa_candidate_id?:string; asset_qa_candidate_sha256?:string;
