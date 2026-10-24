@@ -220,6 +220,6 @@ test('F5 requires scoped Commit and Finish receipts with strictly advancing D1 s
   ]) assert.throws(() => requireF5CommitReceipt(bad, params, 1), /COMMIT_RECEIPT_INVALID/);
   assert.throws(() => requireF5CommitReadbackCount({ sessionCount: 1 }, 2),
     /COMMIT_READBACK_SESSION_MISMATCH/);
-  assert.throws(() => requireF5CommitReadbackCount({ sessionCount: 3 }, 2),
-    /COMMIT_READBACK_SESSION_MISMATCH/);
+  // A SCO may legitimately auto-commit again before the readback.
+  assert.equal(requireF5CommitReadbackCount({ sessionCount: 3 }, 2), true);
 });
