@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {ARCHIVE_SQL,SCHEMA_PROBE_SQL,PRODUCTION_D1_ID,NON_PRODUCTION_D1_IDS,assertSqlTransportScope,d1,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,classifyD1RestRejection,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
+import {ARCHIVE_SQL,SCHEMA_PROBE_SQL,TABLES_PROBE_SQL,validateTableNames,PRODUCTION_D1_ID,NON_PRODUCTION_D1_IDS,assertSqlTransportScope,d1,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,classifyD1RestRejection,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
 
 test('D1 REST transport is pinned to production database and reviewed SELECT statements',async()=>{
  assert.equal(PRODUCTION_D1_ID,'7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae');
@@ -41,6 +41,22 @@ test('D1 rejection is classified without leaking token, SQL or provider messages
  assert.equal(classifyD1RestRejection(500,{errors:[{code:7500,message:'private detail'}]}),'D1_CF_CODE_7500');
  assert.equal(classifyD1RestRejection(502,{errors:[{message:'sensitive'}]}),'D1_HTTP_502');
  assert.equal(safePublicError(new Error('LMS99_HISTORY_D1_CF_CODE_7500')),'LMS99_HISTORY_D1_CF_CODE_7500');
+});
+
+test('minimal table SELECT stays fixed and emits only four flags',async()=>{
+ assert.match(TABLES_PROBE_SQL,/^SELECT name FROM sqlite_master/);
+ assert.doesNotMatch(TABLES_PROBE_SQL,/UNION ALL|pragma_table_info|;/);
+ assert.deepEqual(validateTableNames([{name:'lms_matriculas'},{name:'lms_cursos'}]),[
+  {check_name:'lms_matriculas',present:1},{check_name:'lms_cursos',present:1},
+  {check_name:'lms_matricula_ciclos',present:0},{check_name:'lms_ciclo_evidencias',present:0},
+ ]);
+ assert.throws(()=>validateTableNames([{name:'email'}]),/TABLE_RESULT_INVALID/);
+ const db=new DatabaseSync(':memory:');
+ try{
+  db.exec('CREATE TABLE lms_matriculas(id INT); CREATE TABLE lms_cursos(id INT);');
+  const checks=validateTableNames(db.prepare(TABLES_PROBE_SQL).all());
+  assert.deepEqual(checks.map(x=>x.present),[1,1,0,0]);
+ }finally{db.close();}
 });
 
 test('protected schema probe reports only fixed table and column availability',()=>{
