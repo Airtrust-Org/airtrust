@@ -241,6 +241,18 @@ function statementFor(sql: string) {
           ],
         };
       }
+      if (normalized.includes('FROM cv_motivos_operacionais')) {
+        expect(normalized).toContain('empresa_id = ?');
+        expect(normalized).toContain("tipo = 'geral'");
+        expect(normalized).toContain("substr(UPPER(codigo), 1, 4) = 'OBS_'");
+        expect(normalized).toContain('ativo = 1');
+        expect(statement.binds).toEqual([7]);
+        return {
+          results: [
+            { codigo: 'OBS_RETORNO', nome: 'Retorno antecipado', descricao: 'Retorno antecipado: ' },
+          ],
+        };
+      }
       if (normalized.includes('FROM frms_location_catalog')) {
         return {
           results: [
@@ -483,6 +495,9 @@ describe('Pilot offline package', () => {
     );
     expect(body.data.catalogos.empresas_abastecimento).toEqual([
       expect.objectContaining({ codigo: 'BR-MACAE', nome: 'BR Macaé' }),
+    ]);
+    expect(body.data.catalogos.observacoes_predefinidas).toEqual([
+      { codigo: 'OBS_RETORNO', nome: 'Retorno antecipado', descricao: 'Retorno antecipado: ' },
     ]);
     expect(body.data.abastecimentos[0]).toMatchObject({ id: 20, tem_anexo: true });
     expect(body.data.abastecimentos[0].anexo_r2_key).toBeUndefined();

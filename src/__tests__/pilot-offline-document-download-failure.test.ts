@@ -18,6 +18,10 @@ function functionBody(name: string, followingDeclaration: string): string {
 }
 
 const actualFunctions = [
+  source.slice(
+    source.indexOf('function isFlightClosedForEditing('),
+    source.indexOf('function openCompletedFlightForConsultation('),
+  ),
   functionBody('cacheFlightDocumentForOffline', 'async function cacheFlightDocumentsForOffline('),
   functionBody('cacheFlightDocumentsForOffline', 'function changedFlightDocumentLabels('),
   functionBody('prepareFlightPackage', 'async function ensurePilotShellReadyForFlight('),
@@ -33,10 +37,13 @@ type StoredRecord = {
   localRevision: number;
 };
 
-function setupSandbox(options: { rejectPackageWrite?: boolean } = {}) {
+function setupSandbox(options: { rejectPackageWrite?: boolean; closedRdv?: boolean } = {}) {
   const packageData = {
     contract: { package_id: 'authorized-qa-flight-601' },
     voo: { id: 601 },
+    rdv: options.closedRdv
+      ? { status: 'preenchimento_finalizado', workflow_status: 'enviado' }
+      : { status: 'em_preenchimento', workflow_status: 'rascunho' },
     documents: [
       { id: 101, type: 'WEATHER_REPORT', label: 'Weather Report', file_name: 'weather.pdf', size: 4 },
       { id: 102, type: 'PLANO_VOO', label: 'Planejamento de voo', file_name: 'planning.pdf', size: 20 },
@@ -125,6 +132,15 @@ describe('Pilot App actual offline document failure path', () => {
     expect(app.messages.at(-1)).toMatchObject({ status: 'attention' });
     expect(app.messages.at(-1)?.message).toContain('documentos pendentes de download');
     expect(app.refreshOnlineButton.disabled).toBe(false);
+  });
+
+  it('preserva pacote cifrado para consulta sem abrir automaticamente o editor de RDV finalizado', async () => {
+    const app = setupSandbox({ closedRdv: true });
+    const record = await app.prepare(601);
+    expect(record).not.toBeNull();
+    expect(app.opened).toHaveLength(0);
+    expect(app.getSaved()).toBe(record);
+    expect(record?.value.offline_documents).toHaveLength(2);
   });
 
   it('mantém o voo indisponível se o pacote principal não puder ser persistido no vault', async () => {

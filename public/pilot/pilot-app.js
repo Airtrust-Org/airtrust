@@ -1,5 +1,5 @@
 import { PilotVault } from '/pilot/pilot-vault.js';
-import { renderPilotWorkspace } from '/pilot/pilot-workspace.js';
+import { renderPilotWorkspace, renderPilotFlightDocuments } from '/pilot/pilot-workspace.js';
 import {
   hasTrustedPilotLeaseKeys,
   verifyPilotOfflineLease,
@@ -116,6 +116,7 @@ const rdvLocalSequenceLabel = document.querySelector('#rdv-local-sequence');
 const rdvLeaseUntilLabel = document.querySelector('#rdv-lease-until');
 const rdvCoreFields = document.querySelector('#rdv-core-fields');
 const rdvCrewSummary = document.querySelector('#rdv-crew-summary');
+const rdvFlightDocumentsContent = document.querySelector('#rdv-flight-documents-content');
 const rdvFormFields = document.querySelector('#rdv-form-fields');
 const rdvStageFields = document.querySelector('#rdv-stage-fields');
 const rdvFuelingFields = document.querySelector('#rdv-fueling-fields');
@@ -342,12 +343,25 @@ async function refreshPilotOnlineSession() {
     const body = await response.json().catch(() => null);
     const accessToken = body?.data?.accessToken;
     const refreshToken = body?.data?.refreshToken;
+    // Outra aba do AirTrust pode ter renovado a sessão durante esta chamada.
+    // Um 401 do token antigo não pode derrubar o par já rotacionado.
+    const newestRefresh = readCurrentRefreshToken().value;
+    if (newestRefresh && newestRefresh !== stored.value) {
+      const newestAccess = readCurrentAccessToken();
+      if (newestAccess) return newestAccess;
+    }
     if (!response.ok || !accessToken) {
       throw new PilotOnlineRequestError(
         body?.error || body?.message || 'Não foi possível renovar a sessão online.',
         response.status || 401,
         body?.code || 'REFRESH_FAILED',
       );
+    }
+    // Não sobrescrever credenciais recém-rotacionadas por outra aba.
+    if (readCurrentRefreshToken().value !== stored.value) {
+      const newestAccess = readCurrentAccessToken();
+      if (newestAccess) return newestAccess;
+      throw new PilotOnlineRequestError('Sessão alterada em outra aba. Atualize para continuar.', 401, 'AUTH_SESSION_CHANGED');
     }
     writeStoredAuthValue('airtrust_token', accessToken, stored.persistent);
     if (refreshToken) writeStoredAuthValue('airtrust_refresh_token', refreshToken, stored.persistent);
@@ -823,9 +837,14 @@ async function authenticatedRequest(method, path, payload, options = {}) {
   };
 
   let response = await doFetch(token);
-  if (response.status === 401 && readCurrentRefreshToken().value) {
-    token = await refreshPilotOnlineSession();
-    response = await doFetch(token);
+  if (response.status === 401) {
+    const updatedToken = readCurrentAccessToken();
+    if (updatedToken && updatedToken !== token) {
+      response = await doFetch(updatedToken);
+    } else if (readCurrentRefreshToken().value) {
+      token = await refreshPilotOnlineSession();
+      response = await doFetch(token);
+    }
   }
   const body = await response.json().catch(() => null);
   if (!response.ok) {
@@ -852,9 +871,14 @@ async function authenticatedBlob(path, options = {}) {
     headers: { Accept: '*/*', Authorization: 'Bearer ' + accessToken },
   });
   let response = await doFetch(token);
-  if (response.status === 401 && readCurrentRefreshToken().value) {
-    token = await refreshPilotOnlineSession();
-    response = await doFetch(token);
+  if (response.status === 401) {
+    const updatedToken = readCurrentAccessToken();
+    if (updatedToken && updatedToken !== token) {
+      response = await doFetch(updatedToken);
+    } else if (readCurrentRefreshToken().value) {
+      token = await refreshPilotOnlineSession();
+      response = await doFetch(token);
+    }
   }
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -1167,7 +1191,7 @@ function setSessionMessage(message, kind = 'attention', offerLogin = false) {
   }
 }
 
-function makeFlightItem({ title, subtitle, badge, buttonText, onClick, disabled = false, secondaryButtonText = null, onSecondaryClick = null }) {
+function makeFlightItem({ title, subtitle, badge, buttonText, onClick, flightActionId = null, disabled = false, secondaryButtonText = null, onSecondaryClick = null }) {
   const item = document.createElement('div');
   item.className = 'flight-item';
 
@@ -1192,7 +1216,8 @@ function makeFlightItem({ title, subtitle, badge, buttonText, onClick, disabled 
   button.type = 'button';
   button.textContent = buttonText;
   button.disabled = disabled;
-  button.addEventListener('click', onClick);
+  if (flightActionId != null) button.dataset.flightActionId = String(flightActionId);
+  if (typeof onClick === 'function') button.addEventListener('click', onClick);
 
   const actions = document.createElement('div');
   actions.className = 'flight-item-actions';
@@ -1254,8 +1279,12 @@ function renderCachedPackages() {
         badge: 'Disponível offline',
         buttonText: 'Abrir voo',
         onClick: async () => {
-          openPackageRecord(record);
-          await openExistingOperationalDraft();
+          if (isFlightClosedForEditing(record.value?.package)) {
+            openCompletedFlightForConsultation(record);
+          } else {
+            openPackageRecord(record);
+            await openExistingOperationalDraft();
+          }
         },
       }),
     );
@@ -1335,6 +1364,22 @@ async function notifyFlightUpdate(voo) {
   } catch {}
 }
 
+// Capture actions on the stable document, not the replaceable list/button subtree.
+// On mobile/PWA the list may be recreated after closing a completed RDV.
+document.addEventListener('click', (event) => {
+  const button = event.target instanceof Element
+    ? event.target.closest('button[data-flight-action-id]')
+    : null;
+  if (!button || button.disabled) return;
+  const currentList = document.querySelector('#online-flights');
+  if (!currentList?.contains(button)) return;
+  const flightId = Number(button.dataset.flightActionId);
+  if (!Number.isSafeInteger(flightId) || flightId <= 0) return;
+  // Backend still verifies the caller's tenant and own-flight authorization.
+  // Do not depend on a potentially stale in-memory list after returning from a RDV.
+  void openAuthorizedFlight(flightId);
+}, { capture: true });
+
 function renderOnlineFlights() {
   const selectedDate = selectedFlightDateKey();
   if (authorizedFlightHeading) {
@@ -1385,10 +1430,10 @@ function renderOnlineFlights() {
             : 'horário não informado'),
         badge: stale ? 'Alteração da Coordenação — atualize o voo' : (cached ? 'Já preparado neste tablet' : null),
         buttonText: stale ? 'Atualizar voo' : 'Abrir voo',
-        secondaryButtonText: 'Fazer plano de voo',
         disabled: !navigator.onLine,
-        onClick: () => void openAuthorizedFlight(voo.id),
-        onSecondaryClick: () => void openFlightPlanning(voo.id),
+        // Delegation on the stable container survives iOS/Safari list re-rendering.
+        // Avoid attaching a second handler to the button itself.
+        flightActionId: voo.id,
       }),
     );
   }
@@ -1567,7 +1612,9 @@ async function prepareFlightPackage(flightId, options = {}) {
       activePackageRecord = persisted;
       setFlightSelectionVisible(false);
       rdvEditorCard.classList.remove('hidden');
-    } else {
+    } else if (!isFlightClosedForEditing(packageData)) {
+      // The completed-flight consultation path opens the package exactly once,
+      // without temporarily launching the edit-lease controls.
       openPackageRecord(persisted, options.initialWorkspaceTab || 'summary');
     }
     await updateStorageEstimate();
@@ -1615,13 +1662,113 @@ async function ensurePilotShellReadyForFlight() {
   }
 }
 
-async function openFlightPlanning(flightId) {
-  return Boolean(await prepareFlightPackage(flightId, { initialWorkspaceTab: 'planning' }));
+function isFlightClosedForEditing(packageData) {
+  const rdv = packageData?.rdv;
+  return Boolean(rdv && (
+    rdv.status === 'preenchimento_finalizado' ||
+    !['rascunho', 'devolvido'].includes(String(rdv.workflow_status || ''))
+  ));
+}
+
+function isFlightPendingCoordinationSend(packageData) {
+  const rdv = packageData?.rdv;
+  return Boolean(
+    rdv?.status === 'preenchimento_finalizado' &&
+    ['rascunho', 'devolvido'].includes(String(rdv.workflow_status || '')),
+  );
+}
+
+function appendPendingCoordinationSendAction(packageData) {
+  if (!isFlightPendingCoordinationSend(packageData)) return;
+  const flightId = Number(packageData.voo?.id || 0);
+  const panel = document.createElement('section');
+  panel.id = 'pilot-send-retry-action';
+  panel.className = 'card';
+  panel.setAttribute('aria-label', 'Envio pendente à Coordenação');
+  const heading = document.createElement('h3');
+  heading.textContent = 'Envio à Coordenação pendente';
+  const description = document.createElement('p');
+  description.textContent =
+    'O preenchimento já foi finalizado, mas o recebimento pela Coordenação ainda não está confirmado. ' +
+    'Os campos estão bloqueados para edição. Atualize o status antes de repetir o envio.';
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.textContent = 'Atualizar status e reenviar à Coordenação';
+  retry.disabled = !navigator.onLine;
+  const feedback = document.createElement('p');
+  feedback.className = 'statusline attention';
+  feedback.textContent = navigator.onLine
+    ? 'O servidor será consultado antes de qualquer nova tentativa.'
+    : 'Conecte-se à internet para confirmar o recebimento e tentar novamente.';
+  retry.addEventListener('click', async () => {
+    if (!navigator.onLine || coordinationInFlight || !Number.isSafeInteger(flightId) || flightId <= 0) return;
+    retry.disabled = true;
+    feedback.className = 'statusline attention';
+    feedback.textContent = 'Conferindo o estado atual do servidor…';
+    try {
+      const refreshed = await prepareFlightPackage(flightId);
+      if (!refreshed) throw new Error('Não foi possível atualizar o pacote do servidor.');
+      const updated = refreshed.value?.package;
+      openCompletedFlightForConsultation(refreshed);
+      if (updated?.rdv?.workflow_status === 'enviado') {
+        setSessionMessage('O recebimento pela Coordenação já está confirmado. Não houve novo envio.', 'ok');
+        return;
+      }
+      if (!isFlightPendingCoordinationSend(updated)) {
+        setSessionMessage('Estado do RDV alterado no servidor. Atualize a consulta antes de prosseguir.', 'attention');
+        return;
+      }
+      const state = await getCoordinationState();
+      if (!state.canSend) {
+        setSessionMessage(state.reason || 'Reenvio ainda não autorizado pelo servidor.', 'attention');
+        return;
+      }
+      const confirmed = await sendCanonicalRdvToCoordination();
+      if (!confirmed) {
+        setSessionMessage(
+          'Recebimento não confirmado. O RDV permanece finalizado e poderá ser reenviado após atualizar o status.',
+          'error',
+        );
+      }
+    } catch (error) {
+      setSessionMessage(
+        error instanceof Error ? error.message : 'Não foi possível confirmar o estado do voo.',
+        'error',
+      );
+    } finally {
+      // A nova consulta recria o botão; se não ocorreu, permitir tentativa posterior.
+      if (retry.isConnected) retry.disabled = !navigator.onLine;
+    }
+  });
+  panel.append(heading, description, retry, feedback);
+  // O botão deve estar visível na consulta; o detalhe técnico fica recolhido.
+  flightDetailCard.insertBefore(panel, flightDetailCard.querySelector('.technical-package'));
+}
+
+function openCompletedFlightForConsultation(record) {
+  openPackageRecord(record, 'summary');
+  // A consulta não solicita lease de edição nem altera dados já finalizados.
+  flightDetailCard.classList.add('read-only-flight');
+  flightDetailCard.classList.remove('hidden');
+  setFlightSelectionVisible(false);
+  rdvEditorCard.classList.add('hidden');
+  appendPendingCoordinationSendAction(record.value?.package);
+  setSessionMessage(
+    isFlightPendingCoordinationSend(record.value?.package)
+      ? 'RDV finalizado, mas ainda não recebido pela Coordenação. Atualize o status e reenvie.'
+      : 'Voo concluído: consulta somente para leitura.',
+    isFlightPendingCoordinationSend(record.value?.package) ? 'attention' : 'ok',
+  );
 }
 
 async function openAuthorizedFlight(flightId) {
   const record = await prepareFlightPackage(flightId);
   if (!record) return false;
+  if (isFlightClosedForEditing(record.value?.package)) {
+    // O lease é exclusivo para edição; RDVs enviados continuam consultáveis.
+    openCompletedFlightForConsultation(record);
+    return true;
+  }
 
   try {
     await ensurePilotShellReadyForFlight();
@@ -3751,6 +3898,7 @@ function createEditorField({
   wide = false,
   readOnly = false,
   note,
+  templates = [],
   onInput,
   onBlur,
 }) {
@@ -3788,26 +3936,20 @@ function createEditorField({
   });
   if (onBlur) input.addEventListener('blur', () => onBlur(input.value, input));
   wrapper.append(title, input);
-  if (type === 'textarea' && !readOnly && typeof onInput === 'function') {
-    // Phrases are opt-in; never invent an occurrence or overwrite the pilot's record.
-    // No text is sent to external grammar/AI services.
-    const templates = [
-      ['Retorno antecipado', 'Retorno à base antes de concluir a rota planejada. Motivo: '],
-      ['Interrupção da operação', 'Operação interrompida. Motivo: '],
-      ['Divergência operacional', 'Divergência em relação ao planejamento: '],
-      ['Informação complementar', 'Informação complementar: '],
-    ];
+  if (type === 'textarea' && !readOnly && typeof onInput === 'function' && templates.length > 0) {
+    // Textos opcionais são cadastrados pela Coordenação no catálogo do tenant.
+    // Nenhum campo livre é enviado a serviços externos de IA.
     const select = document.createElement('select');
     select.setAttribute('aria-label', 'Inserir observação predefinida em ' + label);
     const empty = document.createElement('option');
     empty.value = '';
     empty.textContent = 'Inserir texto predefinido (opcional)';
     select.append(empty);
-    for (const [name, value] of templates) {
+    for (const item of templates) {
       const option = document.createElement('option');
-      option.value = value;
-      option.textContent = name;
-      select.append(option);
+      option.value = String(item?.descricao || item?.nome || '').trim();
+      option.textContent = String(item?.nome || item?.codigo || '').trim();
+      if (option.value) select.append(option);
     }
     select.disabled = operationalSyncInFlight;
     select.addEventListener('change', () => {
@@ -4377,21 +4519,17 @@ function renderRdvFormFields() {
       note: 'Vem do cadastro da aeronave; exibido simultaneamente em lb e kg.',
     }),
     createEditorField({
-      label: 'Ocorrências',
+      label: 'Observações do voo',
       value: form.ocorrencias || '',
       type: 'textarea',
       wide: true,
+      templates: Array.isArray(packageData?.catalogos?.observacoes_predefinidas)
+        ? packageData.catalogos.observacoes_predefinidas
+        : [],
       onInput: (value) => { form.ocorrencias = value; scheduleOperationalSave(); },
       onBlur: () => void flushOperationalSave(),
     }),
-    createEditorField({
-      label: 'Divergências do planejado',
-      value: form.divergencias || '',
-      type: 'textarea',
-      wide: true,
-      onInput: (value) => { form.divergencias = value; scheduleOperationalSave(); },
-      onBlur: () => void flushOperationalSave(),
-    }),
+    // Divergências históricas permanecem no pacote/sync; não apagar dados existentes.
   );
 
   const summaryFields = [
@@ -4727,7 +4865,7 @@ function renderStageFields() {
       index > 0 ? 'Integrado ao combustível final da etapa anterior' : null,
     ],
     ['Combustível final', 'combustivel_fim', 'number', 'decimal', false, false, null],
-    ['Observações da etapa', 'observacoes', 'textarea', null, false, true, null],
+    // Observações novas são registradas somente no campo comum do voo.
   ];
 
   const dualWeightLabels = {
@@ -5090,6 +5228,12 @@ function renderOperationalEditor(options = {}) {
   rdvLocalSequenceLabel.textContent = String(operationalLocalSequence);
 
   renderPilotCrewSummary(packageData);
+  if (rdvFlightDocumentsContent) {
+    renderPilotFlightDocuments(rdvFlightDocumentsContent, packageData, {
+      openFlightDocument,
+      documentAvailability: documentAvailabilityMap(activePackageRecord),
+    });
+  }
   renderRdvFormFields();
   renderStageFields();
   renderFuelingFields();
@@ -5148,6 +5292,7 @@ function openPackageRecord(record, initialWorkspaceTab = 'summary') {
     airportLabel(packageData.origem, voo.origem_id) +
     ' → ' +
     airportLabel(packageData.destino, voo.destino_id);
+  flightDetailCard.querySelector('#pilot-send-retry-action')?.remove();
   detailStatus.textContent =
     'Pacote local cifrado · preparado em ' +
     formatTimestamp(record.value.prepared_at) +
@@ -5268,6 +5413,7 @@ function openPackageRecord(record, initialWorkspaceTab = 'summary') {
   ]);
 
   flightDetailCard.classList.add('hidden');
+  flightDetailCard.classList.remove('read-only-flight');
   void refreshLeaseControls(record);
   void refreshCoordinationControls();
 }
@@ -5278,6 +5424,7 @@ function closePackageDetail() {
   activePackageRecord = null;
   activeVerifiedLease = null;
   flightDetailCard.classList.add('hidden');
+  flightDetailCard.classList.remove('read-only-flight');
   flightDetail.replaceChildren();
   pilotWorkspaceView.replaceChildren();
   prepareEditOfflineButton.disabled = true;
@@ -5289,6 +5436,10 @@ function closePackageDetail() {
   completeSendRdvButton.disabled = true;
   setCoordinationMessage('Abra um pacote de voo para avaliar o fechamento.', 'attention');
   setCoordinationReceipt('');
+  // Recreate actionable list buttons after leaving a read-only workspace.
+  // Existing cached packages and unsent outbox records remain untouched.
+  renderOnlineFlights();
+  renderCachedPackages();
 }
 
 async function openWorkspace() {

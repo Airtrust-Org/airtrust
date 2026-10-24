@@ -231,6 +231,7 @@
       .flight-selection-note { margin: 10px 0 0; }
       .operational-focus { margin-top: 0; }
       .technical-only { display: none !important; }
+      .read-only-flight .lease-box { display: none !important; }
       .quick-time-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin: 12px 0 16px; }
       .quick-time-grid button { min-width: 0; min-height: 58px; line-height: 1.2; white-space: normal; }
       .derived-time { background: #f0f6fb; }
@@ -850,7 +851,7 @@
           <div id="cached-flights" class="list"></div>
         </details>
 
-        <section id="flight-detail-card" class="card hidden technical-only" aria-hidden="true">
+        <section id="flight-detail-card" class="card hidden" aria-label="Consulta do voo">
           <div class="section-head">
             <div>
               <h2 id="detail-title">Voo</h2>
@@ -941,6 +942,10 @@
             </div>
           </div>
           <div id="rdv-crew-summary" class="pilot-crew-summary"></div>
+          <details class="expandable-panel" id="rdv-flight-documents">
+            <summary>Documentos recebidos da Coordenação</summary>
+            <div id="rdv-flight-documents-content" class="pilot-workspace"></div>
+          </details>
 
           <div class="section-head" style="margin-top:20px">
             <div>
