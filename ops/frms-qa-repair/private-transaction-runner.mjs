@@ -42,8 +42,41 @@ export async function resolvePrivateTransactionQueues({
     }
   }
   if(found.size!==2||found.get(PREPARE)===found.get(RESULTS))deny();
+  // The list alone is not evidence of a configured private consumer. Inspect
+  // both queue resources via fixed IDs before any signed message can be sent.
+  const inspect=async name=>{
+    let res,body;
+    try{
+      res=await fetcher('https://api.cloudflare.com/client/v4/accounts/'+
+        accountId+'/queues/'+found.get(name),{
+        method:'GET',redirect:'manual',
+        headers:{Authorization:'Bearer '+token,Accept:'application/json'},
+        signal:AbortSignal.timeout(15000),
+      });
+      if(res?.status!==200||res.redirected===true)deny();
+      body=await res.json();
+    }catch{deny();}
+    const q=body?.result;
+    if(body?.success!==true||q?.queue_id!==found.get(name)||
+       q?.queue_name!==name||
+       !Number.isInteger(q.settings?.message_retention_period)||
+       q.settings.message_retention_period<60||
+       q.settings.message_retention_period>900||
+       !Array.isArray(q.consumers)||q.consumers.length!==1)deny();
+    const consumer=q.consumers[0];
+    if(consumer.queue_name!==name||
+       (name===PREPARE?
+         consumer.type!=='worker'||
+           consumer.script_name!=='airtrust-frms-qa-caller-staging-private'||
+           consumer.settings?.batch_size!==1:
+         consumer.type!=='http_pull'||consumer.settings?.batch_size!==1||
+           consumer.settings?.visibility_timeout_ms!==30000))deny();
+  };
+  await inspect(PREPARE);
+  await inspect(RESULTS);
   return Object.freeze({prepareQueueId:found.get(PREPARE),
-    resultsQueueId:found.get(RESULTS),namesPinned:true});
+    resultsQueueId:found.get(RESULTS),namesPinned:true,
+    privateConsumersVerified:true});
 }
 
 /**
