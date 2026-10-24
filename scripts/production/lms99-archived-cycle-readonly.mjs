@@ -123,6 +123,22 @@ export function classifyD1Failure(stderr){
  if(/npx[^\n]*not found|wrangler[^\n]*not found/i.test(s))return 'D1_CLIENT_UNAVAILABLE';
  return 'D1_SELECT_FAILED';
 }
+// Only fixed classifications and numeric HTTP / Cloudflare error codes leave the runner.
+// Never print the provider's message, request SQL, token, account, or response payload.
+export function classifyD1RestRejection(httpStatus,payload){
+ const status=Number(httpStatus);
+ const errors=Array.isArray(payload?.errors)?payload.errors:[];
+ const msg=errors.map(e=>String(e?.message??'')).slice(0,4).join(' ').slice(0,4000);
+ if(/no such table|table .* does not exist/i.test(msg))return 'D1_SCHEMA_TABLE_MISSING';
+ if(/no such column|SQLITE_ERROR.*column/i.test(msg))return 'D1_SCHEMA_COLUMN_MISSING';
+ if(/syntax error|near .*syntax/i.test(msg))return 'D1_SQL_SYNTAX_REJECTED';
+ if([401,403].includes(status)||/permission|forbidden|unauthorized/i.test(msg))return 'D1_ACCESS_DENIED';
+ if(status===429)return 'D1_RATE_LIMITED';
+ const errorCode=errors.map(e=>e?.code).find(c=>Number.isSafeInteger(c)&&c>=100&&c<=99999);
+ if(errorCode)return 'D1_CF_CODE_'+errorCode;
+ if(Number.isSafeInteger(status)&&status>=400&&status<=599)return 'D1_HTTP_'+status;
+ return 'D1_READ_REJECTED';
+}
 export function safePublicError(error){
  const s=String(error?.message??'');
  return /^LMS99_HISTORY_[A-Z0-9_]+$/.test(s)?s:'LMS99_HISTORY_FAILED';
@@ -155,7 +171,7 @@ export async function d1(statement=ARCHIVE_SQL,{fetcher=fetch,accountId=process.
   });
  }catch{reject('D1_TRANSPORT_FAILED')}
  let data;try{data=await response.json()}catch{reject('D1_RESPONSE_INVALID')}
- if(!response.ok||data?.success!==true)reject('D1_READ_REJECTED');
+ if(!response.ok||data?.success!==true)reject(classifyD1RestRejection(response.status,data));
  const first=Array.isArray(data?.result)?data.result[0]:data?.result;
  if(!first||first.success===false||!Array.isArray(first.results))reject('D1_STATEMENT_REJECTED');
  return statement===SCHEMA_PROBE_SQL?validateSchemaRows(first.results):validateRows(first.results);
